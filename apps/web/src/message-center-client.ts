@@ -1,3 +1,5 @@
+import type { AmrSessionState } from '@open-design/contracts';
+
 export type MessageCenterFilter = 'all' | 'unread' | 'read';
 
 export interface MessageCenterMessage {
@@ -50,13 +52,61 @@ export function readAnonymousReadIds(storage: Storage): Set<string> {
   return new Set(parseArray<string>(storage.getItem(READ_KEY)));
 }
 
+/**
+ * Advances whenever anonymous state is WRITTEN. The obligation to clear that
+ * cache on a successful account read belongs to the cache, not to snapshot
+ * publication: gating the clear on the publication token meant an unrelated
+ * sync could move that token, both the read and the sync would then decline to
+ * clear, and a signed-out session's rows survived the sign-in. The only thing
+ * that should stop an account run from clearing is a newer ANONYMOUS write
+ * actually landing.
+ */
+let anonymousWriteSeq = 0;
+
+export function currentAnonymousWriteSeq(): number {
+  return anonymousWriteSeq;
+}
+
+/** Test hook — module counters must not leak between cases. */
+export function resetAnonymousWriteSeq(): void {
+  anonymousWriteSeq = 0;
+}
+
 export function writeAnonymousState(
   storage: Storage,
   messages: MessageCenterMessage[],
   readIds: Set<string>,
 ): void {
+  anonymousWriteSeq += 1;
   storage.setItem(MESSAGES_KEY, JSON.stringify(messages));
   storage.setItem(READ_KEY, JSON.stringify([...readIds]));
+}
+
+/**
+ * Record ONE anonymous read against whatever is already persisted.
+ *
+ * `writeAnonymousState` replaces both keys with a host's whole view, which is
+ * correct for a settled sync but wrong for a read: a `markRead` continuation
+ * can pause across its awaits, its host can unmount, and a successor can
+ * persist a read of its own in the meantime. Writing the full array on resume
+ * dropped that read from the durable cache — the in-memory snapshot delta hid
+ * it until the snapshot expired or the page reloaded, at which point the badge
+ * came back.
+ *
+ * Re-reads storage at write time so it composes with whatever landed while the
+ * caller was awaiting.
+ */
+export function recordAnonymousRead(
+  storage: Storage,
+  messageId: string,
+  readAt: string,
+): void {
+  const messages = readAnonymousMessages(storage).map((message) => (
+    message.id === messageId ? { ...message, readAt: message.readAt ?? readAt } : message
+  ));
+  const readIds = readAnonymousReadIds(storage);
+  readIds.add(messageId);
+  writeAnonymousState(storage, messages, readIds);
 }
 
 export function clearAnonymousState(storage: Storage): void {
@@ -65,15 +115,39 @@ export function clearAnonymousState(storage: Storage): void {
   storage.removeItem(LEGACY_WINDOW_KEY);
 }
 
-export async function isAmrLoggedIn(): Promise<boolean> {
+/**
+ * Three answers, not two. A 503 `amr-runtime-unavailable` means the daemon
+ * could not ASK — it is not a statement about the user — and collapsing it into
+ * "signed out" is only safe for a caller that is about to act once. A caller
+ * that caches its result must be able to tell the difference, or it will serve
+ * the public feed to a signed-in reader for as long as the cache lives.
+ */
+export type AmrAuthMode = 'signed-in' | 'signed-out' | 'unavailable';
+
+export async function readAmrAuthMode(): Promise<AmrAuthMode> {
   const response = await fetch('/api/integrations/vela/status', { cache: 'no-store' });
   if (response.status === 503) {
     const payload = (await response.clone().json().catch(() => null)) as { error?: string } | null;
-    if (payload?.error === 'amr-runtime-unavailable') return false;
+    if (payload?.error === 'amr-runtime-unavailable') return 'unavailable';
   }
   if (!response.ok) throw new Error(`AMR status failed: ${response.status}`);
-  const payload = (await response.json()) as { loggedIn?: boolean };
-  return payload.loggedIn === true;
+  const payload = (await response.json()) as {
+    loggedIn?: boolean;
+    sessionState?: AmrSessionState;
+  };
+  // `loggedIn` answers "is a credential present", not "can it be used" — the
+  // daemon keeps it true for an expired one and puts the verdict in
+  // `sessionState`. This reader publishes what it finds as the shared
+  // authority, and `App.isAmrSessionAuthenticated` reads the same status the
+  // same way; disagreeing with it would let a reauth-required answer take the
+  // authority back to signed-in and admit account pulls under a session that
+  // cannot be used.
+  const usable = payload.loggedIn === true && payload.sessionState !== 'reauth_required';
+  return usable ? 'signed-in' : 'signed-out';
+}
+
+export async function isAmrLoggedIn(): Promise<boolean> {
+  return (await readAmrAuthMode()) === 'signed-in';
 }
 
 export async function pullMessageCenter(input: {

@@ -13,12 +13,18 @@ export interface TabScopeLoginStatus {
    *  session with no `user` object at all (see below). */
   profile: string;
   user: { id?: string; email?: string } | null;
+  /** Non-secret digest of the active credential. The only thing that separates
+   *  two accounts on one profile when the session carries no `user` at all. */
+  credentialRevision?: string;
 }
 
 /** Seed value for `previousAccountBucket` on the very first call — distinct
  *  from any real account bucket (`'anon'`, an account id, or `profile:...`)
  *  so the first resolution is never mistaken for an account change. */
 export const UNSET_ACCOUNT_BUCKET = '__unset__';
+
+/** The bucket for a session with no account at all. */
+export const ANONYMOUS_ACCOUNT_BUCKET = 'anon';
 
 export interface TabIdentityScopeInputs {
   /** App.tsx's merged AMR login status, or `null` before the first read
@@ -116,6 +122,35 @@ export interface TabIdentityScopeResult {
  * `amrLoginStatus === null` case below, instead of computing a scope key
  * against a workspace read that has not had its first confident settle.
  */
+/**
+ * Which account a status describes.
+ *
+ * `loggedIn` says whether there is an account, not WHICH one, and the two are
+ * different boundaries: a credential can move from one account to another with
+ * `loggedIn` true on both sides — a `vela login` in a terminal is enough — and
+ * everything scoped to an account has to move with it. Exported so the tab
+ * scope and the account-boundary notification below decide identity the same
+ * way; two answers to "which account is this" is how one of them goes stale.
+ */
+export function deriveAccountBucket(status: TabScopeLoginStatus): string {
+  if (!status.loggedIn) return ANONYMOUS_ACCOUNT_BUCKET;
+  // Ordered by how tightly each answer is bound to an ACCOUNT. A user id or
+  // email survives re-authentication, so they come first — keying on the
+  // credential there would call a routine token refresh an account switch.
+  //
+  // An env-backed session is authenticated with `user: null` and no fabricated
+  // identity, and its credential digest is the only thing that distinguishes
+  // two accounts on one profile. The daemon's docblock on `credentialRevision`
+  // is explicit that this is why the field exists: without it, a switch that
+  // only rewrites the Settings-backed env reuses the previous account's cached
+  // data. The profile is a CLI environment, not an account, so it stays where
+  // it was — the last resort, for a session that offers nothing better.
+  return status.user?.id?.trim()
+    || status.user?.email?.trim()
+    || status.credentialRevision?.trim()
+    || `profile:${status.profile}`;
+}
+
 export function deriveTabIdentityScope(
   inputs: TabIdentityScopeInputs,
 ): TabIdentityScopeResult {
@@ -148,11 +183,7 @@ export function deriveTabIdentityScope(
     };
   }
 
-  const accountBucket = amrLoginStatus.loggedIn
-    ? amrLoginStatus.user?.id?.trim()
-      || amrLoginStatus.user?.email?.trim()
-      || `profile:${amrLoginStatus.profile}`
-    : 'anon';
+  const accountBucket = deriveAccountBucket(amrLoginStatus);
   const accountChanged = accountBucket !== previousAccountBucket;
 
   const nextWorkspaceBucket =

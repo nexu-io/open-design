@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deriveAccountBucket,
   deriveTabIdentityScope,
   UNSET_ACCOUNT_BUCKET,
   type TabIdentityScopeInputs,
@@ -232,3 +233,28 @@ describe('deriveTabIdentityScope', () => {
     });
   });
 });
+
+describe('deriveAccountBucket', () => {
+  it('separates two credentials on one profile when the session has no user', () => {
+    // Env-backed sessions are authenticated and report `user: null` — no
+    // fabricated blank identity. The daemon's own docblock on
+    // `credentialRevision` says why that field exists: without it, an account
+    // switch that only rewrites the Settings-backed env reuses the previous
+    // account's cached data. Falling back to the profile made both credentials
+    // the same account, so nothing fired the boundary and the previous
+    // account's message-centre snapshot, in-flight run, mounted rows and stale
+    // continuations stayed eligible under the new one.
+    const a = { loggedIn: true, profile: 'local', user: null, credentialRevision: 'rev-a' };
+    const b = { ...a, credentialRevision: 'rev-b' };
+    expect(deriveAccountBucket(a)).not.toBe(deriveAccountBucket(b));
+  });
+
+  it('prefers a stable identity over the credential, which rotates within one account', () => {
+    // A credential revision changes when the same user re-authenticates, so it
+    // must never outrank an identity that does not.
+    const base = { loggedIn: true, profile: 'local', user: { id: 'user-1' } };
+    expect(deriveAccountBucket({ ...base, credentialRevision: 'rev-a' }))
+      .toBe(deriveAccountBucket({ ...base, credentialRevision: 'rev-b' }));
+  });
+});
+

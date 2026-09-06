@@ -5,6 +5,7 @@ import {
   findGoPlanSunsetMessage,
   GO_PLAN_SUNSET_MESSAGE_KEY_PREFIX,
   pullMessageCenter,
+  readAmrAuthMode,
   type MessageCenterMessage,
 } from '../src/message-center-client';
 
@@ -81,6 +82,24 @@ describe('message center client', () => {
       pullMessageCenter({ locale: 'en', loggedIn: false }),
     ).rejects.toThrow('Message Center pagination cursor did not advance');
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats an expired credential as signed out', async () => {
+    // The daemon keeps `loggedIn: true` when a credential is PRESENT but
+    // expired, and says so in `sessionState` — its own comment calls `loggedIn`
+    // the backwards-compatible "credential is present" projection and directs
+    // new callers to `sessionState` for validity. `App.isAmrSessionAuthenticated`
+    // already reads it that way.
+    //
+    // This is the other reader of the same status, and it now publishes what it
+    // finds as the shared authority. Disagreeing with App about what counts as
+    // a session means a reauth-required answer can take the authority back to
+    // signed-in after App has moved it to signed-out, which admits account
+    // pulls and targeted rows under a session that cannot be used.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      Response.json({ loggedIn: true, sessionState: 'reauth_required' }),
+    ));
+    await expect(readAmrAuthMode()).resolves.toBe('signed-out');
   });
 
   it('uses the credential-scoped daemon route for logged-in pulls', async () => {

@@ -221,6 +221,10 @@ interface Props {
   topRightSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
   context: WorkspaceCollabContext | null;
+  /** Whether `/api/workspace/context` has answered yet. `context` alone cannot
+   *  tell "signed out" from "not answered", and the message-center instances
+   *  below are gated on that difference. */
+  workspaceContextResolving?: boolean;
   /** Account billing metadata (via the vela CLI 收口). Null → the billing
    *  chip falls back to the context plan-tier hint. */
   billing?: WorkspaceBillingSummary | null;
@@ -1272,7 +1276,15 @@ export function EntryTopRightCluster({
                       // silently disappears with nothing left in its place.
                       resetCloudSignInTipDismissal();
                       notifyAmrLoginStatusChanged();
-                      notifyWorkspaceContextRefresh();
+                      // The account boundary is NOT notified here.
+                      // `handleActiveCloudSignOut` — awaited just above as
+                      // `onSignedOut`, and the one path every sign-out surface
+                      // shares — owns it. Notifying from both advanced the
+                      // generation twice for one sign-out, because each
+                      // unseeded call mints a fresh stamp: every account-scoped
+                      // consumer invalidated twice, and `MessageCenter`
+                      // (subscribed to the generation) ran a full
+                      // clear-and-resync per advance.
                       notifyWorkspaceBillingRefresh();
                       notifyTeamProjectsChanged();
                     });
@@ -1492,6 +1504,23 @@ export function EntryNavRail({
   open,
   topRightSlot,
   context,
+  /**
+   * Whether `/api/workspace/context` has answered yet.
+   *
+   * The two MessageCenter instances below are gated on `context` so exactly one
+   * panel (and one unread poller) is alive. `context` alone cannot tell "signed
+   * out" from "not answered yet", so on every launch the signed-out instance
+   * mounted first and was replaced when the context arrived — and that
+   * replacement re-ran a full sync (`isAmrLoggedIn` plus a paginated
+   * `pullMessageCenter`). Waiting for the answer costs nothing observable: the
+   * panel is behind an opener, and the count it would report belongs to an
+   * identity that has not resolved.
+   *
+   * Passed down rather than read from `useWorkspaceContext` here: this
+   * component takes its context as a prop, and calling the hook would make the
+   * rail itself able to initiate a directory read it never used to.
+   */
+  workspaceContextResolving = false,
   billing,
   balanceUsd,
   onOpenSettings,
@@ -1533,6 +1562,7 @@ export function EntryNavRail({
   const [messageCenterOpen, setMessageCenterOpen] = useState(false);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const messageCenterRailRef = useRef<HTMLButtonElement | null>(null);
+
   const [teamOpen, setTeamOpen] = useState(false);
   useEffect(() => {
     if (!teamOpen) return;
@@ -2126,6 +2156,14 @@ export function EntryNavRail({
               buttonRef={messageCenterRailRef}
               ariaHasPopup="dialog"
               ariaExpanded={messageCenterOpen}
+              // The panel below is suppressed while the workspace context is
+              // still resolving, so this opener has nothing to open. Leaving it
+              // live let a click set `messageCenterOpen` on a rail that is
+              // about to be replaced by the signed-in cluster — which starts
+              // its own `messageCenterOpen` at false — and the click vanished
+              // with no dialog and no feedback. An opener with no panel must
+              // not accept input.
+              disabled={workspaceContextResolving}
             >
               <Icon name="bell" size={16} />
               {messageUnreadCount > 0 ? (
@@ -2148,7 +2186,7 @@ export function EntryNavRail({
           item above is its opener). Signed-in mounts move into
           `EntryTopRightCluster` — context-gating both sides is what keeps
           exactly one panel (and one unread poller) alive. */}
-      {context ? null : (
+      {context || workspaceContextResolving ? null : (
         <MessageCenter
           hideTrigger
           returnFocusRef={messageCenterRailRef}

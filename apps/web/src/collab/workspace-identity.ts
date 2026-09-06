@@ -80,10 +80,49 @@ export function currentWorkspaceAccountGeneration(): number {
   return workspaceAccountGeneration;
 }
 
+/**
+ * Listeners for account-boundary changes. The counter alone only lets a caller
+ * ASK which account it is on; it cannot tell a component that the answer
+ * changed. A host that stays mounted across a sign-in/sign-out — which
+ * `notifyWorkspaceContextRefresh` deliberately allows by retaining the previous
+ * context while it resolves — therefore kept rendering the previous account's
+ * data until some unrelated refresh happened to fire.
+ */
+const workspaceAccountGenerationListeners = new Set<() => void>();
+
+/**
+ * Subscribe to account-boundary changes. Returns an unsubscribe function, and
+ * is shaped for `useSyncExternalStore` so a component can simply depend on the
+ * generation the way it depends on any other reactive value.
+ */
+export function subscribeWorkspaceAccountGeneration(listener: () => void): () => void {
+  workspaceAccountGenerationListeners.add(listener);
+  return () => {
+    workspaceAccountGenerationListeners.delete(listener);
+  };
+}
+
+function notifyWorkspaceAccountGenerationListeners(): void {
+  for (const listener of [...workspaceAccountGenerationListeners]) {
+    try {
+      listener();
+    } catch (error) {
+      // Isolated, but not swallowed. Stopping the loop would leave the
+      // remaining hosts rendering the previous account's data, which is worse
+      // than one broken subscriber; silently continuing would leave a host
+      // that never learned the boundary moved with no signal to find it by.
+      // The sibling stores in this codebase do not isolate at all — the
+      // account boundary is worth the deviation, an unreported failure is not.
+      console.error('[workspace-identity] account-boundary subscriber failed', error);
+    }
+  }
+}
+
 export function advanceWorkspaceAccountGeneration(stamp: string): void {
   if (workspaceAccountGenerationStamp === stamp) return;
   workspaceAccountGenerationStamp = stamp;
   workspaceAccountGeneration += 1;
+  notifyWorkspaceAccountGenerationListeners();
 }
 
 export function resetWorkspaceAccountGeneration(): void {
