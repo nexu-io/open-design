@@ -77,14 +77,14 @@
       h2 { margin: 0 0 var(--space-4); font: 500 var(--text-2xl) / 1.32 var(--font-display); letter-spacing: -0.01em; }
       h2.kicker { margin: 0 0 var(--space-6); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--meta); }
       h3 { margin: 0 0 var(--space-3); font: 500 var(--text-lg) / 1.32 var(--font-display); letter-spacing: -0.01em; }
-      p { margin: 0 0 var(--space-4); color: var(--muted); text-wrap: pretty; }
-      code { font: 400 0.92em / 1.6 var(--font-mono); letter-spacing: 0; color: var(--fg); background: #ffffff1f; padding: 2px 8px; border-radius: var(--radius-sm); }
+      p { margin: 0 0 var(--space-6); color: var(--muted); text-wrap: pretty; }
+      code { font: 400 0.875em / 1.6 var(--font-mono); letter-spacing: 0; color: var(--fg); background: #ffffff33; padding: 0 4px; border-radius: 4px; }
       .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
       .note { color: var(--meta); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
 
       /* ── Links ── */
-      a { color: var(--fg); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; transition: text-decoration-color var(--motion-base) var(--ease-standard); }
-      a:hover { text-decoration-color: var(--fg); }
+      a { color: var(--fg); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; transition: color 250ms linear; }
+      a:hover { color: var(--muted); }
       .nav { display: flex; gap: var(--space-6); }
       .nav a { font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--meta); text-decoration: none; transition: color var(--motion-fast); }
       .nav a:hover, .nav a[aria-current="page"] { color: var(--fg); }
@@ -151,7 +151,7 @@
       @media (prefers-reduced-motion: reduce) { .hero .letter { opacity: 1; animation: none; transform: none; } }
 
       /* ── Copy column ── */
-      .copy { max-width: 676px; margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      .copy { max-width: 669px; margin: 0 auto; padding: var(--space-12) var(--space-6); }
       .copy h2 { margin: 0 0 var(--space-4); font: 500 var(--text-3xl) / 1.16 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
       .copy p { margin: 0 0 1.1em; }
       .lede { font-size: var(--text-lg); }
@@ -173,6 +173,28 @@
       tr.featured .bar { background: var(--fg); }
       .footnotes h3 { margin: 0 0 var(--space-3); font: 400 var(--text-sm) / 1.6 var(--font-body); color: var(--muted); letter-spacing: 0.02em; }
       .footnotes p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--meta); }
+      /* ── Chips, footnotes, logo strip, media bar (measured on the page) ── */
+      .chip { display: inline-block; padding: var(--space-2) var(--space-3); border-radius: 32px; background: #ffffff1f; font: 500 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; color: var(--fg); text-decoration: none; }
+      .chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+      .footnotes-heading { margin: 0 0 var(--space-3); font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: -0.01em; color: var(--muted); text-transform: uppercase; }
+      .footnotes-list { display: grid; gap: var(--space-3) var(--space-6); margin: 0; padding: 0; list-style: none; max-width: 669px; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: -0.01em; }
+      .footnotes-list li { display: inline-grid; grid-template-columns: auto 1fr; gap: 0 var(--space-2); }
+      .footnotes-list .num { font-size: 12px; line-height: 16px; color: var(--fg); padding-top: 3px; }
+      .footnotes-list p { margin: 0; color: var(--fg); }
+      .footnotes-list a.back { text-decoration: none; font-size: 12px; }
+      .logo-strip { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; }
+      .logo-strip li { min-width: 0; padding: 0 var(--space-1); display: flex; justify-content: center; }
+      .logo-strip button { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: var(--space-2); border: 0; border-radius: 4px; background: transparent; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; color: var(--muted); cursor: pointer; transition: color 200ms linear, background-color 200ms linear; }
+      .logo-strip button:hover, .logo-strip button[aria-pressed="true"] { color: var(--fg); }
+      .media-bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-warm); }
+      .media-bar .time { margin: 0; font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+      .media-bar .time span { margin-left: var(--space-1); color: #ffffff66; }
+      .media-bar .time span::before { content: "|"; margin-right: var(--space-1); }
+      .media-bar .track { flex: 1; height: 2px; border-radius: 1px; background: #ffffff33; }
+      .media-bar .track i { display: block; width: 33%; height: 100%; border-radius: 1px; background: var(--fg); }
+      .media-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--fg); cursor: pointer; transition: background-color 200ms linear; }
+      .media-btn.dim { color: var(--muted); }
+      .media-btn:hover { background: var(--border-soft); }
       kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
 
       /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
@@ -189,7 +211,7 @@
       .site-header .btn svg { width: 12px; height: 12px; }
 
       /* ── Segmented control ── */
-      .segmented { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-pill); }
+      .segmented { display: flex; width: max-content; margin: 0 auto; align-items: center; gap: var(--space-2); padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-pill); }
       .segmented button { min-height: 40px; padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-base) var(--ease-standard); }
       .segmented button:hover { background: var(--border-soft); }
       .segmented button[aria-selected="true"] { background: #ffffff1f; }
@@ -206,26 +228,34 @@
       .bars .name { fill: var(--fg); font: 400 var(--text-sm) / 1 var(--font-body); text-anchor: middle; }
 
       /* ── Chart card ── */
-      .chart-card { padding: var(--space-8); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
+      .chart-card { max-width: 669px; margin: 0 auto; padding: var(--space-4) var(--space-5) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: rgba(0, 0, 0, 0.2); }
       .chart-card .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
-      .chart-card h3 { margin: 0 0 var(--space-3); font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
+      .chart-card h3 { margin: 0 0 var(--space-3); font: 500 var(--text-lg) / 1.32 var(--font-display); letter-spacing: -0.01em; }
       .chart-card .chart-head .icon-btn { color: var(--muted); }
-      .chart-card .select-trigger { height: 32px; min-height: 32px; padding: 0 var(--space-4); gap: var(--space-2); box-shadow: var(--elev-ring); }
+      .chart-card .select-trigger { height: 32px; min-height: 32px; padding: 0 12px; gap: 6px; font-weight: 400; background: rgba(51, 51, 51, 0.8); box-shadow: var(--elev-ring); }
       .chart-card .select-trigger svg { width: 12px; height: 12px; }
       /* ── Select (dropdown): glass trigger pill; menu on #1f1f1f, 12px radius, 8px padding, 40px options, selected #ffffff1f, chevron flips ── */
       .select { position: relative; display: inline-block; }
       .select-trigger[aria-expanded="true"] { box-shadow: var(--elev-ring), 0 0 0 1px var(--border); }
       .select-trigger svg { transition: rotate var(--motion-fast); }
       .select-trigger[aria-expanded="true"] svg { rotate: 180deg; }
-      .select-menu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; min-width: max(100%, 190px); width: max-content; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
+      /* ── Menus (measured on the page): #2b2b2b panel, 12px radius; select menu 8px padding / 40px rows; action menu 12px padding / 32px rows ── */
+      .select-menu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; min-width: max(100%, 160px); width: max-content; margin: 0; padding: var(--space-2); list-style: none; border-radius: 12px; background: #2b2b2b; box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
       .select-menu[hidden] { display: none; }
-      .select-menu li { display: flex; align-items: center; min-height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-md); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); cursor: pointer; }
+      .select-menu li { display: flex; align-items: center; min-height: 40px; padding: 0 var(--space-3); border-radius: var(--radius-md); font: 400 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); cursor: pointer; }
       .select-menu li + li { margin-top: var(--space-1); }
       .select-menu li:hover, .select-menu li:focus-visible { background: var(--border-soft); outline: none; }
       .select-menu li[aria-selected="true"] { background: #ffffff1f; }
-      .legend { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-5) 0 var(--space-4); font-size: var(--text-base); letter-spacing: -0.01em; }
+      .action-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; min-width: 160px; width: max-content; margin: 0; padding: var(--space-3) 0; list-style: none; border-radius: 12px; background: #2b2b2b; box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
+      .action-menu[hidden] { display: none; }
+      .action-menu button { display: flex; align-items: center; width: 100%; min-height: 32px; padding: 0 20px; border: 0; background: transparent; font: 400 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); text-align: left; cursor: pointer; }
+      .action-menu button:hover, .action-menu button:focus-visible { background: var(--border-soft); outline: none; }
+      .menu-root { position: relative; display: inline-block; }
+      .icon-btn.plain { width: 20px; height: 20px; color: var(--fg); }
+      .icon-btn.plain:hover { background: transparent; color: var(--muted); }
+      .legend { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-5) 0 var(--space-4); font: 400 var(--text-sm) / 20px var(--font-body); letter-spacing: -0.01em; }
       .legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
-      .legend svg { width: 22px; height: 22px; }
+      .legend svg { width: 18px; height: 18px; }
       .legend .ref { color: var(--fg); }
       .legend .ref svg { width: 40px; }
       .plot { display: block; width: 100%; height: auto; font: 400 13px / 1 var(--font-mono); letter-spacing: 0; }
@@ -241,10 +271,10 @@
       .chart-card figcaption { max-width: 640px; margin: var(--space-6) auto 0; text-align: center; font-style: italic; font-size: var(--text-sm); line-height: 1.64; color: var(--fg); text-wrap: pretty; }
 
       /* ── Quote card ── */
-      .quote { padding: var(--space-8) var(--space-6); border: 1px solid #ffffff1f; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-raised); }
+      .quote { max-width: 899px; margin: 0 auto; padding: var(--space-8) var(--space-6); border: 1px solid #ffffff1f; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-raised); }
       .quote .logo { display: flex; align-items: center; gap: var(--space-2); height: 32px; margin-bottom: var(--space-4); font: 500 var(--text-xl) / 1 var(--font-display); letter-spacing: -0.02em; }
       .quote .logo svg { width: 28px; height: 28px; }
-      .quote blockquote { margin: 0 0 var(--space-5) 0.5em; font: 500 var(--text-lg) / 1.32 var(--font-body); letter-spacing: -0.01em; text-wrap: pretty; }
+      .quote blockquote { margin: 0 0 var(--space-5) 0.5em; font: 500 var(--text-lg) / 1.32 var(--font-body); letter-spacing: -0.025em; text-wrap: pretty; }
       .quote figcaption { margin-left: 0.5em; font: 500 var(--text-sm) / 1.4 var(--font-body); letter-spacing: 0; color: var(--muted); }
 
       /* ── Media frame + two-up comparison ── */
@@ -257,11 +287,9 @@
       .two-up .screen .status.done { color: var(--fg); }
 
       /* ── Comparison table ── */
-      .compare { width: 100%; border-collapse: collapse; table-layout: fixed; }
-      .compare th, .compare td { padding: var(--space-5) var(--space-6) var(--space-5) 0; border-top: 1px solid var(--border); text-align: left; vertical-align: top; font: 400 var(--text-base) / 1.5 var(--font-body); letter-spacing: -0.01em; color: var(--fg); }
-      .compare thead th { font-weight: 500; }
-      .compare th:first-child { width: 34%; }
-      .compare :is(th, td):last-child { padding-right: 0; }
+      .compare { width: 100%; margin: 28px 0; border-collapse: collapse; }
+      .compare th, .compare td { padding: var(--space-3); border-top: 1px solid var(--border); text-align: left; vertical-align: top; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: -0.01em; color: var(--fg); overflow-wrap: break-word; }
+      .compare thead th { font-weight: 600; }
       .compare tbody tr:last-child td { border-bottom: 1px solid var(--border); }
       .compare .dash { color: var(--muted); }
 
@@ -468,7 +496,7 @@
       <section id="chart">
         <h2 class="kicker">Chart card (linked panels)</h2>
         <div class="chart-panels">
-        <figure class="chart-card" id="chart-ale" role="tabpanel" aria-labelledby="tab-ale" style="margin: 0">
+        <figure class="chart-card" id="chart-ale" role="tabpanel" aria-labelledby="tab-ale">
           <div class="chart-head">
             <div>
               <h3>Agents’ Last Exam</h3>
@@ -480,7 +508,14 @@
                 </ul>
               </div>
             </div>
-            <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+            <div class="menu-root">
+              <button class="icon-btn plain" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chart options"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+              <ul class="action-menu" role="menu" hidden>
+                <li><button type="button" role="menuitem" data-action="png">Download PNG</button></li>
+                <li><button type="button" role="menuitem" data-action="svg">Download SVG</button></li>
+                <li><button type="button" role="menuitem" data-action="link">Copy link</button></li>
+              </ul>
+            </div>
           </div>
           <div class="legend">
             <span><svg viewBox="0 0 22 22"><path class="astra" d="m11 2 2.6 6h6.4l-5.2 3.8 2 6.2L11 14.2 5.2 18l2-6.2L2 8h6.4z"/></svg>GPT‑6 Astra</span>
@@ -508,10 +543,17 @@
           </svg>
           <figcaption>Agents’ Last Exam tests agents on complex professional tasks in real software. The featured model reaches a new high in the comparison shown, scoring 59.3%, compared with 55.5% and 53.6% for the two closest models.</figcaption>
         </figure>
-        <figure class="chart-card" id="chart-ssp" role="tabpanel" aria-labelledby="tab-ssp" style="margin: 0" hidden>
+        <figure class="chart-card" id="chart-ssp" role="tabpanel" aria-labelledby="tab-ssp" hidden>
           <div class="chart-head">
             <div><h3>ScreenSpot-Pro</h3></div>
-            <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+            <div class="menu-root">
+              <button class="icon-btn plain" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chart options"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+              <ul class="action-menu" role="menu" hidden>
+                <li><button type="button" role="menuitem" data-action="png">Download PNG</button></li>
+                <li><button type="button" role="menuitem" data-action="svg">Download SVG</button></li>
+                <li><button type="button" role="menuitem" data-action="link">Copy link</button></li>
+              </ul>
+            </div>
           </div>
           <svg class="plot bars" viewBox="0 0 640 360" role="img" aria-label="ScreenSpot-Pro scores">
             <line class="axis" x1="70" y1="20" x2="70" y2="300"/><line class="axis" x1="70" y1="300" x2="600" y2="300"/>
@@ -523,10 +565,17 @@
           </svg>
           <figcaption>ScreenSpot-Pro measures grounding on high-resolution professional screens. Fixture values; bars use the chart palette, labels sit above each bar.</figcaption>
         </figure>
-        <figure class="chart-card" id="chart-osw" role="tabpanel" aria-labelledby="tab-osw" style="margin: 0" hidden>
+        <figure class="chart-card" id="chart-osw" role="tabpanel" aria-labelledby="tab-osw" hidden>
           <div class="chart-head">
             <div><h3>OSWorld</h3></div>
-            <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+            <div class="menu-root">
+              <button class="icon-btn plain" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chart options"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+              <ul class="action-menu" role="menu" hidden>
+                <li><button type="button" role="menuitem" data-action="png">Download PNG</button></li>
+                <li><button type="button" role="menuitem" data-action="svg">Download SVG</button></li>
+                <li><button type="button" role="menuitem" data-action="link">Copy link</button></li>
+              </ul>
+            </div>
           </div>
           <svg class="plot bars" viewBox="0 0 640 360" role="img" aria-label="OSWorld scores">
             <line class="axis" x1="70" y1="20" x2="70" y2="300"/><line class="axis" x1="70" y1="300" x2="600" y2="300"/>
@@ -539,12 +588,12 @@
           <figcaption>OSWorld runs real desktop tasks end to end. Fixture values; the panel switches when the tab’s countdown completes.</figcaption>
         </figure>
         </div>
-        <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a 32px glass select pill with a permanent 1px #ffffff33 ring that opens a dropdown (menu on #1f1f1f, 12px radius, 8px padding, 40px options with the selected one filled #ffffff1f, chevron flips; Escape, arrows and outside click all work), a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
+        <p class="note">Sits in the 669px prose column: 16px radius, 1px #ffffff33 border, black at 20%, padding 16px 20px 20px. Title 18px / 500, a 32px select pill (#333333 at 80%, 1px #ffffff33 ring, 14px / 400, 12px side padding) that opens a dropdown (#2b2b2b menu, 12px radius, 8px padding, 40px options, selected #ffffff1f), a 20px download icon with no hover fill that opens a right-aligned action menu (#2b2b2b, 12px padding, 32px rows: Download PNG / SVG, Copy link, all functional), a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
       </section>
 
       <section id="quote">
         <h2 class="kicker">Quote card</h2>
-        <figure class="quote" style="margin: 0">
+        <figure class="quote">
           <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Higgsfield</div>
           <blockquote>“Astra gives us a significant advantage in both capability and efficiency. It successfully executes our most complex creative workflows while using up to 20% fewer tokens than other models we’ve tested.”</blockquote>
           <figcaption>Alex Mashrabov, CEO and Co-founder, Higgsfield AI</figcaption>
@@ -589,6 +638,25 @@
           </tbody>
         </table>
         <p class="note">Fixed layout, first column 34%, 20px row padding, hairline #ffffff33 above every row and below the last, 17px / 400 cells, 500 header, missing values as a muted dash. No zebra stripes, no highlighted column.</p>
+      </section>
+
+      <section id="chips">
+        <h2 class="kicker">Chips, footnotes, logo strip, media bar</h2>
+        <div class="chips" style="margin-bottom: var(--space-8)"><a class="chip" href="#">2026</a><a class="chip" href="#">Release</a><a class="chip" href="#">Research</a></div>
+        <h3 class="footnotes-heading">Footnotes</h3>
+        <ol class="footnotes-list" style="margin-bottom: var(--space-8)">
+          <li><span class="num">1</span><p>On ARC-AGI-3 the featured model was run with a responses harness that keeps past reasoning. <a class="back" href="#chart" aria-label="Back to reference">↩</a></p></li>
+          <li><span class="num">2</span><p>Third-party scores are the providers’ reported numbers where a run was not possible. <a class="back" href="#chart" aria-label="Back to reference">↩</a></p></li>
+        </ol>
+        <ul class="logo-strip" style="margin-bottom: var(--space-8)"><li><button type="button" aria-pressed="true">Jane Street</button></li><li><button type="button">Lovable</button></li><li><button type="button">Higgsfield</button></li><li><button type="button">Cursor</button></li></ul>
+        <div class="media-bar">
+          <button class="media-btn" type="button" aria-label="Play"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>
+          <p class="time">00:54 <span>02:43</span></p>
+          <div class="track"><i></i></div>
+          <button class="media-btn dim" type="button" aria-label="Captions"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M5 8h2m2 0h2"/></svg></button>
+          <button class="media-btn dim" type="button" aria-label="Full screen"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+        </div>
+        <p class="note">Chip: 32px radius, #ffffff1f, 8px 12px, 14px / 500. Footnotes: 14px list on a two-column inline grid (12px number, 8px gap, 12px between entries), heading 14px / 400 in #ffffff99, back-links unstyled. Logo strip: 44px buttons, 8px padding, 14px in #ffffff99, 4px radius, the active one white. Media bar: 14px / 500 tabular timestamps (white | 40% white), 32px square 4px-radius buttons, 2px track.</p>
       </section>
 
       <section id="panels">
@@ -697,6 +765,47 @@
         return { select, pause, resume }
       }
       for (const list of document.querySelectorAll('.segmented[data-autoplay]')) autoplayTabs(list)
+      // Action menu (chart download): 20px icon button with no hover fill; the menu drops right-aligned, 8px below.
+      function actionMenu(root, actions) {
+        const trigger = root.querySelector('[aria-haspopup="menu"]')
+        const menu = root.querySelector('.action-menu')
+        const items = Array.from(menu.querySelectorAll('[role="menuitem"]'))
+        const open = () => { menu.hidden = false; trigger.setAttribute('aria-expanded', 'true'); items[0]?.focus() }
+        const close = (back = true) => { if (menu.hidden) return; menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); if (back) trigger.focus() }
+        trigger.addEventListener('click', () => (menu.hidden ? open() : close()))
+        items.forEach((it, i) => {
+          it.tabIndex = -1
+          it.addEventListener('click', () => { close(); actions?.[it.dataset.action]?.(root) })
+          it.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus() }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus() }
+            else if (e.key === 'Escape') { e.preventDefault(); close() }
+          })
+        })
+        document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) close(false) })
+        return { open, close }
+      }
+      // Real exports for inline SVG charts: SVG file, 2× PNG via canvas, or the section link.
+      const chartActions = {
+        svg(root) { const svg = root.closest('.chart-card').querySelector('svg.plot'); const blob = new Blob([serializeSvg(svg)], { type: 'image/svg+xml' }); saveBlob(blob, 'chart.svg') },
+        png(root) {
+          const svg = root.closest('.chart-card').querySelector('svg.plot'); const [, , w, h] = svg.getAttribute('viewBox').split(/\s+/).map(Number)
+          const url = URL.createObjectURL(new Blob([serializeSvg(svg)], { type: 'image/svg+xml' })); const img = new Image()
+          img.onload = () => { const c = document.createElement('canvas'); c.width = w * 2; c.height = h * 2; const g = c.getContext('2d'); g.scale(2, 2); g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url); c.toBlob((b) => saveBlob(b, 'chart.png'), 'image/png') }
+          img.src = url
+        },
+        link(root) { const id = root.closest('section')?.id; navigator.clipboard?.writeText(location.origin + location.pathname + (id ? '#' + id : '')) },
+      }
+      function serializeSvg(svg) {
+        const clone = svg.cloneNode(true); const cs = getComputedStyle(svg)
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', svg.getAttribute('viewBox').split(/\s+/)[2]); clone.setAttribute('height', svg.getAttribute('viewBox').split(/\s+/)[3])
+        // inline the computed colours so the file stands alone
+        clone.querySelectorAll('*').forEach((el, i) => { const src = svg.querySelectorAll('*')[i]; const c = getComputedStyle(src); el.setAttribute('fill', c.fill); el.setAttribute('stroke', c.stroke); el.setAttribute('stroke-width', c.strokeWidth); if (c.strokeDasharray !== 'none') el.setAttribute('stroke-dasharray', c.strokeDasharray); if (el.tagName === 'text') { el.setAttribute('font-family', c.fontFamily); el.setAttribute('font-size', c.fontSize) } })
+        clone.style.font = cs.font
+        return new XMLSerializer().serializeToString(clone)
+      }
+      function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000) }
+      for (const root of document.querySelectorAll('.menu-root')) actionMenu(root, chartActions)
       // Dropdown select: click opens the listbox under the pill, chevron flips, Escape / outside click closes,
       // arrows move, Enter or click selects and reports the value.
       function dropdown(root, onChange) {

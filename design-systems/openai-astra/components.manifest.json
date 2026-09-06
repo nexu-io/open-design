@@ -9,9 +9,9 @@
     "title": "openai-astra — reference components",
     "description": "Reference fixture for design-systems/openai-astra. Every visible value comes from tokens.css. The Astra launch page's signature moves: pure black canvas under a particle galaxy, white text with white-at-alpha secondaries, OpenAI Sans at 500/400, monochrome pill chrome, a single #23435f ambient glow, no shadows, no gradients.",
     "styleBlockCount": 1,
-    "selectorCount": 185,
-    "classCount": 84,
-    "elementCount": 46
+    "selectorCount": 213,
+    "classCount": 99,
+    "elementCount": 48
   },
   "tokens": {
     "declared": [
@@ -135,6 +135,11 @@
     "undeclaredReferenced": []
   },
   "selectors": [
+    ".action-menu",
+    ".action-menu button",
+    ".action-menu button:focus-visible",
+    ".action-menu button:hover",
+    ".action-menu[hidden]",
     ".badge",
     ".badge-outline",
     ".badge-solid",
@@ -174,13 +179,13 @@
     ".chart-card figcaption",
     ".chart-card h3",
     ".chart-panels > .chart-card[hidden]",
+    ".chip",
+    ".chips",
     ".compare",
-    ".compare :is(th, td):last-child",
     ".compare .dash",
     ".compare tbody tr:last-child td",
     ".compare td",
     ".compare th",
-    ".compare th:first-child",
     ".compare thead th",
     ".copy",
     ".copy h2",
@@ -210,6 +215,12 @@
     ".footer-group ul",
     ".footnotes h3",
     ".footnotes p",
+    ".footnotes-heading",
+    ".footnotes-list",
+    ".footnotes-list .num",
+    ".footnotes-list a.back",
+    ".footnotes-list li",
+    ".footnotes-list p",
     ".hero",
     ".hero .label",
     ".hero .label-left",
@@ -222,6 +233,8 @@
     ".hero .star",
     ".icon-btn",
     ".icon-btn:hover",
+    ".icon-btn.plain",
+    ".icon-btn.plain:hover",
     ".lede",
     ".legend",
     ".legend .ref",
@@ -230,7 +243,22 @@
     ".legend svg",
     ".link-arrow",
     ".link-arrow::after",
+    ".logo-strip",
+    ".logo-strip button",
+    ".logo-strip button:hover",
+    ".logo-strip button[aria-pressed=\"true\"]",
+    ".logo-strip li",
+    ".media-bar",
+    ".media-bar .time",
+    ".media-bar .time span",
+    ".media-bar .time span::before",
+    ".media-bar .track",
+    ".media-bar .track i",
+    ".media-btn",
+    ".media-btn:hover",
+    ".media-btn.dim",
     ".media-frame",
+    ".menu-root",
     ".nav",
     ".nav a",
     ".nav a:hover",
@@ -322,9 +350,11 @@
     "tr.featured td"
   ],
   "classes": [
+    "action-menu",
     "actions",
     "astra",
     "axis",
+    "back",
     "badge",
     "badge-outline",
     "badge-solid",
@@ -346,12 +376,15 @@
     "chart-card",
     "chart-head",
     "chart-panels",
+    "chip",
+    "chips",
     "compare",
     "copy",
     "cue",
     "cue-note",
     "cue-target",
     "dash",
+    "dim",
     "done",
     "error",
     "fable",
@@ -361,6 +394,8 @@
     "footer-columns",
     "footer-group",
     "footnotes",
+    "footnotes-heading",
+    "footnotes-list",
     "hero",
     "hint",
     "icon-btn",
@@ -376,13 +411,19 @@
     "line",
     "link-arrow",
     "logo",
+    "logo-strip",
+    "media-bar",
+    "media-btn",
     "media-frame",
+    "menu-root",
     "meta",
     "name",
     "nav",
     "note",
+    "num",
     "opus",
     "panel",
+    "plain",
     "plot",
     "quote",
     "ref",
@@ -403,6 +444,8 @@
     "star",
     "status",
     "tick",
+    "time",
+    "track",
     "two-up",
     "value",
     "wordmark"
@@ -428,6 +471,7 @@
     "head",
     "header",
     "html",
+    "i",
     "input",
     "kbd",
     "label",
@@ -436,6 +480,7 @@
     "main",
     "meta",
     "nav",
+    "ol",
     "p",
     "path",
     "polyline",
@@ -461,6 +506,9 @@
       "label": "Buttons and calls to action",
       "present": true,
       "selectors": [
+        ".action-menu button",
+        ".action-menu button:focus-visible",
+        ".action-menu button:hover",
         ".btn",
         ".btn-ghost",
         ".btn-ghost:hover",
@@ -472,6 +520,9 @@
         ".btn:focus-visible",
         ".btn[disabled]",
         ".footer-bar .legal button",
+        ".logo-strip button",
+        ".logo-strip button:hover",
+        ".logo-strip button[aria-pressed=\"true\"]",
         ".segmented button",
         ".segmented button:focus-visible",
         ".segmented button:hover",
@@ -493,15 +544,14 @@
         "--accent-active",
         "--accent-on",
         "--border",
-        "--border-soft",
         "--ease-standard",
         "--fg",
-        "--focus-ring",
         "--font-body",
-        "--meta",
         "--motion-base",
+        "--muted",
         "--radius-pill",
         "--space-1",
+        "--space-2",
         "--space-3",
         "--space-4",
         "--text-sm"
@@ -573,7 +623,6 @@
         "--space-2",
         "--space-3",
         "--space-4",
-        "--surface",
         "--surface-warm",
         "--text-4xl",
         "--text-base",
@@ -617,13 +666,15 @@
         ".badge",
         ".badge-outline",
         ".badge-solid",
-        ".badge-success"
+        ".badge-success",
+        ".chip"
       ],
       "classes": [
         "badge",
         "badge-outline",
         "badge-solid",
         "badge-success",
+        "chip",
         "status"
       ],
       "elements": [],
@@ -633,7 +684,9 @@
         "--fg",
         "--font-body",
         "--radius-pill",
+        "--space-2",
         "--space-3",
+        "--text-sm",
         "--text-xs"
       ]
     },
@@ -646,6 +699,7 @@
         ".footer-group a",
         ".footer-group a svg",
         ".footer-group a:hover",
+        ".footnotes-list a.back",
         ".link-arrow",
         ".link-arrow::after",
         ".nav a",
@@ -667,7 +721,7 @@
         "--font-body",
         "--meta",
         "--motion-fast",
-        "--space-4",
+        "--muted",
         "--text-sm",
         "--text-xs"
       ]
@@ -683,13 +737,7 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": [
-        "--elev-ring",
-        "--font-mono",
-        "--muted",
-        "--radius-sm",
-        "--text-xs"
-      ]
+      "tokenReferences": []
     },
     {
       "id": "icons",
@@ -698,7 +746,9 @@
       "selectors": [
         ".chart-card .chart-head .icon-btn",
         ".icon-btn",
-        ".icon-btn:hover"
+        ".icon-btn:hover",
+        ".icon-btn.plain",
+        ".icon-btn.plain:hover"
       ],
       "classes": [
         "icon-btn"
@@ -708,6 +758,7 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--muted",
         "--radius-pill"
       ]
     },
@@ -777,19 +828,18 @@
       "tokenReferences": [
         "--container-gutter-desktop",
         "--container-max",
-        "--fg",
         "--font-body",
         "--meta",
         "--motion-fast",
+        "--muted",
         "--space-12",
-        "--space-4",
         "--text-xs"
       ]
     }
   ],
   "literals": {
-    "colorExpressions": 34,
-    "pixelValues": 87,
+    "colorExpressions": 43,
+    "pixelValues": 120,
     "hardcodedFontFamilies": 0
   }
 }

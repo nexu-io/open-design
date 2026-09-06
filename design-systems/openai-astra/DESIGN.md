@@ -89,7 +89,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 ### Principles
 - Weight 500 is the loudest the page gets. No 600, no 700, no italics.
 - Headings use `text-wrap: balance`; body uses `text-wrap: pretty`.
-- Section titles cap at `max-width: 1000px`; body copy sits in a 676px column so the star rails have room.
+- Only the page title is h2-size (`48px`); every section heading after it is h3-size (`30px / 39.6px`, `-0.01em`, `500`), capped at `max-width: 1000px`. Body copy sits in a `669px` column (6 of 12 grid columns, starting at column 4) so the star rails have room; paragraphs are `17px / 28px` with `24px` below; inline links are white with a `1px` underline offset `4px`; inline code is `0.875em` mono on `#ffffff33`, `4px` radius, `0 4px` padding; footnote references are `<sup>` links at `12px`.
 - Hero labels are split: "GPT" pinned left at 50% height, "Astra" pinned right, each letter revealing with a stagger.
 - Tabular numerals for timestamps and benchmark figures.
 
@@ -108,7 +108,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - The drag surface is a full-bleed `<button>` with `cursor: grab`, `touch-action: pan-y pinch-zoom`, so dragging rotates the galaxy without hijacking vertical scroll.
 
 ### Copy Column
-- `max-width 676px`, centred, vertical padding about 26vh, `p1` body in `#ffffff99`, h2 in white. No background, no border. The first copy block carries `data-astra-intro` and its position drives the tilt and scatter.
+- `max-width 669px`, centred, vertical padding about 26vh, `p1` body in `#ffffff99`, h2 in white. No background, no border. The first copy block carries `data-astra-intro` and its position drives the tilt and scatter.
 
 ### Shape Cue
 - A `576px × 80vh` frame centred in the column, `pointer-events: none`, holding an invisible SVG of the target path so it reserves the correct aspect ratio. Stars land exactly on the path inside this frame. A caption (`14px 500`, tracking 0.08em) and a note (`14px`, `#ffffff70`, max 440px) sit under it.
@@ -125,27 +125,36 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - Content sits in a `1440px` (`90rem`) container with `32px` gutters (`24px` on phones), so at 1440px it runs edge to edge. Left group: wordmark `17px` tall, nav links `13px / 500` with `16px` side padding (white, hover `#ffffff99`), then the `40px` round search button in `#ffffff99` closing the group. Right group: glass pill **Log in** with a chevron and white pill **Try …** with an outward arrow, both `36px` tall (`!h-9`), `20px` side padding, `14px / 500` label, `12px` icons, `0.3em` icon gap; the white pill hovers to `#ffffffcc`.
 
 ### Segmented Control
-- Hairline pill container (`1px #ffffff33`, `4px` inner padding, `4px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.
+- Centred, hairline pill container (`1px #ffffff33`, `4px` inner padding, `8px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.
 - Autoplay: every `6s` the next tab is selected and its linked panel switches. Inside the selected pill a `#ffffff33` countdown fill (`absolute inset-0`, radius inherited, behind the label) holds at `scaleX(0)` for the first third of the cycle, then grows left-to-right linearly to `scaleX(1)`. Hover over the tabs, leaving the viewport, or hiding the page pauses the fill (`animation-play-state: paused`, resumed with a negative `animation-delay`); a click switches at once and restarts the cycle. Under reduced motion there is no fill and no autoplay.
 
 ### Select (dropdown)
-- Trigger is a compact glass pill: `32px` tall, `16px` side padding, `#ffffff1f` fill with a permanent `1px #ffffff33` ring, `14px / 500` label, `12px` chevron with `8px` gap. Open state doubles the ring and flips the chevron `180°` over `150ms`.
-- Menu drops `8px` below, left-aligned: `#1f1f1f` panel, `1px #ffffff14` border, `12px` radius, `8px` padding, at least as wide as the trigger (`190px` minimum, `max-content`). Options are `40px` rows with `16px` side padding, `10px` radius, `14px / 500`; hover `#ffffff14`, the selected option filled `#ffffff1f`. Escape, arrow keys, Enter and outside click behave as a native listbox. Used to switch a chart's axis (API cost vs output tokens).
+- Trigger (measured): `32px` tall, `12px` side padding, `rgba(51, 51, 51, 0.8)` fill with a permanent `1px #ffffff33` ring, `14px / 400` label, `12px` chevron with `6px` gap. Open state flips the chevron `180°` over `150ms`.
+- Menu drops `8px` below, left-aligned: `#2b2b2b` panel, `12px` radius, `8px` padding, at least `160px` wide (`max-content`). Options are `40px` rows with `12px` side padding, `10px` radius, `14px / 400`; hover `#ffffff14`, the selected option filled `#ffffff1f`. Escape, arrow keys, Enter and outside click behave as a native listbox. Used to switch a chart's axis (API cost vs output tokens).
+
+### Action Menu (chart download)
+- Trigger is a bare `20px` icon button (white, no fill, no hover ring; hover dims to `#ffffff99`). The menu drops `8px` below, right-aligned to the icon: `#2b2b2b` panel, `12px` radius, `12px` vertical padding, `160px` minimum width; items are `32px` rows with `20px` side padding, `14px / 400`, hover `#ffffff14`. Items: Download PNG, Download SVG, Copy link.
 
 ### Chart Card
-- `16px` radius, `1px #ffffff33` border, `32px` padding, black fill. Header row: title at h4 size, a glass select pill (`API Cost ▾`) beneath it, a download icon button on the right.
-- Legend: `17px` labels with shape markers per series (star, circle, diamond, triangle) and a dashed swatch for "reported score only". Plot: white `1px` axes, mono `13px` ticks, `17px` axis titles, dashed reference line, `2px` series lines with `5px` markers.
+- Lives in the `669px` prose column, centred under a centred segmented control. `16px` radius, `1px #ffffff33` border, black at `20%` (`oklab(0 0 0 / 0.2)`), padding `16px 20px 20px`, `24px` gap between rows. Header row: title `18px / 500`, the select pill beneath it, the download action menu on the right.
+- Legend: `14px / 20px` labels with shape markers per series (star, circle, diamond, triangle) and a dashed swatch for "reported score only". Plot: white `1px` axes, mono `13px` ticks, `17px` axis titles, dashed reference line, `2px` series lines with `5px` markers.
 - Caption: italic `14px`, centred, max `640px`, white. Series colours from the chart palette in §2.
 
 ### Quote Card
-- `#1f1f1f` fill, `1px #ffffff1f` border, `10px` radius, `32px` vertical and `24px` horizontal padding, the page's `0 18px 60px rgba(0,0,0,0.08)` shadow (invisible on black, kept for light embeds).
-- Logo row `32px` tall, quote at h5 size `/ 500` with `-0.01em` tracking and `0.5em` indent, attribution `14px / 500` in `#ffffff99`.
+- `899px` wide (8 of 12 columns), `#1f1f1f` fill, `1px #ffffff1f` border, `6px` radius, `32px` vertical and `24px` horizontal padding, the page's `0 18px 60px rgba(0,0,0,0.08)` shadow (invisible on black, kept for light embeds).
+- Logo row `32px` tall, quote at h5 size `/ 500` with `-0.025em` tracking and `0.5em` indent, attribution `14px / 500` in `#ffffff99`. Several quotes rotate in a carousel with a `1 / 3` counter and round `24px` arrow buttons.
 
 ### Media Frame & Two-up Comparison
 - Any screenshot, video or side-by-side product UI sits in a `10px`-radius frame with a `1px #ffffff14` hairline on `#0a0a0a`; `overflow: hidden`, no shadow. Two-up: two columns, `16px` gap, `24px` padding, centred labels at h4 size above each pane.
 
 ### Comparison Table
-- Fixed layout, first column `34%`, `20px` row padding, `24px` column gap, `1px #ffffff33` rule above every row and below the last. Cells `17px / 400`, header `500`, missing values as a muted `-`. No zebra stripes, no highlighted winner column; emphasis comes from the copy.
+- `28px` above and below, `1px #ffffff33` rule above every row and below the last, `12px` padding on every cell, cells `14px / 23px` with `-0.01em` tracking, header row `600`, missing values as a muted `-`. Wide tables keep their natural width and scroll horizontally inside the column. No zebra stripes, no highlighted winner column; emphasis comes from the copy.
+
+### Chips, Footnotes, Logo Strip, Media Bar
+- Chip: `32px` radius, `#ffffff1f`, `8px 12px`, `14px / 500`.
+- Footnotes: heading `FOOTNOTES` at `14px / 400` in `#ffffff99` with `12px` below; entries `14px / 23px` on a two-column inline grid (`12px` number, `8px` gap, `12px` between entries) in the `669px` column; references in copy are `<sup>` links at `12px`.
+- Logo strip: a flex row of `44px` buttons with `8px` padding, `14px` labels in `#ffffff99`, `4px` radius; the active one is white.
+- Media bar: `14px / 500` tabular timestamps (current white, total `#ffffff66` after a `|`), `32px` square buttons with `4px` radius, a `2px` track.
 
 ### Footer
 - Opaque `#000000`, full width. The canvas and its glow show through everything above it and stop at the footer's top edge, a hard edge that scrolls with the content. `120px` of black above the columns, `13px / 500` throughout. Five columns of link groups: heading in `#ffffff99` with `16px` below, links `20px` apart, groups `44px` apart, external links carry a `10px` outward arrow.
@@ -194,7 +203,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Scroll Stages (800px of scroll = progress 1)
 1. **Tilt**: the galaxy rotates to -52° about X, peaking at 75% of the intro block's travel and flattening at 100%.
-2. **Scatter**: 72% of the stars drift to rails on either side of the 676px column; brightness falls to 18%, dim stars shrink to 45%; the rails keep a depth-weighted parallax as you keep scrolling. The ambient glow does not change.
+2. **Scatter**: 72% of the stars drift to rails on either side of the 669px column; brightness falls to 18%, dim stars shrink to 45%; the rails keep a depth-weighted parallax as you keep scrolling. The ambient glow does not change.
 3. **Cursor**: when the cue enters the viewport, stars form the cursor path over the first 36% of entry and dissolve between 50% and 86%. On formation the shape auto-rotates 0.42 rad.
 4. **Knot**: the last cue holds; six arcs each own one sixth of the flow, so the ring keeps moving while it stays.
 - Scrolling back reverses every stage deterministically; the same seeds put every star back in the same place.
@@ -208,7 +217,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Do
 - Keep the canvas `#000000` and let the ambient glow supply the softness.
-- Keep the copy column at 676px and empty on both sides.
+- Keep the copy column at 669px and empty on both sides.
 - Use one white pill CTA per screen; every other control is glass.
 - Use weight 500 for every heading and 400 for body; keep display tracking at -0.03em.
 - Reserve the shape frames (576px × 80vh) even before the engine is wired, so layout does not shift.
@@ -249,13 +258,13 @@ Text #ffffff · Hero #fafafa · Muted #ffffff99 · Meta #ffffff70
 Hairline #ffffff33 · Soft #ffffff14 · Glass #ffffff1f
 Accent #ffffff on #000000 · Glow #23435f @ 55% · Stars #6dcbf4 #7ab1fe #f87915 #fa994c #f5f6fb
 Font: OpenAI Sans / Inter, 500 headings, 400 body, h1 64px -0.03em, p1 17px/28px
-Pills 9999px · Radii 6 / 10 / 16px · Column 676px · Container 1088px · Cue 576px × 80vh
+Pills 9999px · Radii 6 / 10 / 16px · Column 669px · Container 1088px · Cue 576px × 80vh
 Motion: 300ms cubic-bezier(.6,0,.4,1) · reveals 1s cubic-bezier(.22,1,.36,1) · no scroll-jacking
 ```
 
 ### Example Component Prompts
 - "A launch hero in the Astra system: black canvas, split labels 'NOVA' left and '2' right at 64px weight 500, scroll hint at the bottom, one glass pill 'Read the research'."
-- "A 676px copy block with an h2 at 48px and two p1 paragraphs in #ffffff99, 26vh padding, nothing on either side."
+- "A 669px copy block with an h2 at 48px and two p1 paragraphs in #ffffff99, 26vh padding, nothing on either side."
 - "A shape cue: a 576px × 80vh frame reserving a cursor path, caption 'It takes action' at 14px 500 tracking 0.08em, note in #ffffff70."
 - "A benchmark table: h5 labels, tabular figures, our model in white and three comparisons in #ffffff99, hairlines between rows, no colour bars."
 - "A 54px transparent site header: wordmark left, five 13px nav links, a search icon, a glass 'Log in ▾' pill and a white 'Try Nova ↗' pill."
