@@ -1184,7 +1184,7 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
         contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
         ext = 'pptx';
       } else if (format === 'pdf') {
-        buffer = await buildScreenshotPdf(images);
+        buffer = await buildScreenshotPdf(images, rendered.documentPageSizes);
         contentType = 'application/pdf';
         ext = 'pdf';
       } else {
