@@ -633,6 +633,14 @@ When you write or edit an HTML file in the project folder through the native fil
 // #622). The daemon stages a private copy into `<cwd>/.od-skills/` for reading,
 // and that copy is a deliberate write barrier — edits to it change nothing.
 //
+// That staged copy needs its own sentence in the prompt, because it is the one
+// skill path where the permission error does NOT fire. `withSkillRootPreamble`
+// advertises `.od-skills/<folder>/` as the primary **Skill root**, and it sits
+// inside the agent's writable project cwd — so a `Write`/`Edit`/`Bash` against
+// `.od-skills/<id>/SKILL.md` succeeds, looks like an install, and is discarded
+// when `stageActiveSkill` replaces the copy wholesale on the next turn. Silent
+// success is the same misdirection as the invented setting, minus the error.
+//
 // None of that was ever stated in the prompt. An agent asked to update a skill
 // therefore wrote to the skill path, collected `Operation not permitted`, and —
 // having no stated exit — invented one, telling the user to add the directory
@@ -651,7 +659,9 @@ const SKILL_WRITE_BOUNDARY = `
 
 Skill directories are not writable through your file tools, and that is deliberate — a skill is part of your own instructions, so it is never edited as a side effect of a task. Attempting to write one returns \`Operation not permitted\`. Retrying, changing the path, or routing the same write through a shell command will not help.
 
-When the user asks you to create or change a skill, do the work and hand it over rather than trying to install it yourself: write the proposed \`SKILL.md\` into the project folder (which you *can* write), then tell the user to paste it in through the Integration view's Skills tab, which is where skills are edited in the app.
+The \`.od-skills/\` folder in the project is a private working copy staged for reading only. It is the one exception to the error above: it sits in a directory you can write, so an edit there will appear to succeed while updating nothing, and the copy is replaced on the next turn. Do not edit that path, and never report a successful write there as having created or updated a skill.
+
+When the user asks you to create or change a skill, do the work and hand it over rather than trying to install it yourself: write the proposal as a new \`.md\` file in the project folder — which you *can* write — never under \`.od-skills/\`, then tell the user to paste it in through the Integration view's Skills tab, which is where skills are edited in the app.
 
 Open Design does not currently expose a sandbox mode, a writable-directory or "writable roots" list, or an approval-policy setting. Do not tell the user to look for one, and do not invent a settings path, menu, or option name to explain the failure — they will go looking and find nothing. Describe the limitation plainly and point at the Skills tab instead. (If a future build does add such a surface, this paragraph is what should change.)`;
 

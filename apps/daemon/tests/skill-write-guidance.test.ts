@@ -19,8 +19,14 @@ import { composeSystemPrompt } from '../src/prompts/system.js';
 // These tests pin the three things the prompt must state so the failure mode
 // cannot come back:
 //   1. the boundary  — skill directories are not writable through file tools;
-//   2. the exit      — where a human actually edits a skill in the UI;
-//   3. the prohibition on inventing product settings, worded so it stays a
+//   2. the staged copy — `.od-skills/<folder>/` is the one skill path the
+//      permission error does NOT cover. `withSkillRootPreamble` advertises it
+//      as the primary **Skill root** and it lives inside the agent's writable
+//      project cwd, so a write there succeeds, looks like an install, and is
+//      wiped when `stageActiveSkill` re-stages next turn — the same
+//      misdirection as the invented setting, without the error to stop it;
+//   3. the exit      — where a human actually edits a skill in the UI;
+//   4. the prohibition on inventing product settings, worded so it stays a
 //      statement about today rather than a promise we never make one.
 //
 // The assertions match on meaning rather than importing the implementation
@@ -59,6 +65,24 @@ describe('composeSystemPrompt — skill write guidance', () => {
       /skill (directories|folders|roots)[^.]*(are not|is not|aren't|cannot be)[^.]*writ/i,
     );
     expect(section).toMatch(/operation not permitted|permission denied|will fail/i);
+  });
+
+  it('names the staged .od-skills copy as a write that does not persist', () => {
+    const section = composedSkillGuidance();
+
+    // `/operation not permitted/` above cannot go red on this path: the staged
+    // copy is inside the writable project cwd, so the write succeeds. The
+    // section has to say so explicitly, or "write it into the project folder"
+    // reads as an invitation to install into `.od-skills/<id>/SKILL.md`.
+    expect(section).toMatch(/\.od-skills/);
+    expect(section).toMatch(/(appear to succeed|succeed[^.]*(but|while)|does not (update|persist))/i);
+    expect(section).toMatch(/(do not|don't|never) edit that path/i);
+  });
+
+  it('keeps the handover file out of the staged copy', () => {
+    // The proposal is a new file in the project folder, explicitly not under
+    // the staged skill root.
+    expect(composedSkillGuidance()).toMatch(/never under `\.od-skills\/`/i);
   });
 
   it('points at the real UI location where a skill is edited', () => {
