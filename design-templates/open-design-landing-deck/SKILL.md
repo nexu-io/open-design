@@ -174,8 +174,10 @@ FAL_KEY=... npx tsx ../open-design-landing/scripts/imagegen.ts ../open-design-la
 npx tsx ../open-design-landing/scripts/placeholder.ts ../open-design-landing/assets/
 ```
 
-Set your deck's `inputs.imagery.assets_path` to wherever those PNGs
-live (default in the example: `../open-design-landing/assets/`).
+Set your deck's `inputs.imagery.assets_path` to the shared asset directory
+(default in the example: `../open-design-landing/assets/`). The composer
+uses `.svg` slots for `placeholder` and `.png` slots for `generate` or
+`bring-your-own`, based on `inputs.imagery.strategy`.
 
 ### 3. Compose the deck
 

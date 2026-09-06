@@ -30,9 +30,16 @@ import type {
   Partner,
   FooterColumn,
   SectionRule,
-} from '../schema';
+  ImageryConfig,
+} from '../schema.js';
 
 const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+function assetUrl(imagery: ImageryConfig, slot: string): string {
+  const assets = imagery.assets_path.replace(/\/?$/, '/');
+  const extension = imagery.strategy === 'placeholder' ? 'svg' : 'png';
+  return `${assets}${slot}.${extension}`;
+}
 
 /* ------------------------------------------------------------------ *
  * helpers
@@ -188,7 +195,6 @@ function renderHeroIndex(item: HeroIndexItem): string {
 function renderHero(i: EditorialCollageInputs): string {
   const stats = i.hero.stats.map(renderHeroStat).join('\n          ');
   const index = i.hero.index.map(renderHeroIndex).join('\n      ');
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   return `
 <section class='hero' id='top' data-od-id='hero'>
   <div class='container'>
@@ -234,7 +240,7 @@ function renderHero(i: EditorialCollageInputs): string {
       <span class='annot annot-tr'>${i.hero.annotations.tr}</span>
       <span class='annot annot-bl coord'>${i.hero.annotations.bl}</span>
       <span class='annot annot-br'>${i.hero.annotations.br}</span>
-      <img src='${assets}hero.png' alt='' />
+      <img src='${assetUrl(i.imagery, 'hero')}' alt='' />
       <div class='index'>
       ${index}
       </div>
@@ -245,7 +251,6 @@ function renderHero(i: EditorialCollageInputs): string {
 
 function renderAbout(i: EditorialCollageInputs): string {
   const r = i.rules.about;
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   return `
 <section class='about' data-od-id='about'>
   <div class='container'>
@@ -269,7 +274,7 @@ function renderAbout(i: EditorialCollageInputs): string {
         </div>
       </div>
       <div class='about-art' data-reveal='right'>
-        <img src='${assets}about.png' alt='' />
+        <img src='${assetUrl(i.imagery, 'about')}' alt='' />
         <div class='about-side-note'>
           <b></b>
           ${i.about.side_note}
@@ -300,7 +305,6 @@ function renderCapabilityCard(c: CapabilityCard): string {
 
 function renderCapabilities(i: EditorialCollageInputs): string {
   const cards = i.capabilities.cards.map(renderCapabilityCard).join('\n            ');
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   return `
 <section class='capabilities' id='agents' data-od-id='capabilities'>
   <div class='container'>
@@ -309,7 +313,7 @@ function renderCapabilities(i: EditorialCollageInputs): string {
       <div class='capabilities-art' data-reveal='left'>
         <span class='corner tl'></span>
         <span class='corner br'></span>
-        <img src='${assets}capabilities.png' alt='' />
+        <img src='${assetUrl(i.imagery, 'capabilities')}' alt='' />
         <div class='ribbon'>${i.capabilities.ribbon}</div>
       </div>
       <div class='capabilities-copy' data-reveal>
@@ -329,9 +333,9 @@ function renderLabPill(p: LabPill): string {
   return `<button class='pill${p.active ? ' active' : ''}'>${p.label}<span class='count'>${p.count}</span></button>`;
 }
 
-function renderLabCard(c: LabCard, n: number, assets: string): string {
+function renderLabCard(c: LabCard, imageSrc: string): string {
   return `<div class='lab' data-reveal>
-    <div class='lab-img'><span class='badge'>${c.badge}</span><img src='${assets}lab-${n}.png' alt='' /></div>
+    <div class='lab-img'><span class='badge'>${c.badge}</span><img src='${imageSrc}' alt='' /></div>
     <div class='num-row'><span>${c.num}</span><span>${c.year}</span></div>
     <h4>${c.title}</h4>
     <p>${c.body}</p>
@@ -341,9 +345,8 @@ function renderLabCard(c: LabCard, n: number, assets: string): string {
 
 function renderLabs(i: EditorialCollageInputs): string {
   const pills = i.labs.pills.map(renderLabPill).join('\n          ');
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   const cards = i.labs.cards
-    .map((c, idx) => renderLabCard(c, idx + 1, assets))
+    .map((c, idx) => renderLabCard(c, assetUrl(i.imagery, `lab-${idx + 1}`)))
     .join('\n        ');
   const progress = Array.from({ length: i.labs.progress.total }, (_, k) =>
     k < i.labs.progress.filled ? `<span class='on'></span>` : `<span></span>`,
@@ -381,19 +384,20 @@ function renderLabs(i: EditorialCollageInputs): string {
 </section>`;
 }
 
-function renderMethodStep(s: MethodStep, last: boolean, n: number, assets: string): string {
+function renderMethodStep(s: MethodStep, last: boolean, imageSrc: string): string {
   return `<div class='method-step' data-reveal>
     <div class='num'>${s.num}</div>
     <h4>${s.title}${last ? '' : ` <span class='arrow-r'>→</span>`}</h4>
     <p>${s.body}</p>
-    <div class='img'><img src='${assets}method-${n}.png' alt='' /></div>
+    <div class='img'><img src='${imageSrc}' alt='' /></div>
   </div>`;
 }
 
 function renderMethod(i: EditorialCollageInputs): string {
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   const steps = i.method.steps
-    .map((s, idx, arr) => renderMethodStep(s, idx === arr.length - 1, idx + 1, assets))
+    .map((s, idx, arr) =>
+      renderMethodStep(s, idx === arr.length - 1, assetUrl(i.imagery, `method-${idx + 1}`)),
+    )
     .join('\n        ');
   return `
 <section class='method' data-od-id='method'>
@@ -423,7 +427,7 @@ function renderMethod(i: EditorialCollageInputs): string {
 </section>`;
 }
 
-function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string): string {
+function renderWorkCard(c: WorkCard, idx: number, imageSrc: string, href: string): string {
   return `<a class='work-card${idx === 1 ? ' alt' : ''}' data-reveal href='${href}'${ext(href)}>
     <div class='label-row'>
       <span class='small-label'>${c.small_label}</span>
@@ -431,7 +435,7 @@ function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string):
     </div>
     <h3>${c.title}</h3>
     <p>${c.body}</p>
-    <div class='img'><img src='${assets}work-${idx + 1}.png' alt='' /></div>
+    <div class='img'><img src='${imageSrc}' alt='' /></div>
     <div class='meta-row'>
       <span class='year'>${c.year}</span>
       <span>${c.tag}</span>
@@ -441,11 +445,10 @@ function renderWorkCard(c: WorkCard, idx: number, assets: string, href: string):
 
 function renderWork(i: EditorialCollageInputs): string {
   const r = i.rules.work;
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   // Use the first nav link as the work-card href fallback (we don't model per-card hrefs in WorkCard).
   const fallbackHref = i.nav.find((l) => /skills/i.test(l.label))?.href ?? '#';
   const cards = i.work.cards
-    .map((c, idx) => renderWorkCard(c, idx, assets, fallbackHref))
+    .map((c, idx) => renderWorkCard(c, idx, assetUrl(i.imagery, `work-${idx + 1}`), fallbackHref))
     .join('\n      ');
   return `
 <section class='tight' data-od-id='work'>
@@ -488,7 +491,6 @@ function renderPartner(p: Partner, href: string): string {
 }
 
 function renderTestimonial(i: EditorialCollageInputs): string {
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   // Each Partner can carry its own href. We fall back to the testimonial
   // read-more URL (then '#') so older brand inputs without per-partner
   // links still render valid anchors.
@@ -516,7 +518,7 @@ function renderTestimonial(i: EditorialCollageInputs): string {
         <a class='read-more' href='${i.testimonial.read_more_href}'${ext(i.testimonial.read_more_href)}>${i.testimonial.read_more_label}</a>
       </div>
       <div class='testimonial-art' data-reveal='right'>
-        <img src='${assets}testimonial.png' alt='' />
+        <img src='${assetUrl(i.imagery, 'testimonial')}' alt='' />
       </div>
     </div>
   </div>
@@ -524,7 +526,6 @@ function renderTestimonial(i: EditorialCollageInputs): string {
 }
 
 function renderCTA(i: EditorialCollageInputs): string {
-  const assets = i.imagery.assets_path.replace(/\/?$/, '/');
   return `
 <section class='cta' id='contact' data-od-id='cta'>
   <div class='container'>
@@ -551,7 +552,7 @@ function renderCTA(i: EditorialCollageInputs): string {
         </div>
       </div>
       <div class='cta-art' data-reveal='right'>
-        <img src='${assets}cta.png' alt='' />
+        <img src='${assetUrl(i.imagery, 'cta')}' alt='' />
         <div class='index'>Nº 08</div>
         <div class='ribbon'>${i.cta.ribbon}</div>
       </div>
