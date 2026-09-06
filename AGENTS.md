@@ -25,6 +25,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/closure` owns the independently distributable OpenDesign Closure content. It does not own acquisition, generation state, or shell policy.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/sidecar-proto` owns business DTOs and action names; `packages/sidecar` owns the complete business-agnostic sidecar client boundary and protocol implementation; `packages/platform` owns generic OS process primitives.
+- `packages/scene3d` is the deterministic 3D scene compiler behind the `scene3d` surface: one call runs parse → build (headless Blender) → proof render → export (USD/GLB) → lint → manifest and returns stable `S3D-*` issue codes; export precedes lint on purpose, so the linter validates the artifact that actually ships. It mirrors the HyperFrames pattern — the agent writes sources, a deterministic compiler produces the asset and the diagnostics. Do not add per-check tools alongside it; the single-call boundary is the design. Maintainer onboarding lives in `packages/scene3d/README.md`.
 - `packages/standalone` owns the shell-neutral exact metadata, verification, materialization, generation, and launcher contract.
 - `shells/terminal` owns the official Node carrier and terminal-facing lifecycle commands. Shells consume standalone contracts and must not import Closure app source.
 - `tools/dev` is the local development lifecycle control plane.

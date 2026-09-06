@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "name": "shaded-crate",
+  "shaders": {
+    "shd_rust": {
+      "kernel": "rust.glsl",
+      "size": 512,
+      "uniforms": {
+        "uScale": 6,
+        "uColorA": [0.72, 0.45, 0.2],
+        "uColorB": [0.28, 0.16, 0.1]
+      },
+      "outputs": ["baseColor", "roughness"]
+    }
+  },
+  "materials": {
+    "mtl_rusted": { "shader": "shd_rust", "metallic": 0 },
+    "mtl_stone": { "baseColor": [0.6, 0.6, 0.58], "roughness": 0.9 }
+  },
+  "parts": [
+    { "id": "prp_slab", "size": [1.6, 1.6, 0.1], "material": "mtl_stone" },
+    { "id": "prp_crate", "size": [0.8, 0.8, 0.8], "material": "mtl_rusted" }
+  ],
+  "relations": [
+    { "type": "at", "part": "prp_slab", "center": [0, 0, 0.05] },
+    { "type": "sits_on", "part": "prp_crate", "on": "prp_slab" },
+    { "type": "align", "part": "prp_crate", "to": "prp_slab", "axes": ["x", "y"] }
+  ],
+  "claims": {
+    "parts": 2,
+    "grounded": true,
+    "watertight": true,
+    "materialsUsed": ["mtl_rusted", "mtl_stone"]
+  }
+}

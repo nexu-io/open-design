@@ -421,6 +421,7 @@ const SUBCOMMAND_MAP = {
   diagnostics: runDiagnostics,
   export: runExport,
   lint: runLint,
+  scene3d: runScene3d,
   status: runStatus,
   version: runVersion,
   'whats-new': runWhatsNew,
@@ -721,6 +722,35 @@ async function runExport(args) {
   console.log(`wrote ${out} (${buffer.length} bytes)`);
 }
 
+// `od scene3d …` mirrors the Scene 3D viewer. Same surface, same
+// /api/projects/:id/scene3d/compile endpoint. The CLI form is the
+// embeddability contract: an external agent (hermes-agent, openclaw, a
+// scripted render job) drives the deterministic scene compiler headlessly,
+// which is the whole point of making the compile one call instead of a
+// chain of check tools.
+const SCENE3D_STRING_FLAGS = new Set([
+  'daemon-url', 'project', 'scene', 'stages', 'engine', 'resolution',
+  'turntable-steps', 'fail-on', 'work-budget',
+  // `od scene3d compile --look`: an aimed viewport shot. Repeatable — the flag
+  // parser keeps only the last value for a repeated key, so the compile handler
+  // re-scans argv for every occurrence (the same escape the positional args use).
+  'look', 'shot',
+  // `od scene3d tweaks`: the edits the viewer's gizmo writes. --set takes
+  // JSON inline, --set-file takes a path or `-` for stdin, matching the
+  // --prompt-file convention the rest of the CLI uses for long input.
+  'set', 'set-file',
+  // `od scene3d describe`: scope the re-describe. --region "x0,y0,z0,x1,y1,z1",
+  // --focus <part>, --budget <tokens>.
+  'region', 'focus', 'budget',
+]);
+const SCENE3D_BOOLEAN_FLAGS = new Set([
+  'help', 'h', 'json', 'agent-message', 'no-turntable', 'no-cache',
+  'merge', 'clear', 'fast', 'frames', 'respect-scene-camera',
+]);
+const SCENE3D_ACTIONS = ['compile', 'manifest', 'tweaks', 'describe'];
+const SCENE3D_FAIL_ON_VALUES = ['error', 'warning', 'none'];
+const SCENE3D_STAGE_IDS = ['parse', 'build', 'lint', 'proof', 'export', 'manifest'];
+
 const LINT_STRING_FLAGS = new Set(['daemon-url', 'file', 'html-file', 'fail-on']);
 const LINT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'agent-message']);
 const LINT_FAIL_ON_VALUES = ['p0', 'p1', 'p2', 'none'];
@@ -834,6 +864,798 @@ async function runLint(args) {
     if (flags['agent-message'] && agentMessage) console.log(`\n${agentMessage}`);
   }
   if (failed) process.exitCode = 1;
+}
+
+function printScene3dHelp() {
+  console.log(`Usage:
+  od scene3d compile [options]
+  od scene3d manifest [options]
+  od scene3d describe [options]
+  od scene3d tweaks [options]
+
+Compile a 3D scene project the way a build tool compiles code: parse, build
+through headless Blender, lint deterministically, render proof frames,
+export USD/GLB, and emit a manifest — in ONE call. Issues carry stable codes
+(S3D-E-324 z-fighting, S3D-W-341 default material, ...) so a driving agent
+learns the codes instead of re-reading prose.
+
+\`manifest\` reads the last compile's manifest without spending a Blender run.
+
+\`describe\` re-runs the LOD scene digest with a QUERY — --region, --focus,
+--budget — over the last compile's census (no Blender), so you can zoom into a
+big kit without recompiling.
+
+Exit codes: 0 clean at threshold · 1 issues at/above --fail-on ·
+2 usage · 3 daemon unreachable · 4 scene busy (another compile holds it — nothing ran).
+
+Options:
+  --project <id>           Project id (default: OD_PROJECT_ID)
+  --scene <path>           Project-relative scene directory (default: project root)
+  --fast                   Structure loop: parse,build,lint,manifest — no proofs, no export.
+                           The default iteration gear; a full compile pays ~7s of
+                           proof for findings these stages already produce.
+  --stages <a,b,c>         Restrict the pipeline (${SCENE3D_STAGE_IDS.join(', ')})
+  --engine <e>             BLENDER_EEVEE | CYCLES
+  --resolution <px>        Proof render resolution (64-16384; a GPU-memory ceiling, not a UI cap)
+  --turntable-steps <n>    Turntable frame count (1-2048; time governed by the stage timeout)
+  --no-turntable           Render one still instead of a turntable
+  --respect-scene-camera   One still through the camera the SCENE places, framed as
+                           its author framed it (implies --no-turntable). The runner
+                           MEASURES the placed camera's pose, so the still gets an
+                           honest compass name (e.g. "~front-right 45°") — measured,
+                           never derived.
+  --no-cache               Bypass the per-stage content-hash cache
+  --work-budget <n>        Raise the recipe work-meter ceiling (kernel work units) for a
+                           genuinely large asset — a wall you can raise, not a size cap
+  --region <box>           describe: only parts intersecting "x0,y0,z0,x1,y1,z1" (world metres)
+  --focus <part>           describe: expand the group containing this part in full
+  --budget <tokens>        describe: roughly how many tokens the digest may occupy
+  --look <spec>            Photograph an aimed shot, in ADDITION to the turntable.
+                           Repeatable. You aim by NAMING things — the compiler
+                           resolves the pose against the census it measured, and
+                           echoes back exactly where the camera stood.
+                             --look prp_lamp                (that part, fitted, from the front)
+                             --look prp_lamp:left           (that part, from its left)
+                             --look :back                   (the whole scene, from behind)
+                             --look at=prp_bar,from=20/60   (azimuth 20°, elevation 60°)
+                             --look at=prp_bar,from=part:prp_stool,eyeHeight=1.2
+                                                            (stand at the stool, 1.2m up)
+                           Keys: at, from, elevation (level|eye|high|top|low|bottom),
+                           fov, margin, distance, eyeHeight, label.
+                           margin MULTIPLIES the fitted distance (1 = subject exactly
+                           fills the frame; default 1.25; it is not padding — below 1
+                           walks the camera toward, then inside, the subject).
+                           distance and eyeHeight are metres.
+  --shot <json>            The same viewport in its general form, for the shots an
+                           aimed --look cannot express. Repeatable. A shot is
+                           station (where the eye is) x gaze (where it points) x
+                           lens x sweep (the same shot, n times):
+                             # stand on the counter at eye height, turn all the way around
+                             --shot '{"station":{"at":"prp_counter","offset":[0,0,1.6]},
+                                      "gaze":{"heading":"front"},"lens":{"fovDeg":90},
+                                      "sweep":{"frames":8,"over":{"headingDeg":[0,360]}}}'
+                             # ride the animation from a fixed angle
+                             --shot '{"gaze":{"at":"prp_fan"},"sweep":{"frames":16,"time":true}}'
+                           station: {orbit:{of?,azimuthDeg,elevationDeg?,distance?,margin?}}
+                                  | {at:"<part>",offset?:[x,y,z]} | {point:[x,y,z]}
+                           gaze:    {at?:"<part>"} | {heading:<word|deg>,pitchDeg?}
+                                  | {toward:[x,y,z]}
+                           sweep.over: azimuthDeg | elevationDeg | headingDeg |
+                                       pitchDeg | distance | fovDeg, each [from,to]
+  --frames                 Show the proof frames as ASCII in the report even when clean (implies --agent-message)
+  --fail-on <sev>          error | warning | none — exit 1 threshold (default error)
+  --agent-message          Emit the <scene3d-report> block: per-issue fixes, measured
+                           data, the turntable's compass map, and where the read
+                           artifacts live. Prints after the terse stream, or rides the
+                           envelope as .agentMessage under --json.
+
+Tweaks (per-part placement edits, the same file the viewer's gizmo saves):
+  --set <json>             Write these edits, e.g. '{"prp_lid":{"translate":[0,0.1,0]}}'
+  --set-file <path|->      Read the same JSON from a file, or - for stdin
+  --merge                  Compose with what is already saved instead of replacing
+  --clear                  Remove all saved edits for the scene
+
+Common to every action:
+  --json                   Print a machine-readable result envelope
+  --daemon-url <url>       Override daemon URL
+
+Examples:
+  od scene3d compile --project p1 --scene scenes/crate
+  od scene3d compile --fast --json | jq '.issues[].code'
+  od scene3d compile --stages parse,lint --json | jq '.issues[].code'
+  od scene3d compile --scene scenes/crate --fail-on warning --agent-message
+  od scene3d manifest --project p1 --scene scenes/crate --json
+  od scene3d tweaks --scene scenes/crate --json
+  od scene3d tweaks --scene scenes/crate --set '{"prp_lid":{"translate":[0,0.02,0]}}' --merge
+  od scene3d tweaks --scene scenes/crate --merge \
+    --set '{"prp_lid":{"material":{"assign":"mtl_gold","roughness":0.2}}}'
+  jq '.tweaks' saved.json | od scene3d tweaks --scene scenes/crate --set-file -`);
+}
+
+/**
+ * One `--look` argument as a look spec.
+ *
+ * Two forms, because the two uses are different. The shorthand
+ * `part:direction` is what a person types at a prompt ("prp_lamp:left"), and
+ * the key=value form is what stays readable once a shot needs a lens or a
+ * viewpoint ("at=prp_lamp,from=part:prp_stool,eyeHeight=1.2"). Both produce the
+ * same spec the HTTP body carries, so the CLI and the UI reach one endpoint
+ * with one shape.
+ *
+ * Nothing here knows what a legal part name or direction is: the compiler
+ * resolves that against the measured census and rejects a bad one by naming the
+ * parts that exist. This parser only decides which characters were which field.
+ */
+function parseLookSpec(text) {
+  const raw = String(text).trim();
+  if (!raw) throw new Error('empty look');
+  const spec = {};
+  const numeric = (key, value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) throw new Error(`${key} must be a number (got ${JSON.stringify(value)})`);
+    return n;
+  };
+  /** `left`, `part:prp_stool`, or `20/60` (azimuth/elevation). */
+  const parseFrom = (value) => {
+    if (value.startsWith('part:')) {
+      const part = value.slice('part:'.length).trim();
+      if (!part) throw new Error('from=part: needs a part name');
+      return { part };
+    }
+    if (value.includes('/')) {
+      const [az, el] = value.split('/', 2);
+      return {
+        azimuthDeg: numeric('from azimuth', az),
+        ...(el !== undefined && el !== '' ? { elevationDeg: numeric('from elevation', el) } : {}),
+      };
+    }
+    return value;
+  };
+  if (raw.includes('=')) {
+    for (const pair of raw.split(',')) {
+      const eq = pair.indexOf('=');
+      if (eq < 0) throw new Error(`'${pair.trim()}' is not key=value`);
+      const key = pair.slice(0, eq).trim();
+      const value = pair.slice(eq + 1).trim();
+      switch (key) {
+        case 'at': spec.at = value; break;
+        case 'from': spec.from = parseFrom(value); break;
+        case 'elevation': spec.elevation = value; break;
+        case 'label': spec.label = value; break;
+        case 'fov': case 'fovDeg': spec.fovDeg = numeric(key, value); break;
+        case 'margin': spec.margin = numeric(key, value); break;
+        case 'distance': spec.distance = numeric(key, value); break;
+        case 'eyeHeight': case 'eye-height': spec.eyeHeight = numeric(key, value); break;
+        default:
+          throw new Error(
+            `unknown look key '${key}' (expected at, from, elevation, fov, margin, distance, eyeHeight, label)`,
+          );
+      }
+    }
+    return spec;
+  }
+  // Shorthand: `part`, `part:direction`, or `:direction` for the whole scene.
+  // A part-viewpoint shorthand would collide with this colon, so that form is
+  // only available in the key=value syntax — where it reads unambiguously.
+  const colon = raw.indexOf(':');
+  if (colon < 0) {
+    spec.at = raw;
+    return spec;
+  }
+  const at = raw.slice(0, colon).trim();
+  const from = raw.slice(colon + 1).trim();
+  if (at) spec.at = at;
+  if (from) spec.from = parseFrom(from);
+  return spec;
+}
+
+async function runScene3d(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, { string: SCENE3D_STRING_FLAGS, boolean: SCENE3D_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const pos = positionalArgs(args, SCENE3D_STRING_FLAGS);
+  const action = pos[0];
+  // Asking for help is a successful request (`od scene3d compile --help`
+  // exits 0); arriving with no action at all is a usage error.
+  const askedForHelp = Boolean(flags.help || flags.h || action === 'help');
+  if (askedForHelp || !action) {
+    printScene3dHelp();
+    process.exit(askedForHelp ? 0 : 2);
+  }
+  if (!SCENE3D_ACTIONS.includes(action)) {
+    console.error(`unknown scene3d action: ${action} (expected ${SCENE3D_ACTIONS.join(' | ')})`);
+    process.exit(2);
+  }
+
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
+  if (!projectId) {
+    console.error(
+      'project id required. Pass --project <id> or set OD_PROJECT_ID. The daemon injects this when it spawns the code agent.',
+    );
+    process.exit(2);
+  }
+  const scenePath = flags.scene || '.';
+  const failOn = flags['fail-on'] || 'error';
+  if (!SCENE3D_FAIL_ON_VALUES.includes(failOn)) {
+    console.error(`invalid --fail-on: ${failOn} (expected ${SCENE3D_FAIL_ON_VALUES.join(' | ')})`);
+    process.exit(2);
+  }
+
+  const base = await cliDaemonBaseUrl(flags);
+
+  if (action === 'manifest') {
+    const query = `?scenePath=${encodeURIComponent(scenePath)}`;
+    let resp;
+    try {
+      resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/manifest${query}`);
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+    const result = await resp.json();
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (!result.manifest) {
+      // A dead end with a door: the reader is one command away from a
+      // manifest, so hand them that command instead of only the absence.
+      console.log(`${scenePath}: never compiled`);
+      // Paste-safe in every environment: echo the resolved project id back
+      // rather than assuming OD_PROJECT_ID is set for the next invocation.
+      console.log(
+        `run: od scene3d compile --project ${projectId} --scene ${scenePath} --agent-message`,
+      );
+      return;
+    }
+    printScene3dManifest(result.manifest, scenePath);
+    return;
+  }
+
+  /*
+   * `od scene3d describe` — a scoped re-describe of an already-compiled scene.
+   * The compile ships one fixed 700-token digest; this exposes the LOD
+   * summarizer's region/focus/budget so an agent can zoom into a 50k-part kit
+   * ("describe just the region around the door") without recompiling. A pure
+   * read — no Blender — same shape of truth as the compile-time digest.
+   */
+  if (action === 'describe') {
+    const params = new URLSearchParams({ scenePath });
+    if (typeof flags.region === 'string') params.set('region', flags.region);
+    if (typeof flags.focus === 'string') params.set('focus', flags.focus);
+    if (flags.budget !== undefined) params.set('budget', String(flags.budget));
+    let resp;
+    try {
+      resp = await fetch(
+        `${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/describe?${params.toString()}`,
+      );
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+    const result = await resp.json();
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+      return;
+    }
+    if (!result.describe) {
+      console.log(`${scenePath}: never compiled`);
+      console.log(
+        `run: od scene3d compile --project ${projectId} --scene ${scenePath} --agent-message`,
+      );
+      return;
+    }
+    console.log(result.describe);
+    return;
+  }
+
+  /*
+   * `od scene3d tweaks` — the per-part edits the viewer's gizmo writes.
+   *
+   * This existed as two HTTP endpoints and a Save button and nothing else,
+   * which is the dual-track rule in AGENTS.md being broken rather than an
+   * omission of convenience: an external agent driving Open Design through
+   * `od` could compile a scene and read its manifest, but could not see or
+   * author a single placement edit. Same endpoints as the viewer, so there
+   * is one shape of truth rather than a CLI dialect.
+   */
+  if (action === 'tweaks') {
+    const url = `${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/tweaks`;
+    const inline = typeof flags.set === 'string' ? flags.set : null;
+    const fromFile = await readFileFlagOrStdin(flags['set-file']);
+    if (inline !== null && fromFile !== null) {
+      console.error('pass either --set or --set-file, not both');
+      process.exit(2);
+    }
+    const writing = inline !== null || fromFile !== null || flags.clear === true;
+
+    if (!writing) {
+      let resp;
+      try {
+        resp = await fetch(`${url}?scenePath=${encodeURIComponent(scenePath)}`);
+      } catch (err) {
+        surfaceFetchError(err, base);
+        process.exit(3);
+      }
+      if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+      const result = await resp.json();
+      if (flags.json) {
+        process.stdout.write(`${JSON.stringify(result, null, 2)}
+`);
+        return;
+      }
+      // A file the daemon could not parse is reported, not silently shown
+      // as "no edits" — those are different situations for the reader.
+      if (result.unreadable) {
+        console.error(`${scenePath}: tweaks.json exists but could not be parsed`);
+        process.exitCode = 1;
+        return;
+      }
+      const names = Object.keys(result.tweaks || {}).sort();
+      if (names.length === 0) {
+        console.log(`${scenePath}: no saved edits`);
+        return;
+      }
+      for (const name of names) {
+        const t = result.tweaks[name] || {};
+        const parts = [];
+        if (t.translate) parts.push(`move ${t.translate.map((n) => n.toFixed(4)).join(', ')}`);
+        if (t.quat) parts.push(`turn ${t.quat.map((n) => n.toFixed(4)).join(', ')}`);
+        if (t.scale) parts.push(`scale ${t.scale.map((n) => n.toFixed(4)).join(', ')}`);
+        console.log(`${name}	${parts.join('  ') || '(identity)'}`);
+      }
+      return;
+    }
+
+    let tweaks;
+    if (flags.clear === true) {
+      // Clearing is an empty map, which is exactly what the route already
+      // treats as "remove the file" — no second endpoint, no delete verb.
+      tweaks = {};
+    } else {
+      const raw = inline !== null ? inline : fromFile;
+      try {
+        tweaks = JSON.parse(raw);
+      } catch (err) {
+        console.error(`could not parse tweaks JSON: ${err.message}`);
+        process.exit(2);
+      }
+    }
+    if (flags.clear === true && flags.merge === true) {
+      console.error('--clear and --merge contradict each other');
+      process.exit(2);
+    }
+
+    let resp;
+    try {
+      resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ scenePath, tweaks, merge: flags.merge === true }),
+      });
+    } catch (err) {
+      surfaceFetchError(err, base);
+      process.exit(3);
+    }
+    if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+    const result = await resp.json();
+    if (flags.json) {
+      process.stdout.write(`${JSON.stringify(result, null, 2)}
+`);
+      return;
+    }
+    if (result.cleared) console.log(`${scenePath}: cleared saved edits`);
+    else {
+      console.log(
+        `${scenePath}: ${result.parts} part${result.parts === 1 ? '' : 's'} saved` +
+          (result.merged ? ' (merged into existing)' : ''),
+      );
+    }
+    // Edits are not live until the scene recompiles; saying so here saves
+    // the reader the round trip of wondering why nothing changed.
+    if (!flags.json && !result.cleared) {
+      console.log(`run: od scene3d compile --project ${projectId} --scene ${scenePath} --no-cache`);
+    }
+    return;
+  }
+
+  // Stage/proof options are validated by the daemon too; parsing them here
+  // means a typo fails before a Blender process is ever spawned.
+  const body: Record<string, unknown> = {
+    scenePath,
+    noCache: flags['no-cache'] === true,
+    ...(flags.frames === true ? { frames: true } : {}),
+  };
+  if (flags['work-budget']) {
+    const workBudget = Number(flags['work-budget']);
+    if (!Number.isFinite(workBudget) || workBudget <= 0) {
+      console.error(`invalid --work-budget: ${flags['work-budget']} (expected a positive number of kernel work units)`);
+      process.exit(2);
+    }
+    body.workBudget = workBudget;
+  }
+  /* Aimed viewport shots. Repeatable, so read straight from argv: the flag
+     parser keeps only the last value for a repeated key. */
+  const looks = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    let text = null;
+    if (a === '--look') text = args[i + 1];
+    else if (typeof a === 'string' && a.startsWith('--look=')) text = a.slice('--look='.length);
+    if (text === null || text === undefined) continue;
+    try {
+      looks.push(parseLookSpec(text));
+    } catch (err) {
+      console.error(`invalid --look ${JSON.stringify(text)}: ${err.message}`);
+      process.exit(2);
+    }
+  }
+  if (looks.length > 0) body.looks = looks;
+  /* `--shot` takes JSON rather than a key=value shorthand. A station × gaze ×
+     lens × sweep spec is genuinely structured — nested objects and ranges — and
+     inventing a flat mini-language for it would be exactly the bloat the
+     primitive factoring exists to avoid. `--look` remains the ergonomic form
+     for the aimed shot, which is the one people type by hand. */
+  const shots = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    let text = null;
+    if (a === '--shot') text = args[i + 1];
+    else if (typeof a === 'string' && a.startsWith('--shot=')) text = a.slice('--shot='.length);
+    if (text === null || text === undefined) continue;
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (err) {
+      console.error(`invalid --shot JSON: ${err.message}`);
+      process.exit(2);
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      console.error('each --shot must be a JSON object (station/gaze/lens/sweep/label)');
+      process.exit(2);
+    }
+    shots.push(parsed);
+  }
+  if (shots.length > 0) body.shots = shots;
+  // `--fast` is the structure-loop alias: parse + build + lint + manifest,
+  // no proofs, no export. The iteration gear for grid/naming/relation work —
+  // a full compile pays ~7s of proof for findings these stages already
+  // produce. The manifest stage is pure TypeScript and costs milliseconds;
+  // dropping it made `od scene3d manifest --json` mid-iteration read a
+  // manifest the fast loop had never refreshed, so the machine-readable
+  // census silently went stale while the prose report was current.
+  if (flags.fast === true) {
+    if (flags.stages) {
+      console.error('pass either --fast or --stages, not both');
+      process.exit(2);
+    }
+    body.stages = ['parse', 'build', 'lint', 'manifest'];
+  } else if (flags.stages) {
+    const stages = String(flags.stages).split(',').map((s) => s.trim()).filter(Boolean);
+    const unknown = stages.filter((s) => !SCENE3D_STAGE_IDS.includes(s));
+    if (stages.length === 0 || unknown.length > 0) {
+      console.error(`invalid --stages: ${unknown.join(', ') || '(empty)'} (expected ${SCENE3D_STAGE_IDS.join(', ')})`);
+      process.exit(2);
+    }
+    body.stages = stages;
+  }
+  const proof = {};
+  if (flags.engine) {
+    if (flags.engine !== 'BLENDER_EEVEE' && flags.engine !== 'CYCLES') {
+      console.error(`invalid --engine: ${flags.engine} (expected BLENDER_EEVEE | CYCLES)`);
+      process.exit(2);
+    }
+    proof.engine = flags.engine;
+  }
+  if (flags.resolution) {
+    const resolution = Number(flags.resolution);
+    if (!Number.isInteger(resolution) || resolution < 64 || resolution > 16384) {
+      console.error(`invalid --resolution: ${flags.resolution} (expected an integer 64-16384)`);
+      process.exit(2);
+    }
+    proof.resolution = resolution;
+  }
+  if (flags['turntable-steps']) {
+    const steps = Number(flags['turntable-steps']);
+    if (!Number.isInteger(steps) || steps < 1 || steps > 2048) {
+      console.error(`invalid --turntable-steps: ${flags['turntable-steps']} (expected an integer 1-2048)`);
+      process.exit(2);
+    }
+    proof.turntableSteps = steps;
+  }
+  if (flags['no-turntable'] === true) proof.turntable = false;
+  /* The AUTHORED framing: one still through the camera the scene places,
+     turntable overridden. The daemon has validated this since the flag
+     existed and the CLI never offered it, so the one way to photograph a
+     scene the way its author framed it was to hand-post JSON — a
+     capability with only an HTTP surface, which the dual-track rule calls
+     a regression. */
+  if (flags['respect-scene-camera'] === true) {
+    proof.respectSceneCamera = true;
+    proof.turntable = false;
+  }
+  if (Object.keys(proof).length > 0) body.proof = proof;
+
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/scene3d/compile`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    // The daemon does not abort a compile because this client vanished: a
+    // dropped connection routinely means the work FINISHED server-side and
+    // only the reply was lost. Without this note, the next compile's
+    // "build cached" reads as the compiler skipping work that seemingly
+    // never ran — a field run lost minutes to exactly that doubt.
+    console.error(
+      'note: the compile may still be running (or already finished) on the daemon — ' +
+        'verify with `od scene3d manifest --json` (generatedAt shows whether it landed); ' +
+        'a follow-up compile reports cached stages for any work that completed.',
+    );
+    process.exit(3);
+  }
+  if (resp.status === 409) {
+    // The per-scene compile gate refused: nothing ran, nothing failed. A
+    // distinct exit code — a script must be able to tell "compiled clean"
+    // from "try again later", and the generic JSON dump exited 0 here once.
+    const busyMessage =
+      'scene is busy: another compile holds it — nothing ran; retry when it finishes ' +
+      '(od scene3d manifest --json shows generatedAt when it lands)';
+    if (flags.json) {
+      // The machine-readable surface keeps its contract on refusals too.
+      let body: unknown;
+      try {
+        body = await resp.json();
+      } catch {
+        body = undefined;
+      }
+      process.stdout.write(
+        `${JSON.stringify({ ok: false, code: 'scene-busy', projectId, scenePath, message: busyMessage, ...(body !== undefined ? { response: body } : {}) }, null, 2)}\n`,
+      );
+    } else {
+      console.error(busyMessage);
+    }
+    process.exit(4);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp, 'project-not-found');
+  const result = await resp.json();
+  const { summary } = result;
+  const failed =
+    failOn === 'error' ? summary.errors > 0
+    : failOn === 'warning' ? summary.errors + summary.warnings > 0
+    : false;
+
+  /* Which outputs this run actually produced. A restricted pass (--fast,
+     --stages) carries the previous compile's frames and exports forward so
+     their paths stay addressable — and an agent reading the machine-readable
+     envelope is exactly the consumer that cannot tell by looking. The prose
+     stream and the report letter both mark this; leaving it out of --json
+     put the safeguard on every surface except the one built for automation. */
+  const proofStageRow = result.stages.find((s) => s.id === 'proof');
+  const exportStageRow = result.stages.find((s) => s.id === 'export');
+  // Carried means the paths BELOW name older files — a stage that was
+  // skipped with nothing to carry forward produced no paths, and calling
+  // that empty result stale would have automation branch on a staleness
+  // that has no artifact behind it.
+  const proofCarried =
+    result.proofImages.length > 0 && (!proofStageRow || proofStageRow.status === 'skipped');
+  const exportCarried =
+    result.exportedAssets.length > 0 && (!exportStageRow || exportStageRow.status === 'skipped');
+  const stale = (which: string) => `STALE — from a previous compile (${which} did not run this pass) — `;
+
+  if (flags.json) {
+    const envelope = {
+      ok: !failed,
+      projectId,
+      scenePath: result.scenePath,
+      failOn,
+      summary,
+      stages: result.stages,
+      issues: result.issues,
+      proofImages: result.proofImages.map((a) => a.path),
+      exportedAssets: result.exportedAssets.map((a) => a.path),
+      /* True when the paths above name files an EARLIER compile produced.
+         Present on every compile (never conditional): a field that appears
+         only in the bad case reads as absent-means-nothing-known, and a
+         consumer that has never seen it cannot branch on it. */
+      proofCarried,
+      exportCarried,
+      ...(result.contactSheet ? { contactSheet: result.contactSheet.path } : {}),
+      ...(result.materialBalls
+        ? { materialBalls: result.materialBalls.map((a: { path: string }) => a.path) }
+        : {}),
+      /* Aimed shots keep their RESOLVED pose in the machine-readable envelope,
+         not just their path: a caller scripting an iteration reads the pose to
+         compute its next request, and a bare filename would send it back to
+         guessing. */
+      ...(result.looks ? { looks: result.looks } : {}),
+      ...(result.looksRejected ? { looksRejected: result.looksRejected } : {}),
+      /* The report rides the envelope under the same flags that print it in
+         the prose stream. It used to be dropped here unconditionally, which
+         made `--json --agent-message` a silent no-op and `--frames --json`
+         print no frames at all — on the surface an AGENT uses. The whole
+         point of the block is agent self-correction, so withholding it from
+         the machine-readable path withheld it from its only real audience. */
+      ...((flags['agent-message'] || flags.frames) && result.agentMessage
+        ? { agentMessage: result.agentMessage }
+        : {}),
+      manifest: result.manifest,
+    };
+    process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
+  } else {
+    for (const stage of result.stages) {
+      console.log(`  ${stage.id.padEnd(8)} ${stage.status.padEnd(7)} ${stage.durationMs}ms`);
+    }
+    for (const issue of result.issues) {
+      const target = issue.target ? ` [${issue.target}]` : '';
+      // Carry the demotion arrow into the terse stream. A relaxed finding
+      // keeps its original code (S3D-E-321), so without the arrow the
+      // stream prints error-family codes directly above "0 errors" — the
+      // two lines contradict each other and the stream is what a reader
+      // (and a truncated log) sees first.
+      const relaxedFrom = (issue.detail as { relaxedFrom?: string } | undefined)?.relaxedFrom;
+      const arrow = relaxedFrom && relaxedFrom !== issue.severity ? `→${issue.severity}` : '';
+      console.log(`${issue.code}${arrow}${target} ${issue.message}`);
+      // Multi-line detail payloads (an E-802 driver log) are the finding's
+      // only actionable content; render them as indented blocks rather than
+      // leaving them to the JSON envelope a terse reader never opens.
+      for (const [key, value] of Object.entries(issue.detail ?? {})) {
+        if (typeof value !== 'string' || !value.includes('\n')) continue;
+        console.log(`      ${key}:`);
+        for (const line of value.split('\n')) console.log(`        ${line}`);
+      }
+      if (issue.hint) console.log(`      fix: ${issue.hint}`);
+    }
+    const counts = `${summary.errors} error${summary.errors === 1 ? '' : 's'} · ${summary.warnings} warning${summary.warnings === 1 ? '' : 's'}`;
+    console.log(result.ok ? `compiles clean — ${counts}` : `compile failed — ${counts}`);
+    // Same two facts the JSON envelope publishes, in words: after a
+    // structural edit these files show geometry that no longer exists.
+    if (result.proofImages.length > 0) {
+      console.log(
+        `proof: ${proofCarried ? stale('proof') : ''}${result.proofImages.length} frame(s) — ${result.proofImages[0].path}`,
+      );
+    }
+    /* Aimed shots print their resolved pose in the terse stream too: the pose
+       is the answer to "where did that put me", and a reader who never asks
+       for the full letter still needs it to aim the next one. */
+    for (const [i, look] of (result.looks ?? []).entries()) {
+      // A shot that turns in place has no subject: report where it STANDS and
+      // what it FACES rather than printing a target it does not have.
+      const aimed = look.targetName !== undefined && look.distance !== undefined;
+      // frameSpanM is the one fact the pixels cannot carry (a 2mm screw and
+      // a 2m door are the same picture) — the terse stream used to keep it
+      // to the JSON envelope, which is exactly the reader who needs it least.
+      const span =
+        look.frameSpanM !== undefined
+          ? ` · frame spans ${Math.round(look.frameSpanM * 1000) / 1000}m`
+          : '';
+      const geometry = aimed
+        ? `at ${look.targetName} · ${look.name} az ${Math.round(look.azimuthDeg ?? 0)}° ` +
+          `el ${Math.round(look.elevationDeg ?? 0)}° · ${Math.round(look.distance! * 1000) / 1000}m · ` +
+          `fov ${Math.round(look.fovDeg)}°${span}`
+        : `from (${look.eye.map((n: number) => Math.round(n * 1000) / 1000).join(', ')}) · ` +
+          `facing ${look.facing} ${Math.round(look.headingDeg)}° pitch ${Math.round(look.pitchDeg)}° · ` +
+          `fov ${Math.round(look.fovDeg)}°`;
+      const caught =
+        look.coverage === undefined
+          ? ''
+          : look.coverage <= 0
+            ? '\n        caught: nothing — the pose is exact; it points at empty space'
+            : `\n        caught: subject fills ${Math.round(look.coverage * 1000) / 10}% of frame`;
+      const sample = look.sampleIndex !== undefined ? ` (sample ${look.sampleIndex})` : '';
+      console.log(
+        `look[${i}] ${look.label}${sample} — ${look.image?.path ?? '(no frame rendered)'}\n` +
+          `        ${geometry}${caught}`,
+      );
+      // The resolver's stated substitutions and warnings ("the eye is INSIDE
+      // the subject's bounding sphere") — the terse stream is where a shot
+      // that resolved exactly but photographs garbage gets its one warning.
+      for (const note of look.notes ?? []) {
+        console.log(`        note: ${note}`);
+      }
+    }
+    for (const r of result.looksRejected ?? []) {
+      console.log(`look[${r.index}] REFUSED — ${r.reason}`);
+    }
+    /* The orientation facts, in the terse stream too. A serial-numbered
+       frame set says nothing about which side it photographs, so without
+       these two lines a reader who never asks for the full letter cannot
+       tell the front of their own model from the back — and every
+       observation they make about "one side" is about an unidentified one. */
+    {
+      const views = result.manifest?.proofViews ?? [];
+      if (views.length > 0) {
+        console.log(
+          `orbit: ${views.map((v) => `[${v.index}] ${v.name} ${Math.round(v.azimuthDeg)}°`).join(' · ')}`,
+        );
+      }
+      /* The route's project-relative ref, never manifest.contactSheet.path:
+         the manifest stores it scene-relative, and printing that raw told a
+         reader standing at the project root to open a file that is not
+         there. Every other path in this stream is project-relative. */
+      if (result.contactSheet) {
+        console.log(
+          `contact sheet: ${proofCarried ? stale('proof') : ''}${result.contactSheet.path} — every frame on one labelled page`,
+        );
+      }
+    }
+    // The light measurements, in the terse stream too: they existed in the
+    // full letter only, so a blind reader's sole default answer to "did my
+    // render blow out" was the absence of a threshold complaint.
+    {
+      const frames = result.manifest?.proofFrames ?? [];
+      const measured = frames.filter((f) => f.coverage !== null && f.coverage !== undefined);
+      if (measured.length > 0) {
+        const mean = (pick) => measured.reduce((s, f) => s + (pick(f) ?? 0), 0) / measured.length;
+        console.log(
+          `light: subject ${(mean((f) => f.coverage) * 100).toFixed(0)}% of frame · lum ${mean((f) => f.meanLuminance).toFixed(2)} · clipped ${(mean((f) => f.blownRatio) * 100).toFixed(1)}%`,
+        );
+      }
+    }
+    if (result.exportedAssets.length > 0) {
+      console.log(
+        `assets: ${exportCarried ? stale('export') : ''}${result.exportedAssets.map((a) => a.path).join(', ')}`,
+      );
+    }
+    // --frames implies the letter: the ASCII ramps live INSIDE agentMessage,
+    // so honouring the flag while withholding the message printed nothing —
+    // and the reader who cannot open a PNG concluded the ramps do not exist.
+    if ((flags['agent-message'] || flags.frames) && result.agentMessage) {
+      console.log(`\n${result.agentMessage}`);
+    } else if (summary.errors + summary.warnings > 0) {
+      // The terse listing above shows WHAT fired; the letter explains each
+      // finding with its fix and measured numbers. Point there once, only
+      // when there is something the letter would actually explain.
+      console.log('full letter: re-run with --agent-message for per-issue fixes and measured data');
+    }
+  }
+  if (failed) process.exitCode = 1;
+}
+
+/** Linear-RGB triple → sRGB `#rrggbb`, the same transfer the report and kit
+ *  swatches use, so the hex is stable across every surface an agent reads. */
+function srgbHexCli(rgb) {
+  const enc = (c) => {
+    const v = Math.max(0, Math.min(1, c));
+    const s = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+    return Math.round(s * 255)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${enc(rgb[0])}${enc(rgb[1])}${enc(rgb[2])}`;
+}
+
+function printScene3dManifest(manifest, scenePath) {
+  console.log(`${scenePath}: ${manifest.source.kind} (${manifest.source.files.join(', ')})`);
+  console.log(`blender: ${manifest.blender.version ?? 'not used'}`);
+  for (const part of manifest.partTree) {
+    const mesh = part.mesh ? ` ${part.mesh.verts}v/${part.mesh.faces}f` : '';
+    console.log(`  ${'  '.repeat(part.depth)}${part.name} (${part.type.toLowerCase()})${mesh}`);
+  }
+  for (const material of manifest.materials) {
+    const color = material.baseColor ? ` color=${srgbHexCli(material.baseColor)}` : '';
+    const emit =
+      material.emissionStrength && material.emissionStrength > 0
+        ? ` emission×${Number(material.emissionStrength.toFixed(2))}`
+        : '';
+    const tex = material.hasTexture ? ' textured' : '';
+    console.log(
+      `  mat ${material.name}${color} metallic=${material.metallic} roughness=${material.roughness}${emit}${tex}`,
+    );
+  }
+  console.log(
+    `issues: ${manifest.issues.errors} error(s) · ${manifest.issues.warnings} warning(s)` +
+      (manifest.issueCodes.length ? ` — ${manifest.issueCodes.join(', ')}` : ''),
+  );
 }
 
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
@@ -1037,6 +1859,12 @@ function printRootHelp() {
       Run the daemon's anti-slop artifact linter against an HTML file or stdin
       (no model/agent calls; headless-safe). Exits 1 when findings meet the
       --fail-on threshold, so it can gate cron/CI render pipelines.
+
+  od scene3d <compile|manifest|describe|tweaks> --project <id> --scene <path> [options]
+      Compile/inspect a scene3d asset through the same daemon endpoint the
+      viewer uses. \`od scene3d compile --help\` lists the full flag set
+      (--stages parse,build,lint,proof,export,manifest · --agent-message ·
+      --fail-on). Headless-safe; exits per --fail-on.
 
   "$OD_NODE_BIN" "$OD_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.

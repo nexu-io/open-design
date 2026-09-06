@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "naming": {
+      "objectPattern": "^[a-z]{3}_[a-z0-9_]{2,60}$",
+      "forbidDefaultNames": true,
+      "partPrefixes": ["prp_", "cam_", "lgt_", "mtl_"]
+    }
+  },
+  "proof": {
+    "engine": "BLENDER_EEVEE",
+    "resolution": 256,
+    "turntable": false,
+    "respectSceneCamera": true
+  }
+}

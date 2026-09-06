@@ -1,0 +1,1368 @@
+/* Compiled-asset panel.
+   Component-owned styles per the web CSS ownership rule: no global
+   selectors, no additions to index.css. The two global classes the
+   component does use — `.viewer` and `.viewer-toolbar` — are the app's
+   shared viewer layout contract, deliberately not re-implemented here. */
+
+/* `.viewer` already supplies flex-fill, min-height:0, and overflow
+   containment. This adds only what is specific to this panel. */
+.viewer {
+  container-type: inline-size;
+}
+
+/* The stage owns the pane the way the kit viewport owns its page: the
+   body fills the viewer and never scrolls, the picture flexes to the
+   space that remains, and the scrubber stays anchored under it. Only the
+   side rail scrolls. Scrolling the whole report to reach the turntable
+   controls is what made this surface feel bolted-on. */
+.body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The narrow-pane variant of every rule lives in ONE @container block at
+   the end of the file: same-specificity ties resolve by source order even
+   inside a container query, so overrides scattered above their base rules
+   silently lose. */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---- toolbar ----------------------------------------------------- */
+
+/* The asset's category as a drawn glyph — the word lives on as the
+   tooltip/aria-label. Each glyph strokes itself in on mount and carries a
+   small idle so the chip reads as alive rather than printed; every motion
+   here stands down under prefers-reduced-motion at the end of this
+   section. */
+.kindGlyph {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 999px;
+  color: var(--text-secondary, #667081);
+  animation: glyphChipIn 320ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.kindGlyph svg {
+  display: block;
+}
+
+@keyframes glyphChipIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+/* The draw-in: every stroked path starts fully dashed-out and draws over
+   ~600ms. 44 covers the longest path in a 16px viewBox (the circle,
+   2πr ≈ 39). */
+.glyphStroke {
+  stroke-dasharray: 44;
+  stroke-dashoffset: 44;
+  animation: glyphDraw 620ms cubic-bezier(0.23, 1, 0.32, 1) 80ms forwards;
+}
+
+@keyframes glyphDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Idles — one small, slow motion per kind, quiet enough to live in a
+   toolbar. Each starts after the draw-in has finished. */
+.glyphBeat {
+  transform-origin: 8.4px 8px;
+  animation: glyphBeat 2.8s ease-in-out 900ms infinite;
+}
+
+@keyframes glyphBeat {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.14);
+    opacity: 1;
+  }
+}
+
+.glyphSun {
+  animation: glyphSun 6s ease-in-out 900ms infinite;
+}
+
+@keyframes glyphSun {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-0.9px);
+  }
+}
+
+.glyphHop {
+  animation: glyphHop 6s steps(1, end) 900ms infinite;
+}
+
+@keyframes glyphHop {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(5.9px, 0);
+  }
+  50% {
+    transform: translate(5.9px, 5.9px);
+  }
+  75% {
+    transform: translate(0, 5.9px);
+  }
+}
+
+.glyphFlip {
+  transform-origin: 8px 3px;
+  opacity: 0.55;
+  animation: glyphFlip 4.2s ease-in-out 900ms infinite;
+}
+
+@keyframes glyphFlip {
+  0%,
+  70%,
+  100% {
+    opacity: 0.35;
+  }
+  82% {
+    opacity: 0.85;
+  }
+}
+
+.glyphTwinkle {
+  animation: glyphTwinkle 2.6s ease-in-out 900ms infinite;
+}
+
+.glyphTwinkleLate {
+  animation-delay: 2.2s;
+}
+
+@keyframes glyphTwinkle {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.glyphShimmer {
+  opacity: 0.55;
+  animation: glyphTwinkle 5s ease-in-out 900ms infinite;
+}
+
+.assetName {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- verdict marks ------------------------------------------------ */
+
+/* The verdict as marks with counts; the sentence is the tooltip. The tick
+   draws itself in — the one moment of ceremony a clean compile earns. */
+.verdictMarks {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+
+.verdictMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.verdictMark svg {
+  display: block;
+}
+
+.verdictTick {
+  stroke-dasharray: 12;
+  stroke-dashoffset: 12;
+  animation: glyphDraw 480ms cubic-bezier(0.23, 1, 0.32, 1) 260ms forwards;
+}
+
+.verdictCount {
+  line-height: 1;
+}
+
+.verdictPass {
+  color: var(--status-success, #1f8a5f);
+}
+
+.verdictFail {
+  color: var(--status-danger, #c0392b);
+}
+
+.verdictWarn {
+  color: var(--status-warning, #b7791f);
+}
+
+/* ---- toolbar meta ------------------------------------------------- */
+
+/* Magnitudes as glyph + number; exact counts, world size and the Blender
+   version live in the tooltip. */
+.metaRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  color: var(--text-secondary, #667081);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.metaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+}
+
+.metaItem svg {
+  display: block;
+  opacity: 0.65;
+  flex: none;
+}
+
+.metaDims {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  gap: 0;
+}
+
+/* Axis-coloured dimensions, in the kit gizmo's exact palette — the same
+   hexes AXES declares in kit.ts, deliberately theme-static like the gizmo
+   itself, so readout and manipulator stay one colour language. */
+.dimX {
+  color: #e5484d;
+}
+
+.dimY {
+  color: #46a758;
+}
+
+.dimZ {
+  color: #3b82f6;
+}
+
+.dimSep {
+  opacity: 0.4;
+  margin: 0 3px;
+  font-size: 10px;
+}
+
+.dimUnit {
+  opacity: 0.55;
+  margin-left: 3px;
+  font-size: 11px;
+}
+
+/* ---- export menu ------------------------------------------------- */
+
+.exportWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.exportTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exportTrigger:hover:not(:disabled) {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.exportTrigger:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.exportMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 30;
+  min-width: 240px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 12%);
+}
+
+/* One row: scene name left, format links right — mirrors the host Export
+   menu's model rows so both surfaces read identically. */
+.exportRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+}
+
+.exportRowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.exportRowFormats {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.exportFormat {
+  padding: 2px 6px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 6px;
+  color: var(--text-secondary, #667081);
+  font: 600 10.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-decoration: none;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.exportFormat:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}
+
+/* ---- stage ------------------------------------------------------- */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  /* A soft top-light over the panel surface, so the letterbox around a
+     square proof frame reads as a lit studio backdrop instead of a flat
+     grey slab. Both stops are theme tokens, so it holds in dark mode. */
+  background: radial-gradient(
+    120% 90% at 50% 0%,
+    color-mix(in srgb, var(--surface-raised, #fff) 55%, var(--surface-subtle, #f6f7f9)),
+    var(--surface-subtle, #f6f7f9) 78%
+  );
+  /* The frames are a turntable, so the picture is a rotation surface:
+     horizontal drags scrub the orbit. touch-action keeps a finger drag
+     from scrolling the pane instead. */
+  user-select: none;
+}
+
+.rotatable {
+  cursor: grab;
+  touch-action: pan-y;
+}
+
+.dragging {
+  cursor: grabbing;
+}
+
+/* Absolutely positioned rather than a grid item: a percentage height on
+   a grid item in an auto row resolves against the item's own content
+   contribution (the image's natural size), so a 1024px frame quietly
+   overflowed a shorter stage and read as a crop. inset: 0 sizes against
+   the stage box, full stop. */
+.frame {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  /* The img must not eat the pointer stream or start a ghost-image drag. */
+  pointer-events: none;
+}
+
+.stageEmpty {
+  padding: 24px;
+  color: var(--text-secondary, #667081);
+  text-align: center;
+}
+
+/* The rotate affordance: a quiet glyph in the stage's corner, where a
+   watermark would sit, rather than a sentence over the subject. It retires
+   after the first successful drag because a hint that keeps hinting is
+   chrome; the wording lives on as its hover title. */
+.orbitHint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  color: var(--text-secondary, #667081);
+  opacity: 0.55;
+  pointer-events: none;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.orbitHintHidden {
+  opacity: 0;
+}
+
+/* ---- x-ray cluster ------------------------------------------------- */
+
+/* The kit page's x-ray chrome, seated in the same corner it owns there:
+   toggle + caret sharing one pill, mode menu opening upward with ramp
+   strips and X1..X3 key chips. Same geometry as kit.ts's .xray-cluster;
+   colours ride the panel's tokens so it sits native here. */
+.xrayCluster {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.xrayBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: color-mix(in srgb, var(--surface-raised, #fff) 88%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary, #667081);
+  /* Longhands on purpose: `font:` shorthand silently drops the whole
+     declaration when the family is `inherit` — the exact trap the kit
+     page documents at its own button rule. */
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayBtn[aria-pressed='true'] {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #fff);
+  border-color: transparent;
+}
+
+.xrayBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.xrayIcon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+
+.xrayCaret {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  padding: 0;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 0 8px 8px 0;
+  background: color-mix(in srgb, var(--surface-raised, #fff) 88%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--text-secondary, #667081);
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayCaret svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayCaret:hover,
+.xrayBtn:hover:not(:disabled):not([aria-pressed='true']) {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.xrayCaret[aria-expanded='true'] {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #fff);
+  border-color: transparent;
+}
+
+.xrayCaret[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.xrayMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 240px;
+  padding: 6px;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-raised, #fff);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 14%);
+  animation: xrayMenuIn 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes xrayMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+.xrayMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  /* Explicit auto height: the app ships global button primitives that fix
+     a control height, which clamped these rows and stacked them into each
+     other — the row must grow to its name + desc + ramp. */
+  height: auto;
+  min-height: 0;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.xrayMenuItem:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.xrayMenuItem[aria-checked='true'] {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #fff);
+}
+
+.miText {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.miName {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.miDesc {
+  font-size: 10.5px;
+  line-height: 1.3;
+  opacity: 0.66;
+}
+
+.xrayMenuItem[aria-checked='true'] .miDesc {
+  opacity: 0.82;
+}
+
+.miRamp {
+  height: 5px;
+  margin-top: 1px;
+  border-radius: 3px;
+  border: 1px solid rgb(0 0 0 / 12%);
+}
+
+.xrayMenuItem[aria-checked='true'] .miRamp {
+  border-color: rgb(255 255 255 / 25%);
+}
+
+.miKey {
+  flex: none;
+  align-self: center;
+  padding: 3px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 4px;
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.7;
+}
+
+/* ---- on-picture selection ----------------------------------------- */
+
+/* The reticle layer sits over the frame and never eats the pointer — the
+   stage underneath owns rotate, hover and pick. */
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Focus brackets over the selected part, in the same teal the kit's
+   inspection ramp speaks — legible on the dark proof matte and on a pale
+   backdrop alike thanks to the double shadow (dark core + soft light).
+   Position/size transition so the brackets TRACK the part as the
+   turntable scrubs, instead of teleporting frame to frame. */
+.reticle {
+  --reticle: #3fbcc9;
+  position: absolute;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--reticle) 7%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--reticle) 55%, transparent),
+    0 0 16px color-mix(in srgb, var(--reticle) 30%, transparent);
+  transition:
+    left 170ms cubic-bezier(0.23, 1, 0.32, 1),
+    top 170ms cubic-bezier(0.23, 1, 0.32, 1),
+    width 170ms cubic-bezier(0.23, 1, 0.32, 1),
+    height 170ms cubic-bezier(0.23, 1, 0.32, 1);
+  animation:
+    reticleIn 260ms cubic-bezier(0.23, 1, 0.32, 1),
+    reticleBreathe 2.8s ease-in-out 300ms infinite;
+}
+
+@keyframes reticleIn {
+  from {
+    opacity: 0;
+    transform: scale(1.06);
+  }
+}
+
+@keyframes reticleBreathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.78;
+  }
+}
+
+.corner {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--reticle);
+}
+
+.cornerTl {
+  top: -3px;
+  left: -3px;
+  border-right: 0;
+  border-bottom: 0;
+  border-top-left-radius: 6px;
+}
+
+.cornerTr {
+  top: -3px;
+  right: -3px;
+  border-left: 0;
+  border-bottom: 0;
+  border-top-right-radius: 6px;
+}
+
+.cornerBl {
+  bottom: -3px;
+  left: -3px;
+  border-right: 0;
+  border-top: 0;
+  border-bottom-left-radius: 6px;
+}
+
+.cornerBr {
+  bottom: -3px;
+  right: -3px;
+  border-left: 0;
+  border-top: 0;
+  border-bottom-right-radius: 6px;
+}
+
+/* The part's name, pinned above the brackets in the mono the part list
+   speaks. Clamped inside the stage by sitting under the rect when the
+   rect hugs the top edge is not worth a measurement pass — top-anchored
+   with a small offset reads fine at every size tested. */
+.reticleTag {
+  position: absolute;
+  bottom: 100%;
+  left: -3px;
+  margin-bottom: 7px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: color-mix(in srgb, #0c1116 82%, var(--reticle));
+  color: #e9f6f8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.4;
+  white-space: nowrap;
+  animation: reticleIn 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.reticleTagBelow {
+  bottom: auto;
+  top: 100%;
+  margin-bottom: 0;
+  margin-top: 7px;
+}
+
+/* The x-ray energize canvas. Opacity IS the shader's uXray: this holds
+   the full-energize composite, and the crossfade runs the kit's exact
+   asymmetry — 200ms in, 140ms out, easeOutCubic (1-(1-p)^3, which is
+   cubic-bezier(0.33, 1, 0.68, 1)). */
+.xrayCanvas {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.xrayCanvasOn {
+  opacity: 1;
+  transition-duration: 200ms;
+}
+
+/* While the x-ray is energized the PART is the highlight: the brackets
+   and fill stand down and only the name tag rides along. */
+.reticleQuiet {
+  background: none;
+  box-shadow: none;
+  animation: reticleIn 260ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Hover pre-highlight: the "what am I about to click" answer, kept a
+   whisper next to the selection's full brackets. */
+.hoverBox {
+  position: absolute;
+  border-radius: 7px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #3fbcc9 45%, transparent);
+  background: color-mix(in srgb, #3fbcc9 5%, transparent);
+  transition: box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Ctrl/cmd held: this click will ALSO jump to the part in the rail — the
+   box turns gizmo-red (the same #e5484d the X axis wears) so the promise
+   is visible before the click. Middle-click does it without the tell. */
+.hoverBoxJump {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, #e5484d 75%, transparent);
+  background: color-mix(in srgb, #e5484d 7%, transparent);
+}
+
+/* The player row reads as a scrubber, not a form: a hairline track with a
+   played-portion fill, a small round thumb, and a ghost play control — the
+   grammar of a modern inline video player, in the app's own palette. */
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 0 2px;
+}
+
+.playButton {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary, #667081);
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.playButton:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}
+
+/* Custom-drawn range: the native control is the one element on this panel
+   the design system cannot reach, and it is what made the player read as a
+   2000s form. Track and thumb are longhand-styled per engine; the played
+   fill rides the --progress variable the component sets inline. */
+.scrubInput {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  height: 16px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scrubInput:focus-visible {
+  outline: 2px solid var(--accent, #353535);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.scrubInput::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent, #353535) var(--progress, 0%),
+    var(--border-subtle, #e3e6ea) var(--progress, 0%)
+  );
+}
+
+.scrubInput::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border-radius: 999px;
+  background: var(--surface-raised, #fff);
+  border: 1.5px solid var(--accent, #353535);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.scrubInput:hover::-webkit-slider-thumb,
+.scrubInput:active::-webkit-slider-thumb {
+  transform: scale(1.18);
+}
+
+.scrubInput::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-subtle, #e3e6ea);
+}
+
+.scrubInput::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--accent, #353535);
+}
+
+.scrubInput::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--surface-raised, #fff);
+  border: 1.5px solid var(--accent, #353535);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 18%);
+}
+
+.counter {
+  flex: none;
+  color: var(--text-secondary, #667081);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  min-width: 4ch;
+  text-align: right;
+}
+
+/* The compass name beside the frame count: which side of the subject this
+   frame photographs. Quieter than the count and allowed to disappear before
+   it — the count is the control's own state, the name is annotation. It is
+   compiler data (`front-right`), so it must not wrap mid-word into the
+   scrubber. */
+.counterView {
+  margin-left: 6px;
+  color: var(--text-tertiary, #8a93a3);
+  font-variant-numeric: normal;
+  white-space: nowrap;
+}
+
+/* ---- side rail --------------------------------------------------- */
+
+/* The rail scrolls as one column; the lists inside it do not scroll
+   themselves. Two nested scrollbars in a 300px rail is how the old
+   layout read as a debug panel. */
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary, #667081);
+}
+
+.sectionCount {
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #667081);
+  opacity: 0.75;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.part {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 7px;
+  border-radius: 6px;
+}
+
+.part:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.partName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.partMeta {
+  flex: none;
+  color: var(--text-secondary, #667081);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---- part tree --------------------------------------------------- */
+
+.treeList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 11.5px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition: background 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.treeRow:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.treeRowSelected {
+  background: var(--accent, #2c2723);
+  color: var(--surface-raised, #ffffff);
+}
+
+.treeRowSelected:hover {
+  background: var(--accent, #2c2723);
+}
+
+.treeRowName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.treeRowCount {
+  flex: none;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--text-secondary, #667081);
+  background: var(--surface-subtle, #efebe4);
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.treeRowSelected .treeRowCount {
+  background: color-mix(in srgb, var(--surface-raised, #ffffff) 20%, transparent);
+  color: var(--surface-raised, #ffffff);
+}
+
+.treeRowGlyphs {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  color: color-mix(in srgb, var(--text-secondary, #667081) 75%, transparent);
+}
+
+.treeRowGlyphs svg {
+  width: 7px;
+  height: 7px;
+  fill: currentColor;
+  display: block;
+}
+
+.treeRowSelected .treeRowGlyphs {
+  color: color-mix(in srgb, var(--surface-raised, #ffffff) 65%, transparent);
+}
+
+.treeRowFloat {
+  flex: none;
+  font-size: 9px;
+  color: var(--status-warning, #b7791f);
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+.treeRowSelected .treeRowFloat {
+  color: var(--surface-raised, #ffffff);
+  opacity: 0.85;
+}
+
+.treeRowType {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary, #667081);
+}
+
+.treeRowType svg {
+  display: block;
+  opacity: 0.8;
+}
+
+.treeRowSelected .treeRowType {
+  color: color-mix(in srgb, var(--surface-raised, #ffffff) 65%, transparent);
+}
+
+.treeRowMeta {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-secondary, #667081);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.treeRowSelected .treeRowMeta {
+  color: color-mix(in srgb, var(--surface-raised, #ffffff) 75%, transparent);
+}
+
+/* One issue = one finding: severity is the left rail's colour, the code
+   is the handle, the message is the sentence. */
+.issue {
+  padding: 5px 9px;
+  border-left: 2px solid var(--border-subtle, #e3e6ea);
+  margin-bottom: 8px;
+}
+
+.issue:last-child {
+  margin-bottom: 0;
+}
+
+.severityError {
+  border-left-color: var(--status-danger, #c0392b);
+}
+
+.severityWarning {
+  border-left-color: var(--status-warning, #b7791f);
+}
+
+.issueCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.severityError .issueCode {
+  color: var(--status-danger, #c0392b);
+}
+
+.severityWarning .issueCode {
+  color: var(--status-warning, #b7791f);
+}
+
+.severityInfo .issueCode {
+  color: var(--text-secondary, #667081);
+}
+
+.issueMessage {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.issueHint {
+  display: block;
+  color: var(--text-secondary, #667081);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.error {
+  grid-column: 1 / -1;
+  color: var(--status-danger, #c0392b);
+}
+
+/* ---- proven badge + scene stats ---------------------------------- */
+
+/* The claims ledger's payoff: shown ONLY when the scene declared claims and
+   none failed. A failure shows nothing — the badge cannot be cheapened, and
+   the failure already surfaces as an E-701 in the issue list. Layout rides
+   .verdictMark; this only sets the colour. */
+.provenBadge {
+  color: var(--status-success, #1f8a5f);
+}
+
+/* One muted line of measured facts a render hides: world size and the
+   Blender that measured it, beside the parts/tris already shown. */
+.statLine {
+  font-size: 11.5px;
+  color: var(--text-secondary, #667081);
+}
+
+/* Domain grouping with zero strings: issues sort by code (which orders by
+   severity then domain for free), and the first row of each new domain gets
+   a hairline + breathing room so a long list scans by section. */
+.issueGroupStart {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle, #e3e6ea);
+}
+
+/* Narrow pane: the rail folds under the stage and the body scrolls
+   again. Rows are pinned to max-content — leaving them implicit let the
+   grid resolve them to equal fractions of the pane, which sheared the
+   scrubber across the parts list. The stage stops flexing and caps
+   itself so the scrubber stays in reach, and the rail stops owning its
+   own scrollbar because the body scrolls again. */
+@container (max-width: 860px) {
+  .body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: max-content;
+    grid-auto-rows: max-content;
+    align-content: start;
+    overflow: auto;
+  }
+
+  .stage {
+    flex: none;
+    aspect-ratio: 1 / 1;
+    max-height: 64vh;
+  }
+
+  .side {
+    overflow: visible;
+  }
+
+}
+
+/* Narrow pane: parts and triangles stand down FIRST — both live
+   permanently in the parts rail right below — while the axis-coloured
+   world size keeps its place: it appears nowhere else on screen and is
+   the one number a modeller checks at a glance. Everything stays one
+   hover away on the row's tooltip. */
+@container (max-width: 620px) {
+  .metaItem {
+    display: none;
+  }
+
+  .metaDims {
+    display: inline-flex;
+  }
+
+  .assetName {
+    max-width: 30cqw;
+  }
+
+  /* The compass name stands down before the scrubber does. The count is
+     the control's own state and the track is what the user drags; a
+     nowrap annotation that squeezes either is worth less than both. It
+     stays one hover away on the counter's tooltip. */
+  .counterView {
+    display: none;
+  }
+}
+
+/* Every decorative motion in this panel stands down together. Draw-in
+   strokes must land on their FINISHED state, not their dashed-out start. */
+@media (prefers-reduced-motion: reduce) {
+  .kindGlyph,
+  .glyphBeat,
+  .glyphSun,
+  .glyphHop,
+  .glyphFlip,
+  .glyphTwinkle,
+  .glyphShimmer,
+  .reticle,
+  .reticleTag {
+    animation: none;
+  }
+
+  .reticle {
+    transition: none;
+  }
+
+  .glyphStroke,
+  .verdictTick {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+.muted {
+  color: var(--text-secondary, #667081);
+}
+
+.mutedSmall {
+  margin: 6px 0 0;
+  color: var(--text-secondary, #667081);
+  font-size: 11.5px;
+}
+
+/* ---- kit ---------------------------------------------------------- */
+
+/* The kit page renders the real, orbitable mesh. It stays an iframe on
+   purpose: a live WebGL viewport is not something the host chrome can or
+   should reimplement. What moved out of it is the chrome around it. */
+.kitStage {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--border-subtle, #e3e6ea);
+  border-radius: 10px;
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.sceneRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.sceneRow:hover {
+  background: var(--surface-subtle, #f6f7f9);
+}
+
+.sceneName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sceneError {
+  color: var(--status-danger, #c0392b);
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px 3px 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary, #667081);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.backButton:hover {
+  background: var(--surface-subtle, #f6f7f9);
+  color: inherit;
+}

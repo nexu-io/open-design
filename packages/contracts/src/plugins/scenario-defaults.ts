@@ -53,7 +53,8 @@ export type DefaultScenarioPluginId =
   | 'example-simple-deck'
   | 'example-web-clone'
   | 'example-web-prototype'
-  | 'example-webgl-experience';
+  | 'example-webgl-experience'
+  | 'example-scene3d';
 
 export const DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID =
   'od-default' satisfies DefaultScenarioPluginId;
@@ -163,6 +164,13 @@ export function defaultScenarioPluginIdForProjectMetadata(
   // prototype seed, so the card's own binding read as a user pin and
   // restoring it would have bound the wrong plugin.
   if (metadata?.intent === 'webgl-experience') return 'example-webgl-experience';
+  // The deterministic 3D asset compiler is a first-level output type on the
+  // create rail and binds `example-scene3d`, so that plugin is this
+  // metadata's automatic default the same way `example-webgl-experience` is
+  // webgl-experience's. Leaving it out resolved a scene3d project to the
+  // generic prototype seed, so the card's own binding read as a user pin and
+  // restoring it would have bound the wrong plugin.
+  if (metadata?.intent === 'scene3d') return 'example-scene3d';
   if (metadata?.intent === 'hyperframes') return 'example-hyperframes';
   if (metadata?.intent === 'marketing') return 'example-web-prototype';
   return defaultScenarioPluginIdForKind(metadata?.kind);

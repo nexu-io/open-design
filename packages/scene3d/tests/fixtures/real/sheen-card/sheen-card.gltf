@@ -1,0 +1,42 @@
+{
+  "asset": { "version": "2.0", "generator": "scene3d test fixture — minimal sheen material" },
+  "extensionsUsed": ["KHR_materials_sheen"],
+  "scene": 0,
+  "scenes": [{ "nodes": [0] }],
+  "nodes": [{ "mesh": 0, "name": "prp_sheen_card" }],
+  "meshes": [
+    {
+      "name": "prp_sheen_card",
+      "primitives": [{ "attributes": { "POSITION": 0 }, "material": 0 }]
+    }
+  ],
+  "materials": [
+    {
+      "name": "mtl_velvet",
+      "pbrMetallicRoughness": { "baseColorFactor": [0.5, 0.1, 0.1, 1.0], "metallicFactor": 0.0, "roughnessFactor": 0.8 },
+      "extensions": {
+        "KHR_materials_sheen": {
+          "sheenColorFactor": [0.9, 0.8, 0.7],
+          "sheenRoughnessFactor": 0.4
+        }
+      }
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [0.0, 0.0, 0.0],
+      "max": [1.0, 1.0, 0.0]
+    }
+  ],
+  "bufferViews": [{ "buffer": 0, "byteOffset": 0, "byteLength": 36 }],
+  "buffers": [
+    {
+      "byteLength": 36,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAA"
+    }
+  ]
+}

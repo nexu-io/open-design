@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "shaders": {
+    "shd_bad": {
+      "kernel": "bad.glsl",
+      "size": 64
+    }
+  },
+  "materials": {
+    "mtl_bad": {
+      "shader": "shd_bad"
+    }
+  },
+  "parts": [
+    {
+      "id": "prp_box",
+      "size": [
+        1,
+        1,
+        1
+      ],
+      "material": "mtl_bad"
+    }
+  ],
+  "relations": [
+    {
+      "type": "at",
+      "part": "prp_box",
+      "center": [
+        0,
+        0,
+        0.5
+      ]
+    }
+  ]
+}

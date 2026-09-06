@@ -202,6 +202,20 @@ function AudioArt() {
   );
 }
 
+function Scene3dArt() {
+  // Isometric cube on a turntable arc: the three visible faces read as a
+  // solid, and the accent ellipse underneath is the orbit the proof render
+  // sweeps — the two things that make this surface a compiler, not a canvas.
+  return (
+    <Frame>
+      <ellipse cx="30" cy="32" rx="17" ry="5" stroke={ACCENT} strokeWidth="2" />
+      <path d="M30 7 L45 15 L30 23 L15 15 Z" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <path d="M15 15 L15 27 L30 35 L30 23 Z" fill={SURFACE} stroke={INK} strokeWidth="2" />
+      <path d="M45 15 L45 27 L30 35 L30 23 Z" fill={SURFACE} stroke={INK} strokeWidth="2" />
+    </Frame>
+  );
+}
+
 const ART_BY_CHIP: Record<string, () => ReactElement> = {
   prototype: PrototypeArt,
   'web-clone': WebCloneArt,
@@ -211,6 +225,7 @@ const ART_BY_CHIP: Record<string, () => ReactElement> = {
   document: DocumentArt,
   'create-brand-kit': BrandKitArt,
   hyperframes: HyperFramesArt,
+  scene3d: Scene3dArt,
   'live-artifact': LiveArtifactArt,
   image: ImageArt,
   video: VideoArt,

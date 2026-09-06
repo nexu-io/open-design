@@ -38,7 +38,16 @@ export type ChipScenarioPluginId =
   // render in the cross-origin-isolated "powered preview" iframe. Kept as
   // explicit members — like example-hyperframes — so the rail can name a
   // scenario the default table has not mapped yet; both are mapped today.
-  | 'example-webgl-experience';
+  | 'example-webgl-experience'
+  // Deterministic-asset scenario: 3D models, scenes, textures, sprite
+  // sheets/flipbooks, and skyboxes authored as code and compiled through
+  // headless Blender (`packages/scene3d`). Declared here directly because
+  // no ProjectKind models "asset" yet, so the kind-keyed default table
+  // alone can't name it — but the intent-keyed branch in
+  // `defaultScenarioPluginIdForProjectMetadata` does resolve it, which is
+  // what makes this chip's `automaticDefault: true` correct rather than a
+  // silent no-op.
+  | 'example-scene3d';
 
 export type ChipAction =
   | {
@@ -268,6 +277,31 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
+    id: 'scene3d',
+    label: '3D scene',
+    icon: 'scene3d',
+    group: 'create',
+    description: 'Models, textures, sprite sheets & flipbooks',
+    hint: 'Author a 3D asset as code and compile it through headless Blender — turntable proofs, convention linting, GLB + USD export.',
+    // The asset class is deliberately broad: props, full scenes, textures,
+    // sprite-sheet flipbooks, and skyboxes all compile through the same
+    // `od scene3d compile` boundary, so one chip covers the surface rather
+    // than fragmenting it into five near-identical scenarios. The project
+    // stores `kind: 'prototype'` for preview behavior; `intent: 'scene3d'`
+    // routes the scenario plugin and splits the analytics `project_kind`.
+    action: {
+      kind: 'apply-scenario',
+      pluginId: 'example-scene3d',
+      projectKind: 'prototype',
+      automaticDefault: true,
+      projectMetadata: {
+        kind: 'prototype',
+        intent: 'scene3d',
+        fidelity: 'high-fidelity',
+      },
+    },
+  },
+  {
     id: 'live-artifact',
     label: 'Live artifact',
     icon: 'bar-chart-box',
@@ -404,7 +438,7 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
   return HOME_HERO_CHIPS.filter((c) => c.group === group);
 }
 
-// Fixed Home information architecture. Only these ten output types are
+// Fixed Home information architecture. Only these eleven output types are
 // top-level choices. Action-only create entries (for example Create Design
 // System) are intentionally excluded. Prototype leads and Slide deck follows;
 // the media scenarios trail so at typical widths they live in the 更多
@@ -420,6 +454,7 @@ export const CREATE_RAIL_ORDER = [
   'live-artifact',
   'video',
   'audio',
+  'scene3d',
 ] as const;
 
 // The Home type row is an explicit product decision, not a width computation

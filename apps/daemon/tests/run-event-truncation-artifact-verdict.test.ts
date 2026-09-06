@@ -206,9 +206,7 @@ describe('run event-buffer truncation vs artifact verdict (HTTP)', () => {
 });
 
 async function writeArtifactThenFloodClaude(dir: string, name: string, flood: number): Promise<string> {
-  const bin = path.join(dir, name);
-  await writeFile(bin, `#!/usr/bin/env node
-const fs = require('node:fs');
+  const script = `const fs = require('node:fs');
 if (process.argv.includes('--version')) { console.log('claude-code 1.0.0-trunc'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log('Usage: claude -p [--add-dir DIR]'); process.exit(0); }
 // Synchronous writes so every line is delivered before the process exits.
@@ -227,7 +225,21 @@ for (let i = 0; i < ${flood}; i++) {
   W({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 't' + i + ' ' } } });
 }
 process.exit(1); // non-zero, no clean turn_end
-`, 'utf8');
+`;
+  // Windows has no shebang support: node's spawn() on an extensionless
+  // `#!/usr/bin/env node` file fails with ENOENT, the daemon falls back to the
+  // real claude CLI, and the run never reaches a terminal status inside the
+  // test timeout. Ship the body as a .cjs and point a .cmd shim at it, the
+  // same pattern plugins-headless-run.test.ts uses for its fake agents.
+  if (process.platform === 'win32') {
+    const runner = path.join(dir, `${name}-runner.cjs`);
+    await writeFile(runner, script, 'utf8');
+    const shim = path.join(dir, `${name}.cmd`);
+    await writeFile(shim, `@echo off\r\nnode "${runner}" %*\r\n`, 'utf8');
+    return shim;
+  }
+  const bin = path.join(dir, name);
+  await writeFile(bin, `#!/usr/bin/env node\n${script}`, 'utf8');
   await chmod(bin, 0o755);
   return bin;
 }

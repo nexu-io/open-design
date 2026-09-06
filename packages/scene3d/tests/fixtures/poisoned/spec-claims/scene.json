@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "name": "liar",
+  "materials": {
+    "mtl_paint": { "baseColor": [0.8, 0.2, 0.2], "roughness": 0.5 },
+    "mtl_ghost": { "baseColor": [0.2, 0.8, 0.2], "roughness": 0.5 }
+  },
+  "parts": [{ "id": "prp_lone", "size": [0.5, 0.5, 0.5], "material": "mtl_paint" }],
+  "relations": [{ "type": "at", "part": "prp_lone", "center": [0, 0, -0.1] }],
+  "claims": {
+    "parts": 3,
+    "maxTriangles": 6,
+    "grounded": true,
+    "maxHeight": 0.1,
+    "footprint": [0.4, 0.4],
+    "watertight": true,
+    "materialsUsed": ["mtl_paint", "mtl_ghost"]
+  }
+}

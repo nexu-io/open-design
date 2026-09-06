@@ -17,6 +17,7 @@ const ALLOWED_KINDS: ReadonlySet<ArtifactKind> = new Set([
   'code-snippet',
   'mini-app',
   'design-system',
+  'scene3d',
 ]);
 const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
   'html',
@@ -28,6 +29,7 @@ const ALLOWED_RENDERERS: ReadonlySet<ArtifactRendererId> = new Set([
   'code',
   'mini-app',
   'design-system',
+  'scene3d',
 ]);
 const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
   'html',
@@ -37,6 +39,11 @@ const ALLOWED_EXPORTS: ReadonlySet<ArtifactExportKind> = new Set([
   'md',
   'svg',
   'txt',
+  // scene3d deliverables.
+  'glb',
+  'usd',
+  'obj',
+  'png',
 ]);
 const ALLOWED_STATUS: ReadonlySet<ArtifactStatus> = new Set(['streaming', 'complete', 'error']);
 
