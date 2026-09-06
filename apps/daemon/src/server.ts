@@ -11626,23 +11626,52 @@ export async function startServer({
             // Phase 1 explicitly needs redactedContent for these aggregate prompts:
             // they are the quickest way to inspect the system context sent to the
             // model when diagnosing Langfuse traces.
-            { kind: 'daemonSystemPrompt', content: daemonSystemPrompt },
-            { kind: 'runtimeToolPrompt', content: runtimeToolPrompt },
-            { kind: 'researchCommandContract', content: researchCommandContract },
-            { kind: 'runContextPrompt', content: runContextPrompt },
-            { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
-            { kind: 'clientSystemPrompt', content: clientInstructionPrompt },
-            { kind: 'echoGuard', content: ECHO_GUARD },
-            { kind: 'userRequest', content: userRequestPrompt },
-            { kind: 'skillPrompt', content: promptTelemetryParts?.skillPrompt },
+            //
+            // The stable block is gated by `includeStableForPayload` exactly like
+            // the composed bytes above (the resume/session-reuse token-skip path):
+            // on a resumed turn these sections are NOT resent, so the telemetry must
+            // omit them too — otherwise cacheablePrefix* would hash a stable prefix
+            // that never reached the model. Mirror the same gate here.
+            {
+              kind: 'daemonSystemPrompt',
+              content: includeStableForPayload ? daemonSystemPrompt : '',
+            },
+            {
+              kind: 'runtimeToolPrompt',
+              content: includeStableForPayload ? runtimeToolPrompt : '',
+            },
+            {
+              kind: 'clientSystemPrompt',
+              content: includeStableForPayload ? systemPrompt : '',
+            },
+            {
+              kind: 'skillPrompt',
+              content: includeStableForPayload
+                ? promptTelemetryParts?.skillPrompt
+                : '',
+            },
             {
               kind: 'designSystemPrompt',
-              content: promptTelemetryParts?.designSystemPrompt,
+              content: includeStableForPayload
+                ? promptTelemetryParts?.designSystemPrompt
+                : '',
             },
             {
               kind: 'pluginStagePrompt',
-              content: promptTelemetryParts?.pluginStagePrompt,
+              content: includeStableForPayload
+                ? promptTelemetryParts?.pluginStagePrompt
+                : '',
             },
+            { kind: 'researchCommandContract', content: researchCommandContract },
+            { kind: 'runContextPrompt', content: runContextPrompt },
+            {
+              kind: 'connectedExternalMcpReference',
+              content: mcpConnectedDirective,
+            },
+            { kind: 'browserUsePromptGuard', content: browserUsePromptGuard },
+            { kind: 'titleGenerationPrompt', content: titleGenerationPrompt },
+            { kind: 'echoGuard', content: agentEchoGuard },
+            { kind: 'userRequest', content: userRequestPrompt },
             { kind: 'cwdHint', content: cwdHint, metadata: cwd ? [cwd] : [] },
             {
               kind: 'linkedDirsHint',
