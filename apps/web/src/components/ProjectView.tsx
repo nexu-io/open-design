@@ -9830,6 +9830,14 @@ export function ProjectView({
         setFailedMessagesConversationId(null);
         setConversations((curr) => [fresh, ...curr.filter((c) => c.id !== fresh.id)]);
         setActiveConversationId(fresh.id);
+        setProjectActionsToast({
+          message: t('chat.forkConversationSucceeded', {
+            title: fresh.title?.trim() || t('chat.untitledConversation'),
+          }),
+          details: null,
+          tone: 'success',
+          scope: 'chat-pane',
+        });
         navigate(
           {
             kind: 'project',

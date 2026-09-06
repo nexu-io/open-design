@@ -2145,6 +2145,7 @@ export const hu: Dict = {
   'chat.deleteConversationConfirm': 'Törlöd a(z) „{title}" beszélgetést? Ez eltávolítja az üzeneteit.',
   'chat.untitledConversation': 'Cím nélküli beszélgetés',
   'chat.forkedConversationTitle': '{title} elágazás',
+  'chat.forkConversationSucceeded': 'Az elágazás létrejött. Most itt van: „{title}”.',
   'chat.forkConversationFailed': 'Nem sikerült forkot létrehozni ebből a beszélgetésből.',
   'chat.startTitle': 'Indíts beszélgetést',
   'chat.startHint': 'Írd le, mit szeretnél létrehozni, vagy indulj ki az egyik példából:',

@@ -2145,6 +2145,7 @@ export const ko: Dict = {
   'chat.deleteConversationConfirm': '"{title}" 대화를 삭제하시겠습니까? 관련 메시지가 모두 삭제됩니다.',
   'chat.untitledConversation': '제목 없는 대화',
   'chat.forkedConversationTitle': '{title} 포크',
+  'chat.forkConversationSucceeded': '포크를 만들고 “{title}” 대화로 전환했습니다.',
   'chat.forkConversationFailed': '이 대화를 포크할 수 없습니다.',
   'chat.startTitle': '대화 시작하기',
   'chat.startHint': '생성하고 싶은 내용을 설명하거나 아래 예시에서 시작하세요:',

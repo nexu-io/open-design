@@ -2145,6 +2145,7 @@ export const ja: Dict = {
   'chat.deleteConversationConfirm': '"{title}" を削除しますか？メッセージも削除されます。',
   'chat.untitledConversation': '無題の会話',
   'chat.forkedConversationTitle': '{title} のフォーク',
+  'chat.forkConversationSucceeded': 'フォークを作成し、「{title}」に切り替えました。',
   'chat.forkConversationFailed': 'この会話をフォークできませんでした。',
   'chat.startTitle': '会話を始める',
   'chat.startHint': '生成したい内容を説明するか、以下の例から始めてください:',

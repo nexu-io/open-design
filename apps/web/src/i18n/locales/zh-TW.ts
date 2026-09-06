@@ -2245,6 +2245,7 @@ export const zhTW: Dict = {
   "chat.deleteConversationConfirm": "確定刪除「{title}」？該操作會刪除其訊息。",
   "chat.untitledConversation": "未命名對話",
   "chat.forkedConversationTitle": "{title} 分叉",
+  "chat.forkConversationSucceeded": "分支對話已建立，已切換至「{title}」。",
   "chat.forkConversationFailed": "無法分叉這個對話。",
   "chat.startTitle": "開始一個對話",
   "chat.startHint": "描述你想生成的內容，或從下面的範例開始：",

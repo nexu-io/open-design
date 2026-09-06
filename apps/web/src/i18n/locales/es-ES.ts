@@ -2145,6 +2145,7 @@ export const esES: Dict = {
   'chat.deleteConversationConfirm': '¿Eliminar «{title}»? Se borrarán sus mensajes.',
   'chat.untitledConversation': 'Conversación sin título',
   'chat.forkedConversationTitle': 'Bifurcación de {title}',
+  'chat.forkConversationSucceeded': 'Bifurcación creada. Ahora estás en «{title}».',
   'chat.forkConversationFailed': 'No se pudo bifurcar esta conversación.',
   'chat.startTitle': 'Empieza una conversación',
   'chat.startHint': 'Describe lo que quieres generar o empieza con uno de estos ejemplos:',
