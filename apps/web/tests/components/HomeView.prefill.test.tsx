@@ -3,6 +3,7 @@
 import { act } from 'react';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { SkillSummary } from '@open-design/contracts';
 
 vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
   PlaceholderCarousel: () => null,
@@ -26,6 +27,7 @@ import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips'
 import {
   createPluginAuthoringHandoff,
   createPluginUseHandoff,
+  createSkillUseHandoff,
   PLUGIN_AUTHORING_DEFAULT_GOAL,
   PLUGIN_AUTHORING_PROMPT,
 } from '../../src/components/home-hero/plugin-authoring';
@@ -138,6 +140,21 @@ const HIDDEN_DEFAULT_PLUGIN = {
       hidden: true,
     },
   },
+};
+
+const INDUSTRIAL_PRODUCT_DESIGN_SKILL: SkillSummary = {
+  id: 'industrial-product-design',
+  name: 'Industrial Product Design',
+  description: 'Generate evidence-aware industrial product design directions.',
+  triggers: ['industrial design'],
+  mode: 'design-system',
+  previewType: 'markdown',
+  designSystemRequired: false,
+  defaultFor: [],
+  upstream: null,
+  hasBody: true,
+  examplePrompt: 'Develop three industrial design directions for an air purifier.',
+  aggregatesExamples: false,
 };
 
 // Keep the legacy web-prototype record available for explicit presets and for
@@ -936,6 +953,44 @@ describe('HomeView prompt handoff', () => {
       appliedPluginSnapshotId: null,
       pluginInputs: { prompt: 'Make a launch page for a robotics studio' },
       projectKind: 'other',
+    }));
+  });
+
+  it('submits an explicitly selected skill without the hidden default plugin', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async (url) => {
+      if (typeof url === 'string' && url === '/api/plugins') {
+        return new Response(JSON.stringify({ plugins: [HIDDEN_DEFAULT_PLUGIN] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onSubmit = vi.fn();
+
+    render(
+      <HomeView
+        projects={[]}
+        skills={[INDUSTRIAL_PRODUCT_DESIGN_SKILL]}
+        onSubmit={onSubmit}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+        promptHandoff={createSkillUseHandoff(12, INDUSTRIAL_PRODUCT_DESIGN_SKILL)}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('home-hero-active-skill').textContent)
+        .toContain('Industrial Product Design');
+    });
+    fireEvent.click(screen.getByTestId('home-hero-submit'));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'Develop three industrial design directions for an air purifier.',
+      pluginId: null,
+      skillId: 'industrial-product-design',
+      appliedPluginSnapshotId: null,
     }));
   });
 

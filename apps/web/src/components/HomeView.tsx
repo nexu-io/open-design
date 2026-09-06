@@ -2940,8 +2940,9 @@ export function HomeView({
       // A mentioned Skill travels with whatever the composer selected, rather
       // than replacing it: the pick decides the route, the Skill is material
       // inside it. In Design mode, free-form prompts route through the default
-      // design router; in Ask mode they stay plain chat conversations with no
-      // hidden router plugin.
+      // design router, but an explicit Skill without another route must not
+      // inherit that hidden default. In Ask mode, submits stay plain chat
+      // conversations with no hidden router plugin.
       const resolvedSkillId = activeSkill?.id ?? null;
       const submittedChip = submittedRouteChipId
         ? findChip(submittedRouteChipId)
@@ -2953,7 +2954,8 @@ export function HomeView({
         automaticStrategyTaskProfile
           ? null
           : sessionMode === 'design'
-          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          ? submittedActive?.record.id
+            ?? (resolvedSkillId ? null : DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID)
           : submittedActive?.record.id ?? null;
       const pluginSelectionProvenance = sessionMode === 'design'
         && (!submittedActive || productAutomaticScenario)

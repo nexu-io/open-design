@@ -442,7 +442,7 @@ describe('HomeView context picker', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: '@Prototype Lab',
-      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: null,
       skillId: SKILL.id,
       projectKind: 'prototype',
     }));
