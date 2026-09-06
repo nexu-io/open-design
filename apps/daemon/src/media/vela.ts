@@ -272,11 +272,32 @@ async function fetchPublishedImageCapabilities(
   wireModel: string,
   runCommand: VelaCommandRunner,
 ): Promise<VelaPublishedImageCapabilities | null> {
-  const stdout = await runCommand(['media', 'models', '--json'], {
-    ...velaWorkspaceCommandOptions(input.workspaceId),
-    timeoutMs: VELA_MODELS_TIMEOUT_MS,
-  });
-  return parsePublishedProfiles(stdout, wireModel, edits);
+  try {
+    const stdout = await runCommand(['media', 'models', '--json'], {
+      ...velaWorkspaceCommandOptions(input.workspaceId),
+      timeoutMs: VELA_MODELS_TIMEOUT_MS,
+    });
+    return parsePublishedProfiles(stdout, wireModel, edits);
+  } catch (error) {
+    const providerError = velaMediaErrorFromFailure(error, 'media models');
+    if (providerError) throw providerError;
+    const msg = error instanceof Error ? error.message : String(error);
+    const stdout = velaCommandStdout(error);
+    const stderr = velaCommandStderr(error);
+    const combined = `${msg}\n${stdout}\n${stderr}`.toLowerCase();
+    const isUnauthenticated =
+      combined.includes('unauthorized') ||
+      combined.includes('not logged in') ||
+      combined.includes('login required') ||
+      combined.includes('authentication required') ||
+      combined.includes('auth required') ||
+      combined.includes('please log in') ||
+      combined.includes('unauthenticated');
+    if (isUnauthenticated) {
+      throw new VelaMediaError(msg, { code: 'UNAUTHORIZED', retryable: false });
+    }
+    throw error;
+  }
 }
 
 /**

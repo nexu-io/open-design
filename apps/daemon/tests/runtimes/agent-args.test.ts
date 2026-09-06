@@ -655,11 +655,11 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // the real prompt as the `-p` argument.
 test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.equal(antigravity.bin, 'agy');
-  assert.equal(antigravity.streamFormat, 'plain');
+  assert.equal(antigravity.streamFormat, 'antigravity-stream-json');
   assert.equal(antigravity.promptViaStdin, false);
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', 'write hello world']);
+  assert.deepEqual(args, ['--output-format', 'stream-json', '-p', 'write hello world']);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
@@ -667,6 +667,20 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   assert.deepEqual(argsWithLog, [
     '--log-file',
     '/tmp/od-agy-test.log',
+    '--output-format',
+    'stream-json',
+    '-p',
+    'write hello world',
+  ]);
+
+  const argsWithDirs = antigravity.buildArgs('write hello world', [], ['/path/a', '', '  ', '/path/b'], {}, {});
+  assert.deepEqual(argsWithDirs, [
+    '--add-dir',
+    '/path/a',
+    '--add-dir',
+    '/path/b',
+    '--output-format',
+    'stream-json',
     '-p',
     'write hello world',
   ]);
@@ -683,10 +697,14 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
       agentLogFilePath: '/tmp/od-agy-test.log',
       antigravitySettingsPath: join(settingsDir, 'settings.json'),
     });
-    assert.equal(withModel.includes('--model'), false);
+    assert.equal(withModel.includes('--model'), true);
     assert.deepEqual(withModel, [
+      '--model',
+      'Gemini 3.1 Pro (High)',
       '--log-file',
       '/tmp/od-agy-test.log',
+      '--output-format',
+      'stream-json',
       '-p',
       'hi',
     ]);
@@ -705,42 +723,41 @@ test('antigravity passes prompt via -p argument (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', 'next message']);
+  assert.deepEqual(followUp, ['--output-format', 'stream-json', '-p', 'next message']);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
   });
-  assert.deepEqual(firstTurn, ['-p', 'first']);
+  assert.deepEqual(firstTurn, ['--output-format', 'stream-json', '-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
   assert.equal(antigravity.maxPromptArgBytes, undefined);
 
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Fallback models provide sane defaults when agy models is offline.
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
+      'Gemini 3.8 Flash (High)',
+      'Gemini 3.8 Flash (Medium)',
+      'Gemini 3.8 Flash (Low)',
+      'Gemini 3.7 Flash (High)',
+      'Gemini 3.7 Flash (Medium)',
+      'Gemini 3.7 Flash (Low)',
+      'Gemini 3.6 Flash (High)',
+      'Gemini 3.6 Flash (Medium)',
+      'Gemini 3.6 Flash (Low)',
       'Gemini 3.1 Pro (High)',
       'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
       'Claude Sonnet 4.6 (Thinking)',
       'Claude Opus 4.6 (Thinking)',
       'GPT-OSS 120B (Medium)',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
-  assert.equal(antigravity.supportsCustomModel, false);
+  // Modern `agy` accepts arbitrary models via `--model` flag.
+  assert.equal(antigravity.supportsCustomModel, true);
 });
 
 test('antigravity gates non-interactive permission bypass on the detected CLI capability', () => {
@@ -749,12 +766,19 @@ test('antigravity gates non-interactive permission bypass on the detected CLI ca
   assert.deepEqual(antigravity.capabilityFlags, {
     '--dangerously-skip-permissions': 'skipPermissions',
   });
-  assert.deepEqual(antigravity.buildArgs('', [], [], {}), ['-p', '']);
+  assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
+    '--output-format',
+    'stream-json',
+    '-p',
+    '',
+  ]);
 
   agentCapabilities.set('antigravity', { skipPermissions: true });
   try {
     assert.deepEqual(antigravity.buildArgs('', [], [], {}), [
       '--dangerously-skip-permissions',
+      '--output-format',
+      'stream-json',
       '-p',
       '',
     ]);
@@ -770,7 +794,14 @@ test('antigravity keeps log argv order when permission bypass is unavailable', (
       antigravity.buildArgs('', [], [], {}, {
         agentLogFilePath: '/tmp/od-agy-test.log',
       }),
-      ['--log-file', '/tmp/od-agy-test.log', '-p', ''],
+      [
+        '--log-file',
+        '/tmp/od-agy-test.log',
+        '--output-format',
+        'stream-json',
+        '-p',
+        '',
+      ],
     );
   } finally {
     agentCapabilities.delete('antigravity');
@@ -788,6 +819,8 @@ test('antigravity places permission bypass after log args', () => {
         '--log-file',
         '/tmp/od-agy-test.log',
         '--dangerously-skip-permissions',
+        '--output-format',
+        'stream-json',
         '-p',
         '',
       ],
@@ -795,6 +828,21 @@ test('antigravity places permission bypass after log args', () => {
   } finally {
     agentCapabilities.delete('antigravity');
   }
+});
+
+test('antigravity adopts promptViaFile and passes promptFilePath via --add-dir and instruction prompt', () => {
+  assert.equal(antigravity.promptViaFile, true);
+  const args = antigravity.buildArgs('', [], [], {}, {
+    promptFilePath: '/tmp/od-agy-prompt-123/prompt.md',
+  });
+  assert.deepEqual(args, [
+    '--add-dir',
+    '/tmp/od-agy-prompt-123',
+    '--output-format',
+    'stream-json',
+    '-p',
+    'Read the system instructions, conversation history, and user request from the file /tmp/od-agy-prompt-123/prompt.md. Follow the instructions strictly and provide the final response to the user\'s latest request.',
+  ]);
 });
 
 // `agy` reads `~/.gemini/antigravity-cli/settings.json` on every CLI

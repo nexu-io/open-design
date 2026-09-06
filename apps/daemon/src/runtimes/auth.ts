@@ -51,7 +51,7 @@ const ANTIGRAVITY_AUTH_GUIDANCE =
 // the picker from OD until upstream issue #35 ships a `--model`
 // flag — see antigravity.ts notes.
 const ANTIGRAVITY_QUOTA_GUIDANCE =
-  'Antigravity returned "RESOURCE_EXHAUSTED: Individual quota reached" for the current model. Each Antigravity model (Gemini 3 Pro / Flash, Claude 4.6, GPT-OSS) has its own quota.\n\nFix: open `agy` in a terminal and use its Switch Model picker (the menu at the bottom of the TUI) to pick a model with available quota, then retry here. OpenDesign uses whatever model you pick in agy\'s TUI when the Settings model picker is left on "Default". Quotas reset automatically on Antigravity\'s schedule.';
+  'Antigravity returned "RESOURCE_EXHAUSTED" for the current model. Each Antigravity model (Gemini 3.8 / 3.7 / 3.6 Flash, Gemini 3.1 Pro, Claude 4.6, GPT-OSS) has its own independent quota.\n\nFix: use the Switch Model picker to choose another model directly in OpenDesign (e.g. Gemini 3.8 Flash or Claude Sonnet 4.6), then retry this chat. Quotas reset automatically on Antigravity\'s schedule.';
 
 const REASONIX_AUTH_GUIDANCE =
   'DeepSeek Reasonix is installed but is not authenticated. Add your API key in `~/.reasonix/config.json` under `apiKey`, or expose DEEPSEEK_API_KEY to the OpenDesign daemon process, then retry. If OpenDesign is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
@@ -117,7 +117,8 @@ export function isAntigravityAuthFailureText(text: string): boolean {
     /authentication required.*please visit/i.test(value) ||
     /authentication timed out/i.test(value) ||
     /not logged into antigravity/i.test(value) ||
-    /accounts\.google\.com\/o\/oauth2\/auth.*antigravity/i.test(value)
+    /accounts\.google\.com\/o\/oauth2\/auth.*antigravity/i.test(value) ||
+    /unauthenticated|invalid_grant|token has expired/i.test(value)
   );
 }
 
@@ -305,7 +306,7 @@ const AGENT_AUTH_FAILURE_RE = new RegExp(
 
 // Quota / rate limit / billing balance — the wall the hosted gateway avoids.
 const AGENT_RATE_FAILURE_RE = new RegExp(
-  `(\\b(rate[ _-]?limit|too many requests|quota|insufficient[ _-]?(?:quota|balance|credit|funds)|credit balance is too low|exceeded your current quota|usage limit|session limit|limit reached|billing (?:hard )?limit)\\b|${STATUS_CTX}429\\b)`,
+  `(\\b(resource[ _-]?exhausted|rate[ _-]?limit|too many requests|quota|insufficient[ _-]?(?:quota|balance|credit|funds)|credit balance is too low|exceeded your current quota|usage limit|session limit|limit reached|billing (?:hard )?limit)\\b|${STATUS_CTX}429\\b)`,
   'i',
 );
 

@@ -78,9 +78,11 @@ import {
   findMediaModel,
   findProvider,
   modelsForSurface,
+  IMAGE_MODELS,
 } from './models.js';
 import { assertAndFetchExternalAsset } from '../connectionTest.js';
 import {
+  readMaskedConfig,
   resolveModelAlias,
   resolveProviderConfig,
 } from './config.js';
@@ -93,7 +95,7 @@ import {
   resolveHyperFramesCliPath,
   resolveHyperFramesNodeBin,
 } from './hyperframes-runtime.js';
-import { renderVelaImage, renderVelaVideo } from './vela.js';
+import { renderVelaImage, renderVelaVideo, VelaMediaError } from './vela.js';
 import {
   ensureProject,
   kindFor,
@@ -344,7 +346,80 @@ function clampWithWarning(value: unknown, allowed: number[], flagName: string): 
  * @param {string} [args.audioKind]
  * @param {string} [args.language]
  * @returns {Promise<{ name: string, size: number, mtime: number, kind: string, mime: string, model: string, surface: string, providerNote: string, providerId: string }>}
+/**
+ * Dynamically find the first configured and active image provider
+ * according to user settings in media-config.json or environment variables.
  */
+async function findActiveImageProvider(
+  projectRoot: string,
+  excludeProviders: string[] = [],
+  preferredCap: 't2i' | 'i2i' = 't2i',
+): Promise<MediaModel | null> {
+  const masked = await readMaskedConfig(projectRoot);
+  const candidateProviders = [
+    'nanobanana',
+    'fal',
+    'openai',
+    'volcengine',
+    'minimax',
+    'grok',
+    'custom-image',
+    'imagerouter',
+    'openrouter',
+    'aihubmix',
+    'leonardo',
+    'senseaudio',
+  ];
+  for (const pid of candidateProviders) {
+    if (excludeProviders.includes(pid)) continue;
+    if (masked.providers[pid]?.configured) {
+      const model = IMAGE_MODELS.find((m) => m.provider === pid && m.caps.includes(preferredCap));
+      if (model) return model;
+    }
+  }
+  // No provider found with the requested capability; do NOT silently
+  // downgrade an i2i request to a t2i-only provider — callers must
+  // handle null and surface an actionable error to the user.
+  return null;
+}
+
+async function dispatchFallbackImage(
+  provider: string,
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+): Promise<RenderResult> {
+  if (provider === 'nanobanana') return renderNanoBananaImage(ctx, credentials);
+  if (provider === 'volcengine') return renderVolcengineImage(ctx, credentials);
+  if (provider === 'fal') return renderFalImage(ctx, credentials);
+  if (provider === 'minimax') return renderMinimaxImage(ctx, credentials);
+  if (provider === 'grok') return renderGrokImage(ctx, credentials);
+  if (provider === 'custom-image') return renderCustomOpenAIImage(ctx, credentials);
+  if (provider === 'imagerouter') return renderImageRouterImage(ctx, credentials);
+  if (provider === 'openrouter') return renderOpenRouterImage(ctx, credentials);
+  if (provider === 'openai') return renderOpenAIImage(ctx, credentials);
+  if (provider === 'aihubmix') return renderAIHubMixImage(ctx, credentials);
+  if (provider === 'leonardo') return renderLeonardoImage(ctx, credentials);
+  if (provider === 'senseaudio') return renderSenseAudioImage(ctx, credentials);
+  throw new Error(`Unsupported fallback provider: ${provider}`);
+}
+
+async function createFallbackMediaContext(
+  ctx: MediaContext,
+  fallbackModel: MediaModel,
+): Promise<MediaContext> {
+  return {
+    ...ctx,
+    model: fallbackModel.id,
+    // Fallbacks take the same canonical-to-wire alias path as the selected
+    // model. Keeping the catalog id in `model` preserves capability-specific
+    // renderer behavior while `wireModel` carries the provider's configured
+    // alias (issue #7768).
+    wireModel: await resolveModelAlias(ctx.projectRoot, fallbackModel.id),
+    modelDef: fallbackModel,
+    provider: findProvider(fallbackModel.provider),
+  };
+}
+
 export async function generateMedia(args: {
   projectRoot: string; projectsRoot: string; projectId: string; surface: MediaSurface; model: string;
   prompt?: string; output?: string; aspect?: string; quality?: string; resolution?: string;
@@ -596,10 +671,40 @@ export async function generateMedia(args: {
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'vela' && surface === 'image') {
-      const result = await renderVelaImage(ctx);
-      bytes = result.bytes;
-      providerNote = result.providerNote;
-      suggestedExt = result.suggestedExt;
+      try {
+        const result = await renderVelaImage(ctx);
+        bytes = result.bytes;
+        providerNote = result.providerNote;
+        suggestedExt = result.suggestedExt;
+      } catch (err) {
+        const isAuthError =
+          (err instanceof VelaMediaError && err.code === 'UNAUTHORIZED')
+          || (err instanceof Error && (
+            err.message.includes('not logged in') ||
+            err.message.includes('UNAUTHORIZED') ||
+            err.message.includes('unauthorized')
+          ));
+        if (isAuthError) {
+          const preferredCap = ctx.imageRef || ctx.imageRefs?.length ? 'i2i' : 't2i';
+          const fallbackModel = await findActiveImageProvider(projectRoot, ['vela'], preferredCap);
+          if (fallbackModel) {
+            const fallbackCreds = await resolveProviderConfig(projectRoot, fallbackModel.provider);
+            const fallbackCtx = await createFallbackMediaContext(ctx, fallbackModel);
+            const fallbackResult = await dispatchFallbackImage(fallbackModel.provider, fallbackCtx, fallbackCreds);
+            bytes = fallbackResult.bytes;
+            providerNote = `[auto-routed] Vela unauthenticated; dynamically routed to ${fallbackModel.provider} (${fallbackModel.id})`;
+            suggestedExt = fallbackResult.suggestedExt;
+            providerId = fallbackModel.provider;
+          } else {
+            throw new Error(
+              'Image generation failed: OpenDesign Cloud (Vela) is not logged in, and no alternative image provider is configured. ' +
+              `Please log in via \`vela login\` or configure an image provider (such as Google Nano Banana, OpenAI, Fal.ai, Volcengine Doubao, or MiniMax) in ${SETTINGS_MEDIA_PROVIDERS_PATH}.`
+            );
+          }
+        } else {
+          throw err;
+        }
+      }
     } else if (def.provider === 'vela' && surface === 'video') {
       const result = await renderVelaVideo({
         ...ctx,
@@ -609,10 +714,40 @@ export async function generateMedia(args: {
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'openai' && surface === 'image') {
-      const result = await renderOpenAIImage(ctx, credentials);
-      bytes = result.bytes;
-      providerNote = result.providerNote;
-      suggestedExt = result.suggestedExt;
+      try {
+        const result = await renderOpenAIImage(ctx, credentials);
+        bytes = result.bytes;
+        providerNote = result.providerNote;
+        suggestedExt = result.suggestedExt;
+      } catch (err) {
+        const isMissingCreds =
+          err instanceof Error && (
+            err.message.includes(OPENAI_IMAGE_NO_CREDENTIAL_MESSAGE) ||
+            err.message.includes('OPENAI_API_KEY') ||
+            err.message.includes('No API key') ||
+            err.message.includes('unauthorized')
+          );
+        if (isMissingCreds) {
+          const preferredCap = ctx.imageRef || ctx.imageRefs?.length ? 'i2i' : 't2i';
+          const fallbackModel = await findActiveImageProvider(projectRoot, ['openai'], preferredCap);
+          if (fallbackModel) {
+            const fallbackCreds = await resolveProviderConfig(projectRoot, fallbackModel.provider);
+            const fallbackCtx = await createFallbackMediaContext(ctx, fallbackModel);
+            const fallbackResult = await dispatchFallbackImage(fallbackModel.provider, fallbackCtx, fallbackCreds);
+            bytes = fallbackResult.bytes;
+            providerNote = `[auto-routed] OpenAI credentials not configured; dynamically routed to ${fallbackModel.provider} (${fallbackModel.id})`;
+            suggestedExt = fallbackResult.suggestedExt;
+            providerId = fallbackModel.provider;
+          } else {
+            throw new Error(
+              'Image generation failed: OpenAI API key is not configured, and no alternative image provider is active. ' +
+              `Please configure an image provider (such as Google Nano Banana, Fal.ai, Volcengine Doubao, or MiniMax) in ${SETTINGS_MEDIA_PROVIDERS_PATH}.`
+            );
+          }
+        } else {
+          throw err;
+        }
+      }
     } else if (
       def.provider === 'openai'
       && surface === 'audio'

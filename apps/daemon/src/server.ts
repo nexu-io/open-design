@@ -261,6 +261,7 @@ import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
   plainStdoutFromRunEvents,
+  textDeltaFromRunEvents,
 } from './runtimes/plain-stream.js';
 import {
   readVelaLoginStatus,
@@ -495,11 +496,14 @@ import {
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
   cursorAuthGuidance,
+  isAntigravityAuthFailureText,
   normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
 import { createQoderStreamHandler } from './runtimes/qoder-stream.js';
+import { createAntigravityStreamHandler } from './runtimes/antigravity-stream.js';
+import { syncAntigravityBrainArtifacts } from './runtimes/antigravity-sync.js';
 import { subscribe as subscribeFileEvents } from './project-watchers.js';
 import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
@@ -11854,11 +11858,21 @@ export async function startServer({
       // head to the tail-biased run.events at their exact stream offset, so no
       // artifact is lost and none is double-counted regardless of where in the
       // stream it appears.
-      if (event === 'stdout' && data && typeof data.chunk === 'string') {
-        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
+      const plainArtifactChunk =
+        event === 'stdout' && data && typeof data.chunk === 'string'
+          ? data.chunk
+          : def.streamFormat === 'antigravity-stream-json' &&
+            event === 'agent' &&
+            data &&
+            data.type === 'text_delta' &&
+            typeof data.delta === 'string'
+            ? data.delta
+            : null;
+      if (plainArtifactChunk !== null) {
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + plainArtifactChunk.length;
         if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
           run.plainArtifactStdout =
-            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+            ((run.plainArtifactStdout ?? '') + plainArtifactChunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
         }
       }
       persistRunEventToAssistantMessage(db, run, event, data);
@@ -12785,28 +12799,6 @@ export async function startServer({
       }
     }
 
-    // Serialize antigravity spawns whose buildArgs writes a concrete
-    // model into settings.json. Two concurrent runs with different
-    // models would otherwise race the file: A writes model A, B writes
-    // model B, then A's agy reads model B. The lock is acquired BEFORE
-    // buildArgs (which performs the write) and released asynchronously
-    // AFTER agy's --log-file confirms the model was propagated. See
-    // `antigravity.ts` for the chain implementation.
-    let antigravityModelLockRelease: (() => void) | null = null;
-    const antigravityConcreteModel =
-      def.id === 'antigravity'
-      && typeof agentOptions.model === 'string'
-      && agentOptions.model.length > 0
-      && agentOptions.model !== 'default'
-        ? agentOptions.model
-        : null;
-    if (antigravityConcreteModel) {
-      const { acquireAntigravityModelLock } = await import(
-        './runtimes/defs/antigravity.js'
-      );
-      antigravityModelLockRelease = await acquireAntigravityModelLock();
-    }
-
     let args;
     const observeClaudeNativeChildBehavior =
       def.id === 'claude' && strategyTaskAtStart !== null;
@@ -13566,56 +13558,6 @@ export async function startServer({
         process.platform !== 'win32' && typeof child.pid === 'number'
           ? child.pid
           : null;
-      // Schedule release of the antigravity model lock once agy's
-      // --log-file confirms the chosen model was propagated to the
-      // backend (the upstream signal that settings.json was read).
-      // The watcher's `false` return (timeout) deliberately does NOT
-      // release — looper review at 263fd2fe7 flagged that releasing
-      // on timeout reopens the slow-cold-start race: a >15s agy
-      // startup that hadn't yet read settings.json would let run B
-      // rewrite the file and run A would then read run B's model.
-      // The exit handler is the canonical fallback that releases the
-      // lock no matter what (crashed agy, fast exit, etc.) so the
-      // queue can never starve permanently.
-      if (
-        antigravityModelLockRelease
-        && antigravityConcreteModel
-        && agentLogFilePath
-      ) {
-        const releaseOnce = (() => {
-          let fired = false;
-          return () => {
-            if (fired) return;
-            fired = true;
-            antigravityModelLockRelease?.();
-          };
-        })();
-        const watcherAbort = new AbortController();
-        const { waitForAgyToReadModel } = await import(
-          './runtimes/defs/antigravity.js'
-        );
-        void waitForAgyToReadModel(
-          agentLogFilePath,
-          antigravityConcreteModel,
-          { abortSignal: watcherAbort.signal },
-        )
-          .then((found) => {
-            // Only release on TRUE confirmation; a `false` return means
-            // the watcher ran out of its polling window without seeing
-            // the propagation line. We hold the lock until child exit
-            // so a slow-cold-start agy can't be pre-empted by a
-            // concurrent settings.json rewrite from run B.
-            if (found) releaseOnce();
-          })
-          .catch(() => undefined);
-        child.once('exit', () => {
-          // Stop the watcher so its pending readFile / setTimeout
-          // chain does not outlive the run and leak into subsequent
-          // antigravity spawns (or test cases).
-          watcherAbort.abort();
-          releaseOnce();
-        });
-      }
       if (
         def.promptViaStdin &&
         child.stdin &&
@@ -14521,6 +14463,28 @@ export async function startServer({
       const qoder = createQoderStreamHandler(sendAgentEvent);
       child.stdout.on('data', (chunk) => qoder.feed(chunk));
       child.on('close', () => qoder.flush());
+    } else if (def.streamFormat === 'antigravity-stream-json') {
+      trackingSubstantiveOutput = true;
+      const agy = createAntigravityStreamHandler((ev) => {
+        if (ev?.type === 'oauth_prompt') {
+          return;
+        }
+        if (ev?.type === 'raw' && typeof ev.line === 'string') {
+          if (
+            isAntigravityAuthFailureText(ev.line) ||
+            ev.line.includes('accounts.google.com')
+          ) {
+            return;
+          }
+          noteFirstTokenAt();
+          agentProducedOutput = true;
+          send('stdout', { chunk: ev.line + '\n' });
+          return;
+        }
+        sendAgentEvent(ev);
+      });
+      child.stdout.on('data', (chunk) => agy.feed(chunk));
+      child.on('close', () => agy.flush());
     } else if (def.streamFormat === 'copilot-stream-json') {
       const copilot = createCopilotStreamHandler((ev) => {
         lastAgentEventPhase = summarizeAgentEventForInactivity(ev);
@@ -14867,21 +14831,6 @@ export async function startServer({
           code === 0 && signal === null && !run.cancelRequested && !agentStreamError,
         ));
       });
-    } else if (def.id === 'antigravity') {
-      // Buffer stdout until close so the auth-prompt guard can suppress
-      // the OAuth URL before forwarding it to the client as assistant
-      // text. agy exits 0 after printing the auth URL on stdout, so the
-      // chunks would otherwise arrive before the close-time classifier
-      // detects them as an auth prompt. First-token timing is deliberately
-      // NOT stamped here — only the first chunk's arrival time is recorded,
-      // and `firstTokenAt` is stamped from it at flush time so the
-      // suppressed OAuth-prompt path never reports a TTFT (PR #3412).
-      child.stdout.on('data', (chunk) => {
-        noteAgentActivity();
-        const receivedAt = Date.now();
-        if (firstBufferedStdoutAt === null) firstBufferedStdoutAt = receivedAt;
-        plaintextStdoutBuffer.push({ text: String(chunk), receivedAt });
-      });
     } else {
       // Plain / BYOK mode: guard raw stdout chunks (#3247).
       child.stdout.on('data', (chunk) => {
@@ -15198,8 +15147,25 @@ export async function startServer({
         code === 0 &&
         !run.cancelRequested &&
         trackingSubstantiveOutput &&
-        !agentProducedOutput
+        !agentProducedOutput &&
+        // Antigravity has a later, log-aware silent-exit branch when no
+        // stdout was seen at all (agy fails silently on quota/auth in print
+        // mode). If stdout was seen (e.g. Gemini init/usage records) but
+        // carried no assistant content, fall through to AGENT_EXECUTION_FAILED.
+        !(def.id === 'antigravity' && !childStdoutSeen)
       ) {
+        const authFailure = classifyAgentAuthFailure(
+          agentId,
+          `${agentStderrTail}\n${agentStdoutTail}`,
+        );
+        if (authFailure?.status === 'missing') {
+          send('error', createSseErrorPayload(
+            'AGENT_AUTH_REQUIRED',
+            authFailure.message ?? `${def.name} authentication required. Please re-authenticate and retry.`,
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', 0, signal);
+        }
         markRpcCloseReason('empty_output');
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',
@@ -15260,11 +15226,25 @@ export async function startServer({
       // guard can grep the upstream error code (RESOURCE_EXHAUSTED 429
       // for quota, "not logged into Antigravity" for auth) and route
       // to the right user-facing guidance.
-      if (
-        code === 0 &&
+      //
+      // Also enters for `antigravity-stream-json` when the structured
+      // stream received zero agent-produced content (agentProducedOutput
+      // is false). In that mode trackingSubstantiveOutput is always true
+      // (set at spawn time), so the !trackingSubstantiveOutput path is
+      // never reached — but a silent agy exit still needs log-file
+      // classification for RATE_LIMITED / AGENT_AUTH_REQUIRED routing.
+      const antigravityStreamSilentExit =
+        def.streamFormat === 'antigravity-stream-json' &&
+        !agentProducedOutput &&
+        !childStdoutSeen &&
         !run.cancelRequested &&
-        !trackingSubstantiveOutput &&
-        !childStdoutSeen
+        code === 0;
+      if (
+        (code === 0 &&
+          !run.cancelRequested &&
+          !trackingSubstantiveOutput &&
+          !childStdoutSeen) ||
+        antigravityStreamSilentExit
       ) {
         markRpcCloseReason('empty_output');
         let combinedDetail = `${agentStderrTail}\n${agentStdoutTail}`;
@@ -15286,6 +15266,15 @@ export async function startServer({
           : null;
         const isAntigravityQuota =
           def.id === 'antigravity' && serviceFailure === 'RATE_LIMITED';
+        // `RESOURCE_EXHAUSTED` is agy's hard per-model quota signal. It is
+        // safe to retry an ordinary transient 429, but retrying this same
+        // model only replaces the useful quota guidance with a second empty
+        // response (and can race the previous attempt's log cleanup).
+        const isAntigravityHardQuota =
+          isAntigravityQuota &&
+          /\bRESOURCE_EXHAUSTED\b|\b(?:individual )?quota (?:reached|exhausted|exceeded)\b|\b(?:session|usage) limit\b/i.test(
+            combinedDetail,
+          );
         // Antigravity-only fallback: if neither classifier matched but
         // the run was silent, lean on the empirical observation that
         // an empty agy print-mode exit almost always means
@@ -15309,9 +15298,11 @@ export async function startServer({
         send('error', createSseErrorPayload(
           errorCode,
           msg,
-          { retryable: true },
+          { retryable: !isAntigravityHardQuota },
         ));
-        return finishWithRetryDecision('failed', 0, signal);
+        return finishWithRetryDecision('failed', 0, signal, {
+          allowRetry: !isAntigravityHardQuota,
+        });
       }
       // ACP agents that don't shut down on stdin.end() (e.g. Devin for
       // Terminal) are forced to exit via SIGTERM from attachAcpSession after
@@ -15330,7 +15321,7 @@ export async function startServer({
         typeof acpSession?.completedSuccessfully === 'function' &&
         acpSession.completedSuccessfully();
       const runArtifactSideEffects = runSideEffectsForRun(run);
-      const status = classifyChatRunCloseStatus({
+      let status = classifyChatRunCloseStatus({
         cancelRequested: !!run.cancelRequested,
         code,
         signal,
@@ -15341,6 +15332,30 @@ export async function startServer({
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
+      if (status === 'succeeded') {
+        const linkedMediaTask = typeof mediaTaskStore !== 'undefined' && mediaTaskStore?.mediaTasks
+          ? Array.from(mediaTaskStore.mediaTasks.values()).find((t) => t.runId === run.id)
+          : null;
+        if (linkedMediaTask && linkedMediaTask.status === 'failed') {
+          status = 'failed';
+          send(
+            'error',
+            createSseErrorPayload(
+              'MEDIA_DISPATCH_FAILED',
+              linkedMediaTask.error?.message ?? 'Media generation failed',
+              { retryable: true },
+            ),
+          );
+        } else if (agentStdoutTail.includes('MEDIA_DISPATCH_FAILED')) {
+          status = 'failed';
+          send(
+            'error',
+            createSseErrorPayload('MEDIA_DISPATCH_FAILED', 'Media generation failed', {
+              retryable: true,
+            }),
+          );
+        }
+      }
       // Authentication guards above have now ruled out Antigravity's OAuth
       // prompt. Publish any remaining guarded plaintext before a close error
       // so both the emit-time admission ledger and durable-log reconciliation
@@ -15437,6 +15452,33 @@ export async function startServer({
               metadata: project?.metadata,
             });
             const dir = resolveProjectDir(PROJECTS_DIR, run.projectId, project?.metadata);
+            if (
+              (def.id === 'antigravity' || def.streamFormat === 'antigravity-stream-json') &&
+              typeof capturedSessionId === 'string' &&
+              capturedSessionId &&
+              run.projectId
+            ) {
+              try {
+                const childEnv = spawnedAgentEnv ?? agentSpawnEnv;
+                const childHome =
+                  childEnv?.OD_AGENT_HOME ||
+                  childEnv?.HOME ||
+                  childEnv?.USERPROFILE ||
+                  (SANDBOX_RUNTIME.enabled ? SANDBOX_RUNTIME.roots.agentHomeDir : os.homedir());
+                const brainBaseDir = path.join(childHome, '.gemini', 'antigravity-cli', 'brain');
+                await syncAntigravityBrainArtifacts({
+                  projectsRoot: PROJECTS_DIR,
+                  projectId: run.projectId,
+                  sessionId: capturedSessionId,
+                  projectMetadata: project?.metadata,
+                  brainBaseDir,
+                  agentHome: childHome,
+                  writeProjectFileFn: writeProjectFile,
+                });
+              } catch {
+                /* brain-sync best-effort */
+              }
+            }
             for (const f of files) {
               const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
               if (ext !== '.html' && ext !== '.htm') continue;
@@ -15457,7 +15499,7 @@ export async function startServer({
       }
       if (
         status === 'succeeded' &&
-        (def.streamFormat ?? 'plain') === 'plain' &&
+        ((def.streamFormat ?? 'plain') === 'plain' || def.streamFormat === 'antigravity-stream-json') &&
         run.projectId
       ) {
         // Reconstruct the agent's stdout for artifact extraction from two
@@ -15480,7 +15522,10 @@ export async function startServer({
         //     was already unrecoverable before this change (the old code only
         //     ever had the tail).
         const head = run.plainArtifactStdout ?? '';
-        const tail = plainStdoutFromRunEvents(run.events);
+        const tail =
+          def.streamFormat === 'antigravity-stream-json'
+            ? textDeltaFromRunEvents(run.events)
+            : plainStdoutFromRunEvents(run.events);
         const totalBytes = run.plainStdoutTotalBytes ?? head.length;
         const tailStart = Math.max(0, totalBytes - tail.length);
         let plainArtifacts: ReturnType<typeof extractPlainStreamArtifacts>;
@@ -15935,7 +15980,23 @@ export async function startServer({
           },
         );
       }
-      } finally {
+    } catch (childCloseErr) {
+      console.error('[runs] child close error:', childCloseErr);
+      if (!design.runs.isTerminal(run.status)) {
+        try {
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            `Internal daemon error during run completion: ${childCloseErr instanceof Error ? childCloseErr.message : String(childCloseErr)}`,
+            { retryable: false },
+          ));
+        } catch {}
+        try {
+          finishWithRetryDecision('failed', code ?? 1, signal ?? null);
+        } catch (finishErr) {
+          console.error('[runs] finishWithRetryDecision failed in child close catch:', finishErr);
+        }
+      }
+    } finally {
         // Best-effort cleanup of the per-run agy log file on every close
         // path — successful, failed, cancelled, or non-zero exit — so
         // /tmp doesn't accumulate one file per Antigravity run. The log
