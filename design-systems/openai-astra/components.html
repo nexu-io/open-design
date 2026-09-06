@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>openai-astra — reference components</title>
+    <meta name="description" content="Reference fixture for design-systems/openai-astra. Every visible value comes from tokens.css. The Astra launch page's signature moves: pure black canvas under a particle galaxy, white text with white-at-alpha secondaries, OpenAI Sans at 500/400, monochrome pill chrome, a single #23435f ambient glow, no shadows, no gradients." />
+    <style>
+      /* Canonical token bindings — pasted verbatim from tokens.css (:root declarations only). */
+      :root {
+        --bg:           #000000;
+        --surface:      #1f1f1f;
+        --surface-warm: #0a0a0a;
+        --fg:   #ffffff;
+        --fg-2: #fafafa;
+        --muted: #ffffff99;
+        --meta:  #ffffff70;
+        --border:      #ffffff33;
+        --border-soft: #ffffff14;
+        --accent:        #ffffff;
+        --accent-on:     #000000;
+        --accent-hover:  #ffffffe6;
+        --accent-active: #ffffffcc;
+        --success: #16a34a;
+        --warn:    #eab308;
+        --danger:  #dc2626;
+        --font-display: "OpenAI Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-body:    "OpenAI Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+        --font-mono:    "SF Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+        --text-xs:   13px;
+        --text-sm:   14px;
+        --text-base: 17px;
+        --text-lg:   18px;
+        --text-xl:   22px;
+        --text-2xl:  30px;
+        --text-3xl:  48px;
+        --text-4xl:  64px;
+        --leading-body:     1.65;
+        --leading-tight:    1.08;
+        --tracking-display: -0.03em;
+        --space-1:  4px;
+        --space-2:  8px;
+        --space-3:  12px;
+        --space-4:  16px;
+        --space-5:  20px;
+        --space-6:  24px;
+        --space-8:  32px;
+        --space-12: 48px;
+        --section-y-desktop: 128px;
+        --section-y-tablet:  96px;
+        --section-y-phone:   64px;
+        --radius-sm:   6px;
+        --radius-md:   10px;
+        --radius-lg:   16px;
+        --radius-pill: 9999px;
+        --elev-flat:   none;
+        --elev-ring:   0 0 0 1px var(--border);
+        --elev-raised: 0 18px 60px rgba(0, 0, 0, 0.08);
+        --focus-ring: 0 0 0 2px #ffffffb3;
+        --motion-fast:   150ms;
+        --motion-base:   300ms;
+        --ease-standard: cubic-bezier(0.6, 0, 0.4, 1);
+        --container-max:            1088px;
+        --container-gutter-desktop: 56px;
+        --container-gutter-tablet:  32px;
+        --container-gutter-phone:   20px;
+      }
+
+      /* Astra extension values (DESIGN.md §2 / §7) are literals here so the fixture only references schema tokens. */
+      * { box-sizing: border-box; }
+      html { color-scheme: dark; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font: 400 var(--text-base) / var(--leading-body) var(--font-body); letter-spacing: -0.01em; -webkit-font-smoothing: antialiased; }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--space-12) var(--container-gutter-desktop); }
+      section { padding: var(--space-12) 0; border-top: 1px solid var(--border-soft); }
+      section:first-of-type { border-top: 0; }
+      h1 { margin: 0 0 var(--space-6); font: 500 var(--text-3xl) / var(--leading-tight) var(--font-display); letter-spacing: var(--tracking-display); text-wrap: balance; }
+      h2 { margin: 0 0 var(--space-4); font: 500 var(--text-2xl) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      h2.kicker { margin: 0 0 var(--space-6); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0.08em; text-transform: uppercase; color: var(--meta); }
+      h3 { margin: 0 0 var(--space-3); font: 500 var(--text-lg) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      p { margin: 0 0 var(--space-6); color: var(--muted); text-wrap: pretty; }
+      code { font: 400 0.875em / 1.6 var(--font-mono); letter-spacing: 0; color: var(--fg); background: #ffffff33; padding: 0 4px; border-radius: 4px; }
+      .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+      .note { color: var(--meta); font-size: var(--text-sm); margin: var(--space-3) 0 0; }
+
+      /* ── Links ── */
+      a { color: var(--fg); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; transition: color 250ms linear; }
+      a:hover { color: var(--muted); }
+      .nav { display: flex; gap: var(--space-6); }
+      .nav a { font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--meta); text-decoration: none; transition: color var(--motion-fast); }
+      .nav a:hover, .nav a[aria-current="page"] { color: var(--fg); }
+      .link-arrow { font: 500 var(--text-sm) / 1 var(--font-body); text-decoration: none; }
+      .link-arrow::after { content: " →"; }
+
+      /* ── Buttons ── */
+      .btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 40px; padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-pill); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-base) var(--ease-standard), color var(--motion-base) var(--ease-standard); }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary { background: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover { background: var(--accent-hover); }
+      .btn-primary:active { background: var(--accent-active); }
+      .btn-glass { background: #ffffff1f; color: var(--fg); }
+      .btn-glass:hover { background: var(--border); }
+      .btn-ghost { background: transparent; color: var(--fg); }
+      .btn-ghost:hover { background: var(--border); }
+      .btn[disabled] { background: #ffffff1f; color: var(--muted); cursor: not-allowed; }
+      .icon-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); cursor: pointer; transition: background-color 200ms linear; }
+      .icon-btn:hover { background: #ffffff1f; }
+      .replay { width: 36px; height: 36px; background: #ffffff26; color: #ffffffcc; transition: color var(--motion-fast), background-color var(--motion-fast); }
+      .replay:hover { background: #ffffff40; color: #ffffffe6; }
+
+      /* ── Inputs ── */
+      .field { display: grid; gap: var(--space-2); max-width: 480px; }
+      .field label { font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0.04em; color: var(--meta); }
+      input[type="text"], input[type="email"], textarea, select { width: 100%; min-height: 44px; padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-warm); color: var(--fg); font: 400 var(--text-base) / 1.4 var(--font-body); letter-spacing: -0.01em; transition: border-color var(--motion-base) var(--ease-standard); }
+      input::placeholder, textarea::placeholder { color: var(--meta); }
+      input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; border-color: #ffffffb3; box-shadow: var(--focus-ring); }
+      .field .hint { margin: 0; font-size: var(--text-sm); color: var(--meta); }
+      .field .error { margin: 0; font-size: var(--text-sm); color: var(--danger); }
+      .search { display: flex; align-items: center; gap: var(--space-2); min-height: 48px; padding: 0 var(--space-3) 0 var(--space-4); border-radius: var(--radius-pill); background: #ffffff1f; }
+      .search input { min-height: 0; padding: var(--space-3) 0; border: 0; background: transparent; }
+      .search input:focus-visible { box-shadow: none; }
+
+      /* ── Badges ── */
+      .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--space-3); border-radius: var(--radius-pill); font: 500 var(--text-xs) / 1 var(--font-body); letter-spacing: 0.02em; color: var(--fg); background: #ffffff1f; }
+      .badge-outline { background: transparent; box-shadow: var(--elev-ring); color: var(--muted); }
+      .badge-solid { background: var(--accent); color: var(--accent-on); }
+      .badge-success { color: var(--success); background: transparent; box-shadow: 0 0 0 1px var(--success); }
+
+      /* ── Cards ── */
+      .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
+      .card { padding: var(--space-6); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-flat); }
+      .card-glass { background: #ffffff1f; }
+      .card-outline { background: transparent; box-shadow: var(--elev-ring); }
+      .card h3 { margin-bottom: var(--space-2); }
+      .card p { margin: 0; font-size: var(--text-sm); }
+      .card .meta { display: block; margin-top: var(--space-4); font: 500 var(--text-sm) / 1.4 var(--font-body); letter-spacing: 0; color: var(--meta); }
+      .panel { background: var(--surface); border-radius: var(--radius-md); padding: var(--space-4); font: 400 var(--text-sm) / 1.6 var(--font-mono); letter-spacing: 0; color: var(--muted); }
+      .band { background: var(--surface-warm); border-radius: var(--radius-lg); padding: var(--space-6); }
+
+      /* ── Hero chrome ── */
+      .hero { position: relative; height: 420px; overflow: hidden; border-radius: var(--radius-lg); background: var(--bg) radial-gradient(ellipse farthest-corner at center, transparent 0%, color-mix(in srgb, #23435f 6.25%, transparent) 25%, color-mix(in srgb, #23435f 25%, transparent) 50%, color-mix(in srgb, #23435f 55%, transparent) 100%); }
+      .hero .label { position: absolute; top: 50%; margin: 0; transform: translateY(-50%); font: 500 var(--text-4xl) / 1 var(--font-display); letter-spacing: var(--tracking-display); color: var(--fg-2); text-shadow: 0 0 24px #fafafa14; user-select: none; }
+      .hero .label-left { left: var(--container-gutter-desktop); }
+      .hero .label-right { right: var(--container-gutter-desktop); }
+      .hero .letter { display: inline-block; opacity: 0; animation: reveal 1s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+      .hero .label-left .letter { transform: translateX(-44px); }
+      .hero .label-right .letter { transform: translateX(44px); }
+      @keyframes reveal { to { opacity: 1; transform: translate(0); } }
+      .hero .scroll-hint { position: absolute; bottom: var(--space-8); left: 50%; transform: translateX(-50%); margin: 0; color: #fafafa99; font-size: var(--text-sm); }
+      .hero .replay { position: absolute; right: var(--space-3); bottom: var(--space-3); }
+      .hero .star { position: absolute; width: 3px; height: 3px; border-radius: 50%; }
+      @media (prefers-reduced-motion: reduce) { .hero .letter { opacity: 1; animation: none; transform: none; } }
+
+      /* ── Copy column ── */
+      .copy { max-width: 669px; margin: 0 auto; padding: var(--space-12) var(--space-6); }
+      .copy h2 { margin: 0 0 var(--space-4); font: 500 var(--text-3xl) / 1.16 var(--font-display); letter-spacing: -0.02em; text-wrap: balance; }
+      .copy p { margin: 0 0 1.1em; }
+      .lede { font-size: var(--text-lg); }
+
+      /* ── Shape cue ── */
+      .cue { display: flex; flex-direction: column; align-items: center; gap: var(--space-4); padding: var(--space-8) var(--space-6); }
+      .cue-target { width: min(576px, 100%); height: 320px; display: grid; place-items: center; border: 1px dashed var(--border-soft); border-radius: var(--radius-md); color: #fafafa4d; }
+      .cue-target svg { width: 40%; height: 40%; }
+      .caption { margin: 0; font: 500 var(--text-sm) / 1.5 var(--font-body); letter-spacing: 0.08em; color: #fafafad9; }
+      .cue-note { max-width: 440px; margin: 0; text-align: center; font-size: var(--text-sm); line-height: 1.7; color: var(--meta); }
+
+      /* ── Benchmarks ── */
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th { text-align: left; font: 500 var(--text-lg) / 1.32 var(--font-body); letter-spacing: -0.01em; padding: var(--space-3) 0; border-bottom: 1px solid var(--border); }
+      td { padding: var(--space-3) 0; border-bottom: 1px solid var(--border-soft); color: var(--muted); font-size: var(--text-sm); }
+      td:first-child { color: var(--fg); }
+      tr.featured td { color: var(--fg); }
+      .bar { display: inline-block; height: 6px; border-radius: 3px; background: var(--meta); vertical-align: middle; margin-right: var(--space-2); }
+      tr.featured .bar { background: var(--fg); }
+      .footnotes h3 { margin: 0 0 var(--space-3); font: 400 var(--text-sm) / 1.6 var(--font-body); color: var(--muted); letter-spacing: 0.02em; }
+      .footnotes p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--meta); }
+      /* ── Chips, footnotes, logo strip, media bar (measured on the page) ── */
+      .chip { display: inline-block; padding: var(--space-2) var(--space-3); border-radius: 32px; background: #ffffff1f; font: 500 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; color: var(--fg); text-decoration: none; }
+      .chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+      .footnotes-heading { margin: 0 0 var(--space-3); font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: -0.01em; color: var(--muted); text-transform: uppercase; }
+      .footnotes-list { display: grid; gap: var(--space-3) var(--space-6); margin: 0; padding: 0; list-style: none; max-width: 669px; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: -0.01em; }
+      .footnotes-list li { display: inline-grid; grid-template-columns: auto 1fr; gap: 0 var(--space-2); }
+      .footnotes-list .num { font-size: 12px; line-height: 16px; color: var(--fg); padding-top: 3px; }
+      .footnotes-list p { margin: 0; color: var(--fg); }
+      .footnotes-list a.back { text-decoration: none; font-size: 12px; }
+      .logo-strip { display: flex; align-items: center; margin: 0; padding: 0; list-style: none; }
+      .logo-strip li { min-width: 0; padding: 0 var(--space-1); display: flex; justify-content: center; }
+      .logo-strip button { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: var(--space-2); border: 0; border-radius: 4px; background: transparent; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; color: var(--muted); cursor: pointer; transition: color 200ms linear, background-color 200ms linear; }
+      .logo-strip button:hover, .logo-strip button[aria-pressed="true"] { color: var(--fg); }
+      .media-bar { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--surface-warm); }
+      .media-bar .time { margin: 0; font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); font-variant-numeric: tabular-nums; }
+      .media-bar .time span { margin-left: var(--space-1); color: #ffffff66; }
+      .media-bar .time span::before { content: "|"; margin-right: var(--space-1); }
+      .media-bar .track { flex: 1; height: 2px; border-radius: 1px; background: #ffffff33; }
+      .media-bar .track i { display: block; width: 33%; height: 100%; border-radius: 1px; background: var(--fg); }
+      .media-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--fg); cursor: pointer; transition: background-color 200ms linear; }
+      .media-btn.dim { color: var(--muted); }
+      .media-btn:hover { background: var(--border-soft); }
+      /* ── Motion (page classes): fast 100ms · short 200ms linear · medium 300ms curve-d · long 400ms; curve-out-cubic = cubic-bezier(.33,1,.68,1) ── */
+      .select-trigger svg { transition: rotate 100ms linear; }
+      .site-header .btn { transition: background-color 200ms linear, color 200ms linear; }
+      .media-frame { transition: background-color 300ms cubic-bezier(0.6, 0, 0.4, 1); }
+      /* menus: opacity + 6px slide, enter 160ms / exit 120ms curve-out-cubic (page keyframes; durations inferred) */
+      .select-menu:not([hidden]), .action-menu:not([hidden]) { animation: menu-enter 160ms cubic-bezier(0.33, 1, 0.68, 1) both; }
+      @keyframes menu-enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+      /* action-menu trigger: icon at 64% opacity, 200ms ease-in-out to 100% on hover / focus / open (page CSS) */
+      .icon-btn.plain svg { opacity: 0.64; transition: opacity 200ms ease-in-out; }
+      .icon-btn.plain:hover svg, .icon-btn.plain:focus-visible svg, .icon-btn.plain[aria-expanded="true"] svg { opacity: 1; }
+      .icon-btn.plain:hover { color: var(--fg); }
+      /* chart motion (page: cues 'draw' | 'fade', trigger visibility 0.75, ease-out): lines draw, marks fade with a stagger, bars rise */
+      .plot.is-playing .line { animation: chart-draw 900ms ease-out forwards; }
+      .plot .mark { opacity: 0; }
+      .plot.is-playing .mark { animation: chart-fade 400ms ease-out forwards; }
+      .plot .bar-rect { transform-box: fill-box; transform-origin: 50% 100%; }
+      .plot.is-playing .bar-rect { animation: chart-rise 700ms ease-out both; }
+      .plot.is-static .line { animation: none; stroke-dashoffset: 0; }
+      .plot.is-static .mark { animation: none; opacity: 1; }
+      @keyframes chart-draw { to { stroke-dashoffset: 0; } }
+      @keyframes chart-fade { to { opacity: 1; } }
+      @keyframes chart-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+      .legend span { transition: opacity 200ms ease; }
+      /* carousel (page: figures stacked, opacity 250ms cubic-bezier(.23,1,.32,1); nav 32px round buttons; ring fills linearly over the auto-advance delay, fades in 1250ms / out 250ms) */
+      .carousel-stage { display: grid; }
+      .carousel-stage > * { grid-area: 1 / 1; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1); }
+      .carousel-stage > [aria-hidden="true"] { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1), visibility 0s 250ms; }
+      .carousel-nav { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-top: var(--space-5); }
+      .carousel-nav button { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); cursor: pointer; transition: color 200ms linear; }
+      .carousel-nav button:hover { color: var(--muted); }
+      .carousel-nav button svg.icon { width: 16px; height: 16px; }
+      .carousel-nav .count { min-width: 56px; text-align: center; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+      .carousel-nav .ring { position: absolute; inset: 0; width: 32px; height: 32px; pointer-events: none; }
+      .carousel-nav .ring circle { fill: none; stroke: var(--fg); stroke-width: 1.5; transform: rotate(-90deg); transform-origin: 50% 50%; stroke-dasharray: 94.25; stroke-dashoffset: 94.25; opacity: 0; transition: opacity 250ms cubic-bezier(0.33, 1, 0.68, 1); }
+      .carousel-nav .ring.active circle { animation: ring-fill 5000ms linear forwards; opacity: 1; transition: opacity 1250ms cubic-bezier(0.33, 1, 0.68, 1); }
+      .carousel-nav .ring.paused circle { animation-play-state: paused; }
+      @keyframes ring-fill { to { stroke-dashoffset: 0; } }
+      @media (prefers-reduced-motion: reduce) {
+        .select-menu:not([hidden]), .action-menu:not([hidden]) { animation: none; }
+        .plot .line { stroke-dashoffset: 0 !important; animation: none !important; }
+        .plot .mark { opacity: 1 !important; animation: none !important; }
+        .plot .bar-rect { animation: none !important; }
+        .carousel-nav .ring circle { animation: none; opacity: 0; }
+      }
+      /* ── Slide deck (measured): 669px column, aspect 959/540, #1f1f1f, 4px radius; stage 24px side padding; 56px bar with 1px #ffffff33 top rule, 12px side padding; 32px round buttons; 14px tabular counter ── */
+      .deck { display: flex; flex-direction: column; width: 100%; max-width: 669px; margin: 0 auto; aspect-ratio: 959 / 540; min-height: 240px; overflow: hidden; border-radius: 4px; background: var(--surface); color: var(--fg); pointer-events: auto; }
+      .deck:fullscreen { max-width: none; border-radius: 0; aspect-ratio: auto; }
+      .deck:focus { outline: none; }
+      .deck:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+      .deck-body { display: flex; flex: 1; min-height: 0; }
+      .deck-thumbs { flex: 0 0 auto; width: 0; overflow: hidden; transition: width 200ms cubic-bezier(0.33, 1, 0.68, 1); }
+      .deck[data-thumbs="true"] .deck-thumbs { width: 132px; }
+      .deck-thumbs ol { box-sizing: border-box; width: 132px; height: 100%; margin: 0; padding: var(--space-2); list-style: none; display: grid; align-content: start; gap: 10px; overflow-y: auto; background: #404040; scrollbar-width: thin; scrollbar-color: #6a6a6a transparent; }
+      .deck-thumbs button { position: relative; display: block; width: 100px; aspect-ratio: 16 / 9; margin: 2px; padding: 0; border: 1px solid #ffffff33; outline: 2px solid transparent; outline-offset: 2px; border-radius: 4px; background: #ffffff; color: #000; cursor: pointer; text-align: left; overflow: hidden; font: 500 6px / 1.2 var(--font-body); transition: outline-color 200ms linear; }
+      .deck-thumbs button[aria-current="true"] { outline-color: var(--fg); }
+      .deck-thumbs button .mini { position: absolute; inset: 0; padding: 6px 30px 6px 6px; overflow: hidden; }
+      .deck-thumbs button .mini b { display: block; font-size: 8px; margin-bottom: 2px; }
+      .deck-thumbs button .badge { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #2b2b2bcc; color: var(--fg); font: 500 12px / 1 var(--font-body); }
+      .deck-stage { position: relative; flex: 1; min-width: 0; display: grid; place-items: center; padding: 18px var(--space-6); }
+      .deck-stage > .slide { grid-area: 1 / 1; width: 100%; max-width: calc(100cqh * 16 / 9); aspect-ratio: 16 / 9; overflow: hidden; box-sizing: border-box; padding: 5% 5.5%; background: #ffffff; color: #000; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: 6%; align-items: center; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1); }
+      .deck-stage > .slide > * { min-width: 0; min-height: 0; }
+      .deck-stage { container-type: size; }
+      .deck-stage > .slide[aria-hidden="true"] { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1), visibility 0s 250ms; }
+      .slide .brand { font: 500 clamp(9px, 2.2cqw, 16px) / 1 var(--font-display); letter-spacing: -0.02em; margin-bottom: clamp(8px, 4cqw, 28px); }
+      .slide h4 { margin: 0 0 clamp(6px, 3cqw, 20px); font: 500 clamp(14px, 4.6cqw, 44px) / 1.08 var(--font-display); letter-spacing: -0.03em; }
+      .slide p { margin: 0; color: #000; font: 400 clamp(7px, 2cqw, 17px) / 1.4 var(--font-body); }
+      .slide .art { justify-self: end; height: 100%; width: auto; max-width: 100%; aspect-ratio: 4 / 5; border-radius: 2px; background: radial-gradient(circle at 30% 30%, #7ab1fe, transparent 50%), radial-gradient(circle at 70% 60%, #6dcbf4, transparent 45%), radial-gradient(circle at 50% 90%, #0fd9ae, transparent 40%), #0b1a2b; }
+      .deck-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex-shrink: 0; height: 56px; padding: 0 var(--space-3); border-top: 1px solid var(--border); }
+      .deck-bar .center { display: flex; align-items: center; gap: var(--space-2); justify-self: center; }
+      .deck-bar .end { justify-self: end; }
+      .deck-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); cursor: pointer; transition: color 200ms linear; }
+      .deck-btn:hover { color: var(--muted); }
+      .deck-btn:disabled { color: #5d5d5d; cursor: default; }
+      .deck-btn svg { width: 16px; height: 16px; }
+      .deck-bar .count { min-width: 56px; text-align: center; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+      @media (prefers-reduced-motion: reduce) { .deck-thumbs { transition: none; } .deck-stage > .slide { transition: none; } }
+      kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
+
+      /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
+      .site-header { height: 64px; border-radius: var(--radius-md); background: #ffffff0a; }
+      .site-header.scrolled { background: #000000; box-shadow: var(--elev-ring); }
+      .site-header .bar { display: flex; align-items: center; gap: var(--space-5); height: 100%; max-width: 1440px; margin: 0 auto; padding: 0 var(--space-8); }
+      .site-header .wordmark { display: inline-flex; align-items: center; height: 17px; font: 500 var(--text-lg) / 1 var(--font-display); letter-spacing: -0.02em; color: var(--fg); text-decoration: none; }
+      .site-header nav { display: flex; align-items: center; align-self: stretch; flex: 1; min-width: 0; }
+      .site-header nav a { display: inline-flex; align-items: center; height: 100%; padding: 0 var(--space-4); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--fg); text-decoration: none; transition: color var(--motion-fast); }
+      .site-header nav a:hover { color: var(--muted); }
+      .site-header .actions { display: flex; align-items: center; gap: var(--space-2); }
+      .site-header .search { width: 40px; height: 40px; color: var(--muted); }
+      .site-header .btn { height: 36px; min-height: 0; padding: 0 20px; gap: 0.3em; }
+      .site-header .btn svg { width: 12px; height: 12px; }
+
+      /* ── Segmented control ── */
+      .segmented { display: flex; width: max-content; margin: 0 auto; align-items: center; gap: var(--space-2); padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-pill); }
+      .segmented button { min-height: 40px; padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-base) var(--ease-standard); }
+      .segmented button:hover { background: var(--border-soft); }
+      .segmented button[aria-selected="true"] { background: #ffffff1f; }
+      .segmented button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      /* ── Segmented control: autoplay countdown (page: AUTOPLAY_DURATION_MS 6000; keyframes hold 0–33.3% then linear scaleX 0→1) ── */
+      .segmented button { position: relative; isolation: isolate; overflow: hidden; }
+      .segmented .countdown { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--border); transform-origin: 0 50%; transform: scaleX(0); animation: tab-countdown 6000ms linear both; }
+      @keyframes tab-countdown { 0%, 33.3333% { transform: scaleX(0); } to { transform: scaleX(1); } }
+      .segmented[data-paused="true"] .countdown { animation-play-state: paused; }
+      @media (prefers-reduced-motion: reduce) { .segmented .countdown { animation: none; transform: scaleX(0); } }
+      .chart-panels > .chart-card[hidden] { display: none; }
+      .bars .bar-rect { rx: 2; }
+      .bars .value { fill: var(--fg); font: 400 var(--text-base) / 1 var(--font-body); text-anchor: middle; }
+      .bars .name { fill: var(--fg); font: 400 var(--text-sm) / 1 var(--font-body); text-anchor: middle; }
+
+      /* ── Chart card ── */
+      .chart-card { max-width: 669px; margin: 0 auto; padding: var(--space-4) var(--space-5) var(--space-5); border: 1px solid var(--border); border-radius: var(--radius-lg); background: rgba(0, 0, 0, 0.2); }
+      .chart-card .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+      .chart-card h3 { margin: 0 0 var(--space-3); font: 500 var(--text-lg) / 1.32 var(--font-display); letter-spacing: -0.01em; }
+      .chart-card .chart-head .icon-btn { color: var(--muted); }
+      .chart-card .select-trigger { height: 32px; min-height: 32px; padding: 0 12px; gap: 6px; font-weight: 400; background: rgba(51, 51, 51, 0.8); box-shadow: var(--elev-ring); }
+      .chart-card .select-trigger svg { width: 12px; height: 12px; }
+      /* ── Select (dropdown): glass trigger pill; menu on #1f1f1f, 12px radius, 8px padding, 40px options, selected #ffffff1f, chevron flips ── */
+      .select { position: relative; display: inline-block; }
+      .select-trigger[aria-expanded="true"] { box-shadow: var(--elev-ring), 0 0 0 1px var(--border); }
+      .select-trigger svg { transition: rotate var(--motion-fast); }
+      .select-trigger[aria-expanded="true"] svg { rotate: 180deg; }
+      /* ── Menus (measured on the page): #2b2b2b panel, 12px radius; select menu 8px padding / 40px rows; action menu 12px padding / 32px rows ── */
+      .select-menu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; min-width: max(100%, 160px); width: max-content; margin: 0; padding: var(--space-2); list-style: none; border-radius: 12px; background: #2b2b2b; box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
+      .select-menu[hidden] { display: none; }
+      .select-menu li { display: flex; align-items: center; min-height: 40px; padding: 0 var(--space-3); border-radius: var(--radius-md); font: 400 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); cursor: pointer; }
+      .select-menu li + li { margin-top: var(--space-1); }
+      .select-menu li:hover, .select-menu li:focus-visible { background: var(--border-soft); outline: none; }
+      .select-menu li[aria-selected="true"] { background: #ffffff1f; }
+      .action-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 5; min-width: 160px; width: max-content; margin: 0; padding: var(--space-3) 0; list-style: none; border-radius: 12px; background: #2b2b2b; box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
+      .action-menu[hidden] { display: none; }
+      .action-menu button { display: flex; align-items: center; width: 100%; min-height: 32px; padding: 0 20px; border: 0; background: transparent; font: 400 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); text-align: left; cursor: pointer; }
+      .action-menu button:hover, .action-menu button:focus-visible { background: var(--border-soft); outline: none; }
+      .menu-root { position: relative; display: inline-block; }
+      .icon-btn.plain { width: 20px; height: 20px; color: var(--fg); }
+      .icon-btn.plain:hover { background: transparent; color: var(--muted); }
+      .legend { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-5) 0 var(--space-4); font: 400 var(--text-sm) / 20px var(--font-body); letter-spacing: -0.01em; }
+      .legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+      .legend svg { width: 18px; height: 18px; }
+      .legend .ref { color: var(--fg); }
+      .legend .ref svg { width: 40px; }
+      .plot { display: block; width: 100%; height: auto; font: 400 13px / 1 var(--font-mono); letter-spacing: 0; }
+      .plot .axis { stroke: var(--fg); stroke-width: 1; }
+      .plot .tick { fill: var(--fg); }
+      .plot .label { fill: var(--fg); font: 400 var(--text-base) / 1 var(--font-body); letter-spacing: -0.01em; }
+      .plot .ref { stroke: #ac4f23; stroke-width: 1.5; stroke-dasharray: 8 6; }
+      .chart-card .astra { fill: #539af8; stroke: #539af8; }
+      .chart-card .sol { fill: #2c67c5; stroke: #2c67c5; }
+      .chart-card .fable { fill: #ac4f23; }
+      .chart-card .opus { fill: #653218; }
+      .plot .line { fill: none; stroke-width: 2; }
+      .chart-card figcaption { max-width: 640px; margin: var(--space-6) auto 0; text-align: center; font-style: italic; font-size: var(--text-sm); line-height: 1.64; color: var(--fg); text-wrap: pretty; }
+
+      /* ── Quote card ── */
+      .quote { max-width: 899px; margin: 0 auto; padding: var(--space-8) var(--space-6); border: 1px solid #ffffff1f; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--elev-raised); }
+      .quote .logo { display: flex; align-items: center; gap: var(--space-2); height: 32px; margin-bottom: var(--space-4); font: 500 var(--text-xl) / 1 var(--font-display); letter-spacing: -0.02em; }
+      .quote .logo svg { width: 28px; height: 28px; }
+      .quote blockquote { margin: 0 0 var(--space-5) 0.5em; font: 500 var(--text-lg) / 1.32 var(--font-body); letter-spacing: -0.025em; text-wrap: pretty; }
+      .quote figcaption { margin-left: 0.5em; font: 500 var(--text-sm) / 1.4 var(--font-body); letter-spacing: 0; color: var(--muted); }
+
+      /* ── Media frame + two-up comparison ── */
+      .media-frame { overflow: hidden; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface-warm); }
+      .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); padding: var(--space-6); }
+      .two-up h4 { margin: 0 0 var(--space-3); text-align: center; font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
+      .two-up .screen { min-height: 180px; padding: var(--space-4); border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface); font-size: var(--text-sm); color: var(--muted); }
+      .two-up .screen .bubble { width: fit-content; max-width: 82%; margin: 0 0 var(--space-4) auto; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: #ffffff1f; color: var(--fg); }
+      .two-up .screen .status { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+      .two-up .screen .status.done { color: var(--fg); }
+
+      /* ── Comparison table ── */
+      .compare { width: 100%; margin: 28px 0; border-collapse: collapse; }
+      .compare th, .compare td { padding: var(--space-3); border-top: 1px solid var(--border); text-align: left; vertical-align: top; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: -0.01em; color: var(--fg); overflow-wrap: break-word; }
+      .compare thead th { font-weight: 600; }
+      .compare tbody tr:last-child td { border-bottom: 1px solid var(--border); }
+      .compare .dash { color: var(--muted); }
+
+      /* ── Footer ── */
+      .site-footer { margin-top: var(--space-12); padding: var(--space-12) var(--space-6) var(--space-6); background: var(--bg); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; }
+      .footer-columns { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-8); margin-bottom: var(--space-12); }
+      .footer-group + .footer-group { margin-top: 44px; }
+      .footer-group h4 { margin: 0 0 var(--space-4); font: inherit; color: var(--muted); }
+      .footer-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-5); }
+      .footer-group a { display: inline-flex; align-items: center; gap: 0.3em; color: var(--fg); text-decoration: none; transition: color 250ms linear; }
+      .footer-group a:hover { color: var(--muted); }
+      .footer-group a svg { width: 10px; height: 10px; }
+      .footer-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); padding-top: var(--space-8); }
+      .footer-bar .social { display: flex; gap: var(--space-4); }
+      .footer-bar .social a { display: grid; place-items: center; width: 24px; height: 24px; color: var(--fg); }
+      .footer-bar .social svg { width: 16px; height: 16px; }
+      .footer-bar .legal { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); }
+      .footer-bar .legal button { padding: 0; border: 0; background: none; color: var(--fg); font: inherit; text-decoration: underline; text-decoration-color: var(--meta); text-underline-offset: 2px; cursor: pointer; }
+      .footer-bar .lang { height: 40px; min-height: 32px; gap: 0.3em; color: var(--fg); }
+      .footer-bar .lang span { color: var(--muted); }
+      @media (max-width: 720px) { .footer-columns { grid-template-columns: 1fr 1fr; } .two-up { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>OpenAI Astra components</h1>
+
+      <section id="site-header">
+        <h2 class="kicker">Site header</h2>
+        <header class="site-header" aria-label="At the top of the page">
+          <div class="bar">
+            <a class="wordmark" href="#">Astra</a>
+            <nav aria-label="Primary">
+              <a href="#">Research</a><a href="#">Products</a><a href="#">Business</a><a href="#">Developers</a><a href="#">Company</a>
+              <button class="icon-btn search" type="button" aria-label="Search"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg></button>
+            </nav>
+            <div class="actions">
+              <button class="btn btn-glass" type="button">Log in <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+              <a class="btn btn-primary" href="#">Try ChatGPT <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
+            </div>
+          </div>
+        </header>
+        <header class="site-header scrolled" aria-label="After scrolling" style="margin-top: var(--space-4)">
+          <div class="bar">
+            <a class="wordmark" href="#">Astra</a>
+            <nav aria-label="Primary (scrolled)">
+              <a href="#">Research</a><a href="#">Products</a><a href="#">Business</a><a href="#">Developers</a><a href="#">Company</a>
+              <button class="icon-btn search" type="button" aria-label="Search"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg></button>
+            </nav>
+            <div class="actions">
+              <button class="btn btn-glass" type="button">Log in <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+              <a class="btn btn-primary" href="#">Try ChatGPT <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
+            </div>
+          </div>
+        </header>
+        <p class="note">64px tall on desktop (4rem; 54px below 1020px), fixed over the canvas. Content sits in a 1440px container with 32px gutters: wordmark 17px, nav links 13px / 500 with 16px side padding, the 40px search button closing the nav group, then the glass "Log in" pill and the white "Try" pill, both 36px tall with 20px side padding and 12px icons. Transparent at the top of the page; once scrolled, a solid #000000 surface fades in over 400ms cubic-bezier(.33,1,.68,1). No blur.</p>
+      </section>
+
+      <section id="hero">
+        <h2 class="kicker">Hero chrome</h2>
+        <div class="hero">
+          <span class="star" style="left: 38%; top: 42%; background: #6dcbf4; box-shadow: 0 0 8px #6dcbf4"></span>
+          <span class="star" style="left: 52%; top: 55%; background: #7ab1fe; box-shadow: 0 0 8px #7ab1fe"></span>
+          <span class="star" style="left: 46%; top: 48%; width: 4px; height: 4px; background: #f87915; box-shadow: 0 0 8px #f87915"></span>
+          <span class="star" style="left: 58%; top: 40%; background: #fa994c; box-shadow: 0 0 8px #fa994c"></span>
+          <span class="star" style="left: 43%; top: 60%; background: #f5f6fb; box-shadow: 0 0 8px #f5f6fb"></span>
+          <p class="label label-left" aria-label="GPT"><span class="letter" style="animation-delay: 1.05s">G</span><span class="letter" style="animation-delay: .95s">P</span><span class="letter" style="animation-delay: .85s">T</span></p>
+          <p class="label label-right" aria-label="Astra"><span class="letter" style="animation-delay: .85s">A</span><span class="letter" style="animation-delay: .95s">s</span><span class="letter" style="animation-delay: 1.05s">t</span><span class="letter" style="animation-delay: 1.15s">r</span><span class="letter" style="animation-delay: 1.25s">a</span></p>
+          <p class="scroll-hint">Scroll</p>
+          <button class="icon-btn replay" type="button" aria-label="Replay intro">↻</button>
+        </div>
+        <p class="note">Split labels at 64px / 500, letter reveal 1s cubic-bezier(.22,1,.36,1) with 0.85–1.25s stagger, ambient glow #23435f. The particle canvas sits under this layer.</p>
+      </section>
+
+      <section id="typography">
+        <h2 class="kicker">Typography</h2>
+        <h2>A new generation of intelligence</h2>
+        <h3>The world’s best computer use model</h3>
+        <p class="lede">We’re introducing a model that brings together years of research across pre-training, reasoning, and alignment.</p>
+        <p>It reads long documents, understands screenshots, writes code that runs, and asks the right follow-up question. Inline code looks like <code>astra.setScroll()</code>; shortcuts look like <kbd>⌘</kbd> <kbd>K</kbd>.</p>
+      </section>
+
+      <section id="links">
+        <h2 class="kicker">Links and navigation</h2>
+        <nav class="nav" aria-label="Sections">
+          <a href="#hero" aria-current="page">Research</a>
+          <a href="#typography">Product</a>
+          <a href="#buttons">Safety</a>
+          <a href="#cards">Company</a>
+        </nav>
+        <p style="margin-top: var(--space-4)">Read the <a href="#cards">system card</a> for methodology, or <a class="link-arrow" href="#cards">see all benchmarks</a></p>
+      </section>
+
+      <section id="buttons">
+        <h2 class="kicker">Buttons</h2>
+        <div class="row">
+          <button class="btn btn-primary" type="button">Try in ChatGPT</button>
+          <button class="btn btn-glass" type="button">Read the research</button>
+          <button class="btn btn-ghost" type="button">System card →</button>
+          <button class="btn btn-glass" type="button" disabled>Coming soon</button>
+          <button class="icon-btn" type="button" aria-label="Share">↗</button>
+          <button class="icon-btn replay" type="button" aria-label="Replay">↻</button>
+        </div>
+        <p class="note">One white pill per screen. Pills: min-height 40px, padding 12px 16px, 14px / 500, 300ms cubic-bezier(.6,0,.4,1). Glass fill #ffffff1f, hover --border.</p>
+      </section>
+
+      <section id="inputs">
+        <h2 class="kicker">Inputs</h2>
+        <div class="row" style="align-items: flex-start; gap: var(--space-8)">
+          <form class="field" onsubmit="return false">
+            <label for="email">Work email</label>
+            <input id="email" type="email" placeholder="you@company.com" />
+            <p class="hint">We’ll only use this for the availability notice.</p>
+          </form>
+          <form class="field" onsubmit="return false">
+            <label for="ask">Ask anything</label>
+            <div class="search">
+              <input id="ask" type="text" placeholder="Ask anything" />
+              <button class="icon-btn" type="submit" aria-label="Send">↑</button>
+            </div>
+            <p class="error">Please enter a question.</p>
+          </form>
+        </div>
+      </section>
+
+      <section id="badges">
+        <h2 class="kicker">Badges</h2>
+        <div class="row">
+          <span class="badge">New</span>
+          <span class="badge badge-outline">Research preview</span>
+          <span class="badge badge-solid">GPT‑6 Astra</span>
+          <span class="badge badge-success">Available</span>
+        </div>
+      </section>
+
+      <section id="cards">
+        <h2 class="kicker">Cards</h2>
+        <div class="cards">
+          <article class="card">
+            <h3>Computer use</h3>
+            <p>Give it a goal and it opens the page, fills the form, runs the flow, and hands the result back.</p>
+            <span class="meta">Terminal-Bench 4.0 · 91.4%</span>
+          </article>
+          <article class="card card-glass">
+            <h3>Long context</h3>
+            <p>Reads the whole repository, the whole contract, the whole thread, and keeps the thread.</p>
+            <span class="meta">Updated September 2026</span>
+          </article>
+          <article class="card card-outline">
+            <h3>Alignment</h3>
+            <p>Refuses the same way every time and explains why in one sentence.</p>
+            <span class="meta">System card</span>
+          </article>
+        </div>
+        <p class="note">Solid #1f1f1f, glass #ffffff1f, or hairline outline. No shadows: depth comes from fill and glow.</p>
+      </section>
+
+      <section id="copy">
+        <h2 class="kicker">Copy column</h2>
+        <div class="copy">
+          <h2>One model, many shapes</h2>
+          <p class="lede">Long documents, screenshots, code that runs, a follow-up question asked at the right moment.</p>
+          <p>These are not features bolted together; they are the same stars standing in different shapes at different times.</p>
+        </div>
+        <p class="note">676px column, h2 48px / 500, p1 17px / 28px in #ffffff99. Nothing on either side: the star rails live there.</p>
+      </section>
+
+      <section id="cue">
+        <h2 class="kicker">Shape cue</h2>
+        <div class="cue">
+          <div class="cue-target" aria-hidden="true">
+            <svg viewBox="0 0 19 19" fill="none" stroke="currentColor" stroke-width="0.8"><path d="M9.60978 17.0223C9.24308 17.739 8.76808 18.189 8.18478 18.3723C7.60148 18.564 7.03478 18.4931 6.48478 18.1598C5.93478 17.8348 5.53061 17.314 5.27228 16.5973L0.672282 3.68478C0.497282 3.19312 0.455612 2.72645 0.547282 2.28478C0.638952 1.83478 0.838952 1.45561 1.14728 1.14728C1.45561 0.838948 1.83478 0.638949 2.28478 0.547279C2.73478 0.455619 3.20561 0.497279 3.69728 0.672279L16.6098 5.27228C17.3265 5.53062 17.8473 5.93478 18.1723 6.48478C18.5056 7.02648 18.5765 7.58898 18.3848 8.17228C18.2015 8.75558 17.7515 9.23058 17.0348 9.59728L12.1098 12.1098L9.60978 17.0223Z"/></svg>
+          </div>
+          <p class="caption">It takes action</p>
+          <p class="cue-note">Give it a goal and it opens the page, fills the form, runs the flow, and hands the result back to you.</p>
+        </div>
+        <p class="note">576px × 80vh frame (shortened here). The SVG is invisible in production; it only reserves the aspect ratio for the stars.</p>
+      </section>
+
+      <section id="benchmarks">
+        <h2 class="kicker">Benchmarks</h2>
+        <table>
+          <thead><tr><th>Terminal-Bench 4.0</th><th>Score</th></tr></thead>
+          <tbody>
+            <tr class="featured"><td>This model</td><td><span class="bar" style="width: 180px"></span>91.4%</td></tr>
+            <tr><td>Previous generation</td><td><span class="bar" style="width: 142px"></span>72.1%</td></tr>
+            <tr><td>Comparison A</td><td><span class="bar" style="width: 128px"></span>65.0%</td></tr>
+            <tr><td>Comparison B</td><td><span class="bar" style="width: 96px"></span>48.7%</td></tr>
+          </tbody>
+        </table>
+        <p class="note">h5 labels, tabular figures, white for the featured row, white-at-alpha bars. No colour.</p>
+      </section>
+
+      <section id="segmented">
+        <h2 class="kicker">Segmented control (autoplay)</h2>
+        <div class="segmented" role="tablist" aria-label="Benchmark" data-autoplay="6000">
+          <button type="button" role="tab" aria-selected="true" aria-controls="chart-ale" id="tab-ale">Agents’ Last Exam</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="chart-ssp" id="tab-ssp">ScreenSpot-Pro</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="chart-osw" id="tab-osw">OSWorld</button>
+        </div>
+        <p class="note">Hairline pill container with 4px inner padding; items are 40px pills at 14px / 500, the selected one filled #ffffff1f. Autoplay: every 6s the next tab is selected; inside the selected pill a #ffffff33 fill holds for 2s, then grows left-to-right (scaleX, linear) over 4s. Hover, leaving the viewport or hiding the page pauses it; a click switches immediately and restarts. Reduced motion: no fill, no autoplay. The chart card below is the linked panel.</p>
+      </section>
+
+      <section id="chart">
+        <h2 class="kicker">Chart card (linked panels)</h2>
+        <div class="chart-panels">
+        <figure class="chart-card" id="chart-ale" role="tabpanel" aria-labelledby="tab-ale">
+          <div class="chart-head">
+            <div>
+              <h3>Agents’ Last Exam</h3>
+              <div class="select" data-select="ale-axis">
+                <button class="btn btn-glass select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span data-select-label>API Cost</span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+                <ul class="select-menu" role="listbox" aria-label="X axis" hidden>
+                  <li role="option" aria-selected="true" data-value="cost">API Cost</li>
+                  <li role="option" aria-selected="false" data-value="tokens">Output tokens</li>
+                </ul>
+              </div>
+            </div>
+            <div class="menu-root">
+              <button class="icon-btn plain" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chart options"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+              <ul class="action-menu" role="menu" hidden>
+                <li><button type="button" role="menuitem" data-action="png">Download PNG</button></li>
+                <li><button type="button" role="menuitem" data-action="svg">Download SVG</button></li>
+                <li><button type="button" role="menuitem" data-action="link">Copy link</button></li>
+              </ul>
+            </div>
+          </div>
+          <div class="legend">
+            <span><svg viewBox="0 0 22 22"><path class="astra" d="m11 2 2.6 6h6.4l-5.2 3.8 2 6.2L11 14.2 5.2 18l2-6.2L2 8h6.4z"/></svg>GPT‑6 Astra</span>
+            <span><svg viewBox="0 0 22 22"><circle class="sol" cx="11" cy="11" r="7"/></svg>GPT‑5.6 Sol</span>
+            <span><svg viewBox="0 0 22 22"><path class="fable" d="M11 3l8 8-8 8-8-8z"/></svg>Claude Fable 5</span>
+            <span><svg viewBox="0 0 22 22"><path class="opus" d="M11 3l8 15H3z"/></svg>Claude Opus 5</span>
+            <span class="ref"><svg viewBox="0 0 40 22"><path class="ref" d="M2 11h36" stroke="#ac4f23" stroke-width="1.5" stroke-dasharray="8 6"/></svg>Reported score only</span>
+          </div>
+          <svg class="plot" viewBox="0 0 640 360" role="img" aria-label="Accuracy against API cost">
+            <line class="axis" x1="70" y1="20" x2="70" y2="300"/>
+            <line class="axis" x1="70" y1="300" x2="600" y2="300"/>
+            <g class="tick" text-anchor="end">
+              <text x="60" y="24">65%</text><text x="60" y="80">60%</text><text x="60" y="136">55%</text><text x="60" y="192">50%</text><text x="60" y="248">45%</text><text x="60" y="304">35%</text>
+            </g>
+            <g class="tick" text-anchor="middle" data-x-ticks><text x="70" y="326">$0</text><text x="247" y="326">$10</text><text x="424" y="326">$20</text><text x="600" y="326">$30</text></g>
+            <text class="label" x="335" y="352" text-anchor="middle" data-x-label>API Cost</text>
+            <text class="label" x="22" y="170" text-anchor="middle" transform="rotate(-90 22 170)">Accuracy</text>
+            <line class="ref" x1="70" y1="132" x2="600" y2="132"/>
+            <polyline class="line sol" points="90,258 130,164 160,146 200,158"/>
+            <circle class="sol mark" cx="90" cy="258" r="5"/><circle class="sol mark" cx="130" cy="164" r="5"/><circle class="sol mark" cx="160" cy="146" r="5"/><circle class="sol mark" cx="200" cy="158" r="5"/>
+            <polyline class="line astra" points="130,150 158,96 176,92 196,84 226,66"/>
+            <g class="astra"><path class="mark" d="m130 141 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path class="mark" d="m158 87 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path class="mark" d="m196 75 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path class="mark" d="m226 57 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/></g>
+            <path class="fable mark" d="M574 180l7 7-7 7-7-7z"/>
+            <path class="opus mark" d="M612 124l7 12h-14z"/>
+          </svg>
+          <figcaption>Agents’ Last Exam tests agents on complex professional tasks in real software. The featured model reaches a new high in the comparison shown, scoring 59.3%, compared with 55.5% and 53.6% for the two closest models.</figcaption>
+        </figure>
+        <figure class="chart-card" id="chart-ssp" role="tabpanel" aria-labelledby="tab-ssp" hidden>
+          <div class="chart-head">
+            <div><h3>ScreenSpot-Pro</h3></div>
+            <div class="menu-root">
+              <button class="icon-btn plain" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chart options"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+              <ul class="action-menu" role="menu" hidden>
+                <li><button type="button" role="menuitem" data-action="png">Download PNG</button></li>
+                <li><button type="button" role="menuitem" data-action="svg">Download SVG</button></li>
+                <li><button type="button" role="menuitem" data-action="link">Copy link</button></li>
+              </ul>
+            </div>
+          </div>
+          <svg class="plot bars" viewBox="0 0 640 360" role="img" aria-label="ScreenSpot-Pro scores">
+            <line class="axis" x1="70" y1="20" x2="70" y2="300"/><line class="axis" x1="70" y1="300" x2="600" y2="300"/>
+            <g class="tick" text-anchor="end"><text x="60" y="24">100%</text><text x="60" y="80">80%</text><text x="60" y="136">60%</text><text x="60" y="192">40%</text><text x="60" y="248">20%</text><text x="60" y="304">0%</text></g>
+            <text class="label" x="22" y="160" text-anchor="middle" transform="rotate(-90 22 160)">Score</text>
+            <rect class="bar-rect astra" x="110" y="47" width="130" height="253"/><text class="value" x="175" y="37">90.4%</text><text class="name" x="175" y="326">Featured model</text>
+            <rect class="bar-rect fable" x="255" y="181" width="130" height="119"/><text class="value" x="320" y="171">42.6%</text><text class="name" x="320" y="326">Comparison A</text>
+            <rect class="bar-rect sol" x="400" y="243" width="130" height="57"/><text class="value" x="465" y="233">20.3%</text><text class="name" x="465" y="326">Comparison B</text>
+          </svg>
+          <figcaption>ScreenSpot-Pro measures grounding on high-resolution professional screens. Fixture values; bars use the chart palette, labels sit above each bar.</figcaption>
+        </figure>
+        <figure class="chart-card" id="chart-osw" role="tabpanel" aria-labelledby="tab-osw" hidden>
+          <div class="chart-head">
+            <div><h3>OSWorld</h3></div>
+            <div class="menu-root">
+              <button class="icon-btn plain" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Chart options"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+              <ul class="action-menu" role="menu" hidden>
+                <li><button type="button" role="menuitem" data-action="png">Download PNG</button></li>
+                <li><button type="button" role="menuitem" data-action="svg">Download SVG</button></li>
+                <li><button type="button" role="menuitem" data-action="link">Copy link</button></li>
+              </ul>
+            </div>
+          </div>
+          <svg class="plot bars" viewBox="0 0 640 360" role="img" aria-label="OSWorld scores">
+            <line class="axis" x1="70" y1="20" x2="70" y2="300"/><line class="axis" x1="70" y1="300" x2="600" y2="300"/>
+            <g class="tick" text-anchor="end"><text x="60" y="24">100%</text><text x="60" y="80">80%</text><text x="60" y="136">60%</text><text x="60" y="192">40%</text><text x="60" y="248">20%</text><text x="60" y="304">0%</text></g>
+            <text class="label" x="22" y="160" text-anchor="middle" transform="rotate(-90 22 160)">Score</text>
+            <rect class="bar-rect astra" x="110" y="86" width="130" height="214"/><text class="value" x="175" y="76">76.5%</text><text class="name" x="175" y="326">Featured model</text>
+            <rect class="bar-rect fable" x="255" y="141" width="130" height="159"/><text class="value" x="320" y="131">56.8%</text><text class="name" x="320" y="326">Comparison A</text>
+            <rect class="bar-rect sol" x="400" y="184" width="130" height="116"/><text class="value" x="465" y="174">41.4%</text><text class="name" x="465" y="326">Comparison B</text>
+          </svg>
+          <figcaption>OSWorld runs real desktop tasks end to end. Fixture values; the panel switches when the tab’s countdown completes.</figcaption>
+        </figure>
+        </div>
+        <p class="note">Sits in the 669px prose column: 16px radius, 1px #ffffff33 border, black at 20%, padding 16px 20px 20px. Title 18px / 500, a 32px select pill (#333333 at 80%, 1px #ffffff33 ring, 14px / 400, 12px side padding) that opens a dropdown (#2b2b2b menu, 12px radius, 8px padding, 40px options, selected #ffffff1f), a 20px download icon with no hover fill that opens a right-aligned action menu (#2b2b2b, 12px padding, 32px rows: Download PNG / SVG, Copy link, all functional), a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
+      </section>
+
+      <section id="quote">
+        <h2 class="kicker">Quote carousel</h2>
+        <div class="carousel" data-carousel="5000">
+          <div class="carousel-stage">
+            <figure class="quote" aria-hidden="false">
+              <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Higgsfield</div>
+              <blockquote>“Astra gives us a significant advantage in both capability and efficiency. It successfully executes our most complex creative workflows while using up to 20% fewer tokens than other models we’ve tested.”</blockquote>
+              <figcaption>Alex Mashrabov, CEO and Co-founder, Higgsfield AI</figcaption>
+            </figure>
+            <figure class="quote" aria-hidden="true">
+              <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>ARC Prize</div>
+              <blockquote>“On ARC-AGI-3, Astra surpassed our human baseline on the first attempt. We had not expected that this year.”</blockquote>
+              <figcaption>Greg Kamradt, ARC Prize Foundation</figcaption>
+            </figure>
+            <figure class="quote" aria-hidden="true">
+              <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Lovable</div>
+              <blockquote>“We tested Astra across low, medium and high reasoning settings. At every level it finished the task with fewer tool calls than anything we had run before.”</blockquote>
+              <figcaption>Fixture attribution</figcaption>
+            </figure>
+          </div>
+            <div class="carousel-nav">
+              <button type="button" data-prev aria-label="Previous"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m10 3-5 5 5 5"/></svg></button>
+              <span class="count" aria-live="polite">1 / 3</span>
+              <button type="button" data-next aria-label="Next"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m6 3 5 5-5 5"/></svg><svg class="ring" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15"/></svg></button>
+            </div>
+        </div>
+        <p class="note">899px solid #1f1f1f card with a #ffffff1f border, 6px radius, 32px vertical and 24px horizontal padding. Logo row 32px, quote at h5 size / 500 with -0.025em tracking, attribution 14px / 500 in #ffffff99. Slides stack and crossfade over 250ms cubic-bezier(.23,1,.32,1); the nav is two 32px round buttons and a tabular “n / total” counter; a 1.5px ring around “next” fills linearly over the 5s auto-advance (fades in over 1250ms, out over 250ms) and pauses on hover, focus or a hidden page. Quotes are fixture text.</p>
+      </section>
+
+      <section id="media">
+        <h2 class="kicker">Media frame and two-up comparison</h2>
+        <div class="media-frame">
+          <div class="two-up">
+            <div>
+              <h4>GPT‑5.6 Sol</h4>
+              <div class="screen">
+                <div class="bubble">I’m changing careers. Make me a personal website using my profile as background.</div>
+                <p class="status">Worked for 13m 15s ›</p>
+                <p class="status done">Your personal website is live and private.</p>
+              </div>
+            </div>
+            <div>
+              <h4>GPT‑6 Astra</h4>
+              <div class="screen">
+                <div class="bubble">I’m changing careers. Make me a personal website using my profile as background.</div>
+                <p class="status">Working for 20s</p>
+                <p class="status done">I’ll use your background to build a site that supports the move. One question first: what role are you moving into?</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Media (screenshots, video, side-by-side product UI) sits in a 10px-radius frame with a soft hairline on #0a0a0a; nothing inside gets a shadow. Column labels at h4 size, centred.</p>
+      </section>
+
+      <section id="compare">
+        <h2 class="kicker">Comparison table</h2>
+        <table class="compare">
+          <thead><tr><th>Alignment</th><th>GPT‑6 Astra</th><th>GPT‑5.6 Sol</th><th>Claude Fable 5.1</th><th>Gemini 3.8 Flash</th></tr></thead>
+          <tbody>
+            <tr><td>Internal computer use safety benchmark (lower is better)</td><td>2.4%</td><td>22.0%</td><td>9.5%</td><td class="dash">-</td></tr>
+            <tr><td>Internal circumvention benchmark (lower is better)</td><td>0.00%</td><td>0.29%</td><td class="dash">-</td><td class="dash">-</td></tr>
+            <tr><td>ExploitGym honeypot (lower is better)</td><td>0.0%</td><td>48.2%</td><td class="dash">-</td><td class="dash">-</td></tr>
+            <tr><td>Internal hallucination benchmark (lower is better)</td><td>4.2%</td><td>12.2%</td><td class="dash">-</td><td class="dash">-</td></tr>
+          </tbody>
+        </table>
+        <p class="note">Fixed layout, first column 34%, 20px row padding, hairline #ffffff33 above every row and below the last, 17px / 400 cells, 500 header, missing values as a muted dash. No zebra stripes, no highlighted column.</p>
+      </section>
+
+      <section id="chips">
+        <h2 class="kicker">Chips, footnotes, logo strip, media bar</h2>
+        <div class="chips" style="margin-bottom: var(--space-8)"><a class="chip" href="#">2026</a><a class="chip" href="#">Release</a><a class="chip" href="#">Research</a></div>
+        <h3 class="footnotes-heading">Footnotes</h3>
+        <ol class="footnotes-list" style="margin-bottom: var(--space-8)">
+          <li><span class="num">1</span><p>On ARC-AGI-3 the featured model was run with a responses harness that keeps past reasoning. <a class="back" href="#chart" aria-label="Back to reference">↩</a></p></li>
+          <li><span class="num">2</span><p>Third-party scores are the providers’ reported numbers where a run was not possible. <a class="back" href="#chart" aria-label="Back to reference">↩</a></p></li>
+        </ol>
+        <ul class="logo-strip" style="margin-bottom: var(--space-8)"><li><button type="button" aria-pressed="true">Jane Street</button></li><li><button type="button">Lovable</button></li><li><button type="button">Higgsfield</button></li><li><button type="button">Cursor</button></li></ul>
+        <div class="media-bar">
+          <button class="media-btn" type="button" aria-label="Play"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M4 2.5v11l9-5.5z"/></svg></button>
+          <p class="time">00:54 <span>02:43</span></p>
+          <div class="track"><i></i></div>
+          <button class="media-btn dim" type="button" aria-label="Captions"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M5 8h2m2 0h2"/></svg></button>
+          <button class="media-btn dim" type="button" aria-label="Full screen"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4"/></svg></button>
+        </div>
+        <p class="note">Chip: 32px radius, #ffffff1f, 8px 12px, 14px / 500. Footnotes: 14px list on a two-column inline grid (12px number, 8px gap, 12px between entries), heading 14px / 400 in #ffffff99, back-links unstyled. Logo strip: 44px buttons, 8px padding, 14px in #ffffff99, 4px radius, the active one white. Media bar: 14px / 500 tabular timestamps (white | 40% white), 32px square 4px-radius buttons, 2px track.</p>
+      </section>
+
+      <section id="deck">
+        <h2 class="kicker">Slide deck</h2>
+        <div class="deck" data-thumbs="false" aria-label="Slide deck">
+          <div class="deck-body">
+            <div class="deck-thumbs"><ol><li><button type="button" aria-current="true" aria-label="Slide 1"><span class="mini"><b>Meet Nova 2.</b>Nova 2 is a foundation model for the cli</span><span class="badge">1</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 2"><span class="mini"><b>Forecasts weather up to 15 days ahead.</b>Trained on decades of observations, ocea</span><span class="badge">2</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 3"><span class="mini"><b>Turns observations into forecasts of the Earth system.</b>Available through the API today.</span><span class="badge">3</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 4"><span class="mini"><b>Runs on the API.</b>One call, global coverage.</span><span class="badge">4</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 5"><span class="mini"><b>Open evaluation.</b>Benchmarks published with the model.</span><span class="badge">5</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 6"><span class="mini"><b>Thanks.</b>Questions to the research team.</span><span class="badge">6</span></button></li></ol></div>
+            <div class="deck-stage"><div class="slide" aria-hidden="false"><div><div class="brand">Nova</div><h4>Meet Nova 2.</h4><p>Nova 2 is a foundation model for the climate.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Forecasts weather up to 15 days ahead.</h4><p>Trained on decades of observations, ocean and land reanalysis.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Turns observations into forecasts of the Earth system.</h4><p>Available through the API today.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Runs on the API.</h4><p>One call, global coverage.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Open evaluation.</h4><p>Benchmarks published with the model.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Thanks.</h4><p>Questions to the research team.</p></div><div class="art"></div></div></div>
+          </div>
+          <div class="deck-bar">
+            <button class="deck-btn" type="button" data-thumbs-toggle aria-expanded="false" aria-label="Show slide thumbnails"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></svg></button>
+            <div class="center"><button class="deck-btn" type="button" data-prev aria-label="Previous slide"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 8H3m4-4L3 8l4 4"/></svg></button><span class="count" aria-live="polite">1 / 6</span><button class="deck-btn" type="button" data-next aria-label="Next slide"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button></div>
+            <button class="deck-btn end" type="button" data-fullscreen aria-label="Enter fullscreen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 2h5v5M7 14H2V9M14 2 9 7M2 14l5-5"/></svg></button>
+          </div>
+        </div>
+        <p class="note">669px wide with a 959/540 aspect ratio, #1f1f1f, 4px radius. The stage keeps 24px side and 18px vertical padding around a white 16:9 slide that crossfades over 250ms. The 56px bar has a 1px #ffffff33 top rule, 12px side padding and a 1fr-auto-1fr grid: thumbnails toggle left, previous / “n / total” (56px, 14px tabular) / next in the centre, fullscreen right; buttons are 32px round with 16px icons, hover #ffffff99, disabled #5d5d5d. The thumbnails sidebar (132px, #404040, 100×56 white thumbs with a 1px #ffffff33 border and a 20px numbered badge, the current one ringed by a 2px white outline offset 2px) slides open over 200ms cubic-bezier(.33,1,.68,1). Arrow keys move; fullscreen uses the Fullscreen API.</p>
+      </section>
+
+      <section id="panels">
+        <h2 class="kicker">Panels and bands</h2>
+        <div class="row" style="align-items: stretch">
+          <div class="panel" style="flex: 1 1 280px">astra.setScroll({ progress, tiltProgress, scatterProgress, contentBounds, shape })</div>
+          <div class="band footnotes" style="flex: 1 1 280px">
+            <h3>FOOTNOTES</h3>
+            <p>1. Measured on a held-out set; see the system card for methodology.</p>
+            <p>2. Availability varies by region.</p>
+          </div>
+        </div>
+      </section>
+      <section id="footer">
+        <h2 class="kicker">Footer</h2>
+        <footer class="site-footer">
+          <div class="footer-columns">
+            <div>
+              <div class="footer-group"><h4>Research</h4><ul><li><a href="#">Research Index</a></li><li><a href="#">Research Overview</a></li><li><a href="#">Economic Research</a></li></ul></div>
+              <div class="footer-group"><h4>Latest Advancements</h4><ul><li><a href="#">GPT‑6</a></li><li><a href="#">GPT‑5.6</a></li><li><a href="#">GPT‑5.5</a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>Products</h4><ul><li><a href="#">ChatGPT <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li><li><a href="#">ChatGPT Business <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li><li><a href="#">Codex</a></li><li><a href="#">Release Notes</a></li></ul></div>
+              <div class="footer-group"><h4>API Platform</h4><ul><li><a href="#">Overview</a></li><li><a href="#">Docs <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>Business</h4><ul><li><a href="#">Overview</a></li><li><a href="#">Solutions</a></li><li><a href="#">Customer Stories</a></li><li><a href="#">Contact Sales</a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>Company</h4><ul><li><a href="#">About Us</a></li><li><a href="#">Our Charter</a></li><li><a href="#">Careers</a></li><li><a href="#">News</a></li></ul></div>
+              <div class="footer-group"><h4>Support</h4><ul><li><a href="#">Help Center <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>More</h4><ul><li><a href="#">Stories</a></li><li><a href="#">Podcast</a></li><li><a href="#">RSS</a></li></ul></div>
+              <div class="footer-group"><h4>Terms &amp; Policies</h4><ul><li><a href="#">Terms of Use</a></li><li><a href="#">Privacy Policy</a></li></ul></div>
+            </div>
+          </div>
+          <div class="footer-bar">
+            <div class="social" aria-label="Social">
+              <a href="#" aria-label="X"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3 3 13"/></svg></a>
+              <a href="#" aria-label="YouTube"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5zM6.5 6v4L10 8z"/></svg></a>
+              <a href="#" aria-label="GitHub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6 13.5v-2c0-.6.2-1 .5-1.3C5 10 4 9.3 4 7.5c0-.6.2-1.1.6-1.5-.1-.4-.1-1 .1-1.5.6 0 1.2.3 1.6.6a5 5 0 0 1 3.4 0c.4-.3 1-.6 1.6-.6.2.5.2 1.1.1 1.5.4.4.6.9.6 1.5 0 1.8-1 2.5-2.5 2.7.3.3.5.7.5 1.3v2"/></svg></a>
+              <a href="#" aria-label="Instagram"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.2" cy="4.8" r=".6" fill="currentColor"/></svg></a>
+            </div>
+            <div class="legal"><span>OpenAI © 2015–2026</span><button type="button">Manage Cookies</button></div>
+            <button class="btn btn-glass lang" type="button"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.5 2.5 2.5 9.5 0 12M8 2c-2.5 2.5-2.5 9.5 0 12"/></svg>English <span>United States</span></button>
+          </div>
+        </footer>
+        <p class="note">Opaque #000000 and full width: the canvas and its glow run behind every section above and stop at the footer's top edge (a hard edge that scrolls with the content). 120px of black above the columns, 13px / 500 throughout. Five columns; group headings in #ffffff99 with 16px below, links 20px apart, groups 44px apart, outward arrows on external links. Bottom bar: 16px social glyphs, copyright, underlined “Manage Cookies”, glass language pill.</p>
+      </section>
+    </main>
+    <script>
+      // Autoplay tabs: 6s per tab (2s hold, then a 4s linear fill inside the selected pill), then the linked panel switches.
+      // Pauses on hover, when the tab list leaves the viewport, or when the page is hidden; a click switches at once and restarts the cycle.
+      function autoplayTabs(list, onChange) {
+        const tabs = Array.from(list.querySelectorAll('[role="tab"]'))
+        const duration = Number(list.dataset.autoplay) || 6000
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+        let index = Math.max(0, tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true'))
+        let elapsed = 0, startedAt = 0, timer = 0, hover = false, visible = true, seen = true
+        const paused = () => hover || !visible || !seen || reduced
+        function select(i) {
+          index = (i + tabs.length) % tabs.length
+          tabs.forEach((t, k) => {
+            const on = k === index
+            t.setAttribute('aria-selected', String(on))
+            t.tabIndex = on ? 0 : -1
+            const panel = t.getAttribute('aria-controls') && document.getElementById(t.getAttribute('aria-controls'))
+            if (panel) panel.hidden = !on
+            t.querySelector('.countdown')?.remove()
+          })
+          onChange?.(tabs[index], index)
+          elapsed = 0
+          restart()
+        }
+        function restart() {
+          clearTimeout(timer)
+          const tab = tabs[index]
+          tab.querySelector('.countdown')?.remove()
+          if (reduced) return
+          const fill = document.createElement('span')
+          fill.className = 'countdown'
+          fill.setAttribute('aria-hidden', 'true')
+          fill.style.animationDuration = `${duration}ms`
+          fill.style.animationDelay = `${-elapsed}ms`
+          tab.prepend(fill)
+          list.dataset.paused = String(paused())
+          if (paused()) return
+          startedAt = performance.now()
+          timer = setTimeout(() => select(index + 1), Math.max(duration - elapsed, 0))
+        }
+        function pause() {
+          if (!timer) return
+          clearTimeout(timer); timer = 0
+          elapsed = Math.min(duration, elapsed + performance.now() - startedAt)
+          list.dataset.paused = 'true'
+        }
+        function resume() { if (!timer && !paused()) restart() }
+        const update = () => (paused() ? pause() : resume())
+        list.addEventListener('mouseenter', () => { hover = true; update() })
+        list.addEventListener('mouseleave', () => { hover = false; update() })
+        document.addEventListener('visibilitychange', () => { visible = document.visibilityState === 'visible'; update() })
+        new IntersectionObserver(([e]) => { seen = e.isIntersecting; update() }, { threshold: 0.2 }).observe(list)
+        tabs.forEach((t, k) => t.addEventListener('click', () => select(k)))
+        select(index)
+        return { select, pause, resume }
+      }
+      for (const list of document.querySelectorAll('.segmented[data-autoplay]')) autoplayTabs(list, (tab) => { const panel = document.getElementById(tab.getAttribute('aria-controls')); if (panel && typeof playChartMotion === 'function') playChartMotion(panel.querySelector('svg.plot')) })
+      // Action menu (chart download): 20px icon button with no hover fill; the menu drops right-aligned, 8px below.
+      function actionMenu(root, actions) {
+        const trigger = root.querySelector('[aria-haspopup="menu"]')
+        const menu = root.querySelector('.action-menu')
+        const items = Array.from(menu.querySelectorAll('[role="menuitem"]'))
+        const open = () => { menu.hidden = false; trigger.setAttribute('aria-expanded', 'true'); items[0]?.focus() }
+        const close = (back = true) => { if (menu.hidden) return; menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); if (back) trigger.focus() }
+        trigger.addEventListener('click', () => (menu.hidden ? open() : close()))
+        items.forEach((it, i) => {
+          it.tabIndex = -1
+          it.addEventListener('click', () => { close(); actions?.[it.dataset.action]?.(root) })
+          it.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus() }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus() }
+            else if (e.key === 'Escape') { e.preventDefault(); close() }
+          })
+        })
+        document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) close(false) })
+        return { open, close }
+      }
+      // Real exports for inline SVG charts: SVG file, 2× PNG via canvas, or the section link.
+      const chartActions = {
+        svg(root) { const svg = root.closest('.chart-card').querySelector('svg.plot'); const blob = new Blob([serializeSvg(svg)], { type: 'image/svg+xml' }); saveBlob(blob, 'chart.svg') },
+        png(root) {
+          const svg = root.closest('.chart-card').querySelector('svg.plot'); const [, , w, h] = svg.getAttribute('viewBox').split(/\s+/).map(Number)
+          const url = URL.createObjectURL(new Blob([serializeSvg(svg)], { type: 'image/svg+xml' })); const img = new Image()
+          img.onload = () => { const c = document.createElement('canvas'); c.width = w * 2; c.height = h * 2; const g = c.getContext('2d'); g.scale(2, 2); g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url); c.toBlob((b) => saveBlob(b, 'chart.png'), 'image/png') }
+          img.src = url
+        },
+        link(root) { const id = root.closest('section')?.id; navigator.clipboard?.writeText(location.origin + location.pathname + (id ? '#' + id : '')) },
+      }
+      function serializeSvg(svg) {
+        const clone = svg.cloneNode(true); const cs = getComputedStyle(svg)
+        clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', svg.getAttribute('viewBox').split(/\s+/)[2]); clone.setAttribute('height', svg.getAttribute('viewBox').split(/\s+/)[3])
+        // inline the computed colours so the file stands alone
+        clone.querySelectorAll('*').forEach((el, i) => { const src = svg.querySelectorAll('*')[i]; const c = getComputedStyle(src); el.setAttribute('fill', c.fill); el.setAttribute('stroke', c.stroke); el.setAttribute('stroke-width', c.strokeWidth); if (c.strokeDasharray !== 'none') el.setAttribute('stroke-dasharray', c.strokeDasharray); if (el.tagName === 'text') { el.setAttribute('font-family', c.fontFamily); el.setAttribute('font-size', c.fontSize) } })
+        clone.style.font = cs.font
+        return new XMLSerializer().serializeToString(clone)
+      }
+      function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000) }
+      for (const root of document.querySelectorAll('.menu-root')) actionMenu(root, chartActions)
+      // Chart motion: lines draw, marks fade in with a stagger, bars rise. Plays when 75% of the chart is visible and again on every re-render.
+      var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+      function playChartMotion(svg) {
+        if (!svg) return
+        if (reducedMotion) { svg.classList.add('is-static'); return }
+        svg.classList.remove('is-playing')
+        svg.querySelectorAll('.line').forEach((l) => { const len = l.getTotalLength ? l.getTotalLength() : 1000; l.style.strokeDasharray = len.toFixed(1); l.style.strokeDashoffset = len.toFixed(1) })
+        svg.querySelectorAll('.mark').forEach((m, i) => { m.style.animationDelay = `${450 + i * 70}ms` })
+        void svg.getBoundingClientRect()
+        svg.classList.add('is-playing')
+      }
+      const chartObserver = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) { playChartMotion(e.target); chartObserver.unobserve(e.target) }
+      }, { threshold: 0.75 })
+      document.querySelectorAll('svg.plot').forEach((svg) => chartObserver.observe(svg))
+
+      // Carousel: stacked slides crossfade (250ms), 32px round prev / next, "n / total" counter, auto-advance with a progress ring.
+      // Pauses on hover, focus, hidden page or reduced motion; manual navigation restarts the delay (page: createAutoAdvance).
+      function carousel(root, { delayMs = 5000 } = {}) {
+        const slides = Array.from(root.querySelector('.carousel-stage').children)
+        const count = root.querySelector('.count'), ring = root.querySelector('.ring'), prev = root.querySelector('[data-prev]'), next = root.querySelector('[data-next]')
+        let index = 0, timer = 0, hover = false, focus = false
+        const paused = () => hover || focus || document.visibilityState !== 'visible' || reducedMotion
+        function show(i) {
+          index = (i + slides.length) % slides.length
+          slides.forEach((s, k) => s.setAttribute('aria-hidden', String(k !== index)))
+          if (count) count.textContent = `${index + 1} / ${slides.length}`
+          schedule()
+        }
+        function schedule() {
+          clearTimeout(timer)
+          if (ring) { ring.classList.remove('active', 'paused'); void ring.getBoundingClientRect(); ring.querySelector('circle').style.animationDuration = `${delayMs}ms` }
+          if (paused()) { ring?.classList.remove('active'); return }
+          ring?.classList.add('active')
+          timer = setTimeout(() => show(index + 1), delayMs)
+        }
+        function update() { if (paused()) { clearTimeout(timer); timer = 0; ring?.classList.add('paused') } else if (!timer) schedule() }
+        root.addEventListener('mouseenter', () => { hover = true; update() })
+        root.addEventListener('mouseleave', () => { hover = false; update() })
+        root.addEventListener('focusin', () => { focus = true; update() })
+        root.addEventListener('focusout', () => { focus = false; update() })
+        document.addEventListener('visibilitychange', update)
+        prev?.addEventListener('click', () => show(index - 1))
+        next?.addEventListener('click', () => show(index + 1))
+        show(0)
+        return { show }
+      }
+      for (const root of document.querySelectorAll('[data-carousel]')) carousel(root, { delayMs: Number(root.dataset.carousel) || 5000 })
+      // Slide deck: prev / next with a tabular counter, thumbnails sidebar (200ms width), click a thumbnail to jump, arrow keys, fullscreen.
+      function slideDeck(root) {
+        const slides = Array.from(root.querySelectorAll('.deck-stage > .slide'))
+        const thumbs = Array.from(root.querySelectorAll('.deck-thumbs button'))
+        const count = root.querySelector('.count'), prev = root.querySelector('[data-prev]'), next = root.querySelector('[data-next]')
+        let index = 0
+        function go(i) {
+          index = Math.max(0, Math.min(slides.length - 1, i))
+          slides.forEach((s, k) => s.setAttribute('aria-hidden', String(k !== index)))
+          thumbs.forEach((t, k) => t.setAttribute('aria-current', String(k === index)))
+          count.textContent = `${index + 1} / ${slides.length}`
+          prev.disabled = index === 0; next.disabled = index === slides.length - 1
+          thumbs[index]?.scrollIntoView({ block: 'nearest' })
+        }
+        prev.addEventListener('click', () => go(index - 1)); next.addEventListener('click', () => go(index + 1))
+        thumbs.forEach((t, k) => t.addEventListener('click', () => go(k)))
+        const toggle = root.querySelector('[data-thumbs-toggle]')
+        toggle.addEventListener('click', () => { const on = root.dataset.thumbs !== 'true'; root.dataset.thumbs = String(on); toggle.setAttribute('aria-expanded', String(on)) })
+        root.querySelector('[data-fullscreen]').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen?.(); else root.requestFullscreen?.() })
+        root.tabIndex = 0
+        root.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') { e.preventDefault(); go(index + 1) } else if (e.key === 'ArrowLeft') { e.preventDefault(); go(index - 1) } })
+        go(0)
+        return { go }
+      }
+      for (const root of document.querySelectorAll('.deck')) slideDeck(root)
+      for (const list of document.querySelectorAll('.segmented[data-autoplay]')) list.addEventListener('click', () => {})
+      // Dropdown select: click opens the listbox under the pill, chevron flips, Escape / outside click closes,
+      // arrows move, Enter or click selects and reports the value.
+      function dropdown(root, onChange) {
+        const trigger = root.querySelector('.select-trigger')
+        const label = root.querySelector('[data-select-label]') || trigger
+        const menu = root.querySelector('.select-menu')
+        const options = Array.from(menu.querySelectorAll('[role="option"]'))
+        options.forEach((o) => { o.tabIndex = -1 })
+        const open = () => { menu.hidden = false; trigger.setAttribute('aria-expanded', 'true'); (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus() }
+        const close = (focusBack = true) => { if (menu.hidden) return; menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); if (focusBack) trigger.focus() }
+        const select = (o) => { options.forEach((x) => x.setAttribute('aria-selected', String(x === o))); label.textContent = o.textContent.trim(); close(); onChange?.(o.dataset.value, o) }
+        trigger.addEventListener('click', () => (menu.hidden ? open() : close()))
+        options.forEach((o, i) => {
+          o.addEventListener('click', () => select(o))
+          o.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); options[(i + 1) % options.length].focus() }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); options[(i - 1 + options.length) % options.length].focus() }
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(o) }
+            else if (e.key === 'Escape') { e.preventDefault(); close() }
+          })
+        })
+        trigger.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); open() } })
+        document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) close(false) })
+        return { open, close, select }
+      }
+      const AXES = { cost: { ticks: ['$0', '$10', '$20', '$30'], label: 'API Cost' }, tokens: { ticks: ['0', '10k', '20k', '30k'], label: 'Output tokens' } }
+      dropdown(document.querySelector('[data-select="ale-axis"]'), (value) => {
+        const axis = AXES[value]; const ticks = document.querySelectorAll('[data-x-ticks] text')
+        ticks.forEach((t, i) => { t.textContent = axis.ticks[i] }); document.querySelector('[data-x-label]').textContent = axis.label
+      })
+    </script>
+  </body>
+</html>

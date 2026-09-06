@@ -1,0 +1,146 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * design-systems/openai-astra/tokens.css
+ *
+ * Structured token bindings for "OpenAI Astra" — the dark, cinematic
+ * launch-page register of openai.com, as seen on the GPT-6 Astra
+ * announcement page. Companion to the light editorial `openai` system.
+ *
+ * Brand identity in three sentences:
+ *   1. A pure black canvas (#000000) under a living galaxy: the page is
+ *      dark not as a "dark mode" but because the stars need the void.
+ *      Text is white (#ffffff / #fafafa) and every secondary tone is white
+ *      at a measured alpha (60%, 44%, 20%, 12%) — never a grey hex.
+ *   2. One typeface, OpenAI Sans, at weight 500 for every heading and 400
+ *      for body; display sizes scale fluidly with the viewport and carry
+ *      tight negative tracking (-0.03em at h1).
+ *   3. Chrome is monochrome and pill-shaped: white pill buttons, glass pills
+ *      at 12% white, hairline rules at 20% white. The only chroma is the
+ *      teal-blue ambient glow (#23435f) behind the stars and the star
+ *      palette itself — neither is ever used for UI.
+ *
+ * Schema decisions:
+ *   - --bg: #000000 (site `--color-background` in the forced-dark page).
+ *   - --surface: #1f1f1f (`--color-tertiary-100` dark); --surface-warm:
+ *     #0a0a0a (`--color-secondary-solid-4` dark) for barely-lifted bands.
+ *   - --fg: #ffffff (`--color-primary-100` dark); --fg-2: #fafafa (AstraHero
+ *     label / layout colour).
+ *   - --muted: #ffffff99 (`--color-primary-60`); --meta: #ffffff70
+ *     (`--color-primary-44`).
+ *   - --border: #ffffff33 (`--color-primary-12`, used by `border-primary-12`);
+ *     --border-soft: #ffffff14 (`--color-primary-2`).
+ *   - --accent: #ffffff — the system is monochrome; the primary CTA is a
+ *     white pill with black text (`bg-secondary-100` in dark).
+ *   - --font-display and --font-body both bind to OpenAI Sans; Inter is the
+ *     open fallback with the closest metrics.
+ *   - Type spine maps the site's fluid `--type-*` scale at its desktop
+ *     maximum: h1 64px, h2 48px, h3 30px, h4 22px, h5 18px, p1 17px,
+ *     p2/caption/cta/meta 14px, nav-header 13px.
+ *   - --leading-tight: 1.08 (h1 line-height converges on 1.0 at 1440px and
+ *     1.14 at 375px); --tracking-display: -0.03em (`--type-h1-track`).
+ *   - --radius-sm/md/lg: 6 / 10 / 16px (`--radius-sm .375rem`,
+ *     `--radius-lg .625rem`, `--radius-2xl 1rem`); pills everywhere else.
+ *   - --motion-base: 300ms (`--transition-duration-medium`);
+ *     --ease-standard: cubic-bezier(0.6, 0, 0.4, 1) (`curve-d`, used on CTAs).
+ *   - --container-max: 1088px (68rem, from the site's `--gutter-size`
+ *     formula); gutters 56 / 32 / 20px (label inset clamp(1.25rem,4vw,3.5rem)).
+ *
+ * Astra-specific values (ambient glow, star palette, cue geometry) are
+ * documented in DESIGN.md §2 and §7 and used by components.html; they are
+ * intentionally not part of the shared schema spine.
+ * ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* ─── Surface ──────────────────────────────────────────────────── */
+  --bg:           #000000;
+  --surface:      #1f1f1f;             /* tertiary-100 — solid card / panel */
+  --surface-warm: #0a0a0a;             /* secondary-solid-4 — barely lifted band */
+
+  /* ─── Foreground ───────────────────────────────────────────────── */
+  --fg:   #ffffff;                     /* primary-100 — body, headings */
+  --fg-2: #fafafa;                     /* AstraHero label / layout colour */
+  --muted: #ffffff99;                  /* primary-60 — secondary copy, ledes */
+  --meta:  #ffffff70;                  /* primary-44 — footnotes, inactive nav */
+
+  /* ─── Border ───────────────────────────────────────────────────── */
+  --border:      #ffffff33;           /* primary-12 — hairline rules, outlines */
+  --border-soft: #ffffff14;           /* primary-2 — dividers inside glass */
+
+  /* ─── Accent ───────────────────────────────────────────────────── */
+  --accent:        #ffffff;           /* monochrome: white pill CTA */
+  --accent-on:     #000000;
+  --accent-hover:  #ffffffe6;         /* replay hover colour (90% white) */
+  --accent-active: #ffffffcc;         /* primary-80 */
+
+  /* ─── Semantic ─────────────────────────────────────────────────── */
+  /* The launch page shows no semantic states; schema fallbacks retained. */
+  --success: #16a34a;
+  --warn:    #eab308;
+  --danger:  #dc2626;
+
+  /* ─── Typography ───────────────────────────────────────────────── */
+  /* One family. OpenAI Sans is proprietary — Inter is the open stand-in. */
+  --font-display: "OpenAI Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-body:    "OpenAI Sans", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "SF Mono", Consolas, "Liberation Mono", ui-monospace, monospace;
+
+  /* Type scale — site `--type-*` tokens at desktop maximum (see DESIGN.md §3). */
+  --text-xs:   13px;                  /* nav-header .8125rem */
+  --text-sm:   14px;                  /* p2 / caption / cta / meta .875rem */
+  --text-base: 17px;                  /* p1 1.0625rem */
+  --text-lg:   18px;                  /* h5 1.125rem max */
+  --text-xl:   22px;                  /* h4 1.375rem max */
+  --text-2xl:  30px;                  /* h3 1.875rem max */
+  --text-3xl:  48px;                  /* h2 3rem max */
+  --text-4xl:  64px;                  /* h1 4rem max — hero labels */
+
+  /* Leading + tracking.
+   * p1: 1.75rem / 1.0625rem = 1.647. h1 line converges on 1.0 (desktop).
+   * --tracking-display = --type-h1-track; h2 runs -0.03em → -0.01em fluidly. */
+  --leading-body:     1.65;
+  --leading-tight:    1.08;
+  --tracking-display: -0.03em;
+
+  /* ─── Spacing ──────────────────────────────────────────────────── */
+  /* Tailwind v4 spine: --spacing .25rem → --space-N = N × 4px. */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-12: 48px;
+
+  /* Section rhythm — the launch page breathes in viewport units
+   * (hero 100svh, shape cues 80vh, copy blocks ~26vh of padding);
+   * these pixel stops are the equivalents at a 960px-tall viewport. */
+  --section-y-desktop: 128px;
+  --section-y-tablet:  96px;
+  --section-y-phone:   64px;
+
+  /* ─── Radius ───────────────────────────────────────────────────── */
+  --radius-sm:   6px;                 /* --radius-sm .375rem — chips, code */
+  --radius-md:   10px;                /* --radius-lg .625rem — inputs, small cards */
+  --radius-lg:   16px;                /* --radius-2xl 1rem — media, large cards */
+  --radius-pill: 9999px;              /* every button, the replay control */
+
+  /* ─── Elevation ────────────────────────────────────────────────── */
+  /* Shadows vanish on black; depth comes from glass fills and glow. */
+  --elev-flat:   none;
+  --elev-ring:   0 0 0 1px var(--border);
+  --elev-raised: 0 18px 60px rgba(0, 0, 0, 0.08);   /* site shadow-[0_18px_60px] */
+
+  /* ─── Focus ────────────────────────────────────────────────────── */
+  --focus-ring: 0 0 0 2px #ffffffb3;  /* dragSurface :focus-visible outline */
+
+  /* ─── Motion ───────────────────────────────────────────────────── */
+  --motion-fast:   150ms;             /* replay / icon buttons */
+  --motion-base:   300ms;             /* --transition-duration-medium */
+  --ease-standard: cubic-bezier(0.6, 0, 0.4, 1);   /* curve-d */
+
+  /* ─── Layout ───────────────────────────────────────────────────── */
+  --container-max:            1088px; /* 68rem */
+  --container-gutter-desktop: 56px;   /* clamp(1.25rem, 4vw, 3.5rem) max */
+  --container-gutter-tablet:  32px;   /* --component-container-gutter 8 × 4px */
+  --container-gutter-phone:   20px;   /* max(20px, …) */
+}
