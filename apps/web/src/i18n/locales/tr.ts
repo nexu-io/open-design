@@ -119,6 +119,7 @@ export const tr: Dict = {
   'chat.runError.title.artifactMissing': 'Teslim edilebilir çıktı oluşturulmadı',
   'chat.runError.signInMessage.amr': 'OpenDesign Cloud aracısı henüz oturum açmadı — kullanmaya başlamak için oturum açın.',
   'chat.runError.signInMessage.other': '{agent} oturum açmadı. Oturum durumunu yerel olarak kontrol edin. Daha kararlı ve hesaplı OpenDesign Cloud aracısını öneririz.',
+  'chat.runError.reduceContextCta': 'Yeni sohbet',
   'chat.runError.agentFallback': 'aracı',
   'chat.runError.sourceLabel': 'Hata ayrıntıları',
   'chat.runError.sourceExpandAria': 'Hata kaynağını genişlet',

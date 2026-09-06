@@ -119,6 +119,7 @@ export const th: Dict = {
   'chat.runError.title.artifactMissing': 'ไม่มีไฟล์ผลงานที่สร้างขึ้น',
   'chat.runError.signInMessage.amr': 'เอเจนต์ OpenDesign Cloud ยังไม่ได้ลงชื่อเข้าใช้ — ลงชื่อเข้าใช้เพื่อเริ่มใช้งาน',
   'chat.runError.signInMessage.other': '{agent} ยังไม่ได้ลงชื่อเข้าใช้ โปรดตรวจสอบสถานะการลงชื่อเข้าใช้ในเครื่อง เราแนะนำเอเจนต์ OpenDesign Cloud ที่เสถียรและคุ้มค่ากว่า',
+  'chat.runError.reduceContextCta': 'การสนทนาใหม่',
   'chat.runError.agentFallback': 'เอเจนต์',
   'chat.runError.sourceLabel': 'รายละเอียดข้อผิดพลาด',
   'chat.runError.sourceExpandAria': 'ขยายแหล่งที่มาของข้อผิดพลาด',

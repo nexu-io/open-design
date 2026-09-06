@@ -119,6 +119,7 @@ export const en: Dict = {
   'chat.runError.title.artifactMissing': 'No deliverable produced',
   'chat.runError.signInMessage.amr': 'The OpenDesign Cloud agent isn\'t signed in yet — sign in to start using it.',
   'chat.runError.signInMessage.other': '{agent} isn\'t signed in. Check its sign-in status locally. We recommend the OpenDesign Cloud agent — steadier and better value.',
+  'chat.runError.reduceContextCta': 'New conversation',
   'chat.runError.agentFallback': 'the agent',
   'chat.runError.sourceLabel': 'Error details',
   'chat.runError.sourceExpandAria': 'Expand error source',

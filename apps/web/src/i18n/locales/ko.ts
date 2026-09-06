@@ -119,6 +119,7 @@ export const ko: Dict = {
   'chat.runError.title.artifactMissing': '결과물이 생성되지 않음',
   'chat.runError.signInMessage.amr': 'OpenDesign Cloud 에이전트가 아직 로그인되지 않았습니다. 로그인하여 사용을 시작하세요.',
   'chat.runError.signInMessage.other': '{agent}이(가) 로그인되지 않았습니다. 로컬에서 로그인 상태를 확인하세요. 더 안정적이고 경제적인 OpenDesign Cloud 에이전트를 추천합니다.',
+  'chat.runError.reduceContextCta': '새 대화',
   'chat.runError.agentFallback': '에이전트',
   'chat.runError.sourceLabel': '오류 세부 정보',
   'chat.runError.sourceExpandAria': '오류 소스 펼치기',

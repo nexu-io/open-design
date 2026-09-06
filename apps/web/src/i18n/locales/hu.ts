@@ -119,6 +119,7 @@ export const hu: Dict = {
   'chat.runError.title.artifactMissing': 'Nem készült átadható fájl',
   'chat.runError.signInMessage.amr': 'Az OpenDesign Cloud ügynök még nincs bejelentkezve – jelentkezz be a használatához.',
   'chat.runError.signInMessage.other': '{agent} nincs bejelentkezve. Ellenőrizd a bejelentkezési állapotát helyben. Az OpenDesign Cloud ügynököt ajánljuk – stabilabb és gazdaságosabb.',
+  'chat.runError.reduceContextCta': 'Új beszélgetés',
   'chat.runError.agentFallback': 'az ügynök',
   'chat.runError.sourceLabel': 'Hiba részletei',
   'chat.runError.sourceExpandAria': 'Hibaforrás kibontása',

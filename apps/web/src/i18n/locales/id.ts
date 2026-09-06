@@ -119,6 +119,7 @@ export const id: Dict = {
   'chat.runError.title.artifactMissing': 'Tidak ada hasil yang dibuat',
   'chat.runError.signInMessage.amr': 'Agen OpenDesign Cloud belum masuk — masuk untuk mulai menggunakannya.',
   'chat.runError.signInMessage.other': '{agent} belum masuk. Periksa status masuknya secara lokal. Kami menyarankan agen OpenDesign Cloud — lebih stabil dan hemat.',
+  'chat.runError.reduceContextCta': 'Percakapan baru',
   'chat.runError.agentFallback': 'agen',
   'chat.runError.sourceLabel': 'Detail kesalahan',
   'chat.runError.sourceExpandAria': 'Perluas sumber kesalahan',

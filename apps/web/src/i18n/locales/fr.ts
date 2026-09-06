@@ -119,6 +119,7 @@ export const fr: Dict = {
   'chat.runError.title.artifactMissing': 'Aucun livrable généré',
   'chat.runError.signInMessage.amr': 'L\'agent OpenDesign Cloud n\'est pas encore connecté — connectez-vous pour l\'utiliser.',
   'chat.runError.signInMessage.other': '{agent} n\'est pas connecté. Vérifiez son état de connexion en local. Nous recommandons l\'agent OpenDesign Cloud — plus stable et plus économique.',
+  'chat.runError.reduceContextCta': 'Nouvelle conversation',
   'chat.runError.agentFallback': 'l\'agent',
   'chat.runError.sourceLabel': 'Détails de l’erreur',
   'chat.runError.sourceExpandAria': 'Afficher la source de l’erreur',

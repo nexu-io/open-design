@@ -119,6 +119,7 @@ export const it: Dict = {
   'chat.runError.title.artifactMissing': 'Nessun risultato prodotto',
   'chat.runError.signInMessage.amr': 'L\'agente OpenDesign Cloud non ha ancora effettuato l\'accesso — accedi per iniziare a usarlo.',
   'chat.runError.signInMessage.other': '{agent} non ha effettuato l\'accesso. Controlla lo stato di accesso in locale. Consigliamo l\'agente OpenDesign Cloud — più stabile e conveniente.',
+  'chat.runError.reduceContextCta': 'Nuova conversazione',
   'chat.runError.agentFallback': 'l\'agente',
   'chat.runError.sourceLabel': "Dettagli dell'errore",
   'chat.runError.sourceExpandAria': "Espandi l'origine dell'errore",

@@ -119,6 +119,7 @@ export const esES: Dict = {
   'chat.runError.title.artifactMissing': 'No se generó ningún entregable',
   'chat.runError.signInMessage.amr': 'El agente de OpenDesign Cloud aún no ha iniciado sesión; inicia sesión para empezar a usarlo.',
   'chat.runError.signInMessage.other': '{agent} no ha iniciado sesión. Comprueba su estado de inicio de sesión en local. Recomendamos el agente de OpenDesign Cloud: más estable y rentable.',
+  'chat.runError.reduceContextCta': 'Nueva conversación',
   'chat.runError.agentFallback': 'el agente',
   'chat.runError.sourceLabel': 'Detalles del error',
   'chat.runError.sourceExpandAria': 'Mostrar el origen del error',
