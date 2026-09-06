@@ -15,7 +15,9 @@ import {
   compareAndTransitionStrategyTaskExecution,
   getStrategyTaskExecution,
   strategyPlanContractHash,
+  type StrategyTaskBlockedContext,
   type StrategyTaskExecutionRecord,
+  type StrategyTaskOutcome,
 } from '../task-store.js';
 import type { OdNextMachineProtocolStream } from './protocol.js';
 import {
@@ -119,6 +121,79 @@ function uniqueReasonCodes(values: ReadonlyArray<string>): string[] {
  * Agent's declaration when the turn comes back. Callers that already know the
  * route keep using `prepareStrategyRequest`.
  */
+/**
+ * The reason a task carries when the agent itself declared the turn blocked and
+ * raised no machine code of its own.
+ *
+ * The agent explains that kind of stop in prose ("no second clarification is
+ * available, so this task is blocked"), not in codes. The task store drops a
+ * blocked context whose reason set is empty — and it takes the agent's written
+ * explanation down with it — so an unnamed verdict would persist as nothing at
+ * all. Naming it keeps the attribution, and says something true: this block came
+ * from the agent's own judgement rather than from a machine gate.
+ */
+const AGENT_DECLARED_BLOCK_REASON = 'od_next_agent_declared_block';
+
+/**
+ * The reason codes a blocked turn is attributed with: whatever the caller
+ * established, plus any question-form marker violation the visible text
+ * carries.
+ */
+function blockedReasonCodesFor(
+  visibleText: string,
+  reasonCodes: readonly string[],
+): string[] {
+  return uniqueReasonCodes([
+    ...reasonCodes,
+    ...questionFormMarkerReasonCodes(visibleText),
+  ]);
+}
+
+/**
+ * The attribution a task settling on `blocked` must carry, shaped to spread
+ * into a transition.
+ *
+ * `blockedContext` is the only durable answer to "why did this stop": the chat
+ * error card, the diagnostics export, and every later triage read it and have
+ * nothing else to fall back on. Three paths settle a task on `blocked`, and
+ * until OPEND-2565 only `blockTask` recorded anything —`prepareStrategyRequest`
+ * computed its reason codes and returned them to its caller without persisting
+ * them, and `finalizeStrategyPlanningResult` passed an agent-declared `blocked`
+ * straight through, dropping the agent's own written explanation with it. Both
+ * reached the client as an anonymous failure, which is exactly what the field
+ * report on Design Harness saw.
+ *
+ * A non-blocked outcome spreads to nothing on purpose: a task that did not
+ * block must not carry a blocked context, and the accepted-turn tests pin that.
+ */
+function blockedAttribution(
+  outcome: StrategyTaskOutcome,
+  visibleText: string,
+  reasonCodes: readonly string[],
+): { blockedContext: StrategyTaskBlockedContext } | Record<string, never> {
+  if (outcome !== 'blocked') return {};
+  return {
+    blockedContext: {
+      reasonCodes: blockedReasonCodesFor(visibleText, reasonCodes),
+      visibleText: visibleText.length > 0 ? visibleText : null,
+    },
+  };
+}
+
+/** One log line per blocked task, whichever path settled it. */
+function logStrategyTaskBlocked(
+  current: StrategyTaskExecutionRecord,
+  runId: string,
+  reasonCodes: readonly string[],
+): void {
+  console.warn('[od-next-task] blocked', {
+    taskExecutionId: current.taskExecutionId,
+    runId,
+    inputStage: current.inputStage,
+    reasonCodes: [...reasonCodes],
+  });
+}
+
 export function prepareStrategyIntake(db: SqliteDb, input: {
   taskExecutionId: string;
   intake: OdNextIntakePreflightInput;
@@ -194,15 +269,22 @@ export function prepareStrategyRequest(db: SqliteDb, input: {
     : [];
   const blockingCodes = [...preflightCodes, ...executionCodes];
   const reasonCodes = uniqueReasonCodes([...route.reasonCodes, ...blockingCodes]);
+  const outcome: StrategyTaskOutcome = blockingCodes.length > 0 ? 'blocked' : 'running';
+  if (outcome === 'blocked') {
+    logStrategyTaskBlocked(current, current.latestRunId, reasonCodes);
+  }
   const task = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
     to: {
       route: route.route,
       inputStage: 'request',
-      outcome: blockingCodes.length > 0 ? 'blocked' : 'running',
+      outcome,
       executionMode: route.executionMode,
     },
+    // The router already knows why it refused; without this the codes lived
+    // only in the value returned to the caller (OPEND-2565).
+    ...blockedAttribution(outcome, '', reasonCodes),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   });
   return {
@@ -411,6 +493,16 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       executionMode: state.executionMode,
     });
   }
+  // An agent may declare `blocked` itself — it is the turn that knows a task
+  // ran out of clarification budget, and it writes that reasoning out for the
+  // user. Carry both here: this transition used to pass the verdict through
+  // and drop the attribution, so the chat could only say "the strategy task
+  // could not continue" over an explanation the agent had already written
+  // (OPEND-2565).
+  const acceptedReasonCodes = uniqueReasonCodes([...state.reasonCodes, ...markerCodes]);
+  if (state.outcome === 'blocked') {
+    logStrategyTaskBlocked(current, input.runId, acceptedReasonCodes);
+  }
   const task = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
@@ -420,6 +512,13 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       outcome: state.outcome,
       executionMode: state.executionMode,
     },
+    ...blockedAttribution(
+      state.outcome,
+      parsed.visibleText,
+      acceptedReasonCodes.length > 0
+        ? acceptedReasonCodes
+        : [AGENT_DECLARED_BLOCK_REASON],
+    ),
     ...(parsed.planContract ? { planContract: parsed.planContract } : {}),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
   });
@@ -429,7 +528,7 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       : state.outcome,
     task,
     visibleText: parsed.visibleText,
-    reasonCodes: uniqueReasonCodes([...state.reasonCodes, ...markerCodes]),
+    reasonCodes: acceptedReasonCodes,
     ...(parsed.planContract
       ? { decisionSummary: parsed.planContract.decisionSummary }
       : {}),
@@ -944,16 +1043,8 @@ function blockTask(
   // store has, and these codes raise no rollout stop signal
   // (`rolloutStopSignalForBlockedContinuation` matches route/execution-mode
   // drift and machine-block boundary failures only).
-  const blockedReasonCodes = uniqueReasonCodes([
-    ...reasonCodes,
-    ...questionFormMarkerReasonCodes(visibleText),
-  ]);
-  console.warn('[od-next-task] blocked', {
-    taskExecutionId: current.taskExecutionId,
-    runId: current.latestRunId,
-    inputStage: current.inputStage,
-    reasonCodes: blockedReasonCodes,
-  });
+  const blockedReasonCodes = blockedReasonCodesFor(visibleText, reasonCodes);
+  logStrategyTaskBlocked(current, current.latestRunId, blockedReasonCodes);
   const task = compareAndTransitionStrategyTaskExecution(db, {
     taskExecutionId: current.taskExecutionId,
     expectedRevision: current.revision,
@@ -963,10 +1054,7 @@ function blockTask(
       outcome: 'blocked',
       executionMode: current.executionMode,
     },
-    blockedContext: {
-      reasonCodes: blockedReasonCodes,
-      visibleText: visibleText.length > 0 ? visibleText : null,
-    },
+    ...blockedAttribution('blocked', visibleText, reasonCodes),
     ...(updatedAt === undefined ? {} : { updatedAt }),
   });
   return {

@@ -433,6 +433,8 @@ For a Full Plan route, the request and clarification stages are planning-only. Y
 
 Ask only when one unresolved answer would materially change scope, direction, the canonical deliverable, main outputs, editability, or substantial rework. Use one inline \`<question-form>\` containing one to three questions with recommended defaults. The form is assistant text parsed by the host, not a native tool call. If the known context is sufficient, continue without a form — do not output, quote, or explain the \`<question-form>\` marker to announce that you are skipping it. The host parses that marker wherever it appears, so writing it as a heading, label, or declaration line leaves the user waiting on a form that does not exist.
 
+Not every turn is a design request. A greeting, an off-topic question, a stray keystroke, or an answer that skipped the one question you were allowed to ask can leave you with nothing to design — and the clarification budget is one round, so a second form is not available to rescue it. Do not invent a subject to satisfy the route: turning \`111\` or \`hello\` into a prototype about the number 111 delivers work the user never asked for, and the user cannot tell you misread them from the finished artifact. Answer them in visible prose the way you would answer any other message — say plainly what you would need in order to start — and declare \`outcome: blocked\`. Your reply is what the user reads, the task settles there, and they can come back with a real request. Reserve this for a request you genuinely cannot act on: a thin but real brief still gets the one clarification round, and an ambiguous one still gets your best reading plus stated assumptions.
+
 Keep the Todo plan live while performing Build work. Direct Edit stays local and bounded. Full Plan freezes its decisions before Production, and every Build Package uses the same frozen Design Spec.`;
 
 const OMITTED_PROJECT_METADATA_KEYS = new Set([
@@ -713,6 +715,14 @@ export function renderOdNextOutputContractV2(
     executionMode: null,
     reasonCodes: [],
   } satisfies StrategyRuntimeStateV2;
+  const blockedStateExample = {
+    schema: OD_NEXT_RUNTIME_STATE_SCHEMA,
+    route: 'full_plan',
+    inputStage: 'request',
+    outcome: 'blocked',
+    executionMode: null,
+    reasonCodes: [],
+  } satisfies StrategyRuntimeStateV2;
 
   return `The JSON field sets below are the exact V2 contract shapes. Replace example values with resolved run values; do not add fields. Every value named \`copy-…\`, plus the all-zero capabilitySnapshotHash, is a placeholder: copy the real value byte-for-byte from the <recipe_identity> attributes or the <runtime_facts> block in <context>, and never invent one. Every buildRequirements entry is an object with exactly id and text; every readinessArtifacts entry is an object with exactly id, version, and a 64-character lowercase-hex digest. Every buildPackages entry is an object with exactly id, objective, inputs, outputs, sharedConstraints, dependsOn, and allowedResources, where inputs, dependsOn, and allowedResources are string arrays that may be empty, outputs and sharedConstraints are non-empty string arrays, and dependsOn lists ids of other Build Packages in this same plan. A simple plan leaves buildPackages empty; a complex plan needs at least two Build Packages, an acyclic dependsOn graph, and exactly one owning Build Package per output. Ids must be unique within requiredDeliverables and within buildRequirements, and taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids: when a plan declares several deliverables, list the canonical one among them rather than alongside them. designSpec.source is exactly existing-artifact, brand, or resolved-baseline. Emit JSON only between the matching tags, without Markdown fences or a second copy. Emit exactly one Runtime State block on every response. Emit at most one Plan Contract block, only when a complete Full Plan is ready. Keep machine blocks separate from visible prose.
 
@@ -732,6 +742,12 @@ When the outcome is clarification_required, executionMode MUST be null — the e
 
 <${OD_NEXT_RUNTIME_STATE_BLOCK}>
 ${stableJson(clarificationStateExample)}
+</${OD_NEXT_RUNTIME_STATE_BLOCK}>
+
+\`outcome\` is one of clarification_required, plan_ready, completed, blocked, or canceled. The first three carry the task forward. \`blocked\` settles it without a deliverable — declare it when you cannot act on the request at all, and put the explanation the user should read in your visible prose, because that reply is all they get. \`canceled\` is Open Design's to declare, not yours. A blocked state emits no Plan Contract block and leaves executionMode null:
+
+<${OD_NEXT_RUNTIME_STATE_BLOCK}>
+${stableJson(blockedStateExample)}
 </${OD_NEXT_RUNTIME_STATE_BLOCK}>
 
 The visible decision summary contains only the goal, deliverables, key constraints, assumptions, risks, and open decisions. Machine blocks are consumed by Open Design and must not be paraphrased.`;

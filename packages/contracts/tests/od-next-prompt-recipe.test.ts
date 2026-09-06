@@ -49,6 +49,22 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  // OPEND-2589. The strategy admits a turn on the project's task type, not on
+  // what this turn said, so a greeting or a stray keystroke enters the same
+  // Full Plan route as a real brief. The prompt taught only three outcomes —
+  // ask once, freeze a plan, deliver — and never named `blocked`, so an agent
+  // left with nothing to design had no taught way to say so and invented a
+  // subject instead ("111" became a prototype about 111). Teach the refusal.
+  it('tells the agent to answer and block instead of inventing a subject', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
+
+    expect(prompt).toContain('outcome: blocked');
+    expect(prompt.toLowerCase()).toContain('do not invent');
+    // The outcome has to be spelled out where the contract shapes are, not
+    // only in prose: the agent copies its Runtime State from those examples.
+    expect(prompt).toMatch(/blocked[\s\S]{0,400}canceled|canceled[\s\S]{0,400}blocked/);
+  });
+
   it('pins the canonical Deck Protocol v1 framework into PPT requests only', () => {
     const pptRecipe: OdNextStrategyRequestRecipeV2 = {
       ...recipe,
