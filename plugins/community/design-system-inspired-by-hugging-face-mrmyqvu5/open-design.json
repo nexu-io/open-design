@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "design-system-inspired-by-hugging-face-mrmyqvu5",
+  "title": "Design System Inspired by Hugging Face",
+  "version": "0.1.0",
+  "description": "> Category: AI & LLM > ML community hub. Sunny yellow accent, monospace identity, cheerful and dense.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
