@@ -35,7 +35,12 @@ import type {
 import { renderDeckSlides } from "./deck-capture.js";
 import { renderDeterministicFrames } from "./frame-capture.js";
 import { openFirstPartyMailto } from "./mailto-open.js";
-import { openValidatedDirectory } from "./open-path.js";
+import {
+  handleRevealProjectFile,
+  openValidatedDirectory,
+  resolveProjectRelativeFile,
+  revealValidatedFile,
+} from "./open-path.js";
 import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
@@ -2047,6 +2052,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeHandler("dialog:pick-working-dir");
   ipcMain.removeHandler("shell:open-external");
   ipcMain.removeHandler("shell:open-path");
+  ipcMain.removeHandler("shell:reveal-file");
   ipcMain.removeHandler("browser:clear-data");
   for (const channel of UPDATER_IPC_CHANNELS) {
     ipcMain.removeHandler(channel);
@@ -2234,6 +2240,27 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return err instanceof Error ? err.message : String(err);
     }
   });
+
+  ipcMain.handle(
+    "shell:reveal-file",
+    async (_event, projectId: string, relativePath: string) => {
+      const apiBaseUrl =
+        (options.discoverDaemonUrl ? await options.discoverDaemonUrl() : null) ??
+        (await options.discoverUrl());
+      return await handleRevealProjectFile(apiBaseUrl, projectId, relativePath, {
+        release,
+        execFile: async (cmd, args) => {
+          const { stdout } = await execFileAsync(cmd, [...args]);
+          return { stdout };
+        },
+        showItemInFolder: (p) => shell.showItemInFolder(p),
+        fetchResolvedProjectDir,
+        isOpenPathAllowedForProject,
+        validateExistingDirectory,
+        resolveProjectRelativeFile,
+      });
+    },
+  );
 
   let currentUrl: string | null = null;
   let currentPetUrl: string | null = null;
@@ -3129,3 +3156,5 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     },
   };
 }
+
+export { handleRevealProjectFile, resolveProjectRelativeFile, revealValidatedFile };

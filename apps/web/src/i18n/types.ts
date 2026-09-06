@@ -3720,6 +3720,10 @@ export interface Dict {
   'designFiles.copiedPath': string;
   'designFiles.copyLocalPath': string;
   'designFiles.copiedLocalPath': string;
+  'designFiles.revealInFinder': string;
+  'designFiles.revealInExplorer': string;
+  'designFiles.revealInFileManager': string;
+  'designFiles.revealFailed': string;
   'designFiles.deleteFolderConfirm': string;
   'designFiles.folderCreated': string;
   'designFiles.folderDeleted': string;
