@@ -88,10 +88,10 @@ async function readUrl(url) {
 
 function sidecarRequestTimeoutMs(message) {
   if (message.domain === "lifecycle" && message.operation === "start") return 120_000;
-  if (message.domain === "transition" && message.action === "complete-start") return 120_000;
+  if (message.domain === "lifecycle" && message.operation === "transition" && message.action === "complete-start") return 120_000;
   if (message.domain === "runtime") return 120_000;
   if (message.domain === "lifecycle" && new Set(["release", "stop"]).has(message.operation)) return 60_000;
-  if (message.domain === "transition" && message.action === "force-stop") return 60_000;
+  if (message.domain === "lifecycle" && message.operation === "transition" && message.action === "force-stop") return 60_000;
   if (message.domain === "generation" && message.operation === "handoff") return 60_000;
   if (message.domain === "shell-updater" && message.operation === "invoke") return 10 * 60_000;
   if (message.domain === "shell-updater" && message.operation === "wait") return (message.timeoutMs ?? 0) + 2_000;

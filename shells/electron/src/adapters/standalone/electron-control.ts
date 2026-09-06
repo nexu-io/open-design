@@ -43,17 +43,26 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
   // generation: Shell preflight must execute before Chromium reports ready.
   registerSidecarProcess(stamp, controlResources);
   const cdpBootstrapUserDataRoot = app.getPath("userData");
-  const running = run();
+  let state: "starting" | "running" | "failed" | "stopping" = "starting";
+  // Start preflight synchronously, but do not gate observability on product
+  // readiness: slow carrier acquisition must remain inspectable/stoppable.
+  const running = run().then(() => {
+    if (state === "starting") state = "running";
+    return null;
+  }, (error: unknown) => {
+    if (state === "starting") state = "failed";
+    return { error };
+  });
   const client = SidecarFactory.create<{ startedAt: string }>({
     lifecycle: {
-      async start() { await running; return Object.freeze({ startedAt: new Date().toISOString() }); },
+      async start() { return Object.freeze({ startedAt: new Date().toISOString() }); },
       status(runtime) {
         const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed()) ?? null;
         const namespaceRoot = dirname(app.getPath("userData"));
         return Object.freeze({
           pid: process.pid,
           startedAt: runtime.startedAt,
-          state: "running",
+          state,
           title: window?.getTitle() ?? null,
           url: window?.webContents.getURL() ?? null,
           windowVisible: window?.isVisible() ?? false,
@@ -65,12 +74,15 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
         });
       },
       async stop() {
-        if (!app.isReady()) return;
+        state = "stopping";
+        const quitting = new Promise<void>((resolve) => app.once("will-quit", () => resolve()));
         app.quit();
-        await new Promise<void>((resolve) => app.once("will-quit", () => resolve()));
+        await quitting;
       },
     },
   });
   await client.start();
+  const startupFailure = await running;
+  if (startupFailure != null) throw startupFailure.error;
   await client.waitUntilStopped();
 }

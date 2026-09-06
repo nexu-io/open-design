@@ -65,6 +65,8 @@ import {
   serializeElectronRendererMountAcknowledgement,
 } from "./window/mount-acknowledgement.js";
 
+import { electronSplashHtml } from "./window/splash.js";
+
 export * from "./session/logging.js";
 export * from "./session/cdp.js";
 export * from "./session/namespace-paths.js";
@@ -76,15 +78,6 @@ export * from "./startup/attempt.js";
 export * from "./startup/cancellation.js";
 export * from "./window/presentation.js";
 export * from "./window/mount-acknowledgement.js";
-
-function escapeHtml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-}
-
-function splashHtml(manifest: ElectronShellManifest): string {
-  const policy = manifest.splash;
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><style>html{font-family:ui-sans-serif,system-ui;background:${policy.backgroundColor};color:${policy.foregroundColor}}body{margin:0;display:grid;min-height:100vh;place-items:center;text-align:center}main{display:grid;gap:12px}h2{font-size:20px;font-weight:600;margin:0}p{color:${policy.mutedColor};font-size:13px;margin:0}</style><body><main><h2>${escapeHtml(manifest.productName)}</h2><p id="stage">${escapeHtml(policy.initialLabel)}</p></main></body></html>`)}`;
-}
 
 function setSplashStage(window: BrowserWindow | null, stage: string): void {
   if (window == null || window.isDestroyed()) return;
@@ -261,7 +254,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   const splashStartedAt = Date.now();
   if (presentation === "interactive") {
     splash = new BrowserWindow({ width: manifest.splash.width, height: manifest.splash.height, frame: false, resizable: false, show: true, backgroundColor: manifest.splash.backgroundColor, webPreferences: { sandbox: true } });
-    await context.startupQuit.guard(splash.loadURL(splashHtml(manifest)));
+    await context.startupQuit.guard(splash.loadURL(electronSplashHtml(manifest, definition.splashMedia)));
   }
   setSplashStage(splash, manifest.splash.initialLabel);
 

@@ -22,6 +22,18 @@ uses `app.setActivationPolicy`, `app.dock.show()` and `app.dock.hide()` only for
 the current process presentation. A user's “Keep in Dock” choice is persisted
 and matched to the stable bundle identity by macOS; neither the Shell nor
 electron-kit stores, infers, pins, or unpins that state.
+
+`config/splash-media.json` contains the unchanged transparent VP9/WebM brand
+clip from gold `715c0cb9d8ffdedd47d8c27a78a1d5dfdb2dc201`, originally
+`shells/electron/src/main/splash-video.ts` (SHA-256
+`bb1c0530000a5bfe58becb53d2b8264486c1180efa9ba02fa2f41c4f6db5ce9b`).
+It is embedded in the Shell build closure, independent of Web and offline before
+Closure startup. The Shell retains the 1280×900 light startup window and 2000 ms
+minimum overlapping startup. electron-kit owns sandboxed, non-looping media
+presentation and stage feedback; the old progress bridge and boot authority are
+not retained. `tools-dev` waits for explicit business readiness; inspect exposes
+native CDP while starting, and logs retain diagnostic locations after exit
+without preserving stale process/CDP state.
 The renderer adapter fixes its main-frame identity at mount time, opens foreign
 HTTP(S) navigation in the system browser, limits child windows to the Shell's
 own protocol host plus Blob/about:blank, and admits embedded browsers only in a

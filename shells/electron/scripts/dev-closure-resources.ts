@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 
@@ -31,8 +31,13 @@ async function standaloneWebRoot(workspaceRoot: string): Promise<string> {
   const root = join(workspaceRoot, "apps", "web", ".next", "standalone");
   const candidates = [join(root, "apps", "web", "server.js"), join(root, "server.js")];
   for (const candidate of candidates) {
-    try { await regularFile(candidate, "Web Standalone server"); return root; }
-    catch { /* try the supported alternate Next layout */ }
+    try { await regularFile(candidate, "Web Standalone server"); }
+    catch { continue; }
+    // Next's standalone trace omits browser assets. The dev wrapper uses this
+    // server directly, so assemble its static/public roots just as packing does.
+    await cp(join(workspaceRoot, "apps", "web", ".next", "static"), join(dirname(candidate), ".next", "static"), { recursive: true, dereference: true });
+    await cp(join(workspaceRoot, "apps", "web", "public"), join(dirname(candidate), "public"), { recursive: true, dereference: true });
+    return root;
   }
   throw new Error(`Web Standalone output is missing under ${root}; build @open-design/web first`);
 }

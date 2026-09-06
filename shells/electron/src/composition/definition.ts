@@ -1,4 +1,5 @@
 import runtime from "../../config/runtime.json" with { type: "json" };
+import splashMedia from "../../config/splash-media.json" with { type: "json" };
 import manifest from "../../config/shell.json" with { type: "json" };
 import standalone from "../../config/standalone.json" with { type: "json" };
 import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
@@ -27,6 +28,7 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
   const renderer = createElectronRendererAdapter(shellManifest.window.title);
   return Object.freeze({
     manifest: shellManifest,
+    splashMedia: splashMedia as ElectronShellDefinition["splashMedia"],
     mac: macRuntime as ElectronMacRuntimePolicy,
     preflight: runtimeConfig.preflight,
     warmup: runtimeConfig.warmup,

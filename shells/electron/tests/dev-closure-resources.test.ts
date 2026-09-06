@@ -19,8 +19,15 @@ describe("Electron dev Closure resources", () => {
     const webServer = join(workspaceRoot, "apps", "web", ".next", "standalone", "apps", "web", "server.js");
     await Promise.all([mkdir(join(daemonEntry, ".."), { recursive: true }), mkdir(join(webEntry, ".."), { recursive: true }), mkdir(join(webServer, ".."), { recursive: true })]);
     await Promise.all([writeFile(daemonEntry, "daemon\n"), writeFile(webEntry, "web\n"), writeFile(webServer, "server\n")]);
+    const webRoot = join(workspaceRoot, "apps", "web");
+    await mkdir(join(webRoot, ".next", "static", "chunks"), { recursive: true });
+    await mkdir(join(webRoot, "public"), { recursive: true });
+    await writeFile(join(webRoot, ".next", "static", "chunks", "app.js"), "hydrate();");
+    await writeFile(join(webRoot, "public", "icon.svg"), "<svg/>");
     const outputRoot = join(workspaceRoot, ".tmp", "resources");
     const receipt = await buildElectronDevClosureResources({ outputRoot, workspaceRoot });
+    expect(await readFile(join(webServer, "..", ".next", "static", "chunks", "app.js"), "utf8")).toBe("hydrate();");
+    expect(await readFile(join(webServer, "..", "public", "icon.svg"), "utf8")).toBe("<svg/>");
 
     expect(receipt.resources.map(({ id }) => id)).toEqual(["open-design-daemon", "open-design-web"]);
     for (const resource of receipt.resources) {

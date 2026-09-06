@@ -161,6 +161,7 @@ export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
 
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
+  splashMedia?: Readonly<{ mimeType: "video/webm"; base64: string }>;
   mac: ElectronMacRuntimePolicy;
   preflight: ElectronPreflightTopology;
   warmup: ElectronWarmupTopology;

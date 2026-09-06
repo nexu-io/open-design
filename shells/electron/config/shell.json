@@ -14,9 +14,9 @@
     "title": "Open Design"
   },
   "splash": {
-    "width": 520,
-    "height": 320,
-    "minimumVisibleMs": 1800,
+    "width": 1280,
+    "height": 900,
+    "minimumVisibleMs": 2000,
     "backgroundColor": "#f2f4f5",
     "foregroundColor": "#1f2529",
     "mutedColor": "#7a838a",
