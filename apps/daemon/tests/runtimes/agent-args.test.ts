@@ -88,7 +88,10 @@ test('opencode args pass model-supported variants without changing the default a
     (model) => model.id === 'openai/gpt-5.6-sol',
   )?.reasoningOptions, undefined);
   assert.deepEqual(opencode.helpArgs, ['run', '--help']);
-  assert.deepEqual(opencode.capabilityFlags?.['--dangerously-skip-permissions'], 'skipPermissions');
+  assert.deepEqual(opencode.capabilityFlags, {
+    '--auto': 'autoPermissionBypass',
+    '--dangerously-skip-permissions': 'skipPermissions',
+  });
   assert.equal(baseArgs.includes('-'), false);
   assert.equal(baseArgs.includes(prompt), false);
   assert.deepEqual(baseArgs, [
@@ -232,6 +235,39 @@ test('opencode passes --dangerously-skip-permissions when the help probe finds i
       '--format',
       'json',
       '--dangerously-skip-permissions',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode prefers --auto when the help probe finds the new permission bypass', () => {
+  agentCapabilities.set('opencode', {
+    autoPermissionBypass: true,
+    skipPermissions: false,
+  });
+  try {
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
+      '--auto',
+    ]);
+  } finally {
+    agentCapabilities.delete('opencode');
+  }
+});
+
+test('opencode omits permission bypass when the help probe finds neither supported flag', () => {
+  agentCapabilities.set('opencode', {
+    autoPermissionBypass: false,
+    skipPermissions: false,
+  });
+  try {
+    assert.deepEqual(opencode.buildArgs('design a dashboard', [], [], {}), [
+      'run',
+      '--format',
+      'json',
     ]);
   } finally {
     agentCapabilities.delete('opencode');
