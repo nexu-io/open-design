@@ -925,7 +925,18 @@ export interface SketchExportResultProps {
   project_kind: TrackingProjectKind;
 }
 
-export type TrackingDeployProvider = 'vercel' | 'cloudflare_pages';
+export type TrackingDeployProvider =
+  | 'vercel'
+  | 'cloudflare_pages'
+  | 'netlify'
+  | 'render'
+  | 'railway';
+
+// Compile-time assertion: deploy providers must stay disjoint from export formats.
+type _ExportFormatDeployProviderOverlap = Extract<TrackingExportFormat, TrackingDeployProvider>;
+type _AssertExportFormatExcludesDeployProviders = [_ExportFormatDeployProviderOverlap] extends [never] ? true : false;
+const _assertExportFormatExcludesDeployProviders: _AssertExportFormatExcludesDeployProviders = true;
+void _assertExportFormatExcludesDeployProviders;
 
 // Fired from the deploy modal when a real publish attempt resolves — NOT when
 // the modal merely opens (that path is `artifact_export_result` with

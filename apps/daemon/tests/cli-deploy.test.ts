@@ -377,4 +377,140 @@ describe('od deploy CLI', () => {
     expect(result.code).not.toBe(0);
     expect(stub.requests).toHaveLength(0);
   });
+
+  // od deploy config get <provider>
+  it('GETs /api/deploy/config with providerId when od deploy config get <provider> is called', async () => {
+    const stubConfig = {
+      providerId: 'netlify',
+      configured: true,
+      tokenMask: '••••••••',
+      githubTokenMask: '••••••••',
+      teamId: '',
+      teamSlug: '',
+      target: 'preview',
+    };
+    stub.setResponder(() => ({ status: 200, body: stubConfig }));
+
+    const result = await runCli([
+      'deploy',
+      'config',
+      'get',
+      'netlify',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.method).toBe('GET');
+    expect(stub.requests[0]!.url).toBe('/api/deploy/config?providerId=netlify');
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed).toMatchObject({
+      providerId: 'netlify',
+      configured: true,
+    });
+  });
+
+  // od deploy config set <provider> with credentials
+  it('PUTs to /api/deploy/config when od deploy config set <provider> is called with credentials', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: {
+        providerId: 'netlify',
+        configured: true,
+        tokenMask: '••••••••',
+        githubTokenMask: '••••••••',
+      },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'config',
+      'set',
+      'netlify',
+      '--token',
+      'secret-netlify-token',
+      '--github-token',
+      'ghp-test-pat',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.method).toBe('PUT');
+    expect(stub.requests[0]!.url).toBe('/api/deploy/config');
+    const body = JSON.parse(stub.requests[0]!.body);
+    expect(body).toMatchObject({
+      providerId: 'netlify',
+      token: 'secret-netlify-token',
+      githubToken: 'ghp-test-pat',
+    });
+  });
+
+  // od deploy config set with --value-json
+  it('PUTs to /api/deploy/config when od deploy config set <provider> is called with --value-json', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: {
+        providerId: 'render',
+        configured: true,
+        tokenMask: '••••••••',
+        githubTokenMask: '••••••••',
+      },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'config',
+      'set',
+      'render',
+      '--value-json',
+      JSON.stringify({ token: 'render-secret', githubToken: 'ghp-render-pat' }),
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]!.method).toBe('PUT');
+    const body = JSON.parse(stub.requests[0]!.body);
+    expect(body).toMatchObject({
+      providerId: 'render',
+      token: 'render-secret',
+      githubToken: 'ghp-render-pat',
+    });
+  });
+
+  // od deploy <projectId> --file <file> --provider netlify (GitHub-backed provider)
+  it('POSTs with providerId=netlify to /api/projects/:id/deploy when --provider netlify is given', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: { ...STUB_DEPLOYMENT, providerId: 'netlify', url: 'https://test-site.netlify.app' },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'netlify',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    const req = stub.requests[0]!;
+    expect(req.method).toBe('POST');
+    expect(req.url).toBe('/api/projects/proj-1/deploy');
+    const body = JSON.parse(req.body);
+    expect(body.providerId).toBe('netlify');
+    expect(body.fileName).toBe('index.html');
+  });
 });
+

@@ -227,7 +227,7 @@ export type TrackingArtifactKind =
   | 'doc'
   | 'unknown';
 
-// NOTE: vercel / cloudflare_pages are intentionally NOT here. Deploy attempts
+// NOTE: vercel / cloudflare_pages / netlify / render / railway are intentionally NOT here. Deploy attempts
 // used to ride artifact_export_result with those formats, but that only ever
 // meant "deploy popover opened", never a real publish. Real deploys are now
 // tracked exclusively by artifact_deploy_result (see TrackingDeployProvider).

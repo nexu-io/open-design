@@ -46,6 +46,7 @@ import {
   type TrackingArtifactKind,
   type TrackingProjectKind,
   type TrackingDeployProvider,
+  type TrackingExportFormat,
 } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import { exportErrorCode } from '../analytics/export-error-code';
@@ -116,6 +117,9 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
+  NETLIFY_PROVIDER_ID,
+  RENDER_PROVIDER_ID,
+  RAILWAY_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
@@ -348,17 +352,44 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
 ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  labelKey:
+    | 'fileViewer.vercelProvider'
+    | 'fileViewer.cloudflarePagesProvider'
+    | 'fileViewer.netlifyProvider'
+    | 'fileViewer.renderProvider'
+    | 'fileViewer.railwayProvider';
   tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenLinkKey:
+    | 'fileViewer.vercelTokenGetLink'
+    | 'fileViewer.cloudflareApiTokenGetLink'
+    | 'fileViewer.netlifyTokenGetLink'
+    | 'fileViewer.renderTokenGetLink'
+    | 'fileViewer.railwayTokenGetLink';
   tokenPlaceholderKey:
     | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+    | 'fileViewer.cloudflareApiTokenPlaceholder'
+    | 'fileViewer.netlifyTokenPlaceholder'
+    | 'fileViewer.renderTokenPlaceholder'
+    | 'fileViewer.railwayTokenPlaceholder';
+  tokenReuseHintKey:
+    | 'fileViewer.vercelTokenReuseHint'
+    | 'fileViewer.cloudflareApiTokenReuseHint'
+    | 'fileViewer.netlifyTokenReuseHint'
+    | 'fileViewer.renderTokenReuseHint'
+    | 'fileViewer.railwayTokenReuseHint';
+  tokenRequiredKey:
+    | 'fileViewer.vercelTokenRequired'
+    | 'fileViewer.cloudflareApiTokenRequired'
+    | 'fileViewer.netlifyTokenRequired'
+    | 'fileViewer.renderTokenRequired'
+    | 'fileViewer.railwayTokenRequired';
+  previewHintKey?: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint' | 'fileViewer.netlifyPreviewOnly';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
+    | 'fileViewer.cloudflareApiToken'
+    | 'fileViewer.netlifyToken'
+    | 'fileViewer.renderToken'
+    | 'fileViewer.railwayToken';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -672,6 +703,37 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+  {
+    id: NETLIFY_PROVIDER_ID,
+    labelKey: 'fileViewer.netlifyProvider',
+    tokenLink: 'https://app.netlify.com/user/applications/personal',
+    tokenLinkKey: 'fileViewer.netlifyTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.netlifyTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.netlifyTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.netlifyTokenRequired',
+    previewHintKey: 'fileViewer.netlifyPreviewOnly',
+    tokenLabelKey: 'fileViewer.netlifyToken',
+  },
+  {
+    id: RENDER_PROVIDER_ID,
+    labelKey: 'fileViewer.renderProvider',
+    tokenLink: 'https://dashboard.render.com/u/settings#api-keys',
+    tokenLinkKey: 'fileViewer.renderTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.renderTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.renderTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.renderTokenRequired',
+    tokenLabelKey: 'fileViewer.renderToken',
+  },
+  {
+    id: RAILWAY_PROVIDER_ID,
+    labelKey: 'fileViewer.railwayProvider',
+    tokenLink: 'https://railway.com/account/tokens',
+    tokenLinkKey: 'fileViewer.railwayTokenGetLink',
+    tokenPlaceholderKey: 'fileViewer.railwayTokenPlaceholder',
+    tokenReuseHintKey: 'fileViewer.railwayTokenReuseHint',
+    tokenRequiredKey: 'fileViewer.railwayTokenRequired',
+    tokenLabelKey: 'fileViewer.railwayToken',
   },
 ];
 
@@ -7474,16 +7536,7 @@ function HtmlViewer({
   // / .catch. The same request_id threads both events so PostHog can
   // stitch click → result via $insert_id correlation.
   const fireShareExport = (
-    format:
-      | 'pdf'
-      | 'pptx'
-      | 'zip'
-      | 'html'
-      | 'image'
-      | 'markdown'
-      | 'template'
-      | 'share_link'
-      | 'share_page',
+    format: TrackingExportFormat,
     fn: () => Promise<unknown> | unknown,
     context?: HtmlVersionExportContext | null,
   ) => {
@@ -7915,6 +7968,9 @@ function HtmlViewer({
   const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
+  const [renderGithubToken, setRenderGithubToken] = useState('');
+  const [showDeployToken, setShowDeployToken] = useState(false);
+  const [showGithubToken, setShowGithubToken] = useState(false);
   const [teamId, setTeamId] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
   const [cloudflareAccountId, setCloudflareAccountId] = useState('');
@@ -9189,6 +9245,8 @@ function HtmlViewer({
   const [selectedSideCommentIds, setSelectedSideCommentIds] = useState<Set<string>>(() => new Set());
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
+  const [socialShareModalOpen, setSocialShareModalOpen] = useState(false);
+  const [activeSocialShareProviderId, setActiveSocialShareProviderId] = useState<WebDeployProviderId | null>(null);
   const previewStateKey = `${projectId}:${file.name}`;
   // A configured portal is an overlay contract from the first render, even
   // before the host DOM node has been resolved. Treating that lookup window as
@@ -9269,6 +9327,7 @@ function HtmlViewer({
     setDeployProviderId(providerId);
     setDeployConfig(matchingConfig);
     setDeployToken(matchingConfig?.tokenMask || '');
+    setRenderGithubToken(matchingConfig?.githubTokenMask || '');
     setTeamId(matchingConfig?.teamId || '');
     setTeamSlug(matchingConfig?.teamSlug || '');
     setCloudflareAccountId(matchingConfig?.accountId || '');
@@ -9307,6 +9366,13 @@ function HtmlViewer({
         cloudflarePages: cloudflareConfigHintsFromForm(),
       };
     }
+    if (providerId === NETLIFY_PROVIDER_ID || providerId === RENDER_PROVIDER_ID || providerId === RAILWAY_PROVIDER_ID) {
+      return {
+        providerId,
+        token,
+        githubToken: renderGithubToken.trim(),
+      };
+    }
     return {
       providerId,
       token,
@@ -9320,7 +9386,6 @@ function HtmlViewer({
     options?: { fallbackToExisting?: boolean },
   ) {
     const requestSeq = ++deployProviderLoadSeqRef.current;
-    setDeployProviderId(providerId);
     const deployments = await fetchProjectDeployments(projectId, workspaceContext);
     const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
     const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
@@ -9328,17 +9393,17 @@ function HtmlViewer({
       ? Object.values(nextDeploymentsByProvider)[0] ?? null
       : null;
     const currentDeployment = exactDeployment ?? fallbackDeployment;
-    // Use the explicit providerId for config/form so a fallback deployment from
-    // another provider only fills the existing-URL display, never the form/credentials.
-    const config = await fetchDeployConfig(providerId);
+    const activeProviderId = currentDeployment ? currentDeployment.providerId : providerId;
+    setDeployProviderId(activeProviderId);
+    const config = await fetchDeployConfig(activeProviderId);
     if (requestSeq !== deployProviderLoadSeqRef.current) {
       return { config: null, currentDeployment: null };
     }
-    syncDeployFormFromConfig(providerId, config);
+    syncDeployFormFromConfig(activeProviderId, config);
     setDeploymentsByProvider(nextDeploymentsByProvider);
     setDeployment(currentDeployment ?? null);
     setDeployResult(currentDeployment ?? null);
-    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
+    if (activeProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
       void loadCloudflareZones(config, { requestSeq });
     }
     return { config, currentDeployment };
@@ -14203,6 +14268,7 @@ function HtmlViewer({
   async function openDeployModal(
     nextProviderId: WebDeployProviderId = deployProviderId,
     intent: 'deploy' | 'social-share' = 'deploy',
+    options?: { fallbackToExisting?: boolean },
   ) {
     setDeployMenuOpen(false);
     setDeployModalOpen(true);
@@ -14211,9 +14277,20 @@ function HtmlViewer({
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
-    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+    await loadDeployProvider(nextProviderId, options);
   }
 
+  async function openSocialShareFlow() {
+    setDeployMenuOpen(false);
+    const hasDeployments = DEPLOY_PROVIDER_OPTIONS.some(
+      (option) => deploymentsByProvider[option.id]?.url?.trim(),
+    );
+    if (hasDeployments) {
+      setSocialShareModalOpen(true);
+    } else {
+      await openDeployModal(deployProviderId, 'social-share');
+    }
+  }
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
     if (nextProviderId === deployProviderId) return;
     setDeployError(null);
@@ -14221,7 +14298,8 @@ function HtmlViewer({
     await loadDeployProvider(nextProviderId);
   }
 
-  async function saveDeployConfig() {
+  async function saveDeployConfig(options?: { isDeploying?: boolean }) {
+    const isDeploying = options?.isDeploying ?? false;
     setSavingDeployConfig(true);
     setDeployError(null);
     setDeployActionToast(null);
@@ -14234,6 +14312,23 @@ function HtmlViewer({
         }
         if (!cloudflareAccountId.trim()) {
           throw new Error(t('fileViewer.cloudflareAccountIdRequired'));
+        }
+      }
+      if (deployProviderId === NETLIFY_PROVIDER_ID || deployProviderId === RENDER_PROVIDER_ID || deployProviderId === RAILWAY_PROVIDER_ID) {
+        const isRender = deployProviderId === RENDER_PROVIDER_ID;
+        const isNetlify = deployProviderId === NETLIFY_PROVIDER_ID;
+        const requiredTokenKey = isRender ? 'fileViewer.renderTokenRequired' : isNetlify ? 'fileViewer.netlifyTokenRequired' : 'fileViewer.railwayTokenRequired';
+        if (isDeploying) {
+          if (!deployToken.trim()) {
+            throw new Error(t(requiredTokenKey));
+          }
+          if (!renderGithubToken.trim()) {
+            throw new Error(t('fileViewer.githubPatTokenRequired'));
+          }
+        } else {
+          if (!deployToken.trim() && !renderGithubToken.trim()) {
+            throw new Error(t(requiredTokenKey));
+          }
         }
       }
       const config = await updateDeployConfig(buildDeployConfigRequest(deployProviderId));
@@ -14271,6 +14366,22 @@ function HtmlViewer({
     };
   }
 
+function trackingProviderFromDeployProviderId(providerId: WebDeployProviderId): TrackingDeployProvider {
+  switch (providerId) {
+    case CLOUDFLARE_PAGES_PROVIDER_ID:
+      return 'cloudflare_pages';
+    case NETLIFY_PROVIDER_ID:
+      return 'netlify';
+    case RENDER_PROVIDER_ID:
+      return 'render';
+    case RAILWAY_PROVIDER_ID:
+      return 'railway';
+    case DEFAULT_DEPLOY_PROVIDER_ID:
+    default:
+      return 'vercel';
+  }
+}
+
   async function deployToSelectedProvider() {
     setDeploying(true);
     setDeployPhase('deploying');
@@ -14281,8 +14392,7 @@ function HtmlViewer({
     // accepts the publish, failed on any hard error / missing config. This is
     // distinct from the share-popover "opened" signal (artifact_export_result).
     const deployStarted = performance.now();
-    const providerForTracking: TrackingDeployProvider =
-      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+    const providerForTracking: TrackingDeployProvider = trackingProviderFromDeployProviderId(deployProviderId);
     const firstConfigure = !deployConfig?.configured;
     let savedNewToken = false;
     const fireDeployResult = (
@@ -14305,36 +14415,23 @@ function HtmlViewer({
       });
     };
     try {
-      const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
       const typedToken = deployToken.trim();
-      const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
-      savedNewToken = Boolean(hasNewToken);
-      const cloudflareHints = cloudflareConfigHintsFromForm();
-      const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
-        cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
-        cloudflareHints?.lastZoneName !== deployConfig?.cloudflarePages?.lastZoneName ||
-        cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
-      );
-      const needsConfigSave =
-        hasNewToken ||
-        teamId.trim() !== (deployConfig?.teamId || '') ||
-        teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
-        cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
-        cloudflareHintsChanged ||
-        !deployConfig?.configured;
-      if (needsConfigSave) {
-        const nextConfig = await saveDeployConfig();
-        if (!nextConfig) {
-          // saveDeployConfig bailed (missing/invalid token, e.g. user clicked
-          // Deploy without entering a key) — count as a failed deploy attempt.
-          fireDeployResult('failed', 'CONFIG_REQUIRED');
-          return;
-        }
-        if (!nextConfig?.configured) {
-          const option = getDeployProviderOption(deployProviderId);
-          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
-        }
+      const hasNewToken = Boolean(typedToken && typedToken !== deployConfig?.tokenMask);
+      const typedGithubToken = renderGithubToken.trim();
+      const hasNewGithubToken = Boolean(typedGithubToken && typedGithubToken !== deployConfig?.githubTokenMask);
+      savedNewToken = hasNewToken || hasNewGithubToken;
+
+      // Save the latest credentials unconditionally so they are always used for this deploy!
+      const nextConfig = await saveDeployConfig({ isDeploying: true });
+      if (!nextConfig) {
+        fireDeployResult('failed', 'CONFIG_REQUIRED');
+        return;
       }
+      if (!nextConfig?.configured) {
+        const option = getDeployProviderOption(deployProviderId);
+        throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
+      }
+      const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
       setDeployPhase('preparing-link');
       const next = await deployProjectFile(
         projectId,
@@ -14359,6 +14456,11 @@ function HtmlViewer({
             url: next.url,
           }),
         });
+        if (deployModalIntent === 'social-share') {
+          setActiveSocialShareProviderId(next.providerId);
+          setDeployModalOpen(false);
+          setSocialShareModalOpen(true);
+        }
       } else {
         fireDeployResult('failed', `STATUS_${next.status ?? 'UNKNOWN'}`);
       }
@@ -14385,8 +14487,12 @@ function HtmlViewer({
     }
   }
 
-  async function retryDeploymentLink() {
-    const current = deployResult || deployment;
+  async function retryDeploymentLink(targetProviderId?: WebDeployProviderId) {
+    const providerId = targetProviderId || deployProviderId;
+    const current =
+      (deployResult?.providerId === providerId ? deployResult : null) ||
+      (deployment?.providerId === providerId ? deployment : null) ||
+      deploymentsByProvider[providerId];
     if (!current?.id) return;
     setDeployError(null);
     setDeployPhase('preparing-link');
@@ -15545,7 +15651,7 @@ function HtmlViewer({
       clearBoardComposer();
     }
   }, [activePreviewCommentId, boardMode, effectiveDeck, slideState?.active, visibleSideComments]);
-  const activeDeployment = deployResult || deployment;
+  const activeDeployment = (deployResult?.providerId === deployProviderId ? deployResult : null) || (deployment?.providerId === deployProviderId ? deployment : null);
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
@@ -15612,22 +15718,25 @@ function HtmlViewer({
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
-  const deployedEntries = DEPLOY_PROVIDER_OPTIONS
-    .map((option) => deploymentsByProvider[option.id])
-    .filter((item): item is WebDeploymentInfo => Boolean(item?.url?.trim()));
-  const shareableDeploymentUrl =
-    DEPLOY_PROVIDER_OPTIONS.map((option) => deploymentsByProvider[option.id])
-      .map((item) => publicShareUrlForDeployment(item))
-      .find(Boolean) ?? '';
+  const latestShareDeployment = useMemo(
+    () => pickLatestShareDeployment(deploymentsByProvider),
+    [deploymentsByProvider],
+  );
+  const latestSocialShareDeployment =
+    (activeSocialShareProviderId ? deploymentsByProvider[activeSocialShareProviderId] : null) ??
+    latestShareDeployment;
+  const latestShareDeploymentDefault = latestShareDeployment;
+
+  const shareableDeploymentUrl = publicShareUrlForDeployment(latestSocialShareDeployment);
   // A link is a link: the published-file URL unlocks social sharing exactly
   // like a ready deployment does, so a blocked/protected deployment never
   // gates sharing when a clean publish link exists.
   const socialShareBlockedDeployment =
     shareableDeploymentUrl || publishedFileUrl
       ? null
-      : deployedEntries.find((item) => deployResultState(item.status) === 'protected' && !publicShareUrlForDeployment(item)) ??
-        deployedEntries.find((item) => !publicShareUrlForDeployment(item)) ??
-        null;
+      : latestSocialShareDeployment && !publicShareUrlForDeployment(latestSocialShareDeployment)
+        ? latestSocialShareDeployment
+        : null;
   const socialShareBlockedState = socialShareBlockedDeployment
     ? deployResultState(socialShareBlockedDeployment.status)
     : null;
@@ -15693,10 +15802,76 @@ function HtmlViewer({
     if (providerId === 'cloudflare-pages') return 'pages-line';
     return 'upload-cloud-line';
   };
-  const latestShareDeployment = useMemo(
-    () => pickLatestShareDeployment(deploymentsByProvider),
-    [deploymentsByProvider],
-  );
+
+  const closeSocialShareModal = () => setSocialShareModalOpen(false);
+
+  const deployCopyLinks = DEPLOY_PROVIDER_OPTIONS.map((option) => ({
+    providerId: option.id,
+    providerLabel: t(option.labelKey),
+    url: deploymentsByProvider[option.id]?.url?.trim() || '',
+  })).filter((item) => item.url);
+
+  const copyDeployMenuLabel = (providerLabel: string, url: string) =>
+    copiedDeployLink === url.trim()
+      ? t('fileViewer.copied')
+      : providerLabel.toLowerCase().includes('cloudflare')
+        ? t('fileViewer.copyCloudflareLink')
+        : t('fileViewer.copyProviderLink', { provider: providerLabel });
+
+  const socialShareResultCards = useMemo(() => {
+    const dep = latestSocialShareDeployment;
+    if (!dep) return [];
+    const depState = deployResultState(dep.status);
+    const depDelayed = dep.status === 'link-delayed';
+    const depProtected = dep.status === 'protected';
+    const depUrl = shareUrlForDeployment(dep);
+    const depCloudflare = dep.providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? dep.cloudflarePages : undefined;
+    const depCloudflareCustomDomain = depCloudflare?.customDomain;
+
+    if (depCloudflare) {
+      const cards: DeployResultCard[] = [];
+      const pagesDevUrl = depCloudflare.pagesDev?.url || depUrl;
+      if (pagesDevUrl) {
+        cards.push({
+          id: 'pages-dev',
+          label: t('fileViewer.cloudflarePagesDevLinkLabel'),
+          url: pagesDevUrl,
+          status: depCloudflare.pagesDev?.status || dep.status || 'link-delayed',
+          message: depCloudflare.pagesDev?.statusMessage,
+        });
+      }
+      if (depCloudflareCustomDomain?.url) {
+        cards.push({
+          id: 'custom-domain',
+          label: t('fileViewer.cloudflareCustomDomainLinkLabel'),
+          url: depCloudflareCustomDomain.url,
+          status: depCloudflareCustomDomain.status,
+          message:
+            depCloudflareCustomDomain.errorMessage ||
+            depCloudflareCustomDomain.statusMessage,
+        });
+      }
+      return cards;
+    }
+
+    return depUrl
+      ? [{
+          id: 'default',
+          label: depProtected
+            ? t('fileViewer.deployLinkProtectedLabel')
+            : depDelayed
+              ? t('fileViewer.deployLinkPreparingLabel')
+              : t('fileViewer.deployResultLabel'),
+          url: depUrl,
+          status: dep.status || 'ready',
+          message: depProtected
+            ? t('fileViewer.deployLinkProtected')
+            : depDelayed
+              ? t('fileViewer.deployLinkDelayed')
+              : dep.statusMessage,
+        }]
+      : [];
+  }, [latestSocialShareDeployment, t]);
   const latestDeployedShareUrl = latestShareDeployment
     ? shareUrlForDeployment(latestShareDeployment)
     : '';
@@ -16976,6 +17151,25 @@ function HtmlViewer({
                       <div className="share-menu-section-label" role="presentation">
                         {t('fileViewer.shareMenuPublishOnline')}
                       </div>
+                      <button
+                        type="button"
+                        className="share-menu-item"
+                        role="menuitem"
+                        disabled={streaming || viewerOnly}
+                        title={
+                          viewerOnly
+                            ? viewerOnlyDisabledTitle
+                            : streaming
+                              ? t('fileViewer.shareAfterGenerationComplete')
+                              : undefined
+                        }
+                        onClick={() => {
+                          void openSocialShareFlow();
+                        }}
+                      >
+                        <span className="share-menu-icon"><RemixIcon name="share-line" size={15} /></span>
+                        <span>{t('socialShare.publishPageTitle')}</span>
+                      </button>
                       {DEPLOY_PROVIDER_OPTIONS.map((option) => (
                         <button
                           key={option.id}
@@ -18216,15 +18410,81 @@ function HtmlViewer({
                   {t(deployProvider.tokenLinkKey)}
                 </a>
               </div>
-              <div className="deploy-token-input-row">
+              <div className="deploy-token-input-row" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <input
                   ref={deployTokenInputRef}
                   id="deploy-token"
-                  type="password"
+                  type={showDeployToken ? 'text' : 'password'}
                   value={deployToken}
                   placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
                   onChange={(e) => setDeployToken(e.target.value)}
+                  style={{ width: '100%', paddingRight: '36px' }}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowDeployToken(!showDeployToken)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    color: 'var(--color-fg-muted)',
+                  }}
+                >
+                  <Icon name={showDeployToken ? 'eye-off' : 'eye'} size={16} />
+                </button>
+              </div>
+              {deployProviderId === NETLIFY_PROVIDER_ID || deployProviderId === RENDER_PROVIDER_ID || deployProviderId === RAILWAY_PROVIDER_ID ? (
+                <div className="deploy-field-grid single-field" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                  <div className="field-label-row">
+                    <label htmlFor="github-pat-token">{t('fileViewer.githubPatToken')}</label>
+                    <div className="field-label-note">
+                      {deployConfig?.githubTokenMask ? (
+                        <p className="hint">{t('fileViewer.githubPatTokenReuseHint')}</p>
+                      ) : null}
+                      <a
+                        href={`https://github.com/settings/tokens/new?scopes=${deployProviderId === NETLIFY_PROVIDER_ID ? 'repo' : 'public_repo'}&description=Open%20Design%20Deploy`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {t('fileViewer.githubPatTokenGetLink')}
+                      </a>
+                    </div>
+                  </div>
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                    <input
+                      id="github-pat-token"
+                      type={showGithubToken ? 'text' : 'password'}
+                      value={renderGithubToken}
+                      placeholder={t('fileViewer.githubPatTokenPlaceholder')}
+                      onChange={(e) => setRenderGithubToken(e.target.value)}
+                      style={{ width: '100%', paddingRight: '36px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGithubToken(!showGithubToken)}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: 'var(--color-fg-muted)',
+                      }}
+                    >
+                      <Icon name={showGithubToken ? 'eye-off' : 'eye'} size={16} />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="deploy-config-actions">
                 <button
                   type="button"
                   className="ghost-link button-like"
@@ -18316,7 +18576,7 @@ function HtmlViewer({
                     </p>
                   ) : null}
                 </>
-              ) : (
+              ) : deployProviderId === DEFAULT_DEPLOY_PROVIDER_ID ? (
                 <div className="deploy-field-grid">
                   <label>
                     <span className="deploy-field-title">{t('fileViewer.vercelTeamId')}</span>
@@ -18335,7 +18595,10 @@ function HtmlViewer({
                     />
                   </label>
                 </div>
-              )}
+              ) : null}
+              {deployProvider.previewHintKey ? (
+                <p className="hint">{t(deployProvider.previewHintKey)}</p>
+              ) : null}
               {deployError ? <p className="deploy-error">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'
@@ -18443,6 +18706,210 @@ function HtmlViewer({
                 }}
               >
                 {deployButtonLabel}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+      {workspaceActive && socialShareModalOpen && typeof document !== 'undefined' ? createPortal(
+        <div
+          className="modal-backdrop viewer-modal-backdrop social-share-flow-backdrop"
+          role="presentation"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeSocialShareModal();
+          }}
+        >
+          <div
+            className="modal deploy-modal social-share-flow-modal"
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => {
+              event.stopPropagation();
+            }}
+            style={{ maxWidth: '480px' }}
+          >
+            <div className="deploy-flow-modal__scroll">
+              <div className="modal-head">
+                <div className="kicker">{t('socialShare.projectSection')}</div>
+                <h2>{t('socialShare.publishPageTitle')}</h2>
+                <p className="subtitle">{t('socialShare.publishPageSubtitle')}</p>
+              </div>
+              <div className="deploy-form" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {deployCopyLinks.length > 1 ? (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '12px',
+                      padding: '10px 12px',
+                      background: 'var(--bg-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text)' }}>
+                      {t('fileViewer.deployProviderLabel')}
+                    </span>
+                    <select
+                      aria-label="Select deployment provider for social share"
+                      value={activeSocialShareProviderId || latestShareDeploymentDefault?.providerId || deployCopyLinks[0]?.providerId}
+                      onChange={(e) => setActiveSocialShareProviderId(e.target.value as WebDeployProviderId)}
+                      style={{
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        color: 'var(--text)',
+                        fontSize: '12px',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        minWidth: '140px',
+                      }}
+                    >
+                      {deployCopyLinks.map((item) => (
+                        <option key={item.providerId} value={item.providerId}>
+                          {item.providerLabel}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+
+                <div className={`deploy-social-share${activeProjectSocialShare ? '' : ' is-locked'}${socialShareBlockedState ? ` is-${socialShareBlockedState}` : ''}`} style={{ marginTop: 0 }}>
+                  <div className="deploy-social-share__head">
+                    <div className="deploy-social-share__label">
+                      {t('socialShare.projectSection')}
+                    </div>
+                    {socialShareDisplayUrl ? (
+                      <a
+                        className="deploy-social-share__url"
+                        href={socialShareDisplayUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {socialShareDisplayUrl}
+                      </a>
+                    ) : null}
+                  </div>
+                  {!activeProjectSocialShare || socialShareBlockedState ? (
+                    <p className="hint">{socialShareUnavailableMessage}</p>
+                  ) : null}
+                  {activeProjectSocialShare ? (
+                    <SocialShareGrid
+                      share={activeProjectSocialShare}
+                      onAfterShare={closeSocialShareModal}
+                    />
+                  ) : null}
+                  {socialShareBlockedDeployment?.url && latestSocialShareDeployment?.id === socialShareBlockedDeployment.id ? (
+                    <div className="deploy-social-share__actions">
+                      <button
+                        type="button"
+                        className="viewer-action"
+                        disabled={deployPhase === 'preparing-link'}
+                        onClick={() => {
+                          void retryDeploymentLink(latestSocialShareDeployment?.providerId);
+                        }}
+                      >
+                        {deployPhase === 'preparing-link'
+                          ? t('fileViewer.preparingPublicLink')
+                          : t('fileViewer.retryLink')}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {socialShareResultCards.length > 0 ? (
+                  <div className={`deploy-result-block ${deployResultState(latestSocialShareDeployment?.status)}`}>
+                    <div className="deploy-result-summary" style={{ padding: 0, border: 'none', background: 'transparent' }}>
+                      <div className="deploy-result-links" style={{ marginTop: 0 }}>
+                        {socialShareResultCards.map((card) => {
+                          const state = deployResultState(card.status);
+                          const canRetry = state === 'delayed' || state === 'protected';
+                          const isDisabled = state === 'protected' || state === 'failed';
+                          return (
+                            <div key={card.id} className={`deploy-result-link ${state}`} style={{ margin: 0 }}>
+                              <div className="deploy-result-link-main">
+                                <div className="deploy-result-link-head">
+                                  <span className="deploy-result-link-label">{card.label}</span>
+                                  <span className={`deploy-result-link-state ${state}`}>{statusLabelFor(state)}</span>
+                                </div>
+                                {card.message ? (
+                                  <p className="deploy-result-link-message">{card.message}</p>
+                                ) : null}
+                                <a
+                                  className="deploy-result-url"
+                                  href={card.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                >
+                                  {card.url}
+                                </a>
+                              </div>
+                              <div className="deploy-result-actions">
+                                {canRetry ? (
+                                  <button
+                                    type="button"
+                                    className="viewer-action"
+                                    disabled={deployPhase === 'preparing-link'}
+                                    onClick={() => {
+                                      void retryDeploymentLink(latestSocialShareDeployment?.providerId);
+                                    }}
+                                  >
+                                    {deployPhase === 'preparing-link'
+                                      ? t('fileViewer.preparingPublicLink')
+                                      : t('fileViewer.retryLink')}
+                                  </button>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  className="viewer-action"
+                                  onClick={() => {
+                                    void copyDeployLink(card.url);
+                                  }}
+                                >
+                                  <Icon name="copy" size={14} />
+                                  <span>{copyDeployLabel(card.url)}</span>
+                                </button>
+                                <a
+                                  className={`ghost-link ${isDisabled ? 'disabled' : ''}`}
+                                  href={isDisabled ? undefined : card.url}
+                                  target="_blank"
+                                  rel="noreferrer noopener"
+                                  aria-disabled={isDisabled}
+                                >
+                                  <Icon name="upload" size={14} />
+                                  {t('fileViewer.open')}
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className="modal-foot">
+              <button
+                type="button"
+                className="ghost-link button-like"
+                onClick={closeSocialShareModal}
+              >
+                {t('common.close') || 'Close'}
+              </button>
+              <button
+                type="button"
+                className="viewer-action primary"
+                onClick={() => {
+                  const targetProviderId = activeSocialShareProviderId || latestShareDeploymentDefault?.providerId || deployCopyLinks[0]?.providerId;
+                  setSocialShareModalOpen(false);
+                  void openDeployModal(targetProviderId, 'social-share', { fallbackToExisting: true });
+                }}
+              >
+                {t('socialShare.publishPageTitle')}
               </button>
             </div>
           </div>

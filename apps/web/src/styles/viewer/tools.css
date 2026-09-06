@@ -779,6 +779,8 @@
   right: 0;
   z-index: var(--viewer-action-menu-z);
   min-width: 300px;
+  max-height: min(560px, calc(100vh - 80px));
+  overflow-y: auto;
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
