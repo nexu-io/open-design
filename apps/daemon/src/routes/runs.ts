@@ -1015,6 +1015,32 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     | { kind: 'continuation'; value: ClarificationContinuation };
 
   /**
+   * A source Run restored from durable state may miss its applied snapshot
+   * id: `durableRunState` historically never serialized the field, so any
+   * daemon restart dropped it while the task record kept its locked snapshot.
+   * The `applied_plugin_snapshots` row keeps `run_id` FK-linked to the source
+   * Run across restarts; that link is the ownership witness authorizing this
+   * one-time backfill. A Run whose field is set must never be touched — the
+   * caller treats it as a genuine mismatch.
+   */
+  function recoverSourceRunSnapshotId(
+    task: StrategyTaskExecutionRecord,
+    sourceRun: ChatRun,
+  ): boolean {
+    if (sourceRun.appliedPluginSnapshotId) return false;
+    const linkedSnapshot = db
+      .prepare(
+        `SELECT id FROM applied_plugin_snapshots
+          WHERE id = ? AND run_id = ? AND project_id = ?`,
+      )
+      .get(task.snapshotId, sourceRun.id, task.projectId);
+    if (!linkedSnapshot) return false;
+    sourceRun.appliedPluginSnapshotId = task.snapshotId;
+    design.runs.persistState(sourceRun);
+    return true;
+  }
+
+  /**
    * Resolve only an explicit daemon-issued task handle. Conversation order is
    * never an ownership signal: an ordinary follow-up in a conversation that
    * happens to contain an awaiting strategy task must stay an ordinary Run.
@@ -1183,7 +1209,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       || sourceRun.projectId !== task.projectId
       || sourceRun.conversationId !== task.conversationId
       || sourceRun.agentId !== task.selectedAgentId
-      || sourceRun.appliedPluginSnapshotId !== task.snapshotId
+    ) {
+      return {
+        kind: 'error',
+        status: 409,
+        code: 'STRATEGY_TASK_SOURCE_RUN_INVALID',
+        message: 'strategy clarification source Run is unavailable or does not match the locked task',
+      };
+    }
+    if (
+      sourceRun.appliedPluginSnapshotId !== task.snapshotId
+      && !recoverSourceRunSnapshotId(task, sourceRun)
     ) {
       return {
         kind: 'error',
