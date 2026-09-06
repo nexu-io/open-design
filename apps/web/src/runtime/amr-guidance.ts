@@ -1122,6 +1122,78 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.accountSuspended',
     'chat.runError.accountSuspendedMessage',
   ),
+  // The `model_unavailable` family — the one failure class the daemon fully
+  // diagnoses AND prescribes for, and the only one of those that had no row in
+  // any of the three tables.
+  //
+  // `modelUnavailableDetail()` (`run-failure-classification.ts`) reads the cause
+  // out of the upstream sentence and rules the run `retryable: false` /
+  // `user_action: 'switch_model'`. Web carried only the code-keyed half of that
+  // family — `AMR_MODEL_UNAVAILABLE` in `AGENT_AGNOSTIC_FAILURE_UI` above — and a
+  // BYOK agent's model problem never arrives under that code: it arrives as the
+  // opaque `AGENT_EXECUTION_FAILED` plus one of these details. So it was
+  // structurally unreachable, fell to the rung-4 fallback, and the user was told
+  // "task failed" with 〔contact support〕 while the daemon had already written
+  // down both the cause and the cure. (Observed on a packaged Codex run whose
+  // upstream sentence was literally "The '…' model requires a newer version of
+  // Codex" — the exact string `cli_version_incompatible` matches on.)
+  //
+  // Same card as the code-keyed row, deliberately: one family, one story, and
+  // the copy, the 19 locales and the 〔switch model〕 button all already exist.
+  //
+  // Ladder rung 1, and NO retry — neither primary nor secondary. The model
+  // picker is ours and re-picking is the one act that changes the outcome;
+  // re-running the same CLI against the same model reproduces the same refusal,
+  // which is exactly what the daemon's `retryable: false` says. Note these rows
+  // do not READ that verdict: the card is right for an older daemon that ships
+  // the detail without it, which is the state the wire is actually in today.
+  //
+  // Resolved HERE and not in `DETAIL_FAILURE_UI` for three reasons:
+  //   1. The family's code-keyed row already resolves at this precedence, above
+  //      every agent branch. Splitting one card across two layers would make
+  //      "may an agent branch pre-empt this?" depend on nothing more than
+  //      whether the daemon happened to have a structured error code.
+  //   2. The difference is reachable, not theoretical. The classifier's
+  //      RATE_LIMITED branch sits BELOW its model branch, so `RATE_LIMITED` +
+  //      `model_not_supported` is a real pair — and from `DETAIL_FAILURE_UI`
+  //      the Antigravity `RATE_LIMITED` branch would claim it first and title a
+  //      model-unavailability 「速率受限」.
+  //   3. `DETAIL_FAILURE_UI` is scoped to OVERRIDING a code mapping that is
+  //      wrong or too vague. These override nothing — `AGENT_EXECUTION_FAILED`
+  //      has no row in any table.
+  //
+  // ⚠️ `provider_routing_error` is deliberately NOT here even though
+  // `modelUnavailableDetail()` also emits it: `upstreamDetail()` emits the SAME
+  // string for `upstream_unavailable` / `retryable: true` / `'retry'`, and this
+  // module receives the detail without the category, so one row would mis-card
+  // the upstream half. It needs `failureCategory` on the wire first.
+  //
+  // ⚠️ 待拍板 — `local_model_not_loaded` is the one member whose copy fits
+  // loosely. The daemon prescribes `switch_model` for it like the rest, and the
+  // family card is the honest place for it (the selected model genuinely cannot
+  // serve the run), but its literal fix is "load a model in LM Studio", not
+  // "pick another model here". Routing is right; the sentence may want its own
+  // cell. Change the wording, not the row, when product writes one.
+  cli_version_incompatible: switchModelWithGuidance(
+    'chat.runError.title.modelUnavailable',
+    'chat.runError.modelUnavailableMessage',
+  ),
+  model_not_found: switchModelWithGuidance(
+    'chat.runError.title.modelUnavailable',
+    'chat.runError.modelUnavailableMessage',
+  ),
+  model_not_supported: switchModelWithGuidance(
+    'chat.runError.title.modelUnavailable',
+    'chat.runError.modelUnavailableMessage',
+  ),
+  model_disabled: switchModelWithGuidance(
+    'chat.runError.title.modelUnavailable',
+    'chat.runError.modelUnavailableMessage',
+  ),
+  local_model_not_loaded: switchModelWithGuidance(
+    'chat.runError.title.modelUnavailable',
+    'chat.runError.modelUnavailableMessage',
+  ),
   // S30 · the five client-environment causes. Agent-agnostic on purpose and
   // resolved here, ahead of every agent branch: the proxy, the certificate
   // store, the route and the host policy belong to the user's machine, so the
