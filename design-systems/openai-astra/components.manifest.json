@@ -9,7 +9,7 @@
     "title": "openai-astra — reference components",
     "description": "Reference fixture for design-systems/openai-astra. Every visible value comes from tokens.css. The Astra launch page's signature moves: pure black canvas under a particle galaxy, white text with white-at-alpha secondaries, OpenAI Sans at 500/400, monochrome pill chrome, a single #23435f ambient glow, no shadows, no gradients.",
     "styleBlockCount": 1,
-    "selectorCount": 265,
+    "selectorCount": 267,
     "classCount": 118,
     "elementCount": 49
   },
@@ -228,6 +228,8 @@
     ".deck-thumbs button .mini b",
     ".deck-thumbs button[aria-current=\"true\"]",
     ".deck-thumbs ol",
+    ".deck:focus",
+    ".deck:focus-visible",
     ".deck:fullscreen",
     ".deck[data-thumbs=\"true\"] .deck-thumbs",
     ".field",
@@ -953,7 +955,7 @@
   ],
   "literals": {
     "colorExpressions": 57,
-    "pixelValues": 171,
+    "pixelValues": 173,
     "hardcodedFontFamilies": 0
   }
 }

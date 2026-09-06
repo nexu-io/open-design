@@ -242,6 +242,8 @@
       /* ── Slide deck (measured): 669px column, aspect 959/540, #1f1f1f, 4px radius; stage 24px side padding; 56px bar with 1px #ffffff33 top rule, 12px side padding; 32px round buttons; 14px tabular counter ── */
       .deck { display: flex; flex-direction: column; width: 100%; max-width: 669px; margin: 0 auto; aspect-ratio: 959 / 540; min-height: 240px; overflow: hidden; border-radius: 4px; background: var(--surface); color: var(--fg); pointer-events: auto; }
       .deck:fullscreen { max-width: none; border-radius: 0; aspect-ratio: auto; }
+      .deck:focus { outline: none; }
+      .deck:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
       .deck-body { display: flex; flex: 1; min-height: 0; }
       .deck-thumbs { flex: 0 0 auto; width: 0; overflow: hidden; transition: width 200ms cubic-bezier(0.33, 1, 0.68, 1); }
       .deck[data-thumbs="true"] .deck-thumbs { width: 132px; }
