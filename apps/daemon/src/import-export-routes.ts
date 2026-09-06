@@ -312,14 +312,37 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
 
       const entryFile = await detectEntryFile(normalizedPath);
       const existingMeta = existing.metadata ?? {};
-      const { orchestratorWorkspace: _existingOrchestratorWorkspace, ...preservedMeta } =
-        existingMeta;
+      const {
+        orchestratorWorkspace: _existingOrchestratorWorkspace,
+        linkedDirs: existingLinkedDirs,
+        userWorkingDir: _pendingUserWorkingDir,
+        ...preservedMeta
+      } = existingMeta;
+      const nextLinkedDirs: string[] = [];
+      if (Array.isArray(existingLinkedDirs)) {
+        for (const dir of existingLinkedDirs) {
+          let canonicalDir = dir;
+          try {
+            canonicalDir = await fs.promises.realpath(dir);
+          } catch {
+            // Preserve an existing reference that became unavailable; only
+            // remove the folder when it resolves to the new writable root.
+          }
+          if (
+            canonicalDir !== normalizedPath
+            && !nextLinkedDirs.includes(canonicalDir)
+          ) {
+            nextLinkedDirs.push(canonicalDir);
+          }
+        }
+      }
       const nextMeta = {
         ...preservedMeta,
         kind: existingMeta.kind ?? 'prototype',
         baseDir: normalizedPath,
         importedFrom: 'folder' as const,
         entryFile,
+        ...(nextLinkedDirs.length > 0 ? { linkedDirs: nextLinkedDirs } : {}),
         ...(normalizedOrchestratorWorkspace
           ? { orchestratorWorkspace: normalizedOrchestratorWorkspace }
           : {}),

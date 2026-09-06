@@ -3200,9 +3200,13 @@ export function HomeView({
         onPickWorkingDir={handlePickWorkingDir}
         onPickLocalCodeDir={handlePickLocalCodeDir}
         onSelectRecentWorkingDir={(dir) => {
+          if (isOpenDesignHostAvailable()) {
+            // A remembered path is not an authorization grant. Re-open the
+            // native picker so the selected workspace receives a fresh token.
+            void handlePickWorkingDir();
+            return;
+          }
           setWorkingDir(dir);
-          // Recents come from the browser-side picker only; they carry no
-          // desktop trust token (and linkedDirs don't need one).
           setWorkingDirToken(null);
           void rememberRecentDir(dir);
         }}
