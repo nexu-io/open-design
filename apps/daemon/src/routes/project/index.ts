@@ -93,7 +93,7 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
-import { isSafeId } from '../../projects.js';
+import { isSafeId, isSafeProjectName } from '../../projects.js';
 import {
   ensureTeamProjectCommentConversations,
   getFirstProjectConversation,
@@ -3733,6 +3733,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
+      if (!isSafeProjectName(name)) {
+        // #7042 — display names must not carry path semantics (separators,
+        // traversal segments, control chars); the id slug is the only
+        // filesystem-facing name.
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project name');
+      }
       // baseDir is privileged: it lets a project root directly inside the
       // user's filesystem. The /api/import/folder endpoint is the only
       // path that's allowed to set it, because that's where realpath() +
@@ -5198,6 +5204,11 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         }
       }
       if (typeof patch.name === 'string' && patch.name.trim().length > 0) {
+        if (!isSafeProjectName(patch.name)) {
+          // #7042 — same rule as project create; rename must not smuggle
+          // path semantics into the display name.
+          return sendApiError(res, 400, 'BAD_REQUEST', 'invalid project name');
+        }
         // Design-system workspace projects mirror their design system's
         // title: the workspace ensure re-stamps the project name from the
         // registry on every open, so a rename applied only to the project
