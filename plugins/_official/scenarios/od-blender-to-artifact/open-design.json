@@ -1,0 +1,60 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "od-blender-to-artifact",
+  "title": "Blender to artifact",
+  "title_i18n": {
+    "en": "Blender to artifact",
+    "zh-CN": "Blender 到产物",
+    "zh-TW": "Blender 到產物",
+    "ja": "Blender からアーティファクトへ",
+    "ko": "Blender에서 산출물로"
+  },
+  "version": "0.1.0",
+  "publishedAt": "2026-08-09T05:00:00Z",
+  "description": "Drive a local Blender session through MCP, render or export a still/scene asset, and wrap it as a live artifact in the project.",
+  "description_i18n": {
+    "en": "Drive a local Blender session through MCP, render or export a still/scene asset, and wrap it as a live artifact in the project.",
+    "zh-CN": "通过 MCP 驱动本机 Blender，渲染或导出静帧/场景资源，并包成项目里的 live artifact。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "Open Design",
+    "url": "https://github.com/nexu-io"
+  },
+  "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/scenarios/od-blender-to-artifact",
+  "tags": ["scenario", "first-party", "blender", "3d", "mcp"],
+  "compat": {
+    "agentSkills": [{ "path": "./SKILL.md" }]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "scenario": "blender-to-artifact",
+    "mode": "scenario",
+    "context": {
+      "skills": [{ "path": "./SKILL.md" }]
+    },
+    "pipeline": {
+      "stages": [
+        { "id": "discovery", "atoms": ["discovery-question-form"] },
+        { "id": "plan", "atoms": ["todo-write"] },
+        { "id": "generate", "atoms": ["live-artifact"] }
+      ]
+    },
+    "capabilities": ["prompt:inject", "fs:read", "fs:write"],
+    "inputs": [
+      {
+        "name": "prompt",
+        "type": "text",
+        "required": true
+      }
+    ],
+    "useCase": {
+      "query": {
+        "en": "Use the connected Blender MCP server to build or adjust the scene for: {{prompt}}. Render or export a preview still, save it under the project media folder, and wrap it with a live artifact.",
+        "zh-CN": "用已连接的 Blender MCP 按以下需求搭建或调整场景：{{prompt}}。渲染或导出预览静帧，保存到项目 media 目录，并用 live artifact 包起来。"
+      }
+    }
+  }
+}

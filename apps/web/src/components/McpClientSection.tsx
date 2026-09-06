@@ -267,6 +267,11 @@ function categoryOrder(t: Translate): ReadonlyArray<{
       hint: t('mcp.categoryPublishingHint'),
     },
     {
+      id: '3d',
+      label: t('mcp.category3d'),
+      hint: t('mcp.category3dHint'),
+    },
+    {
       id: 'utilities',
       label: t('mcp.categoryUtilities'),
       hint: t('mcp.categoryUtilitiesHint'),

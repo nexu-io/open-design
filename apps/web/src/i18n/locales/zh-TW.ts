@@ -1392,7 +1392,7 @@ export const zhTW: Dict = {
   "mcpClient.addServer": "新增伺服器",
   "mcpClient.emptyTitle": "尚未設定 MCP 伺服器。",
   "mcpClient.emptyBody":
-    "點擊「新增伺服器」即可開始 — 選擇範本（Higgsfield OpenClaw、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…），或設定自訂 stdio / HTTP 伺服器。",
+    "點擊「新增伺服器」即可開始 — 選擇範本（Higgsfield、Runway、Luma、Pollinations、Allyson、Imagician、EdgeOne Pages、GitHub、Filesystem…），或設定自訂 stdio / HTTP 伺服器。",
   "mcpClient.saveChanges": "儲存變更",
   "mcpClient.storedAt": "儲存於",
   "mcpClient.daemonError":
@@ -5262,6 +5262,8 @@ export const zhTW: Dict = {
   'mcp.categoryImageGenerationHint': '產生點陣圖、向量圖或影片素材的模型。',
   'mcp.categoryPublishing': '發布',
   'mcp.categoryPublishingHint': '將產生的產物推送到公開 URL。',
+  'mcp.category3d': '3D',
+  'mcp.category3dHint': '本機 DCC 工具（如 Blender）用於場景搭建、算繪與匯出。',
   'mcp.categoryUiComponents': 'UI 元件',
   'mcp.categoryUiComponentsHint': '設計師等級的元件、區塊和到達頁素材。',
   'mcp.categoryUtilities': '實用工具',

@@ -71,6 +71,7 @@ export type McpTemplateCategory =
   | 'ui-components'
   | 'data-viz'
   | 'publishing'
+  | '3d'
   | 'utilities';
 
 /** A built-in MCP server preset surfaced in the Settings UI's "Add MCP

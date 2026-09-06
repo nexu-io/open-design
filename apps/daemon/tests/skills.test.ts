@@ -191,6 +191,38 @@ function writeSkill(
 }
 
 describe('listSkills', () => {
+  it('preserves od.mode utility instead of inferring an exclusive media surface', async () => {
+    const root = fresh();
+    try {
+      const dir = path.join(root, 'media-stub');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        path.join(dir, 'SKILL.md'),
+        [
+          '---',
+          'name: media-stub',
+          'description: Generate images and videos via an upstream MCP.',
+          'od:',
+          '  mode: utility',
+          '  category: image-generation',
+          '---',
+          '',
+          '# media-stub',
+          '',
+        ].join('\n'),
+      );
+      const skills = await listSkills(root);
+      expect(skills).toHaveLength(1);
+      expect(skills[0]).toMatchObject({
+        id: 'media-stub',
+        mode: 'utility',
+        surface: 'web',
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('surfaces optional localized display metadata from SKILL.md frontmatter', async () => {
     const root = fresh();
     try {
@@ -296,6 +328,16 @@ describe('listSkills', () => {
     expect(skill.body).toContain('misinterpreted as daemon startup');
     expect(skill.body).toContain('trap cleanup_agent_browser EXIT INT TERM');
     expect(skill.body).toContain('pkill -f -- "--user-data-dir=${CHROME_USER_DATA_DIR}"');
+  });
+
+  it('keeps Integrations catalogue stubs on utility mode', async () => {
+    const skills = await listSkills(skillsRoot);
+    for (const id of ['blender-mcp', 'higgsfield-generate', 'runway-gen', 'luma-dream-machine'] as const) {
+      const skill = skills.find((entry: { id: string }) => entry.id === id);
+      if (!skill) throw new Error(`${id} skill not found`);
+      expect(skill.mode, id).toBe('utility');
+      expect(skill.surface, id).toBe('web');
+    }
   });
 
   it('keeps html-ppt PNG export on one managed Chromium screenshot path', async () => {

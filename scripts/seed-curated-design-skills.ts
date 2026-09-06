@@ -23,7 +23,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const SKILLS_ROOT = path.join(REPO_ROOT, 'skills');
 
-type Mode = 'image' | 'video' | 'audio' | 'deck' | 'design-system' | 'template' | 'prototype';
+type Mode =
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'deck'
+  | 'design-system'
+  | 'template'
+  | 'prototype'
+  | 'utility';
 
 interface CuratedSkill {
   // Folder + frontmatter `name`; must be a slug (a-z, 0-9, dash) so the
@@ -35,8 +43,9 @@ interface CuratedSkill {
   // Lowercase keywords / phrases the agent matches against. Aim for 3-6
   // distinct phrases per skill so triggers stay specific.
   triggers: string[];
-  // Maps to the existing `od.mode` filter. Pick the closest of the seven
-  // modes the daemon recognises; everything else falls back to "prototype".
+  // Maps to `od.mode`. Functional catalogue stubs should use `utility`
+  // so selecting them does not force an exclusive image/video/audio
+  // surface; rendering modes remain for true design-template entries.
   mode: Mode;
   // Free-form category slug that powers the new category filter row in
   // Settings → Skills. Keep the vocabulary tight so a few pills cover the
@@ -128,6 +137,99 @@ const CATALOGUE: CuratedSkill[] = [
     category: 'image-generation',
     upstream: 'https://github.com/anthropics/skills/tree/main/skills/slack-gif-creator',
     attribution: 'Curated from Anthropic\'s official skills repository.',
+  },
+  {
+    id: 'higgsfield-generate',
+    description:
+      'Image, video, 3D, and audio generation across 30+ Higgsfield models (Nano Banana, Soul, Veo, Kling, Seedance, Flux, GPT Image, …), plus Marketing Studio branded ads and Virality Predictor scoring.',
+    triggers: [
+      'higgsfield',
+      'higgsfield generate',
+      'soul generate',
+      'seedance',
+      'marketing studio',
+      'virality predictor',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+    catalogueOnlyNote:
+      'Prefer the built-in Higgsfield MCP template in Settings → Integrations (OAuth Connect) for agent tool calls. Install the full upstream skill pack with `npx skills add higgsfield-ai/skills` when you need CLI workflows.',
+  },
+  {
+    id: 'higgsfield-soul-id',
+    description:
+      'Train a Soul Character — a reusable, face-faithful identity model. Returns a reference_id consumable by Soul-aware Higgsfield generation.',
+    triggers: ['higgsfield soul', 'soul id', 'train soul', 'face identity', 'character reference'],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
+  {
+    id: 'higgsfield-product-photoshoot',
+    description:
+      'Brand-quality product imagery with mode-specific prompt enhancement — studio, lifestyle, Pinterest, hero banner, ad packs, virtual try-on, and more.',
+    triggers: [
+      'higgsfield photoshoot',
+      'product photoshoot',
+      'product shot',
+      'lifestyle product',
+      'virtual model tryout',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
+  {
+    id: 'higgsfield-brandkit',
+    description:
+      'Create or extend a complete visual identity: palettes, editable SVG logo marks, typography, mockups, social graphics, packaging, and brandbooks.',
+    triggers: [
+      'higgsfield brandkit',
+      'brand kit',
+      'visual identity',
+      'logo system',
+      'brandbook',
+    ],
+    mode: 'utility',
+    category: 'design-systems',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
+  {
+    id: 'higgsfield-youtube-thumbnail',
+    description:
+      'Create truthful, high-impact YouTube thumbnails and vertical video covers with identity-preserving references and controlled variants.',
+    triggers: [
+      'higgsfield thumbnail',
+      'youtube thumbnail',
+      'shorts cover',
+      'video cover',
+      'thumbnail variants',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
+  {
+    id: 'higgsfield-marketplace-cards',
+    description:
+      'Marketplace product cards: compliant main image, secondary product images, and A+ style modules via backend prompt enhancement.',
+    triggers: [
+      'higgsfield marketplace',
+      'marketplace cards',
+      'a+ content',
+      'product listing images',
+      'ecommerce product cards',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
   },
   {
     id: 'fal-generate',
@@ -264,6 +366,94 @@ const CATALOGUE: CuratedSkill[] = [
   // Video generation & editing
   // -------------------------------------------------------------------------
   {
+    id: 'higgsfield-video-explainer',
+    description:
+      'Create a narrated non-photoreal explainer as matched Seed Audio + Gemini Omni blocks, then assemble the final MP4 with explainer_video.',
+    triggers: [
+      'higgsfield explainer',
+      'video explainer',
+      'narrated explainer',
+      'explainer video',
+      'seed audio explainer',
+    ],
+    mode: 'utility',
+    category: 'video-generation',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
+  {
+    id: 'runway-gen',
+    description:
+      'Generate videos, images, and audio via the official Runway API skills (text/image/video-to-video, Gen-4.5, Seedance, Veo). Complements the bundled runwayml design system for brand look.',
+    triggers: [
+      'runway',
+      'runway gen',
+      'runwayml video',
+      'gen4.5',
+      'rw-generate-video',
+    ],
+    mode: 'utility',
+    category: 'video-generation',
+    upstream: 'https://github.com/runwayml/skills',
+    attribution: 'Curated from the official Runway ML skills repository.',
+    catalogueOnlyNote:
+      'Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect) for agent tool calls. Install the full upstream skill pack with `npx skills add runwayml/skills` and set RUNWAYML_API_SECRET for CLI workflows. For brand styling inside Open Design artifacts, use the bundled `runwayml` design system.',
+  },
+  {
+    id: 'rw-generate-image',
+    description:
+      'Generate still images via the official Runway API (GPT Image, Nano Banana Pro, and other Runway image models) — text-to-image and image reference workflows.',
+    triggers: [
+      'runway image',
+      'rw-generate-image',
+      'runway still',
+      'runway text to image',
+      'gpt image runway',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/runwayml/skills',
+    attribution: 'Curated from the official Runway ML skills repository.',
+    catalogueOnlyNote:
+      'Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect). Install with `npx skills add runwayml/skills` when you need the CLI skill pack.',
+  },
+  {
+    id: 'rw-generate-audio',
+    description:
+      'Generate audio via the official Runway API skills — sound design, voice, and soundtrack clips that pair with Runway video generations.',
+    triggers: [
+      'runway audio',
+      'rw-generate-audio',
+      'runway sound',
+      'runway soundtrack',
+      'runway voice',
+    ],
+    mode: 'utility',
+    category: 'audio-music',
+    upstream: 'https://github.com/runwayml/skills',
+    attribution: 'Curated from the official Runway ML skills repository.',
+    catalogueOnlyNote:
+      'Prefer the built-in Runway MCP template in Settings → Integrations (OAuth Connect). Install with `npx skills add runwayml/skills` when you need the CLI skill pack.',
+  },
+  {
+    id: 'luma-dream-machine',
+    description:
+      'Luma Dream Machine video generation and restyle — text-to-video, image-to-video, and clip modification with motion-preserving transforms.',
+    triggers: [
+      'luma',
+      'dream machine',
+      'luma video',
+      'luma dream machine',
+      'ray-2',
+    ],
+    mode: 'utility',
+    category: 'video-generation',
+    upstream: 'https://github.com/runapi-ai/luma',
+    attribution: 'Curated from the RunAPI Luma skill (Dream Machine API).',
+    catalogueOnlyNote:
+      'Prefer the built-in "Luma Dream Machine (AceDataCloud)" MCP template in Settings → Integrations (Bearer token from platform.acedata.cloud). Install with `npx skills add runapi-ai/luma -g` for the CLI skill, or use Luma docs at https://docs.lumalabs.ai.',
+  },
+  {
     id: 'remotion',
     description:
       'Programmatic video creation with React. Useful for branded explainers, social cuts, dashboards-to-video, and reproducible motion graphics.',
@@ -308,10 +498,48 @@ const CATALOGUE: CuratedSkill[] = [
     description:
       'Generate images and videos with Kling O3 — Kling\'s most powerful model family — via fal.ai.',
     triggers: ['fal kling', 'kling o3', 'kling video', 'kling image'],
-    mode: 'video',
+    mode: 'utility',
     category: 'video-generation',
     upstream: 'https://github.com/fal-ai-community/skills',
     attribution: 'Curated from the fal.ai community team.',
+    catalogueOnlyNote:
+      'Prefer the built-in Kling (AceDataCloud) MCP template in Settings → Integrations for direct Kling tools, or fal.ai MCP / this fal-kling-o3 skill when you already use FAL_KEY.',
+  },
+  {
+    id: 'midjourney-gen',
+    description:
+      'Midjourney image and video generation via third-party MCP/API proxies (imagine, blend, edit, describe). Complements Higgsfield/Runway when you specifically want Midjourney aesthetics.',
+    triggers: [
+      'midjourney',
+      'mj imagine',
+      'midjourney blend',
+      'midjourney video',
+      'midjourney describe',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://github.com/AceDataCloud/MidjourneyMCP',
+    attribution: 'Curated against the AceDataCloud Midjourney MCP surface (unofficial Midjourney proxy).',
+    catalogueOnlyNote:
+      'Prefer the built-in Midjourney (AceDataCloud) MCP template in Settings → Integrations (Bearer token from platform.acedata.cloud). Midjourney has no official public MCP.',
+  },
+  {
+    id: 'adobe-firefly',
+    description:
+      'Adobe Firefly generative image workflows for commercially safer brand assets — text-to-image, generative fill, and Firefly-powered creative production.',
+    triggers: [
+      'adobe firefly',
+      'firefly',
+      'firefly image',
+      'adobe generative',
+      'commercially safe image',
+    ],
+    mode: 'utility',
+    category: 'image-generation',
+    upstream: 'https://developer.adobe.com/firefly-services/',
+    attribution: 'Catalogue stub pointing at Adobe Firefly Services docs.',
+    catalogueOnlyNote:
+      'No first-party Firefly MCP template yet. Use Adobe Firefly Services / Creative Cloud APIs with your Adobe credentials, or generate via fal / Runway / Higgsfield MCP and apply Firefly brand rules manually.',
   },
   {
     id: 'venice-video',
@@ -391,6 +619,24 @@ const CATALOGUE: CuratedSkill[] = [
   // -------------------------------------------------------------------------
   // 3D, shaders, generative
   // -------------------------------------------------------------------------
+  {
+    id: 'blender-mcp',
+    description:
+      'Drive local Blender 4.2+ from the agent via MCP — scene perception, modeling, materials, nodes, render, and import/export. Pair with the Blender MCP templates in Settings → Integrations.',
+    triggers: [
+      'blender',
+      'blender mcp',
+      'bpy',
+      '3d scene blender',
+      'render in blender',
+    ],
+    mode: 'utility',
+    category: '3d-shaders',
+    upstream: 'https://github.com/ageless-h/blender-mcp',
+    attribution: 'Curated from the ageless-h Blender MCP project (also see dcc-mcp/dcc-mcp-blender).',
+    catalogueOnlyNote:
+      'Enable the Blender (ageless MCP) or Blender (DCC MCP HTTP) template under Settings → Integrations, install the matching Blender addon, and keep Blender running with its MCP server started before asking the agent to call tools.',
+  },
   {
     id: 'fal-3d',
     description:
@@ -1023,6 +1269,38 @@ const CATALOGUE: CuratedSkill[] = [
   // -------------------------------------------------------------------------
   // Web artifacts & creative HTML output
   // -------------------------------------------------------------------------
+  {
+    id: 'higgsfield-websites',
+    description:
+      'Build, edit, and deploy full-stack websites — React 19 + TanStack Start as a Cloudflare Worker with D1 / R2 / KV / Durable Objects. Create → repo access → edit → push → deploy.',
+    triggers: [
+      'higgsfield websites',
+      'higgsfield website',
+      'deploy cloudflare site',
+      'tanstack start site',
+      'higgsfield web app',
+    ],
+    mode: 'utility',
+    category: 'web-artifacts',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
+  {
+    id: 'higgsfield-game-generation',
+    description:
+      'Plan, build, verify, and deploy playable browser games, or generate game-specific sprites, textures, rigged 3D assets, and audio via Higgsfield.',
+    triggers: [
+      'higgsfield game',
+      'browser game generation',
+      'playable game',
+      'game sprites',
+      'game assets generate',
+    ],
+    mode: 'utility',
+    category: 'web-artifacts',
+    upstream: 'https://github.com/higgsfield-ai/skills',
+    attribution: 'Curated from the official Higgsfield AI skills repository.',
+  },
   {
     id: 'artifacts-builder',
     description:

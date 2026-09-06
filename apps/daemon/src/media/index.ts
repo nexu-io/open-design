@@ -116,7 +116,7 @@ type ProgressFn = (message: string) => void;
 type DesktopFrameRenderer = (
   input: DesktopRenderFramesInput,
 ) => Promise<DesktopRenderFramesResult>;
-type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string };
+type ImageRef = { path: string; abs: string; mime: string; size: number; dataUrl: string; remoteUrl?: string };
 type MediaRequestInit = Pick<RequestInit, 'dispatcher'>;
 type MediaContext = {
   surface: MediaSurface;
@@ -234,11 +234,25 @@ function stubsAllowed() {
  * Security: refuses anything that escapes the project directory.
  * Without this guard, an agent (or a hallucinated arg) could ask the
  * daemon to upload `/etc/passwd` to a paid model.
+ *
+ * HTTPS URLs are accepted as-is for providers (e.g. Luma) that can only
+ * fetch publicly reachable frames — they never touch the local FS.
  */
 async function resolveProjectImage(rel: unknown, projectDir: string): Promise<ImageRef | null> {
   if (typeof rel !== 'string' || !rel.trim()) return null;
+  const trimmed = rel.trim();
+  if (/^https:\/\//i.test(trimmed)) {
+    return {
+      path: trimmed,
+      abs: trimmed,
+      mime: 'image/jpeg',
+      size: 0,
+      dataUrl: '',
+      remoteUrl: trimmed,
+    };
+  }
   const projectRootResolved = path.resolve(projectDir);
-  const abs = path.resolve(projectRootResolved, rel.trim());
+  const abs = path.resolve(projectRootResolved, trimmed);
   if (
     abs !== projectRootResolved &&
     !abs.startsWith(projectRootResolved + path.sep)
@@ -283,7 +297,7 @@ async function resolveProjectImage(rel: unknown, projectDir: string): Promise<Im
     );
   }
   return {
-    path: rel.trim(),
+    path: trimmed,
     abs,
     mime,
     size: bytes.length,
@@ -776,6 +790,21 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'fal' && surface === 'video') {
       const result = await renderFalVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'runway' && surface === 'image') {
+      const result = await renderRunwayImage(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'runway' && surface === 'video') {
+      const result = await renderRunwayVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'luma' && surface === 'video') {
+      const result = await renderLumaVideo(ctx, credentials, args.onProgress);
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;
@@ -4351,6 +4380,391 @@ function truncate(s: unknown, n: number): string {
   const v = String(s || '');
   if (v.length <= n) return v;
   return v.slice(0, n - 1) + '…';
+}
+
+const RUNWAY_API_VERSION = '2024-11-06';
+const RUNWAY_DEFAULT_BASE = 'https://api.dev.runwayml.com';
+const RUNWAY_IMAGE_MODEL_MAP: Record<string, string> = {
+  'runway-gen-image': 'gen4_image',
+};
+const RUNWAY_VIDEO_MODEL_MAP: Record<string, string> = {
+  'runway-gen-4.5': 'gen4.5',
+};
+
+function runwayHeaders(apiKey: string): Record<string, string> {
+  return {
+    authorization: `Bearer ${apiKey}`,
+    'content-type': 'application/json',
+    'X-Runway-Version': RUNWAY_API_VERSION,
+  };
+}
+
+function runwayImageRatio(aspect?: string): string {
+  if (aspect === '9:16') return '1080:1920';
+  if (aspect === '1:1') return '1024:1024';
+  if (aspect === '4:3') return '1440:1080';
+  if (aspect === '3:4') return '1080:1440';
+  return '1920:1080';
+}
+
+function runwayVideoRatio(aspect?: string): string {
+  if (aspect === '9:16') return '720:1280';
+  if (aspect === '1:1') return '960:960';
+  if (aspect === '4:3') return '1104:832';
+  if (aspect === '3:4') return '832:1104';
+  return '1280:720';
+}
+
+async function pollRunwayTask(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  baseUrl: string,
+  taskId: string,
+  onProgress?: ProgressFn,
+): Promise<{ output: string[] }> {
+  const configuredMaxMs = Number(process.env.OD_RUNWAY_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 10 * 60 * 1000;
+  const startedAt = Date.now();
+  let lastStatus = '';
+  while (Date.now() - startedAt < maxMs) {
+    await sleep(5000);
+    const pollResp = await fetch(
+      `${baseUrl}/v1/tasks/${encodeURIComponent(taskId)}`,
+      withMediaRequestInit(ctx, {
+        headers: {
+          authorization: `Bearer ${credentials.apiKey}`,
+          'X-Runway-Version': RUNWAY_API_VERSION,
+        },
+      }),
+    );
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(`runway poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`runway poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+    lastStatus = String(pollData.status || '');
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`runway task ${taskId} status=${lastStatus || 'PENDING'} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastStatus === 'SUCCEEDED') {
+      const output = Array.isArray(pollData.output)
+        ? pollData.output.filter((u: unknown): u is string => typeof u === 'string' && u.length > 0)
+        : [];
+      if (output.length === 0) {
+        throw new Error(`runway task ${taskId} succeeded with empty output`);
+      }
+      return { output };
+    }
+    if (lastStatus === 'FAILED' || lastStatus === 'CANCELLED') {
+      const reason = pollData.failure || pollData.failureCode || lastStatus;
+      throw new Error(`runway task ${lastStatus.toLowerCase()}: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
+    }
+  }
+  const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+  throw new Error(
+    `runway timed out after ${elapsedSec}s waiting for SUCCEEDED `
+    + `(last status: ${lastStatus || 'PENDING'}). Raise OD_RUNWAY_MAX_POLL_MS if needed.`,
+  );
+}
+
+async function renderRunwayImage(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Runway credentials — set RUNWAYML_API_SECRET / OD_RUNWAY_API_KEY or configure a key in Settings → Media',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || RUNWAY_DEFAULT_BASE).replace(/\/$/, '');
+  const wireModel = (
+    credentials.model
+    || RUNWAY_IMAGE_MODEL_MAP[ctx.model]
+    || RUNWAY_IMAGE_MODEL_MAP[ctx.wireModel]
+    || (ctx.wireModel.startsWith('gen4_') || ctx.wireModel.startsWith('gemini_')
+      ? ctx.wireModel
+      : 'gen4_image')
+  ).trim();
+  const ratio = runwayImageRatio(ctx.aspect);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    promptText: ctx.prompt || 'A detailed product photograph.',
+    ratio,
+  };
+  if (ctx.imageRef?.dataUrl) {
+    body.referenceImages = [{ uri: ctx.imageRef.dataUrl, tag: 'ref' }];
+  }
+
+  const submitResp = await fetch(`${baseUrl}/v1/text_to_image`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: runwayHeaders(credentials.apiKey),
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`runway image submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`runway image non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const taskId = submitData?.id;
+  if (typeof taskId !== 'string' || !taskId) {
+    throw new Error(`runway image submit missing task id: ${truncate(submitText, 200)}`);
+  }
+  if (typeof onProgress === 'function') {
+    onProgress(`runway image task ${taskId} accepted; polling status…`);
+  }
+  const { output } = await pollRunwayTask(ctx, credentials, baseUrl, taskId, onProgress);
+  const imageUrl = output[0];
+  if (!imageUrl) throw new Error(`runway image task ${taskId} succeeded with empty output`);
+  const dlResp = await fetch(imageUrl, withMediaRequestInit(ctx));
+  if (!dlResp.ok) throw new Error(`runway image fetch ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  return {
+    bytes,
+    providerNote: `runway/${wireModel} · ${ratio} · ${bytes.length} bytes`,
+    suggestedExt: '.png',
+  };
+}
+
+async function renderRunwayVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Runway credentials — set RUNWAYML_API_SECRET / OD_RUNWAY_API_KEY or configure a key in Settings → Media',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || RUNWAY_DEFAULT_BASE).replace(/\/$/, '');
+  const wireModel = (
+    credentials.model
+    || RUNWAY_VIDEO_MODEL_MAP[ctx.model]
+    || RUNWAY_VIDEO_MODEL_MAP[ctx.wireModel]
+    || (ctx.wireModel.includes('.') || ctx.wireModel.startsWith('gen') || ctx.wireModel.startsWith('veo') || ctx.wireModel.startsWith('seedance')
+      ? ctx.wireModel
+      : 'gen4.5')
+  ).trim();
+  const ratio = runwayVideoRatio(ctx.aspect);
+  const duration = Math.min(Math.max(ctx.length || 5, 2), 10);
+  const body: Record<string, unknown> = {
+    model: wireModel,
+    promptText: ctx.prompt || 'A short cinematic clip.',
+    ratio,
+    duration,
+  };
+  const endpoint = ctx.imageRef?.dataUrl ? '/v1/image_to_video' : '/v1/text_to_video';
+  if (ctx.imageRef?.dataUrl) {
+    body.promptImage = ctx.imageRef.dataUrl;
+  }
+
+  const submitResp = await fetch(`${baseUrl}${endpoint}`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: runwayHeaders(credentials.apiKey),
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`runway video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`runway video non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const taskId = submitData?.id;
+  if (typeof taskId !== 'string' || !taskId) {
+    throw new Error(`runway video submit missing task id: ${truncate(submitText, 200)}`);
+  }
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(`runway ${mode} task ${taskId} accepted; polling status…`);
+  }
+  const { output } = await pollRunwayTask(ctx, credentials, baseUrl, taskId, onProgress);
+  const videoUrl = output[0];
+  if (!videoUrl) throw new Error(`runway video task ${taskId} succeeded with empty output`);
+  const dlResp = await fetch(videoUrl, withMediaRequestInit(ctx));
+  if (!dlResp.ok) throw new Error(`runway video fetch ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  return {
+    bytes,
+    providerNote: `runway/${wireModel} · ${ratio} · ${duration}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
+}
+
+const LUMA_DEFAULT_BASE = 'https://api.lumalabs.ai/dream-machine/v1';
+const LUMA_VIDEO_MODEL_MAP: Record<string, string> = {
+  'luma-ray-2': 'ray-2',
+};
+
+function lumaAspectFor(aspect?: string): string {
+  if (
+    aspect === '1:1'
+    || aspect === '16:9'
+    || aspect === '9:16'
+    || aspect === '4:3'
+    || aspect === '3:4'
+    || aspect === '21:9'
+    || aspect === '9:21'
+  ) {
+    return aspect;
+  }
+  return '16:9';
+}
+
+async function renderLumaVideo(
+  ctx: MediaContext,
+  credentials: ProviderConfig,
+  onProgress?: ProgressFn,
+): Promise<RenderResult> {
+  if (!credentials.apiKey) {
+    throw new Error(
+      'no Luma credentials — set LUMAAI_API_KEY / OD_LUMA_API_KEY or configure a key in Settings → Media',
+    );
+  }
+  const baseUrl = (credentials.baseUrl || LUMA_DEFAULT_BASE).replace(/\/$/, '');
+  const wireModel = (
+    credentials.model
+    || LUMA_VIDEO_MODEL_MAP[ctx.model]
+    || LUMA_VIDEO_MODEL_MAP[ctx.wireModel]
+    || (ctx.wireModel.startsWith('ray') ? ctx.wireModel : 'ray-2')
+  ).trim();
+  const aspectRatio = lumaAspectFor(ctx.aspect);
+  const durationSec = ctx.length === 9 ? 9 : 5;
+  const body: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A short cinematic clip.',
+    model: wireModel,
+    aspect_ratio: aspectRatio,
+    resolution: '720p',
+    duration: `${durationSec}s`,
+  };
+  if (ctx.imageRef) {
+    // Dream Machine only accepts publicly reachable HTTPS frame URLs —
+    // local project files resolve to data URIs which Luma cannot fetch.
+    const remoteUrl = ctx.imageRef.remoteUrl;
+    if (!remoteUrl) {
+      throw new Error(
+        'Luma image-to-video requires a publicly reachable HTTPS image URL '
+        + '(Dream Machine cannot fetch local project files or data URIs). '
+        + 'Host the start frame on a CDN and pass --image https://…, or omit --image for text-to-video.',
+      );
+    }
+    body.keyframes = {
+      frame0: { type: 'image', url: remoteUrl },
+    };
+  }
+
+  const submitResp = await fetch(`${baseUrl}/generations`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${credentials.apiKey}`,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  }));
+  const submitText = await submitResp.text();
+  if (!submitResp.ok) {
+    throw new Error(`luma video submit ${submitResp.status}: ${truncate(submitText, 240)}`);
+  }
+  let submitData: any;
+  try {
+    submitData = JSON.parse(submitText);
+  } catch {
+    throw new Error(`luma video non-JSON: ${truncate(submitText, 200)}`);
+  }
+  const generationId = submitData?.id;
+  if (typeof generationId !== 'string' || !generationId) {
+    throw new Error(`luma video submit missing generation id: ${truncate(submitText, 200)}`);
+  }
+
+  const configuredMaxMs = Number(process.env.OD_LUMA_MAX_POLL_MS);
+  const maxMs =
+    Number.isFinite(configuredMaxMs) && configuredMaxMs >= 60_000
+      ? configuredMaxMs
+      : 10 * 60 * 1000;
+  const startedAt = Date.now();
+  let lastState = String(submitData.state || '');
+  let videoUrl: string | null = submitData?.assets?.video || null;
+
+  if (typeof onProgress === 'function') {
+    const mode = ctx.imageRef ? 'i2v' : 't2v';
+    onProgress(`luma ${mode} generation ${generationId} accepted; polling status…`);
+  }
+
+  while (!videoUrl && Date.now() - startedAt < maxMs) {
+    await sleep(5000);
+    const pollResp = await fetch(
+      `${baseUrl}/generations/${encodeURIComponent(generationId)}`,
+      withMediaRequestInit(ctx, {
+        headers: {
+          authorization: `Bearer ${credentials.apiKey}`,
+          accept: 'application/json',
+        },
+      }),
+    );
+    const pollText = await pollResp.text();
+    if (!pollResp.ok) {
+      throw new Error(`luma poll ${pollResp.status}: ${truncate(pollText, 240)}`);
+    }
+    let pollData: any;
+    try {
+      pollData = JSON.parse(pollText);
+    } catch {
+      throw new Error(`luma poll non-JSON: ${truncate(pollText, 200)}`);
+    }
+    lastState = String(pollData.state || '');
+    if (typeof onProgress === 'function') {
+      const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+      onProgress(`luma generation ${generationId} state=${lastState || 'pending'} (elapsed ${elapsedSec}s)`);
+    }
+    if (lastState === 'completed') {
+      videoUrl = typeof pollData?.assets?.video === 'string' ? pollData.assets.video : null;
+      if (!videoUrl) {
+        throw new Error(
+          `luma generation ${generationId} completed with no assets.video URL`,
+        );
+      }
+      break;
+    }
+    if (lastState === 'failed') {
+      const reason = pollData?.failure_reason || pollData?.error || lastState;
+      throw new Error(`luma generation failed: ${typeof reason === 'string' ? reason : JSON.stringify(reason)}`);
+    }
+  }
+
+  if (!videoUrl) {
+    const elapsedSec = Math.round((Date.now() - startedAt) / 1000);
+    throw new Error(
+      `luma timed out after ${elapsedSec}s waiting for completed `
+      + `(last state: ${lastState || 'pending'}). Raise OD_LUMA_MAX_POLL_MS if needed.`,
+    );
+  }
+
+  const dlResp = await fetch(videoUrl, withMediaRequestInit(ctx));
+  if (!dlResp.ok) throw new Error(`luma video fetch ${dlResp.status}`);
+  const bytes = Buffer.from(await dlResp.arrayBuffer());
+  return {
+    bytes,
+    providerNote: `luma/${wireModel} · ${aspectRatio} · ${durationSec}s · ${bytes.length} bytes`,
+    suggestedExt: '.mp4',
+  };
 }
 
 function sleep(ms: number): Promise<void> {
