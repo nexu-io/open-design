@@ -7,7 +7,11 @@
 
 import { describe, expect, it } from 'vitest';
 import path from 'node:path';
-import { applyPlugin, MissingInputError } from '../src/plugins/apply.js';
+import {
+  applyPlugin,
+  MissingInputError,
+  PluginApplyConfigurationError,
+} from '../src/plugins/apply.js';
 import { defaultRegistryRoots } from '../src/plugins/registry.js';
 import { TRUSTED_DEFAULT_CAPABILITIES } from '../src/plugins/trust.js';
 import type { ContextItem, InstalledPluginRecord } from '@open-design/contracts';
@@ -69,6 +73,15 @@ describe('applyPlugin', () => {
 
   it('throws MissingInputError when a required input is missing', () => {
     expect(() => applyPlugin({ plugin: pluginFixture(), inputs: {}, registry: REGISTRY })).toThrow(MissingInputError);
+  });
+
+  it('rejects a malformed persisted manifest at the apply boundary', () => {
+    const plugin = pluginFixture({
+      manifest: { name: 'sample-plugin' } as InstalledPluginRecord['manifest'],
+    });
+
+    expect(() => applyPlugin({ plugin, inputs: {}, registry: REGISTRY }))
+      .toThrow(PluginApplyConfigurationError);
   });
 
   it('coerces optional inputs by defaulting when blank', () => {

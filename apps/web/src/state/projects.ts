@@ -10,7 +10,15 @@ import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { isDaemonProxyConnectionFailure } from '../runtime/daemon-proxy-failure';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
-import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
+import {
+  API_ERROR_CODES,
+  LegacyPluginApplyErrorResponseSchema,
+  PLUGIN_APPLY_ERROR_CONTRACT_HEADER,
+  PLUGIN_APPLY_ERROR_CONTRACT_VERSION,
+  PluginApplyErrorResponseSchema,
+  PluginApplyWorkspaceContextErrorResponseSchema,
+  type ApiErrorCode,
+} from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
   ApplyResult,
@@ -2599,6 +2607,32 @@ export interface PluginMarketplaceMutationOutcome {
   message: string;
 }
 
+export type PluginApplyDiagnosis =
+  | { code: 'PLUGIN_INPUTS_MISSING'; fields: string[] }
+  | {
+      code: 'PLUGIN_CONFIGURATION_INVALID';
+      reason: 'manifest_invalid' | 'internal_strategy_invalid';
+    }
+  | { code: 'PLUGIN_RESOURCE_UNAVAILABLE' }
+  | { code: 'PLUGIN_APPLY_FAILED' }
+  | { code: 'WORKSPACE_CONTEXT_INCOMPLETE' }
+  | { code: 'PLUGIN_NOT_FOUND' };
+
+export type PluginApplyFailure = {
+  ok: false;
+  diagnosis: PluginApplyDiagnosis;
+};
+
+export type ApplyPluginOutcome =
+  | (ApplyResult & { ok?: true })
+  | PluginApplyFailure;
+
+export function pluginApplyFailed(
+  result: ApplyPluginOutcome | null,
+): result is PluginApplyFailure {
+  return result !== null && result.ok === false;
+}
+
 export async function listPluginMarketplaces(): Promise<PluginMarketplace[]> {
   try {
     const resp = await fetch('/api/marketplaces');
@@ -2696,7 +2730,7 @@ export async function applyPlugin(
     pluginSource?: string;
     workspaceContext?: WorkspaceCollabContext | null;
   } = {},
-): Promise<ApplyResult | null> {
+): Promise<ApplyPluginOutcome | null> {
   try {
     const requestBody = JSON.stringify({
       ...(options.pluginSource ? { source: options.pluginSource } : {}),
@@ -2712,6 +2746,7 @@ export async function applyPlugin(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          [PLUGIN_APPLY_ERROR_CONTRACT_HEADER]: PLUGIN_APPLY_ERROR_CONTRACT_VERSION,
           ...(!options.pluginSource && options.workspaceContext
             ? workspaceProjectHeaders(options.workspaceContext)
             : {}),
@@ -2724,9 +2759,64 @@ export async function applyPlugin(
     // daemons still accept old ID-only clients through /apply; during the brief
     // new-Web/old-daemon upgrade window, omitting the plugin is safer than
     // silently substituting different local bytes.
-    if (!resp.ok) return null;
-    const json = (await resp.json()) as ApplyResult & { ok?: boolean };
+    if (!resp.ok) {
+      if (await isDaemonProxyConnectionFailure(resp)) return null;
+      const diagnosis = await readPluginApplyDiagnosis(resp);
+      return diagnosis ? { ok: false, diagnosis } : null;
+    }
+    const json = (await resp.json()) as ApplyPluginOutcome;
     return json;
+  } catch {
+    return null;
+  }
+}
+
+async function readPluginApplyDiagnosis(
+  resp: Response,
+): Promise<PluginApplyDiagnosis | null> {
+  const contentType = (resp.headers.get('content-type') ?? '').toLowerCase();
+  if (contentType.includes('text/html')) return null;
+
+  if (!contentType || contentType.includes('application/json')) {
+    try {
+      const json: unknown = await resp.clone().json();
+      const parsed = PluginApplyErrorResponseSchema.safeParse(json);
+      if (parsed.success) {
+        const diagnosis = parsed.data.error;
+        if (diagnosis.code === 'PLUGIN_INPUTS_MISSING') {
+          return { code: diagnosis.code, fields: diagnosis.details.fields };
+        }
+        if (diagnosis.code === 'PLUGIN_CONFIGURATION_INVALID') {
+          return { code: diagnosis.code, reason: diagnosis.details.reason };
+        }
+        return { code: diagnosis.code };
+      }
+
+      const legacy = LegacyPluginApplyErrorResponseSchema.safeParse(json);
+      if (legacy.success) {
+        if (legacy.data.error === 'missing_inputs') {
+          return { code: 'PLUGIN_INPUTS_MISSING', fields: legacy.data.fields };
+        }
+        if (legacy.data.error === 'plugin_apply_failed') {
+          return { code: 'PLUGIN_APPLY_FAILED' };
+        }
+        return { code: 'PLUGIN_NOT_FOUND' };
+      }
+
+      const workspaceContext = PluginApplyWorkspaceContextErrorResponseSchema.safeParse(json);
+      if (workspaceContext.success) return { code: 'WORKSPACE_CONTEXT_INCOMPLETE' };
+      return null;
+    } catch {
+      if (contentType.includes('application/json')) return null;
+    }
+  }
+
+  if (contentType && !contentType.includes('text/plain')) return null;
+  try {
+    const message = (await resp.text()).trim();
+    return message === 'not found' || message === 'plugin not found'
+      ? { code: 'PLUGIN_NOT_FOUND' }
+      : null;
   } catch {
     return null;
   }
@@ -2734,7 +2824,7 @@ export async function applyPlugin(
 
 async function readErrorMessage(resp: Response): Promise<string> {
   try {
-    const json = (await resp.json()) as {
+    const json = (await resp.clone().json()) as {
       error?: string | { message?: string; data?: { errors?: unknown } };
       errors?: unknown;
       message?: string;
@@ -2749,7 +2839,7 @@ async function readErrorMessage(resp: Response): Promise<string> {
     if (message && details.length > 0) return `${message}: ${details.join('; ')}`;
     if (message) return message;
   } catch {
-    // Fall through to the status text below.
+    // Fall through to the bounded status fallback below.
   }
   return resp.statusText || `HTTP ${resp.status}`;
 }

@@ -32,6 +32,7 @@ import {
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
   resolvedWorkspaceContextForWrite,
+  removePluginMarketplace,
   startGeneratedPluginShareTask,
   uploadPluginFolder,
   waitGeneratedPluginShareTask,
@@ -429,6 +430,7 @@ describe('applyPlugin', () => {
       grantCaps: [],
       locale: 'zh-CN',
     });
+    expect(new Headers(init?.headers).get('x-od-plugin-apply-error-contract')).toBe('2');
   });
 
   it('uses the selected local source without Workspace headers', async () => {
@@ -445,6 +447,7 @@ describe('applyPlugin', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/plugins/shared-plugin-id/apply-local');
     expect(new Headers(init?.headers).has('x-od-workspace-id')).toBe(false);
+    expect(new Headers(init?.headers).get('x-od-plugin-apply-error-contract')).toBe('2');
     expect(JSON.parse(String(init?.body))).toMatchObject({
       source: 'team:plugin:workspace-a:shared-plugin-id',
       inputs: {},
@@ -464,7 +467,10 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('bundled-plugin', {
       pluginSource: 'bundled:bundled-plugin',
-    })).resolves.toBeNull();
+    })).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_NOT_FOUND' },
+    });
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/plugins/bundled-plugin/apply-local',
@@ -474,14 +480,177 @@ describe('applyPlugin', () => {
   it('does not fall back when the new local resolver rejects a source', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({ error: 'plugin not found' }),
-      { status: 404, headers: { 'x-od-plugin-apply-local': '1' } },
+      {
+        status: 404,
+        headers: {
+          'content-type': 'application/json',
+          'x-od-plugin-apply-local': '1',
+        },
+      },
     ));
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(applyPlugin('shared-plugin-id', {
       pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
-    })).resolves.toBeNull();
+    })).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_NOT_FOUND' },
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not expose an HTML server error from plugin apply', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      '<!doctype html><html><body><pre>MissingInputError: workspace_name\n    at /Users/alice/open-design/plugins/apply.ts:42:1</pre></body></html>',
+      { status: 500, headers: { 'content-type': 'text/html; charset=utf-8' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it('keeps the localized fallback when plugin apply cannot reach the daemon', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => {
+      throw new TypeError('fetch failed: connect ECONNREFUSED 127.0.0.1:18544');
+    }));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it('preserves the bounded missing-input diagnosis', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(
+      { error: 'missing_inputs', fields: ['workspace_name'] },
+      { status: 422 },
+    )));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_INPUTS_MISSING', fields: ['workspace_name'] },
+    });
+  });
+
+  it('distinguishes a safe daemon apply failure from a transport failure', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(
+      { error: 'plugin_apply_failed' },
+      { status: 500 },
+    )));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'PLUGIN_APPLY_FAILED' },
+    });
+  });
+
+  it('preserves the bounded workspace-context diagnosis from the apply route', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'both workspace and member identity are required',
+      },
+    }, { status: 400 })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({
+      ok: false,
+      diagnosis: { code: 'WORKSPACE_CONTEXT_INCOMPLETE' },
+    });
+  });
+
+  it.each([
+    {
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'workspace failed at /Users/alice/private/plugin.ts',
+      },
+    },
+    {
+      error: {
+        code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+        message: 'both workspace and member identity are required',
+        details: { path: '/Users/alice/private/plugin.ts' },
+      },
+    },
+    {
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Plugin failed at /Users/alice/private/plugin.ts',
+      },
+    },
+  ])('rejects an unsafe shared API error from plugin apply %#', async (body) => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(body, { status: 400 })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it.each([
+    [
+      500,
+      {
+        error: {
+          code: 'PLUGIN_RESOURCE_UNAVAILABLE',
+          message: 'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+          details: { reason: 'required_resource_missing' },
+        },
+      },
+      { code: 'PLUGIN_RESOURCE_UNAVAILABLE' },
+    ],
+    [
+      422,
+      {
+        error: {
+          code: 'PLUGIN_CONFIGURATION_INVALID',
+          message: 'Plugin configuration is invalid. Reinstall or update the plugin and try again.',
+          details: { reason: 'manifest_invalid' },
+        },
+      },
+      { code: 'PLUGIN_CONFIGURATION_INVALID', reason: 'manifest_invalid' },
+    ],
+  ] as const)('maps a diagnosed daemon apply failure with status %i to an actionable state', async (
+    status,
+    body,
+    diagnosis,
+  ) => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(body, { status })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({ ok: false, diagnosis });
+  });
+
+  it('rejects a daemon diagnosis that adds an unbounded raw path', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'PLUGIN_RESOURCE_UNAVAILABLE',
+        message: 'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+        details: {
+          reason: 'required_resource_missing',
+          path: '/Volumes/PortableSSD/private-plugin/open-design.json',
+        },
+      },
+    }, { status: 500 })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it.each([
+    ['application/json', JSON.stringify({ error: 'connect ECONNREFUSED 127.0.0.1:18544' })],
+    ['application/json', JSON.stringify({ error: 'Plugin failed at /Users/alice/open-design/plugin.ts' })],
+    ['application/json', JSON.stringify({ error: 'ENOENT: /Volumes/PortableSSD/plugin.json' })],
+    ['application/json', JSON.stringify({ error: 'Error: boom at applyPlugin (apps/daemon/src/routes/plugins/index.ts:432:20)' })],
+    ['application/json', JSON.stringify({ error: 'Plugin failed\n    at apply (/private/tmp/plugin.ts:4:2)' })],
+    ['application/json', JSON.stringify({ error: 'x'.repeat(301) })],
+    ['application/json', JSON.stringify({
+      error: {
+        code: 'PLUGIN_UNKNOWN_FAILURE',
+        message: 'Plugin failed at /Users/alice/open-design/plugin.ts',
+      },
+    })],
+    ['text/plain', 'connect ECONNREFUSED 127.0.0.1:18544'],
+    ['text/plain', 'connect ETIMEDOUT 127.0.0.1:18544'],
+  ])('rejects an unsafe %s plugin apply diagnosis', async (contentType, body) => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(body, {
+      status: 500,
+      headers: { 'content-type': contentType },
+    })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
   });
 
   it('scopes same-id plugin apply requests to the exact A/B workspace', async () => {
@@ -517,6 +686,28 @@ describe('applyPlugin', () => {
       ['ws-a', 'wm-a'],
       ['ws-b', 'wm-b'],
     ]);
+  });
+});
+
+describe('plugin marketplace errors', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('does not expose a raw non-JSON response body', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      '<!doctype html><pre>Error: boom at /Users/alice/open-design/marketplace.ts:42:1</pre>',
+      {
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: { 'content-type': 'text/html' },
+      },
+    )));
+
+    await expect(removePluginMarketplace('community')).resolves.toEqual({
+      ok: false,
+      message: 'Internal Server Error',
+    });
   });
 });
 

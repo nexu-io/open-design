@@ -43,12 +43,14 @@ import {
   trackRecentProjectsClick,
 } from '../analytics/events';
 import {
+  type ApplyPluginOutcome,
   applyPlugin,
   createProject,
   duplicatePluginAsProject,
   listPlugins,
   listPluginsFresh,
   pluginCatalogCacheKey,
+  pluginApplyFailed,
   readCachedVisiblePlugins,
   patchProject,
   resolvedWorkspaceContextForWrite,
@@ -60,6 +62,7 @@ import { FigmaImportModal } from './FigmaImportModal';
 import { fetchMcpServers } from '../state/mcp';
 import { takeHomeComposerAssetSeed } from '../state/libraryHandoff';
 import { useI18n, useT } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import {
   formatModelWindowRetryAt,
   modelWindowLimitCopy,
@@ -1574,13 +1577,17 @@ export function HomeView({
 
     const result = await resolveActivePlugin(record, optimisticInputs, applyRequestId);
     if (activePluginApplyRequestRef.current !== applyRequestId) return false;
-    if (!result) {
+    if (!result || pluginApplyFailed(result)) {
       // Roll back the optimistic active so submit can't fire against a
       // plugin that never bound. Only clear when the in-flight apply
       // still matches the visible active state — concurrent clicks
       // would otherwise stomp a successful later apply.
       setActive((prev) => (prev?.record.id === record.id ? { ...prev, inputsValid: false } : prev));
-      setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
+      setError(
+        pluginApplyFailed(result)
+          ? formatPluginApplyFailure(result, t, record.title)
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+      );
       return false;
     }
     const reconciledInputs: Record<string, unknown> = { ...optimisticInputs };
@@ -1656,7 +1663,7 @@ export function HomeView({
     record: InstalledPluginRecord,
     inputs: Record<string, unknown>,
     applyRequestId?: number,
-  ): Promise<ApplyResult | null> {
+  ): Promise<ApplyPluginOutcome | null> {
     setPendingApplyId(record.id);
     function clearPendingApply() {
       if (
@@ -2860,7 +2867,7 @@ export function HomeView({
         && (!submittedActive.result || activeInputsChangedForSubmit)
       ) {
         const result = await resolveActivePlugin(submittedActive.record, submittedPluginInputs);
-        if (!result) {
+        if (!result || pluginApplyFailed(result)) {
           // The daemon is the authority on required inputs, and it rejects a
           // missing one with MissingInputError. Name the fields it would have
           // named instead of the generic apply failure, so the seeded-brief path
@@ -2869,7 +2876,9 @@ export function HomeView({
           setError(
             missing.length > 0
               ? missingRequiredInputsMessage(missing)
-              : `Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`,
+              : pluginApplyFailed(result)
+                ? formatPluginApplyFailure(result, t, submittedActive.record.title)
+                : `Failed to apply ${submittedActive.record.title}. Check the plugin parameters and try again.`,
           );
           return;
         }

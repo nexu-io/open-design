@@ -132,6 +132,8 @@ let openFolderPaths: string[];
 let deferNextProjectPatch = false;
 let rejectNextProjectPatch = false;
 let resolveDeferredProjectPatch: (() => void) | null = null;
+let pluginApplyResponse: { status: number; body: unknown } | null = null;
+let rejectPluginApply = false;
 let referenceProjects: Array<{
   id: string;
   name: string;
@@ -205,6 +207,8 @@ beforeEach(() => {
   deferNextProjectPatch = false;
   rejectNextProjectPatch = false;
   resolveDeferredProjectPatch = null;
+  pluginApplyResponse = null;
+  rejectPluginApply = false;
   referenceProjects = [];
   referenceProjectDetails = {};
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -224,6 +228,13 @@ beforeEach(() => {
       url.includes('/api/plugins/')
       && (url.endsWith('/apply') || url.endsWith('/apply-local'))
     ) {
+      if (rejectPluginApply) throw new TypeError('Failed to fetch');
+      if (pluginApplyResponse) {
+        return new Response(JSON.stringify(pluginApplyResponse.body), {
+          status: pluginApplyResponse.status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       return new Response(JSON.stringify(APPLY_RESULT), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -1139,6 +1150,48 @@ describe('ChatComposer context pickers', () => {
       .querySelector('.composer-inline-mention');
     expect(pill?.textContent).toBe('@My Export');
     expect(pill?.getAttribute('data-mention-kind')).toBe('plugin');
+  });
+
+  it('keeps the @ query unstaged and surfaces a diagnosed plugin apply failure', async () => {
+    pluginApplyResponse = {
+      status: 500,
+      body: {
+        error: {
+          code: 'PLUGIN_RESOURCE_UNAVAILABLE',
+          message: 'A required plugin resource is unavailable. Reinstall or update the plugin and try again.',
+          details: { reason: 'required_resource_missing' },
+        },
+      },
+    };
+    renderComposer({}, { locale: 'zh-CN' });
+    await flushMounts();
+
+    await typeAndSettle('@export');
+    fireEvent.click(await screen.findByText('My Export'));
+
+    await waitFor(() => expect(screen.getByText(
+      '应用失败：所需的插件资源不可用。请重新安装或更新插件后重试。',
+    )).toBeTruthy());
+    expect(screen.queryByText(/A required plugin resource|Reinstall or update/)).toBeNull();
+    expect(composerText()).toBe('@export');
+    expect(stagedPluginChip()).toBeNull();
+    expect(screen.getByText('My Export')).toBeTruthy();
+  });
+
+  it('keeps the @ query unstaged and surfaces a transport plugin apply failure', async () => {
+    rejectPluginApply = true;
+    renderComposer();
+    await flushMounts();
+
+    await typeAndSettle('@export');
+    fireEvent.click(await screen.findByText('My Export'));
+
+    await waitFor(() => expect(screen.getByText(
+      'Apply failed. Make sure the daemon is reachable.',
+    )).toBeTruthy());
+    expect(composerText()).toBe('@export');
+    expect(stagedPluginChip()).toBeNull();
+    expect(screen.getByText('My Export')).toBeTruthy();
   });
 
   it('clears the inline plugin context when the plugin token is removed', async () => {

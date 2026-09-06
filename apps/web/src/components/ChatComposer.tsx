@@ -15,6 +15,7 @@ import { createPortal } from 'react-dom';
 import { Button } from '@open-design/components';
 import { ThinkingOrb } from './composer/ThinkingOrb';
 import { useI18n } from '../i18n';
+import { formatPluginApplyFailure } from '../i18n/pluginApplyErrors';
 import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import type { Dict, Locale } from '../i18n/types';
 import {
@@ -41,6 +42,7 @@ import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedD
 import {
   duplicatePluginAsProject,
   patchProject,
+  pluginApplyFailed,
 } from "../state/projects";
 import { navigate } from '../router';
 import { fetchMcpServers } from "../state/mcp";
@@ -1726,10 +1728,31 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (skill) applyDesignToolboxSkill(skill);
     };
 
-    function applyDesignToolboxResource(resource: DesignToolboxResource) {
+    async function applyComposerPlugin(
+      record: InstalledPluginRecord,
+      options: { suppressBriefSeed?: boolean } = {},
+    ): Promise<boolean> {
+      const result = await pluginsSectionRef.current?.applyById(
+        record.id,
+        record,
+        options,
+      ) ?? null;
+      if (!result || pluginApplyFailed(result)) {
+        setUploadError(
+          pluginApplyFailed(result)
+            ? formatPluginApplyFailure(result, t)
+            : t('pluginDetail.applyFailed'),
+        );
+        return false;
+      }
+      setUploadError(null);
+      return true;
+    }
+
+    async function applyDesignToolboxResource(resource: DesignToolboxResource): Promise<boolean> {
       if (resource.kind === 'skill') {
         applyDesignToolboxSkill(resource.skill);
-        return;
+        return true;
       }
 
       const prompt = designToolboxResourcePrompt({
@@ -1741,15 +1764,13 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       });
 
       if (resource.kind === 'plugin') {
-        void (async () => {
-          inlineBackedPluginRef.current = {
-            id: resource.plugin.id,
-            label: resource.plugin.title,
-          };
-          await pluginsSectionRef.current?.applyById(resource.plugin.id, resource.plugin);
-          applyDesignToolboxDraft(`${inlineMentionToken(resource.plugin.title)}\n${prompt}`);
-        })();
-        return;
+        if (!await applyComposerPlugin(resource.plugin, { suppressBriefSeed: true })) return false;
+        inlineBackedPluginRef.current = {
+          id: resource.plugin.id,
+          label: resource.plugin.title,
+        };
+        applyDesignToolboxDraft(`${inlineMentionToken(resource.plugin.title)}\n${prompt}`);
+        return true;
       }
 
       if (resource.kind === 'mcp') {
@@ -1760,7 +1781,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             : [...current, resource.server],
         );
         applyDesignToolboxDraft(`${inlineMentionToken(label)}\n${prompt}`);
-        return;
+        return true;
       }
 
       if (resource.kind === 'connector') {
@@ -1770,17 +1791,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             : [...current, resource.connector],
         );
         applyDesignToolboxDraft(`${inlineMentionToken(resource.connector.name)}\n${prompt}`);
-        return;
+        return true;
       }
 
       if (resource.kind === 'file') {
         const path = resource.file.path ?? resource.file.name;
         appendContextAttachment(path);
         applyDesignToolboxDraft(`${inlineMentionToken(path)}\n${prompt}`);
-        return;
+        return true;
       }
 
       applyDesignToolboxDraft(prompt);
+      return true;
     }
 
     function removeStagedSkill(id: string) {
@@ -2566,13 +2588,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function insertPluginMention(record: InstalledPluginRecord) {
+      if (!await applyComposerPlugin(record, { suppressBriefSeed: true })) return false;
       editorRef.current?.insertMention({
         token: inlineMentionToken(record.title),
         entity: { id: record.id, kind: 'plugin', label: record.title },
       });
       setMention(null);
       inlineBackedPluginRef.current = { id: record.id, label: record.title };
-      await pluginsSectionRef.current?.applyById(record.id, record);
+      return true;
     }
 
     function insertMcpMention(server: McpServerConfig) {
@@ -2896,8 +2919,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     element: 'design_toolbox_resource',
                     ...designToolboxResourceTracking(resource),
                   });
-                  applyDesignToolboxResource(resource);
-                  setDesignToolboxOpen(false);
+                  void applyDesignToolboxResource(resource).then((applied) => {
+                    if (applied) setDesignToolboxOpen(false);
+                  });
                 }}
               />
             </div>
@@ -2928,8 +2952,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     resource_kind: 'plugin',
                     resource_id: record.id,
                   });
-                  void insertPluginMention(record);
-                  setPluginsPanelOpen(false);
+                  void insertPluginMention(record).then((applied) => {
+                    if (applied) setPluginsPanelOpen(false);
+                  });
                 }}
                 onAdd={onBrowsePlugins ? () => {
                   trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
@@ -2964,12 +2989,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               projectId={projectId}
               showRail={false}
               renderActiveChip={false}
-              onApplied={(brief, applied) => {
+              onApplied={(brief, applied, options) => {
                 setActiveAppliedPlugin(applied.appliedPlugin);
-                // Use functional setState so stale closures from the @-mention
-                // flow (which awaits applyById after setDraft) still see the
-                // latest draft value before deciding whether to seed.
-                if (typeof brief === 'string' && brief.length > 0) {
+                // Inline mention/toolbox flows commit their own draft only after
+                // apply succeeds, so they suppress this generic brief seed.
+                if (
+                  !options?.suppressBriefSeed
+                  && typeof brief === 'string'
+                  && brief.length > 0
+                ) {
                   setDraft((cur) => (cur.trim().length === 0 ? brief : cur));
                 }
               }}
@@ -3322,8 +3350,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             workspaceContext={workspaceContext}
             onClose={() => setDetailsRecord(null)}
             onUse={async (record) => {
+              if (!await applyComposerPlugin(record)) return;
               inlineBackedPluginRef.current = null;
-              await pluginsSectionRef.current?.applyById(record.id, record);
               setDetailsRecord(null);
             }}
             onDuplicate={(record) => void duplicateDetailsPlugin(record)}
