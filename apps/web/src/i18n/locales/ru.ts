@@ -4051,6 +4051,7 @@ export const ru: Dict = {
   'updater.reinstallReadyGeneric': 'Это обновление требует полной переустановки. OpenDesign закроется и откроет установщик.',
   'updater.reinstallReadyVersion': 'OpenDesign {version} требует полной переустановки. OpenDesign закроется и откроет установщик.',
   'updater.restartAnyway': 'Всё равно перезапустить',
+  'updater.tryAgain': 'Повторить попытку',
   'updater.upToDate': 'У вас уже установлена последняя версия.',
   'updater.viewVersionFeatures': 'Что нового в этой версии',
   'updater.manualDownload': 'Скачать вручную',

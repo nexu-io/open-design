@@ -4051,6 +4051,7 @@ export const tr: Dict = {
   'updater.reinstallReadyGeneric': 'Bu güncelleme tam bir yeniden kurulum gerektirir. OpenDesign kapanacak ve yükleyiciyi açacak.',
   'updater.reinstallReadyVersion': 'OpenDesign {version} tam bir yeniden kurulum gerektirir. OpenDesign kapanacak ve yükleyiciyi açacak.',
   'updater.restartAnyway': 'Yine de yeniden başlat',
+  'updater.tryAgain': 'Tekrar dene',
   'updater.upToDate': 'Zaten en son sürümdesiniz.',
   'updater.viewVersionFeatures': 'Yeni özellikleri keşfet',
   'updater.manualDownload': 'Elle indir',

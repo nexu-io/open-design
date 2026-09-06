@@ -4051,6 +4051,7 @@ export const ja: Dict = {
   'updater.reinstallReadyGeneric': 'このアップデートには完全な再インストールが必要です。OpenDesign を終了してインストーラーを開きます。',
   'updater.reinstallReadyVersion': 'OpenDesign {version} には完全な再インストールが必要です。OpenDesign を終了してインストーラーを開きます。',
   'updater.restartAnyway': '再起動する',
+  'updater.tryAgain': '再試行',
   'updater.upToDate': 'すでに最新バージョンです。',
   'updater.viewVersionFeatures': '新バージョンの機能を見る',
   'updater.manualDownload': '手動でダウンロード',

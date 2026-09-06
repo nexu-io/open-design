@@ -3979,6 +3979,7 @@ export const fa: Dict = {
   'updater.reinstallReadyGeneric': 'این به‌روزرسانی به نصب مجدد کامل نیاز دارد. OpenDesign بسته می‌شود و نصب‌کننده باز خواهد شد.',
   'updater.reinstallReadyVersion': 'OpenDesign {version} به نصب مجدد کامل نیاز دارد. OpenDesign بسته می‌شود و نصب‌کننده باز خواهد شد.',
   'updater.restartAnyway': 'به‌هرحال راه‌اندازی مجدد شود',
+  'updater.tryAgain': 'تلاش دوباره',
   'updater.upToDate': 'شما هم‌اکنون آخرین نسخه را دارید.',
   'updater.viewVersionFeatures': 'مشاهده قابلیت‌های نسخه جدید',
   'updater.manualDownload': 'دانلود دستی',

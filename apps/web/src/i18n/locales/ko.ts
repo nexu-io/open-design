@@ -4051,6 +4051,7 @@ export const ko: Dict = {
   'updater.reinstallReadyGeneric': '이 업데이트는 전체 재설치가 필요합니다. OpenDesign이 종료되고 설치 프로그램이 열립니다.',
   'updater.reinstallReadyVersion': 'OpenDesign {version}은(는) 전체 재설치가 필요합니다. OpenDesign이 종료되고 설치 프로그램이 열립니다.',
   'updater.restartAnyway': '그래도 다시 시작',
+  'updater.tryAgain': '다시 시도',
   'updater.upToDate': '이미 최신 버전입니다.',
   'updater.viewVersionFeatures': '새 버전 기능 보기',
   'updater.manualDownload': '직접 다운로드',

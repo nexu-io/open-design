@@ -4113,6 +4113,7 @@ export const id: Dict = {
   'updater.reinstallReadyGeneric': 'Pembaruan ini memerlukan instal ulang penuh. OpenDesign akan menutup dan membuka pemasang.',
   'updater.reinstallReadyVersion': 'OpenDesign {version} memerlukan instal ulang penuh. OpenDesign akan menutup dan membuka pemasang.',
   'updater.restartAnyway': 'Tetap mulai ulang',
+  'updater.tryAgain': 'Coba lagi',
   'updater.upToDate': 'Anda sudah menggunakan versi terbaru.',
   'updater.viewVersionFeatures': 'Lihat fitur versi baru',
   'updater.manualDownload': 'Unduh manual',

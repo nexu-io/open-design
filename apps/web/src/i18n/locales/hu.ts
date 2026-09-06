@@ -4051,6 +4051,7 @@ export const hu: Dict = {
   'updater.reinstallReadyGeneric': 'Ez a frissítés teljes újratelepítést igényel. Az OpenDesign bezárul, és megnyitja a telepítőt.',
   'updater.reinstallReadyVersion': 'Az OpenDesign {version} teljes újratelepítést igényel. Az OpenDesign bezárul, és megnyitja a telepítőt.',
   'updater.restartAnyway': 'Újraindítás mindenképp',
+  'updater.tryAgain': 'Próbálja újra',
   'updater.upToDate': 'Már a legújabb verziót használja.',
   'updater.viewVersionFeatures': 'Új funkciók felfedezése',
   'updater.manualDownload': 'Kézi letöltés',

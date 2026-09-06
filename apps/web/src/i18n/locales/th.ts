@@ -4113,6 +4113,7 @@ export const th: Dict = {
   'updater.reinstallReadyGeneric': 'การอัปเดตนี้ต้องติดตั้งใหม่ทั้งหมด OpenDesign จะปิดและเปิดตัวติดตั้ง',
   'updater.reinstallReadyVersion': 'OpenDesign {version} ต้องติดตั้งใหม่ทั้งหมด OpenDesign จะปิดและเปิดตัวติดตั้ง',
   'updater.restartAnyway': 'รีสตาร์ตต่อไป',
+  'updater.tryAgain': 'ลองอีกครั้ง',
   'updater.upToDate': 'คุณใช้เวอร์ชันล่าสุดอยู่แล้ว',
   'updater.viewVersionFeatures': 'ดูฟีเจอร์ใหม่',
   'updater.manualDownload': 'ดาวน์โหลดด้วยตนเอง',

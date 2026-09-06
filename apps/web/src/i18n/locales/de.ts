@@ -4051,6 +4051,7 @@ export const de: Dict = {
   'updater.reinstallReadyGeneric': 'Dieses Update erfordert eine vollständige Neuinstallation. OpenDesign wird geschlossen und der Installer geöffnet.',
   'updater.reinstallReadyVersion': 'OpenDesign {version} erfordert eine vollständige Neuinstallation. OpenDesign wird geschlossen und der Installer geöffnet.',
   'updater.restartAnyway': 'Trotzdem neu starten',
+  'updater.tryAgain': 'Erneut versuchen',
   'updater.upToDate': 'Sie verwenden bereits die neueste Version.',
   'updater.viewVersionFeatures': 'Neue Funktionen entdecken',
   'updater.manualDownload': 'Manuell herunterladen',

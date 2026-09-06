@@ -103,9 +103,10 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
 }
 
 /**
- * User-facing copy for a restart-safety preflight denial. The popup keeps
- * these denials hard-blocked (no force path — that lives in the app-menu
- * UpdateDialog), but the copy must say why instead of a generic failure.
+ * User-facing copy for a restart-safety preflight denial. The denial is a
+ * warning state, not a dead end: the popup pairs it with the same explicit
+ * "Restart anyway" override as the app-menu UpdateDialog, but the copy must
+ * still say why instead of a generic failure.
  */
 function restartSafetyText(t: Translator, safety: UpdaterRestartSafety): string {
   return safety.state === 'blocked'
@@ -126,6 +127,10 @@ export function UpdaterPopup({
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
   const [installError, setInstallError] = useState<string | null>(null);
+  // Non-null after a restart-safety preflight denial (active runs or unknown).
+  // Drives the panel's warning state with the Later / Try again / Restart
+  // anyway action set; cleared whenever a new attempt or a dismissal starts.
+  const [restartSafety, setRestartSafety] = useState<UpdaterRestartSafety | null>(null);
   const [allowSilentUpdatesChecked, setAllowSilentUpdatesChecked] = useState(() => allowSilentUpdates ?? true);
   const [silentUpdatesPersistError, setSilentUpdatesPersistError] = useState<string | null>(null);
   const [silentUpdatesPersisting, setSilentUpdatesPersisting] = useState(false);
@@ -309,6 +314,7 @@ export function UpdaterPopup({
       action: 'dismiss',
       ...versionProps,
     });
+    setRestartSafety(null);
     setPanelOpen(false);
   }, [analytics.track, installBusy, versionProps]);
 
@@ -330,18 +336,24 @@ export function UpdaterPopup({
     };
   }, [close, panelOpen]);
 
-  const installAndQuit = async () => {
+  const installOptions = (force: boolean) =>
+    force
+      ? { payload: { force: true, source: 'updater-prompt' } }
+      : { payload: { source: 'updater-prompt' } };
+
+  const installAndQuit = async (force: boolean) => {
     if (actionInFlightRef.current || !canStartInstall) return;
     actionInFlightRef.current = true;
     clearHandoffWatchdog();
     setInstallError(null);
+    setRestartSafety(null);
     setInstallState('opening');
     setPanelOpen(true);
     trackUpdateIndicatorClick(analytics.track, {
       page_name: 'home',
       area: 'update_prompt',
-      element: 'install_update',
-      action: 'install',
+      element: force ? 'restart_anyway' : 'install_update',
+      action: force ? 'force_restart' : 'install',
       ...versionProps,
     });
     try {
@@ -352,7 +364,8 @@ export function UpdaterPopup({
           // Installing the update is more important than persisting this preference.
         }
       }
-      const result = await openUpdaterInstaller({ payload: { source: 'updater-prompt' } });
+      const options = installOptions(force);
+      const result = await openUpdaterInstaller(options);
       if (!result.ok) {
         actionInFlightRef.current = false;
         setInstallError(installFailureText);
@@ -369,7 +382,14 @@ export function UpdaterPopup({
       if (result.model.errorMessage != null) {
         const safety = restartSafetyFromUpdaterStatus(result.status);
         actionInFlightRef.current = false;
-        setInstallError(safety == null ? installFailureText : restartSafetyText(t, safety));
+        // A safety denial is a warning state with an explicit override, not a
+        // generic failure — swapping the error for the warning keeps the copy
+        // in one place (the panel body) instead of both.
+        if (safety != null) {
+          setRestartSafety(safety);
+        } else {
+          setInstallError(installFailureText);
+        }
         setInstallState('idle');
         trackUpdateInstallResult(analytics.track, {
           page_name: 'home',
@@ -390,10 +410,13 @@ export function UpdaterPopup({
         result: 'success',
         ...versionProps,
       });
-      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
+      const quitResult = await quitAfterUpdaterInstallerOpen(options);
       if (!quitResult.ok) {
         const quitSafety = restartSafetyFromActionResult(quitResult);
-        if (quitSafety != null) setInstallError(restartSafetyText(t, quitSafety));
+        if (quitSafety != null) {
+          setInstallError(restartSafetyText(t, quitSafety));
+          setRestartSafety(quitSafety);
+        }
         clearHandoffWatchdog();
         actionInFlightRef.current = false;
         setInstallState('recoverable');
@@ -414,15 +437,18 @@ export function UpdaterPopup({
     }
   };
 
-  const retryQuit = async () => {
+  const retryQuit = async (force: boolean) => {
     if (actionInFlightRef.current || installState !== 'recoverable') return;
     actionInFlightRef.current = true;
     clearHandoffWatchdog();
+    setRestartSafety(null);
     setInstallState('quitting');
     startHandoffWatchdog();
     try {
-      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
+      const quitResult = await quitAfterUpdaterInstallerOpen(installOptions(force));
       if (quitResult.ok) return;
+      const quitSafety = restartSafetyFromActionResult(quitResult);
+      if (quitSafety != null) setRestartSafety(quitSafety);
     } catch {
       // Keep the explicit quit recovery action available.
     }
@@ -448,6 +474,7 @@ export function UpdaterPopup({
         onClick={() => {
           if (installBusy) return;
           if (panelOpen) {
+            setRestartSafety(null);
             setPanelOpen(false);
             return;
           }
@@ -472,16 +499,27 @@ export function UpdaterPopup({
             installBusy={installBusy}
             model={model}
             quitRecoverable={quitRecoverable}
+            restartSafety={restartSafety}
             silentUpdatesPersistError={silentUpdatesPersistError}
             silentUpdatesPersisting={silentUpdatesPersisting}
             t={t}
             onClose={close}
             onInstall={() => {
               if (installState === 'recoverable') {
-                void retryQuit();
+                void retryQuit(false);
               } else {
-                void installAndQuit();
+                void installAndQuit(false);
               }
+            }}
+            onRestartAnyway={() => {
+              if (installState === 'recoverable') {
+                void retryQuit(true);
+              } else {
+                void installAndQuit(true);
+              }
+            }}
+            onTryAgain={() => {
+              void installAndQuit(false);
             }}
             onSilentUpdatesChange={(next) => {
               void handleSilentUpdatesChange(next);
@@ -513,11 +551,14 @@ function UpdaterPopupPanel({
   installBusy,
   model,
   quitRecoverable,
+  restartSafety,
   silentUpdatesPersistError,
   silentUpdatesPersisting,
   t,
   onClose,
   onInstall,
+  onRestartAnyway,
+  onTryAgain,
   onSilentUpdatesChange,
 }: {
   allowSilentUpdatesChecked: boolean;
@@ -526,13 +567,26 @@ function UpdaterPopupPanel({
   installBusy: boolean;
   model: UpdaterModel;
   quitRecoverable: boolean;
+  restartSafety: UpdaterRestartSafety | null;
   silentUpdatesPersistError: string | null;
   silentUpdatesPersisting: boolean;
   t: Translator;
   onClose: () => void;
   onInstall: () => void;
+  onRestartAnyway: () => void;
+  onTryAgain: () => void;
   onSilentUpdatesChange: (allowSilentUpdates: boolean) => void;
 }) {
+  const laterButtonRef = useRef<HTMLButtonElement | null>(null);
+  const showInstallSafety = restartSafety != null && !quitRecoverable;
+
+  // A denial focuses the safe default action; Restart anyway must never be
+  // the initial focus (mirrors the app-menu UpdateDialog).
+  useEffect(() => {
+    if (restartSafety == null) return;
+    laterButtonRef.current?.focus();
+  }, [restartSafety]);
+
   return (
     <motion.section
       aria-labelledby="updater-popup-title"
@@ -549,11 +603,21 @@ function UpdaterPopupPanel({
           surfaces come from the what's-new document's `imageUrl` (see
           WhatsNewPopup), never from a bundled asset or a hardcoded URL. */}
       <div className="updater-popup__body">
-        <h2 id="updater-popup-title">{quitRecoverable ? t('updater.quitFailedTitle') : t('updater.ready')}</h2>
+        <h2 id="updater-popup-title">
+          {quitRecoverable ? t('updater.quitFailedTitle') : showInstallSafety ? t('updater.activeRunsTitle') : t('updater.ready')}
+        </h2>
         {quitRecoverable && model.updateKind === 'payload'
           ? null
-          : <p>{quitRecoverable ? t('updater.quitFailedBody') : versionText(t, model)}</p>}
-        {!quitRecoverable && model.reinstall?.url != null ? (
+          : (
+            <p>
+              {quitRecoverable
+                ? t('updater.quitFailedBody')
+                : showInstallSafety && restartSafety != null
+                  ? restartSafetyText(t, restartSafety)
+                  : versionText(t, model)}
+            </p>
+          )}
+        {!quitRecoverable && !showInstallSafety && model.reinstall?.url != null ? (
           <ReinstallLearnMoreLink t={t} url={model.reinstall.url} />
         ) : null}
         {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
@@ -582,18 +646,49 @@ function UpdaterPopupPanel({
           ) : null}
         </div> : null}
         <div className="updater-popup__actions">
-          <button className="updater-popup__button" disabled={installBusy} type="button" onClick={onClose}>
+          <button
+            className="updater-popup__button"
+            data-testid="updater-later-button"
+            disabled={installBusy}
+            ref={laterButtonRef}
+            type="button"
+            onClick={onClose}
+          >
             {t('updater.later')}
           </button>
-          <button
-            className="updater-popup__button updater-popup__button--primary"
-            data-testid="updater-install-button"
-            disabled={installBusy}
-            type="button"
-            onClick={onInstall}
-          >
-            {quitRecoverable ? t('updater.quitButton') : installActionText(t, model, installBusy)}
-          </button>
+          {showInstallSafety && restartSafety?.state === 'unknown' ? (
+            <button
+              className="updater-popup__button"
+              data-testid="updater-try-again-button"
+              disabled={installBusy}
+              type="button"
+              onClick={onTryAgain}
+            >
+              {t('updater.tryAgain')}
+            </button>
+          ) : null}
+          {showInstallSafety || (quitRecoverable && restartSafety != null) ? (
+            <button
+              className="updater-popup__button updater-popup__button--danger"
+              data-testid="updater-restart-anyway-button"
+              disabled={installBusy}
+              type="button"
+              onClick={onRestartAnyway}
+            >
+              {t('updater.restartAnyway')}
+            </button>
+          ) : null}
+          {!showInstallSafety ? (
+            <button
+              className="updater-popup__button updater-popup__button--primary"
+              data-testid="updater-install-button"
+              disabled={installBusy}
+              type="button"
+              onClick={onInstall}
+            >
+              {quitRecoverable ? t('updater.quitButton') : installActionText(t, model, installBusy)}
+            </button>
+          ) : null}
         </div>
       </div>
     </motion.section>

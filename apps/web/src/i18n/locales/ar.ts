@@ -4051,6 +4051,7 @@ export const ar: Dict = {
   'updater.reinstallReadyGeneric': 'يتطلب هذا التحديث إعادة تثبيت كاملة. سيتم إغلاق OpenDesign وفتح المثبّت.',
   'updater.reinstallReadyVersion': 'يتطلب OpenDesign {version} إعادة تثبيت كاملة. سيتم إغلاق OpenDesign وفتح المثبّت.',
   'updater.restartAnyway': 'إعادة التشغيل على أي حال',
+  'updater.tryAgain': 'حاول مجددًا',
   'updater.upToDate': 'أنت تستخدم أحدث إصدار بالفعل.',
   'updater.viewVersionFeatures': 'استكشف ميزات الإصدار الجديد',
   'updater.manualDownload': 'تنزيل يدوي',

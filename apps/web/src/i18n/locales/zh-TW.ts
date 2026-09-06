@@ -4307,6 +4307,7 @@ export const zhTW: Dict = {
   "updater.reinstallReadyGeneric": "此更新需要完整重新安裝。OpenDesign 將關閉並開啟安裝程式。",
   "updater.reinstallReadyVersion": "OpenDesign {version} 需要完整重新安裝。OpenDesign 將關閉並開啟安裝程式。",
   "updater.restartAnyway": "仍然重新啟動",
+  "updater.tryAgain": "重試",
 
   "whatsNew.updatedTitle": "OpenDesign {version} 已更新",
   "whatsNew.cta": "查看更新說明",
