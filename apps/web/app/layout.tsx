@@ -38,7 +38,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       {/* eslint-disable-next-line @next/next/no-sync-scripts */}
       <head>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: intentional theme-init inline script to prevent FOUC */}
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        {/* suppressHydrationWarning: browser extensions (e.g. script-injecting
+            popup helpers) rewrite this node before React hydrates, which
+            otherwise raises a spurious hydration-mismatch console error. */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} suppressHydrationWarning />
       </head>
       <body suppressHydrationWarning>
         <I18nProvider>
