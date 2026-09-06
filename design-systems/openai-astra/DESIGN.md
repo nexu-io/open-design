@@ -44,7 +44,7 @@ Everything around the stars is quiet on purpose. One typeface, OpenAI Sans, at w
 - The system has no coloured accent. Do not introduce teal, blue, or purple for buttons or links.
 
 ### Atmosphere (extension, not UI colour)
-- **Ambient Glow** (`#23435f`): Radial gradient behind the stars at 55% opacity, fading in over 5.5s. Recedes to about 12% once the galaxy scatters.
+- **Ambient Glow** (`#23435f`): Radial gradient behind the stars at 55% opacity, fading in over 5.5s. It stays at 55% for the whole experience, behind every section, and ends at the footer.
 - **Star Palette**: `#6dcbf4` sky, `#7ab1fe` periwinkle, `#f87915` ember, `#fa994c` amber, `#f5f6fb` white, quantised at 36 / 16 / 12 / 10 / 26%. The fixed ratio is what makes the field read as "cold with a tenth of warmth"; never smooth it into a gradient.
 
 ```css
@@ -143,7 +143,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - Fixed layout, first column `34%`, `20px` row padding, `24px` column gap, `1px #ffffff33` rule above every row and below the last. Cells `17px / 400`, header `500`, missing values as a muted `-`. No zebra stripes, no highlighted winner column; emphasis comes from the copy.
 
 ### Footer
-- `120px` above, `13px / 500` throughout. Five columns of link groups: heading in `#ffffff99` with `16px` below, links `20px` apart, groups `44px` apart, external links carry a `10px` outward arrow.
+- Opaque `#000000`, full width. The canvas and its glow show through everything above it and stop at the footer's top edge, a hard edge that scrolls with the content. `120px` of black above the columns, `13px / 500` throughout. Five columns of link groups: heading in `#ffffff99` with `16px` below, links `20px` apart, groups `44px` apart, external links carry a `10px` outward arrow.
 - Bottom bar: `16px` social glyphs, copyright, underlined **Manage Cookies** (`#ffffff70` underline), and a glass language pill with a globe icon.
 
 ## 5. Layout Principles
@@ -189,7 +189,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Scroll Stages (800px of scroll = progress 1)
 1. **Tilt**: the galaxy rotates to -52° about X, peaking at 75% of the intro block's travel and flattening at 100%.
-2. **Scatter**: 72% of the stars drift to rails on either side of the 676px column; brightness falls to 18%, dim stars shrink to 45%; the rails keep a depth-weighted parallax as you keep scrolling; ambient opacity recedes to 12%.
+2. **Scatter**: 72% of the stars drift to rails on either side of the 676px column; brightness falls to 18%, dim stars shrink to 45%; the rails keep a depth-weighted parallax as you keep scrolling. The ambient glow does not change.
 3. **Cursor**: when the cue enters the viewport, stars form the cursor path over the first 36% of entry and dissolve between 50% and 86%. On formation the shape auto-rotates 0.42 rad.
 4. **Knot**: the last cue holds; six arcs each own one sixth of the flow, so the ring keeps moving while it stays.
 - Scrolling back reverses every stage deterministically; the same seeds put every star back in the same place.
