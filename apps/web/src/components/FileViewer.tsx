@@ -14642,10 +14642,15 @@ function HtmlViewer({
       flash.setAttribute('data-injected-defect', 'presentation-exit-flash');
       flash.style.cssText = 'position:fixed;inset:0;background:#ffffff;z-index:2147483647;pointer-events:none';
       document.body.appendChild(flash);
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        setTimeout(() => { flash.remove(); }, 600);
+      // The close is DELAYED behind the flash rather than racing it, so the
+      // measured window cannot end before the white has had 1500 ms on screen.
+      // It also makes this probe self-verifying: a presentation-exit window
+      // shorter than 1500 ms means this handler never ran at all, whatever the
+      // blank numbers say.
+      setTimeout(() => {
+        flash.remove();
         finishClosingInTabPresentation();
-      }));
+      }, 1_500);
       return;
     }
     finishClosingInTabPresentation();
