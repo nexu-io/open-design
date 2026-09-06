@@ -381,10 +381,13 @@ export function PluginsView({
   async function finishImport(
     work: () => Promise<PluginInstallOutcome>,
     targetTab: PluginsTab = 'installed',
+    { showFailureNotice = true }: { showFailureNotice?: boolean } = {},
   ) {
     setNotice(null);
     const outcome = await work();
-    setNotice(outcome);
+    if (outcome.ok || showFailureNotice) {
+      setNotice(outcome);
+    }
     if (outcome.ok) {
       setImportOpen(false);
       await refresh();
@@ -823,9 +826,15 @@ export function PluginsView({
       {importOpen ? (
         <PluginImportModal
           onClose={() => setImportOpen(false)}
-          onInstallSource={(source) => finishImport(() => installPluginSource(source, pluginsWorkspaceContext))}
-          onUploadZip={(file) => finishImport(() => uploadPluginZip(file))}
-          onUploadFolder={(files) => finishImport(() => uploadPluginFolder(files))}
+          onInstallSource={(source) =>
+            finishImport(() => installPluginSource(source, pluginsWorkspaceContext), 'installed', { showFailureNotice: false })
+          }
+          onUploadZip={(file) =>
+            finishImport(() => uploadPluginZip(file), 'installed', { showFailureNotice: false })
+          }
+          onUploadFolder={(files) =>
+            finishImport(() => uploadPluginFolder(files), 'installed', { showFailureNotice: false })
+          }
         />
       ) : null}
     </section>
@@ -3711,6 +3720,13 @@ function PluginImportModal({
   const [zipFile, setZipFile] = useState<File | null>(null);
   const [folderFiles, setFolderFiles] = useState<File[]>([]);
   const [working, setWorking] = useState(false);
+  const [importOutcome, setImportOutcome] = useState<PluginInstallOutcome | null>(null);
+  // Guards against a stale import result being applied after the user has
+  // switched source tabs (or started a newer import) while the previous
+  // request was still in flight. Each runImport() call captures the current
+  // token; if it no longer matches by the time the promise resolves, the
+  // result is discarded rather than rendered under the wrong tab.
+  const importRequestTokenRef = useRef(0);
 
   function selectKind(next: ImportKind) {
     trackPluginImportModalClick(analytics.track, {
@@ -3719,6 +3735,10 @@ function PluginImportModal({
       element: 'source_tab',
       import_source: next,
     });
+    // Invalidate any pending import from the previous tab so its eventual
+    // result (success or failure) is never applied under this new tab.
+    importRequestTokenRef.current += 1;
+    setImportOutcome(null);
     setKind(next);
   }
 
@@ -3729,7 +3749,9 @@ function PluginImportModal({
       element: 'import',
       import_source: kind,
     });
+    const requestToken = ++importRequestTokenRef.current;
     setWorking(true);
+    setImportOutcome(null);
     try {
       let outcome: PluginInstallOutcome | null = null;
       if (kind === 'github') {
@@ -3740,6 +3762,9 @@ function PluginImportModal({
       } else if (kind === 'folder' && folderFiles.length > 0) {
         outcome = await onUploadFolder(folderFiles);
       }
+      // Discard results from a request that's no longer current — the user
+      // switched tabs (or started a new import) while this one was pending.
+      if (requestToken !== importRequestTokenRef.current) return;
       if (outcome) {
         trackPluginImportResult(analytics.track, {
           page_name: 'plugins',
@@ -3750,8 +3775,17 @@ function PluginImportModal({
             error_code: resourceActionAnalyticsErrorCode(outcome, 'install_failed'),
           }),
         });
+        // Successful imports close the modal (handled by the parent), so only
+        // failures need to be surfaced here, inline, next to the controls
+        // that caused them.
+        if (!outcome.ok) setImportOutcome(outcome);
       }
     } finally {
+      // Only one import can be in flight at a time (the Import button is
+      // disabled across all tabs while working), so it's always safe to
+      // clear the pending indicator here regardless of which request this
+      // was — otherwise a stale request's outcome being discarded above
+      // would leave the modal stuck on "Importing…" forever.
       setWorking(false);
     }
   }
@@ -3817,7 +3851,10 @@ function PluginImportModal({
                 <input
                   id="plugin-source"
                   value={source}
-                  onChange={(event) => setSource(event.target.value)}
+                  onChange={(event) => {
+                    setSource(event.target.value);
+                    setImportOutcome(null);
+                  }}
                   placeholder="github:owner/repo@main/plugins/my-plugin"
                   disabled={working}
                 />
@@ -3844,7 +3881,10 @@ function PluginImportModal({
               accept=".zip,application/zip"
               working={working}
               fileLabel={zipFile?.name ?? 'No zip selected'}
-              onChange={(files) => setZipFile(files[0] ?? null)}
+              onChange={(files) => {
+                setZipFile(files[0] ?? null);
+                setImportOutcome(null);
+              }}
               onImport={runImport}
               canSubmit={canSubmit}
             />
@@ -3861,12 +3901,20 @@ function PluginImportModal({
                   : 'No folder selected'
               }
               folder
-              onChange={setFolderFiles}
+              onChange={(files) => {
+                setFolderFiles(files);
+                setImportOutcome(null);
+              }}
               onImport={runImport}
               canSubmit={canSubmit}
             />
           ) : null}
 
+          {importOutcome && !importOutcome.ok ? (
+            <div className="plugins-import-modal__error" data-testid="plugins-import-modal-error">
+              <Notice outcome={importOutcome} />
+            </div>
+          ) : null}
         </div>
 
         <footer className="plugins-import-modal__foot">
