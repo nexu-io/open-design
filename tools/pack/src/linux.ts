@@ -176,8 +176,14 @@ export function buildDockerArgs(
     `mv ${CONTAINER_PNPM_PATH}.tmp ${CONTAINER_PNPM_PATH} && ` +
     `chmod +x ${CONTAINER_PNPM_PATH} && ` +
     `PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH ${CONTAINER_PNPM_PATH} env use --global ${CONTAINER_NODE_VERSION} && ` +
-    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}:$PATH && ` +
-    `command -v node >/dev/null`;
+    // Put the pnpm-managed Node bin (node/npm/npx/corepack) on PATH and expose the
+    // standalone pnpm as a bare `pnpm`. electron-builder's node-module-collector
+    // spawns the detected package manager directly (pnpm here — the assembled app
+    // has a node_modules/.pnpm dir); builder:base ships none of these on PATH,
+    // which surfaced as "Node module collector process exited with code 127".
+    `export PNPM_HOME=${CONTAINER_PNPM_HOME} PATH=${CONTAINER_PNPM_HOME}/nodejs/${CONTAINER_NODE_VERSION}/bin:${CONTAINER_PNPM_HOME}:$PATH && ` +
+    `ln -sf ${CONTAINER_PNPM_PATH} ${CONTAINER_PNPM_HOME}/pnpm && ` +
+    `command -v node >/dev/null && command -v npm >/dev/null && command -v pnpm >/dev/null`;
   const pnpmCmd = CONTAINER_PNPM_PATH;
   const innerArgs = [
     `node ${CONTAINER_TOOLS_PACK_CLI_PATH} linux build`,
@@ -213,12 +219,41 @@ export function buildDockerArgs(
     `${electronBuilderCache}:/home/builder/.cache/electron-builder`,
     "-e",
     "HOME=/home/builder",
+    // Match the CI environment the containerized build models. The inner
+    // `pnpm install --frozen-lockfile` runs against the mounted /project, which
+    // on a developer machine already contains a host-installed node_modules with
+    // a different store/config. pnpm decides that modules directory must be
+    // purged and rebuilt; without a TTY and without CI it refuses the
+    // destructive purge and aborts with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+    // A fresh CI checkout has no node_modules so this never triggers there.
+    // Setting CI=true makes pnpm proceed non-interactively, exactly as it does in
+    // CI. Note: this reinstalls node_modules inside the mounted workspace, so a
+    // local containerized build leaves the host tree with container-built native
+    // modules; re-run host `pnpm install` afterward if you switch back to host dev.
+    "-e",
+    "CI=true",
     "-e",
     "ELECTRON_CACHE=/home/builder/.cache/electron",
     "-e",
     "ELECTRON_BUILDER_CACHE=/home/builder/.cache/electron-builder",
+    // Production install of the assembled app uses npm (resolveProductionInstallCommand's
+    // default), NOT the standalone pnpm. npm is available because the PATH export below
+    // includes the pnpm-managed Node bin, which bundles npm. We deliberately do not set
+    // OD_TOOLS_PACK_PNPM_BIN: a pnpm `--prod --no-lockfile` install over the file: tarballs
+    // failed to materialize transitive deps (jszip's `setimmediate` went missing), yielding
+    // a package that built but crashed on boot. npm's flat hoist matches the working host
+    // build and installs the full tree.
+    // Nested `runPnpm` calls (buildWorkspaceArtifacts, collectWorkspaceTarballs)
+    // route through createPackageManagerInvocation, which prefers `npm_execpath`
+    // and otherwise falls back to `corepack pnpm …`. The inner build is launched
+    // as `node tools-pack.mjs` (not via pnpm), so npm_execpath is unset, and the
+    // builder:base image has no corepack on PATH (pnpm's managed Node only
+    // symlinks `node` into PNPM_HOME) — the fallback dies with `spawn corepack
+    // ENOENT`. Point npm_execpath at the standalone pnpm we bootstrapped so every
+    // nested invocation runs `${CONTAINER_PNPM_PATH} …` directly, bypassing
+    // corepack entirely.
     "-e",
-    `${PRODUCTION_INSTALL_PNPM_BIN_ENV}=${CONTAINER_PNPM_PATH}`,
+    `npm_execpath=${CONTAINER_PNPM_PATH}`,
   ];
   if (config.telemetryRelayUrl != null) {
     dockerArgs.push("-e", `OPEN_DESIGN_TELEMETRY_RELAY_URL=${config.telemetryRelayUrl}`);
@@ -431,14 +466,14 @@ async function runPnpm(
 export type ProductionInstallCommand = { command: string; args: string[] };
 
 // Picks the package manager used to materialize the assembled-app node_modules
-// during writeAssembledApp. The default (`npm`) preserves host behavior for
-// developer-machine builds. When the build runs inside
-// `electronuserland/builder:base` (which strips npm, npx, and corepack),
-// buildDockerArgs sets OD_TOOLS_PACK_PNPM_BIN to the standalone pnpm binary it
-// bootstrapped, and this resolver routes the install through that binary.
-// `--config.node-linker=hoisted` keeps the resulting layout flat so
-// electron-builder packs node_modules the same way it does for npm-installed
-// trees.
+// during writeAssembledApp. Both the host and (now) the containerized build use
+// npm: it hoists the file: internal deps flat and installs the full transitive
+// tree, which is what actually boots. The containerized build exposes npm by
+// putting the pnpm-managed Node bin on PATH (see buildDockerArgs), so it no longer
+// sets OD_TOOLS_PACK_PNPM_BIN. The OD_TOOLS_PACK_PNPM_BIN branch is retained as an
+// opt-in escape hatch, but it is not the container default anymore: a pnpm
+// `--prod --no-lockfile` install over the file: tarballs dropped transitive deps
+// (jszip's `setimmediate`), yielding a package that built but crashed on boot.
 export function resolveProductionInstallCommand(env: NodeJS.ProcessEnv): ProductionInstallCommand {
   const pnpmBin = env[PRODUCTION_INSTALL_PNPM_BIN_ENV];
   if (pnpmBin != null && pnpmBin.length > 0) {
