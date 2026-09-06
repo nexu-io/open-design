@@ -159,9 +159,14 @@ export async function fetchAgents(options?: { throwOnError?: boolean }): Promise
 export async function fetchAgentsStream(args: {
   onAgent: (agent: AgentInfo) => void;
   signal?: AbortSignal;
+  zcodeAppPath?: string | null;
 }): Promise<AgentInfo[]> {
   const { onAgent, signal } = args;
-  const resp = await fetch('/api/agents?stream=1', {
+  const search = new URLSearchParams({ stream: '1' });
+  if (Object.prototype.hasOwnProperty.call(args, 'zcodeAppPath')) {
+    search.set('zcodeAppPath', args.zcodeAppPath ?? '');
+  }
+  const resp = await fetch(`/api/agents?${search.toString()}`, {
     cache: 'no-store',
     headers: { Accept: 'text/event-stream' },
     ...(signal ? { signal } : {}),
@@ -3293,6 +3298,41 @@ export async function openFolderDialog(options: { throwOnError?: boolean } = {})
       throw err instanceof Error ? err : new Error('Could not open folder picker');
     }
     return null;
+  }
+}
+
+export type ZcodeAppDialogResult =
+  | { status: 'selected'; path: string }
+  | { status: 'cancelled' }
+  | { status: 'unsupported'; message?: string }
+  | { status: 'error'; message?: string };
+
+export async function openZcodeAppDialog(): Promise<ZcodeAppDialogResult> {
+  try {
+    const resp = await fetch('/api/dialog/open-zcode-app', { method: 'POST' });
+    const data = await resp.json().catch(() => null) as
+      | { path?: unknown; error?: unknown; code?: unknown }
+      | null;
+    if (resp.status === 501 || data?.code === 'unsupported-platform') {
+      return {
+        status: 'unsupported',
+        message: typeof data?.error === 'string' ? data.error : undefined,
+      };
+    }
+    if (!resp.ok) {
+      return {
+        status: 'error',
+        message: typeof data?.error === 'string' ? data.error : undefined,
+      };
+    }
+    return typeof data?.path === 'string' && data.path.length > 0
+      ? { status: 'selected', path: data.path }
+      : { status: 'cancelled' };
+  } catch (err) {
+    return {
+      status: 'error',
+      message: err instanceof Error ? err.message : undefined,
+    };
   }
 }
 

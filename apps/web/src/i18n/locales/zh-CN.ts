@@ -471,6 +471,7 @@ export const zhCN: Dict = {
   "settings.testUnknown": "测试失败：{detail}",
   "settings.agentInstall.install": "安装",
   "settings.agentInstall.docs": "查看文档",
+  "settings.agentInstall.configurePath": "配置路径",
   "settings.agentInstall.pathHint":
     "如果你通过 npm 或 Homebrew 安装了 CLI，但仍显示为未安装，请确认该工具的 bin 目录已加入 OpenDesign daemon 继承的 PATH（在 macOS 上，Terminal 与 GUI 应用的 PATH 可能不同）。请参阅 QUICKSTART.md（“Local agent CLI and PATH” 章节）。",
   "settings.agentInstall.stepOpenLinks":
@@ -625,6 +626,19 @@ export const zhCN: Dict = {
   "settings.cliEnvCodexBin": "Codex 可执行文件路径",
   "settings.cliEnvCodexBaseUrl": "Codex/OpenAI proxy base URL",
   "settings.cliEnvCodexApiKey": "Codex/OpenAI CLI API key",
+  "settings.cliEnvZcodeBin": "ZCode 可执行文件路径",
+  "settings.zcodeAppPathTitle": "ZCode 应用",
+  "settings.zcodeAppPathHint": "Installed but not detected? Choose ZCode.app.",
+  "settings.zcodeAppPathAuto": "自动发现 ZCode.app",
+  "settings.zcodeAppPathChoose": "选择 ZCode.app",
+  "settings.zcodeAppPathSelected": "正在使用 {path} 中的 ZCode.app。",
+  "settings.zcodeAppPathSelectedPending":
+    "已选择 {path} 中的 ZCode.app，但 ZCode 尚未就绪。请在 ZCode 完成安装或登录后重新扫描。",
+  "settings.zcodeAppPathNoSelection": "没有选择 ZCode.app。",
+  "settings.zcodeAppPathUnsupported": "选择 ZCode.app 仅支持 macOS。",
+  "settings.zcodeAppPathInvalid": "请选择 ZCode.app。当前选择的是 {path}。",
+  "settings.zcodeAppPathPickerError": "无法打开 app 选择器，请在设置中重试。",
+  "settings.zcodeAppPathVerifyError": "无法验证所选 ZCode.app，请在设置中重试。",
   "settings.modelCustom": "自定义（在下方填写）…",
   "settings.modelCustomLabel": "自定义模型 id",
   "settings.modelCustomPlaceholder": "例如 anthropic/claude-sonnet-4-6",

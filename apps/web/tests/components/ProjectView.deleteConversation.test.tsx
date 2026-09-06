@@ -175,6 +175,12 @@ function renderProjectView(onProjectsRefresh: () => void) {
   return render(
     <ProjectView
       project={{ id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never}
+      initialWorkspaceScope={{
+        kind: 'unbound',
+        projectId: 'project-1',
+        workspaceId: null,
+        context: null,
+      }}
       routeFileName={null}
       config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
       agents={[{ id: 'agent-1', name: 'OpenCode', models: [] } as never]}

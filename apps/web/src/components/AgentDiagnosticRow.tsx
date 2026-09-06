@@ -21,6 +21,7 @@ interface Props {
   diagnostic: AgentDiagnostic;
   handlers?: AgentFixHandlers;
   className?: string;
+  extraActions?: AgentDiagnosticExtraAction[];
 }
 
 type ResolvedAction = {
@@ -28,6 +29,13 @@ type ResolvedAction = {
   label: string;
   icon: IconName;
   onClick: () => void;
+};
+
+export type AgentDiagnosticExtraAction = {
+  key: string;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
 };
 
 // Map one typed fix intent to a concrete icon button, reusing translation keys
@@ -86,7 +94,12 @@ function useResolveAction() {
 // The reason text is the daemon-authored message (already English, like the
 // existing auth banner), and tooltips expose the probe detail + the exact
 // directories PATH detection searched.
-export function AgentDiagnosticRow({ diagnostic, handlers = {}, className }: Props) {
+export function AgentDiagnosticRow({
+  diagnostic,
+  handlers = {},
+  className,
+  extraActions = [],
+}: Props) {
   const resolveAction = useResolveAction();
   const actions = (diagnostic.fixActions ?? [])
     .map((intent) => resolveAction(intent, handlers))
@@ -112,8 +125,19 @@ export function AgentDiagnosticRow({ diagnostic, handlers = {}, className }: Pro
       <span className={styles.message} title={tooltip || undefined}>
         {diagnostic.message}
       </span>
-      {actions.length > 0 ? (
+      {actions.length > 0 || extraActions.length > 0 ? (
         <div className={styles.actions}>
+          {extraActions.map((action) => (
+            <button
+              key={action.key}
+              type="button"
+              className={styles.textAction}
+              onClick={action.onClick}
+              disabled={action.disabled}
+            >
+              {action.label}
+            </button>
+          ))}
           {actions.map((action) => (
             <button
               key={action.key}

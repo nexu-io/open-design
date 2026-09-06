@@ -135,7 +135,12 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       ? ctx.appConfig.onAppConfigWritten
       : null;
   const { orbitService } = ctx.orbit;
-  const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
+  const {
+    openBrowser,
+    openNativeFolderDialog,
+    openNativeZcodeAppDialog,
+    supportsNativeZcodeAppDialog,
+  } = ctx.nativeDialogs;
   const { getWorkspaceProjectByProjectId, getProject } = ctx.projectStore;
   const { resolveProjectDir } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
@@ -774,6 +779,29 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
     try {
       const selected = await openNativeFolderDialog();
+      res.json({ path: selected });
+    } catch (err: any) {
+      res
+        .status(500)
+        .json({ error: String(err && err.message ? err.message : err) });
+    }
+  });
+
+  // Native OS picker for the macOS ZCode.app bundle. `.app` packages are not
+  // selectable through the generic folder picker because Finder treats them as
+  // packages/files, even though the runtime later resolves a file inside them.
+  app.post('/api/dialog/open-zcode-app', async (req, res) => {
+    if (!isLocalSameOrigin(req, getResolvedPort())) {
+      return res.status(403).json({ error: 'cross-origin request rejected' });
+    }
+    if (!supportsNativeZcodeAppDialog()) {
+      return res.status(501).json({
+        code: 'unsupported-platform',
+        error: 'ZCode.app selection is only supported on macOS',
+      });
+    }
+    try {
+      const selected = await openNativeZcodeAppDialog();
       res.json({ path: selected });
     } catch (err: any) {
       res

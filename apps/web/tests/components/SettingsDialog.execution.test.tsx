@@ -34,6 +34,7 @@ const {
   importGitHubDesignSystemMock,
   fetchProviderModelsMock,
   fetchLatestGithubReleaseInfoMock,
+  openZcodeAppDialogMock,
   openExternalUrlMock,
   analyticsTrackMock,
 } = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ const {
   importGitHubDesignSystemMock: vi.fn(),
   fetchProviderModelsMock: vi.fn(),
   fetchLatestGithubReleaseInfoMock: vi.fn(),
+  openZcodeAppDialogMock: vi.fn(),
   openExternalUrlMock: vi.fn(),
   analyticsTrackMock: vi.fn(),
 }));
@@ -83,6 +85,7 @@ vi.mock('../../src/providers/registry', async () => {
     importLocalDesignSystem: importLocalDesignSystemMock,
     importGitHubDesignSystem: importGitHubDesignSystemMock,
     fetchLatestGithubReleaseInfo: fetchLatestGithubReleaseInfoMock,
+    openZcodeAppDialog: openZcodeAppDialogMock,
     openExternalUrl: openExternalUrlMock,
     codexPetSpritesheetUrl: (pet: { spritesheetUrl: string }) => pet.spritesheetUrl,
   };
@@ -137,6 +140,19 @@ const baseConfig: AppConfig = {
   mediaProviders: {},
   agentModels: {},
   agentCliEnv: {},
+};
+
+const darwinAppVersionInfo: AppVersionInfo = {
+  version: '0.0.0-test',
+  channel: 'dev',
+  packaged: false,
+  platform: 'darwin',
+  arch: 'arm64',
+};
+
+const linuxAppVersionInfo: AppVersionInfo = {
+  ...darwinAppVersionInfo,
+  platform: 'linux',
 };
 
 const availableAgents: AgentInfo[] = [
@@ -497,6 +513,7 @@ beforeEach(() => {
   importLocalDesignSystemMock.mockReset();
   importGitHubDesignSystemMock.mockReset();
   fetchProviderModelsMock.mockReset();
+  openZcodeAppDialogMock.mockReset();
   openExternalUrlMock.mockReset();
   analyticsTrackMock.mockReset();
   notificationPermissionMock.mockReturnValue('default');
@@ -526,6 +543,7 @@ beforeEach(() => {
   }));
   fetchLatestGithubReleaseInfoMock.mockReset();
   fetchLatestGithubReleaseInfoMock.mockResolvedValue(null);
+  openZcodeAppDialogMock.mockResolvedValue({ status: 'cancelled' });
   openExternalUrlMock.mockResolvedValue(true);
   importLocalDesignSystemMock.mockResolvedValue({
     designSystem: {
@@ -3272,6 +3290,402 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
       }),
       {},
     );
+  });
+
+  it('opens unavailable CLI path fields without switching the saved agent', async () => {
+    const unavailableClaude: AgentInfo = {
+      id: 'claude',
+      name: 'Claude Code',
+      bin: 'claude',
+      available: false,
+      version: null,
+      models: [],
+    };
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { agents: [availableAgents[0]!, unavailableClaude] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Configure path' }));
+
+    expect(screen.getByLabelText('Claude Code config directory')).toBeTruthy();
+    expect(onPersist).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Claude Code config directory'), {
+      target: { value: ' ~/.claude-alt ' },
+    });
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        mode: 'daemon',
+        agentId: 'codex',
+        agentCliEnv: {
+          claude: { CLAUDE_CONFIG_DIR: '~/.claude-alt' },
+        },
+      }),
+      {},
+    );
+  });
+
+  it('lets users choose ZCode.app without exposing the internal executable path', async () => {
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+    };
+    openZcodeAppDialogMock.mockResolvedValue({
+      status: 'selected',
+      path: '/Custom Apps/ZCode.app',
+    });
+    const refreshedZcode: AgentInfo = {
+      ...unavailableZcode,
+      available: true,
+      version: '1.0.0',
+      models: [{ id: 'default', label: 'Default' }],
+    };
+    const onRefreshAgents = vi.fn<OnRefreshAgents>().mockResolvedValue([
+      availableAgents[0]!,
+      refreshedZcode,
+    ]);
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    expect(screen.getByText(en['settings.zcodeAppPathHint'])).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Choose ZCode.app' }));
+
+    expect(screen.queryByRole('button', { name: 'Configure path' })).toBeNull();
+    expect(screen.queryByLabelText('ZCode executable path')).toBeNull();
+    await waitFor(() => {
+      expect(onRefreshAgents).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {},
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      });
+    });
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        mode: 'daemon',
+        agentId: 'zcode',
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      }),
+      {},
+    );
+  });
+
+  it('preserves daemon-authored ZCode diagnostics while showing the app picker action', () => {
+    const diagnosticMessage = 'Configured ZCode.app path no longer exists.';
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+      installUrl: 'https://zcode.z.ai',
+      docsUrl: 'https://zcode.z.ai/cn/docs/welcome',
+      diagnostics: [
+        {
+          reason: 'configured-app-path-invalid',
+          severity: 'error',
+          message: diagnosticMessage,
+          fixActions: [{ kind: 'openInstall' }, { kind: 'rescan' }],
+        },
+      ],
+    };
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+
+    const zcodeCard = screen.getByRole('group', { name: 'ZCode · not installed' });
+    expect(
+      within(zcodeCard).getByRole('link', {
+        name: en['settings.agentInstall.install'],
+      }).getAttribute('href'),
+    )
+      .toBe('https://zcode.z.ai/');
+    expect(
+      within(zcodeCard).getByRole('link', {
+        name: en['settings.agentInstall.docs'],
+      }).getAttribute('href'),
+    ).toBe('https://zcode.z.ai/cn/docs/welcome');
+
+    const diagnosticRow = zcodeCard.querySelector('[data-reason="configured-app-path-invalid"]');
+    expect(diagnosticRow).not.toBeNull();
+    const picker = within(zcodeCard).getByRole('button', {
+      name: 'Choose ZCode.app',
+    });
+    expect(picker.closest('.agent-card-unavailable-row')).toBeNull();
+    const footer = picker.closest('.agent-card-footer');
+    expect(footer).not.toBeNull();
+    expect(picker).toHaveClass('agent-card-link--zcode-picker');
+    expect(
+      within(footer as HTMLElement).getByRole('link', {
+        name: en['settings.agentInstall.install'],
+      }),
+    ).toBeTruthy();
+    expect(
+      within(footer as HTMLElement).getByRole('button', {
+        name: en['settings.rescan'],
+      }),
+    ).toBeTruthy();
+    expect(within(zcodeCard).getByText(diagnosticMessage)).toBeTruthy();
+    expect(within(zcodeCard).queryByText(en['settings.zcodeAppPathHint'])).toBeNull();
+  });
+
+  it('keeps the previous Local CLI selection when the chosen ZCode.app rescan fails', async () => {
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+    };
+    openZcodeAppDialogMock.mockResolvedValue({
+      status: 'selected',
+      path: '/Custom Apps/ZCode.app',
+    });
+    const onRefreshAgents = vi.fn<OnRefreshAgents>().mockRejectedValue(new Error('rescan failed'));
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose ZCode.app' }));
+
+    await waitFor(() => {
+      expect(onRefreshAgents).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {},
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      });
+    });
+    await screen.findByText('Could not verify the selected ZCode.app. Try again from Settings.');
+    expect(onPersist).not.toHaveBeenCalled();
+  });
+
+  it('persists a chosen ZCode.app for later rescans when ZCode is still unavailable', async () => {
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+      diagnostics: [
+        {
+          reason: 'not-on-path',
+          severity: 'error',
+          message: 'ZCode (`zcode`) was not found on your PATH.',
+          fixActions: [{ kind: 'rescan' }],
+        },
+      ],
+    };
+    openZcodeAppDialogMock.mockResolvedValue({
+      status: 'selected',
+      path: '/Custom Apps/ZCode.app',
+    });
+    const onRefreshAgents = vi.fn<OnRefreshAgents>().mockResolvedValue([
+      availableAgents[0]!,
+      unavailableZcode,
+    ]);
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose ZCode.app' }));
+
+    await screen.findByText(
+      'Selected ZCode.app at /Custom Apps/ZCode.app, but ZCode is not ready yet. Rescan after ZCode finishes installing or signing in.',
+    );
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        mode: 'daemon',
+        agentId: 'codex',
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      }),
+      {},
+    );
+
+    const persistedConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig;
+    cleanup();
+
+    const onRefreshAgentsAfterReopen = vi.fn<OnRefreshAgents>().mockResolvedValue([
+      availableAgents[0]!,
+      unavailableZcode,
+    ]);
+    renderSettingsDialog(
+      persistedConfig,
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+        onRefreshAgents: onRefreshAgentsAfterReopen,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    const zcodeCard = screen.getByRole('group', { name: 'ZCode · not installed' });
+    fireEvent.click(within(zcodeCard).getByRole('button', { name: en['settings.rescan'] }));
+
+    await waitFor(() => {
+      expect(onRefreshAgentsAfterReopen).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {},
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      });
+    });
+  });
+
+  it('preserves concurrent edits made while the ZCode.app rescan is pending', async () => {
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+    };
+    openZcodeAppDialogMock.mockResolvedValue({
+      status: 'selected',
+      path: '/Custom Apps/ZCode.app',
+    });
+    const pending = deferred<AgentInfo[]>();
+    const onRefreshAgents = vi.fn<OnRefreshAgents>().mockReturnValue(pending.promise);
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose ZCode.app' }));
+
+    await waitFor(() => {
+      expect(onRefreshAgents).toHaveBeenCalledWith({
+        throwOnError: true,
+        agentCliEnv: {},
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      });
+    });
+    fireEvent.change(screen.getByLabelText('Codex home'), {
+      target: { value: ' ~/.codex-during-zcode-rescan ' },
+    });
+    pending.resolve([availableAgents[0]!, unavailableZcode]);
+
+    await screen.findByText(
+      'Selected ZCode.app at /Custom Apps/ZCode.app, but ZCode is not ready yet. Rescan after ZCode finishes installing or signing in.',
+    );
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        mode: 'daemon',
+        agentId: 'codex',
+        agentCliEnv: {
+          codex: { CODEX_HOME: '~/.codex-during-zcode-rescan' },
+        },
+        zcodeAppPath: '/Custom Apps/ZCode.app',
+      }),
+      {},
+    );
+  });
+
+  it('rejects a non-ZCode app bundle before saving or rescanning', async () => {
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+    };
+    openZcodeAppDialogMock.mockResolvedValue({
+      status: 'selected',
+      path: '/Applications/Claude.app',
+    });
+    const onRefreshAgents = vi.fn<OnRefreshAgents>();
+    const { onPersist } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: darwinAppVersionInfo,
+        onRefreshAgents,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+    fireEvent.click(screen.getByRole('button', { name: 'Choose ZCode.app' }));
+
+    await screen.findByText(
+      'Choose ZCode.app. Current selection: /Applications/Claude.app.',
+    );
+    expect(onRefreshAgents).not.toHaveBeenCalled();
+    expect(onPersist).not.toHaveBeenCalled();
+  });
+
+  it('hides the ZCode.app picker on non-macOS hosts', () => {
+    const unavailableZcode: AgentInfo = {
+      id: 'zcode',
+      name: 'ZCode',
+      bin: 'zcode',
+      available: false,
+      version: null,
+      models: [],
+    };
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        agents: [availableAgents[0]!, unavailableZcode],
+        appVersionInfo: linuxAppVersionInfo,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
+
+    expect(screen.queryByRole('button', { name: 'Choose ZCode.app' })).toBeNull();
   });
 
   it('disables Local CLI mode when the daemon is offline', () => {

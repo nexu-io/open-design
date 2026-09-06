@@ -79,6 +79,7 @@ import {
   runPreviewModuleCountForRun,
 } from '../runtimes/run-lifecycle-analytics.js';
 import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
+import type { AgentExecutableResolutionOptions } from '../runtimes/executables.js';
 import type { AppliedPluginSnapshot } from '@open-design/contracts';
 import type { OdNextRolloutDecision } from '../strategies/od-next/rollout.js';
 import {
@@ -235,6 +236,7 @@ export interface RunAnalyticsLifecycleDeps {
   agents: {
     detectAgents: (
       agentCliEnv?: Record<string, unknown>,
+      options?: AgentExecutableResolutionOptions,
     ) => Promise<Array<{ id: string; available: boolean }>>;
   };
   telemetry: RunAnalyticsTelemetryDeps;
@@ -384,8 +386,13 @@ export function createRunAnalyticsLifecycle(
         const appCfgForAnalytics = await readAppConfig(RUNTIME_DATA_DIR).catch(
           () => ({} as Record<string, unknown>),
         );
+        const analyticsZcodeAppPathRaw = (appCfgForAnalytics as { zcodeAppPath?: unknown })
+          .zcodeAppPath;
+        const analyticsZcodeAppPath =
+          typeof analyticsZcodeAppPathRaw === 'string' ? analyticsZcodeAppPathRaw : null;
         const detectedAgentsForAnalytics = await detectAgents(
           toJsonRecord((appCfgForAnalytics as { agentCliEnv?: unknown }).agentCliEnv),
+          { zcodeAppPath: analyticsZcodeAppPath },
         ).catch((): Array<{ id: string; available: boolean }> => []);
         const velaStatusForAnalytics = (() => {
           try {

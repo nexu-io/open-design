@@ -66,6 +66,8 @@ export interface AppConfigPrefs {
   projectLocations?: ProjectLocationPrefs[];
   /** Project location id used for new projects when the create request does not choose one explicitly. */
   defaultProjectLocationId?: string | null;
+  /** Optional user-selected ZCode.app bundle path for non-standard installs. */
+  zcodeAppPath?: string | null;
   /**
    * Whether this installation opts into the OD Next design strategy, and in
    * which mode.

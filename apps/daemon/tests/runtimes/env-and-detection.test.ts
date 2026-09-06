@@ -83,6 +83,25 @@ test('spawnEnvForAgent applies configured Codex env without mutating the base en
   assert.equal('CODEX_BIN' in base, false);
 });
 
+test('spawnEnvForAgent scopes zcode runtime data under OD_DATA_DIR', () => {
+  const env = spawnEnvForAgent(
+    'zcode',
+    {
+      OD_DATA_DIR: '/tmp/od-data',
+      PATH: '/usr/bin',
+    },
+    {},
+    {},
+  );
+
+  assert.equal(env.ZCODE_STORAGE_DIR, join('/tmp/od-data', 'zcode'));
+  assert.equal(
+    env.ZCODE_SESSION_DB_PATH,
+    join('/tmp/od-data', 'zcode', 'session.db'),
+  );
+  assert.equal(env.PATH, '/usr/bin');
+});
+
 test('spawnEnvForAgent backfills Windows cache directory env for Trae CLI launches', () => {
   const env = withPlatform('win32', () =>
     spawnEnvForAgent(
@@ -476,6 +495,207 @@ test('inspectAgentExecutableResolution reports configured and PATH Codex binarie
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable finds ZCode inside the user Applications app bundle', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-zcode-app-home-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN'], () => {
+      const bundled = join(
+        home,
+        'Applications',
+        'ZCode.app',
+        'Contents',
+        'Resources',
+        'glm',
+        'zcode.cjs',
+      );
+      mkdirSync(dirname(bundled), { recursive: true });
+      writeFileSync(bundled, '#!/bin/sh\nexit 0\n');
+      chmodSync(bundled, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = home;
+      delete process.env.ZCODE_BIN;
+
+      const resolved = withPlatform('darwin', () =>
+        resolveAgentExecutable(minimalAgentDef({ id: 'zcode', bin: 'zcode' })),
+      );
+
+      assert.equal(resolved, bundled);
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable finds ZCode inside a configured app bundle path', () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-zcode-configured-app-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN'], () => {
+      const appPath = join(root, 'Pinned', 'ZCode.app');
+      const bundled = join(
+        appPath,
+        'Contents',
+        'Resources',
+        'glm',
+        'zcode.cjs',
+      );
+      mkdirSync(dirname(bundled), { recursive: true });
+      writeFileSync(bundled, '#!/bin/sh\nexit 0\n');
+      chmodSync(bundled, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'home-without-zcode');
+      delete process.env.ZCODE_BIN;
+
+      const resolved = withPlatform('darwin', () =>
+        resolveAgentExecutable(
+          minimalAgentDef({ id: 'zcode', bin: 'zcode' }),
+          {},
+          { zcodeAppPath: appPath },
+        ),
+      );
+
+      assert.equal(resolved, bundled);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable does not fall back when a configured ZCode app path is invalid', () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-zcode-invalid-app-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN'], () => {
+      const home = join(root, 'home');
+      const realBundled = join(
+        home,
+        'Applications',
+        'ZCode.app',
+        'Contents',
+        'Resources',
+        'glm',
+        'zcode.cjs',
+      );
+      const wrongApp = join(root, 'Applications', 'Claude.app');
+      const pathBin = join(root, 'bin', 'zcode');
+      mkdirSync(dirname(realBundled), { recursive: true });
+      mkdirSync(wrongApp, { recursive: true });
+      mkdirSync(dirname(pathBin), { recursive: true });
+      writeFileSync(realBundled, '#!/bin/sh\nexit 0\n');
+      writeFileSync(pathBin, '#!/bin/sh\nexit 0\n');
+      chmodSync(realBundled, 0o755);
+      chmodSync(pathBin, 0o755);
+      process.env.PATH = dirname(pathBin);
+      process.env.OD_AGENT_HOME = home;
+      delete process.env.ZCODE_BIN;
+
+      const resolved = withPlatform('darwin', () =>
+        resolveAgentExecutable(
+          minimalAgentDef({ id: 'zcode', bin: 'zcode' }),
+          {},
+          { zcodeAppPath: wrongApp },
+        ),
+      );
+
+      assert.equal(resolved, null);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable ignores a configured ZCode app path off macOS', () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-zcode-non-mac-app-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN'], () => {
+      const wrongApp = join(root, 'Applications', 'ZCode.app');
+      const pathBin = join(root, 'bin', 'zcode');
+      mkdirSync(wrongApp, { recursive: true });
+      mkdirSync(dirname(pathBin), { recursive: true });
+      writeFileSync(pathBin, '#!/bin/sh\nexit 0\n');
+      chmodSync(pathBin, 0o755);
+      process.env.PATH = dirname(pathBin);
+      process.env.OD_AGENT_HOME = join(root, 'home-without-zcode');
+      delete process.env.ZCODE_BIN;
+
+      const resolved = withPlatform('linux', () =>
+        resolveAgentExecutable(
+          minimalAgentDef({ id: 'zcode', bin: 'zcode' }),
+          {},
+          { zcodeAppPath: wrongApp },
+        ),
+      );
+
+      assert.equal(resolved, pathBin);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+fsTest('detectAgents surfaces a stale saved ZCode.app path diagnostic', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'od-zcode-invalid-app-diagnostic-'));
+  try {
+    return await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN'], async () => {
+      const wrongApp = join(root, 'Applications', 'ZCode.app');
+      mkdirSync(wrongApp, { recursive: true });
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = join(root, 'home-without-zcode');
+      delete process.env.ZCODE_BIN;
+
+      const agents = await withPlatform('darwin', () =>
+        detectAgents({}, { zcodeAppPath: wrongApp }),
+      );
+      const zcode = agents.find((agent) => agent.id === 'zcode');
+
+      assert.ok(zcode);
+      assert.equal(zcode.available, false);
+      assert.equal(zcode.diagnostics?.[0]?.reason, 'configured-app-path-invalid');
+      assert.equal(zcode.diagnostics?.[0]?.detail, wrongApp);
+      assert.match(
+        zcode.diagnostics?.[0]?.message ?? '',
+        /saved ZCode\.app path no longer contains a runnable ZCode executable/,
+      );
+      assert.deepEqual(zcode.diagnostics?.[0]?.fixActions, [{ kind: 'rescan' }]);
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+fsTest('resolveAgentExecutable prefers ZCODE_BIN over the discovered ZCode app bundle', () => {
+  const home = mkdtempSync(join(tmpdir(), 'od-zcode-app-precedence-'));
+  try {
+    return withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN'], () => {
+      const bundled = join(
+        home,
+        'Applications',
+        'ZCode.app',
+        'Contents',
+        'Resources',
+        'glm',
+        'zcode.cjs',
+      );
+      const configured = join(home, 'custom', 'zcode.cjs');
+      mkdirSync(dirname(bundled), { recursive: true });
+      mkdirSync(dirname(configured), { recursive: true });
+      writeFileSync(bundled, '#!/bin/sh\nexit 0\n');
+      writeFileSync(configured, '#!/bin/sh\nexit 0\n');
+      chmodSync(bundled, 0o755);
+      chmodSync(configured, 0o755);
+      process.env.PATH = '';
+      process.env.OD_AGENT_HOME = home;
+      process.env.ZCODE_BIN = configured;
+
+      const resolved = withPlatform('darwin', () =>
+        resolveAgentExecutable(minimalAgentDef({ id: 'zcode', bin: 'zcode' })),
+      );
+
+      assert.equal(resolved, configured);
+    });
+  } finally {
+    rmSync(home, { recursive: true, force: true });
   }
 });
 
@@ -992,6 +1212,172 @@ test('detectAgents applies configured env while probing the CLI', async () => {
       const detected = agents.find((agent) => agent.id === 'claude');
       assert.equal(detected?.available, true);
       assert.equal(detected?.version, '/tmp/claude-config-probe');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents finds zcode via ZCODE_BIN override', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-zcode-detect-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN', 'HOME', 'USERPROFILE'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'zcode.cmd' : 'zcode');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo zcode 0.14.9& exit /b 0\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "zcode 0.14.9"; exit 0; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      const home = join(dir, 'home');
+      mkdirSync(join(home, '.zcode', 'v2'), { recursive: true });
+      writeFileSync(
+        join(home, '.zcode', 'v2', 'config.json'),
+        JSON.stringify({
+          provider: {
+            'builtin:bigmodel': {
+              options: { apiKey: 'saved-zcode-key' },
+              models: { 'GLM-5.2': {} },
+            },
+          },
+        }),
+      );
+      process.env.PATH = '';
+      process.env.HOME = home;
+      process.env.USERPROFILE = home;
+      process.env.OD_AGENT_HOME = join(dir, 'empty-home');
+      delete process.env.ZCODE_BIN;
+
+      const agents = await detectAgents({
+        zcode: { ZCODE_BIN: bin },
+      });
+
+      const detected = agents.find((agent) => agent.id === 'zcode');
+      assert.equal(detected?.available, true);
+      assert.equal(detected?.path, bin);
+      assert.equal(detected?.version, 'zcode 0.14.9');
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents marks zcode unavailable when saved provider config is missing', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-zcode-missing-config-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN', 'HOME', 'USERPROFILE'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'zcode.cmd' : 'zcode');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo zcode 0.14.9& exit /b 0\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "zcode 0.14.9"; exit 0; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      const home = join(dir, 'home-without-config');
+      process.env.PATH = '';
+      process.env.HOME = home;
+      process.env.USERPROFILE = home;
+      process.env.OD_AGENT_HOME = join(dir, 'empty-home');
+      delete process.env.ZCODE_BIN;
+
+      const agents = await detectAgents({
+        zcode: { ZCODE_BIN: bin },
+      });
+
+      const detected = agents.find((agent) => agent.id === 'zcode');
+      assert.equal(detected?.available, false);
+      assert.equal(detected?.modelsSource, 'fallback');
+      assert.equal(detected?.diagnostics?.[0]?.reason, 'saved-config-invalid');
+      assert.equal(
+        detected?.diagnostics?.[0]?.message,
+        'ZCode is installed but not configured. Add an API key, then rescan.',
+      );
+      assert.match(
+        detected?.diagnostics?.[0]?.detail ?? '',
+        /Failed to read ZCode saved config/,
+      );
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('detectAgents surfaces ZCode saved provider models for the Settings picker', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'od-zcode-model-detect-'));
+  try {
+    await withEnvSnapshot(['PATH', 'OD_AGENT_HOME', 'ZCODE_BIN', 'HOME', 'USERPROFILE'], async () => {
+      const bin = join(dir, process.platform === 'win32' ? 'zcode.cmd' : 'zcode');
+      if (process.platform === 'win32') {
+        writeFileSync(
+          bin,
+          '@echo off\r\nif "%~1"=="--version" echo zcode 0.14.9& exit /b 0\r\nexit /b 0\r\n',
+        );
+      } else {
+        writeFileSync(
+          bin,
+          '#!/bin/sh\nif [ "$1" = "--version" ]; then echo "zcode 0.14.9"; exit 0; fi\nexit 0\n',
+        );
+        chmodSync(bin, 0o755);
+      }
+      const home = join(dir, 'home');
+      mkdirSync(join(home, '.zcode', 'v2'), { recursive: true });
+      writeFileSync(
+        join(home, '.zcode', 'v2', 'config.json'),
+        JSON.stringify({
+          provider: {
+            'builtin:bigmodel': {
+              options: { apiKey: 'saved-zcode-key' },
+              models: {
+                'GLM-5.2': {},
+                'GLM-5.2-Air': {},
+              },
+            },
+          },
+        }),
+      );
+      writeFileSync(
+        join(home, '.zcode', 'v2', 'bots-model-cache.v2.json'),
+        JSON.stringify({
+          providers: [
+            {
+              id: 'builtin:bigmodel',
+              models: [
+                { id: 'GLM-5.2' },
+                { id: 'GLM-5.2-Air', name: 'glm-5.2-air' },
+              ],
+            },
+          ],
+        }),
+      );
+      process.env.PATH = '';
+      process.env.HOME = home;
+      process.env.USERPROFILE = home;
+      process.env.OD_AGENT_HOME = join(dir, 'empty-home');
+      delete process.env.ZCODE_BIN;
+
+      const agents = await detectAgents({
+        zcode: { ZCODE_BIN: bin },
+      });
+
+      const detected = agents.find((agent) => agent.id === 'zcode');
+      assert.equal(detected?.available, true);
+      assert.equal(detected?.modelsSource, 'live');
+      assert.deepEqual(detected?.models, [
+        { id: 'glm-5.2', label: 'GLM-5.2' },
+        { id: 'glm-5.2-air', label: 'GLM-5.2-Air' },
+      ]);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });

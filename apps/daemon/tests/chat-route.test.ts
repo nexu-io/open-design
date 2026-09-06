@@ -29,6 +29,7 @@ import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { getAgentDef } from '../src/agents.js';
 import { readAppConfig, writeAppConfig } from '../src/app-config.js';
 import { readMemoryConfig, writeMemoryConfig } from '../src/memory.js';
+import { resolveSandboxRuntimeConfig } from '../src/sandbox-mode.js';
 import {
   ensureWorkspaceProject,
   ensureWorkspaceResource,
@@ -47,6 +48,7 @@ async function withFakeAgent<T>(
 ): Promise<T> {
   const dir = await fsp.mkdtemp(join(tmpdir(), 'od-chat-route-bin-'));
   const oldPath = process.env.PATH;
+  const oldZcodeBin = process.env.ZCODE_BIN;
   try {
     if (process.platform === 'win32') {
       const runner = join(dir, `${binName}-test-runner.cjs`);
@@ -55,17 +57,41 @@ async function withFakeAgent<T>(
         join(dir, `${binName}.cmd`),
         `@echo off\r\nnode "${runner}" %*\r\n`,
       );
+      if (binName === 'zcode') process.env.ZCODE_BIN = join(dir, `${binName}.cmd`);
     } else {
       const bin = join(dir, binName);
       await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
       await fsp.chmod(bin, 0o755);
+      if (binName === 'zcode') process.env.ZCODE_BIN = bin;
     }
     process.env.PATH = `${dir}${delimiter}${oldPath ?? ''}`;
     return await run();
   } finally {
     process.env.PATH = oldPath;
+    if (oldZcodeBin == null) {
+      delete process.env.ZCODE_BIN;
+    } else {
+      process.env.ZCODE_BIN = oldZcodeBin;
+    }
     killProcessesUsingPath(dir);
     await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function withUnsetEnv<T>(
+  keys: readonly string[],
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map(keys.map((key) => [key, process.env[key]]));
+  for (const key of keys) delete process.env[key];
+  try {
+    return await run();
+  } finally {
+    for (const key of keys) {
+      const value = previous.get(key);
+      if (value == null) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
 }
 
@@ -94,6 +120,8 @@ describe('/api/chat', () => {
   let originalMemoryConfig: Awaited<ReturnType<typeof readMemoryConfig>> | null = null;
   const originalPath = process.env.PATH;
   const originalAgentHome = process.env.OD_AGENT_HOME;
+  const originalHome = process.env.HOME;
+  const originalUserProfile = process.env.USERPROFILE;
   const tempDirs: string[] = [];
 
   async function createPersonalWorkspaceBoundProjectFixture(label: string) {
@@ -195,6 +223,16 @@ describe('/api/chat', () => {
       delete process.env.OD_AGENT_HOME;
     } else {
       process.env.OD_AGENT_HOME = originalAgentHome;
+    }
+    if (originalHome == null) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = originalHome;
+    }
+    if (originalUserProfile == null) {
+      delete process.env.USERPROFILE;
+    } else {
+      process.env.USERPROFILE = originalUserProfile;
     }
   });
 
@@ -3011,6 +3049,656 @@ process.exit(0);
     );
   });
 
+  it('streams a ZCode app-server turn through the daemon run HTTP boundary', async () => {
+    const daemonHome = mkdtempSync(join(tmpdir(), 'od-zcode-http-home-'));
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon sandbox tests');
+    const zcodeHome = resolveSandboxRuntimeConfig(true, dataDir).roots.agentHomeDir;
+    const tracePath = join(daemonHome, 'trace.jsonl');
+    tempDirs.push(daemonHome);
+    mkdirSync(join(zcodeHome, '.zcode', 'v2'), { recursive: true });
+    writeFileSync(
+      join(zcodeHome, '.zcode', 'v2', 'config.json'),
+      JSON.stringify({
+        provider: {
+          'builtin:bigmodel': {
+            kind: 'anthropic',
+            source: 'custom',
+            options: {
+              apiKey: 'fake-zcode-api-key',
+              baseURL: 'https://open.bigmodel.cn/api/anthropic',
+            },
+            models: { 'GLM-5.2': {} },
+          },
+        },
+      }),
+      'utf8',
+    );
+
+    const previousTracePath = process.env.OD_ZCODE_FAKE_TRACE_PATH;
+    const previousSandboxMode = process.env.OD_SANDBOX_MODE;
+    const configResponse = await fetch(`${baseUrl}/api/app-config`);
+    const previousConfig = await configResponse.json() as {
+      config?: { agentCliEnv?: unknown; zcodeAppPath?: unknown };
+    };
+    const hadPreviousAgentCliEnv = Object.prototype.hasOwnProperty.call(previousConfig.config ?? {}, 'agentCliEnv');
+    const previousAgentCliEnv = previousConfig.config?.agentCliEnv;
+    const hadPreviousZcodeAppPath = Object.prototype.hasOwnProperty.call(previousConfig.config ?? {}, 'zcodeAppPath');
+    const previousZcodeAppPath = previousConfig.config?.zcodeAppPath;
+    await fetch(`${baseUrl}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentCliEnv: {}, zcodeAppPath: null }),
+    });
+    process.env.OD_SANDBOX_MODE = '1';
+    process.env.HOME = daemonHome;
+    process.env.USERPROFILE = daemonHome;
+    process.env.OD_ZCODE_FAKE_TRACE_PATH = tracePath;
+
+    try {
+      await withFakeAgent(
+        'zcode',
+        `
+const fs = require('node:fs');
+
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+
+const tracePath = process.env.OD_ZCODE_FAKE_TRACE_PATH;
+function trace(entry) {
+  if (tracePath) fs.appendFileSync(tracePath, JSON.stringify(entry) + '\\n');
+}
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    if (!request.method) {
+      trace({ responseToServerRequest: request.id, result: request.result });
+      continue;
+    }
+    trace({ method: request.method, params: request.params });
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+      case 'session/setMode':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create':
+        respond(request.id, { session: { sessionId: 'sess-http-smoke' } });
+        break;
+      case 'session/subscribe':
+        respond(request.id, {
+          eventSeq: 0,
+          events: [],
+          sessionId: request.params.sessionId,
+        });
+        break;
+      case 'session/send':
+        respond(request.id, {
+          accepted: true,
+          sessionId: request.params.sessionId,
+          stateRevision: 1,
+        });
+        setTimeout(() => {
+          send({
+            method: 'state.updated',
+            params: {
+              reason: 'prompt_started',
+              sessionId: request.params.sessionId,
+              revision: 2,
+              scope: 'session',
+              patch: {},
+            },
+          });
+          send({
+            method: 'session/event',
+            params: {
+              seq: 1,
+              sessionId: request.params.sessionId,
+              payload: { kind: 'text_delta', delta: 'hello from zcode' },
+            },
+          });
+          send({
+            method: 'session/event',
+            params: {
+              seq: 2,
+              sessionId: request.params.sessionId,
+              payload: {
+                kind: 'tool_call',
+                toolCallId: 'tool-1',
+                toolName: 'Bash',
+                input: { command: 'echo zcode-http-smoke' },
+              },
+            },
+          });
+          send({
+            method: 'session/event',
+            params: {
+              seq: 3,
+              sessionId: request.params.sessionId,
+              payload: {
+                kind: 'result',
+                toolCallId: 'tool-1',
+                result: { success: true, content: 'zcode-http-smoke' },
+              },
+            },
+          });
+          send({
+            id: 'runtime-headers-1',
+            method: 'interaction/requestProviderRuntimeHeaders',
+            params: { reason: 'model_request', sessionId: request.params.sessionId },
+          });
+          send({
+            method: 'state.updated',
+            params: {
+              reason: 'prompt_completed',
+              sessionId: request.params.sessionId,
+              revision: 3,
+              scope: 'session',
+              patch: {},
+            },
+          });
+          setTimeout(() => {
+            send({
+              method: 'session/event',
+              params: {
+                seq: 4,
+                sessionId: request.params.sessionId,
+                payload: {
+                  resultType: 'success',
+                  usage: { inputTokens: 7, outputTokens: 3 },
+                  duration: 42,
+                },
+              },
+            });
+            send({
+              method: 'session/event',
+              params: {
+                seq: 5,
+                sessionId: request.params.sessionId,
+                payload: {
+                  source: 'generated',
+                  title: 'ZCode smoke title',
+                  messageID: 'message-title-1',
+                },
+              },
+            });
+          }, 1250);
+        }, 10);
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'zcode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('event: agent');
+          expect(eventsBody).toContain('"type":"text_delta"');
+          expect(eventsBody).toContain('hello from zcode');
+          expect(eventsBody).toContain('"type":"tool_use"');
+          expect(eventsBody).toContain('"name":"Bash"');
+          expect(eventsBody).toContain('"type":"tool_result"');
+          expect(eventsBody).toContain('zcode-http-smoke');
+          expect(eventsBody).toContain('"type":"usage"');
+          expect(eventsBody).toContain('"type":"conversation_title","title":"ZCode smoke title"');
+          expect(eventsBody).toContain('"label":"completed"');
+          expect(eventsBody).toContain('event: end');
+          expect(statusBody.status).toBe('succeeded');
+
+          const trace = readFileSync(tracePath, 'utf8')
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line) as { method?: string });
+          expect(trace.map((entry) => entry.method).filter(Boolean)).toEqual([
+            'workspace/upsertModelProvider',
+            'workspace/setDefaultModel',
+            'session/create',
+            'session/setMode',
+            'session/subscribe',
+            'session/send',
+          ]);
+        },
+      );
+    } finally {
+      if (previousTracePath == null) {
+        delete process.env.OD_ZCODE_FAKE_TRACE_PATH;
+      } else {
+        process.env.OD_ZCODE_FAKE_TRACE_PATH = previousTracePath;
+      }
+      if (previousSandboxMode == null) {
+        delete process.env.OD_SANDBOX_MODE;
+      } else {
+        process.env.OD_SANDBOX_MODE = previousSandboxMode;
+      }
+      await fetch(`${baseUrl}/api/app-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentCliEnv: hadPreviousAgentCliEnv ? previousAgentCliEnv : {},
+          zcodeAppPath: hadPreviousZcodeAppPath ? previousZcodeAppPath : null,
+        }),
+      });
+    }
+  });
+
+  it('auto-reseeds a ZCode turn when the persisted session is missing', async () => {
+    const daemonHome = mkdtempSync(join(tmpdir(), 'od-zcode-resume-home-'));
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon sandbox tests');
+    const zcodeHome = resolveSandboxRuntimeConfig(true, dataDir).roots.agentHomeDir;
+    const tracePath = join(daemonHome, 'resume-trace.jsonl');
+    tempDirs.push(daemonHome);
+    mkdirSync(join(zcodeHome, '.zcode', 'v2'), { recursive: true });
+    writeFileSync(
+      join(zcodeHome, '.zcode', 'v2', 'config.json'),
+      JSON.stringify({
+        provider: {
+          'builtin:bigmodel': {
+            kind: 'anthropic',
+            source: 'custom',
+            options: {
+              apiKey: 'fake-zcode-api-key',
+              baseURL: 'https://open.bigmodel.cn/api/anthropic',
+            },
+            models: { 'GLM-5.2': {} },
+          },
+        },
+      }),
+      'utf8',
+    );
+
+    const projectId = `zcode_resume_${randomUUID()}`;
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'ZCode resume smoke',
+        metadata: { kind: 'prototype' },
+        skipDiscoveryBrief: true,
+      }),
+    });
+    expect(projectResponse.status).toBe(200);
+    const projectBody = await projectResponse.json() as { conversationId: string };
+    const conversationId = projectBody.conversationId;
+
+    const previousTracePath = process.env.OD_ZCODE_FAKE_TRACE_PATH;
+    const previousSandboxMode = process.env.OD_SANDBOX_MODE;
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const configResponse = await fetch(`${baseUrl}/api/app-config`);
+    const previousConfig = await configResponse.json() as {
+      config?: { agentCliEnv?: unknown; zcodeAppPath?: unknown };
+    };
+    const hadPreviousAgentCliEnv = Object.prototype.hasOwnProperty.call(previousConfig.config ?? {}, 'agentCliEnv');
+    const previousAgentCliEnv = previousConfig.config?.agentCliEnv;
+    const hadPreviousZcodeAppPath = Object.prototype.hasOwnProperty.call(previousConfig.config ?? {}, 'zcodeAppPath');
+    const previousZcodeAppPath = previousConfig.config?.zcodeAppPath;
+    await fetch(`${baseUrl}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentCliEnv: {}, zcodeAppPath: null }),
+    });
+    process.env.OD_SANDBOX_MODE = '1';
+    process.env.HOME = daemonHome;
+    process.env.USERPROFILE = daemonHome;
+    process.env.OD_ZCODE_FAKE_TRACE_PATH = tracePath;
+
+    try {
+      await withFakeAgent(
+        'zcode',
+        `
+const fs = require('node:fs');
+
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+
+const tracePath = process.env.OD_ZCODE_FAKE_TRACE_PATH;
+function trace(entry) {
+  if (tracePath) fs.appendFileSync(tracePath, JSON.stringify(entry) + '\\n');
+}
+function traceEntries() {
+  if (!tracePath || !fs.existsSync(tracePath)) return [];
+  return fs.readFileSync(tracePath, 'utf8')
+    .trim()
+    .split('\\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+function respond(id, result) {
+  send({ id, result });
+}
+function completeTurn(sessionId, requestId, label) {
+  respond(requestId, {
+    accepted: true,
+    sessionId,
+    stateRevision: 1,
+  });
+  setTimeout(() => {
+    send({
+      method: 'session/event',
+      params: {
+        seq: 1,
+        sessionId,
+        payload: { kind: 'text_delta', delta: label },
+      },
+    });
+    send({
+      method: 'session/event',
+      params: {
+        seq: 2,
+        sessionId,
+        payload: {
+          resultType: 'success',
+          usage: { inputTokens: 3, outputTokens: 2 },
+          duration: 10,
+        },
+      },
+    });
+    send({
+      method: 'state.updated',
+      params: {
+        reason: 'prompt_completed',
+        sessionId,
+        revision: 2,
+        scope: 'session',
+        patch: {},
+      },
+    });
+  }, 10);
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    if (!request.method) continue;
+    trace({ method: request.method, params: request.params });
+    switch (request.method) {
+      case 'workspace/upsertModelProvider':
+      case 'workspace/setDefaultModel':
+      case 'session/setMode':
+        respond(request.id, { ok: true });
+        break;
+      case 'session/create': {
+        const created = traceEntries()
+          .filter((entry) => entry.method === 'session/create')
+          .length;
+        const sessionId = created <= 1 ? 'sess-stale' : 'sess-fresh';
+        respond(request.id, { session: { sessionId } });
+        break;
+      }
+      case 'session/resume':
+        send({
+          id: request.id,
+          error: {
+            message: 'session not found',
+            code: 'SESSION_NOT_FOUND',
+          },
+        });
+        break;
+      case 'session/subscribe':
+        respond(request.id, {
+          eventSeq: 0,
+          events: [],
+          sessionId: request.params.sessionId,
+        });
+        break;
+      case 'session/send':
+        completeTurn(
+          request.params.sessionId,
+          request.id,
+          request.params.sessionId === 'sess-fresh' ? 'fresh reply' : 'stale reply',
+        );
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const runTurn = async (message: string) => {
+            const response = await fetch(`${baseUrl}/api/runs`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                projectId,
+                conversationId,
+                assistantMessageId: `assistant_zcode_${randomUUID()}`,
+                clientRequestId: `client_zcode_${randomUUID()}`,
+                agentId: 'zcode',
+                message,
+                currentPrompt: message,
+              }),
+            });
+            expect(response.status).toBe(202);
+            const body = await response.json() as { runId: string };
+            const status = await waitForRunStatus(baseUrl, body.runId);
+            expect(status.status).toBe('succeeded');
+            return body.runId;
+          };
+
+          await runTurn('first request');
+          const secondRunId = await runTurn('second request');
+
+          const trace = readFileSync(tracePath, 'utf8')
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line) as { method?: string; params?: { sessionId?: string } });
+          expect(trace.filter((entry) => entry.method === 'session/resume')).toEqual([
+            expect.objectContaining({
+              params: expect.objectContaining({ sessionId: 'sess-stale' }),
+            }),
+          ]);
+          expect(
+            trace
+              .filter((entry) => entry.method === 'session/create')
+              .map((entry) => entry.params?.sessionId ?? null),
+          ).toHaveLength(2);
+          expect(
+            trace
+              .filter((entry) => entry.method === 'session/send')
+              .map((entry) => entry.params?.sessionId),
+          ).toEqual(['sess-stale', 'sess-fresh']);
+
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${secondRunId}/events`);
+          const eventsBody = await readSseUntil(eventsResponse, 'event: end');
+          expect(eventsBody).toContain('agent_resume_auto_reseed');
+          expect(eventsBody).toContain('fresh reply');
+        },
+      );
+    } finally {
+      if (previousTracePath == null) {
+        delete process.env.OD_ZCODE_FAKE_TRACE_PATH;
+      } else {
+        process.env.OD_ZCODE_FAKE_TRACE_PATH = previousTracePath;
+      }
+      if (previousSandboxMode == null) {
+        delete process.env.OD_SANDBOX_MODE;
+      } else {
+        process.env.OD_SANDBOX_MODE = previousSandboxMode;
+      }
+      if (previousHome == null) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = previousHome;
+      }
+      if (previousUserProfile == null) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = previousUserProfile;
+      }
+      await fetch(`${baseUrl}/api/app-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentCliEnv: hadPreviousAgentCliEnv ? previousAgentCliEnv : {},
+          zcodeAppPath: hadPreviousZcodeAppPath ? previousZcodeAppPath : null,
+        }),
+      });
+    }
+  });
+
+  it('classifies ZCode setup failures as execution errors instead of auth prompts', async () => {
+    const daemonHome = mkdtempSync(join(tmpdir(), 'od-zcode-http-home-'));
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon sandbox tests');
+    const zcodeHome = resolveSandboxRuntimeConfig(true, dataDir).roots.agentHomeDir;
+    tempDirs.push(daemonHome);
+    mkdirSync(join(zcodeHome, '.zcode', 'v2'), { recursive: true });
+    writeFileSync(
+      join(zcodeHome, '.zcode', 'v2', 'config.json'),
+      JSON.stringify({
+        provider: {
+          'builtin:bigmodel': {
+            kind: 'anthropic',
+            source: 'custom',
+            options: {
+              baseURL: 'https://open.bigmodel.cn/api/anthropic',
+            },
+            models: { 'GLM-5.2': {} },
+          },
+        },
+      }),
+      'utf8',
+    );
+
+    const previousSandboxMode = process.env.OD_SANDBOX_MODE;
+    const configResponse = await fetch(`${baseUrl}/api/app-config`);
+    const previousConfig = await configResponse.json() as {
+      config?: { agentCliEnv?: unknown; zcodeAppPath?: unknown };
+    };
+    const hadPreviousAgentCliEnv = Object.prototype.hasOwnProperty.call(previousConfig.config ?? {}, 'agentCliEnv');
+    const previousAgentCliEnv = previousConfig.config?.agentCliEnv;
+    const hadPreviousZcodeAppPath = Object.prototype.hasOwnProperty.call(previousConfig.config ?? {}, 'zcodeAppPath');
+    const previousZcodeAppPath = previousConfig.config?.zcodeAppPath;
+    await fetch(`${baseUrl}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentCliEnv: {}, zcodeAppPath: null }),
+    });
+    process.env.OD_SANDBOX_MODE = '1';
+    process.env.HOME = daemonHome;
+    process.env.USERPROFILE = daemonHome;
+
+    try {
+      await withFakeAgent(
+        'zcode',
+        `
+if (process.argv[2] === '--version') {
+  console.log('zcode 0.14.9');
+  process.exit(0);
+}
+if (process.argv[2] !== 'app-server') {
+  console.error('unexpected args: ' + process.argv.slice(2).join(' '));
+  process.exit(1);
+}
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`,
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'zcode',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
+
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
+
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+          expect(eventsBody).toContain('does not have a saved API key');
+          expect(eventsBody).not.toContain('AGENT_AUTH_REQUIRED');
+          expect(statusBody.status).toBe('failed');
+        },
+      );
+    } finally {
+      if (previousSandboxMode == null) {
+        delete process.env.OD_SANDBOX_MODE;
+      } else {
+        process.env.OD_SANDBOX_MODE = previousSandboxMode;
+      }
+      await fetch(`${baseUrl}/api/app-config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentCliEnv: hadPreviousAgentCliEnv ? previousAgentCliEnv : {},
+          zcodeAppPath: hadPreviousZcodeAppPath ? previousZcodeAppPath : null,
+        }),
+      });
+    }
+  });
+
   it('fails stalled json-stream runs after the inactivity timeout elapses', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '500';
@@ -3111,37 +3799,40 @@ const timer = setInterval(() => {
   });
 
   it('surfaces Claude auth diagnostics through the SSE error channel', async () => {
-    await withFakeAgent(
-      'claude',
-      `
+    await withUnsetEnv(
+      ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CONFIG_DIR'],
+      () => withFakeAgent(
+        'claude',
+        `
 console.error(JSON.stringify({ apiKeySource: 'none', error_status: 401 }));
 process.exit(1);
 `,
-      async () => {
-        const createResponse = await fetch(`${baseUrl}/api/runs`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            agentId: 'claude',
-            message: 'hello',
-          }),
-        });
-        expect(createResponse.status).toBe(202);
-        const { runId } = await createResponse.json() as { runId: string };
+        async () => {
+          const createResponse = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'claude',
+              message: 'hello',
+            }),
+          });
+          expect(createResponse.status).toBe(202);
+          const { runId } = await createResponse.json() as { runId: string };
 
-        const eventsController = new AbortController();
-        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
-          signal: eventsController.signal,
-        });
-        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
-        eventsController.abort();
-        const statusBody = await waitForRunStatus(baseUrl, runId);
+          const eventsController = new AbortController();
+          const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+            signal: eventsController.signal,
+          });
+          const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+          eventsController.abort();
+          const statusBody = await waitForRunStatus(baseUrl, runId);
 
-        expect(eventsBody).toContain('event: error');
-        expect(eventsBody).toContain('/login');
-        expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
-        expect(statusBody.status).toBe('failed');
-      },
+          expect(eventsBody).toContain('event: error');
+          expect(eventsBody).toContain('/login');
+          expect(eventsBody).toContain('CLAUDE_CONFIG_DIR');
+          expect(statusBody.status).toBe('failed');
+        },
+      ),
     );
   });
 

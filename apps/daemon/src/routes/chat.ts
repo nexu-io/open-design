@@ -92,6 +92,15 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
     return false;
   };
+  const resolveZcodeConnectionTestAppPath = async (
+    body: Record<string, unknown>,
+  ): Promise<string | null | undefined> => {
+    if (body.agentId !== 'zcode') return undefined;
+    if (typeof body.zcodeAppPath === 'string') return body.zcodeAppPath;
+    if (body.zcodeAppPath === null) return null;
+    const config = await ctx.appConfig.readAppConfig(ctx.paths.RUNTIME_DATA_DIR);
+    return config.zcodeAppPath ?? null;
+  };
 
   // Run lifecycle routes live in `routes/runs.ts`; this file owns feedback,
   // connection tests, critique handoff, and provider proxy routes.
@@ -389,11 +398,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             isKnownServiceTier(def, safeModel, body.serviceTier)
               ? body.serviceTier
               : undefined;
+          const zcodeAppPath = await resolveZcodeConnectionTestAppPath(body);
           const result = await testAgentConnection({
             agentId: body.agentId,
             model: safeModel ?? undefined,
             reasoning: safeReasoning,
             serviceTier: safeServiceTier,
+            ...(zcodeAppPath !== undefined ? { zcodeAppPath } : {}),
             agentCliEnv:
               body.agentCliEnv && typeof body.agentCliEnv === 'object'
                 ? body.agentCliEnv

@@ -186,6 +186,16 @@ export function spawnEnvForAgent(
     }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
+  if (agentId === 'zcode') {
+    // ZCode stores its session database in the data directory.
+    if (!env.ZCODE_STORAGE_DIR?.trim() && env.OD_DATA_DIR?.trim()) {
+      env.ZCODE_STORAGE_DIR = path.join(env.OD_DATA_DIR.trim(), 'zcode');
+    }
+    if (!env.ZCODE_SESSION_DB_PATH?.trim() && env.ZCODE_STORAGE_DIR?.trim()) {
+      env.ZCODE_SESSION_DB_PATH = path.join(env.ZCODE_STORAGE_DIR, 'session.db');
+    }
+    return finalizeRuntimeEnv(env, sandboxRuntime);
+  }
   return finalizeRuntimeEnv(env, sandboxRuntime);
 }
 

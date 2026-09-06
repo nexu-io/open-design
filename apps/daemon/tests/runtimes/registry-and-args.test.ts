@@ -12,6 +12,15 @@ test('AGENT_DEFS ids are unique', () => {
   assert.deepEqual(dupes, [], `duplicate agent ids: ${JSON.stringify(dupes)}`);
 });
 
+test('zcode runtime is registered', () => {
+  const zcode = AGENT_DEFS.find((agent) => agent.id === 'zcode');
+
+  assert.ok(zcode);
+  assert.equal(zcode.name, 'ZCode');
+  assert.equal(zcode.bin, 'zcode');
+  assert.equal(zcode.streamFormat, 'zcode-protocol');
+});
+
 test('local agent profiles inherit a base adapter and can pin the default model', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'od-local-agent-profiles-'));
   try {
@@ -22,7 +31,7 @@ test('local agent profiles inherit a base adapter and can pin the default model'
         JSON.stringify({
           agents: [
             {
-              id: 'zcode',
+              id: 'zcode-wrapper',
               name: 'ZCode',
               baseAgent: 'claude',
               bin: 'zcode',
@@ -47,7 +56,7 @@ test('local agent profiles inherit a base adapter and can pin the default model'
       assert.equal(profiles.length, 1);
       const [profile] = profiles;
       assert.ok(profile);
-      assert.equal(profile.id, 'zcode');
+      assert.equal(profile.id, 'zcode-wrapper');
       assert.equal(profile.name, 'ZCode');
       assert.equal(profile.bin, 'zcode');
       assert.equal(profile.promptViaStdin, true);

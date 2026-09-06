@@ -1430,9 +1430,7 @@ async function gotoOnboarding(page: Page) {
   // The runtime-picker "Choose a runtime" heading was removed. The Connect
   // step now opens on a centered OpenDesign Cloud sign-in landing whose
   // heading is the stable marker that onboarding has rendered.
-  await expect(
-    page.getByRole('heading', { name: /Sign in to OpenDesign|登录 OpenDesign/i }),
-  ).toBeVisible();
+  await expect(connectLandingHeading(page)).toBeVisible();
 }
 
 // The landing's primary cloud button is the AMR/cloud sign-in trigger. Its

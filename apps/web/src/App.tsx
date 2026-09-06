@@ -2807,12 +2807,27 @@ function AppInner() {
   );
 
   const refreshAgents = useCallback(
-    async (options?: { throwOnError?: boolean; agentCliEnv?: AppConfig['agentCliEnv'] }) => {
-      if (options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv')) {
+    async (options?: {
+      throwOnError?: boolean;
+      agentCliEnv?: AppConfig['agentCliEnv'];
+      zcodeAppPath?: AppConfig['zcodeAppPath'];
+    }) => {
+      const hasAgentCliEnvOption =
+        options && Object.prototype.hasOwnProperty.call(options, 'agentCliEnv');
+      const hasZcodeAppPathOption =
+        options && Object.prototype.hasOwnProperty.call(options, 'zcodeAppPath');
+      if (hasAgentCliEnvOption) {
         const current = latestPersistedConfigRef.current;
         const nextConfig = clearStaleAmrModelChoiceOnProfileChange(current, {
           ...current,
-          agentCliEnv: options.agentCliEnv ?? {},
+          agentCliEnv: hasAgentCliEnvOption
+            ? options.agentCliEnv ?? {}
+            : current.agentCliEnv ?? {},
+          ...(hasZcodeAppPathOption
+            ? { zcodeAppPath: options.zcodeAppPath ?? null }
+            : Object.prototype.hasOwnProperty.call(current, 'zcodeAppPath')
+              ? { zcodeAppPath: current.zcodeAppPath ?? null }
+              : {}),
         });
         latestPersistedConfigRef.current = nextConfig;
         amrModelsRef.current = null;
@@ -2834,6 +2849,7 @@ function AppInner() {
               ),
             );
           },
+          ...(hasZcodeAppPathOption ? { zcodeAppPath: options.zcodeAppPath ?? null } : {}),
         });
         const ordered = orderAgentsByRegistry(next);
         reportAgentDetectDiagnostics(analytics.track, ordered);

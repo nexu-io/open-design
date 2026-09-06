@@ -67,6 +67,102 @@ process.exit(0);
   }
 }
 
+async function withFakeKimi<T>(sessionNewPath: string, run: () => Promise<T>): Promise<T> {
+  const dir = await fsp.mkdtemp(join(tmpdir(), 'od-kimi-mcp-spawn-bin-'));
+  const oldPath = process.env.PATH;
+  const oldKimiBin = process.env.KIMI_BIN;
+  const oldAgentHome = process.env.OD_AGENT_HOME;
+  const script = `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === '--version') {
+  console.log('kimi 0.6.0');
+  process.exit(0);
+}
+if (JSON.stringify(args) !== JSON.stringify(['acp'])) {
+  console.error('unexpected args: ' + JSON.stringify(args));
+  process.exit(1);
+}
+
+function send(frame) {
+  process.stdout.write(JSON.stringify(frame) + '\\n');
+}
+
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  const lines = input.split('\\n');
+  input = lines.pop() || '';
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const request = JSON.parse(trimmed);
+    switch (request.method) {
+      case 'initialize':
+        // Kimi's ACP stdio-MCP compatibility is version-gated. Keep this
+        // legacy spawn fixture on a known-compatible build so the test covers
+        // MCP delivery rather than the unknown-version fail-safe.
+        send({
+          id: request.id,
+          result: { agentInfo: { name: 'Kimi Code CLI', version: '0.6.0' } },
+        });
+        break;
+      case 'session/new':
+        fs.writeFileSync(${JSON.stringify(sessionNewPath)}, JSON.stringify(request.params));
+        send({ id: request.id, result: { sessionId: 'kimi-session-1' } });
+        break;
+      case 'session/prompt':
+        send({
+          method: 'session/update',
+          params: {
+            update: {
+              sessionUpdate: 'agent_message_chunk',
+              content: 'ok',
+            },
+          },
+        });
+        send({
+          id: request.id,
+          result: { usage: { inputTokens: 1, outputTokens: 1 } },
+        });
+        break;
+      default:
+        send({ id: request.id, error: { message: 'unexpected method ' + request.method } });
+    }
+  }
+});
+process.stdin.on('end', () => process.exit(0));
+process.on('SIGTERM', () => process.exit(0));
+setInterval(() => {}, 1000);
+`;
+  try {
+    if (process.platform === 'win32') {
+      const runner = join(dir, 'kimi-test-runner.cjs');
+      await fsp.writeFile(runner, script);
+      await fsp.writeFile(
+        join(dir, 'kimi.cmd'),
+        `@echo off\r\nnode "${runner}" %*\r\n`,
+      );
+    } else {
+      const bin = join(dir, 'kimi');
+      await fsp.writeFile(bin, `#!/usr/bin/env node\n${script}`);
+      await fsp.chmod(bin, 0o755);
+    }
+    process.env.PATH = `${dir}${delimiter}${oldPath ?? ''}`;
+    delete process.env.KIMI_BIN;
+    process.env.OD_AGENT_HOME = dir;
+    return await run();
+  } finally {
+    process.env.PATH = oldPath;
+    if (oldKimiBin === undefined) delete process.env.KIMI_BIN;
+    else process.env.KIMI_BIN = oldKimiBin;
+    if (oldAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+    else process.env.OD_AGENT_HOME = oldAgentHome;
+    await fsp.rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function waitForRunStatus(
   baseUrl: string,
   runId: string,
@@ -698,4 +794,86 @@ describe('spawn writes external MCP config for Claude Code', () => {
     const target = join(dir, '.mcp.json');
     expect(existsSync(target)).toBe(false);
   }, 15_000);
+
+  it('delivers live-artifacts and enabled external stdio MCP servers to Kimi ACP runs', async () => {
+    const recordDir = await fsp.mkdtemp(join(tmpdir(), 'od-kimi-mcp-session-'));
+    const sessionNewPath = join(recordDir, 'session-new.json');
+    tempDirs.push(recordDir);
+
+    await withFakeKimi(sessionNewPath, async () => {
+      const putRes = await fetch(`${baseUrl}/api/mcp/servers`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          servers: [
+            {
+              id: 'fs',
+              transport: 'stdio',
+              enabled: true,
+              command: 'node',
+              args: ['fs-server.js'],
+              env: { FS_ROOT: '/tmp' },
+            },
+            {
+              id: 'git',
+              transport: 'stdio',
+              enabled: true,
+              command: 'node',
+              args: ['git-server.js'],
+            },
+          ],
+        }),
+      });
+      expect(putRes.ok).toBe(true);
+
+      const { id, dir } = await createProject();
+      const chatRes = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          agentId: 'kimi',
+          projectId: id,
+          message: 'hello kimi mcp',
+        }),
+      });
+      expect(chatRes.status).toBe(202);
+      const { runId } = (await chatRes.json()) as { runId: string };
+      const status = await waitForRunStatus(baseUrl, runId);
+      expect(status.status).toBe('succeeded');
+      expect(existsSync(join(dir, '.mcp.json'))).toBe(false);
+
+      const sessionNew = JSON.parse(await fsp.readFile(sessionNewPath, 'utf8')) as {
+        mcpServers?: Array<{
+          name?: string;
+          command?: string;
+          args?: string[];
+          env?: Array<{ name: string; value: string }>;
+        }>;
+      };
+      const servers = sessionNew.mcpServers ?? [];
+      expect(servers.map((server) => server.name)).toEqual([
+        'open-design-live-artifacts',
+        'fs',
+        'git',
+      ]);
+      expect(servers[0]).toMatchObject({
+        name: 'open-design-live-artifacts',
+        command: process.execPath,
+        args: expect.arrayContaining(['mcp', 'live-artifacts']),
+      });
+      expect(servers[1]).toMatchObject({
+        type: 'stdio',
+        name: 'fs',
+        command: 'node',
+        args: ['fs-server.js'],
+        env: [{ name: 'FS_ROOT', value: '/tmp' }],
+      });
+      expect(servers[2]).toMatchObject({
+        type: 'stdio',
+        name: 'git',
+        command: 'node',
+        args: ['git-server.js'],
+      });
+    });
+  }, 30_000);
 });

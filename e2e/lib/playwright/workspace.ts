@@ -1,5 +1,6 @@
 import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
+import { T } from '@/timeouts';
 
 // The Design Files entry is a plain tab in the workspace tab strip — there is
 // no dropdown to open first, and "active" is carried by aria-selected rather
@@ -7,9 +8,15 @@ import type { Page } from '@playwright/test';
 // many existing call sites read the same.
 export async function openAllProjectFiles(page: Page): Promise<void> {
   const tab = page.getByTestId('design-files-tab');
-  await expect(tab).toBeVisible();
-  await tab.click();
-  await expectAllProjectFilesActive(page);
+  await expect(tab).toBeVisible({ timeout: T.medium });
+  // The active tab is restored asynchronously after the workspace mounts. A
+  // one-shot click can be overwritten by that late restore, leaving a visible
+  // but inactive Design Files tab. Re-apply the idempotent selection until the
+  // DOM and persisted state converge.
+  await expect(async () => {
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true', { timeout: T.short });
+  }).toPass({ timeout: T.long });
 }
 
 export async function expectAllProjectFilesActive(page: Page): Promise<void> {

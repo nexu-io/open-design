@@ -766,7 +766,13 @@ export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> 
   // menu with a plain Design Files tab (#5517), deleting
   // `workspace-pages-menu-trigger` from the app and this helper alike. The
   // main sync resurrected the driving code here; the trigger stays deleted.
-  await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
+  // The initial project file read competes with the worker's cold daemon/web
+  // bootstrap and may resolve after Playwright's unscaled 10s default. Use the
+  // shared CI-scaled budget for the actual readiness witness so this helper
+  // does not reject a valid, still-settling Design Files surface.
+  await expect(page.getByTestId('design-file-row-index.html')).toBeVisible({
+    timeout: T.medium,
+  });
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
   await resetVisualScroll(page);
   await waitForVisualStable(page);

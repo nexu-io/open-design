@@ -8,6 +8,7 @@ import {
   rememberLiveModels,
 } from './models.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
+import type { AgentExecutableResolutionOptions } from './executables.js';
 import { spawnEnvForAgent } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
@@ -23,6 +24,8 @@ import {
   buildCompatibilityDiagnostic,
   buildExecutableDiagnostic,
   buildNotInvocableDiagnostic,
+  buildZcodeSavedConfigDiagnostic,
+  buildZcodeAppPathDiagnostic,
   buildVersionDiagnostic,
   type NotInvocableCause,
 } from './diagnostics.js';
@@ -39,6 +42,7 @@ import type {
 type FetchedRuntimeModels = {
   models: RuntimeModelOption[];
   source: RuntimeModelSource;
+  error?: unknown;
 };
 
 export interface DetectedRuntimeVersions {
@@ -206,8 +210,8 @@ async function fetchModels(
         return { models: def.fallbackModels, source: 'fallback' };
       }
       return { models: mergeFallbackModelMetadata(def, parsed), source: 'live' };
-    } catch {
-      return { models: def.fallbackModels, source: 'fallback' };
+    } catch (error) {
+      return { models: def.fallbackModels, source: 'fallback', error };
     }
   }
   if (!def.listModels) {
@@ -506,6 +510,7 @@ async function probeCapabilities(
 async function probe(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  options: AgentExecutableResolutionOptions = {},
 ): Promise<DetectedAgent> {
   detectedRuntimeVersions.delete(def.id);
   // Forget what a previous pass proved unusable before re-probing: a rescan
@@ -519,8 +524,15 @@ async function probe(
   // If detection probes the shim but chat/run spawns the native binary, the
   // UI incorrectly reports "not installed" until the user pins CODEX_BIN by
   // hand even though the real launch path is healthy.
-  const initialLaunch = resolveAgentLaunch(def, configuredEnv);
+  const initialLaunch = resolveAgentLaunch(def, configuredEnv, options);
   if (!initialLaunch.selectedPath || !initialLaunch.launchPath) {
+    const zcodeAppPath =
+      def.id === 'zcode' && typeof options.zcodeAppPath === 'string'
+        ? options.zcodeAppPath.trim()
+        : '';
+    if (zcodeAppPath) {
+      return unavailableAgent(def, [buildZcodeAppPathDiagnostic(zcodeAppPath)]);
+    }
     return unavailableAgent(def, [buildExecutableDiagnostic(def, configuredEnv)]);
   }
   // Carry the narrowed pair explicitly: the candidate walk below reassigns
@@ -567,6 +579,7 @@ async function probe(
     if (!failedPath) break;
     attemptedPaths.push(failedPath);
     const next = resolveAgentLaunch(def, configuredEnv, {
+      ...options,
       skipPathCandidates: attemptedPaths,
     });
     // No candidate left, or the resolver handed back something already
@@ -666,6 +679,11 @@ async function probe(
     probeAmrOpenCodeVersion(def, probeEnv),
   ]);
   const surfacedModelResult = withRememberedAmrModels(def, probeEnv, modelResult);
+  if (def.id === 'zcode' && surfacedModelResult.error) {
+    return unavailableAgent(def, [
+      buildZcodeSavedConfigDiagnostic(surfacedModelResult.error),
+    ]);
+  }
   if (caps) {
     agentCapabilities.set(def.id, caps);
   }
@@ -755,9 +773,10 @@ function stripFns(
 export async function detectAgent(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string> = {},
+  options: AgentExecutableResolutionOptions = {},
 ): Promise<DetectedAgent> {
   try {
-    return await probe(def, configuredEnv);
+    return await probe(def, configuredEnv, options);
   } catch {
     // Fault isolation (issue #2297): one adapter's probe blowing up
     // — e.g. a synchronous filesystem throw during PATH walking on a
@@ -788,9 +807,12 @@ function rememberDetectedLiveModels(
 
 export async function detectAgents(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
+  options: AgentExecutableResolutionOptions = {},
 ) {
   const results = await Promise.all(
-    AGENT_DEFS.map((def) => detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id))),
+    AGENT_DEFS.map((def) =>
+      detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id), options),
+    ),
   );
   // Refresh the validation cache from whatever we just surfaced to the UI
   // so /api/chat can accept any model the user could have just picked,
@@ -811,9 +833,10 @@ export async function detectAgents(
 // that don't care about incremental delivery (cache warm, analytics, chat).
 export async function* detectAgentsStream(
   configuredEnvByAgent: Record<string, Record<string, string>> = {},
+  options: AgentExecutableResolutionOptions = {},
 ): AsyncGenerator<DetectedAgent> {
   const tagged = AGENT_DEFS.map((def, index) =>
-    detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id)).then((agent) => {
+    detectAgent(def, configuredEnvForAgent(configuredEnvByAgent, def.id), options).then((agent) => {
       rememberDetectedLiveModels(def, configuredEnvForAgent(configuredEnvByAgent, def.id), agent);
       return { index, agent };
     }),
