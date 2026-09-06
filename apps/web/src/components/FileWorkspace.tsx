@@ -203,6 +203,28 @@ export async function settleManualEditFiles(
   return results.every(Boolean);
 }
 
+// Who asked for an open. `openRequest` started life as the chat file-chip
+// click (see ProjectView's declaration) and later picked up the agent-driven
+// auto-opens, so the request alone cannot say whether the user chose this file
+// or a run did. Required rather than optional: a caller that forgets it would
+// silently reclassify a user's click, which is the failure this exists to stop.
+export type WorkspaceOpenRequestSource = 'user' | 'internal';
+
+export interface WorkspaceOpenRequest {
+  name: string;
+  nonce: number;
+  source: WorkspaceOpenRequestSource;
+  // Re-asked at the moment the activation actually runs, not when the request
+  // is made. An activation can be parked behind an unsettled manual edit for an
+  // unbounded time (see `afterActiveManualEditSettles`), and the requester's own
+  // checks have long since passed by then — so whatever made this request the
+  // right one to honour has to stay askable. Only the requester knows what that
+  // is, which is why this is a predicate rather than data: 'internal' requests
+  // carry their run's ownership, and a user's click carries nothing because a
+  // user's choice cannot go stale.
+  isStillOwned?: () => boolean;
+}
+
 interface Props {
   projectId: string;
   projectKind: TrackingProjectKind;
@@ -227,7 +249,7 @@ interface Props {
   streaming?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
-  openRequest?: { name: string; nonce: number } | null;
+  openRequest?: WorkspaceOpenRequest | null;
   browserOpenRequest?: BrowserOpenRequest | null;
   // Browser tab whose <webview> must stay mounted even while another workspace
   // tab is active. Set for programmatic brand extraction: the chat "Continue
@@ -251,6 +273,13 @@ interface Props {
   // daemon's SQLite store can hold the source of truth and survive reloads.
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
+  // Fired once for every activation the USER makes in here that the parent did
+  // not ask for. `onTabsStateChange` cannot serve as that signal: transient tabs
+  // (an unsaved sketch) are activated locally and never round-trip through the
+  // persisted state, and a persisted change carries no clue about who caused it.
+  // ProjectView's post-turn auto-open watch needs both — see
+  // `AutoOpenSettleRequest.userActivationsAtTurnEnd`.
+  onUserActivateTab?: () => void;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
@@ -1314,6 +1343,7 @@ export function FileWorkspace({
   designSystemActivityEvents = [],
   tabsState,
   onTabsStateChange,
+  onUserActivateTab,
   previewComments = NO_PREVIEW_COMMENTS,
   onSavePreviewComment,
   onRemovePreviewComment,
@@ -1607,11 +1637,35 @@ export function FileWorkspace({
     };
   }, [protectedHtmlViewerFileNames.size, settleProtectedManualEdits]);
 
-  function afterActiveManualEditSettles(action: () => void) {
+  // Every activation in here funnels through this gate, and when a manual edit
+  // is open the action it wraps does not run until that edit has flushed — which
+  // can be after ProjectView's settle watcher has already made its decision. So
+  // the user's intent is reported HERE, at the gesture, rather than waiting for
+  // the `activeTab` effect below to observe an activation that may land too late
+  // (or, if the edit fails to settle, never). `origin` defaults to 'user' so a
+  // new activation site added later is counted rather than silently dropped;
+  // only the parent-driven entry points opt out, since counting one of those
+  // would retire the very watch it belongs to.
+  function afterActiveManualEditSettles(
+    action: () => void,
+    origin: WorkspaceOpenRequestSource = 'user',
+    isStillOwned?: () => boolean,
+  ) {
+    // Over-reporting is the safe direction and is deliberate here: this can
+    // double-count with the `activeTab` effect when the activation lands
+    // promptly. The count is only ever compared for equality, so an extra
+    // increment can retire a watch early — never move focus off the user's tab.
+    if (origin === 'user') onUserActivateTab?.();
+    // The owner is re-checked HERE rather than at the callsite, because this is
+    // the only place that knows whether the action ran immediately or waited.
+    const run = () => {
+      if (isStillOwned && !isStillOwned()) return;
+      action();
+    };
     const sourceTab = activeTabRef.current;
     const exit = manualEditExitHandlersRef.current.get(sourceTab);
     if (!exit) {
-      action();
+      run();
       return;
     }
     const sequence = ++requestedActivationSequenceRef.current;
@@ -1621,7 +1675,7 @@ export function FileWorkspace({
         ok
         && sequence === requestedActivationSequenceRef.current
         && activeTabRef.current === sourceTab
-      ) action();
+      ) run();
     });
   }
 
@@ -1760,13 +1814,46 @@ export function FileWorkspace({
     && liveArtifactEntries.length === 0
     && projectFolders.length === 0;
 
+  // The activation the parent asked for and we have not reported yet. Set by the
+  // two places an activation originates OUTSIDE this component — the persisted
+  // `tabsState.active` hydration below and the `openRequest` effect — so the
+  // reporter can tell those apart from a gesture made in here. Anything not
+  // marked counts as the user's, which is the safe default: over-reporting only
+  // retires an auto-open watch early, while under-reporting would let it move
+  // focus away from a tab the user picked.
+  //
+  // Not the whole story on its own: `openRequest` carries the user's chat
+  // file-link clicks as well as the parent's auto-opens, and this ref cannot
+  // tell those apart. That distinction is the request's `source`, and it is
+  // applied at the settle gate, which is also early enough that an open manual
+  // edit cannot delay the report past the watcher's deadline.
+  const parentRequestedActivationRef = useRef<string | null>(null);
+  const reportedActiveTabRef = useRef(activeTab);
+
+  // Report user activations upward. One effect on `activeTab` rather than a call
+  // at each activation site: there are twenty-odd of those, and a new one added
+  // later would silently go unreported.
+  useEffect(() => {
+    if (reportedActiveTabRef.current === activeTab) return;
+    reportedActiveTabRef.current = activeTab;
+    const parentRequested = parentRequestedActivationRef.current;
+    // Cleared either way: a request that never changed the active tab (openFile
+    // short-circuits when it is already active) must not be left behind to
+    // swallow a later activation of the same name.
+    parentRequestedActivationRef.current = null;
+    if (parentRequested === activeTab) return;
+    onUserActivateTab?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   // Pull the persisted active tab in when the parent's hydration completes
   // (or on project switch). Fall back to the Design Files browser so a
   // fresh project lands in a useful place.
   useEffect(() => {
     const nextActive = tabsState.active ?? defaultRootTab;
     if (nextActive === activeTabRef.current) return;
-    afterActiveManualEditSettles(() => setActiveTab(nextActive));
+    parentRequestedActivationRef.current = nextActive;
+    afterActiveManualEditSettles(() => setActiveTab(nextActive), 'internal');
     // afterActiveManualEditSettles reads post-commit refs and intentionally
     // remains stable across this externally-driven hydration transition.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1833,17 +1920,21 @@ export function FileWorkspace({
     onTabsStateChange(next);
   }
 
-  function setPersistedActive(name: string | null) {
+  function setPersistedActive(
+    name: string | null,
+    origin: WorkspaceOpenRequestSource = 'user',
+    isStillOwned?: () => boolean,
+  ) {
     const nextActive = name ?? defaultRootTab;
     if (nextActive === activeTab) return;
     afterActiveManualEditSettles(() => {
       setActiveTab(nextActive);
       commitTabsState(workspaceTabsState(persistedTabs, name));
-    });
+    }, origin, isStillOwned);
   }
 
   function openRequestedBrowserTab(request: BrowserOpenRequest) {
-    afterActiveManualEditSettles(() => commitRequestedBrowserTab(request));
+    afterActiveManualEditSettles(() => commitRequestedBrowserTab(request), 'internal');
   }
 
   function commitRequestedBrowserTab(request: BrowserOpenRequest) {
@@ -2023,7 +2114,7 @@ export function FileWorkspace({
     }
     if (sketches[activeTab] && !sketches[activeTab]!.persisted) return;
     if (!latestPersistedTabs.includes(activeTab)) {
-      setPersistedActive(latestPersistedTabs[latestPersistedTabs.length - 1] ?? null);
+      setPersistedActive(latestPersistedTabs[latestPersistedTabs.length - 1] ?? null, 'internal');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persistedTabs, activeTab]);
@@ -2031,7 +2122,7 @@ export function FileWorkspace({
   useEffect(() => {
     if (!designSystemEditRequest) return;
     setUploadError(null);
-    setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB);
+    setPersistedActive(designSystemProject ? DESIGN_SYSTEM_TAB : DESIGN_FILES_TAB, 'internal');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [designSystemEditRequest?.nonce]);
 
@@ -2042,19 +2133,35 @@ export function FileWorkspace({
     if (!openRequest) return;
     const name = openRequest.name;
     if (!name) return;
+    // This prop carries both kinds of open. A chat file-link or produced-file
+    // chip click arrives here exactly like a run's auto-open, so only the
+    // request's own `source` can tell them apart — marking on arrival would
+    // classify the user's click as the parent's and leave the settle watcher
+    // free to open a higher-ranked artifact over it.
+    const origin = openRequest.source;
+    const isStillOwned = openRequest.isStillOwned;
+    // Still marked for BOTH sources, so the reporter above never fires off the
+    // landed activation for a request that came through this prop: a run's own
+    // auto-open must not retire the watch that issued it, and a user-sourced one
+    // is reported at the gate instead (see `afterActiveManualEditSettles`) so an
+    // open manual edit cannot hold the signal past the watcher's deadline. The
+    // gate is where `origin` does its work.
     if (name === DESIGN_FILES_TAB || name === DESIGN_SYSTEM_TAB) {
       const nextActive =
         name === DESIGN_SYSTEM_TAB && !designSystemProject
           ? DESIGN_FILES_TAB
           : name;
-      setPersistedActive(nextActive);
+      parentRequestedActivationRef.current = nextActive;
+      setPersistedActive(nextActive, origin, isStillOwned);
       return;
     }
     if (isBrowserTabId(name) && browserTabs.some((tab) => tab.id === name)) {
-      setPersistedActive(name);
+      parentRequestedActivationRef.current = name;
+      setPersistedActive(name, origin, isStillOwned);
       return;
     }
-    openFile(name, { forcePersist: true });
+    parentRequestedActivationRef.current = name;
+    openFile(name, { forcePersist: true, origin, isStillOwned });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
@@ -2113,11 +2220,18 @@ export function FileWorkspace({
     afterActiveManualEditSettles(() => {
       setSlideNavDeliverableNonce(slideNavRequest!.nonce);
       setActiveTab(slideNavRequest!.name);
-    });
+    }, 'internal');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slideNavRequest]);
 
-  function openFile(name: string, options?: { forcePersist?: boolean }) {
+  function openFile(
+    name: string,
+    options?: {
+      forcePersist?: boolean;
+      origin?: WorkspaceOpenRequestSource;
+      isStillOwned?: () => boolean;
+    },
+  ) {
     if (name === activeTab) return;
     afterActiveManualEditSettles(() => {
       setUploadError(null);
@@ -2136,7 +2250,7 @@ export function FileWorkspace({
       if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
       commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
       setActiveTab(name);
-    });
+    }, options?.origin ?? 'user', options?.isStillOwned);
   }
   openFileRef.current = openFile;
 
