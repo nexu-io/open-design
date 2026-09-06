@@ -19,7 +19,10 @@ Existing OSS a11y guidance for AI agents (`fecarrico/A11Y.md`,
 WCAG SCs without versioning the legal floor or specifying which
 constraints survive on iOS / Android / Flutter. This file scopes
 narrower: the compliance floor an OD artifact must clear, with
-jurisdiction notes and native-mobile parity. Heuristic rules and
+jurisdiction notes and native-mobile parity. Since this file was
+written, `fecarrico/A11Y.md` has come to cover both points: a
+native-platform translation layer in v1.1.0 and versioned compliance
+guidance in v1.5.0. Heuristic rules and
 linter-checked items live in sibling craft files
 (`anti-ai-slop.md`, `state-coverage.md`); WCAG SC numbers map to
 specific rules below rather than being re-listed.
