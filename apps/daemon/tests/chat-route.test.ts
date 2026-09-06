@@ -388,6 +388,135 @@ process.exit(0);
     );
   });
 
+  /*
+   * 「问完就交棒」的一整条链路,从假 CLI 的字节一路到 run 的终态。
+   *
+   * 真机 run 441ff961-bd66-4c4a-91e7-812f1d489668(打包版 beta 0.21.1-beta.7):
+   * agent 先写下四条待办(1 条 in_progress + 3 条 pending),再发一个可渲染的
+   * `<question-form>` 交棒给用户,进程 exit 0、无 signal、无 error。
+   * 它被 stamp 成 endedWithUnfinishedWork,项目卡与 Pet 任务中心于是画成
+   * `incomplete`,聊天页脚说「已停止,仍有未完成任务」—— 而没有任何东西停过它。
+   *
+   * 这条用例走真实的 emitAgentEvent 收口(`captureRunWorkCompletenessSignals`
+   * 在那里把 text_delta 攒进 run.askUserScanText),所以它同时钉住了信号的采集
+   * 和 finish() 的判定;runs.test.ts 那几条只钉后者。
+   */
+  it('does not stamp unfinished work on a turn that ended by asking the user', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-ask-user-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-ask-user-session',
+  part: {
+    tool: 'todowrite',
+    callID: 'call-todo-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ todos: [
+        { content: 'Collect the brand brief', status: 'in_progress' },
+        { content: 'Decide the imagery strategy', status: 'pending' },
+        { content: 'Fill inputs.json', status: 'pending' },
+        { content: 'Render the landing page', status: 'pending' },
+      ] }),
+      output: 'ok',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'text', part: { text: '开始之前先确认几件事。\\n<question-form id="brand-brief" title="Brand brief">\\n{"questions":[{"id":"brand_name","label":"Brand name","type":"text"}]}\\n</question-form>' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: '帮我做个落地页。',
+          }),
+        });
+        const body = await response.text();
+        expect(response.ok).toBe(true);
+        expect(body).toContain('<question-form');
+        expect(body).toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; endedWithUnfinishedWork: boolean }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'succeeded',
+          endedWithUnfinishedWork: false,
+        });
+      },
+    );
+  });
+
+  // 量法能看见缺陷:同一份待办、同一条链路,只把可渲染的表单换成被引用的裸标记,
+  // 这一轮就必须重新报「有未完成的活」。产物 HTML / 代码示例里出现这段文本的回合
+  // 不许因此被静音。
+  it('still stamps unfinished work when the form markup was only quoted', async () => {
+    const conversationId = `conv-${randomUUID()}`;
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start', sessionID: 'opencode-quoted-form-session' }));
+console.log(JSON.stringify({
+  type: 'tool_use',
+  sessionID: 'opencode-quoted-form-session',
+  part: {
+    tool: 'todowrite',
+    callID: 'call-todo-1',
+    state: {
+      status: 'completed',
+      input: JSON.stringify({ todos: [
+        { content: 'Collect the brand brief', status: 'in_progress' },
+        { content: 'Render the landing page', status: 'pending' },
+      ] }),
+      output: 'ok',
+    },
+  },
+}));
+console.log(JSON.stringify({ type: 'text', part: { text: '顺带演示一下 <question-form> 这个标记怎么写,我先接着做。' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const response = await fetch(`${baseUrl}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'opencode',
+            conversationId,
+            message: '帮我做个落地页。',
+          }),
+        });
+        expect((await response.text())).toContain('"status":"succeeded"');
+
+        const runsResponse = await fetch(
+          `${baseUrl}/api/runs?conversationId=${encodeURIComponent(conversationId)}`,
+        );
+        const runsBody = (await runsResponse.json()) as {
+          runs: Array<{ status: string; endedWithUnfinishedWork: boolean }>;
+        };
+        expect(runsBody.runs).toHaveLength(1);
+        expect(runsBody.runs[0]).toMatchObject({
+          status: 'succeeded',
+          endedWithUnfinishedWork: true,
+        });
+      },
+    );
+  });
+
   it('passes OPENCODE_CONFIG_CONTENT external_directory rules for the managed project cwd', async () => {
     if (!process.env.OD_DATA_DIR) {
       throw new Error('OD_DATA_DIR is required for OpenCode cwd permission tests');

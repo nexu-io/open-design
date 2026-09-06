@@ -2096,6 +2096,79 @@ describe('work completeness vs a settled OD Next verdict', () => {
     expect(run.endedWithUnfinishedWork).toBe(true);
   });
 
+  /*
+   * 「问完就交棒」的那一轮。
+   *
+   * 真机 run 441ff961-bd66-4c4a-91e7-812f1d489668(打包版 beta 0.21.1-beta.7):
+   * 清单刚写下(1 条 in_progress + 3 条 pending),正文以一个可渲染的
+   * `<question-form>` 收尾,进程 exit 0、无 signal、无 error。没有任何东西
+   * 停过它 —— 用户答完表单后的下一轮交付了 34 个产物。这个 flag 一旦被置上,
+   * 项目卡和 Pet 任务中心就把这一轮画成 `incomplete`。
+   */
+  const RENDERABLE_FORM = [
+    '开始之前先确认几件事。',
+    '<question-form id="brand-brief" title="Brand brief">',
+    '{"questions":[{"id":"brand_name","label":"Brand name","type":"text"}]}',
+    '</question-form>',
+  ].join('\n');
+
+  function clarificationPlan() {
+    return [
+      { content: 'Collect the brand brief', status: 'in_progress' },
+      { content: 'Decide the imagery strategy', status: 'pending' },
+      { content: 'Fill inputs.json', status: 'pending' },
+      { content: 'Render the landing page', status: 'pending' },
+    ];
+  }
+
+  it('does not report unfinished work when the turn ended by asking the user', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = RENDERABLE_FORM;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
+  // 量法能看见缺陷:同一份清单,把表单换成只是被引用的裸标记就必须重新变红。
+  // 产物 HTML / 代码示例里出现这段文本的回合不许因此被静音。
+  it('still reports unfinished work when the markup was quoted, never rendered', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = '演示一下 <question-form> 这个标记怎么写。';
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  // 用户按了停 —— 它路过时问了什么不改变这件事,和 done marker 那一档同理。
+  it('does not let a rendered form erase unfinished work from a canceled run', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = RENDERABLE_FORM;
+
+    runs.finish(run, 'canceled', null, 'SIGTERM');
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('keeps a max_tokens truncation unfinished even under a rendered form', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = RENDERABLE_FORM;
+    run.truncatedMidTurn = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
   it('keeps a max_tokens truncation unfinished even under a completed verdict', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;

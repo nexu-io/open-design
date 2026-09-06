@@ -1,5 +1,9 @@
 import { isTodoWriteToolName } from '@open-design/contracts';
-import { todoStatusIsUnfinished } from '@open-design/contracts';
+import {
+  eventsEndedByAskingUser,
+  todoStatusIsUnfinished,
+  turnEndedByAskingUser,
+} from '@open-design/contracts';
 import type { AgentEvent } from '../types';
 
 export type TodoStatus = 'pending' | 'in_progress' | 'completed' | 'stopped';
@@ -80,20 +84,63 @@ export function unfinishedTodosFromEvents(events: AgentEvent[] | undefined): Tod
 /**
  * Unfinished todos the user can still usefully be offered to continue.
  *
- * A stale TodoWrite snapshot is not sufficient grounds for the offer. When the
- * turn belongs to a strategy task that already settled `completed` — a verdict
- * the daemon only reaches after verifying the canonical deliverable on disk —
- * the declared work IS done, and "continue" would open a fresh task with
- * nothing left to write, which can only end blocked on `no_artifact`.
+ * A stale TodoWrite snapshot is not sufficient grounds for the offer. Two
+ * things outrank it, and both are the daemon's own rules read through the
+ * canonical contract rather than restated here:
  *
- * Mirrors the daemon's `endedWithUnfinishedWork` derivation, where the same
- * verdict outranks the same snapshot.
+ *  · a strategy task that already settled `completed` — a verdict the daemon
+ *    only reaches after verifying the canonical deliverable on disk. The
+ *    declared work IS done, and "continue" would open a fresh task with nothing
+ *    left to write, which can only end blocked on `no_artifact`;
+ *  · a turn that ended by ASKING (`turnEndedByAskingUser`). A clarification
+ *    turn writes its plan, renders a `<question-form>`, and exits 0; its plan is
+ *    the work the user's ANSWER will start. Judging it on the snapshot made the
+ *    footer read "stopped with unfinished work" the moment the form was
+ *    answered — under a turn that nothing had stopped (run
+ *    441ff961-bd66-4c4a-91e7-812f1d489668: `succeeded`, code 0, no error) — and
+ *    put "continue remaining" next to it, which would bypass the question the
+ *    turn just asked.
+ *
+ * This has to be decided HERE, not left to the daemon's `endedWithUnfinishedWork`
+ * stamp: the footer never reads that flag, it re-derives the answer from the
+ * turn's own events. Fixing only the daemon leaves the chat still saying it.
+ *
+ * `content` is the turn's rendered text and is preferred when present — it is
+ * what `hasPendingQuestionForm` reads, so the footer and the form card cannot
+ * disagree about whether a form is on screen. `runStatus` gates the ask rule
+ * exactly as the daemon does: a turn the USER stopped is stopped, whatever it
+ * asked on the way out, and its remaining todos stay continuable.
  */
 export function continuableUnfinishedTodos(
-  message: { events?: AgentEvent[]; strategyTaskDelivered?: boolean } | undefined,
+  message:
+    | {
+        events?: AgentEvent[];
+        content?: string;
+        runStatus?: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | undefined;
+        strategyTaskDelivered?: boolean;
+      }
+    | undefined,
 ): TodoItem[] {
   if (!message || message.strategyTaskDelivered) return [];
+  if (turnRanToCleanEnd(message.runStatus) && messageEndedByAskingUser(message)) return [];
   return unfinishedTodosFromEvents(message.events);
+}
+
+/** A turn with no recorded status is a legacy/replayed reply, which the footer
+ *  already treats as a clean end (`runSucceeded` in AssistantMessage). */
+function turnRanToCleanEnd(
+  runStatus: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | undefined,
+): boolean {
+  return runStatus === undefined || runStatus === 'succeeded';
+}
+
+function messageEndedByAskingUser(
+  message: { events?: AgentEvent[]; content?: string },
+): boolean {
+  if (typeof message.content === 'string' && message.content) {
+    return turnEndedByAskingUser(message.content);
+  }
+  return eventsEndedByAskingUser(message.events);
 }
 
 /**

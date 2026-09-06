@@ -1168,7 +1168,14 @@ function AssistantMessageImpl({
   // turn as stopped with unfinished work (and must not withhold next steps).
   const unfinishedTodos = streaming || completedWithAuthenticatedDone
     ? []
-    : continuableUnfinishedTodos({ events, strategyTaskDelivered: message.strategyTaskDelivered });
+    : continuableUnfinishedTodos({
+        events,
+        // The rendered text, so "did this turn ask?" is answered from the same
+        // source `hasPendingQuestionForm` reads.
+        content: message.content,
+        runStatus: message.runStatus,
+        strategyTaskDelivered: message.strategyTaskDelivered,
+      });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
   );

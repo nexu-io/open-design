@@ -1918,6 +1918,10 @@ export function composeProjectDisplayStatus(
 
 const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
 const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
+// How much of a turn's visible text `run.askUserScanText` keeps: enough of the
+// head to validate a complete `<question-form>` block, which a clarification
+// turn emits near the top.
+const ASK_USER_SCAN_CAP = 256 * 1024;
 
 // Fold per-run work-completeness signals off the agent event stream (#1247 /
 // #1060). Invoked for EVERY agent event via the single emitAgentEvent choke
@@ -1928,6 +1932,13 @@ const LANGFUSE_TERMINAL_FALLBACK_DELAY_MS = 15_000;
 //   - a turn-terminal event cut off by max_tokens sets run.truncatedMidTurn, so
 //     a truncated generation is flagged incomplete regardless of its todos.
 // Never keys off a mid-turn `tool_use` pause — only turn_end / usage terminals.
+//
+// Visible TEXT is deliberately not folded here. It has a second emit path that
+// never reaches this function: `emitGuardedTextDelta` sends its guarded delta
+// straight to `send('agent', …)` (json-event-stream / copilot / ACP all go that
+// way), so a text signal folded here would silently miss whole runtime families.
+// `run.askUserScanText` is therefore accumulated inside `send` itself — the one
+// sink both paths pass through.
 function captureRunWorkCompletenessSignals(run, ev) {
   if (!run || !ev || typeof ev !== 'object') return;
   if (ev.type === 'tool_use' && isTodoWriteToolName(ev.name)) {
@@ -12111,21 +12122,28 @@ export async function startServer({
     lifecycle.mark('launch_preflight_start');
     // (model resolution + AMR concretization hoisted above the resume guard)
     const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
-    // Accumulates the agent's visible text this run so the close handler can
-    // tell whether the turn ended on a clarifying question form. The
-    // `od-plugin-authoring` plugin's turn-1 flow is to emit a
-    // `<question-form>` collecting the plugin brief, then STOP and wait for
-    // the user to answer (see the `discovery-question-form` atom in
-    // `plugins/scaffold.ts`). That turn legitimately closes with `code === 0`
-    // and no `generated-plugin/` artifacts yet, so the missing-artifacts
-    // guard must not treat it as a failure. We buffer the streamed text
-    // rather than read the persisted message because the assistant message
-    // row may not be wired up at close time. The buffer is capped because a
-    // discovery form streams near the top of the turn; we only need enough to
-    // validate the first complete form block (see
-    // `emittedRenderableQuestionForm`).
-    const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
-    let clarifyingQuestionText = '';
+    // The agent's visible text this run accumulates onto `run.askUserScanText`
+    // (see the `send` hook below), so BOTH consumers of "did this turn end on a
+    // clarifying question form?" read one buffer:
+    //
+    //   · the missing-artifacts guard at child close. The `od-plugin-authoring`
+    //     plugin's turn-1 flow is to emit a `<question-form>` collecting the
+    //     brief, then STOP and wait for the user (see the
+    //     `discovery-question-form` atom in `plugins/scaffold.ts`). That turn
+    //     legitimately closes with `code === 0` and no `generated-plugin/`
+    //     artifacts yet, so the guard must not call it a failure;
+    //   · `finish()` in `runtimes/runs.ts`, which asks the canonical
+    //     `turnEndedByAskingUser` whether the turn handed the baton back to the
+    //     user before it stamps `endedWithUnfinishedWork`.
+    //
+    // It lives on the run rather than in this closure because `finish()` runs in
+    // the run service, which cannot see route locals. We buffer the streamed
+    // text rather than read the persisted message because the assistant message
+    // row may not be wired up at close time, and cap it because a clarification
+    // form streams near the top of the turn — enough to validate the first
+    // complete block (see `emittedRenderableQuestionForm`). Past the cap the
+    // signal fails CLOSED: the turn keeps reporting its TodoWrite verdict rather
+    // than inventing a form.
     let visibleAssistantText = '';
     // Reply text handed to the background memory extractor at child-close.
     // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
@@ -12242,16 +12260,21 @@ export async function startServer({
         }
         applyVisibleOutputMarks(lifecycleMarkers);
       });
+      // `send` is the ONE sink every visible-text path reaches: `emitAgentEvent`
+      // funnels here, and so does `emitGuardedTextDelta`, which bypasses
+      // `emitAgentEvent` entirely for json-event-stream / copilot / ACP. Folding
+      // this signal at `emitAgentEvent` instead silently dropped those runtime
+      // families — the whole opencode family included.
       if (
         event === 'agent' &&
         data &&
         data.type === 'text_delta' &&
         typeof data.delta === 'string' &&
-        clarifyingQuestionText.length < CLARIFYING_QUESTION_BUFFER_CAP
+        (run.askUserScanText?.length ?? 0) < ASK_USER_SCAN_CAP
       ) {
-        clarifyingQuestionText = (clarifyingQuestionText + data.delta).slice(
+        run.askUserScanText = ((run.askUserScanText ?? '') + data.delta).slice(
           0,
-          CLARIFYING_QUESTION_BUFFER_CAP,
+          ASK_USER_SCAN_CAP,
         );
       }
       if (
@@ -15914,7 +15937,7 @@ export async function startServer({
         !run.cancelRequested &&
         isPluginAuthoringRun(db, run, getSnapshot) &&
         !(await hasGeneratedPluginArtifacts(cwd)) &&
-        !emittedRenderableQuestionForm(clarifyingQuestionText)
+        !emittedRenderableQuestionForm(run.askUserScanText)
       ) {
         send('error', createSseErrorPayload(
           'AGENT_EXECUTION_FAILED',

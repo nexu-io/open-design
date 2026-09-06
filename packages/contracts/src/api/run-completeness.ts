@@ -1,4 +1,5 @@
 import { renderDoneMarker } from './done-marker.js';
+import { emittedRenderableQuestionForm } from './question-form-markup.js';
 
 /**
  * Canonical "did the run's declared work actually finish?" predicate.
@@ -174,6 +175,61 @@ function markdownCodeRanges(text: string): CodeRange[] {
 }
 
 /**
+ * True when the turn ended by handing the baton back to the user.
+ *
+ * `text` is the turn's VISIBLE assistant text. The turn asked when that text
+ * rendered a `<question-form>`/`<ask-question>` the user can answer — the same
+ * `emittedRenderableQuestionForm` the daemon already uses to report a project
+ * as `awaiting_input` (`listPartitionsAwaitingInput` in apps/daemon/src/db.ts)
+ * and to score `run_finished.asked_user_question`. This is deliberately not a
+ * new product rule: it is the existing awaiting-input rule, finally consulted
+ * by the surfaces that judge completeness.
+ *
+ * Why completeness has to ask it. A discovery/clarification turn writes its
+ * plan with TodoWrite, asks its question, and exits 0 — nothing stopped it, and
+ * the user's answer is the continuation. Judging that turn on its last TodoWrite
+ * snapshot alone (one `in_progress` + three `pending`, zero `completed`) made
+ * every surface assert a *termination cause* it had no evidence for: the chat
+ * footer read "stopped with unfinished work" under a form the user was still
+ * filling in, and `projectDisplayStatusForRunRow` projected the project as
+ * `incomplete`. Run `441ff961-bd66-4c4a-91e7-812f1d489668` (packaged beta
+ * 0.21.1-beta.7) is the recorded case: `status: succeeded`, `exitCode: 0`,
+ * `signal: null`, no error of any kind, and the next turn — after the user
+ * answered — delivered 34 artifacts.
+ *
+ * Renderable is the whole point of the predicate: a bare `<question-form` tag
+ * quoted in prose, or the literal markup inside a generated HTML artifact, is
+ * NOT a question. Only a closed block whose body the web parser would actually
+ * turn into a form card counts, so an artifact-writing turn that happens to
+ * print the tag keeps reporting its real completeness.
+ *
+ * Callers combine this with the run's terminal status themselves, exactly as
+ * they already do for `authenticatedDoneConclusion`: a turn the user STOPPED,
+ * or one that failed, is stopped whatever it asked on the way out.
+ */
+export function turnEndedByAskingUser(text: unknown): boolean {
+  return emittedRenderableQuestionForm(text);
+}
+
+/**
+ * Persisted-event form of `turnEndedByAskingUser`.
+ *
+ * Reassembles the turn's visible text from `kind: 'text'` events — the same
+ * events `eventsHaveAuthenticatedDoneConclusion` reads, and the same array the
+ * web chat footer holds — so the reloaded verdict matches the live one.
+ */
+export function eventsEndedByAskingUser(events: unknown): boolean {
+  if (!Array.isArray(events)) return false;
+  let text = '';
+  for (const event of events) {
+    if (!event || typeof event !== 'object') continue;
+    const record = event as { kind?: unknown; text?: unknown };
+    if (record.kind === 'text' && typeof record.text === 'string') text += record.text;
+  }
+  return turnEndedByAskingUser(text);
+}
+
+/**
  * True when a TodoWrite `todos` snapshot contains any unfinished task.
  *
  * `todos` is the raw `input.todos` array from a `TodoWrite` tool_use event.
@@ -261,6 +317,13 @@ export function eventsEndedWithUnfinishedWork(events: unknown): boolean {
   // only once the work is done, so it outranks an older Todo snapshot exactly
   // like the verified strategy verdict does. Truncation above still wins.
   if (eventsHaveAuthenticatedDoneConclusion(events)) return false;
+  // A turn that rendered a question form did not stop with work undone — it is
+  // waiting on the user, which `GET /api/projects` already reports separately as
+  // `awaiting_input`. Its TodoWrite plan is the work the ANSWER will start, so
+  // reading the snapshot as a termination cause projects the project
+  // `incomplete` while the user is still filling in the form. Truncation above
+  // still wins: a generation cut off mid-form is cut off, not waiting.
+  if (eventsEndedByAskingUser(events)) return false;
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
     if (

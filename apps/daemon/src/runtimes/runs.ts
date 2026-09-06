@@ -2,7 +2,11 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { strategyTaskProvesDelivery, todoSnapshotHasUnfinishedWork } from '@open-design/contracts';
+import {
+  strategyTaskProvesDelivery,
+  todoSnapshotHasUnfinishedWork,
+  turnEndedByAskingUser,
+} from '@open-design/contracts';
 import {
   collectProcessTreePids,
   listProcessSnapshots,
@@ -968,6 +972,14 @@ export function createChatRunService({
       // `endedWithUnfinishedWork` from them via the canonical predicate.
       lastTodoSnapshot: null,
       truncatedMidTurn: false,
+      // The turn's visible assistant text, capped, accumulated by the `send`
+      // sink in server.ts — the one point every text path reaches. finish()
+      // scans it ONCE, at the terminal choke point, to ask the canonical
+      // `turnEndedByAskingUser` whether this turn handed the baton back to the
+      // user; a `<question-form>` is only a form once its close tag lands, so
+      // there is nothing to decide per delta. The missing-artifacts guard reads
+      // the same buffer.
+      askUserScanText: '',
       authenticatedDoneConclusion: false,
       completionMarkerTail: '',
       completionMarkerAwaitingConclusion: false,
@@ -1237,6 +1249,7 @@ export function createChatRunService({
     run.deliverableEntryFile = undefined;
     run.deliverableArtifactKind = undefined;
     run.endedWithUnfinishedWork = false;
+    run.askUserScanText = '';
     run.authenticatedDoneConclusion = false;
     run.completionMarkerTail = '';
     run.completionMarkerAwaitingConclusion = false;
@@ -1461,10 +1474,22 @@ export function createChatRunService({
     // a future frozen bundle explicitly adopts the protocol).
     const authenticatedDoneProvesDelivery =
       status === 'succeeded' && run.authenticatedDoneConclusion === true;
+    // A clarification turn writes its plan, asks its question, and exits 0. It
+    // did not stop with work undone — it handed the baton back, and the user's
+    // answer is the continuation. Judging it on the TodoWrite snapshot alone
+    // asserted a termination cause nothing had caused: run
+    // 441ff961-bd66-4c4a-91e7-812f1d489668 ended `succeeded` / code 0 / no error
+    // and still stamped this flag, which is what projected the project card and
+    // the pet task centre as `incomplete`. Gated on `succeeded` for the same
+    // reason the marker above is: a turn the USER stopped is stopped, whatever
+    // it asked on the way out. Truncation stays independent and still wins.
+    const endedByAskingUser =
+      status === 'succeeded' && turnEndedByAskingUser(run.askUserScanText);
     run.endedWithUnfinishedWork =
       Boolean(run.truncatedMidTurn)
       || (!strategyTaskProvesDelivery(run.strategyTask)
         && !authenticatedDoneProvesDelivery
+        && !endedByAskingUser
         && todoSnapshotHasUnfinishedWork(run.lastTodoSnapshot));
     // Commit the terminal Run snapshot before exposing its terminal event. The
     // optional outbox hook is local-only and synchronous by contract.
@@ -1685,18 +1710,17 @@ export function createChatRunService({
 
   const start = (run, starter) => {
     createRunLifecycleTracer(run).mark('start_requested');
-    const replayArmed = Boolean(process.env.OD_REPLAY_EVENTS || process.env.OD_REPLAY_DIR);
-    const effectiveStarter = replayArmed
-      ? async (r) => {
-        const source = resolveReplaySource();
-        if (!source) {
-          throw new Error(
-            'OD_REPLAY_DIR armed but no recording selected '
-            + '(write a run-id prefix into <OD_REPLAY_DIR>/.selected)',
-          );
-        }
-        return replayRecordedEvents(r, source);
-      }
+    // Arming the directory is NOT by itself a decision to replay. A shared
+    // test runtime points `OD_REPLAY_DIR` at a scratch folder for its whole
+    // lifetime, and only the one spec that wants a deterministic turn drops a
+    // `.selected` pointer in it. Every other Run in that runtime — and every
+    // Run in production, where nothing is armed — must reach the real agent.
+    // Failing here instead of falling through would hijack them all.
+    const replaySource = (process.env.OD_REPLAY_EVENTS || process.env.OD_REPLAY_DIR)
+      ? resolveReplaySource()
+      : null;
+    const effectiveStarter = replaySource
+      ? (r) => replayRecordedEvents(r, replaySource)
       : starter;
     void effectiveStarter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
