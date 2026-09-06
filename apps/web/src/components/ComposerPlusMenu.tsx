@@ -13,6 +13,7 @@ import { useI18n, useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import { resolveFlyoutSide } from './composer-flyout-placement';
 import { Icon, type IconName } from './Icon';
+import { ChatPlusIcon } from './chat/primitives/icons';
 
 const PLUS_MENU_MARGIN = 12;
 const PLUS_MENU_GAP = 8;
@@ -201,6 +202,17 @@ export interface ComposerPlusMenuProps {
 
   /** Test id for the trigger button. */
   triggerTestId?: string;
+  /**
+   * 这颗触发键用聊天面板那一族的**描边**加号(稿
+   * `729fa43ce7:docs/design/chat-panel/src/body-scene.html:42`),而不是共享
+   * `Icon` 的实心 remix `add-line`。
+   *
+   * 为什么要一个开关而不是直接换掉:产品裁决 2026-09-03 是「**只让聊天面板走
+   * 描边版**」,明确不动全站。而这个组件是 home hero(`HomeHero.tsx`)和聊天
+   * 面板(`ChatComposer.tsx`)**共用**的同一个调用点 —— 直接换会连 home 一起
+   * 改掉,正是被否掉的那个范围。所以由调用方点名,只有 `ChatComposer` 传 true。
+   */
+  strokeGlyph?: boolean;
 
   /**
    * Optional visible label beside the "+". Given one, the trigger stops being
@@ -256,6 +268,7 @@ export function ComposerPlusMenu({
   onSelectFromLibrary,
   onImportFigma,
   triggerTestId,
+  strokeGlyph = false,
   triggerLabel,
   onOpen,
   onSubmenuOpen,
@@ -461,14 +474,26 @@ export function ComposerPlusMenu({
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {/* `od-icon` is what the stylesheet keys the 45° pivot off, so the bare
-            disc's glyph reads as a close × while the menu is open. The labeled
-            variant opts out of that pivot — its label already says what the
-            control does, and a tilted paperclip says nothing. */}
-        <Icon name="attach" size={16} className="od-icon" />
-        {triggerLabel ? (
-          <span className="plus-menu__trigger-label">{triggerLabel}</span>
-        ) : null}
+        {/* 两条面向不同界面的分支,合并 main 时都保留:
+            · 聊天面板(`strokeGlyph`)是稿子那枚**描边加号**;`od-icon` 是
+              `.plus-menu__trigger.is-active .od-icon` 挂 45° 旋转的钩子,
+              菜单打开时它读作一个关闭的 ×。
+            · 首页(不传 `strokeGlyph`)走 main 的 `2e4c1a753b` 改版:字形是
+              **回形针**,并且可以带一个 `triggerLabel`。带标签那一档主动放弃
+              45° 旋转 —— 标签已经说清楚这个控件是干什么的,而一枚歪着的回形针
+              什么也没说。
+            我们 2026-09-03 那条「不动全站、首页保持共享 Icon 的实心加号」的裁决,
+            在首页这一格上已被 main 的改版取代;聊天面板那一格不受影响。 */}
+        {strokeGlyph ? (
+          <ChatPlusIcon size={16} className="od-icon" />
+        ) : (
+          <>
+            <Icon name="attach" size={16} className="od-icon" />
+            {triggerLabel ? (
+              <span className="plus-menu__trigger-label">{triggerLabel}</span>
+            ) : null}
+          </>
+        )}
       </button>
       {open && typeof document !== 'undefined' ? createPortal(
         <div

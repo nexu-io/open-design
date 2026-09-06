@@ -26,6 +26,10 @@ import {
   type ClaudeChildToolRuntimeFact,
   type ClaudeOpenChildTerminationReason,
 } from './claude-child-evidence.js';
+import {
+  createToolInputPathScanner,
+  type ToolInputPathScanner,
+} from './tool-input-path-scanner.js';
 
 type StreamEvent = Record<string, unknown>;
 type EventSink = (event: StreamEvent) => void;
@@ -35,6 +39,24 @@ type BlockState = {
   id?: unknown;
   input: string;
   inputValue?: unknown;
+  /**
+   * Reads the write target — and, for whole-file writes, the running line
+   * count — out of `input` as it streams. `null` for every tool that names no
+   * file. It stays alive for the whole block: the path is announced exactly
+   * once (the scanner itself guarantees that), but the line count has to keep
+   * coming until the arguments close.
+   */
+  pathScanner?: ToolInputPathScanner | null;
+  /**
+   * 这个内容块开始的时刻 —— 在途那一行的**不动的计时起点**。
+   *
+   * 秒数在客户端 tick(`build-turn-blocks` 的 `liveEndMs` 每秒一次),daemon 只
+   * 负责给一个不变的起点。每条计数事件各盖一个「现在」的话,行上的秒数会被一路
+   * 按回 0。
+   */
+  startedAt?: number;
+  /** 已经发出去的路径。计数事件要带着它,才能自成一条完整的早期形态。 */
+  targetPath?: string;
 };
 type RuntimeTask = {
   id: string;
@@ -55,6 +77,8 @@ export interface ClaudeStreamHandlerOptions {
   nativeBuildPackageBindings?: Readonly<Record<string, string>>;
   /** Consume forwarded Child frames only as native evidence, never as parent UI output. */
   suppressForwardedSubagentEvents?: boolean;
+  /** 墙上时间。只用来给在途那一行盖一个不动的计时起点;测试注入。 */
+  now?: () => number;
 }
 
 export function createClaudeStreamHandler(
@@ -62,6 +86,7 @@ export function createClaudeStreamHandler(
   options: ClaudeStreamHandlerOptions = {},
 ) {
   let buffer = '';
+  const now = options.now ?? (() => Date.now());
   const childEvidence = options.onChildRuntimeFact || options.onChildToolRuntimeFact
     ? createClaudeChildEvidenceCollector({
         ...(options.onChildRuntimeFact ? { onFact: options.onChildRuntimeFact } : {}),
@@ -77,10 +102,30 @@ export function createClaudeStreamHandler(
 
   // Per-content-block scratch, keyed by `${messageId}:${blockIndex}`.
   const blocks = new Map<string, BlockState>();
-  // Tool uses already emitted from streamed `input_json_delta` data.
-  // Claude Code still repeats them in the final assistant wrapper, often with
-  // empty `{}` inputs, so we suppress that duplicate emission.
-  const streamedToolUseIds = new Set<string>();
+  /**
+   * Tool-use ids this handler has ALREADY EMITTED, by whichever path got there
+   * first. One call must produce exactly one `tool_use`.
+   *
+   * Two paths can emit the same tool: `content_block_stop` (input assembled
+   * from `input_json_delta`) and the final `assistant` wrapper, which Claude
+   * Code replays at message end. The set used to be written by the delta path
+   * only while being read by the wrapper path — it meant "streamed from deltas"
+   * but was consumed as "already emitted". Whenever the wrapper arrived FIRST it
+   * read an empty set, emitted, and left nothing behind, so the later
+   * `content_block_stop` emitted the same id a second time. That is not
+   * hypothetical: in the 2026-08-28 diagnostics bundle (packaged
+   * `0.21.1-beta.4`) every claude run duplicated every tool — 47 of 47 pairs,
+   * byte-identical inputs 5–25ms apart — which also pins the real frame order on
+   * that build as wrapper-before-stop.
+   *
+   * Both paths now check it and both add to it, so the ordering cannot matter.
+   * Neither path ever DEFERS to the other: whichever arrives first emits
+   * immediately, so a turn where only one of them ever arrives (a cancel that
+   * lands before the wrapper; an older Claude Code with no
+   * `--include-partial-messages` and therefore no `content_block_stop` at all)
+   * still emits exactly once. Deduping must never become dropping.
+   */
+  const emittedToolUseIds = new Set<string>();
   // Most recent assistant message id so content_block_* events without an id
   // can be attributed correctly.
   let currentMessageId: string | null = null;
@@ -97,7 +142,18 @@ export function createClaudeStreamHandler(
   let currentMessageStreamedThinking = false;
   // Per-message role-marker guards for cross-chunk detection (#3247).
   const roleGuards = new Map<string, RoleMarkerGuard>();
+  // Task rows in the order the runtime declared them. The key is a slot handle
+  // this module owns, NOT the runtime's task id — the id can be rebound once
+  // the runtime reports it (see `bindRuntimeTaskId`), and re-keying a Map moves
+  // the entry to the end, which would silently reorder the user's plan.
   const runtimeTasks = new Map<string, RuntimeTask>();
+  // Runtime task id -> slot handle. The only lookup `TaskUpdate` may use.
+  const runtimeTaskSlotById = new Map<string, string>();
+  // Slot handles for `TaskCreate` calls still waiting on their tool_result,
+  // which is where the runtime's real id arrives.
+  const pendingTaskCreateSlots = new Map<string, string>();
+  // `TaskList` calls whose result we still want to read as a task snapshot.
+  const pendingTaskListToolUseIds = new Set<string>();
   const canonicalTaskToolUseIds = new Set<string>();
   let nextRuntimeTaskId = 1;
   let suppressNextArtifactText = false;
@@ -107,6 +163,87 @@ export function createClaudeStreamHandler(
   let duplicateArtifactCandidate = '';
   const recentWriteContents: string[] = [];
   let wroteHtmlFileThisTurn = false;
+  /**
+   * Assistant message ids whose turn boundary has already been surfaced as
+   * `turn_end`. Claude Code delivers the same `stop_reason` from two different
+   * frames depending on build (see `emitTurnEndOnce`), and a build that fills
+   * both would otherwise announce one turn twice.
+   */
+  const turnEndEmittedForMessageIds = new Set<string>();
+
+  /**
+   * Announce a turn boundary exactly once, whichever frame carried it.
+   *
+   * Claude Code moved this field, and we do not control which build a user has
+   * installed, so all three sources stay wired:
+   *
+   *   1. `stream_event` → `message_delta` → `delta.stop_reason`. The ONLY place
+   *      Claude Code 2.1.259 carries it: measured across six verbatim
+   *      recordings of that build (`tests/fixtures/claude-cli-recordings/`),
+   *      every `assistant` wrapper reported `stop_reason: null` while every
+   *      `message_delta` carried the real value. Requires
+   *      `--include-partial-messages`; without that flag the CLI emits no
+   *      `stream_event` frames at all.
+   *   2. `assistant` → `message.stop_reason`. The legacy shape. Dead on
+   *      2.1.259 (always null there) but it is the only in-stream boundary an
+   *      older CLI — or a fork such as `openclaude` — offers when partial
+   *      messages are not negotiated. Keep it.
+   *   3. The terminal `result` frame, surfaced separately as `usage`. Present
+   *      on every build and every flag combination, and the only boundary left
+   *      when 1 and 2 are both silent. `applyClaudeStreamJsonRunBookkeeping`
+   *      treats `usage` and `turn_end` as equals for that reason.
+   *
+   * There is no version gate on purpose. The runtime detector does probe
+   * `--version` (`detection.ts`), but nothing tells us which Claude Code
+   * release stopped filling the wrapper field, and the `fallbackBins` /
+   * `local-profiles` forks report version strings on their own schedules. A
+   * capability probe we can trust — is the field populated? — only exists once
+   * the frame is in hand, which is precisely what reading all three and
+   * deduping does.
+   *
+   * `messageId` is null only on the legacy no-partial path (no `message_start`
+   * frame and no `message.id`), where source 1 cannot exist and so there is
+   * nothing to collide with.
+   */
+  function emitTurnEndOnce(
+    messageId: string | null,
+    stopReason: string,
+    parentToolUseId: unknown,
+  ): void {
+    // `turn_end` is the MAIN turn's boundary. Under `--verbose`, a Task
+    // sub-agent's frames stream inline carrying a non-null top-level
+    // `parent_tool_use_id`, and its internal turn ends with its own
+    // `stop_reason`. That sub-turn boundary must NOT be treated as the run's
+    // turn completion: emitting `turn_end` for it would let
+    // applyClaudeStreamJsonRunBookkeeping mark `turnCompletedCleanly` and close
+    // stdin while the main turn is still running (so a later non-zero crash
+    // with no result frame is misclassified as succeeded, #5487), and would
+    // reset the per-turn artifact-echo dedup state mid-turn.
+    if (parentToolUseId != null) return;
+    if (messageId !== null) {
+      if (turnEndEmittedForMessageIds.has(messageId)) return;
+      turnEndEmittedForMessageIds.add(messageId);
+    }
+    onEvent({ type: 'turn_end', stopReason });
+    if (stopReason !== 'tool_use') resetArtifactEchoDedupForNextTurn();
+  }
+
+  /**
+   * The artifact-echo dedup below is deliberately PER TURN: it exists to
+   * swallow the model quoting back a file it just wrote, and a turn that never
+   * wrote anything must start from a clean slate. Leaking the state past a turn
+   * boundary silently drops the next turn's genuine inline HTML artifact.
+   *
+   * Called from every turn boundary we can observe — `emitTurnEndOnce` and the
+   * terminal `result` frame — because on a build where the in-stream boundary
+   * is missing (2.1.259 without `--include-partial-messages`) `result` is the
+   * only one there is, and a held-open stream-json stdin gets one `result` per
+   * user turn, not one per process.
+   */
+  function resetArtifactEchoDedupForNextTurn(): void {
+    recentWriteContents.length = 0;
+    wroteHtmlFileThisTurn = false;
+  }
 
   function normalizeTaskStatus(value: unknown): RuntimeTask['status'] {
     if (value === 'completed' || value === 'in_progress' || value === 'stopped') {
@@ -119,7 +256,7 @@ export function createClaudeStreamHandler(
   }
 
   function nextGeneratedRuntimeTaskId(): string {
-    while (runtimeTasks.has(String(nextRuntimeTaskId))) {
+    while (runtimeTaskSlotById.has(String(nextRuntimeTaskId))) {
       nextRuntimeTaskId += 1;
     }
     const id = String(nextRuntimeTaskId);
@@ -127,19 +264,67 @@ export function createClaudeStreamHandler(
     return id;
   }
 
+  function noteRuntimeTaskId(id: string): void {
+    const numericId = Number(id);
+    if (Number.isSafeInteger(numericId) && numericId >= nextRuntimeTaskId) {
+      nextRuntimeTaskId = numericId + 1;
+    }
+  }
+
   function runtimeTaskIdFromCreate(input: Record<string, unknown>): string {
     if (typeof input.taskId === 'string' && input.taskId) {
-      const numericId = Number(input.taskId);
-      if (Number.isSafeInteger(numericId) && numericId >= nextRuntimeTaskId) {
-        nextRuntimeTaskId = numericId + 1;
-      }
+      noteRuntimeTaskId(input.taskId);
       return input.taskId;
     }
     return nextGeneratedRuntimeTaskId();
   }
 
+  /**
+   * Point `id` at `slot`, retiring whatever id that slot answered to before.
+   *
+   * Retiring the old alias is the load-bearing half. A `TaskCreate` is placed
+   * under a locally minted id because its tool_result — the only place the
+   * runtime states the real one — has not arrived yet. Leaving that placeholder
+   * resolvable after the real id lands is what lets a `TaskUpdate` naming a task
+   * from an EARLIER run land on a row created in THIS one.
+   */
+  function bindRuntimeTaskId(slot: string, id: string): void {
+    const task = runtimeTasks.get(slot);
+    if (!task) return;
+    noteRuntimeTaskId(id);
+    if (task.id !== id) {
+      if (runtimeTaskSlotById.get(task.id) === slot) runtimeTaskSlotById.delete(task.id);
+      // Re-setting an existing key keeps its position, so the plan keeps the
+      // order the runtime declared it in.
+      runtimeTasks.set(slot, { ...task, id });
+    }
+    runtimeTaskSlotById.set(id, slot);
+  }
+
+  function emitTaskSnapshot(eventId: string): void {
+    onEvent({
+      type: 'tool_use',
+      id: eventId,
+      name: 'TodoWrite',
+      input: {
+        todos: Array.from(runtimeTasks.values()).map(({ content, status, activeForm }) => ({
+          content,
+          status,
+          ...(activeForm ? { activeForm } : {}),
+        })),
+      },
+    });
+  }
+
   function emitCanonicalTaskSnapshot(toolUseId: unknown, name: unknown, input: unknown): boolean {
-    if (typeof toolUseId !== 'string' || typeof name !== 'string' || !isRecord(input)) return false;
+    if (typeof toolUseId !== 'string' || typeof name !== 'string') return false;
+    if (name === 'TaskList') {
+      // The call itself still renders as an ordinary tool row; we only want to
+      // read what comes back (see `absorbTaskToolResult`).
+      pendingTaskListToolUseIds.add(toolUseId);
+      return false;
+    }
+    if (!isRecord(input)) return false;
     if (canonicalTaskToolUseIds.has(toolUseId)) return true;
     let changed = false;
     if (name === 'TaskCreate') {
@@ -150,25 +335,32 @@ export function createClaudeStreamHandler(
           : '';
       if (!content) return false;
       const id = runtimeTaskIdFromCreate(input);
+      const slot = `create:${toolUseId}`;
       const activeForm = typeof input.activeForm === 'string' ? input.activeForm : undefined;
-      runtimeTasks.set(id, {
+      runtimeTasks.set(slot, {
         id,
         content,
         status: normalizeTaskStatus(input.status),
         ...(activeForm ? { activeForm } : {}),
       });
+      runtimeTaskSlotById.set(id, slot);
+      pendingTaskCreateSlots.set(toolUseId, slot);
       changed = true;
     } else if (name === 'TaskUpdate') {
       if (typeof input.taskId !== 'string') return false;
-      const existing = runtimeTasks.get(input.taskId);
-      if (!existing) return false;
+      const slot = runtimeTaskSlotById.get(input.taskId);
+      const existing = slot ? runtimeTasks.get(slot) : undefined;
+      // An id this stream never saw belongs to an earlier run of the same
+      // resumed session. Guessing which local row it meant is how the card ends
+      // up reporting work nobody finished, so let it go by unapplied.
+      if (!slot || !existing) return false;
       const content = typeof input.subject === 'string'
         ? input.subject
         : typeof input.description === 'string'
           ? input.description
           : existing.content;
       const activeForm = typeof input.activeForm === 'string' ? input.activeForm : existing.activeForm;
-      runtimeTasks.set(input.taskId, {
+      runtimeTasks.set(slot, {
         ...existing,
         content,
         status: normalizeTaskStatus(input.status),
@@ -180,19 +372,73 @@ export function createClaudeStreamHandler(
     }
     canonicalTaskToolUseIds.add(toolUseId);
     if (!changed || runtimeTasks.size === 0) return false;
-    onEvent({
-      type: 'tool_use',
-      id: `${toolUseId}:todo-task`,
-      name: 'TodoWrite',
-      input: {
-        todos: Array.from(runtimeTasks.values()).map(({ content, status, activeForm }) => ({
-          content,
-          status,
-          ...(activeForm ? { activeForm } : {}),
-        })),
-      },
-    });
+    emitTaskSnapshot(`${toolUseId}:todo-task`);
     return true;
+  }
+
+  /** `Task #7 created successfully: Draft copy` — the runtime stating the id. */
+  const TASK_CREATED_RESULT_RE = /\bTask\s+#([A-Za-z0-9_-]+)\s+created successfully/;
+  /** `#7 [in_progress] Draft copy` — one row of a `TaskList` result. */
+  const TASK_LIST_ROW_RE = /^#([A-Za-z0-9_-]+)\s+\[([^\]]*)\]\s*(.*)$/;
+
+  function mergeTaskListResult(content: string): boolean {
+    let changed = false;
+    for (const line of content.split('\n')) {
+      const row = TASK_LIST_ROW_RE.exec(line.trim());
+      if (!row) continue;
+      const [, id, status, subject] = row;
+      // The pattern has three groups, so a match always fills them — but this
+      // project builds with `noUncheckedIndexedAccess`, where indexing a match
+      // yields `string | undefined`. Narrow once here rather than asserting at
+      // each of the six uses below.
+      if (id === undefined || status === undefined || subject === undefined) continue;
+      const slot = runtimeTaskSlotById.get(id) ?? `task:${id}`;
+      const existing = runtimeTasks.get(slot);
+      const next: RuntimeTask = {
+        id,
+        content: subject.trim() || existing?.content || '',
+        status: normalizeTaskStatus(status.trim()),
+        ...(existing?.activeForm ? { activeForm: existing.activeForm } : {}),
+      };
+      if (!next.content) continue;
+      if (
+        existing
+        && existing.content === next.content
+        && existing.status === next.status
+      ) {
+        continue;
+      }
+      runtimeTasks.set(slot, next);
+      runtimeTaskSlotById.set(id, slot);
+      noteRuntimeTaskId(id);
+      changed = true;
+    }
+    return changed;
+  }
+
+  /**
+   * Read the runtime's answer to a task tool call.
+   *
+   * Two things only reach us here and nowhere else: the id a `TaskCreate` was
+   * actually given, and the full list a `TaskList` reports — which is how a plan
+   * written in an earlier run of this resumed session gets back onto the card
+   * instead of the card showing only what this turn happened to create.
+   */
+  function absorbTaskToolResult(toolUseId: unknown, content: string, isError: boolean): void {
+    if (typeof toolUseId !== 'string') return;
+    // Retire the pending entry either way — a failed call is still answered, and
+    // leaving it pending would keep the slot waiting for a result that already
+    // came. Only a successful result gets to change the plan.
+    const pendingSlot = pendingTaskCreateSlots.get(toolUseId);
+    if (pendingSlot !== undefined) {
+      pendingTaskCreateSlots.delete(toolUseId);
+      if (isError) return;
+      const createdId = TASK_CREATED_RESULT_RE.exec(content)?.[1];
+      if (createdId) bindRuntimeTaskId(pendingSlot, createdId);
+      return;
+    }
+    if (!pendingTaskListToolUseIds.delete(toolUseId) || isError) return;
+    if (mergeTaskListResult(content)) emitTaskSnapshot(`${toolUseId}:todo-task`);
   }
 
   function emitToolUse(id: unknown, name: unknown, input: unknown): void {
@@ -216,6 +462,44 @@ export function createClaudeStreamHandler(
 
   function blockKey(index: unknown): string {
     return `${currentMessageId ?? 'anon'}:${index}`;
+  }
+
+  /**
+   * The still-open streamed block carrying `toolUseId`, if the delta path is
+   * mid-flight for that tool. `blocks` is keyed by message id + block index, so
+   * an id is not directly addressable; a message holds only a handful of open
+   * blocks, so the scan is cheap.
+   */
+  function openToolUseBlock(toolUseId: string): BlockState | null {
+    for (const state of blocks.values()) {
+      if (state.type === 'tool_use' && state.id === toolUseId) return state;
+    }
+    return null;
+  }
+
+  /**
+   * The input to publish for a tool_use block seen on the `assistant` wrapper.
+   *
+   * The delta-assembled input wins when it is present and parses. Claude Code
+   * replays finished tool calls in the wrapper "often with empty `{}` inputs",
+   * so once the wrapper is allowed to emit first (it is — see
+   * `emittedToolUseIds`), taking its input verbatim would let an empty object
+   * overwrite the real command. Assembled JSON that fails to parse means the
+   * deltas were truncated, and then the wrapper's own input is the better of
+   * the two.
+   */
+  function wrapperToolUseInput(block: Record<string, unknown>): unknown {
+    if (typeof block.id === 'string') {
+      const open = openToolUseBlock(block.id);
+      if (open && open.input.trim()) {
+        try {
+          return JSON.parse(open.input);
+        } catch {
+          // Truncated stream — fall back to the wrapper's own input below.
+        }
+      }
+    }
+    return block.input ?? null;
   }
 
   // Per-message role-marker guard (#3247). Covers text_delta ONLY.
@@ -425,8 +709,40 @@ export function createClaudeStreamHandler(
       return;
     }
 
+    /**
+     * 「它在想,而且想了多少」 —— extended thinking 唯一一个**只计费、不给字**的
+     * 档位里,这是屏幕上还说得出口的事实。
+     *
+     * API 有一档会收下推理 token、照常计费,回来的却只有一个加密签名,`thinking`
+     * 一路是空串(真机 CLI 2.1.260:3060 个计费 token、0 个字符)。那一轮用户盯着
+     * 「思考中」和一只空窗看了 57 秒 —— 空窗是**诚实的**,东西真的没来;但 CLI
+     * 一直在报想了多少,这一行以前把它丢在地上。
+     *
+     * ⚠️ **读的是这种独立系统帧,不是 `thinking_delta` 上那个同名字段。**
+     * 后者在录制里一半是 `null`(每个块的收尾帧),而且非 null 时是**每帧增量**
+     * 不是累计(`partial-single-turn` 第二块:系统帧 50/150/300/450,delta 报
+     * 50/100/150/150),不开 `--include-partial-messages` 时更是一帧都不存在。
+     * 仓库里那条「`estimated_tokens` 走不通」的旧结论量的正是那个字段,对它成立。
+     * 系统帧是 55 帧全非空、两种 CLI 配置下都在的那一个。判据钉在
+     * `tests/runtimes/w134-thinking-token-count.test.ts` 的语料守卫一节。
+     *
+     * 送的是**块内累计值**,不是增量:消费方 last-wins 就够,不必自己加。于是
+     * 重连补帧、丢帧、重放都改不了这个数 —— 求和才会被那些事永久带偏。
+     * 一个 thinking 块 = 屏幕上一格「思考中」,所以「块内累计」正好是「那一格的累计」;
+     * 换块时 CLI 自己从小数重新开始,和那一格换新是同一个边界。
+     */
+    if (obj.type === 'system' && obj.subtype === 'thinking_tokens') {
+      const tokens = obj.estimated_tokens;
+      if (typeof tokens === 'number' && Number.isFinite(tokens) && tokens > 0) {
+        onEvent({ type: 'thinking_tokens', tokens });
+      }
+      return;
+    }
+
     if (obj.type === 'stream_event' && isRecord(obj.event)) {
-      handleStreamEvent(obj.event);
+      // `parent_tool_use_id` rides on the OUTER envelope, not on the inner
+      // `event`, so the sub-agent guard needs it handed down explicitly.
+      handleStreamEvent(obj.event, obj.parent_tool_use_id);
       return;
     }
 
@@ -443,12 +759,21 @@ export function createClaudeStreamHandler(
       if (explicitMsgId) currentMessageId = explicitMsgId;
       const textAlreadyStreamed = textMsgId ? textStreamed.has(textMsgId) : false;
       const thinkingAlreadyStreamed = thinkingMsgId ? thinkingStreamed.has(thinkingMsgId) : false;
-      // Per-turn `stop_reason` is emitted as `turn_end` AFTER the content
-      // blocks have been processed (see below). When `--include-partial-
-      // messages` is unsupported, tool_use events surface only from the
-      // assistant wrapper here — emitting `turn_end` before that loop would
-      // let the daemon's stdin-close handler act on the turn before its
-      // tool_use blocks were seen, closing stdin mid-tool. Read the
+      // LEGACY turn-boundary source. Claude Code 2.1.259 sets this field to
+      // null on every assistant frame — it now emits one wrapper per content
+      // block, and the turn's stop reason is not known yet when the first of
+      // them is written. That build carries the real value on
+      // `stream_event`/`message_delta` instead (see `emitTurnEndOnce`), so on a
+      // current CLI this branch is inert. It stays because it is the only
+      // in-stream boundary an OLDER Claude Code — or an argv-compatible fork —
+      // offers when `--include-partial-messages` is not negotiated, and we do
+      // not control which build a user has installed.
+      //
+      // Emitted AFTER the content blocks have been processed (see below), not
+      // here: when `--include-partial-messages` is unsupported, tool_use events
+      // surface only from this wrapper, and emitting `turn_end` before that
+      // loop would let the daemon's stdin-close handler act on the turn before
+      // its tool_use blocks were seen, closing stdin mid-tool. Read the
       // stop_reason now, emit after.
       const stopReason = typeof obj.message.stop_reason === 'string'
         ? obj.message.stop_reason
@@ -456,10 +781,11 @@ export function createClaudeStreamHandler(
       for (const block of obj.message.content) {
         if (!isRecord(block)) continue;
         if (block.type === 'tool_use') {
-          if (typeof block.id === 'string' && streamedToolUseIds.has(block.id)) {
-            continue;
+          if (typeof block.id === 'string') {
+            if (emittedToolUseIds.has(block.id)) continue;
+            emittedToolUseIds.add(block.id);
           }
-          emitToolUse(block.id, block.name, block.input ?? null);
+          emitToolUse(block.id, block.name, wrapperToolUseInput(block));
         } else if (
           !textAlreadyStreamed &&
           block.type === 'text' &&
@@ -479,24 +805,10 @@ export function createClaudeStreamHandler(
       // Surface the turn_end signal now that every tool_use in this
       // assistant message has been emitted, so the daemon's stdin-close
       // handler sees the final `stop_reason` before deciding whether to
-      // close stream-json input stdin.
-      //
-      // `turn_end` is the MAIN turn's boundary. Under `--verbose`, a Task
-      // sub-agent's messages stream inline carrying a non-null top-level
-      // `parent_tool_use_id`, and its internal turn ends with its own
-      // `stop_reason: 'end_turn'`. That sub-turn boundary must NOT be treated
-      // as the run's turn completion: emitting `turn_end` for it would let
-      // applyClaudeStreamJsonRunBookkeeping mark `turnCompletedCleanly` and
-      // close stdin while the main turn is still running (so a later non-zero
-      // crash with no result frame is misclassified as succeeded, #5487), and
-      // would reset the per-turn artifact-echo dedup state below mid-turn.
-      // Only a main-turn frame (`parent_tool_use_id == null`) may fire it.
-      if (stopReason && obj.parent_tool_use_id == null) {
-        onEvent({ type: 'turn_end', stopReason });
-        if (stopReason !== 'tool_use') {
-          recentWriteContents.length = 0;
-          wroteHtmlFileThisTurn = false;
-        }
+      // close stream-json input stdin. The sub-agent guard and the
+      // once-per-message dedup both live in `emitTurnEndOnce`.
+      if (stopReason) {
+        emitTurnEndOnce(explicitMsgId ?? currentMessageId, stopReason, obj.parent_tool_use_id);
       }
       // A sub-agent (parent_tool_use_id != null) in-stream error must NOT be
       // emitted as a run-level error: it condemns a main turn that has already
@@ -522,11 +834,14 @@ export function createClaudeStreamHandler(
       for (const block of obj.message.content) {
         if (!isRecord(block)) continue;
         if (block.type === 'tool_result') {
+          const content = stringifyToolResult(block.content);
+          const isError = Boolean(block.is_error);
+          absorbTaskToolResult(block.tool_use_id, content, isError);
           onEvent({
             type: 'tool_result',
             toolUseId: block.tool_use_id,
-            content: stringifyToolResult(block.content),
-            isError: Boolean(block.is_error),
+            content,
+            isError,
           });
         }
       }
@@ -552,6 +867,20 @@ export function createClaudeStreamHandler(
           null,
         ...(isError ? { isError: true } : {}),
       });
+      // A `result` frame ends ONE user turn, not the process: a stream-json
+      // session whose stdin is held open emits one `result` per turn and keeps
+      // reading (verified against
+      // `tests/fixtures/claude-cli-recordings/claude-2.1.259-*-two-turns.jsonl`,
+      // two `result` frames from a single CLI process). So it is a legitimate
+      // per-turn reset point — and on a build with no in-stream boundary at all
+      // (2.1.259 without `--include-partial-messages`) it is the ONLY one, which
+      // is what keeps the next turn's genuine inline HTML artifact from being
+      // mistaken for an echo of a file written in the previous turn.
+      const resultStopReason =
+        (typeof obj.stop_reason === 'string' && obj.stop_reason) ||
+        (typeof obj.terminal_reason === 'string' && obj.terminal_reason) ||
+        null;
+      if (resultStopReason !== 'tool_use') resetArtifactEchoDedupForNextTurn();
       if (isError) {
         const message = errorResultMessage(obj);
         onEvent({
@@ -598,7 +927,18 @@ export function createClaudeStreamHandler(
     return parts.join('\n').trim();
   }
 
-  function handleStreamEvent(ev: Record<string, unknown>) {
+  function handleStreamEvent(ev: Record<string, unknown>, parentToolUseId: unknown = null) {
+    // The turn's real `stop_reason` on Claude Code 2.1.259. It lands after
+    // every `content_block_stop` of the message (verified frame-by-frame
+    // against the recordings in `tests/fixtures/claude-cli-recordings/`), so by
+    // the time it arrives every tool_use of the turn has already been emitted —
+    // the ordering the assistant-wrapper path had to be careful about.
+    if (ev.type === 'message_delta' && isRecord(ev.delta)) {
+      const stopReason = typeof ev.delta.stop_reason === 'string' ? ev.delta.stop_reason : null;
+      if (stopReason) emitTurnEndOnce(currentMessageId, stopReason, parentToolUseId);
+      return;
+    }
+
     if (ev.type === 'message_start') {
       flushPendingArtifactText();
       // Clean up per-message role-marker guard from the previous message.
@@ -621,6 +961,8 @@ export function createClaudeStreamHandler(
         id: block.id,
         input: '',
         inputValue: 'input' in block ? block.input : undefined,
+        pathScanner: block.type === 'tool_use' ? createToolInputPathScanner(block.name) : null,
+        ...(block.type === 'tool_use' ? { startedAt: now() } : {}),
       });
       if (block.type === 'thinking') {
         onEvent({ type: 'thinking_start' });
@@ -639,8 +981,22 @@ export function createClaudeStreamHandler(
         return;
       }
       if (delta.type === 'thinking_delta' && typeof delta.thinking === 'string') {
-        if (currentMessageId) thinkingStreamed.add(currentMessageId);
-        currentMessageStreamedThinking = true;
+        /*
+         * Only an delta that actually carried characters counts as "the
+         * reasoning already streamed".
+         *
+         * Claude Code sends `thinking_delta` frames whose `thinking` is the
+         * empty string — 1508 of 1707 across 32 recorded runs. Marking the
+         * message as streamed on those retired the message-end fallback below,
+         * which is the ONLY place the real reasoning arrives, so the whole
+         * turn's thinking was dropped: the record head said 「思考中」 over an
+         * empty reasoning window, and after 60s S12 replaced even that with
+         * 「上游响应慢」 while the model was streaming the whole time.
+         */
+        if (delta.thinking.length > 0) {
+          if (currentMessageId) thinkingStreamed.add(currentMessageId);
+          currentMessageStreamedThinking = true;
+        }
         emitSafeText(currentMessageId, delta.thinking, 'thinking_delta');
         return;
       }
@@ -654,6 +1010,68 @@ export function createClaudeStreamHandler(
               name: state.name,
               delta: delta.partial_json,
             });
+            /*
+             * Announce WHICH file this write is about, the moment the path is
+             * provably complete — normally within the first few dozen bytes,
+             * while `content` still has tens of kilobytes to go. Without this
+             * the call is invisible until the last byte lands, because
+             * `tool_use` only fires at `content_block_stop`.
+             *
+             * The scanner reads the buffer we already keep; the arguments
+             * themselves never leave the daemon. `tool_input_delta`'s payload
+             * stays a heartbeat nobody renders (see the note on it in
+             * `packages/contracts/src/sse/chat.ts`) — this is a separate,
+             * few-dozen-byte conclusion. The path fires at most once per call;
+             * the scanner enforces that itself.
+             *
+             * 同一趟扫描顺手把正文行数数出来(W120),于是那一行**一边写一边长**,
+             * 不再是一个静止的文件名 + 一个秒表。行数走节流后的
+             * `tool_input_progress`,同样只有数字 —— 正文一个字节都不出 daemon。
+             */
+            const update = state.pathScanner?.push(delta.partial_json) ?? null;
+            if (update?.path !== undefined) {
+              state.targetPath = update.path;
+              onEvent({
+                type: 'tool_input_target',
+                id: state.id,
+                name: state.name,
+                path: update.path,
+                /*
+                 * 起点必须跟着这一条一起走,因为 `Edit` / `MultiEdit` /
+                 * `NotebookEdit` / `replace` **只有**这一条 —— 行数在途算不出来
+                 * (`−M` 要等 `old_string` 数完),`tool_input_progress` 一条都不
+                 * 发。少了它,行上有文件名而秒表不走(`build-turn-blocks` 的
+                 * `spanElapsed(undefined, live)` 返回 null),而且落定之后
+                 * `dropSupersededInFlightToolUses` 没有可搬的起点,结算行退回
+                 * `emitAgentEvent` 出口盖的时刻 —— 那是**入参传完**的一刻,
+                 * 整段流式传输被排除在外。真机 2026-09-04 实测(claude 2.1.260,
+                 * 27458 字节入参)这一段是 **94.1 秒**,行上却只剩落盘的 0.1 秒。
+                 *
+                 * 用 `state.startedAt`(块开始那一刻)而不是此刻:此刻是**路径
+                 * 扫出来**的时刻,真机那次比块开始晚 0.2 秒。同一次调用的
+                 * `tool_input_progress` 用的也是它,所以两条报的是同一个起点 ——
+                 * 起点在一次调用里必须不动,否则行上的秒数会被一路按回去。
+                 */
+                startedAt: state.startedAt ?? now(),
+              });
+            }
+            /*
+             * ⚠️ `state.targetPath !== undefined` **不是运行时守卫,是形状约束**:
+             * 扫描器保证路径没出之前不报行数(`dueLineCount` 的 `pathFound`),而
+             * 路径出的那一次 push 就在上面把 `targetPath` 记下了 —— 所以这个条件
+             * 恒真,撤掉它任何测试都不会红。留着只为一件事:让这条事件在类型上也
+             * 不可能带一个 `undefined` 的 `path`。别把它当成第二道判据。
+             */
+            if (update?.lines !== undefined && state.targetPath !== undefined) {
+              onEvent({
+                type: 'tool_input_progress',
+                id: state.id,
+                name: state.name,
+                path: state.targetPath,
+                lines: update.lines,
+                startedAt: state.startedAt ?? now(),
+              });
+            }
           }
         }
         return;
@@ -663,10 +1081,19 @@ export function createClaudeStreamHandler(
     if (ev.type === 'content_block_stop') {
       const key = blockKey(ev.index);
       const state = blocks.get(key);
+      // The wrapper may already have published this call (it usually gets here
+      // first — see `emittedToolUseIds`); then this stop is bookkeeping only.
+      const alreadyEmitted = state?.type === 'tool_use'
+        && typeof state.id === 'string'
+        && emittedToolUseIds.has(state.id);
+      if (alreadyEmitted) {
+        blocks.delete(key);
+        return;
+      }
       if (state && state.type === 'tool_use' && typeof state.id === 'string' && state.input.trim()) {
         try {
           emitToolUse(state.id, state.name, JSON.parse(state.input));
-          streamedToolUseIds.add(state.id);
+          emittedToolUseIds.add(state.id);
         } catch {
           // Fall through to the final assistant wrapper's input if the
           // streamed JSON is malformed or incomplete.
@@ -678,7 +1105,7 @@ export function createClaudeStreamHandler(
         state.inputValue !== undefined
       ) {
         emitToolUse(state.id, state.name, state.inputValue);
-        streamedToolUseIds.add(state.id);
+        emittedToolUseIds.add(state.id);
       }
       blocks.delete(key);
       return;

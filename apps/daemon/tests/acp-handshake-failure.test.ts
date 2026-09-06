@@ -592,6 +592,21 @@ describe('handshake failures the run classifier already has a remedy for', () =>
     });
   });
 
+  it('keeps a managed runtime session-start deadline on the retryable timeout path', () => {
+    const raw =
+      'json-rpc id 2: create opencode session: Post "http://127.0.0.1:57462/session": context deadline exceeded';
+
+    expect(isAcpHandshakeRpcErrorText(raw)).toBe(true);
+    expect(isAcpCliSessionRefusalText(raw)).toBe(false);
+    expect(classifyWithAcpFatalClose('AGENT_EXECUTION_FAILED', raw)).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'timeout',
+      retryable: true,
+      user_action: 'retry',
+    });
+    expect(withAcpHandshakeFailureGuidance({ message: raw })).toEqual({ message: raw });
+  });
+
   // The wrapper's other startup shapes, from the same two vela call sites
   // (`acp_runtime.go` newSession/loadSession). None of them is a statement
   // about the agent CLI's own build, and none is deterministic — so the

@@ -85,7 +85,7 @@ function renderUiLocalePrompt(locale: string | undefined): string {
   const lines = [
     '# UI locale override',
     '',
-    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, descriptions, labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, question labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
   ];
   if (normalized === 'zh-CN') {
     lines.push(
@@ -187,6 +187,14 @@ export interface ComposeInput {
   // this from plugin ids; the daemon must supply a verified recipe payload.
   odNextStrategyRecipe?: OdNextStrategyRequestRecipeV2 | undefined;
   agentId?: string | null | undefined;
+  /**
+   * One sentence naming the plan tool this runtime actually has, already
+   * resolved by the host (`planToolNoteForRuntime`, daemon-side). Carried, not
+   * derived: keeping the runtime→tool-name table in one place is what stops a
+   * second copy from drifting. Only the OD Next fork reads it — the legacy
+   * stack composes its own note from the same table.
+   */
+  planToolNote?: string | null | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
   skillMode?:
@@ -281,6 +289,7 @@ export interface ComposeInput {
 export function composeSystemPrompt({
   odNextStrategyRecipe,
   agentId,
+  planToolNote,
   skillBody,
   skillName,
   skillMode,
@@ -318,6 +327,11 @@ export function composeSystemPrompt({
   if (odNextStrategyRecipe) {
     return composeOdNextStrategyRequestPromptV2(odNextStrategyRecipe, {
       agentId,
+      // The plan-tool fact has to cross the fork with everything else. Without
+      // it an OD Next run keeps the pre-fix behaviour the legacy stack no
+      // longer has: a plan step whose tool is never named, and a sanctioned
+      // prose branch to fall into instead.
+      planToolNote,
       sessionMode,
       locale,
       deckIntent: odNextStrategyRecipe.taskType !== 'ppt' && freeformDeckSignal === true,
@@ -431,7 +445,17 @@ export function composeSystemPrompt({
   // and a BYOK/API chat route follow-up choices through the same surface
   // instead of drifting back to plain markdown option lists.
   parts.push(
-    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the OpenDesign UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.",
+    "\n\n---\n\n## Structured clarification on any turn\n\nWhen clarification is materially necessary and the answer benefits from structured input, emit a `<question-form>` block instead of writing a bulleted list of options in markdown. The host renders it inline in the originating assistant message; a markdown list renders as plain text and forces the user to type a reply. Use the richest appropriate web form controls (`radio`, `checkbox`, `select`, `text`, `textarea`, `number`, `range`, `date`, `time`, `datetime-local`, `color`, `url`, `email`, `tel`, `file`, `switch`, or `direction-cards`). For a `direction-cards` question, emit only its intent fields; omit `options`, `cards`, `variant`, and `defaultValue` because the OpenDesign host supplies the project-kind visual catalog, previews, recommendation, and stable style ids. When the clarification needs reference images, source docs, screenshots, or other user files, combine a `type: \"file\"` question with the text/options in the same form; selected files are uploaded into Design Files and submitted as attached/context files on the answer turn. For every finite-choice question, keep user control by leaving `allowCustom` unset or setting it to `true`, and add localized `customLabel` / `customPlaceholder` when useful. Use free-form prose questions only when a form would add no structure. Do NOT also duplicate the form's questions as markdown text alongside it.\n\n`<question-form>` is assistant text for the OpenDesign UI, not a native tool call. If you need to clarify direction, emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call. Do not stop after an introductory sentence such as \"先确认一下方向：\"; the same message must include the full form.\n\nAt most 6-7 options per question; merge near-duplicates instead of listing more. Choose `radio` vs `select` by option count, not importance: `radio` for a short list, `select` once it runs long (languages, timezones, voices); `checkbox` is always a plain list. `select` options may carry `group` (first group expands, the rest collapse) and `trailingLabel` (a short end-of-row code such as `ZH-CN`); both optional. Label options in the user's words, not jargon: \"Magazine-style layout\", not \"Editorial\". Reword only `label`; never change a stable `value`. Keep each `label` under ~40 characters; put anything longer in `description`.",
+    /* 与 daemon 那份 `prompts/system.ts` 的「How your turn is rendered」逐字对应 ——
+       两边措辞必须一致,否则 API/BYOK 模式和 daemon 模式对同一件事给模型两种说法。 */
+    "\n\n---\n\n## How your turn is rendered\n\n" +
+    "This panel does not print your output as one flat transcript. A turn renders as a **collapsed execution card** with your **answer below it**, and the completion marker is the boundary between them (see the turn-completion rules in this turn's instructions). Knowing which side something lands on is the difference between a readable turn and a wall of text.\n\n" +
+    "- **Inside the card** (default collapsed once the turn ends): every tool call, your thinking, and any narration you write while working. Each tool call is one row — a verb plus what it acted on — so a command whose intent is legible from its head reads well here, and a 200-character one-liner does not.\n" +
+    "- **Below the card**: only what comes after the completion marker. This is the part a person reads without clicking anything. Keep it about the outcome — what now exists, what changed, what needs their decision. Do not replay the steps; they are one click away and already legible.\n" +
+    "- **TodoWrite is the progress the user watches.** The list renders as `Plan · N steps` plus one drawer per step inside the card, and while the run is in flight a pill above the composer shows which step is current. So a multi-step task without a plan leaves the user watching a spinner. Update the list as you go — each entry's state is read live, and a plan written once and never advanced reads as a stall.\n" +
+    "- **Artifact cards are the deliverables you declare**, not every file you touch. The display marker in this turn's instructions decides which files get a card with a preview under the turn; a turn that declares none falls back to the host's own pick of the main artifacts it wrote — pages, documents and images, never a stylesheet or a script — and every file stays reachable in the project's file list either way. Pasting file contents back into your answer duplicates something the user can already see and open.\n" +
+    "- **Questions go through `<question-form>`**, never as a markdown list of options — a list renders as plain text and forces the user to type their answer back.\n\n" +
+    "One consequence worth stating plainly: everything you write before the completion marker is filed away by default. If a caveat matters to the decision, it belongs after the marker, not buried in the working narration.",
   );
 
   // Mirrors the daemon-side composer in apps/daemon/src/prompts/system.ts —
@@ -601,6 +625,7 @@ Do not mention tool unavailability to the user. Avoid phrases such as "TodoWrite
 - Plain chat prose to the user (in their language). State your plan as prose — a short numbered list in markdown is fine; it just must not be wrapped in \`<todo-list>\` or claim to be a tool call.
 - A final \`<artifact type="text/html">...</artifact>\` block containing a complete \`<!doctype html>\` document when the brief is ready to deliver.
 - \`<question-form>\` blocks when material clarification is needed on any turn, exactly as the rules below describe — question-form is markup the UI parses, not a tool call.
+- The self-closing \`<od-next key="..." value="..."/>\` follow-up markers described in this turn's instructions, as the very last thing you write — also markup the host parses, not a tool call.
 
 If the rules below tell you to plan with TodoWrite, write the plan as prose instead. If they tell you to read skill side files before writing, describe in one sentence which patterns/conventions you're going to apply and proceed. If they tell you to run brand-spec extraction via Bash + Read + WebFetch, ask the user the missing brand questions in the discovery form instead.`;
 
@@ -1074,7 +1099,6 @@ function shouldRenderElevenLabsVoiceOptions(
 }
 
 function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
-  description: string;
   questions: Array<{
     id: string;
     label: string;
@@ -1092,8 +1116,6 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     value: option.voiceId,
   }));
   return {
-    description:
-      'Pick a voice by description. The selected answer will be the exact voice_id passed to the renderer.',
     questions: [
       {
         id: 'voice',

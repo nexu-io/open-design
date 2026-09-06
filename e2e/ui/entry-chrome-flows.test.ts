@@ -1157,7 +1157,6 @@ test('[P0] @critical home composer delegates the picked prototype scenario to da
   // starts typeless (#7635), so the Prototype type is picked from the row.
   await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
   await pickHomeTemplate(page, 'prototype');
-
   const input = page.getByTestId('home-hero-input');
   const prompt =
     'Turn this into an infographic: "5 habits of effective code reviewers — read the PR description first, review tests before implementation"';

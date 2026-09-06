@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import { type ChatSessionMode } from '@open-design/contracts';
 import { readAnalyticsContext } from '../../analytics.js';
+import { nextForkedConversationTitle } from '../../conversation-fork-title.js';
 import { backfillBrandExtractionTranscriptForProject } from '../../brands/index.js';
 import type { RouteDeps } from '../../server-context.js';
 import type { BoundWorkspaceResourceMutationGate } from '../../collab/workspace-resource-mutation.js';
@@ -44,6 +45,84 @@ function normalizeChatSessionMode(value: unknown): ChatSessionMode {
 
 function isChatSessionMode(value: unknown): value is ChatSessionMode {
   return value === 'chat' || value === 'design' || value === 'plan';
+}
+
+/**
+ * 分叉复制一条消息时,这一轮**到底成没成**要跟着走;指向那次 run 的把手不跟着走。
+ *
+ * `runId` / `lastRunEventId` 是**指针** —— 重连、完成通知去重、SSE 续流都拿 runId
+ * 认人,带到新会话就是给它挂了一个不属于它的把手,所以照旧摘掉。
+ * `runStatus` 不是指针,是**结论**。丢掉它,前端就没有任何东西宣布这一轮结束了,
+ * 只能回退到「从事件里猜」(`AssistantMessage.legacyTurnFailed`):那条判据看到任何
+ * 一条报错的 `tool_result` 就判整轮失败。于是一轮明明成功、只是中途某个工具报过错的
+ * 回答,分叉之后壳头变成红色的「运行失败」(真机 2026-08-27,那一次是
+ * `desktop renderer unavailable`)—— 把「不知道」显示成了「失败」。
+ *
+ * 只带**终态**:`queued` / `running` 说的是「源会话此刻还在跑」,那是活的运行状态,
+ * 复制过来会让新会话里那一条永远转圈(原注释担心的正是这个),所以仍然不带。
+ */
+function settledForkVerdict(status: unknown): string | undefined {
+  return typeof status === 'string' && TERMINAL_RUN_STATUSES.has(status) ? status : undefined;
+}
+
+/**
+ * The `done_key` a Run stamps on its own assistant row, if it has one.
+ *
+ * Each physical Run mints exactly one key (`mintRunDoneKey`, emitted as the
+ * `done_key` agent event before any model output), so the FIRST key in a row's
+ * event list is that row's Run identity. Later keys in the same list are not
+ * identity — they are the damage this guard exists to stop — which is why only
+ * the first one counts.
+ */
+function ownDoneKeyOfPersistedEvents(events: unknown): string | null {
+  if (!Array.isArray(events)) return null;
+  for (const event of events) {
+    if (
+      event
+      && typeof event === 'object'
+      && (event as Record<string, unknown>).kind === 'done_key'
+    ) {
+      const key = (event as Record<string, unknown>).key;
+      if (typeof key === 'string' && key) return key;
+    }
+  }
+  return null;
+}
+
+/**
+ * True when an incoming message payload carries the stream of a Run that
+ * already owns a DIFFERENT assistant row in this conversation.
+ *
+ * A daemon-backed assistant row holds the stream of exactly one physical Run.
+ * One logical OD Next turn, though, spans several Runs — the daemon gives each
+ * its own row (`odnext_assistant_<hash>` for an automatic continuation) while
+ * the client renders them as one turn and keeps appending the successor's
+ * stream into the message object already on screen, which is the PREDECESSOR's
+ * row. Persisting that folded copy stores the successor's answer twice, and a
+ * freshly opened project then renders the conclusion two times.
+ *
+ * The claim-keyed check above (`incoming.runId !== stored.runId`) misses this
+ * whenever the client sends the row's own `runId` — which is exactly what it
+ * holds after a conversation refresh hands the server's `runId` and terminal
+ * `runStatus` back to a message the stream is still writing into. So this test
+ * is keyed on the PAYLOAD instead: a sibling row's own `done_key` appearing in
+ * this row's events can only mean the client folded that sibling's Run in.
+ *
+ * Retries are unaffected: a re-driven attempt keeps the same Run — and
+ * therefore the same key — on the same row.
+ */
+function payloadCarriesAnotherRowsRunStream(
+  incomingEvents: unknown,
+  siblingRunDoneKeys: ReadonlySet<string>,
+): boolean {
+  if (!Array.isArray(incomingEvents) || siblingRunDoneKeys.size === 0) return false;
+  return incomingEvents.some((event) =>
+    event
+    && typeof event === 'object'
+    && (event as Record<string, unknown>).kind === 'done_key'
+    && typeof (event as Record<string, unknown>).key === 'string'
+    && siblingRunDoneKeys.has((event as Record<string, unknown>).key as string),
+  );
 }
 
 export function registerProjectConversationRoutes(app: Express, ctx: RegisterProjectConversationRoutesDeps): void {
@@ -182,10 +261,34 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         : sourceConversation && sourceConversation.projectId === req.params.id
           ? normalizeChatSessionMode(sourceConversation.sessionMode)
           : 'design';
+    const explicitTitle = typeof title === 'string' ? title.trim() || null : null;
+    /*
+     * 从一条回复新开的会话由 **daemon** 起名(「{源标题} (n)」,见
+     * `../../conversation-fork-title.js`)。编号要唯一就得先看一眼这个项目里已有
+     * 哪些标题,而那份名单只有这里是权威的 —— 客户端手上的是可能过期的快照,
+     * 两个客户端各算各的必然撞号。
+     *
+     * 「读名单 → 算号 → 落库」这三步中间**一个 await 都没有**,better-sqlite3 又是
+     * 同步的,所以同进程内它就是原子的:同一秒连点两下拿到的是 (1) 和 (2)。
+     * 在这中间插入任何异步调用都会把这个性质弄没。
+     *
+     * 客户端显式传了标题就照传的来 —— 重命名、导入这些「我知道我要叫什么」的
+     * 调用点不该被编号盖掉。
+     */
+    const resolvedTitle =
+      explicitTitle
+      ?? (sourceConversation
+        ? nextForkedConversationTitle(
+            sourceConversation.title,
+            listConversations(db, req.params.id).map(
+              (existing: { title?: string | null }) => existing.title,
+            ),
+          )
+        : null);
     const conv = insertConversation(db, {
       id: randomId(),
       projectId: req.params.id,
-      title: typeof title === 'string' ? title.trim() || null : null,
+      title: resolvedTitle,
       sessionMode,
       createdAt: now,
       updatedAt: now,
@@ -200,20 +303,39 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     // messages into the fresh conversation. Be defensive — a missing or
     // cross-project source id silently yields an empty conversation.
     if (conv && seedMessages.length > 0) {
-      for (const m of seedMessages) {
+      /*
+       * 分叉分界线落在**新会话**里,盖在带过来的最后一条上(交付稿第 38 格)。
+       *
+       * 为什么是新会话而不是源会话:点完分叉页面就跳到新会话,人此刻站在这里。
+       * 那行脚注写的是「上文已带过来,接着说就行」—— 这句只有对着**新会话**里
+       * 那一截复制过来的上下文说才成立;盖在源会话上等于对着原地没动的人说
+       * 「已经带过来了」。标题用**源会话**的标题:这条线回答的是「上面这些是从哪来的」。
+       *
+       * 只盖最后一条:线是那一截上下文的**下边界**,中间每条都盖就成了一堆线。
+       */
+      const boundaryAt = seedMessages.length - 1;
+      const inheritedTitle =
+        (typeof sourceConversation?.title === 'string' && sourceConversation.title.trim())
+          ? sourceConversation.title.trim()
+          : null;
+      seedMessages.forEach((m, index) => {
         // Fresh id per copied message; upsertMessage assigns the next
         // position so role/content ordering is preserved. Drop the source's
-        // run pointers (runId/runStatus/lastRunEventId): they belong to the
-        // OTHER conversation's runs, and a copied still-`running` assistant
-        // turn would otherwise render a perpetual spinner in the side chat.
+        // run pointers (runId/lastRunEventId) but keep each turn's verdict —
+        // see `settledForkVerdict`.
         upsertMessage(db, conv.id, {
           ...m,
           id: randomId(),
           runId: undefined,
-          runStatus: undefined,
+          runStatus: settledForkVerdict(m.runStatus),
           lastRunEventId: undefined,
+          /* 拿不到源标题就不盖 —— 没有标题的分界线是两条发丝线夹一行空白 */
+          forkedInto:
+            index === boundaryAt && inheritedTitle && seedFromConversationId
+              ? { title: inheritedTitle, conversationId: seedFromConversationId }
+              : undefined,
         });
-      }
+      });
     }
     res.json({ conversation: conv });
   });
@@ -341,11 +463,64 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
   // daemon never persisted events/status there, so the web is the legitimate
   // writer) and lets UI metadata (feedback, comment attachments, telemetry)
   // land on every PUT.
+  /**
+   * The `done_key` every OTHER assistant row in this conversation was recorded
+   * with — i.e. the Run identities this row must never be allowed to absorb.
+   * Only each sibling's FIRST key counts (see `ownDoneKeyOfPersistedEvents`),
+   * so an already-damaged sibling cannot re-export the key it absorbed.
+   */
+  const siblingRunDoneKeys = (
+    conversationId: string,
+    messageId: string,
+  ): ReadonlySet<string> => {
+    const rows = db
+      .prepare(
+        `SELECT events_json AS eventsJson
+           FROM messages
+          WHERE conversation_id = ?
+            AND role = 'assistant'
+            AND id <> ?
+            AND events_json IS NOT NULL
+            AND events_json LIKE '%"done_key"%'`,
+      )
+      .all(conversationId, messageId) as Array<{ eventsJson: string | null }>;
+    const keys = new Set<string>();
+    for (const row of rows) {
+      let parsed: unknown;
+      try {
+        parsed = row.eventsJson ? JSON.parse(row.eventsJson) : null;
+      } catch {
+        continue;
+      }
+      const key = ownDoneKeyOfPersistedEvents(parsed);
+      if (key) keys.add(key);
+    }
+    return keys;
+  };
+
   const mergeMessageWriteForDaemonBacked = (
     stored: ReturnType<typeof getMessage>,
     incoming: Record<string, unknown>,
+    foreignRunDoneKeys: ReadonlySet<string>,
   ): Record<string, unknown> => {
     if (!stored || stored.role !== 'assistant' || !stored.runId) return incoming;
+    // A payload that carries a sibling row's Run stream is a client-side fold of
+    // one logical task's several physical Runs, not a fresher view of this row.
+    // Keep the daemon's copy of every Run-owned field; client metadata still
+    // lands. See `payloadCarriesAnotherRowsRunStream`.
+    if (payloadCarriesAnotherRowsRunStream(incoming.events, foreignRunDoneKeys)) {
+      return {
+        ...incoming,
+        role: stored.role,
+        runId: stored.runId,
+        runStatus: stored.runStatus,
+        events: stored.events ?? [],
+        content: stored.content ?? '',
+        lastRunEventId: stored.lastRunEventId,
+        startedAt: stored.startedAt,
+        endedAt: stored.endedAt,
+      };
+    }
     // A delayed PUT from a superseded run generation (incoming.runId differs
     // from the stored, current run — e.g. an old attempt's snapshot landing
     // after a retry pinned run B) must not repopulate the current run's data.
@@ -592,7 +767,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       ? { ...m, events: compactAdjacentMessageAgentEvents(m.events) }
       : m;
     const saved = upsertMessage(db, req.params.cid, {
-      ...mergeMessageWriteForDaemonBacked(existing, normalizedMessage),
+      ...mergeMessageWriteForDaemonBacked(
+        existing,
+        normalizedMessage,
+        siblingRunDoneKeys(req.params.cid, req.params.mid),
+      ),
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.

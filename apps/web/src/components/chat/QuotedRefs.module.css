@@ -1,0 +1,149 @@
+/*
+ * 引用芯片(设计稿组件 23 · 第 67 / 68 / 69 格)。
+ *
+ * 稿子 `.refs`:输入框上方的一枚小芯片,写着「N 条注释」——
+ * **不占写字的地方**,而且一条和五条一样高(第 69 格的意义就是证明这件事)。
+ * hover 时右侧露出移除、上方浮出全文。
+ */
+.refs {
+  position: relative;
+  display: inline-flex;
+  /*
+   * 不撑满一行。`inline-flex` 一旦成为 flex 项目会被**块化**成 `flex`
+   * (CSS 规范如此),再叠上 `.composer-shell` 那个纵向容器默认的
+   * `align-items: normal`(= stretch),芯片就被拉到整行宽
+   * (用户 2026-08-27 真机量到 457px)。稿子那边 `.refs` 的父容器不是
+   * stretch 容器,所以它天然保持内容宽 —— 这条差异在**父容器**,不在芯片。
+   * 不动父容器(它还有别的孩子),让芯片自己声明对齐:换个容器也不会再坏一次。
+   */
+  align-self: flex-start;
+  align-items: center;
+  gap: 5px;
+  margin: 9px 9px 0;
+  padding: 4px 9px;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: var(--chat-radius);
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-strong);
+  cursor: default;
+}
+
+/* 稿子 `.refs .ic { flex:none; width:13px; height:13px; color: var(--text-soft) }` */
+.icon {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--chat-text-soft);
+}
+
+/* 稿子 `.refs .del { position: static; flex:none; width:16px; height:16px;
+   margin-inline-start:1px; opacity:0 }` + `.refs:hover .del { opacity: 1 }`
+   —— 静止时不摆「×」,和待发送附件那一枚同一条规矩。
+
+   ⚠️ `.refs .del` **只写差异**,本体样式在稿子共用的 `.del` 基类里:
+   `display:grid; place-items:center; border-radius:50%; background: var(--bg);
+    border: 1px solid var(--border); color: var(--text-muted); padding: 0`
+   加上 `.del svg { width:10px; height:10px }`。原来这里只搬了 `.refs .del`
+   那一条,于是两份声明逐字看都对得上,渲染出来却是**一枚没底没边的深色裸叉**
+   —— 真机量 `getComputedStyle` 才照出来:稿子 bg `rgb(255,255,255)` /
+   border `1px solid rgb(219,219,219)` / color `rgb(92,92,92)`,我们三样全空。
+   稿子那条注释里写着这个坑的原型:「之前写成 `.att-i .del`,长条里的那个
+   既没底也没描边,svg 还失去了尺寸约束 —— 渲染成一个巨大的裸叉」。 */
+.remove {
+  position: static;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-inline-start: 1px;
+  padding: 0;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: 50%;
+  background: var(--chat-bg);
+  color: var(--chat-text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--chat-dur-quick) var(--chat-ease-out),
+    color var(--chat-dur-quick) var(--chat-ease-out),
+    border-color var(--chat-dur-quick) var(--chat-ease-out);
+}
+/* 稿子 `.del:hover { color: var(--text-strong); border-color: var(--border-strong) }`
+   —— 只做常规加深,**不变红**:红在这套系统里留给「出事了 / 不可逆」,
+   而摘掉一条引用是零代价的,给它红会让真出事时的红不灵。 */
+.remove:hover {
+  color: var(--chat-text-strong);
+  border-color: var(--chat-border-strong);
+  background: var(--chat-bg);
+}
+.refs:hover .remove,
+.remove:focus-visible {
+  opacity: 1;
+}
+/* 触屏没有 hover,一律常驻 —— 不然「×」永远等不出来 */
+@media (hover: none) {
+  .remove {
+    opacity: 1;
+  }
+}
+
+/* 稿子 `.refs .pop { position:absolute; left:0; bottom: calc(100% + 7px); z-index:7;
+   width: max-content; max-width: 300px; padding: 9px 11px; ... opacity: 0 }` */
+.pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 7px);
+  z-index: 7;
+  width: max-content;
+  max-width: 300px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 9px 11px;
+  border-radius: var(--chat-radius);
+  background: var(--chat-overlay-glass);
+  border: var(--chat-stroke) solid var(--chat-overlay-glass-edge);
+  -webkit-backdrop-filter: blur(var(--chat-glass-blur));
+  backdrop-filter: blur(var(--chat-glass-blur));
+  box-shadow: var(--chat-shadow-md);
+  color: var(--chat-overlay-glass-text);
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--chat-dur-quick) var(--chat-ease-out);
+}
+.refs:hover .pop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 稿子 `.refs .pop ol { list-style: none; counter-reset: r }` + `li::before { counter(r) "." }`
+   —— 序号是 counter 画的,不是文本,所以「1.」永远跟着条数走 */
+.pop ol {
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: r;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.pop li {
+  display: flex;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.pop li + li {
+  margin-top: 6px;
+}
+.pop li::before {
+  counter-increment: r;
+  content: counter(r) '.';
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.6;
+}

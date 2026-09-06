@@ -40,6 +40,11 @@ import { notifyConnectorsChanged } from './connectors-events';
 import { hasConnectorStatusChanges } from './connectors-state';
 import { MemoryProfilePanel } from './MemoryProfilePanel';
 import { MemoryHooksPanel, type MemoryHookKey } from './MemoryHooksPanel';
+import {
+  hooksOffWhileEnabled,
+  paintedMemoryFlags,
+  type MemoryFlags,
+} from './memory-switch-state';
 
 // All manually-selectable memory types. `profile` (the structured singleton)
 // and `rule` (verified checks the POST loop enforces) join the original four
@@ -182,21 +187,14 @@ function writePendingConnectorAuthIds(ids: Set<string>): void {
   }
 }
 
-async function fetchMemoryList(): Promise<MemoryListResponse> {
+// `null` means "we did not learn the daemon's config on this pass". It used to
+// return a fabricated all-true config instead, which made every switch on this
+// screen render green off the back of a failed request — a claim about the
+// daemon made without having heard from it (OPEND-2606). Callers keep whatever
+// they last knew and, on first paint, keep claiming nothing.
+async function fetchMemoryList(): Promise<MemoryListResponse | null> {
   const resp = await fetch('/api/memory');
-  if (!resp.ok) {
-    return {
-      enabled: true,
-      chatExtractionEnabled: true,
-      profileEnabled: true,
-      rewriteEnabled: true,
-      verifyEnabled: true,
-      rootDir: '',
-      index: '',
-      entries: [],
-      extraction: null,
-    };
-  }
+  if (!resp.ok) return null;
   return (await resp.json()) as MemoryListResponse;
 }
 
@@ -736,6 +734,10 @@ export function MemorySection({
   const logoTheme = useResolvedTheme();
   const [enabled, setEnabled] = useState(true);
   const [chatExtractionEnabled, setChatExtractionEnabled] = useState(true);
+  // False until `GET /api/memory` has actually answered. Every switch position
+  // on this screen is drawn through `paintedMemoryFlags`, which reads `null`
+  // (i.e. this being false) as "claim nothing" rather than "everything is on".
+  const [configKnown, setConfigKnown] = useState(false);
   // The three new per-hook flags (default-on). They live alongside the
   // existing chat-extraction flag and are surfaced through MemoryHooksPanel.
   const [profileEnabled, setProfileEnabled] = useState(true);
@@ -865,6 +867,10 @@ export function MemorySection({
       fetchMemoryList(),
       fetchMemoryTree(),
     ]);
+    setMemoryTree(tree);
+    // A pass that never heard back leaves the previous knowledge in place and,
+    // when there was none, leaves the switches claiming nothing at all.
+    if (!list) return;
     setEnabled(list.enabled);
     setChatExtractionEnabled(list.chatExtractionEnabled !== false);
     setProfileEnabled(list.profileEnabled !== false);
@@ -873,7 +879,7 @@ export function MemorySection({
     setRootDir(list.rootDir);
     setIndex(list.index);
     setEntries(list.entries);
-    setMemoryTree(tree);
+    setConfigKnown(true);
   }, []);
 
   const reloadExtractions = useCallback(async () => {
@@ -1457,14 +1463,45 @@ export function MemorySection({
     [],
   );
 
-  const hookFlags = useMemo<Record<MemoryHookKey, boolean>>(
-    () => ({
+  // The daemon's config as far as we actually know it; `null` until the first
+  // successful read. Everything the screen renders about on/off state is
+  // derived from this one value, so a switch cannot get ahead of the daemon.
+  const knownFlags = useMemo<MemoryFlags | null>(
+    () => (configKnown
+      ? {
+        enabled,
+        chatExtractionEnabled,
+        profileEnabled,
+        rewriteEnabled,
+        verifyEnabled,
+      }
+      : null),
+    [
+      configKnown,
+      enabled,
+      chatExtractionEnabled,
       profileEnabled,
       rewriteEnabled,
       verifyEnabled,
-      chatExtractionEnabled,
+    ],
+  );
+  const painted = useMemo(() => paintedMemoryFlags(knownFlags), [knownFlags]);
+  const hookFlags = useMemo<Record<MemoryHookKey, boolean>>(
+    () => ({
+      profileEnabled: painted.profileEnabled,
+      rewriteEnabled: painted.rewriteEnabled,
+      verifyEnabled: painted.verifyEnabled,
+      chatExtractionEnabled: painted.chatExtractionEnabled,
     }),
-    [profileEnabled, rewriteEnabled, verifyEnabled, chatExtractionEnabled],
+    [painted],
+  );
+  // Capabilities the master switch would otherwise silently claim. Memory reads
+  // and memory writes are separate switches in the daemon, so the view that
+  // owns the master toggle has to show every one of them that is not running —
+  // rather than leaving the user to find it under a second tab (OPEND-2606).
+  const undisclosedHooks = useMemo(
+    () => hooksOffWhileEnabled(knownFlags),
+    [knownFlags],
   );
 
   const onSaveIndex = useCallback(async () => {
@@ -1764,7 +1801,7 @@ export function MemorySection({
           >
             <input
               type="checkbox"
-              checked={enabled}
+              checked={painted.enabled}
               onChange={(e) => onToggleEnabled(e.target.checked)}
             />
             <span className="toggle-slider" />
@@ -1772,11 +1809,29 @@ export function MemorySection({
         </div>
       </div>
 
-      {!enabled ? (
+      {configKnown && !enabled ? (
         <div role="status" className="memory-disabled-banner">
           <strong>{t('settings.memoryDisabled')}</strong> —{' '}
           {t('settings.memoryDisabledBanner')}
         </div>
+      ) : null}
+
+      {/*
+        The master switch above reads as "memory is on". It is not the switch
+        that mines new conversations — that is `chatExtractionEnabled`, which
+        the daemon defaults to off — so every hook that is not running is shown
+        here, with its own switch and its own state, on the view the master
+        switch lives on. `undisclosedHooks` is empty once they all match, and
+        the "How it works" tab keeps the full panel, so no row is drawn twice.
+      */}
+      {topTab === 'memories' && undisclosedHooks.length > 0 ? (
+        <MemoryHooksPanel
+          enabled={painted.enabled}
+          flags={hookFlags}
+          onToggle={onToggleHook}
+          hooks={undisclosedHooks}
+          testId="memory-hooks-undisclosed"
+        />
       ) : null}
 
       {enabled && providerConfigBanner ? (

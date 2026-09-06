@@ -114,6 +114,11 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
+import {
+  amrBalanceBlockedDialog,
+  resolveAmrBalanceBranch,
+} from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
@@ -122,7 +127,6 @@ import {
   retryUnavailableAmrBalanceGate,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { entryStrategyRoutingFields } from './entry-strategy-routing';
 import { EntryBlankState } from './EntryBlankState';
@@ -1104,6 +1108,14 @@ export function EntryShell({
   const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
     {
       reason: 'insufficient' | 'signed_out';
+      /**
+       * 哪一张弹窗 —— 身份 × 订阅的分支(规格 §6.V)。
+       *
+       * 首页和聊天流水的差别只有一处:这里**没有那张升级卡**兜底。所以
+       * 「Max · owner 不弹窗」那一支在首页会退回原来的升级弹窗 —— 不然拦住了
+       * 发送却什么都不显示,那是把一个死胡同换成一片空白。
+       */
+      dialog: 'upgrade' | 'ask_owner';
       snapshot: AmrWalletSnapshot;
       resolve: (decision: 'retry' | 'dismiss') => void;
     } | null
@@ -1420,6 +1432,17 @@ export function EntryShell({
           const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
             setAmrBalanceGateBlock({
               reason: blocked.reason,
+              // 被登出说的是登录不是钱,无条件走原来那张(主按钮是应用内登录)。
+              // 余额耗尽才按身份分支;首页没有卡兜底,所以 `null` 退回 `upgrade`。
+              dialog:
+                blocked.reason === 'signed_out'
+                  ? 'upgrade'
+                  : amrBalanceBlockedDialog(
+                      resolveAmrBalanceBranch({
+                        context: gateWorkspaceContext,
+                        billing: workspaceBilling,
+                      }),
+                    ) ?? 'upgrade',
               snapshot: blocked.snapshot,
               resolve,
             });
@@ -1435,14 +1458,19 @@ export function EntryShell({
           // Hold THIS submit while the reminder waits for a decision; 'proceed'
           // resumes the same create-and-run below, so HomeView's normal accept
           // path (draft clearing, context consumption) still applies.
-          const plan = await resolveAmrPlan(gate.snapshot);
-          if (isPaidAmrPlan(plan)) {
-            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
-            });
-            setAmrLowBalanceWarn(null);
-            if (decision !== 'proceed') return 'blocked' as const;
-          }
+          //
+          // The reminder used to be gated on `isPaidAmrPlan(await
+          // resolveAmrPlan(...))`. Product ruling 2026-09-03 (OPEND-2600) opens
+          // it to every tier — a free account's wallet is the ONLY thing funding
+          // its runs, so it is the tier that most needs the warning — and the
+          // plan read that filter needed was a network roundtrip standing
+          // between the user and their run. The gate already decided that a
+          // reminder is warranted; Home just shows it.
+          const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
+            setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
+          });
+          setAmrLowBalanceWarn(null);
+          if (decision !== 'proceed') return 'blocked' as const;
         }
         if (
           currentWorkspaceAccountGeneration() !== gateAccountGeneration
@@ -1732,7 +1760,16 @@ export function EntryShell({
           <WhatsNewPopup active={view === 'home' && !goPlanSunsetMessagePending} />
           {/* The campaign badge lives in EntryNavRail's top-right cluster so it
               stays beside the account module across every entry tab. */}
-          {amrBalanceGateBlock ? (
+          {amrBalanceGateBlock?.dialog === 'ask_owner' ? (
+            /*
+             * 没有账单权限的成员。原来这一档给的是 `AmrBalanceDialog`,而它的
+             * 主按钮取自 `workspaceUpgradeUrl` —— 对这类成员返回 `null`,于是
+             * 弹窗上只剩一颗「暂不需要」(§6.Y)。这张弹窗至少给得出一条路。
+             */
+            <AmrOwnerTopUpDialog
+              onClose={() => amrBalanceGateBlock.resolve('dismiss')}
+            />
+          ) : amrBalanceGateBlock ? (
             <AmrBalanceDialog
               reason={amrBalanceGateBlock.reason}
               balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}

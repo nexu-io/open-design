@@ -4,10 +4,13 @@ import {
   buildDaemonTranscript,
   buildDaemonPriorTranscript,
   DAEMON_RUN_FINISHED_EVENT,
+  DAEMON_STREAM_RECONNECT_LIMIT,
   latestUserPromptFromHistory,
   reattachDaemonRun,
   sanitizePriorAssistantTurnForTranscript,
+  STRATEGY_TASK_BLOCKED_MESSAGE,
   streamViaDaemon,
+  type DaemonReconnectState,
   type DaemonRunFinishedEventDetail,
 } from '../../src/providers/daemon';
 import { streamMessageOpenAI } from '../../src/providers/openai-compatible';
@@ -264,6 +267,118 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).toHaveBeenCalledTimes(1);
   });
 
+  it('carries the tool call clock through to the client so a row can show its duration', async () => {
+    // 时间在这条链上丢过两次:SSE 只发 (event, data, id),web 的 toAgentEvent() 又不带。
+    // daemon 现在在唯一出口盖 startedAt / completedAt(runtimes/tool-timing.ts),
+    // 这里守住第二处 —— 转换时必须把它们带过来,否则工具行永远没有耗时。
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-t' });
+      if (url === '/api/runs/run-t/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"tool_use","id":"call_1","name":"Read","input":{"file_path":"a.ts"},"startedAt":1000}\n\n' +
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"call_1","content":"ok","isError":false,"completedAt":1400}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-t') return jsonResponse({ id: 'run-t', status: 'succeeded' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'read it' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const events = handlers.onAgentEvent.mock.calls.map((c) => c[0]);
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'tool_use', id: 'call_1', startedAt: 1000 }),
+      expect.objectContaining({ kind: 'tool_result', toolUseId: 'call_1', completedAt: 1400 }),
+    ]));
+  });
+
+  /**
+   * 推理 token 计数过线。这一段是整条链**唯一没有别的守卫**的接缝:
+   * daemon 那头发得再对,`translateAgentEvent` 少一个分支就整条哑掉,而它返回 `null`
+   * 是完全无声的(`tool_input_delta` 走的正是那条静默丢弃的路)。
+   *
+   * `at` 由**客户端**在这里盖 —— 它的唯一消费方拿聊天面板自己的 `nowMs` 去比,
+   * 两个时刻必须是同一只钟,daemon 的时刻会把机器间的时钟偏差直接算进去。
+   * 所以这里断言它是「本机此刻」,而不是断言它等于载荷里的某个字段。
+   */
+  it('carries the reasoning-progress count across the wire, client-stamped', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-tk' });
+      if (url === '/api/runs/run-tk/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"thinking_tokens","tokens":50}\n\n' +
+          'event: agent\ndata: {"type":"thinking_tokens","tokens":3278}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-tk') return jsonResponse({ id: 'run-tk', status: 'succeeded' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const before = Date.now();
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'think about it' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const counts = handlers.onAgentEvent.mock.calls
+      .map((c) => c[0])
+      .filter((e) => e?.kind === 'thinking_tokens');
+    expect(counts.map((e) => e.tokens), '两帧都要过线,而且是累计值原样').toEqual([50, 3278]);
+    for (const one of counts) {
+      expect(typeof one.at, '到达时刻是客户端盖的').toBe('number');
+      expect(one.at).toBeGreaterThanOrEqual(before);
+      expect(one.at).toBeLessThanOrEqual(Date.now());
+    }
+  });
+
+  it('omits the clock fields entirely when the adapter has no timing to report', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-u' });
+      if (url === '/api/runs/run-u/events') {
+        return sseResponse(
+          'event: agent\ndata: {"type":"tool_use","id":"c1","name":"Read","input":{}}\n\n' +
+          'event: agent\ndata: {"type":"tool_result","toolUseId":"c1","content":"ok","isError":false}\n\n' +
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-u') return jsonResponse({ id: 'run-u', status: 'succeeded' });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      history: [{ id: '1', role: 'user', content: 'read it' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const use = handlers.onAgentEvent.mock.calls.map((c) => c[0]).find((e) => e?.kind === 'tool_use');
+    const result = handlers.onAgentEvent.mock.calls.map((c) => c[0]).find((e) => e?.kind === 'tool_result');
+    expect(use).not.toHaveProperty('startedAt');
+    expect(result).not.toHaveProperty('completedAt');
+  });
+
   it('keeps consuming when a same-run retry succeeds after the transient error status briefly reads failed', async () => {
     // Regression for #5110: the daemon can emit an empty-output error for a
     // failed first attempt, then recover the SAME run through the retry path.
@@ -372,6 +487,81 @@ describe('streamViaDaemon', () => {
     expect(handlers.onError).toHaveBeenCalledTimes(1);
     const err = handlers.onError.mock.calls[0]![0] as Error & { resumable?: boolean };
     expect(err.resumable).toBe(true);
+  });
+
+  // Frame shape lifted from a real failed run (`.od/runs/60d39320-…`): the
+  // daemon's own sentence is generic and the actual cause only exists in the
+  // stderr the daemon captured. The live path has to carry that onto the
+  // surfaced error, or the failure card can only ever show the generic sentence.
+  it('carries the captured stderr tail onto a surfaced terminal failure', async () => {
+    const stderrTail =
+      'Error: dsh: plugin tree failed to load: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          `event: error\ndata: ${JSON.stringify({
+            message: 'DeepSeek Harness profile exited without a terminal result.',
+            error: {
+              code: 'DSH_PROFILE_MISSING_RESULT',
+              message: 'DeepSeek Harness profile exited without a terminal result.',
+              retryable: false,
+            },
+            stderrTail,
+          })}\n\n`,
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'deepseek-harness',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const err = handlers.onError.mock.calls[0]![0] as Error & { stderrTail?: string };
+    expect(err.message).toBe('DeepSeek Harness profile exited without a terminal result.');
+    expect(err.stderrTail).toBe(stderrTail);
+  });
+
+  it('leaves the stderr tail unset when the failure frame carries none', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+      if (url === '/api/runs/run-1/events') {
+        return sseResponse(
+          'event: error\ndata: {"code":"AGENT_EXECUTION_FAILED","message":"upstream drop","retryable":true}\n\n',
+        );
+      }
+      if (url === '/api/runs/run-1') {
+        return jsonResponse({ id: 'run-1', status: 'failed' });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'do the thing' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const err = handlers.onError.mock.calls[0]![0] as Error & { stderrTail?: string };
+    expect(err.stderrTail).toBeUndefined();
   });
 
   it('sends run-scoped media execution policy to the daemon', async () => {
@@ -2189,7 +2379,7 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenLastCalledWith(expectedStatus);
     if (expectsError) {
       expect(handlers.onError).toHaveBeenCalledWith(
-        expect.objectContaining({ message: 'The strategy task could not continue.' }),
+        expect.objectContaining({ message: STRATEGY_TASK_BLOCKED_MESSAGE }),
       );
       expect(handlers.onDone).not.toHaveBeenCalled();
     } else {
@@ -2245,13 +2435,55 @@ describe('streamViaDaemon', () => {
   });
 
   it('reports an error when reconnects are exhausted before an end event', async () => {
+    // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
+    // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
+    // 既保住确定性也不让这一条把套件拖慢。
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+        if (url === '/api/runs/run-1/events') return sseResponse('');
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'mock',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'daemon stream disconnected before run completed',
+          code: 'DAEMON_STREAM_DISCONNECTED',
+        }),
+      );
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /*
+   * 下面三条测的是「重连读数怎么交给 UI」(设计稿组件 22 · 第 82–84 格)。
+   * 传输层的重连行为一个字没动 —— 只是把循环里那个局部变量变成可观察的信号。
+   */
+
+  it('reports reconnect progress while a daemon stream keeps dropping', async () => {
     const handlers = createDaemonHandlers();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') return sseResponse('');
-      throw new Error(`unexpected fetch ${url}`);
-    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse(''))
+      .mockResolvedValueOnce(sseResponse(''))
+      .mockResolvedValueOnce(sseResponse('id: 1\nevent: stdout\ndata: {"chunk":"hi"}\n\nid: 2\nevent: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
     vi.stubGlobal('fetch', fetchMock);
 
     await streamViaDaemon({
@@ -2262,58 +2494,136 @@ describe('streamViaDaemon', () => {
       handlers,
     });
 
-    expect(fetchMock).not.toHaveBeenCalledWith('/api/runs/run-1/cancel', { method: 'POST' });
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'daemon stream disconnected before run completed',
-        code: 'DAEMON_STREAM_DISCONNECTED',
-      }),
-    );
-    expect(handlers.onDone).not.toHaveBeenCalled();
+    // 恢复后发一条 cleared 让那一行整个消失 —— 设计稿明说不留「已恢复」
+    expect(handlers.onReconnect.mock.calls.map(([state]) => state)).toEqual([
+      { attempt: 1, max: DAEMON_STREAM_RECONNECT_LIMIT, phase: 'reconnecting' },
+      { attempt: 2, max: DAEMON_STREAM_RECONNECT_LIMIT, phase: 'reconnecting' },
+      { attempt: 0, max: DAEMON_STREAM_RECONNECT_LIMIT, phase: 'cleared' },
+    ]);
+    expect(handlers.onDone).toHaveBeenCalledWith('hi');
+  });
+
+  it('keeps the surfaced reconnect count monotonic when resumed streams only carry keepalives', async () => {
+    // keepalive 会把传输层的重连**预算**清零(那是刻意的:一条安静但活着的流不该被判死),
+    // 但用户眼里那次「连上了什么也没来」不是恢复 —— 读数不能跟着回到 1/5(盘点 R7)。
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ runId: 'run-1' }))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse(': keepalive\n\n'))
+      .mockResolvedValueOnce(sseResponse('event: end\ndata: {"code":0,"status":"succeeded"}\n\n'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: 'hello' }],
+      systemPrompt: '',
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    const attempts = handlers.onReconnect.mock.calls
+      .map(([state]) => state)
+      .filter((state) => state.phase === 'reconnecting')
+      .map((state) => state.attempt);
+    expect(attempts).toEqual([1, 2, 3]);
+    expect(handlers.onError).not.toHaveBeenCalled();
+  });
+
+  it('hands the reconnect row an exhausted phase when the retry budget runs out', async () => {
+    // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
+    // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
+    // 既保住确定性也不让这一条把套件拖慢。
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+        if (url === '/api/runs/run-1/events') return sseResponse('');
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'mock',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      const states = handlers.onReconnect.mock.calls.map(([state]) => state);
+      // 5 次尝试走满,最后一格(83)是 5/5,下一条就是「交回给人」(84)
+      expect(states.map((state) => state.attempt)).toEqual([1, 2, 3, 4, 5, 5]);
+      expect(states.at(-1)).toEqual({
+        attempt: DAEMON_STREAM_RECONNECT_LIMIT,
+        max: DAEMON_STREAM_RECONNECT_LIMIT,
+        phase: 'exhausted',
+      });
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'DAEMON_STREAM_DISCONNECTED' }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('marks a daemon run failed when the SSE stream closes silently and status is still active', async () => {
-    const handlers = createDaemonHandlers();
-    const onRunStatus = vi.fn();
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
-      if (url === '/api/runs/run-1/events') return sseResponse('');
-      if (url === '/api/runs/run-1') {
-        return new Response(
-          JSON.stringify({
-            id: 'run-1',
-            status: 'running',
-            createdAt: 1,
-            updatedAt: 2,
-            exitCode: null,
-            signal: null,
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    // 走满 5 次预算的路径现在会**退避**(见 providers/daemon.ts 的
+    // DAEMON_STREAM_RECONNECT_BACKOFF_*),整段要十几秒真实时间。用假时钟推,
+    // 既保住确定性也不让这一条把套件拖慢。
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/runs') return jsonResponse({ runId: 'run-1' });
+        if (url === '/api/runs/run-1/events') return sseResponse('');
+        if (url === '/api/runs/run-1') {
+          return new Response(
+            JSON.stringify({
+              id: 'run-1',
+              status: 'running',
+              createdAt: 1,
+              updatedAt: 2,
+              exitCode: null,
+              signal: null,
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
 
-    await streamViaDaemon({
-      agentId: 'mock',
-      history: [{ id: '1', role: 'user', content: 'hello' }],
-      systemPrompt: '',
-      signal: new AbortController().signal,
-      handlers,
-      onRunStatus,
-    });
+      const streaming = streamViaDaemon({
+        agentId: 'mock',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
 
-    expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
-    expect(onRunStatus).toHaveBeenCalledWith('failed');
-    expect(handlers.onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'daemon stream disconnected before run completed',
-        code: 'DAEMON_STREAM_DISCONNECTED',
-      }),
-    );
-    expect(handlers.onDone).not.toHaveBeenCalled();
+      expect(fetchMock.mock.calls.some(([input]) => String(input) === '/api/runs/run-1')).toBe(true);
+      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(handlers.onError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'daemon stream disconnected before run completed',
+          code: 'DAEMON_STREAM_DISCONNECTED',
+        }),
+      );
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('includes selected preview comments without requiring visible draft text', async () => {
@@ -2579,6 +2889,8 @@ function createDaemonHandlers() {
     ...createStreamHandlers(),
     onAgentEvent: vi.fn(),
     onArtifactCount: vi.fn(),
+    // 重连读数(组件 22)。可选回调,挂上来是为了能在测里读它的调用序列。
+    onReconnect: vi.fn<(state: DaemonReconnectState) => void>(),
   };
 }
 

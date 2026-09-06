@@ -2074,10 +2074,33 @@ describe('work completeness vs a settled OD Next verdict', () => {
     expect(run.endedWithUnfinishedWork).toBe(true);
   });
 
+  it('lets an authenticated done conclusion finish a succeeded non-strategy run with a stale plan', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: '简短总结新图', status: 'in_progress' }];
+    run.authenticatedDoneConclusion = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
+  it('does not let a done marker erase unfinished work from a failed run', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: 'ship it', status: 'in_progress' }];
+    run.authenticatedDoneConclusion = true;
+
+    runs.finish(run, 'failed', 1, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
   it('keeps a max_tokens truncation unfinished even under a completed verdict', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
     run.truncatedMidTurn = true;
+    run.authenticatedDoneConclusion = true;
     run.strategyTask = completedStrategyTask();
     run.deliverableValid = true;
 

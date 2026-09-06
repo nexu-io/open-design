@@ -1916,6 +1916,16 @@ export async function listPlugins(
   const cacheKey = pluginCatalogCacheKey(options);
   const requestGeneration = (pluginCatalogCacheGenerations.get(cacheKey) ?? 0) + 1;
   pluginCatalogCacheGenerations.set(cacheKey, requestGeneration);
+  // NOT single-flighted, deliberately. `FileWorkspace`'s load effect fires this
+  // twice ~4ms apart on a cold conversation open, and a ttl-0 join would remove
+  // the second request — but it would also remove the ordinary same-key request
+  // race that `pluginCatalogCacheGenerations` above exists to arbitrate, and
+  // that `tests/state/projects.test.ts` pins ("keeps the latest-started
+  // same-scope plugin read cached when responses finish in reverse order").
+  // Collapsing identical concurrent reads makes that race unreachable rather
+  // than merely handled, which is a change to this module's stated concurrency
+  // contract, not a request-count change. Left for the owner of that contract
+  // to decide.
   try {
     const resp = await fetch(
       '/api/plugins',

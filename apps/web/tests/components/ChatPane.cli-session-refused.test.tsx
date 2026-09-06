@@ -132,7 +132,7 @@ describe('ChatPane — ACP CLI session refusal card', () => {
 
     // The body is a dictionary key resolved at render time — which is exactly
     // what a daemon-authored English sentence can never be.
-    const description = container.querySelector('.run-error__description');
+    const description = container.querySelector('[data-testid="chat-run-error-description"]');
     expect(description).toBeTruthy();
     expect(description!.textContent).toContain('chat.runError.cliSessionRefusedMessage');
     // Rendered with nothing left to interpolate. A `{…}` slot surviving in the
@@ -146,16 +146,24 @@ describe('ChatPane — ACP CLI session refusal card', () => {
     expect(description!.textContent).not.toContain('Details:');
   });
 
-  it('shows the raw agent line exactly once, in the diagnostics block', () => {
+  /*
+   * NOTE(sync/main): origin/main asserted the raw agent line appears exactly
+   * once, INSIDE the card's 「错误详情」 diagnostics block. This branch removed
+   * that collapse from the error card outright (product ruling), so there is no
+   * diagnostics block left to put it in and main's assertion cannot be kept as
+   * written.
+   *
+   * What survives is the half that still has a home: the raw daemon prose must
+   * not leak into the card at all, so the localized sentence is the only thing
+   * the user reads. Pinned here so removing the collapse cannot quietly become
+   * "the raw line got reinstated somewhere else on the card".
+   */
+  it('keeps the raw agent line out of the card entirely', () => {
     const { container } = renderChat(refusedMessage());
 
-    const diagnostic = container.querySelector('.run-error__diagnostic pre');
-    expect(diagnostic).toBeTruthy();
-    expect(diagnostic!.textContent).toContain(RAW_AGENT_LINE);
-    expect(diagnostic!.textContent).toContain('error_code: AGENT_CLI_SESSION_REFUSED');
-
     const card = container.querySelector('[data-user-action-card="run-recovery"]')!;
-    expect(occurrences(card.textContent ?? '', RAW_AGENT_LINE)).toBe(1);
+    expect(occurrences(card.textContent ?? '', RAW_AGENT_LINE)).toBe(0);
+    expect(container.querySelector('.run-error__diagnostic')).toBeNull();
   });
 
   it('offers Retry — the CLI build is the user\'s to change, then re-run', () => {
@@ -182,7 +190,7 @@ describe('ChatPane — ACP CLI session refusal card', () => {
       } as Partial<ChatMessage>),
     );
 
-    const description = container.querySelector('.run-error__description');
+    const description = container.querySelector('[data-testid="chat-run-error-description"]');
     expect(description!.textContent).toContain('chat.runError.cliSessionRefusedMessage');
     expect(description!.textContent).not.toContain('undefined');
   });

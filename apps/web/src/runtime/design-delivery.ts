@@ -1,5 +1,8 @@
 import type { ChatSessionMode } from '@open-design/contracts';
-import { containsQuestionFormAsk } from '../artifacts/question-form';
+import {
+  containsQuestionFormAsk,
+  containsUnrenderableQuestionForm,
+} from '../artifacts/question-form';
 import type { AgentEvent, ChatMessage } from '../types';
 import { hasFileMutationToolUse } from './file-ops';
 import { unfinishedTodosFromEvents } from './todos';
@@ -100,6 +103,7 @@ export function resolveDesignDeliveryOutcome(
     return 'delivered';
   }
   if (input.persistenceFailed) return 'delivery_failed';
+  if (containsUnrenderableQuestionForm(input.content)) return 'no_result';
   if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
     return 'report_only';
   }

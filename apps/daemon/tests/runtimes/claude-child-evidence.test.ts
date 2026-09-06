@@ -262,6 +262,12 @@ describe('Claude native Child evidence side channel', () => {
       agentCliVersion: '2.1.219 (Claude Code)',
       runtimeAdapterVersion: CLAUDE_CHILD_EVIDENCE_ADAPTER_VERSION,
     });
+    // ⚠️ LEGACY SHAPE, on purpose. These `turn_end`s come from `stop_reason` on
+    // the `assistant` wrapper, which Claude Code 2.1.259 leaves null on every
+    // frame — this fixture is the coverage for older CLIs and argv-compatible
+    // forks that still populate it. For the current shape (stop reason on
+    // `message_delta`) see `w107-claude-turn-boundary-real-cli.test.ts`, which
+    // replays verbatim 2.1.259 recordings.
     expect(mainEvents).toContainEqual({ type: 'turn_end', stopReason: 'tool_use' });
     expect(mainEvents).toContainEqual({ type: 'turn_end', stopReason: 'end_turn' });
   });

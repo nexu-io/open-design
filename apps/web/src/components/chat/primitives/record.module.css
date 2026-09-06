@@ -1,0 +1,1664 @@
+/*
+ * 执行记录这一族原子的样式(Foldable / ToolRow / StatusMark / SayText / FileButton)。
+ *
+ * 为什么这几个原子共用**一个** CSS Module,而不是各自一个文件:
+ * 设计稿里它们的尺寸是**互相咬合**的 —— 缩进量由嵌套层数决定
+ * (`.fold .body.mod-stack > .fold > summary` 一层 11px、两层 33px)、
+ * 工具行在壳里要抵掉壳自己的 -7px 外边距、竖线的起点按各自的 0 点各算各的。
+ * 拆成五个文件就得靠 :global 或者传 className 互相打洞,cascade 一动就错位。
+ * 仓库规约要求「CSS 重构必须保住 cascade 语义」,所以这一族按一个所有者放在一起。
+ *
+ * 规则:只消费 --chat-*(见 ChatRoot.module.css),不直连全局 token、不写 [data-theme] 分支。
+ * 数值逐条来自交付稿 `docs/design/chat-panel-next.html`,改数前先去稿子里对。
+ */
+
+/* ── 折叠块 ─────────────────────────────────────────────────── */
+
+.fold {
+  border: 0;
+  border-radius: var(--chat-radius);
+  background: var(--chat-bg-panel);
+}
+
+.fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-strong);
+  border-radius: var(--chat-radius);
+}
+
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::marker { content: ''; }
+.fold > summary:hover { background: var(--chat-bg-fill-tertiary); }
+
+/* 不可展开(本轮没有内容的 todo,D35):整行不再是热区,也不出箭头 */
+.fold.leaf > summary { cursor: default; }
+.fold.leaf > summary:hover { background: none; }
+
+/*
+ * 标题、耗时和箭头是三个独立槽位。窄侧栏下只让标题槽收缩:
+ * 耗时不换行，箭头也不会被标题挤掉。内层仍是 flex，因为标题本身可能由
+ * 状态点 / 图标 + 文字组成；它的最后一枚文字或显式 `.name` 承担截断。
+ */
+.summaryContent {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.summaryContent > :last-child,
+.summaryContent > .name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 命令失败头是「图标 + .name + 失败按钮」；只截标题，不截操作。 */
+.summaryContent:has(> .name) > :last-child:not(.name) {
+  flex: none;
+  overflow: visible;
+}
+
+.chev {
+  flex: none;
+  margin-left: auto;
+  display: inline-flex;
+  transition: transform var(--chat-dur-quick) var(--chat-ease-out);
+}
+.fold[open] > summary .chev { transform: rotate(180deg); }
+.meta + .chev { margin-left: 0; }
+
+/* 稿子把「推到最右」只写在**折叠头**上(`.fold > summary .ms`),
+   工具行那一枚是 `.tool .ms { flex: none }` —— 靠 `.nm { flex: 1 }` 顶过去,
+   自己不带 auto 外距。我们原来一律 auto,于是工具行里量出 500 多像素的左外距。 */
+.meta {
+  flex: none;
+  margin-left: auto;
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+  color: var(--chat-text-soft);
+  white-space: nowrap;
+}
+/* 工具行与折叠头的耗时都是不换行的完整信息；窄宽度由标题槽让位。 */
+/* 计数类(「2 处」「2/4」)用正文字体 + 等宽数字,不用整套等宽 */
+.meta.num {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * 一行里出现**两枚** `.meta` 的唯一场景:生图批次行的「2/4」+ 实时耗时
+ * (产品 2026-09-03 把「进行中的行都报耗时」补到了这一档)。
+ * 两枚都带 `margin-left: auto` 的话,flex 会把富余空间**平分**给两个 auto 外距,
+ * 计数就飘到行中间去了。第二枚归零,让它紧跟着第一枚(间距走 `.tool` 的 `gap: 7px`)
+ * —— 同 `.meta + .chev` 那条,一样的道理。
+ */
+.meta + .meta { margin-left: 0; }
+
+.fold .body{
+  padding: 0 11px 11px;
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  color: var(--chat-text-muted);
+}
+.fold[open] > summary + .body { padding-top: 4px; }
+
+/* 一摞子项(工具行、todo 抽屉)的容器:去掉自己的框,交给每一行 */
+.fold .body.stack {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px;
+  color: var(--chat-text);
+}
+.fold[open] > summary + .body.stack { padding-top: 2px; }
+/*
+ * 壳内的每一行都要脱掉自己的框:边框、底色、圆角一律抹平,行与行之间只靠间距分开。
+ *
+ * **`.fold ` 这个祖先不能省**。交付稿写的就是 `.fold .body.mod-stack > *`,特异性 (0,3,0);
+ * 而失败行的 `.tool.is-fail`(红边红底)是 (0,2,0) —— 前者赢,所以壳里的失败行**只有图标和
+ * 「失败」两个字是红的**,底是透明的(在真稿上量过:`background: rgba(0,0,0,0)`、`border: 0px none`)。
+ * 红边红底只属于壳**外**独立出现的工具行。
+ *
+ * 省掉 `.fold ` 会让这条掉到 (0,2,0),和 `.tool.fail` 打平、按源码顺序判,红底就漏出来铺满整行。
+ * 单测和陈列页都照不出这一条(它们不算层叠),别再省。
+ */
+.fold .body.stack > * {
+  border: 0;
+  background: none;
+  border-radius: 0;
+  width: auto;
+  margin: 0;
+  padding: 5px 11px;
+}
+.fold .body.stack > .fold{ padding: 0; }
+.fold .body.stack > .fold > summary{ padding: 5px 11px; border-radius: 0; }
+.fold .body.stack > .fold > summary:hover{ background: var(--chat-bg-fill-tertiary); }
+/* 再嵌一层(壳 → todo → 子项):缩进加 22px,与行首图标对齐 */
+.fold .body.stack .body.stack > .fold > summary { padding-inline-start: 33px; }
+.fold .body.stack .body.stack{ padding-bottom: 2px; }
+
+/* ── 壳(最外那层,无框)────────────────────────────────────── */
+
+.fold.flat {
+  border: 0;
+  background: none;
+  border-radius: 0;
+}
+/*
+ * ── ⚠️ 这里**曾经**有一段壳收起时的手风琴过渡,已撤下 ────────────────────
+ *
+ * 写的是 `.fold.flat::details-content { display:grid; grid-template-rows:0fr→1fr;
+ * overflow:hidden }` + `content-visibility … allow-discrete`,目的是让「done 一到就收起」
+ * (`ExecutionShell` 的 `concluded`)不要瞬间把还在流的正文往上拽一大截。
+ *
+ * 撤下的原因:用户 2026-09-04 在真机上报了一个布局缺陷 —— **思考正文那个限高盒
+ * (`.body.scroll`,`max-height:96px`)滚不到底**,最后一行被裁在下沿。这段规则是当时
+ * 唯一动过壳身子**格式化上下文**的改动(把 `.body` 从普通流里的块变成了栅格项,
+ * 外面还多了一层 `overflow:hidden`),嫌疑最大,而它又**不是任何一条产品裁决要的东西**
+ * —— 产品要的只是「收起的**时机**提前到 done」。零成本能摘掉的嫌疑就先摘掉。
+ *
+ * ⚠️ 老实说:证据并不指向它。用户说「刷新一下就好了」,而一条纯 CSS 规则在刷新后
+ * **一模一样地生效**,修不好也坏不掉;真正会因刷新而变的是那一轮的状态和
+ * `useThinkingFollow` 里的跟随/逃逸闩。所以更可能的方向是那一侧,而不是这里。
+ * 完整的原文与理由留在这次的交接里,要 A/B 直接贴回来。
+ *
+ * ⚠️ **想把它加回来的下一位**:先在**真浏览器**里、在「内容一边长一边算」的场景下
+ * 验一遍那个限高盒还滚不滚得到底。jsdom 不做布局(`scrollHeight` / `clientHeight`
+ * 恒为 0),这个仓库里那套「真跑层叠」的量尺也只解层叠、不做布局 ——
+ * **单测绿在这件事上不是证据**。守卫在
+ * `tests/components/chat/shell-collapse-on-done.test.tsx` 的「不许再包一层格式化上下文」。
+ */
+/*
+ * 任务进度那一族的墨色 —— **正文深色**,不是静音灰。
+ *
+ * ## 2026-09-02 掉头:整族从静音灰拉回深色
+ *
+ * 上一版这里是 `#a3a3a3`,照的是当时的稿子。设计当天下午 `104fc5c5dc` 把这条整个
+ * **反转**了(不是补丁,是掉头),最新稿 `361b78253e` 的原文:
+ *   `.fold.mod-flat { --progress-detail-ink: var(--text-strong) }`(components.css:1066)
+ * 注释也跟着改:「步骤小结与正常命令行**跟随步骤标题色**,不联动 Thinking 滚动流」。
+ * 用户 2026-09-02 看过浏览器里的最新稿后确认:「就按他设计稿对齐,是我们之前讨论的结果」。
+ *
+ * 所以整族(步骤间小结 / 步骤耗时 / 可折叠命令行 / 工具行的每一格)现在都是
+ * `--text-strong`,浅色主题下 `#202020` —— 和产品 `--chat-text-strong` 逐字节相同。
+ *
+ * ## 终端块**不**跟着掉头 —— 它现在有自己的一枚
+ *
+ * 最新稿里 `.term` / `.term.mod-cmd` / `.term .er` 仍是字面 `#A3A3A3`
+ * (components.css:2419 / 2439 / 2450),而那条把整族染深的规则挂在
+ * `.fold.mod-flat .tool` 与 `--progress-detail-ink` 上,**够不着终端块**。
+ * 上一版让终端块从 `.fold.flat` 继承这枚 token —— 那时两边同值,看不出问题;
+ * 掉头之后同一枚变量要同时给出两个值,做不到。所以终端块领了自己的
+ * `--chat-terminal-ink`(见文件下方 `.term`),两边各有各的出处。
+ * 判据钉在 `record-progress-ink-latest-spec.test.tsx`:一条盯「进度变深」、
+ * 一条盯「终端仍浅」,少一条就防不住「一翻全翻」。
+ *
+ * ## 为什么两个选择器一起声明
+ *
+ * 消费它的有两类盒子:扁平壳里的那几层,以及**工具行自己**。稿子在 `.tool` 一族里
+ * 写的是字面量而不是 `var(…)`,正因为工具行不保证住在扁平壳里(稿子里它也能独立
+ * 出现)。产品这边不写字面量(仓库规约:组件 CSS Module 只消费 `--chat-*`),
+ * 改成**谁用谁声明一次** —— 值仍然只有这一个出处。
+ */
+/* 两个所有者写在**同一行**是有原因的:`record-label-rail.test.ts` 按行首锚点
+   (`^\.tool\s*\{`)找 `.tool` 那条规则读 `gap`,换行会让它先撞上这一条。 */
+.fold.flat, .tool { --chat-progress-detail-ink: var(--chat-text-strong); }
+/*
+ * 壳头自己那一行的总耗时(稿子 1042 新增:
+ * `.fold.mod-flat > summary .ms { color: var(--text-strong) }`)。
+ * 基础的 `.fold > summary .ms` 是 `--text-soft`(#848484)—— 那一档留给**别处**的
+ * 折叠头;扁平壳这一行跟着整族走深。
+ */
+.fold.flat > summary .meta { color: var(--chat-text-strong); }
+/*
+ * ⚠️ **有意偏离稿子:壳头字号 12 → 13(2026-09-02 产品裁决)。对稿的下一位别改回去。**
+ *
+ * 稿子(`729fa43ce7`)给壳头的字号只有一条出处:`.fold > summary { font-size: var(--t-mini) }`
+ * = **12px**;扁平壳那条 `.fold.mod-flat > summary` 只写外距 / 内距 / 圆角 / 字重,
+ * **不写字号**。我们原来逐值一致,一个字没抄错。
+ *
+ * 但同一个壳头在稿子里**运行中和跑完不是一个字号**(真浏览器里逐档量过):
+ *   · 「进行中 31s」那三个字住在 `.shimmer` 里(扫光要靠它做 `background-clip`),
+ *     而 `.shimmer` 自带 `font-size: var(--t-body)` → **13px**;
+ *   · 跑完 shimmer 撤掉,变回 summary 里的纯文字 → 吃 `--t-mini` → **12px**。
+ * 于是 run 结束的那一瞬间,壳头这行标题会**缩小 1px**。
+ *
+ * 用户 2026-09-02 裁决:**提到 13px,让两个状态同号**。所以这里补一条字号,
+ * 覆盖「已完成」/「已停止」/「运行失败」三个终态(运行态本来就是 13,不用管)。
+ *
+ * ⚠️ 这**不是**「稿子写错了」,也不是「设计忘了改」—— 稿子那两档各自都说得通
+ * (扫光那一档天然 13,静态那一档跟着通用折叠头走 12)。是产品选了「同号」这个结果。
+ * 按稿子把这条删掉 / 改回 `--chat-t-mini` = 把裁决撤了,先去找产品,不要"对齐修复"。
+ *
+ * ## 为什么写在这一层
+ *
+ * `.fold.flat > summary`(0,2,1)够得着的只有**顶层壳自己那一行** —— 扁平壳只有
+ * 执行记录一处(`ExecutionShell` 的 `variant="flat"`),而壳里的每一条抽屉都是
+ * 不带 `.flat` 的 `.fold`。基础规则 `.fold > summary` 一个字没动,所以步骤抽屉里的
+ * 折叠头仍然是 12px;壳头右边那枚总耗时也没跟着长(`.meta` 自己写着 `--chat-t-cap`)。
+ * 判据钉在 `tests/components/chat/w79-shell-head-type-scale.test.tsx`:
+ * 正向三态 + 「四态同号」那条等式,外加一整组反向对照(抽屉 12 / 耗时 12 /
+ * 步骤行、工具行、开场白一格没动)。
+ */
+.fold.flat > summary {
+  margin-inline: -7px;
+  padding: 6px 7px;
+  border-radius: var(--chat-radius-sm);
+  font-size: var(--chat-t-body);
+  font-weight: 600;
+}
+/*
+ * 稿子:`.fold.mod-flat summary .ms, .fold.mod-flat summary .chev { margin-left: 0 }`
+ *
+ * 两处要照抄:
+ *  1. **`.ms` 也要**(我们这边叫 `.meta`)—— 原来只写了 `.chev`,于是秒数被
+ *     `.meta { margin-left: auto }` 一路甩到行尾,稿子里它是贴着文字的。
+ *  2. **后代选择器,不是 `>`** —— 稿子这条管的是整张扁平壳**里所有** summary,
+ *     包括每一条 todo 抽屉;写成 `>` 就只管壳自己那一行,抽屉的秒数和箭头照旧甩到最右。
+ */
+.fold.flat summary .meta,
+.fold.flat summary .chev { margin-left: 0; }
+/*
+ * 壳 body 自己那点内距。
+ *
+ * ⚠️ 这里曾经还挂着五枚变量(`--row-slot` / `--row-pad-block` / `--chain-gap` /
+ * `--chain-x` / `--row-outdent`),全部是为**那条串起各步骤的竖线**服务的:
+ * 线的中轴、线让开状态点的起点、各行盒子往左探出多少。
+ * 2026-09-02 设计裁决把那条线整个撤掉,五枚变量随之没有任何消费者 —— 一起清掉,
+ * 不留「哪天线回来还能用」的死代码。真要回来,重新按当时的量法推一遍比读旧常量可靠。
+ *
+ * **两条列本身没有变**,它们由选择器分层给,不由这些变量给:
+ *   · 壳 body 的直接子代(顶层)行首落 **0**
+ *   · 步骤**里面**的子行落 **22**(稿子:「缩进一格(状态点 15 + 间距 7 = 22)」)
+ */
+.fold.flat > .body.stack {
+  padding: 0 0 2px;
+}
+.fold.flat[open] > summary + .body.stack {
+  border-top: var(--chat-stroke) solid var(--chat-border);
+  padding-top: 6px;
+}
+/* 开场白是**正文**:13px,不是壳里那些 12px 的注脚(稿子:「开头说明保留 13px」) */
+.fold.flat > .body.stack > .think { padding: 6px 0; font-size: var(--chat-t-body); }
+/*
+ * 壳 body 的**直接子代**一律站在第 0 列。
+ *
+ * 三种 DOM 走同一条:能展开的步骤 / 工具行(`details.fold`)、不能展开的工具行
+ * (`div.tool`)、思考那一格(`details.fold.thoughts`)。它们在产线上是平级的兄弟,
+ * 站在同一列才成行 —— 稿子里顶层清一色是步骤,行首那一格全落 0(逐行量过)。
+ *
+ * `margin-inline: -7px` 把行的**可点区域**撑到壳的两侧,悬停底色因此齐边;
+ * 每行的 `summary`/`padding` 再把内容补回 0,所以字和图标仍然落在第 0 列。
+ * ⚠️ 这条不能删:删了所有行的悬停底会一起缩进去(`record-chain-scope.test.tsx`
+ * 的「反向守卫」两条钉着)。
+ *
+ * ⚠️ 同一条规则里原来还有 `position: relative` 和 `--row-outdent: 7px`,
+ * 两者都**只**为那条竖线的绝对定位服务(2026-09-02 线已撤销),一并清掉。
+ */
+.fold.flat > .body.stack > :is(.fold, .tool) {
+  margin-inline: -7px;
+}
+/* 这张壳带清单 —— 只作层叠判据用。给一个没人读的自定义属性而不是留空块:
+   空规则会被 CSS Module 优化掉,`styles.hasTodo` 就成了 undefined,标记静默失效。 */
+.hasTodo { --has-todo: 1; }
+
+/*
+ * 夹在两条步骤**中间**的那段叙述也要接上线,并且整段右移 22px 让开线的位置。
+ * 稿子:`.fold.mod-flat > .body.mod-stack > .fold ~ .think:has(~ .fold)`(以及它的 ::before)。
+ * `:has(~ .fold)` 是「后面还有步骤」的判据 —— 收尾那段叙述后面没有步骤,不接线。
+ *
+ * **两处偏离稿子,都是量出来的**(2026-08-27):
+ *
+ * ① `:is(.fold, .tool)` 而不是只认 `.fold`。步骤有**两种 DOM**:能展开的(命令、
+ *    有输出)走 `Foldable` → `details.fold`;不能展开的(读取 / 改写 / 搜索)是
+ *    `ToolRow` 直接返回的 `div.tool`。把真实录制喂进渲染,壳内实际是
+ *    `p.think │ div.tool ×4 │ details.fold ×2 │ div.tool │ …` —— 稿子 demo 里步骤
+ *    大多可展开所以照不出来,真实产品里没输出的调用占多数,夹心正文**一条都匹配不上**,
+ *    于是全部贴最左、工具行独自缩进。稿子注释写的意图是「**前后都还有步骤**,中间这段
+ *    才该接上」,说的是「步骤」,不是「可折叠的步骤」。
+ *
+ * ② ~~`:not(.hasTodo)` —— 有清单的壳不参与~~ **2026-09-02 撤销**。
+ *
+ *    这条例外原来挂在这里,理由是用户 2026-08-27 那句「缩进你要看看有没有 todo,
+ *    如果文本不在 todo 下面,你看是这样的」,配图是有清单的壳、开场白贴左。
+ *    **但它挡错了东西**:开场白之所以贴左,靠的是选择器本身 ——
+ *    `:is(.fold, .tool) ~ .think` 要求这段文字**前面已经有过一格**,而开场白是壳 body
+ *    的第一个孩子,它本来就一条都不命中。真实 DOM 逐格量过(有计划的那张壳):
+ *
+ *      p.think(开场白) │ details.fold(执行计划) │ details.fold(步骤) │ p.think(小结)
+ *      │ details.fold(步骤) │ p.think(小结) │ details.fold(步骤) │ p.think(收尾)
+ *
+ *    开场白在最前(无前驱)、收尾在最后(无后继),两头天然出局;真正被 `:not(.hasTodo)`
+ *    挡掉的是**中间那两句小结** —— 而它们正是稿子点名要 12px + 静音灰 + 22px 缩进 +
+ *    接线的那几句。用户 2026-09-02 并排对比截图指出的就是这个:产品里它们是 13px 深色。
+ *
+ *    而 `hasTodo` 又把 `kind === 'plan'` 也算进去(`ExecutionShell`),所以**只要这一轮
+ *    出过执行计划,整条规则就失配**。用户截图里正好有「执行计划 · 4 步」,必踩。
+ *
+ * 两种文案两种待遇,靠的是**结构位置**,不是壳上有没有清单:
+ *   开场白(前面没有步骤) 13px + `--chat-text-strong`,由下面 `:has(> .fold) > .think` 那条给
+ *   步骤间小结(前后都有)  12px + 静音灰 + 22px + 接线,就是这一条
+ *
+ * `.hasTodo` 这个类本身留着 —— 它还有别的用处,而且它是「空规则会被优化掉」那个坑的
+ * 现成注脚(见上面 `.hasTodo` 的注释)。
+ *
+ * 详见 `specs/current/chat-panel-feedback.md` §F-11。
+ */
+.fold.flat > .body.stack > .stepRow ~ .think:has(~ .stepRow) {
+  padding-inline-start: 22px;
+  /* 稿子 1071-1076(`104fc5c5dc` 改过这一格):「步骤间的小结**与正文同为 13px**,
+     但降到常规字重,避免盖过步骤标题」。上一版是 12px + 静音灰,配的是掉头前
+     那套「整族退后一档」;掉头之后它跟步骤标题同色,靠**字重**而不是字号 / 墨色分主次。 */
+  font-size: var(--chat-t-body);
+  font-weight: 400;
+  color: var(--chat-progress-detail-ink);
+}
+/* 行内代码自带 --chat-text-strong;不接管的话一段静音里会留下几个黑块 */
+.fold.flat > .body.stack > .stepRow ~ .think:has(~ .stepRow) code {
+  color: inherit;
+}
+/*
+ * 步骤标题 13px / 500(PR #7170:「执行计划和步骤标题统一为 13px / 500,
+ * 进行中、已完成及展开/收起共用」)。
+ *
+ * 这里原来是「继承 12px + 600」,理由是「节点比说明重一档,扫下来才有落点」。
+ * 稿子这一版换了做法:落点靠**字号**(13 比周围的 12 大一档)而不是靠字重,
+ * 字重收回 500 —— 于是同一只壳里不再有两样东西同时在喊。
+ */
+.fold.flat > .body.stack > .fold > summary {
+  padding: 5px 7px;
+  border-radius: var(--chat-radius-sm);
+  font-size: var(--chat-t-body);
+  font-weight: 500;
+}
+/* 耗时是注脚:字重跟着标题走 500,墨色退到那一档静音灰 */
+.fold.flat > .body.stack > .fold > summary .meta {
+  font-weight: 500;
+  color: var(--chat-progress-detail-ink);
+}
+/* 悬停底的圆角跟壳内那一档对齐(稿子:`… .fold > summary:hover { border-radius: var(--radius) }`) */
+.fold.flat > .body.stack .fold > summary:hover { border-radius: var(--chat-radius); }
+/*
+ * 开场白**留在正文深色**(PR #7170:「开头说明沿用正文深色」)。
+ *
+ * 这一条原来是 `--chat-text-muted`,配的是上面那个「步骤 600」的方案:
+ * 标题加重了,说明就得退一档,否则一块里两样东西同时在喊。现在标题收回 500,
+ * 前提没了 —— 再压暗就成了「一整段话比一行标题还轻」,而这段话恰恰是要读完的。
+ */
+.fold.flat > .body.stack:has(> .fold) > .think { color: var(--chat-text-strong); }
+/*
+ * **顶层的工具行站第 0 列,不吃那 22px 缩进**(用户裁决 2026-08-27)。
+ *
+ * 用户原话:「这里不是说要动态判断间距吗? 像这里如果是 todo 外面, 不应该有这个缩进?
+ * todo 外面的工具调用应该也没这个缩进吧?」——配图是顶层「思考过程」左边空出一格。
+ *
+ * 这一条原来是 `padding: 5px 7px 5px 29px`(图标落 22),抄的是稿子的
+ * `.fold.mod-flat > .body.mod-stack > .tool`。**抄错了位置,不是抄错了值**:
+ * 那条规则在稿子自己的 84 格里**一次都没有命中**(把交付稿放进 Chrome 数过,
+ * `.fold.mod-flat > .body.mod-stack > .tool` 命中 0 处)——稿子里工具行永远住在
+ * 某个步骤**里面**,顶层清一色是步骤。它的注释也写明了适用前提:「折叠头本身就是
+ * 一个步骤时,它下面的工具行是这个步骤的子项」。
+ *
+ * 而我们的壳头永远是「进行中 / 已完成」,从来不是一个步骤 —— 顶层的工具行没有
+ * 「谁的子项」可言,它自己就是链上的一格。让它缩进 22,等于给一个不存在的父步骤让位。
+ *
+ * 22 那一格是**步骤里面**的列(稿子:「缩进一格(状态点 15 + 间距 7 = 22)」),
+ * 由下面那两条嵌套规则管,不归这里。两套列的完整口径见
+ * `specs/current/chat-panel-feedback.md` §F-18。
+ *
+ * ⚠️ 【产品裁决 2026-09-02:这里的 7px 维持现状,不跟稿子的 8px】
+ * 稿子 `729fa43ce7` 的 `.tool { gap: 8px }` 和我们差 1px。那 1px 是
+ * `9005070d67` 为 OPEND-2516 特意改的,`record-label-rail.test.ts` 守着
+ * 「工具行和折叠头同一个 gap」这条不变式。
+ * 而稿子自己在这一屏是**错开的** —— 步骤名落 22、可折叠工具行落 23、
+ * 平铺工具行落 24;我们把工具行那一族统一到了一列。两个口径不能同时成立,
+ * 产品选了我们这一套。
+ * **对稿时不要把它改成 8px** —— 那是撤销一次裁决,不是修一个偏差。
+ */
+.fold.flat > .body.stack > .tool { padding: 5px 7px; }
+/*
+ * 思考那一格没有自己的缩进规则 —— 它就是顶层的一格,和步骤、工具行同一列。
+ *
+ * 这里原来有一条 `.fold.flat > .body.stack > .fold.thoughts > summary
+ * { padding-inline-start: 29px }`,把它推到 22 去和当时的工具行对齐。
+ * 工具行那 22px 本身就是错的(见上一条),对齐一个错的位置只是把错误传播开;
+ * 用户 2026-08-27 指着顶层 Thoughts 左边那个空槽问「不应该有这个缩进?」的就是它。
+ *
+ * 用户当初那句「和 toolrow 所在地方同样的缩进逻辑」现在照旧成立 ——
+ * 只不过「toolrow 所在地方」被一起挪回了第 0 列,两者仍然同列。
+ */
+/*
+ * 嵌套一层之后的行缩进。稿子这两条各有**两个逗号段**:
+ *   `.fold .body.mod-stack .body.mod-stack > *,
+ *    .fold .body.mod-stack .body.mod-stack > .fold > summary { padding-inline-start: 33px }`
+ *   `.fold.mod-flat …  > *, .fold.mod-flat … > .fold > summary { padding-inline-start: 29px }`
+ *
+ * 33 = 状态点 15 + 间距 7 + 11,让两级的状态点各自成列;扁平壳那档 29 是把
+ * 它自己那 7px 负外边距补回来之后的同一条竖线。
+ *
+ * 原来只搬了 `> .fold > summary` 那半,`> *` 那半丢了 —— 于是嵌套抽屉里**所有非
+ * summary 的行**(工具行、说明段)少缩 18px(29 − 11),整列比稿子往左偏一格。
+ * 逐属性比对看不见(它们各自的 padding 值都"没被稿子写过"),只有量位置才露馅。
+ */
+/*
+ * `.body.stream` 走**和 `.body.stack` 同一条**缩进(2026-08-27)。
+ *
+ * 思考那一格有两种 body:想完了是 `.body.stack`(点开来读),还在想是 `.body.stream`
+ * (96px 限高窗)。缩进只写给了 `.stack`,于是两态的正文左缘一个 22px、一个 4px,
+ * 思考一结束整段字横跳 18px。它们是同一行的同一段文字,列必须是同一列。
+ * 真 Chrome 逐档量过,记录见 `specs/current/chat-panel-feedback.md` §F-17。
+ */
+.fold .body.stack :is(.body.stack, .body.stream) > *,
+.fold .body.stack .body.stack > .fold > summary { padding-inline-start: 33px; }
+.fold.flat .body.stack :is(.body.stack, .body.stream) > *,
+.fold.flat .body.stack .body.stack > .fold > summary { padding-inline-start: 29px; }
+/*
+ * 稿子紧接着还有一条**例外**:`.fold.mod-flat .body.mod-stack .body.mod-stack > .fold
+ * { padding-inline: 0 }`。上面那条 `> *` 会连嵌套抽屉自己也一并缩进,而缩进要落在
+ * 抽屉的 **summary** 上、不能落在抽屉这只盒子上 —— 落在盒子上,整只抽屉(连同它
+ * 的悬浮底、竖引导线、里面的终端块)整体右移 29px 并窄 29px,而不是只有那行文字缩进。
+ * 一层嵌套那边同样的例外我们早就有(`.fold .body.stack > .fold { padding: 0 }`),
+ * 两层这条漏了。
+ */
+.fold.flat .body.stack .body.stack > .fold { padding-inline: 0; }
+.fold.flat > summary .stFail { color: var(--chat-red); }
+
+/*
+ * **可折叠的命令行整行退到静音灰**(稿子 components.css:1151-1154):
+ *
+ *   .fold.mod-flat .fold:not(.is-fail) > summary:has(> .ti) { color: var(--progress-detail-ink) }
+ *   .fold.mod-flat .fold:not(.is-fail) > summary:has(> .ti) > :is(.ti, .ms),
+ *   .fold.mod-flat .fold:not(.is-fail) > summary:has(> .ti) > .ti > svg { color: inherit }
+ *
+ * 不可折叠的那几种工具行由 `.tool` 自己那条管(见下面「工具行」一节);这一条补的是
+ * **有输出、能展开**的那一种 —— 它走 `Foldable`,summary 从 `.fold > summary` 继承
+ * `--chat-text-strong`,于是同一件事的两种 DOM 深浅不一。
+ *
+ * ## 命中判据是「这一行带工具图标」,不是「这一行不是思考」
+ *
+ * 稿子的判据 `summary:has(> .ti)` 是**正面**的:有工具图标 = 这是一次调用。
+ * 步骤(todo / 计划)行首那一格是状态点 `.mk`(我们叫 `.mark`),天然不命中。
+ *
+ * 两处结构差异,照产品的 DOM 换算,不是照抄字面:
+ *  ① 我们的 `Foldable` 在 summary 里多包了一层 `.summaryContent`(标题槽要能单独收缩),
+ *    所以 `> .ti` 这个**直接子代**在产品里是 `> .summaryContent > .icon`;
+ *    `.ms` 仍然是 summary 的直接子代,`.ti` 不是。
+ *  ② `.icon` 这个类**工具行和思考行共用**(`ExecutionShell` 的 `ThoughtsRow` 两态都用它),
+ *    而稿子里思考行首挂的是 `.orb`,不是 `.ti` —— 所以稿子那条选择器天然避开了思考行,
+ *    我们这条**会连思考行一起变灰**。产品 2026-09-02 裁决:可以一起变灰,不为此加排除。
+ *    不用 `:not(.thoughts)` 这类否定式兜:那是拿排除法绕过一个本该有的正向判据。
+ *
+ * ## 失败那一条例外
+ *
+ * 稿子用 `:not(.is-fail)` 守住:失败行的图标是红的(稿子 2219
+ * `.fold.is-fail > summary .ti > svg { color: var(--red) }`),整行染灰会把它盖掉。
+ * 产品这边 `ToolRow` 2026-09-02 起在可折叠那一支上也挂 `styles.fail`(和 `div.tool`
+ * 那几支一致),所以这里就是稿子那条 `:not(.is-fail)` 的逐字对应。
+ * 上一版靠 summary 里那枚「失败」标记(`.why`)反推,能用但绕:失败是**这一行**的状态,
+ * 判据就该挂在行上。
+ */
+.fold.flat .fold:not(.fail) > summary:has(> .summaryContent > .icon) {
+  color: var(--chat-progress-detail-ink);
+}
+/* 标题、耗时、图标一律跟着整行走 —— 稿子那句「文字、耗时和标记同色」 */
+.fold.flat .fold:not(.fail) > summary:has(> .summaryContent > .icon) > .meta,
+.fold.flat .fold:not(.fail) > summary:has(> .summaryContent > .icon) .icon,
+.fold.flat .fold:not(.fail) > summary:has(> .summaryContent > .icon) .icon > svg {
+  color: inherit;
+}
+/*
+ * 标题和耗时**两种状态都走正文深色**(稿子 1107:
+ * `.fold.mod-flat .fold > summary:has(> .ti) > :is(.nm, .ms) { color: var(--text-strong) }`)。
+ *
+ * ⚠️ 这一条**故意不带** `:not(.fail)` —— 稿子 `104fc5c5dc` 把那个排除**去掉了**。
+ * 上面那条(整行 + 图标)仍带排除,两条分工是稿子自己的分工:
+ *   失败行的**图标**留红(`.fold.fail > summary .icon`),
+ *   失败行的**标题和耗时**跟着深色 —— 失败是状态,由图标和「失败」二字标,
+ *   标题写的是这一步在干什么,不是错误本身。
+ * 少了这一条,失败命令行的耗时会掉回基础的 `--chat-text-soft`(#848484)。
+ *
+ * 换算同上:稿子的 `> .nm` 在产品里隔着一层 `.summaryContent`,`> .ms` 仍是直接子代。
+ */
+.fold.flat .fold > summary:has(> .summaryContent > .icon) > .summaryContent > .name,
+.fold.flat .fold > summary:has(> .summaryContent > .icon) > .meta {
+  color: var(--chat-text-strong);
+}
+
+/* ── 工具行 ─────────────────────────────────────────────────── */
+
+.tool {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: var(--chat-radius);
+  background: var(--chat-bg);
+  font-size: var(--chat-t-body);
+  /*
+   * **整行跟着任务进度走正文深色**(最新稿 2236-2239:
+   * `.fold.mod-flat .tool:not(.is-fail) { color: var(--text-strong) }`,失败那一支同值)。
+   *
+   * ⚠️ 这里 2026-09-02 上午刚按当时的稿子改成静音灰,当天下午 `104fc5c5dc` 又**掉头**了:
+   * 稿子给 `.tool` 一族保留的 `#A3A3A3` 只管**独立出现**的工具行,而坐在
+   * `.fold.mod-flat` 里的那一份被新规则整族覆盖成深色。产品这边 `ToolRow` 只从
+   * `ExecutionShell` 出来、永远坐在扁平壳里,所以「独立出现」那一档在这里没有落点 ——
+   * 一条 `--chat-progress-detail-ink` 就是全部。
+   *
+   * 行高 1.5(--lh-row)照旧,原来没写会继承到外层的 1.7,整行高出 2.6px。
+   */
+  color: var(--chat-progress-detail-ink);
+  line-height: var(--chat-lh-row);
+}
+.tool + .tool { margin-top: 6px; }
+
+/*
+ * 耗时跟着整行同色(稿子 `.tool .ms { … color: #A3A3A3 }`,components.css:2189)。
+ * 基础的 `.meta` 走 `--chat-text-soft`(#848484)—— 那是**折叠头**那一档
+ * (`.fold > summary .ms { color: var(--text-soft) }`,稿子 932),工具行另有自己的一档。
+ * 写死在这里而不是靠继承:失败行把整行的 `color` 换掉(见下面 `.tool.fail`),
+ * 耗时不该跟着换。
+ */
+.tool .meta { margin-left: 0; color: var(--chat-progress-detail-ink); }
+
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/*
+ * 稿子的 `.nm` 也是**两条各自作用域**的规则,不是一条:
+ *   `.tool .nm          { flex: 1;        min-width:0; overflow; ellipsis; nowrap }`
+ *   `.fold > summary .nm { flex: 0 1 auto; min-width:0; overflow; ellipsis; nowrap }`
+ * 除了 flex 一字不差 —— 所以并成一条裸 `.name` 看起来完全等价,实际是把工具行的
+ * `flex: 1` 发给了折叠头:标题从「按文字宽」变成「吃掉整行」(123px → 281px),
+ * 秒数和箭头被顶到行尾(188 → 368),整条抽屉头跟稿子对不上。
+ */
+.fold > summary .name { flex: 0 1 auto; }
+/*
+ * 工具行的标题压到**常规字重**(最新稿 2144-2147 给 `.tool .nm` 补的 `font-weight: 400`)。
+ * 整族拉回深色之后,行标题和步骤标题同色了 —— 主次改由字重分:步骤 500,行 400。
+ * 只挂 `.tool`,不挂裸 `.name`:折叠头那一份的 500 由 summary 自己那条给,并成一条会
+ * 把抽屉标题一起压平。
+ */
+.tool .name { font-weight: 400; }
+.name code {
+  /* 全局 `code` 是行内代码芯片(底色 + 1px 5px 内距 + 圆角);稿子这里的 code
+     只是等宽的文件名,不带芯片。不清掉的话每一行文件名都比稿子胖一圈。 */
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-strong);
+}
+/* 有改动量时,行名让位 —— 改动量要贴着名字,不被推到最右 */
+.tool:has(.delta) .name { flex: 0 1 auto; }
+.fold.flat .tool .name { flex: 0 1 auto; }
+
+/*
+ * 行首那一格。**永远有图标** —— 产品 2026-08-25 裁决不许出现圆点,
+ * 交付稿的 `.ti:empty::before` 圆点兜底已撤(见 icons.tsx 的 toolIcon)。
+ *
+ * 【槽 16px,和它装的图标同宽】(W76)。稿子把这一格按「装的是什么」分成两档,
+ * 并且把理由写在规则上面(`729fa43ce7:components.css:2239-2241`):
+ *
+ *     「工具调用图标占 16px;没有图标的行首圆点和计划序号保持原尺寸。」
+ *     .tool .ti:has(> svg),
+ *     .fold > summary .ti:has(> svg) { width: 16px; height: 16px; }
+ *
+ * 我们原来只搬了下面 `.icon > svg` 的 16px,槽本身留在 15 —— 一只 15px 的盒子
+ * 装着 16px 的字形,`place-items: center` 让它左右各探出 0.5px。
+ * 那条 `:has(> svg)` 从上一版基线 `361b78253e` 起就在稿子里,从来没被搬过来。
+ *
+ * **不照抄 `:has(> svg)` 这个条件**:稿子加条件是为了把圆点和计划序号留在 15,
+ * 而这两样在产品里根本不住这只槽(圆点已裁,序号是 `.step`)。这只槽在产品里
+ * 还多住着一位:思考行「思考中」那一态放的是 `Orb` 的 `<canvas>`
+ * (`ExecutionShell.tsx`,box 20 + 左右各 −2px = 16px 实宽),**不是 svg** ——
+ * 照抄条件会让「思考中」停在 15、「思考过程」跳到 16,左边缘在两态之间横跳,
+ * 正是 `thinking-embedded.test.tsx` 钉死不许发生的事。
+ * 所以搬的是那个值和意图(装图标的槽 = 图标那么大),条件在这边恒真。
+ *
+ * ⚠️ `.step`(计划序号)和 `.mark`(状态记号)**不跟着动**,对应稿子的
+ * `.pk` / `.mk`,两者全程 15。判据在 `tests/components/chat/w76-icon-slot.test.tsx`。
+ */
+.icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--chat-text-strong);
+}
+/*
+ * 图标跟着整行同色(稿子 `.ti > svg { … color: #A3A3A3 }`,components.css:2217)。
+ * 原来是 `--chat-text-soft`(#848484)—— 一摞灰行里再掺一档更深的灰,
+ * 眼睛会以为图标那一列在强调什么。
+ *
+ * 【尺寸是 16px,不是 14px】(OPEND-2196 缺口 B)。上面引的 `components.css:2217`
+ * 是设计 `8015870095` 那一版,原文**尺寸和颜色在同一条声明里**:
+ *
+ *     .ti > svg { width: 16px; height: 16px; color: #A3A3A3; }
+ *
+ * 当时只把颜色搬了过来,width 留在更早那版稿子(`1bbdce0b06:1938`)的 14px。
+ * 引了这一行却只搬一半,是这个缺口的全部成因。最新稿子 `853da24ea5:2173` 仍是 16px。
+ * 描边粗细跟着尺寸走(1.75 用户单位 × 16/24 = 1.167px),判据在
+ * `tests/components/chat/icon-stroke-weight.test.tsx`。
+ */
+.icon > svg { width: 16px; height: 16px; color: var(--chat-progress-detail-ink); }
+/* 失败行:记号和图标转红,红只标要注意的那一个(稿子 2218 / 2223 两条各管一层) */
+.tool.fail .icon,
+.fold.fail > summary .icon { color: var(--chat-red); }
+.tool.fail .icon > svg,
+.fold.fail > summary .icon > svg { color: var(--chat-red); }
+
+/* 计划里的序号占图标那一格 —— 还没跑的步骤没有「哪类调用」可标 */
+.step {
+  flex: none;
+  width: 15px;
+  text-align: center;
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+  /* 稿子 2237 把 `.pk` 也列进了「任务进度整族深色」那条,和行首图标同档;
+     原来的 `--chat-text-soft`(#848484)是掉头之前那套配色留下的。 */
+  color: var(--chat-progress-detail-ink);
+}
+
+/*
+ * 改动量 `+n −m`。稿子 `.tool .dst { flex: none; margin-inline-end: auto;
+ * font-family: var(--mono); font-size: var(--t-cap); font-variant-numeric: tabular-nums;
+ * color: #A3A3A3 }`(853da24ea5 `components.css:2221`,与交付稿 8015870095 逐字相同)
+ * —— 和整行同一档静音灰。
+ *
+ * ⚠️ 这里原来是 `--chat-text-soft`(#848484):上一轮把工具行整族统一到静音灰时
+ * (`.tool` 整行、`.tool .meta`、行内图标)**唯一漏掉的一格**,于是一行里
+ * 「新建 xxx.html」是 #a3a3a3、紧挨着的「+182 −0」却是 #848484,深一档。
+ *
+ * 和 `.tool .meta` 一样**写死在这一格、不靠继承**:失败行会把整行的 `color` 换掉
+ * (见下面 `.tool.fail`),改动量不该跟着换。
+ */
+.delta {
+  flex: none;
+  margin-inline-end: auto;
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+  font-variant-numeric: tabular-nums;
+  color: var(--chat-progress-detail-ink);
+}
+.delta i { font-style: normal; }
+.delta i + i { margin-inline-start: 5px; }
+
+.tool.fail {
+  border-color: var(--chat-red-border);
+  background: var(--chat-red-bg);
+  /* 稿子 2238-2239 把失败行**整行**也列进了「任务进度整族深色」那条,
+     和成功行同色 —— 红只留给行首图标和「失败」二字。 */
+  color: var(--chat-text-strong);
+}
+.why {
+  flex: none;
+  font-size: var(--chat-t-cap);
+  font-weight: 600;
+  color: var(--chat-red);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.why:hover { color: color-mix(in srgb, var(--chat-red) 70%, var(--chat-text-strong)); }
+
+/* ── 文件名按钮 ─────────────────────────────────────────────── */
+
+.file {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--chat-radius-sm);
+}
+.file code {
+  /* 全局 `code` 是行内代码芯片(底色 + 1px 5px 内距 + 圆角);稿子这里的 code
+     只是等宽的文件名,不带芯片。不清掉的话每一行文件名都比稿子胖一圈。 */
+  padding: 0;
+  background: none;
+  border-radius: 0;
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-mini);
+  /*
+   * **跟着整行走,不自己钉一档**(稿子 2196 `.tool .fn code { … color: inherit }`)。
+   * 原来这里写死 `--chat-text-strong`,在「整行退到静音灰」那一版里文件名比整行深一档 ——
+   * 稿子从来没让它单独深:它是那一行的一部分,行是什么色它就是什么色。
+   * 今天两边算出来都是 #202020,但写法不同的后果在失败行上看得见(见下面那条)。
+   */
+  color: inherit;
+  /*
+   * **下划线是静止态,不是 hover 态**(稿子 `729fa43ce7`,动刀的是 `e8726686ae`
+   * 「underline tool references by default」):
+   *
+   *   .tool .fn code { … text-decoration: underline; text-decoration-color: currentColor;
+   *                    text-underline-offset: 2px; }
+   *
+   * 同一次把 `.tool .fn:hover code` 和 `.fold.mod-flat .tool .fn:hover code` 两条
+   * **一起删了** —— hover 那一档整个退场,`currentColor` 挪进静止态,连
+   * `transition` 也没了(没有状态要过渡)。稿子写明的理由:「用真的 `<button>`
+   * 并让 `<code>` 默认带下划线:这是个能点的东西,**不需要先 hover 才发现**」。
+   *
+   * 上一版是「静止无线、hover 才出线」,配的是删掉的那两条;照那个写法,
+   * 一行里哪几个词能点,不把鼠标逐个扫过去是看不出来的。
+   */
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 2px;
+}
+/* 打不开的那一档(读取到的文件、搜索模式、命令)—— 同一副等宽外观,
+   但不给手型、**也不给下划线**:看起来能点、点了没反应比一开始就不像链接更糟。
+   判据见 `runtime/chat/record-file-open.ts`,渲染分叉在 `FileButton.tsx`。
+
+   ⚠️ **稿子里没有这一档**:它的 `.fn` 全是能点的 `<button>`,所以稿子没写过
+   「不可点的文件名长什么样」。而稿子给下划线的理由恰恰是「**这是个能点的东西**,
+   不需要先 hover 才发现」—— 把这个记号发给一个点不动的 `<span>`,等于拿稿子的
+   记号说一句假话。所以下划线只跟着可点那一档走,这一档显式清掉。
+   **要不要连这一档一起加线,归产品拍板**(W66 已列进待拍板)。
+   写成静止态的 `text-decoration: none` 而不是 `:hover` 那一条:上一版那条配的是
+   「hover 才出线」的旧写法,静止态本来就没有线,它一条都没挡住;现在线挪到静止态,
+   挡的位置也得跟着挪。 */
+.fileStatic { cursor: default; }
+.fileStatic code { text-decoration: none; }
+/* 失败行的文件名同样是正文深色(稿子 2239 把 `.is-fail` 那一支的 `.nm code`
+   一并列进了整族深色那条)。原来是 `--chat-text`(#494949),比同一行的其它字浅一档。
+   这一条**照稿子留成显式的**,不靠上面那句 `inherit` 兜:稿子两支各写一次,
+   失败行哪天要换整行底色时,文件名不会跟着漂。 */
+.tool.fail .file code { color: var(--chat-text-strong); }
+
+/* ── 状态记号 ───────────────────────────────────────────────── */
+
+/*
+ * 那颗球的**承载 span**(稿子 `.orb`)。
+ *
+ * 原来壳头直接把 `.mark`(15×15 的状态点圆)挂给了球 —— 球的画布是 24,被压进 15 的格子里;
+ * 而且 `<canvas>` 默认是 **inline**,吃基线、底下还垫出一截行内下沉空间:
+ * 球和「进行中」三个字上下对不齐、中间也没有该有的 7px 间距。
+ * 陈列页照不出这个 —— canvas 要到运行时才画,静态渲染就是一片空白。
+ */
+.orb {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+/* 画布必须是块级,否则行内基线会在它下面垫出一条缝 */
+.orb canvas,
+.mark canvas {
+  display: block;
+}
+/* 稿子按尺寸档收回画布四周的留白 */
+.orb[data-orb-box='24'] { margin-inline: -3px; }
+.orb[data-orb-box='20'],
+.orb:not([data-orb-box]) { margin-inline: -2px; }
+/* 工具行里的球再往回收 1px(稿子 `.tool .orb`) */
+.tool .orb { margin-inline-start: -1px; }
+
+/*
+ * 行首那枚标记**贴着行首摆**,不跟着行高走(OPEND-2417)。
+ *
+ * 原来它靠父级的 `align-items: center` 居中,于是它的位置是**行高的函数**:
+ * 行一旦高过一行(标题折行、行内挂了更高的东西),标记就往下掉,而串起各行的
+ * 那条竖线起点是个常量,两者必然错身 —— 用户看到的就是「灰线覆盖到绿色带勾的
+ * icon 上」。稿子的计划卡本来就不是居中的:`.steps li .tk { margin-top: 1.5px }`。
+ * 1.5 正好等于 12/1.5 那一行的居中偏移 `(18 − 15) / 2`,但它是**常量**。
+ * 照抄那个写法,标记的盒子从此和行高无关,线的起点才算得出来。
+ */
+.mark {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 1.5px;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+}
+.mark svg { width: 10px; height: 10px; }
+/*
+ * 「过了」用一整张图(--chat-tick-img):盘绿勾挖空,深浅两套主题不用各挑勾色。
+ * 全稿凡是这个记号都指同一张图,所以换图只改接缝一处。
+ */
+.mark.ok {
+  background: var(--chat-tick-img) center / contain no-repeat;
+  color: var(--chat-brand-weak);
+}
+.mark.fail { color: var(--chat-red); }
+.mark.fail svg { width: 15px; height: 15px; }
+/* 未开始:一圈虚线;取消:同完成态(D16 —— 设计稿另有红叉态,产品选了完成态) */
+/* 稿子 `.mk.is-run { display: grid; grid-template-areas: "stack"; place-items: stretch;
+   border: 0; border-radius: 50%; overflow: hidden; isolation: isolate }`
+   —— 正在跑那一档,整枚球就是这个盒子本身、里面几层叠着铺满,
+   不是在 `place-items: center` 的格子里居中摆一个小东西。
+   我们的球是 canvas 自绘,按 box 定尺寸,所以 stretch 视觉上不动,
+   但这几条是稿子亲自写过的,值要对上。只挂在**步骤级**那一枚上:
+   壳头那枚在稿子里是 `.orb`,另有一套规则,不能顺手一起改。 */
+/*
+ * 步骤级「正在跑」那颗记号 —— 稿子是**一颗自转的绿球**(纯 CSS:8 层锥形渐变 +
+ * `@property --orb-angle` 驱动旋转 + 一层高光 + 一圈内缘),不是 thinking-orbs 的散点画布。
+ * 散点那一档是**壳头**用的(connecting / composing);步骤这一档稿子用的是这颗球
+ * (用户 2026-08-26 真机指认)。颜色槽位与那几个滤镜值逐个照抄 ——
+ * 稿子注释写明是调过很多轮的,少一层或推高饱和都会让它泛出塑料感。
+ */
+@property --orb-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes orb-spin { to { --orb-angle: 360deg; } }
+@keyframes orb-drift {
+  0% { transform: translate(-6%, -4%) scale(1.05); }
+  100% { transform: translate(7%, 6%) scale(1.12); }
+}
+.mark.run {
+  --c1: #00ff08;
+  --c2: #00ffae;
+  --c3: #202020;
+  --c4: oklch(48% 0.13 152);
+  --c5: #eaffeb;
+  --orb-bg: #202020;
+  --orb-fill: oklch(48% 0.12 158);
+  --orb-blur: 1px;
+  --orb-contrast: 1.1;
+  --orb-sat: 1.12;
+  --orb-shadow: 0.5px;
+  --orb-rim: calc(15px * 0.0625);
+  position: relative;
+  grid-template-areas: 'stack';
+  place-items: stretch;
+  border: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--orb-fill);
+  animation: none;
+}
+.mark.run::before,
+.mark.run > i {
+  content: '';
+  display: block;
+  grid-area: stack;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+}
+.mark.run::before {
+  background:
+    conic-gradient(from calc(var(--orb-angle) * 2) at 25% 70%, var(--c3), transparent 20% 80%, var(--c3)),
+    conic-gradient(from calc(var(--orb-angle) * 2) at 45% 75%, var(--c2), transparent 30% 60%, var(--c2)),
+    conic-gradient(from calc(var(--orb-angle) * -1.5) at 32% 26%, var(--c5), transparent 14% 86%, var(--c5)),
+    conic-gradient(from calc(var(--orb-angle) * -3) at 80% 20%, var(--c1), transparent 40% 60%, var(--c1)),
+    conic-gradient(from calc(var(--orb-angle) * 1.5) at 60% 35%, var(--c4), transparent 25% 75%, var(--c4)),
+    conic-gradient(from calc(var(--orb-angle) * 2) at 15% 5%, var(--c2), transparent 10% 90%, var(--c2)),
+    conic-gradient(from calc(var(--orb-angle) * 1) at 20% 80%, var(--c1), transparent 10% 90%, var(--c1)),
+    conic-gradient(from calc(var(--orb-angle) * -2) at 85% 10%, var(--c3), transparent 20% 80%, var(--c3));
+  box-shadow: inset var(--orb-bg) 0 0 var(--orb-shadow) calc(var(--orb-shadow) * 0.2);
+  filter: blur(var(--orb-blur)) contrast(var(--orb-contrast)) saturate(var(--orb-sat));
+  animation: orb-spin 6s linear infinite;
+}
+.mark.run > .sheen {
+  background:
+    radial-gradient(circle at 30% 24%, hsl(0 0% 100% / 0.32), transparent 34%),
+    radial-gradient(circle at 72% 80%, hsl(0 0% 100% / 0.07), transparent 48%);
+  mix-blend-mode: screen;
+  animation: orb-drift 3.2s ease-in-out infinite alternate;
+}
+.mark.run > .rim {
+  box-shadow:
+    inset 0 0 0 1px hsl(0 0% 100% / 0.16),
+    inset 0 var(--orb-rim) calc(var(--orb-rim) * 2) hsl(0 0% 100% / 0.22),
+    inset 0 calc(var(--orb-rim) * -1.2) calc(var(--orb-rim) * 2.4) hsl(0 0% 0% / 0.4);
+  pointer-events: none;
+}
+/* 关了动效的人看到一颗静止的球 —— 不是空白,也不是转圈 */
+@media (prefers-reduced-motion: reduce) {
+  .mark.run::before,
+  .mark.run > .sheen { animation: none; }
+}
+
+/* 稿子 `.mk` 四档同尺寸(15px),没有给未开始那档缩小 —— 原来这里写了 13px,
+   于是这一枚比别的档小两像素,行高也跟着差 */
+.mark.pending {
+  border: var(--chat-stroke) dashed var(--chat-border-strong);
+}
+/*
+ * 被打断的那一步(OPEND-2626)。同一枚圈、同一档中性灰,**实线**。
+ *
+ * 虚线在这套记号里说的是「还没起步」;这一条起过步,只是没跑完 ——
+ * 两者共用虚线时,一轮跑到一半被停在屏幕上读出来是「一步都没开始」。
+ * 不给红:红留给真的错误(`ExecutionShell.markFor` 那条裁决没变)。
+ */
+.mark.stopped {
+  border: var(--chat-stroke) solid var(--chat-border-strong);
+}
+
+/* ── 壳内文字(thinking 落下的段落 / done 之前的过程叙述 / 作废理由)── */
+
+.think {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  color: var(--chat-text-strong);
+  overflow-wrap: anywhere;
+  /*
+   * 段落里的**单个**换行照旧是换行(markdown 那边把它当软换行,一个空格就抹平了)。
+   * 壳内叙述一直是这个行为,`SayText` 改走 markdown 不该顺手改掉它。
+   * 代码块自己会把 `white-space` 覆盖回 `pre`(见下面 `.md-code`)。
+   */
+  white-space: pre-wrap;
+}
+/*
+ * ── 壳内叙述的 markdown 子树 ──────────────────────────────────
+ *
+ * `SayText` 走 `renderMarkdown`(用户裁决 2026-09-03:壳内也要 markdown),
+ * 发出来的是**全局**类名 `.md-*`,所以要 `:global()` 包住 —— 不包的话 CSS Module
+ * 会把它们改写成哈希名,规则一条都落不上(这个坑本文件里已经踩过两次,见 `.md-h` 那条)。
+ *
+ * ⚠️ 这一份和 `ThinkingMarkdown.module.css` 是**两份**,不是漏抽公共:那边的 `.think`
+ * 是另一个 Module 的哈希类名,两边合成一份就要靠 `:global` 打洞或者互传 className,
+ * 而本文件的层叠是按「谁的祖先更长」逐条量出来的(见 `.fold .thoughts > .body > *`
+ * 那几条注释)。`chat/AGENTS.md` §1b 也把「执行记录这一族共用这一个文件」写死了。
+ * 两边要一起改的只有口径,不是选择器。
+ */
+.think > :global(.md-p),
+.think > :global(.md-h),
+.think > :global(.md-ul),
+.think > :global(.md-ol),
+.think > :global(.md-quote),
+.think > :global(.md-code-block),
+.think > :global(.md-table-wrap),
+.think > :global(.md-hr) {
+  margin-block: 0;
+}
+/* 段与段之间 0.75em —— 和思考流那一格同一个口径 */
+.think > :global(*) + :global(*) {
+  margin-top: 0.75em;
+}
+/*
+ * 小标题**跟着这一段走**,不自己喊。
+ *
+ * 不照抄 `ThinkingMarkdown.module.css` 那条的 `--chat-text-strong`:壳内叙述按**位置**
+ * 分两档(开场白深色 / 步骤间小结静音灰,见上面 `.stepRow ~ .think:has(~ .stepRow)`),
+ * 写死深色会让静音那一档里冒出几行黑粗字 —— 用户 2026-09-02 在思考那一格里已经指过
+ * 一次同样的毛病。字号也继承:壳内没有第二档字号。
+ */
+.think :global(.md-h) {
+  color: inherit;
+  font-size: inherit;
+  line-height: var(--chat-lh-row);
+  font-weight: 600;
+}
+.think :global(.md-ul),
+.think :global(.md-ol) {
+  padding-inline-start: 1.5em;
+}
+.think :global(.md-ul) li,
+.think :global(.md-ol) li {
+  margin-block: 0.25em;
+}
+.think :global(.md-quote) {
+  padding-inline-start: 0.75em;
+  border-inline-start: var(--chat-stroke) solid var(--chat-border-strong);
+  color: var(--chat-text-muted);
+}
+.think :global(.md-code-block) {
+  overflow: hidden;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: var(--chat-radius-sm);
+}
+.think :global(.md-code-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: var(--chat-stroke) solid var(--chat-border);
+  color: var(--chat-text-muted);
+}
+.think :global(.md-code-actions) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.think :global(.md-code-action) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: transparent;
+  color: var(--chat-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+.think :global(.md-code-action:hover) {
+  background: var(--chat-bg-fill-tertiary);
+  color: var(--chat-text-strong);
+}
+.think :global(.md-code) {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  /* 覆盖 `.think` 的 `pre-wrap`:围栏里的长行要横向滚,不能折 */
+  white-space: pre;
+}
+.think :global(.md-link) {
+  color: var(--chat-blue);
+  text-decoration: none;
+}
+.think :global(.md-link:hover) {
+  text-decoration: underline;
+}
+.think :global(.md-table-wrap) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.think :global(.md-table) {
+  border-collapse: collapse;
+}
+.think :global(.md-table) th,
+.think :global(.md-table) td {
+  padding: 4px 6px;
+  border: var(--chat-stroke) solid var(--chat-border);
+}
+.think :global(.md-hr) {
+  border: 0;
+  border-top: var(--chat-stroke) solid var(--chat-border);
+}
+/*
+ * 等宽 + 小一档。两条分开写是有原因的:`.md-inline-code` 是 `<code>`,
+ * 但围栏那只 `.md-code` 是 `<pre>` —— 按元素名选的 `.think code` 够不着它。
+ */
+.think :global(.md-inline-code),
+.think :global(.md-code) {
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+}
+.think code {
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+  color: var(--chat-text-strong);
+}
+
+/* ── 划线:本轮没有内容的那几条(D35)────────────────────────── */
+
+.struck {
+  text-decoration: line-through;
+  color: var(--chat-text-muted);
+}
+
+/* ── 壳头上那句会动的状态(思考中 / 进行中)────────────────────
+ * 一条扫光 + 三个点。三处状态句(思考中 / 进行中 / 正在重新连接)共用同一条动画,
+ * 字重钉在 500 —— 产品指定:比正文重半档、又没到标题那一档。
+ * 扫 1.5s 停 1s(一轮 2.5s):**停顿是这条动画的一半内容** —— 没有间歇就成了
+ * 一条一直在流的带子,反倒不提醒人了(设计稿原话)。
+ */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--dia-base, var(--chat-text-muted)) 0%,
+    var(--dia-base, var(--chat-text-muted)) 33.33%,
+    var(--chat-dia-1) 40%,
+    var(--chat-dia-2) 45%,
+    var(--chat-dia-3) 50%,
+    var(--chat-dia-4) 55%,
+    var(--chat-dia-5) 60%,
+    var(--dia-base, var(--chat-text-muted)) 66.67%,
+    var(--dia-base, var(--chat-text-muted)) 100%
+  );
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-weight: 500;
+  font-size: var(--chat-t-body);
+  animation: chat-record-sweep 2.5s infinite;
+}
+/* 分段头那句(「进行中」)跟「已完成」「运行失败」是同一列标题,要跟着那一档走 */
+.shimmer.head {
+  --dia-base: var(--chat-text-strong);
+  font-weight: 600;
+}
+
+@keyframes chat-record-sweep {
+  0% { background-position: 100% 0; animation-timing-function: cubic-bezier(0.23, 1, 0.32, 1); }
+  60% { background-position: 0% 0; }
+  100% { background-position: 0% 0; }
+}
+
+.dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  margin-inline-start: 3px;
+  /* The 3px box used to sit on the text baseline, which leaves the dots at
+     the bottom of the Chinese glyph. Align the box by its visual middle; the
+     bob animation still moves each dot upward from that centered rest line. */
+  vertical-align: middle;
+}
+.dots i {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--chat-text-muted);
+  animation: chat-record-dot 1.2s var(--chat-ease-out) infinite;
+}
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chat-record-dot {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-3px); }
+}
+
+/* 整轮失败时壳头的状态词 */
+.stFail { color: var(--chat-red); }
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer { animation: none; color: var(--dia-base, var(--chat-text-muted)); -webkit-text-fill-color: currentColor; }
+  .dots i { animation: none; }
+}
+
+/* ── 命令输出块(组件 11)──────────────────────────────────────
+   折叠块展开后的正文:一条命令 + 它的输出。**没有头、没有复制键**(W3)——
+   这不是代码块,是「刚才那条命令在终端里长什么样」。
+   缩进跟着嵌套层数走:壳下直接挂 22px,嵌在步骤里 29px,再深一层交给行首对齐。 */
+.fold .body.stack .code {
+  margin: 2px 11px 4px 33px;
+  padding: 0;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: var(--chat-radius-lg);
+  background: var(--chat-bg-panel);
+  overflow: hidden;
+}
+/* 代码 / 终端块**不吃**上面那份行缩进:它自己靠外边距对齐(稿子
+   `.fold.mod-flat .body.mod-stack .body.mod-stack > .code { padding-inline-start: 0 }`)。
+   选择器必须带 `.flat` —— 少一个类就只有 (0,4,0),压不过上面那条 `> *` 的 (0,5,0),
+   块会连着吃 29px,缩进比稿子深一截(用户在第 6 格量到的就是这个)。 */
+.fold.flat .body.stack .body.stack > .code { padding-inline-start: 0; }
+.fold.flat > .body.stack > .code { margin-inline: 22px 11px; }
+.fold.flat .body.stack .code { margin-inline: 29px 18px; }
+/*
+ * 顶层那条命令行的终端块跟着**顶层**的列走(0),不吃步骤那一格。
+ * 用户 2026-09-02:「todo 外的 toolrow…不要有任何的缩进了」——
+ * 终端块是那一行吐出来的东西,行不缩进,它也不缩。
+ * 29 / 7 这两个数是同一件事在两层的写法:行盒都往左探出 7px,
+ * 补回来之后一个落 22(步骤那一列)、一个落 0(壳的内容边)。
+ */
+.fold.flat > .body.stack > .fold > .body.stack > .code { margin-inline: 7px 18px; }
+
+/*
+ * ## 终端块的三档墨色:稿子里是**同一个灰**,区分不靠颜色
+ *
+ * 稿子(最新稿 361b78253e `components.css:2419 / 2439 / 2450`;交付稿 8015870095、
+ * 中间稿 853da24ea5 逐字相同,只是行号前后移过)三处写的都是字面量 `#A3A3A3`:
+ *   `.term        { … color: #A3A3A3 }`   ← 普通输出
+ *   `.term.mod-cmd{ … color: #A3A3A3 }`   ← 命令那一行
+ *   `.term .er    { color: #A3A3A3 }`     ← 报错那一行
+ *
+ * ⚠️ **这不是把三档压成一档、丢掉区分**。稿子把区分挪到了另外两个维度,并且在它
+ * 自己的注释里写明了理由:
+ *   · 命令 vs 输出 —— 靠行首那个 `$`(下面 `.term.cmd div::before`)。稿子原话:
+ *     「两块用同一副终端底色,靠开头的 $ 区分输入和输出 —— 那是终端本身的约定,
+ *       不用另发明标记。」同一段还撤掉了两块之间那条分隔线,理由同源:$ 已经分清了。
+ *   · 报错 vs 普通输出 —— 靠行首那枚 `✗`(下面 `.term .er::first-letter`,红 + 700)。
+ *     稿子原话:「终端正文用正常深色,不整行红 —— 那是代码/日志内容,不是错误状态
+ *       本身。只有行首的 ✗ 标记是红的。」
+ *   · 成功行 `.ok` **不在这一档**,仍是品牌绿 —— 语义色没有被抹平。
+ * 所以下面三条同色是**有意的**;真要退化,退的是那两枚标记,不是这三个色号。
+ * 守卫见 `record-surface-and-terminal-ink.test.tsx`(会盯着 `$` 和红 `✗` 还在不在)。
+ *
+ * ## ⚠️ 终端块**不跟着任务进度掉头** —— 所以它有自己的一枚 token
+ *
+ * `104fc5c5dc` 把任务进度整族从静音灰拉回了正文深色,可它**只覆盖到**
+ * `.fold.mod-flat .tool` 和 `--progress-detail-ink` 那几条,`.term` 一族三个
+ * 字面量原地未动。最新稿在浏览器里量过:终端块 `rgb(163, 163, 163)`。
+ *
+ * 上一版让终端块从 `.fold.flat` 继承 `--chat-progress-detail-ink` —— 那时两边同值,
+ * 看不出这是两件事;掉头之后同一枚变量要同时给出两个值,做不到。所以这里领一枚
+ * 自己的 `--chat-terminal-ink`:值仍然只有一个出处(声明在 `.term` 上,
+ * `.term.cmd` / `.term .er` 从它继承),而「进度变深、终端不动」两边各自站得住。
+ *
+ * 产品这边不写字面量(仓库规约:组件 CSS Module 只消费 `--chat-*`),所以走
+ * 「谁用谁声明一次」—— 和 `--chat-progress-detail-ink`、`--chat-stream-ink`、
+ * `--chat-message-muted-ink` 同一条路子。这几枚**不合并**:值相同是今天碰巧,
+ * 稿子给每一枚都写明了「不联动谁」。
+ */
+.term {
+  --chat-terminal-ink: #a3a3a3;
+  max-height: 104px;
+  overflow-y: auto;
+  padding: 9px 11px;
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+  line-height: 1.65;
+  color: var(--chat-terminal-ink);
+}
+.fold .body.stack .term{ padding: 7px 9px; }
+/*
+ * 命令块与输出块**相接处**的那道气口:总共 8px,两块各吃一半 —— 稿子
+ * `--term-section-gap: 8px` 挂在 `.code` 上,两条规则各取 `calc(… / 2)`
+ * (853da24ea5 `components.css:2395 / 2433-2434`)。这里写成两个 4px 字面量:
+ * 产品没有别处消费这枚变量,留一枚只被自己除以二的变量反而多一层间接。
+ *
+ * ⚠️ **外侧留白不动**(块顶 / 块底仍是上面那条的 7px)。修复前两块相接处各写 7px、
+ * 叠成 14px —— 中间那道气口比块自己的外侧留白还宽,两段正文被推得比外框还散。
+ *
+ * 特异性:两条都是 6~7 个类,压得过上面那条 `.fold .body.stack .term`(0,4,0)。
+ */
+.fold .body.stack .code > .term.cmd:has(+ .term) { padding-bottom: 4px; }
+.fold .body.stack .code > .term.cmd + .term { padding-top: 4px; }
+/* 长串兜底:路径、token、base64 得能断开,否则一条长链接会冲出圆角被裁掉 */
+.term div { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 命令那一行:和输出**同色**(见上面那段),区分全靠行首这个 $;
+   回绕时对齐到命令本身而不是 $ 下面 */
+.term.cmd { color: var(--chat-terminal-ink); }
+.term.cmd div { padding-inline-start: 13px; text-indent: -13px; }
+.term.cmd div::before { content: '$ '; color: var(--chat-text-faint); }
+
+.term .ok { color: var(--chat-brand-text); }
+/* 报错行也是同一档灰,整行不红;红的只有行首那枚 ✗(下一条) */
+.term .er { color: var(--chat-terminal-ink); }
+.term .er::first-letter { color: var(--chat-red); font-weight: 700; }
+
+/* ── 生图(组件 12)──────────────────────────────────────────
+   还没出完:一排大格,出一张落一张;全出完且没失败:收成一行 + 小缩略图条。 */
+.imgs {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 84px;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+}
+.shot {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  /* 出图这一格和图片卡同一档圆角(稿子 `.shot { border-radius: var(--radius-lg) }`) */
+  border-radius: var(--chat-radius-lg);
+  overflow: hidden;
+  border: var(--chat-stroke) solid var(--chat-border);
+  background: var(--chat-bg-subtle);
+  padding: 0;
+}
+/* 失败格:不描红框,红只留给「重试」两个字 —— 一排格子并排时,
+   描红的那格先让人看到「这格跟别的不一样」,还得再看一眼才知道哪不一样。
+   圆角比出图那一格收一档(稿子 `.shot.is-fail { border-radius: var(--radius) }`):
+   一排格子扫过去,形状先说了一半,红字是第二眼才读的。 */
+.shot.fail { display: grid; place-items: center; border-radius: var(--chat-radius); }
+.shot.fail .retry {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--chat-t-cap);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--chat-red);
+}
+.shot.fail .retry svg { width: 14px; height: 14px; }
+.shot.fail .retry:hover { color: var(--chat-text-strong); }
+
+/* 轮次还在跑的失败格(OPEND-2544)。摆位和「重试」逐条相同 —— 一排格子里
+   这两态会前后脚互换,位置一动就成了跳动。**不同的只有能不能动手**:
+   没有 `cursor: pointer`、没有 `:hover` 换色、下面渲染的也不是 `<button>`。
+   它不是「暂时按不动的按钮」,是一条状态说明;长成按钮而点不动,人会读成界面卡了。
+   `border`/`background`/`padding`/`font-family` 那几条是 `<button>` 的 UA 默认值
+   要压掉才写的,`<span>` 本来就没有,所以这里不重复。 */
+.shot.fail .failNote {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  font-size: var(--chat-t-cap);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--chat-red);
+}
+.shot.fail .failNote svg { width: 14px; height: 14px; }
+
+.strip { display: flex; align-items: center; gap: 5px; }
+.strip .th {
+  position: relative;
+  width: 26px;
+  height: 34px;
+  padding: 0;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: 3px;
+  overflow: hidden;
+  background: none;
+  cursor: pointer;
+  transition: border-color var(--chat-dur-quick) var(--chat-ease-out);
+}
+.strip .th:hover { border-color: var(--chat-text-soft); }
+
+/* 占位图:一块纯灰压住图片该占的范围,不画界面细节 —— 评审看的是框和排布 */
+.mini { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--chat-bg-muted); }
+/* 音频 / 视频那一格(OPEND-2625)。这一格里**没有一帧画面可放** —— 从前统一走
+   `<img src=…mp3>`,浏览器加载不动,给出来的是一枚碎图标,读起来像生成失败了。
+   改画字形:它如实说「这里有一段音频 / 视频」,不假装有缩略图。
+   底色沿用出图格的 `--chat-bg-subtle`,一排格子并排时和图片那一档同一层灰;
+   字形按格子尺寸取中间偏小的一档,26×34 的缩略图条里也还认得出轮廓。 */
+.glyph { display: grid; place-items: center; background: var(--chat-bg-subtle); color: var(--chat-text-soft); }
+.glyph svg { width: 45%; height: 45%; max-width: 28px; max-height: 28px; }
+/* 还没出来的格子:设计稿 21:02 版把它从「幕布」换成了像素液体(见 `PixelLiquid`)。
+   为什么液体比幕布对:幕布要求格子里【已经有一张图】,它演的是「图正在显出来」;
+   而这一格要说的是【还没生成出来】—— 那时候什么都还没有,底下没有图可以糊。
+   ------------------------------------------------------------
+   底色留着、不铺底:上游 light 模式的 bgColor 是 vec4(1,1,1,0),alpha 为 0,
+   没有流体的地方原样透出底下,所以这里让 `--chat-bg-subtle` 透上来。 */
+.shot.load { background: var(--chat-bg-subtle); }
+
+/* ── 思考那一格的正文(组件 3-1)────────────────────────────────
+   **和外面的普通正文一样**:自然高度、随内容长,不裁剪、不自动滚、不渐隐。
+
+   ⚠️ 这里推翻了设计稿(2026-09-02 产品 + 设计线下裁决)。稿子的
+   `thinking-stream.css` 画的是一扇 96px 定高、自己往上走、上下各 32px 渐隐的窗
+   (`--stream-h` / `--stream-fade` / `.stream-viewport` 那一整套)。用户原话:
+     「先不要这个滚动的了,这里文本就和外面普通文本一样有个流式的效果就行,
+       不要这个滚动效果了,**滚动太慢了,也很难看清**」
+   「很难看清」指的就是那两道渐隐 —— 窗口上下把首尾两行淡到读不出来,而那两行
+   恰恰是刚落下的字;「太慢」指的是它按节奏一步一停地走,追不上真实吐字速度。
+
+   留下的只有**一只灰底容器**(用户没说要去掉,截图里就是它)。逐字化开的流式效果
+   不在这一层 —— 它走和普通正文同一套 `useCharReveal`,在 `ThinkingMarkdown` 里。
+
+   ⚠️ **被推翻的只有「定高」「慢速分步滚」「渐隐遮罩」三样,限高和跟随都要留。**
+   这三件事我一度混成一件,把该留的也删了,来回绕了两轮,所以在这里写死:
+     高度  ✗ 定高(短内容也撑满一屏)        ✓ `max-height` —— 短内容完全不限高
+     滚动  ✗ 一步一停的慢速分步滚(「太慢了」)✓ 贴底跟随,但**一次到底**,正常速度
+     遮罩  ✗ 上下渐隐(「很难看清」)         ✓ 一律没有
+   用户 2026-09-02 两句原话:「但我记得 thinking 下面文本不是有最大高度吗?就跟那个
+   thinking 完成后的展示那样,有最大高度」;「thinking 要自动跟随的,agent 一边写一边滚,
+   但是用户如果手动滚动到上面…不能自动跟随滚动了」。
+   限高**不在这条规则里** —— 它复用下面那套现成的 `.body.scroll`(`ThoughtsRow` 两态
+   都传 `scroll`)。同一件事(「够看但不占屏」)不该有两套机制,所以这里只管灰底容器,
+   别在 `.stream` 上再写一遍 `max-height`。跟随归 `useThinkingFollow`,不归 CSS。 */
+/*
+ * **两态共用同一只灰底容器**(产品裁决 2026-09-02)。
+ *
+ * ## 稿子怎么写的
+ *
+ * 稿子只给「还在想」那一态铺底(`thinking-stream.css` 的 `--stream-surface: #FAFAFA`);
+ * 「想完了」那一态是**裸文字**,`components.css:939` 的 `.fold .body.mod-scroll` 只有
+ * `max-height` 和 `overflow-y`,一点底色都没有。稿子给的理由写在旁边:
+ * 「展开之后:一张卡,里面全是行……层级只靠缩进和状态点表达」—— 不铺底是为了避免盒子套盒子。
+ *
+ * ## 产品为什么决定不同
+ *
+ * 用户 2026-09-02 实测:点开 `Thoughts` 之后同一段内容换了个壳 —— 想的时候有底、
+ * 想完了没底,视觉当场断裂。而稿子那条「避免盒子套盒子」的前提是**里面全是行**;
+ * 思考正文不是行,它是一大段连续文字,给它一个底恰恰把它和上下的工具行分开了,
+ * 更贴合稿子那句话的意图。所以两态统一,完成态也给灰底。
+ *
+ * ⚠️ **这是明确的偏离稿子,不是移植错了。** 下一个人对稿子时会发现完成态多出一个底,
+ * 别当成 bug 改回去 —— 要改先回到这条裁决。
+ *
+ * 实现上让完成态**吃同一份职责**,不复制一份值:底色 / 圆角 / 内距只写在这里一次,
+ * 限高仍归下面的 `.body.scroll`(两态都传 `scroll`),跟随仍归 `useThinkingFollow`。
+ *
+ * ⚠️ `.thoughts` 这个类**必须在样式表里真的出现**,否则 CSS Module 根本不发它,
+ * `ExecutionShell` 那句 `className={styles.thoughts}` 就是 `undefined` —— 这个类在
+ * 产线上一次都没上过 DOM(和 `.hasTodo` 注释里记的是同一个坑)。这条规则同时也是
+ * 它的第一个真实消费者。
+ */
+.stream,
+.thoughts > .body.stack {
+  /* 四边留白与上下气口,沿用稿子的 `--stream-pad` / `--stream-gap` */
+  --stream-pad: 8px;
+  --stream-gap: 8px;
+  /* 稿子的 16px。产品 token 目前最大只到 `--chat-radius-lg`(12px);
+     PR #7170 在 `tokens.css` 里新加的那枚 2XL 别名不归这一层改,
+     等共享 token 落地之后把这里换成 `var(--chat-radius-2xl)`。 */
+  --stream-radius: 16px;
+  margin-block: var(--stream-gap);
+  border-radius: var(--stream-radius);
+  /*
+   * 稿子:`--stream-surface: #FAFAFA`(`thinking-stream.css:25`,853da24ea5 与交付稿
+   * 8015870095 逐字相同)—— 一枚**不透明**底色。换成产品 token 是为了深浅两套主题
+   * 自动跟着翻,但必须挑对那一档:`--chat-bg-panel` → `--bg-panel` → `#fafafa`,
+   * 值和稿子一致且不透明。
+   *
+   * ⚠️ 这里原来写的是 `--chat-bg-fill-tertiary`(`rgba(0,0,0,0.03)`)—— **半透明**。
+   * 半透明的后果不是「差一点点」,是这块灰底根本没有确定的颜色:它坐在什么上面就
+   * 跟着变。陈列页里它坐 `--bg-panel`、会话里坐 `--bg`,同一块底在两处不是同一个色,
+   * 而稿子给的恰恰是一个定值。
+   */
+  background: var(--chat-bg-panel);
+  padding: var(--stream-pad);
+}
+/*
+ * ⚠️ **特异性,不是字面值。** 这条原来写的是 `.fold.flat[open] > summary + .body.stream`
+ * —— 那要求这只窗是**壳自己**的 body。思考下沉成壳里的一个条目(§F-15)之后,
+ * 窗子挂在 `.fold.thoughts` 上,这条选择器**整条失配**,于是:
+ *   `.fold .body { padding: 0 11px 11px }`      (0,2,0) 赢了
+ *   `.fold[open] > summary + .body { padding-top: 4px }` (0,3,0) 又赢了它
+ *   而 `.stream { padding: … }` 只有 (0,1,0),两条都打不过。
+ * 真 Chrome 量到的后果:内距变成 `4px 11px 11px`,正文左缘落在 4px,
+ * 而这一行自己的图标在 22px —— 正文比图标还靠左 18px,跟谁都不对齐,
+ * 而且思考一结束(换成 `.body.stack`)正文又跳回 22px。
+ * 补到同一档,并且**不再要求祖先是扁平壳**。
+ */
+.fold[open] > summary + .body.stream,
+.fold.thoughts[open] > summary + .body.stack {
+  border-top: 0;
+  padding: var(--stream-pad);
+}
+/*
+ * 缩进落在**灰底容器**上,不落在容器里的字上。
+ *
+ * 上面那两条 `:is(.body.stack, .body.stream) > *` 把 29 / 33 给了 body 的**孩子**。
+ * 容器自己带 8px 内距,缩进再落在孩子身上,字就变成「容器左缘 + 29」,而思考一结束
+ * (换成 `.body.stack`)又跳回 29 —— 正是用户 2026-08-27 指过的那次横跳换个数字重来。
+ * 所以整只容器往右挪同样的距离,并把它自己那 8px 内距先减掉:容器里的字因此正好落在
+ * 29 / 33 这条线上,两态同列。
+ *
+ * 这也是稿子那条「缩进不能落在盒子上」例外(`.fold.mod-flat … > .fold { padding-inline: 0 }`)
+ * 的同一件事:容器是盒子,推的是盒子,不是盒子里的行。
+ */
+/*
+ * 灰底面板比标题栏的悬停底**窄一圈**,四边各让出一份行内距。
+ *
+ * ## 稿子给的就是这个关系
+ *
+ * 稿子里思考流是壳**自己**的 body:
+ *   `.fold.mod-flat > summary { margin-inline: -7px; padding: 6px 7px }`(components.css:1030)
+ *   `.fold.mod-flat > .body.mod-stream { padding: var(--stream-pad) }`(thinking-stream.css,8px,**不带** margin-inline)
+ * 于是标题的悬停底占 `-7 … W+7`,灰底面板占 `0 … W` —— **两边各差 7px**,
+ * 而这 7 就是 summary 自己那份 `padding-inline`。用户 2026-09-02:
+ * 「这个 hover 态有点丑,应该允许比下面的超出一点点,有个 padding 而已」——
+ * 说的就是这一圈。
+ *
+ * ⚠️ 稿子基础规则里那个 `padding: 8px 11px`(components.css:898)**不适用于这里**:
+ * 扁平壳里的每一行都被 `.fold.mod-flat > .body.mod-stack > .fold > summary
+ * { padding: 5px 7px }`(1056)盖掉了。11 是**有框折叠块**那一档的数。
+ *
+ * ## 上一版为什么不对
+ *
+ * 上一版把 summary 的 `padding-inline-start` 归零、让两块底**齐平** —— 齐平之后
+ * 悬停底和面板变成同一个矩形,读起来像面板自己在闪,而不是「这一行可以点」。
+ * 再上一版则是只有左边探出(左 -7 / 右 0),歪的那半正是用户说的丑。
+ * 现在两边都让 7px:**对称**,而且是稿子自带的量,不是新拍的常数。
+ *
+ * ## 两层各自的数
+ *
+ * 面板永远比抽屉的内容盒窄一圈(`margin-inline: 7px`),所以抽屉的内容盒要落在
+ * 「这一行的列 − 7」上;summary 只留自己那份 7,两条加起来仍然等于原来的一档:
+ *   顶层    抽屉 0(不写)+ summary 7  = 7  → 文字落 0、悬停底 -7、面板 0
+ *   步骤里  抽屉 22      + summary 7  = 29 → 文字落 22、悬停底 15、面板 22
+ * 文字的落点一个像素没动,动的只有两块底的相对大小。
+ */
+.fold .thoughts > .body { margin-inline: 7px; }
+.fold.flat .body.stack .body.stack > .fold.thoughts { padding-inline-start: 22px; }
+.fold.flat .body.stack .body.stack > .fold.thoughts > summary { padding-inline-start: 7px; }
+/* 非扁平壳那一档:33 = 26 + 7,同一条推导 */
+.fold .body.stack .body.stack > .fold.thoughts { padding-inline-start: 26px; }
+.fold .body.stack .body.stack > .fold.thoughts > summary { padding-inline-start: 7px; }
+/*
+ * ── 折叠头的排版 = **同层级的标准工具行** ────────────────────────────
+ *
+ * 这一格**稿子里没有**。用户 2026-09-02 逐字:「思考过程这个是我自己加的,但是跟设计
+ * 同学同步过,这个只要保证跟 toolrow 标准样式一模一样就行」。所以这两条的判据不是某个
+ * 字面值,而是「量出来等于 `.tool`」—— 判据钉在
+ * `tests/components/chat/w71-thoughts-row-matches-tool-row.test.tsx`,那份文件里每条
+ * 断言都是**两边相比**,工具行再变一次(今天已经变过:`.tool .name` 500 → 400)
+ * 这里就会先红,不会又分叉。
+ *
+ * 改之前差在哪(两层级 × 四轴,颜色和字体两轴本来就一致):
+ *   顶层  13px / **500**  ←→ 工具行 13px / 400
+ *   抽屉  **12px** / **500** ←→ 工具行 13px / 400
+ *
+ * 成因是这一格吃的是**折叠行**那一族的通用规则,而不是工具行那一族:
+ *   顶层    `.fold.flat > .body.stack > .fold > summary` 给 13px + 500(那是**步骤**
+ *           标题的一档,见上面 PR #7170 那段);
+ *   抽屉里  上面那条够不着,只剩 `.fold > summary` 的 `--chat-t-mini`(12px),
+ *           字重则一路继承到 `ChatRoot` 的 500。
+ *
+ * 对照物是 `div.tool`(`.tool { font-size: var(--chat-t-body) }` + `.tool .name
+ * { font-weight: 400 }`),不是可折叠命令那一支 —— 那一支和步骤共用折叠头那一档。
+ *
+ * 两条各自的落点是**照抄工具行的分工**,不是随手挑的:
+ *  · 字号写在**行盒**(这里是 summary)上,于是标题和图标槽都跟着走,而耗时 `.meta`
+ *    自己那条 `--chat-t-cap` 照旧赢,和工具行的耗时同为 12px;
+ *  · 字重只写在**标题**上。写到 summary 上会连带把抽屉里的耗时压成 400,而工具行的
+ *    耗时是 500(继承自 `ChatRoot`)—— 那就把一轴修对、另一轴弄歪了。
+ *
+ * 特异性 (0,6,1) 是**故意的**:要压过顶层那条 (0,5,1) 的
+ * `.fold.flat > .body.stack > .fold > summary`,同一条选择器又要够得着抽屉里那一层
+ * (所以 `.body.stack` 之后是后代组合符,不是 `>`)。
+ * 只挂 `.thoughts`:步骤标题和可折叠命令行不在这条裁决里,一个都不许被顺手带走。
+ */
+.fold.flat > .body.stack .fold.thoughts > summary { font-size: var(--chat-t-body); }
+.fold.flat > .body.stack .fold.thoughts > summary .name { font-weight: 400; }
+/*
+ * 盒子里的字**只吃容器那一份 `--stream-pad`**,不再叠第二层缩进。
+ * 稿子逐字:容器 `padding: var(--stream-pad)`(8px),窗里的正文
+ * `… > .think { padding: 0 }` —— 一层内距,不是两层。
+ * 用户 2026-09-02 并排对比时箭头指的就是「灰底左边缘到文字之间那段空白」。
+ *
+ * 特异性要压过上面那条 `:is(.body.stack, .body.stream) > *` 的 (0,6,0),
+ * 所以带上 `.flat`;非扁平壳那份留着,两处各算各的。
+ */
+.fold .body.stack .thoughts > .body > *,
+.fold.flat .body.stack .thoughts > .body > * { padding-inline-start: 0; }
+/*
+ * 流窗里的正文走**常规字重**(稿子 `thinking-stream.css:81`:
+ * `… > .think { padding: 0; font-weight: 400; color: var(--stream-ink) }`)。
+ *
+ * ⚠️ 选择器**不能按 `.think` 选**。那一格的正文是 `ThinkingMarkdown` 渲染的,它的
+ * `.think` 来自另一个 CSS Module,和这里的 `.think` 是两个不同的哈希类名 ——
+ * 按 `.think` 写的规则一条都落不到它身上(下面那条就是这么空转到今天的)。
+ * 所以按「流窗里的那一层」选。
+ *
+ * 特异性 (0,3,0) 是**故意的**:`ThinkingMarkdown.module.css` 里那条 `.think` 是
+ * (0,1,0),打平就要按两个 module 谁先进 bundle 判,那是「今天碰巧对」。
+ *
+ * 字重原来靠继承 400 蒙对;W8 把面板基线换成 500 之后,思考正文跟着变重 —— 真回归。
+ *
+ * **两态都写**(2026-09-02):容器统一之后,同一段字在「想的时候」和「想完了」
+ * 之间换字重就成了新的断裂。
+ */
+.fold .thoughts > .body > * {
+  font-weight: 400;
+}
+/*
+ * 思考正文的墨色 —— 稿子的 `--stream-ink`(#a3a3a3,components.css:28)
+ * 「滚动流里的推理比普通的 `.think` 淡……它的作用是『还在想』这件事本身,
+ *   不是逐字读完 —— 跟正文同一档墨会把注意力钉在一段马上要滚走的字上」。
+ *
+ * ⚠️ **这条至今空转**,原因和上面字重那条一模一样:下面 `.stream > .think` 里的
+ * `.think` 是 record 自己这份(`SayText` 的段落用它),而流窗里住的是
+ * `ThinkingMarkdown` 的 `.think` —— 两个 CSS Module、两个哈希类名,一条都落不上。
+ * 所以思考正文实际一直取 `ThinkingMarkdown.module.css` 的 `--chat-text-strong`(#202020)。
+ * 用户 2026-09-02 截图里那几行「粗体深色的小标题」就是它。
+ * 现在按「思考那一格的 body 里那一层」选,和字重同一条判据。
+ *
+ * **想完了那一态也一起退**(产品裁决 2026-09-02,偏离稿子):稿子把「收起后的
+ * `.think`」当结论、留深色,前提是那一态没有自己的容器、就落在流水里;产品这一版
+ * 两态共用一只灰底容器(见上面 `.stream, .thoughts > .body.stack`),同一只盒子里
+ * 换墨色比换容器更突兀。
+ */
+.fold .thoughts > .body > * {
+  color: var(--chat-stream-ink);
+}
+/*
+ * markdown 小标题不再自己喊。
+ *
+ * `ThinkingMarkdown.module.css` 给 `.md-h` 定的是 `--chat-text-strong` + 600 ——
+ * 那是**消息正文**那一档的口径;落到一段已经整体退后的推理里,就成了灰底上几行
+ * 突兀的黑粗字(用户 2026-09-02 截图)。这里只把它收回「跟着这一段走」:
+ * 颜色继承,字重比正文重半档、不再是最重的那一档。
+ *
+ * 特异性 (0,3,0) 对 (0,2,0) 是**故意的** —— 打平就要按两个 module 谁先进 bundle 判。
+ * `md-h` 是 markdown 渲染器发的**全局**类,所以要用 `:global()` 包住,
+ * 否则 CSS Module 会把它也改写成哈希名,规则又是一条空转的。
+ */
+.fold .thoughts > .body :global(.md-h) {
+  color: inherit;
+  font-weight: 500;
+}
+/*
+ * ⚠️ 下面这条**目前空转**,留着是因为哪天 `SayText` 之类 record 自有的段落落进
+ * 流窗它就是对的 —— 真正生效的是上面按「body 里那一层」选的那两条。
+ */
+.stream > .think {
+  padding: 0;
+  color: var(--chat-stream-ink);
+}
+.stream > .think + .think { margin-top: 0.75em; }
+
+/* ── 限高 + 正常滚动条(点开来读的那一类长内容)────────────────────
+ * 用户 2026-08-27:「thought 展开应该有个最高高度, 可以滚动」——
+ * 配图是**思考已结束**那一档点开之后十几段推理一路铺到屏外。
+ *
+ * 值不是我挑的。交付稿第 1252 行:
+ *   `.fold .body.mod-scroll { max-height: 96px; overflow-y: auto; }`
+ * 3674 行那条注释把这个数说死了:「96px ≈ 5 行,和折叠块里 .mod-scroll 用的是同一个
+ * 高度,这一屏里所有『够看但不占屏』的窗口都是这一档」。
+ *
+ * **进行中那一档现在也走这条**(用户 2026-09-02:「就跟那个 thinking 完成后的展示
+ * 那样,有最大高度」)。`ThoughtsRow` 两态都传 `scroll`,所以这一条同时管着
+ * `.body.stack.scroll`(想完了)和 `.body.stream.scroll`(还在想)。
+ *
+ * `.stream` 只剩灰底容器那一份职责,和这里不重叠、也别合并:
+ *   `.stream` 管底色 / 圆角 / 内距;
+ *   这里管**限高**——`max-height` 而不是 `height`,所以**短内容完全不限高、不出滚动条**,
+ *   长了才截住,而且不遮罩 —— 遮罩会把用户正在读的那一行的上下半截抹掉。
+ *
+ * ⚠️ 曾经在 `.stream` 上写过一份 `height: 96px` + 渐隐 + rAF 分步缓动的窗,那一套已被
+ * 推翻(用户:「滚动太慢了,也很难看清」)。被推翻的是**定高 + 慢速分步 + 遮罩**——
+ * 限高要留(就是这一条),贴底跟随也要留(在 `useThinkingFollow` 里,一次写到底)。
+ */
+.fold .body.scroll {
+  max-height: 96px;
+  overflow-y: auto;
+  /* 越界的字贴着滚动条,留一点气口(限高之前它靠 body 自己的右内距) */
+  padding-inline-end: 4px;
+}

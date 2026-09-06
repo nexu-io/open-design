@@ -5062,12 +5062,16 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     // Both destinations stay on the bar as a two-segment tablist.
-    expect(screen.getByRole('tab', { name: 'Code' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Preview' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
-    expect(screen.getByRole('tab', { name: 'Code' }).getAttribute('aria-selected')).toBe('true');
+    const codeTab = screen.getByRole('tab', { name: 'Code' });
+    const previewTab = screen.getByRole('tab', { name: 'Preview' });
+    expect(codeTab.getAttribute('aria-label')).toBe('Code');
+    expect(codeTab.getAttribute('title')).toBe('Code');
+    expect(previewTab.getAttribute('aria-label')).toBe('Preview');
+    expect(previewTab.getAttribute('title')).toBe('Preview');
+    fireEvent.click(codeTab);
+    expect(codeTab.getAttribute('aria-selected')).toBe('true');
     expect(container.querySelector('.viewer-source')?.textContent).toContain('data-od-id="hero"');
-    fireEvent.click(screen.getByRole('tab', { name: 'Preview' }));
+    fireEvent.click(previewTab);
     fireEvent.click(screen.getByTestId('manual-edit-mode-toggle'));
 
     await waitFor(() => {
@@ -6748,8 +6752,8 @@ describe('FileViewer SVG artifacts', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
 
-    // Share panel: everything that produces a link or reusable asset —
-    // publish, deploy, social share, save as template. No file formats.
+    // Share panel: actions that produce a shareable link. No file formats and
+    // no save/template authoring controls.
     expect(await screen.findByRole('menu')).toBeTruthy();
     expect(screen.getByText('Share project in workspace')).toBeTruthy();
     expect(await screen.findByText('Get a share link')).toBeTruthy();
@@ -6762,6 +6766,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(screen.queryByRole('menuitem', { name: /Publish online above to enable share/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Export as PDF/i })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: /Export as image/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Save as template/i })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /export/i }));
 
@@ -6787,6 +6792,58 @@ describe('FileViewer SVG artifacts', () => {
     // toolbar's screenshot-to-chat already leads with. "Export as image" — the
     // row that DOES write a file — stays, and is asserted present above.
     expect(menuItems).not.toContain('Screenshot');
+  });
+
+  it('keeps an artifact-card Share request limited to OpenDesign Quick Share', async () => {
+    const file = baseFile({
+      name: 'index.html',
+      path: 'index.html',
+      mime: 'text/html',
+      kind: 'html',
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: 'Page',
+        entry: 'index.html',
+        renderer: 'html',
+        exports: ['html'],
+      },
+    });
+    const context = teamWorkspaceContext();
+    stubFetchWithWorkspaceContext(context);
+    const anchorId = 'publish:turn-2:index.html';
+    const anchor = document.createElement('button');
+    anchor.setAttribute('data-artifact-anchor', anchorId);
+    anchor.getBoundingClientRect = () => ({
+      x: 220,
+      y: 300,
+      left: 220,
+      top: 300,
+      right: 278,
+      bottom: 328,
+      width: 58,
+      height: 28,
+      toJSON: () => ({}),
+    } as DOMRect);
+    document.body.appendChild(anchor);
+
+    renderWithProjectWorkspace(
+      <FileViewer
+        projectId="project-1"
+        projectKind="prototype"
+        file={file}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+        shareRequest={{ nonce: 1_730_000_249_000, anchorId }}
+      />,
+      context,
+    );
+
+    expect(await screen.findByText('Get a share link')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+    expect(screen.queryByText('Share project in workspace')).toBeNull();
+    expect(screen.queryByText('SHARE ON YOUR OWN HOSTING')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Deploy to Vercel/i })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Save as template/i })).toBeNull();
   });
 
   // The per-file "Publish" entry point (a single file → a backend link) is
@@ -7014,6 +7071,10 @@ describe('FileViewer SVG artifacts', () => {
       // single-file limitation unreadable for keyboard and touch users.
       expect(help.tagName).toBe('BUTTON');
       expect(help).toHaveProperty('type', 'button');
+      // The help sits at the menu's trailing edge. Opening downward placed the
+      // bubble under the action rows (and most of it behind the higher menu
+      // layer); it belongs above its own section label.
+      expect(help.getAttribute('data-tooltip-placement')).toBe('top');
       help.focus();
       expect(document.activeElement).toBe(help);
 
@@ -7068,6 +7129,7 @@ describe('FileViewer SVG artifacts', () => {
     const help = await screen.findByTestId('workspace-access-help');
     expect(help.tagName).toBe('BUTTON');
     expect(help).toHaveProperty('type', 'button');
+    expect(help.getAttribute('data-tooltip-placement')).toBe('top');
     expect(help.closest('[role="menuitem"]')).toBeNull();
     help.focus();
     expect(document.activeElement).toBe(help);
@@ -8669,15 +8731,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(markup).not.toContain('dangerouslySetInnerHTML');
   });
 
-  it('uses an in-app modal instead of window.prompt() when saving a template', async () => {
-    saveTemplateMock.mockResolvedValueOnce({
-      id: 'tpl_1',
-      name: 'Landing Page',
-      description: null,
-      sourceProjectId: 'project-1',
-      files: [],
-      createdAt: Date.now(),
-    });
+  it('does not expose Save as template from the Share menu', async () => {
     const promptSpy = vi.spyOn(window, 'prompt');
     const file = baseFile({
       name: 'landing-page.html',
@@ -8694,32 +8748,16 @@ describe('FileViewer SVG artifacts', () => {
       },
     });
 
-    const view = render(
+    render(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
     );
 
     await openUnifiedShareTab();
-    fireEvent.click(screen.getByRole('menuitem', { name: /save as template/i }));
-
-    expect(screen.getByRole('dialog')).toBeTruthy();
-    const backdrop = document.body.querySelector('.viewer-modal-backdrop');
-    expect(backdrop).toBeTruthy();
-    expect(backdrop?.parentElement).toBe(document.body);
-    expect(view.container.querySelector('.viewer-modal-backdrop')).toBeNull();
-    const nameInput = screen.getByLabelText(/template name/i) as HTMLInputElement;
-    expect(nameInput.value).toBe('landing-page');
-    fireEvent.change(nameInput, { target: { value: 'Landing Page' } });
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
-
-    await waitFor(() =>
-      expect(saveTemplateMock).toHaveBeenCalledWith({
-        name: 'Landing Page',
-        description: undefined,
-        sourceProjectId: 'project-1',
-      }),
-    );
+    expect(screen.queryByRole('menuitem', { name: /save as template/i })).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(saveTemplateMock).not.toHaveBeenCalled();
     expect(promptSpy).not.toHaveBeenCalled();
     promptSpy.mockRestore();
   });

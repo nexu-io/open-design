@@ -128,7 +128,7 @@ function setGeom(partial: Partial<Geom>) {
 
 function setUserScroll(top: number) {
   geom.scrollTop = top;
-  const el = document.querySelector('.chat-log');
+  const el = document.querySelector('[data-testid="chat-log"]');
   if (el) fireEvent.scroll(el);
 }
 

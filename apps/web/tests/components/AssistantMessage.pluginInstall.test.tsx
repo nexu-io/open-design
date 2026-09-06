@@ -180,7 +180,7 @@ describe('AssistantMessage plugin install success feedback (#2876)', () => {
     // successfully, but the original screen did not communicate that
     // outcome"). A default success label fills that gap.
     await waitFor(() => {
-      expect(screen.getByText(/added to my plugins/i)).toBeTruthy();
+      expect(screen.getByText('Plugin saved.')).toBeTruthy();
     });
   });
 });

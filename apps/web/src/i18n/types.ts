@@ -1730,6 +1730,7 @@ export interface Dict {
   'pluginCard.publish': string;
   'pluginCard.contribute': string;
   'pluginCard.starting': string;
+  'pluginCard.creating': string;
   'pluginCard.detailsAria': string;
   'pluginCard.chooseUseAria': string;
   'pluginCard.useOptionsAria': string;
@@ -2833,7 +2834,6 @@ export interface Dict {
   'chat.amrLowBalance.message': string;
   'chat.amrLowBalance.rechargeCta': string;
   'chat.amrLowBalance.proceedCta': string;
-  'chat.amrLowBalance.dontRemind': string;
   'chat.amrArtifactUpgrade.title': string;
   'chat.amrArtifactUpgrade.message': string;
   'chat.amrArtifactUpgrade.benefit1': string;
@@ -2873,6 +2873,11 @@ export interface Dict {
   'chat.runError.title.cpuUnsupported': string;
   'chat.runError.title.cliSessionRefused': string;
   'chat.runError.title.strategyTaskHalted': string;
+  'chat.runError.title.agentReplyIncomplete': string;
+  'chat.runError.agentReplyIncompleteMessage': string;
+  'chat.runError.title.clarificationRepeated': string;
+  'chat.runError.clarificationRepeatedMessage': string;
+  'chat.runError.title.clientEnvironment': string;
   'chat.runError.title.generic': string;
   'chat.runError.title.artifactMissing': string;
   'chat.runError.signInMessage.amr': string;
@@ -2897,8 +2902,19 @@ export interface Dict {
   'chat.runError.sessionExpiredMessage': string;
   'chat.runError.gitBashMissingMessage': string;
   'chat.runError.cpuUnsupportedMessage': string;
+  'chat.runError.title.agentCrashed': string;
+  'chat.runError.agentCrashedMessage': string;
+  'chat.runError.title.accountSuspended': string;
+  'chat.runError.accountSuspendedMessage': string;
+  'chat.runError.fallbackMessage': string;
   'chat.runError.cliSessionRefusedMessage': string;
   'chat.runError.strategyTaskStateMismatchMessage': string;
+  'chat.runError.clientEnvironmentMessage': string;
+  'chat.runError.clientEnvironmentCause.certificate': string;
+  'chat.runError.clientEnvironmentCause.proxy': string;
+  'chat.runError.clientEnvironmentCause.network': string;
+  'chat.runError.clientEnvironmentCause.hostPolicy': string;
+  'chat.runError.clientEnvironmentCause.localStorage': string;
   'chat.runError.agentFallback': string;
   'chat.runError.sourceLabel': string;
   'chat.runError.sourceExpandAria': string;
@@ -2958,6 +2974,7 @@ export interface Dict {
   'chat.annotationFailed': string;
   'chat.annotationProjectCreateFailed': string;
   'chat.annotationUploadFailed': string;
+  'chat.attachmentFolderUnsupported': string;
   'chat.inspect.noEditableTargets': string;
   'chat.inspect.noCommentTargets': string;
   'chat.inspect.editHint': string;
@@ -2965,20 +2982,44 @@ export interface Dict {
   'chat.conversationsTitle': string;
   'chat.conversationsAria': string;
   'chat.newConversation': string;
+  /**
+   * 面板头图标键的名字,也是**聊天面板内唯一**的「新会话」说法。稿子 `729fa43ce7` 的
+   * `docs/design/chat-panel/src/body-scene.html:8`:`aria-label="新会话" data-tip="新会话"`。
+   *
+   * 产品裁决 2026-09-03:**只统一聊天面板内**。面板内原来三种说法收成一句 ——
+   * 这一条、回合动作行的 `assistant.forkConversation`、以及历史下拉里那颗
+   * 「新建」(`chat.new`,连按钮一起删了)。面板**外**的 `chat.newConversation`
+   * (「新建对话」)不动。
+   *
+   * ⚠️ 稿子自己这两处不一致:面板头写「新会话」,回合动作行写「新开会话」
+   * (`src/body-components.html:1189`)。取「新会话」的依据也在稿子里 ——
+   * `src/body-components.html:1243` 那条 fork 分界线是 `aria-label="新会话从这里开始"`,
+   * 稿子自己把 Fork 产出的东西叫「新会话」。于是词族定成 名词「新会话」+ 动词「开始」。
+   * 非中文语种沿用各自既有的「新建对话」措辞,不引入新词。
+   */
+  'chat.newSession': string;
   'chat.newConversationsTitle': string;
   'chat.conversationsHeading': string;
-  'chat.new': string;
   'chat.emptyConversations': string;
+  'chat.conversationsSearchPlaceholder': string;
+  'chat.conversationsNoMatches': string;
   'chat.deleteConversation': string;
   'chat.renameConversationLabel': string;
   'chat.deleteConversationConfirm': string;
   'chat.untitledConversation': string;
-  'chat.forkedConversationTitle': string;
+  /**
+   * 回合动作行那颗按钮失败时的提示。key 名还带 `fork` 是历史,**文案不带** ——
+   * 它和 `assistant.forkConversation` / `assistant.forkingConversation` 是同一颗
+   * 按钮的三个态,过去 hover 说「新开会话」、按下去变「正在分叉…」、失败说
+   * 「无法分叉这个对话」,一颗按钮两套词。产品裁决 2026-09-03 统一成
+   * 名词「新会话」+ 动词「开始」那一族。
+   */
   'chat.forkConversationFailed': string;
   'chat.startTitle': string;
   'chat.startHint': string;
   'chat.brandBrowserAssistDesktopOnly': string;
   'chat.brandBrowserAssistReadFailed': string;
+  'chat.memoryWrittenSummary': string;
   'chat.brandBrowserAssistMessage': string;
   'chat.brandBrowserLocalSnapshotMissing': string;
   'chat.brandBrowserLocalSnapshotReadFailed': string;
@@ -3001,6 +3042,21 @@ export interface Dict {
   'chat.messageRail.jumpAria': string;
   'chat.messageRail.empty': string;
   'chat.you': string;
+  'chat.record.retryImage': string;
+  'chat.quote.add': string;
+  'chat.quote.count': string;
+  /** 重复添加同一段文案时的轻提示(OPEND-2546) */
+  'chat.quote.duplicate': string;
+  'chat.quote.removeAria': string;
+  'chat.support.title': string;
+  'chat.support.join': string;
+  'chat.sendFailedRetryAria': string;
+  'chat.audio.play': string;
+  'chat.audio.pause': string;
+  'chat.audio.download': string;
+  'chat.upgrade.balance': string;
+  'chat.upgrade.whyLow': string;
+  'chat.upgrade.whyOut': string;
   'chat.openFile': string;
   'chat.copyPrompt': string;
   'chat.copyErrorDiagnostic': string;
@@ -3460,14 +3516,27 @@ export interface Dict {
   'chat.linkedFolderNotFound': string;
   'chat.linkedFolderAlready': string;
   'chat.linkedFolderPickError': string;
-  'chat.queuedHeader': string;
-  'chat.queuedToSend': string;
   'chat.queuedEditQueuedTaskAria': string;
   'chat.queuedSave': string;
   'chat.queuedCancel': string;
   'chat.queuedReorder': string;
   'chat.queuedEdit': string;
-  'chat.queuedMore': string;
+  /** B11: visible label on the queue row's third button. */
+  'chat.queuedSteer': string;
+  /**
+   * B11 hover copy: pressing that button interrupts the run in progress and
+   * sends this queued row straight away (OPEND-2602). Names the button first so
+   * the accessible name still contains the visible label.
+   */
+  'chat.queuedSteerInterrupts': string;
+  /** Why steering is unavailable: the current agent's CLI stops reading input mid-turn. */
+  'chat.queuedSteerUnsupported': string;
+  /** Steering was refused because the turn already stopped reading input. */
+  'chat.queuedSteerClosed': string;
+  /** Steering failed for any other reason (network / daemon). */
+  'chat.queuedSteerFailed': string;
+  /** This queued item carries attachments, which a mid-turn message cannot deliver. */
+  'chat.queuedSteerTextOnly': string;
   'chat.queuedFollowUpFallback': string;
   'chat.send': string;
   'chat.stop': string;
@@ -4285,14 +4354,27 @@ export interface Dict {
   'assistant.doneLabel': string;
   'assistant.canceledLabel': string;
   'assistant.copyMarkdown': string;
+  /**
+   * 回合动作行那颗按钮的名字。**必须和 `chat.newSession` 同字** —— 聊天面板内
+   * 只有一句「新会话」(产品裁决 2026-09-03),守卫在
+   * `tests/components/chat/w129-new-session-single-entry.test.tsx`。
+   */
   'assistant.forkConversation': string;
+  /** 上面那颗按钮的进行态。同一族词:名词「新会话」+ 动词「开始」。 */
   'assistant.forkingConversation': string;
+  /** 分叉分界线下面那行脚注 —— 告诉人 Fork 不是跳走,上文已经带过去了。 */
+  'assistant.forkNote': string;
   'assistant.shareToOpenDesign': string;
   'assistant.shareToOpenDesignBusy': string;
   'assistant.feedbackPrompt': string;
   'assistant.feedbackPositive': string;
   'assistant.feedbackNegative': string;
   'assistant.feedbackReasonTitle': string;
+  /** 点踩那一路的问句(交付稿第 40 格写的是「哪里不对?」);点赞仍用上面那条中性文案 */
+  'assistant.feedbackReasonTitleNegative': string;
+  /** 社区入口那一句。`{discord}` 会被替换成可点的 Discord 链接 */
+  'assistant.feedbackDiscordNegative': string;
+  'assistant.feedbackDiscordPositive': string;
   'assistant.feedbackReasonPositiveMatched': string;
   'assistant.feedbackReasonPositiveVisual': string;
   'assistant.feedbackReasonPositiveUseful': string;
@@ -4302,6 +4384,8 @@ export interface Dict {
   'assistant.feedbackReasonNegativeVisual': string;
   'assistant.feedbackReasonNegativeIncomplete': string;
   'assistant.feedbackReasonNegativeHard': string;
+  'assistant.feedbackReasonNegativeCouldNotRun': string;
+  'assistant.feedbackReasonNegativeTooSlow': string;
   'assistant.feedbackReasonNegativeDesignSystem': string;
   'assistant.feedbackReasonOther': string;
   'assistant.feedbackReasonPlaceholder': string;
@@ -4313,11 +4397,27 @@ export interface Dict {
   'assistant.unfinishedMore': string;
   'assistant.continueRemaining': string;
   'chat.resumeRunCta': string;
+  'chat.runError.contactSupportCta': string;
+  'chat.runError.exportLogsCta': string;
+  'chat.runError.switchModelCta': string;
+  'chat.runError.openSettingsCta': string;
+  'chat.support.channel.feishu': string;
+  'chat.support.channel.discord': string;
+  'chat.amrBalanceOwner.title': string;
+  'chat.amrBalanceOwner.message': string;
+  'chat.amrBalanceOwner.requestTemplate': string;
+  'chat.amrBalanceOwner.copyCta': string;
+  'chat.amrBalanceOwner.copiedCta': string;
+  'chat.amrBalanceOwner.dismissCta': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;
   'assistant.openFile': string;
   'assistant.downloadFile': string;
   'nextStep.title': string;
+  // Accessible name for the three agent-written follow-up rows under a
+  // delivered turn. The suggestions themselves are model-written in the
+  // conversation's own language and deliberately never enter the dictionary.
+  'nextStep.suggestionsLabel': string;
   'nextStep.more': string;
   'nextStep.share': string;
   'nextStep.download': string;
@@ -4361,6 +4461,7 @@ export interface Dict {
   'assistant.thoughtFor': string;
   'assistant.systemReminder': string;
   'assistant.possiblePromptInjection': string;
+  'assistant.designSystemDirectionLocked': string;
   'assistant.waitingFirstOutput': string;
   'assistant.statusBootingAgent': string;
   'assistant.statusPreparing': string;
@@ -4368,6 +4469,7 @@ export interface Dict {
   'assistant.statusRequesting': string;
   'assistant.statusThinking': string;
   'assistant.statusStreaming': string;
+  'assistant.statusCompactingContext': string;
   'assistant.slowHint': string;
   'assistant.verbEditing': string;
   'assistant.verbWriting': string;
@@ -4380,10 +4482,52 @@ export interface Dict {
 
   // Question form labels
   'qf.answered': string;
+  /** 「已回答」陈述块的标题(交付稿 `.answered .k`) */
+  'qf.answeredConfirmed': string;
+  /**
+   * 「已回答」陈述块里,被跳过那道题的值。提交出去的文本给它写的是 `(skipped)`,
+   * 这一行就是同一件事的人话版本 —— 不能整行吞掉,吞掉之后收口会退回
+   * 「答案已发送」那句兜底,而实际上一个答案都没发。
+   */
+  'qf.answeredSkipped': string;
+  'chat.att.cancelUpload': string;
+  'chat.att.retry': string;
+  'chat.attachments.preview': string;
+  'chat.attachments.scrollNext': string;
+  'chat.attachments.scrollPrev': string;
+  'chat.input.collapse': string;
+  'chat.input.expandFull': string;
+  'chat.input.viewAll': string;
+  'chat.artifact.export': string;
+  'chat.artifact.pending': string;
+  'chat.artifact.publish': string;
+  'chat.edge.paused': string;
+  'chat.edge.reconnectCta': string;
+  'chat.edge.reconnectDetail': string;
+  'chat.edge.reconnectFailed': string;
+  'chat.edge.reconnecting': string;
+  'chat.edge.retrying': string;
+  'qf.visualNext': string;
+  'qf.visualPrev': string;
+  'qf.visualRandom': string;
+  'qf.visualReshuffle': string;
+  'qf.visualViewFan': string;
+  'qf.visualViewGrid': string;
+  'qf.confirmed': string;
+  'qf.picked': string;
+  'qf.moreOptions': string;
+  'qf.colorPresets': string;
+  'qf.colorCustom': string;
+  'qf.colorPickerLabel': string;
+  'qf.colorHexLabel': string;
+  'qf.colorPreview': string;
+  'qf.colorInvalid': string;
   'qf.choose': string;
   'qf.customLabel': string;
   'qf.customPlaceholder': string;
   'qf.otherOption': string;
+  /** 「自己填」—— 选项列表最后一项的标签(交付稿 `.own-l`) */
+  'qf.ownAnswer': string;
   'qf.required': string;
   'qf.lockedSubmitted': string;
   'qf.lockedPrev': string;
@@ -4391,9 +4535,6 @@ export interface Dict {
   'qf.submitDefault': string;
   'qf.submitDisabledTitle': string;
   'qf.submitTitle': string;
-  'qf.cardSelected': string;
-  'qf.cardRefs': string;
-  'qf.cardSampleText': string;
   'questions.tabLabel': string;
   'questions.banner': string;
   'questions.bannerAnswered': string;
@@ -5396,6 +5537,77 @@ export interface Dict {
   'experienceSurvey.skip': string;
   'experienceSurvey.thanksTitle': string;
   'experienceSurvey.thanksBody': string;
+
+  /* 执行记录(chat 重构):动词、状态词、计数。数值与措辞来自 wangchenglong 交付稿 */
+  'chat.record.verb.read': string;
+  'chat.record.verb.write': string;
+  'chat.record.verb.edit': string;
+  'chat.record.verb.search': string;
+  'chat.record.verb.exec': string;
+  'chat.record.failed': string;
+  'chat.record.hits': string;
+  /**
+   * S12「上游响应慢，已等 N 秒」。**2026-08-27 起没有调用点** —— 产品把这句文案从壳头
+   * 撤回了(裁决原文在 `components/chat/ExecutionShell.tsx` 的 `head` 注释里),
+   * 但明确要求「后续可能会用到,只不过用别的展现形式」。
+   *
+   * 键连同 19 份译文一起留着:一个没人调的键不花什么成本,而重新组织 19 种语言的翻译
+   * 要花的是真金白银。`scripts/i18n-check.ts` 只查「每个 locale 有没有 Dict 里的键」,
+   * 不查反向的「键有没有人用」,所以留着不会让任何检查变红(已核对)。
+   */
+  'chat.record.slowUpstream': string;
+  'chat.record.running': string;
+  'chat.record.thinking': string;
+  /** 思考行右边那个槽:「3.3k tokens」。`{count}` 已由 `formatThinkingTokens` 写好 */
+  'chat.record.thinkingTokens': string;
+  'chat.record.thoughts': string;
+  'chat.record.done': string;
+  'chat.record.canceled': string;
+  'chat.record.pending': string;
+  /**
+   * 一条步骤**没跑完就结束了** —— 不知道它成没成(`closeRunningSegments`)。
+   * 两种来源:轮次被用户停掉,或者轮次跑完了但 agent 收尾时没再发一次清单。
+   * 所以不能写成「已取消」(succeeded 那一档没人取消过它),也不能写成
+   * 「未开始」(它起过步)—— OPEND-2626。
+   */
+  'chat.record.unfinished': string;
+  'chat.record.failedTurn': string;
+  'chat.record.plan': string;
+  /* Plan 卡收起态那枚药丸(设计稿第 71 格):N = 当前正在做第几步,M = 总步数 */
+  'chat.record.planStep': string;
+  'chat.record.imageBatch': string;
+  'chat.record.imageCount': string;
+  'chat.record.retry': string;
+  'chat.record.viewImage': string;
+  /**
+   * 缩略图条上那枚 26×34 的可见提示。稿子 `729fa43ce7` 的
+   * `docs/design/chat-panel/src/body-components.html:1041`:`data-tip="查看大图"` ——
+   * 和带序号的 `chat.record.viewImage`(读屏用的 `aria-label`)是两句话:
+   * 稿子 `src/components.css:2533-2534` 写死了理由「26×34 已经小到看不出内容了,
+   * tip 是它唯一能自报家门的方式」。
+   */
+  'chat.record.viewLarge': string;
+  'chat.record.imagePending': string;
+  /* OPEND-2625:音频 / 视频不是「插图」,三类各说各的话 */
+  'chat.record.audioBatch': string;
+  'chat.record.videoBatch': string;
+  'chat.record.audioCount': string;
+  'chat.record.videoCount': string;
+  'chat.record.audioPending': string;
+  'chat.record.videoPending': string;
+  'chat.record.viewAudio': string;
+  'chat.record.viewVideo': string;
+  /*
+   * 「设计系统工作区 · 自动创建」状态卡的两句文案。逐字取自稿子
+   * `729fa43ce7:docs/design/chat-panel/src/body-components.html:50-51`:
+   *   Creating design system workspace
+   *   Open Design is using the setup sources to generate this project.
+   * 和菜单项那句 `designFiles.createDesignSystemFromProject`(「基于此项目创建
+   * 设计系统」)是**两回事**:那一句说的是用户点了什么,这两句说的是系统正在做什么。
+   * 菜单项和首轮会话标题仍在用旧那枚,别顺手合并。
+   */
+  'chat.designSystemStatus.title': string;
+  'chat.designSystemStatus.description': string;
   'labs.title': string;
   'labs.itemAbout': string;
   'labs.navHint': string;
@@ -5415,4 +5627,13 @@ export interface Dict {
   'labs.optOutSkip': string;
   'labs.optOutOtherPlaceholder': string;
   'labs.optOutSubmit': string;
+  'chat.pluginAction.failed': string;
+  'chat.pluginAction.saved': string;
+  'chat.pluginAction.validationIssues': string;
+  'chat.pluginAction.contributionStarted': string;
+  'chat.pluginAction.aria': string;
+  'chat.pluginAction.title': string;
+  'chat.pluginAction.subtitle': string;
+  'chat.pluginAction.filesReady': string;
+  'chat.pluginAction.install': string;
 }

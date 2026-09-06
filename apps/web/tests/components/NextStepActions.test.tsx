@@ -70,7 +70,6 @@ function renderActions(
         skill('emilkowalski-motion', 'Emil Kowalski Motion', 'animation-motion'),
         skill('imagegen-frontend-web', 'Imagegen Frontend Web', 'image-generation'),
       ]}
-      toolboxSkillNames={{ 'auto-match': 'creative-director', 'visual-polish': 'impeccable-design-polish' }}
       {...overrides}
     />
   );
@@ -78,18 +77,31 @@ function renderActions(
   return handlers;
 }
 
-describe('NextStepActions', () => {
-  it('renders the two featured rows and More', () => {
-    renderActions();
-    expect(screen.getByText(AUTO_MATCH_TITLE)).toBeTruthy();
-    expect(screen.getByText(VISUAL_POLISH_TITLE)).toBeTruthy();
-    expect(screen.getByTestId('next-step-toolbox-more')).toBeTruthy();
-  });
+/**
+ * 「更多」级联现在只在**工作流档**上出现 —— `default` 那一档整档换成了
+ * agent 现写的三条建议(产品裁决 2026-08-26)。设计百宝箱 / 分享 / 下载 /
+ * 建设计系统这些入口没删,只是不再挂在 `default` 上,所以这些用例改用
+ * `design-system` 档去打同一段代码,别让活代码丢掉回归覆盖。
+ */
+function renderToolbox(
+  overrides: Partial<Parameters<typeof NextStepActions>[0]> = {},
+  locale?: Locale,
+) {
+  return renderActions({ variant: 'design-system', onPromptAction: vi.fn(), ...overrides }, locale);
+}
 
-  it('seeds the composer with the action id (no auto-send) when a featured row is clicked', () => {
-    const h = renderActions();
-    fireEvent.click(screen.getByTestId('next-step-toolbox-action-visual-polish'));
-    expect(h.onToolboxAction).toHaveBeenCalledWith('visual-polish');
+describe('NextStepActions', () => {
+  it('no longer renders the fixed featured rows on any variant', () => {
+    // 产品裁决把「智能匹配下一步 / 设计润色 · 可交付」这两行拿掉了。
+    // 它们原来只在 `default` 出现,而 `default` 现在整档是 agent 现写的三条建议。
+    for (const variant of ['design-system', 'project-incomplete', 'plan', 'brand-extraction'] as const) {
+      cleanup();
+      renderActions({ variant, onPromptAction: vi.fn(), onAiOptimize: vi.fn() });
+      expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
+      expect(screen.queryByText(VISUAL_POLISH_TITLE)).toBeNull();
+      expect(screen.queryByTestId('next-step-toolbox-action-auto-match')).toBeNull();
+      expect(screen.queryByTestId('next-step-toolbox-action-visual-polish')).toBeNull();
+    }
   });
 
   it('uses design-system-specific primary rows for design-system projects', () => {
@@ -331,14 +343,8 @@ describe('NextStepActions', () => {
     expect(within(tooltip).getByText(en['nextStep.brandAiOptimizeBody'])).toBeTruthy();
   });
 
-  it('reveals the matched @skill in the featured-row hover detail', () => {
-    renderActions();
-    fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-action-auto-match'));
-    expect(screen.getByText('@creative-director')).toBeTruthy();
-  });
-
   it('opens the More menu with Design toolbox + Share on hover', () => {
-    renderActions();
+    renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     const menu = screen.getByTestId('next-step-more-menu');
     expect(menu).toBeTruthy();
@@ -347,7 +353,7 @@ describe('NextStepActions', () => {
   });
 
   it('cascades into searchable non-featured toolbox actions and global resources', () => {
-    renderActions();
+    renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     const list = screen.getByTestId('next-step-toolbox-actions');
@@ -372,7 +378,7 @@ describe('NextStepActions', () => {
   });
 
   it('filters actions and global resources from the toolbox search box', () => {
-    renderActions();
+    renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     const list = screen.getByTestId('next-step-toolbox-actions');
@@ -385,7 +391,7 @@ describe('NextStepActions', () => {
   });
 
   it('keeps an action visible when searching by its preferred skill id (parity with the composer matcher)', () => {
-    renderActions();
+    renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     const list = screen.getByTestId('next-step-toolbox-actions');
@@ -406,7 +412,7 @@ describe('NextStepActions', () => {
       displayName: { 'zh-CN': '创意总监' },
       descriptionI18n: { 'zh-CN': 'AI 创意总监，负责整体审美方向' },
     } as SkillSummary;
-    renderActions({ skills: [localizedSkill] }, 'zh-CN');
+    renderToolbox({ skills: [localizedSkill] }, 'zh-CN');
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     const list = screen.getByTestId('next-step-toolbox-actions');
@@ -424,7 +430,7 @@ describe('NextStepActions', () => {
       ...skill('emilkowalski-motion', 'emilkowalski-motion', 'animation-motion'),
       displayName: { 'zh-CN': '动效大师' },
     } as SkillSummary;
-    renderActions({ skills: [motionSkill] }, 'zh-CN');
+    renderToolbox({ skills: [motionSkill] }, 'zh-CN');
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     const list = screen.getByTestId('next-step-toolbox-actions');
@@ -439,7 +445,7 @@ describe('NextStepActions', () => {
   });
 
   it('seeds the composer with a non-featured action id when picked from the submenu', () => {
-    const h = renderActions();
+    const h = renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     fireEvent.click(screen.getByTestId('next-step-toolbox-sub-action-motion'));
@@ -447,7 +453,7 @@ describe('NextStepActions', () => {
   });
 
   it('seeds the composer with a global resource skill when picked from the submenu', () => {
-    const h = renderActions();
+    const h = renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-toolbox'));
     fireEvent.click(screen.getByTestId('next-step-toolbox-resource-emilkowalski-motion'));
@@ -455,7 +461,7 @@ describe('NextStepActions', () => {
   });
 
   it('cascades into Share / Download / Contribute and routes each action', () => {
-    const h = renderActions();
+    const h = renderToolbox();
     fireEvent.mouseEnter(screen.getByTestId('next-step-toolbox-more'));
     fireEvent.mouseEnter(screen.getByTestId('next-step-more-share'));
     expect(screen.getByTestId('next-step-share-menu')).toBeTruthy();
@@ -474,8 +480,107 @@ describe('NextStepActions', () => {
     expect(h.onShareToOpenDesign).toHaveBeenCalledTimes(1);
   });
 
-  it('hides the toolbox rows when no toolbox handler is wired', () => {
-    renderActions({ onToolboxAction: undefined });
-    expect(screen.queryByTestId('next-step-toolbox-action-auto-match')).toBeNull();
+  it('hides the More row when nothing behind it is wired', () => {
+    renderToolbox({
+      onToolboxAction: undefined,
+      onShare: undefined,
+      onDownload: undefined,
+      onShareToOpenDesign: undefined,
+      onCreateDesignSystem: undefined,
+    });
+    expect(screen.queryByTestId('next-step-toolbox-more')).toBeNull();
+  });
+});
+
+/**
+ * 稿子第 41 / 42 格 —— 回合末尾三行**由 agent 现写**的行为引导。
+ *
+ * 产品裁决(2026-08-26):固定的工具箱目录不要了,换成 agent 生成的三条行为引导。
+ * 这一族的判据全在这里:
+ *   · 三条建议照原样出成三行,不是菜单;
+ *   · 点一条 = 把那句话**直接发出去**(所以行尾没有 `›`);
+ *   · 旧会话(没有建议)这一行**干脆不出** —— 不退回工具箱、不出空壳。
+ */
+describe('NextStepActions · 三条行为引导', () => {
+  const THREE = ['再加一页订单列表', '把商品卡换成两列布局', '补一套深色模式'];
+
+  function renderSuggestions(
+    suggestions: string[] | undefined,
+    overrides: Partial<Parameters<typeof NextStepActions>[0]> = {},
+  ) {
+    const onSuggestion = vi.fn();
+    renderActions({ suggestions, onSuggestion, ...overrides });
+    return { onSuggestion };
+  }
+
+  it('把三条建议出成三行', () => {
+    renderSuggestions(THREE);
+    const list = screen.getByTestId('next-step-suggestions');
+    for (const text of THREE) expect(within(list).getByText(text)).toBeTruthy();
+    expect(within(list).getAllByRole('button')).toHaveLength(3);
+  });
+
+  it('每行一枚箭头,没有分类图标、没有行尾 chevron', () => {
+    renderSuggestions(THREE);
+    const row = screen.getByTestId('next-step-suggestion-0');
+    // 稿子 `.nexts button` 里只有一个 svg —— 同一枚箭头。多出来的那个就是
+    // 「点开还有下一层」的承诺,而这一行点下去是直接发送,没有下一层。
+    expect(row.querySelectorAll('svg')).toHaveLength(1);
+  });
+
+  it('点一条就把那句话发出去 —— 不是打开菜单、也不是填草稿', () => {
+    const { onSuggestion } = renderSuggestions(THREE);
+    fireEvent.click(screen.getByTestId('next-step-suggestion-1'));
+    expect(onSuggestion).toHaveBeenCalledTimes(1);
+    expect(onSuggestion).toHaveBeenCalledWith('把商品卡换成两列布局');
+  });
+
+  it('旧会话(没有建议)整块不出 —— 不退回工具箱、不出空壳', () => {
+    renderSuggestions(undefined);
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+    expect(screen.queryByTestId('next-step-suggestions')).toBeNull();
+    // 工具箱那一档已经不在 `default` 上了,不能因为「没有建议」又退回去
+    expect(screen.queryByTestId('next-step-toolbox-more')).toBeNull();
+    expect(screen.queryByText(AUTO_MATCH_TITLE)).toBeNull();
+  });
+
+  it('空数组同理', () => {
+    renderSuggestions([]);
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('全是空白字符时也不出', () => {
+    renderSuggestions(['  ', '\n']);
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('没有接发送回调时不出 —— 出了也点不动', () => {
+    renderActions({ suggestions: THREE, onSuggestion: undefined });
+    expect(screen.queryByTestId('next-step-actions')).toBeNull();
+  });
+
+  it('模型给多于三条时只出前三条', () => {
+    renderSuggestions([...THREE, '再来一条', '还有一条']);
+    expect(within(screen.getByTestId('next-step-suggestions')).getAllByRole('button')).toHaveLength(3);
+    expect(screen.queryByText('再来一条')).toBeNull();
+  });
+
+  it('模型只给一条时就出一条,不补空行', () => {
+    renderSuggestions(['补一套深色模式']);
+    const list = screen.getByTestId('next-step-suggestions');
+    expect(within(list).getAllByRole('button')).toHaveLength(1);
+    expect(within(list).getByText('补一套深色模式')).toBeTruthy();
+  });
+
+  it('工作流档不受影响:仍然是各自的恢复入口,不出建议行', () => {
+    renderActions({
+      variant: 'brand-programmatic-incomplete',
+      suggestions: THREE,
+      onSuggestion: vi.fn(),
+      onContinueExtraction: vi.fn(),
+      onContinueAiExtraction: vi.fn(),
+    });
+    expect(screen.queryByTestId('next-step-suggestions')).toBeNull();
+    expect(screen.getByText(en['nextStep.brandContinueExtractionTitle'])).toBeTruthy();
   });
 });

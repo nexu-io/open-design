@@ -3,14 +3,18 @@
      vertically aligned instead of baseline-offset. */
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  /* 稿子的 `.btn` **不设** justify-content —— 按内容排就行。
+     只有定宽的图标档才需要居中,那一条挪到 `.icon` 上(稿子也是这么写的:
+     `.errb .ops .btn.mod-icon { justify-content: center }`)。 */
   gap: var(--spacing-8, 8px);
-  font: inherit;
+  /* 只继承字体族。`font: inherit` 是简写,会把 **line-height** 一起继承过来 ——
+     按钮在 UA 样式里本来是 `line-height: normal`,继承之后跟着正文变成 1.7,
+     稿子的 `.btn` 没有这回事(逐格量出 23 条差异)。 */
+  font-family: inherit;
   height: 36px;
   padding: 0 var(--spacing-16, 16px);
   font-size: var(--font-size-14, 14px);
   font-weight: 500;
-  line-height: 1;
   white-space: nowrap;
   color: var(--text);
   background: transparent;
@@ -37,6 +41,21 @@
 
 .button:active:not(:disabled) {
   transform: translateY(1px);
+}
+
+/*
+ * 稿子的 `.btn` **不带描边**,只有 `.mod-secondary` 自己加一条。
+ * 我们的基底给了 1px,这几档再把描边色刷成和底色一样 —— 看着一样,盒子却各方向多 2px。
+ * `.sm` 的高度是内距撑出来的(4+18+4=26),多这 2px 就直接高成 28,和稿子差一档。
+ */
+.primary,
+.primaryGhost,
+.ghost,
+.subtle {
+  /* `border: 0` 而不是 `border-width: 0`:稿子这几档写的是 `border: none`,
+     只归零宽度的话 `border-style` 仍是 solid、`border-color` 仍是继承色,
+     四边的 style / color 逐条都对不上(量到 42 条)。 */
+  border: 0;
 }
 
 .primary {
@@ -99,11 +118,49 @@
   background: var(--border-strong);
 }
 
+.secondary {
+  background: var(--bg);
+  border-color: var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+}
+
+.secondary:hover:not(:disabled) {
+  background: var(--bg);
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+.secondary:active:not(:disabled) {
+  background: var(--bg);
+}
+
 .icon {
+  justify-content: center;
   min-width: 36px;
   height: 36px;
   padding: 0;
   border-radius: var(--radius-medium);
+}
+
+.sm {
+  /* 基底那 36px 要显式撤掉,否则这一档的高度还是 36 —— 稿子的 mod-sm 是内距撑出来的 */
+  height: auto;
+  /* 稿子 `.btn.mod-sm { padding: 4px 11px; font-size: var(--t-mini) }` —— 高度是算出来的
+     稿子的 `.btn` **一条 line-height 都不写** —— 按钮在 UA 样式里本来就是
+     `line-height: normal`,不跟着正文的 1.5 走。我们原来在 `.button` 上压成 1、
+     又在这里抬回 1.5,两处都是多写的,逐格量出来 24 条差异。 */
+  padding-block: 4px;
+  padding-inline: 11px;
+  gap: var(--spacing-6, 6px);
+  font-size: var(--font-size-12, 12px);
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+}
+
+.sm svg {
+  width: 11px;
+  height: 11px;
 }
 
 .button:disabled {

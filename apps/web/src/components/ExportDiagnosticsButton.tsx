@@ -76,12 +76,15 @@ async function exportViaHttp(): Promise<{ filename: string }> {
 }
 
 /**
- * Designed for the Settings → About panel. Renders a labeled button with a
- * short status line below it. Works in both the Electron shell (uses native
- * save dialog via window.openDesignDesktop) and the browser (triggers a
- * browser download via the daemon HTTP endpoint).
+ * The one diagnostics-export mechanism, shared by every surface that offers it.
+ *
+ * It used to live inside the Settings row, which is why "export the logs" was a
+ * Settings-only capability while the error card could offer nothing but a
+ * clipboard copy. The behavior (native save dialog under Electron, browser
+ * download otherwise) belongs to the capability, not to one panel — so any new
+ * entry point reuses this instead of re-implementing the download.
  */
-export function ExportDiagnosticsRow() {
+export function useDiagnosticsExport() {
   const t = useT();
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,7 +127,18 @@ export function ExportDiagnosticsRow() {
     }
   };
 
-  const busy = status.kind === 'busy';
+  return { status, busy: status.kind === 'busy', run: handleClick };
+}
+
+/**
+ * Designed for the Settings → About panel. Renders a labeled button with a
+ * short status line below it. Works in both the Electron shell (uses native
+ * save dialog via window.openDesignDesktop) and the browser (triggers a
+ * browser download via the daemon HTTP endpoint).
+ */
+export function ExportDiagnosticsRow() {
+  const t = useT();
+  const { status, busy, run: handleClick } = useDiagnosticsExport();
   return (
     <div className="diagnostics-export-row">
       <button

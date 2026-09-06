@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 import { writeMcpConfig } from '../src/mcp-config.js';
@@ -51,6 +51,13 @@ describe('codex native session resume', () => {
   const originalEnv = snapshotEnv();
   let started: StartedServer | null = null;
   let binDir: string | null = null;
+
+  beforeEach(() => {
+    // These fixtures implement the legacy `codex exec --json` wire format and
+    // assert its argv-level resume contract. Keep this suite on that transport
+    // now that production defaults to the app-server JSON-RPC transport.
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  });
 
   afterEach(async () => {
     await Promise.resolve(started?.shutdown?.());

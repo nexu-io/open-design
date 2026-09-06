@@ -1,0 +1,106 @@
+/*
+ * 「找所有者充值」弹窗。
+ *
+ * 和 `SupportDialog` 同一副骨架(居中小弹窗、标题一行带关闭、下方正文),
+ * 因为它们在同一族里出现,长成两个样子只会让人以为是两种东西。
+ * 多出来的只有中间那块「可以直接发出去的话」。
+ */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: color-mix(in srgb, var(--chat-text-strong) 26%, transparent);
+}
+
+/* 就地形态:陈列页那一格,遮罩只糊自己这一格(同 SupportDialog)。 */
+.overlayInline {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  border-radius: var(--chat-radius);
+}
+
+.modal {
+  width: 100%;
+  max-width: 340px;
+  border-radius: var(--chat-radius-lg);
+  background: var(--chat-bg);
+  box-shadow: var(--chat-shadow-lg);
+  overflow: hidden;
+}
+
+.head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 11px 13px;
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-strong);
+}
+.head::after {
+  content: '';
+  position: absolute;
+  inset-inline: 13px;
+  bottom: 0;
+  height: 1px;
+  background: var(--chat-border-soft);
+}
+.head b {
+  font-weight: 600;
+}
+
+.close {
+  margin-inline-start: auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: none;
+  color: var(--chat-text-soft);
+  cursor: pointer;
+  transition: background-color var(--chat-dur-quick) var(--chat-ease-out),
+    color var(--chat-dur-quick) var(--chat-ease-out);
+}
+.close:hover {
+  background: var(--chat-bg-fill-secondary);
+  color: var(--chat-text-strong);
+}
+
+.body {
+  padding: 12px 13px 13px;
+}
+
+.message {
+  margin: 0;
+  font-size: var(--chat-t-mini);
+  line-height: 1.6;
+  color: var(--chat-text-soft);
+}
+
+/*
+ * 那句可以直接发给所有者的话。做成一块可选中的引文,而不是输入框 ——
+ * 它不是给人改的,是给人抄走的;复制按钮失灵时这一块就是备用出路。
+ */
+.request {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  border-radius: var(--chat-radius-sm);
+  background: var(--chat-bg-fill-secondary);
+  font-size: var(--chat-t-mini);
+  line-height: 1.6;
+  color: var(--chat-text-strong);
+  user-select: text;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 13px;
+}

@@ -206,3 +206,193 @@ describe('FileOpsSummary', () => {
     expect(screen.queryByText('running…')).toBeNull();
   });
 });
+
+// Component 14 — design matrix grids 30-33. Cards only appear once a project
+// id is available, because both the thumbnail and the export href are
+// project-scoped URLs.
+describe('FileOpsSummary artifact cards', () => {
+  afterEach(() => cleanup());
+
+  it('keeps text rows when no project id is available', () => {
+    render(<FileOpsSummary entries={[entry({ path: 'result.html' })]} />);
+
+    expect(screen.queryByTestId('artifact-cards')).toBeNull();
+    expect(screen.getByTestId('file-ops-row-result.html')).toBeTruthy();
+  });
+
+  it('renders an artifact as a card that writes no filename and carries no preview button', () => {
+    render(
+      <FileOpsSummary
+        entries={[entry({ path: 'result.html' })]}
+        projectId="proj-1"
+        onRequestOpenFile={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByTestId('artifact-card-result.html');
+    expect(card.textContent).not.toContain('result.html');
+    expect(screen.queryByTestId('file-ops-row-result.html')).toBeNull();
+    // 卡片形态下**不出文本列表**;但「这一轮的产物面板」这个身份要留着 ——
+    // 「一条消息只出一个产物面板」那条不变量(P0 recvqaerXd82bE)靠它来守
+    expect(document.querySelector('.file-ops-list')).toBeNull();
+    expect(screen.queryByTestId('file-ops-summary')).not.toBeNull();
+    // The card itself is the preview entry (D28) — no separate preview action.
+    expect(card.querySelectorAll('.artifact-card-act')).toHaveLength(1);
+  });
+
+  it('renders one card when a historical run reports the same artifact twice', () => {
+    render(
+      <FileOpsSummary
+        entries={[
+          entry({ path: 'result.html', fullPath: '/first/result.html' }),
+          entry({ path: 'result.html', fullPath: '/second/result.html' }),
+        ]}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getAllByTestId('artifact-card-result.html')).toHaveLength(1);
+  });
+
+  it('gives an HTML artifact both publish and export, in that order', () => {
+    const onPublish = vi.fn();
+    const onExport = vi.fn();
+    render(
+      <FileOpsSummary
+        entries={[entry({ path: 'landing.html' })]}
+        projectId="proj-1"
+        onPublish={onPublish}
+        onExport={onExport}
+      />,
+    );
+
+    const acts = Array.from(
+      screen
+        .getByTestId('artifact-card-landing.html')
+        .querySelectorAll('.artifact-card-act'),
+    );
+    expect(acts).toHaveLength(2);
+    expect(acts[0]).toBe(screen.getByTestId('artifact-card-publish-landing.html'));
+    expect(acts[1]).toBe(screen.getByTestId('artifact-card-export-landing.html'));
+
+    /*
+     * 两枚都**不在卡上画菜单**:它们把「哪份产物 + 锚在哪枚按钮上」交给预览区,
+     * 由预览区把**它本来那两块菜单**开在这枚按钮旁边(产品 2026-08-27:
+     * 「为啥不直接复用现在那个分享弹窗??」「导出这个样式也不对呢, 为啥不直接复用?」)。
+    */
+    fireEvent.click(acts[0] as HTMLElement);
+    expect(onPublish).toHaveBeenCalledWith(
+      'landing.html',
+      expect.stringMatching(/^publish:[^:]+:landing\.html$/),
+    );
+    fireEvent.click(acts[1] as HTMLElement);
+    expect(onExport).toHaveBeenCalledWith(
+      'landing.html',
+      expect.stringMatching(/^export:[^:]+:landing\.html$/),
+    );
+  });
+
+  it('leaves a non-HTML artifact with export alone (grid 32)', () => {
+    render(
+      <FileOpsSummary
+        entries={[entry({ path: 'poster.png' })]}
+        projectId="proj-1"
+        onPublish={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByTestId('artifact-card-publish-poster.png')).toBeNull();
+    expect(screen.getByTestId('artifact-card-export-poster.png')).toBeTruthy();
+  });
+
+  it('exports through a direct download when the parent supplies no handler', () => {
+    render(
+      <FileOpsSummary entries={[entry({ path: 'poster.png' })]} projectId="proj-1" />,
+    );
+
+    const exportLink = screen.getByTestId('artifact-card-export-poster.png');
+    expect(exportLink.tagName).toBe('A');
+    expect(exportLink.getAttribute('download')).toBe('poster.png');
+    expect(exportLink.getAttribute('href')).toBe('/api/projects/proj-1/raw/poster.png');
+  });
+
+  it('presses nothing onto a video card and letterboxes it (grid 33)', () => {
+    render(
+      <FileOpsSummary
+        entries={[entry({ path: 'reveal.mp4' })]}
+        projectId="proj-1"
+        onPublish={vi.fn()}
+        onExport={vi.fn()}
+      />,
+    );
+
+    const card = screen.getByTestId('artifact-card-reveal.mp4');
+    expect(card.className).toContain('artifact-card--video');
+    expect(screen.queryByTestId('artifact-card-publish-reveal.mp4')).toBeNull();
+    expect(card.querySelectorAll('.artifact-card-act')).toHaveLength(1);
+  });
+
+  it('shows a still-writing artifact as a placeholder with no actions (D37)', () => {
+    render(
+      <FileOpsSummary
+        entries={[entry({ path: 'result.html', status: 'running' })]}
+        projectId="proj-1"
+        onRequestOpenFile={vi.fn()}
+        onPublish={vi.fn()}
+        onExport={vi.fn()}
+        /*
+         * 「还在写」需要**轮次也还在跑**。轮次结束之后 `status: 'running'` 只说明
+         * 那条 `tool_result` 丢了,不说明还在写 —— 挂一张永远转下去的 loading 卡
+         * 是在撒谎(分叉出来的会话尤其明显,用户真机指认过)。这一条原来没传这个
+         * 旗标,断言的其实是修掉那个谎之前的形态。
+         */
+        turnIsLive
+      />,
+    );
+
+    const card = screen.getByTestId('artifact-card-result.html');
+    expect(card.className).toContain('is-pending');
+    expect(card.querySelector('.artifact-card-mini')).toBeTruthy();
+    expect(card.querySelector('.artifact-card-acts')).toBeNull();
+    expect(screen.queryByTestId('artifact-card-open-result.html')).toBeNull();
+  });
+
+  /**
+   * 拿不出缩略图的产出(md / csv / 源码)走 `doc` 卡,**不是**文本行。
+   *
+   * 这一条原来断言的是「notes.md 留在文本列表里」。那是两条产物面板路径里的
+   * 一条:同一份 `notes.md` 在「没有工具行」的那一轮里是一张 `doc` 卡
+   * (`producedArtifactCardKind`),在这一轮里却是一行灰字 —— 同一个面板两副
+   * 长相。收口的时候按用户 2026-08-26 对着灰列表的裁决走:「变成上面卡片形式
+   * 才对」。
+   *
+   * ⚠️ 这一处与设计稿组件 13 的散文有张力(「顺手生成的文件(组件、样式、
+   * csv、md)都不是这一轮的主产物,不给它们各来一张大卡」)。稿子里确实没有
+   * `doc` 卡这一档 —— 它只画了缩略图能答话的那三种。翻回去只要把
+   * `producedArtifactCardKind` 换回 `artifactCardKind` 一行,等产品裁决。
+   */
+  it('cards non-thumbnail artifacts too, and keeps deletions out of the cards', () => {
+    render(
+      <FileOpsSummary
+        entries={[
+          entry({ path: 'result.html' }),
+          entry({ path: 'notes.md' }),
+          entry({
+            path: 'old.png',
+            ops: ['delete'],
+            opCounts: { read: 0, write: 0, edit: 0, delete: 1 },
+          }),
+        ]}
+        projectId="proj-1"
+      />,
+    );
+
+    expect(screen.getByTestId('artifact-card-result.html')).toBeTruthy();
+    expect(screen.getByTestId('artifact-card-notes.md')).toBeTruthy();
+    expect(screen.getByTestId('artifact-card-notes.md').getAttribute('data-kind')).toBe('doc');
+    // 删掉的文件**不出卡** —— 一张带预览的卡对一个已经不在的文件是假话
+    expect(screen.queryByTestId('artifact-card-old.png')).toBeNull();
+    expect(screen.getByTestId('file-ops-row-old.png')).toBeTruthy();
+  });
+});

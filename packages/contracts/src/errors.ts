@@ -154,6 +154,21 @@ export const API_ERROR_CODES = [
   // registered owner unshares the project, so clients must not render it as
   // a "try again later" error.
   'TEAM_PROJECT_OWNER_CONFLICT',
+  // `POST /api/runs/:id/steer` (B11 「引导对话」): the run's runtime cannot take
+  // a mid-turn user message at all. Only a `promptInputFormat: 'stream-json'`
+  // runtime keeps the child's stdin open past the opening prompt; every other
+  // runtime closes it together with the prompt, so a later write would go
+  // nowhere. This is a permanent property of the selected agent, NOT a
+  // transient state — clients must stop advertising the affordance rather than
+  // retry. Not retryable.
+  'RUN_STEERING_UNSUPPORTED',
+  // `POST /api/runs/:id/steer`: the runtime supports steering but this run can
+  // no longer receive it — the run reached a terminal status, or its turn ended
+  // cleanly and the daemon closed stdin (a `stop_reason: 'tool_use'` pause does
+  // NOT close it, and stays steerable). The message was NOT delivered and NOT
+  // written to the conversation; the caller should send it as a new turn.
+  // Not retryable against the same run.
+  'RUN_STEERING_CLOSED',
   // A design-system enrichment ("AI Optimize") run was requested while the
   // same conversation already has a non-terminal run. The enrichment turn is
   // a hidden seeded prompt that refines the registered design system in
@@ -206,6 +221,17 @@ export type CompatibleErrorResponse = ApiErrorResponse | LegacyErrorResponse;
 export interface SseErrorPayload {
   message: string;
   error?: ApiError;
+  /**
+   * Bounded, secret-redacted tail of what the agent process printed to stderr
+   * during this run — the ORIGINAL cause behind a failure whose `message` is
+   * necessarily generic (e.g. "…exited without a terminal result").
+   *
+   * Produced daemon-side by `failureCardStderrTail`, so the bound (a tail of
+   * lines, capped in bytes) and the redaction both happen before the text
+   * crosses the process boundary. Absent when the run wrote no stderr —
+   * consumers must render nothing rather than an empty section.
+   */
+  stderrTail?: string;
 }
 
 export function createApiError(code: ApiErrorCode, message: string, init: Omit<ApiError, 'code' | 'message'> = {}): ApiError {

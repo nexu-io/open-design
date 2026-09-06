@@ -414,6 +414,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation,
     error,
     onRetry,
+    onResendUserMessage,
     onSubmitQuestionForm,
   }: {
     activeConversationId: string | null;
@@ -441,6 +442,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
     onRetry?: (message: ChatMessage) => void;
+    onResendUserMessage?: (message: ChatMessage) => void;
     onSubmitQuestionForm?: (
       text: string,
       attachments?: unknown[],
@@ -502,7 +504,10 @@ vi.mock('../../src/components/ChatPane', () => ({
         <output data-testid="user-messages">
           {(messages ?? [])
             .filter((message) => message.role === 'user')
-            .map((message) => message.content)
+            .map(
+              (message) =>
+                `${message.id}|${message.sendFailed ? 'failed' : 'sent'}|${message.content}`,
+            )
             .join('\n')}
         </output>
         <output data-testid="attached-comment-count">{attached.length}</output>
@@ -511,6 +516,18 @@ vi.mock('../../src/components/ChatPane', () => ({
             retry
           </button>
         ) : null}
+        {(messages ?? [])
+          .filter((message) => message.role === 'user' && message.sendFailed)
+          .map((message) => (
+            <button
+              key={message.id}
+              type="button"
+              data-testid="user-send-failed"
+              onClick={() => onResendUserMessage?.(message)}
+            >
+              resend
+            </button>
+          ))}
         {queuedItems?.map((item, index) => (
           <div key={item.id}>
             <button
@@ -2844,7 +2861,7 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('auto-starts queued sends one at a time after the active run completes', async () => {
+  it('auto-starts queued sends one at a time in the same event flush after the active run becomes terminal', async () => {
     let finishReattach: (() => void) | null = null;
     let reattachHandlers: { onDone: () => void } | null = null;
     const daemonRuns: Array<{
@@ -2900,12 +2917,19 @@ describe('ProjectView conversation run isolation', () => {
     });
     expect(streamViaDaemon).toHaveBeenCalledTimes(1);
 
-    await act(async () => {
-      daemonRuns[0]?.onRunStatus?.('succeeded');
-      daemonRuns[0]?.handlers.onDone('first done');
-    });
-
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    // Terminal status is the drain signal. Freeze timers before delivering it:
+    // the next send must begin from this React update/effect cycle, without a
+    // polling interval or a delayed retry (the reported regression was ~20s).
+    vi.useFakeTimers();
+    try {
+      await act(async () => {
+        daemonRuns[0]?.onRunStatus?.('succeeded');
+        daemonRuns[0]?.handlers.onDone('first done');
+      });
+      expect(streamViaDaemon).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
     expect(streamViaDaemon.mock.calls[1]?.[0]).toEqual(
       expect.objectContaining({
         history: expect.arrayContaining([
@@ -3404,6 +3428,184 @@ describe('ProjectView conversation run isolation', () => {
     fireEvent.click(screen.getByTestId('send-message'));
 
     await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+  });
+
+  it('keeps a pre-run daemon failure on the user row and retries that row without duplication', async () => {
+    conversationAMessages = [];
+    saveMessage.mockImplementation(
+      async (_projectId: string, _conversationId: string, message: ChatMessage) => message,
+    );
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        history: ChatMessage[];
+        userMessageId?: string;
+        onRunCreated?: (runId: string) => void;
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+        handlers: { onError: (error: Error) => void | Promise<void> };
+      }) => {
+        if (streamViaDaemon.mock.calls.length === 1) {
+          // This is the exact ordering used by streamViaDaemon when POST
+          // /api/runs fails before the response yields a run id.
+          options.onRunStatus?.('failed');
+          await options.handlers.onError(new Error('daemon 503: unavailable'));
+          return;
+        }
+        options.onRunCreated?.('run-after-user-resend');
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(screen.getByTestId('user-send-failed')).toBeTruthy());
+    expect(screen.getByTestId('assistant-summary').textContent).toBe('');
+    expect(screen.getByTestId('chat-error').textContent).toBe('');
+    expect(screen.getByTestId('conversation-latest-runs').textContent).toBe('conv-a:\nconv-b:');
+    expect(playSound).not.toHaveBeenCalled();
+
+    const firstCall = streamViaDaemon.mock.calls[0]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+      history: ChatMessage[];
+    };
+    expect(screen.getByTestId('user-messages').textContent).toBe(
+      `${firstCall.userMessageId}|failed|hello from b`,
+    );
+    const persistedMessages = saveMessage.mock.calls.map((call) => call[2] as ChatMessage);
+    expect(persistedMessages).toContainEqual(
+      expect.objectContaining({
+        id: firstCall.userMessageId,
+        role: 'user',
+        clientRequestId: firstCall.clientRequestId,
+        sendFailed: true,
+      }),
+    );
+    expect(persistedMessages.some((message) => message.role === 'assistant')).toBe(false);
+
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    const retryCall = streamViaDaemon.mock.calls[1]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+      history: ChatMessage[];
+    };
+    expect(retryCall.clientRequestId).toBe(firstCall.clientRequestId);
+    expect(retryCall.userMessageId).toBe(firstCall.userMessageId);
+    expect(retryCall.history).toHaveLength(1);
+    expect(retryCall.history[0]).toMatchObject({
+      id: firstCall.userMessageId,
+      role: 'user',
+      content: 'hello from b',
+    });
+    expect(screen.getByTestId('user-messages').textContent).toBe(
+      `${firstCall.userMessageId}|sent|hello from b`,
+    );
+    expect(screen.queryByTestId('user-send-failed')).toBeNull();
+  });
+
+  /**
+   * OPEND-2586 的最后一句:「**再次失败时仍可继续重试**」。
+   *
+   * 上面那条只走了「失败一次 → 重试成功」。这一条走「失败 → 重试 → 又失败」:
+   * 第二次失败必须重新把那一行标回失败态,重试按钮仍在,而且**那条消息只有一条** ——
+   * 每次重试都用同一个 `userMessageId` / `clientRequestId` 重发,不是新开一条。
+   */
+  it('keeps the same user row retryable when the retry fails the same way', async () => {
+    conversationAMessages = [];
+    saveMessage.mockImplementation(
+      async (_projectId: string, _conversationId: string, message: ChatMessage) => message,
+    );
+    streamViaDaemon.mockImplementation(
+      async (options: {
+        onRunStatus?: (status: NonNullable<ChatMessage['runStatus']>) => void;
+        handlers: { onError: (error: Error) => void | Promise<void> };
+      }) => {
+        // POST /api/runs 5xx: no run id ever came back, on every attempt.
+        options.onRunStatus?.('failed');
+        await options.handlers.onError(new Error('daemon 503: unavailable'));
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(screen.getByTestId('user-send-failed')).toBeTruthy());
+    const firstCall = streamViaDaemon.mock.calls[0]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+    };
+
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    // The retry failed exactly as the first send did — the row must come back
+    // to a failed state, not silently settle as sent.
+    await waitFor(() =>
+      expect(screen.getByTestId('user-messages').textContent).toBe(
+        `${firstCall.userMessageId}|failed|hello from b`,
+      ),
+    );
+    expect(screen.getByTestId('user-send-failed')).toBeTruthy();
+
+    const secondCall = streamViaDaemon.mock.calls[1]?.[0] as {
+      clientRequestId: string;
+      userMessageId: string;
+    };
+    expect(secondCall.userMessageId).toBe(firstCall.userMessageId);
+    expect(secondCall.clientRequestId).toBe(firstCall.clientRequestId);
+
+    // …and a third attempt is still reachable from that same row.
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(screen.getByTestId('user-messages').textContent).toBe(
+        `${firstCall.userMessageId}|failed|hello from b`,
+      ),
+    );
+    expect(screen.getByTestId('assistant-summary').textContent).toBe('');
+  });
+
+  it('durably queues one retry when the conversation becomes busy', async () => {
+    const failedUser = {
+      id: 'failed-user-while-busy',
+      role: 'user',
+      content: 'retry this exact send',
+      createdAt: 1,
+      clientRequestId: 'request-before-busy',
+      sendFailed: true,
+    } as ChatMessage & { clientRequestId: string };
+    conversationAMessages = [failedUser, runningAssistant];
+    saveMessage.mockImplementation(
+      async (_projectId: string, _conversationId: string, message: ChatMessage) => message,
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('user-send-failed')).toBeTruthy());
+    fireEvent.click(screen.getByTestId('user-send-failed'));
+
+    await waitFor(() => {
+      const queued = JSON.parse(
+        window.localStorage.getItem('od:chat-queued-sends:project-1:v1') ?? '[]',
+      ) as Array<{ id?: string; prompt?: string }>;
+      expect(queued).toEqual([
+        expect.objectContaining({
+          id: failedUser.clientRequestId,
+          prompt: failedUser.content,
+        }),
+      ]);
+    });
+    expect(screen.queryByTestId('user-send-failed')).toBeNull();
+    expect(streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('keeps Chat retry available after a structured AMR insufficient-balance error', async () => {

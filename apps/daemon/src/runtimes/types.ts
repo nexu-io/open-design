@@ -167,6 +167,18 @@ export type RuntimeAgentDef = {
   compatibilityProbe?: RuntimeCompatibilityProbe;
   helpArgs?: string[];
   capabilityFlags?: Record<string, string>;
+  // Flags the CLI accepts but omits from `--help`, so the substring scan in
+  // `capabilityFlags` can never see them. Probed by invoking each flag with a
+  // value it cannot possibly accept: a build that knows the flag rejects the
+  // *value*, a build that does not rejects the *option*. Both fail before any
+  // model call, which keeps the probe free.
+  hiddenCapabilityFlags?: {
+    // Prefixed to every probe invocation, e.g. `['-p']` for flags that only
+    // exist under a subcommand.
+    probeArgsPrefix: string[];
+    // Flag string -> capability key, same shape as `capabilityFlags`.
+    flags: Record<string, string>;
+  };
   // Adapter reads the composed prompt from a daemon-created temp file.
   // This is intentionally opt-in: stdin-capable adapters keep using
   // `promptViaStdin`, and argv-only adapters keep their argv budget guard
@@ -332,6 +344,7 @@ export type DetectedAgent = Omit<
   | 'fallbackModels'
   | 'helpArgs'
   | 'capabilityFlags'
+  | 'hiddenCapabilityFlags'
   | 'fallbackBins'
   | 'versionProbeTimeoutMs'
   | 'versionPolicy'

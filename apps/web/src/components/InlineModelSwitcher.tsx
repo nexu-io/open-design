@@ -1091,9 +1091,21 @@ export function InlineModelSwitcher({
   // a user-configured endpoint, treated as connected.
   const chipConnected =
     config.mode === 'daemon' ? currentAgent?.available === true : true;
-  const chipAgentLabel = currentAgent
-    ? displayAgentName(currentAgent)
-    : t('inlineSwitcher.chipTitle');
+  /**
+   * 紧凑 chip 的读屏标签 / 提示里那个「谁在跑」。
+   *
+   * **必须跟着 `config.mode` 分岔**,和非紧凑那支的 `chipPrimary` 同一条规则。
+   * 原来无条件取 `displayAgentName(currentAgent)`,而 API/BYOK 模式下
+   * `config.agentId` 还留着上一个 daemon agent —— 真机上配好 OpenRouter 之后
+   * chip 念的是「Claude Code · google/gemini-2.5-flash」,可那一轮真正跑的是
+   * `byok-opencode`。可见文字只有模型名,所以只有读屏用户会被念错。
+   */
+  const chipAgentLabel =
+    config.mode === 'daemon'
+      ? currentAgent
+        ? displayAgentName(currentAgent)
+        : t('inlineSwitcher.chipTitle')
+      : apiProtocolLabel(apiProtocol);
 
   const handleChipClick = useCallback(() => {
     const nextOpen = !open;

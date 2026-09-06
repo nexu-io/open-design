@@ -32,8 +32,9 @@ const translations: Record<string, string> = {
   'chat.queuedEdit': 'Edit',
   'chat.queuedMore': 'more queued',
   'chat.queuedFollowUpFallback': 'Queued follow-up',
+  'chat.designToolbox.kind.plugin': 'Plugin',
+  'chat.plus.designSystem': 'Design system',
   'avatar.useLocal': 'Use Local CLI',
-  'chat.copyErrorDiagnostic': 'Copy error diagnostics',
   'chat.copyDone': 'Copied!',
 };
 
@@ -287,11 +288,11 @@ describe('ChatPane streaming state', () => {
     expect(css).toContain('.chat-queued-send-drag-handle');
     expect(css).toContain('align-self: auto;');
     expect(css).toContain('.pane {');
-    expect(css).toContain('--chat-composer-inline-inset: 12px;');
-    expect(css).toContain('.app .split-chat-slot > .pane');
+    expect(css).toContain('--chat-composer-inline-inset: 16px;');
+    expect(css).toContain('.split-chat-slot > .pane');
     expect(css).toContain('--chat-composer-inline-inset: 10px;');
-    expect(css).toContain('width: calc(100% - (var(--chat-composer-inline-inset, 12px) * 2));');
-    expect(css).toContain('margin: 0 var(--chat-composer-inline-inset, 12px) 2px;');
+    expect(css).toContain('width: calc(100% - (var(--chat-composer-inline-inset, 16px) * 2));');
+    expect(css).toContain('margin: 0 var(--chat-composer-inline-inset, 16px) 2px;');
     expect(css).toContain('max-width: none;');
     expect(css).toContain('.chat-queued-send-action');
     expect(css).toContain('width: 24px;');
@@ -327,7 +328,7 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    expect(container.querySelector('.chat-log')?.className).toContain('is-balanced-transcript');
+    expect(screen.getByTestId('chat-log').getAttribute('data-balanced')).toBe('true');
 
     rerender(
       <ChatPane
@@ -347,7 +348,7 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    expect(container.querySelector('.chat-log')?.className).not.toContain('is-balanced-transcript');
+    expect(screen.getByTestId('chat-log').getAttribute('data-balanced')).toBe('false');
   });
 
   it('keeps composer popovers above the chat jump button', () => {
@@ -592,62 +593,6 @@ describe('ChatPane streaming state', () => {
     },
   );
 
-  it('copies failed-run diagnostics with the trace id from the error card', async () => {
-    const messages: ChatMessage[] = [
-      { id: 'user-1', role: 'user', content: 'Create a login page', createdAt: 0 },
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: 'Generation failed',
-        agentId: 'amr',
-        createdAt: 1,
-        runId: 'run-trace-123',
-        runStatus: 'failed',
-        events: [
-          {
-            kind: 'status',
-            label: 'error',
-            detail: 'json-rpc id 4: Connection reset by server',
-            code: 'AGENT_EXECUTION_FAILED',
-          },
-        ],
-      },
-    ];
-
-    render(
-      <ChatPane
-        projectKindForTracking="prototype"
-        messages={messages}
-        streaming={false}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-        conversations={conversations}
-        activeConversationId="conv-1"
-        onSelectConversation={vi.fn()}
-        onDeleteConversation={vi.fn()}
-        projectMetadata={projectMetadata}
-    />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'brand.viewDetails' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Copy error diagnostics' }));
-
-    await waitFor(() => expect(clipboardMocks.copyToClipboard).toHaveBeenCalledTimes(1));
-    const copied = clipboardMocks.copyToClipboard.mock.calls[0]?.[0] ?? '';
-    expect(copied).toContain('trace_id: run-trace-123');
-    expect(copied).toContain('run_id: run-trace-123');
-    expect(copied).toContain('error_code: AGENT_EXECUTION_FAILED');
-    expect(copied).toContain('project_id: project-1');
-    expect(copied).toContain('conversation_id: conv-1');
-    expect(copied).toMatch(/^json-rpc id 4: Connection reset by server\n\nOpenDesign run error diagnostics/);
-    expect(copied).not.toContain('raw_error:');
-    expect(copied).not.toContain('\nerror:\n');
-  });
-
   it('formats run error diagnostics with a raw error when guidance copy differs', () => {
     const text = buildRunErrorDiagnosticText({
       message: 'Service unavailable. Try again.',
@@ -684,6 +629,68 @@ describe('ChatPane streaming state', () => {
     expect(text).not.toContain('\nerror:\n');
   });
 
+  // The diagnostics body used to hold only the daemon's generic sentence and a
+  // pile of ids, while the agent's own stderr — captured, persisted, and
+  // carrying the actual cause — was surfaced nowhere at all.
+  // Shapes below are lifted from a real failed run's persisted error event.
+  // NOTE: the failure card no longer renders this string anywhere (the
+  // 「view details」 disclosure was removed on 2026-08-27); these cases now
+  // pin the builder only.
+  it('puts the captured agent stderr in the diagnostics body', () => {
+    const text = buildRunErrorDiagnosticText({
+      message: 'DeepSeek Harness profile exited without a terminal result.',
+      rawMessage: 'DeepSeek Harness profile exited without a terminal result.',
+      errorCode: 'DSH_PROFILE_MISSING_RESULT',
+      stderrTail: DSH_STDERR_TAIL,
+      traceId: '60d39320-f154-4974-855b-47cf9da2ef47',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'deepseek-harness',
+    });
+
+    expect(text).toContain('agent_stderr_tail:');
+    expect(text).toContain(DSH_REAL_CAUSE);
+    // The generic sentence still leads, and the id block still follows: the
+    // stderr is added to the body, it does not displace what was there.
+    expect(text).toMatch(/^DeepSeek Harness profile exited without a terminal result\./);
+    expect(text).toContain('error_code: DSH_PROFILE_MISSING_RESULT');
+  });
+
+  it('grows no stderr section for a failure that captured no stderr', () => {
+    const text = buildRunErrorDiagnosticText({
+      message: 'Connection dropped. Try again.',
+      rawMessage: 'json-rpc id 4: Connection reset by server',
+      errorCode: 'AGENT_CONNECTION_DROPPED',
+      traceId: 'run-abc',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'amr',
+    });
+
+    expect(text).not.toContain('agent_stderr_tail');
+    expect(text).toMatch(
+      /^json-rpc id 4: Connection reset by server\n\nOpenDesign run error diagnostics/,
+    );
+  });
+
+  it('ignores a blank stderr tail rather than emitting an empty section', () => {
+    const text = buildRunErrorDiagnosticText({
+      message: 'Connection dropped. Try again.',
+      rawMessage: 'json-rpc id 4: Connection reset by server',
+      errorCode: 'AGENT_CONNECTION_DROPPED',
+      stderrTail: '   \n  ',
+      traceId: 'run-abc',
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantMessageId: 'assistant-1',
+      agentId: 'amr',
+    });
+
+    expect(text).not.toContain('agent_stderr_tail');
+  });
+
   it('renders user turns with the chat bubble styling hook', () => {
     const messages: ChatMessage[] = [
       {
@@ -713,9 +720,11 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    const bubble = screen.getByText('Generate a simple sign-in page');
-    expect(bubble.classList.contains('user-bubble')).toBe(true);
-    expect(bubble.closest('.msg.user')).not.toBeNull();
+    // 正文现在包在气泡【里面那层】(`-webkit-line-clamp` 的裁切边界是 padding box,
+    // 直接折在气泡上会从下内边距里露半条字),所以从文字往上找气泡,不再是文字自己。
+    const text = screen.getByText('Generate a simple sign-in page');
+    expect(text.closest('.user-bubble')).not.toBeNull();
+    expect(text.closest('.msg.user')).not.toBeNull();
   });
 
   it('offers a Local CLI recovery action on BYOK error states', () => {
@@ -769,7 +778,7 @@ describe('ChatPane streaming state', () => {
     expect(onSwitchToLocalCli).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the sent mode and applied plugin context on user turns', () => {
+  it('keeps workspace/plugin context off the transcript while preserving the user turn', () => {
     const messages: ChatMessage[] = [
       {
         id: 'user-1',
@@ -818,9 +827,6 @@ describe('ChatPane streaming state', () => {
       },
     ];
 
-    const onRequestOpenFile = vi.fn();
-    const onRequestPluginDetails = vi.fn();
-    const onRequestDesignSystemDetails = vi.fn();
     const activeDesignSystem = {
       id: 'neutral-modern',
       title: 'Neutral Modern',
@@ -845,33 +851,16 @@ describe('ChatPane streaming state', () => {
         onSelectConversation={vi.fn()}
         onDeleteConversation={vi.fn()}
         projectMetadata={projectMetadata}
-        onRequestOpenFile={onRequestOpenFile}
-        onRequestPluginDetails={onRequestPluginDetails}
-        onRequestDesignSystemDetails={onRequestDesignSystemDetails}
         activeDesignSystem={activeDesignSystem}
         skills={[skillSummary('visual-explain')]}
       />,
     );
 
-    // Design is the default mode, so it carries no chip — only the opt-outs
-    // (Ask / Plan) are labelled.
+    expect(screen.getByText('Generate the refinement glow-up deck')).toBeTruthy();
+    expect(screen.queryByTestId('msg-run-context-row')).toBeNull();
     expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
-    expect(screen.getByTestId('msg-workspace-context-chip').textContent).toContain('Dribbble');
-    const context = screen.getByTestId('msg-applied-context');
-    expect(context.textContent).toContain('A Decade of Refinement Glow-Up');
-    expect(context.textContent).toContain('visual-explain');
-    expect(context.textContent).toContain('Neutral Modern');
-    fireEvent.click(screen.getByTestId('msg-workspace-context-chip'));
-    expect(onRequestOpenFile).toHaveBeenCalledWith('tab-1');
-    fireEvent.click(within(context).getByRole('button', { name: /Using/ }));
-    fireEvent.click(within(context).getByRole('button', { name: /Plugin.*A Decade of Refinement Glow-Up/ }));
-    expect(onRequestPluginDetails).toHaveBeenCalledWith('refinement-plugin');
-    fireEvent.click(within(context).getByRole('button', { name: /Design System.*Neutral Modern/ }));
-    expect(onRequestDesignSystemDetails).toHaveBeenCalledWith(activeDesignSystem);
-    // The plugin's resolved context is now collapsed into the single
-    // plugin chip — the per-category (asset/design/skill) fan-out is no
-    // longer rendered in the bubble, even though the full snapshot still
-    // rides the run for the agent.
+    expect(screen.queryByTestId('msg-workspace-context-chip')).toBeNull();
+    expect(screen.queryByTestId('msg-applied-context')).toBeNull();
     expect(screen.queryByText('template.json')).toBeNull();
   });
 
@@ -909,7 +898,7 @@ describe('ChatPane streaming state', () => {
     expect(screen.getByTestId('assistant-role-assistant-4').textContent).toBe('shown');
   });
 
-  it('shows applied context again only when the configuration changes', () => {
+  it('does not render applied-context chrome even when the configuration changes', () => {
     const messages: ChatMessage[] = [
       {
         id: 'user-1',
@@ -954,10 +943,8 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    const contexts = screen.getAllByTestId('msg-applied-context');
-    expect(contexts).toHaveLength(2);
-    expect(contexts[0]?.textContent).toContain('visual-explain');
-    expect(contexts[1]?.textContent).toContain('imagegen');
+    expect(screen.queryByTestId('msg-run-context-row')).toBeNull();
+    expect(screen.queryByTestId('msg-applied-context')).toBeNull();
   });
 
   // OD Next is applied by the daemon, not picked by the user: the strategy
@@ -1043,7 +1030,7 @@ describe('ChatPane streaming state', () => {
     expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
   });
 
-  it('still lists user-chosen context on a strategy-owned turn', () => {
+  it('keeps user-chosen strategy context in data but not transcript chrome', () => {
     const messages: ChatMessage[] = [
       {
         id: 'user-1',
@@ -1076,13 +1063,25 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    const context = screen.getByTestId('msg-applied-context');
-    expect(context.textContent).toContain('visual-explain');
-    expect(context.textContent).not.toContain('OD Next Strategy V2');
+    expect(screen.getByText('Same app, softer shelves')).toBeTruthy();
+    expect(screen.queryByTestId('msg-run-context-row')).toBeNull();
+    expect(screen.queryByTestId('msg-applied-context')).toBeNull();
     expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
   });
 
-  it('keeps labelling Ask and Plan on a strategy-owned turn', () => {
+  /*
+   * NOTE(sync/main): origin/main (#7016) landed this as "Design is the default
+   * so it carries no chip, but the opt-outs Ask / Plan still get one". This
+   * branch's ruling (2026-08-26, user on a real build: 「把这个东西干掉」) is one
+   * step further — the mode chip is not rendered on the run-context row at ALL,
+   * for any mode. So main's half of the behaviour is void here and the chip
+   * assertion is inverted.
+   *
+   * The other half of main's point is untouched and still guarded below: a
+   * strategy-owned turn shows no applied-context chrome either, because the
+   * OD Next package is daemon plumbing rather than something the user picked.
+   */
+  it('keeps a strategy-owned Ask turn free of run-context chrome', () => {
     const messages: ChatMessage[] = [
       {
         id: 'user-1',
@@ -1113,7 +1112,7 @@ describe('ChatPane streaming state', () => {
       />,
     );
 
-    expect(screen.getByTestId('msg-session-mode-chip').textContent).toContain('Ask');
+    expect(screen.queryByTestId('msg-session-mode-chip')).toBeNull();
     expect(screen.queryByTestId('msg-applied-context')).toBeNull();
   });
 
@@ -1196,9 +1195,29 @@ Expected output:
       />,
     );
 
-    expect(screen.getByText('Creating design system workspace')).toBeTruthy();
+    /*
+     * ⚠️ 这里的断言**翻转过一次**,两次决定是相反的,别只看现在这一版:
+     *
+     *   旧:这条系统写的摘要走「类型化的语言字典 + 标准用户气泡」,而不是一张
+     *       一次性的灰色状态卡 —— 于是这里断言 `.user-status-card` 必须不存在,
+     *       并断言正文是 `designFiles.createDesignSystemFromProject`(菜单那句)。
+     *   新:**2026-09-02 用户裁决**「设计系统状态卡 也和设计稿 1:1 对齐」。
+     *       稿子 `729fa43ce7:docs/design/chat-panel/src/body-components.html:45-53`
+     *       这一格画的就是一张状态卡(调色盘图标 + 标题 + 一句说明),
+     *       所以卡加回来,「必须不存在」翻成「必须渲染出来」。
+     *
+     * 卡片本体的逐值判据在 `tests/components/chat/w88-design-system-status-card.test.tsx`;
+     * 这里只守两件事:命中那个 prompt 时**换的是卡不是气泡**,以及内部长 prompt
+     * 一个字都不上屏。文案换成了状态卡自己的两句(`chat.designSystemStatus.*`),
+     * 菜单那句 `designFiles.createDesignSystemFromProject` 仍归菜单项与首轮会话标题用。
+     */
+    const cardRoot = document.querySelector('[data-testid="design-system-generation-status"]');
+    expect(cardRoot).toBeTruthy();
+    expect(screen.getByText('chat.designSystemStatus.title')).toBeTruthy();
+    expect(screen.getByText('chat.designSystemStatus.description')).toBeTruthy();
+    expect(document.querySelector('.user-bubble')).toBeNull();
     expect(screen.queryByText(DESIGN_SYSTEM_WORKSPACE_PROMPT_PREFIX, { exact: false })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'chat.copyPrompt' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'chat.copyPrompt' })).toBeTruthy();
   });
 
   it('keeps composer idle while active-run messages still render as streaming', () => {
@@ -1338,229 +1357,12 @@ Expected output:
     expect(spacer!.style.height).toBe('0px');
   });
 
-  it('pins a stopped todo after a terminal run without a final TodoWrite', () => {
-    const onContinueRemainingTasks = vi.fn();
-    const messages: ChatMessage[] = [
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: '',
-        createdAt: 1,
-        startedAt: 1,
-        endedAt: 2,
-        runStatus: 'failed',
-        events: [
-          {
-            kind: 'tool_use',
-            id: 'todo-1',
-            name: 'TodoWrite',
-            input: {
-              todos: [
-                {
-                  content: 'Build prototype',
-                  status: 'in_progress',
-                  activeForm: 'Building prototype',
-                },
-                { content: 'Run QA', status: 'pending' },
-              ],
-            },
-          },
-        ],
-      },
-    ];
-
-    const { container } = render(
-      <ChatPane
-        messages={messages}
-        streaming={false}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-        conversations={conversations}
-        activeConversationId="conv-1"
-        onSelectConversation={vi.fn()}
-        onDeleteConversation={vi.fn()}
-        projectMetadata={projectMetadata}
-        onContinueRemainingTasks={onContinueRemainingTasks}
-      />,
-    );
-
-    expect(container.querySelector('.chat-log .op-card.op-todo')).toBeNull();
-    expect(container.querySelectorAll('.chat-pinned-todo .op-card.op-todo')).toHaveLength(1);
-    expect(container.querySelector('.todo-stopped .todo-text')?.textContent).toBe('Build prototype');
-    expect(container.querySelector('.todo-pending .todo-text')?.textContent).toBe('Run QA');
-    const continueButton = container.querySelector<HTMLButtonElement>('.op-todo-continue');
-    expect(continueButton).not.toBeNull();
-    fireEvent.click(continueButton!);
-    expect(onContinueRemainingTasks).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'assistant-1' }),
-      [
-        {
-          content: 'Build prototype',
-          status: 'in_progress',
-          activeForm: 'Building prototype',
-        },
-        { content: 'Run QA', status: 'pending', activeForm: undefined },
-      ],
-    );
-  });
-
-  it('hides the stale pinned todo after continuing its remaining tasks', async () => {
-    const onContinueRemainingTasks = vi.fn(() => true);
-    const messages: ChatMessage[] = [
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: '',
-        createdAt: 1,
-        endedAt: 2,
-        runStatus: 'failed',
-        events: [
-          {
-            kind: 'tool_use',
-            id: 'todo-1',
-            name: 'TodoWrite',
-            input: {
-              todos: [
-                { content: 'Build prototype', status: 'completed' },
-                { content: 'Run QA', status: 'pending' },
-              ],
-            },
-          },
-        ],
-      },
-    ];
-
-    const { container, rerender } = render(
-      <ChatPane
-        messages={messages}
-        streaming={false}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-        conversations={conversations}
-        activeConversationId="conv-1"
-        onSelectConversation={vi.fn()}
-        onDeleteConversation={vi.fn()}
-        projectMetadata={projectMetadata}
-        onContinueRemainingTasks={onContinueRemainingTasks}
-      />,
-    );
-
-    fireEvent.click(container.querySelector<HTMLButtonElement>('.op-todo-continue')!);
-
-    expect(onContinueRemainingTasks).toHaveBeenCalledOnce();
-    await waitFor(() => {
-      expect(container.querySelector('.chat-pinned-todo')).toBeNull();
-    });
-
-    rerender(
-      <ChatPane
-        messages={[
-          ...messages,
-          {
-            id: 'assistant-2',
-            role: 'assistant',
-            content: '',
-            createdAt: 3,
-            runStatus: 'running',
-            events: [
-              {
-                kind: 'tool_use',
-                id: 'todo-2',
-                name: 'TodoWrite',
-                input: {
-                  todos: [
-                    { content: 'Build prototype', status: 'completed' },
-                    { content: 'Run QA', status: 'pending' },
-                  ],
-                },
-              },
-            ],
-          },
-        ]}
-        streaming
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-        conversations={conversations}
-        activeConversationId="conv-1"
-        onSelectConversation={vi.fn()}
-        onDeleteConversation={vi.fn()}
-        projectMetadata={projectMetadata}
-        onContinueRemainingTasks={onContinueRemainingTasks}
-      />,
-    );
-
-    expect(container.querySelector('.chat-pinned-todo')).not.toBeNull();
-  });
-
-  it('keeps a continued todo snapshot hidden after the conversation remounts', async () => {
-    const messages: ChatMessage[] = [
-      {
-        id: 'assistant-1',
-        role: 'assistant',
-        content: '',
-        createdAt: 1,
-        endedAt: 2,
-        runStatus: 'failed',
-        events: [
-          {
-            kind: 'tool_use',
-            id: 'todo-1',
-            name: 'update_plan',
-            input: {
-              plan: [
-                { step: 'Build prototype', status: 'completed' },
-                { step: 'Run QA', status: 'pending' },
-              ],
-            },
-          },
-        ],
-      },
-    ];
-    const props = {
-      messages,
-      streaming: false,
-      error: null,
-      projectId: 'project-1',
-      projectFiles: [],
-      onEnsureProject: async () => 'project-1',
-      onSend: vi.fn(),
-      onStop: vi.fn(),
-      conversations,
-      activeConversationId: 'conv-1',
-      onSelectConversation: vi.fn(),
-      onDeleteConversation: vi.fn(),
-      projectMetadata,
-      onContinueRemainingTasks: vi.fn(() => true),
-    };
-
-    const firstMount = render(<ChatPane {...props} />);
-    fireEvent.click(firstMount.container.querySelector<HTMLButtonElement>('.op-todo-continue')!);
-    await waitFor(() => {
-      expect(firstMount.container.querySelector('.chat-pinned-todo')).toBeNull();
-    });
-    firstMount.unmount();
-
-    const secondMount = render(<ChatPane {...props} />);
-    expect(secondMount.container.querySelector('.chat-pinned-todo')).toBeNull();
-  });
-
   it('shows several queued prompts above the composer with compact controls', () => {
     const onRemoveQueuedSend = vi.fn();
     const onSendQueuedNow = vi.fn();
     const onUpdateQueuedSend = vi.fn();
     const onReorderQueuedSends = vi.fn();
+    const onSendEdited = vi.fn();
     const { container } = render(
       <ChatPane
         messages={[]}
@@ -1598,7 +1400,7 @@ Expected output:
         onUpdateQueuedSend={onUpdateQueuedSend}
         onReorderQueuedSends={onReorderQueuedSends}
         onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
+        onSend={onSendEdited}
         onStop={vi.fn()}
         conversations={conversations}
         activeConversationId="conv-1"
@@ -1608,19 +1410,24 @@ Expected output:
       />,
     );
 
-    const strip = container.querySelector('.chat-queued-send-strip');
-    expect(strip).not.toBeNull();
-    expect(strip?.textContent).toContain('5 Queued');
-    expect(strip?.textContent).toContain('to Send');
+    const strip = screen.getByTestId('chat-queued-send-strip');
+    // 稿子里队列**没有卡头**:它贴在输入框底下,是什么一目了然,
+    // 不再单起一行写「排队中 · N 条」。行首改成序号。
+    expect(strip?.textContent).not.toContain('Queued');
     expect(strip?.textContent).not.toContain('Start Multitasking');
-    expect(container.querySelectorAll('.chat-queued-send-row')).toHaveLength(5);
+    expect(
+      screen.getAllByTestId('chat-queued-send-index').map((el) => el.textContent),
+    ).toEqual(['1', '2', '3', '4', '5']);
+    expect(screen.getAllByTestId('chat-queued-send-row')).toHaveLength(5);
     expect(strip?.textContent).toContain('Make the export button larger and use a warmer accent');
     expect(strip?.textContent).toContain('Then adjust the title spacing');
     expect(strip?.textContent).toContain('Reduce the subtitle size');
     expect(strip?.textContent).toContain('Switch to a lighter font weight');
     expect(strip?.textContent).toContain('Add hover polish');
-    expect(container.querySelector('.chat-queued-send-list')?.className).toContain('is-scrollable');
-    expect(container.querySelector('.chat-queued-send-overflow')?.textContent).toContain('+1 more queued');
+    // 限的是高度不是条数:超出的部分整块滚动,不再折成「+N more」那一行。
+    // 这条**故意**还按类名查:它钉的是「那段 DOM 已经删掉了」,类名就是被删的东西本身,
+    // 换成 testid 反而钉不住(删掉的元素不会有 testid)。
+    expect(container.querySelector('.chat-queued-send-overflow')).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(5);
 
     const sendNowButtons = screen.getAllByRole('button', { name: 'chat.send' });
@@ -1646,16 +1453,27 @@ Expected output:
           htmlHint: '<section id="hero">',
         },
       ],
+      // 这一条排队时没带引用,所以取回来是空的 —— 空也要显式传:
+      // 输入框拿它**替换**当前的引用芯片,不传就会把上一条编辑留下的芯片
+      // 漏进这一发的正文里。
+      quotes: [],
+      meta: undefined,
     });
-    expect(onUpdateQueuedSend).not.toHaveBeenCalled();
+    // 「编辑」= 把这一条**从队列里取出来**放回输入框(产品拍板 2026-08),
+    // 所以点下去的同时它就出队了 —— 屏幕上不会再有同一条话的两个副本。
+    expect(onRemoveQueuedSend).toHaveBeenCalledWith('queued-1');
+    // 出队之后再发,走的就是普通的发送那条路。它**不能**回头去「就地更新」
+    // 一个已经不在队列里的条目 —— 那样这条话会被静默吞掉。
     fireEvent.click(screen.getByTestId('composer-submit'));
-    expect(onUpdateQueuedSend).toHaveBeenCalledWith('queued-1', {
-      prompt: 'Use a bolder export button',
-      attachments: [{ path: 'edited.md', name: 'edited.md', kind: 'file' }],
-      commentAttachments: [
-        { id: 'edited-comment', order: 1, filePath: 'preview.html', comment: 'Bolder' },
-      ],
-    });
+    expect(onUpdateQueuedSend).not.toHaveBeenCalled();
+    // 第四个参数是 meta,这个 mock 的提交按钮不带,所以显式写 undefined ——
+    // 省略它会让断言在「多传了一个 meta」时照样通过。
+    expect(onSendEdited).toHaveBeenCalledWith(
+      'Use a bolder export button',
+      [{ path: 'edited.md', name: 'edited.md', kind: 'file' }],
+      [{ id: 'edited-comment', order: 1, filePath: 'preview.html', comment: 'Bolder' }],
+      undefined,
+    );
 
     const removeButtons = screen.getAllByRole('button', { name: 'chat.comments.remove' });
     fireEvent.click(removeButtons[1]!);
@@ -1688,7 +1506,7 @@ Expected output:
       />,
     );
 
-    const rows = container.querySelectorAll('.chat-queued-send-row');
+    const rows = screen.getAllByTestId('chat-queued-send-row');
     const handles = screen.getAllByRole('button', { name: 'Drag to reorder' });
     const dataTransfer = mockDataTransfer();
     const targetRect = {
@@ -1761,14 +1579,12 @@ Expected output:
       />,
     );
 
-    const log = container.querySelector('.chat-log') as HTMLDivElement | null;
+    const log = screen.getByTestId('chat-log') as HTMLDivElement;
     const strip = screen.getByTestId('chat-queued-send-strip');
-    expect(log).not.toBeNull();
-    expect(strip).toBeTruthy();
 
-    Object.defineProperty(log!, 'scrollHeight', { configurable: true, get: () => 600 });
-    Object.defineProperty(log!, 'clientHeight', { configurable: true, get: () => 200 });
-    Object.defineProperty(log!, 'scrollTop', {
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => 600 });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, get: () => 200 });
+    Object.defineProperty(log, 'scrollTop', {
       configurable: true,
       get() {
         return (this as HTMLDivElement).dataset.scrollTop
@@ -1782,9 +1598,36 @@ Expected output:
 
     MockResizeObserver.triggerObserved(strip);
 
-    expect(log!.scrollTop).toBe(600);
+    expect(log.scrollTop).toBe(600);
   });
 });
+
+// Verbatim from a real failed run's persisted `status:error` event
+// (`.od/runs/60d39320-…/events.jsonl`): the bounded, redacted tail of what the
+// agent actually printed. The account name is the only substitution.
+const DSH_REAL_CAUSE =
+  'credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+
+const DSH_STDERR_TAIL = `    at boot (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-app-boot/lib/index.js:1186:9)
+    at async runProfile (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/lib/profile-boot-DG5t9aNs.js:247:14)
+    at async file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/lib/bin.js:133:3 {
+  [cause]: Error: failed to apply loader entry include (cordis:include): failed to apply loader entry credentials (@deepseek-ai/dsh-credentials-local): credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string
+      at updateError (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js:299:9)
+      at Entry._init (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js:519:10) {
+    [cause]: Error: failed to apply loader entry credentials (@deepseek-ai/dsh-credentials-local): credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string
+        at updateError (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js:299:9)
+        at Entry._init (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/cordis-plugin-loader/lib/index.js:519:10) {
+      [cause]: TypeError: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string
+          at parseCredentialsDocument (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-credentials-local/lib/index.js:132:40)
+          at LocalCredentialProvider.loadInitial (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-credentials-local/lib/index.js:344:17)
+          at async [cordis.init] (file:///Users/tester/.nvm/versions/node/v24.18.0/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/dsh-credentials-local/lib/index.js:207:3)
+          at file:///Users/tester/.dsh/profiles/open-design/#credentials
+          at file:///Users/tester/.dsh/profiles/open-design/#include
+    }
+  }
+}
+
+Node.js v24.18.0`;
 
 const conversations: Conversation[] = [
   {

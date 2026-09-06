@@ -1382,14 +1382,12 @@ test('[P0] empty home composer submits the active prototype suggestion without e
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home composer has no mode picker and always creates in design mode', async ({ page }) => {
-  await routeProjectCreates(page);
+test('[P1] home composer has no mode picker and always creates in design mode', async ({ page }) => {  await routeProjectCreates(page);
   await routeRunsAccepted(page);
   await gotoEntryHome(page);
 
   // The 「设计」 mode pill was removed from the Home composer footer; the
-  // per-conversation picker now lives only in the project chat composer.
-  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
+  // per-conversation picker now lives only in the project chat composer.  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
   await page.getByTestId('home-hero-input').fill('Design the screens from this brief.');
 
   const designRequestPromise = page.waitForRequest((request) =>

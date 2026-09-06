@@ -2618,3 +2618,81 @@ describe('classifyRunFailure — sampled 0.15.1 provider request failures', () =
     expect(isResumableFailure(result)).toBe(resumable);
   });
 });
+
+describe('被硬杀掉的进程不许被文本蒙混成别的原因', () => {
+  /**
+   * 真机复现(2026-08-27):对 daemon 起的 claude 子进程 `kill -9`,
+   * run 落库是 `signal: SIGKILL / exitCode: null` —— 教科书式的 S19,
+   * 可分类器给出的是 `auth / stale_profile`,聊天里那张卡于是让用户去跑
+   * `/login`。**用户的登录一点问题都没有**,被杀是外部动作。
+   *
+   * 成因是判定顺序:`isAuthDetailText(text)` 这类**纯文本匹配**排在
+   * `signalInterruptClassification` 前面几百行,于是缓冲区里碰巧留下的
+   * 半截 stderr 就能盖过「操作系统把它杀了」这个结构性事实。
+   *
+   * 本文件里那句注释早就写对了道理 ——「a signal is the strongest evidence
+   * we have」—— 只是没有覆盖到强制信号这一档。
+   *
+   * 收窄到**强制信号**(SIGKILL 与那几个崩溃信号):它们从来不是子进程
+   * 「说」出来的,文本再像也解释不了它们。SIGTERM / SIGINT 不动 ——
+   * 那两个确实会伴随优雅关闭与中断,文本在那儿是有意义的。
+   */
+  const killedWithProfileNoise = (signal: string) =>
+    classifyRunFailure({
+      result: 'failed',
+      status: {
+        status: 'failed',
+        error: 'Claude Code may be using a different or stale local profile than your terminal.',
+        errorCode: `AGENT_SIGNAL_${signal}`,
+        exitCode: null,
+        signal,
+      },
+      errorCode: `AGENT_SIGNAL_${signal}`,
+      agentId: 'claude',
+      events: [],
+    });
+
+  it('calls SIGKILL a killed process, not a stale login', () => {
+    const out = killedWithProfileNoise('SIGKILL');
+    expect(out?.failure_category, '被 kill -9 却报 auth = 让用户去修一个没坏的东西').toBe('process_exit');
+    expect(out?.failure_detail).toBe('signal_killed');
+  });
+
+  it('calls a crash signal a crash, whatever the buffer happened to hold', () => {
+    const out = killedWithProfileNoise('SIGSEGV');
+    expect(out?.failure_category).toBe('process_exit');
+    expect(out?.failure_detail).toBe('process_crashed');
+  });
+
+  /**
+   * ⚠️ 这一条才是**真机那一份**。上面三条我一开始写的是
+   * `errorCode: 'AGENT_SIGNAL_SIGKILL'` —— 那个形状产品根本产不出来:
+   * 真跑一次 `kill -9`,run 落库是 `errorCode: 'AGENT_EXECUTION_FAILED'`,
+   * 信号只在 `status.signal` 里。于是我的「修复」在单测里绿了、在浏览器里
+   * 一点没变。**能复现不等于复现的是同一条路。**
+   */
+  it('reads the signal off the run even when the error code says nothing about it', () => {
+    const out = classifyRunFailure({
+      result: 'failed',
+      status: {
+        status: 'failed',
+        error: 'Claude Code may be using a different or stale local profile than your terminal.',
+        errorCode: 'AGENT_EXECUTION_FAILED',
+        exitCode: null,
+        signal: 'SIGKILL',
+      },
+      errorCode: 'AGENT_EXECUTION_FAILED',
+      agentId: 'claude',
+      events: [],
+    });
+    expect(out?.failure_category, '真机就是这个形状:码是 EXECUTION_FAILED,信号在 status 上').toBe('process_exit');
+    expect(out?.failure_detail).toBe('signal_killed');
+  });
+
+  it('still lets the text speak for SIGTERM and SIGINT', () => {
+    // 这两个是优雅关闭 / 中断会走的路,文本在那儿确实更有信息量 —— 不许顺手改掉。
+    for (const signal of ['SIGTERM', 'SIGINT']) {
+      expect(killedWithProfileNoise(signal)?.failure_category).toBe('auth');
+    }
+  });
+});

@@ -18,6 +18,7 @@ import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import type { InstalledPluginRecord } from '@open-design/contracts';
 import { pickFirstLocalSkillPath } from './apply.js';
+import { skillBodyWithRootPreamble } from '../skills.js';
 
 export interface PluginLocalSkill {
   body: string;
@@ -48,13 +49,15 @@ export async function loadPluginLocalSkill(
   } catch {
     return null;
   }
-  const body = stripFrontmatter(raw).trim();
-  if (!body) return null;
+  const rawBody = stripFrontmatter(raw).trim();
+  if (!rawBody) return null;
+  const dir = path.dirname(abs);
+  const body = await skillBodyWithRootPreamble(rawBody, dir);
   const name = (manifest.title ?? manifest.name ?? plugin.id).toString();
   return {
     body,
     name,
-    dir: path.dirname(abs),
+    dir,
     relpath: safeRel,
   };
 }

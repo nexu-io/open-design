@@ -4,6 +4,18 @@
 // Each tool call lives in its own assistant message wrapper (the
 // "finalized blocks" path — simpler than stream_event deltas, identical
 // semantics).
+//
+// ⚠️ VERSION RANGE: this renderer emits the LEGACY frame shape, with
+// `stop_reason` on the `assistant` wrapper. Claude Code 2.1.259 does not do
+// that — it leaves the wrapper's `stop_reason` null on every frame and carries
+// the real value on `stream_event`/`message_delta` (with
+// `--include-partial-messages`) or on the terminal `result` frame (without it).
+// Keeping the legacy shape here is deliberate: it is the coverage for older
+// CLIs and argv-compatible forks, which the parser still supports.
+//
+// Do NOT treat what this file emits as "what the CLI produces today". For the
+// current shape, replay the verbatim recordings in
+// `apps/daemon/tests/fixtures/claude-cli-recordings/` (see its README) instead.
 
 import { writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';

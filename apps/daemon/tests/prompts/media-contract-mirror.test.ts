@@ -49,26 +49,27 @@ describe('MEDIA_USER_REPLY_CONTRACT mirrors', () => {
   it('carries safe English and Simplified Chinese failure categories', () => {
     const normalized = daemonBody.replace(/\s+/g, ' ');
     expect(daemonBody).toContain('图片已生成');
-    expect(daemonBody).toContain('图片未生成：内容安全策略拒绝了该请求');
-    expect(daemonBody).toContain('MEDIA_EXECUTION_DISABLED');
-    expect(daemonBody).toContain('本次任务未启用图片生成');
-    expect(daemonBody).toContain('STUB_PROVIDER_DISABLED');
-    expect(daemonBody).toContain('所选图片模型未配置可用的生成器');
-    expect(daemonBody).toContain('MEDIA_DISPATCHER_UNREACHABLE');
-    expect(daemonBody).toContain('无法连接本地媒体生成调度器');
-    expect(daemonBody).toContain('MEDIA_DISPATCH_NOT_INVOKED');
-    expect(daemonBody).toContain('未调用媒体生成调度器');
-    expect(daemonBody).toContain('MEDIA_DISPATCH_FAILED');
-    expect(daemonBody).toContain('媒体生成调度失败，原因未分类');
-    expect(normalized).toContain('Media generation was disabled for this run');
-    expect(normalized).toContain('The selected image model has no configured renderer');
-    expect(normalized).toContain('The local media dispatcher could not be reached');
-    expect(normalized).toContain('The media dispatcher was not invoked');
-    expect(normalized).toContain('The media dispatcher failed for an unclassified reason');
-    expect(daemonBody).toContain('safety_rejection');
-    expect(daemonBody).toContain('错误代码：\\`MEDIA_EXECUTION_DISABLED\\`');
-    expect(daemonBody).toContain('错误代码：\\`{code}\\`');
-    expect(normalized).toContain('structured dispatcher or provider error');
+    // Every failure sentence pairs a cause with a next step, and none of them
+    // carries an internal code (OPEND-2577).
+    expect(daemonBody).toContain('提示词没通过内容审核 —— 换个说法、去掉敏感内容再试。');
+    expect(daemonBody).toContain('参考图没通过内容审核 —— 换一张参考图再试。');
+    expect(daemonBody).toContain('这个图片模型用不了 —— 换一个图片模型再试。');
+    expect(daemonBody).toContain('图片模型的 API key 还没填 —— 在设置里填好就能用。');
+    expect(daemonBody).toContain('图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。');
+    expect(daemonBody).toContain('图片生成这会儿不稳定 —— 不是你的问题,过一会儿再试通常就好。');
+    expect(daemonBody).toContain('需要更新 Open Design 才能生成图片。');
+    expect(daemonBody).toContain('这次任务里不能生成图片 —— 需要图片的话,新建一个图片项目再试。');
+    expect(normalized).toContain('Reword it, drop the sensitive details, and try again.');
+    expect(normalized).toContain('Pick a different image model and try again.');
+    expect(normalized).toContain('Fill it in under Settings and it will work.');
+    expect(normalized).toContain('top up, or switch to another image model.');
+    expect(normalized).toContain('trying again shortly usually works.');
+    expect(daemonBody).toContain('error.subject');
+    expect(daemonBody).toContain('error.nextStep');
+    expect(daemonBody).not.toContain('错误代码');
+    expect(daemonBody).not.toContain('MEDIA_DISPATCH_FAILED');
+    expect(daemonBody).not.toContain('MEDIA_EXECUTION_DISABLED');
+    expect(daemonBody).not.toContain('STUB_PROVIDER_DISABLED');
     expect(daemonBody).not.toContain('图片生成服务暂时不可用');
   });
 

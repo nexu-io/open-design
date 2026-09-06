@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
 import { useT } from '../i18n';
@@ -10,7 +9,6 @@ import {
   recordAmrEntry,
 } from '../analytics/amr-attribution';
 import { amrConsoleUrlForProfile } from '../runtime/amr-guidance';
-import { setAmrLowBalanceWarnOptedOut } from '../runtime/amr-balance-gate';
 import { formatVelaBalanceUsd } from '../providers/daemon';
 import { Icon } from './Icon';
 import styles from './AmrLowBalanceDialog.module.css';
@@ -34,9 +32,13 @@ interface Props {
 // fund a start but sits at or below the low-balance line, so the run may die
 // mid-flight. Unlike the hard AmrBalanceDialog this never stands between the
 // user and their task — "start anyway" resolves the SAME pending send the
-// gate paused (a continuation, not a re-submit), "top up" opens the console
-// dashboard and parks the send, and the "don't remind me" opt-out persists
-// for every future soft warning. Hard blocks ignore the opt-out by design.
+// gate paused (a continuation, not a re-submit), and "top up" opens the
+// console dashboard and parks the send.
+//
+// There is deliberately no "don't ask again" here. The bit it used to write
+// was read by the project page's pre-send gate too, so silencing this dialog
+// silenced the upgrade card on a surface the user never saw — removed
+// 2026-09-04. The reminder is a function of the balance alone.
 export function AmrLowBalanceDialog({
   balanceUsd,
   profile,
@@ -47,15 +49,7 @@ export function AmrLowBalanceDialog({
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
-  const optOutRef = useRef<HTMLInputElement>(null);
   const formattedBalance = formatVelaBalanceUsd(balanceUsd) ?? '';
-  const commitOptOut = () => {
-    if (optOutRef.current?.checked) setAmrLowBalanceWarnOptedOut();
-  };
-  const decide = (decision: AmrLowBalanceDecision) => {
-    commitOptOut();
-    onDecision(decision);
-  };
   const openConsoleAndPark = () => {
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
       metricsConsent,
@@ -70,13 +64,13 @@ export function AmrLowBalanceDialog({
       '_blank',
       'noopener,noreferrer',
     );
-    decide('recharge');
+    onDecision('recharge');
   };
   const dialog = (
     <Dialog
       role="alertdialog"
       ariaLabel={t('chat.amrLowBalance.title')}
-      onClose={() => decide('dismiss')}
+      onClose={() => onDecision('dismiss')}
       closeOnEscape
       className={styles.panel}
       data-testid="amr-low-balance-dialog"
@@ -84,7 +78,7 @@ export function AmrLowBalanceDialog({
       <button
         type="button"
         className={styles.closeButton}
-        onClick={() => decide('dismiss')}
+        onClick={() => onDecision('dismiss')}
         aria-label={t('common.close')}
       >
         <Icon name="close" size={14} />
@@ -96,19 +90,12 @@ export function AmrLowBalanceDialog({
       <p className={styles.message}>
         {t('chat.amrLowBalance.message', { balance: formattedBalance })}
       </p>
-      {/* Canonical suppression-dialog footer (macOS alerts, VS Code, JetBrains):
-          the "don't ask again" checkbox sits bottom-left as a quiet meta
-          option, the actions sit bottom-right in one row with the primary
-          outermost. */}
+      {/* Actions sit bottom-right in one row with the primary outermost. */}
       <div className={styles.footer}>
-        <label className={styles.optOut}>
-          <input ref={optOutRef} type="checkbox" data-testid="amr-low-balance-dialog-optout" />
-          {t('chat.amrLowBalance.dontRemind')}
-        </label>
         <div className={styles.footerActions}>
           <Button
             className={styles.action}
-            onClick={() => decide('proceed')}
+            onClick={() => onDecision('proceed')}
             data-testid="amr-low-balance-dialog-proceed"
           >
             {t('chat.amrLowBalance.proceedCta')}

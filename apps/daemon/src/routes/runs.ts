@@ -67,6 +67,7 @@ import {
   odNextAdvertisedCapabilityGap,
   resolveBundledOdNextRuntimeCapability,
 } from '../runtimes/od-next-capability-gate.js';
+import { mintRunDoneKey } from '../runtimes/run-done-key.js';
 import {
   deriveLangfuseDeliveryState,
   readTelemetrySinkConfig,
@@ -184,6 +185,10 @@ import {
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
+import {
+  runtimeAcceptsMidTurnInput,
+  type RunSteeringRefusal,
+} from '../runtimes/run-steering.js';
 import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
 import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
 import {
@@ -428,6 +433,18 @@ interface ChatRunService {
     run: ChatRun,
     origin?: NonNullable<ChatRunStatusResponse['cancelOrigin']>,
   ): Promise<ChatRunStatusResponse>;
+  /**
+   * B11 「引导对话」: deliver one more user message into the turn that is still
+   * running. `runtimeAccepts` is the caller's `runtimeAcceptsMidTurnInput`
+   * verdict for the run's agent def — the runs service owns no agent registry.
+   */
+  steer(
+    run: ChatRun,
+    text: string,
+    runtimeAccepts: boolean,
+  ):
+    | { ok: true; backpressure: boolean }
+    | { ok: false; refusal: RunSteeringRefusal };
   /** Undo an optimistically-created run (e.g. a failed ownership claim). */
   drop(run: ChatRun): void;
   /** Persist daemon-owned state assigned during an atomic claim hook. */
@@ -2625,6 +2642,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     delete fingerprintMeta.strategyRolloutDecision;
     delete fingerprintMeta.runtimeCapabilitySnapshot;
     meta.requestFingerprint = runRequestFingerprint(fingerprintMeta, fingerprintSnapshot);
+    if (
+      !clarificationContinuation
+      && !idempotentStrategyRetry
+      && strategyRolloutDecision?.effectiveMode === 'active'
+    ) {
+      // The initial Bundle is frozen before the physical Run exists. Mint the
+      // daemon-owned key now so the exact prompt and the Run parser share the
+      // same nonce without putting it in the idempotency fingerprint.
+      meta.doneKey = mintRunDoneKey();
+    }
     let createdTaskInputSnapshot: OdNextTaskInputSnapshotDescriptor | null = null;
     let preparedPromptBundleText: string | null = null;
     if (
@@ -3476,6 +3503,94 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     await design.runs.cancel(cancelRun, 'user_stop');
     const body = { ok: true, run: statusWithStrategyTask(cancelRun) };
     res.json(body);
+  });
+
+  // B11 「引导对话」 — steer the turn that is ALREADY running.
+  //
+  // The sibling `/cancel` above is the interrupt path: it stops the turn and
+  // the caller re-sends. This one is the opposite — the turn keeps everything
+  // it has done and one more `user` frame goes down the child's still-open
+  // stdin, so the model reads the correction mid-flight. Admissibility is
+  // decided once, in `classifyRunSteering`; this route only translates the
+  // verdict into HTTP and makes the delivered message durable.
+  app.post('/api/runs/:id/steer', async (req: ApiRequest, res: ApiResponse) => {
+    const runId = routeParamId(req);
+    if (!runId) return sendApiError(res, 400, 'BAD_REQUEST', 'run id missing');
+    const run = design.runs.get(runId);
+    if (!run) return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    if (!await authorizeRunProject(
+      req,
+      res,
+      run,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
+    const requestBody = toJsonRecord(req.body);
+    const rawText = typeof requestBody.text === 'string' ? requestBody.text : '';
+    const text = rawText.trim();
+    if (!text) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'text is required and must be a non-empty string',
+      );
+    }
+    const runtimeAccepts = runtimeAcceptsMidTurnInput(
+      typeof run.agentId === 'string' ? getAgentDef(run.agentId) : null,
+    );
+    const outcome = design.runs.steer(run, text, runtimeAccepts);
+    if (!outcome.ok) {
+      // Two distinct codes on purpose: `UNSUPPORTED` is permanent for this
+      // agent (the caller should stop offering the affordance), the closed
+      // ones mean "this turn is past taking input — send it as a new turn".
+      if (outcome.refusal === 'runtime_unsupported') {
+        return sendApiError(
+          res,
+          409,
+          'RUN_STEERING_UNSUPPORTED',
+          `agent ${run.agentId ?? 'unknown'} cannot take a mid-turn message: `
+          + 'its stdin is closed together with the opening prompt',
+          { retryable: false, details: { refusal: outcome.refusal } },
+        );
+      }
+      return sendApiError(
+        res,
+        409,
+        'RUN_STEERING_CLOSED',
+        outcome.refusal === 'run_terminal'
+          ? 'run already finished; send the message as a new turn'
+          : 'the turn already ended and stopped reading input; send the message as a new turn',
+        { retryable: false, details: { refusal: outcome.refusal } },
+      );
+    }
+    // Durability. Without this row the user reloads and their own words are
+    // gone — the model acted on something the transcript never recorded. It is
+    // written only AFTER a successful delivery, so a refused steer leaves no
+    // trace, and it goes in as `role: 'user'` because that is who wrote it:
+    // any other role would misattribute it, and the next turn's flattened
+    // transcript would drop the instruction the model was actually given.
+    // Position is append-only, so it lands after the assistant turn it steered
+    // — which is exactly when the user said it.
+    const messageId = randomUUID();
+    if (run.conversationId) {
+      const now = Date.now();
+      upsertMessage(db, run.conversationId, {
+        id: messageId,
+        role: 'user',
+        content: text,
+        startedAt: now,
+        endedAt: now,
+      });
+      if (typeof run.projectId === 'string' && run.projectId) {
+        updateProject(db, run.projectId, {});
+      }
+    }
+    res.json({
+      ok: true,
+      delivered: true,
+      messageId,
+      run: design.runs.statusBody(run),
+    });
   });
 
   app.post('/api/chat', async (req: ApiRequest, res: ApiResponse) => {

@@ -1,3 +1,4 @@
+import { isTodoWriteToolName } from '@open-design/contracts';
 import { todoStatusIsUnfinished } from '@open-design/contracts';
 import type { AgentEvent } from '../types';
 
@@ -95,6 +96,41 @@ export function continuableUnfinishedTodos(
   return unfinishedTodosFromEvents(message.events);
 }
 
+/**
+ * The task list the CURRENT turn declared — the plan pill's one source.
+ *
+ * It stops at the newest assistant message and answers from that message alone:
+ * a turn that re-listed nothing returns `[]`, and the pill is gone. That is the
+ * same rule the transcript card has always followed (D24, every turn shows only
+ * its own content), and it is deliberate rather than incidental — recall hands
+ * an earlier plan back to the AGENT as a fact it decides about, and the client
+ * "only recognizes items the agent chose to re-emit". A pill that kept showing
+ * the previous plan would be the client making that decision instead: the user
+ * asked an unrelated question, the agent listed nothing, and the composer still
+ * read "Step 3 of 4".
+ *
+ * Contrast `latestTodoWriteInputFromMessages` below, which scans the WHOLE
+ * conversation for the newest snapshot. That is the right answer for a pinned
+ * card that outlives a turn, and the wrong one for anything that speaks about
+ * the turn in progress. The pill used it until W99 only because it predates the
+ * cross-turn recall model by two months.
+ *
+ * Reads the turn through `latestTodosFromEvents`, the same primitive
+ * `previousTodosByAssistantMessageId` uses for the card's side of the pair, so
+ * "which snapshot is this turn's" cannot be answered two ways.
+ */
+export function todosDeclaredByLatestTurn(
+  messages: ReadonlyArray<{ role: string; events?: AgentEvent[] | undefined }> | undefined,
+): TodoItem[] {
+  if (!messages || messages.length === 0) return [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant') continue;
+    return latestTodosFromEvents(message.events);
+  }
+  return [];
+}
+
 // Walk the conversation in reverse to find the most recent TodoWrite
 // tool_use, return its raw input so callers can hand it to a `TodoCard`
 // without re-implementing the discovery logic. Returns `null` when no
@@ -143,13 +179,45 @@ export function latestTodoWriteInputForPinnedCard<
   return null;
 }
 
-export function isTodoWriteToolName(name: string): boolean {
-  return (
-    name === 'TodoWrite' ||
-    name === 'todowrite' ||
-    name === 'todo_write' ||
-    name === 'update_plan'
-  );
+/**
+ * 转发给契约里那个**唯一**的判据 —— 这里不再自己写一份。
+ *
+ * 曾经全仓有三份、写法还不一致(两份精确 `===`、一份带 `/i` 的正则),
+ * 于是 AMR 把名字 title-case 成 `Todowrite` 之后表现成「一半坏」:
+ * 客户端画得出清单,daemon 的 `endedWithUnfinishedWork` 却漏判。
+ * 保留这个导出只是为了不改动全部调用点。
+ */
+export { isTodoWriteToolName };
+
+/**
+ * For each assistant message, the task list this conversation had already
+ * declared BEFORE it — the input `buildTurnBlocks` needs to answer "was this
+ * item on screen in an earlier turn?" (D17: recall is decided by content
+ * intersection, nothing semantic, no turn limit).
+ *
+ * Two properties matter and both are deliberate:
+ *  · a turn that declared no list does NOT clear the carry — an unrelated
+ *    question answered in between leaves the outstanding plan outstanding;
+ *  · COMPLETED items stay in the carry. Recall is matched on content, never on
+ *    status, so "召回 · 上一轮就完成的" (spec §5.2) still reads as recall when the
+ *    agent re-lists it.
+ *
+ * Mirrors the daemon's `latestTodoWriteInputForConversation`, which walks the
+ * same way when it decides what to hand back to the agent.
+ */
+export function previousTodosByAssistantMessageId(
+  messages: ReadonlyArray<{ id: string; role: string; events?: AgentEvent[] | undefined }> | undefined,
+): Map<string, TodoItem[]> {
+  const byId = new Map<string, TodoItem[]>();
+  if (!messages || messages.length === 0) return byId;
+  let carried: TodoItem[] | null = null;
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    if (carried) byId.set(message.id, carried);
+    const declared = latestTodosFromEvents(message.events);
+    if (declared.length > 0) carried = declared;
+  }
+  return byId;
 }
 
 function hasTerminalRunEnded(

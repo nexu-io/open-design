@@ -67,7 +67,7 @@ describe('ChatPane connect-repo CTA', () => {
     const onConnectRepo = vi.fn();
     const { container } = renderPane({ connectRepoNeeded: true, githubConnected: false, onConnectRepo });
 
-    expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
+    expect(screen.getByRole('note')).toBeTruthy();
     const connectButton = screen.getByRole('button', { name: /ds\.repoConnectButton/ });
     fireEvent.click(connectButton);
 
@@ -91,7 +91,7 @@ describe('ChatPane connect-repo CTA', () => {
     const onConnectRepo = vi.fn();
     const { container } = renderPane({ connectRepoNeeded: true, githubConnected: true, onConnectRepo });
 
-    expect(container.querySelector('.chat-connect-repo')).not.toBeNull();
+    expect(screen.getByRole('note')).toBeTruthy();
     expect(screen.getByText('ds.repoConnectedTitle')).toBeTruthy();
     const importButton = screen.getByRole('button', { name: /ds\.repoImportButton/ });
     fireEvent.click(importButton);
@@ -113,7 +113,7 @@ describe('ChatPane connect-repo CTA', () => {
 
   it('hides the CTA when the project does not need a repo connection', () => {
     const { container } = renderPane({ connectRepoNeeded: false, onOpenSettings: vi.fn() });
-    expect(container.querySelector('.chat-connect-repo')).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
   });
 
   it('hides the CTA once the conversation has messages', () => {
@@ -122,7 +122,7 @@ describe('ChatPane connect-repo CTA', () => {
       onOpenSettings: vi.fn(),
       messages: [{ id: 'user-1', role: 'user', content: 'hi', createdAt: 1 }],
     });
-    expect(container.querySelector('.chat-connect-repo')).toBeNull();
+    expect(screen.queryByRole('note')).toBeNull();
   });
 
   it('hides empty terminal assistant rows for brand extraction projects', () => {

@@ -125,6 +125,31 @@ export interface ChatRequest {
    * message; ordinary runs continue to consume message unchanged.
    */
   priorTranscript?: string;
+  /**
+   * True when `message` is a continuation directive for this conversation's
+   * last failed run ("continue where you left off; otherwise complete the
+   * original request") rather than a self-contained request.
+   *
+   * Such a directive is only answerable inside the session that heard the
+   * original request — and whether that session is actually continued is
+   * decided by the DAEMON, not the caller. `evaluateResumeInvalidation` also
+   * compares the stored model / cwd / resume cursor, none of which a caller can
+   * see: the chat client checks `resumable` + agent identity, and
+   * `od run continue` checks only `resumable`. So a caller can legitimately ask
+   * to continue a turn the daemon then refuses to resume (changing the model in
+   * Settings between the failure and the click is the common path).
+   *
+   * Setting this hands the "what do we actually send" decision to the layer
+   * that knows the answer: when the daemon resumes, the directive is sent
+   * alone; when it refuses the stored session, the daemon restates the original
+   * request from persisted history so the fresh session can act on it.
+   *
+   * Callers that already ship the full rendered transcript in `message` (the
+   * web client, which sends the transcript AND `currentPrompt`) do not need
+   * this — their context survives either branch. Callers that send only the
+   * directive (`od run continue`, external agents driving the daemon) do.
+   */
+  resumeContinuation?: boolean;
   systemPrompt?: string;
   projectId?: string | null;
   conversationId?: string | null;
@@ -433,6 +458,8 @@ export type ChatMessageFeedbackReasonCode =
   | 'followed_design_system'
   | 'missed_request'
   | 'weak_visual'
+  | 'could_not_run'
+  | 'too_slow'
   | 'incomplete_output'
   | 'hard_to_use'
   | 'missed_design_system'
@@ -731,6 +758,16 @@ export interface ChatRunStatusResponse {
   failureDetail?: RunFailureDetail | null;
   /** Recommended recovery action derived from the same failure classification. */
   failureAction?: RunFailureAction | null;
+  /** The classifier's own verdict on whether re-running this can help
+   *  (`run-failure-classification.ts` → `retryable`). Published alongside
+   *  `failureAction` because the two are written independently: a failure can be
+   *  `retryable: false` and still carry an action other than `'none'`
+   *  (install the CLI, switch model, recharge). Absent on success / older
+   *  daemons, and an absent verdict must be read as "no verdict" rather than
+   *  as `false` — the classifier's own last-resort `unknown` row is stamped
+   *  `retryable: false` by default, so treating absence as a verdict would
+   *  strip Retry from precisely the unclassified failures that deserve it. */
+  retryable?: boolean | null;
   /** True when this terminal failure can be recovered by resuming the agent's
    *  existing CLI session (a transient upstream drop / inactivity timeout on a
    *  session-resuming runtime), rather than only restarting from scratch. The
@@ -825,6 +862,43 @@ export interface ChatRunCancelResponse {
   run?: ChatRunStatusResponse;
 }
 
+/**
+ * B11 「引导对话」 — `POST /api/runs/:id/steer`.
+ *
+ * Steering is the opposite of cancel-and-resend: the running turn keeps its
+ * work and the message is written onto the agent child's still-open stdin, so
+ * the model reads it in the middle of the turn it is already executing.
+ */
+export interface ChatRunSteerRequest {
+  /** The user's mid-turn instruction. Must be non-blank. */
+  text: string;
+}
+
+/**
+ * Why a steer was refused. `runtime_unsupported` is permanent for the run's
+ * agent; the other two are about this run's stdin having already closed.
+ */
+export type ChatRunSteerRefusal =
+  | 'runtime_unsupported'
+  | 'run_terminal'
+  | 'stdin_closed';
+
+export interface ChatRunSteerResponse {
+  ok: true;
+  /**
+   * True once the JSONL user frame was handed to the child's stdin. False is
+   * never returned with `ok: true` — a failed write is an error response.
+   */
+  delivered: true;
+  /**
+   * Id of the `role: 'user'` message the daemon appended to the run's
+   * conversation, so a reload still shows what the user said mid-turn.
+   */
+  messageId: string;
+  /** Run status AFTER delivery — still non-terminal, because steering does not stop the turn. */
+  run: ChatRunStatusResponse;
+}
+
 export interface ChatAttachment {
   path: string;
   name: string;
@@ -871,6 +945,12 @@ export type PersistedAgentEvent =
   // `failureCategory` / `failureDetail` carry the daemon's finer classification
   // for the same failure, so the error card can name a specific type + fix even
   // when many causes share one `code` (e.g. hard_quota vs a transient 429).
+  // `retryable` / `failureAction` carry the daemon's VERDICT on that same
+  // failure — whether re-running can help, and what the user should do instead.
+  // The card reads them off this persisted event, so a reloaded conversation
+  // resolves to the same button the live stream did. Both absent on events
+  // written before they existed; see the note on `ChatRunStatusResponse` for why
+  // absence must not be read as `retryable: false`.
   | {
       kind: 'status';
       label: string;
@@ -878,10 +958,85 @@ export type PersistedAgentEvent =
       code?: string;
       failureCategory?: RunFailureCategory;
       failureDetail?: RunFailureDetail;
+      failureAction?: RunFailureAction;
+      retryable?: boolean;
+      /**
+       * `label: 'error'` only. Bounded, secret-redacted tail of the agent
+       * process's stderr for this run — the original cause behind a generic
+       * `detail`. Kept separate from `detail` on purpose: `detail` is the
+       * string the failure classifiers pattern-match on, so mixing raw agent
+       * output into it would change which card a failure resolves to.
+       * Absent when the run wrote no stderr.
+       */
+      stderrTail?: string;
     }
   | { kind: 'text'; text: string }
+  /**
+   * This turn's one-time done key. The daemon mints it per run, injects it into
+   * the system prompt, and emits this event BEFORE any model output; the chat
+   * client then only accepts `<od-done key="…"/>` markers carrying this exact
+   * value as the process/conclusion boundary.
+   *
+   * It exists because the boundary used to be a bare `<done/>` that no prompt
+   * ever taught — so any turn whose content happened to contain that string
+   * (agent quoting HTML, explaining the tag) flipped the boundary and threw the
+   * rest of the answer out of the execution shell. A model cannot reproduce a
+   * nonce it was never shown, which is what makes the keyed form unforgeable.
+   *
+   * Persisted with the turn's other events so a reloaded conversation validates
+   * against the same key it was recorded with. Messages from before this event
+   * existed simply have none — clients MUST fall back to the legacy bare-marker
+   * heuristic there rather than treating "no key" as "no boundary".
+   */
+  | { kind: 'done_key'; key: string }
+  /**
+   * This turn's follow-up suggestions — the three one-line actions the chat
+   * offers under a delivered answer. Parsed by the daemon out of the agent's
+   * `<od-next key="…">` marker and validated against the turn's nonce, so the
+   * client stores conclusions, never raw protocol.
+   *
+   * Persisted with the turn's other events so a reloaded conversation shows
+   * the same three rows it showed live. Turns recorded before this event
+   * existed have none, and MUST render no next-step row at all — there is no
+   * legacy fallback, because the suggestions are about the specific thing that
+   * turn built and cannot be reconstructed after the fact.
+   */
+  | { kind: 'next_steps'; suggestions: string[] }
+  /**
+   * This turn's display intent — which file the preview opened and which
+   * produced files earned a card. Parsed by the daemon out of the agent's
+   * `<od-focus …/>` marker, key-checked against the turn nonce, and resolved to
+   * project-relative paths inside the project root, so the client stores
+   * conclusions and never raw protocol.
+   *
+   * Persisted with the turn's other events so a reloaded conversation shows the
+   * same card set it showed live. Turns recorded before this event existed have
+   * none, and MUST fall back to the host's own produced-file inference —
+   * unlike `next_steps`, "no event" here has a well-defined legacy meaning and
+   * rendering nothing would blank a panel that used to work.
+   *
+   * More than one may be persisted for a turn; fold last-wins per field with
+   * `foldArtifactFocusSelections`.
+   */
+  | { kind: 'artifact_focus'; open?: string; show?: string[] }
   | { kind: 'conversation_title'; title: string }
   | { kind: 'thinking'; text: string }
+  /**
+   * Live-only reasoning progress: the cumulative token estimate for the
+   * thinking block currently running. See the `thinking_tokens` SSE event for
+   * where the number comes from, why it is cumulative rather than a delta, and
+   * why it is an estimate rather than the bill.
+   *
+   * **Never persisted**, so this never appears in a stored transcript — the
+   * union is shared with the live path, which is the only producer.
+   *
+   * `at` is the **client's** arrival time, not the daemon's. The only consumer
+   * compares it against the chat panel's own `nowMs` to decide whether the
+   * count is still moving, and those two clocks have to be the same clock —
+   * same reason `BuildTurnInput.lastEventAtMs` is observed rather than
+   * transported.
+   */
+  | { kind: 'thinking_tokens'; tokens: number; at?: number }
   | {
       kind: 'live_artifact';
       action: 'created' | 'updated' | 'deleted';
@@ -908,7 +1063,21 @@ export type PersistedAgentEvent =
       /** Optional wall-clock ms when the tool first started (e.g. ACP first frame). */
       startedAt?: number;
     }
-  | { kind: 'tool_result'; toolUseId: string; content: string; isError: boolean }
+  | {
+      kind: 'tool_result';
+      toolUseId: string;
+      content: string;
+      isError: boolean;
+      /**
+       * Wall-clock ms when the call finished. Pairs with `tool_use.startedAt` so the
+       * UI can show a per-call duration. Optional on purpose: several adapters emit
+       * `tool_use` only once the call has already completed (codex sends it at
+       * `item.completed`), so a difference computed there would be ~0 — which means
+       * "unknown", not "fast". Consumers must render nothing when either end is
+       * missing rather than showing `0.0s`.
+       */
+      completedAt?: number;
+    }
   | {
       kind: 'diagnostic';
       name: string;
@@ -944,6 +1113,110 @@ export type PersistedAgentEvent =
       stopReason?: string;
     }
   | { kind: 'raw'; line: string };
+
+/**
+ * What a chat card DRAWS.
+ *
+ * `latest_with_static_preview` — the cover is the turn's frozen first viewport
+ * and does not follow later edits. This is the ruling for HTML / prototype /
+ * slide / document artifacts: a conversation is a record of what happened, so
+ * the turn that produced version 3 keeps showing version 3 even after version 7
+ * lands.
+ *
+ * `immutable_snapshot` — cover and target are the same fixed thing (a shared or
+ * published turn), so there is nothing to diverge.
+ */
+export const CHAT_ARTIFACT_DISPLAY_POLICIES = [
+  'latest_with_static_preview',
+  'immutable_snapshot',
+] as const;
+
+export type ChatArtifactDisplayPolicy = (typeof CHAT_ARTIFACT_DISPLAY_POLICIES)[number];
+
+/*
+ * There is deliberately NO open policy here.
+ *
+ * A click always opens the workspace's LATEST file — HTML and image alike
+ * (user ruling 2026-09-02: "html 和图片都是,产物缩略是快照,但跳过去产物永远
+ * 指向最新的"). The ref already names that target: `workspaceArtifactId`.
+ *
+ * An earlier draft carried `openPolicy: 'workspace_latest' | 'snapshot'`, and
+ * the image branch announced `'snapshot'`. Nothing downstream honoured it — the
+ * host's open handler takes one argument and dropped the second — so the
+ * shipped behaviour was accidentally correct. That is exactly why the field is
+ * gone rather than pinned to one value: a constant that reads as a switch
+ * invites someone to "fix" the dropped argument, and fixing it would build the
+ * behaviour the user rejected. Neither typecheck nor tests would have caught it.
+ */
+
+/**
+ * Lifecycle of the turn's static cover.
+ *
+ * `legacy_unavailable` is NOT `failed`: a conversation that predates static
+ * covers never had a capture attempted, so there is nothing to retry and
+ * nothing to report. Both fall back to a live preview, but only one of them is
+ * worth telling anyone about.
+ */
+export const CHAT_ARTIFACT_SNAPSHOT_STATES = [
+  'pending',
+  'ready',
+  'failed',
+  'legacy_unavailable',
+] as const;
+
+export type ChatArtifactSnapshotState = (typeof CHAT_ARTIFACT_SNAPSHOT_STATES)[number];
+
+/**
+ * One artifact as a chat turn refers to it.
+ *
+ * Additive alongside {@link ChatMessage.producedFiles}: `producedFiles` still
+ * says which files a turn wrote, this says how the card should present them.
+ */
+export interface ChatArtifactRef {
+  id: string;
+  label: string;
+  kind: ProjectFileKind;
+  displayPolicy: ChatArtifactDisplayPolicy;
+  /** Workspace document this card's click opens. Always the latest file. */
+  workspaceArtifactId?: string;
+  /**
+   * Frozen evidence of this turn — what the CARD paints, never what the click
+   * opens. Addressed by the two URLs below; the id itself is for diagnostics
+   * and for the snapshot endpoints, not a navigation target.
+   */
+  snapshotId?: string;
+  /** Static cover for a `latest_with_static_preview` card. */
+  thumbnailUrl?: string;
+  /** Static cover for an `immutable_snapshot` card. */
+  snapshotUrl?: string;
+  snapshotState: ChatArtifactSnapshotState;
+}
+
+/**
+ * The image a card should paint, or `null` when it must fall back to a live
+ * preview.
+ *
+ * Single source of truth on purpose. Every surface that draws a card has to
+ * make this same decision, and re-deriving it per surface is how "some cards
+ * show a blank box" happens: a ref can claim `ready` and still carry no URL,
+ * and a URL can be present while the state says the capture failed.
+ */
+export function chatArtifactStaticCoverUrl(
+  ref: ChatArtifactRef | null | undefined,
+): string | null {
+  if (!ref || ref.snapshotState !== 'ready') return null;
+  const url = ref.displayPolicy === 'immutable_snapshot'
+    ? ref.snapshotUrl ?? ref.thumbnailUrl
+    : ref.thumbnailUrl ?? ref.snapshotUrl;
+  return typeof url === 'string' && url.length > 0 ? url : null;
+}
+
+/** True when {@link chatArtifactStaticCoverUrl} has something to paint. */
+export function isChatArtifactStaticCoverReady(
+  ref: ChatArtifactRef | null | undefined,
+): boolean {
+  return chatArtifactStaticCoverUrl(ref) !== null;
+}
 
 export interface ChatMessage {
   id: string;
@@ -1005,10 +1278,56 @@ export interface ChatMessage {
    *  resumes and clarification answers survive reloads without splitting one
    *  user intent into unrelated failures. */
   taskAnalytics?: ChatTaskExecutionAnalytics;
+  /**
+   * Stable daemon run-create identity for this user turn. A retry after an
+   * ambiguous transport failure must reuse it so createOrReuse can return the
+   * Run that may already have been accepted instead of starting a duplicate.
+   */
+  clientRequestId?: string;
   appliedPluginSnapshot?: AppliedPluginSnapshot;
   attachments?: ChatAttachment[];
   commentAttachments?: ChatCommentAttachment[];
+  /**
+   * 用户消息**没发出去**(网络或服务异常)。
+   *
+   * 设计稿第 49 / 50 格要的就是这一档:气泡下方一行红色说明 + 一枚常驻的「重试」。
+   * 在这之前失败一律归到助手侧的报错卡,消息本身不带任何状态 —— 于是那两格根本画不出来。
+   * 只对 `role === 'user'` 有意义;助手侧的失败仍然看 `runStatus`。
+   */
+  sendFailed?: boolean;
+  /**
+   * 这条消息之后**原地分叉**过一次(点了「新开会话」)。
+   *
+   * 设计稿第 38 格:分叉不是跳走 —— 上面是老会话说完的话,线以下是新会话,
+   * 中间那行字是**承接过来的会话标题**。点完什么都不留的话,人只会以为按钮没反应。
+   * 之前契约里没有这两样,所以那一格根本画不出来。
+   */
+  forkedInto?: {
+    /** 新会话的标题(认领的就是老会话的题目) */
+    title: string;
+    /** 新会话 id —— 之后要跳过去看靠它 */
+    conversationId?: string;
+  };
+  /**
+   * 这一轮是**谁**取消的。枚举与 `ChatRun.cancelOrigin` 同源。
+   *
+   * 交付稿第 81 格那一行「已手动暂停任务」只有在 `user_stop` 时才成立。
+   * 客户端此前只有 `runStatus: 'canceled'`,把「用户按停」和
+   * 「daemon 关机 / 项目清理杀掉」混成一种 —— 照那个判据画,daemon 重启后
+   * 那一行会谎报(盘点 R8)。所以来源要跟着**消息**存下来,而不是只活在
+   * run 对象里:刷新之后那一行还得在,而且还得是同一个来源。
+   *
+   * 缺失(旧 daemon 不发)时不补默认值 —— 证不出是用户按的就不说是。
+   */
+  cancelOrigin?: RunCancelOrigin | null;
   producedFiles?: ProjectFile[];
+  /**
+   * How this turn's artifacts should be PRESENTED — cover image, and where a
+   * click goes. Strictly additive: `producedFiles` remains the record of what
+   * the turn wrote, and a daemon that has not learned artifact refs simply
+   * omits this, which the card reads as "no static cover, show it live".
+   */
+  artifactRefs?: ChatArtifactRef[];
   traceObjectFiles?: ProjectFile[];
   // Diff baseline so reattach can rebuild producedFiles after reload.
   preTurnFileNames?: string[];

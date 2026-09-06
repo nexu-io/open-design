@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   useLayoutEffect,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -20,6 +21,9 @@ import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, re
 import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
 import {
+  type DaemonAgentReconnectState,
+  type DaemonAgentRetryState,
+  type DaemonReconnectState,
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
   GENERIC_DAEMON_DISCONNECT_MESSAGE,
@@ -30,6 +34,15 @@ import {
   reportChatRunFeedback,
   streamViaDaemon,
 } from '../providers/daemon';
+import {
+  type ChatReconnectSignal,
+  type ChatReconnectView,
+  MANUAL_RECONNECT_FEEDBACK_MS,
+  nextChatReconnectView,
+  reconnectViewForConversation,
+  settledSignalFromMessages,
+} from '../runtime/chat/reconnect-state';
+import { forkBoundaryMessageIndex } from '../runtime/chat/fork-boundary';
 import { normalizeCustomReason } from '@open-design/contracts/analytics';
 import {
   deletePreviewComment,
@@ -62,6 +75,7 @@ import {
   strategySettledMessageFields,
 } from '../runtime/strategy-question-continuation';
 import {
+  isTodoWriteToolName,
   type AmrWalletSnapshot,
   type ByokChatProviderConfig,
   type ByokMediaDefaults,
@@ -133,6 +147,7 @@ import {
   appendErrorStatusEvent,
   removeErrorStatusEvent,
   runFailureFieldsFromError,
+  stderrTailFromError,
 } from '../runtime/chat-events';
 import type { RunFailureClassificationFields } from '../runtime/chat-events';
 import {
@@ -147,13 +162,28 @@ import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   amrBalanceGateScopeForWorkspaceContext,
   amrBalanceGateScopesMatch,
+  amrWalletBalanceUsd,
   checkAmrBalanceGate,
+  fetchAmrBalanceCardWalletSnapshot,
   isAmrBalanceGateScope,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
+import {
+  amrBalanceBlockedDialog,
+  amrBalanceUpgradeIntent,
+  resolveAmrBalanceBranch,
+  type AmrBalanceBlockedDialogKind,
+} from '../runtime/amr-balance-branch';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
-import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
+import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
+import { markHistoryReplayLanded } from './chat/useCharReveal';
+import { workspaceAutoRechargeUrl, workspaceUpgradeUrl } from './EntryNavRail';
+import {
+  amrHandoffDeviceId,
+  attributedAmrUrl,
+  recordAmrEntry,
+} from '../analytics/amr-attribution';
+import { getResolvedDeviceId } from '../analytics/client';
 import {
   cancelBrandExtraction,
   continueBrandExtraction,
@@ -181,14 +211,15 @@ import {
 import { useSingleFlightCallback } from '../runtime/useSingleFlightCallback';
 import { useBrandReadyPrompt } from '../runtime/useBrandReadyPrompt';
 import {
+  memoryWrittenCardContent,
+  useMemoryWrittenCard,
+} from '../runtime/useMemoryWrittenCard';
+import {
   buildDesignSystemPackageAuditRepairPrompt,
   summarizeDesignSystemPackageAudit,
 } from '../runtime/design-system-package-audit';
 import { isLiveArtifactTabId, liveArtifactTabId } from '../types';
-import {
-  DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
-  isDesignSystemWorkspacePrompt,
-} from '../design-system-auto-prompt';
+import { isDesignSystemWorkspacePrompt } from '../design-system-auto-prompt';
 import {
   createConversation,
   deleteConversation as deleteConversationApi,
@@ -266,13 +297,16 @@ import {
 } from '../collab/useTeamMembers';
 import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import {
+  useWorkspaceBillingResponse,
   useWorkspaceContext,
+  workspaceBillingSummaryForContext,
   workspaceIdentityCanBillAmr,
 } from '../collab/useWorkspaceContext';
 import {
   projectWorkspaceContext,
   projectWorkspaceScopeAuthorizesAmr,
   projectWorkspaceScopeReady,
+  projectWorkspaceVisibility,
   runWorkspaceIdentity,
   runWorkspacePersonalAdoptionWitness,
   useProjectWorkspaceScope,
@@ -295,9 +329,11 @@ import {
 import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { invalidateHtmlSourceSnapshotProject } from './html-source-snapshot-cache';
 import {
+  decideAgentFocusOpen,
   decideAutoOpenAfterWrite,
   selectAutoOpenProducedArtifact,
   selectAutoOpenTurnArtifact,
+  selectAutoOpenTurnArtifacts,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
@@ -335,10 +371,16 @@ import {
   type ProjectDetailSeed,
 } from '../hooks/useProjectDetail';
 import { useTerminalLaunch } from '../hooks/useTerminalLaunch';
+import { createBoundedConcurrency } from '../lib/bounded-concurrency';
 import { buildContinueInCliToast } from '../lib/build-continue-in-cli-toast';
 import { buildClipboardPrompt } from '../lib/build-clipboard-prompt';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { effectiveMaxTokens } from '../state/maxTokens';
+import {
+  dismissHomeAttachmentUpload,
+  homeAttachmentUploadsFor,
+  subscribeHomeAttachmentUploads,
+} from '../state/home-attachment-handoff';
 import { effectiveAgentModelChoice, effectiveAgentModelId } from './agentModelSelection';
 import { mediaExecutionPolicyForProjectMetadata } from '../media/execution-policy';
 import { mediaModelProviderId } from '../media/models';
@@ -507,6 +549,67 @@ function messagesThatAbsorbedASuccessorRun(
   return absorbed;
 }
 
+function terminalErrorEventOf(message: ChatMessage): AgentEvent | undefined {
+  const events = message.events ?? [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.kind === 'status' && event.label === 'error') return event;
+  }
+  return undefined;
+}
+
+/**
+ * The client's record of a terminal `blocked` verdict that the server row has
+ * no way to contradict — because it has no way to EXPRESS it.
+ *
+ * A blocked strategy task is not a failed process. The daemon writes the Run's
+ * own outcome (`succeeded`, exit 0, zero error frames) and it is right to: the
+ * agent answered, and the answer is on screen. What failed is the TASK — the
+ * OD Next protocol gate refused the turn because the reply carried no Runtime
+ * State block. `providers/daemon.ts` already resolves that verdict into the
+ * turn's user-facing status (`endStatus = 'failed'` plus a structured error
+ * whose `code` is the gate's reason code), so within the chat
+ * `ChatMessage.runStatus` means "how this TURN ended", not "how the process
+ * exited".
+ *
+ * `GET …/messages` returns neither half of that verdict: the daemon persists
+ * no `strategyTaskBlocked` column and never wrote the client-side error frame
+ * (its Run had none to write). So the post-run alignment refresh arrives
+ * carrying only the process status — and the plain `{...server}` copy read that
+ * silence as a correction, dropping the verdict AND its reason code. The
+ * blocked card that `runtime/amr-guidance.ts` already writes for
+ * `od_next_protocol_runtime_state_missing` could therefore never render: with
+ * no `runStatus: 'failed'` there is no `retryAssistant`, with no
+ * `retryAssistant` there is no `runFailureUi`, and the chat fell back to the
+ * anonymous "task failed" card plus the English diagnostic sentence — under a
+ * message labelled "completed". The same emptiness took the card's Retry with
+ * it (its whole action group hangs off `runFailureUi`).
+ *
+ * The witnesses are deliberately narrow, so this is "the server does not know
+ * about this verdict", never "the local copy wins":
+ *   - the daemon's OWN terminal projection stamped the block (`onStrategyTaskSettled`);
+ *   - the client already resolved the turn as failed — which excludes the
+ *     blocked-but-delivered carve-out in `providers/daemon.ts`, where the Run
+ *     succeeded AND delivered and the turn deliberately stays `succeeded`;
+ *   - both copies describe the SAME physical Run, so a later Run's row cannot
+ *     inherit an older Run's verdict;
+ *   - the client holds the attribution (the error event carrying the gate's
+ *     reason code) and the server row does not, so nothing is duplicated and a
+ *     verdict without a reason can never resurrect an anonymous failure card.
+ */
+function localBlockedTurnVerdictUnknownToServer(
+  server: ChatMessage,
+  local: ChatMessage,
+): { runStatus: ChatMessage['runStatus']; errorEvent: AgentEvent } | null {
+  if (local.strategyTaskBlocked !== true) return null;
+  if (local.runStatus !== 'failed') return null;
+  if (!server.runId || server.runId !== local.runId) return null;
+  if (terminalErrorEventOf(server)) return null;
+  const errorEvent = terminalErrorEventOf(local);
+  if (!errorEvent) return null;
+  return { runStatus: local.runStatus, errorEvent };
+}
+
 function mergeServerMessageWithLocal(
   server: ChatMessage,
   local?: ChatMessage,
@@ -539,6 +642,42 @@ function mergeServerMessageWithLocal(
   }
   if (!server.runStatus && local.runStatus) {
     merged.runStatus = local.runStatus;
+  }
+  // A terminal `blocked` verdict is sticky (the daemon answers every further
+  // continuation of that task with 409 STRATEGY_TASK_STATE_MISMATCH) and the
+  // server row cannot carry it, so a refresh must not quietly un-block the
+  // turn's question form.
+  if (!server.strategyTaskBlocked && local.strategyTaskBlocked) {
+    merged.strategyTaskBlocked = local.strategyTaskBlocked;
+    if (server.strategyTaskBlockedText === undefined) {
+      merged.strategyTaskBlockedText = local.strategyTaskBlockedText ?? null;
+    }
+  }
+  // See `localBlockedTurnVerdictUnknownToServer`. The server's richer event log
+  // stays authoritative — the client's error frame is APPENDED to it, not
+  // swapped in — because the daemon's own diagnostics belong to the same turn.
+  const blockedVerdict = localBlockedTurnVerdictUnknownToServer(server, local);
+  if (blockedVerdict) {
+    merged.runStatus = blockedVerdict.runStatus;
+    if (!terminalErrorEventOf(merged)) {
+      merged.events = [...(merged.events ?? []), blockedVerdict.errorEvent];
+    }
+  }
+  // Feedback is written through a best-effort PUT after the button updates
+  // the local message. A run-completion refresh can race that PUT and return
+  // the previous server snapshot; blindly accepting it makes the selected
+  // thumb (and the reason panel after submit) visibly snap back until reload.
+  // Both copies carry the client-issued feedback timestamp, so keep the newer
+  // one just like we already keep fresher streamed content/events above.
+  if (
+    local.feedback
+    && (
+      !server.feedback
+      || (local.feedback.updatedAt ?? local.feedback.createdAt)
+        > (server.feedback.updatedAt ?? server.feedback.createdAt)
+    )
+  ) {
+    merged.feedback = local.feedback;
   }
   return merged;
 }
@@ -756,7 +895,7 @@ const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
 const MIN_CHAT_PANEL_WIDTH = 345;
-const MAX_CHAT_PANEL_WIDTH = 720;
+const FALLBACK_MAX_CHAT_PANEL_WIDTH = 720;
 const MIN_WORKSPACE_PANEL_WIDTH = 400;
 const SPLIT_RESIZE_HANDLE_WIDTH = 8;
 const BYOK_OPENCODE_UNAVAILABLE_MESSAGE =
@@ -843,6 +982,72 @@ function hasGenericDisconnectFailureEvent(message: ChatMessage): boolean {
         event.detail === GENERIC_DAEMON_DISCONNECT_MESSAGE),
   );
 }
+
+/**
+ * 从重挂的流里回放出来的状态帧,能不能改这条消息的状态。
+ *
+ * **不变量:daemon 已经对这条 run 给出终态裁定之后,同一条 run 回放出来的「活着」
+ * 信号只是历史,不许把这一轮改回进行中。**
+ *
+ * 订阅之前客户端刚问过 `/api/runs/:id`。拿到终态之后仍然会去订阅(`recoverableGenericDisconnectFailed`
+ * 这类路径要靠重放补回正文与产物),而 daemon 重放的是这条 run 的**完整事件日志** ——
+ * 里面有它当初的 `start` 帧,`providers/daemon.ts` 收到 `start` 就发 `running`。
+ * 那一帧描述的是「这条 run 当时启动了」,不是「它现在活着」。
+ *
+ * 让它落地的后果(真机会话 64acc867 / 消息 b7b61e19,DB 与 API 都写着 failed):
+ *  · `isAssistantMessageStreaming` 看到 running 就提前返回 true,`AssistantMessage`
+ *    把整轮的 `turnRunStatus` 钉成 running → 壳头「进行中」,耗时跟着 `nowMs` 永远涨
+ *    (一条真实时长 20.7s 的 run 被画成 202 分钟);
+ *  · `currentConversationAwaitingActiveRunAttach`(有活跃 run、又没在流)为真 → 发送禁用,
+ *    而 `currentConversationControlStreaming` 为假 → 连停止按钮都没有。用户没有出路。
+ *
+ * run 的日志里没有 `end` 帧时(daemon 被重启打断,`terminalTrigger: "daemon_restart"`)
+ * 这就是死结:再没有任何一帧能把它改回终态,刷新也解不开。
+ *
+ * 只挡**非终态**的帧。终态帧照常落地;daemon 的裁定本身不是终态(run 真的在跑)时
+ * 整条判据关闭;流已经转到**另一条** run(strategy task 推进)时同样放行 ——
+ * 那条 run 的死活与这份裁定无关。
+ */
+function replayedRunStatusMayLand(
+  frameStatus: ChatMessage['runStatus'],
+  terminalVerdict: ChatMessage['runStatus'] | null,
+  frameBelongsToVerdictRun: boolean,
+): boolean {
+  if (!terminalVerdict) return true;
+  if (!frameBelongsToVerdictRun) return true;
+  return isTerminalRunStatus(frameStatus);
+}
+
+/**
+ * How many REPLAY reattaches may hold a connection at the same time.
+ *
+ * Reopening a conversation whose messages all ended in a daemon disconnect
+ * releases one reattach per message. Each one opens an SSE subscription, and
+ * the browser gives an origin about six HTTP/1.1 connections for the entire
+ * profile — shared with any other Open Design tab sitting in the background.
+ * Firing the whole batch at once does not make the batch finish sooner; it
+ * parks every other request the page still owes behind it.
+ *
+ * Two is deliberate rather than one: a replay is mostly connection setup plus
+ * a finite event log, so a second in-flight replay keeps the pipe busy while
+ * the first is being decoded, without approaching the connection budget.
+ *
+ * Module scope, not per-effect: the connection budget belongs to the tab, and
+ * this effect re-runs on every `messages` change. A gate that was recreated
+ * per run would let each re-run open its own pair.
+ */
+const REATTACH_REPLAY_CONCURRENCY = 2;
+/**
+ * A replay is a finite event log, so it settles — but a connection that dies
+ * without closing does not. Cap how long one replay may hold its slot so a
+ * wedged one can never stop the rest of the batch from reattaching at all;
+ * exceeding the cap only means we stop counting it, never that we drop it.
+ */
+const REATTACH_REPLAY_MAX_HOLD_MS = 30_000;
+const reattachReplayGate = createBoundedConcurrency(REATTACH_REPLAY_CONCURRENCY, {
+  maxHoldMs: REATTACH_REPLAY_MAX_HOLD_MS,
+});
+
 const MIN_NORMAL_SPLIT_WIDTH =
   MIN_CHAT_PANEL_WIDTH + SPLIT_RESIZE_HANDLE_WIDTH + MIN_WORKSPACE_PANEL_WIDTH;
 type DesignSystemReviewEntry = NonNullable<ProjectMetadata['designSystemReview']>[string];
@@ -859,20 +1064,34 @@ function workspacePanelMinWidthForSplit(splitWidth: number): number {
 }
 
 function maxChatPanelWidthForSplit(splitWidth: number): number {
-  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return MAX_CHAT_PANEL_WIDTH;
+  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return FALLBACK_MAX_CHAT_PANEL_WIDTH;
   const workspaceMinWidth = workspacePanelMinWidthForSplit(splitWidth);
   const viewportAwareMax = splitWidth - SPLIT_RESIZE_HANDLE_WIDTH - workspaceMinWidth;
-  return Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(viewportAwareMax)));
+  // Keep the established 720px drag ceiling on ordinary windows, widening it
+  // only as far as the equal split on larger project workspaces. That makes
+  // 1:1 reachable without letting the chat drag past and dominate preview.
+  const equalSplitWidth = Math.floor((splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2);
+  const responsiveMax = Math.max(FALLBACK_MAX_CHAT_PANEL_WIDTH, equalSplitWidth);
+  return Math.max(0, Math.min(responsiveMax, Math.floor(viewportAwareMax)));
 }
 
 function clampPreferredChatPanelWidth(width: number): number {
-  return Math.min(MAX_CHAT_PANEL_WIDTH, Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width)));
+  return Math.max(MIN_CHAT_PANEL_WIDTH, Math.round(width));
 }
 
-function clampChatPanelWidth(width: number, maxWidth = MAX_CHAT_PANEL_WIDTH): number {
-  const effectiveMax = Math.max(0, Math.min(MAX_CHAT_PANEL_WIDTH, Math.floor(maxWidth)));
+function clampChatPanelWidth(
+  width: number,
+  maxWidth = FALLBACK_MAX_CHAT_PANEL_WIDTH,
+): number {
+  const effectiveMax = Math.max(0, Math.floor(maxWidth));
   const effectiveMin = Math.min(MIN_CHAT_PANEL_WIDTH, effectiveMax);
   return Math.min(effectiveMax, Math.max(effectiveMin, Math.round(width)));
+}
+
+export function defaultChatPanelWidthForSplit(splitWidth: number): number {
+  if (!Number.isFinite(splitWidth) || splitWidth <= 0) return DEFAULT_CHAT_PANEL_WIDTH;
+  const equalHalf = (splitWidth - SPLIT_RESIZE_HANDLE_WIDTH) / 2;
+  return clampChatPanelWidth(equalHalf, maxChatPanelWidthForSplit(splitWidth));
 }
 
 function designSystemFeedbackAttachments(
@@ -1103,16 +1322,18 @@ function designSystemNeedsWorkPrompt(
   );
 }
 
-function readSavedChatPanelWidth(): number {
-  if (typeof window === 'undefined') return DEFAULT_CHAT_PANEL_WIDTH;
+function readSavedChatPanelWidth(): { width: number; customized: boolean } {
+  if (typeof window === 'undefined') {
+    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
+  }
   try {
     const raw = window.localStorage.getItem(CHAT_PANEL_WIDTH_STORAGE_KEY);
     const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
     return Number.isFinite(parsed)
-      ? clampPreferredChatPanelWidth(parsed)
-      : DEFAULT_CHAT_PANEL_WIDTH;
+      ? { width: clampPreferredChatPanelWidth(parsed), customized: true }
+      : { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
   } catch {
-    return DEFAULT_CHAT_PANEL_WIDTH;
+    return { width: DEFAULT_CHAT_PANEL_WIDTH, customized: false };
   }
 }
 
@@ -1540,6 +1761,21 @@ export function shouldDefaultCollapseChatForSharedNonOwner(collab: {
   return collab.enabled && collab.isSharedNonOwner;
 }
 
+/**
+ * B11 —— 「当前 agent 不支持中途插话」什么时候才**说得通**。
+ *
+ * 这句话是对「队列里那颗为什么不是『引导对话』」的解释,而「引导」只有在
+ * **有一轮正在跑**的时候才存在。一轮都没在跑、队列纯粹排着等的时候,没有任何
+ * 东西可以插话:那颗按钮就是普通的「立即发送」,不打断任何东西 —— 这时候再解释
+ * 「不支持中途插话」,是在回答一个没人问的问题。
+ */
+export function shouldExplainMidTurnSteeringUnsupported(input: {
+  steerableRunId: string | null;
+  agentSupportsSteering: boolean;
+}): boolean {
+  return Boolean(input.steerableRunId) && !input.agentSupportsSteering;
+}
+
 // React key for the on-screen question form. Deliberately does NOT include the
 // form's parsed `id`: there is at most one (first) form per assistant message,
 // so `${conversation}:${message}` is already a stable, unique identity for the
@@ -1770,7 +2006,12 @@ function projectEventToAgentEvent(evt: ProjectEvent): LiveArtifactEventItem['eve
     evt.type === 'comment-changed' ||
     evt.type === 'presence-changed' ||
     evt.type === 'project-metadata-changed' ||
-    evt.type === 'project-content-transfer-state'
+    evt.type === 'project-content-transfer-state' ||
+    // Same shape of signal: `handleProjectEvent` turns it into a targeted
+    // conversation re-read. It must be named here rather than left to fall
+    // through — the tail of this function assumes whatever survives is a
+    // live-artifact refresh and reads `evt.phase` off it.
+    evt.type === 'chat-artifact-refs-changed'
   ) {
     return null;
   }
@@ -1908,6 +2149,49 @@ export function ProjectView({
     amrAuthRetryMountIdRef.current = randomUUID();
   }
   const activeAuthorizationLifetimeRef = useRef<string | null>(projectAuthorizationKey);
+  /**
+   * The Home-carried attachments, by every name the workspace might list them
+   * under. `selectPrimaryProjectFile` uses it to NOT auto-open a file the user
+   * merely attached to their prompt.
+   *
+   * This can no longer be a first-render snapshot. The project frame now opens
+   * while those files are still uploading, so at mount the only names we have
+   * are the local ones the picker gave us; the server paths arrive later. Both
+   * sources are folded in, and the set keeps refreshing until the uploads are
+   * done — a snapshot taken mid-upload would let a just-uploaded attachment
+   * win the initial-open race it is supposed to be excluded from.
+   */
+  const initialHomeAttachmentFileNamesRef = useRef<{
+    projectId: string;
+    fileNames: Set<string>;
+  } | null>(null);
+  const refreshInitialHomeAttachmentFileNames = useCallback(() => {
+    const current = initialHomeAttachmentFileNamesRef.current;
+    const fileNames = current?.projectId === project.id ? current.fileNames : new Set<string>();
+    let isHomeAutoSend = false;
+    try {
+      isHomeAutoSend = Boolean(
+        window.sessionStorage.getItem(autoSendFirstMessageKey(project.id)),
+      );
+    } catch {
+      /* sessionStorage may be unavailable; use ordinary initial selection. */
+    }
+    if (isHomeAutoSend) {
+      for (const upload of homeAttachmentUploadsFor(project.id)) fileNames.add(upload.name);
+      for (const attachment of readAutoSendAttachments(project.id)) {
+        fileNames.add(attachment.path);
+        const baseName = attachment.path.split('/').pop();
+        if (baseName) fileNames.add(baseName);
+        if (attachment.name) fileNames.add(attachment.name);
+      }
+    }
+    initialHomeAttachmentFileNamesRef.current = { projectId: project.id, fileNames };
+    return fileNames;
+  }, [project.id]);
+  if (initialHomeAttachmentFileNamesRef.current?.projectId !== project.id) {
+    refreshInitialHomeAttachmentFileNames();
+  }
+
   useEffect(() => {
     activeAuthorizationLifetimeRef.current = projectAuthorizationKey;
     return () => {
@@ -2085,6 +2369,11 @@ export function ProjectView({
     workspaceContext: projectRunWorkspaceContext,
     workspaceContextLoading: projectWorkspaceScopeState.loading,
     initialMaterializationPending,
+    // The daemon's own `workspace_projects` verdict for this project. A
+    // `personal` row is the same authority its write gate consults, so the
+    // read-only banner must not outlive it when `/collab/status` cannot
+    // answer (OPEND-2624).
+    projectVisibility: projectWorkspaceVisibility(projectWorkspaceScopeState.scope),
     presenceFilePath: project?.metadata?.entryFile ?? null,
   });
   // A Team-bound placeholder is safe to render and comment around, but its
@@ -2307,15 +2596,6 @@ export function ProjectView({
   const [activePluginActionPaths, setActivePluginActionPaths] = useState<Set<string>>(() => new Set());
   const [hiddenAssistantPluginActionPaths, setHiddenAssistantPluginActionPaths] = useState<Set<string>>(() => new Set());
   const [forceStreamingPluginMessageIds, setForceStreamingPluginMessageIds] = useState<Set<string>>(() => new Set());
-  // Ephemeral, live-only accumulation of a tool call's streaming JSON input,
-  // keyed by tool-use id (globally unique per run). Fed by `onToolInputDelta`
-  // while the model is still emitting `input_json_delta`; dropped per-id once
-  // the full `tool_use` lands and wiped when the run ends. Never persisted —
-  // see daemon `daemonAgentPayloadToPersistedAgentEvent` (returns null).
-  // `seq` records how many persisted events existed when the tool started
-  // streaming, so the renderer can place the live card at the tool call's
-  // position in the message (text before it = preamble, after it = hedging).
-  const [liveToolInput, setLiveToolInput] = useState<Record<string, { name: string; text: string; seq: number }>>({});
   // True once the initial DB read for the active conversation has settled.
   // Auto-send gates on this so it can't fire before listMessages resolves and
   // race-clobber the freshly-pushed user + assistant placeholder. Without
@@ -2343,11 +2623,6 @@ export function ProjectView({
   const [attachedComments, setAttachedComments] = useState<PreviewComment[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [streamingConversationId, setStreamingConversationId] = useState<string | null>(null);
-  // Safety net: drop any live tool-input partials whose tool never produced a
-  // full `tool_use` (run errored/canceled mid-call) once streaming settles.
-  useEffect(() => {
-    if (!streaming) setLiveToolInput((prev) => (Object.keys(prev).length ? {} : prev));
-  }, [streaming]);
   const [paneError, setPaneError] = useState<{
     message: string;
     sourceAssistantId: string | null;
@@ -2533,18 +2808,221 @@ export function ProjectView({
   const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
     {
       reason: 'insufficient' | 'signed_out';
+      /**
+       * 这一档同时唤起哪个弹窗 —— 由**身份 × 订阅**决定(规格 §6.V):
+       * `upgrade` 是现有的余额不足升级弹窗(非 Max · owner);`ask_owner` 是
+       * 「找所有者充值」那张(所有非 owner 成员);`null` 是不弹窗
+       * (Max · owner —— 他没有更高的套餐可买,卡上那颗按钮直接落在自动充值上,
+       * 中间再插一张弹窗只是多一次点击)。
+       *
+       * 决定在**拦截发生的那一刻**做完并记下来,而不是渲染时再算:身份换了
+       * (切工作区)不该把一张已经开着的弹窗换成另一张。
+       */
+      dialog: AmrBalanceBlockedDialogKind;
       snapshot: AmrWalletSnapshot;
       conversationId: string;
     } | null
   >(null);
-  // Soft low-balance warning holding a pending send: the dialog resolves the
-  // promise the gate is awaiting ('proceed' continues the very same send).
-  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    {
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: AmrLowBalanceDecision) => void;
-    } | null
-  >(null);
+  /**
+   * 余额提示卡(交付稿第 75 / 76 格)要显示的余额,`null` = 不提示。
+   *
+   * 产品 2026-08-26 裁决:「**告警可继续的不弹窗,只有卡片;余额不足再弹窗**」。
+   * 于是这里成了告警档**唯一**的呈现方式 —— 它不挡发送(D4),卡在流水里,
+   * 和输入框无关。拦截档弹窗保留,但也会同时点亮这张卡。
+   *
+   * 判定本身没动(`runtime/amr-balance-gate.ts`),这只是判定结果的呈现。
+   */
+  const [amrBalanceCardUsd, setAmrBalanceCardUsd] = useState<number | null>(null);
+  /**
+   * 出这张卡时那份钱包读数的 profile。只在**没有工作区上下文**时用得到 ——
+   * 那种情况下升级链接退回 profile 兜底(和 `AmrBalanceDialog` 同一条规则)。
+   */
+  const [amrBalanceCardProfile, setAmrBalanceCardProfile] = useState<string | null>(null);
+  /**
+   * **跑到一半死在钱上的那一轮,也要点亮同一张卡。**
+   *
+   * 用户 2026-09-02 裁决:「额度不足和额度耗尽,升级卡各只有一张,不存在第二张
+   * 白色通用报错卡」。上面那两处 `setAmrBalanceCardUsd` 都在**发送前**的余额闸门
+   * 里 —— 闸门看不出问题、run 起来了、跑到一半才耗尽的那一格,在此之前只有
+   * daemon 的 `AMR_INSUFFICIENT_BALANCE` → 通用白卡。白卡那一半已经由
+   * `amr-guidance` 的 `suppressCard` 撤掉,这里补上另一半。
+   *
+   * 判据从**消息**上读,不挂在 `onError` 回调里:错误事件是落库的,所以刷新之后
+   * 卡还在;而发送路径和重挂路径各有一个 `onError`,挂回调等于要在两处各写一遍,
+   * 漏一处就是刷新后卡消失。
+   */
+  const amrBalanceFailureMessageId = useMemo(
+    () => amrInsufficientBalanceFailureMessageId(messages),
+    [messages],
+  );
+  /**
+   * **补查落空了没有。** 落空 = 报错卡那一半没人接得住,得还回去。
+   *
+   * 三态,不是两态:`false` 同时覆盖「没有这样一轮失败」和「补查还在路上」——
+   * 这两格都不该画白卡。前者本来就没有失败可说,后者画了就会先闪一下白卡再
+   * 换成升级卡,把裁决里的「一张卡」闪成两张。只有**查完了、确实没有数字**
+   * 那一格才置 true。
+   */
+  const [amrBalanceFailureWalletUnavailable, setAmrBalanceFailureWalletUnavailable] =
+    useState(false);
+  /**
+   * 补查要读**哪个钱包**。
+   *
+   * 和发送前那道闸门钉在同一个工作区身份上(`projectRunPreflightContext`)——
+   * 这一轮的钱是从那儿出的。少了这一步,补查会去读账号级的
+   * `/api/integrations/vela/wallet`,而那条请求里根本没有 workspace 参数
+   * (`daemon/src/routes/vela.ts:601`):团队项目会念出这个人**个人账号**的余额。
+   * 那不是「数字略有出入」,是整张卡说反 —— 团队钱包 $0 的那一轮会被个人的
+   * $12.50 画成橙色的「余额可能撑不完下一个任务」,而真相是「现在无法开始新任务」,
+   * 且他把个人钱包充满也救不了这个团队。
+   *
+   * 判据字符串化之后当 effect 的依赖:scope 落定得比这条失败晚时,effect 会
+   * 自己重跑一次把数字换过来,不需要额外的等待态。
+   */
+  const amrBalanceCardScope = useMemo(
+    () => amrBalanceGateScopeForWorkspaceContext(projectRunPreflightContext),
+    [projectRunPreflightContext],
+  );
+  const amrBalanceCardScopeKey = amrBalanceCardScope
+    ? `${amrBalanceCardScope.workspaceType}:${amrBalanceCardScope.workspaceId}:${amrBalanceCardScope.workspaceMemberId}`
+    : '';
+  const amrBalanceCardScopeRef = useRef(amrBalanceCardScope);
+  amrBalanceCardScopeRef.current = amrBalanceCardScope;
+  useEffect(() => {
+    if (!amrBalanceFailureMessageId) {
+      setAmrBalanceFailureWalletUnavailable(false);
+      return;
+    }
+    let cancelled = false;
+    // 换了一轮失败就重新查:上一轮的结论不能替这一轮回答。
+    setAmrBalanceFailureWalletUnavailable(false);
+    void (async () => {
+      // 失败事件本身**不带余额**(daemon 的 `classifyAmrAccountFailure` 只给出
+      // 错误码),所以数字只能现查。有工作区身份就走闸门那条被后端证明过的
+      // 工作区读数,没有(旧的未绑定项目)才退回账号钱包 —— 那种项目花的
+      // 本来就是账号的钱。
+      const snapshot = await fetchAmrBalanceCardWalletSnapshot(
+        amrBalanceCardScopeRef.current,
+      );
+      if (cancelled) return;
+      // 读不出确定的数字就**什么都不念**。这张卡把余额报给用户,编一个出来
+      // 比不出卡更糟 —— 判定用的是和闸门同一条解析规则,两处不另算。
+      //
+      // 但「不念数字」不等于「不给出路」:这一轮是死在钱上的,充值入口是它
+      // 唯一的自救口。所以这里把落空**说出来**,由 ChatPane 把白色报错卡
+      // (充值 + 重试)还回来,而不是两张卡都不画、屏幕上什么都不剩。
+      const balanceUsd = amrBalanceCardBalanceUsd(snapshot);
+      if (balanceUsd == null) {
+        setAmrBalanceFailureWalletUnavailable(true);
+        return;
+      }
+      setAmrBalanceCardUsd(balanceUsd);
+      setAmrBalanceCardProfile(snapshot?.profile ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [amrBalanceFailureMessageId, amrBalanceCardScopeKey]);
+  /**
+   * 这一次要付钱的工作区,把这个人放进 §6.V 的哪一格。
+   *
+   * 用的是 `projectRunPreflightContext` —— 余额门查的是同一个工作区,不是环境里
+   * 恰好选中的那个;两处不同源就会出现「查 A 的钱、按 B 的身份呈现」。
+   */
+  /**
+   * 这个工作区的**套餐**,投影到要付这笔钱的那个工作区上。
+   *
+   * 不能只靠 `context.planId`:走到客户端的 collab context 是用 vela 的
+   * `/api/v1/workspaces` 目录行拼出来的,而目录行不带套餐字段 —— daemon 和 web
+   * 两侧的 `workspaceContextFromDirectoryItem` 都把 `planId` 写死成 null
+   * (`daemon/src/collab/vela-workspace-context.ts` / `collab/useWorkspaceContext.ts`)。
+   * 2026-09-04 用真账号打后端实测过:一个 `team_max` 的团队工作区,vela 自己报
+   * `planId: "team_max"`,而 `GET /api/workspace/context` 报 null。只认 context
+   * 就会把每一个团队 Max 所有者都判成非 Max,把他送去 Pricing 买他已经买过的套餐。
+   *
+   * 工作区套餐唯一的真实来源是账单快照,所以这里跟 Home(`EntryShell`)用同一个
+   * 投影函数。scope 钉在 `projectRunPreflightContext` 上,而不是环境里恰好选中的
+   * 那个工作区 —— 否则又会变成「查 A 的钱、按 B 的套餐呈现」。
+   */
+  const projectRunPreflightBillingResponse = useWorkspaceBillingResponse({
+    context: projectRunPreflightContext,
+  });
+  const projectRunPreflightBilling = useMemo(
+    () =>
+      workspaceBillingSummaryForContext(
+        projectRunPreflightBillingResponse,
+        projectRunPreflightContext,
+      ),
+    [projectRunPreflightBillingResponse, projectRunPreflightContext],
+  );
+  const amrBalanceBranch = useMemo(
+    () =>
+      resolveAmrBalanceBranch({
+        context: projectRunPreflightContext,
+        billing: projectRunPreflightBilling,
+      }),
+    [projectRunPreflightBilling, projectRunPreflightContext],
+  );
+  const amrBalanceBranchRef = useRef(amrBalanceBranch);
+  amrBalanceBranchRef.current = amrBalanceBranch;
+  /**
+   * 「找所有者充值」弹窗是从**卡上那颗按钮**点开的(而不是拦截时自动弹出的)。
+   * 拦截时自动弹出的那一份记在 `amrBalanceGateBlock.dialog` 上,两者共用同一个
+   * 组件,任一为真就渲染。
+   */
+  const [amrOwnerTopUpFromCard, setAmrOwnerTopUpFromCard] = useState(false);
+  /**
+   * 升级卡那颗按钮:**点了跳哪由身份 × 订阅决定**(规格 §6.V 的第四列)。
+   *
+   *   非 Max · owner → 现有的 Pricing 深链(和弹窗同一个落点,「卡和弹窗都直接跳 Pricing」)
+   *   Max   · owner → vela web 端 + 自动充值意图(他没有更高的套餐可买,充值才是解法)
+   *   任何非 owner  → 不外跳:账单动作 B 会拒。给他「找所有者充值」那张弹窗,
+   *                   那是他唯一真正走得通的一条路(也是 §6.Y 死胡同的出口)。
+   *
+   * 落点复用 `workspaceUpgradeUrl` / `workspaceAutoRechargeUrl` 这两个唯一决策点,
+   * 免得升级卡和账号菜单、设置面板各自长出一条不一样的链接。
+   */
+  const handleAmrBalanceCardUpgrade = useCallback(() => {
+    const branch = amrBalanceBranchRef.current;
+    const intent = amrBalanceUpgradeIntent(branch);
+    if (intent === 'ask_owner') {
+      setAmrOwnerTopUpFromCard(true);
+      return;
+    }
+    const fallbackProfile = amrBalanceCardProfile;
+    // 自动充值链接对「可读但不可写」的工作区会返回 null(权限位不同,见
+    // `workspaceAutoRechargeUrl`)。那时退回 Pricing —— 少一个功能好过一颗死按钮。
+    const url =
+      (intent === 'auto_recharge'
+        ? workspaceAutoRechargeUrl(projectRunPreflightContext, { fallbackProfile })
+        : null)
+      ?? workspaceUpgradeUrl(projectRunPreflightContext, null, { fallbackProfile });
+    if (!url) return;
+    const entrySource =
+      intent === 'auto_recharge'
+        ? ('chat_upgrade_card_auto_recharge' as const)
+        : ('chat_upgrade_card' as const);
+    const metricsConsent = config.telemetry?.metrics === true;
+    const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
+      metricsConsent,
+    });
+    const deviceId = amrHandoffDeviceId({
+      metricsConsent,
+      resolvedDeviceId: getResolvedDeviceId(),
+      installationId: config.installationId,
+    });
+    window.open(
+      attributedAmrUrl(url, attribution, deviceId),
+      '_blank',
+      'noopener,noreferrer',
+    );
+  }, [
+    amrBalanceCardProfile,
+    analytics.track,
+    config.installationId,
+    config.telemetry?.metrics,
+    projectRunPreflightContext,
+  ]);
   // Conversations with a balance-gate check currently in flight. Sends that
   // arrive during the check queue instead of racing a duplicate run through
   // the not-yet-busy window the gate's await opens.
@@ -2556,13 +3034,15 @@ export function ProjectView({
   const amrGatePausedQueueConversationsRef = useRef<Set<string>>(new Set());
   const [autoAuditRepairSeed, setAutoAuditRepairSeed] =
     useState<{ id: string; value: string } | null>(null);
-  const [chatPanelWidth, setChatPanelWidth] = useState(readSavedChatPanelWidth);
-  const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(MAX_CHAT_PANEL_WIDTH);
+  const initialChatPanelWidth = useMemo(readSavedChatPanelWidth, []);
+  const [chatPanelWidth, setChatPanelWidth] = useState(initialChatPanelWidth.width);
+  const [chatPanelMaxWidth, setChatPanelMaxWidth] = useState(FALLBACK_MAX_CHAT_PANEL_WIDTH);
   const [workspacePanelMinWidth, setWorkspacePanelMinWidth] = useState(MIN_WORKSPACE_PANEL_WIDTH);
   const [resizingChatPanel, setResizingChatPanel] = useState(false);
   const splitRef = useRef<HTMLDivElement | null>(null);
   const chatPanelWidthRef = useRef(chatPanelWidth);
   const preferredChatPanelWidthRef = useRef(chatPanelWidth);
+  const chatPanelWidthCustomizedRef = useRef(initialChatPanelWidth.customized);
   const resizeStartPreferredWidthRef = useRef(chatPanelWidth);
   const chatPanelMaxWidthRef = useRef(chatPanelMaxWidth);
   const resizeStateRef = useRef<{
@@ -2612,14 +3092,23 @@ export function ProjectView({
   // tool card, an attachment chip, or a produced-file chip in chat. We
   // include a nonce so re-clicking the same name after the user closed the
   // tab still focuses it.
-  const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  // `openBatch` carries a whole finished turn's artifacts (OPEND-2588) in one
+  // request. It has to be one request: this is a single state slot, so N
+  // synchronous `requestOpenFile` calls would collapse into the last one.
+  const [openRequest, setOpenRequest] = useState<
+    { name: string; nonce: number; openBatch?: readonly string[] } | null
+  >(null);
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
   // existing export/deploy surface rather than introducing a new share backend.
-  const [shareRequest, setShareRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [shareRequest, setShareRequest] = useState<
+    { name: string; nonce: number; anchorId?: string } | null
+  >(null);
   // Parallel to shareRequest, but opens the workspace's Download/Export menu.
-  const [downloadRequest, setDownloadRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [downloadRequest, setDownloadRequest] = useState<
+    { name: string; nonce: number; anchorId?: string } | null
+  >(null);
   const [designSystemEditRequest, setDesignSystemEditRequest] =
     useState<{ module: 'logo'; nonce: number } | null>(null);
   // When a queued chat send starts processing, ask the workspace to flip the
@@ -2676,6 +3165,134 @@ export function ProjectView({
   // Timer handles for pending transient-retry callbacks; cleared on cleanup.
   const transientRetryTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [recoveryTick, setRecoveryTick] = useState(0);
+  /**
+   * 组件 22 · 重连 · S29:流水最后一行此刻该不该有、写几分之几。
+   *
+   * 读数来自传输层的 `onReconnect`(`providers/daemon.ts` 的 `DaemonReconnectState`),
+   * 推演规则全在 `runtime/chat/reconnect-state.ts` —— 包括「恢复后整行消失」
+   * 与「run 落终态后整行消失」这两条边界。这里只做搬运。
+   */
+  const [reconnectView, setReconnectView] = useState<ChatReconnectView | null>(null);
+  const pushReconnectSignal = useCallback((signal: ChatReconnectSignal) => {
+    setReconnectView((prev) => nextChatReconnectView(prev, signal));
+  }, []);
+  /**
+   * 那一轮的结局有时不从流上来 —— 会话刷新、切回这个会话时重新拉消息,
+   * 都能把终态带进 `messages`,而 `settled` 今天只在流上发。掉线正是流断了的时刻,
+   * 所以这条「别的门」恰恰是最常走的那条:不补这一拍,重连行会挂在一条写着
+   * 「已完成」的消息下面继续说「连接失败」(2026-08-27 真机见过)。
+   *
+   * 撤不撤由 `nextChatReconnectView` 判 —— `failed` 对已经交回给人的那一行是不动的。
+   */
+  useEffect(() => {
+    const signal = settledSignalFromMessages(reconnectView, messages);
+    if (signal) pushReconnectSignal(signal);
+  }, [reconnectView, messages, pushReconnectSignal]);
+  /**
+   * 组件 22 的**第二个上膛口**:浏览器自己说这一屏没网了。
+   *
+   * 第一个上膛口是传输层那条重连预算,它只认「socket 真的断掉」。那条路本身是通的
+   * (`tests/providers/daemon-sse-tab-offline.test.ts` 走的就是它)。可 daemon 跑在
+   * **本机回环**上 —— 页签断网时那条流常常一点事都没有:25 秒一次的 keepalive 照旧到,
+   * 75 秒的静默闸(`DAEMON_STREAM_IDLE_TIMEOUT_MS`)一次都不上膛,预算于是从头到尾是 0。
+   *
+   * 真机 2026-09-03:一条长任务跑着,把那个页签断网,一分钟后 `navigator.onLine`
+   * 已经是 `false`,而壳头照旧写着「进行中」、秒数还在往上走,「正在重新连接 /
+   * 连接失败 / 重新连接」一个字都没有。**浏览器早就知道,我们没问过它。**
+   *
+   * 只在**这个会话里有一轮还在跑**的时候上膛:没有在跑的东西就没有可重连的东西,
+   * 那时报「正在重新连接」是凭空多一句话。收场只认 `online` 与这一轮的终态
+   * (`settled`),判据全在 `nextChatReconnectView` 的 `network` 分支。
+   */
+  const offlineWatchRunId = useMemo(() => {
+    // 切会话的那一拍 `messages` 可能还是上一个会话的,别把别人的 run 盖上这个会话的戳。
+    if (!activeConversationId || messagesConversationId !== activeConversationId) return null;
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i];
+      if (message?.role !== 'assistant' || !message.runId) continue;
+      if (!isActiveRunStatus(message.runStatus)) continue;
+      return message.runId;
+    }
+    return null;
+  }, [messages, activeConversationId, messagesConversationId]);
+  useEffect(() => {
+    const runId = offlineWatchRunId;
+    const conversationId = activeConversationId;
+    if (!runId || !conversationId) return undefined;
+    const push = (online: boolean): void => {
+      pushReconnectSignal({ kind: 'network', runId, conversationId, online });
+    };
+    // 挂上来时就已经断着的那一种:事件早发过了,只有问一次才知道。
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) push(false);
+    const handleOffline = (): void => push(false);
+    const handleOnline = (): void => push(true);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [offlineWatchRunId, activeConversationId, pushReconnectSignal]);
+  /**
+   * 22-3 那颗〔重新连接〕。
+   *
+   * 语义是**接回同一轮的流**,不是重试 —— 复用已有的重挂通道
+   * (`attachRecoverableRuns` → `reattachDaemonRun`,带 `?after=<lastRunEventId>` 游标),
+   * 所以已经跑出来的东西不会丢,也不会在 daemon 上多起一轮。
+   *
+   * 用尽预算后那条通道被 `genericDisconnectBackoffUntilRef` 压了一段冷却窗口
+   * (给还在跑的 daemon 留喘息),这里是用户明确要求现在就试,所以先撤掉冷却与
+   * 重试计数,再推一拍 `recoveryTick` 把重挂扫描叫醒。
+   *
+   * 按下之后那一行**当场**翻回「正在重新连接 1/5」,不撤整行。
+   *
+   * 为什么必须当场变:按下之后要走的整条链(清记账 → 叫醒扫描 → 拉运行状态 →
+   * 起重挂)全在异步里,而 daemon 没回来时它在第三步就断了 —— 上面这几行
+   * `delete` 一个像素都不会改。真机 2026-08-27 用户原话「点击 reconnect 咋没啥
+   * 反应」;**「点了没变化」和「按钮坏了」在屏幕上长得一模一样。**
+   *
+   * 为什么不能撤整行:更早一版乐观推了一条 `dropped`,重挂起不来时没有人再把
+   * 行画回来,屏幕只剩壳头一句「运行失败」,用户连再按一次的入口都没有。
+   * 撤整行的唯一正当时机仍然是「重挂真的开始了」,那个位置由 `attachRecoverableRuns`
+   * 里 `reattachDaemonRun` 前一行的 `dropped` 占着。
+   *
+   * 乐观就必须有到期。这把闸是那条不变量在运行时的唯一落点:重挂起不来的形态太多
+   * (状态拉不到、daemon 亲口说这一轮已经 failed、被冷却窗口挡下、扫描因为
+   * `daemonLive` 翻假压根没跑),挨个去认等于把一条规矩拆成十几处记得写对。
+   * 过了 `MANUAL_RECONNECT_FEEDBACK_MS` 这一行还是那条乐观读数,就回落成 22-3
+   * 把按钮还给人 —— 判据在 `reconnect-state.ts` 的 `manual-retry-expired`,
+   * 传输层真的接管出来的读数不带 `manualRetry`,那把闸对它自动作废。
+   *
+   * 连点不成立,而且不是靠一把锁:乐观读数的 `exhausted` 是 false,而
+   * `components/chat/Reconnect.tsx` 只有 `exhausted` 那一档才画按钮 ——
+   * 窗口里屏幕上没有可按的东西,一次按压最多换来一次重挂扫描。
+   */
+  const reconnectRunId = reconnectView?.runId ?? null;
+  const manualReconnectExpiryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleManualReconnect = useCallback(() => {
+    const runId = reconnectRunId;
+    /*
+     * 没有 runId 就是**屏幕上没有那一行**:按钮和这个 id 读的是同一份
+     * `reconnectView`(渲染那一路只多过一道会话过滤,过滤只会把它变成 null),
+     * 所以没有行 = 没有按钮 = 没有东西可接。能走到这里只剩一种时序:画面画出按钮
+     * 之后、这一下按压落地之前那一行自己收场了(比如这一轮其实已经成功)。
+     * 那时什么都不做才是对的 —— 不该为一个已经不存在的目标再起一次重挂。
+     */
+    if (!runId) return;
+    transientFailedRetriesRef.current.delete(runId);
+    genericDisconnectRetriesRef.current.delete(runId);
+    genericDisconnectBackoffUntilRef.current.delete(runId);
+    completedReattachRunsRef.current.delete(runId);
+    clearProjectTimeout(manualReconnectExpiryRef.current);
+    manualReconnectExpiryRef.current = null;
+    setReconnectView((prev) => nextChatReconnectView(prev, { kind: 'manual-retry', runId }));
+    manualReconnectExpiryRef.current = scheduleProjectTimeout(() => {
+      manualReconnectExpiryRef.current = null;
+      setReconnectView((prev) =>
+        nextChatReconnectView(prev, { kind: 'manual-retry-expired', runId }));
+    }, MANUAL_RECONNECT_FEEDBACK_MS);
+    setRecoveryTick((t) => t + 1);
+  }, [reconnectRunId, clearProjectTimeout, scheduleProjectTimeout]);
   const recoveredArtifactMessagesRef = useRef<Set<string>>(new Set());
   const messagesRef = useRef<ChatMessage[]>([]);
   const startingQueuedChatSendIdRef = useRef<string | null>(null);
@@ -3468,6 +4085,12 @@ export function ProjectView({
 
   const persistTabsState = useCallback(
     (next: OpenTabsState) => {
+      // A tab activation the host did not ask for is the user steering the
+      // preview themselves. See `userTookOverPreviewRef` for why that outranks
+      // an agent's `<od-focus open="…">`.
+      if (next.active && next.active !== lastHostRequestedOpenRef.current) {
+        userTookOverPreviewRef.current = true;
+      }
       setOpenTabsState(next);
       if (!tabsLoadedRef.current) return;
       // Immediate, cheap, synchronous — keeps the cache canonical for reload.
@@ -3728,16 +4351,80 @@ export function ProjectView({
       hasAppliedInitialPrimaryOpenRef.current = true;
       return;
     }
-    const primaryFile = selectPrimaryProjectFile(projectFiles);
+    const primaryFile = selectPrimaryProjectFile(
+      projectFiles,
+      refreshInitialHomeAttachmentFileNames(),
+    );
     if (!primaryFile) return;
     hasAppliedInitialPrimaryOpenRef.current = true;
     persistTabsState({ tabs: [primaryFile.name], active: primaryFile.name });
-  }, [openTabsState.active, openTabsState.tabs.length, persistTabsState, projectFiles, routeFileName]);
+  }, [
+    openTabsState.active,
+    openTabsState.tabs.length,
+    persistTabsState,
+    projectFiles,
+    refreshInitialHomeAttachmentFileNames,
+    routeFileName,
+  ]);
+
+  /**
+   * The last file the HOST asked to open. Everything the host opens — an
+   * auto-open decision, a Share/Download affordance, a route restore — goes
+   * through `requestOpenFile`, so a tab activation that lands anywhere ELSE is
+   * the user's own click.
+   */
+  const lastHostRequestedOpenRef = useRef<string | null>(null);
+  /**
+   * True once the user has taken the preview over during the current run.
+   *
+   * Read by the `<od-focus open="…">` handler, which declines rather than yank
+   * the tab away. Reset when a run starts: taking over during turn N says
+   * nothing about turn N+1.
+   *
+   * Known false negative, accepted: the user clicking BACK to the file the host
+   * last opened is indistinguishable from the host's own open. The cost is that
+   * a later agent `open` may still fire in that one case, and the cost of
+   * closing it would be threading a "who asked" flag through FileWorkspace's
+   * whole tab surface.
+   */
+  const userTookOverPreviewRef = useRef(false);
 
   const requestOpenFile = useCallback((name: string) => {
     if (!name) return;
+    lastHostRequestedOpenRef.current = name;
     setOpenRequest({ name, nonce: Date.now() });
   }, []);
+
+  /**
+   * Open a finished turn's artifacts together, with `focused` selected.
+   *
+   * Product ruling 2026-09-04 (OPEND-2588): 「就让 agent 生成完,把那些产物在右侧
+   * 全打开呗」—— 「是全部的**主要**产物」. Auto-open used to open exactly ONE file
+   * per turn, so a batch that generated four images left two of them with no
+   * tab. Which artifacts qualify is still `auto-open-file.ts`'s call; this only
+   * stops throwing the rest away.
+   *
+   * Deliberately ONE request rather than a `requestOpenFile` loop: `openRequest`
+   * is a single state slot, so successive calls in the same tick collapse to the
+   * last name, and even spread across ticks each open would steal the focus that
+   * the selection heuristic deliberately assigned to `focused`.
+   */
+  const requestOpenTurnArtifacts = useCallback(
+    (names: readonly string[], focused: string) => {
+      if (!focused) return;
+      lastHostRequestedOpenRef.current = focused;
+      // The batch is the complete, ordered tab list — `focused` included, so
+      // the tab strip keeps file-list order instead of pushing the selected
+      // artifact to the end.
+      const openBatch = names.filter((name) => Boolean(name));
+      setOpenRequest({
+        name: focused,
+        nonce: Date.now(),
+        ...(openBatch.length > 1 ? { openBatch } : {}),
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     const designSystemId = brandReady?.designSystemId;
@@ -4046,6 +4733,11 @@ export function ProjectView({
   // Ref to the (later-defined) comment refresher so the SSE handler above can
   // call it without a temporal-dead-zone reference.
   const refreshPreviewCommentsRef = useRef<(() => Promise<void>) | null>(null);
+  // Same temporal-dead-zone dodge for the conversation re-read, used by the
+  // `chat-artifact-refs-changed` branch below.
+  const scheduleConversationMessageRefreshRef = useRef<((conversationId: string) => void) | null>(
+    null,
+  );
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
       iframeKeepAlivePool.evictProject(project.id);
@@ -4061,6 +4753,29 @@ export function ProjectView({
       // `refreshPreviewComments` is defined later in this component, so reach it
       // through a ref to avoid a temporal-dead-zone reference here.
       if (evt.projectId === project.id) void refreshPreviewCommentsRef.current?.();
+      return;
+    }
+    if (evt.type === 'chat-artifact-refs-changed') {
+      /*
+       * A card's static cover finished rendering after its turn already ended.
+       *
+       * The render deliberately outlives the turn, so it lands well after the
+       * one post-run re-read (`scheduleConversationMessageRefresh`, 150ms) has
+       * already returned a message with no ready ref — measured at 616ms on a
+       * real client against that 150ms window. Without this the card sits on
+       * the live-iframe degrade branch for the rest of the session, which is
+       * what `chat-artifact-versioning-design.md` line 505 forbids: "后台
+       * ready 后消息投影更新".
+       *
+       * Re-read rather than apply: the event carries no refs, so `listMessages`
+       * stays the single authority on what a ref is, and a duplicate event
+       * costs one redundant fetch instead of a wrong card. Reusing the existing
+       * scheduler also keeps the degrade branch mounted until the real refs
+       * arrive — line 505 asks for a follow-up update, not a placeholder.
+       */
+      if (evt.projectId === project.id) {
+        scheduleConversationMessageRefreshRef.current?.(evt.conversationId);
+      }
       return;
     }
     if (evt.type === 'presence-changed') {
@@ -4663,6 +5378,45 @@ export function ProjectView({
     t,
   ]);
 
+  // Memory the conversation itself wrote. Extraction runs out of band after the
+  // turn (the daemon queues it on child close), so there is no run event left to
+  // carry it — and until this landed, three rules could reach the store with the
+  // transcript showing nothing but prose (OPEND-2607). Same shape as the assist
+  // card above: one host-authored assistant message, persisted with the
+  // conversation, so the card is still there after a reload. A batch that wrote
+  // nothing never reaches here, so the block simply does not appear at 0 — the
+  // draft's rule for every "empty means gone" surface in the panel.
+  const {
+    batch: memoryWritten,
+    dismiss: dismissMemoryWritten,
+  } = useMemoryWrittenCard(memoryExtractionRunActive);
+  useEffect(() => {
+    if (!memoryWritten || !activeConversationId) return;
+    if (messagesConversationId !== activeConversationId) return;
+    const content = memoryWrittenCardContent(
+      memoryWritten,
+      t('chat.memoryWrittenSummary', { count: memoryWritten.count }),
+    );
+    appendConversationMessage(activeConversationId, {
+      id: randomUUID(),
+      role: 'assistant',
+      agentId: selectedAssistantIdentity.agentId,
+      agentName: selectedAssistantIdentity.agentName,
+      content,
+      events: [{ kind: 'text', text: content }],
+      createdAt: Date.now(),
+    });
+    dismissMemoryWritten();
+  }, [
+    memoryWritten,
+    dismissMemoryWritten,
+    activeConversationId,
+    appendConversationMessage,
+    messagesConversationId,
+    selectedAssistantIdentity,
+    t,
+  ]);
+
   const replaceConversationMessage = useCallback(
     (
       conversationId: string,
@@ -4841,11 +5595,12 @@ export function ProjectView({
       message: string,
       code?: string,
       failure?: RunFailureClassificationFields,
+      stderrTail?: string,
     ) => {
       if (!message) return;
       updateMessageById(
         messageId,
-        (prev) => appendErrorStatusEvent(prev, message, code, failure),
+        (prev) => appendErrorStatusEvent(prev, message, code, failure, stderrTail),
         true,
       );
     },
@@ -4986,6 +5741,15 @@ export function ProjectView({
       refreshPreviewCommentsRef.current = null;
     };
   }, [refreshPreviewComments]);
+
+  // Same exposure for the conversation re-read, so a pushed
+  // `chat-artifact-refs-changed` can pick up a cover that landed after the turn.
+  useEffect(() => {
+    scheduleConversationMessageRefreshRef.current = scheduleConversationMessageRefresh;
+    return () => {
+      scheduleConversationMessageRefreshRef.current = null;
+    };
+  }, [scheduleConversationMessageRefresh]);
 
   // Cross-daemon comment sync: the daemon merges teammates' comments into the
   // local store on a background poll, but the web panel only shows what it last
@@ -5263,6 +6027,16 @@ export function ProjectView({
     genericDisconnectBackoffUntilRef.current = new Map();
   }, [activeConversationId, daemonLive]);
 
+  // 组件 22 · 重连 · S29:换项目 / 离开这一屏,本地就不再跟着那条流了,
+  // 掉线那一行不该跟着走。会话之间的隔离由渲染前的
+  // `reconnectViewForConversation` 负责;这里管的是整屏的收尾。
+  useEffect(
+    () => () => {
+      setReconnectView(null);
+    },
+    [project.id],
+  );
+
   useEffect(() => {
     if (config.mode !== 'daemon' || !daemonLive || !activeConversationId || streaming) return;
     let cancelled = false;
@@ -5455,6 +6229,39 @@ export function ProjectView({
               status: projectedTaskStatus,
             }
           : physicalStatus;
+        const projectedRunAlreadyHydrated = Boolean(
+          taskRunAdvanced
+          && messages.some(
+            (candidate) =>
+              candidate.id !== message.id
+              && candidate.role === 'assistant'
+              && candidate.runId === reattachRunId,
+          ),
+        );
+        if (projectedRunAlreadyHydrated) {
+          // A normal hydration contains one persisted assistant message per
+          // physical strategy Run. The predecessor's status probe still
+          // projects the task's active successor, but that successor must own
+          // its own replay/reattach. Replaying it into this predecessor would
+          // append the final answer here while its hydrated sibling already
+          // renders the same answer, producing a duplicate conclusion after a
+          // hard refresh. Keep the crash-window recovery below for the case
+          // where the successor message has not been persisted yet.
+          if (status.strategyTask?.taskExecutionId) {
+            const settledFields = strategySettledMessageFields(status.strategyTask);
+            updateMessageById(
+              message.id,
+              (prev) => ({
+                ...prev,
+                strategyTaskExecutionId: status.strategyTask!.taskExecutionId,
+                ...(settledFields ?? {}),
+              }),
+              true,
+            );
+          }
+          completedReattachRunsRef.current.add(runId);
+          continue;
+        }
         if (
           taskRunAdvanced
           && (
@@ -5664,8 +6471,12 @@ export function ProjectView({
               ) ?? [],
               recoveredExistingArtifact,
             );
-            const producedArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+            // OPEND-2588 (2026-09-04): a turn that finishes while we are
+            // replaying it opens ALL of its primary artifacts, same as a live
+            // completion — the user cannot tell the two apart.
+            const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
               ...autoOpenArtifactOptions,
+              preTurnFileNames: beforeFileNames,
               turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
               turnEndedAt: message.endedAt || legacyReplayEndedAt || null,
               agentTouchedFileNames: resolveAgentTouchedFileNames(
@@ -5675,7 +6486,9 @@ export function ProjectView({
                 projectDetail.resolvedDir,
               ),
             });
-            if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+            if (turnArtifacts.focused) {
+              requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
+            }
             const deliveryOutcome = resolveDesignDeliveryOutcome({
               sessionMode: message.sessionMode,
               runStatus: 'succeeded',
@@ -5742,6 +6555,17 @@ export function ProjectView({
         claimReattachRun(runId);
         claimReattachRun(reattachRunId);
         let activeReattachRunId = reattachRunId;
+        /*
+         * daemon 刚给出的裁定 —— 见 `replayedRunStatusMayLand`。终态时它就是这条 run 的
+         * 权威结论,之后从同一条流里回放出来的 `start`(→ `running`)只是历史帧。
+         */
+        const reattachTerminalVerdict = isTerminalRunStatus(status.status) ? status.status : null;
+        /*
+         * 这次订阅**听到 daemon 说话了吗**。见 `.finally()` 里的封存判据。
+         * 只有三种声音算数:终态的 `onRunStatus`、`onDone`、`onError` ——
+         * 它们各自都会封存这条 run 或安排一次有节流的重试。
+         */
+        let reattachHeardFromDaemon = false;
         if (taskRunAdvanced) {
           updateMessageById(
             message.id,
@@ -5894,6 +6718,10 @@ export function ProjectView({
           persistSoon,
           flushAndPersistNow: () => persistNow({ keepalive: true }),
           onContentDelta: applyContentDelta,
+          // 这两种情况下面会把 `initialLastEventId` 设成 null,daemon 于是从第 0 条
+          // 重推 —— 开头那一段是用户已经看过的历史,攒住一次性铺出来,别一段一段
+          // 重新走一遍流式(OPEND-2590)。
+          replayingHistory: needsFullReplay || taskRunAdvanced,
         });
         reattachTextBuffersRef.current.add(textBuffer);
         const unregisterTextBuffer = () => {
@@ -5905,7 +6733,11 @@ export function ProjectView({
           || isActiveRunStatus(status.status)
           || spuriouslyFailedPending
           || recoverableGenericDisconnectFailed;
-        void reattachDaemonRun({
+        // 组件 22 · 重连 · S29:重挂即将开始 ——「次数用尽、交回给人」这句话此刻
+        // 已经不成立了,先把那一行撤掉。这次重挂的读数从 0 起,断不了就永远不会
+        // 发 `cleared`,留着那一行会在正文重新流进来时挂着一句反话。
+        pushReconnectSignal({ kind: 'dropped', runId });
+        const startReattach = () => reattachDaemonRun({
           agentId: message.agentId,
           runId: reattachRunId,
           projectId: project.id,
@@ -5979,7 +6811,42 @@ export function ProjectView({
             onArtifactCount: (count) => {
               daemonArtifactCount = count;
             },
+            // 组件 22 · 重连 · S29,重挂那条流上的同一份读数。
+            // 会话取被重挂消息自己的 `reattachConversationId`(后台重挂可能发生在
+            // 别的会话上),渲染前再按当前会话过一道,免得串到别人的流水里。
+            onReconnect: (state: DaemonReconnectState) => {
+              pushReconnectSignal({
+                kind: 'transport',
+                runId,
+                conversationId: reattachConversationId,
+                attempt: state.attempt,
+                max: state.max,
+                phase: state.phase,
+              });
+            },
+            // daemon 把这一轮重跑了 —— 同一行、同一套规矩,只有那句话不同。
+            onAgentRetry: (state: DaemonAgentRetryState) => {
+              pushReconnectSignal({
+                kind: 'agent-retry',
+                runId,
+                conversationId: reattachConversationId,
+                attempt: state.attempt,
+                max: state.max,
+                phase: state.phase,
+              });
+            },
+            onAgentReconnect: (state: DaemonAgentReconnectState) => {
+              pushReconnectSignal({
+                kind: 'agent-reconnect',
+                runId,
+                conversationId: reattachConversationId,
+                attempt: state.attempt,
+                max: state.max,
+                phase: state.phase,
+              });
+            },
             onDone: async () => {
+              reattachHeardFromDaemon = true;
               // A reattached run interrupted by a "send now" still receives a
               // late onDone from the daemon. Decide ownership first, then bail
               // BEFORE any current-run side effect (committing buffered text,
@@ -6109,8 +6976,11 @@ export function ProjectView({
                   ) ?? [],
                   recoveredExistingArtifact,
                 );
-                const producedArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+                // OPEND-2588 (2026-09-04): see the replay path above — a run
+                // that lands while reattached is still a turn finishing.
+                const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
                   ...autoOpenArtifactOptions,
+                  preTurnFileNames: beforeFileNames,
                   turnStartedAt: status.createdAt || message.startedAt || message.createdAt || null,
                   turnEndedAt: endedAt ?? null,
                   agentTouchedFileNames: resolveAgentTouchedFileNames(
@@ -6123,7 +6993,9 @@ export function ProjectView({
                     projectDetail.resolvedDir,
                   ),
                 });
-                if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+                if (turnArtifacts.focused) {
+                  requestOpenTurnArtifacts(turnArtifacts.open, turnArtifacts.focused);
+                }
                 const deliveryContent = needsFullReplay ? replayedContent : message.content;
                 const deliveryEvents = needsFullReplay ? replayedEvents : message.events;
                 const deliveryOutcome = resolveDesignDeliveryOutcome({
@@ -6162,6 +7034,7 @@ export function ProjectView({
               onProjectsRefresh();
             },
             onError: async (err) => {
+              reattachHeardFromDaemon = true;
               const errorCode = (err as Error & { code?: string }).code;
               const resumable = (err as Error & { resumable?: boolean }).resumable === true;
               let skipFinalPersistNow = false;
@@ -6177,7 +7050,13 @@ export function ProjectView({
               unregisterTextBuffer();
               if (runMayFinalize) {
                 setRunError(err.message, message.id);
-                appendAssistantErrorEvent(message.id, err.message, errorCode, failure);
+                appendAssistantErrorEvent(
+                  message.id,
+                  err.message,
+                  errorCode,
+                  failure,
+                  stderrTailFromError(err),
+                );
                 updateMessageById(
                   message.id,
                   (prev) => ({
@@ -6241,7 +7120,10 @@ export function ProjectView({
                     if (produced.length > 0) {
                       recoveredArtifactMessagesRef.current.add(message.id);
                     }
-                    const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+                    const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, {
+                      ...autoOpenArtifactOptions,
+                      preTurnFileNames: beforeFileNames,
+                    });
                     if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
                     if (latestRunStatus?.status === 'succeeded') setError(null);
                     if (
@@ -6451,6 +7333,22 @@ export function ProjectView({
           },
           onRunStatus: (runStatus) => {
             textBuffer.flush();
+            /*
+             * 回放出来的「活着」不许压过 daemon 的终态裁定 —— 判据与理由见
+             * `replayedRunStatusMayLand`。挡下的帧连 `settled` 信号都不发:
+             * 什么都没有落定,重连那一行不该被一帧历史扰动。
+             */
+            if (
+              !replayedRunStatusMayLand(
+                runStatus,
+                reattachTerminalVerdict,
+                activeReattachRunId === reattachRunId,
+              )
+            ) {
+              return;
+            }
+            // 见发送路径同名回调:落终态就把重连那一行让出去。
+            pushReconnectSignal({ kind: 'settled', runId, status: runStatus });
             updateMessageById(
               message.id,
               (prev) => ({
@@ -6461,6 +7359,7 @@ export function ProjectView({
               true,
             );
             latestReattachRunStatus = runStatus;
+            if (isTerminalRunStatus(runStatus)) reattachHeardFromDaemon = true;
             if (runStatus === 'canceled') {
               textBuffer.cancel();
               unregisterTextBuffer();
@@ -6475,6 +7374,11 @@ export function ProjectView({
             if (isTerminalRunStatus(runStatus)) {
               scheduleConversationMessageRefresh(reattachConversationId);
             }
+          },
+          /* 同上:重连接管的那条 run 被停掉时,来源同样落到它自己的消息上。 */
+          onCancelOrigin: (cancelOrigin) => {
+            textBuffer.flush();
+            updateMessageById(message.id, (prev) => ({ ...prev, cancelOrigin }), true);
           },
           onRunEventId: (lastRunEventId) => {
             textBuffer.flush();
@@ -6505,9 +7409,52 @@ export function ProjectView({
             textBuffer.cancel();
             unregisterTextBuffer();
             if (persistTimer) clearProjectTimeout(persistTimer);
+            /*
+             * **不变量:一次 daemon 一句话都没说的重挂,不构成「再试一次」的理由。**
+             *
+             * 这条 effect 的依赖里带着 `messages`,而重挂过程中每条回放事件都会
+             * `updateMessageById` —— 它的 `setMessages((curr) => curr.map(...))` 永远返回
+             * 新数组,所以每条事件都让 effect 重跑一次。正常收场时不要紧:`onDone` /
+             * `onError` / 终态 `onRunStatus` 都会 `completeReattachRuns()` 把这条 run 封存,
+             * 重跑时在封存那道闸上直接 `continue`。
+             *
+             * 但流**没给出任何裁定**就结束时,收尾只走这里的 `releaseReattachRuns()`:
+             * 认领被释放、又没被封存,于是下一次重跑立刻又订阅一次、又回放一整份日志、
+             * 又改一遍 `messages` —— 实测约 120 次/秒,每次都带一次 SSE 订阅和一次
+             * `saveMessage`,栈就落在用户报的 `onRunEventId → updateMessageById` 和
+             * `persistSoon → persistMessageById` 上。
+             *
+             * 封存不是死路:重连行的手动重试(`handleManualReconnect`)会把这条 run 从
+             * `completedReattachRunsRef` 里删掉,用户始终有出路。
+             *
+             * 我们自己 abort 掉的那次除外 —— 那是卸载/切会话/按停的收尾,不是
+             * 「daemon 没说话」;那些路径各自会重挂或把这一行落终态,封存反而会让
+             * 切回来时接不上。
+             */
+            if (!reattachHeardFromDaemon && !controller.signal.aborted) {
+              completeReattachRuns();
+            }
             releaseReattachRuns();
             clearActiveRunRefs(reattachConversationId, controller, cancelController);
           });
+        /*
+         * 组件 22 · 重连 · 连接预算:重挂**排队**,但只排「回放」那一类。
+         *
+         * `reattachDaemonRun` 的 promise 要等这条流走完才 settle。daemon 还说
+         * 这条 run 活着时,那就是「等这次生成结束」——把它放进闸里,后面排队的
+         * run 在它跑完之前一个字都收不到,那不是限流,是丢输出。所以活着的 run
+         * 直接放行,只有终态回放(有限的事件日志,很快 settle)进闸。
+         *
+         * 闸只改**同时**开几条,不改开不开:被挡住的那条在前一条 settle 时立刻
+         * 补上(见 lib/bounded-concurrency.ts)。
+         */
+        const reattachIsLiveStream =
+          isActiveRunStatus(message.runStatus) || isActiveRunStatus(status.status);
+        if (reattachIsLiveStream) {
+          void startReattach();
+        } else {
+          void reattachReplayGate.run(startReattach);
+        }
       }
     };
 
@@ -6541,6 +7488,7 @@ export function ProjectView({
     readProjectHtml,
     persistArtifact,
     requestOpenFile,
+    requestOpenTurnArtifacts,
     onProjectsRefresh,
     scheduleProjectTimeout,
     scheduleConversationMessageRefresh,
@@ -6657,7 +7605,10 @@ export function ProjectView({
             continue;
           }
           recoveredArtifactMessagesRef.current.add(message.id);
-          const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
+          const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, {
+            ...autoOpenArtifactOptions,
+            preTurnFileNames: beforeFileNames,
+          });
           if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
           // This message's persisted runStatus was already terminal (a
           // precondition of hasRecoverableArtifactMessage); when it has no
@@ -6890,7 +7841,15 @@ export function ProjectView({
             ? pendingBlockedTask.taskAnalytics
           : buildInitialTaskAnalytics(randomUUID()));
       const runContext = meta?.context ?? retryTarget?.userMsg.runContext;
-      const historyBase = retryTarget ? retryTarget.priorMessages : baseMessages ?? messages;
+      const unclaimedHistoryBase = retryTarget
+        ? retryTarget.priorMessages
+        : baseMessages ?? messages;
+      // Stable user ids are also used by retries and durable queue drains. If
+      // the row is already visible, replace its position below instead of
+      // appending a second copy of the same logical user turn.
+      const historyBase = meta?.userMessageId
+        ? unclaimedHistoryBase.filter((message) => message.id !== meta.userMessageId)
+        : unclaimedHistoryBase;
       if (
         !retryTarget &&
         !prompt.trim() &&
@@ -6974,195 +7933,68 @@ export function ProjectView({
         });
         return meta?.acceptDurableQueue === true;
       }
-      // OpenDesign Cloud pre-run balance gate: a definitively insufficient
-      // wallet blocks the run BEFORE any message is persisted or a daemon run
-      // spawned, surfacing the subscription dialog instead of a mid-run
-      // AMR_INSUFFICIENT_BALANCE failure. Sends the home submit already gated
-      // (amrGatePrechecked) pass straight through — the user answered there.
-      if (config.mode === 'daemon' && config.agentId === 'amr' && !meta?.amrGatePrechecked) {
-        const gateConversationId = activeConversationId;
-        // The gate's await opens a window where the conversation is not yet
-        // marked busy. A second send arriving during that window behaves like
-        // a busy conversation: it queues instead of racing a duplicate run.
-        if (amrGateInFlightConversationsRef.current.has(gateConversationId)) {
-          if (retryTarget) return false;
-          queueChatSendForCurrentConversation({
-            conversationId: gateConversationId,
-            prompt,
-            attachments: effectiveAttachments,
-            commentAttachments,
-            meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
-          });
-          return meta?.acceptDurableQueue === true;
-        }
-        amrGateInFlightConversationsRef.current.add(gateConversationId);
-        try {
-          // A persisted project Workspace is the spawn billing address even
-          // when the local membership/scope read is temporarily unavailable.
-          // In that state there is no trustworthy member-scoped wallet for a
-          // client preflight, so defer authorization and billing to the daemon
-          // and Vela backend. Passing `undefined` here would instead inspect
-          // the Personal/account wallet and could block a valid Team run (or
-          // present a Personal recharge prompt) before the backend sees the
-          // project's persisted Workspace id. An unbound project uses an exact
-          // Personal preflight only when runWorkspaceIdentity supplied the
-          // active Personal adoption witness. Team/absent witnesses skip the
-          // account preflight and let the daemon explicitly reject adoption.
-          // A resolved Personal or Team scope keeps its exact member-scoped
-          // preflight.
-          const persistedWorkspaceId = project.workspaceId?.trim() ?? '';
-          const deferAmrPreflightToDaemon =
-            !projectRunPreflightContext
-            && (
-              persistedWorkspaceId.length > 0
-              || projectWorkspaceScopeState.scope?.kind === 'unbound'
-            );
-          const amrModelId = effectiveAgentModelId(
-            agentsById.get('amr'),
-            config.agentModels?.amr,
-          );
-          const gate =
-            deferAmrPreflightToDaemon
-              ? { kind: 'allow' as const }
-              : await checkAmrBalanceGate(
-                  projectRunPreflightContext
-                    ? {
-                        workspaceType: projectRunPreflightContext.workspaceType,
-                        workspaceId: projectRunPreflightContext.workspaceId,
-                        workspaceMemberId:
-                          projectRunPreflightContext.workspaceMemberId,
-                      }
-                    : undefined,
-                  amrModelId,
-                );
-          // A blocked send parks in the conversation queue with its FULL
-          // payload (prompt, attachments, comment context) — the composer
-          // already cleared itself, and a text-only draft restore would
-          // silently drop staged attachments. Retries keep their error card
-          // and queue drains already have their queue item, so both skip the
-          // re-queue. The pause keeps queued items from re-hitting the gate
-          // (and re-popping a dialog) on every unrelated state change; any
-          // later send that passes the gate lifts it, and a manual "run now"
-          // on a queued item bypasses it deliberately.
-          const queueGateSend = (): boolean => {
-            if (!retryTarget && !meta?.queueDrain) {
-              queueChatSendForCurrentConversation({
-                conversationId: gateConversationId,
-                prompt,
-                attachments: effectiveAttachments,
-                commentAttachments,
-                meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
-              });
-              return true;
-            }
-            return false;
-          };
-          const parkBlockedSend = (): boolean => {
-            const queued = queueGateSend();
-            amrGatePausedQueueConversationsRef.current.add(gateConversationId);
-            return queued;
-          };
-          const acceptedDurableQueue = (queued: boolean): boolean => {
-            return queued && meta?.acceptDurableQueue === true;
-          };
-          // The await may have raced a conversation switch; re-run the entry
-          // guard before touching any state so this stale closure can't write
-          // the old conversation's messages into the now-visible view. The
-          // composer has already cleared, so keep the full payload queued for
-          // the original conversation instead of dropping it.
-          if (messagesConversationIdRef.current !== activeConversationId) {
-            return acceptedDurableQueue(queueGateSend());
-          }
-          if (gate.kind === 'hard') {
-            const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
-            trackRunStartBlockedSurfaceView(analytics.track, {
-              page_name: 'chat_panel',
-              area: 'chat_composer',
-              element: 'run_start_blocked',
-              task_execution_id: taskAnalytics.taskExecutionId,
-              recovery_action_instance_id: recoveryActionInstanceId,
-              block_reason: gate.reason,
-              agent_provider_id: 'amr',
-              model_id: config.agentModels?.amr?.model?.trim() || 'default',
-            });
-            taskAnalytics = {
-              ...taskAnalytics,
-              recoveryActionType: 'manual_retry',
-              recoveryActionInstanceId,
-            };
-            setAmrBalanceGateBlock({
-              reason: gate.reason,
-              snapshot: gate.snapshot,
-              conversationId: gateConversationId,
-            });
-            return acceptedDurableQueue(parkBlockedSend());
-          }
-          if (gate.kind === 'unavailable') {
-            return acceptedDurableQueue(parkBlockedSend());
-          }
-          if (gate.kind === 'soft') {
-            // Low balance: pause THIS send while the reminder dialog waits
-            // for a decision. 'proceed' resumes the very same send below —
-            // a continuation, not a re-submit.
-            const plan = await resolveAmrPlan(gate.snapshot);
-            if (messagesConversationIdRef.current !== activeConversationId) {
-              return acceptedDurableQueue(queueGateSend());
-            }
-            if (isPaidAmrPlan(plan)) {
-              const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-                setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
-              });
-              setAmrLowBalanceWarn(null);
-              // Same conversation-switch guard for the dialog-open window; the
-              // payload is parked (not sent) so nothing is lost either way.
-              if (decision !== 'proceed' || messagesConversationIdRef.current !== activeConversationId) {
-                return acceptedDurableQueue(parkBlockedSend());
-              }
-            }
-          }
-          amrGatePausedQueueConversationsRef.current.delete(gateConversationId);
-        } finally {
-          amrGateInFlightConversationsRef.current.delete(gateConversationId);
-        }
-      }
-      if (resumesBlockedTask) blockedRunTaskRef.current = null;
-      // First genuine send in a recommendation-started project — the
-      // send-through half of the onboarding funnel. Fires once per project (the
-      // guard is project-scoped so it survives ProjectView remounts), on the
-      // first message of the conversation (not retries). Placed AFTER the
-      // queue-only / busy / AMR balance gates above: those can abort the send
-      // without creating a run, so emitting earlier would over-count blocked
-      // attempts and then suppress the real retry via the once-only guard. By
-      // here the send is committed to creating a run.
+      /*
+       * ── OPEND-2614 【不变量】本地数据画得出来的先画,要跟服务器说的话排后面 ──
+       *
+       * 「点击发送 → 消息上屏」这一段里唯一的 await 是下面那道 OpenDesign Cloud
+       * 预检。它在有工作区身份的项目上是**两条 HTTP 往返**,其中
+       * `/api/workspace/billing?…&freshness=authoritative` 会逼 daemon 向上游
+       * Vela 取一次新读数(daemon 侧翻成 `requireFresh: true`)。上屏排在它后面,
+       * 用户点完发送就要盯着 1–2 秒毫无反馈的界面 —— 报告里的「卡顿」是这一趟
+       * 网络,不是渲染慢。
+       *
+       * 预检**该不该拦这一次 run** 一个字都没变:它仍然在持久化和
+       * `POST /api/runs` 之前落定;拦下来时这一轮由 `retractPaintedTurn` 原样收回,
+       * 照旧落进发送队列,由余额卡 / 弹窗解释原因。
+       *
+       * 【前置条件】上屏之前必须走完所有**同步**的拒绝路(只排队、会话忙、预检
+       * 并发窗口)。同步就能拒的东西画出去再收回,那是白闪一下 —— 所以预检那道
+       * 并发窗口的守卫从 `try` 里提到了这里。
+       */
+      const amrGateApplies =
+        config.mode === 'daemon'
+        && config.agentId === 'amr'
+        && !meta?.amrGatePrechecked;
+      // The gate's await opens a window where the conversation is not yet
+      // marked busy. A second send arriving during that window behaves like
+      // a busy conversation: it queues instead of racing a duplicate run.
       if (
-        onboardingEntryRef.current &&
-        !hasSentFirstOnboardingPrompt(project.id) &&
-        !retryTarget &&
-        historyBase.length === 0
+        amrGateApplies
+        && amrGateInFlightConversationsRef.current.has(activeConversationId)
       ) {
-        markFirstOnboardingPromptSent(project.id);
-        const entry = onboardingEntryRef.current;
-        trackOnboardingFirstPromptSent(analytics.track, {
-          entry_source: entry.source,
-          product_type: entry.productType,
-          recommendation_id: entry.recommendationId,
-          // True only when the user sent the prefilled suggestion unmodified;
-          // an edited, cleared, replaced, or starter-swapped prompt (or an
-          // attachments-only send) reports false so the send-through split
-          // stays honest.
-          has_prefilled_prompt: sentPrefilledPrompt(onboardingSeedPromptRef.current, prompt),
+        if (retryTarget) return false;
+        queueChatSendForCurrentConversation({
+          conversationId: activeConversationId,
+          prompt,
+          attachments: effectiveAttachments,
+          commentAttachments,
+          meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
         });
-        recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
+        return meta?.acceptDurableQueue === true;
       }
-      setChatSeed(null);
       const runConversationId = activeConversationId;
       setError(null);
+      /*
+       * 【和上屏同一批】`chatSeed?.id` 是 `ChatPane` 的 `key` 的一部分 —— 清它会把
+       * 整个面板**重挂**。重挂会清掉 anchor-to-top 的那两个 ref,而重挂之后到齐的
+       * 转录按定义「不是新发的一轮」(`isNewTailUserTurn`),于是这一轮钉不了顶。
+       * 原来它和 `setMessages` 在同一批里,重挂和上屏是同一帧;上屏提前而它留在
+       * 预检后面的话,就变成「先画好、1–2 秒后再把面板拆了重来」,反而制造出
+       * OPEND-2615 那个症状。两件事必须绑在一起。
+       */
+      setChatSeed(null);
       const startedAt = Date.now();
+      const previousConversation = conversationsRef.current.find(
+        (conversation) => conversation.id === runConversationId,
+      );
+      const previousConversationUpdatedAt = previousConversation?.updatedAt;
+      const previousConversationLatestRun = previousConversation?.latestRun;
       const userMsg: ChatMessage = retryTarget?.userMsg ?? {
         id: meta?.userMessageId ?? randomUUID(),
         role: 'user',
         content: prompt,
         createdAt: startedAt,
+        clientRequestId,
         sessionMode: runSessionMode,
         taskAnalytics,
         ...(meta?.appliedPluginSnapshot
@@ -7252,15 +8084,243 @@ export function ProjectView({
           ),
         );
       };
-      activeCompletionNotificationRunsRef.current.add(assistantId);
       const nextHistory = retryTarget
         ? [...retryTarget.priorMessages, userMsg]
         : [...historyBase, userMsg];
       const nextVisibleMessages = retryTarget
         ? [...nextHistory, ...retryTarget.preservedAttempts, assistantMsg]
         : [...nextHistory, assistantMsg];
-      setMessages(nextVisibleMessages);
+      /*
+       * 画出去 —— 同时把画之前的样子记下来。预检拒绝时要**原样**放回去,而
+       * 「原样」只有这一刻知道:`messages` 是一份快照,不是能从这一轮反算出来的量
+       * (重试那一路尤其:被重试的那条用户消息和保留下来的失败尝试都在里面)。
+       */
+      const paintedFrom: { messages: ChatMessage[] | null } = { messages: null };
+      setMessages((current) => {
+        paintedFrom.messages = current;
+        return nextVisibleMessages;
+      });
       markStreamingConversation(runConversationId);
+      /**
+       * 把刚画出去的那一轮收回 —— 只有预检拒绝时才走这里。
+       *
+       * 会话在这期间被切走的话**一个字都不写回去**:`messages` 那份状态此刻属于
+       * 另一条会话,把上一条会话的快照盖上去就是覆盖别人的流水(跨 await 的老坑)。
+       * 进行中标记仍要清 —— 它是按会话 id 认领的,清的就是这一条。
+       */
+      const retractPaintedTurn = () => {
+        const restore = paintedFrom.messages;
+        paintedFrom.messages = null;
+        clearStreamingMarker(runConversationId);
+        if (restore === null) return;
+        if (messagesConversationIdRef.current !== runConversationId) return;
+        setMessages(restore);
+      };
+      // OpenDesign Cloud pre-run balance gate: a definitively insufficient
+      // wallet blocks the run BEFORE any message is persisted or a daemon run
+      // spawned, surfacing the subscription dialog instead of a mid-run
+      // AMR_INSUFFICIENT_BALANCE failure. Sends the home submit already gated
+      // (amrGatePrechecked) pass straight through — the user answered there.
+      if (amrGateApplies) {
+        const gateConversationId = runConversationId;
+        amrGateInFlightConversationsRef.current.add(gateConversationId);
+        try {
+          // A persisted project Workspace is the spawn billing address even
+          // when the local membership/scope read is temporarily unavailable.
+          // In that state there is no trustworthy member-scoped wallet for a
+          // client preflight, so defer authorization and billing to the daemon
+          // and Vela backend. Passing `undefined` here would instead inspect
+          // the Personal/account wallet and could block a valid Team run (or
+          // present a Personal recharge prompt) before the backend sees the
+          // project's persisted Workspace id. An unbound project uses an exact
+          // Personal preflight only when runWorkspaceIdentity supplied the
+          // active Personal adoption witness. Team/absent witnesses skip the
+          // account preflight and let the daemon explicitly reject adoption.
+          // A resolved Personal or Team scope keeps its exact member-scoped
+          // preflight.
+          const persistedWorkspaceId = project.workspaceId?.trim() ?? '';
+          const deferAmrPreflightToDaemon =
+            !projectRunPreflightContext
+            && (
+              persistedWorkspaceId.length > 0
+              || projectWorkspaceScopeState.scope?.kind === 'unbound'
+            );
+          const amrModelId = effectiveAgentModelId(
+            agentsById.get('amr'),
+            config.agentModels?.amr,
+          );
+          const gate =
+            deferAmrPreflightToDaemon
+              ? { kind: 'allow' as const }
+              : await checkAmrBalanceGate(
+                  projectRunPreflightContext
+                    ? {
+                        workspaceType: projectRunPreflightContext.workspaceType,
+                        workspaceId: projectRunPreflightContext.workspaceId,
+                        workspaceMemberId:
+                          projectRunPreflightContext.workspaceMemberId,
+                      }
+                    : undefined,
+                  amrModelId,
+                );
+          // A blocked send parks in the conversation queue with its FULL
+          // payload (prompt, attachments, comment context) — the composer
+          // already cleared itself, and a text-only draft restore would
+          // silently drop staged attachments. Retries keep their error card
+          // and queue drains already have their queue item, so both skip the
+          // re-queue. The pause keeps queued items from re-hitting the gate
+          // (and re-popping a dialog) on every unrelated state change; any
+          // later send that passes the gate lifts it, and a manual "run now"
+          // on a queued item bypasses it deliberately.
+          const queueGateSend = (): boolean => {
+            // 判定拒绝 = 这一轮不会有 run。先把已经画出去的那一轮收回,再决定
+            // 它去哪儿 —— 三条拒绝路(会话切走 / 拦截 / 读不到)都经过这里,
+            // 所以收回只写一处。放行那两档(soft / allow)碰不到它。
+            retractPaintedTurn();
+            if (!retryTarget && !meta?.queueDrain) {
+              queueChatSendForCurrentConversation({
+                conversationId: gateConversationId,
+                prompt,
+                attachments: effectiveAttachments,
+                commentAttachments,
+                meta: { ...(meta ?? {}), sessionMode: runSessionMode, taskAnalytics },
+              });
+              return true;
+            }
+            return false;
+          };
+          const parkBlockedSend = (): boolean => {
+            const queued = queueGateSend();
+            amrGatePausedQueueConversationsRef.current.add(gateConversationId);
+            return queued;
+          };
+          const acceptedDurableQueue = (queued: boolean): boolean => {
+            return queued && meta?.acceptDurableQueue === true;
+          };
+          // The await may have raced a conversation switch; re-run the entry
+          // guard before touching any state so this stale closure can't write
+          // the old conversation's messages into the now-visible view. The
+          // composer has already cleared, so keep the full payload queued for
+          // the original conversation instead of dropping it.
+          if (messagesConversationIdRef.current !== activeConversationId) {
+            return acceptedDurableQueue(queueGateSend());
+          }
+          if (gate.kind === 'hard') {
+            const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
+            trackRunStartBlockedSurfaceView(analytics.track, {
+              page_name: 'chat_panel',
+              area: 'chat_composer',
+              element: 'run_start_blocked',
+              task_execution_id: taskAnalytics.taskExecutionId,
+              recovery_action_instance_id: recoveryActionInstanceId,
+              block_reason: gate.reason,
+              agent_provider_id: 'amr',
+              model_id: config.agentModels?.amr?.model?.trim() || 'default',
+            });
+            taskAnalytics = {
+              ...taskAnalytics,
+              recoveryActionType: 'manual_retry',
+              recoveryActionInstanceId,
+            };
+            // 「同时唤起什么弹窗」是四组分支唯一的差别(规格 §6.V)。
+            //
+            // 被登出不在这四组里:那一档说的是登录,不是钱,主按钮是应用内登录,
+            // 所以它无条件走原来那张弹窗。
+            setAmrBalanceGateBlock({
+              reason: gate.reason,
+              dialog:
+                gate.reason === 'signed_out'
+                  ? 'upgrade'
+                  : amrBalanceBlockedDialog(amrBalanceBranchRef.current),
+              snapshot: gate.snapshot,
+              conversationId: gateConversationId,
+            });
+            // 拦截档:把流水里那张卡点亮 —— 弹窗一关就什么都不剩(Max · owner 那组
+            // 干脆没有弹窗),而人回到聊天里仍然需要看到「为什么开不了」。
+            //
+            // 只对「余额耗尽」出卡。被登出也走这条硬拦截,但那张卡说的是钱的事,
+            // 摆一个 $0.00 去解释一次登录过期是在误导 —— 那一档交给弹窗。
+            if (gate.reason === 'insufficient') {
+              setAmrBalanceCardUsd(amrBalanceCardBalanceUsd(gate.snapshot));
+              setAmrBalanceCardProfile(gate.snapshot.profile ?? null);
+            }
+            return acceptedDurableQueue(parkBlockedSend());
+          }
+          if (gate.kind === 'unavailable') {
+            return acceptedDurableQueue(parkBlockedSend());
+          }
+          if (gate.kind === 'soft') {
+            /*
+             * 告警档。产品 2026-08-26 裁决:「告警可继续的不弹窗,只有卡片」——
+             * 所以这里**不再拦住这一次发送**,只在流水里留下那张卡,人自己决定
+             * 要不要现在去充值(D4 不阻塞)。
+             *
+             * 这里曾经还夹着一道 `isPaidAmrPlan(await resolveAmrPlan(...))`。
+             * 产品 2026-09-03 裁决把它拆了(OPEND-2600):低余额提醒对**所有档位**
+             * 可见 —— 免费档的钱包读数同样是他们唯一的约束,不提醒才是坑人。
+             * 顺带解掉红线那一条:那道过滤要多打一次套餐读数,把出卡挂在一次网络
+             * 往返后面。判定已经把「要不要提醒」算完了,呈现层只管画,不再等任何
+             * 东西 —— 这一段现在是同步的,原本跨 await 的会话切换复查也不需要了
+             * (进这个分支之前已经复查过一次)。
+             */
+            setAmrBalanceCardUsd(amrBalanceCardBalanceUsd(gate.snapshot));
+            setAmrBalanceCardProfile(gate.snapshot.profile ?? null);
+          }
+          // 判定放行:撤掉那张卡 —— 余额已经不是问题了,提示不该留在屏幕上。
+          if (gate.kind === 'allow') {
+            setAmrBalanceCardUsd(null);
+            setAmrBalanceCardProfile(null);
+          }
+          amrGatePausedQueueConversationsRef.current.delete(gateConversationId);
+        } finally {
+          amrGateInFlightConversationsRef.current.delete(gateConversationId);
+        }
+      }
+      /*
+       * 上屏提前带来的**新状态**:预检那一两秒里,这一轮已经在跑的样子摆在屏幕上,
+       * 于是〔停止〕这颗按钮**第一次**在建出 run 之前可以按。按下去
+       * `handleStop` 会把进行中标记清掉、把这条 assistant 收成「已停止」——
+       * 如果这里不看一眼,预检回来之后照样持久化并 `POST /api/runs`,
+       * 用户明明叫停了却还是跑起来一轮。
+       *
+       * 判据用进行中标记本身:它是「这条会话此刻认领着哪一轮」的唯一出处,
+       * 停止、切走、被别的轮接管,三种情况一次说清。
+       *
+       * **不收回画面**:停止那条路已经把这一轮收成终态了(用户消息留着,
+       * assistant 标成已停止),这里再按预检那套原样放回去,会把用户刚发的
+       * 那条消息一起抹掉。
+       */
+      if (streamingConversationIdRef.current !== runConversationId) return false;
+      if (resumesBlockedTask) blockedRunTaskRef.current = null;
+      // First genuine send in a recommendation-started project — the
+      // send-through half of the onboarding funnel. Fires once per project (the
+      // guard is project-scoped so it survives ProjectView remounts), on the
+      // first message of the conversation (not retries). Placed AFTER the
+      // queue-only / busy / AMR balance gates above: those can abort the send
+      // without creating a run, so emitting earlier would over-count blocked
+      // attempts and then suppress the real retry via the once-only guard. By
+      // here the send is committed to creating a run.
+      if (
+        onboardingEntryRef.current &&
+        !hasSentFirstOnboardingPrompt(project.id) &&
+        !retryTarget &&
+        historyBase.length === 0
+      ) {
+        markFirstOnboardingPromptSent(project.id);
+        const entry = onboardingEntryRef.current;
+        trackOnboardingFirstPromptSent(analytics.track, {
+          entry_source: entry.source,
+          product_type: entry.productType,
+          recommendation_id: entry.recommendationId,
+          // True only when the user sent the prefilled suggestion unmodified;
+          // an edited, cleared, replaced, or starter-swapped prompt (or an
+          // attachments-only send) reports false so the send-through split
+          // stays honest.
+          has_prefilled_prompt: sentPrefilledPrompt(onboardingSeedPromptRef.current, prompt),
+        });
+        recordFirstLoopStep(analytics.track, 'prompt_sent', project.id);
+      }
+      activeCompletionNotificationRunsRef.current.add(assistantId);
       updateConversationLatestRun(config.mode === 'daemon' ? 'running' : 'queued');
       setArtifact(null);
       savedArtifactRef.current = null;
@@ -7304,7 +8364,7 @@ export function ProjectView({
       }
       const isFirstTurn = !retryTarget && historyBase.length === 0;
       const fallbackFirstTurnTitle = isDesignSystemWorkspacePrompt(prompt)
-        ? DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE
+        ? t('designFiles.createDesignSystemFromProject')
         : summarizeProjectNameFromPrompt(prompt) || prompt.slice(0, 60).trim();
       const fallbackProjectName = summarizeProjectNameFromPrompt(prompt);
       // If this is the first turn, derive a working title from the prompt
@@ -7413,6 +8473,9 @@ export function ProjectView({
       // has selected a turn-level artifact, however, an older Write refresh
       // must not move focus again.
       let completionSelectedAutoOpen = false;
+      // A new run gets a clean slate: taking the preview over during the last
+      // turn says nothing about this one.
+      userTookOverPreviewRef.current = false;
       const clearTraceTouchedFilePaths = () => {
         pendingWrites.clear();
         traceTouchedFilePaths.clear();
@@ -7434,15 +8497,16 @@ export function ProjectView({
 
       const updateAssistant = (updater: (prev: ChatMessage) => ChatMessage) => {
         setMessages((curr) => {
-          let found = false;
-          const next = curr.map((m) => {
-            if (m.id !== assistantId) return m;
-            found = true;
-            const updated = updater(m);
+          const messageIndex = curr.findIndex((message) => message.id === assistantId);
+          if (messageIndex >= 0) {
+            const previous = curr[messageIndex]!;
+            const updated = updater(previous);
             latestAssistantMsg = updated;
-            return updated;
-          });
-          if (found) return next;
+            if (updated === previous) return curr;
+            const next = curr.slice();
+            next[messageIndex] = updated;
+            return next;
+          }
 
           // A workspace-authority refresh can reload the same conversation
           // while POST /runs is retrying. That authoritative read may still
@@ -7488,12 +8552,51 @@ export function ProjectView({
         }
         persistMessageById(assistantId, { keepalive: true });
       };
+      const pushedEventDeduper = createAdjacentAgentEventDeduper();
       const pushEvent = (ev: AgentEvent) => {
         textBuffer.flush();
-        updateAssistant((prev) => ({
-          ...prev,
-          events: appendCoalescedAgentEvent(prev.events ?? [], ev),
-        }));
+        if (pushedEventDeduper.isDuplicate(ev)) return;
+        updateAssistant((prev) => {
+          const previousEvents = prev.events ?? [];
+          const nextEvents = appendCoalescedAgentEvent(previousEvents, ev);
+          return nextEvents === previousEvents
+            ? prev
+            : { ...prev, events: nextEvents };
+        });
+        /*
+         * `<od-focus open="…">` —— agent 说「现在开这个」。
+         *
+         * daemon 已经证过三件事:key 是这一轮的、路径落在项目根之内、文件**非空**
+         * (空白预览在用户眼里就是 bug,产品明确拍过)。所以这里不再复核那三条,
+         * 只判客户端才知道的两条:是不是**本轮新建**的,以及用户有没有自己接管
+         * 过预览。判据全在 `decideAgentFocusOpen` 里,那是个纯函数,有独立红测。
+         *
+         * 事件可能在**回合中途**到达 —— 这正是它存在的意义:agent 写完 index.html
+         * 之后还要再花一分半写配套资源,不该让用户对着空白等到回合结束。
+         */
+        if (ev.kind === 'artifact_focus' && ev.open) {
+          const declaredPath = ev.open;
+          void refreshProjectFiles().then(async (nextFiles) => {
+            const moduleFileNames = /\.(jsx|tsx)$/i.test(declaredPath)
+              ? await collectReferencedJsxNames(nextFiles, readProjectHtml)
+              : undefined;
+            const decision = decideAgentFocusOpen({
+              declaredPath,
+              projectFiles: nextFiles,
+              preTurnFileNames: beforeFileNames,
+              userTookOverPreview: userTookOverPreviewRef.current,
+              moduleFileNames,
+            });
+            if (decision.shouldOpen && decision.fileName) {
+              // agent 的明示优先于本轮后续的启发式排序:它比 rank/mtime 更知道
+              // 哪个才是交付物。置位之后,尾随的配套文件写入不会再抢走焦点。
+              completionSelectedAutoOpen = true;
+              requestOpenFile(decision.fileName);
+            }
+          }).catch(() => {
+            // 后台读文件列表失败不具权威性 —— 保持现状,等下一个事件。
+          });
+        }
         if (ev.kind === 'live_artifact') {
           setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
           void refreshLiveArtifacts().then(() => {
@@ -7514,17 +8617,6 @@ export function ProjectView({
         // file the moment the agent finishes writing it. The file-creating
         // tools we care about: Write (new file), Edit (existing file —
         // surfacing the freshly-modified file is also useful).
-        if (ev.kind === 'tool_use') {
-          // The authoritative input has landed; drop the live partial so the
-          // card renders from the parsed `tool_use.input` instead of the
-          // mid-token JSON fragment.
-          setLiveToolInput((prev) => {
-            if (!(ev.id in prev)) return prev;
-            const next = { ...prev };
-            delete next[ev.id];
-            return next;
-          });
-        }
         if (ev.kind === 'tool_use' && isFileWriteToolName(ev.name)) {
           const filePath = extractFileWriteToolPath(ev.input);
           if (typeof filePath === 'string' && filePath.length > 0) {
@@ -7553,7 +8645,7 @@ export function ProjectView({
               const immediateTouchedFiles = provenTraceTouchedFiles();
               const immediateArtifact = selectAutoOpenProducedArtifact(
                 immediateTouchedFiles,
-                autoOpenArtifactOptions,
+                { ...autoOpenArtifactOptions, preTurnFileNames: beforeFileNames },
               );
               if (
                 !completionSelectedAutoOpen
@@ -7585,9 +8677,10 @@ export function ProjectView({
                 // generated deliverable (index.html).
                 const bestTouchedArtifact = selectAutoOpenProducedArtifact(
                   provenTraceTouchedFiles(),
-                  autoOpenArtifactOptions,
+                  { ...autoOpenArtifactOptions, preTurnFileNames: beforeFileNames },
                 ) ?? selectAutoOpenTurnArtifact([], nextFiles, {
                     ...autoOpenArtifactOptions,
+                    preTurnFileNames: beforeFileNames,
                     turnStartedAt: startedAt,
                     agentTouchedFileNames: resolveAgentTouchedFileNames(
                       [...traceTouchedFilePaths],
@@ -7689,30 +8782,55 @@ export function ProjectView({
             applyAgentGeneratedTitle(ev.title);
             return;
           }
-          if (ev.kind === 'text') textBuffer.appendTextEvent(ev.text);
-          else if (ev.kind === 'thinking') textBuffer.appendEvent(ev);
-          else pushEvent(ev);
+          if (ev.kind === 'text') {
+            pushedEventDeduper.reset();
+            textBuffer.appendTextEvent(ev.text);
+          } else if (ev.kind === 'thinking') {
+            pushedEventDeduper.reset();
+            textBuffer.appendEvent(ev);
+          } else {
+            pushEvent(ev);
+          }
         },
         onArtifactCount: (count: number) => {
           daemonArtifactCount = count;
         },
-        onToolInputDelta: (id: string, name: string, delta: string) => {
-          setLiveToolInput((prev) => ({
-            ...prev,
-            [id]: {
-              name,
-              text: (prev[id]?.text ?? '') + delta,
-              // Pin the tool's stream position the first time we see it: the
-              // count of events already on the message is everything the model
-              // emitted before the tool call (its preamble). Buffered text
-              // (appendTextEvent) isn't flushed into `events` until the next
-              // frame, so add 1 for any still-pending preamble chunk — it will
-              // commit as one text event just before this tool's position.
-              seq:
-                prev[id]?.seq ??
-                ((latestAssistantMsg.events?.length ?? 0) + (textBuffer.hasPendingText() ? 1 : 0)),
-            },
-          }));
+        // 组件 22 · 重连 · S29:掉线期间流水最后一行的读数。传输层如实上报,
+        // 该不该显示、显示到几分之几由 reconnect-state 判(它也负责与组件 20 互斥)。
+        onReconnect: (state: DaemonReconnectState) => {
+          if (!currentRunId) return;
+          pushReconnectSignal({
+            kind: 'transport',
+            runId: currentRunId,
+            conversationId: runConversationId,
+            attempt: state.attempt,
+            max: state.max,
+            phase: state.phase,
+          });
+        },
+        // 自动重试:daemon 把 agent 那一轮重跑了。走同一行(交付稿 4058 不许为
+        // 同一件事再立第三个模块),读数与预算取运行层自己的那一份。
+        onAgentRetry: (state: DaemonAgentRetryState) => {
+          if (!currentRunId) return;
+          pushReconnectSignal({
+            kind: 'agent-retry',
+            runId: currentRunId,
+            conversationId: runConversationId,
+            attempt: state.attempt,
+            max: state.max,
+            phase: state.phase,
+          });
+        },
+        onAgentReconnect: (state: DaemonAgentReconnectState) => {
+          if (!currentRunId) return;
+          pushReconnectSignal({
+            kind: 'agent-reconnect',
+            runId: currentRunId,
+            conversationId: runConversationId,
+            attempt: state.attempt,
+            max: state.max,
+            phase: state.phase,
+          });
         },
         onDone: (fullText = '') => {
           // The daemon delivers onDone even for a canceled run, so a run
@@ -7893,8 +9011,14 @@ export function ProjectView({
                 project.id,
                 projectDetail.resolvedDir,
               ) ?? [];
-              const turnArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+              // OPEND-2588 (product ruling 2026-09-04): the turn is over —
+              // open ALL of its primary artifacts, not just the best one.
+              // `turnArtifacts.focused` is byte-for-byte the old
+              // `selectAutoOpenTurnArtifact` answer, so the focused tab below
+              // is decided exactly as it was before; only `.open` is new.
+              const turnArtifacts = selectAutoOpenTurnArtifacts(produced, nextFiles, {
                 ...autoOpenArtifactOptions,
+                preTurnFileNames: beforeFileNames,
                 turnStartedAt: startedAt,
                 turnEndedAt: endedAt ?? null,
                 agentTouchedFileNames: resolveAgentTouchedFileNames(
@@ -7907,6 +9031,7 @@ export function ProjectView({
                   projectDetail.resolvedDir,
                 ),
               });
+              const turnArtifactToOpen = turnArtifacts.focused;
               const producedArtifactToOpen = selectAutoOpenProducedArtifact(
                 [
                   ...provenTraceTouchedFiles(),
@@ -7917,11 +9042,11 @@ export function ProjectView({
                       ]
                     : []),
                 ],
-                autoOpenArtifactOptions,
+                { ...autoOpenArtifactOptions, preTurnFileNames: beforeFileNames },
               );
               if (producedArtifactToOpen) {
                 completionSelectedAutoOpen = true;
-                requestOpenFile(producedArtifactToOpen);
+                requestOpenTurnArtifacts(turnArtifacts.open, producedArtifactToOpen);
               }
               const deliveryCandidate: ChatMessage = {
                 ...latestAssistantMsg,
@@ -8011,6 +9136,53 @@ export function ProjectView({
           textBuffer.flush();
           textBuffer.cancel();
           cancelSendTextBuffer();
+          // POST /api/runs can fail before it yields a run id. That is a failed
+          // user send, not a failed assistant run: no assistant process ever
+          // existed, so keeping the optimistic placeholder would fabricate a
+          // run and route the user to the wrong recovery action.
+          if (config.mode === 'daemon' && !currentRunId) {
+            if (runMayFinalize) {
+              setError(null);
+              activeCompletionNotificationRunsRef.current.delete(assistantId);
+              setConversations((current) =>
+                current.map((conversation) => {
+                  if (
+                    conversation.id !== runConversationId
+                    || conversation.latestRun?.startedAt !== startedAt
+                  ) {
+                    return conversation;
+                  }
+                  return {
+                    ...conversation,
+                    ...(previousConversationUpdatedAt === undefined
+                      ? {}
+                      : { updatedAt: previousConversationUpdatedAt }),
+                    latestRun: previousConversationLatestRun,
+                  };
+                }),
+              );
+              setMessages((current) => {
+                let failedUser: ChatMessage | null = null;
+                const next = current.flatMap((message) => {
+                  if (message.id === assistantId) return [];
+                  if (message.id !== userMsg.id) return [message];
+                  failedUser = { ...message, sendFailed: true };
+                  return [failedUser];
+                });
+                if (failedUser) persistMessage(failedUser);
+                return next;
+              });
+              if (runCommentAttachments.length > 0) {
+                void patchAttachedStatuses(runCommentAttachments, 'failed');
+              }
+            }
+            clearCurrentRunStreamingMarker(
+              runConversationId,
+              controller,
+              cancelController,
+            );
+            return;
+          }
           // The daemon refused a duplicate design-system enrichment because the
           // conversation already runs one (HTTP 409
           // DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS). The surviving run is the one
@@ -8020,7 +9192,13 @@ export function ProjectView({
             errorCode === 'DESIGN_SYSTEM_ENRICHMENT_IN_PROGRESS';
           if (runMayFinalize) {
             if (!duplicateEnrichmentRejected) setRunError(err.message, assistantId);
-            appendAssistantErrorEvent(assistantId, err.message, errorCode, failure);
+            appendAssistantErrorEvent(
+              assistantId,
+              err.message,
+              errorCode,
+              failure,
+              stderrTailFromError(err),
+            );
             updateAssistant((prev) => ({
               ...prev,
               endedAt,
@@ -8412,9 +9590,19 @@ export function ProjectView({
             authoritativeArtifactPaths = paths;
           },
           onRunStatus: (runStatus) => {
+            // streamViaDaemon reports `failed` before onError when POST
+            // /api/runs itself fails. Until onRunCreated supplies an id there is
+            // no assistant run to finalize or persist; onError moves the failure
+            // to the user row instead.
+            if (!currentRunId && runStatus === 'failed') return;
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize =
               !supersededRunsRef.current.has(controller);
+            // 这一轮落终态,掉线那一行就该消失。canceled 由回合 footer 报结果,
+            // succeeded 同样不留「已恢复」。见 reconnect-state 的规则表。
+            if (currentRunId) {
+              pushReconnectSignal({ kind: 'settled', runId: currentRunId, status: runStatus });
+            }
             updateMessageById(
               assistantId,
               (prev) => ({
@@ -8432,6 +9620,15 @@ export function ProjectView({
               scheduleConversationMessageRefresh(runConversationId);
               if (runStatus !== 'succeeded') clearTraceTouchedFilePaths();
             }
+          },
+          /*
+           * 「这一轮是谁停的」——只在服务端答得出来时才落到消息上。
+           * 交付稿第 81 格那一行「已手动暂停任务」只认 `user_stop`;
+           * 存进消息(而不是只留在 run 对象里)是因为刷新之后那一行还得在,
+           * 而且还得是同一个来源(盘点 R8)。
+           */
+          onCancelOrigin: (cancelOrigin) => {
+            updateMessageById(assistantId, (prev) => ({ ...prev, cancelOrigin }), true);
           },
           onRunEventId: (lastRunEventId) => {
             updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
@@ -8618,6 +9815,10 @@ export function ProjectView({
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;
             const runMayFinalize = !supersededRunsRef.current.has(controller);
+            // 见 CLI / AMR 路径同名回调:落终态就把重连那一行让出去。
+            if (currentRunId) {
+              pushReconnectSignal({ kind: 'settled', runId: currentRunId, status: runStatus });
+            }
             updateMessageById(
               assistantId,
               (prev) => ({
@@ -8634,6 +9835,15 @@ export function ProjectView({
               clearCurrentRunStreamingMarker(runConversationId, controller, cancelController);
               scheduleConversationMessageRefresh(runConversationId);
             }
+          },
+          /*
+           * 「这一轮是谁停的」——只在服务端答得出来时才落到消息上。
+           * 交付稿第 81 格那一行「已手动暂停任务」只认 `user_stop`;
+           * 存进消息(而不是只留在 run 对象里)是因为刷新之后那一行还得在,
+           * 而且还得是同一个来源(盘点 R8)。
+           */
+          onCancelOrigin: (cancelOrigin) => {
+            updateMessageById(assistantId, (prev) => ({ ...prev, cancelOrigin }), true);
           },
           onRunEventId: (lastRunEventId) => {
             updateMessageById(assistantId, (prev) => ({ ...prev, lastRunEventId }));
@@ -8664,6 +9874,7 @@ export function ProjectView({
       refreshLiveArtifacts,
       readProjectHtml,
       requestOpenFile,
+      requestOpenTurnArtifacts,
       persistMessage,
       persistMessageById,
       auditDesignSystemWorkspaceAfterRun,
@@ -8691,6 +9902,56 @@ export function ProjectView({
       projectMutationReadOnly,
       projectWorkspaceScopeState.scope,
     ],
+  );
+
+  const handleResendUserMessage = useCallback(
+    (failedMessage: ChatMessage) => {
+      if (failedMessage.role !== 'user' || !failedMessage.sendFailed) return;
+      const currentMessages = messagesRef.current;
+      const currentMessage = currentMessages.find((message) => message.id === failedMessage.id);
+      if (currentMessage?.role !== 'user' || !currentMessage.sendFailed) return;
+
+      const retryMessage: ChatMessage = { ...currentMessage, sendFailed: undefined };
+      function restoreFailedState() {
+        updateMessageById(
+          retryMessage.id,
+          (message) => ({ ...message, sendFailed: true }),
+          true,
+        );
+      }
+
+      // Clear the persistent failure state before the canonical send path runs
+      // its preflight checks. A rejected preflight restores the retry action.
+      updateMessageById(currentMessage.id, () => retryMessage, true);
+
+      void handleSend(
+        retryMessage.content,
+        retryMessage.attachments ?? [],
+        retryMessage.commentAttachments ?? [],
+        {
+          clientRequestId: retryMessage.clientRequestId ?? retryMessage.id,
+          userMessageId: retryMessage.id,
+          acceptDurableQueue: true,
+          ...(retryMessage.sessionMode ? { sessionMode: retryMessage.sessionMode } : {}),
+          ...(retryMessage.runContext
+            ? {
+                context: retryMessage.runContext,
+                skillIds: retryMessage.runContext.skillIds,
+              }
+            : {}),
+          ...(retryMessage.appliedPluginSnapshot
+            ? { appliedPluginSnapshot: retryMessage.appliedPluginSnapshot }
+            : {}),
+          ...(retryMessage.taskAnalytics ? { taskAnalytics: retryMessage.taskAnalytics } : {}),
+        },
+      ).then(
+        (started) => {
+          if (!started) restoreFailedState();
+        },
+        restoreFailedState,
+      );
+    },
+    [handleSend, updateMessageById],
   );
 
   const handleComposerSend = useCallback(
@@ -8861,6 +10122,33 @@ export function ProjectView({
     })();
   }, [armSlideNavForQueuedSend, commitPreviewComments, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend, projectRunWorkspaceContext]);
 
+  /*
+   * B11 「引导对话」 —— 队列行第三颗按钮什么时候露面(OPEND-2602)。
+   *
+   * 它原来走的是「一个字都不打断,把消息写进 agent 子进程还开着的 stdin」
+   * (`steerChatRun`)。产品 2026-09-03 裁决把这条路整个撤了,两件实测事实:
+   *   · 27 个 runtime 里只有 `claude` / `codebuddy` 的 `promptInputFormat` 是
+   *     `stream-json`,其余 25 个这颗按钮压根不出现,退回成「发送」;
+   *   · 拿装机的真 claude 2.1.259 做对照:轮次跑到一半写进 stdin 的 user 帧
+   *     CLI 完全没处理(等 180s 进程活着不动),同一条在 `result` 帧之后写进去
+   *     才正常起第二轮 —— 而 daemon 恰恰在 `usage` 那一档就关了 stdin。
+   *
+   * 现在它按下去干的事是**中断当前这一轮,然后立刻发出这条**,也就是
+   * 上面 `sendQueuedChatSendNow` 在会话 busy 时走的那条路 —— 复用它,而不是
+   * 另起一条:那条已经处理好三件难的事(把被顶掉的 run 记进 `supersededRunsRef`,
+   * 免得 daemon 迟到的终止回调污染新一轮;把卡在 `applying` 的预览批注复位;
+   * 靠自动启动效应避免两轮重叠)。
+   *
+   * 判据只剩「此刻有没有一轮可中断」:中断对所有 27 个 agent 都成立,不存在
+   * 「这个 agent 不支持」。而且这里用的谓词和 `sendQueuedChatSendNow` 内部
+   * 分支用的是**同一个** `currentConversationBusy` —— 按钮的脸和它按下去
+   * 干的事因此不可能对不上(旧代码用的是从 `messages` 推出来的 runId,
+   * 那份读数会比 busy 慢一拍)。
+   */
+  const canSteerCurrentTurn = Boolean(
+    currentConversationBusy && !currentConversationQueueDisabled,
+  );
+
   useEffect(() => {
     if (currentConversationBusy) {
       startingQueuedChatSendIdRef.current = null;
@@ -8918,6 +10206,23 @@ export function ProjectView({
     removeQueuedChatSend,
     scheduleProjectTimeout,
   ]);
+
+  /*
+   * 〔更换模型〕(E3)。交付稿 `error-ux-design.md:130`(S08)写的是
+   * 「更换模型**直接打开模型选择器,选完自动重跑**」。
+   *
+   * 分两半:这里推一拍信号把 composer 那张 `AvatarMenu` 叫开,并记下是**哪一轮**
+   * 在等重跑;等 `onAgentModelChange` 真的换了模型,再把那一轮重发一次。
+   *
+   * 记 message 而不是只记一个布尔:用户可能在选模型之前又翻了别的会话,
+   * 到时候重跑的必须仍是当初按下那颗按钮的那一轮。
+   */
+  const [modelPickerOpenSignal, setModelPickerOpenSignal] = useState(0);
+  const rerunAfterModelChangeRef = useRef<ChatMessage | null>(null);
+  const handleSwitchModel = useCallback((assistantMessage: ChatMessage) => {
+    rerunAfterModelChangeRef.current = assistantMessage;
+    setModelPickerOpenSignal((n) => n + 1);
+  }, []);
 
   const handleRetry = useCallback(
     (
@@ -9762,7 +11067,15 @@ export function ProjectView({
       if (!activeConversationId || forkingMessageId || projectMutationReadOnly) return;
       const requestId = analytics.newRequestId();
       const startedAt = Date.now();
-      const forkIndex = messages.findIndex((message) => message.id === assistantMessage.id);
+      /*
+       * `assistantMessage` 是**渲染**出来的那一格 —— 一条 OD Next Full Plan 回合的
+       * 几个物理 run 被 `foldStrategyTaskTurns` 折成一条,折出来那条带的是头一个 run
+       * 的 id。分叉切的是转录,所以先把边界推回这条逻辑回合在转录里的最后一条。
+       * 见 `runtime/chat/fork-boundary.ts`。
+       */
+      const forkIndex = forkBoundaryMessageIndex(messages, assistantMessage.id);
+      const forkBoundaryMessage = forkIndex < 0 ? undefined : messages[forkIndex];
+      const forkAfterMessageId = forkBoundaryMessage?.id ?? assistantMessage.id;
       const forkContext = {
         page_name: 'chat_panel' as const,
         area: 'chat_panel' as const,
@@ -9776,7 +11089,7 @@ export function ProjectView({
         source_agent_id: assistantMessage.agentId ?? 'unknown',
         agent_provider_id: runAgentProviderId(assistantMessage.agentId ?? 'unknown'),
         session_mode: sessionModeToTracking(activeSessionMode),
-        fork_point: conversationForkPoint(messages, assistantMessage.id, forkIndex),
+        fork_point: conversationForkPoint(messages, forkAfterMessageId, forkIndex),
         seed_message_count: forkIndex < 0 ? null : forkIndex + 1,
         conversation_message_count: messages.length,
         messages_after_fork_count: forkIndex < 0 ? null : messages.length - forkIndex - 1,
@@ -9786,19 +11099,33 @@ export function ProjectView({
       setConversationLoadError(null);
       let emptyResponse = false;
       try {
-        const sourceTitle = activeConversation?.title?.trim();
-        const forkTitle = sourceTitle
-          ? t('chat.forkedConversationTitle', { title: sourceTitle })
-          : undefined;
         const forkFallbackPredecessorMessageId = forkIndex < 0
           ? undefined
           : (messages[forkIndex - 1]?.id ?? null);
-        const fresh = await createConversation(project.id, forkTitle, {
+        /*
+         * 标题**不传** —— 归 daemon 起(`apps/daemon/src/conversation-fork-title.ts`)。
+         *
+         * 2026-09-03 产品裁决把「{原标题} 分叉」换成了自增编号「{原标题} (n)」。编号要
+         * 唯一就得先看一眼这个项目里已有哪些标题,那份名单只有 daemon 手上是权威的:
+         * 这里的 `conversations` 是可能过期的快照,两个客户端各拿各的快照算同一个号
+         * 必然撞。daemon 那边「读名单 → 算号 → 落库」中间没有 await,同进程内原子。
+         *
+         * 顺带白拿了 CLI 那条路(`od chat new --fork-after`),它本来就不传标题。
+         * `fresh.title` 是 daemon 返回的真实标题,下面直接进 `conversations`,
+         * 所以这里也不需要乐观标题。
+         */
+        const fresh = await createConversation(project.id, undefined, {
           seedFromConversationId: activeConversationId,
-          forkAfterMessageId: assistantMessage.id,
+          forkAfterMessageId,
           sessionMode: activeSessionMode,
+          /*
+           * 兜底送的是**边界那条转录消息**,不是屏幕上那条折叠出来的 —— 折叠那条的正文
+           * 是几个 run 拼起来的,真走到兜底路径就会把同一段内容再塞一遍。
+           */
           forkFallbackMessage:
-            forkFallbackPredecessorMessageId === undefined ? undefined : assistantMessage,
+            forkFallbackPredecessorMessageId === undefined
+              ? undefined
+              : (forkBoundaryMessage ?? assistantMessage),
           forkFallbackPredecessorMessageId,
           workspaceContext: projectRunWorkspaceContext,
           throwOnError: true,
@@ -9817,6 +11144,19 @@ export function ProjectView({
           },
           { requestId },
         );
+        /*
+         * 分界线**不落在源会话**(2026-08-26 用户裁决:「要在新的 fork 里出现,
+         * 而不是旧会话里出现啊」)。
+         *
+         * 这里原来给源会话那条助手消息盖 `forkedInto`,理由是「分支要留在它被拉出来
+         * 的地方」。但点完分叉页面就**跳到新会话**,人此刻站在那边 —— 源会话上的那条线
+         * 除非专门翻回去否则永远看不到;而那行脚注「上文已带过来,接着说就行」
+         * 对着原地没动的源会话说也不成立。
+         *
+         * 标记改由 daemon 在建新会话时盖在**带过来的最后一条**上,见
+         * `apps/daemon/src/routes/project/conversations.ts` 的 fork 分支。
+         * 放在 daemon 还顺带白拿了 CLI 那条路(`od project conversation --fork-after`)。
+         */
         setMessages([]);
         commitPreviewComments([]);
         setAttachedComments([]);
@@ -9875,6 +11215,7 @@ export function ProjectView({
       project.metadata,
       projectMutationReadOnly,
       t,
+      updateMessageById,
     ],
   );
 
@@ -10020,11 +11361,16 @@ export function ProjectView({
             onUpdateQueuedSend: updateQueuedChatSend,
             onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
             onSendQueuedNow: sendQueuedChatSendNow,
+            // B11: handed over only while there is a turn to interrupt. Same
+            // handler as「立即发送」on purpose — it already branches on
+            // `currentConversationBusy` into stop-then-resend.
+            onSteerQueuedSend: canSteerCurrentTurn ? sendQueuedChatSendNow : undefined,
             onAssistantFeedback: handleAssistantFeedback,
           }
         : undefined,
     [
       activeConversationId,
+      canSteerCurrentTurn,
       conversationLoadError,
       currentConversationActionDisabled,
 	      currentConversationQueuedItems,
@@ -10338,18 +11684,24 @@ export function ProjectView({
   // workspace's existing Share/Export menu. The featured design-toolbox rows are
   // driven by ChatPane's composer ref, so ProjectView no longer wires them here.
   const handleArtifactShare = useCallback(
-    (fileName: string) => {
+    (fileName: string, anchorId?: string) => {
       requestOpenFile(fileName);
-      setShareRequest({ name: fileName, nonce: Date.now() });
+      setShareRequest({ name: fileName, nonce: Date.now(), ...(anchorId ? { anchorId } : {}) });
     },
     [requestOpenFile],
   );
   // Mirrors share, but opens the workspace's Download/Export menu (PDF / image /
   // zip / standalone HTML / save-as-template) instead of a bare file download.
+  /*
+   * `format` **只有产物卡的格式浮层会传**:多格式产物在卡上就把格式选完了,
+   * 不该把人送进预览区的菜单再选第二遍(产品 2026-08-27「导出浮层贴着按钮开」)。
+   * 不带 `format` 的调用(「下一步引导」那行〔下载〕)沿用原语义:打开文件、
+   * 展开导出菜单。
+   */
   const handleArtifactDownload = useCallback(
-    (fileName: string) => {
+    (fileName: string, anchorId?: string) => {
       requestOpenFile(fileName);
-      setDownloadRequest({ name: fileName, nonce: Date.now() });
+      setDownloadRequest({ name: fileName, nonce: Date.now(), ...(anchorId ? { anchorId } : {}) });
     },
     [requestOpenFile],
   );
@@ -10425,6 +11777,7 @@ export function ProjectView({
   }, [renderPreferredChatPanelWidth]);
 
   const finishChatPanelResize = useCallback((saveFinalWidth = true) => {
+    const resized = resizeStateRef.current?.hasMoved === true;
     pointerCleanupRef.current?.();
     pointerCleanupRef.current = null;
     if (pointerFrameRef.current !== null) {
@@ -10434,8 +11787,9 @@ export function ProjectView({
     pendingPointerClientXRef.current = null;
     resizeStateRef.current = null;
     setResizingChatPanel(false);
-    if (saveFinalWidth) {
+    if (saveFinalWidth && resized) {
       const finalWidth = renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current);
+      chatPanelWidthCustomizedRef.current = true;
       saveChatPanelWidth(finalWidth);
     }
   }, [renderPreferredChatPanelWidth]);
@@ -10463,7 +11817,10 @@ export function ProjectView({
       chatPanelMaxWidthRef.current = nextMax;
       setWorkspacePanelMinWidth(nextWorkspaceMin);
       setChatPanelMaxWidth(nextMax);
-      renderPreferredChatPanelWidth(preferredChatPanelWidthRef.current, nextMax);
+      const preferredWidth = chatPanelWidthCustomizedRef.current
+        ? preferredChatPanelWidthRef.current
+        : defaultChatPanelWidthForSplit(splitWidth);
+      renderPreferredChatPanelWidth(preferredWidth, nextMax);
     };
 
     updateAllowedWidth();
@@ -10618,6 +11975,7 @@ export function ProjectView({
     if (nextWidth === null) return;
     event.preventDefault();
     const next = applyChatPanelWidth(nextWidth);
+    chatPanelWidthCustomizedRef.current = true;
     saveChatPanelWidth(next);
   }, [applyChatPanelWidth]);
 
@@ -10661,6 +12019,22 @@ export function ProjectView({
     autoSendAttachmentsRef.current = isAutoSend ? readAutoSendAttachments(project.id) : [];
     autoSendContextRef.current = isAutoSend ? readAutoSendContext(project.id) : null;
   }
+  /**
+   * The Home batch that is still going up for this project.
+   *
+   * This is what un-blocks the first paint. The server paths the auto-send
+   * needs are written only after the last upload answers, and reading them at
+   * mount is what used to keep the whole project frame behind the uploads.
+   * They are needed by the SEND, not by the paint: the frame opens now, draws
+   * these cards from the local bytes the picker already handed us, and the
+   * auto-send below waits for this list to empty out before it reads the real
+   * paths — see `readAutoSendAttachments` at the dispatch site.
+   */
+  const homeAttachmentUploads = useSyncExternalStore(
+    subscribeHomeAttachmentUploads,
+    () => homeAttachmentUploadsFor(project.id),
+    () => homeAttachmentUploadsFor(project.id),
+  );
   const initialWorkspaceContexts = autoSendContextRef.current?.workspaceItems ?? [];
   const brandEnrichmentEligibleForProject =
     config.mode === 'daemon' &&
@@ -11294,6 +12668,13 @@ export function ProjectView({
       return;
     }
     if (messages.length > 0) return;
+    // The picked files are still going up. Sending now would ship the prompt
+    // with whichever attachments happened to have landed — which, at the
+    // moment this frame opens, is none of them. This effect re-runs when the
+    // batch drains (`homeAttachmentUploads` is a dependency), so waiting here
+    // costs the send exactly the upload time it always cost, and costs the
+    // first paint nothing.
+    if (homeAttachmentUploads.length > 0) return;
     let flag: string | null = null;
     try {
       flag = window.sessionStorage.getItem(autoSendFirstMessageKey(project.id));
@@ -11311,7 +12692,16 @@ export function ProjectView({
       project.pendingPrompt ||
       ''
     ).trim();
-    const attachments = autoSendAttachmentsRef.current ?? [];
+    // Read the server paths HERE, not at mount. The mount snapshot is taken
+    // while the batch may still be uploading, so it can legitimately be empty
+    // for a project that does have attachments; the session values are only
+    // cleared once a send is accepted, so a fresh read is the newer of the two
+    // whenever it has anything, and the snapshot still covers the case where
+    // sessionStorage stopped answering after mount.
+    const freshAttachments = readAutoSendAttachments(project.id);
+    const attachments = freshAttachments.length > 0
+      ? freshAttachments
+      : autoSendAttachmentsRef.current ?? [];
     const context = autoSendContextRef.current ?? readAutoSendContext(project.id);
     if (!seed && attachments.length === 0) {
       return;
@@ -11356,6 +12746,7 @@ export function ProjectView({
       });
   }, [
     activeConversationId,
+    homeAttachmentUploads,
     messagesInitialized,
     streaming,
     messages.length,
@@ -11421,6 +12812,13 @@ export function ProjectView({
             ...(project?.id ? { project_id: project.id } : {}),
           });
           onAgentModelChange(agentId, choice);
+          /*
+           * 「选完自动重跑」的那一半。只有确实是从报错卡那颗〔更换模型〕进来的
+           * 才会有待重跑的那一轮 —— 平时手动换模型不该无端重发。
+           */
+          const pending = rerunAfterModelChangeRef.current;
+          rerunAfterModelChangeRef.current = null;
+          if (pending) handleRetry(pending, 'switch_model_retry');
         }}
         onApiModelChange={(model) => {
           trackComposerBarClick(analytics.track, {
@@ -11434,6 +12832,7 @@ export function ProjectView({
         }}
         onOpenSettings={onOpenSettings}
         onRefreshAgents={onRefreshAgents}
+        openSignal={modelPickerOpenSignal}
         placement="up"
         projectWorkspaceScope={projectWorkspaceScopeState}
       />
@@ -11507,11 +12906,26 @@ export function ProjectView({
               key={`${project.id}:${activeConversationId ?? 'conversation-unavailable'}:${chatSeed?.id ?? 'ready'}`}
               messages={messages}
               streaming={currentConversationControlStreaming}
-              liveToolInput={liveToolInput}
               loading={currentConversationLoading}
               // A read-only viewer of a team-shared project cannot drive artifact
               // changes through chat (comments go through the separate overlay).
-              sendDisabled={currentConversationSendDisabled || projectMutationReadOnly}
+              // Home's own prompt has not gone out yet — it is waiting for this
+              // same batch. Letting a second prompt overtake it would consume
+              // the turn the Home prompt was going to use, and go out without
+              // the attachments the user picked for it. Typing stays open;
+              // only the send waits, and it waits exactly as long as the
+              // uploads do.
+              // Home's own prompt has not gone out yet — it is waiting for this
+              // same batch. Letting a second prompt overtake it would consume
+              // the turn the Home prompt was going to use, and go out without
+              // the attachments the user picked for it. Typing stays open;
+              // only the send waits, and it waits exactly as long as the
+              // uploads do.
+              sendDisabled={
+                currentConversationSendDisabled
+                || projectMutationReadOnly
+                || homeAttachmentUploads.length > 0
+              }
               viewerOnly={projectMutationReadOnly}
               composerPlaceholder={
                 projectCollab.materializationPending
@@ -11545,7 +12959,9 @@ export function ProjectView({
               onDetachComment={detachPreviewComment}
               onDeleteComment={(commentId) => void removePreviewComment(commentId)}
               onSend={handleComposerSend}
+              onResendUserMessage={handleResendUserMessage}
               onRetry={handleRetry}
+              onSwitchModel={handleSwitchModel}
               amrAuthRetryContinuation={amrAuthRetryContinuation}
               amrAuthRetryMountId={amrAuthRetryMountIdRef.current}
               amrAuthRetryWorkspaceIdentityKey={projectRunAuthorityKey}
@@ -11555,10 +12971,15 @@ export function ProjectView({
               onDiscardAmrAuthRetryContinuation={onDiscardAmrAuthRetryContinuation}
               onResumeRun={handleResumeRun}
               onStop={handleStop}
+              // 组件 22 · 重连 · S29:掉线时流水的最后一行。按当前会话过一道 ——
+              // 后台重挂可能发生在别的会话上,那一行不该串进这一屏。
+              reconnect={reconnectViewForConversation(reconnectView, activeConversationId)}
+              onManualReconnect={handleManualReconnect}
               onRemoveQueuedSend={removeQueuedChatSend}
               onUpdateQueuedSend={updateQueuedChatSend}
               onReorderQueuedSends={reorderCurrentConversationQueuedChatSends}
               onSendQueuedNow={sendQueuedChatSendNow}
+              onSteerQueuedSend={canSteerCurrentTurn ? sendQueuedChatSendNow : undefined}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginDetails={handleOpenContextPluginDetails}
               onRequestDesignSystemDetails={handleOpenContextDesignSystemDetails}
@@ -11652,6 +13073,9 @@ export function ProjectView({
               onDeleteConversation={handleDeleteConversation}
               config={config}
               onOpenSettings={onOpenSettings}
+              amrBalanceCardUsd={amrBalanceCardUsd}
+              amrBalanceCardUnavailable={amrBalanceFailureWalletUnavailable}
+              onAmrBalanceUpgrade={handleAmrBalanceCardUpgrade}
               showByokRecoveryAction={
                 config.mode === 'api' &&
                 daemonLive &&
@@ -11689,6 +13113,12 @@ export function ProjectView({
               }
               createDesignSystemFromProjectBusy={projectDesignSystemCreateStarting}
               onBrandBrowserAssistConfirm={handleBrandBrowserAssistConfirm}
+              // The Home batch, drawn from the local bytes while it uploads.
+              // Same tray, same cards, same "uploading" treatment the composer
+              // already gives files picked from inside the project.
+              homeAttachmentUploads={homeAttachmentUploads}
+              onDismissHomeAttachmentUpload={(cardId) =>
+                dismissHomeAttachmentUpload(project.id, cardId)}
               chatLogTray={
                 projectActionsToastInChatPane ? (
                   <div className="project-actions-toast-anchor">
@@ -11941,7 +13371,20 @@ export function ProjectView({
       {onboardingEntryRef.current && hasPreviewableArtifact && !currentConversationStreaming ? (
         <FirstArtifactHint />
       ) : null}
-      {amrBalanceGateBlock ? (
+      {amrBalanceGateBlock?.dialog === 'ask_owner' || amrOwnerTopUpFromCard ? (
+        /*
+         * 非 owner 的成员。他拿不到账单动作,所以这张弹窗不外跳,而是给他一句
+         * 可以直接发给所有者的话 —— 在此之前这一档只有一颗「暂不需要」(§6.Y)。
+         */
+        <AmrOwnerTopUpDialog
+          onClose={() => {
+            setAmrOwnerTopUpFromCard(false);
+            // 和现有弹窗的「暂不需要」同义:任务留在队列里,只是不再是唯一选项。
+            setAmrBalanceGateBlock(null);
+          }}
+        />
+      ) : null}
+      {amrBalanceGateBlock?.dialog === 'upgrade' ? (
         <AmrBalanceDialog
           reason={amrBalanceGateBlock.reason}
           balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
@@ -11960,16 +13403,6 @@ export function ProjectView({
             amrGatePausedQueueConversationsRef.current.delete(conversationId);
             setQueuedAutoStartTick((tick) => tick + 1);
           }}
-        />
-      ) : null}
-      {amrLowBalanceWarn ? (
-        <AmrLowBalanceDialog
-          balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-          profile={amrLowBalanceWarn.snapshot.profile}
-          entrySource="chat_low_balance_warn_recharge"
-          metricsConsent={config.telemetry?.metrics === true}
-          installationId={config.installationId}
-          onDecision={amrLowBalanceWarn.resolve}
         />
       ) : null}
       <AnimatePresence>
@@ -12175,9 +13608,23 @@ function filterProjectFilesByMinMtime(
     : [...projectFiles];
 }
 
-export function selectPrimaryProjectFile(files: ProjectFile[]): ProjectFile | null {
+export function selectPrimaryProjectFile(
+  files: ProjectFile[],
+  excludedFileNames: ReadonlySet<string> = new Set(),
+): ProjectFile | null {
+  const normalizedExcludedFileNames = new Set(
+    [...excludedFileNames].map(normalizeProjectFileName),
+  );
   const candidates = files
-    .filter((file) => !isProcessArtifactFile(file.name))
+    .filter(
+      (file) =>
+        !isProcessArtifactFile(file.name)
+        && !normalizedExcludedFileNames.has(normalizeProjectFileName(file.name))
+        && !(
+          file.path
+          && normalizedExcludedFileNames.has(normalizeProjectFileName(file.path))
+        ),
+    )
     .map((file) => ({ file, rank: primaryProjectFileRank(file) }))
     .filter((candidate) => Number.isFinite(candidate.rank));
   if (candidates.length === 0) return null;
@@ -13020,6 +14467,62 @@ export function shouldClearActiveRunRefs(
   return currentConversationId === completedConversationId;
 }
 
+/**
+ * 升级卡要显示的余额。读数拿不准就返回 `null` —— 这张卡把数字念给用户听,
+ * 念错比不念更糟(付费档的 $0.00 本来就常态,见 #7190)。
+ *
+ * 判定用的是 `amrWalletBalanceUsd` 同一条解析规则,两处不另算。
+ */
+export function amrBalanceCardBalanceUsd(
+  snapshot: AmrWalletSnapshot | null | undefined,
+): number | null {
+  const balance = amrWalletBalanceUsd(snapshot);
+  if (balance == null) return null;
+  return Math.max(0, balance);
+}
+
+/**
+ * daemon 在 run 里判定的「余额不足」错误码。写在这里而不是从 `amr-guidance`
+ * 里借:那个模块导出的是**卡面映射**,不是错误码本身,而这一条要回答的是
+ * 「这一轮是不是死在钱上」。
+ */
+const AMR_INSUFFICIENT_BALANCE_CODE = 'AMR_INSUFFICIENT_BALANCE';
+
+/**
+ * **最后一轮是不是跑到一半死在余额上** —— 是就返回那条助手消息的 id,不是就 `null`。
+ *
+ * 这是升级卡在「跑到一半」那条路上的唯一触发点(用户 2026-09-02 裁决:钱的事
+ * 只有升级卡一张,没有第二张白色通用报错卡)。发送前那道闸门是另一个触发点,
+ * 两者写的是同一个 `amrBalanceCardUsd`。
+ *
+ * 三条刻意的窄化:
+ *
+ * - **只看最后一条助手消息。** 卡说的是「你现在的额度」,不是「历史上某一轮
+ *   曾经缺过钱」。上一轮缺钱、这一轮跑通了,卡就该下去。
+ * - **只认结构化错误码**,不去猜原文。错误码由 daemon 的
+ *   `classifyAmrAccountFailure` 判定,那是唯一的判据来源;web 再猜一遍就是
+ *   两处各说各话。这条码本身只对 AMR 发出,所以不另加 agent 判据 ——
+ *   多一道会在 agentId 没落盘的历史消息上把卡吃掉。
+ * - **只认终态失败。** 还在跑的一轮不谈余额。
+ */
+export function amrInsufficientBalanceFailureMessageId(
+  messages: ChatMessage[],
+): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant') continue;
+    if (message.runStatus !== 'failed') return null;
+    const events = message.events ?? [];
+    for (let j = events.length - 1; j >= 0; j--) {
+      const event = events[j];
+      if (event?.kind !== 'status' || event.label !== 'error') continue;
+      return event.code === AMR_INSUFFICIENT_BALANCE_CODE ? message.id : null;
+    }
+    return null;
+  }
+  return null;
+}
+
 export function finalizeActiveAssistantMessagesOnStop(
   messages: ChatMessage[],
   stoppedAt: number,
@@ -13042,11 +14545,29 @@ export function finalizeActiveAssistantMessagesOnStop(
 
 type BufferedTextUpdates = ReturnType<typeof createBufferedTextUpdates>;
 
+/**
+ * 重放窗口关掉的判据:这条流安静这么久,就当 daemon 的缓冲已经放完了。
+ *
+ * 为什么是「安静多久」而不是某个信号:`/api/runs/:id/events` 上**没有**历史与直播的
+ * 分界。daemon(`runtimes/runs.ts` 的 `stream`)是先同步把 `run.events` 整个写出去,
+ * 写完才把这条连接加进 `run.clients` 收直播 —— 两段同一个通道、同一套 `id`、同一种帧。
+ * 客户端唯一能如实观察到的差别是**到货节奏**:重放那一段是一次灌下来的,直播那一段
+ * 按模型出字的速度来。所以这里造的分界就是「第一次安静下来」。
+ */
+export const HISTORY_REPLAY_SETTLE_MS = 160;
+/**
+ * 兜底:模型此刻正在密集出字时,重放和直播的节奏可能一直分不开。窗口最多开这么久,
+ * 到点无论如何都切回逐块直播 —— 宁可把开头那一小段直播也一次性铺出来,
+ * 也不能把「运行中、agent 新输出」的流式效果永久关掉。
+ */
+export const HISTORY_REPLAY_MAX_MS = 1_200;
+
 export function createBufferedTextUpdates({
   updateMessage,
   persistSoon,
   flushAndPersistNow,
   onContentDelta,
+  replayingHistory = false,
 }: {
   updateMessage: (updater: (prev: ChatMessage) => ChatMessage) => void;
   persistSoon: () => void;
@@ -13055,15 +14576,32 @@ export function createBufferedTextUpdates({
   // last buffered chunk isn't lost when the user reloads mid-stream.
   flushAndPersistNow?: () => void;
   onContentDelta?: (delta: string) => void;
+  /**
+   * 这条流开头是 daemon 从缓冲里重推的历史(重挂时 `?after=` 不带游标,从第 0 条起)。
+   * 开着的时候,落地动作全部攒住,窗口关掉时一次性提交 —— 历史不该一段一段地
+   * 走一遍入场动画,那是「运行中、agent 新输出」才有的样子(OPEND-2590)。
+   */
+  replayingHistory?: boolean;
 }) {
   let pendingContentDelta = '';
   let pendingTextEventDelta = '';
   let pendingThinkingEventDelta = '';
+  /**
+   * **来过几帧**思考,和它们**带了多少字**是两件事(W102,2026-09-03)。
+   *
+   * claude 的思考帧正文 100% 是空串,攒起来还是空串。只看 `pendingThinkingEventDelta`
+   * 就等于「一帧都没来过」,于是 `{ kind: 'thinking' }` 一条都不进 `message.events`,
+   * 而壳头的「思考中」(`buildTurnBlocks` 的 `shell.thinking`)**只**认这种事件 ——
+   * 那一格就永远不亮,用户盯着几分钟空白。规格 W11 写死:`thinking_delta` 到达
+   * **哪怕 delta 为空**也要进入思考中。所以帧数要单独记。
+   */
+  let pendingThinkingEventFrames = 0;
   let flushFrame: number | null = null;
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
   let flushing = false;
   let needsFlush = false;
+  const nonDeltaEventDeduper = createAdjacentAgentEventDeduper();
   const hasDocument = typeof document !== 'undefined';
   const hasWindow = typeof window !== 'undefined';
 
@@ -13078,7 +14616,78 @@ export function createBufferedTextUpdates({
     }
   };
 
-  const flush = () => {
+  // ── 重放窗口(OPEND-2590)────────────────────────────────────────────────
+  // 窗口开着时,每一次「提交给 React」都改成排队。攒住的是 updater 函数本身,
+  // 所以去重、合并、事件与正文的先后全部保持原样;关窗口时按顺序叠成一次提交。
+  let replayOpen = replayingHistory;
+  let replayQueue: Array<(prev: ChatMessage) => ChatMessage> = [];
+  let replayContentDelta = '';
+  let replaySettleTimer: ReturnType<typeof setTimeout> | null = null;
+  let replayCapTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearReplayTimers = () => {
+    if (replaySettleTimer !== null) {
+      clearTimeout(replaySettleTimer);
+      replaySettleTimer = null;
+    }
+    if (replayCapTimer !== null) {
+      clearTimeout(replayCapTimer);
+      replayCapTimer = null;
+    }
+  };
+
+  /** 把攒住的历史一次性交出去。队列空就什么都不做。 */
+  const drainReplayQueue = () => {
+    if (replayQueue.length === 0) {
+      replayContentDelta = '';
+      return;
+    }
+    const queued = replayQueue;
+    const contentDelta = replayContentDelta;
+    replayQueue = [];
+    replayContentDelta = '';
+    // 化开只服务「模型此刻正在吐的字」。这一整块是 daemon 从缓冲里重推的旧内容,
+    // 打个标记让 `useCharReveal` 把它直接落地,不走入场动画。
+    markHistoryReplayLanded();
+    updateMessage((prev) => queued.reduce((message, updater) => updater(message), prev));
+    persistSoon();
+    if (contentDelta) onContentDelta?.(contentDelta);
+  };
+
+  const closeReplayWindow = () => {
+    clearReplayTimers();
+    if (!replayOpen) return;
+    replayOpen = false;
+    drainReplayQueue();
+  };
+
+  /** 又有东西到货:窗口还开着就把「安静」的判定往后推。 */
+  const noteReplayActivity = () => {
+    if (!replayOpen || disposed) return;
+    if (replaySettleTimer !== null) clearTimeout(replaySettleTimer);
+    replaySettleTimer = setTimeout(closeReplayWindow, HISTORY_REPLAY_SETTLE_MS);
+  };
+
+  /** 落地一次改动:窗口开着就排队,否则照旧直接提交。 */
+  const commit = (updater: (prev: ChatMessage) => ChatMessage) => {
+    if (replayOpen) {
+      replayQueue.push(updater);
+      return;
+    }
+    updateMessage(updater);
+  };
+
+  const commitPersistSoon = () => {
+    if (replayOpen) return;
+    persistSoon();
+  };
+
+  if (replayOpen) {
+    replayCapTimer = setTimeout(closeReplayWindow, HISTORY_REPLAY_MAX_MS);
+    noteReplayActivity();
+  }
+
+  const flushPending = () => {
     if (disposed) return;
     if (flushing) {
       needsFlush = true;
@@ -13089,6 +14698,7 @@ export function createBufferedTextUpdates({
       !pendingContentDelta
       && !pendingTextEventDelta
       && !pendingThinkingEventDelta
+      && pendingThinkingEventFrames === 0
       && !needsFlush
     ) return;
     flushing = true;
@@ -13096,25 +14706,40 @@ export function createBufferedTextUpdates({
     const contentDelta = pendingContentDelta;
     const textEventDelta = pendingTextEventDelta;
     const thinkingEventDelta = pendingThinkingEventDelta;
+    const thinkingFramesArrived = pendingThinkingEventFrames > 0;
     pendingContentDelta = '';
     pendingTextEventDelta = '';
     pendingThinkingEventDelta = '';
+    pendingThinkingEventFrames = 0;
     try {
-      updateMessage((prev) => ({
-        ...prev,
-        content: prev.content + contentDelta,
-        events: appendBufferedAgentDeltas(
-          prev.events ?? [],
+      commit((prev) => {
+        const previousEvents = prev.events ?? [];
+        const nextEvents = appendBufferedAgentDeltas(
+          previousEvents,
           textEventDelta,
           thinkingEventDelta,
-        ),
-      }));
-      persistSoon();
-      if (contentDelta) onContentDelta?.(contentDelta);
+          thinkingFramesArrived,
+        );
+        // 一串空思考帧里只有第一帧会改动数组;其余帧什么都没变,别白换一次消息身份
+        if (nextEvents === previousEvents && !contentDelta) return prev;
+        return { ...prev, content: prev.content + contentDelta, events: nextEvents };
+      });
+      if (replayOpen) {
+        replayContentDelta += contentDelta;
+      } else {
+        persistSoon();
+        if (contentDelta) onContentDelta?.(contentDelta);
+      }
     } finally {
       flushing = false;
     }
-    if (pendingContentDelta || pendingTextEventDelta || pendingThinkingEventDelta || needsFlush) {
+    if (
+      pendingContentDelta
+      || pendingTextEventDelta
+      || pendingThinkingEventDelta
+      || pendingThinkingEventFrames > 0
+      || needsFlush
+    ) {
       needsFlush = false;
       scheduleFlush();
     }
@@ -13124,26 +14749,40 @@ export function createBufferedTextUpdates({
     if (disposed || flushFrame !== null || flushTimer !== null) return;
     flushFrame = requestAnimationFrame(() => {
       flushFrame = null;
-      flush();
+      flushPending();
     });
     flushTimer = setTimeout(() => {
       flushTimer = null;
-      flush();
+      flushPending();
     }, 250);
+  };
+
+  /**
+   * 对外的 `flush()` 是「**现在**就要看到已落地的状态」—— 落盘、卸载、收尾都靠它,
+   * 所以它连重放队列一起交出去。模块内部为了排序而做的 flush 走 `flushPending()`,
+   * 那种只是把待定的正文变成一条 text 事件,不该把重放窗口提前关掉。
+   */
+  const flush = () => {
+    flushPending();
+    drainReplayQueue();
   };
 
   const appendContent = (delta: string) => {
     if (disposed) return;
     pendingContentDelta += delta;
     needsFlush = true;
+    noteReplayActivity();
     scheduleFlush();
   };
 
   const appendTextEvent = (delta: string) => {
     if (disposed) return;
-    if (pendingThinkingEventDelta) flush();
+    // 攒着的思考先交出去 —— 空帧也算,否则思考与正文的先后会错位
+    if (pendingThinkingEventDelta || pendingThinkingEventFrames > 0) flushPending();
+    nonDeltaEventDeduper.reset();
     pendingTextEventDelta += delta;
     needsFlush = true;
+    noteReplayActivity();
     scheduleFlush();
   };
 
@@ -13154,27 +14793,43 @@ export function createBufferedTextUpdates({
       return;
     }
     if (ev.kind === 'thinking') {
-      if (pendingTextEventDelta) flush();
+      if (pendingTextEventDelta) flushPending();
+      nonDeltaEventDeduper.reset();
       pendingThinkingEventDelta += ev.text;
+      // 帧数单独记:claude 的 delta 全是空串,只看上面那行等于「一帧都没来过」
+      pendingThinkingEventFrames += 1;
       needsFlush = true;
+      noteReplayActivity();
       scheduleFlush();
       return;
     }
-    flush();
-    updateMessage((prev) => ({
-      ...prev,
-      events: appendCoalescedAgentEvent(prev.events ?? [], ev),
-    }));
-    persistSoon();
+    flushPending();
+    noteReplayActivity();
+    if (nonDeltaEventDeduper.isDuplicate(ev)) return;
+    commit((prev) => {
+      const previousEvents = prev.events ?? [];
+      const nextEvents = appendCoalescedAgentEvent(previousEvents, ev);
+      return nextEvents === previousEvents
+        ? prev
+        : { ...prev, events: nextEvents };
+    });
+    commitPersistSoon();
   };
 
   const cancel = () => {
+    // 攒住的历史不能跟着 buffer 一起消失:重挂开始时这条消息已经被清空了,
+    // 丢掉队列等于把正文留在空白上。先交出去再拆。
+    clearReplayTimers();
+    replayOpen = false;
+    drainReplayQueue();
     disposed = true;
     cancelScheduledFlush();
     pendingContentDelta = '';
     pendingTextEventDelta = '';
     pendingThinkingEventDelta = '';
+    pendingThinkingEventFrames = 0;
     needsFlush = false;
+    nonDeltaEventDeduper.reset();
     if (hasDocument) {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     }
@@ -13211,6 +14866,58 @@ export function createBufferedTextUpdates({
   return { appendContent, appendTextEvent, appendEvent, flush, cancel, hasPendingText };
 }
 
+function isSnapshotAgentEvent(event: AgentEvent): event is Extract<AgentEvent, { kind: 'tool_use' }> {
+  return event.kind === 'tool_use' && isTodoWriteToolName(event.name);
+}
+
+function agentEventsAreIdentical(left: AgentEvent, right: AgentEvent): boolean {
+  if (left === right) return true;
+  if (
+    !isSnapshotAgentEvent(left)
+    || !isSnapshotAgentEvent(right)
+    || left.id !== right.id
+    || left.name !== right.name
+  ) return false;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function createAdjacentAgentEventDeduper() {
+  let previous: AgentEvent | null = null;
+  let previousJson: string | null = null;
+  return {
+    isDuplicate(event: AgentEvent): boolean {
+      if (!isSnapshotAgentEvent(event)) {
+        previous = null;
+        previousJson = null;
+        return false;
+      }
+      if (!previous || !isSnapshotAgentEvent(previous)) {
+        previous = event;
+        return false;
+      }
+      if (previous === event) return true;
+      if (previous.id !== event.id || previous.name !== event.name) {
+        previous = event;
+        previousJson = null;
+        return false;
+      }
+      const eventJson = JSON.stringify(event);
+      const priorJson = previousJson ?? JSON.stringify(previous);
+      if (eventJson === priorJson) {
+        previousJson = priorJson;
+        return true;
+      }
+      previous = event;
+      previousJson = eventJson;
+      return false;
+    },
+    reset(): void {
+      previous = null;
+      previousJson = null;
+    },
+  };
+}
+
 function appendCoalescedAgentEvent(events: AgentEvent[], event: AgentEvent): AgentEvent[] {
   const last = events[events.length - 1];
   if (
@@ -13222,18 +14929,43 @@ function appendCoalescedAgentEvent(events: AgentEvent[], event: AgentEvent): Age
       { ...last, text: last.text + event.text },
     ];
   }
+  if (
+    last
+    && event.kind !== 'text'
+    && event.kind !== 'thinking'
+    && isSnapshotAgentEvent(last)
+    && isSnapshotAgentEvent(event)
+    && agentEventsAreIdentical(last, event)
+  ) {
+    return events;
+  }
   return [...events, event];
 }
 
+/**
+ * 把这一批攒住的增量落进事件流。
+ *
+ * `thinkingFramesArrived` 和 `thinkingDelta` 分开传,是 W102(2026-09-03)的判据:
+ * **帧到了**和**帧里有字**是两件事。claude 的思考帧正文 100% 是空串,只看
+ * `thinkingDelta` 就等于「一帧都没来过」——「思考中」那一格于是永远不亮
+ * (规格 W11:`thinking_delta` 到达**哪怕 delta 为空**就进入思考中)。
+ *
+ * 空帧只需要在流里留下「在想」这一个事实,所以已经有一段思考在收尾时就什么都不做:
+ * 数组身份不变,上面的 `commit` 会原样返回,连着几十帧空的也不会换一次消息身份。
+ * 空串本身不成段 —— `build-turn-blocks.ts` 那两道 `!text.trim()` 管这件事。
+ */
 function appendBufferedAgentDeltas(
   events: AgentEvent[],
   textDelta: string,
   thinkingDelta: string,
+  thinkingFramesArrived = false,
 ): AgentEvent[] {
   let next = events;
   if (textDelta) next = appendCoalescedAgentEvent(next, { kind: 'text', text: textDelta });
   if (thinkingDelta) {
     next = appendCoalescedAgentEvent(next, { kind: 'thinking', text: thinkingDelta });
+  } else if (thinkingFramesArrived && next[next.length - 1]?.kind !== 'thinking') {
+    next = appendCoalescedAgentEvent(next, { kind: 'thinking', text: '' });
   }
   return next;
 }

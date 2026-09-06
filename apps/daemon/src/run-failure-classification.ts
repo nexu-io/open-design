@@ -222,7 +222,7 @@ function isWorkspaceCreditsText(text: string): boolean {
 }
 
 function isTimeoutText(text: string): boolean {
-  return /\b(timed?\s*out|timeout|inactivity|stalled|hung|no new output|without emitting any new output)\b/i
+  return /\b(timed?\s*out|timeout|context deadline exceeded|inactivity|stalled|hung|no new output|without emitting any new output)\b/i
     .test(text);
 }
 
@@ -267,12 +267,35 @@ function isBundledBinaryMissingText(text: string): boolean {
   return /\bbundled (?:OpenCode|agent) binary (?:is )?missing\b/i.test(text);
 }
 
+/**
+ * The endpoint was never reached from this machine.
+ *
+ * These are the OS-level answers to "the connection could not even be opened":
+ * the name did not resolve (`getaddrinfo` / `ENOTFOUND` / `EAI_AGAIN`), no route
+ * existed (`EHOSTUNREACH` / `ENETUNREACH` / `ENETDOWN`), or something on the path
+ * refused it (`ECONNREFUSED`).
+ *
+ * This is the FIRST shape a lost network produces, and the reason it needs to be
+ * named separately from `stream_disconnected`: a request has to resolve and
+ * connect before it can be reset, so a machine that just went offline fails at
+ * DNS, not with a socket error. Only a call that was *already streaming* when the
+ * link died reports a reset — which is why the two arrive with different words
+ * for one physical cause, and why matching only the reset vocabulary leaves the
+ * commoner half to fall through to the last-resort `execution_failed` bucket.
+ *
+ * They stay in the client-environment family rather than the upstream one on
+ * purpose: nothing is wrong at the provider, so the honest answer is the
+ * environment card and not "the provider is having trouble".
+ */
+const ENDPOINT_NEVER_REACHED_RE =
+  /\b(ECONNREFUSED|ENETUNREACH|ENETDOWN|EHOSTUNREACH|ENOTFOUND|EAI_AGAIN|getaddrinfo|network unreachable|local connection failed)\b/i;
+
 function clientEnvironmentFailureDetail(text: string): TrackingRunFailureDetail | null {
   if (/\b(Windows Application Control|AppLocker)\b/i.test(text)) return 'host_policy_block';
   if (/\b(SQLite|WAL).*(?:I\/O|readonly|locked|corrupt|failed)\b/i.test(text)) return 'local_storage_failure';
   if (/\b(certificate|CERT_|self[- ]signed|unable to verify)\b/i.test(text)) return 'certificate_failure';
   if (/\b(unsupported proxy protocol|proxy configuration)\b/i.test(text)) return 'proxy_configuration';
-  if (/\b(ECONNREFUSED|ENETUNREACH|network unreachable|local connection failed)\b/i.test(text)) return 'network_configuration';
+  if (ENDPOINT_NEVER_REACHED_RE.test(text)) return 'network_configuration';
   return null;
 }
 
@@ -487,6 +510,22 @@ const PROCESS_CRASH_SIGNALS = new Set([
   'SIGBUS',
 ]);
 
+/**
+ * The signals a child never chooses: the OS or an operator ended it. Read from
+ * either the normalized error code or the raw status, because a run can carry
+ * the signal without ever getting an `AGENT_SIGNAL_*` code stamped on it.
+ */
+function forcedSignalName(errorCode: string, signal: unknown): string | null {
+  const named = errorCode.startsWith('AGENT_SIGNAL_')
+    ? errorCode.slice('AGENT_SIGNAL_'.length)
+    : typeof signal === 'string'
+      ? signal
+      : '';
+  if (!named) return null;
+  if (named === 'SIGKILL' || PROCESS_CRASH_SIGNALS.has(named)) return named;
+  return null;
+}
+
 // Classifies a run that died from an OS signal or an interrupt exit code
 // (130 = 128 + SIGINT). Returns null when the failure is not signal/interrupt
 // shaped so the caller can fall through to the generic exit-code bucket.
@@ -501,11 +540,18 @@ function signalInterruptClassification(
   errorCode: string,
   text: string,
   retryableHint: boolean | undefined,
+  /**
+   * The signal when the caller already knows it. A killed run does NOT reliably
+   * carry an `AGENT_SIGNAL_*` code — a real `kill -9` lands as
+   * `AGENT_EXECUTION_FAILED` with the signal only on `status.signal` — so the
+   * code alone is not enough to recognize one.
+   */
+  signalOverride?: string | null,
 ): RunFailureClassification | null {
   const isInterruptExit = errorCode === 'AGENT_EXIT_130';
   const signal = errorCode.startsWith('AGENT_SIGNAL_')
     ? errorCode.slice('AGENT_SIGNAL_'.length)
-    : '';
+    : (signalOverride ?? '');
   if (!signal && !isInterruptExit) return null;
 
   if (signal === 'SIGKILL') {
@@ -623,6 +669,22 @@ function isManagedRuntimeStartupFailureText(text: string): boolean {
 // mislabeled as a processor limitation and lose its retry. The same binary on
 // the same CPU fails deterministically, so cpu_unsupported must never be
 // auto-retried.
+/**
+ * Risk control has suspended the account.
+ *
+ * vela answers with JSON-RPC `-32600`, message "Account temporarily
+ * suspended\nWe detected abnormal payment risk on this account…", and
+ * `data: {"kind":"account_suspended","retryable":false}`. Both are matched: the
+ * ACP bridge does not always surface `data` to the host, and matching only the
+ * structured kind would lose the classification on the paths that carry the
+ * sentence alone (which is exactly how this failure went unnamed until now).
+ */
+function isAccountSuspendedText(text: string): boolean {
+  if (/\baccount_suspended\b/i.test(text)) return true;
+  if (/\baccount temporarily suspended\b/i.test(text)) return true;
+  return /\btemporarily suspended account access\b/i.test(text);
+}
+
 function isCpuUnsupportedCrashText(text: string): boolean {
   if (/\bno_avx2\b/i.test(text)) return true;
   return (
@@ -881,6 +943,25 @@ function classifyRunFailureBase(
     );
   }
 
+  // Risk control suspended the account. Claimed first because nothing further
+  // down can improve on it and several branches would happily swallow it: the
+  // sentence carries no code any existing pattern matches, so today it falls
+  // through to `fatal_rpc_error` / `execution_failed` and the chat card offers a
+  // Retry that can only fail identically (catalogue R-064; design principle 4).
+  if (isAccountSuspendedText(text)) {
+    return classification(
+      // The account is refused access, so this belongs with the authorization
+      // failures rather than in the opaque process-exit bucket — but unlike the
+      // rest of that bucket there is no sign-in that fixes it, hence
+      // `user_action: 'none'` and a non-retryable verdict.
+      'auth',
+      'account_suspended',
+      inferFailureStageFromEvents(events, 'session_init'),
+      false,
+      'none',
+    );
+  }
+
   if (
     errorCode === 'AMR_INSUFFICIENT_BALANCE' ||
     amrFailure?.code === 'AMR_INSUFFICIENT_BALANCE'
@@ -933,6 +1014,31 @@ function classifyRunFailureBase(
         ? { evidenceLevel: 'structured_code' }
         : {},
     );
+  }
+
+  /*
+   * A forced signal is a STRUCTURAL fact — the child did not report it, the OS
+   * or an operator ended the process — so no amount of leftover stderr can
+   * explain it away. Claimed here, ahead of every text heuristic below.
+   *
+   * Found on a real run (2026-08-27): `kill -9` on the agent child produced
+   * `signal: SIGKILL, exitCode: null`, and the classifier answered
+   * `auth / stale_profile` because a half-written line about local profiles
+   * happened to be in the buffer. The chat card then told the user to run
+   * `/login` — sending them to fix something that was never broken.
+   *
+   * `signalInterruptClassification` already carries the right reasoning ("a
+   * signal is the strongest evidence we have"); it just sat 300 lines too late
+   * to win. Deliberately narrow:
+   *  · only SIGKILL and the crash signals — SIGTERM/SIGINT genuinely accompany
+   *    graceful shutdown and interrupts, where the text does carry more meaning;
+   *  · timeout still wins, because the daemon's watchdog writes its own reason
+   *    before escalating to a kill, and WHY it was killed beats the bare signal.
+   */
+  const forcedSignal = forcedSignalName(errorCode, input.status.signal);
+  if (forcedSignal && !isTimeoutText(text) && errorCode !== 'TIMEOUT') {
+    const forced = signalInterruptClassification(errorCode, text, retryableHint, forcedSignal);
+    if (forced) return forced;
   }
 
   const promptSizeDetail = promptTooLargeDetail(text);

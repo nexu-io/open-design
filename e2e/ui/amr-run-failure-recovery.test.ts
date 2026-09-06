@@ -535,6 +535,7 @@ test('[P1] Settings AMR wallet fallback balance renders from the daemon wallet e
     selectedAgentId: 'amr',
     assistantText: 'AMR wallet refresh smoke',
     accountSummaryAvailable: false,
+    workspaceBalanceAvailable: false,
   });
 
   await gotoEntryHome(page);
@@ -590,8 +591,8 @@ test('[P1] Settings AMR upgrade opens the attributed plans URL for the active pr
 
   await expect.poll(() => openedUrl).toBeTruthy();
   const url = new URL(openedUrl);
-  expect(url.pathname).toBe('/dashboard');
-  expect(url.searchParams.get('billing')).toBe('plan');
+  expect(url.pathname).toBe('/pricing/');
+  expect(url.searchParams.get('billing')).toBeNull();
   expect(url.searchParams.get('od_origin')).toBe('open_design');
   expect(url.searchParams.get('od_entry_source')).toBe('settings_amr_upgrade');
   expect(url.searchParams.get('od_entry_id')).toBeTruthy();
@@ -701,7 +702,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
   await gotoProject(page, amr.projectId);
   await sendPrompt(page, 'AMR auth failure before switch smoke');
   await expect(runErrorCard(page)).toContainText(
-    /OpenDesign agent isn't signed in yet|AMR sign-in is required/i,
+    /OpenDesign Cloud agent isn't signed in yet|AMR sign-in is required/i,
     { timeout: T.long },
   );
   const settings = await openExecutionSettingsDialog(page);
@@ -798,7 +799,9 @@ test('[P0] upstream outages keep Retry available without promoting AMR', async (
   await gotoProject(page, projectId);
 
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: T.long });
-  await expect(page.getByText(/Generation service unavailable|model provider is temporarily unavailable/i).first()).toBeVisible();
+  await expect(runErrorCard(page)).toContainText(
+    /Service temporarily unavailable|model service is temporarily unavailable/i,
+  );
   await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
@@ -884,11 +887,10 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
 
-  const sourceToggle = card.getByRole('button', { name: /查看详情/ });
-  await expect(sourceToggle).toHaveAttribute('aria-expanded', 'false');
-  await sourceToggle.click();
-  await expect(sourceToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(card.locator('.run-error__diagnostic')).toContainText(rawDetail);
+  // 卡上不再有「错误详情」折叠(用户 2026-08-27):既没有那颗〔查看详情〕,
+  // 上游原文也不出现在卡上的任何地方。
+  await expect(card.getByRole('button', { name: /查看详情/ })).toHaveCount(0);
+  await expect(card).not.toContainText(rawDetail);
 });
 
 test('[P0] antigravity rate limits offer terminal model switching without promoting AMR', async ({ page }) => {
@@ -993,6 +995,7 @@ async function setupAmrWorkspace(
     seedLoginConfig?: boolean;
     assistantText?: string;
     accountSummaryAvailable?: boolean;
+    workspaceBalanceAvailable?: boolean;
   },
 ) {
   await stubCatalogsEmpty(page);
@@ -1063,6 +1066,9 @@ async function setupAmrWorkspace(
       accountPlan: 'free',
       ...(options.accountSummaryAvailable !== undefined
         ? { accountSummaryAvailable: options.accountSummaryAvailable }
+        : {}),
+      ...(options.workspaceBalanceAvailable !== undefined
+        ? { workspaceBalanceAvailable: options.workspaceBalanceAvailable }
         : {}),
     },
   );

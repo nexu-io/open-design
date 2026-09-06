@@ -67,13 +67,13 @@
   text-wrap: balance;
 }
 
-/* Suppression-dialog footer: checkbox bottom-left, actions bottom-right with
- * the primary outermost. Wraps gracefully on long-label locales — the action
- * row keeps its right alignment on its own line. */
+/* Dialog footer: actions bottom-right with the primary outermost. Wraps
+ * gracefully on long-label locales — the action row keeps its right alignment
+ * on its own line. */
 .footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 10px 12px;
   width: 100%;
@@ -96,32 +96,4 @@
 
 .cta:active {
   transform: scale(0.98);
-}
-
-/* Scoped under .footer to outrank the legacy `.modal label` column layout
- * (mention-home.css) that the shared Dialog chrome drags in. */
-.footer .optOut {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--text-muted);
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-
-.footer .optOut input {
-  /* Undo the global text-input chrome (width:100%, padding, border) that
-   * primitives.css puts on every `input` — this is a native checkbox. */
-  appearance: auto;
-  width: 14px;
-  height: 14px;
-  flex: none;
-  padding: 0;
-  border: none;
-  background: none;
-  accent-color: var(--accent);
-  margin: 0;
 }

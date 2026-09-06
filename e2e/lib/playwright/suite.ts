@@ -55,6 +55,10 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         // fake runtime configuration and request headers.
         await toolsDev.startWeb({
           AMR_HOME: join(toolsDev.root, 'scratch', 'amr-home'),
+          // The hermetic Codex fixture emits the legacy `exec --json` stream.
+          // Pin its matching transport here; app-server protocol coverage lives
+          // in the daemon transport/parity suites, not in this fake-CLI worker.
+          OD_CODEX_TRANSPORT: 'exec-json',
         });
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
         await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));

@@ -123,6 +123,8 @@ rendered, the filename, and one concrete variation idea.
 - Never ship a video without saving the file — the user expects
   something to play in the file viewer.
 - When the underlying model fails (NSFW filter, content policy,
-  timeout), report the error verbatim. Don't silently retry.
+  timeout), keep the raw provider error in the tool trace and give the
+  user the media contract's `nextStep` sentence for that outcome. Never
+  paste upstream error text into the reply. Don't silently retry.
 - Do not claim a render has been "sent", "started", or "is running"
   unless you have already called `"$OD_NODE_BIN" "$OD_BIN" media generate`.

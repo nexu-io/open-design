@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 import {
   isFreeAmrPlan,
-  isPaidAmrPlan,
   resolveAmrPlan,
 } from '../../src/runtime/amr-low-balance-plan';
 import { fetchVelaLoginStatus } from '../../src/providers/daemon';
@@ -33,22 +32,34 @@ afterEach(() => {
 });
 
 describe('AMR plan eligibility', () => {
-  it('shows the low-balance soft gate only to the three paid tiers', () => {
-    expect(isPaidAmrPlan('plus')).toBe(true);
-    expect(isPaidAmrPlan(' PRO ')).toBe(true);
-    expect(isPaidAmrPlan('Max')).toBe(true);
-
-    expect(isPaidAmrPlan('free')).toBe(false);
-    expect(isPaidAmrPlan('enterprise')).toBe(false);
-    expect(isPaidAmrPlan(null)).toBe(false);
-    expect(isPaidAmrPlan(undefined)).toBe(false);
-  });
-
   it('recognizes only the explicit free tier for post-success upgrades', () => {
     expect(isFreeAmrPlan(' free ')).toBe(true);
     expect(isFreeAmrPlan('FREE')).toBe(true);
     expect(isFreeAmrPlan('plus')).toBe(false);
     expect(isFreeAmrPlan(null)).toBe(false);
+  });
+
+  /*
+   * The fact this file exists to protect, and the reason the question is asked
+   * as "is it FREE" rather than "is it PAID": the two are not complements.
+   *
+   * A plan that cannot be read is neither. `planMayFundRunOutsideWallet` is
+   * `!isFreeAmrPlan(...)`, so an unreadable tier answers "something else may be
+   * funding this" and the hard block stands down — a subscriber whose tier the
+   * client cannot read is never blocked by a failed read (T39). Ask it the
+   * other way round and the same account gets hard-blocked instead, which is
+   * the paid-team lockout T15 calls a production incident.
+   *
+   * A `isPaidAmrPlan` counterpart used to live next to this one and is gone on
+   * purpose; see the docblock on `isFreeAmrPlan`.
+   */
+  it('an unreadable tier is not free — and that is what keeps it unblocked', () => {
+    expect(isFreeAmrPlan(null)).toBe(false);
+    expect(isFreeAmrPlan(undefined)).toBe(false);
+    expect(isFreeAmrPlan('')).toBe(false);
+    // Tiers outside the known set answer the same way, for the same reason.
+    expect(isFreeAmrPlan('enterprise')).toBe(false);
+    expect(isFreeAmrPlan('go')).toBe(false);
   });
 });
 

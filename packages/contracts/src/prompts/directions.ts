@@ -243,7 +243,7 @@ export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
     '## Direction library — infer and bind by default',
     '',
-    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a direction-form, use that selection instead. Replace the seed template\'s `:root` block with the chosen direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
+    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a Host-owned direction form, its answer carries a stable Host `value`, a `foundation` id from this library, and visual `guidance`. Bind the named foundation from this library, then apply the guidance as the selected refinement; the Host value is catalogue identity and must not be passed to `od tools directions`. Replace the seed template\'s `:root` block with the chosen foundation\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {

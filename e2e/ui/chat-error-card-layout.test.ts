@@ -132,8 +132,12 @@ async function expectActionsContained(
   await retryAction.click({ trial: true });
 
   const layout = await card.evaluate((element) => {
+    // `RunErrorCard` 把动作直接排在 `[data-user-action-footer]` 这一层。
+    // 旧的 `UserActionCard` 在 footer 里另包了一个 `div.actions`(所以原来取的是
+    // `:scope > div:last-child`);换组件之后那个 div 没了,再按老选择器取会取到
+    // null、一颗按钮都数不到 —— 这个 P1 布局守卫会在不报错的情况下什么都不守。
     const footer = element.querySelector<HTMLElement>('[data-user-action-footer="true"]');
-    const actions = footer?.querySelector<HTMLElement>(':scope > div:last-child') ?? null;
+    const actions = footer;
     const buttons = actions
       ? Array.from(actions.querySelectorAll<HTMLElement>('button'))
       : [];
@@ -168,7 +172,9 @@ async function expectActionsContained(
   expect(layout.actionScrollWidth).toBeLessThanOrEqual(layout.actionClientWidth);
   expect(layout.actionLeft).toBeGreaterThanOrEqual(layout.cardLeft);
   expect(layout.actionRight).toBeLessThanOrEqual(layout.cardRight);
-  expect(layout.buttons).toHaveLength(2);
+  // 四颗:常驻的〔联系支持〕〔导出日志〕+ 这一档的主动作 + 重试。
+  // 前两颗不挑失败类型(产品 2026-08-26 裁决),所以它们也在这条窄面板守卫里。
+  expect(layout.buttons).toHaveLength(4);
   for (const button of layout.buttons) {
     expect(button.width).toBeGreaterThan(0);
     expect(button.height).toBeGreaterThan(0);
@@ -176,7 +182,12 @@ async function expectActionsContained(
     expect(button.right).toBeLessThanOrEqual(layout.cardRight);
   }
   if (options.sameRow) {
-    expect(layout.buttons[0]?.top).toBe(layout.buttons[1]?.top);
+    // 按**这两颗具体的按钮**比,不按下标 —— 动作行会换行,下标不再等于「那一对」。
+    const [primaryBox, retryBox] = await Promise.all([
+      primaryAction.boundingBox(),
+      retryAction.boundingBox(),
+    ]);
+    expect(primaryBox?.y).toBe(retryBox?.y);
   }
 }
 

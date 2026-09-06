@@ -46,6 +46,18 @@ describe('discovery.ts — on-demand clarification policy', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).toContain('**Hard cap: 5 questions per form — never more.**');
   });
 
+  it('treats direction-cards as a host-owned catalog trigger', () => {
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      "`direction-cards` is a trigger for Open Design's host-owned visual-style catalog",
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'omit `options`, `cards`, `variant`, and `defaultValue`',
+    );
+    expect(DISCOVERY_AND_PHILOSOPHY).toContain(
+      'the host-owned catalog owns its recommendation',
+    );
+  });
+
   it('leaves the task-type form to od-default while accepting historical answers', () => {
     expect(DISCOVERY_AND_PHILOSOPHY).not.toContain('<question-form id="task-type"');
     expect(DISCOVERY_AND_PHILOSOPHY).toContain(

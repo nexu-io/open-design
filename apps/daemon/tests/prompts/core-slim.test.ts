@@ -36,7 +36,41 @@ const repoRoot = path.resolve(__dirname, '../../../..');
 // geometry, provenance check) is load-bearing product behavior that could not
 // be delegated to the web-prototype skill, because it must hold for every
 // skill and for skill-less runs.
-const SLIM_CORE_BYTE_BUDGET = 29_696;
+//
+// 29_696 → 30_720: five option-authoring rules (option cap, radio-vs-select by
+// option count, the `group`/`trailingLabel` fields, plain-language labels, and
+// a 40-character label ceiling). Cost after compressing them from prose to
+// short imperatives: 644B, down from 1_315B in the first draft.
+//
+// Why they have to live here, at per-turn cost:
+//   - `### <question-form> Writing Guidelines` is unconditional in this charter,
+//     so every slim run already pays ~4.8KB for it. These rules govern the forms
+//     that section authorizes; splitting them out would leave the authorization
+//     without its quality bar.
+//   - There is no "this turn will emit a form" signal at compose time. The 51
+//     conditional sections in `composeSystemPrompt` key on session mode, design
+//     system, and project shape — none of them predicts a clarification turn.
+//     The one gate that touches this (`isSlimCharterHead`, system.ts:1432) runs
+//     the other way: it *suppresses* the duplicate block precisely because the
+//     charter already carries it.
+//   - The `discovery-question-form` atom is on-demand, but OD Next only. Moving
+//     the rules there would lose them for every skill-less slim run — the same
+//     reason the imagery contract above could not be delegated.
+//
+// Sized to the next 1KiB step rather than to fit: the previous raise left only
+// 44B of slack, so the next person to add a sentence hit this wall. 30_720
+// restores ~424B of headroom.
+//
+// 30_720 → 31_744: +318B for the render-check reply rule (W81). The model was
+// telling users 「桌面渲染服务暂不可用，本轮未能生成截图预览」 because this
+// section used to say "state that clearly" — see
+// `render-check-user-copy.test.ts`. Saying where a failed render goes instead
+// (tool output and daemon logs, never the visible reply) costs prose that
+// "state that clearly" did not, and it has to live here: the render check is
+// in the always-on charter, so a skill-less slim run must carry the rule too.
+// Sized to the next 1KiB step again rather than to fit — landing at 104B of
+// slack would just rebuild the wall this comment was written about.
+const SLIM_CORE_BYTE_BUDGET = 31_744;
 
 describe('renderSlimCoreCharter — byte budget', () => {
   it('stays under the byte budget in both execution profiles', () => {
@@ -80,10 +114,12 @@ describe('renderSlimCoreCharter — frozen protocol markers', () => {
     expect(charter).toContain('allowCustom');
   });
 
-  it('requires a recommended default prefill on every form question', () => {
-    expect(charter).toContain('provide a sensible default for each question');
+  it('requires recommended defaults except for the host-owned visual catalog', () => {
+    expect(charter).toContain('provide a sensible default for each non-visual question');
     expect(charter).toContain('Use `defaultValue` to preselect an answer');
     expect(charter).toContain("`defaultValue` must match an option's `value`");
+    expect(charter).toContain('A host-owned `direction-cards` question is the exception');
+    expect(charter).toContain('Omit `options`, `cards`, `variant`, and `defaultValue`');
   });
 
   it('localizes user-visible form copy while preserving machine identifiers', () => {
@@ -356,6 +392,8 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     expect(out).toContain(
       'When the user has not explicitly requested\noptions, infer a fitting direction',
     );
+    expect(out).toContain('`direction-cards` is a Host-owned catalog trigger');
+    expect(out).toContain('Omit `options`,\n`cards`, `variant`, and `defaultValue`');
     expect(out).not.toContain(
       'The direction-picker atom asks the agent to draft',
     );
@@ -487,6 +525,7 @@ describe('slim core — direction library becomes a pull layer', () => {
     expect(slim).toContain('tools directions --id <id>');
     expect(slim).toContain('do not probe CLI help or alternate paths first');
     expect(slim).toContain('retry only after materially changing the fix or input');
+    expect(slim).toContain('resolve the `foundation` id with this command, never the Host `value`');
     expect(slim).toContain('- `editorial-monocle` — Editorial — Monocle / FT magazine');
     // No inline palette data under slim — that's the pull payload.
     expect(slim).not.toContain('**Palette (drop into `:root`):**');
@@ -494,6 +533,7 @@ describe('slim core — direction library becomes a pull layer', () => {
     expect(classic).toContain('## Direction library — infer and bind by default');
     expect(classic).toContain('Infer the best match from the brief and known context');
     expect(classic).toContain('If the user explicitly requested direction comparison');
+    expect(classic).toContain('the Host value is catalogue identity and must not be passed to `od tools directions`');
     expect(classic).toContain('**Palette (drop into `:root`):**');
     expect(classic).not.toContain('## Direction library — index');
     // An active design system suppresses both variants.
@@ -599,24 +639,52 @@ describe('slim core — regression-audit fixes vs classic', () => {
 
   it('keeps the plan step agent-agnostic — no hardcoded TodoWrite in the charter', () => {
     // OpenDesign drives many code agents (codex, opencode, Qwen CLI, ACP
-    // family) that have no TodoWrite tool. The charter must NOT hardcode it,
-    // or the plan step is dead for ~2/3 of production traffic. Freeze the
-    // generic wording and the anti-hallucination guard.
+    // family) and none of them has a tool literally called TodoWrite — the
+    // ones that can plan spell it `update_plan` / `todowrite`, and some
+    // cannot plan at all. The charter is prepended to every slim run, so it
+    // must NOT hardcode one family's name. The concrete per-runtime name is
+    // added outside the charter (`planToolNoteForRuntime`, covered by
+    // `plan-tool-note.test.ts`). Freeze the generic wording and the
+    // anti-hallucination guard.
     const charter = renderSlimCoreCharter('filesystem');
     expect(charter).not.toContain('TodoWrite');
     expect(charter).toContain('If the runtime supports task lists, use one');
     expect(charter).toContain('Do not simulate tool calls that the current runtime does not support');
   });
 
-  it('injects the concrete TodoWrite note only for Claude-family runs', () => {
+  it('injects the concrete TodoWrite note for Claude-family runs', () => {
     const base = { metadata: { kind: 'other' as const },
       executionProfile: 'filesystem' as const, promptCoreVariant: 'slim' as const };
     // Claude family (claude/codebuddy/amp) → named tool + live-card benefit.
+    // The whole family shares one stream format, so it is identified by
+    // `streamFormat` alone and needs no agent id.
     expect(composeSystemPrompt({ ...base, streamFormat: 'claude-stream-json' }))
       .toContain('Your plan tool is `TodoWrite`');
-    // codex / opencode (json-event-stream) → generic charter only, no note.
+    // `json-event-stream` is shared by codex, opencode and cursor-agent, so
+    // the format alone identifies no runtime and names no tool. Which agents
+    // DO get a note, and which tool each is told to call, is
+    // `plan-tool-note.test.ts`.
     expect(composeSystemPrompt({ ...base, streamFormat: 'json-event-stream' }))
       .not.toContain('Your plan tool is');
+  });
+
+  /*
+   * Claude Code >= 2.1.x renamed the capability: `TodoWrite` is gone and the
+   * plan lives in `TaskCreate` / `TaskUpdate` (measured on 2.1.247 — the init
+   * frame's `tools` array carries no `TodoWrite` on any model). The daemon
+   * reduces either dialect into the same Todos card, so the note has to name
+   * both or it points half the installed base at a tool that does not exist.
+   */
+  it('names both plan-tool dialects so the note survives the Claude Code rename', () => {
+    const note = composeSystemPrompt({
+      metadata: { kind: 'other' as const },
+      executionProfile: 'filesystem' as const,
+      promptCoreVariant: 'slim' as const,
+      streamFormat: 'claude-stream-json',
+    });
+    expect(note).toContain('`TodoWrite`');
+    expect(note).toContain('`TaskCreate`');
+    expect(note).toContain('`TaskUpdate`');
   });
 
   it('carries the multi-turn edit-adherence invariants (DS binding + locked constraints)', () => {

@@ -32,23 +32,33 @@ test('title marker stripper parses markers split across deltas', () => {
   assert.equal(stripper.flush(), '');
 });
 
-test('title marker stripper passes text through when disabled', () => {
+test('title marker stripper drops malformed marker content without throwing', () => {
+  const { stripper, titles } = createStripper();
+
+  assert.equal(stripper.strip('Lead <od-title>unfinished'), 'Lead ');
+  assert.equal(stripper.flush(), '');
+  assert.deepEqual(titles, []);
+});
+
+/*
+ * 红测:**没请求生成标题时,标记也不许漏进正文**。
+ *
+ * 线上量到的:`<od-title>编辑级羊皮纸单页</od-title>` 原样出现在聊天正文第一行。
+ * 真因是调用点写的 `enabled: Boolean(titleGenerationRequested)` —— 不请求标题就把
+ * 剥离器整个关掉;而模型是按系统提示词吐这个标记的,它并不知道这一轮我们要不要标题。
+ *
+ * 「要不要拿它命名会话」和「它能不能出现在正文里」是两件事:后者永远是否。
+ */
+test('title marker never leaks into visible text, even when no title was requested', () => {
   const titles: string[] = [];
   const stripper = createAgentTitleMarkerStripper({
     enabled: false,
     emitTitle: (title) => titles.push(title),
   });
 
-  assert.equal(stripper.strip('<od-title>Foo</od-title>Answer'), '<od-title>Foo</od-title>Answer');
+  assert.equal(stripper.strip('<od-title>Foo</od-title>Answer'), 'Answer');
   assert.equal(stripper.flush(), '');
-  assert.deepEqual(titles, []);
-});
-
-test('title marker stripper drops malformed marker content without throwing', () => {
-  const { stripper, titles } = createStripper();
-
-  assert.equal(stripper.strip('Lead <od-title>unfinished'), 'Lead ');
-  assert.equal(stripper.flush(), '');
+  // 没请求标题就不该往上报,但正文必须干净
   assert.deepEqual(titles, []);
 });
 

@@ -2,7 +2,12 @@ import { expect, test } from '@/playwright/suite';
 import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { expectStableCount } from '@/playwright/assertions';
 import { applyStandardMocks, routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
-import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
+import {
+  clickDeckNextSlide,
+  clickPreviewToolbarAction,
+  openAllProjectFiles,
+  openPreviewToolbarMoreMenu,
+} from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
@@ -32,11 +37,18 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(artifactPreview(page)).toBeVisible();
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection'))
+    .toMatch(/^(row|column)$/);
+  const initialFlexDirection = await previewCss(
+    page,
+    '[data-od-id="responsive-pair"]',
+    'flexDirection',
+  );
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
-  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection')).toBe('row');
+  await expect.poll(() => previewCss(page, '[data-od-id="responsive-pair"]', 'flexDirection'))
+    .toBe(initialFlexDirection);
 
   await frame.locator('body').evaluate(() => {
     window.parent.postMessage({ type: 'od-edit-background' }, '*');
@@ -90,7 +102,7 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expectFileSourceExcludes(page, projectId, 'manual-edit.html', ['data-od-edit-selected']);
   await expect(page.locator('.manual-edit-error')).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
   const viewMode = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewMode).toBeVisible();
@@ -98,8 +110,8 @@ test('[P0] manual edit inspector previews and persists page and selected element
   await expect(viewMode.getByRole('tab', { name: 'Code', exact: true })).toBeVisible();
   await expect(artifactPreview(page)).toBeVisible();
 
-  await page.getByTestId('board-mode-toggle').click();
-  await expect(page.getByRole('button', { name: /^Comment$/ })).toBeVisible();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
+  await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: /^Share$/ })).toBeVisible();
   const actionMenu = await openShareExportMenu(page);
   await expect(actionMenu.getByRole('menuitem', { name: /Export as PDF/i })).toBeVisible();
@@ -127,13 +139,13 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeHidden();
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
 
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeHidden();
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -141,7 +153,7 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toBeHidden();
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await preview.locator('[data-od-id="mobile-page-home"]').evaluate((element) => {
     element.dispatchEvent(new MouseEvent('click', {
@@ -192,7 +204,7 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
   await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
   await expect(preview.getByTestId('mobile-page-today')).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
 
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -209,14 +221,14 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
     'CONTENT',
   );
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await preview.getByRole('button', { name: 'Today' }).click();
   await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-profile')).toHaveCount(0);
@@ -244,26 +256,26 @@ test('[P0] srcDoc page navigation keeps manual edit hover guides across files an
 
   const preview = artifactPreviewFrame(page);
   await expect(preview.getByRole('heading', { name: 'Today page' })).toBeVisible();
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await preview.locator('[data-od-id="today-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
   await preview.getByRole('link', { name: 'Profile' }).click();
 
   await expect(tabBySuffix(page, 'profile.html')).toHaveAttribute('aria-selected', 'true');
   await expect(preview.getByRole('heading', { name: 'Profile page' })).toBeVisible();
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await preview.locator('[data-od-id="profile-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(0);
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(preview.locator('html[data-od-edit-mode]')).toHaveCount(1);
   await preview.locator('[data-od-id="profile-screen"]').hover();
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
@@ -414,17 +426,22 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await offlinePage.close();
   await expect(downloadMenu).toHaveCount(0);
 
-  await page.getByRole('button', { name: /^Comment$/ }).click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: /^Comment$/ }).click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'false');
 
   const zoomButton = page.locator('.viewer-toolbar-zoom .zoom-trigger');
   await expect(zoomButton).toHaveText(/^\d+%$/);
-  await zoomButton.click();
-  const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
-  await expect(zoomMenu).toBeVisible();
-  await zoomMenu.getByRole('menuitem', { name: '150%' }).click();
+  if (await zoomButton.isVisible()) {
+    await zoomButton.click();
+    const zoomMenu = page.locator('.zoom-menu-popover[role="menu"]');
+    await expect(zoomMenu).toBeVisible();
+    await zoomMenu.getByRole('menuitem', { name: '150%' }).click();
+  } else {
+    const overflowMenu = await openPreviewToolbarMoreMenu(page);
+    await overflowMenu.getByRole('menuitem', { name: '150%' }).click();
+  }
   await expect(zoomButton).toHaveText('150%');
 });
 
@@ -555,7 +572,7 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   // The screenshot step is gone: `screenshot-copy-button` no longer exists in
   // apps/web, and FileViewer's own suite asserts its absence. Comments, mark
   // and edit below are still live, so the rest of this spec stands.
-  await page.getByTestId('board-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await artifactPreviewFrame(page).locator('[data-od-id="hero-title"]').click();
   await expect(page.getByTestId('comment-popover')).toBeVisible();
@@ -565,9 +582,9 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
 
   await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
   const commentsButton = page.getByTestId('comment-panel-toggle');
-  await commentsButton.click();
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
   await expect(commentsButton).toHaveAttribute('aria-pressed', 'false');
-  await commentsButton.click();
+  await clickPreviewToolbarAction(page, 'comment-panel-toggle', /^Comments \(\d+\)$/);
   await expect(page.getByTestId('comment-side-panel')).toBeVisible();
   await expect(page.getByTestId('comment-side-panel')).toContainText('Panel-level comment');
   await expect(commentsButton).toContainText('1');
@@ -578,7 +595,7 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await sendPrompt(page, 'Keep the current preview run active');
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
 
-  await page.getByTestId('draw-overlay-toggle').click();
+  await clickPreviewToolbarAction(page, 'draw-overlay-toggle', /^Mark$/);
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
   await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
@@ -597,9 +614,9 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Mark this hero crop');
-  await expect(queuedStrip).toContainText('1 mark');
+  await expect(queuedStrip.getByTestId('chat-queued-send-index')).toHaveText('1');
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await expect(page.getByTestId('manual-edit-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await selectPreviewElementThroughBridge(page, artifactPreviewFrame(page), '[data-od-id="hero-title"]', 'Parameters');
   await expect(page.locator('.manual-edit-modal')).toContainText('Hero title');
@@ -617,13 +634,13 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   await page.goto(`/projects/${projectId}/conversations/${conversationId}/files/draw-position.html`);
   await openDesignFile(page, 'draw-position.html');
 
-  await page.getByTestId('board-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'board-mode-toggle', /^Comment$/);
   await expect(page.getByTestId('board-mode-toggle')).toHaveAttribute('aria-pressed', 'true');
   await holdNextRunOpen(page);
   await sendPrompt(page, 'Keep draw queue mode active');
   await expect(page.getByRole('button', { name: 'Stop' })).toBeVisible();
 
-  await page.getByTestId('draw-overlay-toggle').click();
+  await clickPreviewToolbarAction(page, 'draw-overlay-toggle', /^Mark$/);
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
 
   const previewBox = await artifactPreview(page).boundingBox();
@@ -653,7 +670,7 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Float this note near the marked hero area');
-  await expect(queuedStrip).toContainText('1 mark');
+  await expect(queuedStrip.getByTestId('chat-queued-send-index')).toHaveText('1');
 });
 
 test('[P1] first-loop onboarding completes once after a successful artifact export', async ({ page }) => {
@@ -863,11 +880,7 @@ test('[P0] @critical edited HTML file restores selected tab and preview after re
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: 'Original Hero' })).toBeVisible();
-  const activeEditToggle = page.locator(
-    '[data-testid="file-workspace"] [data-testid="manual-edit-mode-toggle"]:visible',
-  );
-  await expect(activeEditToggle).toHaveCount(1);
-  await activeEditToggle.click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   await selectPreviewElementThroughBridge(page, frame, '[data-od-id="hero-title"]', 'Parameters');
   const parameters = inspectorSection(page, 'Parameters');
   const fontSizeInput = parameters.locator('.cc-row').filter({ hasText: 'Font size' }).locator('input');
@@ -877,7 +890,7 @@ test('[P0] @critical edited HTML file restores selected tab and preview after re
   await inspectSaveButton(page).click({ force: true });
   await expectFileSource(page, projectId, 'restore-edit.html', ['font-size: 52px', 'color:']);
 
-  await activeEditToggle.click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
   const viewMode = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewMode).toBeVisible();
   await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');

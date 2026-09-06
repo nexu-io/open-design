@@ -1,0 +1,106 @@
+/*
+ * 「设计系统工作区 · 自动创建」那张状态卡。
+ *
+ * 稿子 `729fa43ce7:docs/design/chat-panel/src/components.css:344-364`,
+ * DOM 在 `src/body-components.html:45-53`,验收记录在 `design-qa.md`。
+ * 声明逐条照搬,只有三处刻意不同,每一处都在下面标了原因。
+ *
+ * ── 稿子把它拆成了「基类 + 修饰类」,我们只有一个实例 ────────────────
+ * 稿子写的是 `.user-status-card` + `.design-system-generation-status`:前者是
+ * 陈列页想复用的壳,后者是这一格自己。产品里这张卡只有一个出处,拆成两层只会让
+ * 「哪一条归谁」多一次转译,所以合并成一条 `.card`。
+ *
+ * ⚠️ 稿子 DOM 上那个 `id="msg-design-system-generation-status"` **没有搬**:
+ * 它是陈列页的锚点(`design-qa.md` 用它定位),而产品里同一次会话可能有多条这样的
+ * 消息,id 必须唯一。定位改走 `data-testid`。
+ */
+
+/*
+ * ⚠️ **宽度是 280,不是 320。**
+ *
+ * 稿子里这两条分在两处:
+ *
+ *   .user-status-card                        { max-width: min(320px, 100%) }   :345
+ *   .st-b .design-system-generation-status    { width:     min(280px, 100%) }   :686
+ *
+ * `.st-b` 是**陈列页的格子容器**,产品里没有这东西 —— 照抄组件那一条,产品里这张卡
+ * 会漂到 320:说明文字从两行变一行,高度从 ~68px 掉到 ~51px。而设计验收
+ * (`design-qa.md`)量的、也是设计肉眼确认过的,是 **280 × 67.98px**、
+ * 「标题完整显示为一行,说明文字完整显示为两行」。反算也对得上:
+ * 内距 18 + 标题 13×1.2 = 15.6 + 缝 2 + 说明 12×1.35×2 = 32.4 → 68.0。
+ *
+ * 所以 280 钉在组件自己身上,`min(…, 100%)` 保住 QA 说的「窄容器中可以随父容器收缩」。
+ * 320 那一条**不搬**:width 280 之下它永远不生效,留着只会让下一个人以为上限是 320。
+ *
+ * ⚠️ 【产品裁决 2026-09-02:圆角走 token,不跟稿子的字面 14px】
+ * 稿子这里写的是字面 `14px 14px 4px 14px`。而紧挨着它的用户气泡(`.bub`)走的是
+ * `--radius-lg`/`--radius-sm`,即 **12/12/4/12** —— 两张卡并排站着,角差 2px。
+ * 产品的形状刻度是 2/4/8/12/16,**没有 14 这一档**,所以照抄就必须写死一个
+ * 刻度外的值,而且只为这一张卡写死。产品选了跟刻度、和旁边的气泡同形。
+ *
+ * **对稿时不要把它改回 14px** —— 那是撤销一次裁决,不是修一个偏差。
+ * 稿子那 14 是不是设计有意区分,没有结论;有结论的是我们这边走 token。
+ */
+.card {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(280px, 100%);
+  padding: 9px 11px;
+  border: none;
+  border-radius: var(--chat-radius-lg) var(--chat-radius-lg) var(--chat-radius-sm) var(--chat-radius-lg);
+  background: var(--chat-status-card-surface);
+  box-shadow: none;
+  color: var(--chat-status-card-ink);
+  text-align: start;
+}
+
+/* 稿子 `.user-status-card__icon`(:351-355)。`border-radius: var(--radius)` 是
+   产品刻度的 8px 那一档,走接缝的 `--chat-radius`。 */
+.icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--chat-radius);
+  color: var(--chat-status-card-ink);
+  background: var(--chat-status-card-icon-plate);
+}
+.icon > svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+/* 稿子 `.user-status-card__copy`(:357)。`min-width: 0` + `overflow: hidden` 是
+   让标题那一行的省略号真的生效 —— flex 子项默认 `min-width: auto`,不压到 0 的话
+   它会撑开卡片而不是省略。 */
+.copy {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  display: grid;
+  gap: 2px;
+}
+
+/* 标题保持一行,超了走省略号(design-qa.md「标题保持单行并使用省略号兜底」)。
+   不写颜色 —— 稿子这一条就不写,继承卡面的白。 */
+.copy strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--chat-t-body);
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+/* 说明允许自然断词(同上),字重不写 —— 吃面板排版基线的 500。 */
+.copy span {
+  overflow-wrap: anywhere;
+  font-size: var(--chat-t-mini);
+  line-height: 1.35;
+  color: var(--chat-status-card-detail-ink);
+}

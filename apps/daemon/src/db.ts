@@ -9,12 +9,20 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type {
+  ChatMessage,
   CollabCloudComment,
   OdNextDevicePlatformV1,
   ProjectBrowserWorkspaceTab,
   ProjectTabsState,
 } from '@open-design/contracts';
-import { eventsEndedWithUnfinishedWork } from '@open-design/contracts';
+import {
+  eventsEndedWithUnfinishedWork,
+  isTodoWriteToolName,
+  latestTodoWriteInputFromEvents,
+  stripArtifactFocusMarkers,
+  stripDoneMarkers,
+  stripNextStepMarkers,
+} from '@open-design/contracts';
 import { migrateCollabSyncSnapshots } from './collab/sync-snapshot-store.js';
 import { migrateCommentRelayOutbox } from './collab/comment-relay-outbox.js';
 import { migratePublicFilePublications } from './collab/public-file-publication-store.js';
@@ -23,6 +31,17 @@ import {
   collapseWorkspaceProjectHomes,
   type WorkspaceProjectHomeRow,
 } from './collab/workspace-project-home.js';
+import { scrubDsmlToolProtocolTail } from './artifacts/text-suppression.js';
+import {
+  listMessageArtifactRows,
+  migrateChatArtifacts,
+  replaceMessageArtifacts,
+} from './chat-artifacts/store.js';
+import {
+  projectChatArtifactRefs,
+  projectConversationChatArtifactRefs,
+} from './chat-artifacts/refs.js';
+import type { ChatArtifactRef } from './chat-artifacts/types.js';
 import { migrateCritique } from './critique/persistence.js';
 import { migrateMediaTasks } from './media/tasks.js';
 import { migrateLibrary } from './library-store.js';
@@ -452,6 +471,21 @@ function migrate(db: SqliteDb): void {
   if (!messageCols.some((c: DbRow) => c.name === 'telemetry_finalized_at')) {
     db.exec(`ALTER TABLE messages ADD COLUMN telemetry_finalized_at INTEGER`);
   }
+  // Fork divider (delivered design, cell 38): the marker that says "this turn
+  // was forked, and here is the title the new conversation inherited". It has
+  // to be a stored column, not a client-side flag — the divider is only
+  // honest if it is still there after a reload.
+  if (!messageCols.some((c: DbRow) => c.name === 'forked_into_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN forked_into_json TEXT`);
+  }
+  // Who stopped this turn (delivered design, cell 81). `runStatus: 'canceled'`
+  // alone cannot tell a user's Stop from a daemon shutdown / project cleanup,
+  // so the pause line would lie after a daemon restart. The origin has to be a
+  // stored column for the same reason the fork divider is: the line is only
+  // honest if it still says the same thing after a reload.
+  if (!messageCols.some((c: DbRow) => c.name === 'cancel_origin')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN cancel_origin TEXT`);
+  }
   const routineRunCols = db.prepare(`PRAGMA table_info(routine_runs)`).all() as DbRow[];
   if (!routineRunCols.some((c: DbRow) => c.name === 'error_code')) {
     db.exec(`ALTER TABLE routine_runs ADD COLUMN error_code TEXT`);
@@ -573,6 +607,7 @@ function migrate(db: SqliteDb): void {
   migrateProjectScenarioBindings(db);
   migrateStrategyTaskStore(db);
   migrateOdNextRolloutStore(db);
+  migrateChatArtifacts(db);
   migrateCollabSyncSnapshots(db);
   migrateCommentRelayOutbox(db);
   migrateAmrTerminalReportOutbox(db);
@@ -2650,6 +2685,78 @@ export function latestCompletedAssistantMessageId(
   return row && typeof row.id === 'string' ? row.id : null;
 }
 
+/**
+ * The user request that produced `assistantMessageId` — i.e. what the upstream
+ * session that ended on that assistant turn was working on.
+ *
+ * Anchored on the stored resume cursor rather than "the newest user message",
+ * because by prompt-composition time the current turn's own user row is already
+ * seeded (`seedRunUserMessage`) and would win a naive lookup. Returns null when
+ * the anchor row is gone or nothing precedes it — the caller must then
+ * synthesize no context at all rather than guess at one.
+ */
+export function userRequestBeforeAssistantMessage(
+  db: SqliteDb,
+  conversationId: string,
+  assistantMessageId: string,
+): string | null {
+  const row = db
+    .prepare(
+      // A missing anchor makes the subquery NULL, so `position < NULL` matches
+      // nothing and the caller correctly gets null instead of the latest turn.
+      `SELECT content FROM messages
+        WHERE conversation_id = ? AND role = 'user'
+          AND position < (SELECT position FROM messages WHERE id = ?)
+        ORDER BY position DESC LIMIT 1`,
+    )
+    .get(conversationId, assistantMessageId) as DbRow | undefined;
+  const content = row && typeof row.content === 'string' ? row.content.trim() : '';
+  return content.length > 0 ? content : null;
+}
+
+/**
+ * How far back a run start looks for the conversation's last declared task
+ * list. A plan is recalled from the RECENT past, not from the whole
+ * conversation — and the bound is also the cost ceiling: 21 of the 27 runtimes
+ * never emit a task list at all, so without it every one of their run starts
+ * would read every assistant message's `events_json` blob in the conversation.
+ */
+const TODO_RECALL_MESSAGE_LOOKBACK = 8;
+
+/**
+ * The conversation's most recently declared task list — the raw TodoWrite
+ * `input` — walking back from the newest assistant turn, or `null` when none of
+ * the recent turns declared one.
+ *
+ * Deliberately NOT `latestCompletedAssistantMessageId`'s `run_status =
+ * 'succeeded'` filter: a turn that was interrupted or failed is precisely the
+ * turn most likely to have left work open, and it is the one we most want to
+ * hand back. Only `excludeMessageId` — the current run's own in-flight
+ * placeholder — is skipped.
+ *
+ * Walking PAST a turn that declared no list is intentional: an unrelated
+ * question answered in between does not close the outstanding plan.
+ */
+export function latestTodoWriteInputForConversation(
+  db: SqliteDb,
+  conversationId: string,
+  excludeMessageId: string,
+): unknown | null {
+  const rows = db
+    .prepare(
+      `SELECT id, events_json AS eventsJson FROM messages
+        WHERE conversation_id = ? AND role = 'assistant' AND id != ?
+        ORDER BY position DESC LIMIT ?`,
+    )
+    .all(conversationId, excludeMessageId, TODO_RECALL_MESSAGE_LOOKBACK) as DbRow[];
+  for (const row of rows) {
+    const events = materializeMessageAgentEvents(db, String(row.id), row.eventsJson).events;
+    const input = latestTodoWriteInputFromEvents(events);
+    if (input != null) return input;
+  }
+  return null;
+}
+
 export function updateAgentSessionStableHash(
   db: SqliteDb,
   conversationId: string,
@@ -2707,6 +2814,8 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               run_context_json AS runContextJson,
               task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              forked_into_json AS forkedIntoJson,
+              cancel_origin AS cancelOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
@@ -2715,11 +2824,42 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     )
     .all(conversationId) as DbRow[];
   const eventBatches = readConversationMessageEventBatches(db, conversationId);
+  // One query for the whole conversation. A per-message lookup here would be a
+  // straight N+1 on every transcript read.
+  const artifactRefs = conversationChatArtifactRefs(db, conversationId);
   return messages.map((message) => normalizeMessage(
     db,
     message,
     eventBatches.get(String(message.id)) ?? [],
+    artifactRefs.get(String(message.id)) ?? [],
   ));
+}
+
+function projectIdForConversation(db: SqliteDb, conversationId: string): string | null {
+  const row = db
+    .prepare(`SELECT project_id AS projectId FROM conversations WHERE id = ?`)
+    .get(conversationId) as DbRow | undefined;
+  return typeof row?.projectId === 'string' ? row.projectId : null;
+}
+
+function conversationChatArtifactRefs(
+  db: SqliteDb,
+  conversationId: string,
+): Map<string, ChatArtifactRef[]> {
+  try {
+    const projectId = projectIdForConversation(db, conversationId);
+    if (!projectId) return new Map();
+    return projectConversationChatArtifactRefs(db, projectId, conversationId);
+  } catch {
+    // A snapshot store problem must never make a conversation unreadable.
+    //
+    // The owning-project lookup is INSIDE this guard, not in front of it. It
+    // reads a different table than the refs themselves, so it can fail on its
+    // own — and when it did, the throw travelled all the way out of
+    // `listMessages` and the transcript came back empty. Artifact refs decorate
+    // a conversation; nothing about them is worth losing its messages over.
+    return new Map();
+  }
 }
 
 export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
@@ -2739,13 +2879,83 @@ export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              forked_into_json AS forkedIntoJson,
+              cancel_origin AS cancelOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages
         WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
     )
     .get(conversationId ? [id, conversationId] : id) as DbRow | undefined;
-  return row ? normalizeMessage(db, row) : null;
+  if (!row) return null;
+  return normalizeMessage(db, row, undefined, messageChatArtifactRefs(db, String(row.id)));
+}
+
+function messageChatArtifactRefs(db: SqliteDb, messageId: string): ChatArtifactRef[] {
+  const owner = db
+    .prepare(
+      `SELECT c.project_id AS projectId FROM messages m
+         JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.id = ?`,
+    )
+    .get(messageId) as DbRow | undefined;
+  if (typeof owner?.projectId !== 'string') return [];
+  try {
+    return projectChatArtifactRefs(db, owner.projectId, messageId);
+  } catch {
+    // A snapshot store problem must never make a message unreadable.
+    return [];
+  }
+}
+
+/**
+ * Materialize artifact refs for a message that has none yet.
+ *
+ * This is what makes CONVERSATION FORK work: the fork copies each source
+ * message under a fresh id, and the copy re-seeds its own `message_artifacts`
+ * rows pointing at the SAME immutable snapshots. Blobs are shared, never
+ * duplicated, and the two branches count independently — deleting one branch's
+ * message cannot take the other branch's evidence with it.
+ *
+ * Refs are only seeded when the message has none. A browser PUT that echoes a
+ * stale projection back must not be able to overwrite refs the daemon wrote at
+ * the run's terminal chokepoint.
+ */
+function seedMessageArtifactRefsIfAbsent(
+  db: SqliteDb,
+  messageId: string,
+  refs: unknown,
+): void {
+  if (!Array.isArray(refs) || refs.length === 0) return;
+  try {
+    if (listMessageArtifactRows(db, messageId).length > 0) return;
+    const inputs = refs.flatMap((raw) => {
+      const ref = raw as Partial<ChatArtifactRef>;
+      if (
+        typeof ref?.label !== 'string' ||
+        typeof ref.kind !== 'string' ||
+        (ref.displayPolicy !== 'immutable_snapshot' &&
+          ref.displayPolicy !== 'latest_with_static_preview')
+      ) return [];
+      return [{
+        label: ref.label,
+        kind: ref.kind,
+        displayPolicy: ref.displayPolicy,
+        snapshotId: typeof ref.snapshotId === 'string' ? ref.snapshotId : null,
+        workspaceArtifactId:
+          typeof ref.workspaceArtifactId === 'string' ? ref.workspaceArtifactId : null,
+        // `html_version_id` is daemon-internal lineage that never crosses the
+        // wire, so a fork rebuilt from the DTO cannot carry it. It is optional
+        // diagnostics; the snapshot itself is what the fork actually needs.
+      }];
+    });
+    if (inputs.length === 0) return;
+    replaceMessageArtifacts(db, messageId, inputs);
+  } catch (error) {
+    // A fork that cannot carry its refs still forks. The copy simply shows no
+    // cards rather than blocking the branch.
+    console.warn('[db] failed to seed message artifact refs', error);
+  }
 }
 
 export function conversationTurnIndexForRun(
@@ -2835,7 +3045,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
               session_mode = ?, run_context_json = ?, task_analytics_json = ?,
-              applied_plugin_snapshot_json = ?,
+              applied_plugin_snapshot_json = ?, forked_into_json = ?,
+              cancel_origin = ?,
               telemetry_finalized_at = CASE
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
@@ -2862,6 +3073,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runContext ? JSON.stringify(m.runContext) : null,
       nextTaskAnalyticsJson,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      normalizeForkedIntoForStorage(m.forkedInto),
+      normalizeCancelOriginForStorage(m.cancelOrigin),
       m.telemetryFinalized === true ? 1 : 0,
       now,
       m.startedAt ?? null,
@@ -2878,12 +3091,13 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     const createdAt = typeof m.createdAt === 'number' && Number.isFinite(m.createdAt)
       ? m.createdAt
       : now;
-    // 25 values: id, conversation_id, role, content, agent_id, agent_name,
+    // 28 values: id, conversation_id, role, content, agent_id, agent_name,
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
-    // task_analytics_json, applied_plugin_snapshot_json,
-    // telemetry_finalized_at, started_at, ended_at, position, created_at.
+    // task_analytics_json, applied_plugin_snapshot_json, forked_into_json,
+    // cancel_origin, telemetry_finalized_at, started_at, ended_at, position,
+    // created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
@@ -2891,9 +3105,9 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
           session_mode, run_context_json, task_analytics_json,
-          applied_plugin_snapshot_json,
+          applied_plugin_snapshot_json, forked_into_json, cancel_origin,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -2916,6 +3130,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runContext ? JSON.stringify(m.runContext) : null,
       m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
+      normalizeForkedIntoForStorage(m.forkedInto),
+      normalizeCancelOriginForStorage(m.cancelOrigin),
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
       m.endedAt ?? null,
@@ -2923,6 +3139,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       createdAt,
     );
   }
+  seedMessageArtifactRefsIfAbsent(db, String(m.id), m.artifactRefs);
   // Bump conversation activity so the sidebar's recency sort works.
   db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
     now,
@@ -2945,6 +3162,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               run_context_json AS runContextJson,
               task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              forked_into_json AS forkedIntoJson,
+              cancel_origin AS cancelOrigin,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
          FROM messages WHERE id = ?`,
@@ -3005,6 +3224,7 @@ export function compactAdjacentMessageAgentEvents(
   incomingEvents: readonly DbRow[],
 ): DbRow[] {
   const events: DbRow[] = [];
+  let lastNonDeltaJson: string | undefined;
   for (const event of incomingEvents) {
     const kind = typeof event?.kind === 'string' ? event.kind : '';
     const last = events[events.length - 1];
@@ -3012,9 +3232,42 @@ export function compactAdjacentMessageAgentEvents(
       (kind === 'text' || kind === 'thinking') && typeof event?.text === 'string';
     if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
       events[events.length - 1] = { ...last, text: last.text + event.text };
-    } else {
-      events.push(event);
+      lastNonDeltaJson = undefined;
+      continue;
     }
+
+    if (isMergeableDelta) {
+      events.push(event);
+      lastNonDeltaJson = undefined;
+      continue;
+    }
+
+    // TodoWrite is a state-replacement snapshot, not an activity log. Stream
+    // reconnects and whole-message browser snapshots can replay the exact same
+    // state thousands of times; those byte-equal adjacent copies carry no UI
+    // meaning. Ordinary tool/status/result events remain untouched even when
+    // equal, and changed Todo snapshots still survive.
+    const comparableSnapshots =
+      last?.kind === 'tool_use'
+      && kind === 'tool_use'
+      && isTodoWriteToolName(last.name)
+      && isTodoWriteToolName(event.name)
+      && last.id === event.id
+      && last.name === event.name;
+    if (comparableSnapshots) {
+      if (last === event) continue;
+      const eventJson = JSON.stringify(event);
+      const previousJson = lastNonDeltaJson ?? JSON.stringify(last);
+      if (eventJson === previousJson) {
+        lastNonDeltaJson = previousJson;
+        continue;
+      }
+      events.push(event);
+      lastNonDeltaJson = eventJson;
+      continue;
+    }
+    events.push(event);
+    lastNonDeltaJson = undefined;
   }
   return events;
 }
@@ -3122,7 +3375,23 @@ function materializeMessageAgentEvents(
   let textDelta = '';
   for (const batch of batches) {
     for (const event of batch) {
-      if (event?.kind === 'text' && typeof event.text === 'string') textDelta += event.text;
+      /*
+       * The turn-completion marker rides the text stream (that is how the chat
+       * client finds the process/conclusion boundary) but must not survive into
+       * the message body. `content` is what copy-to-clipboard, exports, title
+       * fallbacks and the legacy events-less render path read, and a raw
+       * `<od-done key="…"/>` in any of those is a protocol tag on screen — the
+       * exact failure `<od-title>` already shipped once.
+       */
+      /*
+       * `<od-next key="…" .../>` (or the legacy paired form) and `<od-focus key="…"/>` are stripped from the live stream before
+       * anything is persisted, so this is belt-and-braces: the body is the one
+       * surface a future path could reach without passing the stream stripper,
+       * and the cost of being wrong there is a protocol tag in an export.
+       */
+      if (event?.kind === 'text' && typeof event.text === 'string') {
+        textDelta += stripArtifactFocusMarkers(stripNextStepMarkers(stripDoneMarkers(event.text)));
+      }
     }
     events = mergeMessageAgentEvents(events, batch);
   }
@@ -3190,6 +3459,74 @@ export function finalizeMessageAgentEvents(
     clearMessageAgentEventBatches(db, messageId);
     return materialized.events;
   })();
+}
+
+/**
+ * Retire the unfinished prose an interrupted attempt left on this message.
+ *
+ * A turn only gets another attempt because the previous one never terminated,
+ * so whatever text the superseded attempt streamed after its last committed
+ * boundary was never closed upstream either — and the next attempt writes that
+ * passage again. Appending it a second time is how one conclusion ends up in
+ * the transcript twice (OPEND-2566): the event stream is append-only and
+ * adjacent text is concatenated, so nothing downstream can tell a re-written
+ * answer from a longer one.
+ *
+ * Only the trailing delta run goes. Prose that a tool row already closed is
+ * committed in the agent's own session — a resumed attempt continues past it
+ * instead of repeating it — so it has to survive, and the last tool row is the
+ * boundary the resume itself is anchored on.
+ *
+ * `content` is corrected by removing exactly the suffix those deltas
+ * contributed, and only when it really is that suffix; a row whose body came
+ * from somewhere else is left alone rather than rewritten on a guess.
+ *
+ * Returns how many events were dropped.
+ */
+export function dropTrailingMessageAgentDeltas(
+  db: SqliteDb,
+  messageId: string,
+): number {
+  const events = finalizeMessageAgentEvents(db, messageId);
+  if (!events || events.length === 0) return 0;
+  // How the attempt ended is bookkeeping, not body: an interrupted attempt
+  // signs off with its own `status` rows (the terminal error above all), and
+  // they sit AFTER the passage that was cut off. Step over them to reach the
+  // prose, then leave them where they are — they are what makes the seam
+  // legible once the duplicate is gone.
+  let end = events.length;
+  while (end > 0 && events[end - 1]?.kind === 'status') end -= 1;
+  let cut = end;
+  while (cut > 0) {
+    const event = events[cut - 1];
+    const kind = typeof event?.kind === 'string' ? event.kind : '';
+    if ((kind === 'text' || kind === 'thinking') && typeof event?.text === 'string') {
+      cut -= 1;
+      continue;
+    }
+    break;
+  }
+  if (cut === end) return 0;
+  const dropped = events.slice(cut, end);
+  const kept = [...events.slice(0, cut), ...events.slice(end)];
+  const droppedText = dropped
+    .filter((event) => event?.kind === 'text' && typeof event.text === 'string')
+    .map((event) =>
+      stripArtifactFocusMarkers(stripNextStepMarkers(stripDoneMarkers(String(event.text)))),
+    )
+    .join('');
+  const row = db
+    .prepare(`SELECT content FROM messages WHERE id = ?`)
+    .get(messageId) as DbRow | undefined;
+  if (!row) return 0;
+  const content = typeof row.content === 'string' ? row.content : '';
+  const nextContent =
+    droppedText && content.endsWith(droppedText)
+      ? content.slice(0, content.length - droppedText.length)
+      : content;
+  db.prepare(`UPDATE messages SET content = ?, events_json = ? WHERE id = ?`)
+    .run(nextContent, JSON.stringify(kept), messageId);
+  return dropped.length;
 }
 
 export function appendMessageAgentEvent(
@@ -4207,7 +4544,12 @@ function scheduleNextMessageEventMaintenance(
   immediate.unref?.();
 }
 
-function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
+function normalizeMessage(
+  db: SqliteDb,
+  row: DbRow,
+  eventBatches?: DbRow[][],
+  artifactRefs?: ChatArtifactRef[],
+) {
   const eventsJson = typeof row.eventsJson === 'string' ? row.eventsJson : null;
   const materializedEvents = materializeMessageAgentEvents(
     db,
@@ -4237,10 +4579,18 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
       });
     }
   }
+  const scrubProtocolTail = row.role === 'assistant'
+    ? scrubDsmlToolProtocolTail
+    : (text: string) => text;
+  const visibleEvents = row.role === 'assistant'
+    ? scrubDsmlToolProtocolTailFromEvents(materializedEvents.events)
+    : materializedEvents.events;
   return {
     id: row.id,
     role: row.role,
-    content: `${typeof row.content === 'string' ? row.content : ''}${materializedEvents.textDelta}`,
+    content: scrubProtocolTail(
+      `${typeof row.content === 'string' ? row.content : ''}${materializedEvents.textDelta}`,
+    ),
     agentId: row.agentId ?? undefined,
     agentName: row.agentName ?? undefined,
     runId: row.runId ?? undefined,
@@ -4249,11 +4599,14 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
     lastRunEventId: row.lastRunEventId ?? undefined,
     events:
       eventsJson !== null || materializedEvents.batchCount > 0
-        ? materializedEvents.events
+        ? visibleEvents
         : undefined,
     attachments: parseJsonOrUndef(row.attachmentsJson),
     commentAttachments: parseJsonOrUndef(row.commentAttachmentsJson),
     producedFiles: parseJsonOrUndef(row.producedFilesJson),
+    // Normalized artifact refs. `producedFiles` stays exactly as it was for
+    // transcripts and older clients; new cards read this instead.
+    artifactRefs: artifactRefs && artifactRefs.length > 0 ? artifactRefs : undefined,
     traceObjectFiles: parseJsonOrUndef(row.traceObjectFilesJson),
     feedback: parseJsonOrUndef(row.feedbackJson),
     preTurnFileNames: parseJsonOrUndef(row.preTurnFileNamesJson),
@@ -4261,10 +4614,53 @@ function normalizeMessage(db: SqliteDb, row: DbRow, eventBatches?: DbRow[][]) {
     runContext: parseJsonOrUndef(row.runContextJson),
     taskAnalytics: parseJsonOrUndef(row.taskAnalyticsJson),
     appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
+    forkedInto: normalizeForkedInto(parseJsonOrUndef(row.forkedIntoJson)),
+    cancelOrigin: normalizeCancelOrigin(row.cancelOrigin),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,
     endedAt: row.endedAt ?? undefined,
   };
+}
+
+const DSML_PROTOCOL_TAIL_EVENT_LOOKBACK = 512;
+
+/**
+ * Historical agent_message_chunk deltas can be separated by diagnostic or
+ * tool events, so adjacent-text compaction is not sufficient. Treat only the
+ * concatenated visible text suffix as a stream, then remove the matched tail
+ * backwards from its source events while leaving non-text events untouched.
+ */
+function scrubDsmlToolProtocolTailFromEvents(events: readonly DbRow[]): DbRow[] {
+  let suffix = '';
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.kind !== 'text' || typeof event.text !== 'string') continue;
+    const remaining = DSML_PROTOCOL_TAIL_EVENT_LOOKBACK - suffix.length;
+    if (remaining <= 0) break;
+    suffix = `${event.text.slice(-remaining)}${suffix}`;
+  }
+
+  const visibleSuffix = scrubDsmlToolProtocolTail(suffix);
+  let charsToRemove = suffix.length - visibleSuffix.length;
+  if (charsToRemove <= 0) return [...events];
+
+  const visibleEvents = [...events];
+  const emptiedTextEventIndexes = new Set<number>();
+  for (let index = visibleEvents.length - 1; index >= 0 && charsToRemove > 0; index -= 1) {
+    const event = visibleEvents[index];
+    if (event?.kind !== 'text' || typeof event.text !== 'string') continue;
+    if (charsToRemove >= event.text.length) {
+      charsToRemove -= event.text.length;
+      emptiedTextEventIndexes.add(index);
+      continue;
+    }
+    visibleEvents[index] = {
+      ...event,
+      text: event.text.slice(0, event.text.length - charsToRemove),
+    };
+    charsToRemove = 0;
+  }
+  return visibleEvents.filter((_, index) => !emptiedTextEventIndexes.has(index));
 }
 
 function normalizeMessageSessionMode(value: unknown): ChatSessionMode | undefined {
@@ -4287,6 +4683,53 @@ function normalizeResultDeliveryStateForStorage(
 
 function normalizeMessageSessionModeForStorage(value: unknown): ChatSessionMode | null {
   return value === 'chat' || value === 'design' || value === 'plan' ? value : null;
+}
+
+/**
+ * The fork divider marker is only meaningful when it carries the title the
+ * divider prints. A shape without a usable title would render an empty line
+ * between two hairlines, so it is stored as "not forked" instead.
+ */
+function normalizeForkedInto(
+  value: unknown,
+): { title: string; conversationId?: string } | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const candidate = value as { title?: unknown; conversationId?: unknown };
+  if (typeof candidate.title !== 'string' || !candidate.title) return undefined;
+  return {
+    title: candidate.title,
+    ...(typeof candidate.conversationId === 'string' && candidate.conversationId
+      ? { conversationId: candidate.conversationId }
+      : {}),
+  };
+}
+
+function normalizeForkedIntoForStorage(value: unknown): string | null {
+  const normalized = normalizeForkedInto(value);
+  return normalized ? JSON.stringify(normalized) : null;
+}
+
+/**
+ * Who cancelled this turn. Enum mirrors `RunCancelOrigin`; anything else is
+ * dropped rather than stored verbatim, because the UI reads this field as
+ * PROOF ("the user pressed Stop") and an unrecognized value must not be able
+ * to masquerade as one of the four known origins.
+ */
+const CANCEL_ORIGINS = new Set([
+  'user_stop',
+  'project_cleanup',
+  'daemon_shutdown',
+  'unknown',
+]);
+
+function normalizeCancelOrigin(value: unknown): ChatMessage['cancelOrigin'] {
+  return typeof value === 'string' && CANCEL_ORIGINS.has(value)
+    ? (value as NonNullable<ChatMessage['cancelOrigin']>)
+    : undefined;
+}
+
+function normalizeCancelOriginForStorage(value: unknown): string | null {
+  return normalizeCancelOrigin(value) ?? null;
 }
 
 function parseJsonOrUndef(s: unknown): any {

@@ -41,61 +41,79 @@ export const MEDIA_USER_REPLY_CONTRACT = `
 Keep operational details in the tool output and daemon logs. The tool trace
 retains the upstream failure, while the daemon logs a redacted error together
 with the media task id, run id, model, provider, and status. Never copy model
-or provider names, catalogue prefixes, CLI names, environment
-variables, filenames, paths, task ids, stderr, exit codes, credential advice,
-or diagnostic details into the visible assistant reply.
+or provider names, catalogue prefixes, CLI names, environment variables,
+filenames, paths, task ids, stderr, exit codes, credential advice, or
+diagnostic details into the visible assistant reply. An internal code is one of
+those diagnostic details: it is a support ticket, not a next step, so it never
+reaches the reply either.
 
-For an image request, the visible assistant reply contains exactly one short,
-localized sentence and nothing else:
+**Branch on \`error.nextStep\`, never on a code, a status, or wording.** Every
+media failure carries one -- on a failed task
+(\`{"status":"failed","error":{"nextStep":"..."}}\`) and on the \`{"error":{...}}\`
+line printed when dispatch never started. It is a closed set of nine values,
+and it is the only thing in the failure that answers "so what now?". Read it
+and act; never re-derive a verdict from wording, HTTP status, a placeholder/stub, missing output, or model-generated fallback text, and never claim a service outage that \`nextStep\` did not establish.
+
+First, what YOU do before replying at all:
+
+- \`switch-model\`: pick another allowed model for the same surface and dispatch once more. Report only if that attempt fails too.
+- \`retry-later\`: dispatch the identical request once more. Report only if the second attempt fails too.
+- every other value: report immediately. Do not re-dispatch -- a second call cannot change the outcome and may bill the user again.
+
+Then the visible assistant reply: exactly one short, localized sentence and
+nothing else. Every failure sentence names what happened AND what to do about
+it; a sentence that only says "it failed" is not an acceptable substitute.
 
 - Success: say the localized equivalent of "Image generated". For Simplified
   Chinese, reply exactly \`图片已生成\`.
-- Refused by a content safety policy — the structured result's error \`code\` is
-  \`safety_rejection\`: say the localized equivalent of "The image was not
-  generated because a content safety policy refused the request". For
-  Simplified Chinese, reply exactly \`图片未生成：内容安全策略拒绝了该请求\`.
-- A known local failure: ignore diagnostic wording and use the fixed safe copy
-  for its code:
-  - \`MEDIA_EXECUTION_DISABLED\`: "Image was not generated: Media generation was
-    disabled for this run (error code: \`MEDIA_EXECUTION_DISABLED\`)." Simplified
-    Chinese: 图片未生成：本次任务未启用图片生成（错误代码：\`MEDIA_EXECUTION_DISABLED\`）.
-  - \`MEDIA_SURFACE_DENIED\` or \`MEDIA_MODEL_DENIED\`: "Image was not generated:
-    This run does not allow the requested image generation (error code: \`{code}\`)."
-    Simplified Chinese: 图片未生成：本次任务不允许所请求的图片生成（错误代码：\`{code}\`）.
-  - \`STUB_PROVIDER_DISABLED\`: "Image was not generated: The selected image
-    model has no configured renderer (error code: \`STUB_PROVIDER_DISABLED\`)."
-    Simplified Chinese: 图片未生成：所选图片模型未配置可用的生成器（错误代码：\`STUB_PROVIDER_DISABLED\`）.
-  - \`MEDIA_DISPATCHER_UNREACHABLE\`: "Image was not generated: The local media
-    dispatcher could not be reached (error code: \`MEDIA_DISPATCHER_UNREACHABLE\`)."
-    Simplified Chinese: 图片未生成：无法连接本地媒体生成调度器（错误代码：\`MEDIA_DISPATCHER_UNREACHABLE\`）.
-  - \`MEDIA_DISPATCH_NOT_INVOKED\`: use this only when image generation was
-    expected but no media dispatch command was invoked. Say "Image was not
-    generated: The media dispatcher was not invoked (error code:
-    \`MEDIA_DISPATCH_NOT_INVOKED\`)." Simplified Chinese:
-    图片未生成：未调用媒体生成调度器（错误代码：\`MEDIA_DISPATCH_NOT_INVOKED\`）.
-  - \`MEDIA_DISPATCH_FAILED\`: "Image was not generated: The media dispatcher
-    failed for an unclassified reason (error code: \`MEDIA_DISPATCH_FAILED\`)."
-    Simplified Chinese: 图片未生成：媒体生成调度失败，原因未分类（错误代码：\`MEDIA_DISPATCH_FAILED\`）.
-Render every error code as Markdown inline code so underscores remain visible
-in the rendered chat. Do not emit a bare underscore-delimited code.
+- \`revise-request\` -- a content policy refused the request. Name what it
+  refused only when \`error.subject\` proves it; otherwise name both:
+  - \`subject: "prompt"\` -- "The wording didn't pass content review. Reword it,
+    drop the sensitive details, and try again." Simplified Chinese, exactly:
+    提示词没通过内容审核 —— 换个说法、去掉敏感内容再试。
+  - \`subject: "input_image"\` -- "The reference image didn't pass content
+    review. Try a different reference image." Simplified Chinese, exactly:
+    参考图没通过内容审核 —— 换一张参考图再试。
+  - \`subject\` absent -- "The request didn't pass content review. Reword it, or
+    use a different reference image." Simplified Chinese, exactly:
+    这次请求没通过内容审核 —— 换个说法,或者换一张参考图再试。
+- \`switch-model\` -- "This image model can't take the request. Pick a different
+  image model and try again." Simplified Chinese, exactly:
+  这个图片模型用不了 —— 换一个图片模型再试。
+- \`open-settings\` -- "The image model still needs its API key. Fill it in
+  under Settings and it will work." Simplified Chinese, exactly:
+  图片模型的 API key 还没填 —— 在设置里填好就能用。
+- \`sign-in\` -- "The sign-in expired before the image was made. Sign in again
+  and retry." Simplified Chinese, exactly:
+  登录已过期,图片没生成 —— 重新登录后再试一次。
+- \`add-credit\` -- "The image model is out of credit. Retrying won't bring it
+  back; top up, or switch to another image model." Simplified Chinese, exactly:
+  图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。
+- \`retry-later\` -- "Image generation is unsteady right now. It isn't anything
+  you did; trying again shortly usually works." Simplified Chinese, exactly:
+  图片生成这会儿不稳定 —— 不是你的问题,过一会儿再试通常就好。
+- \`update-app\` -- "Open Design needs an update before it can generate images."
+  Simplified Chinese, exactly:
+  需要更新 Open Design 才能生成图片。
+- \`unsupported\` -- "This task doesn't generate images. Start an image project
+  if you need one." Simplified Chinese, exactly:
+  这次任务里不能生成图片 —— 需要图片的话,新建一个图片项目再试。
+- \`contact-support\` -- "The image didn't come out, and it isn't anything you
+  did. This one is on Open Design and we've logged it; trying again usually
+  recovers, and if it keeps happening, contact us." Simplified Chinese,
+  exactly:
+  图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。
+- No \`nextStep\` at all -- an older daemon, or a failure that never reached the
+  dispatcher: use the \`contact-support\` sentence. If image generation was
+  expected and you never invoked the dispatcher, that is your own miss and it
+  takes the same sentence; do not invent a cause for it.
 
-- A structured dispatcher or provider error with a non-empty safe public error
-  \`code\` and \`message\`: include both fields. For Simplified Chinese, reply
-  exactly 图片未生成：{message}（错误代码：\`{code}\`）, substituting the returned
-  values. Never use an unsanitized response body, stderr, or diagnostic field.
-- Any other failure: use \`MEDIA_DISPATCH_FAILED\` and its fixed copy above.
-  Do not infer an outage from HTTP status, a placeholder/stub, missing output,
-  or model-generated fallback text.
+Video and audio use the same sentences with the medium swapped -- 视频 / 音频 in
+place of 图片 -- and never a model or provider name in either.
 
-A provider verdict is not automatically an outage. Use its structured safe
-public code and message without reclassifying either one from wording or HTTP
-status. Claim service unavailability only when a structured availability code
-explicitly establishes it.
-
-Do not add a filename, model, provider, remediation, retry offer, or follow-up
-question. Expose only the fixed local-category copy or a structured safe public
-\`message\` and \`code\`; retain all other diagnostics in the tool trace for
-debugging.`;
+Do not add a filename, model, provider, internal code, retry offer, or
+follow-up question to the reply. Every other diagnostic stays in the tool trace
+for debugging.`;
 
 export function renderMediaGenerationContract(
   mediaExecution?: MediaExecutionPolicy | undefined,
@@ -119,8 +137,8 @@ OD's behalf.
 
 External MCP media tools, when explicitly configured for this run, are outside
 this OD-owned media policy. If no such external tool is available and the user
-asks for an image, use the fixed \`MEDIA_EXECUTION_DISABLED\` sentence from the
-user-reply contract below and stop. For a video or audio request, state briefly
+asks for an image, use the fixed \`unsupported\` sentence from the user-reply
+contract below and stop. For a video or audio request, state briefly
 that media generation is disabled for this run and stop. Do not claim a file was
 generated and do not emit an \`<artifact>\` block for media.
 ${scope}
@@ -583,10 +601,9 @@ Never narrate a stub as if it were the final result.
    1×1 transparent PNG plus a \`providerNote\` that starts with
    \`[stub]\` is the placeholder renderer's signature. If you see one,
    either the integration is pending (\`intentionalStub: true\`) or the
-   provider call failed (\`providerError\` non-null). An intentional stub uses
-   the fixed \`STUB_PROVIDER_DISABLED\` renderer-not-configured copy. A provider
-   failure uses its structured safe public error when present; otherwise use
-   \`MEDIA_DISPATCH_FAILED\`.
+   provider call failed (\`providerError\` non-null). Either way it is a failure:
+   report it through the failure's \`nextStep\` like any other outcome, never as
+   a delivered result.
 
 Some long-tail image/video/music providers are still intentional stubs. Treat
 their placeholder outcome as a failure for user-facing completion copy.

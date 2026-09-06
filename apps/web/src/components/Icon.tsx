@@ -43,6 +43,9 @@ export type IconName =
   | 'github'
   | 'github-filled'
   | 'grip-vertical'
+  | 'magic'
+  | 'headset'
+  | 'grid-4'
   | 'grid'
   | 'globe'
   | 'hammer'
@@ -90,6 +93,7 @@ export type IconName =
   | 'star'
   | 'swap'
   | 'swatchbook'
+  | 'pause'
   | 'play'
   | 'present'
   | 'refresh'
@@ -169,12 +173,16 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   'folder-2': 'folder-2-line',
   'folder-transfer': 'folder-transfer-line',
   'folder-filled': 'folder-fill',
-  fork: 'git-branch-line',
+  // 支线朝**下**的那一版 —— 交付稿 729fa43ce7 的「新开会话」按钮与分界脚注用的
+  // 就是它(理由与来历见 `remix-icon-paths.ts` 里 `git-branch-line-down` 的注释)。
+  fork: 'git-branch-line-down',
   github: 'github-line',
   'github-filled': 'github-fill',
   globe: 'global-line',
   grid: 'grid-line',
-  'grip-vertical': 'drag-move-line',
+  // 'grip-vertical' 【不映射】到 remix 的 drag-move-line ——
+  // 那是「四向箭头菱形」,交付稿的拖动手柄是 2×3 六个圆点(见下方本地 case)。
+  // 映射存在时 remix 优先,本地那段 case 一直是死代码,手柄画错的根因就在这一行。
   hammer: 'hammer-line',
   'help-circle': 'question-line',
   history: 'history-line',
@@ -609,12 +617,41 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
     case 'grip-vertical':
       return (
         <svg {...common} fill="currentColor" stroke="none">
-          <circle cx="9" cy="5" r="1.45" />
-          <circle cx="15" cy="5" r="1.45" />
-          <circle cx="9" cy="12" r="1.45" />
-          <circle cx="15" cy="12" r="1.45" />
-          <circle cx="9" cy="19" r="1.45" />
-          <circle cx="15" cy="19" r="1.45" />
+          {/* 坐标逐个照抄交付稿的 `.grip`:两列 cx 9/15,三行 cy 6/12/18,r 1.5 */}
+          <circle cx="9" cy="6" r="1.5" />
+          <circle cx="15" cy="6" r="1.5" />
+          <circle cx="9" cy="12" r="1.5" />
+          <circle cx="15" cy="12" r="1.5" />
+          <circle cx="9" cy="18" r="1.5" />
+          <circle cx="15" cy="18" r="1.5" />
+        </svg>
+      );
+    case 'grid-4':
+      /*
+       * 交付稿视觉方向卡右上那颗「摊开看全部」——**四个圆角方块**,坐标照抄稿子。
+       * 不复用 `grid`:那个名字映射到 remix 的 `grid-line`(带分隔线的九宫格),
+       * 画出来是「⊞」,和稿子的四块差得远。
+       */
+      return (
+        <svg {...common} fill="none" stroke="currentColor">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case 'headset':
+      /* 报错卡「联系支持」那一枚(交付稿第 78 格)—— 路径逐字节取自稿子 */
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M19.9381 8H21C22.1046 8 23 8.89543 23 10V14C23 15.1046 22.1046 16 21 16H19.9381C19.446 19.9463 16.0796 23 12 23V21C15.3137 21 18 18.3137 18 15V9C18 5.68629 15.3137 3 12 3C8.68629 3 6 5.68629 6 9V16H3C1.89543 16 1 15.1046 1 14V10C1 8.89543 1.89543 8 3 8H4.06189C4.55399 4.05369 7.92038 1 12 1C16.0796 1 19.446 4.05369 19.9381 8ZM3 10V14H4V10H3ZM20 10V14H21V10H20ZM7.75944 15.7849L8.81958 14.0887C9.74161 14.6662 10.8318 15 12 15C13.1682 15 14.2584 14.6662 15.1804 14.0887L16.2406 15.7849C15.0112 16.5549 13.5576 17 12 17C10.4424 17 8.98882 16.5549 7.75944 15.7849Z" />
+        </svg>
+      );
+    case 'magic':
+      /* 交付稿队列行「编辑」用的那枚魔杖 —— 路径逐字节取自稿子,不另找近似图形 */
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M4.7134 7.12811L4.46682 7.69379C4.28637 8.10792 3.71357 8.10792 3.53312 7.69379L3.28656 7.12811C2.84706 6.11947 2.05545 5.31641 1.06767 4.87708L0.308047 4.53922C-0.102682 4.35653 -0.102682 3.75881 0.308047 3.57612L1.0252 3.25714C2.03838 2.80651 2.84417 1.97373 3.27612 0.930828L3.52932 0.319534C3.70578 -0.106511 4.29417 -0.106511 4.47063 0.319534L4.72382 0.930828C5.15577 1.97373 5.96158 2.80651 6.9748 3.25714L7.69188 3.57612C8.10271 3.75881 8.10271 4.35653 7.69188 4.53922L6.93228 4.87708C5.94451 5.31641 5.15288 6.11947 4.7134 7.12811ZM6.33421 15.8154C6.51032 15.233 6.7072 14.6562 6.93912 14.0327C8.99484 8.50636 12.4197 5.08172 18.0129 4.21479C17.5 5.35838 17.0151 6.15301 16.5858 6.58237C16.2521 6.91603 15.9185 7.24993 15.5848 7.58407L14.1721 8.99878L15.6279 10.4535C14.4976 12.5384 12.2652 14.1979 9.75193 14.512C8.43544 14.6766 7.29345 15.1188 6.33421 15.8154ZM18 9.99658L17 8.99728C17.3331 8.66372 17.6662 8.33039 18.0027 7.99391C19.0018 6.99303 20.0009 4.99392 21 1.99658C6.31105 1.99658 4.08854 15.422 3.06361 21.6132C3.0419 21.7443 3.02074 21.8722 3 21.9966H4.99824C5.66421 18.6635 7.33146 16.8301 10 16.4966C14 15.9966 17 12.9966 18 9.99658Z" />
         </svg>
       );
     case 'grid':
@@ -893,6 +930,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z" />
+        </svg>
+      );
+    case 'pause':
+      // 音频产物那颗播放键的暂停态(设计稿组件 24)
+      return (
+        <svg {...common}>
+          <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
         </svg>
       );
     case 'play':

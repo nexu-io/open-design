@@ -1,10 +1,12 @@
 import { performance } from 'node:perf_hooks';
 import type Database from 'better-sqlite3';
 import type { PersistedAgentEvent } from '@open-design/contracts';
+import { MAX_ARTIFACT_FOCUS_SHOW, MAX_NEXT_STEP_SUGGESTIONS } from '@open-design/contracts';
 import type { RunFinishedProps } from '@open-design/contracts/analytics';
 import {
   appendMessageAgentEvents,
   clearMessageAgentEventBatches,
+  dropTrailingMessageAgentDeltas,
   finalizeMessageAgentEvents,
   upsertMessage,
 } from '../db.js';
@@ -24,6 +26,8 @@ type ChatRunMessageState = {
   errorCode?: string | null;
   failureCategory?: string | null;
   failureDetail?: string | null;
+  failureAction?: string | null;
+  retryable?: boolean | null;
 };
 
 type PendingMessageEvents = {
@@ -75,6 +79,7 @@ export const RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS = 250;
 const RUN_MESSAGE_EVENT_FLUSH_CHARS = 64 * 1024;
 const pendingMessageEvents = new WeakMap<ChatRunMessageState, PendingMessageEvents>();
 const finalizedInputEventCounts = new WeakMap<ChatRunMessageState, number>();
+const startedAttemptMessages = new WeakMap<ChatRunMessageState, string>();
 const messageEventPersistenceTelemetry = new WeakMap<
   ChatRunMessageState,
   RunMessageEventPersistenceTelemetry
@@ -142,6 +147,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
+/**
+ * A second `start` on the same assistant message is the daemon re-driving this
+ * turn: the previous attempt was torn down and another one is about to spawn
+ * (`run-retry-policy.ts`). The attempt being replaced never terminated — that
+ * is the only reason it is retried — so the passage it was still writing gets
+ * written again, and an append-only event stream keeps both copies.
+ *
+ * Retiring it here, on the attempt boundary and before the new attempt's first
+ * delta, is what stops a reload from showing the same conclusion twice.
+ */
+function retireSupersededAttemptProse(db: SqliteDb, run: ChatRunMessageState): void {
+  const messageId = run.assistantMessageId;
+  if (!messageId) return;
+  const previous = startedAttemptMessages.get(run);
+  startedAttemptMessages.set(run, messageId);
+  if (previous !== messageId) return;
+  flushRunMessageEvents(run);
+  try {
+    dropTrailingMessageAgentDeltas(db, messageId);
+  } catch (err) {
+    const telemetry = ensureRunMessageEventPersistenceTelemetry(run);
+    telemetry.persistenceErrorCount += 1;
+    console.warn('[runs] superseded attempt cleanup failed', err);
+  }
+}
+
 export function persistRunEventToAssistantMessage(
   db: SqliteDb,
   run: ChatRunMessageState,
@@ -149,6 +180,7 @@ export function persistRunEventToAssistantMessage(
   data: unknown,
 ): void {
   if (!run.assistantMessageId) return;
+  if (event === 'start') retireSupersededAttemptProse(db, run);
   const persisted = runSseEventToPersistedAgentEvent(event, data);
   if (!persisted) {
     if (event === 'end' || event === 'close') flushRunMessageEvents(run);
@@ -280,6 +312,8 @@ export function persistRunFailureClassification(
   if (!run.assistantMessageId) return;
   const failureCategory = run.failureCategory ?? null;
   const failureDetail = run.failureDetail ?? null;
+  const failureAction = run.failureAction ?? null;
+  const retryable = typeof run.retryable === 'boolean' ? run.retryable : null;
   if (!failureCategory && !failureDetail) return;
   try {
     finalizeRunMessageEvents(db, run);
@@ -310,6 +344,12 @@ export function persistRunFailureClassification(
       ...base,
       ...(failureCategory ? { failureCategory } : {}),
       ...(failureDetail ? { failureDetail } : {}),
+      // The verdict rides along with the classification so a RELOADED
+      // conversation resolves to the same error-card button the live stream
+      // did. `retryable` is spread on an explicit non-null test, not on
+      // truthiness: `false` is the whole point of carrying it.
+      ...(failureAction ? { failureAction } : {}),
+      ...(retryable === null ? {} : { retryable }),
     };
     if (run.errorCode && typeof enriched.code !== 'string') enriched.code = run.errorCode;
     if (idx >= 0) {
@@ -354,11 +394,15 @@ export function runSseEventToPersistedAgentEvent(
       : typeof record.message === 'string'
         ? record.message
         : '';
+    // The stderr tail rides along so a reloaded conversation shows the same
+    // original cause the live stream did (see withFailureStderrTail).
+    const stderrTail = typeof record.stderrTail === 'string' ? record.stderrTail.trim() : '';
     return {
       kind: 'status',
       label: 'error',
       ...(message ? { detail: message } : {}),
       ...(typeof error.code === 'string' ? { code: error.code } : {}),
+      ...(stderrTail ? { stderrTail } : {}),
     };
   }
   if (event !== 'agent') return null;
@@ -370,6 +414,23 @@ export function runSseEventToPersistedAgentEvent(
  * user-visible detail and must be suppressed at persistence time so that
  * history replay doesn't render empty expandable rows in the assistant
  * process panel.
+ *
+ * The membership test is "would replaying this row tell the reader anything?",
+ * not "is this label noisy while it streams". Everything listed here is
+ * polling-shaped: it fires repeatedly, describes a state rather than an event,
+ * and is superseded by whatever comes next — so the transcript is strictly
+ * better without it.
+ *
+ * `agent_reconnecting` used to be on this list and is deliberately NOT any
+ * more. It is the one label here that marks a real, irreversible, once-per-
+ * occurrence upstream event: the agent's connection to the model dropped
+ * mid-turn and the turn was restarted. When that happens the model can and does
+ * re-generate text it had already streamed, so the transcript legitimately
+ * contains the answer twice. Dropping the row left the reader with two
+ * conclusions and nothing at all to explain the seam — the duplicate looked
+ * like the product inventing text. Keeping one row is not a fix for the
+ * duplication (that is the codex-app-server message-restart question), but it
+ * turns "inexplicable" into "legible", which is worth one row.
  */
 const TRANSIENT_ACP_PERSISTED_STATUS_LABELS = new Set([
   'waiting_for_first_output',
@@ -400,6 +461,51 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
   }
   if (type === 'text_delta' && typeof data.delta === 'string') {
     return { kind: 'text', text: data.delta };
+  }
+  /**
+   * Persisted so a reloaded conversation validates its `<od-done key="…"/>`
+   * markers against the same key the turn was recorded with. Without this the
+   * turn would render one way live and another way after refresh.
+   */
+  if (type === 'done_key' && typeof data.key === 'string' && data.key) {
+    return { kind: 'done_key', key: data.key };
+  }
+  /**
+   * Persisted so a reloaded conversation shows the same three follow-up rows it
+   * showed live. A turn with no such event renders no row at all — that is what
+   * every conversation from before this event looks like, and the suggestions
+   * are about what that specific turn built, so there is nothing to fall back
+   * to.
+   */
+  if (type === 'next_steps' && Array.isArray(data.suggestions)) {
+    const suggestions = data.suggestions
+      .filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+      .slice(0, MAX_NEXT_STEP_SUGGESTIONS);
+    if (suggestions.length === 0) return null;
+    return { kind: 'next_steps', suggestions };
+  }
+  /**
+   * Persisted so a reloaded conversation shows the same card set it showed
+   * live. Unlike `next_steps`, a turn with no such event is NOT rendered empty:
+   * the host falls back to its own produced-file inference, which is what every
+   * conversation recorded before this event looks like.
+   *
+   * Stored only when it carries something usable — an event with neither field
+   * would be a persisted no-op that later folds have to skip anyway.
+   */
+  if (type === 'artifact_focus') {
+    const open = typeof data.open === 'string' && data.open ? data.open : undefined;
+    const show = Array.isArray(data.show)
+      ? data.show
+          .filter((p): p is string => typeof p === 'string' && p.trim().length > 0)
+          .slice(0, MAX_ARTIFACT_FOCUS_SHOW)
+      : undefined;
+    if (!open && (!show || show.length === 0)) return null;
+    return {
+      kind: 'artifact_focus',
+      ...(open ? { open } : {}),
+      ...(show && show.length > 0 ? { show } : {}),
+    };
   }
   if (type === 'conversation_title' && typeof data.title === 'string') {
     return { kind: 'conversation_title', title: data.title };
@@ -444,12 +550,31 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
     };
   }
   if (type === 'tool_input_delta') return null;
+  /*
+   * Live-only, like the delta it is derived from. Once the run is over the same
+   * path is in the finished `tool_use.input`, so persisting this would leave a
+   * reloaded conversation with two rows for one call — and the whole point of
+   * the event is a head start that no longer exists after the fact.
+   */
+  if (type === 'tool_input_target') return null;
+  /*
+   * `thinking_tokens` deliberately has NO branch here: it is live-only, so the
+   * fallthrough `return null` at the bottom is the whole implementation. The
+   * count describes a thinking block that is still running, and a reloaded
+   * conversation has no such block — either the reasoning text is there to
+   * read, or, in Claude's billed-but-withheld mode, the row itself is gone.
+   * Persisting it would also write ~40 rows per block to buy nothing back.
+   * Pinned by `tests/runtimes/w134-thinking-token-count.test.ts`.
+   */
   if (type === 'tool_result' && typeof data.toolUseId === 'string') {
     return {
       kind: 'tool_result',
       toolUseId: data.toolUseId,
       content: String(data.content ?? ''),
       isError: Boolean(data.isError),
+      ...(typeof data.completedAt === 'number' && Number.isFinite(data.completedAt)
+        ? { completedAt: data.completedAt }
+        : {}),
     };
   }
   if (type === 'usage') {

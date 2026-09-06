@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
+  ProjectVisibility,
   ProjectWorkspaceScope,
   ProjectWorkspaceScopeResponse,
   WorkspaceCollabContext,
@@ -88,6 +89,20 @@ export function projectWorkspaceScopeReady(
   scope: ProjectWorkspaceScope | null | undefined,
 ): boolean {
   return scope?.kind === 'unbound' || scope?.kind === 'personal' || scope?.kind === 'team';
+}
+
+/**
+ * The daemon's own visibility verdict for a resolved project scope.
+ *
+ * Deliberately independent of `kind`: a private draft can live in a team
+ * workspace and still be `personal`. Null when the scope has not resolved, or
+ * for a legacy unbound project that has no `workspace_projects` row to be
+ * visible in — neither case is evidence of anything.
+ */
+export function projectWorkspaceVisibility(
+  scope: ProjectWorkspaceScope | null | undefined,
+): ProjectVisibility | null {
+  return scope && scope.kind !== 'unbound' ? scope.visibility : null;
 }
 
 function activePersonalAdoptionWitness(

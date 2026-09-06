@@ -109,8 +109,7 @@ describe('HomeView media composer options', () => {
     expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
   });
 
-  it('drops the Home composer mode picker and still submits in Design mode', async () => {
-    stubFetch();
+  it('drops the Home composer mode picker and still submits in Design mode', async () => {    stubFetch();
     const onSubmit = vi.fn();
     renderHome({ onSubmit });
 
@@ -123,7 +122,6 @@ describe('HomeView media composer options', () => {
     // The 「设计」 pill was removed from the Home composer footer; Home creates
     // keep running in the app default — design — which the payload states.
     expect(screen.queryByTestId('composer-mode-trigger')).toBeNull();
-
     await setHomePrompt('Create a clean loading animation');
     await submitHome();
 

@@ -55,6 +55,239 @@
   color: var(--text);
 }
 
+/* ---- Component 14 · artifact cards (design matrix grids 30-33) ----
+   Verbatim port of `.arts` / `.art` / `.thumb` / `.acts` from
+   `docs/design/chat-panel-next.html`; class names are prefixed because the
+   sheet's own selectors (`.art`, `.mini`) are short enough to collide with
+   anything. The card answers exactly one question — "is this the version I
+   wanted?" — so it carries the picture and nothing else: no filename, no
+   toolbar, no preview button (the card IS the preview entry), no overflow
+   menu. D28 / B19. */
+.artifact-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+/* One deliverable is the focus of the turn, so let it use the transcript's
+   available width. The shared cap matches the design sheet's 406px content
+   lane; multiple deliverables keep the two-column matrix above. */
+.artifact-cards:has(> .artifact-card:only-child) {
+  width: 100%;
+  max-width: var(--chat-artifact-single-max-width);
+  grid-template-columns: minmax(0, 1fr);
+}
+/* No `overflow: hidden` on the card itself — it would clip tooltips and any
+   popover an action opens. The thumbnail rounds its own corners instead. */
+.artifact-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+}
+.artifact-card-thumb {
+  position: relative;
+  display: block;
+  aspect-ratio: 16 / 10;
+  height: auto;
+  background: var(--bg-subtle);
+  border-radius: calc(var(--radius) - 1px);
+  overflow: hidden;
+  /* Query container for the HTML thumbnail's fit scale (see
+     `.artifact-card-frame`), and it has to be declared HERE. With no
+     container in the ancestor chain, `100cqw` falls back to the viewport:
+     measured 2026-08-28 in a 1600px window, dropping this line takes the
+     frame's scale from 0.140 to 1.111 and the 1440px page renders 1600px
+     wide inside a 202px card. */
+  container-type: inline-size;
+}
+/* The grey placeholder: the only placeholder tone in the whole sheet. */
+.artifact-card-mini {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-muted);
+}
+.artifact-card-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Image deliverables must show the complete canvas. In particular, portrait
+   posters should letterbox inside the 16:10 card instead of losing their top
+   and bottom to the generic media crop. HTML keeps its scaled iframe path and
+   video keeps the dedicated portrait treatment below. */
+.artifact-card-media[data-preview-fit="contain"] {
+  object-fit: contain;
+}
+/* HTML artifacts render the real page as their thumbnail: the frame lays the
+   page out at a DESKTOP viewport and the whole thing is then scaled down to
+   the card. Same trick, same numbers-shape as the home project grid
+   (`styles/home/recent-projects.css` `.recent-projects__thumb-iframe`).
+
+   An iframe's own box size IS its viewport, so the base has to be an absolute
+   px width — not a multiple of the card. This rule used to read
+   `width: 250%; transform: scale(0.4)`, i.e. 2.5x a ~202px card = a 505px
+   viewport, which every responsive page treats as a phone: the card showed a
+   different LAYOUT from the preview beside it (measured 2026-08-28: card
+   `innerWidth` 505 with the page's mobile tab bar, preview pane 1124 with its
+   desktop three-column layout). Scaling was never the missing part; the base
+   was.
+
+   1440x900 because: it is 16/10 like the thumb above, so scaling by width
+   fits both axes exactly with no crop or letterbox; and it clears every
+   common desktop breakpoint (768 / 1024 / 1280) while staying near the real
+   preview pane's width, so both land in the same responsive bucket. Going all
+   the way to 1920 would show a wider layout than the pane on the right
+   actually renders, and would shrink type past legibility at card size. */
+.artifact-card-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1440px;
+  height: 900px;
+  transform: scale(calc(100cqw / 1440px));
+  transform-origin: top left;
+  border: 0;
+  background: var(--bg-panel);
+  pointer-events: none;
+}
+/* Video: nothing is pressed onto the picture — no play button, no scrubber,
+   no "view" chip. A frame that fills the card already reads as tappable, and
+   the centre of a vertical clip is where its content usually is. A portrait
+   clip is letterboxed rather than stretched; the empty margins are themselves
+   information ("this is a vertical cut"). */
+.artifact-card--video .artifact-card-thumb {
+  display: grid;
+  place-items: center;
+  background: var(--bg-panel);
+}
+.artifact-card--video .artifact-card-media {
+  position: relative;
+  inset: auto;
+  width: auto;
+  max-width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.artifact-card--video .artifact-card-mini {
+  width: auto;
+  aspect-ratio: 9 / 16;
+  height: 100%;
+}
+/* The whole picture is the open target, laid over the thumbnail rather than
+   wrapping it: an <iframe>/<video> may not live inside a <button>. */
+/* Descendant-qualified throughout this block: `primitives.css` styles the bare
+   `button` element (36px tall, bordered, grey on hover) and its `:hover` /
+   `:focus-visible` rules carry an element-plus-two-pseudo weight that a single
+   class cannot outrank. */
+.artifact-card .artifact-card-open {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  cursor: pointer;
+}
+.artifact-card .artifact-card-open:hover { background: transparent; }
+.artifact-card .artifact-card-open:active { transform: none; }
+.artifact-card .artifact-card-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Actions sit in the TOP-RIGHT, not on the bottom edge: the lower strip of a
+   UI screenshot is usually still content and a button row lands right on top
+   of it, while the top-right corner is the emptiest part of nearly any
+   interface capture. Count varies by kind (HTML two, everything else one), so
+   the row is flex/end aligned — losing one button pulls the row right instead
+   of shifting the survivor. 12px on both edges so image and video cards line
+   up when they sit side by side. */
+.artifact-card-acts {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 8px;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+/* The export pill wraps in a relative anchor when it opens a format popover
+   (multi-format artifacts only). Keeping the wrapper a zero-cost inline-flex
+   means the row still collapses to the right when publish is absent — the
+   count-varies-by-kind rule above holds either way. */
+.artifact-card-act-anchor {
+  flex: none;
+  display: inline-flex;
+}
+/* PR7170 keeps the artwork visible through a dark glass pill. OPEND-2560 only
+   supersedes its outer height; the fill, inset, type, icon and interaction
+   stay on the design baseline. */
+.artifact-card .artifact-card-act {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgb(18 18 18 / 60%);
+  color: #fff;
+  -webkit-backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-regular-blur)) saturate(140%);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 16%, transparent), 0 2px 8px rgb(0 0 0 / 12%);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* Hover deepens the same glass fill without changing geometry. */
+.artifact-card .artifact-card-act:hover {
+  background: rgb(18 18 18 / 72%);
+  border-color: transparent;
+}
+.artifact-card .artifact-card-act:active { transform: none; }
+.artifact-card .artifact-card-act:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* PR7170's custom ring glyph remains 12px; -1px eats its optical padding. */
+.artifact-card .artifact-card-act svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-inline-start: -1px;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .artifact-card .artifact-card-act { background: #353535; }
+  .artifact-card .artifact-card-act:hover { background: #202020; }
+}
+/* D37 — NOT in the design sheet. Product asked for it on 2026-08-21: while a
+   file is still being written the turn otherwise sits silent and then pops an
+   artifact out of nowhere. No actions yet, and — product, 2026-08-26 — the
+   placeholder is NOT a grey card: "任何产物卡片加载期间不能用灰色卡片代替".
+   The pixel-liquid canvas (`PixelLiquid`) lives inside the same `-mini` box so
+   the video card's 9/16 letterbox still holds; the box itself drops its grey
+   fill so the liquid's transparent gaps read as the thumb's own tone, exactly
+   as the sheet has it (upstream `bgColor.a = 0`).
+   The old `artifact-card-pulse` keyframes are gone with it — reduced-motion
+   degradation now lives in the canvas (one static frame, no rAF). */
+.artifact-card-mini.is-loading {
+  position: relative;
+  background: none;
+}
+
 .produced-files {
   margin-top: 6px;
   padding: 0;

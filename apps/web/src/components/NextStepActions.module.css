@@ -1,17 +1,20 @@
+/*
+ * 稿子 `.nexts { border-radius: var(--radius); background: var(--bg); overflow: hidden }`
+ * —— **不画外框、不留外距、不留内距**,几条建议行自己铺满这一块;
+ * 行与行之间也没有缝(每行自己 `padding: 9px 11px`,hover 时整行换底)。
+ *
+ * 我们原来是一张有 1px 边框 + 渐变底、还留着 10px/12px 内距的卡。
+ * 内容那一层还卡在 T12(契约里没有「本轮相关建议」字段),但**容器的样子不需要等裁决**。
+ */
 .root {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px 12px;
+  gap: 0;
   font-size: 12px;
-  border: 1px solid var(--border-soft);
+  border: 0;
   border-radius: var(--radius);
-  background: linear-gradient(
-    135deg,
-    color-mix(in srgb, var(--accent-tint) 50%, var(--bg-panel)) 0%,
-    var(--bg-panel) 60%
-  );
+  overflow: hidden;
+  background: var(--bg);
   animation: next-step-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
@@ -32,7 +35,158 @@
   }
 }
 
+/*
+ * 稿子第 41 / 42 格 —— agent 现写的三条行为引导。
+ *
+ * 稿子 `.nexts button { display:flex; align-items:center; gap:8px; width:100%;
+ * padding: 9px 11px; border:none; background:none; font-size: var(--t-mini);
+ * color: var(--text); text-align:left }`。度量和下面那批工具箱行**是同一套** ——
+ * 行高 35px、`9px 11px` 内距、8px 间隙、12px 字、hover 只亮一行 —— 那部分
+ * 前一版已经对齐过稿子,这次换的是**内容来源和行的构成**,不是度量。
+ *
+ * 构成上的两处差别,都照稿子:
+ *   · 每行是**同一枚箭头** + 一句话,没有分类图标;
+ *   · **行尾没有 chevron** —— 点一条就是把那句话发出去,不展开任何东西,
+ *     一个指向别处的箭头会承诺一个并不存在的下一层。
+ */
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.suggestionRow {
+  display: flex;
+  /*
+   * 稿子 `.nexts button { align-items: center }` —— 那是**单行**下的写法,
+   * 稿子里这三条建议永远只有一行,所以居中和顶对齐看不出区别。
+   * 我们放开换行之后就有区别了:居中会让那枚箭头飘到两行**中间**。
+   * 稿子对「会换行的行」自己给过答案 —— Queue 那条把手柄和右侧动作都按
+   * **第一行**对齐(`components.css` 原话:「22px 的按钮盒对 18px 的首行,
+   * 上移 2px 才与第一行同心」)。这里照同一条判例:顶对齐,箭头补 3px
+   * 落在第一行的行盒中央((18 - 12) / 2)。
+   * 单行时两者渲染完全相同(自然高 9 + 18 + 9 = 36px,就是今天的行高)。
+   */
+  align-items: flex-start;
+  /*
+   * 全局 `button { justify-content: center }` 漏进来的。稿子的 button 复位
+   * (`components.css:170`)没有这一条,flex 默认就是 flex-start。
+   * 今天看不出来是因为 `.suggestionText` 有 `flex: 1`,把行撑满了;
+   * 一旦它不再撑满(空文案、未来换结构)就会露出来。
+   */
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 11px;
+  /*
+   * 全局 `button { height: 36px }` 漏进来的固定高:换行之后第二行会被**裁掉**。
+   * 稿子 `.nexts button` 没有 height,高度由内容定。
+   * 换回 auto 不改变单行观感 —— 单行自然高正好是 9 + 12×1.5 + 9 = 36px。
+   */
+  height: auto;
+  font-size: 12px;
+  /*
+   * 全局 `button { line-height: 1 }` 漏进来的。单行时被 `height: 36px` 盖住
+   * 看不出来,换行之后两行会贴死。稿子 `.nexts button` 不写 line-height,
+   * 而稿子对**会换行的行**用的是 `--lh-row`(= 1.5,见 `.queue .q .tx`)。
+   * 仓库没有 `--lh-row` 变量,队列那条的移植(`chat.css`)同样写字面量 1.5
+   * 并在注释里注明出处 —— 这里沿用同一约定。
+   */
+  line-height: 1.5;
+  /*
+   * 全局 `button { white-space: nowrap }` 漏进来的 —— 这是截断的**第二个**
+   * 来源(第一个在下面 `.suggestionText`)。稿子的 button 复位没有这一条。
+   * 全局那条对真正的单行按钮是对的,所以复位落在组件这一层,不动原语。
+   */
+  white-space: normal;
+  /*
+   * 稿子 `.nexts button { … font-weight: 500 … }`(PR #7170 @ `8015870`)。
+   *
+   * ⚠️ 这一行**不改变渲染结果**,别指望它治「这块太轻」。
+   * `styles/primitives.css` 的全局 `button` 规则本来就写着 `font-weight: 500`,
+   * 建议行一直是 500 —— 实测见 `tests/components/next-step-suggestion-weight.test.tsx`:
+   * 把这一行删掉,真实层叠下仍然是 500。它的作用只有一个:**把稿子的值钉在
+   * 组件自己身上**,这样将来清理那条遗留的全局按钮样式时,这一行不会跟着掉档。
+   *
+   * 稿子那个 500 的语义也不是「强调」:稿子 `body` 自己就是 `font-weight: 500`,
+   * 而稿子的全局 `button` 复位只写 `font-family: inherit`、没有复位字重,所以
+   * `.nexts button { font-weight: 500 }` 是「把按钮拉回正文同档」。我们的 `body`
+   * 没有字重声明(继承 400),于是同样是 500 的建议行,在我们这里反而比身边的
+   * 助手正文重一档 —— 方向与稿子相反。这层 body 基线差属于全局问题,不在这个
+   * 组件里修;跟进与否待产品拍板(见 OPEND-2558 交接结论)。
+   *
+   * 裸数值不是遗漏:仓库里没有字重 token(`styles/tokens.css` 没有字重梯度,
+   * W5 清点全仓 1256 处 `font-weight` 走 token 的 0 处),稿子本身也是裸数值。
+   */
+  font-weight: 500;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color var(--duration-faster) var(--ease-out),
+    color var(--duration-faster) var(--ease-out);
+}
+
+/*
+ * 祖先 `.suggestions` 不是可省的装饰,它在这里**承担层叠职责**:
+ * 全局 `button:hover:not(:disabled) { background: var(--bg-subtle) }` 是 (0,2,1)
+ * —— `:not()` 里的 `:disabled` 照样计入 b 档,再加元素名 `button` 的 c 档。
+ * 只写 `.suggestionRow:hover` 是 (0,2,0),会输给它,量出来的底色就成了
+ * `--bg-subtle` 而不是稿子要的 `--bg-panel`。补上祖先 = (0,3,0) 才是照抄。
+ * (工具箱那一族踩过同一个坑,注释见下面 `.toolboxList .toolboxRow:hover`。)
+ */
+.suggestions .suggestionRow:hover {
+  background: var(--bg-panel);
+  color: var(--text-strong);
+}
+
+.suggestionRow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 稿子 `.nexts button svg { flex:none; width:12px; height:12px;
+   color: var(--text-soft) }` —— 箭头是辅助信息,和正文同一条灰阶上的下一档,
+   不是品牌色的重音。 */
+.suggestions .suggestionRow svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  /* 顶对齐之后,把 12px 的箭头压回第一行行盒的中央:(12 × 1.5 − 12) / 2 = 3。
+     和稿子 Queue 行给手柄补 −2px 是同一手法,理由也一样 —— 这类行首的记号
+     要跟**第一行**同心,不是跟整块同心。 */
+  margin-top: 3px;
+  color: var(--text-soft);
+}
+
+/* 稿子 `.nexts button:hover svg { color: var(--text-strong) }` ——
+   指到哪一行,那一行的字**和箭头**一起转深,整条亮起来才算显出自己的形状。 */
+.suggestions .suggestionRow:hover svg {
+  color: var(--text-strong);
+}
+
+/* 一句话,一行装不下就截断 —— 稿子把这一行固定在 35px */
+/*
+ * 一句话读全了才点得下去 —— 这一行的文字**就是**点下去要发出的那条消息。
+ *
+ * 原来这里是 `overflow:hidden + text-overflow:ellipsis + white-space:nowrap`,
+ * 现场把「保持 Ateli…」截在半截(OPEND-2558 附件)。稿子 `.nexts button`
+ * 从来没有这三条;产品裁决是**换行**,不是两行 clamp、也不是 tooltip,
+ * 所以这里不留任何行数上限。
+ */
+.suggestionText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 容器按稿子去掉内距之后,这一行自己贴着行的内距走,才不会顶到边上。
+   `9px 11px` 就是稿子 `.nexts button` 的内距 —— 用同一个值,不另发明一个。
+   (稿子里没有这一行标题;它是我们多出来的,归属见 T12 那条) */
 .label {
+  padding: 9px 11px 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -123,40 +277,61 @@
 }
 
 
+/* 稿子里行与行**不留缝**(`.nexts` 只给圆角和 overflow,行自己撑高) */
 .toolboxList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
 }
 
 .toolboxRowWrap {
   position: relative;
 }
 
+/*
+ * 稿子 `.nexts button { display:flex; align-items:center; gap:8px; width:100%;
+ * padding: 9px 11px; border: none; background: none; font-size: var(--t-mini);
+ * color: var(--text) }` —— **无框行**,一行贴着一行,不画分割线也不留缝。
+ * 原来这里是「带 1px 边框的独立胶囊」。内容那一层还卡在 T12,但**行的形态不需要等裁决**。
+ */
 .toolboxRow,
 .moreRow {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 9px 11px;
   font-size: 12px;
-  color: var(--text-default);
-  background: var(--bg-panel);
-  border: 1px solid var(--border-soft);
-  /* Full capsule, matching the quick pills above the composer. */
-  border-radius: 999px;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
   text-align: left;
+  /* 稿子 `transition: background-color var(--duration-faster) var(--ease-out),
+                      color var(--duration-faster) var(--ease-out)`。
+     换底和换字色在这一族里是**同一件事**,得一起走 —— 原来只过渡 `background`
+     和一条根本不存在的 `border-color`,字色是硬跳的。 */
   transition:
-    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    background-color var(--duration-faster) var(--ease-out),
+    color var(--duration-faster) var(--ease-out);
 }
 
-.toolboxRow:hover,
-.moreRow:hover {
-  background: var(--accent-tint);
-  border-color: var(--border);
+/*
+ * 稿子 `.nexts button:hover { background: var(--bg-panel); color: var(--text-strong) }`
+ *
+ * `.nexts` 这个祖先不是可以省的装饰,它在稿子里**承担层叠职责**:
+ *   全局 `button:hover:not(:disabled) { background: var(--bg-subtle) }` 是 (0,2,1)
+ *   —— `:not()` 里的 `:disabled` 照样计入 b 档,再加元素名 `button` 的 c 档。
+ * 只写 `.toolboxRow:hover` 是 (0,2,0),输给它;真客户端上量到的 hover 底色是
+ * `rgb(237,237,237)`(--bg-subtle),不是稿子要的 `rgb(250,250,250)`(--bg-panel)。
+ * 把祖先补回来 = (0,3,0),这才是「照抄」。
+ * (面板的 `:where([data-chat-root]) button` reset 是 (0,0,1),压不住带 `:hover` 的那条。)
+ */
+.toolboxList .toolboxRow:hover,
+.toolboxList .moreRow:hover {
+  background: var(--bg-panel);
+  color: var(--text-strong);
 }
 
 .toolboxRow:disabled,
@@ -165,16 +340,38 @@
   opacity: 0.72;
 }
 
-.toolboxRow:disabled:hover,
-.moreRow:disabled:hover {
-  background: var(--bg-panel);
-  border-color: var(--border-soft);
+/* 抬高之后,这条得跟着抬 —— 否则和 (0,3,0) 打平,退回源码顺序判胜负 */
+.toolboxList .toolboxRow:disabled:hover,
+.toolboxList .moreRow:disabled:hover {
+  background: none;
 }
 
 .toolboxRow:focus-visible,
 .moreRow:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
+}
+
+/*
+ * 稿子 `.nexts button svg { flex: none; width: 12px; height: 12px; color: var(--text-soft) }`
+ * —— 行内的图标是**辅助信息**,和正文一个灰阶梯上的下一档,不是品牌色的重音。
+ *
+ * 关在 `.toolboxList` 这个笼子里:`.toolboxRowIcon` / `.toolboxRowArrow` 同一批类名
+ * 也用在三级浮层的行上(`.flyoutRow`),那边仍旧是 14 / 13 与品牌绿,不受这条影响。
+ */
+.toolboxList .toolboxRow svg,
+.toolboxList .moreRow svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--text-soft);
+}
+
+/* 稿子 `.nexts button:hover svg { color: var(--text-strong) }` —— 指到哪一行,
+   那一行的字**和图标**一起转深,整条亮起来才算「显出自己的形状」 */
+.toolboxList .toolboxRow:hover svg,
+.toolboxList .moreRow:hover svg {
+  color: var(--text-strong);
 }
 
 .toolboxRowIcon {

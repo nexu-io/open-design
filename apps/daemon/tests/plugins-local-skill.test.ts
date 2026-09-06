@@ -18,6 +18,7 @@ import {
   applyPlugin,
   pickFirstLocalSkillPath,
 } from '../src/plugins/apply.js';
+import { skillCwdAliasSegment } from '../src/cwd-aliases.js';
 import { loadPluginLocalSkill } from '../src/plugins/local-skill.js';
 import type { InstalledPluginRecord, PluginManifest } from '@open-design/contracts';
 
@@ -163,20 +164,34 @@ describe('loadPluginLocalSkill', () => {
     expect(local!.body).toContain('Route first; clarify only when needed');
   });
 
-  it('reads SKILL.md, strips frontmatter, and returns body/name/dir', async () => {
+  it('reads SKILL.md, strips frontmatter, and advertises staged side files', async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'od-plugin-local-skill-'));
     try {
       const skillPath = path.join(dir, 'SKILL.md');
+      await mkdir(path.join(dir, 'assets'), { recursive: true });
+      await writeFile(path.join(dir, 'assets', 'template.html'), '<main>seed</main>', 'utf8');
       await writeFile(
         skillPath,
-        ['---', 'name: fixture-plugin', 'mode: deck', '---', '', '# Body header', '', 'Body line.'].join('\n'),
+        [
+          '---',
+          'name: fixture-plugin',
+          'mode: deck',
+          '---',
+          '',
+          '# Body header',
+          '',
+          'Read assets/template.html before writing.',
+        ].join('\n'),
         'utf8',
       );
       const manifest = manifestWithSkills([{ path: './SKILL.md' }]);
       const local = await loadPluginLocalSkill(pluginRecord(dir, manifest));
       expect(local).not.toBeNull();
-      expect(local!.body.startsWith('# Body header')).toBe(true);
-      expect(local!.body).toContain('Body line.');
+      expect(local!.body).toContain(`.od-skills/${skillCwdAliasSegment(dir)}/`);
+      expect(local!.body).toContain('Known side files in this skill: `assets/template.html`.');
+      expect(local!.body).toContain('# Body header');
+      expect(local!.body).toContain('Read assets/template.html before writing.');
+      expect(local!.body).not.toContain('name: fixture-plugin');
       expect(local!.name).toBe('Fixture Plugin');
       expect(local!.dir).toBe(dir);
       expect(local!.relpath).toBe('SKILL.md');

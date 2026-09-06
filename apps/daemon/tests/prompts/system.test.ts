@@ -439,8 +439,10 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
       });
       expect(imagePrompt).toContain('reply exactly `图片已生成`');
-      expect(imagePrompt).toContain('MEDIA_DISPATCH_FAILED');
-      expect(imagePrompt).toContain('图片未生成：媒体生成调度失败，原因未分类');
+      expect(imagePrompt).toContain('`error.nextStep`');
+      expect(imagePrompt).toContain(
+        '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
+      );
       expect(imagePrompt).toContain('tool output and daemon logs');
       expect(imagePrompt).not.toContain('the filename, the model used');
       expect(imagePrompt).not.toContain('surface them verbatim to the user');
@@ -452,18 +454,20 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'prototype' } as any,
       });
       expect(prototypePrompt).toContain('reply exactly `图片已生成`');
-      expect(prototypePrompt).toContain('MEDIA_DISPATCH_FAILED');
-      expect(prototypePrompt).toContain('图片未生成：媒体生成调度失败，原因未分类');
+      expect(prototypePrompt).toContain('`error.nextStep`');
+      expect(prototypePrompt).toContain(
+        '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
+      );
       expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
       expect(prototypePrompt).not.toContain(
         'For the best fal image model use `--model flux-pro-ultra`',
       );
     });
 
-    // The provider-error branch has to reach the prompt the DAEMON composes,
-    // not just the copy in packages/contracts. Reclassifying a provider verdict
-    // as an outage hides the actionable code and message from the user.
-    it('preserves structured provider errors in both prompts', () => {
+    // The classified-failure branch has to reach the prompt the DAEMON
+    // composes, not just the copy in packages/contracts. Reclassifying a
+    // provider verdict from wording is what used to hide the real next step.
+    it('preserves the classified failure routing in both prompts', () => {
       for (const metadata of [
         { kind: 'image', imageModel: 'vela/gpt-image-2' },
         { kind: 'prototype' },
@@ -473,9 +477,9 @@ describe('composeSystemPrompt', () => {
           locale: 'zh-CN',
           metadata: metadata as any,
         });
-        expect(prompt).toContain('错误代码：`{code}`');
-        expect(prompt).toContain(
-          'public code and message without reclassifying either one from wording or HTTP',
+        expect(prompt).toContain('图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。');
+        expect(prompt.replace(/\s+/g, ' ')).toContain(
+          'never re-derive a verdict from wording, HTTP status, a placeholder/stub',
         );
       }
     });
@@ -485,9 +489,19 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('## Structured clarification on any turn');
       expect(prompt).toContain('`<question-form>` is assistant text for the OpenDesign UI, not a native tool call');
       expect(prompt).toContain(
+        'For a `direction-cards` question, emit only its intent fields; omit `options`, `cards`, `variant`, and `defaultValue`',
+      );
+      expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
       expect(prompt).toContain('Do not stop after an introductory sentence such as "先确认一下方向："');
+    });
+
+    it('keeps the host-owned direction-card boundary in bare Ask mode', () => {
+      const prompt = composeSystemPrompt({ sessionMode: 'chat' });
+      expect(prompt).toContain(
+        'the OpenDesign host supplies the project-kind visual catalog, previews, recommendation, and stable style ids',
+      );
     });
 
     it('pins filesystem artifact handoff for other CLI agents too', () => {
@@ -579,8 +593,8 @@ describe('composeSystemPrompt', () => {
         mediaExecution: { mode: 'disabled' },
       });
       expect(prompt).toContain('OpenDesign-owned media execution is **disabled for this run**');
-      expect(prompt).toContain('MEDIA_EXECUTION_DISABLED');
-      expect(prompt).toContain('本次任务未启用图片生成');
+      expect(prompt).toContain('use the fixed `unsupported` sentence');
+      expect(prompt).toContain('这次任务里不能生成图片 —— 需要图片的话,新建一个图片项目再试。');
       expect(prompt).not.toContain('describe the intended creative brief');
       expect(prompt).not.toContain('## Media generation contract');
       expect(prompt).not.toContain('External MCP servers — already authenticated');

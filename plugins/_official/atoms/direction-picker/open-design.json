@@ -5,7 +5,7 @@
   "title": "Direction picker",
   "version": "0.1.0",
   "publishedAt": "2026-05-09T13:00:27Z",
-  "description": "Optional 3-5 direction picker for users who explicitly ask to compare visual directions.",
+  "description": "Optional host-owned visual catalog for users who explicitly ask to compare directions.",
   "license": "MIT",
   "author": {
     "name": "OpenDesign",

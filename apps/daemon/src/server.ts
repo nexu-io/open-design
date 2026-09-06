@@ -28,9 +28,20 @@ import {
   composeOdNextStrategyStableRequestContextV2,
   executionProfileFromStreamFormat,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+  renderChatTurnHostProtocolInstructions,
   resolveOdNextDeckFrameworkMode,
 } from '@open-design/contracts';
-import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
+import {
+  advanceAuthenticatedDoneCapture,
+  isTodoWriteToolName,
+  stopReasonIsTruncation,
+  todoItemsFromTodoWriteInput,
+} from '@open-design/contracts';
+import {
+  renderUnfinishedTodoRecall,
+  recalledTodosFromTodoWriteInput,
+  type RecalledTodo,
+} from '@open-design/contracts';
 import type {
   CollabCloudMemberDirectoryEntry,
   TeamProject,
@@ -54,6 +65,7 @@ import {
   detectMediaIntentSignal,
   detectPlatformIntentSignal,
   extractUserAuthoredSignalText,
+  planToolNoteForRuntime,
   renderConnectedExternalMcpDirective,
   resolveExclusiveSurface,
 } from './prompts/system.js';
@@ -144,6 +156,9 @@ import {
   runtimeEmissionCountsAsAgentProgress,
   resolveChatRunShutdownGraceMs,
 } from './runtimes/chat-run-lifecycle.js';
+// Shared with `POST /api/runs/:id/steer` so the opening prompt and a B11
+// mid-turn steering frame are encoded by the same writer.
+import { encodeStreamJsonUserMessage } from './runtimes/run-steering.js';
 import { assertOdNextSemanticRequestFactProducerCoverage } from './runtimes/od-next-exact-input.js';
 import {
   normalizeRunContextSelection,
@@ -157,6 +172,7 @@ import {
   persistRunFailureClassification,
   pinAssistantMessageOnRunCreate,
 } from './runtimes/chat-run-messages.js';
+import { withFailureStderrTail } from './run-diagnostics.js';
 import {
   createRunSideEffectLedger,
   foldEventIntoRunSideEffectLedger,
@@ -253,6 +269,7 @@ import { withAcpHandshakeFailureGuidance } from './runtimes/acp-handshake-failur
 import { preflightCodexDefaultModel } from './runtimes/codex-model-preflight.js';
 import { preparePromptFileForAgent } from './runtimes/prompt-file.js';
 import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js';
+import { stampToolTiming } from './runtimes/tool-timing.js';
 import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
@@ -455,6 +472,12 @@ import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { createAgentTitleMarkerStripper } from './title-marker.js';
+import {
+  createPanelGrammarStripper,
+  strippingConsumedTheWholeFrame,
+} from './panel-grammar-strip.js';
+import { createArtifactFocusMarkerStripper } from './artifact-focus-marker.js';
+import { createNextStepMarkerStripper } from './next-step-marker.js';
 import { createRoleMarkerGuard } from './role-marker-guard.js';
 import { createToolLoopGuard, resolveToolLoopMode, type ToolLoopVerdict } from './tool-loop-guard.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
@@ -473,6 +496,12 @@ import {
 import { narrowProjectCritiqueOverride } from './critique/spawn-inputs.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
 import { createJsonEventStreamHandler } from './runtimes/json-event-stream.js';
+import {
+  CODEX_APP_SERVER_STREAM_FORMAT,
+  applyCodexTransportOverride,
+  codexResolvedSandboxMode,
+} from './runtimes/defs/codex.js';
+import { attachCodexAppServerSession } from './agent-protocol/codex-app-server/session.js';
 import {
   ensureDetectedRuntimeVersions,
   getDetectedRuntimeVersions,
@@ -597,7 +626,7 @@ import {
   bindOdNextExactSendPromptEvidence,
   buildPromptStackTelemetry,
 } from './prompt-telemetry.js';
-import { newInsertId, readAnalyticsContext, type AnalyticsService } from './analytics.js';
+import { newInsertId, readAnalyticsContext, type AnalyticsContext, type AnalyticsService } from './analytics.js';
 import {
   agentIdToTracking,
   modelIdForTracking,
@@ -756,6 +785,7 @@ import {
   insertScheduledRoutineRun,
   insertTemplate,
   latchConversationIntentSignals,
+  latestTodoWriteInputForConversation,
   readConversationIntentSignals,
   findTemplateByNameAndProject,
   updateTemplate,
@@ -801,6 +831,7 @@ import {
   upsertDeployment,
   upsertMessage,
   upsertPreviewComment,
+  userRequestBeforeAssistantMessage,
 } from './db.js';
 import {
   createPhysicalAgentSessionUsageTracker,
@@ -810,6 +841,7 @@ import {
   resolveAgentResumeContext,
   resolveAgentResumeFailurePolicy,
   resolveAgentResumePromptPolicy,
+  resolveResumeContinuationSeed,
 } from './agent-session-resume.js';
 import {
   initialNativeSessionRecoveryMetadata,
@@ -851,6 +883,21 @@ import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
 import { registerProjectRoutes, registerProjectArtifactRoutes, registerProjectFileRoutes, registerProjectUploadRoutes, createEnforceWorkspaceProjectMutation } from './routes/project/index.js';
+import { registerProjectChatArtifactRoutes } from './routes/project/chat-artifacts.js';
+import { createChatArtifactBlobStore } from './chat-artifacts/blob-store.js';
+import { resolveChatArtifactQuota } from './chat-artifacts/quota.js';
+import {
+  resolveChatArtifactMaintenanceIntervalMs,
+  startChatArtifactMaintenance,
+} from './chat-artifacts/maintenance.js';
+import {
+  captureRunChatArtifactSnapshots,
+  type CaptureRunChatArtifactsReport,
+} from './chat-artifacts/run-capture.js';
+import { associateRunProducedFiles } from './runtimes/run-produced-files.js';
+import { chatArtifactCaptureResultProps } from './chat-artifacts/telemetry.js';
+import { freezeAndRenderChatArtifactCovers } from './chat-artifacts/cover.js';
+import { setMessageArtifactHtmlVersionIds } from './chat-artifacts/store.js';
 import { registerVelaRoutes } from './routes/vela.js';
 import { registerFinalizeRoutes, registerImportRoutes, registerProjectExportRoutes } from './import-export-routes.js';
 import { registerHandoffRoutes } from './routes/handoff.js';
@@ -1314,6 +1361,11 @@ migrateLegacyDataDirSync({
   legacyDir: process.env.OD_LEGACY_DATA_DIR,
   dataDir: RUNTIME_DATA_DIR,
 });
+// Immutable chat-artifact snapshot storage. Derived from the SINGLE resolved
+// data root per the repository "Daemon data directory contract" — the store
+// itself has no default and would throw if handed anything else.
+const CHAT_ARTIFACT_BLOBS = createChatArtifactBlobStore({ dataDir: RUNTIME_DATA_DIR });
+const CHAT_ARTIFACT_QUOTA = resolveChatArtifactQuota(process.env);
 const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 // Critique Theater artifacts intentionally live outside the static
 // `/artifacts` tree. The per-run artifact endpoint is the sanctioned
@@ -2052,10 +2104,64 @@ function formAnswerTransitionForCurrentPrompt(currentPrompt) {
   return lines.join('\n');
 }
 
+/**
+ * Background block that tells a FRESH session which request it is continuing.
+ *
+ * Only ever rendered for a turn whose message is a continuation directive AND
+ * whose stored session the daemon refused (see `resolveResumeContinuationSeed`).
+ * Absent for every other turn, so no existing prompt moves by a byte — and so
+ * no upstream cached prefix moves either.
+ */
+export function renderResumeContinuationContext(
+  originalRequest: string | null | undefined,
+): string | null {
+  const request = typeof originalRequest === 'string' ? originalRequest.trim() : '';
+  if (!request) return null;
+  return [
+    '## Continuing an interrupted turn',
+    'The previous attempt could not be continued in its original agent session,'
+      + ' so this is a fresh session with no memory of it. The request that turn'
+      + ' was working on:',
+    '',
+    request,
+    '',
+    'Any files it already wrote are still in the project — inspect them before'
+      + ' redoing work.',
+  ].join('\n');
+}
+
 export function composeChatUserRequestForAgent(
   message,
   currentPrompt,
-  options: { skipTranscript?: boolean } = {},
+  options: {
+    skipTranscript?: boolean;
+    /**
+     * The request a refused upstream session was working on, when this turn is
+     * a continuation directive the daemon could not resume. Rides the per-turn
+     * user body for the same reason the todo recall below does: a resumed
+     * session throws the rendered transcript away, and the system prompt is the
+     * cached stable prefix. Omitted/empty leaves the composed body unchanged.
+     */
+    resumeContinuationOriginalRequest?: string | null;
+    /**
+     * The task list an earlier turn of this conversation last declared — the
+     * WHOLE snapshot, finished rows included (see
+     * `latestTodoWriteInputForConversation` + `recalledTodosFromTodoWriteInput`).
+     * `renderUnfinishedTodoRecall` owns the question of whether any of it is
+     * still open, and renders nothing when none of it is.
+     *
+     * This is the ONLY keyhole that reaches both branches below. A resumed
+     * session throws the rendered transcript away entirely (`skipTranscript`),
+     * so anything appended to the transcript is invisible to the 6 runtimes
+     * with native resume; anything put in the system prompt moves the cached
+     * stable prefix on every turn. The per-turn user body is the one place a
+     * per-turn fact can ride for free, and `formAnswerTransitionForCurrentPrompt`
+     * below is the existing precedent for synthesizing into it.
+     *
+     * Empty/omitted MUST leave the composed body byte-identical to before.
+     */
+    previousTurnTaskList?: readonly RecalledTodo[];
+  } = {},
 ) {
   // When the adapter resumes its own session, the
   // daemon-rendered `## user` / `## assistant` transcript is a duplicate
@@ -2077,19 +2183,32 @@ export function composeChatUserRequestForAgent(
       ? bodySource
       : '(No extra typed instruction.)';
   const transition = formAnswerTransitionForCurrentPrompt(currentPrompt);
-  if (!transition) return body;
-  if (skip) {
+  // Stated before the turn's own words, the same way the form-answer transition
+  // is: it is background the agent reads first, not something the user said.
+  const recall = renderUnfinishedTodoRecall(options.previousTurnTaskList);
+  // Stated before everything else: a fresh session must learn what it is
+  // continuing before it reads the directive telling it to continue.
+  const continuationContext = renderResumeContinuationContext(
+    options.resumeContinuationOriginalRequest,
+  );
+  const parts: string[] = [];
+  if (continuationContext) parts.push(continuationContext);
+  if (recall) parts.push(recall);
+  if (!transition) {
+    parts.push(body);
+  } else if (skip) {
     // The transition block already embeds the trimmed `currentPrompt`
     // (the submitted form answers). On the resume path `body` IS
     // `currentPrompt`, so appending it would ship the answers twice
     // (issue #6239); the transition alone carries the whole turn.
-    return transition;
+    parts.push(transition);
+  } else {
+    parts.push(transition, '## Full conversation transcript', body);
   }
-  return [
-    transition,
-    '## Full conversation transcript',
-    body,
-  ].join('\n\n');
+  // With no recall block this is byte-for-byte the pre-feature result in all
+  // three branches — a conversation with nothing outstanding cannot shift a
+  // single prompt byte (and so cannot move an upstream cache boundary).
+  return parts.join('\n\n');
 }
 
 export function createFinalizedMessageTelemetryReporter({
@@ -3289,6 +3408,30 @@ export async function startServer({
   for (const row of listRecentMediaTasks(db, { terminalTtlMs: TASK_TTL_AFTER_DONE_MS })) {
     mediaTaskStore.hydrateMediaTask(row);
   }
+
+  // Chat-artifact snapshot maintenance: one pass now, then a pass per period
+  // for as long as the daemon lives. Blob-store initialization is deliberately
+  // separate from the SQLite migration and never blocks startup: a broken
+  // snapshot store must degrade the cards, not the daemon.
+  //
+  // The period defaults to 0 (boot-only, today's behaviour) because no period
+  // has been ruled on yet — see `resolveChatArtifactMaintenanceIntervalMs`.
+  const chatArtifactMaintenance = startChatArtifactMaintenance({
+    db,
+    blobs: CHAT_ARTIFACT_BLOBS,
+    quota: CHAT_ARTIFACT_QUOTA,
+    resolveSourcePath: (projectId, relativePath) => {
+      try {
+        const project = getProject(db, projectId);
+        const dir = resolveProjectDir(PROJECTS_DIR, projectId, project?.metadata);
+        return path.join(dir, relativePath.split('/').join(path.sep));
+      } catch {
+        return null;
+      }
+    },
+    gcDryRun: process.env.OD_CHAT_ARTIFACT_GC !== '1',
+    intervalMs: resolveChatArtifactMaintenanceIntervalMs(process.env),
+  });
 
   if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
     console.log('[od] Codex plugins disabled via OD_CODEX_DISABLE_PLUGINS=1');
@@ -8779,6 +8922,15 @@ export async function startServer({
     projectPreviewScopes,
     verifyWorkspaceRequestAuthority,
   });
+  // Immutable chat-artifact snapshot reads. Same read authority as /raw; see
+  // routes/project/chat-artifacts.ts for the gate chain.
+  registerProjectChatArtifactRoutes(app, {
+    db,
+    http: httpDeps,
+    paths: pathDeps,
+    projectStore: projectStoreDeps,
+    authorizeProjectRequest,
+  });
 
   registerMediaRoutes(app, {
     db,
@@ -9966,9 +10118,25 @@ export async function startServer({
         if (!snap?.strategy && stages.length > 0) {
           const { loadAtomBodies } = await import('./plugins/atom-bodies.js');
           const { renderActiveStageBlocks } = await import('@open-design/contracts');
+          const { atomsForPrompt } = await import('./plugins/critique-prompt-gate.js');
           const stageViews = [];
           for (const stage of stages) {
-            const bodies = await loadAtomBodies(db, stage.atoms ?? []);
+            /*
+             * 评审剧场的 atom body 必须和**协议注入**同生同死。
+             *
+             * 默认 scenario 的 `critique` 阶段一直声明 `atoms: ['critique-theater']`,
+             * 而 2026-08-26 下线剧场时只关掉了协议注入(`renderPanelPrompt`)那一条路。
+             * 结果是模型读到一段自相矛盾的提示词:「严格遵守 daemon 注入的标记协议」,
+             * 而那份协议永远不会来 —— 于是它照着 atom SKILL.md 的散文把线格式现编出来,
+             * 原样打进聊天正文。用户连着撞到五次。详见 `critique-prompt-gate.ts`。
+             *
+             * `critiqueShouldRun` 就是"协议会不会注入"的答案,这里直接复用它,
+             * 不另起一套判据 —— 另起一套就是第三个入口。
+             */
+            const atoms = atomsForPrompt(stage.atoms ?? [], {
+              critiqueEnabled: critiqueShouldRun,
+            });
+            const bodies = await loadAtomBodies(db, atoms);
             stageViews.push({ stageId: stage.id, bodies });
           }
           // Issue #6238 — the builder inlines each atom body exactly
@@ -10145,6 +10313,13 @@ export async function startServer({
       ? {
           agentId,
           streamFormat,
+          // The runtime's real plan-tool name. OD Next composes its own prompt
+          // and never reaches the slim charter that carries this note, so
+          // without it here an OD Next codex run is told to keep a Todo plan
+          // live and is never told what its plan tool is called. Resolved from
+          // the single daemon-side table; a runtime with no verified name
+          // resolves to null and adds no bytes.
+          planToolNote: planToolNoteForRuntime(agentId, streamFormat),
           executionProfile: executionProfileFromStreamFormat(streamFormat),
           deckIntent: odNextDeckIntent,
           deckFrameworkMode: odNextDeckFrameworkMode,
@@ -10446,6 +10621,7 @@ export async function startServer({
       message,
       currentPrompt,
       priorTranscript,
+      resumeContinuation,
       systemPrompt,
       imagePaths = [],
       projectId,
@@ -10536,7 +10712,10 @@ export async function startServer({
       sessionMode === 'chat' || sessionMode === 'design' || sessionMode === 'plan'
         ? normalizeConversationSessionMode(sessionMode)
         : normalizeConversationSessionMode(conversationSession?.sessionMode);
-    const def = getAgentDef(agentId);
+    // Single choke point for the codex transport switch. Every other
+    // agent — and codex with the switch off — gets back the identical
+    // registry object, so nothing below can tell this call happened.
+    const def = applyCodexTransportOverride(getAgentDef(agentId));
     if (!def)
       return failRun(
         'AGENT_UNAVAILABLE',
@@ -11171,6 +11350,109 @@ export async function startServer({
       const afterSnapshot = await snapshotProjectArtifactsAsync(artifactBaseline.cwd);
       return resolveRunArtifactOutcomeBeforeFinish(afterSnapshot);
     };
+    // Design §10.3. The properties object is the builder's return value
+    // VERBATIM — nothing is spread in or added here, so what the builder's own
+    // tests assert on is exactly what reaches the sink.
+    const emitChatArtifactCaptureTelemetry = (
+      captureRun: { id: string; projectId?: string; analyticsContext?: AnalyticsContext | null },
+      report: CaptureRunChatArtifactsReport,
+    ) => {
+      try {
+        const context = captureRun.analyticsContext ?? null;
+        if (!context || !captureRun.projectId || !design?.analytics?.capture) return;
+        const properties = chatArtifactCaptureResultProps({
+          projectId: captureRun.projectId,
+          runId: captureRun.id,
+          report,
+        });
+        if (!properties) return;
+        design.analytics.capture({
+          eventName: 'chat_artifact_capture_result',
+          context,
+          appVersion: design.getAppVersion?.() ?? 'unknown',
+          properties,
+          insertId: `chat_artifact_capture_result:${captureRun.id}`,
+        });
+      } catch {
+        // Telemetry never changes the turn's outcome.
+      }
+    };
+    // Freeze this turn's artifact evidence while the daemon still owns the
+    // moment: at the terminal chokepoint, BEFORE the terminal SSE frame goes
+    // out and before any client can see the message as done. A snapshot taken
+    // after that races the next turn's overwrite, which is exactly the bug this
+    // exists to close. Never throws — a failed capture degrades one card, it
+    // does not fail the run.
+    const captureChatArtifactsBeforeSuccess = async () => {
+      try {
+        if (!run?.projectId || !run.assistantMessageId) return;
+        const outcome = await resolveRunArtifactOutcomeBeforeFinishAsync();
+        const touchedPaths = Array.isArray(outcome?.diff?.touchedPaths)
+          ? outcome.diff.touchedPaths
+          : [];
+        if (!outcome?.projectRoot || touchedPaths.length === 0) return;
+        // Attach the turn's deliverable to the turn, before anything else here
+        // can fail. `produced_files_json` otherwise has exactly one writer — a
+        // closure inside the browser's `ProjectView` — so a run whose viewer
+        // navigated away finishes with its artifacts orphaned, and the client's
+        // own repair window has closed by the time the user returns
+        // (OPEND-2598 / OPEND-2608). This only fills a column that is still
+        // NULL, so the client's list stays authoritative when it does arrive.
+        // Its own try: a produced-file miss must not cost the snapshot capture
+        // below, and vice versa.
+        try {
+          await associateRunProducedFiles(db, {
+            messageId: run.assistantMessageId,
+            projectRoot: outcome.projectRoot,
+            touchedPaths,
+          });
+        } catch (err) {
+          console.warn('[chat-artifacts] produced-file association failed', err);
+        }
+        const deps = { db, blobs: CHAT_ARTIFACT_BLOBS, quota: CHAT_ARTIFACT_QUOTA };
+        const captured = await captureRunChatArtifactSnapshots(deps, {
+          projectId: run.projectId,
+          projectRoot: outcome.projectRoot,
+          messageId: run.assistantMessageId,
+          runId: run.id,
+          touchedPaths,
+        });
+        emitChatArtifactCaptureTelemetry(run, captured);
+        // Same chokepoint, same reason (spec §6.3). The image path above froze
+        // BYTES here; this freezes the HTML card's RENDERER INPUT here, so the
+        // cover render that follows can take its seconds without the file it is
+        // drawing being allowed to change underneath it. Only the freeze is
+        // awaited — the render deliberately outlives the turn.
+        await freezeAndRenderChatArtifactCovers(deps, {
+          projectRoot: outcome.projectRoot,
+          rows: captured.rows,
+          renderer: desktopArtifactExporter,
+          /*
+           * The cover outlives the turn by design, so it lands into a message
+           * the client already filed as done — after the single post-run
+           * re-read (`ProjectView.scheduleConversationMessageRefresh`, 150ms)
+           * has been and gone. Without this nudge the card keeps the
+           * live-iframe degrade branch until a full reload, which is the
+           * regression spec line 505 exists to forbid.
+           *
+           * Thin on purpose: it names the stale message and nothing else, so
+           * `listMessages` stays the only thing that decides what a ref is.
+           */
+          onRefsChanged: (row) => {
+            if (!run.projectId || !run.conversationId) return;
+            emitProjectEvent(run.projectId, {
+              type: 'chat-artifact-refs-changed',
+              projectId: run.projectId,
+              conversationId: run.conversationId,
+              messageId: row.messageId,
+              at: Date.now(),
+            });
+          },
+        });
+      } catch (err) {
+        console.warn('[chat-artifacts] run terminal capture failed', err);
+      }
+    };
     const snapshotAiHtmlVersionsBeforeSuccess = async () => {
       const origin = artifactOriginForRun({
         runId: run.id,
@@ -11195,6 +11477,20 @@ export async function startServer({
         ...(origin ? { origin } : {}),
         metadata: projectRecord?.metadata,
       });
+      // §3.2 lineage, backfilled rather than reordered: the chat-artifact refs
+      // were written a few lines above, before these versions existed. Never
+      // allowed to fail the run — a card without lineage is still a card.
+      if (run.assistantMessageId && result.snapshots.length > 0) {
+        try {
+          setMessageArtifactHtmlVersionIds(
+            db,
+            run.assistantMessageId,
+            new Map(result.snapshots.map(({ fileName, version }) => [fileName, version.id])),
+          );
+        } catch (err) {
+          console.warn('[chat-artifacts] html version lineage backfill failed', err);
+        }
+      }
       if (origin) {
         const matching = result.snapshots.filter(({ version }) =>
           version.origin?.entrySurface === origin.entrySurface
@@ -11432,7 +11728,58 @@ export async function startServer({
       invalidationReason: agentResumeCtx.invalidationReason,
     });
     publishNativeSessionRecoveryMetadata();
+    /*
+     * The plan the previous turn last declared — whole, finished rows included.
+     *
+     * Read here, on the path that already queries this conversation for the
+     * resume cursor, and handed to the agent as a fact it decides about — see
+     * `renderUnfinishedTodoRecall`, which decides whether any of it is still
+     * open and renders nothing when none of it is. Every runtime gets it, not
+     * just the 6 with native resume: the 21 that start a fresh process each
+     * turn are exactly the ones with no other way to know. A read failure
+     * degrades to "nothing outstanding" rather than failing the run.
+     *
+     * NOTE(sync/main): the OD Next request stage composes its own user prompt
+     * from the frozen task bundle, so recall is not threaded into that branch —
+     * the bundle IS the turn's stated input. Recall still applies to every
+     * ordinary chat turn, which is where it was measured.
+     */
+    const previousTurnTaskList: RecalledTodo[] = run.conversationId
+      ? (() => {
+          try {
+            return recalledTodosFromTodoWriteInput(
+              latestTodoWriteInputForConversation(
+                db,
+                run.conversationId,
+                run.assistantMessageId ?? '',
+              ),
+            );
+          } catch {
+            return [];
+          }
+        })()
+      : [];
     const agentResumePromptPolicy = resolveAgentResumePromptPolicy(agentResumeCtx);
+    // A continuation directive whose stored session the daemon just refused has
+    // to be told which request it is continuing; see
+    // `resolveResumeContinuationSeed`. Callers that ship their own transcript
+    // never set `resumeContinuation`, so this stays null for them.
+    const resumeContinuationSeed = resolveResumeContinuationSeed({
+      isContinuation: resumeContinuation === true,
+      requiresFullTranscript: agentResumePromptPolicy.requiresFullTranscript,
+      storedSessionId: agentResumeCtx.storedSessionId,
+      storedLastMessageId: agentResumeCtx.storedLastMessageId,
+    });
+    const resumeContinuationOriginalRequest =
+      resumeContinuationSeed.required
+      && run.conversationId
+      && resumeContinuationSeed.anchorAssistantMessageId
+        ? userRequestBeforeAssistantMessage(
+            db,
+            run.conversationId,
+            resumeContinuationSeed.anchorAssistantMessageId,
+          )
+        : null;
     const userRequestPrompt = isOdNextRequestStage
       ? resolveOdNextRequestUserPrompt({
           message,
@@ -11446,7 +11793,11 @@ export async function startServer({
           // existing session. A create turn still sends the full transcript so
           // a brand-new session (incl. first turn after another agent)
           // is seeded with prior context.
-          { skipTranscript: agentResumePromptPolicy.skipTranscript },
+          {
+            skipTranscript: agentResumePromptPolicy.skipTranscript,
+            previousTurnTaskList,
+            resumeContinuationOriginalRequest,
+          },
         );
     // The stable instruction slice (daemon prompt + tool contract + system
     // prompt = design system / skills / memory) is identical across turns of
@@ -11501,6 +11852,55 @@ export async function startServer({
           'Do not mention this title task to the user. Continue with the normal answer after the title marker.',
         ].join('\n')
       : '';
+    /*
+     * This turn's done-marker contract.
+     *
+     * It lives in the per-turn slice for the same reason the connected-MCP
+     * directive does (see the note just below): the key is a fresh nonce every
+     * run, so putting it in `daemonSystemPrompt` would move the cached stable
+     * prefix on EVERY turn of EVERY conversation — a guaranteed
+     * `stable-prompt-changed` miss that also invalidates the upstream cache for
+     * the whole conversation history downstream of it. The rules are cheap to
+     * restate per turn; the prefix is not cheap to lose.
+     *
+     * Wording mirrors the `<od-title>` task above it — same shape of contract
+     * (emit one inline marker the host parses and strips), same "don't narrate
+     * this to the user" clause.
+     */
+    const hostProtocol = renderChatTurnHostProtocolInstructions(
+      typeof run.doneKey === 'string' ? run.doneKey : '',
+      'ordinary',
+    );
+    /*
+     * This turn's follow-up suggestions.
+     *
+     * Shares the per-turn nonce with the done marker above — see
+     * `packages/contracts/src/api/next-step-marker.ts` for why this marker is
+     * keyed at all (clicking a suggestion sends that exact sentence as the
+     * user's next message, so an unkeyed marker would let any text the agent
+     * read plant a sentence in the user's own composer path). Reusing the
+     * existing nonce keeps the cost at one prompt sentence: no second key to
+     * mint, no second event on the wire, and the model has already copied this
+     * exact string once in the same turn.
+     *
+     * Per-turn slice for the same cache reason as the done marker: a fresh
+     * nonce in the stable prefix would miss the prompt cache on every turn.
+     */
+    /*
+     * This turn's display intent.
+     *
+     * Same per-turn slice and same shared nonce as the two markers above — see
+     * `packages/contracts/src/api/artifact-focus-marker.ts` for why this one is
+     * keyed (it names a path the host then reads and renders, so an unkeyed
+     * form would let any document the agent merely READ steer the preview).
+     *
+     * The body lives next to the parser rather than here, so the instruction,
+     * the example it shows, and the regexes that accept it cannot drift apart —
+     * and so a BYOK path composing its own per-turn slice reads the same string
+     * instead of a second copy of it. `renderArtifactFocusInstruction` returns
+     * '' without a key, which is the same guard the two markers above spell out
+     * inline.
+     */
     // The connected-external-MCP directive reflects live OAuth token state,
     // which flips mid-conversation as Bearers expire/refresh. Keeping it out of
     // the cached stable prefix (daemonSystemPrompt) and re-sending it here in
@@ -11508,6 +11908,19 @@ export async function startServer({
     // across resumes (protecting the conversation-history cache) while still
     // giving the model the current MCP auth state on every turn.
     const mcpConnectedDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
+    /*
+     * NOTE(sync/main): this branch used to hand-roll the client instruction
+     * slice here (`clientInstructionParts` + `composeLiveInstructionPrompt`).
+     * origin/main extracted that composition into `composeChatAgentTextPayload`
+     * (see the call below), which owns the contributor registry and the OD Next
+     * exact-input coverage assertion. We adopt main's composer and feed this
+     * branch's three per-turn directives — done key, `<od-next>` suggestions and
+     * `<od-focus>` — through its `clientSystemPrompt` slot, which is the same
+     * position they occupied in the old array (after the title directive,
+     * ahead of the system prompt). Unlike `systemPrompt` they are NOT gated on
+     * `includeStableForPayload`: each carries this turn's nonce, so it has to be
+     * restated every turn or the marker it authorises cannot be validated.
+     */
     // Some models (notably claude-opus-4-7 with --include-partial-messages)
     // start their reply by echoing the top of the user message verbatim,
     // so the rendered chat shows a "# Instructions ..." block ahead of the
@@ -11578,7 +11991,19 @@ export async function startServer({
       connectedExternalMcpReference: mcpConnectedDirective,
       browserUnavailableGuard: browserUsePromptGuard,
       titleGenerationDirective: titleGenerationPrompt,
-      clientSystemPrompt: includeStableForPayload ? systemPrompt : '',
+      // This branch's per-turn directives ride in ahead of the system prompt,
+      // exactly where they sat in the pre-merge `clientInstructionParts` array.
+      // Each is keyed on this run's nonce, so they are unconditional while
+      // `systemPrompt` stays gated on the stable-slice decision.
+      clientSystemPrompt: [
+        hostProtocol.doneMarker,
+        hostProtocol.nextSteps,
+        hostProtocol.artifactFocus,
+        includeStableForPayload ? systemPrompt : '',
+      ]
+        .map((part) => (typeof part === 'string' ? part.trim() : ''))
+        .filter(Boolean)
+        .join('\n\n---\n\n'),
       cwdReference: cwdHint,
       linkedDirectoryReferences: linkedDirsHint,
       echoGuard: agentEchoGuard,
@@ -11717,6 +12142,16 @@ export async function startServer({
     // by the artifact finalizer (see the emit handler below). 8 MiB comfortably
     // covers realistic artifact-bearing runs while bounding per-run memory.
     const PLAIN_ARTIFACT_STDOUT_CAP = 8 * 1024 * 1024;
+    // Everything this attempt put on stderr, kept as a bounded rolling window so
+    // the terminal `error` frame can carry the ORIGINAL cause and not only the
+    // daemon's own generic sentence. The window is deliberately larger than the
+    // tail the card shows, so the tail is always computed over a full slice of
+    // final output rather than over whatever happened to arrive last. Scoped to
+    // one spawn attempt: a same-run retry re-enters startChatRun and gets a
+    // fresh closure, so a failed attempt's output can never be attributed to the
+    // next one's error frame.
+    const FAILURE_STDERR_WINDOW_CAP = 32 * 1024;
+    let failureStderrWindow = '';
     // Run instrumentation sits ON the path the model's bytes travel: `send`
     // is the single choke point every stream event passes through on its way
     // to the user, and the strategy's close-time tail is broadcast from the
@@ -11826,6 +12261,48 @@ export async function startServer({
         typeof data.delta === 'string'
       ) {
         visibleAssistantText += data.delta;
+        const doneCapture = advanceAuthenticatedDoneCapture({
+          fullVisibleText: visibleAssistantText,
+          delta: data.delta,
+          key: typeof run.doneKey === 'string' ? run.doneKey : '',
+          state: {
+            markerTail: run.completionMarkerTail,
+            awaitingConclusion: run.completionMarkerAwaitingConclusion,
+            authenticatedConclusion: run.authenticatedDoneConclusion,
+          },
+        });
+        run.completionMarkerTail = doneCapture.markerTail;
+        run.completionMarkerAwaitingConclusion = doneCapture.awaitingConclusion;
+        run.authenticatedDoneConclusion = doneCapture.authenticatedConclusion;
+      } else if (event === 'stdout' && data && typeof data.chunk === 'string') {
+        // Plain runtimes have no existing full text_delta accumulator. Reuse
+        // the bounded artifact stdout head rather than retaining a second
+        // unbounded copy solely for completion detection. The cap is already
+        // the daemon's declared realistic-output bound; once exceeded we fail
+        // closed on a NEW marker, but can still finish a marker seen before it.
+        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
+        if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
+          run.plainArtifactStdout =
+            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+        }
+        if (
+          run.plainStdoutTotalBytes <= PLAIN_ARTIFACT_STDOUT_CAP
+          || run.completionMarkerAwaitingConclusion
+        ) {
+          const doneCapture = advanceAuthenticatedDoneCapture({
+            fullVisibleText: run.plainArtifactStdout ?? '',
+            delta: data.chunk,
+            key: typeof run.doneKey === 'string' ? run.doneKey : '',
+            state: {
+              markerTail: run.completionMarkerTail,
+              awaitingConclusion: run.completionMarkerAwaitingConclusion,
+              authenticatedConclusion: run.authenticatedDoneConclusion,
+            },
+          });
+          run.completionMarkerTail = doneCapture.markerTail;
+          run.completionMarkerAwaitingConclusion = doneCapture.awaitingConclusion;
+          run.authenticatedDoneConclusion = doneCapture.authenticatedConclusion;
+        }
       }
       // Accumulate the visible reply for the memory extractor from whichever
       // channel this agent family uses: `agent` text_delta (structured streams)
@@ -11854,15 +12331,17 @@ export async function startServer({
       // head to the tail-biased run.events at their exact stream offset, so no
       // artifact is lost and none is double-counted regardless of where in the
       // stream it appears.
-      if (event === 'stdout' && data && typeof data.chunk === 'string') {
-        run.plainStdoutTotalBytes = (run.plainStdoutTotalBytes ?? 0) + data.chunk.length;
-        if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
-          run.plainArtifactStdout =
-            ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
-        }
+      if (event === 'stderr' && data && typeof data.chunk === 'string' && data.chunk) {
+        failureStderrWindow = `${failureStderrWindow}${data.chunk}`.slice(
+          -FAILURE_STDERR_WINDOW_CAP,
+        );
       }
-      persistRunEventToAssistantMessage(db, run, event, data);
-      design.runs.emit(run, event, data);
+      // One decoration point for both consumers below: the live SSE client and
+      // the persisted assistant message get the same error payload, so a reload
+      // shows exactly what the run showed.
+      const outgoing = withFailureStderrTail(event, data, failureStderrWindow);
+      persistRunEventToAssistantMessage(db, run, event, outgoing);
+      design.runs.emit(run, event, outgoing);
     };
     const retryAnalyticsBase = (decision, failure, errorCode) => {
       const runProjectKind = resolveRunProjectKindForAnalytics({
@@ -12310,6 +12789,16 @@ export async function startServer({
       run.failureCategory = result === 'failed' ? failure?.failure_category ?? null : null;
       run.failureDetail = result === 'failed' ? failure?.failure_detail ?? null : null;
       run.failureAction = result === 'failed' ? failure?.user_action ?? null : null;
+      // The classifier's own retryability verdict. Kept alongside `user_action`
+      // rather than derived from it: the two are written independently, so a
+      // failure can be non-retryable while still carrying an action other than
+      // `'none'` (install the CLI, switch model, recharge). Without this the
+      // chat can only re-derive retryability from the detail NAME, which is the
+      // drift the classification fields exist to end.
+      run.retryable =
+        result === 'failed' && typeof failure?.retryable === 'boolean'
+          ? failure.retryable
+          : null;
       // Stamp the classification onto the persisted assistant message too, so a
       // reload (or any daemon-side persistence without the live web error
       // handler) keeps the specific failure guidance instead of the coarse
@@ -13426,6 +13915,20 @@ export async function startServer({
       serviceTier: safeServiceTier,
       toolTokenExpiresAt: toolTokenGrant?.expiresAt ?? null,
     });
+    /*
+     * This turn's done key, published BEFORE the child is spawned.
+     *
+     * Ordering is the whole contract: the chat client only honours a
+     * `<od-done key="…"/>` marker whose key matches the one it has already
+     * seen for this turn, so the key event must land ahead of the first
+     * `text_delta` on both the live stream and the persisted event list. It is
+     * emitted as a normal agent event so it rides the same path as everything
+     * else — persisted into the assistant message and replayed on reconnect —
+     * rather than needing a message column of its own.
+     */
+    if (typeof run.doneKey === 'string' && run.doneKey) {
+      send('agent', { type: 'done_key', key: run.doneKey });
+    }
     noteAgentActivity();
 
     let child;
@@ -13457,7 +13960,8 @@ export async function startServer({
       const stdinMode =
         def.promptViaStdin ||
         def.streamFormat === 'acp-json-rpc' ||
-        def.streamFormat === 'dsh-profile-jsonl'
+        def.streamFormat === 'dsh-profile-jsonl' ||
+        def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT
           ? 'pipe'
           : 'ignore';
       const env = applyAgentLaunchEnv({
@@ -13617,7 +14121,7 @@ export async function startServer({
         });
       }
       if (
-        def.promptViaStdin &&
+        (def.promptViaStdin || def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT) &&
         child.stdin &&
         def.streamFormat !== 'pi-rpc' &&
         def.streamFormat !== 'dsh-profile-jsonl'
@@ -13642,7 +14146,10 @@ export async function startServer({
             );
           }
         });
-        writePromptToChildStdin = true;
+        // The app-server transport owns its own stdin writes (JSON-RPC
+        // frames); only the plain stdin-prompt adapters hand the composed
+        // prompt over on this channel.
+        writePromptToChildStdin = def.promptViaStdin === true;
       }
     } catch (err) {
       cleanupPromptFile();
@@ -13973,16 +14480,25 @@ export async function startServer({
       'text_delta',
       'thinking_delta',
     ]);
-    // Stamps ONLY `first_token`. `first_visible_output` deliberately does not
-    // ride along: it belongs to the single emission choke point in `send()`,
-    // which runs after the title-marker stripper and the fabricated-role-marker
-    // guard have decided whether these bytes reach the client at all. Stamping
-    // both here made `time_to_first_visible_output_ms` a byte-for-byte copy of
-    // `time_to_first_token_ms` — the mark is first-write-wins, so this call
-    // always won and the `send()` mark could never fire. The two are equal
-    // whenever output streams straight through (the common case, and correct);
-    // they diverge exactly when the daemon HOLDS bytes back, which is the
-    // window the metric exists to measure.
+    /*
+     * `first_token` only. `first_visible_output` has exactly ONE owner: the
+     * `send()` path, which asks `runLifecycleMarkersForStreamEvent` whether the
+     * frame actually carried characters.
+     *
+     * Co-stamping both here made the two boundaries the same number by
+     * construction, and Claude is the case where they genuinely differ: its
+     * extended thinking arrives as `thinking_delta` frames whose `thinking` is
+     * the empty string (20 of 20 frames on a 26.5s turn measured straight off
+     * the CLI). A token really was produced — thinking tokens are billed — so
+     * `first_token` belongs here; nothing was drawn, so the pixel boundary does
+     * not. Run 1cc48454-e9a7-411a-981e-4325fcca95dd reported
+     * `time_to_first_visible_output_ms: 9926` for a turn whose first on-screen
+     * character landed at 46,729ms.
+     *
+     * A runtime whose visible output never reaches `send()` simply leaves the
+     * mark unset, and `summarizeRunTimingAnalytics` already falls back to
+     * `firstTokenAt` — i.e. exactly the value this line used to write.
+     */
     const noteFirstTokenAt = (timestamp = Date.now()) => {
       // Telemetry-only, and every call site sits inside a live stream handler
       // that is mid-way through delivering a delta. Same contract as the marks
@@ -14031,16 +14547,116 @@ export async function startServer({
     // directive lives in the agent's own session history, so a resumed CLI can
     // repeat the marker on a later turn that never requested one — gating the
     // stripper on the request is what let `<od-title>` reach the chat.
-    const titleMarkerStripper = createAgentTitleMarkerStripper({
-      enabled: true,
-      emitTitle: titleGenerationRequested
-        ? (title) => send('agent', { type: 'conversation_title', title })
-        : () => {},
+    //
+    // NOTE(sync/main): origin/main fixed that leak AT THIS CALL SITE (pass
+    // `enabled: true`, swap the announce callback). This branch fixed the same
+    // leak one layer down, in `title-marker.ts`: the stripper now always scans,
+    // and `enabled` means "adopt this title", not "strip it". Both fixes are
+    // kept — the call site below reads correctly against the new semantics, and
+    // main's regression test (`enabled: true` + no-op emit) still passes.
+    const rawTitleMarkerStripper = createAgentTitleMarkerStripper({
+      enabled: Boolean(titleGenerationRequested),
+      emitTitle: (title) => send('agent', { type: 'conversation_title', title }),
     });
+    /*
+     * 评审剧场的通信语法**兜底剥离**(见 `panel-grammar-strip.ts` 的注释)。
+     *
+     * 挂在这里而不是逐个改五个调用点:所有可见文本都要先过 `titleMarkerStripper`,
+     * 把它包一层,五处自动都有,以后再多一处也不会漏。
+     * 顺序是「先剥标题、再剥面板语法」—— 两者互不重叠,谁先都行,
+     * 但两个都必须有各自的半截缓冲,否则会闪出半截标签。
+     */
+    const panelGrammarStripper = createPanelGrammarStripper();
+    /*
+     * **思考流**的那一份 —— 独立实例,不和正文共用。
+     *
+     * 上面那个只盖住 `text_delta`。`thinking_delta` 走的是另一条路
+     * (`sendAgentEvent` 里非 text_delta 一律直接 `emitAgentEvent`),
+     * 2026-08-26 建兜底时漏掉了它,于是剧场语法照旧原样进思考区**并落库**
+     * (`chat-run-messages.ts` 把 `thinking_delta` 存成 `{ kind: 'thinking' }`),
+     * 刷新之后永远还在。用户第五次撞到的就有这一半。
+     *
+     * 为什么必须是**第二个实例**而不是复用上面那个:剥离器带「半截标记」缓冲,
+     * 两条流交错喂进同一个缓冲会互相串位 —— 正文的半截会被思考流的下一片接上,
+     * 拼出一个两边都没写过的东西。各自一份缓冲是唯一安全的做法。
+     */
+    const thinkingGrammarStripper = createPanelGrammarStripper();
+    /*
+     * 这一轮的「下一步建议」(`<od-next key="…">`,见 `next-step-marker.ts`)。
+     *
+     * 和上面两个剥离器串在同一条链上,理由一样:所有可见文本都要过这条链,
+     * 挂在这里就不会漏掉任何一个调用点。它排在最外层 —— 看到的正是客户端
+     * 将要看到的文本,判据和最终屏幕上的东西一致。
+     *
+     * key 只管**采纳**,不管**剥离**:key 不对、没写 key、这一轮压根没 key,
+     * 标记照样吃掉。这是 `<od-title>` 拿线上事故换来的规矩。
+     */
+    const nextStepMarkerStripper = createNextStepMarkerStripper({
+      key: typeof run.doneKey === 'string' && run.doneKey ? run.doneKey : null,
+      emit: (suggestions) => send('agent', { type: 'next_steps', suggestions }),
+    });
+    /*
+     * 这一轮的「显示什么」(`<od-focus …/>`,见 `artifact-focus-marker.ts`)。
+     *
+     * 和上面三个剥离器串在同一条链上,理由一样:所有可见文本都要过这条链,
+     * 挂在这里就不会漏掉任何一个调用点。
+     *
+     * key 只管**采纳**,不管**剥离** —— 和 `<od-next>` 同一条规矩,也是
+     * `<od-title>` 拿线上事故换来的。
+     *
+     * `open` 还要过一道文件系统门:声明的路径必须落在项目根之内(realpath 之后
+     * 再判一次,软链走不出去),而且文件必须**非空**。空白预览在用户眼里就是
+     * bug,所以标记先到、字节后到时,标记是**攒着**而不是丢掉 —— 由
+     * `settle()` 在每个 tool_result 之后补发。
+     */
+    const artifactFocusStripper = createArtifactFocusMarkerStripper({
+      key: typeof run.doneKey === 'string' && run.doneKey ? run.doneKey : null,
+      projectRoot: typeof cwd === 'string' && cwd ? cwd : null,
+      emit: (selection) => send('agent', { type: 'artifact_focus', ...selection }),
+    });
+    const titleMarkerStripper = {
+      strip: (delta: string) =>
+        nextStepMarkerStripper.strip(
+          artifactFocusStripper.strip(
+            panelGrammarStripper.strip(rawTitleMarkerStripper.strip(delta)),
+          ),
+        ),
+      flush: () => {
+        const head = nextStepMarkerStripper.strip(
+          artifactFocusStripper.strip(
+            panelGrammarStripper.strip(rawTitleMarkerStripper.flush()),
+          ),
+        );
+        const mid = nextStepMarkerStripper.strip(
+          artifactFocusStripper.strip(panelGrammarStripper.flush()),
+        );
+        const tail = nextStepMarkerStripper.strip(artifactFocusStripper.flush());
+        return head + mid + tail + nextStepMarkerStripper.flush();
+      },
+    };
 
     function flushAgentTitleMarkerBuffer() {
       const visible = titleMarkerStripper.flush();
       if (visible) emitGuardedTextDelta(visible);
+      /*
+       * 思考流攒着的半截 —— 流结束了,它终究不是标记,原样吐回去。
+       *
+       * 「不吞用户的字」和「不闪半截标签」是同一条规矩的两面(见
+       * `panel-grammar-strip.ts` 开头的两条硬要求)。走 `send` 而不是
+       * `emitAgentEvent`,是因为这里已经出了剥离器,再进一次收口会被自己
+       * 重新扣住,永远吐不出来。
+       */
+      const heldThinking = thinkingGrammarStripper.flush();
+      if (heldThinking) send('agent', { type: 'thinking_delta', delta: heldThinking });
+      /*
+       * Backstop for the empty-file gate. The normal release path is the
+       * `tool_result` hook in `emitAgentEvent` — the write lands, the result
+       * frame arrives, the bytes are there. This covers the runtime that
+       * reports no write event at all: the file is on disk by the time the
+       * stream ends, so one last probe turns a held marker into an event.
+       * Fire-and-forget on purpose; the run must not block on a stat.
+       */
+      void artifactFocusStripper.settle();
     }
 
     function guardTextDelta(delta) {
@@ -14192,6 +14808,41 @@ export async function startServer({
     // follows the result that triggered it in the stream. (PR #3375 review:
     // Copilot and ACP bypassed the guard by calling send('agent', …) directly.)
     function emitAgentEvent(ev: any) {
+      /*
+       * 思考流的剧场语法剥离 —— 位置是判据的一部分,不是随手挑的。
+       *
+       * 必须在 `send('agent', …)` **之前**:落库(`persistRunEventToAssistantMessage`)
+       * 就挂在 `send()` 里,晚一步这段协议就永久写进 `{ kind: 'thinking' }`,
+       * 刷新之后再也擦不掉。
+       *
+       * 必须在 `emitAgentEvent` 这一层而不是某个适配器里:这是 27 个 runtime
+       * 唯一都要经过的收口(见下面 tool timing 的同款理由),挂在这里就没有
+       * runtime 能从覆盖面里漂出去 —— 上一次正是"某条路径漏挂"栽的跟头。
+       *
+       * 整片都是标记时连事件都不发,免得思考区多出一格空的「Thoughts」;
+       * 但"模型已经在出字"这件事照记,否则首字时延会被记晚。
+       *
+       * ⚠️ 该不该扔看的是 `strippingConsumedTheWholeFrame` ——「上游到底送没送字符」,
+       * 不是「剥完还剩没剩」。W102(2026-09-03)在这里栽过:原来写的是 `if (!visible)`,
+       * 而 claude 的思考帧正文 100% 是空串,`strip('')` 也返回空串,于是**整个
+       * claude 家族的思考帧被 100% 丢掉** —— 壳头「思考中」永远不亮(规格 W11 明写
+       * 「哪怕 delta 为空」也要进入思考中),传输层拿这些帧当心跳的静默计时也一起谎报。
+       * 判据与真机数字见 `panel-grammar-strip.ts` 上那个函数的注释。
+       */
+      if (ev?.type === 'thinking_delta' && typeof ev.delta === 'string') {
+        const visible = thinkingGrammarStripper.strip(ev.delta);
+        if (strippingConsumedTheWholeFrame(ev.delta, visible)) {
+          noteFirstOutputEvent(ev);
+          return;
+        }
+        if (visible !== ev.delta) ev = { ...ev, delta: visible };
+      }
+      // Stamp tool call start/finish time here — the one choke point every runtime
+      // funnels through — so all 27 adapters get per-call durations without each
+      // one growing its own clock. Only fills what is missing (ACP already carries
+      // `startedAt`). See `runtimes/tool-timing.ts` for why both ends can be absent
+      // and why the web treats a sub-100ms difference as "unknown", not "fast".
+      stampToolTiming(ev);
       // Fold work-completeness signals (TodoWrite snapshot / truncation) off the
       // stream BEFORE the send, so run.lastTodoSnapshot / run.truncatedMidTurn are
       // set by the time finish() derives run.endedWithUnfinishedWork (#1247/#1060).
@@ -14199,6 +14850,17 @@ export async function startServer({
       noteFirstOutputEvent(ev);
       send('agent', ev);
       observeToolEventForLoop(ev);
+      /*
+       * The `<od-focus open="…">` release point.
+       *
+       * A tool result is the daemon's only runtime-agnostic "the filesystem may
+       * have changed" signal — Write, Edit, and a Bash heredoc all land here,
+       * and this is the choke point every one of the 27 adapters funnels
+       * through, so no runtime can drift out of coverage. `settle()` is a no-op
+       * unless a marker is actually waiting on bytes, and it is idempotent, so
+       * calling it on every result costs one branch.
+       */
+      if (ev?.type === 'tool_result') void artifactFocusStripper.settle();
     }
 
     const sendAgentEvent = (ev) => {
@@ -14832,6 +15494,45 @@ export async function startServer({
           }
           send(event, data);
         },
+      });
+    } else if (def.streamFormat === CODEX_APP_SERVER_STREAM_FORMAT) {
+      // codex over the JSON-RPC `app-server` transport. Everything flows
+      // through `sendAgentEvent`, exactly as it does for `exec --json`: the
+      // normalizer translates app-server notifications back into the codex
+      // stream frames the shipping parser already understands, so tool rows,
+      // file changes, warnings, errors and usage take the same code path they
+      // always did. The transport's own additions are token-level text and
+      // reasoning deltas.
+      trackingSubstantiveOutput = true;
+      acpSession = attachCodexAppServerSession({
+        child,
+        prompt: composed,
+        cwd: effectiveCwd,
+        model: safeModel,
+        reasoning: safeReasoning,
+        serviceTier: safeServiceTier,
+        sandboxMode: codexResolvedSandboxMode(),
+        imagePaths: def.supportsImagePaths ? amrStagedImages : [],
+        clientVersion: design.getAppVersion?.() ?? '0.0.0',
+        // Capture-style resume, same contract as `exec resume <thread_id>`:
+        // the id comes off the stream, and the daemon replays it here.
+        resumeSessionId:
+          agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+            ? agentResumeCtx.resumeSessionId
+            : null,
+        onAgentEvent: (event) => sendAgentEvent(event),
+        onCliReady: () => noteCliReadyAt(),
+        onSessionReady: () => noteSessionInitDoneAt(),
+        // The prompt boundary for this transport is the `turn/start` write, not
+        // a stdin write that never happens. Marking it keeps the Langfuse
+        // `stdin-write` and `agent-call` spans — and therefore the tool spans
+        // nested under `agent-call` — present on app-server runs.
+        onPromptSendStart: () => {
+          lifecycle.mark('model_call_start');
+          lifecycle.mark('stdin_write_start');
+        },
+        onPromptSendEnd: () => lifecycle.mark('stdin_write_end'),
+        onTurnComplete: () => clearFirstOutputWatchdog(),
       });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
@@ -15629,8 +16330,27 @@ export async function startServer({
             persistRunEventToAssistantMessage(db, run, tailEvent, tailData);
             design.runs.emit(run, tailEvent, tailData);
             strategyVisibleEmitted += tail;
+            // The frozen Harness prompt currently does not receive the nonce,
+            // so its authoritative completion signal remains the verified
+            // strategy verdict. Still fold a marker if a future frozen bundle
+            // explicitly carries the protocol; this close-time tail bypasses
+            // send() and would otherwise be the only uncovered visible path.
+            const doneCapture = advanceAuthenticatedDoneCapture({
+              fullVisibleText: strategyProtocolResult.visibleText,
+              delta: tail,
+              key: typeof run.doneKey === 'string' ? run.doneKey : '',
+              state: {
+                markerTail: run.completionMarkerTail,
+                awaitingConclusion: run.completionMarkerAwaitingConclusion,
+                authenticatedConclusion: run.authenticatedDoneConclusion,
+              },
+            });
+            run.completionMarkerTail = doneCapture.markerTail;
+            run.completionMarkerAwaitingConclusion = doneCapture.awaitingConclusion;
+            run.authenticatedDoneConclusion = doneCapture.authenticatedConclusion;
           }
         }
+        await captureChatArtifactsBeforeSuccess();
         try {
           await snapshotAiHtmlVersionsBeforeSuccess();
         } catch (err) {
@@ -15962,18 +16682,16 @@ export async function startServer({
         // messages into the same turn. The stdin is closed on a clean terminal
         // turn (see applyClaudeStreamJsonRunBookkeeping) or when the child
         // exits (run terminates, user cancels).
-        const userMessage = JSON.stringify({
-          type: 'user',
-          message: {
-            role: 'user',
-            content: [{ type: 'text', text: composed }],
-          },
-        });
+        //
+        // Shared encoder with B11 steering (`run-steering.ts`): a mid-turn
+        // frame the model does not recognise fails invisibly, so the opening
+        // prompt and the steering write must never drift apart.
+        const userMessage = encodeStreamJsonUserMessage(composed);
         try {
           // E-lite: `write` returns false when the chunk was buffered because the
           // OS pipe is full (the child isn't draining stdin) — the corroborating
           // signal for a `stdin_write`-phase inactivity stall.
-          const accepted = child.stdin.write(`${userMessage}\n`, 'utf8', markStdinWriteEnd);
+          const accepted = child.stdin.write(userMessage, 'utf8', markStdinWriteEnd);
           run.stdinBackpressure = accepted === false;
         } catch (err) {
           // Swallow EPIPE here for the same reason as the listener above —
@@ -16764,11 +17482,16 @@ export async function startServer({
       orbitService.stop();
       routineService?.stop();
       clearInterval(teamResourcesPollTimer);
+      // Disarms synchronously; the returned promise drains an in-flight pass.
+      // Nothing here awaits it — the point is that no NEW pass can start once
+      // the daemon is coming down.
+      void chatArtifactMaintenance.stop();
       workspaceHubSubscriptions?.dispose();
       hubEventRefreshes.dispose();
       workspaceDirectoryRefreshes.dispose();
       workspaceBillingRuntime.dispose();
       proactiveContentPull.dispose();
+      collabPublishWatcher.dispose();
       collabCloud?.dispose();
     };
     const shutdownDaemonRuns = async () => {

@@ -354,6 +354,26 @@ export async function generateMedia(args: {
   desktopFrameRenderer?: DesktopFrameRenderer | null;
   workspaceId?: string;
   onProviderRequestSettled?: (summary: ImageGenerationRequestSummary & { providerId: string }) => void;
+  /**
+   * Called once with the EXACT provider bytes that were just written, while
+   * they are still in memory.
+   *
+   * This is the strongest capture point in the daemon: the caller receives the
+   * very buffer that produced the file, so an immutable snapshot never has to
+   * re-read a path that the next turn may already have overwritten. The media
+   * layer stays a pure dispatcher — it hands over bytes and a project-relative
+   * name and knows nothing about snapshots, runs, or messages.
+   *
+   * Failures here must never fail the generation, so the caller's rejection is
+   * swallowed by design.
+   */
+  onBytesWritten?: (written: {
+    bytes: Buffer;
+    name: string;
+    mime: string;
+    kind: string;
+    mtime: number;
+  }) => void | Promise<void>;
 }) {
   const {
     projectRoot,
@@ -850,6 +870,21 @@ export async function generateMedia(args: {
   const finalTarget = path.join(dir, finalOut);
   await writeFile(finalTarget, bytes);
   const st = await stat(finalTarget);
+  if (args.onBytesWritten) {
+    try {
+      await args.onBytesWritten({
+        bytes,
+        name: finalOut,
+        mime: mimeFor(finalOut),
+        kind: kindFor(finalOut),
+        mtime: st.mtimeMs,
+      });
+    } catch (err) {
+      // A snapshot is evidence, not a precondition. Losing it degrades one
+      // chat card; failing the generation here would lose the file itself.
+      console.warn('[media] onBytesWritten hook failed', err);
+    }
+  }
   return {
     name: finalOut,
     size: st.size,

@@ -24,6 +24,7 @@ import { useBrandsByDesignSystemId } from '../runtime/brands';
 import { DesignSystemKitPreview } from './DesignSystemKitPreview';
 import { DesignSystemPreviewModal } from './DesignSystemPreviewModal';
 import { Icon } from './Icon';
+import { ComposerPaletteIcon } from './chat/primitives/icons';
 
 // Mirror DesignSystemsTab's user/official split so the picker's grouping lines
 // up exactly with the "你的体系 / 官方预设" tabs in the Design Systems tab.
@@ -496,7 +497,7 @@ export function DesignSystemPicker({
           title={selected?.title ?? t('designSystemPicker.noneTitle')}
           onClick={() => setOpen((v) => !v)}
         >
-          <Icon name="palette" size={16} />
+          <ComposerPaletteIcon size={16} />
           {selected ? (
             <span className="composer-ds-icon-trigger-label">{selected.title}</span>
           ) : null}

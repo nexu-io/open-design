@@ -18,7 +18,11 @@
   height: 38px;
   position: sticky;
   top: 0;
-  z-index: 4;
+  /* Above the jump-to-latest pill (z-index: 6) and the message rail
+     (z-index: 8). The history menu belongs to this sticky stacking context,
+     so the header must clear both chat overlays or the rail's transparent
+     20px hit zone steals clicks from the menu's trailing edge. */
+  z-index: 9;
 }
 .chat-project-header::after {
   content: '';
@@ -151,6 +155,25 @@
   background: var(--bg-subtle);
   color: var(--text);
 }
+/* 面板头第二颗图标键「新会话」(稿子 729fa43ce7 · src/body-scene.html:8)。
+   盒子/悬停整套复用上面的 .chat-session-trigger —— 稿子里这两颗本来就是同一副
+   `.panel-hd button`。这里只补它作为 flex 直接子项不被压缩:
+   .chat-session-switcher 自带 flex:0 0 auto,这一颗在 wrapper 外面,没有。 */
+.chat-project-header .chat-new-conversation {
+  flex: 0 0 auto;
+}
+/* 禁用表现沿用产品原来那颗「新建」的写法(`cursor: default; opacity: .55`)——
+   那颗按钮和它在 `styles/viewer/composio.css` 里的 `.chat-history-new` 一组样式
+   已随入口收敛删掉了(产品裁决 2026-09-03),这里是它留下的唯一一处禁用表现。
+   额外把底色按回透明:全局 `styles/primitives.css` 的 `button:disabled`
+   带 `background: var(--bg-subtle)`,选择器权重压过 `.chat-session-trigger` 自己的
+   `background: transparent` —— 不按回来,这颗图标键一禁用就变成一个灰色实心方块,
+   读起来是另一种控件。 */
+.chat-project-header .chat-new-conversation:disabled {
+  background: transparent;
+  cursor: default;
+  opacity: 0.55;
+}
 .chat-header-tabs { display: inline-flex; gap: 16px; flex: 1; }
 .chat-header-tab {
   background: transparent;
@@ -246,6 +269,47 @@
   /* No visible scrollbar: the message rail at the right edge is the
      positional affordance for the log. */
   scrollbar-width: none;
+}
+/* The Step pill is an overlay, but the final transcript line still needs a
+   real scroll destination above it. Reserve only while the pill exists so
+   virtualized and regular transcripts share the same bottom safety area.
+
+   52px = 12(药丸底边离 viewport,`.chat-bottom-float-slot { bottom: 12px }`)
+        + 32(药丸自身高:内距 5+5 + 描边 1+1 + 球 20)
+        +  8(呼吸位)
+   前 44 是硬账:让位不足这个数,滚到最底时最后一行就落进药丸的矩形里。
+
+   ── 类名为什么写两遍 ────────────────────────────────────────────────
+   `routines.css` 里有一条同为 (0,2,0) 的皮肤规则:
+
+       .app .chat-log, .chat-skin .chat-log { padding: 18px 18px 20px }
+
+   而 `index.css` 里 routines.css 排在 chat.css **后面** —— 同优先级后来居上,
+   那句 `padding` 简写会把这里的 `padding-bottom` 整个打掉。这条预留因此从写下
+   那天起在真实产品里就没生效过:真机量到 `paddingBottom` 一直是 20px,
+   滚到底时药丸压住最后一行 13.88px(用户 2026-09-03 实机报的就是这个)。
+   偏偏同一条规则里的 `scroll-padding-bottom` 活了下来(`padding` 简写不重置
+   `scroll-padding`),半死不活的样子让它看着像已经修好了。
+
+   把类名写两遍拿到 (0,3,0),**靠优先级赢,不靠源码顺序** —— 也不用在这里点名
+   `.app` / `.chat-skin`,将来多一层皮肤这条依然成立。`routines.css` 里那条
+   `padding` 简写不必动,省得牵连它同一条规则里的 gap/背景。
+
+   ── 这块让位不会撑大「新消息滚到最顶」的空白 ──────────────────────────
+   底部空间 = 这里的 padding-bottom(静态地板)+ `.chat-log-tail-spacer` 的高度
+   (anchor-to-top 的动态顶补)。顶补是从 `scrollHeight` 减出来的,而 `scrollHeight`
+   **含**容器内距 —— 地板 +32 ⇒ 顶补 −32,两块之和是常数。所以抬地板不会加重
+   「刚发完消息底下一大片空白」那一条。真机对照(带计划的一轮,滚到最底):
+   同一页把预留类摘掉再挂上,最后一行相对药丸正好挪 32px。
+
+   ── 守卫 ──────────────────────────────────────────────────────────
+   · `tests/components/chat/w95-plan-pill-bottom-reserve.test.tsx`
+     自己算层叠 —— jsdom 的 getComputedStyle 不实现优先级,拿它当判据会假绿。
+   · `tests/components/chat/w95-reserve-vs-anchor-spacer.test.ts`
+     地板 + 顶补之和恒定,证明抬地板不会撑大顶补。 */
+.chat-log.has-plan-pill-reserve.has-plan-pill-reserve {
+  padding-bottom: 52px;
+  scroll-padding-bottom: 52px;
 }
 .chat-log::-webkit-scrollbar {
   display: none;
@@ -354,20 +418,19 @@
 }
 .chat-message-rail__preview {
   position: absolute;
-  /* The rail sits at the pane's right edge; the card opens to its left. */
-  right: 36px;
+  /* The rail's right edge is 4px inside the pane. A 16px inset puts this
+     card's right edge on the transcript's 20px content boundary. */
+  right: 16px;
   top: var(--chat-message-rail-y);
   width: min(280px, calc(100vw - 88px));
   max-width: 280px;
   padding: 12px 14px;
   border: 1px solid var(--material-separator);
   border-radius: 12px;
-  /* Keep the text side calm and opaque, then reveal more of the transcript
-     toward the rail so the card reads as a white-to-glass lens. */
-  background: linear-gradient(to right, var(--bg-elevated), var(--glass-regular));
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  color: var(--text);
+  /* This card overlays the transcript, so translucency would merge two
+     different messages into one unreadable layer. */
+  background: var(--chat-floating-card-bg);
+  color: var(--chat-floating-card-text);
   box-shadow: 0 18px 40px color-mix(in srgb, var(--text) 12%, transparent);
   transform: translateY(-50%);
   pointer-events: none;
@@ -454,12 +517,16 @@
   flex: 0 0 auto;
   min-height: 100%;
 }
+/* 虚拟化那条路(消息数超过阈值时)。行是**绝对定位**的,`.chat-log` 的 flex gap
+   在这儿一点都不生效 —— 行距只由这条 padding 给。所以它必须等于轮次**内部**
+   那一档(12);换人说话时多出来的那 12 由行里 `.msg` 自己的上外距补,
+   见 `viewer/routines.css` 的「换人说话 = 24」一段。两条路因此算出同一个数。 */
 .chat-virtual-row {
   position: absolute;
   left: 0;
   right: 0;
   top: 0;
-  padding-bottom: 14px;
+  padding-bottom: 12px;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -501,7 +568,21 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  max-width: min(78%, 560px);
+  /* 上限不再由这一层管:附件行锁 412、气泡锁 380,两条各管各的(见 .msg-stack)。
+     再在外面套一个 78% 会让两条上限在窄面板里同时失效,右边界反而对不齐。 */
+  max-width: 100%;
+}
+/* 一条消息里附件在上、文字在下,右边界对齐 —— 它们是同一条消息,不是两条(#53)。
+   412 = 6 × 64 + 28,刻意错开卡片节拍(卡 57 + 缝 7 = 一格 64):
+   写 380 的话切点正好落在第 6 张卡之后的缝里,7 张附件看起来就是整整齐齐的 6 张,
+   「后面还有」一点痕迹都没有。412 把切点挪到第 7 张卡的腰上。
+   壳子刻意不设 width:100% —— 那样两个孩子会各自按自己的百分比算宽度。 */
+.msg.user .msg-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  max-width: min(100%, 412px);
 }
 .msg .role {
   display: flex;
@@ -521,16 +602,149 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* 消息辅助信息**专用**的静音色(PR #7170 `components.css` 的 `--message-muted-ink`)。
+   ------------------------------------------------------------
+   稿子把时间戳、复制、反馈、fork 收进同一档 `#a3a3a3`,并写明「不联动全局次级文字
+   或已选中的反馈状态」—— 所以它是一枚**专用 token**,不是把 `--text-soft` 调一调:
+   前者只影响这一层,后者会把整个产品的次级文字一起拖走。
+   值在明暗两套主题下都一样(和 `--border-selected` 同色),这是稿子的本意:
+   它是消息旁边那圈附属信息的固定音量,不跟着主题的正文对比度走。
+   ⚠️ 只给「时间 / 复制」这类附属信息用。赞踩选中后是语义绿 / 红,
+   它们住在 `viewer/theater.css` / `viewer/composio.css`;这枚 token 一旦漫过去,
+   「我选过了」这件事就被抹掉了。 */
+/* 定义处对齐稿子的 `.msg-act, .fb, .fork-note` —— 谁用它谁自己声明一次,
+   而不是挂到 chat 根上让整棵树都继承得到:那样迟早会有人「顺手」拿它染别的东西。 */
+.msg,
+.fork-note {
+  --chat-message-muted-ink: #a3a3a3;
+}
+.msg.user {
+  /* 气泡底色只能有一个出处:hover 变色、以及折行时盖住半个字的那道渐变,
+     必须和它同色 —— 写死两处早晚会分叉。接入 chat 接缝后这条搬去 --chat-bub-bg(W1)。
+     ------------------------------------------------------------
+     稿子(PR #7170)把这枚底从 `--text-strong`(#202020)再压深一档到 #121212。
+     不直接写在 `--bub-bg` 上,是因为**暗色下不能跟着压**:那边气泡是「浅底深字」
+     (`color: var(--bg)`),再压成近黑就是黑底黑字。所以中间隔一枚
+     `--chat-user-bubble-ground`,明暗各给各的。 */
+  --chat-user-bubble-ground: #121212;
+  --bub-bg: var(--chat-user-bubble-ground);
+}
+/* 暗色回到主题自己的最强墨色 —— 那边气泡是浅底,近黑会把白字吃掉。
+   两条选择器对齐 `styles/tokens.css` 的写法:显式 [data-theme] 与系统跟随各一条。 */
+[data-theme="dark"] .msg.user {
+  --chat-user-bubble-ground: var(--text-strong);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .msg.user {
+    --chat-user-bubble-ground: var(--text-strong);
+  }
+}
 .msg.user .user-text {
+  /* 稿子是深底白字,缺口在**右下**(原来是浅底深字、缺口在右上) */
   white-space: pre-wrap;
-  color: var(--text);
-  background: #ededed;
+  color: var(--bg);
+  background: var(--bub-bg);
   border: none;
-  border-radius: var(--radius-lg) var(--radius-none) var(--radius-lg) var(--radius-lg);
-  padding: 8px 12px;
-  line-height: 1.5;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  padding: 9px 13px;
+  line-height: 1.7;
   font-size: 13px;
+  /* 稿子 `.bub { font-weight: 500 }` —— 深底白字在常规字重下会显得比周围的
+     助手正文更细;medium 把它拉回同一个视觉重量。 */
+  font-weight: 500;
   box-shadow: none;
+  /* 承载用户输入的容器要能把没有空格的一长串断开(链接 / token / 路径 / base64)。
+     用 anywhere 不用 break-all:后者会把每个英文词都拆散 */
+  overflow-wrap: anywhere;
+  max-width: min(84%, 380px);
+}
+/* 在 .msg-stack 里气泡锁死 380(不跟着壳子的 412 变宽):412 的气泡离面板左缘
+   只剩 8px,「我说的话贴右边」这个读感就没了。 */
+.msg.user .msg-stack .user-text {
+  max-width: min(100%, 380px);
+  position: relative;
+}
+
+/* ── 超长消息折到 6 行,文末留一枚「…」(#46 / #47)──────────────────
+   这是流水里唯一没有上限的东西 —— 用户自己贴进来的内容最没法预估:
+   一段日志、一份需求文档、一整个报错堆栈。不封顶的话一条消息就能把上下文
+   全顶出屏幕。6 行的来历:13px × 1.7 行高 ≈ 22px,6 行 ≈ 132px。
+   ------------------------------------------------------------------
+   折的是【里面那层 .user-text-txt】,不是气泡本身:-webkit-line-clamp 的裁切
+   边界是 padding box,直接折在气泡上的话第 7 行会从那 9px 下内边距里露半条字。 */
+.msg.user .user-text-clip {
+  position: relative;
+  display: block;
+}
+.msg.user .user-text-txt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+}
+.msg.user .user-text.is-expanded .user-text-txt {
+  display: block;
+  overflow: visible;
+}
+/* 「…」只在【真的被截断】时才出(is-cut 由 JS 量出来,见 useIsTextClamped)。
+   同一段话在宽一点的面板里可能六行就说完了,那时候还挂一枚「…」是在说一句
+   不存在的下文。左边垫一段由透明化到 --bub-bg 的 26px 渐变:被压在下面的那半个
+   字不能硬生生被切一刀,化过去才像是文字自己淡出;底色走同一个变量,气泡 hover
+   变色时它跟着变。 */
+.msg.user .user-text-more {
+  display: none;
+}
+.msg.user .user-text.is-cut .user-text-more {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 0;
+  display: inline-flex;
+  align-items: center;
+  height: auto;
+  padding: 0 0 0 26px;
+  border: none;
+  background: linear-gradient(to right, transparent 0, var(--bub-bg) 26px);
+  color: var(--bg);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.7;
+  cursor: pointer;
+}
+/* 气泡下面单独给一行「查看全部」。
+   气泡内右下角那枚「…」说的是「这里被截断了」,是个记号;这一行说的是
+   「点这里看全文」,是个动作。记号挤在文末容易被当成正文的一部分,
+   动作放出来才有人点。 */
+.msg.user .msg-more {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.msg.user .msg-more button {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: auto;
+  padding: 2px 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  /* 装在气泡【里面】,跟着气泡的前景色走(反色底上是白),压一档透明度让它
+     退在正文后面 —— 它是出口,不是话。 */
+  color: color-mix(in srgb, var(--bg) 68%, transparent);
+  cursor: pointer;
+  transition: color 100ms var(--ease-out);
+}
+.msg.user .msg-more button:hover {
+  color: var(--bg);
+}
+.msg.user .msg-more button .od-icon {
+  width: 12px;
+  height: 12px;
+}
+.msg.user .user-text.is-expanded .msg-more button .od-icon {
+  transform: rotate(180deg);
 }
 .msg.user.is-chat-rail-highlighted .user-bubble {
   outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
@@ -829,10 +1043,6 @@
   align-items: flex-end;
   max-width: 100%;
 }
-.msg.user .user-status-wrap {
-  display: flex;
-  justify-content: flex-end;
-}
 .msg.assistant .op-waiting {
   display: inline-flex;
   align-items: center;
@@ -872,81 +1082,94 @@
   font-size: 12px;
   font-style: italic;
 }
-.user-status-card {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  max-width: min(320px, 100%);
-  padding: 9px 11px;
-  border-radius: 14px 14px 4px 14px;
-  background: var(--bg-fill-tertiary);
-  border: none;
-  box-shadow: none;
-  color: var(--text);
-  text-align: start;
-}
-.user-status-card__icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-.user-status-card__copy {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.user-status-card__copy strong {
-  font-size: 13px;
-  line-height: 1.2;
-  font-weight: 600;
-}
-.user-status-card__copy span {
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--text-muted);
-}
-
 /* Hover-revealed footer below the user bubble: time + copy (Lobe style) */
+/* 操作位在气泡【下方】,距气泡 4px、右缘对齐:单行 / 多行合并成同一种情况,
+   气泡的 padding 或 line-height 再怎么改都不会错位(#50 / #51)。 */
 .msg.user .user-actions {
   display: flex;
   align-items: center;
   gap: 4px;
   margin-top: 4px;
-  min-height: 20px;
+  min-height: 30px;
+}
+/* 藏的是**这一行里的时间和复制**,不是这一行本身。
+   ------------------------------------------------------------
+   稿子(PR #7170 `components.css`)把「藏」写在孩子身上,并且把重试排除在外:
+
+       .msg-act .tm,
+       .msg-act button:not(.keep) { opacity: 0; pointer-events: none; … }
+
+   写在父级 `.user-actions` 上是不等价的:`opacity` 不继承,它建的是**合成组**,
+   孩子无法把祖先的 0 撤销。于是「重试」跟着一起被藏 —— 消息没发出去,
+   屏幕上什么都不出,要先 hover 才知道有这么一颗按钮。
+   而重试恰恰是这条消息**随时可能要用的出口**:没发成功、或者结果不对,
+   手要能直接够到。`ChatPane.tsx` 那颗按钮旁边的注释写的也正是「不跟着 hover 出没」。
+
+   藏起来用 opacity 不用 display —— 位置一直占着,浮出时这一行不跳。
+   pointer-events 一并关掉:看不见的按钮不该点得到。
+   守卫见 `tests/components/chat/user-retry-always-visible.test.tsx`
+   (量的是「从按钮乘到消息根」的有效不透明度 —— 按钮自己的 opacity 是假读数)。 */
+.msg.user .user-actions-time,
+.msg.user .user-actions button:not(.user-keep-btn) {
   opacity: 0;
+  pointer-events: none;
   transition: opacity 140ms var(--ease-out);
 }
-.msg.user .user-text-wrap:hover .user-actions,
-.msg.user .user-text-wrap:focus-within .user-actions {
+.msg.user .user-text-wrap:hover .user-actions-time,
+.msg.user .user-text-wrap:hover .user-actions button:not(.user-keep-btn),
+.msg.user .user-text-wrap:focus-within .user-actions-time,
+.msg.user .user-text-wrap:focus-within .user-actions button:not(.user-keep-btn) {
   opacity: 1;
+  pointer-events: auto;
+}
+/* 气泡 hover **不变色**(2026-08-26 用户裁决:「不要 hover 变色反正,你干掉吧」)。
+   ------------------------------------------------------------
+   稿子里确实有 `.msg-row:hover .bub { --bub-bg: var(--text) }`,但那条在交付稿自己
+   那一页上是**死规则** —— 普通气泡的祖先是 `.msg-me`,全文只有两格摆拍 hover 态的
+   用了 `.msg-row.is-hover`。用户在原稿上 hover 没有任何反应,据此裁掉。
+   顺带解掉了它自带的矛盾:那节状态名写「背景加深」,值却是 #202020 → #494949,
+   在白底上是变浅。
+   hover 仍然有反馈 —— 时间与复制会浮出来(见上面 `.user-actions` 那条)。 */
+/* 时间不是动作,所以不给它按钮那套 30px 命中框 —— 做成能点的样子等于给一个
+   按了没反应的东西。字号 12,颜色走消息静音层(见 `--chat-message-muted-ink`):
+   这一行的主角是复制,时间只是附注。 */
+.msg.user .user-actions-time {
+  margin-inline-start: 2px;
+  font-size: 12px;
+  color: var(--chat-message-muted-ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .msg.user .user-copy-btn {
-  padding: 4px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border: none;
   background: none;
   border-radius: var(--radius-sm);
-  color: var(--text-soft);
+  color: var(--chat-message-muted-ink);
   cursor: pointer;
-  display: inline-flex;
   transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
+/* hover 只换底,不换字色(稿子 `.msg-act button:hover` 就是这么写的)。
+   字色一 hover 就跳档,这排东西就不再是「一档静音色」而是两档;
+   而 hover 要说的事(「这个能点」)由底色说完就够了。 */
 .msg.user .user-copy-btn:hover {
-  color: var(--text);
   background: var(--bg-subtle);
 }
 .msg.user .user-copy-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* 触屏没有 hover 这一档,所以时间和复制常驻 —— 否则它们永远够不到。
+   目标跟着上面那条一起从整行改成行里的两样(重试本来就不藏)。 */
 @media (hover: none) {
-  .msg.user .user-actions {
+  .msg.user .user-actions-time,
+  .msg.user .user-actions button:not(.user-keep-btn) {
     opacity: 1;
+    pointer-events: auto;
   }
 }
 .msg.assistant .prose { margin-top: 8px; }
@@ -959,15 +1182,19 @@
   color: white;
   border-radius: var(--radius-xs);
 }
-/* Run recovery uses the shared user-action card. Only the concrete problem and
-   primary recovery action stay visible; friendly copy plus raw diagnostics are
-   grouped in one expandable detail area. */
-.run-error__details {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
+/* Legacy run-recovery card styling. The card itself moved to a CSS Module in
+   `38aa03bff4` (chat panel rebuild) - `components/chat/RunErrorCard.tsx` now
+   emits hashed class names plus `data-testid="chat-run-error-description"`, so
+   none of these global BEM names reach the DOM any more.
 
+   `.run-error__details` and `.run-error__desc` were removed with that evidence
+   (zero producers anywhere in `src/`; guard: `tests/components/chat/w74-dead-css-rules.test.ts`).
+
+   `.run-error__description` is kept on purpose even though it is equally
+   unreachable: `e2e/ui/project-management-flows.test.ts` still anchors an
+   assertion on `page.locator('.run-error__description')`. That e2e selector was
+   missed by the same rebuild and needs an owner before this rule goes - either
+   the card re-emits the name, or the selector migrates to the test id. */
 .run-error__description {
   margin: 0;
   font-size: 13px;
@@ -975,125 +1202,7 @@
   line-height: 1.4;
   color: var(--text-strong);
 }
-.run-error__desc {
-  margin: 3px 0 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-muted);
-  max-width: 64ch;
-  overflow-wrap: anywhere;
-}
 
-.run-error__diagnostic {
-  overflow: hidden;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-}
-
-.run-error__diagnostic-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 5px 7px 3px 10px;
-  color: var(--text-soft);
-}
-/* Copy diagnostics — sits at the right edge of the source head row. */
-.run-error__source-copy {
-  flex: 0 0 auto;
-  appearance: none;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  color: var(--text-soft);
-  transition: background 140ms cubic-bezier(0.23, 1, 0.32, 1), color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.run-error__source-copy:hover {
-  background: var(--bg-fill-tertiary);
-  color: var(--text);
-}
-.run-error__source-chevron {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
-  color: var(--text-faint);
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.run-error__source.is-open .run-error__source-chevron { transform: rotate(90deg); }
-.run-error__source-label {
-  flex: 0 0 auto;
-  font-size: 12px;
-  font-size: 11px;
-  font-weight: 600;
-}
-.run-error__source-peek {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.run-error__source.is-open .run-error__source-peek { opacity: 0; }
-/* max-height accordion (robust where grid-rows:0fr leaks the first child line) */
-.run-error__source-full {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 220ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.run-error__source.is-open .run-error__source-full { max-height: 240px; }
-.run-error__source-full > pre {
-  margin: 0;
-  overflow: auto;
-  max-height: 220px;
-  padding: 4px 10px 10px;
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.run-error__diagnostic > pre {
-  max-height: 220px;
-  margin: 0;
-  padding: 4px 10px 10px;
-  overflow: auto;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.run-error__source-copy {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-xs);
-  background: transparent;
-  color: var(--text-soft);
-  cursor: pointer;
-}
-
-.run-error__source-copy:hover {
-  background: var(--bg-fill-tertiary);
-  color: var(--text);
-}
 /* Primary contextual CTA (Authorize & retry / Top up / terminal launch). */
 .chat-error-action {
   flex: 0 0 auto;
@@ -1221,11 +1330,13 @@
 
 /* -------- Composer -------------------------------------------------- */
 .pane {
-  --chat-composer-inline-inset: 12px;
+  /* Queue / PlanPill are siblings of the composer, so this is the one source
+     of truth for the column that their visible edges align to. */
+  --chat-composer-inline-inset: 16px;
 }
 
 .composer {
-  padding: 10px 16px;
+  padding: 10px var(--chat-composer-inline-inset, 16px);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1252,6 +1363,13 @@
 .chat-composer-slot {
   flex: 0 0 auto;
 }
+.chat-composer-slot[aria-hidden='true'] {
+  /* Once the composer is portaled, this node is only its layout placeholder.
+     It can sit in a higher workspace stacking context (for example while
+     manual edit mode is active), so it must never intercept clicks intended
+     for the visible fixed-layer composer beneath it. */
+  pointer-events: none;
+}
 .chat-composer-fixed-layer {
   position: fixed;
   z-index: 45;
@@ -1262,6 +1380,12 @@
      fully above the transcript. */
   contain: layout style;
   transform: translateZ(0);
+}
+body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
+  /* Manual edit elevates the workspace above a body-portaled survey. The
+     composer is portaled separately, so keep it one layer above that shell or
+     the shell wins hit testing even though the input remains visible. */
+  z-index: 1501;
 }
 .chat-composer-fixed-layer .composer,
 /* The 扩展 / 设计百宝箱 quick pills travel with the composer into this layer;
@@ -1305,8 +1429,8 @@
      container clips it). */
   .composer-row .session-mode-toggle__popover { left: auto; right: 0; }
   .composer-row .composer-send {
-    width: 36px;
-    min-width: 36px;
+    width: 28px;
+    min-width: 28px;
     padding: 0;
     gap: 0;
   }
@@ -1526,6 +1650,27 @@
   background: var(--accent);
   opacity: 0.85;
   animation: home-hero-carousel-caret 900ms steps(1) infinite;
+}
+/* 会话面板输入框的行高 —— 稿子 `.composer .ta { line-height: var(--lh-body) }`
+   (`729fa43ce7:docs/design/chat-panel/src/components.css:3100`,`--lh-body` = **1.7**)。
+
+   ⚠️ 为什么另起一条**带 `[data-chat-root]`** 的规则,而不是把上面那个 1.6 改掉:
+   `.composer-input-editor` 这一族是**共用**的 —— 同一个 Lexical 编辑器同时服务
+   会话面板(`ChatComposer`)和首页 hero(`HomeHero`,外壳 `.home-hero__lexical`,
+   字号自己抬到 14)。直接改基线会把首页的输入框一起带走,而首页不在这次对稿范围里。
+   `[data-chat-root]` 是现成的作用域钩子:`ChatPane` 用 `chatSeam('pane')` /
+   `chatSeam('chat-composer-fixed-layer')` 把它抹在输入框的祖先上,首页 hero 和
+   批注侧栏都没有它。特异性 (0,3,0) / (0,2,0) 稳压各自的基线,不靠源码顺序。
+
+   三层一起抬,少一层就会错位:真正写字的那层、Lexical 的静态占位符、
+   以及盖在占位符原位上的打字机轮播 —— 它们是同一行字的三种状态。
+   (行内 @芯片的 19px 方盒不跟着变:它按 `vertical-align: middle` 居中,
+    高度不是从行高推出来的,见下面 `.composer-inline-mention` 那段注释。) */
+[data-chat-root] .composer-input-editor [contenteditable='true'],
+[data-chat-root] .composer-input-editor .composer-editable,
+[data-chat-root] .composer-input-placeholder,
+[data-chat-root] .composer-input-wrap .home-hero__carousel {
+  line-height: 1.7;
 }
 /* Single-paragraph + LineBreakNode model: collapse paragraph margins so a
    serialized "\n" reads as a single visual line break (no \n\n gap). */
@@ -1800,6 +1945,29 @@
 }
 .composer-row .icon-btn:active:not(:disabled) { background: var(--bg-muted); }
 .composer-row .icon-btn:disabled { opacity: 0.45; cursor: default; }
+/* 会话面板底栏那颗图标键的墨色 —— 稿子
+   `729fa43ce7:docs/design/chat-panel/src/components.css:3112-3116`:
+     .composer .bar button       { color: var(--text-strong) }        → #202020
+     .composer .bar button:hover { background: var(--bg-fill-secondary) }
+
+   两条必须**一起**改。静止态提到最深那一档之后,原来的 hover(`color: var(--text)`
+   = #494949)方向就反了 —— 鼠标停上去反而变浅,读成「失焦了」。稿子那段注释
+   把这件事写成了规则:提到最深之后 hover 只留底色。描边同理:静止态是
+   `1px solid transparent`,稿子 hover 一条边框都不写,所以这里把它按住在
+   `transparent`,而不是长出一圈 `--border`。
+
+   ⚠️ 同样挂 `[data-chat-root]` 收敛作用域:`.composer-row` 是共用类名 ——
+   批注侧栏「新建评论」的动作行(`FileViewer` 的
+   `.composer-row.comment-side-new-comment-actions`)也吃它,而那一行不在
+   这次对稿范围里。(0,3,0) / (0,5,0) 稳压各自的基线。 */
+[data-chat-root] .composer-row .icon-btn {
+  color: var(--text-strong);
+}
+[data-chat-root] .composer-row .icon-btn:hover:not(:disabled) {
+  background: var(--bg-fill-secondary);
+  color: var(--text-strong);
+  border-color: transparent;
+}
 .composer-spacer { flex: 1; }
 
 /* --- Composer footer: one control system ----------------------------------
@@ -2089,6 +2257,19 @@
   border-radius: 50%;
   background: var(--accent);
 }
+/* W134: box brought back to the draft's 28×28 (`729fa43ce7:
+   docs/design/chat-panel/src/components.css:3105-3125` — `.composer .bar
+   button` / `.composer .bar .send` share one box with every other footer
+   icon button, `.send` only adds fill color + pill radius). The 36px box,
+   1px border and `--shadow-xs` were the product's pre-existing generic
+   `button` + `.primary` primitive geometry (`styles/primitives.css`),
+   never reconciled against the draft — flagged and deferred as "another
+   matter" by W126 (`chat/primitives/icons.tsx:287`) instead of decided.
+   It was also the one control the composer row's "one control system" pass
+   named as needing unification (`chat.css` above, "Send (.composer-send)")
+   but never actually folded into the 28px selector list — this closes that
+   gap rather than opening a new exception. No border, no shadow: the
+   draft's global `button` reset is `border: none; background: none`. */
 .composer-send {
   display: inline-flex;
   align-items: center;
@@ -2097,34 +2278,28 @@
   flex-shrink: 0;
   white-space: nowrap;
   min-width: 0;
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
   background: var(--text-strong);
-  border: var(--stroke-thin) solid var(--text-strong);
+  border: none;
   color: var(--bg);
   font-weight: 600;
   padding: 0;
   font-size: var(--font-size-14);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-xs);
   transition:
     background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 140ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 140ms cubic-bezier(0.23, 1, 0.32, 1),
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .composer-send:hover:not(:disabled) {
   background: var(--text);
-  border-color: var(--text);
-  box-shadow: var(--shadow-sm);
 }
-.composer-send:active:not(:disabled) { transform: translateY(1px); box-shadow: var(--shadow-xs); }
+.composer-send:active:not(:disabled) { transform: translateY(1px); }
 .composer-send:focus-visible {
   outline: var(--stroke-thin) solid var(--blue);
   outline-offset: 2px;
-  box-shadow: var(--shadow-xs);
 }
 .composer-send:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 /* Executing state: the SAME box as Send, minus the arrow — 底.svg's 32px
@@ -2138,8 +2313,7 @@
    block at the top of home/home-hero.css: the app-wide 600 default ships with
    the entry refresh, and the composer inherits it locally until then. */
 .composer,
-:where(.composer) button {
-  font-weight: 600;
+:where(.composer) button {  font-weight: 600;
 }
 .composer-send.stop {
   width: 32px;
@@ -2186,6 +2360,23 @@
 .composer-send.stop:focus-visible .composer-stop-glyph {
   opacity: 1;
 }
+/* 预检还没跑起来的那一档不是「正在运行」,所以它停不了 —— 合并 main 时这几条从
+   本分支带过来,并改写成 main 的字形结构(它没有文字标签了,只有球和停止方块)。
+   丢掉它们会让一个仍在渲染的 class(`composer-send stop admission-pending`,
+   见 ChatComposer.tsx)失去样式。 */
+.composer-send.stop.admission-pending:disabled {
+  opacity: 1;
+  background: var(--send-ink);
+  color: var(--send-ground);
+}
+/* 停不了的东西不该在 hover 时给出停止的字形 */
+.composer-send.stop.admission-pending:hover .composer-run-glyph,
+.composer-send.stop.admission-pending:focus-visible .composer-run-glyph { opacity: 1; }
+.composer-send.stop.admission-pending:hover .composer-stop-glyph,
+.composer-send.stop.admission-pending:focus-visible .composer-stop-glyph { opacity: 0; }
+.composer-send.stop.admission-pending:hover {
+  background: var(--text-strong);
+}
 .composer-run-glyph {
   /* ThinkingOrb's own <canvas>; it sets display/width/height inline from its
      `size` prop (20), so nothing here needs to size it. */
@@ -2227,12 +2418,12 @@
   display: flex;
   flex-direction: column;
   align-self: auto;
-  width: calc(100% - (var(--chat-composer-inline-inset, 12px) * 2));
+  width: calc(100% - (var(--chat-composer-inline-inset, 16px) * 2));
   min-width: 0;
   max-width: none;
   gap: 3px;
   box-sizing: border-box;
-  margin: 0 var(--chat-composer-inline-inset, 12px) 2px;
+  margin: 0 var(--chat-composer-inline-inset, 16px) 2px;
   padding: 7px;
   overflow: visible;
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
@@ -2253,12 +2444,6 @@
   overflow-x: hidden;
   padding-right: 1px;
   scrollbar-width: thin;
-}
-
-.chat-queued-send-list.is-scrollable {
-  padding-right: 3px;
-  overscroll-behavior: contain;
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 18px), transparent);
 }
 
 .chat-queued-send-header {
@@ -2287,8 +2472,11 @@
 
 .chat-queued-send-row {
   position: relative;
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) max-content;
+  /* 稿子 `.queue .q { display: flex; align-items: flex-start; gap: 8px }` ——
+     原来是四列栅格(把手 | 序号 | 主体 | 动作)。栅格能排,flex 也能排:
+     把手 / 序号 / 动作都是 `flex: none`,主体 `flex: 1; min-width: 0`。
+     换成 flex 是为了和稿子同一套排版模型,不是为了省事。 */
+  display: flex;
   align-items: center;
   gap: 5px;
   min-width: 0;
@@ -2305,14 +2493,13 @@
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.chat-queued-send-row-active {
-  border-color: color-mix(in srgb, var(--border) 80%, transparent);
-  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
-}
-
-.chat-queued-send-row:hover {
-  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
-}
+/* 整行 hover **不铺底** —— 稿子里 hover 反馈只挂在控件上
+   (`components.css:2909` 的 `.grip:hover` 换字色、:2935 的 `.qops button:hover`
+   换底色 + 字色),`.queue` 一族里**没有** `.queue .q:hover` 这条规则。
+   原来这里那条整行底色是**卡片时代的残留**:它和已经被撤掉的 `border` /
+   `background` / `min-height` / `box-shadow` 是同一批进来的,按稿子还原那一版
+   把那几条都收了,唯独漏了它。队列今天是一叠靠分隔线立起来的待办,
+   整行铺色会读成「这一条被选中了」,而队列里没有"选中"这个状态。 */
 
 .chat-queued-send-row-dragging {
   opacity: 0.45;
@@ -2385,38 +2572,6 @@
   white-space: nowrap;
 }
 
-.chat-queued-send-chips {
-  display: flex;
-  /* #90: wrap instead of clip. With nowrap + overflow:hidden the container
-     hard-cut the last visible chip mid-word ("1 workspace cont…") and the
-     crowded single line read as colliding with the row's action buttons.
-     Wrapping keeps every chip legible; each chip still ellipsizes its own
-     long label via max-width below. */
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 3px;
-  min-width: 0;
-}
-
-.chat-queued-send-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 18px;
-  min-width: 0;
-  max-width: 124px;
-  padding: 0 5px;
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .chat-queued-send-actions {
   display: inline-flex;
   align-items: center;
@@ -2425,18 +2580,20 @@
   min-width: 0;
 }
 
+/* 稿子 `.queue .q .grip { display: grid; place-items: center; color: var(--text-faint) }`
+   —— 一格居中,不占描边;字色比我们原来淡一档。 */
 .chat-queued-send-drag-handle,
 .chat-queued-send-action {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  /* 稿子 `.queue .q .grip { width: 16px; height: 22px }` —— 比我们原来的 24×24 窄一圈 */
+  width: 16px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  color: var(--text-soft);
   padding: 0;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text-muted);
 }
 
 .chat-queued-send-drag-handle {
@@ -2454,11 +2611,24 @@
   opacity: 0.35;
 }
 
-.chat-queued-send-drag-handle:hover:not(:disabled),
+/* 稿子把「抓手」和「按钮」的 hover **分开写**,两边的值一条都不一样,
+   合成一条选择器就必然有一半是错的:
+     · `components.css:2909`  `.queue .q .grip:hover { color: var(--text-muted) }`
+       —— 整条规则**只有这一句**,不铺底;
+     · `components.css:2935`  `.qops button:hover { background: var(--bg-fill-secondary);
+                                                    color: var(--text-strong) }`。
+   原来两者共用 `background: var(--bg-panel); color: var(--text)`:手柄多了一块稿子
+   没有的底(抓手一 hover 就读成一颗按钮),动作键的底色与字色也都不在稿子那两档上。
+
+   `border-color` 一并去掉 —— 基础那条写的是 `border: 0`,0 宽的边染什么色都看不见,
+   是条死声明;留着只会让下一个人以为 hover 时有一圈描边。 */
+.chat-queued-send-drag-handle:hover:not(:disabled) {
+  color: var(--text-muted);
+}
+
 .chat-queued-send-action:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--border) 84%, transparent);
-  background: var(--bg-panel);
-  color: var(--text);
+  background: var(--bg-fill-secondary);
+  color: var(--text-strong);
 }
 
 .chat-queued-send-drag-handle:focus-visible,
@@ -2972,4 +3142,952 @@
   white-space: nowrap;
   max-width: 106px;
   line-height: 12px;
+}
+
+/* ── 已发送附件行 · 对齐设计稿组件 2(第 52–59 格)────────────────────
+   `.user-attachments` 这个类留着不动 —— 注释芯片那一行还在用它,e2e 也按它定位;
+   这里只在多挂一个 `.msg-att` 的那一行上覆盖。
+   ------------------------------------------------------------------
+   永远单行,超出横向滚动(#58)。多少个附件都只占一行 —— 消息在流水里的高度
+   因此是常量,不随附件数变化。这比「换行 + 满两行收进 +N」更可预期:后者 5 个和
+   8 个的高度不一样,回看历史时消息块忽高忽低。
+   右对齐靠【首个子元素的 auto 外边距】,不用 justify-content:flex-end,也不用
+   width:fit-content:前者会让溢出内容跑到左边、滚不回去(经典的 flex 溢出陷阱),
+   后者叠加 overflow-x:auto 在单张卡时会算塌成 0。auto 外边距自动二选一 ——
+   附件少时它吸掉空白、整排贴右;附件多时空白为负、它解析成 0,于是从左往右正常滚。 */
+.user-attachments.msg-att {
+  flex-wrap: nowrap;
+  justify-content: normal;
+  gap: 7px;
+  max-width: 412px;
+  margin-inline-start: auto;
+  margin-bottom: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 1px;
+}
+.user-attachments.msg-att > :first-child {
+  margin-inline-start: auto;
+}
+.user-attachments.msg-att::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── 附件行两端的翻页箭头(#58,稿子里的 `.att-nav`)────────────────────
+   这一行永远单行、超出横向滚动,而滚动条是藏起来的(见上面 scrollbar-width),
+   所以「还能往哪边走」必须由别的东西说。原来指望【卡被切在腰上】这一个信号 ——
+   它说得了「后面还有」,说不了「往回也还有」,更给不了鼠标一个能点的地方
+   (触控板能横扫,鼠标只有按住 shift 滚轮)。
+   ------------------------------------------------------------------
+   两条规矩:
+   ① 【只在真的被遮住时才出】。左边有东西被卷走了才出左箭头,右边还有才出右
+      箭头;一行放得下时两枚都不出 —— 常驻的箭头是在说「这里有东西看不见」,
+      而那时并没有。量在 `useAttachmentRowNav`,判据是纯函数 attachment-nav.ts。
+   ② 【箭头自带一段渐变,压在内容上】。硬边的按钮扣在一排卡上,像是有人在这
+      一行里又摆了一个东西;渐变让被压住的那半张卡淡出去,读起来是「这一行到
+      这儿看不清了,那边还有」,而不是「这儿多了一个按钮」。所以壳子是绝对定位
+      叠上去的,不挤占布局 —— 一行的可见宽度不因为出没出箭头而变。
+   渐变色取 --att-fade(默认就是面板底色 --bg):这一行落在白底的消息里、
+   也会落在输入框的托盘里(#64),两处底色相同,真出现第三种底时改这一个变量。 */
+.msg.user .msg-att-wrap,
+.composer-att-wrap {
+  position: relative;
+  max-width: 100%;
+}
+/* 稿子 `.att-nav { display: none }` + `.att-wrap.is-prev > .att-nav.mod-prev { display: flex }`
+   —— 两颗常驻,出没由壳上的状态类决定。 */
+.msg.user .msg-att-nav,
+.composer-att-wrap .msg-att-nav {
+  position: absolute;
+  inset-block: 0;
+  /* `inset-block: 0` 撑不开一个 `<button>` —— Chrome 仍按内容给它高度
+     (量到 36px,而托盘有 62px),然后把这一小截钉在 top: 0。结果是箭头贴着顶
+     (圆片中心比卡片中心高 14.5px),而且它那段用来盖住半张卡的渐变也只盖了
+     上半截。所以高度得显式要,不能指望上下贴边把它拉开。 */
+  block-size: 100%;
+  z-index: 3;
+  display: none;
+  align-items: center;
+  width: 52px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+/* 托盘那一行的上下内边距是不对称的(见 `.composer-att` 的 `padding: 4px 9px 1px`)。
+   箭头整个压在这一行上面,得把同一份纵向内边距抄过来 —— 否则 `align-items: center`
+   居中的是**整条**,落点会比卡片带的中线高 1.5px。 */
+.composer-att-wrap .msg-att-nav {
+  padding-block: 4px 1px;
+}
+.msg.user .msg-att-nav.mod-prev,
+.composer-att-wrap .msg-att-nav.mod-prev {
+  inset-inline-start: 0;
+  justify-content: flex-start;
+  background: linear-gradient(to right, var(--att-fade, var(--bg)) 46%, transparent);
+}
+.msg.user .msg-att-nav.mod-next,
+.composer-att-wrap .msg-att-nav.mod-next {
+  inset-inline-end: 0;
+  justify-content: flex-end;
+  background: linear-gradient(to left, var(--att-fade, var(--bg)) 46%, transparent);
+}
+/* `linear-gradient` 的 to right / to left 是**物理**方向,不跟着 inset-inline-*
+   翻面 —— RTL 下不翻的话渐变会朝着行外淡出,压不住被切开的那半张卡。 */
+[dir='rtl'] .msg.user .msg-att-nav.mod-prev,
+[dir='rtl'] .composer-att-wrap .msg-att-nav.mod-prev {
+  background: linear-gradient(to left, var(--att-fade, var(--bg)) 46%, transparent);
+}
+[dir='rtl'] .msg.user .msg-att-nav.mod-next,
+[dir='rtl'] .composer-att-wrap .msg-att-nav.mod-next {
+  background: linear-gradient(to right, var(--att-fade, var(--bg)) 46%, transparent);
+}
+/* 圆片是给鼠标的靶子:24px 的白片压在渐变上,自己带一圈边和一层浅影,
+   底下不管是深色缩略图还是白色文档卡,它都立得住。 */
+.msg.user .msg-att-nav i ,
+.composer-att-wrap .msg-att-nav i {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-strong);
+  transition:
+    border-color 100ms var(--ease-out),
+    background-color 100ms var(--ease-out);
+}
+.msg.user .msg-att-nav:hover i ,
+.composer-att-wrap .msg-att-nav:hover i {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+}
+.msg.user .msg-att-nav:focus-visible i ,
+.composer-att-wrap .msg-att-nav:focus-visible i {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.msg.user .msg-att-nav svg ,
+.composer-att-wrap .msg-att-nav svg {
+  width: 14px;
+  height: 14px;
+}
+/* 一枚朝下的箭头转 90 度当左右用 —— 稿子里只此一支箭头,不另画两枚。 */
+.msg.user .msg-att-nav.mod-prev svg ,
+.composer-att-wrap .msg-att-nav.mod-prev svg {
+  transform: rotate(90deg);
+}
+.msg.user .msg-att-nav.mod-next svg ,
+.composer-att-wrap .msg-att-nav.mod-next svg {
+  transform: rotate(-90deg);
+}
+[dir='rtl'] .msg.user .msg-att-nav.mod-prev svg ,
+[dir='rtl'] .composer-att-wrap .msg-att-nav.mod-prev svg {
+  transform: rotate(-90deg);
+}
+[dir='rtl'] .msg.user .msg-att-nav.mod-next svg ,
+[dir='rtl'] .composer-att-wrap .msg-att-nav.mod-next svg {
+  transform: rotate(90deg);
+}
+
+/* 卡片 57px 见方 —— 这个数字不是挑的,是量出来的:
+   57 = 文档卡的自然高度(9 上内边距 + 18 主名行 + 1 行距 + 18 副行 + 9 下内边距 + 2 边框)。
+   图卡跟着文档卡走,行高由「两行字最少要多高」决定,一行里两种卡严丝合缝。
+   圆角也跟文档卡走(12px):两种卡并排站在同一行、同一个高度,只有拐角差 4px
+   说不出任何区别,只会让一行东西看着没对齐。 */
+.msg.user .msg-att-img,
+.composer-att .msg-att-img {
+  flex: none;
+  width: 57px;
+  height: auto;
+  padding: 0;
+  display: block;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 100ms var(--ease-out);
+}
+.msg.user .msg-att-img:disabled,
+.composer-att .msg-att-img:disabled {
+  cursor: default;
+}
+.msg.user .msg-att-img:not(:disabled):hover,
+.composer-att .msg-att-img:not(:disabled):hover {
+  border-color: var(--border-strong);
+}
+/* 图片区 1:1。用 aspect-ratio 声明比例,不写死高度 —— 卡宽改过三轮,
+   每次高度都自己跟上。 */
+.msg.user .msg-att-ph,
+.composer-att .msg-att-ph {
+  display: block;
+  aspect-ratio: 1 / 1;
+  height: auto;
+}
+/* 缩略图接上来之前,这一格不该是空的灰:一排纯灰方块读起来像「图没加载出来」,
+   摆上产品标才读得出「这里是一个传上来的文件」。
+   稿子 `.att-i .mini`(`361b78253e:docs/design/chat-panel/src/components.css:796`;
+   `8015870095` / `853da24ea5` / `361b78253e` 三版这一块 md5 相同):图源是设计给的
+   `src/att-placeholder.svg`,内联成 data URI —— 稿子是单文件不能外链,
+   我们这一轮授权动的也只有样式表,所以照它内联。
+   `cover` 不是 `contain`:卡 1:1、图 1:1,cover 不留边。
+   底下 `--bg-muted` 那一层留着 —— 图万一没解出来还是原来那块灰,不会露白。
+   作用域跟着稿子走,只盖【用户传的】附件(`.msg.user` / `.composer-att`);
+   生图结果、缩略图条、视觉选项不是用户传的东西,不盖产品标。 */
+.msg.user .msg-att-mini,
+.composer-att .msg-att-mini {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background:
+    url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDQ0IiBoZWlnaHQ9IjQ0NCIgdmlld0JveD0iMCAwIDQ0NCA0NDQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+IDxyZWN0IHdpZHRoPSI0NDQiIGhlaWdodD0iNDQ0IiBmaWxsPSIjMjAyMDIwIi8+IDxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMF8zNDlfMjgxKSI+IDxnIGNsaXAtcGF0aD0idXJsKCNjbGlwMV8zNDlfMjgxKSI+IDxwYXRoIGQ9Ik0yMjIgNzEuOTk0MUMzMDQuODQzIDcxLjk5NDEgMzcyIDEzOS4xNTEgMzcyIDIyMS45OTRDMzcyIDMwNC44MzcgMzA0Ljg0MyAzNzEuOTk0IDIyMiAzNzEuOTk0SDkxLjk1N0M4MC45MTE0IDM3MS45OTQgNzIuMDAxIDM2My4wODUgNzIuMDAxIDM1Mi4wMzlDNzIuMDAwOCAzMTguNTg1IDcyIDI1MS45MTUgNzIgMjIxLjk5NEM3MiAxMzkuMTUxIDEzOS4xNTcgNzEuOTk0MSAyMjIgNzEuOTk0MVpNMjIyLjAwMSAxMDEuOTk0QzE1NS43MjcgMTAxLjk5NCAxMDIuMDAxIDE1NS43MiAxMDIuMDAxIDIyMS45OTRDMTAyLjAwMSAyODguMjY4IDE1NS43MjcgMzQxLjk5NCAyMjIuMDAxIDM0MS45OTRDMjg4LjI3NSAzNDEuOTk0IDM0Mi4wMDEgMjg4LjI2OCAzNDIuMDAxIDIyMS45OTRDMzQyLjAwMSAxNTUuNzIgMjg4LjI3NSAxMDEuOTk0IDIyMi4wMDEgMTAxLjk5NFoiIGZpbGw9IndoaXRlIi8+IDxwYXRoIGQ9Ik0yMTIuNjU0IDI5Mi40MDlMMTY2LjkyMSAxNzIuMDYxQzE2NS40NDEgMTY4LjE2NiAxNjkuMjQ1IDE2NC4zNDcgMTczLjExNCAxNjUuODQ0TDI5My41MTkgMjEyLjQyN0MyOTguNDc0IDIxNC4zNDQgMjk3LjEwOSAyMjEuNzQgMjkxLjggMjIxLjc0SDIyMS45MTdWMjkwLjY4OUMyMjEuOTE3IDI5Ni4wMzUgMjE0LjU1MiAyOTcuNDAzIDIxMi42NTQgMjkyLjQwOVoiIGZpbGw9IndoaXRlIi8+IDwvZz4gPC9nPiA8ZGVmcz4gPGNsaXBQYXRoIGlkPSJjbGlwMF8zNDlfMjgxIj4gPHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MiA3MikiLz4gPC9jbGlwUGF0aD4gPGNsaXBQYXRoIGlkPSJjbGlwMV8zNDlfMjgxIj4gPHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IndoaXRlIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MiA3MikiLz4gPC9jbGlwUGF0aD4gPC9kZWZzPiA8L3N2Zz4=") center / cover no-repeat,
+    var(--bg-muted);
+}
+
+/* 文档卡:md / txt / csv 这些没有可看的画面。硬塞进 1:1 的灰方块,那块灰不传达
+   任何东西,而唯一有用的信息 —— 文件名 —— 反而被压在几十像素里截成一截。
+   所以给它一张更宽的卡,把宽度还给文件名。
+   宽度定死 180px,不随名字长短变:一行里每张卡宽度都不一样的话,眼睛没有落点。
+   180 的来历:消息区上限 380,180 × 2 + 7 间距 = 367,正好一行放下两张。
+   高度靠 flex 默认的 stretch 跟住图卡,没有第二个数字要维护。 */
+.msg.user .msg-att-doc,
+.composer-att .msg-att-doc {
+  position: relative;
+  flex: none;
+  width: 180px;
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  text-align: left;
+  /* 稿子 `.att-d` **不写 color** —— 卡本身走继承的 --text,
+     强调色只落在文件名那一行(`.att-d .nm { color: var(--text-strong) }`,
+     我们这边是 `.msg-att-nm`,已经自己写了)。 */
+  cursor: pointer;
+  transition: border-color 100ms var(--ease-out);
+}
+.msg.user .msg-att-doc:disabled,
+.composer-att .msg-att-doc:disabled {
+  cursor: default;
+}
+.msg.user .msg-att-doc:not(:disabled):hover,
+.composer-att .msg-att-doc:not(:disabled):hover {
+  border-color: var(--border-strong);
+}
+.msg.user .msg-att-fi,
+.composer-att .msg-att-fi {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--text-soft);
+}
+/* flex:1 是【故意加的,稿子上没有】:名字要在 JS 里按可用宽度算中间省略,
+   而 flex:0 1 auto 的文本列会随内容收缩 —— 名字一截短列就变窄,下次再量到的
+   是缩过的值,只会越截越短、永远长不回去。钉成 flex:1 之后这个宽度是常量。 */
+.msg.user .msg-att-tx,
+.composer-att .msg-att-tx {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+/* 第一行是【完整的文件名】,主名 + 后缀连在一起:人嘴里说的、搜索框里敲的、
+   复制出去的都是「商品卡组件规格说明终稿.md」,把 .md 摘掉屏幕上就没有一个
+   地方写着这个文件真正的名字。所以主名可收缩、后缀 flex:none 永远完整。 */
+.msg.user .msg-att-nm,
+.composer-att .msg-att-nm {
+  display: flex;
+  align-items: baseline;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-strong);
+}
+.msg.user .msg-att-base,
+.composer-att .msg-att-base {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.msg.user .msg-att-ext,
+.composer-att .msg-att-ext {
+  flex: none;
+  white-space: nowrap;
+}
+/* 体积那一行:拿不到就空着,位置留住 —— 一行里有体积和没体积的卡不能差一行高。 */
+.msg.user .msg-att-meta,
+.composer-att .msg-att-meta {
+  display: block;
+  min-height: 18px;
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-soft);
+}
+
+/* ── 发送前的托盘 · 对齐设计稿组件 21(第 60–64 格)────────────────────
+   待发送的附件跟已发送的用【同一张卡】—— 上面那几条规则两处共写,不另抄一套。
+   刻意不给「未发送」另画一套更矮的紧凑行:一旦两侧长得不一样,同一批文件在按下
+   发送的那一瞬会整个跳一下形状;更要命的是两套模板会各自漂移 —— 线上那版就是
+   这么裂的(图片走大卡、文档走单行,同一行里两种高度,基线对不上)。
+   卡片本身不变,状态只由叠加物承担,这条是这个组件的骨架。
+
+   托盘靠左。已发送那一侧要贴右,是因为它压在用户气泡上方、跟气泡右对齐;
+   而托盘在输入框里,输入框是满宽的,内容当然从左边起。两处共用同一条单行滚动,
+   只在这里把那个 auto 外边距归零。 */
+.composer-att {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 7px;
+  margin: 0;
+  /* 左右 9px 与输入框正文对齐(稿子量 406px 净内宽时算的就是这一档托盘内边距)。 */
+  padding: 4px 9px 1px;
+  max-width: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* 上传中那圈流光的墨色。稿子叫 --anim-ink;产品的 chat 接缝层
+     (`components/chat/ChatRoot.module.css`)有 --chat-anim-ink,但那是 CSS Module
+     的作用域,全局 chat.css 够不着,所以在这里落一份同值的局部变量。
+     亮暗两个作用域都写(见 components/chat/AGENTS.md §2)。 */
+  --composer-att-ink: #353535;
+  /* 翻页箭头那段渐变要压住被切开的半张卡,所以它的颜色必须**等于托盘的底色**。
+     稿子说「两处底色相同,真出现第三种底时改这一个变量」—— 这里就是那第三种底:
+     已发送那一行落在白底的消息里(--bg),而托盘落在 .composer-shell 上,
+     那层底是 --bg-fill-tertiary(半透明黑/白)压在 --bg 上。按同样的比例合出来,
+     不然箭头两侧会露出一道比周围亮的带子。 */
+  --att-fade: color-mix(in srgb, #000 3%, var(--bg));
+}
+[data-theme='dark'] .composer-att {
+  --composer-att-ink: #dbdbdb;
+  --att-fade: color-mix(in srgb, #fff 6%, var(--bg));
+}
+.composer-att::-webkit-scrollbar {
+  display: none;
+}
+/* 托盘里的卡不是「打开文件」的按钮,而是一张躺着的卡 —— 可点的只有里面的
+   「×」/「重试」/ 缩略图。所以把共用规则里的手型收掉。 */
+.composer-att .msg-att-img,
+.composer-att .msg-att-doc {
+  cursor: default;
+}
+/* 「×」是绝对定位的浮标,图卡得先是个定位上下文(文档卡在共用规则里已经是了)。 */
+.composer-att .msg-att-img {
+  position: relative;
+}
+.composer-att .msg-att-mini-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+/* 「×」的本体样式不绑在图卡上 —— 文档长条也要用同一枚。两处只有【位置】不同:
+   图卡上它浮在右上角 4px,长条上是 5px(两张卡的边框 / 内边距不同,稿子给的
+   就是两个值,别统一成一个)。 */
+.composer-att .msg-att-del {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  /* 静止时不出,鼠标指到哪张才浮出哪张。
+     ------------------------------------------------------------
+     托盘里躺的是【你自己刚挑的这几个文件】,不是一份待办清单。每张卡的右上角
+     常驻一枚带底带描边的圆钮,三四张排开就成了一行小白点压在缩略图上 ——
+     缩略图统共 57px,而那枚钮吃掉的正是最能认出「这是哪张图」的那个角。
+     何况「拿掉某一个」是偶发动作:选错了才用得上。
+     【逐张出】,不是整条托盘一起亮:一起亮的话指一张会招来一排「×」,
+     而你要删的只有手底下这一张。 */
+  opacity: 0;
+  transition:
+    opacity 100ms var(--ease-out),
+    color 100ms var(--ease-out),
+    border-color 100ms var(--ease-out);
+}
+.composer-att .msg-att-del svg {
+  width: 10px;
+  height: 10px;
+}
+.composer-att .msg-att-img:hover .msg-att-del,
+.composer-att .msg-att-doc:hover .msg-att-del,
+.composer-att .msg-att-del:focus-visible {
+  opacity: 1;
+}
+/* 键盘走到它身上照样要显形,否则 Tab 过去是个看不见的按钮;
+   触屏那一档没有 hover,一律常驻 —— 不然「×」永远等不出来。 */
+@media (hover: none) {
+  .composer-att .msg-att-del {
+    opacity: 1;
+  }
+}
+/* hover 不变红。红在这套系统里是「出事了 / 不可逆」,而「×」只是把这个文件从
+   待发列表里拿掉 —— 文件还在你磁盘上,拿掉了还能再选一次,代价约等于零。 */
+.composer-att .msg-att-del:hover {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+.composer-att .msg-att-img .msg-att-del {
+  inset-inline-end: 4px;
+  top: 4px;
+}
+.composer-att .msg-att-doc .msg-att-del {
+  inset-inline-end: 5px;
+  top: 5px;
+}
+/* 文档卡在托盘里额外让出 28px 给右上角的「×」;图卡不用,它的「×」压在缩略图上。 */
+.composer-att .msg-att-doc {
+  padding-inline-end: 28px;
+}
+
+/* 上传中:缩略图压暗 + 描边上跑一道流光,传完就没(#61)。
+   ------------------------------------------------------------
+   仍然【不另占一行】—— 卡高是常量,多一行文字就得给所有卡都留出那一行的位置,
+   而那一行只有上传的这几秒用得上。57px 的卡上一条 3px 的进度条读不出「62%」,
+   只读得出「在动」,那就让它老实地表达「在动」:这是一圈匀速转的描边,是「在忙」
+   的不定式指示,**不是按百分比走的进度**,所以不需要逐字节进度数据。
+   实现上不用伪元素:卡有 overflow:hidden,inset 到边框上的环会被裁掉。改用背景
+   两层 —— padding-box 那层盖住内部,border-box 那层只在 1px 描边区露出来。
+   流光之外的那一圈仍是 --border,所以任何一瞬间卡都是有边的。 */
+@property --att-up-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+.composer-att .msg-att-img.is-up,
+.composer-att .msg-att-doc.is-up {
+  border-color: transparent;
+  /* `var(--att-up-angle, 0deg)` 的兜底不是多余的:@property 被剥掉的环境
+     (镜像陈列页会整段丢掉 at 规则)下没有它,整条 background 会被判无效,
+     卡片会变成一个没有描边也没有底的白块。 */
+  background:
+    linear-gradient(var(--bg-subtle) 0 0) padding-box,
+    conic-gradient(
+      from var(--att-up-angle, 0deg),
+      var(--composer-att-ink) 0deg,
+      color-mix(in srgb, var(--composer-att-ink) 60%, var(--border)) 45deg,
+      color-mix(in srgb, var(--composer-att-ink) 25%, var(--border)) 90deg,
+      var(--border) 150deg,
+      var(--border) 360deg
+    ) border-box;
+  animation: composer-att-up-travel 1.4s linear infinite;
+}
+.composer-att .msg-att-img.is-up .msg-att-mini {
+  opacity: 0.45;
+}
+@keyframes composer-att-up-travel {
+  to {
+    --att-up-angle: 360deg;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-att .msg-att-img.is-up,
+  .composer-att .msg-att-doc.is-up {
+    animation: none;
+  }
+}
+
+/* 上传失败:整块缩略图就是重试的热区(#63)。
+   ------------------------------------------------------------
+   失败卡【不描红框】,红只留给「可以点的那一下」,不是「这张卡出事了」。
+   卡上说明失败已经够用:画面是空的,中间摆着「↻ 重试」。再描一道红边,人先看到
+   的是「这张卡跟旁边不一样」,还得再看一眼才知道不一样在哪 —— 托盘里一排缩略图
+   并排时尤其明显。
+   「重试」图标在上、文字在下:横排放不下 —— 缩略图只有 57px 见方,而「↻ 重试」
+   横着要 60px 出头,按钮会顶出卡外。竖排之后两行各占一半,刚好落在方块里。 */
+.composer-att .msg-att-rt {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--red);
+}
+.composer-att .msg-att-rt svg {
+  width: 14px;
+  height: 14px;
+}
+.composer-att .msg-att-rt:hover {
+  color: var(--text-strong);
+}
+/* 文档长条的失败态稿子没画(S13 待决):这里只把「重试」压在名字右边、
+   不动卡的轮廓,等设计补一态再改。 */
+.composer-att .msg-att-doc.is-fail .msg-att-nm {
+  color: var(--red);
+}
+
+/* 快捷切换器打开时,输入框整块要淡下去(那套规则住在 styles/viewer/routines.css,
+   它按 `.staged-chip` 系列的类名挑元素,挑不到托盘里这两张卡)。 */
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-doc,
+body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-del {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+
+/* ── 队列 · 对齐设计稿组件 17 ────────────────────────────────────────
+   三处按稿子改:①不套框不铺底 —— 输入框自己已经是个有边的东西,队列再套一圈,
+   人得先分辨这两块是不是一回事;条与条之间留一道 1px 就够。
+   ②限的是**高度**不是条数:122px = 单行 34px + 1px 分隔,3.5 行,
+   露出的半行本身就是「下面还有」的提示。两行消息时可见条数不足三条半是对的。
+   ③顶对齐:两行消息时居中会让序号 / 手柄 / 按钮掉到文字块中间。 */
+.chat-queued-send-strip {
+  /* 稿子中无外框的 `.queue` 可以贴满容器;产品后来明确给队列
+     加了一圈淡边框,这个前提就变了:有形的外框必须与下方 composer
+     shell 的左右边界对齐。两者是 `.pane` 里的兄弟,所以队列用外距消化
+     composer 自己的水平 padding,宽度同步减去两侧;三处共用一个 token,
+     避免以后调整 composer 留白时又漂开。 */
+  width: calc(100% - (var(--chat-composer-inline-inset, 16px) * 2));
+  margin-inline: var(--chat-composer-inline-inset, 16px);
+  background: none;
+  padding: 0;
+  /* ── 外框:稿子「不套框」那半条被产品撤了(2026-08-27)────────────────
+     原话:「给我们消息队列加一个小边框吧,不然有点混在一起了,你边框淡一点」。
+     稿子当初撤框的理由(「输入框自己已经是个有边的东西,队列再套一圈,
+     人得先分辨这两块是不是一回事」)在真实场景里翻了过来:队列夹在流水和输入框
+     中间,三块同一个底色、中间一条边都没有,读起来是连着的一整片。
+
+     **只补一条线,不补底、不补阴影** —— 稿子「不铺底」那半条留着。
+     要的是分隔,不是强调;铺底会让队列变成第二张卡片,正是稿子担心的那件事。
+
+     色值 `--chat-border-soft`(#ededed)不是随手挑的淡:
+       · 它**就是队列自己行间分隔线**用的那一档(下面 `.q + .q` 的 `--border-soft`)。
+         外框和内线同一个重量,整条读成「一块列表」,而不是「一个框套着一个表」。
+       · 正下方输入框 `.composer-shell` 的边是 `--bg-fill-secondary`
+         = `rgba(0,0,0,0.06)`;`#ededed` 落在白底上约等于 `rgba(0,0,0,0.07)`,
+         两者几乎同重 —— 分得开,又不会把输入框的边压下去。
+       · 正上方那枚 PlanPill 用的是 `--chat-border`(#dbdbdb)。同一个值搬到
+         这条通栏矩形上就过重了(是输入框那条边的两倍多),产品要的是「淡一点」。
+
+     半径取 `--chat-radius`(8px):执行记录里带框的那一层(`record.module.css`
+     的 `.fold` boxed 态)就是这个值。输入框是 `--radius-lg`(12px),
+     比它收一档,队列读起来是从属的一条,不是并排的第二张卡。
+
+     ⚠️ `--chat-*` 只在 `[data-chat-root]` 子树里有定义(`chat/ChatRoot.module.css`)。
+     队列条挂在 `ChatPane` 的 `chatSeam('pane')` 之内,解析得到;
+     哪天它被搬到接缝之外,这三个 var 会**静默**解析成空串,整条 border 声明作废、
+     框直接不出现且不报错。钉子在
+     `tests/components/chat/queue-strip-border.test.tsx` 的「接缝」一节。 */
+  border: var(--chat-stroke) solid var(--chat-border-soft);
+  border-radius: var(--chat-radius);
+  /* 卡片时代那条投影(2337 行的 `0 10px 24px -18px` + `0 1px 2px`)一直**漏在这儿**:
+     按稿子撤框那一版只写了 `border: 0; background: none; padding: 0`,没把它一起撤,
+     于是队列至今顶着一道没有框的浮空阴影。补一条线的同时把它收掉 ——
+     一条淡线 + 一层投影是两种分隔手法叠用,读起来就不「淡」了。 */
+  box-shadow: none;
+  /* 行的悬停底色是方角的(`.q:hover`),不裁一刀就会从圆角外面探出一小块。
+     提示浮层走 body 上的 `.od-tooltip-layer`,拖放指示线本来就被
+     `.chat-queued-send-list` 的 `overflow-y: auto` 裁着 —— 这一刀不影响它们。 */
+  overflow: hidden;
+}
+/* 稿子 `.queue { max-height: 122px; overflow-y: auto }` —— **只有这两条**,
+   它是一个普通的**块**。我们这边是 `display: flex; flex-direction: column`(2356 行),
+   两处不一样都要还原:
+     ① 弹性列会给每条 `flex-shrink: 1`,超出 `max-height` 时**把行压扁**
+        —— 六条 35px 塞进 122px,每条被压成 20.3px,内距整个失效;
+        原来 `min-height: 36px` 挡住了这件事,一撤掉地板就现形。
+     ② 弹性列的 `gap: 3px` 又在 34 + 1 的行距上多加 3px。
+   块级布局两件事一起消失:条与条之间只剩 `.q` 自己的 `border-top`,
+   高度是内容加内距自己长出来的,超出部分交给 `overflow-y` 滚。 */
+.chat-queued-send-list {
+  display: block;
+  /* 稿子 `.queue` 没有内距:留给滚动条的那 1px 让每一行又窄 1px */
+  padding-right: 0;
+  max-height: 122px;
+  overflow-y: auto;
+}
+/* 稿子 `.queue .q { align-items: flex-start; gap: 8px; padding: 7px 10px;
+   font-size: var(--t-mini); color: var(--text) }`。
+   `display` 这里不重复写:整行的排版模型在上面 `.chat-queued-send-row` 那条里,
+   已经是稿子同一套 `flex`(把手 / 序号 / 动作 `flex: none`,正文 `flex: 1; min-width: 0`)。
+   ⚠️ 这条注释原来写着「靠四列栅格排,换成 flex 会把它们掀了」—— 那是栅格时代的旧话,
+   和上面那条规则自相矛盾;换 flex 的那次改动没顺手把它改过来。 */
+.chat-queued-send-row {
+  align-items: flex-start;
+  gap: 8px;
+  /* 稿子的 `.q` **没有** min-height:行高是内容加内距自己长出来的
+     (7 + 20 + 7 = 34)。卡片时代留下的 36px 地板会把每条顶高 2px。 */
+  min-height: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: var(--font-size-12);
+}
+.chat-queued-send-row + .chat-queued-send-row {
+  border-top: 1px solid var(--border-soft, var(--border));
+}
+/* 稿子 `.queue .q .ix { flex: none; font-family: var(--mono);
+   font-size: var(--t-cap); color: var(--text-soft) }` —— 就这四条。
+   我们多写的 `min-width: 1.2em` 把序号从 7.5px 撑到 14.5px,后面正文整段右移;
+   多写的 `line-height: 20px` 又把行内盒从 18px 顶到 20px,行高跟着高 2px。
+   序号本来就 `flex: none`,`tabular-nums` 已经保证两位数不抖,预留宽度是多余的。 */
+.chat-queued-send-index {
+  flex: none;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+/* 稿子 `.queue .q .grip { flex: none; display: grid; place-items: center;
+   width: 16px; height: 22px; margin-inline-start: -2px; margin-top: -2px;
+   color: var(--text-faint); cursor: grab }`
+   —— 那两条**负外距**原来一条都没搬。它们是这一行高度的来源:22px 的手柄
+   往上收 2px,行内容就是 20px,加上下 7px 内距正好 34px。漏掉负外距,行高变 36px。 */
+.chat-queued-send-drag-handle {
+  margin-top: -2px;
+  margin-inline-start: -2px;
+}
+/* 稿子 `.queue .q .grip svg { width: 12px; height: 12px }` —— 手柄的图标。
+   `<Icon size>` 给的是 14,比稿子大一档,所以这里压回去。
+   ⚠️ 这一条**只管手柄**:动作键在 PR #7170 里已经提到 14(见下一条)。
+   两者原来并成一条选择器写,于是「动作键改大」这件事在这个文件里
+   一改就会把手柄一起带走。 */
+.chat-queued-send-drag-handle svg {
+  width: 12px;
+  height: 12px;
+}
+/* 稿子(PR #7170)`.qops button svg { width: 14px; height: 14px }` —— 从 12 提到 14。
+   手柄是「抓手」、动作是「按钮」,两者本来就不是同一号:命中框已经分了
+   (16×22 对 22×22),图标跟着分开才成立。 */
+.chat-queued-send-action svg {
+  width: 14px;
+  height: 14px;
+}
+/* 稿子 `.qops { display: flex; gap: 1px; margin-top: -2px }` —— 同样是负外距那条。 */
+.chat-queued-send-actions {
+  margin-top: -2px;
+}
+/* 稿子 `.qops button { width: 22px; height: 22px }` —— 动作键是 **22×22**,
+   只有手柄那条 `.grip` 才是 16×22。我们把两者并成一条选择器写了 `width: 16px`
+   (2543 行),等于拿手柄的宽度去套动作键,三颗按钮整组窄了 18px。 */
+.chat-queued-send-action {
+  width: 22px;
+}
+/* 稿子 `.qops button.mod-steer { display: inline-flex; align-items: center;
+   justify-content: center; gap: 4px; width: auto; padding: 0 4px;
+   font-size: inherit; white-space: nowrap }` —— 「引导对话」是三颗里唯一带文字的,
+   盒子得跟着标签放开。
+
+   ⚠️ **这一条必须排在上面那条 `.chat-queued-send-action { width: 22px }` 之后。**
+   两者同优先级(都是单类名),谁赢只看源码顺序;写到前面那一块(约 2440 行)去,
+   源码上看着完全正确,层叠走完却仍是 22px,标签被裁掉一大半。
+
+   `min-width: 22px` 是给纯图标形态留的地板:`width: auto` 之下 14px 图标加两侧
+   4px 内距正好 22px,和另外两颗对齐;哪天标签为空也不会缩成一条缝。
+   `height` 不在这里重声明 —— 它只在前一块出现过一次,重复一遍就等于给它开了
+   第二个出处,下次改行高时两处必然分叉。 */
+.chat-queued-send-action-steer {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: auto;
+  min-width: 22px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+/* 标签跟着行走:队列行是 `--font-size-12`,标签不另起字号。 */
+.chat-queued-send-action-label {
+  font-size: inherit;
+  line-height: 1;
+}
+/* 两行,不是一行:一行会把话截在半截 */
+/* 稿子 `.queue .q .tx { line-height: var(--lh-row) }` = 1.5,我们原来是 1.2 */
+.chat-queued-send-row .chat-queued-send-title {
+  /* 稿子 `.queue .q .tx { flex: 1; min-width: 0; line-height: var(--lh-row) }` */
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  /* 稿子 `components.css:327` 把 `.queue .q .tx` 和终端输出并成一条:
+       `.term div, .queue .q .tx { overflow-wrap: anywhere }`
+     这一格装的是用户自己写的话,里头可能有一整条 URL 或一串没有空格的路径。
+     不给这一条,那种长串在两行的盒子里既不换行也不参与 clamp,直接把行撑破。 */
+  overflow-wrap: anywhere;
+}
+
+/* ── 壳外正文的逐字化开(组件 4 / 13,W9)────────────────────────────
+   稿子把流式光标删了:流式期间没有任何标记,新到的字自己化开就是流式的样子。
+   起跑延迟由 JS 逐字算(见 useCharReveal),这里只管一个字怎么显出来。 */
+[data-reveal] .rv {
+  display: inline-block;
+  animation: text-reveal 0.4s var(--ease-out) both;
+}
+@keyframes text-reveal {
+  from { opacity: 0; filter: blur(10px) brightness(0%); }
+  to { opacity: 1; filter: blur(0px) brightness(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] .rv { animation: none; }
+}
+
+/* ── 聊天面板里的裸按钮:按稿子的全局 reset ────────────────────────────
+   稿子只给了这么几条:
+     button { font-family: inherit; border: none; background: none;
+              cursor: pointer; color: inherit; font-size: var(--font-size-13) }
+   我们的全局 `button`(styles/primitives.css)还额外给了 36px 高、0 16px 内距、
+   1px 描边、14px / 500 —— 面板里几十颗**没有类名**的按钮全被这套默认值撑着。
+   逐格量出来的账:字号 13↔14 共 79 处、1px 描边 47 处,还有一堆内距。
+
+   `:where()` 把特异性压成 (0,0,1):正好压过同为 (0,0,1) 的全局 `button`
+   (本文件在 primitives.css 之后导入),又输给**任何**带类名的规则 ——
+   共享 `Button` 的 `.button` / `.sm`,以及各组件自己的类,一律照旧。
+   `display` 不动:稿子那边也是各组件自己定,动它会把居中方式一起掀了。 */
+:where([data-chat-root]) button {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--font-size-13);
+  /* 写死 `400`,不是 `inherit` —— 这是稿子的**真实渲染值**,不是它的声明。
+     稿子的全局 button 复位(`8015870095:docs/design/chat-panel/src/components.css:170`)
+     确实**一条字重都不设**,但「不设」不等于「跟着基线走」:浏览器的 UA 样式表
+     给 `<button>` 用的是 **`font` 简写**(Chrome `font: 400 13.3333px Arial`),
+     简写会把 `font-weight` 一并压成 400,所以按钮的字重**默认不继承**。
+     稿子既没写 `font-weight` 也没写 `font`,裸按钮就停在 UA 的 400。
+     同一份稿子里 `.tool .fn { font: inherit }`(components.css:2235)是反证 ——
+     只有显式用 `font` / `font-weight` 盖掉 UA 那条,按钮才回到继承值(实测 500)。
+
+     量法(2026-09-02,真实 Chrome + 设计交付页 `chat-panel-next-pr7170-8015870.html`,
+     md5 `495992a904b6674dd07db4e0cb8d6f19`,= PR #7170 @ `8015870095`)。
+     那份是旧一版的交付页,但**这条复位规则在当前基线 `729fa43ce7` 里逐字节相同**
+     (两版 `components.css:170` 用 `diff` 对过),所以量到的 400 对当前基线同样成立:
+     293 颗 `<button>` 读 `getComputedStyle().fontWeight` → 400×195 / 500×43 / 600×55;
+     往稿子的 `.bub`(自身 500)里同时插一颗无类名 button 和一个 span,同一次读回
+     **button 400 / span 500** —— 既定住了 400,也证明读法分得出 400 和 500。
+     `tests/components/chat/w77-bare-button-weight.test.ts` 钉住这个值;那把量尺
+     **不建模 UA 样式表**,所以它只断言层叠里谁赢,400 的出处由上面这段实测背书。 */
+  font-weight: 400;
+  cursor: pointer;
+  /* 排版那几条也要归零 —— 稿子的全局 button 一条都不设,
+     各组件自己写(`.grip { display:grid; place-items:center }`、
+     `.opt { display:flex; align-items:flex-start }`…)。
+     我们的全局塞了 align-items/justify-content/gap/line-height,
+     于是**每一颗**没自己写的按钮都带着这四个值 —— 逐格量出来 603 条差异,占全部的 44%。
+     `display` 同理:稿子的全局 button 不设 display,按钮就是 UA 的 inline-block;
+     要 flex 的组件自己写(`.grip` / `.opt` / `.btn` 各写各的)。
+     文件名按钮就是这么从 inline-block 变成 inline-flex、高度也跟着差 1.5px。 */
+  display: inline-block;
+  align-items: normal;
+  justify-content: normal;
+  gap: normal;
+  line-height: normal;
+}
+
+/* 滚得动才出对应那一颗(稿子 `.att-wrap.is-prev > .att-nav.mod-prev`) */
+.composer-att-wrap.is-prev > .msg-att-nav.mod-prev,
+.composer-att-wrap.is-next > .msg-att-nav.mod-next,
+.msg.user .msg-att-wrap.is-prev > .msg-att-nav.mod-prev,
+.msg.user .msg-att-wrap.is-next > .msg-att-nav.mod-next {
+  display: flex;
+}
+
+/* 文档产物卡的封面(稿子没画这一档:拿不出预览图的产出)。
+   骨架和别的产物卡一样,只是缩略图位换成「图标 + 文件名」——
+   不留一块空灰,也不退化成一行列表。 */
+.artifact-card-doc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  color: var(--text-muted);
+}
+.artifact-card-doc-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--mono);
+  font-size: var(--font-size-12);
+  color: var(--text);
+}
+
+/* ── 用户消息发送失败(设计稿第 49 / 50 格)────────────────────────────
+   稿子 `.msg-act .keep { width:auto; height:30px; padding-inline:6px;
+   grid-auto-flow:column; gap:5px; color:var(--red); font-size:var(--t-cap);
+   font-weight:600 }` —— 这颗「重试」**长在动作行里**,和时间 / 复制并排,
+   只是不跟着 hover 出没(第 50 格的状态名写着「重试常驻」)。
+
+   原来我把它另起了一行(`.msg-fail`)挂在气泡下面。那样一来隐藏的动作行照样占着
+   30px,气泡和「重试」之间空出一大截 —— 用户量到的就是这一截。 */
+.msg.user .user-keep-btn {
+  display: grid;
+  grid-auto-flow: column;
+  place-items: center;
+  gap: 5px;
+  width: auto;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--red);
+  cursor: pointer;
+}
+.msg.user .user-keep-btn svg {
+  width: 13px;
+  height: 13px;
+}
+.msg.user .user-keep-btn:hover {
+  background: none;
+  color: color-mix(in srgb, var(--red) 70%, var(--text-strong));
+}
+
+/* ── 已发送图卡的悬停角标(设计稿第 55 格)────────────────────────────
+   稿子 `.att-ov .act { position:absolute; inset-inline-end:5px; top:5px;
+   display:grid; place-items:center; width:20px; height:20px;
+   border-radius: var(--radius-sm); background: var(--text-strong); color: var(--bg);
+   box-shadow: var(--shadow-sm) }`。
+   稿子那一格是 hover 态,所以静止时不摆 —— 和待发送托盘那枚「×」同一条规矩。 */
+.msg.user .msg-att-img {
+  position: relative;
+}
+.msg.user .msg-att-eye {
+  position: absolute;
+  inset-inline-end: 5px;
+  top: 5px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  background: var(--text-strong);
+  color: var(--bg);
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  transition: opacity 100ms var(--ease-out);
+  pointer-events: none;
+}
+.msg.user .msg-att-eye svg {
+  width: 12px;
+  height: 12px;
+}
+.msg.user .msg-att-img:hover .msg-att-eye,
+.msg.user .msg-att-img:focus-visible .msg-att-eye {
+  opacity: 1;
+}
+@media (hover: none) {
+  .msg.user .msg-att-eye {
+    opacity: 1;
+  }
+}
+
+/* ── 分叉分界(设计稿第 38 格)──────────────────────────────────────
+   稿子 `.fork-sep`:两侧各一条线,都从外沿的透明化到贴着字的实色 ——
+   渐变是为了让它读起来像「一段的开头」,而不是把这一列切成两半的硬横线。
+   中间那行字是**承接过来的会话标题**,过长时截断不换行(换行两侧的线会错位)。
+   线用 `--border-strong`:要盖过卡片自己的 `--border` 才立得住。 */
+.fork-sep {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 0;
+}
+.fork-sep i {
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, var(--border-strong));
+}
+.fork-sep i:last-child {
+  background: linear-gradient(to left, transparent, var(--border-strong));
+}
+.fork-sep span {
+  flex: none;
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-12);
+  font-weight: 500;
+  color: var(--brand-text);
+}
+/* 分界脚注(同一格):跟着上面那条线【居中】—— 它是这条线的注解,
+   不是新会话里的第一条消息;左对齐会读成「新会话已经开口说了一句」。 */
+.fork-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-bottom: 2px;
+  font-size: var(--font-size-12);
+  /* 稿子(PR #7170)把它收进消息静音层 —— 分界脚注和消息旁的时间 / 复制
+     是同一类附属信息,音量该一样。 */
+  color: var(--chat-message-muted-ink);
+}
+.fork-note svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+/* 点出来的那两块要「落」一下(同一格)。静态地摆在那儿,分不出它是刚才那一下
+   带来的;落这一下(上方 4px + 淡入)说的就是「这是你刚点的那一下」。
+   线先落、脚注晚 60ms —— 脚注是线的注解,顺序照读的顺序来。
+   开关是 `.is-new`:只有 `AssistantMessage` 渲染的那两块挂,陈列页那一格
+   (手写的裸 `.fork-sep` / `.fork-note`)不挂,一加载就是已经落好的样子 ——
+   这正是稿子交代的「钉住展示的那一格不挂 .is-new」。
+   ⚠️ 缓动取的是稿子写的 `var(--ease-out)`(在我们 tokens.css 里解出来是
+   `cubic-bezier(0, 0, 0, 1)`)。仓库 `AGENTS.md` 的「UI 动效」一节写的默认
+   缓动是 `cubic-bezier(0.23, 1, 0.32, 1)`,本文件里 `.msg` 的入场用的也正是
+   后者 —— 两者对不上,按稿子照搬,取舍待拍板。
+   时值 200ms 与「进入约 200ms」一致;起手是 translateY 不是 scale(0),
+   不触碰「禁止从 scale(0) 起手」那一条。
+   reduced-motion 不另写:`styles/base.css` 已有全局的
+   `animation-duration: .01ms !important` 兜底。 */
+@keyframes fork-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+.fork-sep.is-new,
+.fork-note.is-new {
+  animation: fork-in var(--duration-normal) var(--ease-out) both;
+}
+.fork-note.is-new {
+  animation-delay: 60ms;
 }

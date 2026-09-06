@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, waitFor } from '@testing-library/react';
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ProjectView,
@@ -45,6 +46,7 @@ const chatPaneHarness = vi.hoisted(() => ({
   ) => unknown),
   onStop: null as null | (() => void),
   openRequestNames: [] as string[],
+  messages: [] as ChatMessage[],
 }));
 
 vi.mock('../../src/i18n', () => ({
@@ -66,6 +68,10 @@ vi.mock('../../src/providers/daemon', () => ({
   GENERIC_DAEMON_DISCONNECT_CODE: 'GENERIC_DAEMON_DISCONNECT',
   GENERIC_DAEMON_DISCONNECT_MESSAGE: 'daemon stream disconnected before run completed',
   fetchChatRunStatus: (...args: unknown[]) => fetchChatRunStatus(...args),
+  // 一轮死在 `AMR_INSUFFICIENT_BALANCE` 上之后,`ProjectView` 会去查一次钱包读数
+  // 来点亮升级卡(用户 2026-09-02 裁决:钱的事只有那一张卡)。这一页不测那张卡,
+  // 只是要让那条路走得通 —— 少了这个 mock 会变成一条 unhandled rejection。
+  fetchAmrWalletSnapshot: vi.fn().mockResolvedValue(null),
   listActiveChatRuns: (...args: unknown[]) => listActiveChatRuns(...args),
   listProjectRuns: (...args: unknown[]) => listProjectRuns(...args),
   publishDaemonRunFinishedEvent: (...args: unknown[]) => publishDaemonRunFinishedEvent(...args),
@@ -120,12 +126,15 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
+    messages,
     onSend,
     onStop,
   }: {
+    messages: ChatMessage[];
     onSend: typeof chatPaneHarness.onSend;
     onStop: typeof chatPaneHarness.onStop;
   }) => {
+    chatPaneHarness.messages = messages;
     chatPaneHarness.onSend = onSend;
     chatPaneHarness.onStop = onStop;
     return null;
@@ -134,8 +143,20 @@ vi.mock('../../src/components/ChatPane', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: ({ openRequest }: { openRequest?: { name?: string } | null }) => {
+  FileWorkspace: ({
+    openRequest,
+  }: {
+    openRequest?: { name?: string; openBatch?: readonly string[] } | null;
+  }) => {
     const name = openRequest?.name;
+    // A finished turn's other artifacts ride in `openBatch` (OPEND-2588).
+    // Recording only `.name` would quietly make the "never opened ghost.html"
+    // assertion below vacuous for anything opened through a batch.
+    for (const batched of openRequest?.openBatch ?? []) {
+      if (batched !== name && chatPaneHarness.openRequestNames.at(-1) !== batched) {
+        chatPaneHarness.openRequestNames.push(batched);
+      }
+    }
     if (name && chatPaneHarness.openRequestNames.at(-1) !== name) {
       chatPaneHarness.openRequestNames.push(name);
     }
@@ -147,17 +168,23 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => null,
 }));
 
-function renderProjectView(options?: { resolvedDir?: string | null }) {
+function renderProjectView(options?: {
+  resolvedDir?: string | null;
+  projectId?: string;
+  routeConversationId?: string | null;
+  strict?: boolean;
+}) {
   const project = {
-    id: 'project-1',
+    id: options?.projectId ?? 'project-1',
     name: 'Project',
     skillId: null,
     designSystemId: null,
   } as never;
-  return render(
+  const view = (
     <ProjectView
       project={project}
       initialProjectDetail={{ project, resolvedDir: options?.resolvedDir ?? null }}
+      routeConversationId={options?.routeConversationId ?? null}
       routeFileName={null}
       config={
         {
@@ -182,8 +209,9 @@ function renderProjectView(options?: { resolvedDir?: string | null }) {
       onTouchProject={() => {}}
       onProjectChange={() => {}}
       onProjectsRefresh={() => {}}
-    />,
+    />
   );
+  return render(options?.strict ? <StrictMode>{view}</StrictMode> : view);
 }
 
 describe('computeProducedFiles', () => {
@@ -498,7 +526,113 @@ describe('ProjectView daemon reattach restore', () => {
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
     chatPaneHarness.openRequestNames = [];
+    chatPaneHarness.messages = [];
     window.sessionStorage.clear();
+  });
+
+  it('settles a hard-routed fresh succeeded row with a terminal blocked strategy projection', async () => {
+    const projectId = 'fc036a72-6d8c-41a0-aa83-ae7fdd657da6';
+    const conversationId = 'ee4050ef-20f8-4fe5-a703-33073fc789ef';
+    const runId = 'a1a163a0-626f-44af-adfd-7850f8274a5c';
+    const strategyTaskExecutionId = 'odnext_68e6dd9e6313456cb35c498fa58c13f4';
+    const now = Date.now();
+    const messages: ChatMessage[] = [
+      {
+        id: 'home-auto-send-18mikvgtydqdr-user',
+        role: 'user',
+        content: 'Reply exactly: beta7 cold-start send path is healthy. Do not create or modify files.',
+        createdAt: now - 22_000,
+      },
+      {
+        id: 'home-auto-send-18mikvgtydqdr-assistant',
+        role: 'assistant',
+        agentId: 'agent-1',
+        content: 'beta7 cold-start send path is healthy.',
+        events: [
+          { kind: 'status', label: 'starting', detail: 'codex' },
+          { kind: 'done_key', key: '2c2867ff50a4ca49' },
+          { kind: 'status', label: 'initializing' },
+          { kind: 'status', label: 'thinking' },
+          { kind: 'text', text: 'beta7 cold-start send path is healthy.' },
+          { kind: 'usage', inputTokens: 36_352, outputTokens: 97 },
+          { kind: 'diagnostic', name: 'child_evidence_coverage_v1' },
+        ] as never,
+        createdAt: now - 22_000,
+        startedAt: now - 22_000,
+        endedAt: now,
+        runId,
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        producedFiles: [],
+        traceObjectFiles: [],
+        strategyTaskExecutionId,
+        strategyTaskRunIndex: 0,
+      },
+    ];
+    listConversations.mockResolvedValue([
+      { id: conversationId, projectId, title: 'Reply Exactly Beta7 Cold-start Send Path' },
+    ]);
+    listMessages.mockResolvedValue(messages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    listProjectRuns.mockResolvedValue([]);
+    saveMessage.mockResolvedValue(undefined);
+    fetchChatRunStatus.mockResolvedValue({
+      id: runId,
+      status: 'succeeded',
+      createdAt: now - 22_000,
+      updatedAt: now,
+      exitCode: 0,
+      signal: null,
+      strategyTask: {
+        taskExecutionId: strategyTaskExecutionId,
+        strategy: {
+          id: 'od-next-strategy',
+          version: '2.0.0',
+          packageHash: 'a'.repeat(64),
+          snapshotId: 'e348ed1a-39f1-4c4c-b03b-25728586f87f',
+        },
+        inputStage: 'request',
+        outcome: 'blocked',
+        route: 'full_plan',
+        executionMode: null,
+        activeRunId: runId,
+        terminal: true,
+        blockedContext: {
+          reasonCodes: ['od_next_protocol_runtime_state_missing'],
+          visibleText: 'beta7 cold-start send path is healthy.',
+        },
+      },
+    });
+    const consoleErrors: unknown[][] = [];
+    const consoleError = vi.spyOn(console, 'error').mockImplementation((...args) => {
+      consoleErrors.push(args);
+    });
+
+    try {
+      renderProjectView({ projectId, routeConversationId: conversationId, strict: true });
+
+      await waitFor(() => expect(chatPaneHarness.messages).toHaveLength(2));
+      await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalledTimes(1));
+
+      expect(reattachDaemonRun).not.toHaveBeenCalled();
+      expect(saveMessage).not.toHaveBeenCalled();
+      expect(
+        consoleErrors.filter((args) =>
+          args.some((value) =>
+            /(?:Minified React error #185|Maximum update depth exceeded|update-depth)/iu.test(String(value)),
+          ),
+        ),
+      ).toEqual([]);
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('flushes the pending predecessor delta and text event before pinning a task successor', async () => {
@@ -860,6 +994,80 @@ describe('ProjectView daemon reattach restore', () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(reattachDaemonRun).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not replay a projected successor into its predecessor when that successor message is already hydrated', async () => {
+    const startedAt = Date.now();
+    const taskExecutionId = 'task-already-hydrated';
+    const strategyTask = {
+      taskExecutionId,
+      strategy: {
+        id: 'od-next-strategy',
+        version: '2.0.0',
+        packageHash: 'f'.repeat(64),
+        snapshotId: 'snapshot-already-hydrated',
+      },
+      inputStage: 'production' as const,
+      outcome: 'completed' as const,
+      route: 'full_plan' as const,
+      executionMode: 'simple' as const,
+      activeRunId: 'run-production-hydrated',
+      terminal: true,
+    };
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-request-hydrated',
+        role: 'assistant',
+        agentId: 'codex',
+        content: 'Planning decision.',
+        events: [],
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-request-hydrated',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: taskExecutionId,
+        strategyTaskRunIndex: 0,
+      } satisfies ChatMessage,
+      {
+        id: 'msg-production-hydrated',
+        role: 'assistant',
+        agentId: 'codex',
+        content: 'Final delivery.',
+        events: [],
+        createdAt: startedAt + 1,
+        startedAt: startedAt + 1,
+        endedAt: startedAt + 2,
+        runId: 'run-production-hydrated',
+        runStatus: 'succeeded',
+        strategyTaskExecutionId: taskExecutionId,
+        strategyTaskRunIndex: 1,
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    fetchChatRunStatus.mockImplementation(async (runId: string) => ({
+      id: runId,
+      status: 'succeeded',
+      createdAt: startedAt,
+      updatedAt: startedAt + 2,
+      exitCode: 0,
+      signal: null,
+      strategyTask,
+    }));
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+
+    renderProjectView();
+
+    await waitFor(() => expect(fetchChatRunStatus).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(reattachDaemonRun).not.toHaveBeenCalled();
   });
 
   it('preserves the predecessor visible prefix while replaying only the active successor', async () => {
@@ -1929,6 +2137,68 @@ describe('ProjectView daemon reattach restore', () => {
       expect(errorEvent).toMatchObject({
         code: 'AMR_INSUFFICIENT_BALANCE',
       });
+    });
+  });
+
+  it('threads the captured stderr tail onto a reattached run that fails', async () => {
+    // Same promise as the live send path, different entry: a run whose failure
+    // arrives on reattach must also carry the daemon-captured stderr onto the
+    // assistant message, or the card that greets the user after a reconnect can
+    // only show the generic sentence.
+    const stderrTail =
+      'Error: dsh: plugin tree failed to load: credentials-local: the value for "version" in /Users/tester/.dsh/.credentials.yaml must be a string';
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-stderr-tail',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-stderr-tail',
+        runStatus: 'running',
+        preTurnFileNames: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-stderr-tail',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      const error = new Error(
+        'DeepSeek Harness profile exited without a terminal result.',
+      ) as Error & { code: string; stderrTail: string };
+      error.code = 'DSH_PROFILE_MISSING_RESULT';
+      error.stderrTail = stderrTail;
+      options.handlers.onError(error);
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      const finalSave = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-stderr-tail' && m.runStatus === 'failed')
+        .at(-1);
+      const errorEvent = finalSave?.events?.find(
+        (event) => event.kind === 'status' && event.label === 'error',
+      ) as { stderrTail?: string } | undefined;
+      expect(errorEvent?.stderrTail).toBe(stderrTail);
     });
   });
 

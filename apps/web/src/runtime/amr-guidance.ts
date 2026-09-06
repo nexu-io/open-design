@@ -8,6 +8,7 @@ import {
   readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
 } from '@open-design/contracts';
+import type { RunFailureAction } from '@open-design/contracts';
 
 // AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
@@ -28,6 +29,29 @@ export const OPEN_DESIGN_PRICING_URL = 'https://open-design.ai/pricing/';
 // Path + attribution the console is always reached through, so a runtime
 // origin only has to carry the host.
 const AMR_CONSOLE_PATH = '/dashboard?source=open_design';
+
+/**
+ * The console's `billing=<intent>` value that means "open the auto-recharge
+ * (auto top-up) settings dialog for THIS workspace".
+ *
+ * NOTE(sync/main): the sibling `AMR_CONSOLE_UPGRADE_INTENT = 'plan'` was
+ * REMOVED by origin/main (#7122 / #7167 / #5459): generic plan comparison no
+ * longer deep-links into the Cloud console, it goes to public Pricing. This
+ * intent survives because it names a DIFFERENT destination — the console's own
+ * auto-recharge settings — which Pricing does not own. The client states an
+ * intent and B decides which surface satisfies it. It exists because the
+ * 2026-08-26 balance ruling gives a Max owner no dialog of our own — clicking
+ * Upgrade must land them directly on 触发阈值 / 充值金额 / 每月上限, since a Max
+ * subscriber has no higher plan to sell and topping up IS the fix.
+ *
+ * ⚠️ UNCONFIRMED ON B. As of this change B's dashboard deep-link effect only
+ * recognizes `checkout` and `plan` (vela `apps/web/src/routes/team-dashboard.tsx`);
+ * its auto top-up surface is opened by in-page interaction only. An
+ * unrecognized `billing` value is inert there, so today this link still lands
+ * the owner on the dashboard that owns the setting — it just does not pop the
+ * dialog open. Needs a B-side handler before the ruling is fully satisfied.
+ */
+export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
 
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
   prod: DEFAULT_AMR_RECHARGE_URL,
@@ -119,6 +143,24 @@ export function amrPlansUrlForProfile(_profile: string | null | undefined): stri
   return OPEN_DESIGN_PRICING_URL;
 }
 
+/**
+ * Console dashboard deep-linked to open the auto-recharge settings, used by the
+ * Max-tier balance card whose owner has no higher plan to buy. See
+ * {@link AMR_CONSOLE_AUTO_RECHARGE_INTENT} for the B-side caveat.
+ */
+export function amrAutoRechargeUrlForProfile(profile: string | null | undefined): string {
+  return amrConsoleUrlWithBillingIntent(profile, AMR_CONSOLE_AUTO_RECHARGE_INTENT);
+}
+
+function amrConsoleUrlWithBillingIntent(
+  profile: string | null | undefined,
+  intentValue: string,
+): string {
+  const base = amrConsoleUrlForProfile(profile);
+  const intent = `billing=${intentValue}`;
+  return base.includes('?') ? `${base}&${intent}` : `${base}?${intent}`;
+}
+
 export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
   if (profile === 'test') return 'TEST';
   if (profile === 'feature-test') return 'FEATURE TEST';
@@ -149,6 +191,12 @@ const PROMOTE_AMR_CODES = new Set<string>([
 //                                  for the auth code), so OD spawns a
 //                                  system Terminal running `agy` and
 //                                  the user finishes OAuth there.
+//   - switch-model:                the selected model is gone/disabled, so a
+//                                  retry reproduces the same answer. Opens the
+//                                  model picker (Settings → Execution) instead
+//                                  of offering a dead Retry. Design principle
+//                                  4: a retry button only appears where a retry
+//                                  can actually work.
 //   - launch-terminal-switch-model: Antigravity-specific. agy has no
 //                                  `--model` flag (upstream #35), so
 //                                  switching to a model with available
@@ -157,6 +205,31 @@ const PROMOTE_AMR_CODES = new Set<string>([
 //                                  daemon spawns the same terminal as
 //                                  launch-terminal-auth — the button
 //                                  label is the only thing that changes.
+//   - open-settings:               S30. The failure is in the user's own machine
+//                                  or network path — a corporate proxy, a
+//                                  rewritten TLS chain, an unreachable route, a
+//                                  host policy, a broken local store. Nothing
+//                                  upstream changes on a re-run, and the only
+//                                  lever we own is the place those overrides are
+//                                  entered: Settings → Local CLI → "Advanced:
+//                                  proxy & custom paths", whose `configuredEnv`
+//                                  outranks the inherited process env
+//                                  (`apps/daemon/src/runtimes/env.ts`). Pairs
+//                                  with `secondaryRetry: true` because the
+//                                  upstream string this classifies on also
+//                                  covers a genuine handshake flake — design
+//                                  keeps 〔重试〕 on this card deliberately.
+//   - switch-to-cloud:             ladder rung 3. This local path cannot work at
+//                                  all (nothing installed, nothing signed in,
+//                                  the provider's quota is spent) and none of
+//                                  the fixes are in our hands, so the forward
+//                                  path is the hosted alternative. The card
+//                                  itself draws no button — the AMR switch card
+//                                  rendered underneath IS the primary action.
+//   - contact-support:             ladder rung 4. Retrying is futile and we have
+//                                  no other way out, so the always-present
+//                                  secondary 〔Contact support〕 is promoted to
+//                                  primary rather than leaving a dead-end card.
 // Both terminal-launch actions pair with `secondaryRetry: true` so the
 // user has a Retry button after the external step completes (OAuth /
 // switching models happens out-of-band; we can't auto-retry from the
@@ -166,12 +239,12 @@ export type RunFailurePrimaryAction =
   | 'authorize'
   | 'recharge'
   | 'upgrade'
+  | 'switch-model'
+  | 'open-settings'
   | 'launch-terminal-auth'
   | 'launch-terminal-switch-model'
-  // No self-contained recovery button. Used when retrying is futile (e.g. a
-  // hard quota / exhausted credits) and the only forward path is the AMR switch
-  // card rendered below, so the card shows guidance copy without a dead Retry.
-  | 'none';
+  | 'switch-to-cloud'
+  | 'contact-support';
 
 // i18n keys for the gray-card text override (null = show the raw error).
 // Keys ending in a value with `{agent}` are interpolated at render time via
@@ -202,9 +275,45 @@ export type RunFailureMessageKey =
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
+  | 'chat.runError.agentCrashedMessage'
+  | 'chat.runError.accountSuspendedMessage'
+  | 'chat.runError.fallbackMessage'
   | 'chat.runError.cliSessionRefusedMessage'
   | 'chat.runError.strategyTaskStateMismatchMessage'
+  | 'chat.runError.agentReplyIncompleteMessage'
+  | 'chat.runError.clarificationRepeatedMessage'
+  | 'chat.runError.clientEnvironmentMessage'
   | null;
+
+/**
+ * The `{cause}` half of S30's sentence — the parenthesis the design writes as
+ * 「{地区不支持 / 证书校验失败}」, i.e. a slot, not a fixed phrase.
+ *
+ * It is a KEY rather than a string because this module has no `t`: the card
+ * resolves it at render time next to `{agent}` (see ChatPane's
+ * `runFailureMessageVars`). Keeping the five causes in one sentence — instead
+ * of five near-identical sentences — is also what keeps the copy honest across
+ * 19 locales: only the noun changes.
+ */
+export type RunFailureCauseKey =
+  | 'chat.runError.clientEnvironmentCause.certificate'
+  | 'chat.runError.clientEnvironmentCause.proxy'
+  | 'chat.runError.clientEnvironmentCause.network'
+  | 'chat.runError.clientEnvironmentCause.hostPolicy'
+  | 'chat.runError.clientEnvironmentCause.localStorage';
+
+/**
+ * The one sentence a failure card falls back to when its mapping carries no
+ * copy of its own.
+ *
+ * Before this existed the card rendered `rawError` — the upstream string, in
+ * English, sometimes a slab of stderr — straight onto the card face, which is
+ * design principle 5 ("say it in plain words") inverted. The raw text is still
+ * reachable: it stays in the collapsible diagnostic area, which is where the
+ * engineering-facing copy belongs.
+ */
+export const RUN_FAILURE_FALLBACK_MESSAGE_KEY =
+  'chat.runError.fallbackMessage' as const;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
 // detail message). Frontend-only mapping from error code → human-readable type;
@@ -233,8 +342,13 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
   | 'chat.runError.title.cpuUnsupported'
+  | 'chat.runError.title.agentCrashed'
+  | 'chat.runError.title.accountSuspended'
   | 'chat.runError.title.cliSessionRefused'
   | 'chat.runError.title.strategyTaskHalted'
+  | 'chat.runError.title.agentReplyIncomplete'
+  | 'chat.runError.title.clarificationRepeated'
+  | 'chat.runError.title.clientEnvironment'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -248,11 +362,82 @@ export interface RunFailureUi {
   // something the daemon read off the failure (e.g. when a rolling model window
   // reopens). Absent for every message that is a fixed sentence.
   messageVars?: Record<string, string>;
+  // A `{cause}` the copy names but that is itself localized, so it arrives as a
+  // key and is translated next to `{agent}` at render time. Only S30 uses it.
+  messageCauseKey?: RunFailureCauseKey;
   // Show a secondary plain "retry" button alongside the primary action (used
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
   // Show the AMR promotion card under the gray error card.
   showSwitchCard: boolean;
+  /**
+   * Draw no error card at all — some other surface already owns this story.
+   *
+   * Two failures set it. The browser↔daemon stream drop hands its card to the
+   * reconnect line at the tail of the conversation (grid 82–84, S29), which is
+   * already saying the same thing with the right button; the insufficient
+   * balance hands its card to the upgrade card (component 18). Two blocks of
+   * UI for one event, in two different wordings, is exactly what the design
+   * forbids.
+   *
+   * This is a HAND-OFF, not a delete: it is only true while the surface named
+   * above is actually on screen. The reconnect line always is. The upgrade card
+   * is conditional — see `failureCardHandedToAmrBalanceCard`.
+   */
+  suppressCard?: boolean;
+}
+
+/**
+ * Is this the failure whose card is handed to the AMR upgrade card, rather
+ * than to the always-present reconnect line?
+ *
+ * The distinction matters because that receiver is conditional: the upgrade
+ * card only renders once a wallet read returns a definite number, and the
+ * failure event itself carries no balance. When that read comes back empty
+ * nobody is telling the story, and honouring the hand-off would leave a run
+ * that died for lack of funds with no top-up entry and no retry — the one
+ * self-rescue path this failure has.
+ *
+ * Callers must therefore confirm the upgrade card is on screen before
+ * honouring `suppressCard` for this failure.
+ */
+export function failureCardHandedToAmrBalanceCard(
+  ui: RunFailureUi | null | undefined,
+): boolean {
+  return ui?.suppressCard === true && ui.primaryAction === 'recharge';
+}
+
+/**
+ * The browser↔daemon SSE stream ran out of reconnect budget.
+ *
+ * Duplicated from `providers/daemon.ts` rather than imported: that module
+ * already imports this one (`setRuntimeAmrConsoleOrigin`), so the import would
+ * close a cycle. `run-error-ladder.test.ts` pins the two copies equal, since a
+ * silently drifting copy is the failure mode of writing it twice.
+ */
+export const RECONNECT_OWNED_FAILURE_CODE = 'DAEMON_STREAM_DISCONNECTED';
+const RECONNECT_OWNED_FAILURE_MESSAGE =
+  'daemon stream disconnected before run completed';
+
+/**
+ * Is this failure the one the reconnect line already speaks for?
+ *
+ * Reads the same code-or-message pair as `ProjectView`'s
+ * `hasGenericDisconnectFailureEvent`: rows persisted before the structured code
+ * existed carry only the sentence, and they have to be recognized too or the
+ * duplicate card comes back for exactly the users with the longest history.
+ *
+ * Not the same thing as `AGENT_CONNECTION_DROPPED` (S11): that is the agent's
+ * connection to the MODEL service, which the reconnect line knows nothing about
+ * and cannot re-establish, so that failure keeps its card and its retry.
+ */
+export function isReconnectOwnedFailure(
+  code: string | null | undefined,
+  rawMessage?: string | null,
+): boolean {
+  if (code === RECONNECT_OWNED_FAILURE_CODE) return true;
+  return typeof rawMessage === 'string'
+    && rawMessage.trim() === RECONNECT_OWNED_FAILURE_MESSAGE;
 }
 
 /**
@@ -314,20 +499,301 @@ export function formatModelWindowRetryAt(retryAt: string, locale: string): strin
   }
 }
 
-// Small helper for the common shape: a named failure type + actionable copy,
-// recovered by re-running once the user has followed the instruction. No AMR
-// promotion (these root causes aren't "switch to hosted model" cases).
+/**
+ * The rung-1 actions: the things we can do FOR the user in one click.
+ *
+ * Narrowed out of `RunFailurePrimaryAction` so a mapping cannot accidentally
+ * declare "we have a direct fix" and then name `retry` (rung 2) or
+ * `contact-support` (rung 4) as that fix.
+ */
+export type RunFailureDirectFix = Extract<
+  RunFailurePrimaryAction,
+  | 'authorize'
+  | 'recharge'
+  | 'upgrade'
+  | 'switch-model'
+  | 'open-settings'
+  | 'launch-terminal-auth'
+  | 'launch-terminal-switch-model'
+>;
+
+/**
+ * What KIND of failure this is — the only thing a mapping has to declare.
+ *
+ * Every field is a question about the failure itself, not about the button we
+ * want. The button is derived (`primaryActionForFailure`), which is the whole
+ * point: adding a new failure code means answering three questions, not picking
+ * a CTA by hand and hoping it stays consistent with the sixteen picked before it.
+ */
+export interface RunFailureNature {
+  /** Rung 1 — we have a one-click action that actually resolves this. */
+  directFix?: RunFailureDirectFix;
+  /** Rung 2 — running it again can plausibly succeed (possibly after the user does something). */
+  transient?: boolean;
+  /** Rung 3 — this local path cannot work at all and the fix isn't in our hands. */
+  localDeadEnd?: boolean;
+}
+
+/**
+ * The primary-button ladder (`specs/current/run-error-catalog.md` §6.Z),
+ * top-down; the first rung that matches wins.
+ *
+ *   1. We have an action that directly solves it   → that action
+ *   2. The failure is transient                    → retry from where it failed
+ *   3. This local path cannot work at all          → switch to Cloud
+ *   4. None of the above                           → contact support (promoted
+ *                                                     from the standing secondary)
+ *
+ * One ladder covers both environments: a run that is ALREADY on Cloud never
+ * trips rung 3, so it degrades to the Cloud answer on its own — no second table.
+ *
+ * Rung 1 outranks rung 3 deliberately (user's words): someone paying for their
+ * own CLI/BYOK who hits a "just switch models" problem must not be told to buy
+ * a second product instead — that puts marketing ahead of solving the problem.
+ *
+ * Rung 4 is what makes design principle 4 hold structurally rather than by
+ * vigilance: a failure that declares neither a direct fix nor transience can no
+ * longer end up with a Retry button, because nothing in this function can
+ * produce one.
+ *
+ * §6.T maps the rungs onto the F0–F10 flow table: rung 1 = F4/F5/F6/F7/F8,
+ * rung 2 = F1/F2/F3/F9, rung 3 has no F-row (it is new in the ladder),
+ * rung 4 = F10.
+ */
+export function primaryActionForFailure(
+  nature: RunFailureNature,
+): RunFailurePrimaryAction {
+  if (nature.directFix) return nature.directFix;
+  if (nature.transient) return 'retry';
+  if (nature.localDeadEnd) return 'switch-to-cloud';
+  return 'contact-support';
+}
+
+/**
+ * The daemon's own reading of a failed run: can it be re-run, and what should
+ * the user do. Both are already computed at finalize time
+ * (`apps/daemon/src/run-failure-classification.ts` → `retryable` /
+ * `user_action`) and both are already on `GET /api/runs/:id`
+ * (`ChatRunStatusResponse.failureAction`).
+ *
+ * ⚠️ They do NOT reach the card today. The chat reads its failure off the
+ * persisted `status`/`error` event, and the streaming layer only stamps
+ * `failureCategory` + `failureDetail` onto it. Carrying these two the same way
+ * is a three-file change outside this module — the SSE `end` frame /
+ * `PersistedAgentEvent` shape in contracts, `providers/daemon.ts`'s
+ * `markErrorRunFailure`, and `runtime/chat-events.ts`'s
+ * `appendErrorStatusEvent` — so this parameter is written to be inert until
+ * they land, and correct the moment they do.
+ */
+export interface RunFailureDaemonVerdict {
+  /** Daemon's `retryable`. */
+  retryable?: boolean | null;
+  /** Daemon's `user_action`, as published on the run-status response. */
+  failureAction?: RunFailureAction | null;
+}
+
+/**
+ * Did the daemon put a NAME on this failure?
+ *
+ * The two cases the fallback used to merge are separable in the data, and this
+ * is the whole of the test: the classifier emits a specific `failure_detail`
+ * when it recognised the cause, and the literal `'unknown'` when it did not
+ * (the last `classification('unknown', 'unknown', …)` in
+ * `run-failure-classification.ts`). An absent detail is an older daemon that
+ * classified nothing at all, which is the same situation.
+ *
+ * What it does NOT settle is the button. Among the causes the daemon names but
+ * this module has no row for there are both futile ones (`spawn_enoexec`,
+ * `cli_version_incompatible`) and genuinely transient ones (`upstream_5xx`,
+ * `provider_high_demand`), so "named" alone cannot demote a Retry without
+ * taking it away from failures that deserve it. That call belongs to the
+ * daemon's own verdict — see {@link RunFailureDaemonVerdict}.
+ */
+export function daemonNamedTheFailure(detail: string | null | undefined): boolean {
+  return typeof detail === 'string' && detail.length > 0 && detail !== 'unknown';
+}
+
+/**
+ * Did the daemon already decide that running this again cannot help?
+ *
+ * Either half is sufficient and they are written independently upstream:
+ * `retryable: false` is the classifier's verdict, `failureAction: 'none'` is
+ * the same verdict expressed as an instruction. An absent verdict answers no,
+ * which is what keeps an older daemon on today's behaviour.
+ */
+function daemonSaysRetryIsFutile(
+  verdict: RunFailureDaemonVerdict | null | undefined,
+): boolean {
+  if (!verdict) return false;
+  return verdict.retryable === false || verdict.failureAction === 'none';
+}
+
+/**
+ * Read the daemon's verdict off whatever the chat has for this failure.
+ *
+ * Deliberately structural rather than typed against the event: the fields are
+ * not on `PersistedAgentEvent` yet (see {@link RunFailureDaemonVerdict}), and
+ * the same shape of defensive read is how `runFailureFieldsFromError` already
+ * picks the classification off a surfaced error. Returns undefined when neither
+ * field is present, so a caller passes nothing through rather than an object
+ * that says "we asked and the answer was nothing".
+ */
+export function daemonFailureVerdictFrom(
+  source: unknown,
+): RunFailureDaemonVerdict | undefined {
+  const value = source as
+    | { retryable?: unknown; failureAction?: unknown }
+    | null
+    | undefined;
+  if (!value || typeof value !== 'object') return undefined;
+  const retryable = typeof value.retryable === 'boolean' ? value.retryable : undefined;
+  const failureAction =
+    typeof value.failureAction === 'string'
+      ? (value.failureAction as RunFailureAction)
+      : undefined;
+  if (retryable === undefined && failureAction === undefined) return undefined;
+  return {
+    ...(retryable === undefined ? {} : { retryable }),
+    ...(failureAction === undefined ? {} : { failureAction }),
+  };
+}
+
+/**
+ * Does THIS card draw a control that can push the failed run forward?
+ *
+ * Rung 3 and rung 4 both answer no: rung 3's button lives on the switch card
+ * rendered underneath, and "contact support" opens a conversation, not a
+ * recovery. Callers use it to decide whether to offer the generic local-CLI
+ * escape hatch alongside.
+ */
+export function hasSelfContainedRecovery(ui: RunFailureUi | null | undefined): boolean {
+  if (!ui) return false;
+  if (ui.secondaryRetry) return true;
+  return ui.primaryAction !== 'switch-to-cloud' && ui.primaryAction !== 'contact-support';
+}
+
+/**
+ * Build a failure card from the nature of the failure. Callers never name a
+ * primary action — they describe the failure and the ladder answers.
+ */
+function failureCard(
+  nature: RunFailureNature,
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+  extra: Partial<
+    Pick<
+      RunFailureUi,
+      'secondaryRetry' | 'showSwitchCard' | 'messageVars' | 'messageCauseKey'
+    >
+  > = {},
+): RunFailureUi {
+  return {
+    primaryAction: primaryActionForFailure(nature),
+    titleKey,
+    messageKey,
+    secondaryRetry: extra.secondaryRetry ?? false,
+    // Rung 3 says the way out is the hosted alternative, so the switch card is
+    // that rung's button and is always on. Any other rung may still promote AMR
+    // for its own reasons, but has to ask for it.
+    showSwitchCard: extra.showSwitchCard ?? Boolean(nature.localDeadEnd),
+    ...(extra.messageVars ? { messageVars: extra.messageVars } : {}),
+    ...(extra.messageCauseKey ? { messageCauseKey: extra.messageCauseKey } : {}),
+  };
+}
+
+// Named failure type + actionable copy, recovered by re-running once the user
+// has followed the instruction (ladder rung 2). No AMR promotion — these root
+// causes aren't "switch to hosted model" cases.
 function retryWithGuidance(
   titleKey: RunFailureTitleKey,
   messageKey: RunFailureMessageKey,
 ): RunFailureUi {
+  return failureCard({ transient: true }, titleKey, messageKey);
+}
+
+/**
+ * The selected model cannot serve this run at all — it is missing, disabled, or
+ * no longer in the catalogue. Retrying re-picks the same model and reproduces
+ * the same answer, so the card offers the one thing that changes the outcome:
+ * picking a different model (ladder rung 1).
+ */
+function switchModelWithGuidance(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+): RunFailureUi {
+  return failureCard({ directFix: 'switch-model' }, titleKey, messageKey);
+}
+
+/**
+ * S30 · the failure is in the user's own machine or network path.
+ *
+ * The daemon already names these five causes (`clientEnvironmentFailureDetail`
+ * in `apps/daemon/src/run-failure-classification.ts`) and already rules them
+ * `retryable: false` / `user_action: 'none'`. Web had no row for any of them,
+ * so all five landed on the unclassified fallback and were handed a 〔重试〕 —
+ * and a retry here is a whole new run against the same rewritten TLS chain or
+ * the same blocked route, i.e. the same answer.
+ *
+ * Copy is the design's, verbatim (`error-ux-design.md` S30): 「网络环境不对 ——
+ * 看起来走了代理或公司网络,{供应商} 拒绝了请求({地区不支持 / 证书校验失败})。
+ * 换一个网络出口,或在设置里调整代理。〔去设置 | 重试〕」 — note what it does NOT
+ * say: nothing here promises that installing a certificate makes it work, because
+ * upstream has measured builds where it does not.
+ *
+ * 〔重试〕 stays as the SECONDARY on purpose. The upstream sentence these
+ * classify on ("unknown certificate verification error") covers two different
+ * events: a corporate middlebox (deterministic) and a handshake cut mid-flight
+ * on a lossy link (a flake). Keeping a retry within reach costs nothing and
+ * covers the second; making it the primary is what the design forbids.
+ */
+function clientEnvironmentCard(causeKey: RunFailureCauseKey): RunFailureUi {
+  return failureCard(
+    { directFix: 'open-settings' },
+    'chat.runError.title.clientEnvironment',
+    'chat.runError.clientEnvironmentMessage',
+    { secondaryRetry: true, messageCauseKey: causeKey },
+  );
+}
+
+/**
+ * Rung 3 — "switch to the Open Design agent" — is not an answer for a run that
+ * is ALREADY on that agent: the card would recommend the very thing that just
+ * failed, and the switch card underneath would advertise it a second time.
+ *
+ * The ladder's own docblock already claims this ("a run that is ALREADY on
+ * Cloud never trips rung 3, so it degrades to the Cloud answer on its own — no
+ * second table"). Until now nothing executed that claim, because the AMR branch
+ * returned a catch-all before any rung-3 mapping could be reached. This
+ * function is where the claim becomes true, so the AMR branch no longer has to
+ * swallow the rest of the table to stay honest.
+ *
+ * Removing rung 3 leaves nothing below it, so such a card lands on rung 4
+ * (contact support) — never on a Retry, which principle 4 forbids for the
+ * quota/entitlement failures that reach rung 3 in the first place.
+ */
+function withoutCloudSelfPromotion(ui: RunFailureUi): RunFailureUi {
+  if (!ui.showSwitchCard && ui.primaryAction !== 'switch-to-cloud') return ui;
   return {
-    primaryAction: 'retry',
-    titleKey,
-    messageKey,
-    secondaryRetry: false,
+    ...ui,
     showSwitchCard: false,
+    primaryAction:
+      ui.primaryAction === 'switch-to-cloud' ? 'contact-support' : ui.primaryAction,
   };
+}
+
+/** The hosted agent — the one every rung-3 mapping points at. */
+const CLOUD_NATIVE_AGENT_ID = 'amr';
+
+/**
+ * Nothing on this card can move the run forward and retrying is futile
+ * (ladder rung 4). 〔Contact support〕 — a standing secondary on every failure
+ * card — is promoted to primary so the card is never a dead end.
+ */
+function contactSupportOnly(
+  titleKey: RunFailureTitleKey,
+  messageKey: RunFailureMessageKey,
+): RunFailureUi {
+  return failureCard({}, titleKey, messageKey);
 }
 
 // Agent-agnostic failure codes that carry a clear root cause and a concrete
@@ -353,8 +819,10 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.promptTooLarge',
     'chat.runError.promptTooLargeMessage',
   ),
-  // Selected model is missing/disabled (user_action: switch_model).
-  AMR_MODEL_UNAVAILABLE: retryWithGuidance(
+  // Selected model is missing/disabled (user_action: switch_model). The daemon
+  // already names the fix — offer it as the button instead of a Retry that is
+  // guaranteed to fail the same way.
+  AMR_MODEL_UNAVAILABLE: switchModelWithGuidance(
     'chat.runError.title.modelUnavailable',
     'chat.runError.modelUnavailableMessage',
   ),
@@ -370,12 +838,29 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.outputInvalid',
     'chat.runError.outputInvalidMessage',
   ),
-  // Checked-in runtime def failed strict validation (user_action: fix_config);
-  // the user can't self-repair, so the copy points at update/support.
-  AGENT_RUNTIME_DEF_INVALID: retryWithGuidance(
+  // Checked-in runtime def failed strict validation (user_action: fix_config).
+  // Ladder rung 4 (catalogue R-031: flow F10, "retryable: no"): the user cannot
+  // self-repair and a new run re-reads the same invalid definition, so the
+  // button now matches what the copy has always said — talk to us.
+  AGENT_RUNTIME_DEF_INVALID: contactSupportOnly(
     'chat.runError.title.runtimeConfig',
     'chat.runError.runtimeConfigMessage',
   ),
+  // R9 · the browser↔daemon stream gave up reconnecting. Ladder rung 2 — the
+  // stream can be re-established, and 〔重新连接〕 already exists for exactly
+  // that. But the button lives on the reconnect line at the tail of the
+  // conversation (grid 84, S29), not on a card, so this mapping draws no card:
+  // the run may well still be alive on the daemon (`ProjectView` re-attaches
+  // any run whose only failure event is this one), and a card claiming "task
+  // failed" would be both a duplicate and a lie.
+  [RECONNECT_OWNED_FAILURE_CODE]: {
+    ...failureCard(
+      { transient: true },
+      'chat.runError.title.connectionDropped',
+      'chat.connectionDropped',
+    ),
+    suppressCard: true,
+  },
   // A strategy-task continuation (clarification answer) arrived after the
   // daemon's OD Next protocol gate already settled the task — typically a
   // sticky `blocked` verdict. This is a task-lifecycle rejection, not an
@@ -385,22 +870,99 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.strategyTaskHalted',
     'chat.runError.strategyTaskStateMismatchMessage',
   ),
+  // The agent answered — completely, readably, and the reply is already on
+  // screen — but the reply carried no usable Runtime State block, and the OD
+  // Next clarification stage admits only `plan_ready` (which needs a Plan
+  // Contract this reply never had), `blocked`, or `canceled`. So the turn
+  // settles terminal-`blocked`.
+  //
+  // Refusing it is CORRECT and is not what these rows change. What they change
+  // is what the user is told. Without a row here the failure fell through to
+  // the generic fallback, whose `messageKey: null` renders
+  // RUN_FAILURE_FALLBACK_MESSAGE_KEY — a blank "the task failed" — while the
+  // user is looking at their submitted answers and a full prose plan. The one
+  // sentence that actually described the failure lived only in the English
+  // diagnostic text. That is design principle 5 inverted twice over: it
+  // explains nothing, and it lets the user suspect their own answers.
+  //
+  // Ladder rung 2. The omission is intermittent — the same prompt re-run
+  // usually emits the block — so Retry is the honest action, and
+  // `retryWithGuidance` keeps exactly the button the fallback already gave.
+  //
+  // ⚠️ `docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS. The
+  // nearest, S21, covers an empty / malformed / looping model response, which
+  // this is not. The copy below is W41's draft for a cell product has yet to
+  // write — replace the wording, not the routing, when they do.
+  //
+  // All four Runtime State issue codes (`strategies/od-next/protocol.ts:16-19`)
+  // share the row: to the user they are one story — the reply came back without
+  // the marker — and splitting them would only ask product for four wordings of
+  // the same sentence.
+  od_next_protocol_runtime_state_missing: agentReplyIncomplete(),
+  od_next_protocol_runtime_state_duplicate: agentReplyIncomplete(),
+  od_next_protocol_runtime_state_invalid_json: agentReplyIncomplete(),
+  od_next_protocol_runtime_state_invalid_schema: agentReplyIncomplete(),
+  // The user answered the clarification form, and the agent came back with
+  // ANOTHER question instead of proceeding.
+  //
+  // DELIBERATELY NOT one of the four above, even though the daemon reaches this
+  // code through the same block-less turn. To the user those are one story —
+  // "the reply came back without its marker" — and this is a different one: "I
+  // answered, and it is asking me again." Folding it into that row would tell
+  // the user their reply went missing while a fresh question form sits on
+  // screen in front of them.
+  //
+  // It is also NOT intermittent, which is why its copy must not promise that a
+  // re-run fixes it. A task admits exactly ONE clarification round
+  // (`coordinator.ts` beginStrategyClarification: "the task is not awaiting its
+  // one allowed clarification answer"), and at `inputStage: 'clarification'`
+  // the contract admits only `plan_ready` / `blocked` / `canceled`
+  // ("Clarification cannot request another clarification round",
+  // `contracts/src/plugins/strategy-v2.ts`). A properly DECLARED second
+  // question is refused by the identical code, so nothing about this is a
+  // dropped block.
+  //
+  // Retry still earns its place, for a different reason than rung 2's usual
+  // one: Retry does not re-roll this turn, it opens a NEW task. `handleRetry`
+  // sends no `strategyTaskExecutionId`, so `resolveClarificationContinuation`
+  // returns `ordinary` and `createStrategyTaskExecution` starts a fresh chain
+  // at `clarificationCount: 0` / `inputStage: 'request'` — where asking a
+  // question is a legal outcome. The agent will likely ask again; that time it
+  // renders as a normal round of questions instead of a failure card.
+  //
+  // ⚠️ `docs/design/run-errors/error-ux-design.md` HAS NO CELL FOR THIS either
+  // — S01–S32 contain nothing about clarification or follow-up questions. The
+  // copy is W41's draft; product should rewrite the wording, not the routing.
+  od_next_clarification_repeated: retryWithGuidance(
+    'chat.runError.title.clarificationRepeated',
+    'chat.runError.clarificationRepeatedMessage',
+  ),
 };
 
-// Same "switch to the hosted alternative" shape for causes where retrying with
-// the current provider is futile (hard quota / exhausted credits): no plain
-// Retry button, just guidance copy + the AMR promotion card below.
-function switchToAlternative(
+/**
+ * The card for "the agent replied, but the reply could not be recorded".
+ *
+ * A function rather than a shared constant because `AGENT_AGNOSTIC_FAILURE_UI`
+ * hands its values straight to callers; four references to one frozen-by-
+ * convention object would let a future mutation of one code's card silently
+ * rewrite the other three.
+ */
+function agentReplyIncomplete(): RunFailureUi {
+  return retryWithGuidance(
+    'chat.runError.title.agentReplyIncomplete',
+    'chat.runError.agentReplyIncompleteMessage',
+  );
+}
+
+// Ladder rung 3: this local path cannot work at all — the provider's quota is
+// spent, and topping it up / changing keys isn't something we can do for the
+// user. The hosted alternative is the way out, so the switch card below is the
+// primary action and the card itself draws no button.
+function switchToCloud(
   titleKey: RunFailureTitleKey,
   messageKey: RunFailureMessageKey,
 ): RunFailureUi {
-  return {
-    primaryAction: 'none',
-    titleKey,
-    messageKey,
-    secondaryRetry: false,
-    showSwitchCard: true,
-  };
+  return failureCard({ localDeadEnd: true }, titleKey, messageKey);
 }
 
 // Failure causes keyed by the daemon's fine-grained `failure_detail`, for the
@@ -412,11 +974,11 @@ function switchToAlternative(
 const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // Provider quota / billing hard-stop: retrying reproduces the failure, so
   // drop Retry and steer to the hosted-AMR switch card.
-  hard_quota: switchToAlternative(
+  hard_quota: switchToCloud(
     'chat.runError.title.quotaExhausted',
     'chat.runError.quotaExhaustedMessage',
   ),
-  workspace_credits_exhausted: switchToAlternative(
+  workspace_credits_exhausted: switchToCloud(
     'chat.runError.title.quotaExhausted',
     'chat.runError.workspaceCreditsMessage',
   ),
@@ -436,6 +998,10 @@ const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
 // every agent, including AMR. They leak in under the opaque AGENT_EXECUTION_FAILED
 // / process-exit codes, so without this the card would only show the raw stderr.
 const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
+  stream_disconnected: retryWithGuidance(
+    'chat.runError.title.connectionDropped',
+    'chat.connectionDropped',
+  ),
   // Hard wall-clock timeout for the run (daemon user_action: retry). A plain
   // retry — optionally with a smaller task — usually gets through.
   timeout: retryWithGuidance(
@@ -472,13 +1038,114 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // switching hosted models doesn't help (the runtime binary is the problem).
   // The fix is updating OpenDesign to a build that bundles a compatible
   // (baseline) runtime, so show guidance copy without a dead Retry button.
-  cpu_unsupported: {
-    primaryAction: 'none',
-    titleKey: 'chat.runError.title.cpuUnsupported',
-    messageKey: 'chat.runError.cpuUnsupportedMessage',
-    secondaryRetry: false,
-    showSwitchCard: false,
-  },
+  // Ladder rung 4. §6.Z names this one explicitly under principle 4 ("quota
+  // spent, account suspended, CPU unsupported — these three get no Retry").
+  // Rung 3 is not available either: the binary that cannot start IS the hosted
+  // runtime, so "switch to Cloud" would point at the thing that just crashed.
+  cpu_unsupported: contactSupportOnly(
+    'chat.runError.title.cpuUnsupported',
+    'chat.runError.cpuUnsupportedMessage',
+  ),
+  // S19 · the agent exited and did not say why. 20,868 runs/month, 16.3% of all
+  // failures, 3,869 devices — the second-largest bucket, and until now it had no
+  // row in any of the three tables, so every one of those runs rendered "task
+  // failed" plus whatever stderr happened to be attached (catalogue R-070 /
+  // R-071 / R-072 / R-079).
+  //
+  // Design copy verbatim (`error-ux-design.md:212-217`): "{agent} exited
+  // unexpectedly — it didn't say why. Retrying usually recovers; if it keeps
+  // happening, send us the logs. 〔Retry | Export logs〕". 〔Export logs〕 is a
+  // standing secondary on every card (§6.Z), so the mapping only has to declare
+  // that a retry is worth offering — ladder rung 2.
+  //
+  // Causes we CAN name resolve earlier (cli missing, Git Bash, timeouts, stale
+  // session, CPU): these six are the residue where the exit carries no reason.
+  process_crashed: retryWithGuidance(
+    'chat.runError.title.agentCrashed',
+    'chat.runError.agentCrashedMessage',
+  ),
+  signal_killed: retryWithGuidance(
+    'chat.runError.title.agentCrashed',
+    'chat.runError.agentCrashedMessage',
+  ),
+  terminated_unknown: retryWithGuidance(
+    'chat.runError.title.agentCrashed',
+    'chat.runError.agentCrashedMessage',
+  ),
+  exit_code: retryWithGuidance(
+    'chat.runError.title.agentCrashed',
+    'chat.runError.agentCrashedMessage',
+  ),
+  exit_nonzero: retryWithGuidance(
+    'chat.runError.title.agentCrashed',
+    'chat.runError.agentCrashedMessage',
+  ),
+  execution_failed: retryWithGuidance(
+    'chat.runError.title.agentCrashed',
+    'chat.runError.agentCrashedMessage',
+  ),
+  // S10 · the hosted agent service failed at the protocol level and did not
+  // come back. `fatal_rpc_error` is what the daemon writes when the ACP/JSON-RPC
+  // channel to the agent reported a FATAL and the child closed
+  // (`server.ts` markRpcCloseReason → `process_exit / fatal_rpc_error`); the
+  // named members of that family — suspended account, insufficient balance,
+  // rolling model window, stale resumed session — are all extracted ahead of
+  // this row, so what is left is "the service backing this agent broke and did
+  // not say anything we can act on".
+  //
+  // Why S10 (「服务暂时不可用」) and not S19 (「智能体意外退出了」): S19's copy is
+  // "it didn't say why", and this failure is the case where it DID say — at the
+  // protocol level — that the service side gave up. The observed instance is
+  // AMR's `session/new`: vela's opencode session creation is slow by nature
+  // (median 26.7s, p100 ~32s) and its long tail returns Go's
+  // `context deadline exceeded`, which is upstream slowness, not a local crash.
+  //
+  // S10's 时机 is "自动重试都失败后", and that is exactly when this row is read:
+  // `fatal_rpc_error` is in the daemon's safe same-run retry set
+  // (`run-retry-policy.ts`), so by the time a card renders the run has already
+  // burned its automatic retry — which makes S10's "已自动重试过" literally true.
+  //
+  // No switch card: 推荐 Open Design 智能体 is reserved for「本地 agent 没登录」
+  // and「供应商额度用完」(design §3), and the agent that just failed here
+  // usually IS the hosted one.
+  fatal_rpc_error: retryWithGuidance(
+    'chat.runError.title.upstreamUnavailable',
+    'chat.runError.upstreamUnavailableMessage',
+  ),
+  // S18 · risk control suspended the account (catalogue R-064: "card — contact
+  // support, no Retry"). Resolved here, ahead of the AMR branch, because the
+  // suspension is the ACCOUNT's and the AMR catch-all below would otherwise
+  // render it as "task failed" with a Retry that can only fail the same way.
+  // Ladder rung 4, and deliberately no switch card: a suspended account has the
+  // same problem on the hosted path.
+  account_suspended: contactSupportOnly(
+    'chat.runError.title.accountSuspended',
+    'chat.runError.accountSuspendedMessage',
+  ),
+  // S30 · the five client-environment causes. Agent-agnostic on purpose and
+  // resolved here, ahead of every agent branch: the proxy, the certificate
+  // store, the route and the host policy belong to the user's machine, so the
+  // card is the same one whichever agent happened to be running.
+  certificate_failure: clientEnvironmentCard(
+    'chat.runError.clientEnvironmentCause.certificate',
+  ),
+  proxy_configuration: clientEnvironmentCard(
+    'chat.runError.clientEnvironmentCause.proxy',
+  ),
+  network_configuration: clientEnvironmentCard(
+    'chat.runError.clientEnvironmentCause.network',
+  ),
+  host_policy_block: clientEnvironmentCard(
+    'chat.runError.clientEnvironmentCause.hostPolicy',
+  ),
+  // ⚠️ 待拍板 — this one is a local SQLite/WAL I/O failure, not a network path.
+  // The design gives the environment family exactly one card (S30) and W28's
+  // brief lists all five under it, so it renders here with its own cause noun;
+  // but S30's opening clause (「看起来走了代理或公司网络」) does not describe this
+  // failure. Either it needs its own sentence or it needs its own scenario.
+  local_storage_failure: clientEnvironmentCard(
+    'chat.runError.clientEnvironmentCause.localStorage',
+  ),
 };
 
 // Resolve the failure UI for a failed run:
@@ -490,16 +1157,39 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
 //   - AMR agent, auth required      → authorize-and-retry button, clearer copy
 //   - AMR agent, insufficient funds → recharge button + manual retry, clearer copy
 //   - AMR agent, tier entitlement   → upgrade button + manual retry
-//   - AMR agent, anything else      → plain retry
+//   - AMR agent, anything else      → keeps walking the table below
 //   - fine-grained failure_detail (hard quota, workspace credits, text-detected
 //     cli-missing) → named type + fix, overriding a too-coarse code
 //   - non-AMR agent, model/auth/quota error → plain retry + promotion card
-//   - non-AMR agent, generic failure        → plain retry
+//   - any agent, generic failure            → plain retry
+//
+// AMR is the DEFAULT hosted agent, so anything its branch fails to hand on is a
+// gap on the most-used path. The branch therefore names only what is genuinely
+// AMR-specific and then falls through; `withoutCloudSelfPromotion` at the exit
+// keeps that safe by making rung 3 unreachable for a run already on Cloud.
 export function resolveRunFailureUi(
   code: string | null | undefined,
   detail: string | null | undefined,
   agentId: string | null | undefined,
   rawMessage?: string | null,
+  verdict?: RunFailureDaemonVerdict | null,
+): RunFailureUi {
+  const ui = resolveRunFailureUiIgnoringSelfPromotion(
+    code,
+    detail,
+    agentId,
+    rawMessage,
+    verdict,
+  );
+  return agentId === CLOUD_NATIVE_AGENT_ID ? withoutCloudSelfPromotion(ui) : ui;
+}
+
+function resolveRunFailureUiIgnoringSelfPromotion(
+  code: string | null | undefined,
+  detail: string | null | undefined,
+  agentId: string | null | undefined,
+  rawMessage?: string | null,
+  verdict?: RunFailureDaemonVerdict | null,
 ): RunFailureUi {
   // An ACP agent CLI that answered `initialize` and then refused to open a
   // session. Resolved before every other branch, and before the static
@@ -538,16 +1228,15 @@ export function resolveRunFailureUi(
     // that the daemon still classified must not silently lose the card.
     const parsed = readModelWindowResetAt(rawMessage);
     const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
-    return {
-      primaryAction: 'retry',
-      titleKey: 'chat.runError.title.modelWindowLimit',
-      messageKey: retryAt
+    // The window rolls over on its own — as transient as a failure gets (rung 2).
+    return failureCard(
+      { transient: true },
+      'chat.runError.title.modelWindowLimit',
+      retryAt
         ? 'chat.runError.modelWindowLimitMessage'
         : 'chat.runError.modelWindowLimitMessageNoTime',
-      ...(retryAt ? { messageVars: { retryAt } } : {}),
-      secondaryRetry: false,
-      showSwitchCard: false,
-    };
+      retryAt ? { messageVars: { retryAt } } : {},
+    );
   }
   // Membership concurrency is a temporary policy gate carried inside an ACP
   // fatal envelope. Keep the Retry button manual, name the wait explicitly,
@@ -572,45 +1261,84 @@ export function resolveRunFailureUi(
   const agnosticDetail =
     typeof detail === 'string' ? AGENT_AGNOSTIC_DETAIL_FAILURE_UI[detail] : undefined;
   if (agnosticDetail) return agnosticDetail;
-  if (agentId === 'amr') {
-    if (code === 'AMR_AUTH_REQUIRED') {
-      return {
-        primaryAction: 'authorize',
-        // PRD「需要登录」type — shared title with the non-AMR sign-in case.
-        titleKey: 'chat.runError.title.signInRequired',
-        // "OpenDesign 智能体尚未登录，前往登录即可正常使用" — single CTA, no
-        // AMR promotion (the agent already IS AMR). The authorize action reuses
-        // the inline AmrLoginPill (sign-in + auto-retry on success).
-        messageKey: 'chat.runError.signInMessage.amr',
-        secondaryRetry: false,
-        showSwitchCard: false,
-      };
+  if (agentId === CLOUD_NATIVE_AGENT_ID) {
+    // The daemon's classifier already treats these three codes as ONE class
+    // (`run-failure-classification.ts` → category `auth`, user_action `login`).
+    // Web only recognised the AMR-branded one, so an AMR run whose auth failure
+    // arrived under the generic code fell through to the catch-all — and after
+    // the catch-all is gone it would pick up the non-AMR card below, whose copy
+    // ("run the login command in your terminal") is wrong for an agent that
+    // signs in inside the app. Alias them here instead.
+    if (
+      code === 'AMR_AUTH_REQUIRED' ||
+      code === 'AGENT_AUTH_REQUIRED' ||
+      code === 'UNAUTHORIZED'
+    ) {
+      // Rung 1: we can sign the user in from inside the card. PRD「需要登录」type
+      // — shared title with the non-AMR sign-in case. No AMR promotion (the
+      // agent already IS AMR); the authorize action reuses the inline
+      // AmrLoginPill (sign-in + auto-retry on success).
+      return failureCard(
+        { directFix: 'authorize' },
+        'chat.runError.title.signInRequired',
+        'chat.runError.signInMessage.amr',
+      );
     }
     if (code === 'AMR_INSUFFICIENT_BALANCE') {
+      // 钱的事只有一张卡:升级卡(交付稿组件 18)。
+      //
+      // 用户 2026-09-02 裁决:「额度不足和额度耗尽,升级卡各只有一张,**不存在
+      // 第二张白色通用报错卡**」。在此之前这一格返回的是通用 `failureCard`,于是
+      // 同一件事被说两遍 —— 发送前那道闸门出的是升级卡(剩余额度 + Upgrade),
+      // 跑到一半出的却是白卡 + 四颗按钮(联系支持 / 导出日志 / 充值 / 重试)。
+      // 两块 UI 讲一件事、还是两种说法,正是设计稿要避免的。
+      //
+      // 所以这一档整张卡不画,交给升级卡。点亮它的是 `ProjectView` ——
+      // 它认出这条失败之后去把钱包读数取回来,喂给 `amrBalanceCardUsd`
+      // (见 `amrInsufficientBalanceFailureMessageId`)。这和 R9 断线那一档
+      // 是同一个手法:`suppressCard` 的意思一直都是「别人已经在说这件事了」。
+      //
+      // 剩下的字段不是死码:标题 / 正文仍是这条失败**在别处**的人话来源
+      // (被 `RunErrorCard` 之外的读者引用时),而 `secondaryRetry` 描述的是
+      // 这条失败本身可重试 —— 判定不因为这张卡不画就改变。
       return {
-        primaryAction: 'recharge',
-        titleKey: 'chat.runError.title.balance',
-        messageKey: 'chat.amrError.balanceMessage',
-        secondaryRetry: true,
-        showSwitchCard: false,
+        ...failureCard(
+          { directFix: 'recharge' },
+          'chat.runError.title.balance',
+          'chat.amrError.balanceMessage',
+          { secondaryRetry: true },
+        ),
+        suppressCard: true,
       };
     }
     if (code === 'AMR_TIER_UPGRADE_REQUIRED') {
-      return {
-        primaryAction: 'upgrade',
-        titleKey: 'chat.amrBalanceGate.title',
-        messageKey: null,
-        secondaryRetry: true,
-        showSwitchCard: false,
-      };
+      return failureCard(
+        { directFix: 'upgrade' },
+        'chat.amrBalanceGate.title',
+        null,
+        { secondaryRetry: true },
+      );
     }
-    return {
-      primaryAction: 'retry',
-      titleKey: 'chat.runError.title.generic',
-      messageKey: null,
-      secondaryRetry: false,
-      showSwitchCard: false,
-    };
+    // Workspace credits are OUR credits, so topping them up is a rung-1 action
+    // we can run from inside the card — the same one `AMR_INSUFFICIENT_BALANCE`
+    // offers, and the same one the daemon itself names (user_action `recharge`,
+    // `run-failure-classification.ts`). The shared `DETAIL_FAILURE_UI` row below
+    // answers rung 3 ("switch to Cloud"), which is right for a BYOK run and
+    // meaningless here. Retry stays as a secondary because the top-up lands
+    // out-of-band, exactly as in the balance case.
+    if (detail === 'workspace_credits_exhausted') {
+      return failureCard(
+        { directFix: 'recharge' },
+        'chat.runError.title.quotaExhausted',
+        'chat.runError.workspaceCreditsMessage',
+        { secondaryRetry: true },
+      );
+    }
+    // No catch-all. Everything past this point — S11 connection dropped, S09
+    // rate limit, S10 upstream unavailable, S08 provider quota, S01 missing CLI
+    // — is agent-neutral and was dead code for AMR while this branch ended in a
+    // generic card. The exit-point invariant strips the AMR promotion those
+    // shared mappings carry for BYOK agents.
   }
   // Antigravity's auth flow is terminal-only — see the
   // `launch-terminal-auth` action comment for why. Without this branch
@@ -620,25 +1348,23 @@ export function resolveRunFailureUi(
   // running, and a Retry button to redo the chat after OAuth completes.
   if (agentId === 'antigravity') {
     if (code === 'AGENT_AUTH_REQUIRED') {
-      return {
-        primaryAction: 'launch-terminal-auth',
-        titleKey: 'chat.runError.title.signInRequired',
-        messageKey: null,
-        secondaryRetry: true,
-        showSwitchCard: false,
-      };
+      return failureCard(
+        { directFix: 'launch-terminal-auth' },
+        'chat.runError.title.signInRequired',
+        null,
+        { secondaryRetry: true },
+      );
     }
     // Quota: each Antigravity model has its own quota, so the action
     // is "open agy, switch model" rather than "sign in." Same handler
     // spawns the same terminal; only the label changes.
     if (code === 'RATE_LIMITED') {
-      return {
-        primaryAction: 'launch-terminal-switch-model',
-        titleKey: 'chat.runError.title.rateLimited',
-        messageKey: null,
-        secondaryRetry: true,
-        showSwitchCard: false,
-      };
+      return failureCard(
+        { directFix: 'launch-terminal-switch-model' },
+        'chat.runError.title.rateLimited',
+        null,
+        { secondaryRetry: true },
+      );
     }
   }
   // Fine-grained daemon classification overrides a too-coarse code (e.g.
@@ -652,13 +1378,10 @@ export function resolveRunFailureUi(
   // Not an AMR-promotable case: the break is the user's own network path, which
   // switching model service wouldn't fix.
   if (code === 'AGENT_CONNECTION_DROPPED') {
-    return {
-      primaryAction: 'retry',
-      titleKey: 'chat.runError.title.connectionDropped',
-      messageKey: 'chat.connectionDropped',
-      secondaryRetry: false,
-      showSwitchCard: false,
-    };
+    return retryWithGuidance(
+      'chat.runError.title.connectionDropped',
+      'chat.connectionDropped',
+    );
   }
   // Non-AMR sign-in required (any non-amr, non-antigravity agent — those two are
   // handled above). The agent's login lives in the user's own terminal, so Open
@@ -666,42 +1389,61 @@ export function resolveRunFailureUi(
   // message, offer Retry as the primary action (re-run after they log in
   // locally), and promote AMR as the steadier alternative via the switch card.
   if (code === 'AGENT_AUTH_REQUIRED' || code === 'UNAUTHORIZED') {
-    return {
-      primaryAction: 'retry',
-      titleKey: 'chat.runError.title.signInRequired',
-      messageKey: 'chat.runError.signInMessage.other',
-      secondaryRetry: false,
-      showSwitchCard: true,
-    };
+    return failureCard(
+      { transient: true },
+      'chat.runError.title.signInRequired',
+      'chat.runError.signInMessage.other',
+      { showSwitchCard: true },
+    );
   }
   // Non-antigravity rate limit / upstream outage: name the type and explain the
   // recovery (wait & retry / switch service), and still promote AMR as the
   // steadier hosted alternative. Antigravity's own RATE_LIMITED was handled
   // above (per-model quota → switch model in terminal).
   if (code === 'RATE_LIMITED') {
-    return {
-      primaryAction: 'retry',
-      titleKey: 'chat.runError.title.rateLimited',
-      messageKey: 'chat.runError.rateLimitedMessage',
-      secondaryRetry: false,
-      showSwitchCard: true,
-    };
+    return failureCard(
+      { transient: true },
+      'chat.runError.title.rateLimited',
+      'chat.runError.rateLimitedMessage',
+      { showSwitchCard: true },
+    );
   }
   if (code === 'UPSTREAM_UNAVAILABLE') {
-    return {
-      primaryAction: 'retry',
-      titleKey: 'chat.runError.title.upstreamUnavailable',
-      messageKey: 'chat.runError.upstreamUnavailableMessage',
-      secondaryRetry: false,
-      showSwitchCard: true,
-    };
+    return failureCard(
+      { transient: true },
+      'chat.runError.title.upstreamUnavailable',
+      'chat.runError.upstreamUnavailableMessage',
+      { showSwitchCard: true },
+    );
   }
   const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
-  return {
-    primaryAction: 'retry',
-    titleKey: 'chat.runError.title.generic',
-    messageKey: null,
-    secondaryRetry: false,
+  // Nothing above claimed this failure — but two very different situations end
+  // up here, and until now they shared one answer.
+  //
+  // (a) The daemon NAMED the cause and this table has no row for it. The old
+  //     comment here read "Nothing named this failure", which was simply untrue
+  //     of `certificate_failure` and forty-odd siblings: the daemon named them,
+  //     ruled them non-retryable, and web handed out a Retry anyway. When its
+  //     verdict is available it decides, because it read the run and this is a
+  //     lookup table. Rung 4.
+  //
+  // (b) The daemon did not know either. Keep the retry — an unclassified
+  //     failure really is usually a one-off.
+  //
+  // The `daemonNamedTheFailure` guard is load-bearing, not decoration: the
+  // classifier's own last-resort row is `classification('unknown', 'unknown',
+  // 'finalize', retryableHint ?? false, retryableHint ? 'retry' : 'none')`, so
+  // a plain unknown failure carries `retryable: false` / `'none'` by DEFAULT.
+  // Reading the verdict without this guard would therefore strip the Retry from
+  // exactly the case that is supposed to keep it.
+  if (daemonNamedTheFailure(detail) && daemonSaysRetryIsFutile(verdict)) {
+    return failureCard({}, 'chat.runError.title.generic', null, {
+      showSwitchCard: promote,
+    });
+  }
+  // Copy comes from RUN_FAILURE_FALLBACK_MESSAGE_KEY at render time, not from
+  // the upstream string, which stays in the collapsible diagnostic area.
+  return failureCard({ transient: true }, 'chat.runError.title.generic', null, {
     showSwitchCard: promote,
-  };
+  });
 }

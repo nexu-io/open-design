@@ -5,12 +5,13 @@ import type {
   HyperFramesScaffoldResponse,
   MediaExecutionPolicy,
   MediaGenerationResultProps,
+  ProjectFile,
+  ProjectMediaTaskFile,
 } from '@open-design/contracts';
 import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
 import { findMediaModel } from '../media/models.js';
-import type { MediaTaskError } from '../media/tasks.js';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
 import type {
@@ -25,15 +26,139 @@ import {
   type AIHubMixCatalogType,
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
+import { createChatArtifactBlobStore } from '../chat-artifacts/blob-store.js';
+import { captureChatArtifactSnapshotFromBytes } from '../chat-artifacts/capture.js';
+import { resolveChatArtifactQuota } from '../chat-artifacts/quota.js';
 import {
   HYPERFRAMES_SCAFFOLD_TOOL_ENDPOINT,
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
 } from '../tool-tokens.js';
+import { associateLateRunProducedFile } from '../runtimes/run-produced-files.js';
 import { scaffoldHyperFramesComposition } from '../media/hyperframes-scaffold.js';
+import { assignMediaTaskBatches } from '../media/task-batches.js';
+import { mediaTaskErrorFromFailure } from '../media/task-error.js';
 import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+const MEDIA_FILE_MTIME_TOLERANCE_MS = 1;
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Files a media task's recorded metadata could still be, after the agent moved
+ * or renamed it.
+ *
+ * An in-project move preserves size and mtime, so the pair is a bounded
+ * identity witness that needs no filename guessing. The tolerance absorbs a
+ * destination filesystem storing fewer sub-millisecond digits than the source;
+ * it is deliberately far below any real filesystem's timestamp granularity,
+ * because a wider window buys nothing for a move (which preserves the value
+ * exactly) and only makes unrelated files collide. A witness that has drifted
+ * past it is not a witness, and staying blind beats showing the wrong image.
+ *
+ * `claimedNames` are files another task has already proven it owns. A witness
+ * may never point at one of those: two chat cards showing the same image is
+ * the same lie as one card showing a stranger's.
+ */
+function mediaTaskFileCandidates(
+  taskFile: unknown,
+  projectFiles: readonly ProjectFile[],
+  claimedNames: ReadonlySet<string>,
+): ProjectFile[] {
+  if (!taskFile || typeof taskFile !== 'object') return [];
+  const file = taskFile as Partial<ProjectMediaTaskFile>;
+  const name = typeof file.name === 'string' ? file.name.trim() : '';
+  if (!name) return [];
+
+  const size = finiteNumber(file.size);
+  const mtime = finiteNumber(file.mtime);
+  if (size === null || mtime === null) return [];
+  const kind = typeof file.kind === 'string' && file.kind ? file.kind : null;
+  return projectFiles.filter((candidate) => (
+    !claimedNames.has(candidate.name)
+    && candidate.size === size
+    && Math.abs(candidate.mtime - mtime) <= MEDIA_FILE_MTIME_TOLERANCE_MS
+    && (kind === null || candidate.kind === kind)
+  ));
+}
+
+/**
+ * Resolve one media task's generation-time file metadata to the path that is
+ * currently registered in the project. Ambiguous matches fail closed so
+ * ChatPanel never previews an unrelated file.
+ */
+export function resolveMediaTaskProjectFile(
+  taskFile: unknown,
+  projectFiles: ProjectFile[],
+  claimedNames: ReadonlySet<string> = new Set(),
+): ProjectFile | null {
+  if (!taskFile || typeof taskFile !== 'object') return null;
+  const file = taskFile as Partial<ProjectMediaTaskFile>;
+  const name = typeof file.name === 'string' ? file.name.trim() : '';
+  if (!name) return null;
+
+  if (!claimedNames.has(name)) {
+    const exact = projectFiles.find((candidate) => candidate.name === name);
+    if (exact) return exact;
+  }
+
+  const matches = mediaTaskFileCandidates(taskFile, projectFiles, claimedNames);
+  return matches.length === 1 ? matches[0]! : null;
+}
+
+/**
+ * Resolve every moved media task against the project at once, so no surviving
+ * file is handed to two of them.
+ *
+ * Per-task uniqueness is not enough: two tasks that recorded the same witness
+ * each see exactly one candidate and each would take it. A file that more than
+ * one task can claim proves nothing about either, so it is withdrawn from all
+ * of them — the same fail-closed rule, applied across tasks instead of within
+ * one.
+ */
+export function resolveMovedMediaTaskFiles(
+  candidates: ReadonlyArray<{ taskId: string; file: unknown }>,
+  projectFiles: readonly ProjectFile[],
+  claimedNames: ReadonlySet<string> = new Set(),
+): Map<string, ProjectFile> {
+  const matchesByTask = new Map<string, ProjectFile[]>();
+  const claimCounts = new Map<string, number>();
+  for (const candidate of candidates) {
+    const matches = mediaTaskFileCandidates(candidate.file, projectFiles, claimedNames);
+    matchesByTask.set(candidate.taskId, matches);
+    for (const match of matches) {
+      claimCounts.set(match.name, (claimCounts.get(match.name) ?? 0) + 1);
+    }
+  }
+
+  const resolved = new Map<string, ProjectFile>();
+  for (const [taskId, matches] of matchesByTask) {
+    const uncontested = matches.filter((match) => (claimCounts.get(match.name) ?? 0) === 1);
+    const only = uncontested.length === 1 ? uncontested[0] : undefined;
+    if (only) resolved.set(taskId, only);
+  }
+  return resolved;
+}
+
+function reconciledMediaTaskFile(
+  taskFile: unknown,
+  projectFile: ProjectFile,
+): Record<string, unknown> {
+  const original = taskFile && typeof taskFile === 'object'
+    ? taskFile as Record<string, unknown>
+    : {};
+  return {
+    ...original,
+    name: projectFile.name,
+    size: projectFile.size,
+    mtime: projectFile.mtime,
+    kind: projectFile.kind,
+    mime: projectFile.mime,
+  };
+}
 
 function mediaProviderId(model: string): string | undefined {
   const registered = findMediaModel(model)?.provider;
@@ -96,36 +221,16 @@ export function resolveLegacyMediaRouteGrant(input: {
   return { ok: true, grant: input.grant };
 }
 
-
-/**
- * Build the persisted failure record for a media task.
- *
- * A media failure is the only thing the client has left to explain itself
- * with, so anything the producer proved must survive into the snapshot: the
- * stable `code` the web client keys its copy on, the optional `subject`
- * naming what a safety policy objected to, and `retryable` so the UI can stop
- * inviting a retry that cannot succeed. Absent fields stay absent rather than
- * being defaulted — `retryable: false` invented here would tell a user a
- * transient outage is permanent.
- */
-function mediaTaskErrorFromFailure(err: any): MediaTaskError {
-  const subject = err?.subject;
-  const retryable = err?.retryable;
-  return {
-    message: String(err && err.message ? err.message : err),
-    status: typeof err?.status === 'number' ? err.status : 400,
-    code: err?.code,
-    ...(subject === 'prompt' || subject === 'input_image' || subject === 'output_image'
-      ? { subject }
-      : {}),
-    ...(typeof retryable === 'boolean' ? { retryable } : {}),
-  };
-}
+export { mediaTaskErrorFromFailure };
 
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, requireLocalDaemonRequest, isLocalSameOrigin, resolvedPortRef } = ctx.http;
   const { PROJECT_ROOT, PROJECTS_DIR, RUNTIME_DATA_DIR } = ctx.paths;
+  // Derived from the one resolved daemon data root; the store rejects anything
+  // else, so there is no second data root to drift.
+  const chatArtifactBlobs = createChatArtifactBlobStore({ dataDir: RUNTIME_DATA_DIR });
+  const chatArtifactQuota = resolveChatArtifactQuota(process.env);
   const { authorizeToolRequest, optionalToolGrantFromRequest, requestProjectOverride } = ctx.auth;
   const { randomUUID } = ctx.ids;
   const { MEDIA_PROVIDERS, IMAGE_MODELS, VIDEO_MODELS, AUDIO_MODELS_BY_KIND, MEDIA_ASPECTS, VIDEO_LENGTHS_SEC, AUDIO_DURATIONS_SEC, readMaskedConfig, writeConfig, generateMedia, createMediaTask, persistMediaTask, appendTaskProgress, notifyTaskWaiters, getLiveMediaTask, mediaTaskSnapshot, listMediaTasksByProject, listElevenLabsVoiceOptions } = ctx.media;
@@ -137,7 +242,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
   const { getWorkspaceProjectByProjectId, getProject } = ctx.projectStore;
-  const { resolveProjectDir } = ctx.projectFiles;
+  const { listFiles, resolveProjectDir, resolveProjectFilePath } = ctx.projectFiles;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
@@ -250,6 +355,38 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         hasCompositionDir: Boolean(req.body?.compositionDir),
       }));
 
+      /**
+       * Hand this task's output back to the turn that asked for it.
+       *
+       * A media generation is a 202 dispatch: the file can land long after the
+       * run went terminal, and the run-terminal produced-file floor works off a
+       * filesystem diff frozen before these bytes existed (Plane OPEND-2608 /
+       * OPEND-2609). `associateLateRunProducedFile` is additive and refuses to
+       * act while the run is still live, so the terminal pass keeps ownership
+       * of every file that DID land in time.
+       *
+       * Resolves the project directory exactly the way `generateMedia` does
+       * (`ensureProject(projectsRoot, projectId)` — no metadata), so this points
+       * at the bytes that were actually written.
+       */
+      const attachLateOutputToRunMessage = async (meta: unknown): Promise<void> => {
+        const runId = options.grant?.runId;
+        const name =
+          meta && typeof meta === 'object' && typeof (meta as { name?: unknown }).name === 'string'
+            ? (meta as { name: string }).name
+            : '';
+        if (!runId || !name) return;
+        try {
+          await associateLateRunProducedFile(db, {
+            runId,
+            projectRoot: resolveProjectDir(PROJECTS_DIR, projectId),
+            projectRelativePath: name,
+          });
+        } catch (err) {
+          console.warn('[media] late produced-file association failed', err);
+        }
+      };
+
       const proxyDispatcher = proxyDispatcherRequestInit(process.env, {
         headersTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
         bodyTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
@@ -290,13 +427,39 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         image: req.body?.image,
         images: Array.isArray(req.body?.images) ? req.body.images : undefined,
         workspaceId,
+        // Strong capture path (spec §5.1.1): freeze the provider's own bytes
+        // the moment they land, so a later turn overwriting the same output
+        // name can never rewrite this message's history. Bound to THIS run and
+        // task, so the run-terminal pass can reuse it verbatim instead of
+        // re-reading a file that may already have moved on.
+        onBytesWritten: async (written: {
+          bytes: Buffer;
+          name: string;
+          mime: string;
+          kind: string;
+          mtime: number;
+        }) => {
+          await captureChatArtifactSnapshotFromBytes(
+            { db, blobs: chatArtifactBlobs, quota: chatArtifactQuota },
+            {
+              projectId,
+              projectRelativePath: written.name,
+              kind: written.kind,
+              mime: written.mime,
+              bytes: written.bytes,
+              sourceMtime: written.mtime,
+              ...(options.grant?.runId ? { runId: options.grant.runId } : {}),
+              mediaTaskId: taskId,
+            },
+          );
+        },
         onProgress: (line: any) => appendTaskProgress(task, line),
         requestInit: proxyDispatcher.requestInit,
         onProviderRequestSettled: (summary: ImageGenerationRequestSummary & { providerId: string }) => {
           providerRequestSummary = summary;
         },
       })
-        .then((meta: any) => {
+        .then(async (meta: any) => {
           task.status = 'done';
           task.file = meta;
           task.endedAt = Date.now();
@@ -324,10 +487,16 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             fileSize: typeof meta?.size === 'number' ? meta.size : undefined,
             mime: typeof meta?.mime === 'string' ? meta.mime : undefined,
           }));
+          // Last, and only after the waiters have been told: this generation
+          // may have outlived the turn that asked for it, and the run-terminal
+          // floor froze its file list before these bytes existed. Attach them
+          // to that turn now, additively. A no-op whenever the run is still
+          // live — the terminal pass covers that case on its own.
+          await attachLateOutputToRunMessage(meta);
         })
         .catch((err: any) => {
           task.status = 'failed';
-          task.error = mediaTaskErrorFromFailure(err);
+          task.error = mediaTaskErrorFromFailure(err, { model });
           task.endedAt = Date.now();
           persistMediaTask(task);
           if (analyticsContext && providerRequestSummary) {
@@ -363,7 +532,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     } catch (err: any) {
       if (task) {
         task.status = 'failed';
-        task.error = mediaTaskErrorFromFailure(err);
+        task.error = mediaTaskErrorFromFailure(err, { model });
         task.endedAt = Date.now();
         persistMediaTask(task);
         notifyTaskWaiters(task);
@@ -1022,16 +1191,86 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const projectId = req.params.id;
-    if (!getProject(db, projectId)) {
+    const project = getProject(db, projectId);
+    if (!project) {
       return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
     }
     if (!await ctx.authorizeProjectRequest(req, res, projectId, { mode: 'read' })) return;
     const includeDone =
       req.query.includeDone === '1' || req.query.includeDone === 'true';
-    const tasks = listMediaTasksByProject(db, projectId, {
+    const taskRows = listMediaTasksByProject(db, projectId, {
       includeTerminal: includeDone,
-    }).map((t: any) => ({
+    });
+    const confirmedFiles = new Map<string, ProjectFile>();
+    const movedCandidates: typeof taskRows = [];
+    if (includeDone && taskRows.some((task: any) => task.status === 'done')) {
+      await Promise.all(taskRows.map(async (task: any) => {
+        if (task.status !== 'done') return;
+        const name = typeof task.file?.name === 'string' ? task.file.name.trim() : '';
+        if (!name) return;
+        try {
+          confirmedFiles.set(
+            task.id,
+            await resolveProjectFilePath(PROJECTS_DIR, projectId, name, project.metadata),
+          );
+        } catch {
+          if (finiteNumber(task.file?.size) !== null && finiteNumber(task.file?.mtime) !== null) {
+            movedCandidates.push(task);
+          }
+        }
+      }));
+    }
+    if (movedCandidates.length > 0) {
+      try {
+        const projectFiles = await listFiles(
+          PROJECTS_DIR,
+          projectId,
+          { metadata: project.metadata },
+        );
+        // Files a task still resolves by its recorded path are already
+        // spoken for; a moved task must not take one of them.
+        const claimedNames = new Set(
+          [...confirmedFiles.values()].map((file) => file.name),
+        );
+        const resolved = resolveMovedMediaTaskFiles(
+          movedCandidates.map((task: any) => ({ taskId: task.id, file: task.file })),
+          projectFiles,
+          claimedNames,
+        );
+        for (const [taskId, file] of resolved) confirmedFiles.set(taskId, file);
+      } catch {
+        // Task status remains useful when an imported folder is temporarily
+        // unavailable. Omit unconfirmed files and let the client's bounded
+        // terminal poll reconcile them if the project root returns.
+      }
+    }
+    const batches = assignMediaTaskBatches(taskRows.map((task: any) => ({
+      id: task.id,
+      runId: task.runId,
+      surface: task.surface,
+      startedAt: task.startedAt,
+      endedAt: task.endedAt,
+      sequence: task.sequence,
+    })));
+    const tasks = taskRows.map((t: any) => {
+      const resolvedFile = confirmedFiles.get(t.id) ?? null;
+      let confirmedFile: Record<string, unknown> | null = null;
+      if (resolvedFile) {
+        confirmedFile = reconciledMediaTaskFile(t.file, resolvedFile);
+        if ((t.file as { name?: unknown } | null)?.name !== resolvedFile.name) {
+          const liveTask = getLiveMediaTask(t.id);
+          if (liveTask) {
+            liveTask.file = confirmedFile;
+            persistMediaTask(liveTask);
+          }
+        }
+      }
+      const batch = batches.get(t.id);
+      return {
         taskId: t.id,
+        sequence: t.sequence,
+        ...(batch ?? {}),
+        ...(t.runId ? { runId: t.runId } : {}),
         status: t.status,
         startedAt: t.startedAt,
         endedAt: t.endedAt,
@@ -1040,10 +1279,13 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         model: t.model,
         progress: t.progress.slice(-3),
         progressCount: t.progress.length,
-        ...(t.status === 'done' ? { file: t.file } : {}),
+        ...(confirmedFile ? { file: confirmedFile } : {}),
         ...(t.status === 'failed' || t.status === 'interrupted' ? { error: t.error } : {}),
-      }));
-    tasks.sort((a: any, b: any) => b.startedAt - a.startedAt);
+      };
+    });
+    // Newest first, with creation order breaking the ties a parallel fan-out
+    // always produces.
+    tasks.sort((a: any, b: any) => (b.startedAt - a.startedAt) || (b.sequence - a.sequence));
     res.json({ tasks });
   });
 

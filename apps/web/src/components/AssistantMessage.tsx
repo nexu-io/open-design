@@ -1,6 +1,13 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { TodoCard, ToolCard } from "./ToolCard";
+import { useCharReveal } from "./chat/useCharReveal";
+import { ExecutionShell } from "./chat/ExecutionShell";
+import { buildTurnBlocks } from "../runtime/chat/build-turn-blocks";
+import { copyableTurnText } from "../runtime/chat/copyable-turn";
+import type { ExecutionShell as ExecutionShellData } from "../runtime/chat/contract";
+import { upstreamActivityAt } from "../runtime/chat/upstream-activity";
+import type { RecordFileScope } from "../runtime/chat/record-file-open";
 import { FileOpsSummary } from "./FileOpsSummary";
+import { messageArtifactRefs } from "../runtime/chat/artifact-refs";
 import {
   renderMarkdown,
   type MarkdownLinkClickHandler,
@@ -10,6 +17,7 @@ import {
   isPathLikeChatHref,
   resolveChatFileLink,
 } from "../runtime/in-project-link";
+import { Button } from "@open-design/components";
 import { navigate } from "../router";
 import { deleteProjectFile, projectFileUrl, uploadProjectFiles } from "../providers/registry";
 import { useProjectCollabContext } from "../collab/collab-context";
@@ -38,16 +46,23 @@ import {
 } from "@open-design/contracts/analytics";
 import { questionsFormTrackingId } from "@open-design/contracts/analytics";
 import {
-  formOptionLabelForValue,
   hasUnterminatedQuestionForm,
   splitOnQuestionForms,
   stripTrailingOpenQuestionForm,
   type QuestionForm,
 } from "../artifacts/question-form";
 import {
+  foldArtifactFocusSelections,
+  eventsHaveAuthenticatedDoneConclusion,
+  declaredArtifactCards,
   hasOdCard,
+  narrowProducedFilesToFocus,
+  pickPrimaryArtifacts,
   splitOnOdCards,
+  stripArtifactFocusMarkers,
+  stripCritiqueGrammar,
   stripTrailingOpenOdCard,
+  todoStatusIsUnfinished,
   type ChatSessionMode,
   type OdCard,
   type OdCardBrandBrowserAssist,
@@ -56,16 +71,13 @@ import {
 } from "@open-design/contracts";
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import {
-  normalizeVisualStyleQuestionValue,
   parseSubmittedAnswers,
   QuestionFormView,
+  summarizeQuestionFormAnswers,
   type QuestionFormFileSubmission,
   type QuestionFormInteraction,
 } from "./QuestionForm";
-import {
-  visualStyleCardsForContext,
-  type VisualStyleContext,
-} from "../runtime/visual-style-catalog";
+import type { VisualStyleContext } from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import { stripInternalControlMarkers } from "../artifacts/internal-markers";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
@@ -81,7 +93,7 @@ import type { DesignToolboxActionId } from "../runtime/design-toolbox";
 import { copyToClipboard } from "../lib/copy-to-clipboard";
 import { useT } from "../i18n";
 import { deriveFileOps, type FileOpEntry } from "../runtime/file-ops";
-import { dedupeToolUsesById } from "../runtime/tool-events";
+import { dedupeToolUsesById, dropSupersededInFlightToolUses } from "../runtime/tool-events";
 import {
   continuableUnfinishedTodos,
   isTodoWriteToolName,
@@ -102,6 +114,7 @@ import type {
   ProjectMetadata,
   SkillSummary,
 } from "../types";
+import type { ProjectMediaTask } from '@open-design/contracts';
 
 type TranslateFn = (
   key: keyof Dict,
@@ -119,7 +132,6 @@ export type QuestionFormSubmitHandler = (
   formId?: string,
 ) => boolean | void | Promise<boolean | void>;
 
-const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
 const viewedInlineQuestionForms = new Set<string>();
 const QUESTION_FORM_DRAFT_STORAGE_PREFIX = "open-design:question-form-draft:";
 const QUESTION_FORM_SUBMITTED_STORAGE_PREFIX =
@@ -240,7 +252,7 @@ function SkillPluginCandidateCard({
         data?.message ??
         (typeof data?.error === "string" ? data.error : data?.error?.message) ??
         resp.statusText;
-      throw new Error(message || "Plugin candidate action failed.");
+      throw new Error(message || t('chat.pluginAction.failed'));
     }
     return data;
   }
@@ -255,22 +267,22 @@ function SkillPluginCandidateCard({
       );
       const draftPath = String(data?.draftPath ?? "");
       if (data?.validation?.ok === false) {
-        setNotice({ message: "Draft created with validation issues." });
+        setNotice({ message: t('chat.pluginAction.validationIssues') });
       } else if (draftPath) {
         const install = await post(
           `/api/projects/${encodeURIComponent(projectId)}/plugins/install-folder`,
           { path: draftPath },
         );
         if (install?.ok === false) {
-          setNotice({ message: install?.message ?? "Plugin draft created, but install failed." });
+          setNotice({ message: install?.message ?? t('chat.pluginAction.failed') });
         } else {
           if (typeof window !== "undefined") {
             window.dispatchEvent(new CustomEvent("open-design:plugins-changed"));
           }
-          setNotice({ message: install?.message ?? "Plugin draft created and added to My plugins." });
+          setNotice({ message: install?.message ?? t('chat.pluginAction.saved') });
         }
       } else {
-        setNotice({ message: "Plugin draft created." });
+        setNotice({ message: t('chat.pluginAction.saved') });
       }
       if (draftPath && onRequestOpenFile) onRequestOpenFile(`${draftPath}/open-design.json`);
     } catch (err) {
@@ -290,7 +302,9 @@ function SkillPluginCandidateCard({
         { action },
       );
       setNotice({
-        message: `OpenDesign contribution task started for ${data?.path ?? "the draft"}.`,
+        message: t('chat.pluginAction.contributionStarted', {
+          path: data?.path ?? t('chat.designToolbox.kind.plugin'),
+        }),
       });
     } catch (err) {
       setNotice({ message: err instanceof Error ? err.message : String(err) });
@@ -314,7 +328,7 @@ function SkillPluginCandidateCard({
             onClick={() => void share("contribute-open-design")}
           >
             <Icon name={busy === "contribute" ? "spinner" : "share"} size={13} />
-            <span>{busy === "contribute" ? "Starting..." : t("skillPluginCandidate.contributeToMain")}</span>
+            <span>{busy === "contribute" ? t("pluginCard.starting") : t("skillPluginCandidate.contributeToMain")}</span>
           </button>
         }
         details={
@@ -327,7 +341,7 @@ function SkillPluginCandidateCard({
               onClick={() => void createDraft()}
             >
               <Icon name={busy === "draft" ? "spinner" : "plus"} size={13} />
-              <span>{busy === "draft" ? "Creating..." : t("skillPluginCandidate.createForMe")}</span>
+              <span>{busy === "draft" ? t("pluginCard.creating") : t("skillPluginCandidate.createForMe")}</span>
             </button>
           </div>
         }
@@ -344,11 +358,6 @@ function SkillPluginCandidateCard({
 interface Props {
   message: ChatMessage;
   streaming: boolean;
-  // Live-only streaming tool-input partials keyed by tool-use id (raw,
-  // mid-token JSON accumulated from `input_json_delta`). Used to render an
-  // in-flight Write/Edit's code in real time before the full `tool_use`
-  // arrives. Never persisted.
-  liveToolInput?: Record<string, { name: string; text: string; seq?: number }>;
   projectId?: string | null;
   // Analytics context for the assistant_feedback_* events. Defaults
   // applied at the call site keep AssistantMessage usable in tests
@@ -363,7 +372,13 @@ interface Props {
   // classifying absolute disk hrefs in chat file links — see
   // `resolveChatFileLink`.
   projectResolvedDir?: string | null;
+  mediaTasks?: ProjectMediaTask[];
   onRequestOpenFile?: (name: string) => void;
+  /**
+   * 生图失败格的「重试」。这一层不知道怎么重发,只把「第几张砸了」交给 ChatPane ——
+   * 由它组一句话走正常发送路径(规格 D59)。
+   */
+  onRetryImage?: (row: { total: number; done: number; failed: number }, index: number) => void;
   // Client-side action for a <od-card type="brand-browser-assist"> button: open
   // or focus the Browser tab so the user can clear verification. Excluded from
   // the memo comparison (routed through ChatPane's stable callbacks ref).
@@ -393,6 +408,13 @@ interface Props {
   nextUserContent?: string;
   onSubmitQuestionForm?: QuestionFormSubmitHandler;
   questionFormSubmitDisabled?: boolean;
+  /**
+   * 更早轮次已经出现过的那份清单(ChatPane 用 `previousTodosByAssistantMessageId` 算)。
+   *
+   * 它**只做认领**:本轮清单里出现同一条内容时标成召回(划线)。agent 没重发,
+   * `previous` 根本不会被查到 —— 这一轮天然一条都不显示,不需要额外规则。
+   */
+  previousTodos?: TodoItem[];
   onContinueRemainingTasks?: (todos: TodoItem[]) => void;
   onForkFromMessage?: () => void;
   forking?: boolean;
@@ -402,7 +424,14 @@ interface Props {
   // "Next step" affordance handlers, surfaced under the latest settled
   // assistant message. Omitting them hides the affordance entirely (e.g. in
   // tests that don't wire chat send).
-  onArtifactShare?: (fileName: string) => void;
+  /**
+   * 发布这份产物 —— 打开文件并展开预览区**本来那块**分享菜单。
+   *
+   * `anchorId` **只有产物卡的那枚胶囊会传**:菜单不再开在预览区右上角,而是
+   * 开在这枚按钮旁边(产品 2026-08-27)。不带 `anchorId` 的调用(「下一步引导」
+   * 那行〔分享〕)照旧开在预览区自己的工具栏下面。
+   */
+  onArtifactShare?: (fileName: string, anchorId?: string) => void;
   // Featured design-toolbox follow-up rows on the "next step" card. Seeding the
   // composer with an action / opening the toolbox both route through the
   // composer; see ChatPane's composer ref wiring.
@@ -422,9 +451,23 @@ interface Props {
   onNextStepCreateDesignSystem?: () => void;
   nextStepCreateDesignSystemBusy?: boolean;
   onPickSkill?: (skillId: string) => void;
-  onArtifactDownload?: (fileName: string) => void;
+  /**
+   * Send one of this turn's agent-written follow-up suggestions as the user's
+   * next message. The suggestion text IS the message — no composer draft, no
+   * menu — which is why the rows carry no trailing chevron.
+   */
+  onNextStepSuggestion?: (text: string) => void;
+  /**
+   * 导出这份产物 —— 打开文件并展开预览区**本来那块**导出菜单。
+   *
+   * `anchorId` 的作用同 `onArtifactShare`:产物卡传它,菜单就开在卡上那枚按钮
+   * 旁边;「下一步引导」那行〔下载〕不传,菜单开在预览区工具栏下面。
+   *
+   * 单格式产物(md / 图片 / 视频 / 其它)压根不调这个回调 —— 卡上那枚就是
+   * 一条 `<a download>`,见 `runtime/chat/artifact-export.ts`。
+   */
+  onArtifactDownload?: (fileName: string, anchorId?: string) => void;
   nextStepSkills?: SkillSummary[];
-  toolboxSkillNames?: Partial<Record<DesignToolboxActionId, string | null>>;
   nextStepVariant?: NextStepActionsVariant;
 }
 
@@ -448,6 +491,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'projectMetadata',
   'projectFileNames',
   'projectResolvedDir',
+  'mediaTasks',
   'onRequestOpenFile',
   'onRequestPluginFolderAgentAction',
   'activePluginActionPaths',
@@ -467,16 +511,15 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'nextStepCreateDesignBusy',
   'nextStepCreateDesignSystemBusy',
   // Memoized + stable from ChatPane; compared so a late skill-list load
-  // refreshes the featured next-step rows' `@skill` hover detail and the
-  // More → Design toolbox global resources.
-  'toolboxSkillNames',
+  // refreshes the More → Design toolbox flyout's global resources.
   'nextStepSkills',
   'nextStepVariant',
-  // Live streaming tool input changes identity on every `tool_input_delta`.
-  // ChatPane passes it only to the streaming row (undefined elsewhere), so
-  // comparing it re-renders just that row as the card grows — without it the
-  // memo swallows the deltas and the card only updates on the final tool_use.
-  'liveToolInput',
+  // `previousTodos` is deliberately ABSENT. It is derived from the messages
+  // BEFORE this one, so ChatPane re-derives it (new array identity) on every
+  // streamed frame while its content stays fixed — comparing it would re-render
+  // all N messages per token. A settled earlier turn cannot change its task list
+  // without the whole message array being replaced, which moves `message`
+  // identity and re-renders this row anyway.
 ];
 
 function areAssistantMessagePropsEqual(prev: Props, next: Props): boolean {
@@ -502,10 +545,52 @@ export const AssistantMessage = memo(AssistantMessageImpl, areAssistantMessagePr
  *     the individual tool cards. Mirrors the chat surface in screenshot 9.
  *   - status pills
  */
+/**
+ * 壳头那颗秒表的两个读数,每秒一起取一次,只在 `active` 期间走。
+ *
+ *  · `nowMs` —— 「现在」。不这么推的话 React 不会因为墙上时间变了就重渲染,
+ *    秒表会冻在最后一次事件那一刻,页面上看着像卡死。
+ *  · `lastEventAtMs` —— 上游最近一帧是什么时候到的(S12 的静默起点)。
+ *
+ * **两个读数必须同一刻取。** 分成两个 hook 就是两个 interval、两次 setState,
+ * 而且它们取的「现在」差着毫秒,静默 = now − last 会莫名多出个负数或零头。
+ *
+ * **为什么从 `upstreamActivityAt` 取,而不是数事件条数。**
+ * 上一版这里写的是 `useMemo(() => Date.now(), [displayEvents.length])` ——
+ * 想法没错(到达时刻比事件自带的时刻诚实),但那把钥匙在流式期间根本不动:
+ * `tool_input_delta` 不进事件数组、claude 的空 `thinking_delta` 被挡在门外、
+ * 连续文字被合进最后一条。真机 run `7ed15c2f` 的 161.6 秒窗口里落了 126 条帧,
+ * 而 `displayEvents.length` 一次都没变,于是壳头照报「已等 156 秒」。
+ * 传输层那张表记的是帧到达,与事件加工无关,也与 agent 填不填时刻无关。
+ *
+ * 取不到(没有 runId、或这条 run 一帧都还没来过)就返回 undefined,
+ * 让 `buildTurnBlocks` 退回轮次开头 —— 「卡在首个 token」那一档要的正是这个。
+ */
+interface StreamClock {
+  nowMs?: number | undefined;
+  lastEventAtMs?: number | undefined;
+}
+
+function useTickingNow(active: boolean, runId?: string): StreamClock {
+  const [tick, setTick] = useState<StreamClock>({});
+  useEffect(() => {
+    if (!active) {
+      setTick({});
+      return;
+    }
+    const sample = (): void => {
+      setTick({ nowMs: Date.now(), lastEventAtMs: upstreamActivityAt(runId) ?? undefined });
+    };
+    sample();
+    const id = setInterval(sample, 1000);
+    return () => { clearInterval(id); };
+  }, [active, runId]);
+  return tick;
+}
+
 function AssistantMessageImpl({
   message,
   streaming,
-  liveToolInput,
   projectId = null,
   projectKind = null,
   conversationId = null,
@@ -513,7 +598,9 @@ function AssistantMessageImpl({
   projectMetadata,
   projectFileNames,
   projectResolvedDir,
+  mediaTasks = [],
   onRequestOpenFile,
+  onRetryImage,
   onBrandBrowserAssistConfirm,
   onRequestPluginFolderAgentAction,
   activePluginActionPaths = new Set(),
@@ -526,6 +613,7 @@ function AssistantMessageImpl({
   nextUserContent,
   onSubmitQuestionForm,
   questionFormSubmitDisabled = false,
+  previousTodos,
   onContinueRemainingTasks,
   onForkFromMessage,
   forking = false,
@@ -546,12 +634,17 @@ function AssistantMessageImpl({
   onNextStepCreateDesignSystem,
   nextStepCreateDesignSystemBusy,
   onPickSkill,
+  onNextStepSuggestion,
   onArtifactDownload,
   nextStepSkills,
-  toolboxSkillNames,
   nextStepVariant = 'default',
 }: Props) {
   const t = useT();
+  const { workspaceContext } = useProjectCollabContext();
+  const imageSrc = useCallback(
+    (path: string) => projectId ? projectFileUrl(projectId, path, workspaceContext) : path,
+    [projectId, workspaceContext],
+  );
   // A blocked strategy task is a sticky terminal verdict: the daemon rejects
   // every further continuation with 409 STRATEGY_TASK_STATE_MISMATCH, so the
   // turn's question forms must stop accepting submissions and explain why.
@@ -561,67 +654,310 @@ function AssistantMessageImpl({
     message.strategyTaskBlocked === true
       ? message.strategyTaskBlockedText?.trim() || t("questions.strategyBlockedNotice")
       : null;
-  // Thinking text renders markdown too — its file links must route in-app
-  // exactly like prose links (ProseBlock builds the same handler itself).
-  const thinkingLinkClick = useMemo(
-    () => chatFileLinkClickHandler(onRequestOpenFile, projectFileNames, projectId, projectResolvedDir),
-    [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
-  );
+  // NOTE(sync/main): origin/main also declares a `thinkingLinkClick` memo here
+  // and hands it to its own `ThinkingBlock`. This branch moved thinking into the
+  // execution shell (`components/chat/ExecutionShell.tsx`), which builds its own
+  // link handler, so that memo has no consumer left and is deliberately dropped
+  // rather than carried as an unused binding.
   const events =
     (message.events?.length ?? 0) > 0
       ? message.events!
       : message.content.trim()
         ? ([{ kind: "text", text: message.content }] satisfies AgentEvent[])
         : [];
-  const displayEvents = useMemo(() => dedupeToolUsesById(events), [events]);
-  // ChatPane renders the canonical TodoWrite card above the composer, so the
-  // per-message flow must not render the same task list again.
-  const settledUseIds = useMemo(
-    () => new Set(displayEvents.filter((e) => e.kind === "tool_use").map((e) => e.id)),
+  const displayEvents = useMemo(
+    () => dedupeToolUsesById(dropSupersededInFlightToolUses(events)),
+    [events],
+  );
+  const completedWithAuthenticatedDone = useMemo(
+    () =>
+      message.runStatus === "succeeded" &&
+      eventsHaveAuthenticatedDoneConclusion(displayEvents),
+    [displayEvents, message.runStatus],
+  );
+  /**
+   * **这一轮的 done 标记到了没有** —— 和上面那个同一条判据,只是**不问 run 结没结束**。
+   *
+   * 产品 2026-09-04:「输出 done 标记之后,上面的进行中展开收起卡片,就应该自动收起,
+   * 而不是等到整个对话 run 完了再收起」。所以这里要的正是「标记到了、run 还在跑」
+   * 那一帧,`runStatus` 不参与。
+   *
+   * 判据借的是共享契约那一份(`eventsHaveAuthenticatedDoneConclusion`):要有 `done_key`、
+   * 要有对得上的标记、标记后面要真的开始有结论。**不在这一层另写一份正则** ——
+   * 标记的形状是 daemon / web 共用的契约,两边各留一份迟早会分歧,而分歧的表现形式
+   * 就是协议标签出现在用户屏幕上(`api/done-marker` 的注释里记着这条)。
+   *
+   * ⚠️ 认的**只有真标记**。`buildTurnBlocks` 内部还有一档「隐式 done」——
+   * `<question-form>` / `<artifact>` 一出现就当结论开始;那是**分块**用的判据,
+   * 不是产品这次说的「done 标记」。拿它一起收会在模型刚要发问、活还没干完的时候
+   * 把执行记录藏起来(`stream-cursor-removed.test.tsx` 那一格正是这个形状),
+   * 边界钉在 `shell-collapse-on-done.test.tsx`。
+   */
+  const turnDoneMarkerLanded = useMemo(
+    () => eventsHaveAuthenticatedDoneConclusion(displayEvents),
     [displayEvents],
   );
-  // Live code boxes (Write/Edit streaming) append after everything else.
-  const liveCodeBlocks = useMemo<Block[]>(() => {
-    if (!streaming || !liveToolInput) return [];
-    const out: Block[] = [];
-    for (const [id, entry] of Object.entries(liveToolInput)) {
-      if (settledUseIds.has(id)) continue;
-      if (!isLiveCodeToolName(entry.name)) continue;
-      out.push({ kind: "live-tool", id, name: entry.name, raw: entry.text });
-    }
-    return out;
-  }, [streaming, liveToolInput, settledUseIds]);
   // ChatPane owns one canonical conversation-level Todo card above the
   // composer. Strip TodoWrite snapshots from individual messages so plans do
   // not appear twice or jump around as history is virtualized.
   const blocks = useMemo(() => {
-    const rawBlocks = [...buildBlocks(displayEvents), ...liveCodeBlocks];
     return stripTodoToolGroups(
-      stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(rawBlocks)),
+      stripEmptyThinkingBlocks(suppressDuplicateQuestionForms(buildBlocks(displayEvents))),
     );
-  }, [displayEvents, liveCodeBlocks]);
-  // A task gets one execution-record disclosure. This keeps answer prose
-  // readable when an agent has alternated between many tools, while retaining
-  // every command, file operation, and streaming code preview for review.
-  // TodoWrite has already been removed because ChatPane owns the single
-  // conversation-level progress card outside message history.
-  const { contentBlocks, taskActivity } = useMemo(
-    () => splitTaskActivity(blocks),
+  }, [displayEvents]);
+  /**
+   * 这一轮对执行记录来说算什么状态。
+   *
+   * 三条都不是 `message.runStatus` 自己说得清的:
+   *  · **还在流** → 一定是 running,不管落库里写的是什么;
+   *  · **不流了但没有 runStatus** → 历史/遗留消息。它已经结束了,只是没人给它盖过章。
+   *    当成 running 的话壳永远转下去,而且 D43 的兜底(结论提到壳外)不会触发 ——
+   *    整段回答会被关在壳里,`<od-card>` 这类交互块跟着一起消失。
+   *  · **产物没送达**(`no_result` / `delivery_failed`)→ 用户视角就是这一轮失败了,
+   *    与老链路的 `runFailed` 判据保持一致;失败原因交给下面的报错卡(B18)。
+   *
+   * 还有一条只对没有 runStatus 的历史消息生效,见 `legacyTurnFailed`。
+   */
+  let turnRunStatus: NonNullable<ChatMessage['runStatus']>;
+  if (streaming) {
+    turnRunStatus = 'running';
+  } else if (message.runStatus === 'canceled') {
+    turnRunStatus = 'canceled';
+  } else if (
+    message.resultDeliveryState === 'no_result' ||
+    message.resultDeliveryState === 'delivery_failed' ||
+    (!message.runStatus && legacyTurnFailed(displayEvents, message.endedAt))
+  ) {
+    turnRunStatus = 'failed';
+  } else {
+    turnRunStatus = message.runStatus ?? 'succeeded';
+  }
+  /**
+   * 这一轮的执行记录(规格 `chat-panel-next.md`)。
+   *
+   * 壳内装过程(thinking / 工具行 / done 之前的叙述),壳外只留结论 —— 归属规则全在
+   * `buildTurnBlocks` 里,这里不做任何判断。
+   */
+  /** 壳头那颗秒表的「现在」+ S12 的静默起点,每秒同刻取一次(见 `useTickingNow`)。 */
+  const { nowMs, lastEventAtMs } = useTickingNow(streaming, message.runId);
+
+  /**
+   * 执行记录里的文件名要判归属才决定做不做链接(产品 2026-08-27:
+   * 「这些文件不要变成可点击的.. 因为读的不一定是我们项目文件夹下的文件....」)。
+   * 这三样就是正文 markdown 链接判归属用的同一套(见 `chatFileLinkClickHandler`),
+   * 判据本身在 `runtime/chat/record-file-open.ts`,这里只负责递过去。
+   */
+  const recordFileScope = useMemo<RecordFileScope>(
+    () => ({ projectId, projectFileNames, projectResolvedDir }),
+    [projectId, projectFileNames, projectResolvedDir],
+  );
+  const nextTurn = useMemo(() => {
+    const turn = buildTurnBlocks({
+      events: displayEvents,
+      ...(mediaTasks.length ? { mediaTasks } : {}),
+      runStatus: turnRunStatus,
+      // 只在本轮清单里出现过的条目上取值(`build-turn-blocks` 的 `previous.has`),
+      // 所以 agent 不重发时它是纯空转,不会凭空造出任何一行。
+      ...(previousTodos?.length ? { previousTodos } : {}),
+      ...(nowMs != null ? { nowMs } : {}),
+      // 「一件事都还没发生」那一格(S12)靠它算静默时长;它同时也是壳头耗时的
+      // 兜底起点 —— 不发工具事件的那批 agent(plain-stream / qoder)整轮没有一个
+      // 带时刻的事件,没有这一对起止,壳头就只有一句光秃秃的「已完成」。
+      ...(message.createdAt != null ? { startedAtMs: message.createdAt } : {}),
+      ...(message.endedAt != null ? { endedAtMs: message.endedAt } : {}),
+      // 取不到就**不传** —— 让 `shellQuiet` 退回轮次开头,而不是拿一个假的
+      // 「刚刚」把 S12 悄悄关掉(「卡在首个 token」那一档每月 5,547 次)。
+      ...(streaming && lastEventAtMs != null ? { lastEventAtMs } : {}),
+    });
+    return {
+      /**
+       * **原样的块序** —— 壳和结论段按它们在流里发生的先后交替排列。
+       *
+       * 一轮跑一张壳时它只有两项,看不出所以然;跨轮折叠(`foldStrategyTaskTurns`)
+       * 之后就不是了:「先问后做」的会话是两个 run 接成一条事件流,run 0 末尾那张
+       * `<question-form>` 是**夹在两张壳中间**的结论段。下面两个数组按 kind 一分,
+       * 这个先后就没了 —— 谁在前谁在后必须由这一条来还原(OPEND-2592)。
+       */
+      blocks: turn,
+      shells: turn.filter((b): b is ExecutionShellData => b.kind === 'shell'),
+      /** 壳【外】的结论(D43)—— done 之后的那几段 */
+      prose: turn.filter((b) => b.kind === 'prose').map((b) => (b as { text: string }).text),
+    };
+    // `message.endedAt` 从 undefined 变成时刻**就在轮次终止那一刻** —— 不进依赖的话
+    // 兜底耗时会停在「还没有终点」的那一版,壳头刚收起时秒数是空的。
+  }, [displayEvents, turnRunStatus, nowMs, previousTodos, message.endedAt, streaming, lastEventAtMs, mediaTasks]);
+  /**
+   * 执行记录里**真的有东西**。
+   *
+   * 壳本身是永远出现的(D10),所以「有没有壳」问不出这个 —— 要问壳里有没有内容。
+   * 两处消费方靠它,语义都是老链路 `taskActivity !== null` 的那一条:
+   *  · 页脚的「准备中 → 进行中」翻面判据(有内容了就不再是准备中);
+   *  · 回合状态行的去重(有执行记录时状态在壳头上,页脚不再重复一遍)。
+   *    稿子要两处都显示,但那是待决项 T19,产品没拍 —— 这里保持现状。
+   */
+  const recordHasContent = nextTurn.shells.some(
+    (shell) => shell.items.length > 0 || shell.segments.length > 0,
+  );
+  /**
+   * 壳外要渲染的块。
+   *
+   * 执行记录已经拥有 thinking、工具调用与 done 之前的过程叙述,这三种块不能再出现在壳外
+   * (出现就是同一件事画两遍)。剩下的 —— 问答表单、`<od-card>`、产物面板、插件候选、
+   * 状态行 —— 原样留在这一层,因为它们挂着交互,不属于执行记录。
+   *
+   * 正文只有一个来源:`buildTurnBlocks` 算出来的结论段。它必须走**和消息层同一条加工链**
+   * (去重表单 / 丢空 thinking / 剥 TodoWrite 快照),直接把字符串塞进去会绕过去重,
+   * 同一张表单会渲染两次(`next-record-integration.test.tsx` 钉住了这一点)。
+   */
+  /**
+   * 结论段**按它在流里的位置分组**,一组一个落点(OPEND-2592)。
+   *
+   * 原来这里把所有结论段 `join('\n\n')` 成一段再加工,于是「第几段」这件事被抹平,
+   * 渲染时只能整坨压在所有壳的后面。跨轮折叠之后这就是错的:用户在两个 run **中间**
+   * 答的表单,收口(「已确认」)会被甩到最底下 —— 用户 2026-09-02 的原话是
+   * 「如果是我中间时回答的,那就得放中间呢,不能放最底下」。
+   *
+   * 加工链一个字没换,只是拆成两半跑,好让分组边界活到渲染:
+   *  · 两道 strip 是**逐块的过滤**,按组各跑一遍与拍平跑一遍等价;
+   *  · 表单去重是**整轮**的 first-wins(第一张留下、后面同 id 的清掉),必须跨组共享
+   *    那本账,所以拍平之后跑;它是逐块 `map`、长度不变,再按各组块数切回来就是原样。
+   */
+  const proseGroups = useMemo(() => {
+    const cleaned = nextTurn.prose.map((text) =>
+      text.trim()
+        ? stripTodoToolGroups(stripEmptyThinkingBlocks(buildBlocks([{ kind: 'text', text }])))
+        : [],
+    );
+    const flat = suppressDuplicateQuestionForms(cleaned.flat());
+    const groups: Block[][] = [];
+    let at = 0;
+    for (const group of cleaned) {
+      groups.push(flat.slice(at, at + group.length));
+      at += group.length;
+    }
+    return groups;
+  }, [nextTurn]);
+  /** 不属于执行记录、也不属于结论的那些块 —— 状态行 / 插件候选,统一收在最后 */
+  const restBlocks = useMemo(
+    () => blocks.filter((b) => b.kind !== 'text' && b.kind !== 'thinking' && b.kind !== 'tool-group'),
     [blocks],
   );
-  const hasConclusion = contentBlocks.some(
-    (block) => block.kind === "text" && block.text.trim().length > 0,
+  const outerBlocks = useMemo(
+    () => [...proseGroups.flat(), ...restBlocks],
+    [proseGroups, restBlocks],
   );
-  const fileOps = useMemo(() => deriveFileOps(displayEvents), [displayEvents]);
-  const produced = message.producedFiles ?? [];
+  /**
+   * 屏幕上从上到下的编排:壳与结论段交替,顺序就是 `buildTurnBlocks` 算出来的那一版。
+   *
+   * ⚠️ 别再改回「先把壳全画完、再画结论」。一轮一壳时两种写法看不出差别,
+   * 跨轮折叠时后者会把中途的表单收口踢到最底下(`cross-run-form-placement.test.tsx`)。
+   */
+  const turnFlow = useMemo(() => {
+    let proseAt = 0;
+    /**
+     * 这张壳后面**已经有结论段**了没有 —— 也就是这一轮的 done 标记到没到。
+     *
+     * 产品 2026-09-04:「输出 done 标记之后,上面的进行中展开收起卡片,就应该自动收起,
+     * 而不是等到整个对话 run 完了再收起」。`buildTurnBlocks` 里那只 `doneSeen` 闩没有
+     * 出口(壳的契约里没有这个字段),而它的**可观察后果**恰好就在块序上:done 一判定,
+     * 后面的正文就不再进壳,而是成为壳外的 `ProseBlock`(D43)。所以「后面有结论段」
+     * 等价于「这张壳的 done 已经来了」。
+     *
+     * 两个信号必须同时成立:
+     *  · `turnDoneMarkerLanded` —— 这一轮真的发过 done 标记(共享契约那一份判据,
+     *    **不认**隐式 done,理由见它自己的注释);
+     *  · 这张壳后面已经有结论段 —— 把轮次级的事实收到**这一张壳**上。
+     *
+     * ⚠️ 已知边界两条,都不是回归(改动前一律等 run 结束才收):
+     *  · agent 发完 done 就闭嘴、一个字的结论都没有时,这里推不出来;
+     *  · 跨轮折叠(`foldStrategyTaskTurns`)把几个物理 run 接成一条流时,前一个 run
+     *    的标记会让后一个 run 的壳也满足轮次级那半条 —— 但后一个 run 的壳后面此刻
+     *    没有结论段,所以仍然收不起来,只有它自己也开始写结论时才收。
+     * 要收得再准一步,得让 `buildTurnBlocks` 把它那只 `doneSeen` 挂到壳上;
+     * 那个文件另有改动在飞,先不动。
+     */
+    const concludedAt = new Set<number>();
+    let sawProse = false;
+    for (let i = nextTurn.blocks.length - 1; i >= 0; i -= 1) {
+      const b = nextTurn.blocks[i]!;
+      if (b.kind === 'shell') {
+        if (turnDoneMarkerLanded && sawProse) concludedAt.add(i);
+      } else if (b.text.trim()) {
+        sawProse = true;
+      }
+    }
+    return nextTurn.blocks.map((b, i) =>
+      b.kind === 'shell'
+        ? ({ kind: 'shell', key: b.id, shell: b, concluded: concludedAt.has(i) } as const)
+        // key 认**第几段结论**,不认它在块序里的下标:空壳在轮次收尾那一刻会被丢掉
+        // (`build-turn-blocks` 的 `kept`),下标会跟着挪,而挪一次就是把表单重挂一遍
+        // —— 用户填了一半的草稿会当场清空。
+        : ({ kind: 'prose', key: `prose-${proseAt}`, at: proseAt++ } as const),
+    );
+  }, [nextTurn, turnDoneMarkerLanded]);
+
+  /*
+   * 把项目上下文递进去,`FileOpEntry.path` 才能是**项目相对路径** —— 产物卡、
+   * 结果行、封面地址、导出 / 分享全都拿它当项目文件的钥匙(不变式写在
+   * `runtime/file-ops.ts` 的 `FileOpEntry.path` 上)。少了 `resolvedDir`,
+   * agent 给的绝对路径只能退回基名,住在子目录里的产物就点不开、封面也画不出来。
+   */
+  const fileOpScope = useMemo(
+    () => ({ projectId, resolvedDir: projectResolvedDir }),
+    [projectId, projectResolvedDir],
+  );
+  const fileOps = useMemo(
+    () => deriveFileOps(displayEvents, fileOpScope),
+    [displayEvents, fileOpScope],
+  );
+  const rawProduced = message.producedFiles ?? [];
+  /**
+   * 这一轮 agent 自己声明的「显示什么」—— `<od-focus …/>` 的 `show`。
+   *
+   * daemon 已经校过 key、折过路径、剥过正文,这里拿到的只有结论。一轮可以发
+   * 好几枚(`open` 早发、`show` 晚发),所以**按字段**取最后一个,而不是按事件
+   * 整条覆盖 —— 否则晚到的 `show` 会把早到的 `open` 抹掉。
+   *
+   * 没有这个事件时 `show` 是 undefined。交付清单(`displayedProduced`,喂 Share /
+   * Download / 下一步锚点)退化成恒等;产物卡只保留 daemon 已经归属给本轮的
+   * `producedFiles`,不会把正文猜测或裸工具行兜底成卡。这样旧会话 / 漏发协议标记
+   * 的模型不会把权威产物丢掉,又不会让「正文提到一个旧文件」重新冒出产物卡。
+   */
+  const artifactFocus = useMemo(() => {
+    const selections: { open?: string; show?: string[] }[] = [];
+    for (const event of message.events ?? []) {
+      if (event?.kind !== 'artifact_focus') continue;
+      selections.push({
+        ...(event.open ? { open: event.open } : {}),
+        ...(event.show && event.show.length > 0 ? { show: event.show } : {}),
+      });
+    }
+    return foldArtifactFocusSelections(selections);
+  }, [message.events]);
+  /*
+   * `produced` 保持原样 —— 它是 daemon 结算出的**权威清单**,语义不能动。
+   *
+   * 收窄发生在两个**消费点**,不是在这里:结果面板有两条互斥的输入路 ——
+   * 有写 / 改工具记录时用 `summaryArtifactOps`,没有时用 `declaredArtifactFiles`
+   * (见下面 `turnArtifactPanelEntries` 的三分支)。两条各收窄一次,各有各的
+   * 测试和各自的 ablation;在这里收窄会让其中一条被收两遍,那条的测试就永远
+   * 红不了。
+   *
+   * 注:这两条路原来分别渲染成 `FileOpsSummary` 和 `ProducedFiles` 两个组件,
+   * 后者已被产物卡片对齐那一轮删掉、两条汇进同一个 `FileOpsSummary`。
+   * **路还是两条、收窄仍是各一次**,只是终点合并了 —— 这句留着,免得下一个人
+   * 看到「一个组件」就以为可以把两次收窄合并成一次。
+   */
+  const produced = rawProduced;
   const displayedProduced = useMemo(
     () => {
-      const linkedFiles = recoverLinkedProjectFilesFromContent(
-        message.content,
+      const linkedFiles = recoverLinkedProjectFilesFromContent({
+        content: message.content,
         projectFiles,
         projectId,
         message,
-      );
+        turnTouchedFiles: turnTouchedAnyFile(produced, fileOps),
+      });
       const baseFiles =
         produced.length > 0
           ? produced
@@ -632,9 +968,40 @@ function AssistantMessageImpl({
               fileOps,
               streaming,
             });
-      return mergeProjectFiles(baseFiles, linkedFiles);
+      /*
+       * 收窄放在**合并之后**,不是合并之前。
+       *
+       * `baseFiles` 有两个来源(daemon 结算的清单 / 本地推断),`linkedFiles`
+       * 是从正文里捞回来的第三个来源。三条都能往下游塞东西,所以只有在它们汇成
+       * 一条之后收窄,才是唯一出口 —— 收在任何一条支流上,另外两条都会绕过去。
+       *
+       * 这里用的是 `narrowProducedFilesToFocus`(没声明就原样保留),不是
+       * `declaredArtifactCards`(没声明就清空):这条值喂的是 Share / Download /
+       * 下一步锚点和插件目录扫描,它们在没声明的回合里必须还有目标。产物卡那条
+       * 相反的规则挂在 `declaredArtifactFiles` 上。
+       */
+      const merged = mergeProjectFiles(baseFiles, linkedFiles);
+      const narrowed = narrowProducedFilesToFocus(merged, artifactFocus.show);
+      return narrowed === merged ? merged : [...narrowed];
     },
-    [blocks, fileOps, message, produced, projectFiles, projectId, streaming],
+    [artifactFocus.show, blocks, fileOps, message, produced, projectFiles, projectId, streaming],
+  );
+  /**
+   * 这一轮**对话里列出来**的产物。
+   *
+   * 产品拍的板(逐字):「一张都不显示那就不显示呗, 如果有重要的新创建的没给用户
+   * 展示那是问题, 但如果没什么重要的或者要让用户看的, 那就不展示呗没啥问题吧?」
+   *
+   * 有 `show` 时按 agent 声明收窄 `displayedProduced`;没有时只接受 daemon 的
+   * `producedFiles`。关键是后半条不能写成 `displayedProduced` 的无条件 fallback:
+   * 它还混着正文链接 / mtime 推断,曾把上一轮旧文件误认成本轮产物。OPEND-2515
+   * 的反例正相反:daemon 已经给出权威产物,却因为模型没发 `show` 在这里被清空。
+  */
+  const declaredArtifactFiles = useMemo(
+    () => artifactFocus.show
+      ? [...declaredArtifactCards(displayedProduced, artifactFocus.show)]
+      : [...produced],
+    [artifactFocus.show, displayedProduced, produced],
   );
   const turnFileOps = useMemo(
     () => mergeProducedFilesIntoFileOps(fileOps, displayedProduced),
@@ -650,10 +1017,44 @@ function AssistantMessageImpl({
   // the daemon has attached an authoritative produced-file list, the result
   // card must describe that delivered set rather than every attempted tool
   // path. Failed attempts remain visible in the execution disclosure.
+  // 第二个收窄点:汇总行。它读的是权威清单,所以收窄要在这里做一次 —— 否则
+  // 卡片精简了、汇总行还写着 6 个文件,同一块面板自己跟自己不一致。
   const summaryArtifactOps = useMemo(
-    () => summaryArtifactOpsForProducedFiles(fileOps, produced),
-    [fileOps, produced],
+    () => summaryArtifactOpsForProducedFiles(
+      fileOps,
+      message.producedFiles === undefined
+        ? undefined
+        : artifactFocus.show
+          ? [...declaredArtifactCards(message.producedFiles, artifactFocus.show)]
+          : message.producedFiles,
+      artifactFocus.show,
+    ),
+    [artifactFocus.show, fileOps, message.producedFiles],
   );
+  /**
+   * 这一轮的产物面板喂什么 —— **一条消息只算一次**,交给唯一那个组件。
+   *
+   * 两条来源仍在,但它们现在只是同一个面板的两种输入:
+   *  1. 这一轮真有 write/edit 工具行 → 用那份清单(它已经按 daemon 的
+   *     `producedFiles` 对齐过,见 `summaryArtifactOpsForProducedFiles`);
+   *  2. 没有工具行 → 用产出 / 从正文里找回来的文件,翻成同一种记录形状。
+   *
+   * 第 2 条要求 `!streaming`:流式过程中「产出」还没定,`displayedProduced` 里
+   * 的东西会一边跳一边变形(这是原来 `ProducedFiles` 那道 `!streaming` 闸的
+   * 用意,原样保留)。第 1 条不受这道闸约束 —— 工具行本身带 `pending` 态,
+   * 边跑边出卡是设计要的(D37)。
+   */
+  const turnArtifactPanelEntries = useMemo(() => {
+    /*
+     * 两条支各自已经在消费点做过同一套边界处理
+     * (`summaryArtifactOps` / `declaredArtifactFiles`):有 `show` 就按声明收窄,
+     * 没有 `show` 就只保留 daemon 权威归属的 `producedFiles`。所以这里不能再回到
+     * raw fileOps / `displayedProduced` —— 后两者还混着裸工具行与正文 / mtime 推断。
+     */
+    if (summaryArtifactOps.length > 0) return summaryArtifactOps;
+    if (streaming) return [];
+    return producedFilesAsFileOps(declaredArtifactFiles);
+  }, [declaredArtifactFiles, streaming, summaryArtifactOps]);
   // The single artifact the "next step" affordance anchors to: prefer the HTML
   // produced by THIS turn; if the final turn emitted none (a summary / continue
   // message) fall back to the most recently modified HTML in the project so
@@ -717,7 +1118,7 @@ function AssistantMessageImpl({
           message || url
             ? buildActionNotice(message || url, url)
             : action === "install"
-              ? { message: "Added to My plugins." }
+              ? { message: t('chat.pluginAction.saved') }
               : null;
         if (notice) {
           setPluginNoticeByFolder((prev) => ({
@@ -734,7 +1135,7 @@ function AssistantMessageImpl({
         setPluginBusyKey(null);
       }
     },
-    [pluginBusyKey, onRequestPluginFolderAgentAction],
+    [pluginBusyKey, onRequestPluginFolderAgentAction, t],
   );
   const usage = events.find((e) => e.kind === "usage") as
     | Extract<AgentEvent, { kind: "usage" }>
@@ -765,12 +1166,28 @@ function AssistantMessageImpl({
   // A settled `completed` strategy verdict outranks a stale TodoWrite snapshot:
   // the deliverable was verified on disk, so the footer must not report the
   // turn as stopped with unfinished work (and must not withhold next steps).
-  const unfinishedTodos = streaming
+  const unfinishedTodos = streaming || completedWithAuthenticatedDone
     ? []
     : continuableUnfinishedTodos({ events, strategyTaskDelivered: message.strategyTaskDelivered });
   const hasTodoSnapshot = events.some(
     (event) => event.kind === "tool_use" && isTodoWriteToolName(event.name),
   );
+  /*
+   * 〔继续剩余任务〕这一次要送回去的是哪几条。
+   *
+   * 这是 **agent 不照做时唯一的用户出口**,所以它不能只认「本轮自己发过清单」——
+   * 上一轮留了活、这一轮 agent 判断跟用户新问题无关而没重发,恰恰是最需要这个出口
+   * 的那一刻,而那时本轮的 `unfinishedTodos` 是空的。
+   *
+   * 取值顺序因此是:本轮发过清单就以本轮为准(它是最新事实,可能已经把旧账做掉了);
+   * 本轮没发清单才回落到带过来的那份。它不依赖任何 agent 能力 —— 21 家从不发清单的
+   * runtime 走的就是第二条路。
+   */
+  const continuableTodos = streaming || completedWithAuthenticatedDone
+    ? []
+    : hasTodoSnapshot
+      ? unfinishedTodos
+      : (previousTodos ?? []).filter((todo) => todoStatusIsUnfinished(todo.status));
   const runSucceeded =
     !streaming &&
     !hasResultDeliveryFailure &&
@@ -780,7 +1197,12 @@ function AssistantMessageImpl({
       isBrandBrowserAssistMessage
     );
   const canFork = !streaming && !!onForkFromMessage;
-  const copyMarkdown = message.content.trim().length > 0 ? message.content : undefined;
+  /*
+   * 复制按钮的判据。正文优先,正文空了退回推理原文 —— 判据本身与理由在
+   * `runtime/chat/copyable-turn.ts`。中止的那一轮常常只剩一格「思考过程」,
+   * 那也是内容(用户 2026-08-27:「thought 也算能复制的吧?」)。
+   */
+  const copyMarkdown = copyableTurnText(message.content, nextTurn.shells);
   const showFeedback =
     !!onFeedback &&
     isFeedbackEligible({
@@ -789,25 +1211,65 @@ function AssistantMessageImpl({
       hasEmptyResponse,
       hasUnfinishedTodos: unfinishedTodos.length > 0,
     });
+  /*
+   * OPEND-2542 supersedes the 2026-08-26 "last turn only" decision. Every
+   * settled reply keeps this row rendered: the latest row is always visible,
+   * while historical rows are revealed by message hover/focus in CSS. Keeping
+   * the same DOM footprint prevents the transcript from jumping on reveal.
+   *
+   * Running turns remain excluded: the execution shell already reports their
+   * state and this footer would duplicate it (`chat-panel-feedback.md` B50).
+   */
   const showCompletionRow =
-    showFeedback ||
-    streaming ||
+    !streaming &&
+    (showFeedback ||
     !!message.startedAt ||
     !!message.endedAt ||
     !!usage ||
     unfinishedTodos.length > 0 ||
+    // 只剩「还欠着上一轮的活」这一条理由时,这一行也得出 —— 出口挂在它上面
+    continuableTodos.length > 0 ||
     hasEmptyResponse ||
     !!copyMarkdown ||
-    canFork;
+    canFork);
+  // Continuing unfinished work is current-turn state, unlike copy/feedback/
+  // fork. Restoring historical action rows must not revive stale todo work.
+  const continueRemaining =
+    isLast && onContinueRemainingTasks && continuableTodos.length > 0
+      ? () => onContinueRemainingTasks(continuableTodos)
+      : undefined;
   const canShowOpenDesignSubmission = !!onShareToOpenDesign && showFeedback && runSucceeded;
   const showOpenDesignSubmission =
     canShowOpenDesignSubmission && (!!isLast || shareToOpenDesignBusy);
   const effectiveNextStepVariant: NextStepActionsVariant =
     nextStepVariant === 'brand-extraction' && (!runSucceeded || !nextStepArtifactName)
       ? 'brand-programmatic-incomplete'
-      : nextStepVariant === 'default' && (!runSucceeded || !nextStepArtifactName)
-        ? 'project-incomplete'
-        : nextStepVariant;
+      : nextStepVariant;
+  /*
+   * 这一轮的三条行为引导。
+   *
+   * 来源是 daemon 解析 `<od-next key="…">` 之后下发并落库的 `next_steps` 事件 ——
+   * **不是**正文里的标记:客户端从来看不到标记本身,所以它不可能漏进正文、
+   * 也不会被复制/导出带走。
+   *
+   * 取**最后一条**:一轮里理应只有一条,但重试会在同一条消息上再来一轮,
+   * 那时新的一条才是当前这一轮的。
+   *
+   * 旧会话没有这个事件 —— 于是这里是空数组,下一步引导整块不出。这是产品
+   * 明确要的兼容口径:不退回工具箱、不出空壳。
+   */
+  const nextStepSuggestions = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i -= 1) {
+      const event = events[i];
+      if (event?.kind !== 'next_steps') continue;
+      const list = Array.isArray(event.suggestions) ? event.suggestions : [];
+      const cleaned = list
+        .map((s) => (typeof s === 'string' ? s.trim() : ''))
+        .filter(Boolean);
+      if (cleaned.length > 0) return cleaned;
+    }
+    return [];
+  }, [events]);
   const hasNextStepPrimary =
     effectiveNextStepVariant === 'brand-extraction'
       ? !!onNextStepAiOptimize || !!onNextStepCreateDesign || !!onNextStepContinueExtraction
@@ -825,9 +1287,12 @@ function AssistantMessageImpl({
               !!onToolboxAction ||
               !!onNextStepCreateDesignSystem ||
               (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload))
-            : !!onToolboxAction ||
-              !!onNextStepCreateDesignSystem ||
-              (!!nextStepArtifactName && (!!onArtifactShare || !!onArtifactDownload));
+            /*
+             * `default` 这一档已经不是工具箱目录了 —— 它**只**渲染 agent 现写
+             * 的三条建议。没有建议(旧会话、模型这轮没给、给的一条都用不了)
+             * 就没有这一块,不再靠「有工具箱回调」把一张空目录顶上来。
+             */
+            : nextStepSuggestions.length > 0 && !!onNextStepSuggestion;
   // A clarification turn terminates its run while the emitted <question-form>
   // is still waiting for the user inline. Until the immediate
   // user reply submits that form's answers (skip-all submits through the same
@@ -850,6 +1315,28 @@ function AssistantMessageImpl({
     turnArtifactOps.length > 0 ||
     displayedProduced.length > 0 ||
     pluginActionFolders.length > 0;
+  /*
+   * 这一轮**凭什么**可以出「下一步引导」。
+   *
+   * 工具箱那几档(brand / plan / design-system / project-incomplete)的行是
+   * **宿主自己造的** —— 分享、下载、继续抽取、生成产物,每一条都指着一个具体
+   * 目标。没有产物就没有目标,所以那几档必须先有 `hasTurnDeliverable`,否则
+   * 会给出点了没有去处的入口。
+   *
+   * `default` 档不一样:它整档就是 agent 这一轮**自己写下的**三条建议。
+   * 「这一轮有没有值得接着做的事」这个判断已经在 agent 那边做过了 —— host
+   * 协议原话是「没有可迭代的东西(打招呼、一句普通回答、以问题收尾的回合)
+   * 就一条都别发」。宿主再拿产物清单二次否决,不是加一道保险,是把 agent
+   * 已经给出的结论丢掉:引用正文追问、改一处措辞、校对一遍、答一个关于刚
+   * 交付物的问题 —— 这些回合宿主都不往产物名下记,建议却是有的,于是三条
+   * 建议被静默扔掉(OPEND-2497)。
+   *
+   * 收口仍然在 `runSucceeded` 上:失败 / 中止的回合出口是重试,不是接着往下做。
+   */
+  const nextStepDeliveryEvidence =
+    effectiveNextStepVariant === 'default'
+      ? nextStepSuggestions.length > 0
+      : hasTurnDeliverable;
   // Incomplete brand extraction is an explicit recovery workflow, not a
   // generic failed turn: its Continue action is the only way to resume the
   // saved extraction state, even when no artifact was produced yet.
@@ -863,15 +1350,15 @@ function AssistantMessageImpl({
     unfinishedTodos.length === 0 &&
     !hasPendingQuestionForm &&
     ((!!isLast && hasNextStepPrimary &&
-      ((runSucceeded && hasTurnDeliverable) || isBrandExtractionRecovery)) ||
+      ((runSucceeded && nextStepDeliveryEvidence) || isBrandExtractionRecovery)) ||
       showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
   // files) the footer shimmers "Preparing…"; the moment content lands it
   // flips to "Working". The elapsed clock stays anchored to the persisted run
   // start so switching project tabs or remounting the message cannot restart it.
   const hasContent =
-    contentBlocks.some((b) => b.kind !== "status") ||
-    taskActivity !== null ||
+    outerBlocks.some((b) => b.kind !== "status") ||
+    recordHasContent ||
     turnFileOps.length > 0;
   const preparing = streaming && !hasContent;
   const preparingStatus = preparing && events.some((e) => e.kind === "status" && e.label === "thinking")
@@ -881,132 +1368,135 @@ function AssistantMessageImpl({
   // Index of the trailing text block — the streaming caret rides the end of
   // the last prose block so it tracks the final character as tokens arrive.
   let lastTextBlockIndex = -1;
-  for (let i = contentBlocks.length - 1; i >= 0; i--) {
-    if (contentBlocks[i]?.kind === "text") {
+  for (let i = outerBlocks.length - 1; i >= 0; i--) {
+    if (outerBlocks[i]?.kind === "text") {
       lastTextBlockIndex = i;
       break;
     }
   }
 
+  /**
+   * 壳【外】的一块。抽成函数是因为它现在有**两个调用点** —— 交替编排里的结论段,
+   * 和收在最后的那些非结论块 —— 两处必须画得一模一样。
+   */
+  const renderOuterBlock = (b: Block, key: string): ReactNode => {
+    if (b.kind === "text")
+      return (
+        <ProseBlock
+          key={key}
+          text={b.text}
+          hideRecoveredHtmlFallback={(message.agentId === "grok-build" || message.agentId === "claude") && !streaming}
+          assistantMessageId={message.id}
+          isLastAssistant={!!isLast}
+          streaming={streaming}
+          nextUserContent={nextUserContent}
+          suppressDirectionForms={suppressDirectionForms}
+          onSubmitQuestionForm={onSubmitQuestionForm}
+          questionFormSubmitDisabled={
+            questionFormSubmitDisabled || strategyBlockedNotice !== null
+          }
+          strategyBlockedNotice={strategyBlockedNotice}
+          visualStyleContext={visualStyleContextForProjectKind(projectKind)}
+          projectId={projectId}
+          conversationId={conversationId}
+          runId={message.runId ?? null}
+          projectFileNames={projectFileNames}
+          projectResolvedDir={projectResolvedDir}
+          onRequestOpenFile={onRequestOpenFile}
+          onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
+        />
+      );
+    if (b.kind === "plugin-candidate") {
+      return (
+        <SkillPluginCandidateCard
+          key={key}
+          block={b}
+          projectId={projectId}
+          onRequestOpenFile={onRequestOpenFile}
+        />
+      );
+    }
+    if (b.kind === "status") {
+      // Suppress this message's gray error pill ONLY when ChatPane is
+      // rendering the top-level error card for it (the last failed run).
+      // Other failed turns — older history, or once a follow-up makes
+      // this no longer the last assistant message — keep their pill so
+      // the error detail still survives reload / history review.
+      /*
+       * `error` 这一档**一律不出**。稿子里没有这种状态行,用户 2026-08-27
+       * 指认过两次:「为什么还会有这种错误样式?? 你的错误卡片呢??」
+       * 「设计稿里哪有这种状态行」。
+       *
+       * 它原来只在「这条消息正好拥有报错卡」时才藏,于是**任何历史失败轮次**
+       * 都还把上游英文原文顶着一个红框戳在回答中间。出事了该由谁说:
+       *  · 当前那一轮 → 报错卡(标题 + 人话 + 恢复动作);
+       *  · 历史轮次   → 壳头那句「运行失败」;
+       *  · 上游原文   → 卡上的「查看详情」,不裸奔。
+       * `warning` / `initializing` 早就按同一个道理去掉了,这是漏网的那一档。
+       */
+      if (b.label === "error") return null;
+      // The pre-output "initializing" status is surfaced by the footer's
+      // shimmering "Preparing…" label instead of its own pill.
+      if (b.label === "initializing") return null;
+      /*
+       * `warning` 这一档**不在对话里出**(产品裁决 2026-08-26:「这个 warning 也不要显示了」)。
+       *
+       * 真机上撞到的那条是「Skill descriptions were shortened to fit the skills
+       * context budget…」—— 这是**内部预算提示**,对用户既不可操作也看不懂,
+       * 却顶着一整块橙色戳在回答中间。`error` 那一档留着:那是真出事了。
+       */
+      if (b.label === "warning") return null;
+      return <StatusPill key={key} label={b.label} detail={b.detail} />;
+    }
+    return null;
+  };
+
   return (
     <div
       id={`assistant-message-${message.id}`}
       className={`msg assistant${showRole ? '' : ' assistant-continuation'}`}
+      /* 「接上一条,不再重复报名字」是状态,不是样式的私事 —— 给它自己的出口 */
+      data-continuation={showRole ? 'false' : 'true'}
       data-assistant-message-id={message.id}
-      tabIndex={-1}
     >
       {showRole ? (
-        <div className="role">
+        <div className="role" data-testid="assistant-role">
           <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
           <span className="role-name">{roleName}</span>
         </div>
       ) : null}
-      <div className="assistant-flow">
-        {taskActivity ? (
-          <TaskActivityCard
-            entries={taskActivity.entries}
-            trailingThinking={taskActivity.trailingThinking}
-            hasConclusion={hasConclusion}
-            runStreaming={streaming}
-            runSucceeded={runSucceeded}
-            terminalRunSucceeded={message.runStatus === "succeeded"}
-            runCanceled={message.runStatus === "canceled"}
-            runFailed={
-              !streaming &&
-              (message.runStatus === "failed" ||
-                message.runStatus === "canceled" ||
-                hasResultDeliveryFailure)
-            }
-            startedAt={message.startedAt}
-            endedAt={message.endedAt}
-            durationMs={usage?.durationMs}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-            onThinkingLinkClick={thinkingLinkClick}
-          />
-        ) : null}
-        {contentBlocks.map((b, i) => {
-          if (b.kind === "text")
-            return (
-              <ProseBlock
-                key={i}
-                text={b.text}
-                hideRecoveredHtmlFallback={(message.agentId === "grok-build" || message.agentId === "claude") && !streaming}
-                assistantMessageId={message.id}
-                isLastAssistant={!!isLast}
-                streaming={streaming}
-                showStreamCursor={streaming && i === lastTextBlockIndex}
-                nextUserContent={nextUserContent}
-                suppressDirectionForms={suppressDirectionForms}
-                onSubmitQuestionForm={onSubmitQuestionForm}
-                questionFormSubmitDisabled={
-                  questionFormSubmitDisabled || strategyBlockedNotice !== null
-                }
-                strategyBlockedNotice={strategyBlockedNotice}
-                visualStyleContext={visualStyleContextForProjectKind(projectKind)}
-                projectId={projectId}
-                conversationId={conversationId}
-                runId={message.runId ?? null}
-                projectFileNames={projectFileNames}
-                projectResolvedDir={projectResolvedDir}
-                onRequestOpenFile={onRequestOpenFile}
-                onBrandBrowserAssistConfirm={onBrandBrowserAssistConfirm}
-              />
-            );
-          if (b.kind === "thinking")
-            // Thinking is only "in progress" while this is the trailing block.
-            // Once any block (prose / tools) lands after it, the model has
-            // moved past thinking, so the block flips to its finished state.
-            return (
-              <ThinkingBlock
-                key={i}
-                text={b.text}
-                streaming={streaming && i === contentBlocks.length - 1}
-                onLinkClick={thinkingLinkClick}
-              />
-            );
-          if (b.kind === "tool-group") {
-            return (
-              <ToolGroupCard
-                key={i}
-                items={b.items}
-                runStreaming={streaming}
-                runSucceeded={runSucceeded}
-                projectFileNames={projectFileNames}
-                onRequestOpenFile={onRequestOpenFile}
-              />
-            );
-          }
-          if (b.kind === "live-tool") {
-            // splitTaskActivity moves live code into the same execution
-            // disclosure as settled tools. Keep this branch defensive in
-            // case a future block type opts out of that collection.
-            return null;
-          }
-          if (b.kind === "plugin-candidate") {
-            return (
-              <SkillPluginCandidateCard
-                key={i}
-                block={b}
-                projectId={projectId}
-                onRequestOpenFile={onRequestOpenFile}
-              />
-            );
-          }
-          if (b.kind === "status") {
-            // Suppress this message's gray error pill ONLY when ChatPane is
-            // rendering the top-level error card for it (the last failed run).
-            // Other failed turns — older history, or once a follow-up makes
-            // this no longer the last assistant message — keep their pill so
-            // the error detail still survives reload / history review.
-            if (b.label === "error" && message.id === errorCardOwnerId) return null;
-            // The pre-output "initializing" status is surfaced by the footer's
-            // shimmering "Preparing…" label instead of its own pill.
-            if (b.label === "initializing") return null;
-            return <StatusPill key={i} label={b.label} detail={b.detail} />;
-          }
-          return null;
-        })}
+      <div className="assistant-flow" data-testid="assistant-flow">
+        {/*
+          壳与结论段**按发生顺序交替**,不再「先把壳全画完再画结论」(OPEND-2592)。
+          跨轮折叠的会话里,中途那张表单的收口就夹在两张壳中间;把壳整体提到前面
+          会让「已确认」掉到整条消息的最底下,和用户实际回答的时刻对不上。
+        */}
+        {turnFlow.map((entry) =>
+          entry.kind === 'shell' ? (
+            <ExecutionShell
+              key={entry.key}
+              shell={entry.shell}
+              onOpenFile={onRequestOpenFile}
+              /* 执行记录里的文件名要判「这个路径是不是当前项目的」才决定做不做链接。
+                 这三样正是正文 markdown 链接判归属用的同一套(见 chatFileLinkClickHandler),
+                 判据本身在 `runtime/chat/record-file-open.ts`。 */
+              fileScope={recordFileScope}
+              onRetryImage={onRetryImage}
+              runTerminal={isTerminalRunStatus(turnRunStatus)}
+              imageSrc={imageSrc}
+              /* done 一到就收起,不等 run 结束(产品 2026-09-04,见 `concludedAt`) */
+              concluded={entry.concluded}
+            />
+          ) : (
+            <Fragment key={entry.key}>
+              {(proseGroups[entry.at] ?? []).map((b, i) =>
+                renderOuterBlock(b, `${entry.key}-${i}`),
+              )}
+            </Fragment>
+          ),
+        )}
+        {/* 状态行 / 插件候选不属于执行记录,也没有流里的位置 —— 收在最后 */}
+        {restBlocks.map((b, i) => renderOuterBlock(b, `rest-${i}`))}
         {brandBrowserAssistFallbackCard ? (
           <OdCardView
             card={brandBrowserAssistFallbackCard}
@@ -1027,28 +1517,47 @@ function AssistantMessageImpl({
             disclosure, so `fileOps` — not `turnFileOps` — feeds this row.
             Read-only entries are filtered out (they stay in the execution
             record); the summary lists artifacts, not inspected inputs. */}
-        {summaryArtifactOps.length > 0 ? (
+        {/*
+          「这一轮的产物」**只有一个面板,也只有一份实现**。
+          ------------------------------------------------------------
+          原来这里是两个互斥的组件:有 write/edit 工具行走 `FileOpsSummary`,
+          没有就走 `ProducedFiles`。互斥是 P0 `recvqaerXd82bE` 的补丁 ——
+          它解决的是「同时出两块、同一个标题不同的计数」,**没有**解决两块长得
+          不一样:卡片准入、音频画法、按钮集合、导出行为各写了一份,于是同一份
+          `plan.md` / `theme.mp3` 在两条路上是两副长相。
+
+          现在只留 `FileOpsSummary`,产出回退那条支把 `ProjectFile[]` 翻成
+          `FileOpEntry[]` 再喂给它(`producedFilesAsFileOps`,复用
+          `mergeProducedFilesIntoFileOps` 那条已经在用的映射)。互斥仍然成立,
+          而且是**结构上**的:一条消息只调用一次这个组件。
+
+          `onPublish` / `onExport` 不再按 `isLast` 发放 —— 设计稿组件 14 里没有
+          这一档:动作是这张卡自己的属性(「这张卡能不能发布」一眼可见),不是
+          「这一轮是不是最后一轮」的属性。按轮次发放的结果是同一种产物在历史
+          轮次里少一枚按钮,截图里两张卡不一样。**「下一步引导」那一块仍然是
+          最后一轮限定**(它讲的是「接下来做什么」,天然只对当前这一轮成立),
+          那一处的 `isLast` 原样留着。
+        */}
+        {turnArtifactPanelEntries.length > 0 ? (
           <FileOpsSummary
-            entries={summaryArtifactOps}
+            entries={turnArtifactPanelEntries}
             projectFileNames={projectFileNames}
             onRequestOpenFile={onRequestOpenFile}
-          />
-        ) : null}
-        {/* Exactly one "files from this turn" panel per message. When the
-            turn tracked explicit write/edit tool calls, FileOpsSummary above
-            already covers it; ProducedFiles is the fallback surface (with
-            Download) for turns that produced/recovered files without any
-            tracked tool call. Rendering both at once — which happened when a
-            message had real tool ops AND additional recovered files from its
-            prose — showed two panels with the identical "Files from this
-            turn" header and different file counts, reported as a P0 (Feishu
-            recvqaerXd82bE). See AssistantMessage.test.tsx "never shows the
-            tool-op summary and the produced-files block at once". */}
-        {summaryArtifactOps.length === 0 && !streaming && displayedProduced.length > 0 && projectId ? (
-          <ProducedFiles
-            files={displayedProduced}
-            projectId={projectId}
-            onRequestOpenFile={onRequestOpenFile}
+            projectId={projectId ?? undefined}
+            onPublish={onArtifactShare}
+            onExport={onArtifactDownload}
+            turnIsLive={streaming || turnRunStatus === 'running'}
+            /*
+             * 这一轮产物的**版本身份**。它决定卡面读当轮快照还是降级
+             * (HTML → live iframe 显示最新;图片 → 当前同名文件),以及图片卡
+             * 点击时开的是哪一张(设计文档 §4)。
+             *
+             * 走一个读取函数而不是 `message.artifactRefs`:这个字段的线上 DTO 在
+             * `packages/contracts`,和 daemon 侧同批次落地;落地之后旧消息里也仍然
+             * 可能没有它。收敛与「只信 ready」的判据都在
+             * `runtime/chat/artifact-refs.ts`。
+             */
+            artifactRefs={messageArtifactRefs(message)}
           />
         ) : null}
         {!streaming && projectId && pluginActionFolders.length > 0 ? (
@@ -1111,10 +1620,20 @@ function AssistantMessageImpl({
                   forking,
                   forceVisible: true,
                   isLast: !!isLast,
-                  hideRunStatus:
-                    taskActivity !== null ||
-                    hasTodoSnapshot ||
-                    message.id === errorCardOwnerId,
+                  createdAt: message.createdAt,
+                  /*
+                   * 跑完之后这一行**要**报终态(稿子:绿勾 + 已完成)。
+                   * 原来只要壳里有内容就把状态词整个藏掉,于是跑完也不出 ——
+                   * 用户 2026-08-26 指认「这个状态你好像也丢了」。
+                   * 运行中的去重已经由 `showCompletionRow` 整行不出来解决。
+                   * 只在报错卡那一轮仍然让位:原因和下一步由报错卡说。
+                   */
+                  // A clarification run may be process-terminal while its
+                  // inline form is still waiting for an answer. Showing the
+                  // green Done label here turns that handshake into a false
+                  // success, especially when replaying legacy child-tag forms.
+                  hideRunStatus: message.id === errorCardOwnerId || hasPendingQuestionForm,
+                  onContinueRemaining: continueRemaining,
                 }}
               />
             ) : (
@@ -1129,11 +1648,9 @@ function AssistantMessageImpl({
                 onFork={canFork ? onForkFromMessage : undefined}
                 forking={forking}
                 isLast={!!isLast}
-                hideRunStatus={
-                  taskActivity !== null ||
-                  hasTodoSnapshot ||
-                  message.id === errorCardOwnerId
-                }
+                createdAt={message.createdAt}
+                hideRunStatus={message.id === errorCardOwnerId || hasPendingQuestionForm}
+                onContinueRemaining={continueRemaining}
               />
             )}
           </div>
@@ -1157,13 +1674,43 @@ function AssistantMessageImpl({
             onCreateDesignSystem={isLast ? onNextStepCreateDesignSystem : undefined}
             createDesignSystemBusy={Boolean(isLast && nextStepCreateDesignSystemBusy)}
             onPickSkill={isLast ? onPickSkill : undefined}
+            suggestions={isLast ? nextStepSuggestions : undefined}
+            onSuggestion={isLast ? onNextStepSuggestion : undefined}
             onDownload={isLast && nextStepFileName ? onArtifactDownload : undefined}
             skills={isLast ? nextStepSkills : undefined}
-            toolboxSkillNames={isLast ? toolboxSkillNames : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
             variant={effectiveNextStepVariant}
           />
+        ) : null}
+        {/* 分叉分界(稿子第 38 格)。
+            ------------------------------------------------------------
+            它是**这一截带过来的上下文的下边界**,所以必须排在这条消息的**最后** ——
+            回合状态行、下一步引导都属于上面那一轮,得在线的**上面**。
+            原来它排在下一步引导之前,于是那三行落到了线下面,读起来像是
+            「新会话开口就给了三条建议」;用户真机指认过。
+
+            落在**新会话**里,不是源会话:点完分叉页面就跳到新会话,人此刻站在这里,
+            而那行脚注「上文已带过来,接着说就行」也只有对着这一截复制过来的上下文
+            才说得通。标题用**源会话**的标题 —— 这条线回答的是「上面这些是从哪来的」。
+            盖标记的地方在 daemon 的 fork 分支(`routes/project/conversations.ts`)。 */}
+        {message.forkedInto ? (
+          <>
+            {/* `.is-new` 是入场动画的开关(稿子第 38 格「落一下」)。
+                这两块只在这里渲染,陈列页那一格是手写的裸类名 —— 稿子交代的
+                「钉住展示的那一格不挂 .is-new」因此天然成立。 */}
+            <div className="fork-sep is-new" data-testid="assistant-fork-divider">
+              <i aria-hidden />
+              <span title={message.forkedInto.title}>{message.forkedInto.title}</span>
+              <i aria-hidden />
+            </div>
+            {/* 脚注跟着分界线【居中】:它是这条线的注解,不是新会话里的第一句话。
+                左对齐会让人读成「新会话已经开口说了一句」。 */}
+            <div className="fork-note is-new" data-testid="assistant-fork-note">
+              <Icon name="fork" size={12} />
+              {t('assistant.forkNote')}
+            </div>
+          </>
         ) : null}
       </div>
     </div>
@@ -1281,14 +1828,74 @@ function mergeProducedFilesIntoFileOps(
   return merged;
 }
 
+/**
+ * `ProjectFile[]` → `FileOpEntry[]`,给「没有工具行的那一轮」用。
+ *
+ * 直接复用 `mergeProducedFilesIntoFileOps` 的空底座:这条映射(名字、全路径、
+ * 记成一次 write、`status: 'done'`)本来就已经在 `turnFileOps` 那条路上跑了,
+ * 再写一份只会得到第二种记录形状 —— 而两种形状正是这次要消掉的东西。
+ */
+function producedFilesAsFileOps(produced: ProjectFile[]): FileOpEntry[] {
+  return mergeProducedFilesIntoFileOps([], produced);
+}
+
 function summaryArtifactOpsForProducedFiles(
   fileOps: FileOpEntry[],
-  produced: ProjectFile[],
+  produced: ProjectFile[] | undefined,
+  declared: readonly string[] | null | undefined,
 ): FileOpEntry[] {
   const artifactOps = fileOps.filter(
     (entry) => entry.ops.includes('write') || entry.ops.includes('edit'),
   );
-  if (artifactOps.length === 0 || produced.length === 0) return artifactOps;
+  /*
+   * 这一轮**有没有**产物,判据只有一个:本轮自己的 write/edit 工具行。
+   * 没有工具行就没有卡 —— 声明(`<od-focus show=…>`)只能收窄本轮真写过的
+   * 东西,不能凭空造出一张卡。
+   */
+  if (artifactOps.length === 0) return artifactOps;
+  /*
+   * 空清单**不是**否决票。
+   *
+   * `producedFiles` 是客户端拿「回合前后的项目文件名」做差算出来的
+   * (`ProjectView.computeProducedFiles`:`next.filter(f => !before.has(f.name))`),
+   * 所以它为空有一大堆与「这轮没产物」无关的原因:
+   *   · 改的是**已存在**的文件 —— 名字本来就在 before 里,差集天然为空;
+   *   · 算不出基线时 `computeProducedFiles` 返回 `undefined`,而五个落库点
+   *     一律 `?? []`,把「不知道」直接写成了「空」;
+   *   · 文件列表读取与 daemon 退出赛跑,陈旧快照会让这一轮落库成空清单 ——
+   *     这条竞态就写在 `ProjectView.tsx` 那句注释里,是 OPEND-2550 的现场。
+   *
+   * 所以 `[]` 和 `undefined` 在这里是**同一件事**:没有可用的权威清单。
+   * 两者都回落到本轮的工具行证据,再按声明收窄一次。权威清单只在**非空**时
+   * 才参与,用来补路径和元数据、并把工具行没记全的产物带回来 —— 它是补充项,
+   * 不是否决项。把 `[]` 当权威空,正是「生成完了却没有产物卡」的成因。
+   */
+  if (produced === undefined || produced.length === 0) {
+    const candidates = artifactOps.map((entry) => ({
+      name: entry.path,
+      path: entry.fullPath,
+      entry,
+    }));
+    /*
+     * 没声明**不等于**全端出来。
+     *
+     * 「不声明就一张卡都没有」是原设计,但真机声明率是新建 100% / 只改 25%
+     * (W10 从诊断包里量的),所以那条规则在只改文件的轮次上就是「一张卡都没
+     * 有」。d17d70e864 把它翻成「全端出来」,于是六张卡又回来了 —— 而标记本来
+     * 就是为了消掉这六张。
+     *
+     * 产品裁决(方案 C)落在这一行:兜底,但只端主产物。判据整条挂在
+     * `pickPrimaryArtifacts` 上(页面 / 文档压过图片,`.js` `.css` `.svg`
+     * `.json` 这类依赖永不出卡),而不是在这里摊成一串 if —— 同一条判据还要
+     * 喂 `run_finished.wrote_only_dependencies` 的埋点,两处必须是同一个函数。
+     *
+     * 它只在**本轮写过的文件**里挑:改了 `app.js` 不会去找引用它的
+     * `index.html`,因为宿主契约禁止把卡指向本轮没产出的文件。那个场景到底
+     * 有多常见,先量再说。
+     */
+    if (!declared?.length) return pickPrimaryArtifacts(candidates).map((c) => c.entry);
+    return declaredArtifactCards(candidates, declared).map((candidate) => candidate.entry);
+  }
 
   const unused = new Set(artifactOps);
   return produced.map((file) => {
@@ -1339,12 +1946,40 @@ function normalizeTouchedPath(path: string): string {
   return path.replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
-function recoverLinkedProjectFilesFromContent(
-  content: string,
-  projectFiles: ProjectFile[],
-  projectId?: string | null,
-  message?: ChatMessage,
-): ProjectFile[] {
+/**
+ * 这一轮**碰过文件**吗 —— 决定正文里的一句话能不能把一个文件「找」回来当产出。
+ *
+ * 两条硬证据:daemon 给这一轮结算出的产出清单(`producedFiles`),和本轮记下的
+ * 写 / 改工具调用。两条都空,这一轮就是一次没动过文件;此时回答里的
+ * 「我已经为你创建了 `x.html`」只是在**复述历史**,不是本轮增量。
+ * 真机撞到过:用户只发了一句「你好」,agent 顺口复述了上一轮的成果,
+ * 那份 38 分钟前写的文件就被摆成了一张整块的产物预览卡。
+ *
+ * 文件自己的落盘时间是另一条独立证据,走 `isFileMtimeInsideRun`,不受这里约束 ——
+ * 真在本轮落的盘,哪怕这两条都空(工具调用没记上、产出清单也没算进去)也照样认。
+ */
+function turnTouchedAnyFile(
+  produced: readonly ProjectFile[],
+  fileOps: readonly FileOpEntry[],
+): boolean {
+  if (produced.length > 0) return true;
+  return fileOps.some((entry) => entry.ops.includes("write") || entry.ops.includes("edit"));
+}
+
+function recoverLinkedProjectFilesFromContent({
+  content,
+  projectFiles,
+  projectId,
+  message,
+  turnTouchedFiles,
+}: {
+  content: string;
+  projectFiles: ProjectFile[];
+  projectId?: string | null;
+  message?: ChatMessage;
+  /** 见 `turnTouchedAnyFile` —— 为 false 时正文里的措辞不再算作产出证据 */
+  turnTouchedFiles: boolean;
+}): ProjectFile[] {
   if (!content || projectFiles.length === 0) return [];
   const projectFileNames = new Set<string>();
   const byPath = new Map<string, ProjectFile>();
@@ -1378,7 +2013,7 @@ function recoverLinkedProjectFilesFromContent(
     if (!filePath) continue;
     const file = byPath.get(normalizeTouchedPath(filePath));
     if (!file) continue;
-    if (!shouldRecoverReferencedFile(content, href, file, message)) continue;
+    if (!shouldRecoverReferencedFile(content, href, file, message, turnTouchedFiles)) continue;
     recovered.set(file.path || file.name, file);
   }
   return Array.from(recovered.values());
@@ -1423,13 +2058,26 @@ function extractKnownProjectFileRefs(
   return refs;
 }
 
+/**
+ * 这个被正文提到的文件,算不算**这一轮的产出**。
+ *
+ * 两条证据,任一成立即可,但都必须来自**这一轮**:
+ *  · 它的落盘时间落在本轮跑的窗口里 —— 这一轮真写了它;
+ *  · 这一轮**碰过文件**(见 `turnTouchedAnyFile`),而正文用产出的口气点了它的名 ——
+ *    留给「写是写了,但工具调用没记上、产出清单也没算进去」的那一档兜底。
+ *
+ * 措辞本身**不是**证据。一轮什么文件都没动的回答里,「我已经为你创建了 `x.html`」
+ * 说的是上一轮的事,凭它摆出产物卡就是把历史当成了本轮增量。
+ */
 function shouldRecoverReferencedFile(
   content: string,
   rawRef: string,
   file: ProjectFile,
-  message?: ChatMessage,
+  message: ChatMessage | undefined,
+  turnTouchedFiles: boolean,
 ): boolean {
   if (isFileMtimeInsideRun(file, message)) return true;
+  if (!turnTouchedFiles) return false;
   return contentHasOutputHintForFile(content, rawRef, file);
 }
 
@@ -1529,6 +2177,17 @@ function isTerminalRunStatus(
   return status === "succeeded" || status === "failed" || status === "canceled";
 }
 
+/**
+ * 这一轮是**用户自己按停的**。
+ * ------------------------------------------------------------
+ * 停下来的一轮没有「答得好不好」可评 —— 它不是答得差,是压根没答完,
+ * 而赞 / 踩问的正是前者。稿子 15-6 因此只留 复制 / Fork 两枚。
+ * 跑挂了的那一轮不在此列:那是**结果**,评得动,而且正是最该被点踩的一档。
+ */
+function userStoppedTheTurn(message: ChatMessage): boolean {
+  return message.runStatus === "canceled";
+}
+
 function isFeedbackEligible({
   streaming,
   message,
@@ -1544,6 +2203,7 @@ function isFeedbackEligible({
     streaming ||
     hasEmptyResponse ||
     hasUnfinishedTodos ||
+    userStoppedTheTurn(message) ||
     message.resultDeliveryState === "no_result" ||
     message.resultDeliveryState === "delivery_failed"
   ) return false;
@@ -1633,9 +2293,18 @@ interface AssistantFooterProps {
   // When the turn has an execution disclosure, its run state lives at the top
   // of the answer. The footer keeps only actions so run state is not repeated.
   hideRunStatus?: boolean;
+  /**
+   * 〔继续剩余任务〕。**只有还欠着活的时候才传** —— 传了就画,没传就不画,
+   * 这一行不自己判断有没有未完成的活(镜像陈列页要能单独摆出两种形态)。
+   */
+  onContinueRemaining?: () => void;
+  /** 这一轮的时间,靠右端(设计稿 15-1 的 `.tm`)。拿不到就不显示,不估算 */
+  createdAt?: number;
 }
 
-function AssistantFooter({
+/** 导出只为验收:镜像陈列页要单挂这一行去对第 34–39 格。产品里的消费方仍是
+ *  `AssistantMessageImpl` 与下面的 `AssistantFeedback`。 */
+export function AssistantFooter({
   streaming,
   hasUnfinishedTodos,
   hasEmptyResponse,
@@ -1649,6 +2318,8 @@ function AssistantFooter({
   forceVisible = false,
   isLast = false,
   hideRunStatus = false,
+  onContinueRemaining,
+  createdAt,
 }: AssistantFooterProps) {
   const t = useT();
   if (
@@ -1658,20 +2329,35 @@ function AssistantFooter({
     !hasEmptyResponse &&
     !canceled &&
     !copyMarkdown &&
-    !onFork
+    !onFork &&
+    !onContinueRemaining
   )
     return null;
   return (
     <div
       className="assistant-footer"
+      data-testid="assistant-footer"
       data-unfinished={hasUnfinishedTodos ? "true" : "false"}
       data-streaming={streaming ? "true" : "false"}
+      // 中断的那一轮不能戴完成勾:它并没有跑完(稿子 15-6「绿点转灰」)
+      data-canceled={canceled ? "true" : "false"}
       data-last={isLast ? "true" : "false"}
     >
+      {/* 稿子这一行的头是**一个**元素:`<span class="fin"><svg class="tick"/>已完成</span>` ——
+          勾在字里面,不是它旁边的兄弟。原来 dot 和文字是平级的两个 span,
+          逐元素比样式时从这里就错开一位。 */}
       {!hideRunStatus ? (
         <>
-          <span className="dot" data-active={streaming ? "true" : "false"} />
-          <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`}>
+          <span className={`assistant-label${streaming && preparing ? " shimmer-text shimmer-prepare" : ""}`} data-testid="assistant-label">
+            {/* 跑完那一档稿子用的是 `<svg class="tick">`(勾其实是 background 画的,
+                里面的 path 被 `.tick > * { display:none }` 关掉了),没跑完那几档用的是 `<i>`。
+                标记本身的样子全在 `.dot` 的 CSS 里,这里只决定用哪个标签 —— 标签不一样,
+                逐元素比样式时后面整列都要错位。 */}
+            {!streaming && !canceled && !hasUnfinishedTodos ? (
+              <svg className="dot" viewBox="0 0 24 24" aria-hidden />
+            ) : (
+              <i className="dot" data-active={streaming ? "true" : "false"} />
+            )}
             {streaming
               ? preparing
                 ? preparingStatus === "thinking"
@@ -1688,8 +2374,28 @@ function AssistantFooter({
           </span>
         </>
       ) : null}
-      {copyMarkdown || onFork || feedbackControls ? (
+      {copyMarkdown || onFork || feedbackControls || onContinueRemaining ? (
         <span className="assistant-footer-controls">
+          {/*
+            〔继续剩余任务〕排在最前面。
+            ------------------------------------------------------------
+            它和后面几个不是一类:复制 / 赞踩 / Fork 是「对这段回答做点什么」,
+            这一颗是**把没干完的活接着往下推**,是这一行状态词(「已停止,仍有未完成任务」)
+            的直接下一步 —— 挨着那句话才读得通。
+            它也是 agent 判断「这一轮跟旧账无关」时用户唯一的出口,不能被折进更里面。
+          */}
+          {onContinueRemaining ? (
+            <button
+              type="button"
+              className="assistant-copy-button assistant-continue-remaining"
+              data-testid="assistant-continue-remaining"
+              onClick={onContinueRemaining}
+            >
+              {t("assistant.continueRemaining")}
+            </button>
+          ) : null}
+          {/* 稿子的顺序是 赞 → 踩 → 复制 → Fork:先是「这答案好不好」,再是「拿它做点什么」 */}
+          {feedbackControls}
           {copyMarkdown ? <AssistantMarkdownCopyButton markdown={copyMarkdown} /> : null}
           {onFork ? (
             <AssistantForkButton
@@ -1697,11 +2403,27 @@ function AssistantFooter({
               onFork={onFork}
             />
           ) : null}
-          {feedbackControls}
         </span>
+      ) : null}
+      {/* 弹簧 + 时间:稿子里这一行是满宽的,时间贴右端。拿不到时间就两样都不出。
+          **跑的过程中不出时间** —— 那一刻这一行只该留复制 / Fork 这类动作;
+          状态由壳头报,时间等落定了再说(用户 2026-08-26 真机指认「运行中没有这个了」)。 */}
+      {createdAt != null && !streaming ? (
+        <>
+          <span className="assistant-footer-gap" />
+          <time className="assistant-footer-time" dateTime={new Date(createdAt).toISOString()}>
+            {formatClock(createdAt)}
+          </time>
+        </>
       ) : null}
     </div>
   );
+}
+
+/** 「14:32」—— 只给时分,和稿子一致;跨天与否不在这一行表达 */
+function formatClock(at: number): string {
+  const d = new Date(at);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function AssistantForkButton({
@@ -1774,7 +2496,9 @@ function AssistantMarkdownCopyButton({ markdown }: { markdown: string }) {
   );
 }
 
-function AssistantFeedback({
+/** 导出只为验收:第 34 / 36 / 37 / 39 格要的是「状态行 + 赞踩」整条,
+ *  赞踩两枚是这里注入 `AssistantFooter` 的,单挂 footer 出不来。 */
+export function AssistantFeedback({
   feedback,
   onFeedback,
   hasDesignSystemContext,
@@ -1822,7 +2546,7 @@ function AssistantFeedback({
   }, [selected]);
   useEffect(() => {
     if (!reasonRating) return;
-    reasonsRef.current?.scrollIntoView({ block: "start", behavior: "smooth" });
+    reasonsRef.current?.scrollIntoView({ block: "nearest", behavior: "auto" });
     // P0 surface_view assistant_feedback_reason_panel — fires when the
     // reason panel actually appears (reasonRating flips from null to
     // truthy), not when the buttons render.
@@ -1924,8 +2648,12 @@ function AssistantFeedback({
   const toggleReasonCode = (code: ChatMessageFeedbackReasonCode) => {
     const next = new Set(draftReasonCodes);
     if (next.has(code)) {
+      /*
+       * 取消勾选「其他」**不再清空补充框**。补充框现在是常驻的(稿子第 40 格),
+       * 它和「其他」这一颗胶囊已经没有绑定关系;人写完一句话再顺手取消了那颗胶囊,
+       * 就把他的话删掉,是在替他做决定。
+       */
       next.delete(code);
-      if (code === "other") setCustomReason("");
     } else {
       next.add(code);
     }
@@ -1936,7 +2664,7 @@ function AssistantFeedback({
     const trimmedCustomReason = customReason.trim();
     const reasonCodes = [...draftReasonCodes];
     const reasonJoined = reasonCodes.length > 0 ? reasonCodes.join(",") : undefined;
-    const hasCustomReason = draftReasonCodes.has("other") && trimmedCustomReason.length > 0;
+    const hasCustomReason = trimmedCustomReason.length > 0;
     const requestId = analytics.newRequestId();
     // P0 ui_click element=assistant_feedback_reason_submit_button — fires
     // synchronously on the user gesture so the click count never depends on
@@ -2036,10 +2764,11 @@ function AssistantFeedback({
     onFeedback({
       rating: reasonRating,
       reasonCodes,
-      customReason:
-        draftReasonCodes.has("other") && trimmedCustomReason
-          ? trimmedCustomReason
-          : undefined,
+      /*
+       * 补充框常驻之后,这里也不能再要求「勾了『其他』才算数」——
+       * 人把话写进去了却因为没勾那一项被丢掉,是我们把他的输入扔了。
+       */
+      customReason: trimmedCustomReason || undefined,
       reasonsSubmittedAt: Date.now(),
     });
     setReasonRating(null);
@@ -2047,10 +2776,12 @@ function AssistantFeedback({
   const reasonOptions = reasonRating
     ? feedbackReasonOptions(reasonRating, t, hasDesignSystemContext)
     : [];
-  const reasonEmoji = reasonRating === "positive" ? "😊" : "😔";
-  const showOtherInput = draftReasonCodes.has("other");
-  const canSubmit =
-    draftReasonCodes.size > 0 || (showOtherInput && customReason.trim().length > 0);
+  /*
+   * 补充框现在常驻(见 `AssistantFeedbackReasons`),所以「能不能提交」也跟着松开:
+   * 只写了一句补充、一个原因都没勾,同样是有效反馈 —— 原来那条 `has('other')` 的门
+   * 会把这种人挡在外面,而他已经把话打完了。
+   */
+  const canSubmit = draftReasonCodes.size > 0 || customReason.trim().length > 0;
   const controls = (
     <span
       className="assistant-feedback"
@@ -2061,6 +2792,7 @@ function AssistantFeedback({
         type="button"
         className="assistant-feedback-button od-tooltip"
         data-testid="assistant-feedback-positive"
+        data-rating="up"
         data-selected={selected === "positive" ? "true" : "false"}
         data-tooltip={t("assistant.feedbackPositive")}
         data-tooltip-placement="top"
@@ -2074,6 +2806,7 @@ function AssistantFeedback({
           <span
             key={burstKey}
             className="assistant-feedback-burst"
+            data-testid="assistant-feedback-burst"
             aria-hidden="true"
           >
             <span />
@@ -2089,6 +2822,7 @@ function AssistantFeedback({
         type="button"
         className="assistant-feedback-button od-tooltip"
         data-testid="assistant-feedback-negative"
+        data-rating="down"
         data-selected={selected === "negative" ? "true" : "false"}
         data-tooltip={t("assistant.feedbackNegative")}
         data-tooltip-placement="top"
@@ -2105,78 +2839,29 @@ function AssistantFeedback({
     <div className="assistant-feedback-wrap">
       <AssistantFooter {...footerProps} feedbackControls={controls} />
       {reasonRating ? (
-        <div className="assistant-feedback-reasons" ref={reasonsRef}>
-          <div className="assistant-feedback-reason-title">
-            <span>{t("assistant.feedbackReasonTitle")}</span>
-            <span className="assistant-feedback-reason-emoji" aria-hidden="true">
-              {reasonEmoji}
-            </span>
-          </div>
-          <div className="assistant-feedback-reason-options">
-            {reasonOptions.map((option) => (
-              <label
-                key={option.code}
-                className="assistant-feedback-reason-option"
-                data-selected={draftReasonCodes.has(option.code) ? "true" : "false"}
-              >
-                <input
-                  type="checkbox"
-                  checked={draftReasonCodes.has(option.code)}
-                  onChange={() => toggleReasonCode(option.code)}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-          {showOtherInput ? (
-            <textarea
-              className="assistant-feedback-custom"
-              value={customReason}
-              placeholder={t("assistant.feedbackReasonPlaceholder")}
-              rows={2}
-              onChange={(event) => setCustomReason(event.target.value)}
-            />
-          ) : null}
-          {reasonRating === "positive" ? (
-            <p className="assistant-feedback-discord-note">
-              Share what you made with the{" "}
-              <a
-                href={DISCORD_INVITE_URL}
-                data-testid="assistant-feedback-discord-positive"
-              >
-                Discord
-              </a>{" "}
-              community, or drop a screenshot and tell us what worked well.
-            </p>
-          ) : (
-            <p className="assistant-feedback-discord-note">
-              Share more context in{" "}
-              <a
-                href={DISCORD_INVITE_URL}
-                data-testid="assistant-feedback-discord-negative"
-              >
-                Discord
-              </a>{" "}
-              so the team can understand what went wrong and follow up directly.
-            </p>
-          )}
-          <div className="assistant-feedback-actions">
-            <button
-              type="button"
-              className="assistant-feedback-submit"
-              disabled={!canSubmit}
-              onClick={submitReasons}
-            >
-              {t("assistant.feedbackReasonSubmit")}
-            </button>
-          </div>
-        </div>
+        <AssistantFeedbackReasons
+          rating={reasonRating}
+          options={reasonOptions}
+          selected={draftReasonCodes}
+          onToggle={(code) => toggleReasonCode(code as never)}
+          customReason={customReason}
+          onCustomReasonChange={setCustomReason}
+          canSubmit={canSubmit}
+          onSubmit={submitReasons}
+          onCancel={() => setReasonRating(null)}
+          panelRef={reasonsRef}
+          t={t as never}
+        />
       ) : null}
     </div>
   );
 }
 
-function feedbackReasonOptions(
+/**
+ * 导出只为**验收**:镜像陈列页第 40 格要摆产品**真实**的原因项,
+ * 不许在夹具里手抄一份稿子的四个词冒充 —— 那样比出来的是夹具,不是实现。
+ */
+export function feedbackReasonOptions(
   rating: ChatMessageFeedbackRating,
   t: TranslateFn,
   hasDesignSystemContext: boolean,
@@ -2194,10 +2879,8 @@ function feedbackReasonOptions(
       : [
           "missed_request",
           "weak_visual",
-          "incomplete_output",
-          "hard_to_use",
-          ...(hasDesignSystemContext ? (["missed_design_system"] as const) : []),
-          "other",
+          "could_not_run",
+          "too_slow",
         ];
   return codes.map((code) => ({ code, label: feedbackReasonLabel(code, t) }));
 }
@@ -2221,6 +2904,10 @@ function feedbackReasonLabel(
       return t("assistant.feedbackReasonNegativeMissed");
     case "weak_visual":
       return t("assistant.feedbackReasonNegativeVisual");
+    case "could_not_run":
+      return t("assistant.feedbackReasonNegativeCouldNotRun");
+    case "too_slow":
+      return t("assistant.feedbackReasonNegativeTooSlow");
     case "incomplete_output":
       return t("assistant.feedbackReasonNegativeIncomplete");
     case "hard_to_use":
@@ -2231,72 +2918,6 @@ function feedbackReasonLabel(
       return t("assistant.feedbackReasonOther");
   }
   return code;
-}
-
-function ProducedFiles({
-  files,
-  projectId,
-  onRequestOpenFile,
-}: {
-  files: ProjectFile[];
-  projectId: string;
-  onRequestOpenFile?: (name: string) => void;
-}) {
-  const t = useT();
-  const { workspaceContext } = useProjectCollabContext();
-  return (
-    <div className="produced-files">
-      <div className="produced-files-label">{t("assistant.producedFiles")}</div>
-      <div className="produced-files-list">
-        {files.map((f) => (
-          <div
-            key={f.name}
-            className={`produced-file${onRequestOpenFile ? " produced-file-openable" : ""}`}
-            role={onRequestOpenFile ? "button" : undefined}
-            tabIndex={onRequestOpenFile ? 0 : undefined}
-            aria-label={onRequestOpenFile ? `${t("assistant.openFile")}: ${f.name}` : undefined}
-            onClick={onRequestOpenFile ? () => onRequestOpenFile(f.name) : undefined}
-            onKeyDown={onRequestOpenFile ? (event) => {
-              if (event.target !== event.currentTarget) return;
-              if (event.key !== "Enter" && event.key !== " ") return;
-              event.preventDefault();
-              onRequestOpenFile(f.name);
-            } : undefined}
-          >
-            <span className="produced-file-icon" aria-hidden>
-              <Icon name={kindIconName(f.kind)} size={14} />
-            </span>
-            <span className="produced-file-name" title={f.name}>
-              {f.name}
-            </span>
-            <span className="produced-file-size">{humanBytes(f.size)}</span>
-            <div className="produced-file-actions">
-              {onRequestOpenFile ? (
-                <button
-                  type="button"
-                  className="ghost"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRequestOpenFile(f.name);
-                  }}
-                >
-                  {t("assistant.openFile")}
-                </button>
-              ) : null}
-              <a
-                className="ghost-link"
-                href={projectFileUrl(projectId, f.name, workspaceContext)}
-                download={f.name}
-                onClick={(event) => event.stopPropagation()}
-              >
-                {t("assistant.downloadFile")}
-              </a>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // Pure renderer. State (busyKey, notices) and the action runner live in the
@@ -2327,17 +2948,18 @@ function PluginActionPanel({
 }) {
   const noticeByFolder = notices;
   const runAction = onRunAction;
+  const t = useT();
 
   return (
-    <div className="plugin-action-panel" aria-label="Plugin next actions">
+    <div className="plugin-action-panel" aria-label={t('chat.pluginAction.aria')}>
       <div className="plugin-action-panel__head">
         <span className="plugin-action-panel__icon" aria-hidden>
           <Icon name="sparkles" size={15} />
         </span>
         <div>
-          <div className="plugin-action-panel__title">Plugin ready</div>
+          <div className="plugin-action-panel__title">{t('chat.pluginAction.title')}</div>
           <div className="plugin-action-panel__subtitle">
-            Send the next step to the agent so it can run the od CLI.
+            {t('chat.pluginAction.subtitle')}
           </div>
         </div>
       </div>
@@ -2356,7 +2978,7 @@ function PluginActionPanel({
               </span>
               <div className="plugin-action-card__copy">
                 <code className="plugin-action-card__path">{folder.path}</code>
-                <span>{folder.fileCount} files ready for My plugins</span>
+                <span>{t('chat.pluginAction.filesReady', { count: folder.fileCount })}</span>
               </div>
             </div>
               <div className="plugin-action-card__actions">
@@ -2372,7 +2994,9 @@ function PluginActionPanel({
                     size={13}
                   />
                   <span>
-                    {actionBusy && busyKey === `install:${folder.path}` ? "Sending..." : "Add to My plugins"}
+                    {actionBusy && busyKey === `install:${folder.path}`
+                      ? t('chat.comments.sending')
+                      : t('chat.pluginAction.install')}
                   </span>
                 </button>
                 <button
@@ -2387,7 +3011,9 @@ function PluginActionPanel({
                     size={13}
                   />
                   <span>
-                    {actionBusy && busyKey === `publish:${folder.path}` ? "Sending..." : "Publish repo"}
+                    {actionBusy && busyKey === `publish:${folder.path}`
+                      ? t('chat.comments.sending')
+                      : t('pluginCard.publish')}
                   </span>
                 </button>
                 <button
@@ -2403,8 +3029,8 @@ function PluginActionPanel({
                   />
                   <span>
                     {actionBusy && busyKey === `contribute:${folder.path}`
-                      ? "Sending..."
-                      : "OpenDesign PR"}
+                      ? t('chat.comments.sending')
+                      : t('pluginCard.contribute')}
                   </span>
                 </button>
                 {onRequestOpenFile ? (
@@ -2415,7 +3041,7 @@ function PluginActionPanel({
                     onClick={() => onRequestOpenFile(folder.manifestPath)}
                   >
                     <Icon name="file-code" size={13} />
-                    <span>Open manifest</span>
+                    <span>{t('ds.openManifest')}</span>
                   </button>
                 ) : null}
               </div>
@@ -2551,7 +3177,6 @@ function ProseBlock({
   assistantMessageId,
   isLastAssistant,
   streaming,
-  showStreamCursor,
   nextUserContent,
   suppressDirectionForms,
   onSubmitQuestionForm,
@@ -2571,7 +3196,6 @@ function ProseBlock({
   assistantMessageId: string;
   isLastAssistant: boolean;
   streaming: boolean;
-  showStreamCursor?: boolean;
   nextUserContent?: string;
   suppressDirectionForms: boolean;
   projectId?: string | null;
@@ -2589,9 +3213,25 @@ function ProseBlock({
 }) {
   const t = useT();
   const cleaned = useMemo(() => {
-    // Internal control markers come off first: they are daemon plumbing that
-    // never belongs in prose, and a leaked one would otherwise reach Markdown.
-    const withoutMarkers = stripInternalControlMarkers(text, { streaming });
+    /*
+     * 三道**协议噪音**先剥干净,再交给按标记找边界的 `stripArtifact`。
+     * 三者互不重叠,合在一条链上,谁都不能少:
+     *
+     * 1. `stripInternalControlMarkers`(origin/main):daemon 的内部控制标记
+     *    (`<od-title>` / `open-design-plan-contract` / `open-design-runtime-state`)。
+     *    这些本该被 daemon 侧的流式剥离器吃掉,但已经落库的旧消息修不回来。
+     * 2. `stripCritiqueGrammar`(本分支):评审剧场语法。daemon 那道
+     *    (`panel-grammar-strip.ts`)只管**新流**;用户手上已经有一堆落了库的旧对话,
+     *    里面原样写着 `<CRITIQUE_RUN>` / `<PANELIST role="Critic" score="9.0">`。
+     * 3. `stripArtifactFocusMarkers`(本分支):`<od-focus>` 展示意图标记。
+     *
+     * 位置都在最前面:后面 `stripArtifact` 之类都按标记找边界,先把不是标记的
+     * 噪音清掉,它们的扫描才不会被岔开。
+     * 语法出处在 `@open-design/contracts`,两边共用一份,不会分叉。
+     */
+    const withoutMarkers = stripArtifactFocusMarkers(
+      stripCritiqueGrammar(stripInternalControlMarkers(text, { streaming })),
+    );
     const stripped = stripArtifact(withoutMarkers);
     return hideRecoveredHtmlFallback
       ? stripRecoveredHtmlFallbackForDisplay(stripped, withoutMarkers)
@@ -2618,6 +3258,12 @@ function ProseBlock({
     [visibleText, streaming]
   );
   const segments = useMemo(() => splitOnQuestionForms(head), [head]);
+  /**
+   * 逐字化开(W9):稿子把流式光标删了,新到的字自己化开就是流式的样子。
+   * 判据挂在「这是最后一条且还在流」上 —— 历史消息重渲染时不能再化开一遍。
+   */
+  const proseRef = useRef<HTMLDivElement>(null);
+  useCharReveal(proseRef, Boolean(isLastAssistant && streaming));
   // Route file-link clicks away from the default target="_blank" behavior.
   // Without this, Electron's window-open handler creates a new app window
   // whose href can't resolve, and the user lands on the home screen — the
@@ -2657,9 +3303,20 @@ function ProseBlock({
       }));
     });
   });
-  if (renderable.length === 0 && !live) return null;
+  /**
+   * 一段正文可以「看上去空但仍有东西要画」:还没闭合的 `<question-form>` 被剥掉之后,
+   * 留下来的加载框才是这一块此刻的全部内容。
+   *
+   * 老链路里这种情况不会发生 —— 表单前面的引导语和表单在同一个 text 块里,剥完还剩字。
+   * 新执行记录按 D43 把表单之前的过程叙述收进壳内,壳外只剩这半截标记,
+   * 于是 `renderable` 真的是空的;在这里返回 null 就把加载框一起吞了。
+   */
+  if (renderable.length === 0 && !live && !hadOpenForm) return null;
   return (
-    <div className="prose-block" data-stream-cursor={showStreamCursor && !live ? "true" : undefined}>
+    <div
+      ref={proseRef}
+      className="prose-block"
+    >
       {renderable.map((seg) => {
         if (seg.kind === "reminder") {
           return <SystemReminderBlock key={seg.key} text={seg.text} variant="injection" />;
@@ -2689,10 +3346,8 @@ function ProseBlock({
         }
         if (seg.kind === "suppressed-direction") {
           return (
-            <div key={seg.key} className="status-pill">
-              <span className="status-label">
-                Active design system selected. Visual direction is already locked.
-              </span>
+            <div key={seg.key} className="status-pill" data-testid="status-pill">
+              <span className="status-label">{t("assistant.designSystemDirectionLocked")}</span>
             </div>
           );
         }
@@ -2776,61 +3431,18 @@ function FormBlock({
     [form, nextUserContent],
   );
   const submittedSummary = useMemo(() => {
-    const items: Array<{ label: string; value: string }> = [];
-    const visualItems: Array<{
-      label: string;
-      cards: Array<{ title: string; src: string }>;
-    }> = [];
-    if (!submittedFromHistory) return { items, visualItems };
-    for (const question of form.questions) {
-      const raw = submittedFromHistory[question.id];
-      const values = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : [];
-      const labels = values
-        .filter((value) => value.trim().length > 0)
-        .map((value) => formOptionLabelForValue(question, value));
-      if (labels.length === 0) continue;
-
-      const visualStyleCards =
-        visualStyleContext &&
-        question.id === "tone" &&
-        (question.type === "checkbox" || question.type === "radio") &&
-        question.options
-          ? visualStyleCardsForContext(visualStyleContext)
-          : [];
-      const normalizedVisualValues =
-        visualStyleCards.length > 0 && visualStyleContext
-          ? values.map((value) =>
-              normalizeVisualStyleQuestionValue(question, value, visualStyleContext),
-            )
-          : values;
-      const visualCards = visualStyleCards.flatMap((card) =>
-        normalizedVisualValues.includes(card.value) && card.preview
-          ? [{ title: card.title, src: card.preview.src }]
-          : [],
-      );
-      if (visualCards.length > 0) {
-        visualItems.push({ label: question.label, cards: visualCards });
-        const selectedLabelsWithoutPreview = normalizedVisualValues
-          .filter(
-            (value) =>
-              !visualStyleCards.some((card) => card.value === value && card.preview),
-          )
-          .map((value) => {
-            const card = visualStyleCards.find((candidate) => candidate.value === value);
-            return card?.title ?? formOptionLabelForValue(question, value);
-          });
-        if (selectedLabelsWithoutPreview.length > 0) {
-          items.push({
-            label: question.label,
-            value: selectedLabelsWithoutPreview.join(", "),
-          });
-        }
-        continue;
-      }
-      items.push({ label: question.label, value: labels.join(", ") });
-    }
-    return { items, visualItems };
-  }, [form, submittedFromHistory, visualStyleContext]);
+    if (!submittedFromHistory) return { items: [], visualItems: [] };
+    // 跳过的题也要占一行。`formatFormAnswers` 已经把它们写成 `(skipped)` 发给模型了,
+    // 收口不念出来的话,用户看不出自己跳过了什么;整张表都跳时更会一行不剩,
+    // 退回那句「答案已发送」—— 而那一分支恰恰是「一个答案都没有」才成立的。
+    return summarizeQuestionFormAnswers(
+      form,
+      submittedFromHistory,
+      visualStyleContext,
+      false,
+      t('qf.answeredSkipped'),
+    );
+  }, [form, submittedFromHistory, t, visualStyleContext]);
   useEffect(() => {
     const syncSubmitLock = () => {
       const outstanding = readInlineQuestionFormSubmitted(formKey);
@@ -2920,9 +3532,6 @@ function FormBlock({
           : {}),
         ...("source" in interaction
           ? { interaction_source: interaction.source }
-          : {}),
-        ...("categoryId" in interaction
-          ? { category_id: interaction.categoryId }
           : {}),
         ...("stepIndex" in interaction
           ? {
@@ -3098,48 +3707,53 @@ function FormBlock({
   );
 
   if (submittedFromHistory) {
+    const flat = submittedSummary.items;
+    const single = flat.length === 1 && submittedSummary.visualItems.length === 0;
     return (
+      /*
+       * 已回答的收口(稿子第 23 / 24 / 25 格)。
+       *
+       * 稿子这一块**没有卡**:一行绿色的「已确认」,底下是 `标签 值` 的纯文本行,
+       * 多选就列成几行,视觉方向那格再挂一张 57px 的缩略图。
+       * 原来这里是灰底圆角卡 + 一枚 ✓ 圆圈 + 一排胶囊 —— 那是稿子之前的形态。
+       *
+       * 类名与 `QuestionForm` 里的 `AnsweredSummary` 共用(`.answered / .k / .ab / .ak / .al / .av`),
+       * 两条路径(历史回放 vs 当轮提交)长得一样,不再各画一套。
+       */
       <div
-        className="question-form-summary"
+        className="answered"
         data-testid="question-form-summary"
         data-form-id={form.id}
         data-message-id={assistantMessageId}
       >
-        <span className="question-form-summary-icon" aria-hidden>
-          <Icon name="check" size={14} />
-        </span>
-        <div className="question-form-summary-body">
-          <div className="question-form-summary-title">{t("questions.bannerAnswered")}</div>
-          {submittedSummary.items.length > 0 || submittedSummary.visualItems.length > 0 ? (
-            <>
-              {submittedSummary.visualItems.map((item) => (
-                <div key={item.label} className="question-form-summary-visuals">
-                  <span className="question-form-summary-visual-label">{item.label}</span>
-                  <div className="question-form-summary-visual-cards">
-                    {item.cards.map((card) => (
-                      <figure key={card.src} className="question-form-summary-visual-card">
-                        <img src={card.src} alt={`${item.label}: ${card.title}`} />
-                        <figcaption>{card.title}</figcaption>
-                      </figure>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {submittedSummary.items.length > 0 ? (
-                <div className="question-form-summary-items">
-                  {submittedSummary.items.map((item) => (
-                    <span key={item.label} className="question-form-summary-item">
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="question-form-summary-empty">{t("qf.lockedSubmitted")}</div>
-          )}
-        </div>
+        <div className="k">{t("qf.answeredConfirmed")}</div>
+        {flat.length === 0 && submittedSummary.visualItems.length === 0 ? (
+          <div className="ab">{t("qf.lockedSubmitted")}</div>
+        ) : null}
+        {single ? (
+          <div className="ab">
+            <span className="ak">{flat[0]!.label}</span>
+            <b>{flat[0]!.value}</b>
+          </div>
+        ) : flat.length > 0 ? (
+          <ul className="al">
+            {flat.map((item) => (
+              <li key={`${item.label}-${item.value}`}>
+                <span className="ak">{item.label}</span>
+                <b>{item.value}</b>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {submittedSummary.visualItems.map((item) => (
+          <div key={item.label} className="ab">
+            <span className="ak">{item.label}</span>
+            <b>{item.cards.map((c) => c.title).join(" / ")}</b>
+            {item.cards.map((card) => (
+              <img key={card.src} className="av" src={card.src} alt={`${item.label}: ${card.title}`} />
+            ))}
+          </div>
+        ))}
       </div>
     );
   }
@@ -3394,8 +4008,16 @@ function visualStyleContextForProjectKind(
     projectKind === "web_clone" ||
     projectKind === "wireframe" ||
     projectKind === "mobile" ||
-    projectKind === "live_artifact"
+    projectKind === "live_artifact" ||
+    projectKind === "template" ||
+    projectKind === "other"
   ) {
+    // Generic/template projects share the same HTML product surface and
+    // generation rules as prototypes. They must therefore receive the same
+    // host-owned visual catalogue when an agent emits `direction-cards`.
+    // Without this mapping, the protocol-valid options-only form renders no
+    // cards because there is neither a catalogue context nor legacy `cards`
+    // metadata in the model payload.
     return "prototype";
   }
   if (projectKind === "document") return "document";
@@ -3446,6 +4068,16 @@ function SystemReminderBlock({
   );
 }
 
+/**
+ * 推理段落的 markdown 形态(可展开、按 markdown 渲染、文件链接在应用内打开)。
+ *
+ * **当前没有消费方。** 原来留着是在等一条拍板:「壳内文字要不要按 markdown 渲染」。
+ * **那条拍板已经来了**(用户 2026-09-03:「都要 markdown 啊」),`SayText` 与
+ * `ThinkingMarkdown` 现在都走 `renderMarkdown`,链接也一起回来了 —— 所以这一份
+ * 不再背着「唯一还有 markdown 能力的实现」这个职责。剩下的差异只有
+ * `onLinkClick`(文件链接在应用内打开)壳内还没接。清理它是一次独立的收尾,
+ * 要么把 `onLinkClick` 透给壳内两个渲染组件、要么连这份一起删,别再当作待拍板项挂着。
+ */
 function ThinkingBlock({
   text,
   streaming,
@@ -3479,7 +4111,7 @@ function ThinkingBlock({
       ? t("assistant.thoughtFor", { s: elapsedSec })
       : t("assistant.thought");
   return (
-    <div className="thinking-block">
+    <div className="thinking-block" data-testid="thinking-block">
       <button className="thinking-toggle" onClick={() => setOpen((o) => !o)}>
         <span className={`thinking-status${isThinking ? ' op-status-running' : open ? ' thinking-status-active' : ''}`} aria-hidden>
           {isThinking
@@ -3510,16 +4142,19 @@ function StatusPill({
   label: string;
   detail?: string | undefined;
 }) {
+  const t = useT();
   const variant =
     label === "error" ? "error" : label === "warning" ? "warning" : undefined;
-  const displayLabel = label === "context_compaction" ? "compacting context" : label;
+  const displayLabel =
+    label === "context_compaction" ? t("assistant.statusCompactingContext") : label;
   return (
     <div
       className={`status-pill${variant ? ` is-${variant}` : ""}`}
+      data-testid="status-pill"
       data-status={label}
     >
       <span className="status-label">{displayLabel}</span>
-      {detail ? <span className="status-detail">{renderStatusDetail(detail)}</span> : null}
+      {detail ? <span className="status-detail" data-testid="status-detail">{renderStatusDetail(detail)}</span> : null}
     </div>
   );
 }
@@ -3570,123 +4205,12 @@ interface ToolItem {
   result?: Extract<AgentEvent, { kind: "tool_result" }>;
 }
 
-// Snapshot tools (the call IS the state, later calls supersede earlier
-// ones) and tools the model retries verbatim under headless-mode errors
-// are noisy when stacked. Collapse identical-input neighbors to the most
-// recent. Currently:
-//   - TodoWrite / todowrite: the input replaces the previous list, so the
-//     latest call is the only one worth showing; older identical or
-//     superseded snapshots are pure duplication.
-// Other tool names pass through untouched.
-const SNAPSHOT_TOOL_NAMES = new Set([
-  "TodoWrite",
-  "todowrite",
-  "todo_write",
-  "update_plan",
-]);
-
-function dedupeSnapshotToolRetries(items: ToolItem[]): ToolItem[] {
-  if (items.length <= 1) return items;
-  const allSnapshot = items.every((it) => SNAPSHOT_TOOL_NAMES.has(it.use.name));
-  if (!allSnapshot) return items;
-  // For TodoWrite specifically, the LATEST call always wins regardless of
-  // input — it is a state replace, not an append. The cheap unifying
-  // behavior: keep the last item per `(name, JSON.stringify(input))` key;
-  // for TodoWrite a single name+input is the snapshot identity.
-  const lastByKey = new Map<string, ToolItem>();
-  for (const it of items) {
-    let key: string;
-    try {
-      key = `${it.use.name}:${JSON.stringify(it.use.input)}`;
-    } catch {
-      key = it.use.id;
-    }
-    lastByKey.set(key, it);
-  }
-  // For TodoWrite groups, additionally collapse to just the most recent
-  // item overall (a later call supersedes an earlier one even when inputs
-  // differ). We detect by checking whether all items share a TodoWrite
-  // name after the input-key dedupe above.
-  const collapsed = Array.from(lastByKey.values());
-  const allTodoWrite = collapsed.every((it) => isTodoWriteToolName(it.use.name));
-  if (allTodoWrite && collapsed.length > 1) {
-    return [collapsed[collapsed.length - 1]!];
-  }
-  return collapsed;
-}
-
-// Tools whose streaming JSON input is worth previewing as live code. Other
-// tools (Bash, Grep, TodoWrite, …) stream JSON too but a code panel for them
-// would be noise.
-const LIVE_CODE_TOOL_NAMES = new Set([
-  "Write",
-  "write",
-  "Edit",
-  "edit",
-  "MultiEdit",
-  "multiedit",
-  "NotebookEdit",
-]);
-
-function isLiveCodeToolName(name: string): boolean {
-  return LIVE_CODE_TOOL_NAMES.has(name);
-}
-
-// Pull the (possibly still-streaming) value of a top-level JSON string field
-// out of a raw, not-yet-closed JSON fragment. Returns the decoded text up to
-// wherever the stream currently ends — an unterminated escape or \u sequence
-// at the tail is dropped rather than throwing. Returns null when the field /
-// its opening quote hasn't arrived yet. Good enough for a live preview; the
-// authoritative value comes from the parsed `tool_use.input` once complete.
-function extractStreamingJsonString(raw: string, field: string): string | null {
-  const marker = `"${field}"`;
-  const mi = raw.indexOf(marker);
-  if (mi === -1) return null;
-  let i = mi + marker.length;
-  // Advance to the value's opening quote, past the `:` and any whitespace.
-  while (i < raw.length && raw[i] !== '"') i++;
-  if (i >= raw.length) return null;
-  i++; // step past the opening quote
-  let out = "";
-  while (i < raw.length) {
-    const ch = raw[i]!;
-    if (ch === "\\") {
-      const next = raw[i + 1];
-      if (next === undefined) break; // incomplete escape at the streaming tail
-      switch (next) {
-        case "n": out += "\n"; break;
-        case "t": out += "\t"; break;
-        case "r": out += "\r"; break;
-        case '"': out += '"'; break;
-        case "\\": out += "\\"; break;
-        case "/": out += "/"; break;
-        case "b": out += "\b"; break;
-        case "f": out += "\f"; break;
-        case "u": {
-          const hex = raw.slice(i + 2, i + 6);
-          if (hex.length < 4) return out; // incomplete \u escape at the tail
-          out += String.fromCharCode(parseInt(hex, 16));
-          i += 6;
-          continue;
-        }
-        default: out += next;
-      }
-      i += 2;
-      continue;
-    }
-    if (ch === '"') break; // closing quote → value complete
-    out += ch;
-    i++;
-  }
-  return out;
-}
-
 // Presentational in-flight code panel: a boxed header (spinner + shimmer
 // title + optional meta) over a monospace body with a typing caret. Plain
 // monospace on purpose — shiki highlighting is async and would thrash on
 // every streamed delta; the finished, highlighted view is taken over by the
-// normal card once the write/artifact completes. Shared by the tool-call
-// path (LiveCodeBox) and the streaming-artifact path (ProseBlock).
+// normal card once the artifact completes. Only the streaming-artifact path
+// (ProseBlock) uses it — a still-streaming tool call renders nothing (D3).
 function StreamingCodeCard({
   icon,
   titleLabel,
@@ -3705,7 +4229,7 @@ function StreamingCodeCard({
     if (el) el.scrollTop = el.scrollHeight;
   }, [code]);
   return (
-    <div className="op-card op-file live-code-box">
+    <div className="op-card op-file live-code-box" data-testid="live-code-box">
       <div className="op-card-head live-code-head">
         <span className="op-status op-status-category op-status-running" aria-hidden>
           <Icon name={icon} size={14} />
@@ -3717,356 +4241,11 @@ function StreamingCodeCard({
         <pre className="live-code-pre" ref={preRef}>
           <code>
             {code}
-            <span className="live-code-caret" aria-hidden />
           </code>
         </pre>
       ) : null}
     </div>
   );
-}
-
-// In-flight code panel rendered from a tool call whose JSON input is still
-// streaming. The finished view is taken over by the normal tool card once
-// `tool_use` lands.
-function LiveCodeBox({ name, raw }: { name: string; raw: string }) {
-  const t = useT();
-  const file =
-    extractStreamingJsonString(raw, "file_path") ??
-    extractStreamingJsonString(raw, "filePath") ??
-    extractStreamingJsonString(raw, "path") ??
-    "";
-  const baseName = file ? file.split("/").pop() ?? file : "";
-  const code =
-    extractStreamingJsonString(raw, "content") ??
-    extractStreamingJsonString(raw, "new_string") ??
-    "";
-  const isEdit = /edit/i.test(name);
-  return (
-    <StreamingCodeCard
-      icon={isEdit ? "pencil" : "file-code"}
-      titleLabel={isEdit ? t("tool.edit") : t("tool.write")}
-      metaLabel={baseName || undefined}
-      code={code}
-    />
-  );
-}
-
-function ToolGroupCard({
-  items,
-  runStreaming,
-  runSucceeded,
-  projectFileNames,
-  onRequestOpenFile,
-}: {
-  items: ToolItem[];
-  runStreaming: boolean;
-  runSucceeded: boolean;
-  projectFileNames?: Set<string>;
-  onRequestOpenFile?: (name: string) => void;
-}) {
-  const t = useT();
-  // While a task is running, expose the current execution detail. Once it
-  // settles, retain just the activity summary and let the user expand it for
-  // command-level evidence. This gives a task one readable progress line
-  // instead of a stack of finished tool cards.
-  const [open, setOpen] = useState(runStreaming);
-  const [userToggled, setUserToggled] = useState(false);
-
-  useEffect(() => {
-    if (!userToggled) setOpen(runStreaming);
-  }, [runStreaming, userToggled]);
-
-  // Snapshot-style tools (TodoWrite and friends) replace their whole state on
-  // each call, so a turn that wrote the list several times would otherwise
-  // render a stack of superseded cards. Collapse those retries to the latest
-  // snapshot; every other tool passes through untouched.
-  items = dedupeSnapshotToolRetries(items);
-
-  // Fallback for direct ActionGroup use: keep a Todo summary as the first
-  // disclosure level instead of nesting it under the generic tool accordion.
-  if (items.length > 0 && items.every((item) => isTodoWriteToolName(item.use.name))) {
-    const latestTodo = items[items.length - 1]!;
-    return (
-      <TodoCard
-        input={latestTodo.use.input}
-        runStreaming={runStreaming}
-        runSucceeded={runSucceeded}
-      />
-    );
-  }
-
-  const summary = summarizeGroup(items, t, runStreaming, runSucceeded);
-  const running = runStreaming && items.some((it) => !it.result);
-  const hasError =
-    items.some((it) => it.result?.isError) || (!runStreaming && !runSucceeded);
-  return (
-    <div className="action-card">
-      <button
-        type="button"
-        className={`action-card-toggle ${running ? "running" : ""}`}
-        onClick={() => {
-          setUserToggled(true);
-          setOpen((value) => !value);
-        }}
-        aria-expanded={open}
-      >
-        <span className={`action-card-status ${running ? 'op-status-running' : hasError ? 'op-status-error' : 'op-status-ok'}`} aria-hidden>
-          {running
-            ? <Icon name="spinner" size={14} />
-            : hasError
-            ? <Icon name="close" size={14} />
-            : <Icon name="check" size={14} />
-          }
-        </span>
-        <span className={`summary${running ? ' shimmer-text' : ''}`}>
-          {summary.label}
-        </span>
-        <span className="chev" aria-hidden>
-          <Icon name={open ? "chevron-down" : "chevron-right"} size={11} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="action-card-body">
-            {items.map((it, i) => (
-              <ToolCard
-                key={i}
-                use={it.use}
-                result={it.result}
-                runStreaming={runStreaming}
-                runSucceeded={runSucceeded}
-                projectFileNames={projectFileNames}
-                onRequestOpenFile={onRequestOpenFile}
-              />
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * One compact, per-turn audit trail for thinking and every non-progress tool.
- * The default view keeps the overall run state above the answer; opening it
- * restores the chronological evidence with a semantic icon for each activity.
- */
-function TaskActivityCard({
-  entries,
-  trailingThinking,
-  hasConclusion,
-  runStreaming,
-  runSucceeded,
-  terminalRunSucceeded,
-  runCanceled,
-  runFailed,
-  startedAt,
-  endedAt,
-  durationMs,
-  projectFileNames,
-  onRequestOpenFile,
-  onThinkingLinkClick,
-}: {
-  entries: TaskActivityEntry[];
-  trailingThinking: boolean;
-  hasConclusion: boolean;
-  runStreaming: boolean;
-  runSucceeded: boolean;
-  terminalRunSucceeded: boolean;
-  runCanceled: boolean;
-  runFailed: boolean;
-  startedAt: number | undefined;
-  endedAt: number | undefined;
-  durationMs: number | undefined;
-  projectFileNames?: Set<string>;
-  onRequestOpenFile?: (name: string) => void;
-  onThinkingLinkClick?: MarkdownLinkClickHandler;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(runStreaming);
-  const [userToggled, setUserToggled] = useState(false);
-  useEffect(() => {
-    if (!userToggled) setOpen(runStreaming);
-  }, [runStreaming, userToggled]);
-  const toolItems = entries
-    .filter((entry): entry is Extract<TaskActivityEntry, { kind: "tool" }> => entry.kind === "tool")
-    .map((entry) => entry.item);
-  const settledItems = dedupeSnapshotToolRetries(toolItems);
-  const visibleTools = new Set(settledItems);
-  const visibleEntries = entries.filter(
-    (entry) => entry.kind !== "tool" || visibleTools.has(entry.item),
-  );
-  const currentIndex = visibleEntries.length - 1;
-  const currentEntry = currentIndex >= 0 ? visibleEntries[currentIndex] : undefined;
-  const running = runStreaming;
-  const hasError =
-    !runStreaming &&
-    (runFailed ||
-      (!terminalRunSucceeded &&
-        settledItems.some(
-          (item) => item.result?.isError || (!item.result && !runSucceeded),
-        )));
-  const stateLabel = running
-    ? t("assistant.workingLabel")
-    : runCanceled
-      ? t("assistant.canceledLabel")
-      : hasError
-        ? t("critiqueTheater.failedHeading")
-        : t("assistant.doneLabel");
-  const runState = running
-    ? "running"
-    : runCanceled
-      ? "canceled"
-      : hasError
-        ? "error"
-        : "completed";
-  const elapsed = useLiveElapsed(runStreaming, startedAt, endedAt, durationMs);
-
-  if (running && !hasConclusion && currentEntry) {
-    return (
-      <div
-        className="action-card task-activity task-activity-current"
-        data-run-state="running"
-        data-testid="task-activity-current"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <div
-          key={taskActivityEntryKey(currentEntry, currentIndex)}
-          className="task-activity-current-row"
-        >
-          <CurrentTaskActivityRow
-            entry={currentEntry}
-            projectFileNames={projectFileNames}
-            onRequestOpenFile={onRequestOpenFile}
-            onThinkingLinkClick={onThinkingLinkClick}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`action-card task-activity${open ? " is-open" : ""}`}>
-      <button
-        type="button"
-        className={`action-card-toggle task-state-${runState}${running ? " running" : ""}`}
-        onClick={() => {
-          setUserToggled(true);
-          setOpen((value) => !value);
-        }}
-        aria-expanded={open}
-        data-run-state={runState}
-        data-testid="task-activity-toggle"
-      >
-        <span className={`summary${running ? " shimmer-text" : ""}`}>{stateLabel}</span>
-        {elapsed ? <span className="task-activity-elapsed">{elapsed}</span> : null}
-        <span className="chev" aria-hidden>
-          <Icon name="chevron-down" size={13} />
-        </span>
-      </button>
-      <div className={`accordion-collapsible${open ? " open" : ""}`}>
-        <div className="accordion-collapsible-inner">
-          <div className="action-card-body">
-            {visibleEntries.map((entry, index) => {
-              if (entry.kind === "thinking") {
-                return (
-                  <ThinkingBlock
-                    key={`thinking-${index}`}
-                    text={entry.text}
-                    streaming={runStreaming && trailingThinking && index === visibleEntries.length - 1}
-                    onLinkClick={onThinkingLinkClick}
-                  />
-                );
-              }
-              if (entry.kind === "live-tool") {
-                return <LiveCodeBox key={entry.id} name={entry.name} raw={entry.raw} />;
-              }
-              return (
-                <ToolCard
-                  key={entry.item.use.id || index}
-                  use={entry.item.use}
-                  result={entry.item.result}
-                  runStreaming={runStreaming}
-                  runSucceeded={runSucceeded}
-                  projectFileNames={projectFileNames}
-                  onRequestOpenFile={onRequestOpenFile}
-                />
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function taskActivityEntryKey(entry: TaskActivityEntry, index: number): string {
-  if (entry.kind === "thinking") return `thinking-${index}`;
-  if (entry.kind === "live-tool") return `live-${entry.id}`;
-  return `tool-${entry.item.use.id || index}`;
-}
-
-function CurrentTaskActivityRow({
-  entry,
-  projectFileNames,
-  onRequestOpenFile,
-  onThinkingLinkClick,
-}: {
-  entry: TaskActivityEntry;
-  projectFileNames?: Set<string>;
-  onRequestOpenFile?: (name: string) => void;
-  onThinkingLinkClick?: MarkdownLinkClickHandler;
-}) {
-  if (entry.kind === "thinking") {
-    // The compact running view keeps one current row (#5667), but thinking
-    // must stay expandable mid-run: a user parked on a long "Thinking…" (or a
-    // hung provider, incident recvqgLmAkUM6G) needs to open the streamed
-    // reasoning to judge progress. ThinkingBlock is the same disclosure the
-    // settled card uses, so the affordance matches before and after the run
-    // completes.
-    return (
-      <ThinkingBlock
-        text={entry.text}
-        streaming
-        onLinkClick={onThinkingLinkClick}
-      />
-    );
-  }
-  if (entry.kind === "live-tool") {
-    return <LiveCodeBox name={entry.name} raw={entry.raw} />;
-  }
-  return (
-    <ToolCard
-      use={entry.item.use}
-      result={entry.item.result}
-      runStreaming
-      runSucceeded={false}
-      projectFileNames={projectFileNames}
-      onRequestOpenFile={onRequestOpenFile}
-    />
-  );
-}
-
-function summarizeGroup(
-  items: ToolItem[],
-  t: (k: keyof Dict, vars?: Record<string, string | number>) => string,
-  runStreaming: boolean,
-  runSucceeded: boolean
-): { label: string; icon: string } {
-  // All items share a tool family because the grouper only merges by name.
-  const name = items[0]?.use.name ?? "";
-  const family = toolFamily(name);
-  const icon = familyIcon(family);
-  const verbs = items.map((it) =>
-    verbForState(it, t, runStreaming, runSucceeded)
-  );
-  // Roll the verbs into a comma-list with deduplicated last-state. So three
-  // edits whose results are all 'Done' render as "Editing ×3, Done"; mixed
-  // states render as "Editing, Reading, Done".
-  const head = countLabel(family, items.length, t);
-  const tail = lastStateLabel(verbs, t);
-  return { label: tail ? `${head}, ${tail}` : head, icon };
 }
 
 function toolFamily(name: string): string {
@@ -4082,67 +4261,10 @@ function toolFamily(name: string): string {
   return name.toLowerCase();
 }
 
-function familyIcon(family: string): string {
-  if (family === "edit") return "✎";
-  if (family === "write") return "+";
-  if (family === "read") return "↗";
-  if (family === "glob" || family === "grep" || family === "search") return "⌕";
-  if (family === "bash") return "$";
-  if (family === "todo") return "☐";
-  if (family === "fetch") return "↬";
-  return "·";
-}
-
-function countLabel(
-  family: string,
-  n: number,
-  t: (k: keyof Dict) => string
-): string {
-  const verb =
-    family === "edit"
-      ? t("assistant.verbEditing")
-      : family === "write"
-      ? t("assistant.verbWriting")
-      : family === "read"
-      ? t("assistant.verbReading")
-      : family === "glob" || family === "grep" || family === "search"
-      ? t("assistant.verbSearching")
-      : family === "bash"
-      ? t("assistant.verbRunning")
-      : family === "todo"
-      ? t("assistant.verbTodos")
-      : family === "fetch"
-      ? t("assistant.verbFetching")
-      : t("assistant.verbCalling");
-  return n > 1 ? `${verb} ×${n}` : verb;
-}
-
-function verbForState(
-  it: ToolItem,
-  t: (k: keyof Dict) => string,
-  runStreaming = false,
-  runSucceeded = false
-): string {
-  if (!it.result && runStreaming) return t("assistant.verbRunning");
-  if (!it.result && !runSucceeded) return t("tool.error");
-  if (it.result?.isError) return t("tool.error");
-  return t("tool.done");
-}
-
-function lastStateLabel(verbs: string[], t: (k: keyof Dict) => string): string {
-  const set = new Set(verbs);
-  if (set.size === 1) return verbs[verbs.length - 1] ?? "";
-  // Mixed states: surface error first, else running, else any.
-  if (set.has(t("tool.error"))) return t("tool.error");
-  if (set.has(t("assistant.verbRunning"))) return t("assistant.verbRunning");
-  return verbs[verbs.length - 1] ?? "";
-}
-
 type Block =
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string }
   | { kind: "tool-group"; items: ToolItem[] }
-  | { kind: "live-tool"; id: string; name: string; raw: string }
   | {
       kind: "plugin-candidate";
       candidateId: string;
@@ -4153,60 +4275,33 @@ type Block =
     }
   | { kind: "status"; label: string; detail?: string | undefined };
 
-type TaskActivityEntry =
-  | Extract<Block, { kind: "thinking" }>
-  | Extract<Block, { kind: "live-tool" }>
-  | { kind: "tool"; item: ToolItem };
-
-type TaskActivity = {
-  entries: TaskActivityEntry[];
-  trailingThinking: boolean;
-};
-
-function splitTaskActivity(blocks: Block[]): {
-  contentBlocks: Block[];
-  taskActivity: TaskActivity | null;
-} {
-  const contentBlocks: Block[] = [];
-  const entries: TaskActivityEntry[] = [];
-
-  for (const block of blocks) {
-    if (block.kind === "thinking") {
-      entries.push(block);
-      continue;
-    }
-    if (block.kind === "live-tool") {
-      entries.push(block);
-      continue;
-    }
-    if (block.kind === "tool-group") {
-      // The canonical TodoWrite display is kept above the composer. It
-      // remains the one task-progress surface, rather than becoming another
-      // item inside the execution audit trail.
-      if (block.items.every((item) => isTodoWriteToolName(item.use.name))) {
-        contentBlocks.push(block);
-      } else {
-        entries.push(...block.items.map((item) => ({ kind: "tool" as const, item })));
-      }
-      continue;
-    }
-    contentBlocks.push(block);
-  }
-
-  return {
-    contentBlocks,
-    taskActivity: entries.length > 0
-      ? { entries, trailingThinking: blocks.at(-1)?.kind === "thinking" }
-      : null,
-  };
-}
-
 /**
  * Walk the event stream and build the rendering layout list. We additionally
  * collapse runs of consecutive tool_uses sharing the same tool family into a
  * single tool-group block so the chat surface stays compact during chains
  * of edits / reads.
  */
+/**
+ * 没有 `runStatus` 的历史消息:这一轮到底成没成,只能从事件里看。
+ *
+ * 判据原样来自老的执行记录卡(`TaskActivityCard` 的 `hasError`),搬过来是为了不把
+ * 已经在线上的行为弄丢 —— 少了它,那些消息会顶着「已完成」,壳里却摆着一行红的失败调用。
+ * 两种情况算失败:**有调用报错**,或者**这一轮连结束时间都没有、还挂着没回来的调用**。
+ *
+ * 新规格没给这条派生规则编决策号(壳的三态是按 run 状态定的),先按现状保留。
+ */
+function legacyTurnFailed(events: AgentEvent[], endedAt: number | undefined): boolean {
+  const settled = new Set<string>();
+  for (const event of events) {
+    if (event.kind === "tool_result") settled.add(event.toolUseId);
+  }
+  return events.some((event) => {
+    if (event.kind === "tool_result") return event.isError === true;
+    if (event.kind !== "tool_use") return false;
+    return endedAt === undefined && !settled.has(event.id);
+  });
+}
+
 function stripTodoToolGroups(blocks: Block[]): Block[] {
   return blocks.filter(
     (block) =>
@@ -4312,11 +4407,33 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "requesting" ||
         ev.label === "thinking" ||
         ev.label === "empty_response" ||
+        /*
+         * `model` —— **AMR(ACP)独有**的一条运行时标记,不是助手内容。
+         *
+         * `apps/daemon/src/agent-protocol/acp/session.ts` 在 `session/new`、
+         * `session/set_model` 完成、以及选型失败回落时各发一次
+         * `{ label: 'model', model: <当前模型> }`;`providers/daemon.ts` 把
+         * `model` 折进 `detail`。走 stdout 协议的 runtime(claude / codex /
+         * opencode …)一条都不发,所以这一行只在 AMR 那一路冒出来。
+         *
+         * 它无条件戳在**一轮的最下面**,内容是模型 id —— 而模型身份输入区的
+         * 模型芯片上已经写着了。用户 2026-08-27:「这个模型的标识可以去掉」。
+         *
+         * 只是不画:事件照发照存,daemon 的 `run-analytics-observability.ts`
+         * 仍按 `label === 'model'` 归因,那一路不受影响。
+        */
+        ev.label === "model" ||
         // Vela emits OpenCode's compaction lifecycle as internal observability.
         // Older transcripts persisted it as a generic status before the ACP
         // adapter classified it as a diagnostic, so suppress that legacy label
         // during history replay as well as on the live path.
         ev.label === "opencode_compaction" ||
+        // Codex versions before the normalized reconnect protocol persisted
+        // every `Reconnecting... n/5 (...)` warning as assistant history.
+        // New runs use the machine label and are dropped before persistence;
+        // suppress both shapes so old conversations remain compatible.
+        ev.label === "agent_reconnecting" ||
+        /^Reconnecting\.\.\.\s+\d+\/\d+\b/u.test(ev.label) ||
         // Transient ACP tool-call markers (#4618). On the live SSE path the
         // daemon normalizes these to `running` (TRANSIENT_ACP_STATUS_LABELS in
         // providers/daemon.ts), which is already skipped above; the persisted-
@@ -4329,14 +4446,16 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         continue;
       const last = out[out.length - 1];
       if (last && last.kind === "status" && last.label === ev.label) {
-        // Update detail to the latest value rather than skip. When an agent
-        // emits multiple status events with the same label (notably
-        // `label: 'model'` — fired once after `session/new` with the agent's
-        // initial default, then again after the explicit model-selection
-        // call completes), the badge UI must reflect the most recent detail,
-        // not the first one. Without this update the post-selection model
-        // (e.g. `claude-opus-4-7-high`) is silently replaced in the badge
-        // by the stale initial default (`swe-1-6-fast`).
+        // Update detail to the latest value rather than skip. An agent can
+        // emit the same label several times in one turn (a workflow badge
+        // that re-reports progress, for instance); the badge UI must reflect
+        // the most recent detail, not the first one, or a later, truer value
+        // is silently replaced by the stale initial one.
+        //
+        // `label: 'model'` used to be the worked example here — it fires once
+        // after `session/new` and again once model selection settles. It no
+        // longer reaches this branch: it is skipped above as AMR transport
+        // telemetry.
         last.detail = ev.detail;
         continue;
       }
@@ -4381,31 +4500,103 @@ function splitSystemReminders(input: string): ProseSegment[] {
     .filter((seg) => seg.kind === "reminder" || seg.text.trim().length > 0);
 }
 
-function useLiveElapsed(
-  streaming: boolean,
-  startedAt: number | undefined,
-  endedAt: number | undefined,
-  fixedDurationMs: number | undefined,
-): string {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!streaming) return;
-    const id = window.setInterval(() => setNow(Date.now()), 200);
-    return () => window.clearInterval(id);
-  }, [streaming]);
-  if (!streaming && endedAt === undefined && typeof fixedDurationMs === "number") {
-    return formatElapsedMs(fixedDurationMs);
-  }
-  if (!startedAt || (!streaming && endedAt === undefined)) return "";
-  const end = streaming ? now : endedAt;
-  const ms = Math.max(0, (end ?? now) - startedAt);
-  return formatElapsedMs(ms);
-}
-
-function formatElapsedMs(ms: number): string {
-  const s = ms / 1000;
-  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`;
-  const m = Math.floor(s / 60);
-  const rem = Math.floor(s - m * 60);
-  return `${m}m ${rem.toString().padStart(2, "0")}s`;
+/**
+ * 反馈原因面板(设计稿第 40 格)。
+ *
+ * 抽出来的原因:它原来长在 `AssistantFeedback` 里、由 `reasonRating` 这个 React state 驱动 ——
+ * 只有**真的点一下**赞或踩才置上,静态渲染的镜像陈列页永远够不着它,
+ * 于是那一格只能空着写「这一页够不着」。抽成组件之后它能被单独渲染、单独比对。
+ * 行为(什么时候弹、提交去哪)仍然留在 `AssistantFeedback`。
+ */
+export function AssistantFeedbackReasons({
+  rating,
+  options,
+  selected,
+  onToggle,
+  customReason,
+  onCustomReasonChange,
+  canSubmit,
+  onSubmit,
+  onCancel,
+  panelRef,
+  t,
+}: {
+  rating: 'positive' | 'negative';
+  options: Array<{ code: string; label: string }>;
+  selected: Set<string>;
+  onToggle: (code: string) => void;
+  customReason: string;
+  onCustomReasonChange: (next: string) => void;
+  canSubmit: boolean;
+  onSubmit: () => void;
+  /** 稿子第 40 格右下角那颗「取消」—— 收起面板,不提交 */
+  onCancel?: () => void;
+  panelRef?: React.Ref<HTMLDivElement>;
+  /* `key: never` 是坏的:它的意思是「任何 key 都不能传」,写下的那天起这个 prop 就
+     调不动。它没被发现,是因为唯一的外部调用点(镜像陈列页)也把自己的 `t` 断言成了
+     `as never` —— 两个错误互相盖住,`tsc` 两边都不报。
+     `Record<string, unknown>` 同理:比真实的 `Record<string, string | number>` 宽,
+     宽出来的那部分是插不进文案的。
+     现在和 `useI18n` / `SettingsDialog` / `DesignBrowserPanel` 用同一个签名。 */
+  t: (key: keyof Dict, vars?: Record<string, string | number>) => string;
+}) {
+  return (
+    <div className="assistant-feedback-reasons" ref={panelRef}>
+      <div className="assistant-feedback-reason-title">
+        {t(
+          (rating === "negative"
+            ? "assistant.feedbackReasonTitleNegative"
+            : "assistant.feedbackReasonTitle") as never,
+        )}
+      </div>
+      <div className="assistant-feedback-reason-options">
+        {options.map((option) => (
+          /*
+           * 稿子这一排是**胶囊**(`.chip.mod-sm`),不是「方框 + 文字」的复选框。
+           * 换成 button + `aria-pressed` 而不是留着 `<input type=checkbox>` 藏起来:
+           * 原生方框在这一排里是唯一有直角的东西,而且它自带的 12px 方块把每颗
+           * 胶囊撑宽一截,整排的节奏和稿子对不上。多选语义由 `aria-pressed` 承担。
+           */
+          <button
+            key={option.code}
+            type="button"
+            className="assistant-feedback-reason-option"
+            aria-pressed={selected.has(option.code)}
+            data-selected={selected.has(option.code) ? "true" : "false"}
+            onClick={() => onToggle(option.code)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {/*
+        补充框**常驻**,不再等「勾了『其他』才出」(稿子第 40 格里它一直在)。
+        原来那条门的代价是:面板会在勾选「其他」的瞬间长高一截,把下面的按钮推走;
+        而它本来就是可选项,躲起来并不会让人少填,只会让人以为没有这个入口。
+      */}
+      <textarea
+        className="assistant-feedback-custom"
+        value={customReason}
+        placeholder={t("assistant.feedbackReasonPlaceholder" as never)}
+        rows={1}
+        onChange={(event) => onCustomReasonChange(event.target.value)}
+      />
+      <div className="assistant-feedback-actions">
+        {onCancel ? (
+          <Button variant="ghost" size="sm" onClick={onCancel}>
+            {t("common.cancel" as never)}
+          </Button>
+        ) : null}
+        <Button
+          variant="primary"
+          size="sm"
+          className="assistant-feedback-submit"
+          disabled={!canSubmit}
+          onClick={onSubmit}
+        >
+          {t("assistant.feedbackReasonSubmit" as never)}
+        </Button>
+      </div>
+    </div>
+  );
 }

@@ -29,11 +29,11 @@ export const QUESTION_FORM_OPEN_RE = /<(question-form|ask-question)\b[^>]*>/i;
 /**
  * True when `body` is a renderable question-form body.
  *
- * The grammar is exactly the one the web parser's `parseForm` accepts: JSON,
- * optionally wrapped in a ```` ```json ```` fence, parsing either to an object
- * carrying a `questions` array or to a bare array of questions, with at least
- * one entry that survives `mapRawQuestion` — which rejects only non-objects.
- * A body that fails it is kept as raw prose by the UI (no form card renders).
+ * The grammar is exactly the one the web parser's `parseForm` accepts:
+ * canonical JSON (optionally fenced, object or bare array) plus the narrow
+ * `question-select` / `question-text` compatibility shape already persisted
+ * by older runs. A body that fails both grammars becomes the UI's safe error
+ * fallback (no form card renders).
  *
  * The bare top-level array is not a tolerance this module invents: the UI has
  * always rendered `[{…}]`, so requiring the `questions` key here scored a
@@ -50,13 +50,73 @@ export function questionFormBodyIsRenderable(body: string): boolean {
   try {
     data = JSON.parse(stripped);
   } catch {
-    return false;
+    return legacyQuestionFormBodyIsRenderable(body);
   }
   if (!data || typeof data !== 'object') return false;
   const questions = Array.isArray(data)
     ? data
     : (data as { questions?: unknown }).questions;
   return Array.isArray(questions) && questions.some((q) => q && typeof q === 'object');
+}
+
+/**
+ * Mirror of the web parser's narrow legacy child-tag compatibility reader.
+ * Older persisted conversations can contain `question-select` and
+ * `question-text` children instead of a JSON body. Only that closed grammar is
+ * accepted; arbitrary XML and unbalanced options remain unrenderable.
+ */
+function legacyQuestionFormBodyIsRenderable(body: string): boolean {
+  const childRe = /<(question-select|question-text)\b([^>]*?)(\/?)>/gi;
+  let cursor = 0;
+  let questionCount = 0;
+  let match: RegExpExecArray | null;
+  while ((match = childRe.exec(body)) !== null) {
+    if (body.slice(cursor, match.index).trim()) return false;
+    const tagName = (match[1] ?? '').toLowerCase();
+    const selfClosing = match[3] === '/';
+    const openEnd = match.index + match[0].length;
+    let inner = '';
+    let nextCursor = openEnd;
+    if (!selfClosing) {
+      const closeTag = `</${tagName}>`;
+      const closeIdx = findQuestionFormCloseTag(body, openEnd, closeTag);
+      if (closeIdx === -1) return false;
+      inner = body.slice(openEnd, closeIdx);
+      nextCursor = closeIdx + closeTag.length;
+    }
+    if (tagName === 'question-select') {
+      if (!legacySelectOptionsAreRenderable(inner)) return false;
+    } else if (/<[^>]+>/.test(inner)) {
+      return false;
+    }
+    questionCount += 1;
+    cursor = nextCursor;
+    childRe.lastIndex = nextCursor;
+  }
+  return questionCount > 0 && !body.slice(cursor).trim();
+}
+
+function legacySelectOptionsAreRenderable(inner: string): boolean {
+  const optionRe = /<option\b([^>]*)>([\s\S]*?)<\/option\s*>/gi;
+  let cursor = 0;
+  let optionCount = 0;
+  let sawLeadingText = false;
+  let match: RegExpExecArray | null;
+  while ((match = optionRe.exec(inner)) !== null) {
+    const rawBetween = inner.slice(cursor, match.index);
+    if (/<[^>]+>/.test(rawBetween)) return false;
+    const between = rawBetween.trim();
+    if (between) {
+      if (optionCount > 0 || sawLeadingText) return false;
+      sawLeadingText = true;
+    }
+    const label = (match[2] ?? '').trim();
+    if (!label || /<[^>]+>/.test(label)) return false;
+    optionCount += 1;
+    cursor = match.index + match[0].length;
+  }
+  const trailing = inner.slice(cursor);
+  return optionCount > 0 && !/<[^>]+>/.test(trailing) && !trailing.trim();
 }
 
 // Locate `closeTag` (case-insensitively) at or after `from`, returning an index

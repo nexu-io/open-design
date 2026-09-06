@@ -275,7 +275,7 @@ export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
     '## Direction library — infer and bind by default',
     '',
-    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a direction-form, use that selection instead. Replace the seed template\'s `:root` block with the chosen direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
+    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a Host-owned direction form, its answer carries a stable Host `value`, a `foundation` id from this library, and visual `guidance`. Bind the named foundation from this library, then apply the guidance as the selected refinement; the Host value is catalogue identity and must not be passed to `od tools directions`. Replace the seed template\'s `:root` block with the chosen foundation\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {
@@ -295,7 +295,7 @@ export function renderDirectionIndexBlock(): string {
   const lines: string[] = [
     '## Direction library — index (pull the chosen one on demand)',
     '',
-    'When you must pick a visual direction yourself (no active design system, no user-provided brand source), choose the best match for the brief\'s tone from this index, then run `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` directly — do not probe CLI help or alternate paths first, and retry only after materially changing the fix or input. Bind the printed `:root` palette + font stacks **verbatim** into the seed, honour the posture cues, and never improvise palette values from the label alone.',
+    'When you must pick a visual direction yourself (no active design system, no user-provided brand source), choose the best match for the brief\'s tone from this index, then run `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` directly — do not probe CLI help or alternate paths first, and retry only after materially changing the fix or input. A Host-owned direction-form answer already carries `value`, `foundation`, and `guidance`: resolve the `foundation` id with this command, never the Host `value`, then apply `guidance` as the selected refinement. Bind the printed `:root` palette + font stacks **verbatim** into the seed, honour the posture cues, and never improvise palette values from the label alone.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {

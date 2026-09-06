@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
@@ -151,8 +151,16 @@ describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
   let sequence = 0;
+  let previousCodexTransport: string | undefined;
+
+  beforeEach(() => {
+    previousCodexTransport = process.env.OD_CODEX_TRANSPORT;
+    process.env.OD_CODEX_TRANSPORT = 'exec-json';
+  });
 
   afterEach(async () => {
+    if (previousCodexTransport == null) delete process.env.OD_CODEX_TRANSPORT;
+    else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     delete process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS;
@@ -1168,6 +1176,16 @@ describe('OD Next automatic production through the real server', () => {
         selections: [],
       });
     expect(activeTask?.runs[0]?.finalText).toEqual(activeTask?.promptBundle);
+    const promptBundleText = activeTask?.promptBundle.text ?? '';
+    const doneKey = /<od-done key="([a-f0-9]{16})"\/>/.exec(promptBundleText)?.[1];
+    expect(doneKey).toMatch(/^[a-f0-9]{16}$/);
+    expect(promptBundleText).toContain('route=direct_edit');
+    expect(promptBundleText).toContain(`<od-next key="${doneKey}" value="Add an orders list page"/>`);
+    expect(promptBundleText).toContain(`<od-focus key="${doneKey}"`);
+    expect(promptBundleText.slice(
+      promptBundleText.indexOf('<open_design_core_system_prompt>'),
+      promptBundleText.indexOf('</open_design_core_system_prompt>'),
+    )).not.toContain(doneKey);
     expect(activeTask?.promptBundle.utf8Bytes).toBe(
       Buffer.byteLength(activeTask?.promptBundle.text ?? '', 'utf8'),
     );
@@ -1837,7 +1855,9 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[0]?.stdin).not.toContain('<task_config>');
     expect(invocations[0]?.stdin).not.toContain('<user_prompt>');
     // The Bundle is a tree: each spec slot is its own element, not a '---'
-    // section inside one blob, and the user's words come last.
+    // section inside one blob, and the user's words come last. Markdown inside
+    // a CDATA prompt is allowed to contain a thematic break, so inspect only
+    // the XML envelope when guarding against the rejected flat serialization.
     for (const nested of [
       '<execution_boundary>',
       '<core_strategy>',
@@ -1855,7 +1875,11 @@ describe('OD Next automatic production through the real server', () => {
     ]) {
       expect(invocations[0]!.stdin).toContain(nested);
     }
-    expect(invocations[0]!.stdin).not.toContain('\n\n---\n\n');
+    const structuralEnvelope = invocations[0]!.stdin.replace(
+      /<!\[CDATA\[[\s\S]*?\]\]>/gu,
+      '<![CDATA[…]]>',
+    );
+    expect(structuralEnvelope).not.toContain('\n\n---\n\n');
     expect(invocations[0]!.stdin).not.toContain('## Active stage:');
     expect(invocations[0]!.stdin.lastIndexOf('<user_first_prompt>'))
       .toBeGreaterThan(invocations[0]!.stdin.lastIndexOf('</context>'));

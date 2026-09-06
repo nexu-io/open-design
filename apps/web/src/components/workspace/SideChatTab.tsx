@@ -54,6 +54,9 @@ export interface ActiveConversationChatState {
   ) => void;
   onReorderQueuedSends?: (orderedIds: string[]) => void;
   onSendQueuedNow?: (id: string) => void;
+  /** B11 「引导对话」: present only when the running turn can take a mid-turn message. */
+  onSteerQueuedSend?: (id: string) => void;
+  steerBlockedReason?: string | null;
   onAssistantFeedback?: (
     assistantMessage: ChatMessage,
     change: ChatMessageFeedbackChange,
@@ -152,6 +155,8 @@ export function SideChatTab({
           onUpdateQueuedSend={controlledChat?.onUpdateQueuedSend}
           onReorderQueuedSends={controlledChat?.onReorderQueuedSends}
           onSendQueuedNow={controlledChat?.onSendQueuedNow}
+          onSteerQueuedSend={controlledChat?.onSteerQueuedSend}
+          steerBlockedReason={controlledChat?.steerBlockedReason ?? null}
           error={controlledChat ? controlledChat.error : chat.error}
           errorSourceAssistantId={controlledChat?.errorSourceAssistantId}
           projectId={projectId}

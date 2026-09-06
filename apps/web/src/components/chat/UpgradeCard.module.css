@@ -1,0 +1,191 @@
+/*
+ * 升级卡(设计稿组件 18)。
+ *
+ * 形态取自交付稿的 `.up`:**流水里的一张卡**,不是弹窗、不挡发送。
+ * 出现时机由用户 2026-08-26 裁决:**运行结束之后**(见规格 D58)。
+ *
+ * 与产品原有的 `AmrLowBalanceDialog` 是两回事 —— 那个是居中硬阻断弹窗;
+ * 这张卡走 D4「不阻塞」的取向,只是把话说清楚。
+ *
+ * ── PR #7170 改版 ──────────────────────────────────────────────
+ * 这张卡从白卡换成了**深色发光外壳**,配色契约整个翻了个面:
+ *
+ *   旧  黑底按钮 + 绿字(`--upgrade-ink`),卡面是白的
+ *   新  绿底按钮 + 深字(`--upgrade-surface` / `--upgrade-button-ink`),卡面是 #121212
+ *
+ * 它是这一屏上唯一一张深色卡,理由在稿子里:整屏都是白卡,而这一张要说的是
+ * 「再不管它,下一轮会停在半成品上」—— 换一副底色,眼睛扫过去时它自己就分出来了,
+ * 不用靠红色告警(红在这一屏另有专职:19 · 报错、上传失败、步骤取消)。
+ *
+ * ── 为什么这里出现色值字面量 ────────────────────────────────────
+ * 卡面 / 卡上文字 / 按钮墨这三支是**刻意不跟主题走**的:整张卡永远是那副深色,
+ * 亮暗两套主题下都一样(稿子 `.up:not(.branch)` 里就是无条件写死的)。
+ * 它们在这里定义成卡片自己的自定义属性,而不是散落在各条声明里 ——
+ * 换色时只改这一处,并且下面每一条都能读出「我用的是卡面色 / 卡上墨 / 按钮墨」。
+ *
+ * 把它们提升成 `--chat-*` 接缝层变量是 `ChatRoot.module.css` 的事,那个文件属于
+ * 另一条工作线;真正需要主题参与的两支(`--chat-upgrade-ink` 那支绿、`--chat-red`)
+ * 仍然从接缝层取,没有在这里复制一遍色号。
+ */
+.up {
+  /* 卡面与卡上墨:整张卡固定深色,不随主题翻转。 */
+  --upgrade-card-bg: #121212;
+  --upgrade-card-ink: #ffffff;
+  /* 卡头和底排之间那条细线。稿子给的是半透明灰,压在深底上刚好是一道暗线,
+     不像实色那样在深色上显出一条亮边。 */
+  --upgrade-card-hairline: rgb(83 83 83 / 40%);
+  /* 金额那支橙。稿子在改深底的同一次里把它从 #f8672f 提亮到 #f49624 ——
+     旧值是给白卡定的,压在 #121212 上会闷成褐色。
+     (接缝层的 `--chat-upgrade-amount` 仍是白卡那一档,归 ChatRoot 处置。) */
+  --upgrade-card-amount: #f49624;
+  /* 那支绿现在是**底**不是墨。色号没变,仍从接缝层取,免得同一个 #00FF08
+     在仓库里出现第二遍。 */
+  --upgrade-surface: var(--chat-upgrade-ink);
+  /* 绿底上的墨:回用卡面那支深色,一张卡上只有两支色在轮转。 */
+  --upgrade-button-ink: var(--upgrade-card-bg);
+
+  position: relative;
+  /* 辉光是 `z-index: -1` 的伪元素。没有这道 isolation,它会掉到卡片外面去,
+     压在流水里上一条消息底下。 */
+  isolation: isolate;
+  padding: 16px;
+  border: none;
+  /* 16px 那一档。chat 接缝层今天还没有这个别名(归 ChatRoot),先落到产品 token;
+     别名补上的当天这里自动接管,两种写法都不是写死的数。 */
+  border-radius: var(--chat-radius-2xl, var(--radius-2xl));
+  background: var(--upgrade-card-bg);
+  color: var(--upgrade-card-ink);
+  overflow: hidden;
+}
+
+/* 右上角那枚辉光(两颗星,渐变从那支绿收到卡面色)。
+   稿子把提供的 SVG 旋转 180° 放在右上:小星在上、大星在下。
+   `z-index: -1` 落在卡片自己的背景之上、内容之下 —— 所以它压在底色上、
+   被文字盖住,而不是浮在字面前。`pointer-events: none` 保证它不吃点击。 */
+.up::after {
+  content: '';
+  position: absolute;
+  inset-inline-end: 0;
+  top: 0;
+  z-index: -1;
+  width: 48px;
+  height: 62px;
+  pointer-events: none;
+  transform: rotate(180deg);
+  background: url("data:image/svg+xml,%3Csvg%20width%3D%2267%22%20height%3D%2287%22%20viewBox%3D%220%200%2067%2087%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Cpath%20opacity%3D%220.5%22%20d%3D%22M25.1408%2059.8603L30.3371%2053.7463C34.9617%2048.3057%2041.3853%2044.8059%2048.3422%2043.9371L57.9258%2042.7402C60.9727%2042.3598%2062.1548%2038.4443%2059.8294%2036.4355L52.7432%2030.3142C47.2969%2025.6094%2043.8543%2018.9176%2043.1264%2011.6212L42.2837%203.17174C41.9709%200.036192%2038.1292%20-1.12822%2036.1342%201.30788L30.7582%207.87237C26.1159%2013.5412%2019.5483%2017.199%2012.4125%2018.0902L3.12809%2019.2497C0.0811039%2019.6301%20-1.10108%2023.5456%201.22452%2025.5544L8.53913%2031.873C13.8488%2036.4597%2017.2591%2042.9402%2018.0982%2050.0367L19.041%2058.0115C19.4035%2061.0766%2023.1432%2062.2101%2025.1408%2059.8603ZM50.6955%2086.3266L52.1573%2084.6058C54.7633%2081.5378%2058.3849%2079.5636%2062.3081%2079.0724L65.3252%2078.6944C66.957%2078.4901%2067.5894%2076.3956%2066.3442%2075.3194L64.1711%2073.4405C61.1003%2070.7862%2059.1599%2067.0126%2058.7507%2062.8995L58.5112%2060.4887C58.3439%2058.8085%2056.2838%2058.1841%2055.2151%2059.4896L53.682%2061.3632C51.0662%2064.5595%2047.3636%2066.6227%2043.3392%2067.1265L40.4908%2067.4833C38.8593%2067.6877%2038.2269%2069.7822%2039.4718%2070.8584L41.7738%2072.8486C44.7678%2075.4363%2046.6895%2079.0907%2047.1613%2083.0916L47.4263%2085.3357C47.6199%2086.9783%2049.6254%2087.5862%2050.6955%2086.3266Z%22%20fill%3D%22url%28%23paint0_linear_1975_81%29%22%2F%3E%0A%3Cdefs%3E%0A%3ClinearGradient%20id%3D%22paint0_linear_1975_81%22%20x1%3D%2247.8253%22%20y1%3D%2296.362%22%20x2%3D%2247.8253%22%20y2%3D%220%22%20gradientUnits%3D%22userSpaceOnUse%22%3E%0A%3Cstop%20stop-color%3D%22%2300FF08%22%2F%3E%0A%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23121212%22%2F%3E%0A%3C%2FlinearGradient%3E%0A%3C%2Fdefs%3E%0A%3C%2Fsvg%3E") center / contain no-repeat;
+}
+
+/* 稿子 `.up .h { display:flex; align-items:center; padding: 0 48px 8px 0;
+   border-bottom: 1px solid rgb(83 83 83 / 40%) }`
+   —— 右边那 48px 不是留白,是给辉光腾的位置:金额再长也不会钻到星星底下。 */
+.head {
+  display: flex;
+  align-items: center;
+  padding: 0 48px 8px 0;
+  border-bottom: var(--chat-stroke) solid var(--upgrade-card-hairline);
+}
+
+/* 稿子 `.up .h .amt { flex: 1; min-width: 0 }` */
+.amount {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 稿子 `.up .h .amt .n { display:block; font-size: var(--font-size-16);
+   line-height: 1.5; font-weight: 400; color: var(--upgrade-card-text) }`
+   —— 标签退回常规字重:这一段的重点是后面那个数,不是「剩余额度」四个字。 */
+.amount > span {
+  display: block;
+  font-size: var(--chat-t-head);
+  line-height: var(--chat-lh-row);
+  font-weight: 400;
+  color: var(--upgrade-card-ink);
+}
+
+/* 稿子 `.up .h .amt b { font: inherit; font-size: var(--font-size-20);
+   line-height: 1.2; color: #f49624 }`
+   —— 数字改用**字号**分档,不再靠等宽字体和 700 字重。整句一支字体、一档字重,
+   只有那个数大一号,眼睛的落点就只有一处。 */
+.amount b {
+  font: inherit;
+  font-size: var(--chat-t-disp);
+  line-height: 1.2;
+  color: var(--upgrade-card-amount);
+}
+
+/* 稿子 `.up .h .amt.is-out b { color: var(--red) }` —— 归零那一档换红。
+   橙是「注意,快没了」,红是「已经不能用了」,分量不一样。 */
+.out b {
+  color: var(--chat-red);
+}
+
+/* 底排:说明句 + 出口。稿子 `.up .up-bottom { display:flex; align-items:center;
+   justify-content: flex-end; flex-wrap: wrap; gap: 12px 16px; padding-top: 8px }`
+   —— 换行由内容自己决定,不绑页面断点:ChatPanel 的宽度是用户拖出来的,
+   窗口断点在这里说明不了任何事。 */
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding-top: 8px;
+}
+
+/* 稿子 `.up .why { flex: 1 1 180px; min-width: 0; margin: 0;
+   font-size: var(--font-size-13); line-height: 1.5; font-weight: 400;
+   color: var(--upgrade-card-text) }`
+   —— `1 1 180px`:低于 180px 就折到自己一行,而不是被按钮挤成一列单字。 */
+.why {
+  flex: 1 1 180px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--chat-t-body);
+  line-height: var(--chat-lh-row);
+  font-weight: 400;
+  color: var(--upgrade-card-ink);
+}
+
+/* 稿子 `.up .up-bottom .btn.mod-primary` + `.btn` + `.btn svg`。
+   ------------------------------------------------------------
+   **祖先 `.up .bottom` 不能省。** 少了它这条是 (0,1,0),和共享 Button 的
+   primary(`background: var(--text-strong); color: var(--bg)`,同样 (0,1,0))
+   打平,谁赢全看 import 顺序 —— 真机上就是白的赢了,绿从没生效过
+   (用户 2026-08-27 指出,那次是绿墨,这次换成绿底,同一副病灶)。
+   稿子那条本来就是三个类(`.up .up-bottom .btn.mod-primary`),照搬祖先链
+   才不靠顺序取胜。同一副病灶在 `routines.css` 上也出现过一次:两条声明逐字相同、
+   纯靠顺序取胜,文本 diff 照不出来,只有量计算样式才看得见。
+
+   `height: auto` 必须显式写:共享 Button 基底是固定 `height: 36px`,
+   不松开的话下面那条 `min-height: 44px` 永远不会生效 —— 而 44 是触达尺寸,
+   不是装饰。 */
+.up .bottom .cta {
+  flex: none;
+  gap: 8px;
+  height: auto;
+  min-height: 44px;
+  padding: 12px 16px 12px 12px;
+  font-size: var(--chat-t-lead);
+  line-height: 20px;
+  font-weight: 400;
+  background: var(--upgrade-surface);
+  border-color: var(--upgrade-surface);
+  color: var(--upgrade-button-ink);
+}
+
+/* hover 也要写一遍 —— 共享 Button 的 `.primary:hover` 会把底和墨一起改回去,
+   不覆盖的话鼠标一压上去这颗就掉回黑底白字。稿子同样把 hover 写成和常态一样
+   (`.up .up-bottom .btn.mod-primary, …:hover`):这颗是整张卡唯一的出口,
+   悬停时换个样子只会让人以为按下去是另一件事。 */
+.up .bottom .cta:hover:not(:disabled) {
+  background: var(--upgrade-surface);
+  border-color: var(--upgrade-surface);
+  color: var(--upgrade-button-ink);
+}
+
+/* 稿子 `.up .up-bottom .btn svg { flex: none; width: 20px; height: 20px }` */
+.up .bottom .cta svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}

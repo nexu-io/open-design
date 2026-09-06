@@ -166,7 +166,8 @@ describe('resolveDesignDeliveryOutcome', () => {
       resolveDesignDeliveryOutcome({
         sessionMode: 'design',
         runStatus: 'succeeded',
-        content: '<question-form id="brief">{"questions":[]}</question-form>',
+        content:
+          '<question-form id="brief">{"questions":[{"id":"surface","label":"Which surface?"}]}</question-form>',
         events: [],
         producedFileCount: 0,
         traceObjectFileCount: 0,
@@ -194,6 +195,40 @@ describe('resolveDesignDeliveryOutcome', () => {
         traceObjectFileCount: 0,
       }),
     ).toBe('awaiting_input');
+  });
+
+  it('keeps a legacy child-tag clarification turn awaiting input', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: [
+          '<question-form id="audio">',
+          '<question-select id="format" label="Format">',
+          '<option value="mp3">MP3</option>',
+          '</question-select>',
+          '<question-text id="mood" label="Mood" />',
+          '</question-form>',
+        ].join(''),
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('awaiting_input');
+  });
+
+  it('does not report a malformed closed question form as a successful text answer', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content:
+          '<question-form><question-select id="format"><option>MP3</question-select></question-form>',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('no_result');
   });
 
   it('does not latch a no-clarification turn to awaiting_input on a stray open tag', () => {
@@ -251,6 +286,16 @@ describe('resolveDesignDeliveryOutcome', () => {
         traceObjectFileCount: 0,
       }),
     ).toBe('awaiting_input');
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Quick brief first.\n<question-form id="brief"><question-se',
+        events: [],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+      }),
+    ).toBe('awaiting_input');
   });
 
   it('does not impose artifact delivery on Chat/Plan or already-failed runs', () => {
@@ -301,7 +346,8 @@ describe('resolveDesignDeliveryOutcome', () => {
       designDeliveryVerificationPending({
         sessionMode: 'design',
         runStatus: 'succeeded',
-        content: '<question-form id="brief">{"questions":[]}</question-form>',
+        content:
+          '<question-form id="brief">{"questions":[{"id":"surface","label":"Which surface?"}]}</question-form>',
         events: [],
       }),
     ).toBe(false);

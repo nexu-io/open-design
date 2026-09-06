@@ -447,4 +447,54 @@ describe('i18n locales', () => {
       }
     }
   });
+
+  /*
+   * `assistant.waitingFirstOutput` got its first reader on 2026-09-03 (an ACP
+   * turn silent for 60s now shows it — see
+   * `tests/components/chat/waiting-first-output.test.tsx`). It had sat as a
+   * dead key long enough for a mistranslation to go unnoticed: `tr` read
+   * 「İlk girdi için bekleniyor」— *waiting for first **input***, the exact
+   * inverse of what the line reports.
+   *
+   * ⚠️ **What this test can and cannot prove.** Asserting a translated string
+   * against the file that defines it is a tautology — it can never tell you
+   * whether the Turkish is *good*, only that it is not the specific broken
+   * string we already found. So the two halves below claim exactly that much:
+   *
+   *  · the key resolves to non-empty text in all 19 locales (a real
+   *    completeness check — `types.ts` forces the key to exist, not to be
+   *    filled in with something), and
+   *  · no locale's value carries its own language's word for **input**, which
+   *    is a lint pinning one known regression shut, not evidence of quality.
+   *
+   * The `input`-word list stays SHORT and evidence-backed: only languages
+   * where a wrong-direction word was actually observed, or where the
+   * input/output pair is close enough to swap by accident. Guessing an
+   * "input" word for a language nobody here reads would make this test lie in
+   * the other direction.
+   */
+  it('never says "waiting for first INPUT" in any locale (assistant.waitingFirstOutput)', async () => {
+    const inputWords: Partial<Record<Locale, RegExp>> = {
+      tr: /girdi/i,
+      de: /Eingabe/i,
+      it: /\binput\b/i,
+      'es-ES': /\bentrada\b/i,
+      fr: /\bentrée\b/i,
+      'pt-BR': /\bentrada\b/i,
+      en: /\binput\b/i,
+    };
+    for (const locale of LOCALES) {
+      const dict = await loadDict(locale);
+      const value = dict['assistant.waitingFirstOutput'];
+      expect(typeof value, `${locale} must define assistant.waitingFirstOutput`).toBe('string');
+      expect(value.trim(), `${locale}.assistant.waitingFirstOutput must not be blank`).not.toBe('');
+      const wrongDirection = inputWords[locale];
+      if (wrongDirection) {
+        expect(
+          value,
+          `${locale}.assistant.waitingFirstOutput reports the model's first OUTPUT, not its input`,
+        ).not.toMatch(wrongDirection);
+      }
+    }
+  });
 });

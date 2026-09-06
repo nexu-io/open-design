@@ -193,6 +193,20 @@ const residualAllowedPathPrefixes = [
   // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
   // precedent as the clipper, and it must not be retypecast to TypeScript.
   "figma-plugin/",
+  // ChatPanel 评审载体:场景模拟器与它的出图脚本(`docs/design/chat-sim/`、
+  // `docs/design/chat-panel-diagrams/`)。模拟器是**双击即开的浏览器页面** ——
+  // 设计与产品要在没有构建步骤、没有服务的情况下打开单文件 HTML 评审,
+  // 所以那些脚本必须是浏览器可直接加载的 JS,不能改成 TypeScript(改了就得先编译,
+  // 评审载体也就没法直接发人了)。出图脚本(`shoot.mjs` / `topng.mjs`)是同一批
+  // 一次性工具,用 Node 直接跑、只读 mermaid 源码出 SVG/PNG。
+  // 这批是 docs 下的设计评审产物,不参与产品运行时。见
+  // `docs/design/chat-sim/README.md` 与 `docs/design/chat-panel-diagrams/README.md`。
+  // `docs/design/chat-mirror/` 是同一批里的第三个:用我们的组件渲染的镜像陈列页
+  // 与它的逐格出图脚本(`shoot.mjs`,走无头 Chrome 的 CDP)。
+  // 见 `docs/design/chat-mirror/README.md`。
+  "docs/design/chat-sim/",
+  "docs/design/chat-panel-diagrams/",
+  "docs/design/chat-mirror/",
   "test-results/",
   "vendor/",
 ];

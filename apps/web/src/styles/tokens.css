@@ -2,6 +2,11 @@
    OpenDesign — neutral product workspace
    ============================================================ */
 :root {
+  /* 选中记号:盘底 + 挖空的勾,两枚同大的圆叠出来(底圆 r=9,不然边缘透深色)。
+     执行记录的完成勾和意图澄清的选项勾是同一张,所以放全局。 */
+  --tick-img: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBmaWxsPSIjMjAyMDIwIi8+PHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+PC9zdmc+");
+  /* 选中项的字色 —— 比正文重一档,产品指定的色号 */
+  --select-ink: #353535;
   /* OpenDesign system palette. Neutrals carry the interface; brand green is
      reserved for sparse feedback, selected assists, and brand emphasis. */
   --bg: #fff;
@@ -106,6 +111,30 @@
   --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
   --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
 
+  /* Floating-layer ladder — the two tiers that already exist in
+     `primitives.css`, named so a new floating surface can be placed by
+     MEANING instead of by picking a number that happens to clear whatever it
+     collided with today.
+
+       --z-hint  a transient hint about something else on screen. Nobody
+                 opened it, `pointer-events: none`, it goes away on its own.
+                 `.od-tooltip-layer` is the only member.
+       --z-menu  a surface the user deliberately opened from a trigger and
+                 must be able to read and click. `.od-select-menu` has been
+                 here since it was written, and the artifact card's
+                 publish / export popovers join it.
+
+     menu ABOVE hint is the point, not an accident: a hint that paints over
+     the menu you just opened is never what you wanted — reported 2026-08-27
+     with a tooltip covering the lower half of the export menu.
+
+     These two do NOT describe the whole app. Roughly forty other z-index
+     literals (chrome 150, viewer popovers 220, dialogs 1500…) are still
+     ad-hoc; naming them is a separate job. Do not invent a third token here
+     without deciding what tier it means. */
+  --z-hint: 4000;
+  --z-menu: 9000;
+
   /* Corner-radius scale — the only radii UI should reach for (Shape
      Consistency Lock). xs for inline code / micro-chips, sm for controls,
      base for cards/menus, md for medium containers, lg for large surfaces,
@@ -116,7 +145,11 @@
   --radius-medium: 4px;
   --radius-large: 8px;
   --radius-xlarge: 12px;
-  --radius-xxlarge: 16px;
+  --radius-2xlarge: 16px;
+  /* 合并 main 时两边给同一个值起了不同的名字(我们 `--radius-2xlarge`,
+     main `--radius-xxlarge`),双方都有使用者,所以两个都留、互为别名,
+     谁的使用者都不断。想收敛成一个名字是另一件事,要连使用者一起改。 */
+  --radius-xxlarge: var(--radius-2xlarge);
   --radius-circular: 50%;
   --stroke-thin: 1px;
   --stroke-thick: 2px;
@@ -127,7 +160,8 @@
   --radius: var(--radius-large);
   --radius-md: var(--radius-large);
   --radius-lg: var(--radius-xlarge);
-  --radius-xl: var(--radius-xxlarge);
+  --radius-2xl: var(--radius-2xlarge);
+  --radius-xl: var(--radius-2xlarge);
   --radius-pill: 999px;
 
   --duration-ultra-fast: 50ms;

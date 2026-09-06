@@ -23,8 +23,20 @@ button {
     transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
     box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
-button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
-button:active:not(:disabled) { transform: translateY(1px); }
+/*
+ * 这三条是**默认值**,不是判决 —— 所以特异性归零(`:where()`)。
+ *
+ * 原来写成裸选择器 `button:hover:not(:disabled)`,特异性 (0,2,1),压过了组件自己的
+ * 单类 hover(比如 CSS Module 的 `.play:hover`,(0,2,0))。后果是一颗深色实心的
+ * 播放键 hover 时被刷成近白的 `--bg-subtle`,组件写的 `opacity: .86` 完全不算数。
+ * 用户 2026-08-27 指认:「hover 不是应该变成稍微亮一点点的颜色吗…而不是一整个
+ * 按钮全变成白色」,并且说「很多按钮都是」—— 确实,仓里已有十几处在跟它打层叠仗。
+ *
+ * `:where()` 之后:没写 hover 的裸 button 仍然拿到这层反馈,而任何组件只要写了
+ * 自己的 hover 就直接生效,不必再靠加祖先选择器去拼特异性。
+ */
+:where(button:hover:not(:disabled)) { background: var(--bg-subtle); border-color: var(--border-strong); }
+:where(button:active:not(:disabled)) { transform: translateY(1px); }
 button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
 
 button.primary {
@@ -128,26 +140,64 @@ button:disabled {
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 4000;
+  /* hint tier — see the ladder in tokens.css */
+  z-index: var(--z-hint);
+  /* 换行策略是这条规则里**唯一没跟稿子**的一处。稿子写的是
+     `white-space: nowrap` 且不设 max-width —— 那是为「纯图标按钮的名字」
+     量身的,两三个字,一行放得下。这条 primitive 是全应用共享的,上面还挂着
+     长描述(`fileViewer.publishSingleFileDescription` 法语 202 字符)和一批
+     长度无上限的用户数据(`data-tooltip={workingDir}` 是文件系统路径、
+     `{active.title}` 是标签页标题)。单行会横穿屏幕,所以限宽换行留着。
+     判据在 `tests/styles/w126-tooltip-design-parity.test.ts` 的
+     「换行策略」那一组,别照着稿子顺手补 nowrap。 */
   max-width: min(260px, calc(100vw - 16px));
-  padding: 5px 8px;
-  border: 1px solid var(--material-separator);
-  border-radius: var(--radius-sm);
-  /* Thick material: tooltips are small precise text, which per the material
-     spec takes the highest-contrast (most opaque) tier. */
-  background: var(--material-thick);
-  -webkit-backdrop-filter: var(--material-thick-backdrop);
-  backdrop-filter: var(--material-thick-backdrop);
-  box-shadow: var(--shadow-sm);
-  color: var(--vibrancy-label);
+  /* 以下逐条取自稿 `729fa43ce7:docs/design/chat-panel/src/components.css:2699-2707`
+     的 `[data-tip]::after`(产品裁决 2026-09-03:全站都改成稿子这套)。
+     搬的是值不是机制 —— 稿子是 `::after` 伪元素,我们是 body portal,
+     定位/贴边那一套归 `TooltipLayer.tsx`。 */
+  padding: 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* 实底,不是磨砂。稿子的理由写在 :2691-2698:气泡是被动的标签,只在鼠标停住时
+     出现,不该比它解释的那个按钮还重 —— 浅底 + 细边 + 软阴影已经够把它从正文里
+     分出来。深色磨砂留给「你要伸手去点」的浮层(选中浮条、注释全文)。
+     实底还顺带解决了一件事:气泡会盖在预览 iframe 的任意用户内容上方,
+     半透明 + blur 在花底子上会掉对比度,不透明的 --bg-elevated 不会。 */
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+  color: var(--text-strong);
   font-size: 12px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.4;
   contain: layout paint style;
   pointer-events: none;
   overflow-wrap: anywhere;
   white-space: normal;
   will-change: transform;
+  /* 稿 `729fa43ce7:docs/design/chat-panel/src/components.css:2706-2707`:
+       `opacity: 0; transition: opacity var(--duration-faster) var(--ease-out);`
+     两个 token 在 `styles/tokens.css` 里同名同值(`:123` 100ms,`:134` → `:132`
+     `cubic-bezier(0, 0, 0, 1)`),所以连写法一起照搬,不折算成字面值。
+
+     ⚠️ 和 `AGENTS.md`「UI animation philosophy」列的默认值不同 —— 那条默认是
+     `cubic-bezier(0.23, 1, 0.32, 1)`、进场 ~200ms / 退场 ~140ms。这里以稿子为准
+     (聊天面板的设计稿是这个面板的事实源),两条硬约束仍然满足:
+     `cubic-bezier(0,0,0,1)` 是减速曲线,不是被禁的 ease-in;也没有从 scale(0) 起。
+
+     ⚠️ 这条能生效的前提是 `TooltipLayer.tsx` **不卸载**节点、只切 opacity。
+     谁把它改回「hide 时 return null」,这条就重新变成死规则 ——
+     判据在 `tests/components/w129-tooltip-fade.test.tsx`。 */
+  opacity: 0;
+  transition: opacity var(--duration-faster) var(--ease-out);
+}
+/* A hint opened FROM INSIDE an already-open menu belongs to that menu. The
+   default ladder deliberately keeps unrelated hints below menus, but applying
+   that rule to a menu's own help trigger hides most of the bubble behind its
+   parent surface. Lift only this scoped case; activation still dismisses the
+   hint before another menu can open, so the global menu > hint invariant stays
+   intact for every unrelated tooltip. */
+.od-tooltip-layer[data-tooltip-context="menu"] {
+  z-index: calc(var(--z-menu) + 1);
 }
 
 /* -------- Inputs ---------------------------------------------------- */
@@ -262,7 +312,8 @@ textarea { resize: vertical; font-family: inherit; }
   white-space: nowrap;
 }
 .od-select-menu {
-  z-index: 9000;
+  /* menu tier — deliberately above the hint tier */
+  z-index: var(--z-menu);
   padding: 4px;
   overflow-y: auto;
   overflow-x: hidden;

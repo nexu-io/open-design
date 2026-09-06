@@ -756,57 +756,112 @@
 
 /* Question form — interactive form a planning agent can post into chat */
 .question-form {
-  margin: 8px 0;
+  /* 稿子 `.card:has(.q), .card:has(.foot) { width: 380px; max-width: 100% }`
+     —— 这张卡是定宽的,不跟着聊天列宽摊开。原来没写宽度,量出来 728px(稿子 380)。 */
+  width: 380px;
+  max-width: 100%;
+  /* 稿子 `.card` 不带外距也不带投影 —— 上下间距由 `.assistant-flow` 的 gap:12px 给
+     (稿子 `scene-shell.css` 的 `.flow { gap: 12px }`,轮次**内部**那一档)。
+     自己再加 margin 就是 12+8,比稿子松一档。 */
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
-  box-shadow: var(--shadow-md);
   overflow: hidden;
+}
+/* 稿子 `.card:has(.foot):has(.opts)`:带底栏又带选项的卡换一层确认底色 */
+.question-form:has(.question-form-foot):has(.qf-options) {
+  background: var(--chat-confirm-surface, var(--bg-panel));
+}
+/* 稿子 `.card:has(.foot) > .h`:有底栏的卡,头不再有分隔线和底色 */
+.question-form:has(.question-form-foot) > .question-form-head {
+  border-bottom: 0;
+  border-radius: 0;
+  background: none;
 }
 .question-form-locked {
   background: var(--bg-subtle);
   box-shadow: none;
   opacity: 0.92;
 }
+/* 稿子 `729fa43ce7:docs/design/chat-panel/src/components.css:1337`:
+     .card > .h { display:flex; align-items:center; gap:7px; padding:9px 11px;
+                  border-bottom: 1px solid var(--border-soft);
+                  background: var(--bg-panel);
+                  font-size: var(--t-lead); font-weight: 600;
+                  color: var(--text-strong); }
+   ⚠️ `--t-lead` = `--font-size-14`(稿子 components.css:109 注「组件名、卡片标题」)。
+   这里原来写的是 12 —— 在稿子那把梯子上是 `--t-cap` / `--t-mini` 那一档,
+   也就是「角标、状态标签、辅助行」用的号。卡头是这张卡的**名字**,掉两档之后
+   它和卡里的辅助文字同号,卡就没有头了。两个基线(`361b78253e` / `729fa43ce7`)
+   上这一条一个字没改,所以不是跟新稿走,是一直没对上。 */
 .question-form-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--bg-panel) 100%);
+  gap: 7px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border-soft, var(--border));
+  background: var(--bg-panel);
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text-strong);
 }
 .question-form-locked .question-form-head {
   background: var(--bg-subtle);
 }
-.question-form-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: white;
-  font-weight: 600;
-  font-size: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
+/* 稿子 `729fa43ce7:visual-fan.css`:
+     .card:has(> .cbody > .opts.mod-visual) > .h { padding-inline: 16px; }
+   —— **只收视觉方向这一张卡**:它的卡头右边多了一枚倒计时,标题组和倒计时各贴
+   一侧内边界,11px 在那张卡上顶得太紧。其余确认卡仍是通用卡头的 9px / 11px。
+   稿子用 `.opts.mod-visual` 认这张卡,我们对应的是 `.qf-visual-picker`;
+   写成后代 `:has()` 而不是直接子代 —— 那颗选择器在我们这边比稿子多包了一层。 */
+.question-form:has(.qf-visual-picker) > .question-form-head {
+  padding-inline: 16px;
 }
-.question-form-titles {
-  flex: 1;
+/* 稿子:`.card > .h .hd-ic { flex:none; width:15px; height:15px; color: var(--text-soft) }`
+   —— 图标是**灰的**(我们原来用 --text-strong,黑的),而且直接是 svg 本身,不套一层 span。
+   `.question-form-titles` 那层包裹稿子也没有,一并撤掉。 */
+.question-form-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--text-soft);
+}
+/* 稿子的 `<b>` 不撑开;把右侧那些靠 `margin-left: auto` 推到头(`.card > .h .n` 就是这么写的) */
+.question-form-title {
   min-width: 0;
 }
+/* 稿子里这一段就是 `.card > .h` 里那只裸 `<b>`,自己不另开字号 ——
+   跟着卡头的 `--t-lead`(14)走。写出来而不是靠继承:`.question-form-head`
+   之外还有别的地方挂这个类,漏一处就又掉回 12。 */
 .question-form-title {
-  font-size: 14px;
+  font-size: var(--font-size-14);
   font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text);
+  color: var(--text-strong);
 }
-.question-form-desc {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.45;
+/* 稿子 `729fa43ce7:components.css:1318`:
+     .card:has(> .cbody > .opts) > .h > b { font-weight: 500; }
+   —— **带选项的确认卡**,卡头那只 `<b>` 降到 500;不带选项的卡仍走上面那条 600
+   (`.card > .h b`)。把稿子那份 CSS 在稿子那份 HTML 上算过:意图澄清卡的
+   `.h > b` 胜出值就是 500,赢在 `:has()` 那一档特异性上。
+   我们的对应结构是 `.question-form > .question-form-body > .qf-options`,
+   所以钩子挂在 `.question-form` 上,和上面那条 `:has(.question-form-foot):has(.qf-options)`
+   同一种写法。
+   ------------------------------------------------------------------
+   ⚠️ **视觉方向卡也要算进来**。稿子那张卡的容器是 `.opts.mod-visual` —— 它**就是一个
+   `.opts`**,所以稿子里它跟着降到 500;而我们把这张卡渲染成 `.qf-visual-picker`
+   (不是 `.qf-options`),原来的钩子够不着它,于是停在通用卡头的 600。
+   实测(2026-09-02,系统 Chrome headless):
+     稿 `chat-panel-next.html` 的 `.card > .h > b`,按「这张卡有没有 `.opts`」分档 ——
+       有 `.opts`(含 `.opts.mod-visual` 那两张)→ 500,10 处
+       没有 `.opts`(如「执行中」)               → 600
+     产品侧在**跑着的 web**(127.0.0.1:17573,注入真实组件标记 + 真实祖先链)——
+       带选项的确认卡 → 500(本来就对)   视觉方向卡 → 600(差一档)
+   预览卡里的方向名(稿 `.vt` / 我们 `.qf-visual-card-name`)两边实测都是 600,
+   **不是**这一条说的东西,别顺手一起改。 */
+.question-form:has(.qf-options) > .question-form-head > .question-form-title,
+.question-form:has(.qf-visual-picker) > .question-form-head > .question-form-title {
+  font-weight: 500;
 }
 .question-form-pill {
   font-size: 12px;
@@ -818,43 +873,77 @@
   border: 1px solid var(--border);
   color: var(--text-muted);
 }
+/* 稿子的 `.cbody` 只有圆角和底色,没有 padding / gap —— 内距挂在 `.q`(10/11/8)
+   与 `.opts.mod-stack`(0 6px 8px)上。容器上再压一层会和子元素的内距叠加。 */
+/* 稿子 `.cbody { border: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+   background: var(--bg) }` —— 白底那一块从问题一直盖到底栏 */
 .question-form-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 14px;
+  border: 0;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--bg);
+}
+/* 稿子 `.card > .h .n { margin-left: auto; font-variant-numeric: tabular-nums }`
+   + PR #7170 把计数拆成两档字色:
+     `.selection-count            { color: var(--text-strong) }`
+     `.selection-count .count-label { color: var(--text-soft) }`
+   —— 数字保留原色,「已选」退后一档。
+   **不设 gap、不设 flex**:两段之间的空格是译文自己带的(`en` 有、`ko` 没有),
+   靠正常的行内空白处理渲染出来。改成 flex + gap 会给韩语凭空插一个空格。 */
+.qf-picked {
+  margin-inline-start: auto;
+  color: var(--text-strong);
+  /* 稿子 `729fa43ce7:components.css:1356`:
+       .card > .h .n { margin-left: auto; font-variant-numeric: tabular-nums;
+                       font-size: var(--t-cap); font-weight: 600; }
+     计数**自己降回 12**,不跟卡头的 14 —— 卡头抬到 `--t-lead` 之后这两条必须
+     一起看:少了这一行,「已选 2」会跟着继承成 14,一行里两个 14 就分不出
+     哪个是卡的名字、哪个是附注。 */
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.qf-picked-label {
+  color: var(--text-soft);
 }
 .qf-step-progress {
   flex: 0 0 auto;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
+  margin-inline-start: auto;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
 }
-.qf-field {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+
 .qf-field-visual .qf-label {
   padding-right: 36px;
 }
+/* 稿子:`.cbody > .q { padding: 10px 11px 8px; font-size: var(--t-body);
+   line-height: var(--lh-body); color: var(--text-strong) }`
+   —— 我们原来是 12px / --text / font-weight 500 / 无内距,四处都不对。
+   `--t-body` 与 `--lh-body` 是稿子的别名(= font-size-13 / 1.7)。
+   稿子的 `.q` 是块级,`font-weight` 也不写(继承 400);必填角标改成行内跟排。 */
 .qf-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  padding: 10px 11px 8px;
+  font-size: var(--font-size-13);
+  line-height: 1.7;
+  color: var(--text-strong);
 }
+/* `.qf-label` 跟着稿子改回块级之后,角标要自己跟排(原来靠 label 的 flex gap)
+   ------------------------------------------------------------------
+   OPEND-2401:「『必填』标识对比度和辨识度偏低,不容易看清」。原来是
+   10px 的 `--text-muted` 配 `--border` 的细圈 —— 三处都踩在可读性下限上,
+   叠起来就成了一枚要凑近才认得出的小灰球。抬两档:字号到 11px(和卡内
+   其它辅助文字同档,不再是全卡最小的那个),字色到 `--text`、边框到
+   `--border-strong`。它仍然比正文轻,但不再需要辨认。 */
 .qf-required {
-  color: var(--text-muted);
-  border: 1px solid var(--border);
+  display: inline-block;
+  margin-inline-start: 4px;
+  vertical-align: middle;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  padding: 1px 5px;
-  font-size: 10px;
+  padding: 1px 6px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -866,40 +955,241 @@
   overflow-wrap: break-word;
   line-height: 1.4;
 }
+/* 选项按设计稿竖排一列:每行一个选择框 + 文字。
+   横排胶囊读起来像标签云,竖排才是「在几个答案里挑一个」。 */
+/* 稿子:`.cbody > .opts.mod-stack { flex-direction:column; align-items:stretch;
+   gap:2px; padding: 0 6px 8px }`,选项自己再 `padding-inline: 5px` */
 .qf-options {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 2px;
+  padding: 0 6px 8px;
 }
+/* 稿子 `.opt` 的全文(`729fa43ce7:components.css:1420`,逐条对过):
+   display:flex; align-items:flex-start; gap:8px; width:100%; padding:8px 11px;
+   border:0; border-radius:var(--radius); background:transparent; text-align:left;
+   font-size:var(--t-body); line-height:var(--lh-row); color:var(--text);
+
+   ⚠️ 字号是 **13**(`--t-body`),不是 12。上一版基线(`361b78253e`)这里写的是
+   `--t-mini`,`17841fa8e1` 把整档抬到了 `--t-body` —— 选项行和问句现在同号。
+   `--lh-row` 是稿子的别名(= 1.5)。
+   ⚠️ **只抬这一行**:它里面那格「自己填」的输入框稿子仍是
+   `.opt .own-ta { font-size: var(--t-mini) }`(12),两个一起抬就把
+   「输入框比选项轻一档」这层关系抹掉了。护栏见
+   `tests/components/chat/w67-text-axes.test.tsx` 的反向对照。 */
 .qf-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  font-size: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 11px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  text-align: left;
+  font-size: var(--font-size-13);
+  line-height: 1.5;
+  color: var(--text);
   cursor: pointer;
-  transition: border-color 120ms var(--ease-out), background 120ms var(--ease-out), color 120ms var(--ease-out);
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
 }
-.qf-chip input { width: auto; margin: 0; display: none; }
+/* 稿子:`.opts.mod-stack .opt { padding-inline: 5px }` —— 竖排时左右内距收窄,
+   因为列表本身已经有 `padding: 0 6px 8px`。漏了这条,选项会比稿子宽出 12px。
+   ------------------------------------------------------------------
+   OPEND-2402:右侧**单独**多留一格。左边是稿子写死的 11px 竖线(6 + 5),
+   问句、选项、底栏共用,不能动;右边只是它的镜像,没有对齐义务。
+   多这一格是给中文行尾的全角标点 —— 换行时「。」「,」不允许落到行首,
+   浏览器会把它挤在上一行末尾并允许悬挂出去大半个字身,在 5px 的余量下
+   正好压到卡的描边上(用户截图指认的就是这一处)。11px ≈ 半个 12px 字身,
+   悬挂出来的部分仍落在卡里。
+   **必须写成左右两条 longhand**:`padding-inline: <单值>` 的简写会把右边这格
+   一起刷掉,这一族最容易复发的就是有人顺手把两条合并回简写。 */
+.qf-options .qf-chip {
+  padding-inline-start: 5px;
+  padding-inline-end: 11px;
+}
+/* 选项现在**每一项**都是 <button>(稿子就是 `.opt`),按钮的浏览器默认值要归零:
+   字体不继承、内容居中。原来只给「自己填」那颗单独补过,现在是全体的公共项。 */
+.qf-chip {
+  /* 只继承字体族(稿子的全局 reset 就是 `button { font-family: inherit }`)。
+     写成 `font: inherit` 会连带把上面那条规则的 font-size / line-height 一起冲掉。 */
+  font-family: inherit;
+  /* **400,是量出来的,不是从稿子的声明推的。**
+     ------------------------------------------------------------------
+     这里原来写 500,理由是「稿子的 `.opt` 一条字重都不写,所以继承
+     `body { font-weight: 500 }`」。那条推理错在一个前提上:`<button>` 的字重
+     **默认不继承** —— 浏览器 UA 给按钮用的是 `font` 简写(Chrome
+     `font: 400 13.3333px Arial`),简写把 `font-weight` 一并压成 400。稿子的全局
+     复位(`729fa43ce7:docs/design/chat-panel/src/components.css:170`)只写了
+     `font-family: inherit`,没写 `font` 也没写 `font-weight`,所以稿子的静息选项行
+     **停在 UA 的 400**。`638596f84a` 已经按同一条理由把面板里的裸按钮拨回 400;
+     `.qf-chip` 因为自己写了这一条才躲过那次,这里是同一件事的剩余部分。
+     ------------------------------------------------------------------
+     实测(2026-09-02,系统 Chrome headless + 交付稿 `729fa43ce7` 的组件全集页,
+     同一次会话里往页面注一颗 400 和一颗 500 的按钮做防真空,读回 400 / 500):
+       稿 `.opt`(静息)→ 400 × 12 处,一个例外都没有
+       稿 `.opt.is-on`  → 500(它自己亲自写,见下面那条选中档)
+     产品侧同一把尺在**跑着的 web**(127.0.0.1:17573,注入真实组件标记 + 真实祖先链)
+     读回 `.qf-chip` = 500,改前确实重一档。
+     ------------------------------------------------------------------
+     数值和 `chat.css` 那条 `:where([data-chat-root]) button` 撞上了,但这一格
+     **仍要自己说**:那条是 `:where()`(0,0,1),任何类都压得过它,靠它兜底等于把
+     这张卡的静息字重寄生在一条管着面板里所有裸按钮的规则上。
+     ⚠️ 面板排版基线(`ChatRoot.module.css` 的 500)**不受这条影响、也不许跟着降** ——
+     那一档有裁决,`typography-baseline.test.ts` 钉着。 */
+  font-weight: 400;
+  /* OPEND-2402 的**病根**。`primitives.css` 的裸 `button { white-space: nowrap }`
+     是给「一行字的按钮」定的 —— 那种按钮的文案断行只会更难读。可选项行是一段
+     会换行的正文:一句话的标题,底下还挂一行描述。继承下来之后整行不许换行,
+     描述文字直接冲出 380px 的卡,被 `.question-form { overflow: hidden }` 裁掉
+     (无头 Chrome 量:描述行 scrollWidth 373 / clientWidth 327,溢出 46px)。
+     注意上面那两条 `min-width: 0` / `overflow-wrap` 在这条之前是**空转**的:
+     压根不许换行的时候,「能缩多窄」和「能不能在词中间断」都轮不到被用上。
+     `nowrap` 只能在这儿归零 —— `primitives.css` 是全局原语,那条规则对真正的
+     单行按钮是对的,不该为这张卡去动它。 */
+  white-space: normal;
+  appearance: none;
+  cursor: pointer;
+}
+/* 稿子 `.opt .box svg { width:10px; height:10px; opacity:0 }`
+   + `.opts.mod-single .opt .box svg { display:none }` —— 它从不显示,存在是为了结构对齐 */
+.qf-chip-check {
+  width: 10px;
+  height: 10px;
+  opacity: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+/* 稿子 `.opts.mod-single .opt .box svg { display: none }` —— 单选从不画对勾 */
+[role='radiogroup'] .qf-chip-check {
+  display: none;
+}
+/* 稿子 `.opts.mod-multi .opt.is-on .box svg { display: none }` —— 多选选中后也不画 */
+.qf-chip-on .qf-chip-check {
+  display: none;
+}
+/* 禁用的 `<button>` 在浏览器里照样命中 `:hover`(点击事件没了,伪类还在),
+   所以这条对「已经选不了」的选项同样成立。它的底色由后面那条
+   `.qf-chip:disabled` 收回去 —— 同为 (0,2,0),靠**写在后面**取胜。
+   这两条的相对顺序是有意的,别把 `:disabled` 那条挪到这条前面。 */
+.qf-chip:hover {
+  background: var(--bg-panel);
+}
+/* 稿子 `.opt.is-on { color: var(--select-ink); … }`(L1457)。
+   稿子里它只需要 (0,2,0) 就压得过 `.opt` 的 (0,1,0) —— 因为稿子没有
+   `primitives.css` 那条全局 `button:disabled` 要对付。我们这儿静息档为了
+   压过全局原语已经被抬到 `.qf-chip:disabled` 的 (0,2,0)(见下文),选中档
+   必须跟着抬,否则**一张已提交的表单会把选中项也刷成静息色**。
+   补的是 `.qf-options` 这层祖先(和下面勾的描边同一个手段),(0,3,0)
+   **严格大于**而不是打平靠源码顺序 —— 踩坑 25 栽的就是打平那一下。
+
+   字重照稿子的 **500**(L1458),不是 600。这一格不是抄错,是**稿子改了我们没跟**:
+   上一版稿子 `1bbdce0b06`(2026-08-21)写的就是 600(注释原文「文字加粗到 600
+   并换成 --brand-text」),这条是 `38aa03bff4`(2026-08-26,照那一版重建聊天面板)
+   落的,当时对。2026-09-01 的交付稿 `8015870095` 把这一档降到 500 并把
+   --brand-text 换成 --select-ink —— 颜色那一半当时跟上了,字重这一半漏了。
+   稿子的理由写在 L1442-1444:选中态只留两处变化(控件填实 + 文字 500 换色),
+   底色那一档还给 hover,免得「能点的是这条」和「选中的是这条」抢同一种表达。 */
+.qf-options .qf-chip.qf-chip-on {
+  color: var(--select-ink);
+  font-weight: 500;
+}
+/* 选择框就是原生 input 本身 —— 不另画一个 span,读屏和键盘都照常 */
+/* 稿子 `.opt .box` —— 选中与否画在方框自己身上(--tick-img 铺底),不是靠里面那枚对勾 */
+.qf-chip .qf-chip-box {
+  content: '';
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  appearance: none;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--bg);
+  transition: border-color 120ms var(--ease-out), background-color 120ms var(--ease-out);
+}
+/* 稿子 `.opt:hover .box { border-color: var(--text-soft) }`(L1485),逐字照抄。
+   稿子里它 (0,3,0) 稳输给 `.opts.mod-* .opt.is-on .box` 的 (0,5,0) —— 选中的
+   勾在 hover 时**不会**被描回一圈灰边;禁用那一档稿子没有,下面两条按我们自己的
+   环境补,并且都排在这条之后。 */
+.qf-chip:hover .qf-chip-box {
+  border-color: var(--text-soft);
+}
+/* 禁用态照静息还原(稿子 `.btn:disabled:hover`「把静息值原样重述一遍」)。
+   和上面那条同为 (0,3,0),靠**写在后面**取胜 —— 与底色那一对
+   (`.qf-chip:hover` / `.qf-chip:disabled`)完全同一个做法,顺序是有意的。
+   这条**不能**并回上面写成 `:hover:not(:disabled)`,但理由不是「会把选中那条压
+   下去」—— `:not()` 自身不计权重(规范 selectors-4 §15,只取参数里最重的那条),
+   所以 hover 并回去是 (0,4,0),和下面选中那条的 (0,4,0)**打平**,靠源码顺序
+   分胜负。选中那条写在后面,今天照样赢。
+   不能并的真理由是:**打平靠源码顺序**正是规格踩坑 25 禁止的那件事 —— 谁挪一下
+   规则位置就翻,而且翻了没有测试会红。
+   而上面这一对拆开写也同为 (0,3,0)、同样靠顺序,区别在于它俩的顺序**有护栏钉着**:
+   「鼠标移上去,选不了的那一项一个像素都不变」(`question-form-maxed-option-hover`)
+   —— 禁用按钮照样命中 `:hover`(这就是本轮修的缺陷本身),所以这两条同时成立时给的
+   值不同,谁在后面是有意的,挪了当场红。选中那条并没有这样一条护栏,靠不得。 */
+.qf-chip:disabled .qf-chip-box {
+  border-color: var(--border-strong);
+}
+/* 稿子 `.opts.mod-multi .opt.is-on .box`(L1511)/ `.opts.mod-single …`(L1493)
+   是 (0,5,0),**稳压** hover 那条的 (0,3,0)。我们搬过来时把 `.opts` 那层祖先和
+   `.opt` 那格元素类都省了,只剩 `.qf-chip-on .qf-chip-box` 的 (0,2,0),于是
+   反过来输给 hover:一颗**可点的**选中项,鼠标一扫就把勾的描边从 transparent
+   跳成 `--text-soft`。这是规格踩坑 25 的同一类事故(搬稿子时省掉祖先,层叠就反了),
+   处方也一样:祖先补回去,并且要**严格大于**——(0,4,0) 压过上面两条的 (0,3,0),
+   不打平靠源码顺序。 */
+.qf-options .qf-chip.qf-chip-on .qf-chip-box {
+  border-color: transparent;
+  background: var(--tick-img) center / 120% no-repeat;
+  background-origin: border-box;
+}
 /* Host-injected "Other" chip on finite-choice questions — dashed border
    reads as "escape hatch", distinct from the model-authored options. It is a
    real <button> so keyboard users can reach and toggle it; reset the UA
    button chrome to the shared chip look and give focus a visible ring. */
-.qf-chip-other { border-style: dashed; }
-button.qf-chip-other { font: inherit; color: inherit; text-align: inherit; }
-button.qf-chip-other:focus-visible { outline: 2px solid var(--accent, var(--border-strong)); outline-offset: 2px; }
-button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
+.qf-chip:focus-visible { outline: 2px solid var(--accent, var(--border-strong)); outline-offset: 2px; }
+/* 选项行是 `<button>`(D52,照抄稿子的 `.opt`),于是一被 `disabled` 就吃到
+   `primitives.css` 的全局 `button:disabled { background: var(--bg-subtle) }` ——
+   特异性 (0,1,1),压过 `.qf-chip { background: transparent }` 的 (0,1,0),
+   把一行选项刷成一枚灰药丸。稿子的 `.opt` 从头到尾只有 `transparent` 一种底,
+   禁用态**没画过**,所以照静息还原。
+   写成 `.qf-chip:disabled` (0,2,0) 才压得回去 —— 和视觉方向卡那一路
+   (`.qf-visual-card.qf-visual-card-disabled`)是同一个做法,理由也是同一条。
+
+   这一条**同时**管住 hover:它和上面的 `.qf-chip:hover` 同为 (0,2,0),
+   写在后面所以指针停在禁用选项上时底色仍是 transparent —— 也就是稿子
+   `.btn:disabled:hover`「把静息值原样重述一遍」的那条规矩。位置是有意的。
+
+   `color` 是同一条渗漏的第二处,上一轮只抢回了底色没跟着抢它:
+   `button:disabled { color: var(--text-faint) }` 同样是 (0,1,1),把选项
+   **标题**刷成 `#bdbdbd`;而底下那行说明是个 `<span class="qf-chip-desc">`,
+   全局原语匹配不到它,保留着 `--text-muted` `#5c5c5c` —— 于是标题比它自己的
+   说明还淡,主次颠倒。照静息还原成稿子 `.opt` 的 `var(--text)`;
+   选中档由上面 `.qf-options .qf-chip.qf-chip-on` 的 (0,3,0) 接着压回来。 */
+.qf-chip:disabled { background: transparent; color: var(--text); cursor: default; }
 /* The collapsed custom field still occupies a slot in .qf-field's 6px
    column gap; cancel it so a closed accordion leaves no phantom spacing. */
 .qf-custom-collapsible:not(.open) { margin-top: -6px; }
+/* 稿子的选项文案是 `.opt` 的直接子 `<span>`,行高就是 `.opt` 的
+   `line-height: var(--lh-row)` = 1.5。我们为了容下第二行说明多包了这一层,
+   顺手写了 `line-height: 1.2` —— 于是文案的行内盒从 18px 缩到 14.5px,
+   每颗选项按钮跟着从 34px 矮成 32px,四颗下来整张卡短 6px。
+   说明那一行是产品自己加的,没有稿子依据去压行高;让它跟着 `.qf-chip` 走。 */
+/* OPEND-2402 的另一半:`.qf-chip` 是一行 flex,文案列默认 `min-width: auto`,
+   **缩不到自己的 min-content 以下** —— 中英混排里一段断不开的长串(URL、型号、
+   括号里的英文)会把这一列整个顶出容器,文字于是压到卡的描边上。
+   `min-width: 0` 让它缩得下去,`overflow-wrap` 让它在没有断点的地方也能断。 */
 .qf-chip-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .qf-chip-desc {
   color: var(--text-muted);
@@ -910,93 +1200,566 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   color: inherit;
   opacity: 0.72;
 }
-.qf-chip:hover { border-color: var(--border-strong); }
-.qf-chip-disabled {
+/* 「选满了,这一项现在选不了」。**两个类** (0,2,0) 是必需的:只写一个类时
+   上面那条 `.qf-chip:disabled` 的 `cursor: default` 会压过它,这条声明的
+   `not-allowed` 从来没生效过。`not-allowed` 是仓库里「选不了」的既有口径
+   (稿子 `.btn:disabled`、产品 `.qf-visual-card-disabled` 都是它)。 */
+.qf-chip.qf-chip-disabled {
   cursor: not-allowed;
   opacity: 0.48;
 }
-.qf-chip-disabled:hover { border-color: var(--border); }
-.qf-chip-on {
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--bg-subtle) 45%, var(--bg-panel));
-  color: var(--accent-hover);
-  font-weight: 500;
-}
 .question-form-locked .qf-chip { cursor: not-allowed; }
+/*
+ * 自由填写一律是「无框 + 一条底线」(稿子的 `.rsn .ta` / `.qf-custom .qf-input`
+ * 是同一种做法)。
+ *
+ * 这条原来只写了字号 —— 于是只有折叠的「自己填」那一路(在 `.qf-custom` 里)
+ * 是下划线,而 `type: 'text' / 'number' / 'textarea'` 三种自由填写掉回浏览器
+ * 默认的四边框 + 圆角 + 灰底。用户截图反馈过一次,当时只修了「自己填」那一路,
+ * 另外三种没跟上 —— 同一件事要在同一个地方说完。
+ *
+ * `select` 不在内:它有原生的下拉指示符,拆掉边框会看不出是可选的。
+ */
 .qf-input,
-.qf-select,
 .qf-textarea {
+  display: block;
+  width: 100%;
+  padding: 2px 0 5px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  field-sizing: content;
+  resize: none;
+  outline: none;
+}
+.qf-select {
   font-size: 13px;
 }
-.qf-custom {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  width: fit-content;
-  max-width: 100%;
-  min-height: 30px;
-  padding: 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  font-size: 12px;
-  line-height: 1.2;
-  cursor: text;
-  transition: border-color 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+.qf-input::placeholder,
+.qf-textarea::placeholder { color: var(--text-soft); }
+.qf-input:focus,
+.qf-textarea:focus {
+  border-bottom-color: var(--border-strong);
+  box-shadow: none;
 }
-.qf-custom:hover { border-color: var(--border-strong); }
+/*
+ * 自由填写框跟着落回稿子那条 **11px 竖线**,底下留稿子那 **16px**。
+ *
+ * 稿子的白底块 `.cbody`(= 我们的 `.question-form-body`)**自己不带内距** ——
+ * 内距全挂在孩子身上,而每个孩子都把内容落在同一条竖线上:
+ *   `.cbody > .q { padding: 10px 11px 8px }`
+ *   `.cbody > .opts.mod-stack { padding: 0 6px 8px }` + `.opts.mod-stack .opt { padding-inline: 5px }`(6 + 5 = 11)
+ *   `.cbody > .foot { padding: 0 11px 8px }` + `.cbody > .foot > .btn:first-child { padding-inline: 0 }`
+ * 稿子把这条写成了明文:「控件正好落在 11px,和上面那句问话同一条竖线」。
+ *
+ * 漏的是自由填写这一路:`.qf-input` / `.qf-textarea` 是 `.question-form-body` 的
+ * **直系孩子**,自己一格内距都没有 —— 在无头 Chrome 上量过(380px 的卡):
+ * 左右各只剩 1px(那 1px 是卡自己的描边),到底栏上缘 0px。下划线一路顶到卡的
+ * 两条边,底下也不留一点余地。选项那一路(`.qf-options`)和折叠的「自己填」
+ * (`.qf-custom`)早就有内距,所以只有「一句问话 + 一个填空」的卡看得见这件事。
+ *
+ * 为什么走**外距**而不是内距:那条下划线是 `border-bottom`,画在 border box 上;
+ * 加 `padding-inline` 只把文字往里推,线还是顶着卡边。外距同时要求把 `width`
+ * 从 `100%` 放回 `auto`(块级元素自己减掉外距),否则 100% + 外距会溢出 ——
+ * 所以这条必须**赢过**裸 `.qf-input`,不能打平靠源码顺序。
+ *
+ * 16 是稿子的数,不是估的:稿子里唯一的自由填写实体是 `.opt .own-ta`,量出来
+ * 下划线到底栏上缘正好 16;稿子在 `.cbody > .foot` 那条注释里把它写死过 ——
+ * 「剩下的 8 + 8 = 16,既是『最后一条选项到底栏上缘』,也是『到下一步按钮』
+ *  —— 同一个数,量哪儿都对得上」。
+ *
+ * `.question-form-body >` 这个祖先不能省:它既是**作用域**(折叠的「自己填」
+ * `.qf-custom .qf-input` 和选项里的 `.qf-own-input` 各有自己的容器内距,不该被
+ * 刷成 11),也是**特异性**(少了它就和 `.qf-custom .qf-input` 打平)。
+ */
+.question-form-body > .qf-help,
+.question-form-body > .qf-input,
+.question-form-body > .qf-textarea {
+  /* 两侧同值,没有要在 RTL 下镜像的东西,所以写物理属性 —— 和旁边的
+     `.qf-custom` / `.qf-label` 保持同一种写法,也才量得到(逻辑属性的
+     简写在 jsdom 的 CSSOM 里解析不出 `marginLeft`,断言会变成空转)。 */
+  margin-left: 11px;
+  margin-right: 11px;
+}
+.question-form-body > .qf-input,
+.question-form-body > .qf-textarea {
+  width: auto;
+  margin-bottom: 16px;
+}
+.qf-custom {
+  display: block;
+  width: auto;
+  margin: 0 11px 0 34px;
+  padding: 0 0 6px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.qf-custom-label {
+  display: none;
+}
 .qf-custom > span {
   flex-shrink: 0;
 }
 .qf-custom .qf-input {
-  width: clamp(132px, calc(var(--qf-custom-chars, 18) * 0.62ch + 18px), 360px);
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0;
+  display: block;
+  width: 100%;
+  padding: 2px 0 5px;
   border: 0;
+  border-bottom: 1px solid var(--border);
   border-radius: 0;
-  background: transparent;
-  color: var(--text);
+  background: none;
+  color: var(--text-strong);
+  font-family: inherit;
   font-size: 12px;
-  line-height: 1.2;
-  box-shadow: none;
+  line-height: 1.5;
+  field-sizing: content;
+  resize: none;
+  outline: none;
 }
-.qf-custom:focus-within {
-  border-color: var(--selected);
-  box-shadow: 0 0 0 3px var(--selected-soft);
-}
+.qf-custom .qf-input::placeholder { color: var(--text-soft); }
+.qf-custom .qf-input:focus::placeholder { color: transparent; }
+.qf-custom .qf-input:focus { border-bottom-color: var(--border-strong); }
 .qf-custom .qf-input:focus {
   box-shadow: none;
 }
-.qf-range-wrap {
+/* ── 数值滑块(交付稿 `.opts.mod-slider`,PR #7170)───────────────────────
+   「上方数字**可直接编辑**并与滑杆双向同步,**不展示刻度点**。」
+   `--qf-range-pct` 由组件按当前值写在包装层上;轨道拿它画出「已经走到哪」。
+   上一版稿子轨道里那排 `.amount-stop` 光点这一版**整排删掉了** —— 别再加回来。
+   稿子 `.opts.mod-slider { display:block; padding: 0 11px 10px }`,内容仍落在
+   和问句、每个选项同一条 11px 竖线上。 */
+.qf-amount {
+  --qf-amount-track: 16px;
+  --qf-amount-thumb: calc(var(--qf-amount-track) - 2px);
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
+  gap: 7px;
+  padding: 0 11px 10px;
 }
-.qf-range {
-  width: 100%;
-  min-width: 0;
+.qf-amount-readout {
+  min-height: 42px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
 }
-.qf-range-value {
-  min-width: 38px;
-  padding: 3px 6px;
-  border: 1px solid var(--border-soft);
+/* 稿子 `.amount-value-input`(`361b78253e:1726-1731`)—— 32px 的大字号数字
+   **本身就是**输入框。
+   ------------------------------------------------------------------
+   09-02 那一版稿子把它从「看不出边框」改成了**平时就带一圈描边**:
+   `1.35em × 42px`、内距 `3px 2px`、`border: var(--stroke-thin) solid var(--border)`,
+   悬停压深边框、聚焦换成「边框染色 + 外扩一圈」而不再用 `outline`。
+   改判的道理是「这是一个能敲字的框」得先看得出来 —— 上一版要把指针移上去才知道。
+   高度 42 和 `.amount-readout` 的 `min-height: 42px` 是同一个数,两处一起改。
+   `box-sizing` 不写:`base.css` 的 `* { box-sizing: border-box }` 已经给了这一档,
+   而描边一旦存在,`content-box` 会让 1.35em 连边框一起往外长。 */
+.qf-amount-value {
+  width: 1.35em;
+  height: 42px;
+  padding: 3px 2px;
+  appearance: textfield;
+  border: var(--stroke-thin) solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 34px;
   text-align: center;
 }
+.qf-amount-value::-webkit-outer-spin-button,
+.qf-amount-value::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+}
+.qf-amount-value:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-subtle);
+}
+/* 聚焦不再画 `outline`,改成「边框染色 + 外扩一圈」(稿子 `361b78253e:1735-1738`)。
+   平时已经有一圈边之后,再在外面套一圈 outline 就是两条同心线;染现有那一条
+   更省一层,外扩的柔光只负责说「焦点在这儿」。 */
+.qf-amount-value:focus-visible {
+  border-color: var(--selected);
+  box-shadow: 0 0 0 2px var(--selected-soft);
+  background: var(--bg);
+}
+/* 稿子这条进度色写的是字面绿 `#00FF08`;换成产品的「已选」token ——
+   tokens.css 对它的定义就是「outer rings / fills」这类语义。 */
+.qf-amount-rail {
+  position: relative;
+  height: var(--qf-amount-track);
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--selected) 22%, var(--bg-panel)) 0 var(--qf-range-pct),
+    var(--bg-panel) var(--qf-range-pct) 100%
+  );
+}
+.qf-range {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  appearance: none;
+  width: 100%;
+  height: var(--qf-amount-track);
+  margin: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  cursor: grab;
+}
+.qf-range:active {
+  cursor: grabbing;
+}
+.qf-range:focus-visible {
+  outline: 1px solid var(--selected);
+  outline-offset: -1px;
+}
+.qf-range::-webkit-slider-runnable-track {
+  height: var(--qf-amount-track);
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+.qf-range::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--qf-amount-thumb);
+  height: var(--qf-amount-thumb);
+  margin-top: 1px;
+  border: 0;
+  border-radius: var(--radius-circular);
+  background: var(--selected);
+  box-shadow: var(--shadow-sm);
+}
+.qf-range::-moz-range-track {
+  height: var(--qf-amount-track);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+}
+.qf-range::-moz-range-thumb {
+  width: var(--qf-amount-thumb);
+  height: var(--qf-amount-thumb);
+  border: 0;
+  border-radius: var(--radius-circular);
+  background: var(--selected);
+  box-shadow: var(--shadow-sm);
+}
+/* 稿子 `.amount-limits { font-size: var(--t-cap) }` —— 12px,不是更小的一档。 */
+.qf-amount-limits {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-muted);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 查找型单选(交付稿 `.opts.mod-language`,PR #7170 新增)──────────────
+   稿子那一档演的是语言表,能力却是通用的三件事:**选项分组、行尾副标、高度上限**。
+   所以类名按能力起(`qf-select-*`),不叫 language —— 时区、国家、字体同一条路。
+   内容一律来自 agent 的 `options`,host 一张表都不内置。
+
+   稿子 `.opts.mod-language { display:block; padding: 0 11px 10px }` —— 仍旧落在
+   问句、每个选项、底栏共用的那条 11px 竖线上。 */
+.qf-select-field {
+  display: block;
+  padding: 0 11px 10px;
+}
+/* 稿子 `.language-menu, .language-more` —— 两块都是独立的带边圆角面 */
+.qf-select-menu,
+.qf-select-more {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+}
+.qf-select-more {
+  margin-top: 8px;
+}
+/* 稿子 `.language-group-label { font-size: var(--t-cap); font-weight: 500 }`。
+   ------------------------------------------------------------------
+   字号走产品梯子,**最低就是 12px**。稿子把 `--t-cap` / `--t-mini` 两档
+   一起绑到 `--font-size-12`,并在文件开头写明理由:「原稿的 11px 档在产品体系里
+   没有对应值……要恢复 11px 需先在 typography.css 加 `--font-size-11`,
+   不能在本文件里私开」(`361b78253e:components.css:101-104`)。
+   这一族里凡是 11px 都是没跟上梯子的旧值,不是刻意压小。 */
+.qf-select-group-label {
+  display: block;
+  padding: 7px 10px 3px;
+  color: var(--text-muted);
+  font-size: var(--font-size-12);
+  font-weight: 500;
+}
+/* 稿子 `.language-option, .language-more-toggle` —— 32px 是一行的基准高度,
+   下面那条 6.5 行的上限(208px)就是按它算的。 */
+.qf-select-option,
+.qf-select-more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  /* 和 `.qf-chip` 同一件事:`primitives.css` 的裸 `button { white-space: nowrap }`
+     会让长选项名冲出菜单。这一族的选项名(语言、国家、字体)不短。 */
+  white-space: normal;
+  text-align: left;
+  appearance: none;
+  cursor: pointer;
+}
+.qf-select-option:hover:not(:disabled),
+.qf-select-more-toggle:hover {
+  background: var(--bg-fill-secondary);
+}
+.qf-select-option:focus-visible,
+.qf-select-more-toggle:focus-visible {
+  outline: 2px solid var(--selected);
+  outline-offset: -2px;
+}
+.qf-select-option:disabled {
+  cursor: not-allowed;
+}
+.qf-select-option[aria-selected='true'] {
+  background: var(--brand-soft);
+  color: var(--select-ink);
+  font-weight: 500;
+}
+/* 选项名占满剩下的宽度并允许换行;副标和勾各自不缩。 */
+.qf-select-option-label {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* 稿子 `.language-code` —— 行尾那枚短标记,等宽数字免得几行之间跳动 */
+/* 稿子 `.language-option .language-code { font-size: var(--t-cap) }` —— 行尾那枚短标记,
+   等宽数字免得几行之间跳动。字号同样是梯子最低那一档 12px,不是 11。 */
+.qf-select-trailing {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--text-muted);
+  font-size: var(--font-size-12);
+  font-variant-numeric: tabular-nums;
+}
+/* 稿子:勾平时是**占位不显形**(opacity:0),这样选中与否行宽不变、不抖。
+   没有副标时由勾自己吃掉那段 auto 外距;有副标时外距归副标(下一条)。 */
+.qf-select-check {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-inline-start: auto;
+  opacity: 0;
+  color: var(--brand-text);
+}
+.qf-select-trailing + .qf-select-check {
+  margin-inline-start: 0;
+}
+.qf-select-option[aria-selected='true'] .qf-select-check {
+  opacity: 1;
+}
+.qf-select-more-toggle {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.qf-select-more-gap {
+  flex: 1;
+}
+/* 稿子 `.language-more-toggle svg { transition: transform var(--duration-faster) var(--ease-out) }`。
+   时长走 token 而不是写死毫秒 —— `--duration-faster`(100ms)由 `tokens.css` 的 `:root`
+   提供,全站在这一档上同步;写死 140ms 就是这颗箭头自己一个速度。 */
+.qf-select-more-toggle svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  transition: transform var(--duration-faster) var(--ease-out);
+}
+.qf-select-more-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+/* 稿子写死的那条高度上限:**32px × 6.5 = 208px**。露半行是给「下面还有」的提示,
+   收在 6 行整会读成「就这些了」。`overscroll-behavior: contain` 挡住滚到底之后
+   把整条会话一起带走。 */
+.qf-select-more-list {
+  max-height: 208px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+.qf-select-more-list[hidden] {
+  display: none;
+}
+/* 「自己填」仍旧是选项列表那套(逃生口在两种形态下是同一颗),只是挪到菜单下面。
+   它自带 `.qf-options` 的内距,这里把左右那份撤掉 —— 外面 `.qf-select-field`
+   已经出了 11px,再叠一层会比菜单窄一格。 */
+.qf-select-own {
+  padding-inline: 0;
+  padding-bottom: 0;
+}
+
+/* ── 颜色选择(交付稿 `.opts.mod-color`,PR #7170)────────────────────────
+   「预设色、系统取色器和 Hex 输入三条路实时同步,预览跟着更新。」
+   预览底色由 `--qf-choice-color` 驱动 —— 组件按当前答案把它写在包装层上,
+   CSS 这边只管怎么用,不再留第二份真相。 */
+.qf-color-field {
+  display: grid;
+  gap: 10px;
+  padding: 0 11px 10px;
+}
+/* 稿子 `.color-field { min-width:0; margin:0; padding:0; border:0 }` ——
+   `<fieldset>` 的浏览器默认边框和内距要全部归零 */
+.qf-color-preset-field,
+.qf-color-custom-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* 稿子 `361b78253e:1566-1570`:
+     `.color-field legend, .color-label {
+        display: block; margin: 0 0 6px;
+        font-size: var(--t-mini); font-weight: 600; color: var(--text-strong); }`
+   —— 12px / #202020 / 600。
+   ------------------------------------------------------------------
+   稿子随后**只**给 `<legend>` 单独降一档:
+     `.opts.mod-color .color-field > legend { font-weight: 500 }`(`:1700`)。
+   示例页里这两句正好落在两种元素上(`chat-panel-next.html:4904` 与 `:4917`):
+   预设那句是 `<legend>`(→ 500),自定义那句是 `<label class="color-label">`(→ 留在 600)。
+   我们两句复用同一个类名,所以按元素分档才等价 —— 只写一档会把自定义那句一起降。 */
+.qf-color-legend {
+  display: block;
+  margin: 0 0 6px;
+  padding: 0;
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+legend.qf-color-legend {
+  font-weight: 500;
+}
+.qf-color-presets {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 6px;
+}
+.qf-color-swatch {
+  width: 30px;
+  height: 30px;
+  justify-self: center;
+  padding: 0;
+  border: 2px solid var(--bg);
+  border-radius: var(--radius-circular);
+  background: var(--qf-swatch);
+  box-shadow: 0 0 0 1px var(--border);
+  cursor: pointer;
+  transition: transform 120ms var(--ease-out), box-shadow 120ms var(--ease-out);
+}
+.qf-color-swatch:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+/* 稿子:选中态**只动外圈**,色块本身保留它所代表的真实颜色 */
+.qf-color-swatch[aria-pressed='true'] {
+  transform: scale(1.06);
+  box-shadow: 0 0 0 2px var(--selected);
+}
+.qf-color-swatch:focus-visible {
+  outline: 2px solid var(--selected);
+  outline-offset: 2px;
+}
+.qf-color-swatch:disabled {
+  cursor: not-allowed;
+}
+.qf-color-custom {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+}
+/* 覆盖层把取色器的外框和浏览器画在里面的那块色统一成圆形 */
 .qf-color {
-  width: 44px;
+  width: 34px;
   height: 34px;
   padding: 2px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-panel);
+  border-radius: var(--radius-circular);
+  background: var(--bg);
+  overflow: hidden;
+  cursor: pointer;
+}
+.qf-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.qf-color::-webkit-color-swatch {
+  border: 0;
+  border-radius: var(--radius-circular);
+}
+.qf-color::-moz-color-swatch {
+  border: 0;
+  border-radius: var(--radius-circular);
+}
+/* 稿子 `.color-hex { font-family: var(--mono); font-size: var(--t-mini) }` —— 12px。 */
+.qf-color-hex {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text-strong);
+  font-family: var(--mono);
+  font-size: var(--font-size-12);
+}
+.qf-color-hex:hover {
+  border-color: var(--border-strong);
+}
+.qf-color-hex:focus {
+  border-color: var(--text-soft);
+  outline: none;
+}
+.qf-color-hex[aria-invalid='true'] {
+  border-color: var(--red);
+}
+/* 稿子只把边框标红。红框说得出「这里不对」,说不出「哪里不对」——
+   而这道题的规则(6 位、不收 alpha / 简写)恰恰不是看一眼就知道的,
+   所以补一句话。位置紧跟在输入框下面,`aria-describedby` 把它接给读屏。
+   ------------------------------------------------------------------
+   ⚠️ 稿子里**没有这一条**(它只有 `.color-hex[aria-invalid="true"] { border-color: var(--red) }`,
+   `361b78253e:1602`),所以这一格的字号/字色在稿子上**没有可对照的原值**。
+   11px 是我们自己定的,先原样留着 —— 按「梯子下限是 12px」把它推到 12 属于自行发挥,
+   要改得由产品对着稿子拍板。 */
+.qf-color-error {
+  color: var(--red);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.qf-color-preview {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--qf-choice-color) 12%, var(--bg));
+  color: var(--qf-choice-color);
+  /* 稿子 `.color-preview { font-size: var(--t-mini) }`(`361b78253e:1607`)—— 12px。
+     这一格其余属性早就和稿子一致,只有字号漏在 11。 */
+  font-size: var(--font-size-12);
+  line-height: 1.5;
 }
 .qf-file-wrap {
   display: flex;
@@ -1065,19 +1828,62 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
 }
 /* Quiet neutral focus for form fields: the global --selected focus border is
    near-black and reads like the chosen-chip state sitting right above. */
-.qf-input:focus,
-.qf-select:focus,
-.qf-textarea:focus {
+/* 自由填写那两种的聚焦态在上面(`.qf-input:focus, .qf-textarea:focus`)——
+   加深的是那条底线,不是一圈框。这里只剩 select:它保留原生四边框 */
+.qf-select:focus {
   border-color: var(--border-strong);
 }
+/* 稿子 `.cbody > .foot { display:flex; align-items:center; gap:8px; padding:0 11px 8px }`
+   —— 在白底里面,所以没有上边线也没有另一层底色 */
 .question-form-foot {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-subtle);
+  gap: 8px;
+  padding: 0 11px 8px;
 }
+/* 稿子 `.cbody > .foot > .btn:first-child { padding-inline: 0 }`:靠左那颗贴边。
+   用 `:first-of-type` 而不是 `:first-child`:倒计时曾经排在这一行的第一格,按
+   `:first-child` 匹配不到「跳过」,它就凭空缩进一格(用户真机指认)。倒计时后来
+   按稿子 `729fa43ce7` 挪去了卡头,`:first-of-type` 仍然是这里更稳的写法 ——
+   底栏将来再插进任何非按钮节点(提示、分隔)都不会重演那次缩进。 */
+.question-form-foot > button:first-of-type {
+  padding-inline: 0;
+}
+/* 稿子 `.btn.mod-ghost { color: var(--text-muted) }` + `.cbody > .foot .btn.mod-ghost:hover
+   { background: none; color: var(--text-strong) }` —— 我们共用的 ghost 底子是 `--text`,
+   在这张卡里要按稿子降一档。 */
+/* 底栏里所有 ghost 档都按稿子降一档(「随机」那颗套在自己的行里,不是直接子元素) */
+.question-form-foot button.ghost {
+  color: var(--text-muted);
+}
+.question-form-foot button.ghost:hover:not(:disabled) {
+  background: none;
+  color: var(--text-strong);
+}
+/* 禁用态也**不铺灰** —— 这一行的次要动作在任何状态下都只是一句可点的话。
+   ------------------------------------------------------------
+   共享 Button 的 `.button:disabled` 给所有档位刷一层 `--bg-subtle`。对实心的
+   「下一步」是对的(稿子 `.btn:disabled { background: var(--bg-subtle) }`),
+   但底栏左边这几颗 ghost 按稿子**没有形状**:上面那条 hover 规则已经为此把灰底
+   摘掉了,理由(顶掉左内距之后那层灰会漫到卡的内边距上,看着像凭空多出一张小卡片)
+   对禁用态一字不差地成立 —— 而且这里内距是 0,那层灰会紧贴文字缩成一枚椭圆。
+
+   为什么这条一直在发作:底栏**只要这一轮还在跑就是禁用的**
+   (`questionFormSubmitDisabled` ← `currentConversationActionDisabled`,会话忙即为真),
+   外加提交在飞时 `FormBlock` 自己的 `submitting`。所以表单流式落地时是这样、
+   点完提交按钮之后又是这样,跑完才变回一行字 —— 用户两次指认的就是这个来回变形。
+
+   只写 `background`:禁用的**颜色**照旧由上面那条 `.question-form-foot button.ghost`
+   决定(它 (0,2,1) 压过 `.button:disabled` 的 (0,2,0)),所以两态连字色都一致;
+   「你现在动不了」由同一行那颗实心的「下一步」照稿子铺灰来说,不必每颗都说一遍。
+   特异性 (0,3,1) 压过共享原语的 (0,2,0)。 */
+.question-form-foot button.ghost:disabled {
+  background: none;
+}
+.qf-foot-gap {
+  flex: 1;
+}
+
 .qf-hint,
 .qf-locked-note {
   flex: 1;
@@ -1085,10 +1891,24 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   color: var(--text-muted);
   line-height: 1.4;
 }
+/* 倒计时在【卡头右上】,不在底栏 —— 稿子 `729fa43ce7:visual-fan.css` 新加的那一处:
+     <time class="n visual-countdown" datetime="PT30S">30s</time>   ← 在 `.h` 里
+     .card > .h .visual-countdown { color: var(--text-soft); font-weight: 400 }
+   它同时带 `.n`,所以还继承稿子 `components.css:1356` 那条:
+     .card > .h .n { margin-left: auto; font-variant-numeric: tabular-nums;
+                     font-size: var(--t-cap); font-weight: 600 }
+   —— 也就是 12px + 顶右 + 数字不跳,字重再由 `.visual-countdown` 压回 400。
+   我们只有一个卡头,所以这两条合成一条写在这里。
+   改前是 11px + `--text-muted`,两项都不是稿子的值。
+
+   ⚠️ 显示格式是**有意偏离**(2026-09-02 产品裁决,详见 `QuestionForm.tsx` 里那段注释):
+   稿子是 `30s`,我们保留 `M:SS`。格式不由 CSS 决定,这里记一笔免得只读样式的人误判。 */
 .qf-auto-continue {
-  flex: 1;
-  color: var(--text-muted);
-  font-size: 11px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  color: var(--text-soft);
+  font-size: var(--font-size-12);
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
   line-height: 1.4;
 }
@@ -1104,329 +1924,502 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
    selects "Pick a direction for me". Each card carries a palette swatch
    row, a serif/sans type sample, a mood blurb, and a real-world refs
    line so the user can scan visually instead of squinting at radio labels. */
-.qf-direction-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 10px;
-  margin-top: 4px;
-}
-.qf-card {
+
+/* 视觉方向选择器 —— 版式与手势逐条取自交付稿 `docs/design/chat-panel-next.html`
+   的第 21 / 22 格（`.opts.mod-visual`）。
+   ------------------------------------------------------------
+   风格这类问题不能用文字选项：「Modern minimal」「Editorial」这种抽象词，
+   用户只能生成完才知道自己选了什么，所以这一格给的是图。
+   默认【叠成一沓】：这是问一句、问完就收走的东西，不该是这一屏最大的一块；
+   叠着仍然说清了「还有几个」。要挨个比较就点右上角铺成网格 —— 那才是需要
+   占屏的时刻，而那一下是你自己要的。 */
+.qf-visual-picker {
   position: relative;
+  container-type: inline-size;
+  display: grid;
+  gap: 6px;
+}
+/* 这一沓的高度：.qf-visual-stack 用它撑开，左右箭头用它对齐垂直中线，
+   两处必须是同一个数，所以提到共同的祖先上。
+   -12 / -8 两个数与稿子一致，四张的旋转角落在下面的 nth-child 上。
+   ------------------------------------------------------------
+   【卡横过来了】(2026-08-27 产品:「卡片可能要改成更适合展示完整图片的尺寸,
+   竖着的展示不全」)。稿子的 152×212 是**竖卡**,而目录素材全是 4:3 横图
+   (96 张逐张读 WebP 头,一张不差 1600×1200)—— 竖卡配 object-fit: cover,
+   左右各切掉 46.4%,一半的构图根本没进画面。
+   画幅统一到素材的 4/3 之后,单张宽度提到 200px:卡矮了一大截(198×148.5),
+   横向的量补回来,整沓仍然只占 194px 高 —— 比原来的 244px 还矮,
+   稿子那句「不该是这一屏最大的一块」照旧成立。 */
+.qf-visual-picker[data-view='fan'] {
+  --qf-fan-h: 194px;
+  --qf-fan-w: 200px;
+  --qf-fan-dx: -12px;
+  --qf-fan-dy: -8px;
+}
+/* 顶栏只管【这一组预览】:换一批和叠放 / 网格切换并排靠右。标题与倒计时仍在
+   卡头里,这里不会长成第二个卡头(稿子 `729fa43ce7:visual-fan.css` 原话)。
+   切换那枚是纯图标不带字 —— 两个图标本身已经把话说完了(四格 = 铺开,
+   两张叠着 = 收起);读屏那句留在 aria-label 上,切换时跟着换。
+   稿子 `.vbar { display:flex; align-items:center; gap: 4px; padding-bottom: 6px }`
+   —— `gap: 4px` 是这一次加的,原来只有两颗中的一颗,没有间距可言。
+   稿子用 `<span class="sp">{flex:1}` 把这一组推到右边,我们用 `justify-content`
+   做同一件事(少一个空节点),两边的落位一致。 */
+.qf-visual-bar {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-inline: 11px;
+}
+/* 稿子 `729fa43ce7:visual-fan.css`:
+     .visual-refresh {
+       flex: none; min-height: 24px; padding-inline: 8px;
+       border-radius: var(--radius-pill);
+       color: var(--text-muted); font-size: var(--t-cap); font-weight: 400;
+       transition: background-color …, color …;
+     }
+     .visual-refresh:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+   —— 稿子给它开了**自己的一档**,不是底栏那几颗 ghost:24px 的矮胶囊、12px / 400。
+   我们这颗是共享 `Button variant="ghost" size="sm"`,它自带 `gap: 8px` /
+   `font-weight: 600` / `padding-block: 4px` / `padding-inline: 11px` / `height: auto`,
+   稿子的 `.visual-refresh` 一条都不设,所以逐条显式撤掉 —— 和旁边 `.qf-visual-switch`
+   同一种写法,连拔特异性的理由都一样(module 的 `.ghost` / `.sm` 也是单类,
+   平手时看谁后加载,那是靠不住的)。
+   `padding-block: 0`:稿子只写了 `padding-inline`,块向留给 UA(1px),而 24px 的
+   `min-height` 无论 0 还是 1 都在撑着 —— 两边渲染高度同为 24px。 */
+.qf-visual-picker .qf-visual-refresh {
+  flex: none;
+  gap: normal;
+  height: auto;
+  min-height: 24px;
+  min-width: auto;
+  padding-block: 0;
+  padding-inline: 8px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-12);
+  font-weight: 400;
   transition:
-    border-color 0.12s var(--ease-out),
-    background 0.12s var(--ease-out),
-    transform 0.06s var(--ease-out);
+    background-color var(--duration-faster) var(--ease-out),
+    color var(--duration-faster) var(--ease-out);
 }
-.qf-card input { display: none; }
-.qf-card:hover { border-color: var(--border-strong); }
-.qf-card:active { transform: translateY(1px); }
-.qf-card-on {
-  border-color: var(--accent, #87ea5c);
-  background: color-mix(in oklch, var(--accent, #87ea5c) 4%, var(--bg));
-  box-shadow: 0 0 0 1px var(--accent, #87ea5c) inset;
+.qf-visual-picker .qf-visual-refresh:hover:not(:disabled) {
+  background: var(--bg-fill-secondary);
+  color: var(--text-strong);
 }
-.qf-card-disabled { cursor: not-allowed; opacity: 0.6; }
-.qf-card-head {
+/* 稿子 `.vswitch { display:grid; place-items:center; width:24px; height:24px;
+   border-radius: var(--radius-sm); color: var(--text-soft) }`。
+   选择器要带上 `.qf-visual-picker` 拔一档特异性:这两颗用的是共享 `Button size="icon"`,
+   它的 module 类 `.icon` / `.ghost` 也是单类,平手时就看谁后加载 —— 那是靠不住的。 */
+/* 稿子 `.btn.mod-ghost { color: var(--text-muted) }` —— 页脚那几颗和意图澄清底栏同一档。
+   带上 `.qf-visual-foot` 拔一档特异性,才压得过共享 Button 的 `.ghost`。 */
+.qf-visual-foot .qf-visual-foot-action {
+  color: var(--text-muted);
+}
+.qf-visual-picker .qf-visual-switch {
+  display: grid;
+  place-items: center;
+  /* 这两颗用的是共享 `Button`,它带着 `gap: 8px` / `font-weight: 500` / `min-width`;
+     稿子的 `.vswitch` / `.vnav-b` 一条都不设,所以要显式撤掉。 */
+  gap: normal;
+  font-weight: 400;
+  width: 24px;
+  min-width: auto;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: var(--font-size-13);
+  color: var(--text-soft);
+}
+.qf-visual-switch svg {
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+}
+/* 叠放态下左右箭头要浮在这一沓上，所以给它们一个共同的定位祖先。 */
+.qf-visual-stage {
+  position: relative;
+  /* The reference `.opts.mod-visual` owns an 11px side gutter. The React
+     picker keeps its footer in a separate row, so apply that gutter to the
+     card stage instead of the whole picker (which would double-pad footer). */
+  margin-inline: 11px;
+}
+/* ---- 铺开：按图【本身的画幅】排，不切图 —— 铺开就是为了挨个比构图。 ---- */
+.qf-visual-picker[data-view='grid'] .qf-visual-stack {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+/* 格子按【图本身的画幅】,不切图 —— 铺开就是为了挨个比构图,把构图切了
+   等于把要比的东西拿走了(稿子原话)。
+   稿子写的 `422 / 560` 是它那份**占位素材**的像素,并且当场交代了下一步:
+   「真素材换进来只要仍是同一画幅,改这一行即可」。真素材已经换进来了 ——
+   目录里 96 张预览图逐张读 WebP 头,**全是 1600×1200**(deck 25 / prototype 26 /
+   document 11 / image 22 / video 12),仍是同一画幅。所以这里做的就是稿子交代的那一步。 */
+.qf-visual-picker[data-view='grid'] .qf-visual-preview {
+  aspect-ratio: 4 / 3;
+}
+/* ---- 叠放：几何取自稿子里那套 image-stack，四个数原样搬 ----
+     x = i × -12px，y = i × -8px，rotate = 0 / -5 / -8 / -11 度，支点在底边中点。
+   居中的是【整沓的外接框】而不是最前面那张：后面三张转出去的角是实打实占
+   地方的，眼睛量的是整块的边界，所以往右补 38px（四张连角横跨 227px，超出
+   前排卡的 75px 全在左边，补一半才能让两侧留白相等）。 */
+.qf-visual-picker[data-view='fan'] .qf-visual-stack {
+  position: relative;
+  height: var(--qf-fan-h);
+}
+.qf-visual-picker[data-view='fan'] .qf-visual-card {
+  position: absolute;
+  /* 顶上留出 41px：第四张往上挪 3 × 8 = 24px，再绕底边中点转 -11°，
+     宽卡的那个远角还会再翘起 17px（200×148.5 的卡实算 40.3px）。
+     稿子的 24px 是按它那张 152×212 竖卡算的「3 × 8」——卡横过来之后
+     翘角变高,照抄 24px 会把最后一张的角切进上面那条视图切换里。
+     左右靠 margin 居中而不是 transform —— transform 那一格归拖拽用。
+     ------------------------------------------------------------
+     居中的是【整沓的外接框】,不是最前面那张:后面三张转出去的角是实打实占
+     地方的,眼睛量的是整块的边界。四张连角横跨 263px(不是 200),超出前排卡的
+     63px 全在左边,所以整体往右补一半(63 / 2 ≈ 32)才能让两侧留白相等。
+     稿子那版是 +38,因为它的竖卡转出去的角更靠左(横跨 227,超出 75)。 */
+  top: 41px;
+  left: 50%;
+  width: var(--qf-fan-w);
+  margin-left: calc(var(--qf-fan-w) / -2 + 32px);
+  transform-origin: bottom center;
+  /* 触屏上这一沓是拖着翻的，别让页面先把手势抢走 */
+  touch-action: none;
+  transition:
+    transform var(--duration-slower) var(--ease-out),
+    border-color var(--duration-faster) var(--ease-out),
+    background-color var(--duration-faster) var(--ease-out);
+}
+/* 【两档都按素材的画幅】。原来叠放态是 5/7 —— 稿子从上游 image-stack 抄来的
+   卡片形状,它自己也承认「叠着的时候切了还说得过去(那是一沓卡片的形状)」。
+   产品 2026-08-27 覆盖了这一条:要的是**看得全**,不是卡片好看
+   (「竖着的展示不全」)。素材是 4:3 横图,所以叠放态也跟着横过来,
+   两档统一到 4/3,一刀不切。 */
+.qf-visual-picker[data-view='fan'] .qf-visual-preview {
+  aspect-ratio: 4 / 3;
+}
+/* 最前面那张是能上手的：光标先说这件事，不用等人试。
+   ------------------------------------------------------------
+   【选满之后这张也点不动了,那就别再摆出能上手的样子】——「最多选 2 项」的上限
+   一到,没被选中的卡拿到 `.qf-visual-card-disabled`,而最前面那张同样可能是其中之一。
+   稿子对点不到的卡给的规矩是**别给反馈**:「它们此刻不可点,给反馈等于骗一下手」。
+   grab 光标是一句「能上手」的承诺,此刻兑现不了,所以把禁用态排除出去,
+   让 `.qf-visual-card-disabled` 的 not-allowed 接上 —— 那条只有 (0,2,0),
+   不排除的话根本压不过这里的 (0,4,0)。 */
+.qf-visual-picker[data-view='fan']
+  .qf-visual-card:nth-child(1):not(.qf-visual-card-disabled) {
+  cursor: grab;
+}
+.qf-visual-picker[data-view='fan'] .qf-visual-card:nth-child(1) {
+  z-index: 4;
+  transform: none;
+}
+.qf-visual-picker[data-view='fan']
+  .qf-visual-card:nth-child(1):not(.qf-visual-card-disabled):active {
+  cursor: grabbing;
+}
+.qf-visual-picker[data-view='fan'] .qf-visual-card:nth-child(2) {
+  z-index: 3;
+  transform: translate(var(--qf-fan-dx), var(--qf-fan-dy)) rotate(-5deg);
+}
+.qf-visual-picker[data-view='fan'] .qf-visual-card:nth-child(3) {
+  z-index: 2;
+  transform: translate(calc(var(--qf-fan-dx) * 2), calc(var(--qf-fan-dy) * 2)) rotate(-8deg);
+}
+.qf-visual-picker[data-view='fan'] .qf-visual-card:nth-child(4) {
+  z-index: 1;
+  transform: translate(calc(var(--qf-fan-dx) * 3), calc(var(--qf-fan-dy) * 3)) rotate(-11deg);
+}
+/* 一批是 6 张(见 `runtime/visual-style-deck.ts`),而稿子的叠放几何只排四层。
+   第 5、6 张收起来 —— 收起而不是留着,是因为它们会精确压在第一张底下。
+   翻一下(箭头 / 拖拽)它们就轮上来;要一次看全 6 张就点右上角铺成网格。 */
+.qf-visual-picker[data-view='fan'] .qf-visual-card:nth-child(n + 5) {
+  display: none;
+}
+/* 只有最上面那张显示方向名和勾选圈 —— 后面几张只露侧边说明「还有几个」。 */
+/* 稿子藏的是整层 `.vmeta`(以及 `.pick`),不是里面那行字 —— 藏错一层,
+   名字那个元素在两边的 display 就对不上 */
+.qf-visual-picker[data-view='fan'] .qf-visual-card:not(:nth-child(1)) .qf-visual-card-meta,
+.qf-visual-picker[data-view='fan'] .qf-visual-card:not(:nth-child(1)) .qf-visual-card-check {
+  display: none;
+}
+/* 【选满之后,点不到的那张不画勾选圈】。
+   ------------------------------------------------------------
+   稿子对压在后面那几张的规矩是:「勾选圈只在最前面那张给:后面几张的右上角本来就
+   压在别人底下,**画一个点不到的控件是骗人**」。到了「最多选 2 项」的上限之后,
+   最前面那张同样点不到 —— 同一条规矩,同一个做法:把那个圈收掉。
+   这就是「选满了」在扇形里的**全部**表达:圈没了、hover 不放大了、光标不再是 grab。
+   三样一起消失,读出来就是「这张现在不归你点」——【一个像素都不用淡】。
+   (刷淡那条路 2026-08-27 已被用户截图否掉:叠着的卡半透明会把背后那张连同面板底
+   一起透出来,整沓糊成一片。见 `tests/components/chat/visual-option-stack-opacity.test.ts`。)
+   选中的那两张不受影响:它们是此刻唯一还能点的卡,点一下就取消 —— 勾必须留着。 */
+.qf-visual-picker[data-view='fan'] .qf-visual-card-disabled .qf-visual-card-check {
+  display: none;
+}
+/* hover 只放大最前面那张,而且只在它**真的能点**的时候 ——
+   稿子:「它们此刻不可点,给反馈等于骗一下手」。 */
+.qf-visual-picker[data-view='fan']
+  .qf-visual-card:nth-child(1):not(.qf-visual-card-disabled):hover {
+  z-index: 5;
+  transform: scale(1.05);
+}
+@media (prefers-reduced-motion: reduce) {
+  .qf-visual-picker[data-view='fan'] .qf-visual-card {
+    transition: none;
+  }
+  .qf-visual-picker[data-view='fan']
+    .qf-visual-card:nth-child(1):not(.qf-visual-card-disabled):hover {
+    transform: none;
+  }
+}
+/* 稿子这条是 `[data-view="fan"] .vpv { aspect-ratio: 5/7 }`(竖卡,不是方卡)。
+   卡横过来之后跟着上面那条一起走 4/3 —— 这一层是卡面的外框,里面那层
+   `.qf-visual-preview` 是图本身,两层的画幅必须是同一个数,
+   差一档就会在卡里留出一条灰边(`.qf-visual-card-preview` 的 --bg-subtle 底)。 */
+.qf-visual-picker[data-view='fan'] .qf-visual-card-preview {
+  aspect-ratio: 4 / 3;
+}
+/*
+ * 左右箭头**距卡的内容边各 11px**,不是贴边(稿子 `.opts.mod-visual .vnav`
+ * 就是 `inset-inline: 11px`)。11px 和「换一批 / 随机」那一行的左右内距是
+ * 同一个数,三者的竖向边界因此对齐;贴边之后这条对齐就没了。
+ *
+ * ⚠️ **这 11px 只能数一遍**(OPEND-2633)。稿子里 `.vnav` 的定位祖先是
+ * `.opts.mod-visual` —— 那是**整张卡宽**的盒子,所以它写 `inset-inline: 11px`
+ * 才正好落在内容边上。我们的定位祖先是 `.qf-visual-stage`,而它上面那条
+ * `margin-inline: 11px` **已经把这条 gutter 吃掉了**;在它里面再写一次 11px,
+ * 同一条 gutter 就被数了两遍,箭头比稿子往里挪 11px,一头扎进卡片区。
+ * 所以这里写 0:相对卡的内容边,总量仍然是稿子的那 11px。
+ *
+ * 竖向同样由 `.qf-visual-stage` 承担(它的高度就是这一沓的高度 `--qf-fan-h`),
+ * 不照搬稿子的 `bottom: 10px; height: var(--fan-h)` —— 那两条是因为稿子把
+ * `.vnav` 挂在更高的 `.opts` 上、要自己把盒子压回这一沓,我们的祖先已经正好
+ * 是这一沓了,再写一遍反而会错开 10px。同一个道理,同一处地方错过两次。
+ *
+ * **不给 z-index**:稿子的 `.vnav` 一条层叠都没写,而 `.vopt` 带 4/3/2/1,
+ * 所以稿子里是**卡片盖在箭头上**。原来这里写 `z-index: 6`,比最前面那张(4)
+ * 和 hover 放大那张(5)都高,反过来成了箭头盖卡片 —— 工单里「卡片看起来被
+ * 裁掉一块」就是这一下。整条不吃指针事件,只有两枚按钮自己吃。
+ */
+.qf-visual-nav {
+  position: absolute;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  inset-block: 0;
+  inset-inline: 0;
+  pointer-events: none;
 }
-.qf-card-title {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
-  color: var(--text);
-  line-height: 1.3;
-}
-.qf-card-pill {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  background: var(--accent, #87ea5c);
-  color: #fff;
-  border-radius: var(--radius-pill);
-  flex-shrink: 0;
-}
-.qf-card-swatches {
-  display: flex;
-  gap: 4px;
-  height: 18px;
-}
-.qf-card-swatch {
-  flex: 1;
-  border-radius: 3px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  min-width: 0;
-}
-.qf-card-types {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 6px 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-.qf-card-type-display {
-  font-size: 28px;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  flex-shrink: 0;
-}
-.qf-card-type-body {
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.3;
-  letter-spacing: -0.005em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.qf-card-mood {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--text-muted);
-}
-.qf-card-refs {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-.qf-card-refs-label {
-  font-family: ui-monospace, 'JetBrains Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
-/* Artifact-aware visual style picker. The deterministic layout previews keep
-   this first frontend iteration local; cloud catalogue images can replace the
-   preview surface without changing the selection component. */
-.qf-visual-picker {
-  container-type: inline-size;
+/* 稿子 `.vnav-b { display:grid; place-items:center; width:26px; height:26px;
+   border-radius:50%; background: var(--bg); border:1px solid var(--border);
+   color: var(--text-muted) }` */
+.qf-visual-picker .qf-visual-nav-button {
   display: grid;
-  gap: 7px;
-}
-.qf-visual-toolbar {
-  position: absolute;
-  top: -6px;
-  right: 0;
-  display: flex;
-  min-height: 28px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-}
-.qf-visual-toolbar-button {
-  width: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  padding: 4px;
-  border-radius: var(--radius-sm);
+  place-items: center;
+  gap: normal;
+  font-weight: 400;
+  width: 26px;
+  min-width: auto;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  font-size: var(--font-size-13);
   color: var(--text-muted);
-  font-size: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-muted);
+  pointer-events: auto;
 }
-.qf-visual-toolbar-button svg {
+/* 铺开之后没有「一沓」可翻，箭头连同它的定位一起退场。 */
+.qf-visual-picker[data-view='grid'] .qf-visual-nav {
+  display: none;
+}
+.qf-visual-picker .qf-visual-nav-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+.qf-visual-nav-button svg {
   flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
 }
-.qf-visual-strip {
-  display: grid;
-  gap: 6px;
-  padding: 2px;
+/* 页脚不铺底色也不画线 —— 它靠【位置】说话，再垫一层灰是拿颜色把位置
+   已经讲过的事重讲一遍。「换一批」靠左顶掉自己的左内距，文字落在和上面
+   问句同一条竖线上；「随机」靠右，挨着下一步。 */
+.qf-visual-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* 稿子 `.cbody > .foot { padding: 0 11px 8px }` —— 底栏自己带左右内距。
+     「下一步」搬进这一行之后,原来卡片底栏(`.question-form-foot`)的那份内距就不在了;
+     不补上,整行会**贴着卡的左右边界**:「换一批」被左边界切掉、「下一步」贴死右边界。 */
+  padding: 0 11px 8px;
 }
+/* 稿子 `.cbody > .foot > .btn:first-child { padding-inline: 0 }` ——
+   左起那个动作(换一批)顶掉自己的左内距,文字直接落在卡的 11px 竖线上,
+   和上面的问句、每张卡左缘同一条线。只收左起这一颗:右边的「随机」要的是
+   和「下一步」之间的距离,不是和卡边界对齐。 */
+.qf-visual-foot > .button:first-child {
+  padding-inline: 0;
+  min-width: auto;
+}
+/* 稿子 `.btn.mod-primary { height: 32px }` —— 底栏那颗主按钮比其它 sm 档高一截。
+   用 QuestionForm 自己的语义类命中；共享 Button 的基础类来自 CSS Module，
+   DOM 上没有全局 `.button`，拿 `.button.primary` 当钩子会让这条规则静默失效。 */
+/* **只写高度**,内距和宽度都不碰 —— 稿子选的就是这个做法,理由写在它自己的注释里:
+   「写死高度而不是加内边距:这是个被指定的数值,以后字号一动,靠 padding 撑出来
+   的高度就跟着漂,写死的 32 不会。」宽度同理:稿子的 `.btn` 一族**一条
+   `min-width` 都没有**,这颗按钮的宽度只由文案决定。
+   曾经这里还有 `min-width: 76px` + `padding-inline: 14px`,理由是「圆角吃掉了
+   `.sm` 那 11px 的余量」「短文案会缩成小圆球」。两条在稿子上一字不差地同样成立
+   (稿子那颗同样是 32px 高的胶囊、同样吃 `.mod-sm` 的 11px、同样要渲染短词),
+   而稿子仍然只写高度 —— 所以那不是稿子漏了,是它选了别的做法。
+   那 14px 也不是「补基底缺的东西」:稿子的底栏按钮是 `.btn.mod-primary.mod-sm`,
+   `.mod-sm { padding: 4px 11px }` 覆盖掉基底 `.btn` 的 `6px 14px`,14px 属于
+   **非 sm 档**。写上去等于把档位改回去,按钮于是又宽又肥。
+   删掉不会塌:共享 `Button` 的 `.sm` 自带 `padding-block: 4px; padding-inline: 11px`,
+   和稿子的 `.btn.mod-sm` 逐格相同。 */
+.question-form .qf-primary-action {
+  height: 32px;
+}
+.qf-visual-foot-gap {
+  flex: 1;
+}
+/* 目录外那个答案的**陈述**(不是控件)。B53 之前它是一颗 `<Button variant="ghost">`,
+   点开画廊弹窗;弹窗退场后降成 `<span>`,于是原来从共享 Button 基底拿到的
+   `align-items` / 字号 / 字重 / `white-space` 要在这里写出来 —— 少一条就会掉回
+   浏览器默认,行高和垂直居中都跟着变。 */
 .qf-visual-custom-summary {
   display: flex;
+  align-items: center;
   width: 100%;
   min-width: 0;
-  min-height: 36px;
+  height: 36px;
   justify-content: flex-start;
   gap: 7px;
   margin-top: 7px;
   padding: 7px 9px;
   color: var(--text);
+  font-size: var(--font-size-14, 14px);
+  font-weight: 500;
+  white-space: nowrap;
 }
 .qf-visual-custom-summary span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 稿子 `.vopt { position:relative; display:flex; flex-direction:column; gap:0; padding:0;
+   overflow:hidden; border:1px solid var(--border); border-radius: var(--radius-lg);
+   background: var(--bg); text-align:left }` */
 .qf-visual-card {
   position: relative;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  /* 这张卡是 `<button>`,得把全局 button 规则塞进来的 flex 三条按稿子归位 ——
+     稿子的 `.vopt` 也是 button,但它那张页面的全局 button 规则不碰 flex,
+     所以量出来是初始值 `normal`。写 `stretch/flex-start` 虽然渲染一样,
+     逐属性比对会一直报差 —— 这里要的是**和稿子同一个计算值**。 */
+  align-items: normal;
+  justify-content: normal;
+  gap: 0;
+  padding: 0;
+  text-align: left;
   width: 100%;
-  min-width: 0;
+  /* 稿子的 `.vopt` 不设 min-width(计算值 auto);写 0 是我们为共享 Button 打的补丁 */
+  min-width: auto;
   flex: none;
-  aspect-ratio: 4 / 3;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-panel);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
   cursor: pointer;
   scroll-snap-align: start;
   transition:
-    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    border-color var(--duration-faster) var(--ease-out),
+    background-color var(--duration-faster) var(--ease-out);
 }
-.qf-visual-dialog {
-  width: min(760px, calc(100vw - 32px));
-  max-height: min(760px, calc(100vh - 32px));
+/* 稿子 `.vpv`:方形预览区,自己是白底、装勾和缩略图,底部一条渐隐压住名字 */
+.qf-visual-card-preview {
+  position: relative;
+  display: block;
+  aspect-ratio: 1 / 1;
+  background: var(--bg-subtle);
   overflow: hidden;
 }
-.qf-visual-dialog .qf-visual-dialog-head {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-.qf-visual-dialog-title {
-  min-width: 0;
-  text-align: left;
-  text-wrap: balance;
-}
-.qf-visual-dialog-close {
-  width: 36px;
-  min-width: 36px;
-  min-height: 36px;
-  padding: 6px;
-}
-.qf-visual-dialog-body {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow-y: auto;
-}
-.qf-visual-dialog-tabs {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  overflow-x: auto;
-}
-.qf-visual-dialog-tab {
-  position: relative;
-  flex: 0 0 auto;
-  min-height: 34px;
-  padding: 6px 10px;
-  border-radius: 0;
-  color: var(--text-muted);
-}
-.qf-visual-dialog-tab::after {
+.qf-visual-card-preview::after {
+  content: "";
   position: absolute;
-  right: 8px;
-  bottom: 0;
-  left: 8px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: transparent;
-  content: '';
-}
-.qf-visual-dialog-tab-active {
-  color: var(--text);
-}
-.qf-visual-dialog-tab-active::after {
-  background: var(--accent);
-}
-.qf-visual-dialog-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-.qf-visual-dialog-grid .qf-visual-card {
-  width: 100%;
-  min-width: 0;
-}
-.qf-visual-custom {
-  display: grid;
-  gap: 7px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-.qf-visual-custom-label {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 550;
-  line-height: 1.3;
-}
-.qf-visual-dialog-foot {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-}
-@media (max-width: 640px) {
-  .qf-visual-dialog-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-.qf-visual-card input {
-  position: absolute;
-  opacity: 0;
+  inset-inline: 0;
+  inset-block-end: 0;
+  height: 52px;
+  background: linear-gradient(
+    to top,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 62%, transparent) 45%,
+    transparent 100%
+  );
   pointer-events: none;
+}
+/* 稿子 `.vmeta`:名字压在预览区左下角 */
+.qf-visual-card-meta {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-block-end: 0;
+  display: block;
+  padding: 7px 9px;
+  z-index: 1;
 }
 .qf-visual-card:hover {
   border-color: var(--border-strong);
-  transform: translateY(-1px);
 }
-.qf-visual-card:active {
-  transform: scale(0.96);
-}
-.qf-visual-card:has(input:focus-visible) {
+.qf-visual-card:focus-visible {
   outline: 2px solid var(--accent-soft);
   outline-offset: 2px;
 }
+/* 【不设「推荐」标】。这张卡存在的前提是「风格这种事文字说不清，所以给你看
+   图」—— 既然承认了要靠眼睛判断，再替人先挑一个，等于把刚交出去的判断权
+   收回来一半。有推荐标的时候，四张图不再是平等的四张。 */
 .qf-visual-card-on {
-  border-color: var(--accent);
-  box-shadow:
-    0 0 0 2px var(--accent) inset,
-    0 2px 8px rgba(0, 0, 0, 0.12);
+  border-color: color-mix(in srgb, var(--brand) 82%, var(--border-strong));
+  background: color-mix(in srgb, var(--brand-soft) 88%, var(--bg-panel));
 }
-.qf-visual-card-recommended::after {
-  position: absolute;
-  top: 7px;
-  left: 7px;
-  width: 5px;
-  height: 5px;
-  border: 2px solid rgba(255, 255, 255, 0.88);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  content: '';
-}
-.qf-visual-card-disabled {
+/* 到了「最多选 N 项」的上限之后，没被选中的卡拿到这个类。
+   ------------------------------------------------------------
+   【叠放态一律不许淡】。这一沓是四张互相压着的卡：半透明的卡会把它背后那张
+   连同面板底一起透出来，四张叠在一起就糊成一片 —— 用户 2026-08-27 截到的
+   「为啥这个卡片好多是透明的」就是这么来的（用左右箭头翻两下，最前面那张也是
+   disabled，于是整沓全变半透明）。
+   稿子里 `.vopt` 没有任何一档是淡的：无头 Chrome 实测那一沓四层的 `opacity`
+   全是 `1`、底色全是 `rgb(255, 255, 255)`。后面几张之所以「只露出一道边」，
+   靠的是被前面那张【实实在在挡住】，不是靠透明度。稿子对点不到的那几张给的
+   规矩恰恰相反 —— 是别给反馈：「它们此刻不可点，给反馈等于骗一下手」。
+
+   所以叠放态只改光标，卡面按稿子还原。还得把底色和边框**抢回来**：全局
+   `button:disabled`（`styles/primitives.css`）是 `button:disabled`，特异性
+   (0,1,1)，压过只写了一个类的 `.qf-visual-card`(0,1,0)，会把卡刷成
+   `--bg-subtle` 的灰片。这里写成两个类 (0,2,0) 才压得回去。 */
+.qf-visual-card.qf-visual-card-disabled {
   cursor: not-allowed;
+  background: var(--bg);
+  border-color: var(--border);
+}
+/* 铺开成网格时四张【不重叠】，淡化只是把一张平摊的卡压暗，不会透出别的东西 ——
+   和固定选项那一路的 `.qf-chip-disabled` 同一个做法，保留。 */
+.qf-visual-picker[data-view='grid'] .qf-visual-card-disabled {
   opacity: 0.52;
 }
-.qf-visual-card-disabled:hover,
-.qf-visual-card-disabled:active {
-  transform: none;
-}
 .qf-visual-more {
-  display: grid;
-  width: 100%;
-  flex: none;
-  aspect-ratio: 4 / 3;
-  min-height: 0;
-  place-items: center;
-  border: 1px dashed var(--border-strong);
-  border-radius: 10px;
-  color: var(--text-muted);
-  font-size: 16px;
   font-variant-numeric: tabular-nums;
-  scroll-snap-align: start;
 }
 .qf-visual-preview {
   --visual-bg: #eef0ed;
@@ -1437,15 +2430,28 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
   aspect-ratio: 4 / 3;
   overflow: hidden;
   background: var(--visual-bg);
 }
+/* 【压名字的兜底渐变不在这一层】。稿子里那层是 `.vpv::after` —— 对应我们的
+   `.qf-visual-card-preview::after`（见上面），而 `.qf-visual-preview` 是嵌在
+   它里面的预览面本身（稿子叫 `.mini`，那上面没有 ::after）。
+   这里原来又铺了一条一模一样的 52px `to top, var(--bg)` 渐变，两层叠在一起把
+   每张卡下沿朝 --bg 洗了两遍，方向名于是压在一张发虚的图上。删掉这一层，
+   兜底只留外面那一层。 */
+/* 没有预览图时的占位面：一块纯灰压住图片该占的范围，不画内容 —— 这是占位不是
+   效果图。四张会长得一样，「能不能比出风格差异」要等真图；能判断的是版式、
+   勾选和「帮我决定」的出口。素材到位后换掉这一层即可。 */
+.qf-visual-preview-blank {
+  background: var(--bg-muted);
+}
 .qf-visual-preview-image {
+  position: absolute;
   display: block;
   width: 100%;
   height: 100%;
+  inset: 0;
   object-fit: cover;
 }
 .qf-visual-preview[data-style='editorial'] {
@@ -1659,46 +2665,70 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   gap: 4px;
 }
 .qf-preview-content-list i:last-child { width: 76%; }
+/* 选中标记：光靠一圈边框，几张图并排时不够跳 —— 边框只在卡的外沿，眼睛落在
+   图上时看不到，所以在图内角上放一个明确的勾选圈。
+   用【圆形】而不是方形：圆 = 单选是这份稿子里已经立下的规矩（见 .qf-chip）。
+   未选中也画空圈，不是选中才冒出来 —— 空圈在告诉人「这几张是可选的」。
+   带底和一圈描边，是为了压住底下任意深浅的预览图。 */
 .qf-visual-card-check {
   position: absolute;
   top: 6px;
-  right: 6px;
   z-index: 2;
   display: grid;
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   place-items: center;
-  border: 2px solid rgba(255, 255, 255, 0.9);
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: white;
-}
-.qf-visual-card-name {
-  position: absolute;
-  right: 5px;
-  bottom: 5px;
-  left: 5px;
-  z-index: 1;
-  overflow: hidden;
-  padding: 3px 5px;
-  border-radius: 5px;
-  background: rgba(18, 18, 18, 0.72);
-  color: white;
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 1.2;
-  opacity: 0;
-  text-overflow: ellipsis;
-  transform: translateY(2px);
+  border: 1.5px solid var(--border-strong);
+  /* 稿子 `.vpv .pick { border-radius: 50% }` —— 正方形上 50% 和 999px 画出来一样,
+     但逐属性比对认的是值本身 */
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: var(--shadow-sm);
+  color: var(--brand-text);
+  inset-inline-end: 6px;
   transition:
-    opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    background-color var(--duration-faster) var(--ease-out),
+    border-color var(--duration-faster) var(--ease-out);
+}
+.qf-visual-card-check svg {
+  opacity: 0;
+}
+.qf-visual-card:hover .qf-visual-card-check {
+  border-color: var(--text-soft);
+}
+/* 落勾用整张 --tick-img（盘底 + 挖空的勾），和多选那一枚是同一张，所以
+   深浅两套主题不用各挑一个勾色。origin 掰成 border-box、尺寸给 120%：
+   contain 只能把圆画到 18 × 20/24 = 15，比这个 18 的圈小一圈。 */
+.qf-visual-card-on .qf-visual-card-check {
+  border-color: transparent;
+  background: var(--tick-img) center / 120% no-repeat;
+  background-origin: border-box;
+  box-shadow: none;
+}
+.qf-visual-card-on .qf-visual-card-check svg {
+  display: none;
+}
+/* 方向名压在图上，不再单开一条白底 —— 那条白底是卡里的第二块地：图已经占满
+   了卡，底下再挂一条，卡就成了「图 + 一行说明」两段式，叠成一沓时四张的白边
+   还会连成一片横条。名字本来就是这张图的标注，贴着左下角说完就够了。 */
+/* 稿子 `.vt` —— 定位交给外面那层 `.vmeta`,这一层只管排版 */
+.qf-visual-card-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  inset-block-end: 0;
+  inset-inline-start: 0;
+  line-height: 1.3;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.qf-visual-card:hover .qf-visual-card-name,
 .qf-visual-card-on .qf-visual-card-name {
-  opacity: 1;
-  transform: translateY(0);
+  color: var(--brand-text);
 }
 /* Terminal-blocked strategy task: the inline form is disabled and this strip
    explains why (gate visible text, or the generic localized notice). */
@@ -1937,11 +2967,6 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   padding: 16px 18px;
 }
 .questions-panel-body .question-form-title {
-  font-size: 16px;
-}
-.questions-panel-body .question-form-icon {
-  width: 30px;
-  height: 30px;
   font-size: 16px;
 }
 .questions-panel-foot {
@@ -2976,20 +4001,6 @@ button.filter-pill:hover:not(:disabled) .filter-pill-count,
 }
 .skeleton-block + .skeleton-block { margin-top: 6px; }
 
-.design-card-skeleton { cursor: default; pointer-events: none; }
-.design-card-skeleton .design-card-thumb { background: none; }
-.design-card-skeleton .design-card-thumb::before,
-.design-card-skeleton .design-card-thumb::after { display: none; }
-.design-card-skeleton .design-card-thumb {
-  background-image: linear-gradient(
-    90deg,
-    var(--bg-subtle) 0%,
-    var(--bg-muted) 50%,
-    var(--bg-subtle) 100%
-  );
-  background-size: 800px 100%;
-  animation: shimmer 1.4s linear infinite;
-}
 
 .centered-loader {
   display: flex;
@@ -3176,9 +4187,6 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   line-height: 1;
   margin-left: 6px;
 }
-.chat-history-menu-head .chat-history-new {
-  margin-left: auto;
-}
 .chat-history-search {
   display: flex;
   align-items: center;
@@ -3241,32 +4249,9 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--bg-subtle);
   color: var(--text);
 }
-.chat-history-new {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  height: 22px;
-  padding: 0 7px;
-  font-size: 12px;
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-subtle) 84%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
-  color: var(--text-muted);
-  transition:
-    background-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 160ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.chat-history-new:hover {
-  background: var(--bg-muted);
-  border-color: color-mix(in srgb, var(--text-faint) 28%, var(--border));
-  color: var(--text);
-}
-.chat-history-new:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
+/* `.chat-history-new` 那一组(下拉里的「新建」按钮)已随按钮删除 ——
+   产品裁决 2026-09-03:新建入口只留面板头那枚图标键,见
+   `components/ChatPane.tsx` 的 `.chat-history-menu-head` 处注释。 */
 .chat-history-list {
   display: flex;
   flex-direction: column;
@@ -3393,17 +4378,46 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 /* ============================================================
    Scroll-to-bottom button (chat)
    ============================================================ */
-.chat-log-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; display: flex; }
-.chat-log-wrap .chat-log { flex: 1; }
-.chat-jump-btn {
+.chat-log-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chat-log-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  /* The log is the sole in-flow owner of this viewport. Keep it stretched to
+     both logical edges with an explicit grid cell while the rail / jump /
+     Plan controls remain positioned overlays. */
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+}
+.chat-log-viewport > .chat-log {
+  grid-area: 1 / 1;
+  min-height: 0;
+  min-width: 0;
+}
+/* Jump 与 Plan 严格复用同一个底部浮层位。这个宿主是两者唯一的水平定位
+   基准:左右取 composer 同一份对称内缩,子项不再各算一遍 center。 */
+.chat-bottom-float-slot {
   position: absolute;
+  left: var(--chat-composer-inline-inset, 16px);
+  right: var(--chat-composer-inline-inset, 16px);
   bottom: 12px;
-  /* Margin-based centering (instead of `transform: translateX(-50%)`)
-   * so the slide-in / slide-out transition can animate `transform`
-   * without overwriting a centering translate. */
-  left: 0;
-  right: 0;
-  margin: 0 auto;
+  z-index: 6;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.chat-bottom-float-slot.has-plan-pill {
+  z-index: 9;
+}
+.chat-jump-btn {
   width: max-content;
   display: inline-flex;
   align-items: center;
@@ -3418,7 +4432,8 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   font-size: 12px;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  z-index: 6;
+  /* 定位与水平中线由 `.chat-bottom-float-slot` 唯一拥有;按钮只恢复自己的
+   * 命中,这样它和 Plan 不可能因为两套定位公式再次漂开。 */
   /* Default = hidden. The slide tucks below and scales down slightly to
    * read as folding into the composer. Strong ease-out curve
    * (cubic-bezier(0.23, 1, 0.32, 1)) replaces both built-in `ease` and
@@ -3474,11 +4489,17 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   align-items: flex-start;
   gap: 6px;
 }
+/* 稿子 `.fb { display: flex; align-items: center; gap: 2px }` —— 两条要照抄:
+   ① **没有内距**。我们的 `padding: 4px 0` 把整行从 26px 顶成 34px,行内每一件东西
+      (勾、状态词、四枚按钮、时间)都跟着下沉 4px。
+   ② **gap 是 2px 不是 6px**。稿子里按钮之间那 2px 就是这条;状态词与第一枚按钮之间
+      的 6px 是 `.fin { margin-inline-end: 4px }` 再加这 2px 凑出来的,而不是把 gap
+      调宽 —— 调宽 gap 会把按钮组整体右移。 */
 .assistant-footer {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0;
+  gap: 2px;
+  padding: 0;
   background: none;
   border: none;
   border-radius: 0;
@@ -3486,15 +4507,22 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   color: var(--text-faint);
   width: fit-content;
   opacity: 0;
-  transition: opacity 150ms var(--ease-out);
+  transition: opacity 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
+/*
+ * OPEND-2542: the final reply is always actionable; settled history reveals
+ * the same controls on message hover or keyboard focus. Opacity deliberately
+ * preserves the row's footprint, so reveal never shifts transcript content.
+ * Keep this as the only ownership point — a former `.app` duplicate in
+ * routines.css overrode the component rule through specificity/import order.
+ */
 .msg.assistant:hover .assistant-footer,
 .msg.assistant:focus-within .assistant-footer,
-.assistant-footer[data-streaming="true"],
-.assistant-footer[data-last="true"] { opacity: 1; }
-@media (hover: none) {
-  .assistant-footer { opacity: 1; }
+.assistant-footer[data-last="true"] {
+  opacity: 1;
+  transition-duration: 200ms;
 }
+
 .assistant-footer .dot {
   width: 5px;
   height: 5px;
@@ -3505,10 +4533,29 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   background: var(--green);
   animation: pulse 1.2s ease-in-out infinite;
 }
+/* 稿子 `729fa43ce7:docs/design/chat-panel/src/components.css:2753`:
+     .fb .fin { display: inline-flex; align-items: center; gap: 5px;
+                margin-inline-end: 4px; font-size: var(--font-size-14);
+                color: var(--brand-text); }
+   —— 勾在字里面,所以这一层自己排版,不再靠外面那层 flex 的 gap。
+
+   ⚠️ 字号是 **14**,不是 12。上一版稿子(`361b78253e`)这里写的是 `var(--t-cap)`,
+   新稿把它整档提到 `--font-size-14` —— 状态词比正文(13)高一档,而不是低一档。
+   我们一直停在 12,于是「已完成」比它下面的正文还小,这正是用户报的那一条。
+   同一次改动里稿子把勾也从 13 提到 16(`.fb .fin > .tick`,那条在 theater.css)。
+
+   字重稿子**一条都不写**,所以它吃面板的排版基线 500
+   (`components/chat/ChatRoot.module.css` 的 `.vars` / `.root`)。这里显式写 500
+   而不是删掉声明:删掉在没挂接缝的上下文里会掉回全站 body 的 400,而
+   「跟基线同重」这条不变量得有人守得住(见 `PlanPill.module.css` 同款处理)。 */
 .assistant-footer .assistant-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-inline-end: 4px;
   font-weight: 500;
   color: var(--text-faint);
-  font-size: 12px;
+  font-size: var(--font-size-14);
 }
 .assistant-footer .assistant-stats {
   font-variant-numeric: tabular-nums;
@@ -3543,4 +4590,221 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
 .assistant-action-btn:hover {
   color: var(--text);
   background: var(--bg-subtle);
+}
+
+/* ── 「已确认」陈述块(稿子 `.answered`,#23 / #24 / #25)───────────────────
+   回答完就收成一条陈述,不再把整张表单锁住置灰。规则逐条照抄**最新稿**
+   `361b78253e:components.css:2064-2106`:
+     .answered { --answered-radius: 16px; --answered-padding: 12px;
+                 width: fit-content; max-width:100%; padding: var(--answered-padding);
+                 background: var(--bg-panel); border-radius: var(--answered-radius);
+                 font-size: var(--t-mini); line-height: var(--lh-row); }
+     .answered.mod-visual-answer { --answered-radius: var(--radius-lg); }
+     .answered .k   { margin-bottom:3px; font-size: var(--t-lead); color: var(--brand-text); }
+     .answered .ab  { color: var(--text); }
+     .answered b    { color: var(--text-strong); font-weight: inherit; }
+     .answered .al  { margin:0; padding:0; list-style:none; }
+     .answered .ak  { margin-inline-end:6px; color: var(--text-soft); font-weight:500; }
+     .answered .av  { display:block; margin-top:5px; width:57px; aspect-ratio:1/1; … }
+   `--t-mini` / `--lh-row` 是稿子自己的别名(= font-size-12 / 1.5),我们这边没有,
+   照抄会静默失效 —— 所以映射成我们的 token。
+
+   稿子给底色的理由:「已确认结果统一加浅灰底…16px 圆角只属于答案块,不改变
+   其它卡片的圆角;12px 内边距让文字避开圆角」。这三条原来一条都没落地,
+   那块在本地 runtime 上是纯白无底(用户指认)。
+   两个数走自定义属性而不是各写一条规则 —— 变体只需要换属性,不用重写整块;
+   16px 用产品 token `--radius-2xl`(= --radius-2xlarge),不写裸值。 */
+.answered {
+  --answered-radius: var(--radius-2xl);
+  --answered-padding: 12px;
+  width: fit-content;
+  max-width: 100%;
+  padding: var(--answered-padding);
+  background: var(--bg-panel);
+  border-radius: var(--answered-radius);
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+}
+/* 稿子:视觉方向答案带缩略图,圆角降到内容卡同档的 12px(我们的 `--radius-lg`)。 */
+.answered.mod-visual-answer {
+  --answered-radius: var(--radius-lg);
+}
+/* 「已确认」那个词比块里的正文高一档(稿子 `--t-lead` = 我们的 `--font-size-14`)。
+   最新稿 `361b78253e:2081` 才补上这条字号,09-01 的交付稿 `8015870095:2124` 还没有 —— 它是整块唯一
+   一个标题性的词,和 12px 的答案正文同号时读起来像另一条答案。 */
+.answered .k {
+  margin-bottom: 3px;
+  font-size: var(--font-size-14);
+  color: var(--brand-text);
+}
+.answered .ab {
+  color: var(--text);
+}
+.answered b {
+  color: var(--text-strong);
+  font-weight: inherit;
+}
+.answered .al {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.answered .al li {
+  color: var(--text-strong);
+}
+.answered .al li + li {
+  margin-top: 2px;
+}
+/* 每条前面的重点词。稿子写死 `font-weight: 500`(`361b78253e:2099`;`853da24ea5:2098` /
+   `8015870095:2142` 同值,三版没分叉)—— 它和答案的分层靠**颜色**(`--text-soft` vs
+   `--text-strong`),不靠字重,所以这一格跟基线同档、不往下压。 */
+.answered .ak {
+  margin-inline-end: 6px;
+  color: var(--text-soft);
+  font-weight: 500;
+}
+.answered .ab,
+.answered .al li {
+  overflow-wrap: anywhere;
+}
+.answered .av {
+  display: block;
+  margin-top: 5px;
+  width: 57px;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+/* 颜色那条已确认答案(交付稿 `.answered .color-answer`):一枚色块 + 规范化后的 Hex。
+     .answered .ab.mod-value { display:flex; align-items:center }
+     .answered .color-answer { display:inline-flex; align-items:center; gap:6px }
+     .answered .color-answer i { width:13px; height:13px; border-radius:50%;
+                                 background: var(--answer-color); box-shadow: 0 0 0 1px var(--border) } */
+.answered .ab.mod-value {
+  display: flex;
+  align-items: center;
+}
+.answered .ab.mod-value > .ak {
+  flex: none;
+}
+.answered .ab.mod-value > :last-child {
+  min-width: 0;
+}
+.answered .color-answer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.answered .color-answer i {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  border-radius: var(--radius-circular);
+  background: var(--answer-color);
+  box-shadow: 0 0 0 1px var(--border);
+}
+.answered .color-answer b {
+  font-family: var(--mono);
+}
+
+/* ── 「自己填」(交付稿 `.opt.mod-own`)────────────────────────────────
+   它是选项列表里的**最后一项**,输入框内嵌在这一项里 —— 不是列表之后另起一块折叠。
+   规则逐条照抄:
+     .opt .own    { flex:1; min-width:0; display:block; }
+     .opt .own-l  { display:block; font-weight:600; }
+     .opt .own-ta { display:block; width:100%; margin-top:6px; padding:2px 0 5px;
+                    border:0; border-bottom:1px solid var(--border); border-radius:0; background:none; }
+     .opt.mod-own          { color: var(--text-muted); }
+     .opt.mod-own.is-on    { color: var(--select-ink); }
+     .opt.mod-own:hover    { color: var(--text-strong); } */
+.qf-chip-other {
+  align-items: flex-start;
+  color: var(--text-muted);
+}
+.qf-chip-other:hover { color: var(--text-strong); }
+.qf-chip-other.qf-chip-on { color: var(--select-ink); }
+/* 那枚勾选框:稿子是静态 <span class="box">,产品里换成真按钮以便键盘操作。
+   外观仍旧走 .qf-chip input / .qf-chip-other::before 那套(同其余选项一模一样)。 */
+.qf-chip-own-box {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  margin: 1px 0 0;
+  padding: 0;
+  appearance: none;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+}
+/* 稿子 `.opt:hover .box { border-color: var(--text-soft) }`(L1485)在「自己填」这一路
+   的对应条。稿子里它 (0,3,0) 稳输给下面那条的 (0,5,0) —— 选中的勾在 hover 时**不会**
+   被描回一圈灰边。留着它是照稿子:那条 hover 在稿子里同样管着所有 `.box`。 */
+.qf-chip-other:hover .qf-chip-own-box { border-color: var(--text-soft); }
+/* 稿子 `.opts.mod-multi .opt.is-on .box`(L1511)/ `.opts.mod-single …`(L1493)。
+   固定选项那一路上一轮已经把祖先补回去了(`.qf-options .qf-chip.qf-chip-on
+   .qf-chip-box`,(0,4,0));「自己填」展开态换了一颗盒子(稿子是静态
+   `<span class="box">`,产品换成真 `<button>` 以便键盘操作),这一对当时没跟着改:
+     `.qf-chip-other:hover .qf-chip-own-box`  → 2 类 + 1 伪类 = (0,3,0)
+     `.qf-chip-on .qf-chip-own-box`           → 2 类        = (0,2,0)
+   选中那条**低一档**,于是鼠标一扫,勾外面就描出一圈 --text-soft 的灰边 ——
+   踩坑 25 的同一类事故(搬稿子时省掉祖先,层叠就反了),处方也一样:祖先补回去,
+   并且要**严格大于**(0,4,0) > (0,3,0),不打平靠源码顺序。
+   `.qf-options` 这层祖先是稳的:renderOwnChoice 的四处调用点全都包在 `.qf-options` 里。 */
+.qf-options .qf-chip.qf-chip-on .qf-chip-own-box {
+  border-color: transparent;
+  background: var(--tick-img) center / 120% no-repeat;
+  background-origin: border-box;
+}
+.qf-chip-own-box:disabled { cursor: default; }
+.qf-own {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+/* 稿子 `.opt .own-l { display: block; font-weight: 500 }`(`361b78253e:1489`)。
+   600 出自**上一版**稿子 `1bbdce0b06:1524` —— 那一版的 `body` 还没有字重、
+   全局基线是 400,这句标题得自己加粗才跳得出来。基线抬到 500 之后它跟着降到 500,
+   和旁边的选项行同档。
+   ------------------------------------------------------------------
+   两态因此不再需要分开写:稿子的 `.own-l` 只存在于展开态(收起态是个没有类名的
+   裸 `<span>`,继承 `body` 的 500),我们两态复用同一个 `qf-own-label`,
+   现在两边要的都是 500,祖先 `.qf-own` 那层作用域就没有活干了,合成一条。 */
+.qf-own-label {
+  display: block;
+  font-weight: 500;
+}
+.qf-own-input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 2px 0 5px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: none;
+  color: var(--text-strong);
+  /* 稿子 `.opt .own-ta { font-family: inherit; font-size: var(--t-mini);
+     font-weight: 500; line-height: var(--lh-row) }`(`361b78253e:1497-1503`)——
+     四条都点名,不写 `font: inherit`。 */
+  font-family: inherit;
+  font-size: var(--font-size-12);
+  line-height: 1.5;
+  /* 字重必须**说出来**。上一版稿子 `1bbdce0b06:1532-1538` 这条不写字重,靠的是
+     「浏览器不给 textarea 继承字重」+ 那时的全局基线 400;基线抬到 500 之后,
+     交付稿同一条补上了 `font-weight: 500`。我们这边全局
+     `input, textarea, select { font: inherit }`(`styles/primitives.css`)
+     把继承打开了,不写就会顺着选项行往下继承 —— 那是"碰巧对",不是等价。 */
+  font-weight: 500;
+  resize: none;
+  field-sizing: content;
+}
+.qf-own-input::placeholder { color: var(--text-soft); }
+.qf-own-input:focus::placeholder { color: transparent; }
+.qf-own-input:focus {
+  outline: none;
+  border-bottom-color: var(--border-strong);
 }

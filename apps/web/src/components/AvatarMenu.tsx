@@ -59,6 +59,17 @@ interface Props {
   /** Fired when the dropdown transitions from closed to open. */
   onOpen?: () => void;
   /**
+   * A monotonically advancing counter that asks this popover to open.
+   *
+   * The error card's 'switch model' action has to reach in from outside — the
+   * delivered design says it "opens the model picker directly"
+   * (`error-ux-design.md:130`, S08). This is a one-way request, not control of
+   * the open state: the popover still opens and closes on its own the rest of
+   * the time, and a re-render that does not advance the counter does nothing,
+   * so a menu the user just dismissed does not spring back.
+   */
+  openSignal?: number;
+  /**
    * Project detail supplies its daemon-authoritative persisted workspace
    * scope. Other surfaces omit it and continue using the ambient navigation
    * workspace.
@@ -85,6 +96,7 @@ export function AvatarMenu({
   placement = 'down',
   onOpen,
   projectWorkspaceScope,
+  openSignal,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -122,6 +134,21 @@ export function AvatarMenu({
       return !v;
     });
   }
+  /*
+   * Honour an outside open request. Keyed on the counter's value rather than
+   * its truthiness so that repeated requests all land, and guarded by the last
+   * value seen so an ordinary re-render never reopens a dismissed menu.
+   */
+  const lastOpenSignalRef = useRef(openSignal);
+  useEffect(() => {
+    if (openSignal === undefined) return;
+    if (lastOpenSignalRef.current === openSignal) return;
+    lastOpenSignalRef.current = openSignal;
+    setOpen((wasOpen) => {
+      if (!wasOpen) onOpen?.();
+      return true;
+    });
+  }, [openSignal, onOpen]);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -445,6 +472,7 @@ export function AvatarMenu({
         ref={triggerRef}
         type="button"
         className="avatar-agent-trigger"
+        data-testid="avatar-agent-trigger"
         onClick={toggleOpen}
         aria-haspopup="menu"
         aria-expanded={open}
