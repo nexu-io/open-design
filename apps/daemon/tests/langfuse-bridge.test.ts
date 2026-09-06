@@ -138,6 +138,7 @@ describe('langfuse-bridge deliverable syntax telemetry', () => {
         maxAttempts: 3,
         checker: 'web-syntax@1',
         candidateHash: 'content-free-not-exported',
+        mode: 'host_safe_fixer',
       },
       deliverableSyntaxValidation: {
         schema: 'open-design.deliverable-syntax-tool/v1',
@@ -159,6 +160,9 @@ describe('langfuse-bridge deliverable syntax telemetry', () => {
           repairPassedAtMs: 1_650,
           repairWindowDurationMs: 650,
           repairToDeliveryDurationMs: 900,
+          repairExecutor: 'host_safe_fixer',
+          repairDurationMs: 8,
+          appliedRepairRules: ['insert_missing_closing_delimiter'],
         },
       },
     }))).toEqual({
@@ -172,6 +176,9 @@ describe('langfuse-bridge deliverable syntax telemetry', () => {
       checkerDurationMs: 16,
       repairWindowDurationMs: 650,
       repairToDeliveryDurationMs: 900,
+      repairExecutor: 'host_safe_fixer',
+      repairDurationMs: 8,
+      appliedRepairRules: ['insert_missing_closing_delimiter'],
       repairableCheckCount: 2,
       initialDiagnosticCount: 1,
       latestDiagnosticCount: 0,

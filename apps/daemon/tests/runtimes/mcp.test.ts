@@ -71,7 +71,6 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
     'live_artifacts_refresh',
     'connectors_list',
     'connectors_execute',
-    'deliverable_syntax_check',
   ]);
 
   for (const tool of tools) {
@@ -97,38 +96,6 @@ test('MCP-capable agents can discover equivalent live artifact and connector too
   assert.deepEqual(Object.keys(updateProperties).sort(), ['artifactId', 'input', 'provenanceJson', 'templateHtml']);
   assert.deepEqual(Object.keys(connectorsListProperties).sort(), ['useCase']);
 
-  const deliverableSyntaxCheckTool = tools.find((tool) => tool.name === 'deliverable_syntax_check')!;
-  assert.deepEqual(deliverableSyntaxCheckTool.inputSchema, {
-    type: 'object',
-    additionalProperties: false,
-    properties: {},
-  });
-});
-
-test('MCP deliverable syntax check forwards an empty POST to daemon tools', async () => {
-  process.env.OD_DAEMON_URL = 'http://127.0.0.1:17456/base';
-  process.env.OD_TOOL_TOKEN = 'test-tool-token';
-  const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
-  globalThis.fetch = async (url, init) => {
-    calls.push({ url: String(url), init });
-    return new Response(JSON.stringify({ status: 'pass', diagnostics: [] }), { status: 200 });
-  };
-
-  const response = await handleLiveArtifactsMcpRequest({
-    jsonrpc: '2.0',
-    id: 6,
-    method: 'tools/call',
-    params: { name: 'deliverable_syntax_check', arguments: {} },
-  }) as { error?: unknown };
-
-  assert.equal(response.error, undefined);
-  assert.equal(calls.length, 1);
-  const call = calls[0];
-  assert.ok(call);
-  assert.equal(call.url, 'http://127.0.0.1:17456/base/api/tools/deliverable-syntax/check');
-  assert.equal(call.init?.method, 'POST');
-  assert.equal(call.init?.body, undefined);
-  assert.equal((call.init?.headers as Record<string, string>).Authorization, 'Bearer test-tool-token');
 });
 
 test('live artifact MCP connector list forwards daily digest use case to daemon tools', async () => {

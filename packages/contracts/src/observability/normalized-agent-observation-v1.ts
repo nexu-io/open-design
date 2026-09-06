@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { DELIVERABLE_SYNTAX_SAFE_FIX_RULES } from '../api/deliverable-syntax.js';
 import { StrategyInputStageV2Schema } from '../plugins/strategy-v2.js';
 
 export const NORMALIZED_AGENT_OBSERVATION_V1_SCHEMA =
@@ -687,6 +688,11 @@ export const SafeDeliverableSyntaxTelemetryV1Schema = z.object({
   checkerDurationMs: z.number().nonnegative().nullable(),
   repairWindowDurationMs: z.number().nonnegative().nullable(),
   repairToDeliveryDurationMs: z.number().nonnegative().nullable(),
+  repairExecutor: z.enum(['agent', 'host_safe_fixer']).nullable().optional(),
+  repairDurationMs: z.number().nonnegative().nullable().optional(),
+  appliedRepairRules: z.array(z.enum(DELIVERABLE_SYNTAX_SAFE_FIX_RULES)).max(
+    DELIVERABLE_SYNTAX_SAFE_FIX_RULES.length,
+  ).optional(),
   repairableCheckCount: z.number().int().nonnegative(),
   initialDiagnosticCount: z.number().int().nonnegative().nullable(),
   latestDiagnosticCount: z.number().int().nonnegative().nullable(),

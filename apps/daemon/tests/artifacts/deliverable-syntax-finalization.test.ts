@@ -78,9 +78,68 @@ describe('deliverable syntax finalization', () => {
       processTreeQuiescent: true,
     })).resolves.toMatchObject({
       action: 'fail',
+      reason: 'no_safe_fix',
       location: expect.stringMatching(/^index\.html:1:/u),
       validation: { status: 'repairable', source: 'run_finalizer' },
     });
+    await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8'))
+      .resolves.toBe('<!doctype html><script>const broken = ;</script>');
+  });
+
+  it('repairs in memory, verifies the complete candidate, then commits once', async () => {
+    const projectRoot = await htmlFixture(
+      '<!doctype html><script>function ready() { const items = [1, 2;</script>',
+    );
+
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html',
+      projectRoot,
+      entryFile: 'index.html',
+      processTreeQuiescent: true,
+    })).resolves.toMatchObject({
+      action: 'allow',
+      validation: {
+        status: 'pass',
+        source: 'run_finalizer',
+        repairState: {
+          mode: 'host_safe_fixer',
+          attempt: 2,
+          maxAttempts: 3,
+        },
+        metrics: {
+          checkCount: 3,
+          repairableCheckCount: 2,
+          repairExecutor: 'host_safe_fixer',
+          appliedRepairRules: ['insert_missing_closing_delimiter'],
+        },
+      },
+    });
+    await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8'))
+      .resolves.toBe(
+        '<!doctype html><script>function ready() { const items = [1, 2];}</script>',
+      );
+  });
+
+  it('does not publish any staged bytes when three patches are insufficient', async () => {
+    const source = '<!doctype html><script>function ready() { if (true) { const items = [[1, 2;</script>';
+    const projectRoot = await htmlFixture(source);
+
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html',
+      projectRoot,
+      entryFile: 'index.html',
+      processTreeQuiescent: true,
+    })).resolves.toMatchObject({
+      action: 'fail',
+      reason: 'attempt_limit_reached',
+      validation: {
+        status: 'repairable',
+        repairState: { attempt: 3, maxAttempts: 3, mode: 'host_safe_fixer' },
+        metrics: { checkCount: 4, repairableCheckCount: 4 },
+      },
+    });
+    await expect(fs.readFile(path.join(projectRoot, 'index.html'), 'utf8'))
+      .resolves.toBe(source);
   });
 
   it('skips non-Web deliverables before touching the filesystem', async () => {

@@ -887,6 +887,18 @@ export function deliverableSyntaxFlatMetadata(
     deliverable_syntax_repair_window_duration_ms: syntax.repairWindowDurationMs,
     deliverable_syntax_repair_to_delivery_duration_ms:
       syntax.repairToDeliveryDurationMs,
+    ...(syntax.repairExecutor !== undefined
+      ? { deliverable_syntax_repair_executor: syntax.repairExecutor }
+      : {}),
+    ...(syntax.repairDurationMs !== undefined
+      ? { deliverable_syntax_repair_duration_ms: syntax.repairDurationMs }
+      : {}),
+    ...(syntax.appliedRepairRules !== undefined
+      ? {
+          deliverable_syntax_applied_repair_rules:
+            syntax.appliedRepairRules.join(','),
+        }
+      : {}),
     deliverable_syntax_repairable_check_count: syntax.repairableCheckCount,
     deliverable_syntax_initial_diagnostic_count: syntax.initialDiagnosticCount,
     deliverable_syntax_latest_diagnostic_count: syntax.latestDiagnosticCount,
@@ -922,6 +934,9 @@ export function taskDeliverableSyntaxTelemetry(
       ? []
       : [syntax.repairToDeliveryDurationMs]
   ));
+  const repairDurations = syntaxes.flatMap((syntax) => (
+    syntax.repairDurationMs == null ? [] : [syntax.repairDurationMs]
+  ));
   const initialDiagnostics = syntaxes.flatMap((syntax) => (
     syntax.initialDiagnosticCount === null ? [] : [syntax.initialDiagnosticCount]
   ));
@@ -943,6 +958,12 @@ export function taskDeliverableSyntaxTelemetry(
     repairToDeliveryDurationMs: repairToDeliveryDurations.length > 0
       ? repairToDeliveryDurations.reduce((sum, duration) => sum + duration, 0)
       : null,
+    repairDurationMs: repairDurations.length > 0
+      ? repairDurations.reduce((sum, duration) => sum + duration, 0)
+      : null,
+    appliedRepairRules: [...new Set(
+      syntaxes.flatMap((syntax) => syntax.appliedRepairRules ?? []),
+    )],
     repairableCheckCount: syntaxes.reduce(
       (sum, syntax) => sum + syntax.repairableCheckCount,
       0,
