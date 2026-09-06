@@ -2011,6 +2011,63 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   line-height: 1;
   white-space: nowrap;
 }
+/* Shortcut into the per-agent "Advanced: proxy & custom paths" disclosure,
+   shown on every installed agent card that declares CLI env fields.
+
+   Deliberately NOT a second pill. The card's action row already owns one
+   affordance (.agent-card-test-btn), and Test performs work while this only
+   navigates; giving them equal weight would read as two peer actions and blunt
+   Test. So this renders as quiet inline text — no fill, no border — that sits
+   to Test's left and recedes until hovered.
+
+   It stays a real <button> (the shared ghost primitive) rather than an <a>:
+   there is no href, it drives an in-page disclosure, and keeping button
+   semantics is what makes keyboard / AT activation work. Scoping under
+   .agent-card-installed (0-2-0) outranks the primitive's own .button module
+   class (0-1-0), whose height/padding would otherwise fight this rule
+   depending on stylesheet injection order. */
+.agent-card-installed .agent-card-cli-env-link {
+  align-self: center;
+  flex-shrink: 0;
+  gap: 3px;
+  /* 8px here + .agent-card-test-btn's 4px left margin = a 12px gutter, enough
+     that the quiet link reads as separate from the Test button rather than as
+     its label. */
+  margin: 0 8px 0 0;
+  padding: 0 4px;
+  height: auto;
+  min-width: auto;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.agent-card-installed .agent-card-cli-env-link:hover:not(:disabled) {
+  background: none;
+  color: var(--accent-strong);
+}
+/* Underline the label only. The label and the chevron are separate flex items,
+   so a decoration on the control itself paints two segments with the flex gap
+   unpainted between them, which reads as a broken rule rather than a link. */
+.agent-card-installed
+  .agent-card-cli-env-link:hover:not(:disabled)
+  .agent-card-cli-env-link__label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* Configured: something in the panel is set, so the link carries a little more
+   weight. --accent is #353535, a neutral, so in this monochrome palette the
+   signal has to be text darkness rather than hue. */
+.agent-card-installed .agent-card-cli-env-link--configured {
+  color: var(--accent);
+  font-weight: 600;
+}
+.agent-card-cli-env-link__chevron {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.75;
+}
 .agent-card-name-divider,
 .agent-card-tagline {
   color: var(--text-muted);

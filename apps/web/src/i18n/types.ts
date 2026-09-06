@@ -569,6 +569,8 @@ export interface Dict {
   'settings.modelPickerLiveCatalogOnlyHint': string;
   'settings.modelPickerFallbackHint': string;
   'settings.cliEnvTitle': string;
+  'settings.cliEnvShortcut': string;
+  'settings.cliEnvShortcutConfigured': string;
   'settings.cliEnvHint': string;
   'settings.cliEnvClaudeConfigDir': string;
   'settings.cliEnvClaudeBaseUrl': string;
