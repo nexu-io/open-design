@@ -1,0 +1,58 @@
+/* Agenti v praxi design tokens.
+ * Copy this :root block into generated artifacts before component CSS,
+ * then reference values through var(--token-name).
+ */
+
+:root {
+  --bg: #f7f4ef;
+  --surface: #ffffff;
+  --surface-warm: #fffaf0;
+  --fg: #111315;
+  --fg-2: #252a2f;
+  --meta: #6b7280;
+  --border: #d8dee6;
+  --border-soft: #e8edf3;
+
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-contrast: #ffffff;
+
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+  --focus-ring: rgba(37, 99, 235, 0.35);
+
+  --font-display: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", SFMono-Regular, Consolas, monospace;
+
+  --font-size-xs: 12px;
+  --font-size-sm: 13px;
+  --font-size-md: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 28px;
+  --font-size-2xl: 40px;
+
+  --line-height-tight: 1.15;
+  --line-height-body: 1.56;
+  --tracking-display: 0;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --shadow-subtle: 0 1px 2px rgba(17, 19, 21, 0.06), 0 12px 28px rgba(17, 19, 21, 0.06);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-base: 180ms;
+}
