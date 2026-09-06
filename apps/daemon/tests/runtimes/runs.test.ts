@@ -1780,6 +1780,122 @@ describe('run event log persistence', () => {
     });
   });
 
+  // OPEND-2629: `GET /api/runs?projectId` is what the Home entry rail folds
+  // into one status per project. After a restart nothing is in memory, so the
+  // project-scoped list has to be rebuilt from durable history — every
+  // persisted run of the queried project, and only that project's runs.
+  describe('project-scoped list after restart', () => {
+    it('lists every persisted run of the project without loading other projects', () => {
+      const before = createRunsWithLog(tmpDir);
+      const failed = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(failed, 'failed', 1, null);
+      const succeeded = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(succeeded, 'succeeded', 0, null);
+      const other = before.create({ projectId: 'p2', conversationId: 'c2' });
+      before.finish(other, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      const listed = restarted.list({ projectId: 'p1' });
+      expect(listed.map((run) => run.id).sort()).toEqual([failed.id, succeeded.id].sort());
+      expect(listed.map((run) => run.status).sort()).toEqual(['failed', 'succeeded']);
+      expect(listed.every((run) => run.projectId === 'p1')).toBe(true);
+
+      // Hydration is scoped to the queried project: p2 stays on disk until
+      // something asks for it, so a project-scoped list never loads the
+      // whole run history.
+      expect(restarted.list().map((run) => run.id)).not.toContain(other.id);
+      expect(restarted.get(other.id)).toMatchObject({ id: other.id, projectId: 'p2' });
+    });
+
+    it('applies conversation and status filters on top of the hydrated project history', () => {
+      const before = createRunsWithLog(tmpDir);
+      const failed = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(failed, 'failed', 1, null);
+      const succeeded = before.create({ projectId: 'p1', conversationId: 'c2' });
+      before.finish(succeeded, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      expect(
+        restarted.list({ projectId: 'p1', status: 'succeeded' }).map((run) => run.id),
+      ).toEqual([succeeded.id]);
+      expect(
+        restarted.list({ projectId: 'p1', conversationId: 'c1' }).map((run) => run.id),
+      ).toEqual([failed.id]);
+      expect(restarted.list({ projectId: 'p1', status: 'active' })).toEqual([]);
+    });
+
+    it('keeps the persisted workspace scope and runtime on hydrated project runs', () => {
+      const workspaceScope = {
+        schemaVersion: 1,
+        projectId: 'p-team',
+        workspaceId: 'workspace-a',
+        source: 'persisted_project_binding',
+      };
+      const before = createRunsWithLog(tmpDir);
+      const teamRun = before.create({
+        projectId: 'p-team',
+        conversationId: 'c-team',
+        agentId: 'amr',
+        workspaceScope,
+      });
+      before.finish(teamRun, 'succeeded', 0, null);
+      const localRun = before.create({
+        projectId: 'p-team',
+        conversationId: 'c-team',
+        agentId: 'claude',
+        workspaceScope: null,
+      });
+      before.finish(localRun, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      const listed = restarted.list({ projectId: 'p-team' });
+      expect(listed).toHaveLength(2);
+      // The route's visibility filters key off these two fields, so they must
+      // come back exactly as persisted for the same authorization decision.
+      expect(listed.find((run) => run.id === teamRun.id)).toMatchObject({
+        agentId: 'amr',
+        workspaceScope,
+      });
+      expect(listed.find((run) => run.id === localRun.id)).toMatchObject({
+        agentId: 'claude',
+        workspaceScope: null,
+      });
+      expect(restarted.list({ projectId: 'p-other' })).toEqual([]);
+    });
+
+    it('lists runs created after the restart alongside hydrated history and forgets dropped runs', () => {
+      const before = createRunsWithLog(tmpDir);
+      const persisted = before.create({ projectId: 'p1', conversationId: 'c1' });
+      before.finish(persisted, 'succeeded', 0, null);
+
+      const restarted = createRunsWithLog(tmpDir);
+      const fresh = restarted.create({ projectId: 'p1', conversationId: 'c1' });
+      restarted.finish(fresh, 'succeeded', 0, null);
+      const dropped = restarted.create({ projectId: 'p1', conversationId: 'c1' });
+      restarted.drop(dropped);
+
+      expect(restarted.list({ projectId: 'p1' }).map((run) => run.id).sort()).toEqual(
+        [persisted.id, fresh.id].sort(),
+      );
+    });
+
+    it('re-lists a terminal run the in-memory TTL already evicted', () => {
+      vi.useFakeTimers();
+      try {
+        const runs = createRunsWithLog(tmpDir);
+        const run = runs.create({ projectId: 'p1', conversationId: 'c1' });
+        runs.finish(run, 'succeeded', 0, null);
+        vi.advanceTimersByTime(60_001);
+        // The unscoped list is a view of what is in memory and still forgets
+        // the run after the TTL; the project-scoped list is the durable one.
+        expect(runs.list().map((entry) => entry.id)).not.toContain(run.id);
+        expect(runs.list({ projectId: 'p1' }).map((entry) => entry.id)).toEqual([run.id]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   it('retains the cancellation cause when hydrating durable status after restart', async () => {
     const beforeRestart = createRunsWithLog(tmpDir);
     const canceled = beforeRestart.create({ projectId: 'p1' });

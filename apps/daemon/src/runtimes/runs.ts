@@ -707,6 +707,28 @@ export function createChatRunService({
   const runs = new Map();
   const runIdsByClientRequestId = new Map();
   const runIdsByPluginWorkflowId = new Map();
+  // Every run id ever persisted or created for a project, whether or not the
+  // run object is currently in `runs`. This is the index a project-scoped
+  // `list()` completes itself from; see `hydrateProjectRuns`.
+  const runIdsByProjectId = new Map();
+
+  const indexRunProject = (projectId, runId) => {
+    if (typeof projectId !== 'string' || !projectId) return;
+    if (typeof runId !== 'string' || !runId) return;
+    let ids = runIdsByProjectId.get(projectId);
+    if (!ids) {
+      ids = new Set();
+      runIdsByProjectId.set(projectId, ids);
+    }
+    ids.add(runId);
+  };
+
+  const unindexRunProject = (projectId, runId) => {
+    const ids = runIdsByProjectId.get(projectId);
+    if (!ids) return;
+    ids.delete(runId);
+    if (ids.size === 0) runIdsByProjectId.delete(projectId);
+  };
 
   const finalizeTerminalLocally = (run, status, terminalAt) => {
     if (!onTerminal) return;
@@ -733,6 +755,7 @@ export function createChatRunService({
         const statePath = path.join(runsLogDir, entry.name, 'state.json');
         const state = readDurableRunState(statePath);
         if (!state) continue;
+        indexRunProject(state.projectId, state.id);
         if (
           typeof state.clientRequestId === 'string'
           && state.clientRequestId
@@ -834,6 +857,31 @@ export function createChatRunService({
     };
     runs.set(id, run);
     return run;
+  };
+
+  /**
+   * Bring every persisted run of `projectId` into `runs`.
+   *
+   * Invariant: a project-scoped run list is complete with respect to persisted
+   * history. The in-memory map only ever holds what this process created or
+   * happened to hydrate by id, so after a daemon restart (or after the terminal
+   * TTL evicted a run) a project's newest terminal run can be missing while an
+   * older one is present, and every consumer that folds the list into one
+   * status per project — `GET /api/runs?projectId`, the Home entry rail, the
+   * `od run list` CLI — then reports the wrong outcome. Hydration is scoped to
+   * the one project being listed so listing never loads the whole run history.
+   *
+   * A run whose durable state can no longer be read (dropped, or the journal
+   * is gone) is forgotten from the index so it is not re-read on every call.
+   */
+  const hydrateProjectRuns = (projectId) => {
+    if (!runsLogDir) return;
+    const ids = runIdsByProjectId.get(projectId);
+    if (!ids) return;
+    for (const id of [...ids]) {
+      if (runs.has(id)) continue;
+      if (!hydrateDurableRun(id)) unindexRunProject(projectId, id);
+    }
   };
 
   const create = (meta = {}) => {
@@ -987,6 +1035,7 @@ export function createChatRunService({
       run.workspaceScope = meta.workspaceScope ?? null;
     }
     runs.set(run.id, run);
+    indexRunProject(run.projectId, run.id);
     if (run.clientRequestId) runIdsByClientRequestId.set(run.clientRequestId, run.id);
     if (
       run.externalPluginAnalytics?.externalPluginId === OPEN_DESIGN_PLUGIN_ID
@@ -1580,13 +1629,16 @@ export function createChatRunService({
     });
   };
 
-  const list = ({ projectId, conversationId, status } = {}) => Array.from(runs.values()).filter((run) => {
-    if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
-    if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
-    if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
-    if (typeof status === 'string' && status) return run.status === status;
-    return true;
-  });
+  const list = ({ projectId, conversationId, status } = {}) => {
+    if (typeof projectId === 'string' && projectId) hydrateProjectRuns(projectId);
+    return Array.from(runs.values()).filter((run) => {
+      if (typeof projectId === 'string' && projectId && run.projectId !== projectId) return false;
+      if (typeof conversationId === 'string' && conversationId && run.conversationId !== conversationId) return false;
+      if (status === 'active') return !TERMINAL_RUN_STATUSES.has(run.status);
+      if (typeof status === 'string' && status) return run.status === status;
+      return true;
+    });
+  };
 
   const childHasExited = (child) => !child || child.exitCode !== null || child.signalCode !== null;
 
@@ -2014,6 +2066,7 @@ export function createChatRunService({
       try { finalize(); } catch { /* best-effort */ }
     }
     runs.delete(run.id);
+    unindexRunProject(run.projectId, run.id);
     if (
       run.clientRequestId
       && runIdsByClientRequestId.get(run.clientRequestId) === run.id
