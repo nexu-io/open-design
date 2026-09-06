@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * Serializers for the derived style system. Given the DesignTokens (or the
  * upstream SeedToken) this module emits the three portable artifacts a

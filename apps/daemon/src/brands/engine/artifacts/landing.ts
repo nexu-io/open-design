@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * landing — a long, single-goal marketing page that follows the project's
  * content-structure playbook (docs/content-structures/landing-page.md) to the
@@ -204,7 +203,7 @@ function productMock(brand: Brand): string {
 /** Pull a usable adjective for headline math, lowercased. */
 function adjective(brand: Brand, i: number, fallback: string): string {
   const list = brand.voice.adjectives.map((a) => a.trim().toLowerCase()).filter(Boolean);
-  return list.length ? list[i % list.length] : fallback;
+  return list.length ? list[i % list.length]! : fallback;
 }
 
 /** Hero headline — the value-prop formula `help {who} {do} {result}`. Prefer a

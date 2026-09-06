@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * artifacts/_shared — the bits every artifact (or 2+ of them) needs: the HTML
  * document shell, the brand-font resolver, the derived-copy helpers (tagline /
@@ -180,7 +179,7 @@ export function pillarList(brand: Brand): string[] {
  */
 export function splitPillar(pillar: string): { title: string; body?: string } {
   const m = pillar.match(/^(.{2,60}?)\s*(?:—|–|:|·)\s+(.{12,})$/);
-  if (m) return { title: cap(m[1].trim()), body: cap(m[2].trim()) };
+  if (m) return { title: cap(m[1]!.trim()), body: cap(m[2]!.trim()) };
   return { title: cap(pillar) };
 }
 
@@ -205,7 +204,7 @@ export function featureCards(brand: Brand): Array<{ title: string; body: string 
   const out: Array<{ title: string; body: string }> = [];
   for (let i = 0; i < 6; i++) {
     if (pillars[i]) {
-      const split = splitPillar(pillars[i]);
+      const split = splitPillar(pillars[i]!);
       const adj = adjectives[i % Math.max(1, adjectives.length)];
       out.push({
         title: split.title,
@@ -213,10 +212,10 @@ export function featureCards(brand: Brand): Array<{ title: string; body: string 
           split.body ??
           (adj
             ? `${cap(adj)} by design — and built into every surface ${brand.name} ships.`
-            : FEATURE_FALLBACKS[i].body),
+            : FEATURE_FALLBACKS[i]!.body),
       });
     } else {
-      out.push(FEATURE_FALLBACKS[i]);
+      out.push(FEATURE_FALLBACKS[i]!);
     }
   }
   return out;
