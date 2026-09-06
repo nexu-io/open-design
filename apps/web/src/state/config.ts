@@ -273,6 +273,23 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     preferredModels: ['deepseek/deepseek-v3.1', 'deepseek/deepseek-r1'],
   },
   {
+    label: 'Novita AI',
+    protocol: 'openai',
+    baseUrl: 'https://api.novita.ai/openai',
+    preferredModels: [
+      'deepseek/deepseek-v4-pro',
+      'minimax/minimax-m3',
+      'qwen/qwen3.8-max',
+      'zai-org/glm-5.2',
+      'moonshotai/kimi-k3',
+      'openai/gpt-oss-120b',
+    ],
+    apiKeyConsoleLink: {
+      host: 'novita.ai',
+      url: 'https://novita.ai/settings/key-management?utm_source=open_design&utm_medium=provider_preset&utm_campaign=novita_byok',
+    },
+  },
+  {
     label: 'NVIDIA',
     protocol: 'openai',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
@@ -520,6 +537,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
     providerLabel: 'SiliconFlow (Global)',
   },
   { id: 'ppio', title: 'PPIO', providerLabel: 'PPIO' },
+  { id: 'novita', title: 'Novita AI', providerLabel: 'Novita AI' },
   { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
