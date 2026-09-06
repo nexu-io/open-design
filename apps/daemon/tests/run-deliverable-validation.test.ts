@@ -5,6 +5,14 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { validateRunDeliverable } from '../src/run-deliverable-validation.js';
+import {
+  diffRunArtifacts,
+  snapshotProjectArtifacts,
+} from '../src/run-artifact-fs.js';
+import {
+  createRunSideEffectLedger,
+  recordRunSideEffectEvent,
+} from '../src/runtimes/run-lifecycle-analytics.js';
 
 const temporaryRoots: string[] = [];
 
@@ -206,6 +214,249 @@ describe('run deliverable validation', () => {
         validation: 'type_mismatch',
         entryFile: 'index.html',
         artifactKind: 'html',
+      });
+    });
+  });
+
+  describe('export-only artifact validation', () => {
+    it('accepts a touched export artifact with a complete manifest when the prototype entry is stale', async () => {
+      const fixture = await projectFixture({
+        'fitcv-settings-ui-prototype.html': '<!doctype html><title>Stale prototype</title>',
+        'fitcv-design-system-export.md': '# Design System Export',
+        'fitcv-design-system-export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'fitcv-design-system-export.md',
+          entry: 'fitcv-design-system-export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md', 'html', 'pdf', 'zip'],
+          metadata: {
+            task: 'final-design-export-curation',
+            source: 'fitcv-settings-ui-prototype.html',
+          },
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['fitcv-design-system-export.md'],
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'fitcv-settings-ui-prototype.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'fitcv-design-system-export.md',
+        artifactKind: 'text',
+      });
+    });
+
+    it('still uses projectMetadata.entryFile when the prototype entry is touched', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Updated prototype</title>',
+        'export.md': '# Export',
+        'export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'export.md',
+          entry: 'export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md'],
+          metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 2,
+          touchedPaths: ['index.html', 'export.md'],
+          projectMetadata: {
+            kind: 'prototype',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'index.html',
+        artifactKind: 'html',
+      });
+    });
+
+    it('rejects when neither the prototype entry nor any export artifact was touched', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Old entry</title>',
+        'notes.txt': 'unrelated output',
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['notes.txt'],
+          projectMetadata: {
+            kind: 'prototype',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'entry_not_touched',
+        entryFile: 'index.html',
+      });
+    });
+
+    it('rejects an export artifact whose manifest status is not complete', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Stale prototype</title>',
+        'export.md': '# Streaming Export',
+        'export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'export.md',
+          entry: 'export.md',
+          renderer: 'markdown',
+          status: 'streaming',
+          exports: ['md'],
+          metadata: {},
+        }),
+      });
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: 1,
+          touchedPaths: ['export.md'],
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: false,
+        validation: 'entry_not_touched',
+        entryFile: 'index.html',
+      });
+    });
+
+    it('integrates with diffRunArtifacts for export-only manifest creation', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Old prototype</title>',
+      });
+      const projectRoot = path.join(fixture.projectsRoot, fixture.projectId);
+      const before = snapshotProjectArtifacts(projectRoot);
+
+      // Simulate writing a markdown export deliverable with companion manifest
+      await fs.writeFile(
+        path.join(projectRoot, 'design-export.md'),
+        '# Design Export',
+        'utf8',
+      );
+      await fs.writeFile(
+        path.join(projectRoot, 'design-export.md.artifact.json'),
+        JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'design-export.md',
+          entry: 'design-export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md'],
+          metadata: {
+            task: 'export',
+          },
+        }),
+        'utf8',
+      );
+
+      const after = snapshotProjectArtifacts(projectRoot);
+      const diff = diffRunArtifacts(before, after);
+
+      expect(diff.touched).toBeGreaterThanOrEqual(1);
+      expect(diff.touchedPaths).toContain(path.join(projectRoot, 'design-export.md'));
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: diff.touched,
+          touchedPaths: diff.touchedPaths,
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'design-export.md',
+        artifactKind: 'text',
+      });
+    });
+
+    it('promotes export artifact when finalization relies on tool-stream create_artifact fallback', async () => {
+      const fixture = await projectFixture({
+        'index.html': '<!doctype html><title>Old prototype</title>',
+        'design-export.md': '# Design Export',
+        'design-export.md.artifact.json': JSON.stringify({
+          version: 1,
+          kind: 'markdown-document',
+          title: 'design-export.md',
+          entry: 'design-export.md',
+          renderer: 'markdown',
+          status: 'complete',
+          exports: ['md'],
+          metadata: {
+            task: 'export',
+          },
+        }),
+      });
+
+      // Simulate ledger tracking MCP-qualified mcp__open-design__create_artifact tool-use with { name: 'design-export.md' }
+      const ledger = createRunSideEffectLedger();
+      recordRunSideEffectEvent(ledger, 'agent', {
+        type: 'tool_use',
+        id: 'tool-call-1',
+        name: 'mcp__open-design__create_artifact',
+        input: { name: 'design-export.md' },
+      });
+      recordRunSideEffectEvent(ledger, 'agent', {
+        type: 'tool_result',
+        tool_use_id: 'tool-call-1',
+        is_error: false,
+      });
+
+      expect(ledger.artifactPaths.has('design-export.md')).toBe(true);
+
+      const fallbackPaths = Array.from(ledger.artifactPaths);
+
+      await expect(
+        validateRunDeliverable({
+          ...fixture,
+          runStatus: 'succeeded',
+          artifactCount: ledger.artifactPaths.size,
+          touchedPaths: fallbackPaths,
+          projectMetadata: {
+            kind: 'other',
+            entryFile: 'index.html',
+          },
+        }),
+      ).resolves.toMatchObject({
+        valid: true,
+        validation: 'valid',
+        entryFile: 'design-export.md',
+        artifactKind: 'text',
       });
     });
   });

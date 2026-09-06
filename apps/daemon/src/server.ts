@@ -11117,12 +11117,24 @@ export async function startServer({
       if (run.artifactOutcome) return run.artifactOutcome;
 
       const artifactBaseline = runArtifactBaselines.take(run.id);
-      const fallbackOutcome = () => ({
-        artifactCount: runArtifactCountForRun(run),
-        designSystemCreated: runDesignSystemCreatedForRun(run),
-        previewModuleCount: runPreviewModuleCountForRun(run),
-        filesWritten: runFilesWrittenForRun(run),
-      });
+      const fallbackOutcome = () => {
+        if (run?.sideEffectLedger?.artifactPaths) {
+          run.artifactPaths = Array.from(run.sideEffectLedger.artifactPaths)
+            .map((filePath) => filePath.replaceAll('\\', '/'))
+            .filter((filePath) =>
+              filePath.length > 0 &&
+              filePath !== '..' &&
+              !filePath.startsWith('../') &&
+              !path.isAbsolute(filePath),
+            );
+        }
+        return {
+          artifactCount: runArtifactCountForRun(run),
+          designSystemCreated: runDesignSystemCreatedForRun(run),
+          previewModuleCount: runPreviewModuleCountForRun(run),
+          filesWritten: runFilesWrittenForRun(run),
+        };
+      };
       let outcome;
       if (!artifactBaseline || artifactBaseline.contended) {
         outcome = fallbackOutcome();
