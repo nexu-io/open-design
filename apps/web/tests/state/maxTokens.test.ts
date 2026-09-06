@@ -43,6 +43,44 @@ describe('modelMaxTokensDefault', () => {
     expect(modelMaxTokensDefault('definitely-not-a-real-model-x9z')).toBe(FALLBACK_MAX_TOKENS);
     expect(FALLBACK_MAX_TOKENS).toBe(8192);
   });
+
+  it('drops OVERRIDES entries for retired Ollama Cloud models', () => {
+    // These ids are no longer served by Ollama Cloud (verified against
+    // GET https://ollama.com/api/tags on 2026-08-04), so any OVERRIDES cap
+    // for them is a dead entry that would shadow the LiteLLM/fallback value
+    // for a stale selection. The value must come from LiteLLM data or the
+    // unknown-model fallback — never from a hand-authored cloud override.
+    const retiredCloudModels = [
+      'cogito-2.1:671b',
+      'deepseek-v3.2',
+      'devstral-2:123b',
+      'devstral-small-2:24b',
+      'gemini-3-flash-preview',
+      'gemma3:4b',
+      'gemma3:12b',
+      'glm-4.6',
+      'glm-5',
+      'kimi-k2:1t',
+      'kimi-k2-thinking',
+      'kimi-k2.5',
+      'minimax-m2',
+      'minimax-m2.1',
+      'minimax-m2.5',
+      'ministral-3:3b',
+      'ministral-3:8b',
+      'ministral-3:14b',
+      'qwen3-coder:480b',
+      'qwen3-coder-next',
+      'qwen3-next:80b',
+      'qwen3-vl:235b',
+      'qwen3-vl:235b-instruct',
+      'rnj-1:8b',
+    ];
+    const litellm = litellmData.models as Record<string, number>;
+    for (const model of retiredCloudModels) {
+      expect(modelMaxTokensDefault(model)).toBe(litellm[model] ?? FALLBACK_MAX_TOKENS);
+    }
+  });
 });
 
 describe('effectiveMaxTokens', () => {
