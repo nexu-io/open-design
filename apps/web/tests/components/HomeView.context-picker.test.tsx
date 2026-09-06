@@ -674,6 +674,20 @@ describe('HomeView context picker', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
+      // These cases render HomeView with an active Workspace context, so the
+      // reference-project picker reads the workspace-scoped catalog. The
+      // unscoped `/api/projects` route only ever serves unbound projects
+      // (OPEND-2370), which is why it cannot stand in for this one.
+      if (typeof url === 'string' && url.startsWith('/api/workspaces/workspace-a/projects')) {
+        return new Response(JSON.stringify({
+          projects: [
+            { project: referenceProject, workspaceId: 'workspace-a', visibility: 'personal' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (typeof url === 'string' && url === '/api/projects') {
         return new Response(JSON.stringify({ projects: [referenceProject] }), {
           status: 200,
@@ -758,6 +772,20 @@ describe('HomeView context picker', () => {
       }
       if (typeof url === 'string' && url === '/api/mcp/servers') {
         return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // These cases render HomeView with an active Workspace context, so the
+      // reference-project picker reads the workspace-scoped catalog. The
+      // unscoped `/api/projects` route only ever serves unbound projects
+      // (OPEND-2370), which is why it cannot stand in for this one.
+      if (typeof url === 'string' && url.startsWith('/api/workspaces/workspace-a/projects')) {
+        return new Response(JSON.stringify({
+          projects: [
+            { project: referenceProject, workspaceId: 'workspace-a', visibility: 'personal' },
+          ],
+        }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
