@@ -11,6 +11,7 @@ import type {
   Conversation,
   ProjectFile,
 } from '../../types';
+import type { SettingsSection } from '../SettingsDialog';
 import type { ChatSessionMode, WorkspaceCollabContext } from '@open-design/contracts';
 import type { ChatSendMeta } from '../ChatComposer';
 import { useConversationChat } from './useConversationChat';
@@ -88,6 +89,7 @@ interface Props {
   onRenameConversation?: (id: string, title: string) => void;
   onSessionModeChange?: (id: string, mode: ChatSessionMode) => void;
   onNewConversation?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
   /** Live ProjectView state for the primary conversation when this tab mirrors it. */
   activeConversationChat?: ActiveConversationChatState;
   /** Forward produced-file / tool-card open requests to the workspace. */
@@ -114,6 +116,7 @@ export function SideChatTab({
   onRenameConversation,
   onSessionModeChange,
   onNewConversation,
+  onOpenSettings,
   activeConversationChat,
   onRequestOpenFile,
 }: Props) {
@@ -175,6 +178,7 @@ export function SideChatTab({
           onSelectConversation={onSelectConversation}
           onDeleteConversation={onDeleteConversation}
           onNewConversation={onNewConversation}
+          onOpenSettings={onOpenSettings}
           researchAvailable={config.mode === 'daemon'}
           config={config}
         />

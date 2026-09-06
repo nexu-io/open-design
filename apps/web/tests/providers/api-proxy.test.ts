@@ -339,6 +339,61 @@ describe('buildProxyMessages', () => {
   });
 });
 
+describe('streamProxyEndpoint error classification', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('forwards the daemon code + failure classification onto the thrown Error', async () => {
+    // A BYOK proxy `error` frame carrying the daemon-stamped classification
+    // (#3408 §5) must surface `code` / `userAction` / `failureCategory` on the
+    // Error so the chat layer can drive the switch-model CTA instead of a bare
+    // Retry. Without this the BYOK path dropped them.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                'event: error\n' +
+                  'data: {"message":"Upstream error: 400","error":{"code":"UPSTREAM_UNAVAILABLE","message":"Upstream error: 400","failure_category":"model_unavailable","user_action":"switch_model"}}\n\n',
+              ),
+            );
+            controller.close();
+          },
+        }),
+      }),
+    );
+
+    let captured: (Error & { code?: string; userAction?: string; failureCategory?: string }) | null =
+      null;
+    await streamProxyEndpoint(
+      '/api/proxy/openai/stream',
+      { apiKey: 'k', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-x' } as any,
+      'System prompt',
+      [userMessage('hi', [])],
+      new AbortController().signal,
+      {
+        onDelta: vi.fn(),
+        onDone: vi.fn(),
+        onError: (err) => {
+          captured = err as typeof captured;
+        },
+      },
+      { projectId: 'project-1' },
+    );
+
+    expect(captured).toBeInstanceOf(Error);
+    expect(captured!.message).toBe('Upstream error: 400');
+    expect(captured!.code).toBe('UPSTREAM_UNAVAILABLE');
+    expect(captured!.failureCategory).toBe('model_unavailable');
+    expect(captured!.userAction).toBe('switch_model');
+  });
+});
+
 function userMessage(
   content: string,
   attachments: NonNullable<ChatMessage['attachments']>,

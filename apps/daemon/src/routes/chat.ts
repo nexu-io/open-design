@@ -39,6 +39,7 @@ import { googleStreamGenerateContentUrl } from '../integrations/google-models.js
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
+import { classifyRunFailure } from '../run-failure-classification.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -491,15 +492,37 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   };
 
   const sendProxyError = (sse: any, message: string, init: any = {}) => {
-    sse.send('error', {
+    const error: Record<string, unknown> = {
+      code: init.code || 'UPSTREAM_UNAVAILABLE',
       message,
-      error: {
-        code: init.code || 'UPSTREAM_UNAVAILABLE',
-        message,
-        ...(init.details === undefined ? {} : { details: init.details }),
-        ...(init.retryable === undefined ? {} : { retryable: init.retryable }),
-      },
-    });
+      ...(init.details === undefined ? {} : { details: init.details }),
+      ...(init.retryable === undefined ? {} : { retryable: init.retryable }),
+    };
+    // BYOK runs are web-orchestrated and never pass through the agent run
+    // pipeline's classification choke point, so their failures used to reach
+    // the error card with no `user_action` and fell back to a bare Retry —
+    // even for model-unavailable / quota / auth errors the guidance (#3408 §5)
+    // is meant to steer. Classify here off the same daemon classifier the CLI
+    // pipeline uses (single source of truth) so the provider's real message —
+    // carried in `details`, including CJK bodies like GLM's "模型不存在" — drives
+    // the same CTA. The web reads these fields off the SSE error (see
+    // daemonSseError → resolveRunFailureUi).
+    try {
+      const failure = classifyRunFailure({
+        result: 'failed',
+        status: { status: 'failed', error: message, errorCode: error.code as string },
+        errorCode: error.code as string,
+        agentId: typeof init.agentId === 'string' ? init.agentId : undefined,
+        events: [{ event: 'error', data: { message, error } }],
+      });
+      if (failure) {
+        error.failure_category = failure.failure_category;
+        error.user_action = failure.user_action;
+      }
+    } catch {
+      // Classification is best-effort guidance; never block the error itself.
+    }
+    sse.send('error', { message, error });
   };
 
   const appendVersionedApiPath = (baseUrl: string, path: string) => {

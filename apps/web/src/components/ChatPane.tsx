@@ -58,6 +58,7 @@ import type {
   ChatSessionMode,
   RunContextSelection,
   WorkspaceContextItem,
+  TrackingRunFailureUserAction,
 } from '@open-design/contracts';
 import type {
   TrackingProjectKind,
@@ -1378,6 +1379,22 @@ export function ChatPane({
         // gateway reported (the instant a model window reopens) can read it back
         // out. Same string the card renders under 「查看详情」.
         failedRunErrorEvent?.detail,
+        {
+          failureCategory:
+            failedRunErrorEvent?.kind === 'status'
+              ? (((failedRunErrorEvent as unknown as Record<string, unknown>).failure_category
+                ?? (failedRunErrorEvent as unknown as Record<string, unknown>).failureCategory) as
+                | string
+                | undefined) ?? null
+              : null,
+          userAction:
+            failedRunErrorEvent?.kind === 'status'
+              ? (((failedRunErrorEvent as unknown as Record<string, unknown>).user_action
+                ?? (failedRunErrorEvent as unknown as Record<string, unknown>).userAction) as
+                | TrackingRunFailureUserAction
+                | undefined) ?? null
+              : null,
+        },
       )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
@@ -1656,10 +1673,16 @@ export function ChatPane({
   // no-action card doesn't leave an empty flex row (and a dangling column gap).
   const runFailureHasAction = Boolean(
     retryAssistant &&
-      onRetry &&
       runFailureUi &&
-      (runFailureUi.primaryAction !== 'none' ||
-        runFailureUi.secondaryRetry ||
+      ((runFailureUi.primaryAction === 'authorize' && onRetry) ||
+        (runFailureUi.primaryAction === 'launch-terminal-auth' && onLaunchAntigravityOauth) ||
+        (runFailureUi.primaryAction === 'launch-terminal-switch-model' && onLaunchAntigravityOauth) ||
+        (runFailureUi.primaryAction === 'switch-model' && onOpenSettings) ||
+        runFailureUi.primaryAction === 'recharge' ||
+        runFailureUi.primaryAction === 'upgrade' ||
+        (runFailureUi.primaryAction === 'reduce-context' && onNewConversation) ||
+        (runFailureUi.primaryAction === 'retry' && onRetry) ||
+        (runFailureUi.secondaryRetry && onRetry) ||
         canResumeFailedRun),
   );
   // The generic local-CLI escape hatch is only used when the failure card has
@@ -1671,10 +1694,10 @@ export function ChatPane({
   const showAmrGuidance = Boolean(amrSwitchPayload);
   const visibleRecoveryActionTypes = useMemo(() => {
     const actions: TrackingRunRecoveryActionType[] = [];
-    if (!retryAssistant || !onRetry || !runFailureUi) return actions;
-    if (runFailureUi.primaryAction === 'authorize') actions.push('authorize_and_retry');
+    if (!retryAssistant || !runFailureUi) return actions;
+    if (runFailureUi.primaryAction === 'authorize' && onRetry) actions.push('authorize_and_retry');
     if (canResumeFailedRun) actions.push('resume_run');
-    else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
+    else if ((runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) && onRetry) {
       actions.push('manual_retry');
     }
     if (showAmrGuidance && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
@@ -2874,9 +2897,9 @@ export function ChatPane({
                           {t('avatar.useLocal')}
                         </button>
                       ) : null}
-                      {retryAssistant && onRetry && runFailureUi ? (
+                      {retryAssistant && runFailureUi ? (
                         <>
-                          {runFailureUi.primaryAction === 'authorize' ? (
+                          {runFailureUi.primaryAction === 'authorize' && onRetry ? (
                             // Sign in to AMR inline — the pill drives vela login,
                             // surfaces the activation URL/code when the browser
                             // doesn't auto-open, and on success we retry the run
@@ -2936,6 +2959,25 @@ export function ChatPane({
                               }}
                             >
                               {t('chat.antigravityError.launchSwitchModelCta')}
+                            </button>
+                          ) : runFailureUi.primaryAction === 'switch-model' ? (
+                            // model_unavailable: steer the user to pick a
+                            // different model instead of retrying the same
+                            // failing one (the PR's whole point). Opens the
+                            // model picker (Settings → execution). Retry stays
+                            // SECONDARY below via secondaryRetry. For non-AMR
+                            // agents the AMR promotion card (showSwitchCard)
+                            // also renders below as the one-click "switch to
+                            // AMR" path; this button is the general escape for
+                            // every switch-model case, including AMR
+                            // self-switch where no promotion card renders and
+                            // the user would otherwise see only Retry.
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              onClick={() => onOpenSettings?.('execution')}
+                            >
+                              {t('chat.runError.switchModelCta')}
                             </button>
                           ) : runFailureUi.primaryAction === 'recharge' ? (
                             <button
@@ -3010,7 +3052,30 @@ export function ChatPane({
                             >
                               {t('chat.amrBalanceGate.plansCta')}
                             </button>
+                          ) : runFailureUi.primaryAction === 'reduce-context' ? (
+                            // prompt_too_large: steer the user to start a fresh
+                            // conversation rather than retrying the same oversized
+                            // context (which would deterministically fail again).
+                            // Opens a new conversation tab via onNewConversation.
+                            // Retry stays secondary below via secondaryRetry.
+                            <button
+                              type="button"
+                              className="chat-error-action"
+                              disabled={newConversationDisabled}
+                              onClick={() => onNewConversation?.()}
+                            >
+                              {t('chat.runError.reduceContextCta')}
+                            </button>
                           ) : null}
+                          {/*
+                            'reduce-context' (#3408 §5) carries no bespoke
+                            primary button here: reducing context is user-side
+                            guidance. It sets secondaryRetry, so the Retry
+                            button below is its recovery action, and its
+                            distinct titleKey (promptTooLarge) names the failure
+                            type on the card. ('switch-model' renders its own
+                            model-picker CTA above; Retry stays secondary.)
+                          */}
                           {canResumeFailedRun ? (
                             // Resumable failure: continue the agent's existing
                             // CLI session instead of restarting from scratch, so
@@ -3032,8 +3097,8 @@ export function ChatPane({
                             >
                               {t('chat.resumeRunCta')}
                             </button>
-                          ) : runFailureUi.primaryAction === 'retry' ||
-                            runFailureUi.secondaryRetry ? (
+                          ) : (runFailureUi.primaryAction === 'retry' ||
+                            runFailureUi.secondaryRetry) && onRetry ? (
                             <button
                               type="button"
                               className="chat-error-action chat-error-retry"

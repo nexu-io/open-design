@@ -1471,6 +1471,7 @@ export function createChatRunService({
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
+      failureAction: run.failureAction ?? null,
       ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     }, terminalAt, false);
     for (const sse of run.clients) sse.end();

@@ -1,4 +1,8 @@
 import type { JsonValue } from './common.js';
+import type {
+  TrackingRunFailureCategory,
+  TrackingRunFailureUserAction,
+} from './analytics/events.js';
 
 export const API_ERROR_CODES = [
   // Generic HTTP/API failures.
@@ -176,6 +180,12 @@ export interface ApiError {
   retryable?: boolean;
   requestId?: string;
   taskId?: string;
+  // Canonical failure classification (#3408 §5) carried on run-failure SSE
+  // error payloads. `user_action` is the daemon-decided CTA signal the chat
+  // error card prefers over re-deriving from `code`; `failure_category` is for
+  // display/telemetry. Both optional — older daemons omit them.
+  failure_category?: TrackingRunFailureCategory;
+  user_action?: TrackingRunFailureUserAction;
 }
 
 export interface ApiErrorResponse {

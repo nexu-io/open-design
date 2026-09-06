@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   finalizeRunMessageEvents,
   persistRunEventToAssistantMessage,
+  persistRunFailureClassification,
   readRunMessageEventPersistenceTelemetry,
   RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS,
   runMessageEventPersistenceAnalytics,
@@ -275,6 +276,51 @@ describe('run message event persistence', () => {
         id: 'tool-1',
         name: 'Read',
         input: { file_path: 'brief.md' },
+      },
+    ]);
+  });
+
+  it('atomically updates preliminary classification with finalize-time classification', () => {
+    const db = createDb();
+    const run = {
+      id: 'run-1',
+      assistantMessageId: 'assistant-1',
+    };
+    db.prepare(`INSERT INTO messages (id, events_json) VALUES (?, ?)`).run('assistant-1', '[]');
+
+    // 1. Preliminary error frame event written during stream (e.g. early generic failure)
+    persistRunEventToAssistantMessage(db, run, 'error', {
+      error: {
+        code: 'UPSTREAM_UNAVAILABLE',
+        message: 'Connection failed',
+        failure_category: 'upstream_unavailable',
+        user_action: 'retry',
+      },
+    });
+    finalizeRunMessageEvents(db, run);
+
+    // 2. Finalizer refines the classification (e.g. model_unavailable + switch_model)
+    persistRunFailureClassification(db, {
+      ...run,
+      failureCategory: 'model_unavailable',
+      failureDetail: 'model_not_found',
+      failureAction: 'switch_model',
+    });
+
+    const message = db.prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+      .get('assistant-1') as { eventsJson: string };
+    const events = JSON.parse(message.eventsJson);
+    expect(events).toEqual([
+      {
+        kind: 'status',
+        label: 'error',
+        code: 'UPSTREAM_UNAVAILABLE',
+        detail: 'Connection failed',
+        failureCategory: 'model_unavailable',
+        failure_category: 'model_unavailable',
+        failureDetail: 'model_not_found',
+        failure_detail: 'model_not_found',
+        user_action: 'switch_model',
       },
     ]);
   });

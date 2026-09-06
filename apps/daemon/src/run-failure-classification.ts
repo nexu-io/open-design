@@ -76,6 +76,25 @@ function readBool(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+// Flatten a proxy error's `details` into classifiable text. A string body is
+// taken verbatim; an object body contributes its message-ish fields (the same
+// shape providers nest under `error`). Bounded depth — we only need the
+// human-readable message, not the whole payload.
+function detailsText(details: unknown): string[] {
+  if (typeof details === 'string') return details ? [details] : [];
+  if (!details || typeof details !== 'object') return [];
+  const obj = details as Record<string, unknown>;
+  const nested = obj.error && typeof obj.error === 'object'
+    ? obj.error as Record<string, unknown>
+    : {};
+  return [
+    readString(obj.message),
+    readString(obj.code),
+    readString(nested.message),
+    readString(nested.code),
+  ].filter((value): value is string => Boolean(value));
+}
+
 function eventErrorText(data: unknown): string[] {
   const payload = data && typeof data === 'object'
     ? data as Record<string, unknown>
@@ -93,6 +112,13 @@ function eventErrorText(data: unknown): string[] {
     readString(nested.code),
     readString(nestedData.message),
     typeof nestedData.statusCode === 'number' ? `statusCode:${nestedData.statusCode}` : undefined,
+    // The BYOK proxy collapses the upstream response to message
+    // "Upstream error: <status>" and carries the provider's real body (e.g.
+    // the GLM `{"error":{"message":"模型不存在…"}}`) in `details`. Surface that
+    // raw body so model-unavailable / quota / auth text inside it is
+    // classifiable instead of opaque. `details` is the raw string body on the
+    // non-OK path and an SSE data object on the streamed-error path.
+    ...detailsText(payload.details ?? nested.details),
   ].filter((value): value is string => Boolean(value));
 }
 
@@ -416,7 +442,15 @@ function modelUnavailableDetail(text: string): TrackingRunFailureDetail | null {
   if (/\b(unsupported model\b|model .*not supported|not supported model\b|requested model is not supported|supported api model names|not supported when using codex)\b/i.test(text)) {
     return 'model_not_supported';
   }
-  if (/\b(model (?:is )?(?:unavailable|not available|unsupported|not found)|selected model is not available|not have access|no access|model .*not found|no healthy deployments|model .*not in (?:the )?allowed list)\b/i.test(text)) {
+  if (/\b(model(?:_|\s+)(?:is\s+)?(?:unavailable|not[_\s]available|unsupported|not[_\s]found)|selected model is not available|not have access|no access|model[_\s].*not[_\s]?found|model_not_found|model_unavailable|invalid_model|no healthy deployments|model .*not in (?:the )?allowed list)\b/i.test(text)) {
+    return 'model_not_found';
+  }
+  // CJK providers (GLM/Zhipu, Qwen, Moonshot, etc.) return model-unavailable
+  // text in Chinese, which the English-only checks above miss — e.g. GLM's
+  // "模型不存在，请检查模型代码". \b word boundaries don't apply to CJK, so match
+  // the phrases directly. Keep this to genuine "wrong/missing model" wording so
+  // it stays a switch_model action, not a catch-all.
+  if (/模型(?:代码|名称)?(?:不存在|未找到|无效|不可用|不支持)|(?:无效|未知|错误)的?模型|没有(?:该|此)?模型(?:的)?(?:权限|访问权限)?/.test(text)) {
     return 'model_not_found';
   }
   return null;
@@ -1473,4 +1507,44 @@ export function classifyRunFailure(
     ...runFailureEvidence(input, evidenceFailure, evidenceEvents),
     ...(terminalTrigger ? { terminal_trigger: terminalTrigger } : {}),
   };
+}
+
+/**
+ * Classify a live error event before it is appended to run history, so the
+ * surfaced SSE `error` frame carries the structured failure category and
+ * actionable `user_action` without duplicating provider-details parsing in the
+ * server composition root (#4734).
+ */
+export function classifyLiveErrorEvent(input: {
+  errorData: Record<string, unknown>;
+  agentId?: string | null;
+  events?: RunEventForFailureClassification[];
+}): RunFailureClassification | undefined {
+  const errorObj = input.errorData.error && typeof input.errorData.error === 'object'
+    ? input.errorData.error as Record<string, unknown>
+    : input.errorData;
+  const errorCode =
+    typeof errorObj.code === 'string' ? errorObj.code : undefined;
+  const baseErrorMessage =
+    typeof errorObj.message === 'string'
+      ? errorObj.message
+      : typeof input.errorData.message === 'string'
+        ? input.errorData.message
+        : '';
+  const detailsParts = detailsText(errorObj.details ?? input.errorData.details);
+  const errorMessage = [baseErrorMessage, ...detailsParts]
+    .filter(Boolean)
+    .join('\n');
+
+  return classifyRunFailure({
+    result: 'failed',
+    status: {
+      status: 'failed',
+      error: errorMessage,
+      ...(errorCode ? { errorCode } : {}),
+    },
+    ...(errorCode ? { errorCode } : {}),
+    ...(input.agentId !== undefined ? { agentId: input.agentId } : {}),
+    ...(input.events !== undefined ? { events: input.events } : {}),
+  });
 }

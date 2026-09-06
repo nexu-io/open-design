@@ -469,9 +469,27 @@ function daemonSseError(data: SseErrorPayload): Error {
   const error = new Error(daemonSseErrorMessage(data)) as Error & {
     code?: string;
     details?: unknown;
+    failureCategory?: string;
+    userAction?: string;
   };
-  if (data.error?.code) error.code = data.error.code;
-  if (data.error?.details !== undefined) error.details = data.error.details;
+  const errorPayload = data.error as
+    | {
+        code?: string;
+        details?: unknown;
+        failure_category?: string;
+        failureCategory?: string;
+        user_action?: string;
+        userAction?: string;
+      }
+    | undefined;
+  if (errorPayload?.code) error.code = errorPayload.code;
+  if (errorPayload?.details !== undefined) error.details = errorPayload.details;
+  // Carry the daemon's canonical failure classification (#3408 §5) so the chat
+  // error card can drive its CTA off `user_action` (see resolveRunFailureUi).
+  if (errorPayload?.failure_category) error.failureCategory = errorPayload.failure_category;
+  else if (errorPayload?.failureCategory) error.failureCategory = errorPayload.failureCategory;
+  if (errorPayload?.user_action) error.userAction = errorPayload.user_action;
+  else if (errorPayload?.userAction) error.userAction = errorPayload.userAction;
   return error;
 }
 
@@ -1364,6 +1382,7 @@ async function consumeDaemonPhysicalRun({
   // frame — both mirror the same finalize-time classification.
   let endFailureCategory: ChatRunStatusResponse['failureCategory'] = null;
   let endFailureDetail: ChatRunStatusResponse['failureDetail'] = null;
+  let endFailureAction: ChatRunStatusResponse['failureAction'] = null;
   let resolvedArtifactCount: number | undefined;
   const reportArtifactCount = (value: unknown) => {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
@@ -1527,6 +1546,7 @@ async function consumeDaemonPhysicalRun({
             if (event.data.resumable === true) endResumable = true;
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
+            if (event.data.failureAction) endFailureAction = event.data.failureAction;
             reportArtifactCount(event.data.artifactCount);
             reportArtifactPaths(event.data.artifactPaths);
             if (event.data.strategyTask) endStrategyTask = event.data.strategyTask;
@@ -1555,6 +1575,7 @@ async function consumeDaemonPhysicalRun({
           // run-error UI on reconnect.
           if (status.failureCategory) endFailureCategory = status.failureCategory;
           if (status.failureDetail) endFailureDetail = status.failureDetail;
+          if (status.failureAction) endFailureAction = status.failureAction;
           reportArtifactCount(status.artifactCount);
           reportArtifactPaths(status.artifactPaths);
           if (status.strategyTask) endStrategyTask = status.strategyTask;
@@ -1588,6 +1609,7 @@ async function consumeDaemonPhysicalRun({
         if (status.resumable === true) endResumable = true;
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
+        if (status.failureAction) endFailureAction = status.failureAction;
         reportArtifactCount(status.artifactCount);
         reportArtifactPaths(status.artifactPaths);
         if (status.strategyTask) endStrategyTask = status.strategyTask;
@@ -1672,6 +1694,7 @@ async function consumeDaemonPhysicalRun({
           markErrorRunFailure(markErrorResumable(pendingStructuredError, endResumable), {
             failureCategory: endFailureCategory,
             failureDetail: endFailureDetail,
+            failureAction: endFailureAction,
           }),
         );
         return;
@@ -1691,7 +1714,11 @@ async function consumeDaemonPhysicalRun({
             new Error(`agent exited with ${exitSignal ? `signal ${exitSignal}` : `code ${exitCode}`}${fallbackTail ? `\n${fallbackTail}` : ''}`),
             endResumable,
           ),
-          { failureCategory: endFailureCategory, failureDetail: endFailureDetail },
+          {
+            failureCategory: endFailureCategory,
+            failureDetail: endFailureDetail,
+            failureAction: endFailureAction,
+          },
         ),
       );
       return;
@@ -1747,14 +1774,29 @@ function markErrorRunFailure(
   fields: {
     failureCategory?: ChatRunStatusResponse['failureCategory'];
     failureDetail?: ChatRunStatusResponse['failureDetail'];
+    failureAction?: ChatRunStatusResponse['failureAction'];
   },
 ): Error {
   const target = err as Error & {
     failureCategory?: ChatRunStatusResponse['failureCategory'];
     failureDetail?: ChatRunStatusResponse['failureDetail'];
+    failure_category?: ChatRunStatusResponse['failureCategory'];
+    failure_detail?: ChatRunStatusResponse['failureDetail'];
+    user_action?: ChatRunStatusResponse['failureAction'];
+    userAction?: ChatRunStatusResponse['failureAction'];
   };
-  if (fields.failureCategory) target.failureCategory = fields.failureCategory;
-  if (fields.failureDetail) target.failureDetail = fields.failureDetail;
+  if (fields.failureCategory) {
+    target.failureCategory = fields.failureCategory;
+    target.failure_category = fields.failureCategory;
+  }
+  if (fields.failureDetail) {
+    target.failureDetail = fields.failureDetail;
+    target.failure_detail = fields.failureDetail;
+  }
+  if (fields.failureAction) {
+    target.user_action = fields.failureAction;
+    target.userAction = fields.failureAction;
+  }
   return err;
 }
 
