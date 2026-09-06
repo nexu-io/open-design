@@ -44,6 +44,29 @@ declare global {
   }
 }
 
+function isOnboardingReloadRaceError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes('Execution context was destroyed') ||
+    message.includes('Target page, context or browser has been closed') ||
+    message.includes('Target closed')
+  );
+}
+
+async function safeEvaluate<T>(page: Page, pageFunction: () => T): Promise<T | undefined>;
+async function safeEvaluate<T, A>(page: Page, pageFunction: (arg: A) => T, arg: A): Promise<T | undefined>;
+async function safeEvaluate<T, A>(page: Page, pageFunction: (arg: A) => T, arg?: A): Promise<T | undefined> {
+  try {
+    if (arg === undefined) {
+      return await (page.evaluate as unknown as (fn: () => T) => Promise<T>)(pageFunction as () => T);
+    }
+    return await (page.evaluate as unknown as (fn: (arg: A) => T, arg: A) => Promise<T>)(pageFunction, arg as A);
+  } catch (error) {
+    if (isOnboardingReloadRaceError(error)) return undefined;
+    throw error;
+  }
+}
+
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
@@ -1294,7 +1317,7 @@ async function wireOnboardingMocks(
 
   await page.route('**/api/integrations/vela/status', async (route) => {
     statusCalls += 1;
-    await page.evaluate((calls) => {
+    await safeEvaluate(page, (calls) => {
       window.__amrOnboardingStatusCalls = calls;
     }, statusCalls);
     if (options.statusGate) {
@@ -1307,14 +1330,14 @@ async function wireOnboardingMocks(
         body: JSON.stringify({ error: 'status unavailable' }),
       });
       statusResponses += 1;
-      await page.evaluate((responses) => {
+      await safeEvaluate(page, (responses) => {
         window.__amrOnboardingStatusResponses = responses;
       }, statusResponses);
       return;
     }
-    if (loginInFlight && await page.evaluate(() => (
-      window.__amrOnboardingCompleteLogin === true
-    ))) {
+    const shouldCompleteLogin = loginInFlight
+      && (await safeEvaluate(page, () => window.__amrOnboardingCompleteLogin === true)) === true;
+    if (shouldCompleteLogin) {
       loggedIn = true;
       loginInFlight = false;
     }
@@ -1325,11 +1348,11 @@ async function wireOnboardingMocks(
       (!loggedIn &&
         typeof options.delaySignedOutStatusMs === 'number' &&
         options.delaySignedOutStatusMs > 0 &&
-        (await page.evaluate(() => {
+        (await safeEvaluate(page, () => {
           if (!window.__amrOnboardingDelayNextSignedOutStatus) return false;
           window.__amrOnboardingDelayNextSignedOutStatus = false;
           return true;
-        })));
+        })) === true);
     if (shouldDelaySignedOutStatus) {
       const delayMs = shouldDelayAllStatuses
         ? delayAllStatusMs
@@ -1359,11 +1382,11 @@ async function wireOnboardingMocks(
           },
     });
     statusResponses += 1;
-    await page.evaluate((responses) => {
+    await safeEvaluate(page, (responses) => {
       window.__amrOnboardingStatusResponses = responses;
     }, statusResponses);
     if (shouldDelaySignedOutStatus) {
-      await page.evaluate(() => {
+      await safeEvaluate(page, () => {
         window.__amrOnboardingSlowStatusResolved = true;
       });
     }
@@ -1390,7 +1413,7 @@ async function wireOnboardingMocks(
       loggedIn = true;
       loginInFlight = false;
     }
-    await page.evaluate((calls) => {
+    await safeEvaluate(page, (calls) => {
       window.__amrOnboardingLoginCalls = calls;
     }, loginCalls);
     await route.fulfill({
@@ -1408,7 +1431,7 @@ async function wireOnboardingMocks(
     expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
-    await page.evaluate((calls) => {
+    await safeEvaluate(page, (calls) => {
       window.__amrOnboardingCancelCalls = calls;
     }, cancelCalls);
     await route.fulfill({ json: { canceled: true, pids: [4242] } });
