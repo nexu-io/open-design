@@ -18,6 +18,8 @@ import type {
   WorkspaceBillingResponse,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
+import { resolveAmrPlan } from './amr-low-balance-plan';
+import { planUnlimitedTier } from './amr-unlimited-models';
 
 /**
  * Hard-block line (USD): at or below this the wallet cannot fund any part of
@@ -142,6 +144,35 @@ export function amrWalletBalanceInsufficient(
   return balance != null && balance <= AMR_HARD_BLOCK_BALANCE_USD;
 }
 
+/**
+ * Whether a low-balance wallet may still start the selected model's run and
+ * leave the authoritative billing / Model Limit call to Vela.
+ *
+ * ABOVE the hard-block line the wallet can fund at least the start, so the
+ * client must not pre-judge a Model Limit it can no longer see: fail open.
+ *
+ * AT or BELOW the hard-block line the wallet can fund nothing, so failing open
+ * only manufactures the mid-run AMR_INSUFFICIENT_BALANCE failure this pre-run
+ * gate exists to prevent. The one account that may still proceed is one whose
+ * plan funds runs without ever drawing the wallet — a Personal Coding Plan
+ * tier, whose in-plan usage vela records through the `coding_plan` billing
+ * mode. A free account (and every Team plan) has no such funding source, so an
+ * empty wallet must stay a hard block for them.
+ *
+ * An unresolved plan counts as "no Coding Plan funding" and blocks. The block
+ * is dismissible ("Not now") and re-checks the wallet, so a wrong block costs
+ * one click, while a wrong allow costs a run that dies after the user has
+ * already committed their task.
+ */
+async function selectedModelMayRunOnThisBalance(
+  balance: number,
+  snapshot: AmrWalletSnapshot,
+): Promise<boolean> {
+  if (balance > AMR_HARD_BLOCK_BALANCE_USD) return true;
+  const plan = await resolveAmrPlan(snapshot).catch(() => null);
+  return planUnlimitedTier(plan) !== null;
+}
+
 /** Whether the user opted out of the low-balance soft warning ("don't remind
  * me again"). Hard blocks are never subject to this opt-out. */
 export function isAmrLowBalanceWarnOptedOut(): boolean {
@@ -264,10 +295,10 @@ async function checkWorkspaceBalanceGate(
     balance <= AMR_LOW_BALANCE_WARN_USD
     && scope.workspaceType === 'personal'
     && modelId?.trim()
+    && await selectedModelMayRunOnThisBalance(balance, workspaceSnapshot!)
   ) {
-    // Coding Plan membership is no longer exposed to the client. Personal
-    // requests therefore fail open here and let Vela enforce the authoritative
-    // billing and Model Limit decision at admission time.
+    // Per-model Coding Plan membership is no longer exposed to the client, so
+    // a fundable personal wallet defers the Model Limit decision to Vela.
     return { kind: 'allow' };
   }
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
@@ -323,7 +354,11 @@ export async function checkAmrBalanceGate(
     if (fresh.stale || fresh.error != null) return { kind: 'allow' };
     const freshBalance = amrWalletBalanceUsd(fresh);
     if (freshBalance == null) return { kind: 'allow' };
-    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD && modelId?.trim()) {
+    if (
+      freshBalance <= AMR_LOW_BALANCE_WARN_USD
+      && modelId?.trim()
+      && await selectedModelMayRunOnThisBalance(freshBalance, fresh)
+    ) {
       return { kind: 'allow' };
     }
     if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {

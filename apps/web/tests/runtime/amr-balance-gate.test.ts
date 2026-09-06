@@ -312,6 +312,52 @@ describe('checkAmrBalanceGate', () => {
     ).resolves.toEqual({ kind: 'allow' });
   });
 
+  // OPEND-2448. A free account has no plan that funds a run without the
+  // wallet, so an empty wallet means the run cannot start at all — selecting a
+  // model does not change that, and letting it through only manufactures the
+  // mid-run AMR_INSUFFICIENT_BALANCE failure this pre-run gate exists to
+  // prevent. Vela reports a free account either as plan 'free' or with no plan
+  // field at all (the daemon omits falsy plans), so both shapes must block.
+  it.each([
+    ['an explicit free plan', { id: 'u1', email: 'user@example.com', plan: 'free' }],
+    ['no plan field at all', { id: 'u1', email: 'user@example.com' }],
+  ])('hard-blocks a selected model on an empty wallet with %s', async (_label, user) => {
+    const freeAccount = snapshot({ balanceUsd: '0', user });
+    mockedFetch
+      .mockResolvedValueOnce({ ...freeAccount, source: 'daemon_cache' })
+      .mockResolvedValueOnce(freeAccount);
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'deepseek-v4-flash'),
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: freeAccount,
+    });
+  });
+
+  it('hard-blocks a selected model on an empty wallet for a signed-in free account', async () => {
+    const freeAccount = snapshot({ balanceUsd: '0', user: null });
+    mockedFetch
+      .mockResolvedValueOnce({ ...freeAccount, source: 'daemon_cache' })
+      .mockResolvedValueOnce(freeAccount);
+    mockedFetchStatus.mockResolvedValue({
+      loggedIn: true,
+      profile: 'prod',
+      user: null,
+      account: { plan: 'free', balanceUsd: '0' },
+      configPath: '/tmp/vela.json',
+    });
+
+    await expect(
+      checkAmrBalanceGate(undefined, 'glm-5.2'),
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: freeAccount,
+    });
+  });
+
   it('hard-blocks a signed-out account after refresh confirmation', async () => {
     const signedOut = snapshot({ status: 'signed_out', balanceUsd: null, user: null });
     mockedFetch.mockResolvedValueOnce(signedOut).mockResolvedValueOnce(signedOut);
@@ -494,6 +540,38 @@ describe('checkAmrBalanceGate', () => {
         workspaceMemberId: 'wm-personal-go',
       }, 'deepseek-v4-pro'),
     ).resolves.toEqual({ kind: 'allow' });
+  });
+
+  // OPEND-2448, workspace-scoped half of the same invariant: the personal
+  // Coding Plan fail-open must not swallow the hard block for a free account.
+  it('hard-blocks a selected model in a zero-dollar free Personal workspace', async () => {
+    mockedFetch.mockResolvedValue(snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'free' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-personal-free',
+          'wm-personal-free',
+          '0',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    await expect(
+      checkAmrBalanceGate({
+        workspaceType: 'personal',
+        workspaceId: 'ws-personal-free',
+        workspaceMemberId: 'wm-personal-free',
+      }, 'deepseek-v4-flash'),
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: expect.objectContaining({ balanceUsd: '0' }),
+    });
   });
 
   it('lets Vela decide a selected model in a low-balance Personal workspace', async () => {

@@ -1480,8 +1480,11 @@ describe('ProjectView conversation run isolation', () => {
     );
   });
 
-  it('lets Vela decide a selected Personal model when the wallet is empty', async () => {
+  it('hard-blocks the AMR send and shows the balance dialog when the wallet is empty', async () => {
     conversationAMessages = [];
+    // Both the cached read and the refresh confirmation report an empty
+    // wallet for an account with no Coding Plan tier, so the send must be
+    // hard-blocked before any run spawns (OPEND-2448).
     fetchAmrWalletSnapshot.mockResolvedValue({
       status: 'available',
       profile: 'prod',
@@ -1512,8 +1515,8 @@ describe('ProjectView conversation run isolation', () => {
 
     fireEvent.click(screen.getByTestId('send-message'));
 
-    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
+    expect(streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('does not guess whether a selected Personal model is metered at low balance', async () => {
