@@ -549,6 +549,67 @@ function messagesThatAbsorbedASuccessorRun(
   return absorbed;
 }
 
+function terminalErrorEventOf(message: ChatMessage): AgentEvent | undefined {
+  const events = message.events ?? [];
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (event?.kind === 'status' && event.label === 'error') return event;
+  }
+  return undefined;
+}
+
+/**
+ * The client's record of a terminal `blocked` verdict that the server row has
+ * no way to contradict — because it has no way to EXPRESS it.
+ *
+ * A blocked strategy task is not a failed process. The daemon writes the Run's
+ * own outcome (`succeeded`, exit 0, zero error frames) and it is right to: the
+ * agent answered, and the answer is on screen. What failed is the TASK — the
+ * OD Next protocol gate refused the turn because the reply carried no Runtime
+ * State block. `providers/daemon.ts` already resolves that verdict into the
+ * turn's user-facing status (`endStatus = 'failed'` plus a structured error
+ * whose `code` is the gate's reason code), so within the chat
+ * `ChatMessage.runStatus` means "how this TURN ended", not "how the process
+ * exited".
+ *
+ * `GET …/messages` returns neither half of that verdict: the daemon persists
+ * no `strategyTaskBlocked` column and never wrote the client-side error frame
+ * (its Run had none to write). So the post-run alignment refresh arrives
+ * carrying only the process status — and the plain `{...server}` copy read that
+ * silence as a correction, dropping the verdict AND its reason code. The
+ * blocked card that `runtime/amr-guidance.ts` already writes for
+ * `od_next_protocol_runtime_state_missing` could therefore never render: with
+ * no `runStatus: 'failed'` there is no `retryAssistant`, with no
+ * `retryAssistant` there is no `runFailureUi`, and the chat fell back to the
+ * anonymous "task failed" card plus the English diagnostic sentence — under a
+ * message labelled "completed". The same emptiness took the card's Retry with
+ * it (its whole action group hangs off `runFailureUi`).
+ *
+ * The witnesses are deliberately narrow, so this is "the server does not know
+ * about this verdict", never "the local copy wins":
+ *   - the daemon's OWN terminal projection stamped the block (`onStrategyTaskSettled`);
+ *   - the client already resolved the turn as failed — which excludes the
+ *     blocked-but-delivered carve-out in `providers/daemon.ts`, where the Run
+ *     succeeded AND delivered and the turn deliberately stays `succeeded`;
+ *   - both copies describe the SAME physical Run, so a later Run's row cannot
+ *     inherit an older Run's verdict;
+ *   - the client holds the attribution (the error event carrying the gate's
+ *     reason code) and the server row does not, so nothing is duplicated and a
+ *     verdict without a reason can never resurrect an anonymous failure card.
+ */
+function localBlockedTurnVerdictUnknownToServer(
+  server: ChatMessage,
+  local: ChatMessage,
+): { runStatus: ChatMessage['runStatus']; errorEvent: AgentEvent } | null {
+  if (local.strategyTaskBlocked !== true) return null;
+  if (local.runStatus !== 'failed') return null;
+  if (!server.runId || server.runId !== local.runId) return null;
+  if (terminalErrorEventOf(server)) return null;
+  const errorEvent = terminalErrorEventOf(local);
+  if (!errorEvent) return null;
+  return { runStatus: local.runStatus, errorEvent };
+}
+
 function mergeServerMessageWithLocal(
   server: ChatMessage,
   local?: ChatMessage,
@@ -581,6 +642,26 @@ function mergeServerMessageWithLocal(
   }
   if (!server.runStatus && local.runStatus) {
     merged.runStatus = local.runStatus;
+  }
+  // A terminal `blocked` verdict is sticky (the daemon answers every further
+  // continuation of that task with 409 STRATEGY_TASK_STATE_MISMATCH) and the
+  // server row cannot carry it, so a refresh must not quietly un-block the
+  // turn's question form.
+  if (!server.strategyTaskBlocked && local.strategyTaskBlocked) {
+    merged.strategyTaskBlocked = local.strategyTaskBlocked;
+    if (server.strategyTaskBlockedText === undefined) {
+      merged.strategyTaskBlockedText = local.strategyTaskBlockedText ?? null;
+    }
+  }
+  // See `localBlockedTurnVerdictUnknownToServer`. The server's richer event log
+  // stays authoritative — the client's error frame is APPENDED to it, not
+  // swapped in — because the daemon's own diagnostics belong to the same turn.
+  const blockedVerdict = localBlockedTurnVerdictUnknownToServer(server, local);
+  if (blockedVerdict) {
+    merged.runStatus = blockedVerdict.runStatus;
+    if (!terminalErrorEventOf(merged)) {
+      merged.events = [...(merged.events ?? []), blockedVerdict.errorEvent];
+    }
   }
   // Feedback is written through a best-effort PUT after the button updates
   // the local message. A run-completion refresh can race that PUT and return
