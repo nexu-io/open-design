@@ -43,6 +43,8 @@ export type SharedLifecycleCommand =
   | Readonly<{ type: "reserve-transition"; transition: SharedLifecycleTransitionState }>
   | Readonly<{ type: "renew-transition"; token: string; fence: number; expiresAt: string }>
   | Readonly<{ type: "release-transition"; token: string; fence: number }>
+  | Readonly<{ type: "abandon-stopped-transition"; token: string; fence: number }>
+  | Readonly<{ type: "confirm-stopped-transition"; token: string; fence: number }>
   | Readonly<{ type: "force-stop"; token: string; fence: number; requestedAt: string; expiresAt: string }>
   | Readonly<{
       type: "complete-start";
@@ -148,7 +150,8 @@ export function reduceSharedLifecycleState(stateInput: SharedLifecycleState, com
   if (command.type === "tick") {
     const now = Date.parse(command.now);
     if (!Number.isFinite(now) || !Number.isSafeInteger(command.leaseDurationMs) || command.leaseDurationMs <= 0) throw new Error("invalid lifecycle clock");
-    if (state.transition != null && Date.parse(state.transition.expiresAt) <= now) {
+    if (state.transition != null && Date.parse(state.transition.expiresAt) <= now
+      && !(state.transition.kind === "shell-install" && state.transition.phase === "stopped-sealed")) {
       state.transition = null;
       state.fence += 1;
     }
@@ -219,6 +222,22 @@ export function reduceSharedLifecycleState(stateInput: SharedLifecycleState, com
   if (command.type === "release-transition") {
     const transition = expectTransition(state, command.token, command.fence);
     if (transition.phase !== "reserved") throw domainError("sealed-transition", "a stopped sealed transition cannot be released");
+    state.transition = null;
+    return validateSharedLifecycleState(state);
+  }
+  if (command.type === "abandon-stopped-transition") {
+    const transition = expectTransition(state, command.token, command.fence);
+    if (transition.phase !== "stopped-sealed" || state.state !== "stopped" || state.attachments.length !== 0) {
+      throw domainError("transition-not-sealed", "only an unoccupied stopped sealed transition can be abandoned");
+    }
+    state.transition = null;
+    return validateSharedLifecycleState(state);
+  }
+  if (command.type === "confirm-stopped-transition") {
+    const transition = expectTransition(state, command.token, command.fence);
+    if (transition.kind !== "shell-install" || transition.phase !== "stopped-sealed" || state.state !== "stopped" || state.attachments.length !== 0) {
+      throw domainError("transition-not-sealed", "only an exact shell install stopped sealed transition can be confirmed");
+    }
     state.transition = null;
     return validateSharedLifecycleState(state);
   }

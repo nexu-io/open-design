@@ -52,8 +52,8 @@
       "exclude": ["match://daemon-runtime-definition", "prefix://apps/daemon/src/sidecar/"]
     },
     "shell-exact": {
-      "prefixes": ["apps/closure/", "packages/electron-kit/", "packages/sidecar/", "packages/standalone/", "shells/electron/", "shells/terminal/"],
-      "exact": ["tools/release/src/exact/control-cli.ts", "tools/release/src/exact/control-common.ts", "tools/release/src/exact/control-pack.ts", "tools/release/src/exact/control-release.ts", ".github/workflows/convergence-exact.atom.yml", ".github/workflows/release-exact.yml"]
+      "prefixes": ["apps/closure/", "packages/electron-kit/", "packages/sidecar/", "packages/standalone/", "shells/electron/", "shells/terminal/", "tools/pack/src/exact/", "tools/release/src/exact/", "tools/release/src/policy/"],
+      "exact": [".github/workflows/convergence-exact.atom.yml", ".github/workflows/release-exact.yml", ".github/workflows/release-prerelease.yml", ".github/workflows/release-stable.yml"]
     },
     "medium-exempt": {
       "exact": [

@@ -12,7 +12,7 @@ import {
   type StandaloneShellMetadata,
 } from "@open-design/standalone";
 
-import { ElectronReleaseExactFeed } from "@/adapters/standalone/release-feed.js";
+import { ElectronReleaseExactFeed, resolveElectronChannelHeadOverride } from "@/adapters/standalone/release-feed.js";
 import { ElectronStandaloneHostLifecycle } from "@/adapters/standalone/host-lifecycle.js";
 import { ElectronStandaloneHostUpdater } from "@/adapters/standalone/host-updater.js";
 import { ElectronStandaloneShellCandidateLedger } from "@/adapters/standalone/shell-updater-candidate.js";
@@ -39,6 +39,7 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2") {
       shell: { type: "electron", version: "0.2.0", buildHash: "b".repeat(64) },
       target: "darwin-arm64",
       artifact: { url: artifactUrl, sha256: artifactSha256, size: artifact.byteLength, mediaType: "application/x-apple-diskimage" },
+      platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: 'identifier "io.open-design.test"', teamIdentifier: "adhoc" },
       updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
     }],
   };
@@ -73,6 +74,16 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2") {
 }
 
 describe("Electron release-exact feed", () => {
+  it("accepts one explicit signed-feed override without exposing an environment backdoor", () => {
+    expect(resolveElectronChannelHeadOverride(["electron", "--od-channel-head-url=https://releases.invalid/betahyx/candidate/channel-head.json"]))
+      .toBe("https://releases.invalid/betahyx/candidate/channel-head.json");
+    expect(resolveElectronChannelHeadOverride(["electron"])).toBeUndefined();
+    expect(() => resolveElectronChannelHeadOverride(["electron", "--od-channel-head-url=https://a.invalid/head", "--od-channel-head-url=https://b.invalid/head"]))
+      .toThrow("exactly once");
+    expect(() => resolveElectronChannelHeadOverride(["electron", "--od-channel-head-url=https://user:secret@releases.invalid/head"]))
+      .toThrow("invalid");
+  });
+
   it("verifies signed head and Shell metadata before downloading the exact artifact", async () => {
     const { artifact, feed, fetcher } = await fixture();
     const candidate = await feed.check();
@@ -98,10 +109,10 @@ describe("Electron release-exact feed", () => {
     const scope = { channel: "betahyx", namespace: "release-feed" };
     const ledger = new ElectronStandaloneShellUpdaterLedger(cacheRoot, scope, "electron");
     const candidates = new ElectronStandaloneShellCandidateLedger(cacheRoot, scope, feed);
-    const firstHost = new ElectronStandaloneHostUpdater("electron", new ElectronStandaloneHostLifecycle(scope), ledger, { feed, candidates });
+    const firstHost = new ElectronStandaloneHostUpdater("electron", new ElectronStandaloneHostLifecycle(scope), ledger, { authorityRoot: cacheRoot, feed, candidates });
     expect(await firstHost.invoke("check")).toMatchObject({ outcome: "accepted", snapshot: { state: "available", candidateId: "0.2.0-betahyx.2" } });
 
-    const replacementHost = new ElectronStandaloneHostUpdater("electron", new ElectronStandaloneHostLifecycle(scope), ledger, { feed, candidates });
+    const replacementHost = new ElectronStandaloneHostUpdater("electron", new ElectronStandaloneHostLifecycle(scope), ledger, { authorityRoot: cacheRoot, feed, candidates });
     const downloaded = await replacementHost.invoke("download");
     expect(downloaded).toMatchObject({
       outcome: "accepted",
@@ -110,5 +121,7 @@ describe("Electron release-exact feed", () => {
         handoff: { releaseVersion: "0.2.0-betahyx.2", target: "darwin-arm64", shell: { version: "0.2.0" } },
       },
     });
+    expect(downloaded.snapshot.handoff?.artifact.path).toContain("/installer/artifacts/sha256/");
+    expect(downloaded.snapshot.handoff?.artifact.path).not.toContain("/blobs/");
   });
 });

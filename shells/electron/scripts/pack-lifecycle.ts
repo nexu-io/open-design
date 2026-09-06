@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -5,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { packElectronShell } from "@open-design/electron-kit/pack";
 import { validateElectronShellManifest, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 import { resolveElectronStandaloneTarget } from "../src/adapters/standalone/installation.ts";
+import { createElectronReleaseManifest, type ElectronReleaseIdentityRegistry } from "../src/composition/release-identity.ts";
 import { loadElectronStandaloneAuthorityResources } from "./build-authority.ts";
 import { materializeElectronDevInstallation } from "./dev-installation.ts";
 
@@ -54,17 +56,12 @@ export function parseElectronPackRequest(value: unknown): ElectronPackRequest {
 }
 
 export function createElectronPackManifest(baseManifest: ElectronShellManifest, request: ElectronPackRequest): ElectronShellManifest {
-  const channelLabel = request.channel === "stable"
-    ? ""
-    : ` ${request.channel[0]!.toUpperCase()}${request.channel.slice(1)}`;
-  return validateElectronShellManifest({
-    ...baseManifest,
-    appId: request.channel === "stable" ? "io.open-design" : `io.open-design.${request.channel}`,
+  const identitiesPath = fileURLToPath(new URL("../config/release-identities.json", import.meta.url));
+  const registry = JSON.parse(readFileSync(identitiesPath, "utf8")) as ElectronReleaseIdentityRegistry;
+  return createElectronReleaseManifest(baseManifest, registry, {
     channel: request.channel,
-    executableName: request.channel === "stable" ? "open-design" : `open-design-${request.channel}`,
     namespace: request.namespace,
-    productName: `Open Design${channelLabel}`,
-    version: request.releaseVersion,
+    releaseVersion: request.releaseVersion,
   });
 }
 

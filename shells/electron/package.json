@@ -16,6 +16,8 @@
   "scripts": {
     "dev": "node ./scripts/dev.mjs",
     "exact:distribution": "node ./scripts/exact-distribution.ts",
+    "exact:manifest": "node ./scripts/release-manifest.ts",
+    "exact:scene-manifest": "node ./scripts/scene-manifest.ts",
     "exact:scene": "node ./scripts/exact-scene.ts",
     "pack:adapter": "node ./scripts/pack-lifecycle.ts",
     "runtime:adapter": "node ./scripts/runtime-lifecycle.ts",

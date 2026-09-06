@@ -26,24 +26,20 @@ const handedOff = {
 };
 
 describe("Electron installer handoff observation", () => {
-  it("resumes installer arming when the current Shell is still the old identity", async () => {
-    const confirmInstalled = vi.fn(async () => ({ outcome: "blocked" as const, snapshot: handedOff }));
+  it("fails sealed instead of replaying installer arming when the current Shell is still the old identity", async () => {
     await expect(resolveElectronInstallerRecovery({
       shell: { type: "electron", version: "0.0.9", buildHash: "c".repeat(64), digest: "d".repeat(64) },
-      updater: { readSnapshot: async () => handedOff, confirmInstalled },
-    })).resolves.toMatchObject({ state: "arm-and-quit", request: { handoff: handedOff.handoff, installAttemptId: handedOff.installAttemptId } });
-    expect(confirmInstalled).toHaveBeenCalledOnce();
+      updater: { readSnapshot: async () => handedOff },
+    })).resolves.toMatchObject({ state: "recovery-required", request: { handoff: handedOff.handoff, installAttemptId: handedOff.installAttemptId } });
   });
 
-  it("continues startup after the exact replacement Shell confirms installation", async () => {
-    const installed = { ...handedOff, revision: 7, state: "installed" as const, actions: [] };
+  it("routes the exact replacement Shell through authority confirmation without mutating the updater", async () => {
+    const readSnapshot = vi.fn(async () => handedOff);
     await expect(resolveElectronInstallerRecovery({
       shell: { ...handedOff.handoff.shell, digest: "d".repeat(64) },
-      updater: {
-        readSnapshot: async () => handedOff,
-        confirmInstalled: async () => ({ outcome: "accepted", snapshot: installed }),
-      },
-    })).resolves.toEqual({ state: "continue", snapshot: installed });
+      updater: { readSnapshot },
+    })).resolves.toMatchObject({ state: "replacement-confirmation-required", snapshot: handedOff });
+    expect(readSnapshot).toHaveBeenCalledOnce();
   });
 
   it("hands an applying transition to the Shell-owned guarded continuation", async () => {
@@ -92,5 +88,30 @@ describe("Electron installer handoff observation", () => {
       },
     });
     expect(onHandoff).not.toHaveBeenCalled();
+  });
+
+  it("reattaches observation after an expected Standalone host replacement", async () => {
+    const onHandoff = vi.fn(async () => undefined);
+    const readSnapshot = vi.fn()
+      .mockResolvedValueOnce({ ...handedOff, revision: 0, state: "idle", handoff: null, installAttemptId: null })
+      .mockResolvedValueOnce(handedOff);
+    const unavailable = Object.assign(new Error("connect ENOENT host.sock"), { code: "ENOENT" });
+    await observeElectronInstallerHandoff({
+      afterRevision: 0,
+      isClosing: () => false,
+      onHandoff,
+      updater: { readSnapshot, waitForChange: vi.fn(async () => { throw unavailable; }) },
+    });
+    expect(readSnapshot).toHaveBeenCalledTimes(2);
+    expect(onHandoff).toHaveBeenCalledWith({ handoff: handedOff.handoff, installAttemptId: handedOff.installAttemptId });
+  });
+
+  it("surfaces non-transport observation failures", async () => {
+    await expect(observeElectronInstallerHandoff({
+      afterRevision: 0,
+      isClosing: () => false,
+      onHandoff: vi.fn(),
+      updater: { readSnapshot: async () => { throw new Error("invalid updater state"); }, waitForChange: vi.fn() },
+    })).rejects.toThrow("invalid updater state");
   });
 });

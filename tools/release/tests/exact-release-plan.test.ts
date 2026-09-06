@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { parseContentIdentityRegistry } from "@open-design/metatool";
 
-import { acceptedShellBaselineIdentity, type AcceptedShellBaselinePayload } from "../src/exact/accepted-baseline.js";
+import { acceptedShellBaselineIdentity, createAcceptedShellBaselineReceipt, type AcceptedShellBaselinePayload } from "../src/exact/accepted-baseline.js";
 import { createExactPlan } from "../src/exact/plan.js";
 import { createExactReleasePlan } from "../src/exact/release-plan.js";
 
@@ -31,7 +31,7 @@ async function fixture() {
   return {
     registry: parseContentIdentityRegistry({
       identities: Object.fromEntries(ids.map((id) => [id, {
-        parameters: (id.startsWith("electron.") && !id.startsWith("electron.contract.")) || id === "closure.acceptance.hot" ? ["target", "acceptedShellBaseline"] : ["target"],
+        parameters: id === "closure.acceptance.hot" ? ["target", "acceptedShellBaseline"] : ["target"],
         schemaVersion: 1, sourceSets: [id],
       }])),
       schemaVersion: 1,
@@ -58,7 +58,8 @@ describe("exact release plan", () => {
       ...input, availableIdentities: new Set(), channel: "betahyx", target: "darwin-arm64",
     });
     expect(second.baseline.baselineIdentity).not.toBe(first.baseline.baselineIdentity);
-    expect(second.plan.nodes["electron.shell.build"].identity).not.toBe(first.plan.nodes["electron.shell.build"].identity);
+    expect(second.plan.nodes["electron.shell.build"].identity).toBe(first.plan.nodes["electron.shell.build"].identity);
+    expect(second.plan.nodes["closure.build"].identity).not.toBe(first.plan.nodes["closure.build"].identity);
   });
 
   it("retains accepted Shell identities across a Closure-only change", async () => {
@@ -71,9 +72,16 @@ describe("exact release plan", () => {
     const baselineIdentity = acceptedShellBaselineIdentity(baseline);
     const acceptedPlan = await createExactPlan({ ...input, acceptedShellBaseline: baselineIdentity, target: "darwin-arm64" });
     const acceptedIdentities = Object.values(acceptedPlan.nodes).map(({ identity }) => identity);
-    const bytes = Buffer.from(`${JSON.stringify({
-      acceptedIdentities, baseline, baselineIdentity, operation: "electron.shell-baseline.accepted", schemaVersion: 1,
-    })}\n`);
+    const acceptance = {
+      schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx",
+      releaseVersion: "0.1.0-betahyx.4", sourceCommit: "f".repeat(40), target: "darwin-arm64",
+      shell: baseline.shell, artifact: { url: "https://releases.example/electron.dmg", ...baseline.artifact },
+      installed: { shell: baseline.shell, target: "darwin-arm64", proof: { files: { seeds: [
+        { file: "standalone-launcher.mjs", ...baseline.seed.standalone },
+        { file: "closure.mjs", ...baseline.seed.closure },
+      ] } } },
+    };
+    const bytes = Buffer.from(`${JSON.stringify(createAcceptedShellBaselineReceipt(acceptance, acceptedIdentities))}\n`);
     await writeFile(join(input.root, "closure.build", "input.txt"), "new Closure\n");
     const release = await createExactReleasePlan({
       ...input,

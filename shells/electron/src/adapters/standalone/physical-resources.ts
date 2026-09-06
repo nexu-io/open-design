@@ -1,7 +1,7 @@
 import {
   normalizeSidecarStamp,
   type SidecarStamp,
-} from "@open-design/sidecar";
+} from "@open-design/sidecar/authority";
 import type { StandaloneGenerationBinding } from "@open-design/standalone";
 
 export const ELECTRON_PHYSICAL_RESOURCE_SET_SCHEMA_VERSION = 1 as const;

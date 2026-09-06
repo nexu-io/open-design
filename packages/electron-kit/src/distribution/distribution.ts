@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -40,8 +40,9 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     : Platform.MAC.createTarget([...policy.mac.targets], process.arch === "arm64" ? Arch.arm64 : Arch.x64);
   const require = createRequire(import.meta.url);
   const electronPackage = JSON.parse(await readFile(require.resolve("electron/package.json"), "utf8")) as { version: string };
-  const scratchRoot = platform === "win" ? await mkdtemp(join(tmpdir(), "electron-kit-nsis-")) : null;
-  const windowsNsisIncludePath = scratchRoot == null ? undefined : join(scratchRoot, "installer.nsh");
+  const scratchRoot = await mkdtemp(join(tmpdir(), "electron-kit-distribution-"));
+  const projectRoot = join(scratchRoot, "project");
+  const windowsNsisIncludePath = platform === "win" ? join(scratchRoot, "installer.nsh") : undefined;
   let built: string[];
   const existingResourceNames = new Set(input.scene.authorityResources.map(({ name }) => name));
   const additionalResources = input.additionalResources ?? [];
@@ -51,6 +52,22 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     await access(resource.path);
   }
   try {
+    await mkdir(projectRoot, { recursive: true });
+    await Promise.all([
+      copyFile(input.scene.mainPath, join(projectRoot, "main.cjs")),
+      copyFile(input.scene.rendererPreloadPath, join(projectRoot, "renderer-mount-preload.cjs")),
+      copyFile(input.scene.nodeCarrierLockPath, join(projectRoot, "node-lock.json")),
+      copyFile(input.scene.runtimeConfigPath, join(projectRoot, "runtime.json")),
+      writeFile(join(projectRoot, "shell.json"), `${JSON.stringify(input.manifest, null, 2)}\n`, "utf8"),
+      writeFile(join(projectRoot, "package.json"), `${JSON.stringify({
+        name: input.manifest.executableName,
+        version: input.manifest.version,
+        private: true,
+        description: `${input.manifest.productName} Electron Shell`,
+        author: input.manifest.publisher,
+        main: "main.cjs",
+      }, null, 2)}\n`, "utf8"),
+    ]);
     if (windowsNsisIncludePath != null) {
       await writeElectronWindowsNsisInclude({
         identity: resolveElectronWindowsInstallIdentity({ manifest: input.manifest, policy: windowsLifecycle }),
@@ -58,7 +75,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
       });
     }
     built = await electronBuild({
-      projectDir: input.scene.sceneRoot,
+      projectDir: projectRoot,
       targets,
       config: {
         ...resolveElectronDistributionConfiguration({
@@ -76,7 +93,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
       },
     });
   } finally {
-    if (scratchRoot != null) await rm(scratchRoot, { force: true, recursive: true });
+    await rm(scratchRoot, { force: true, recursive: true });
   }
   const appPath = platform === "mac"
     ? join(input.outputRoot, `mac-${process.arch}`, `${input.manifest.executableName}.app`)

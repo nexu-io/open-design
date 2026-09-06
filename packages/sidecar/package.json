@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./authority": {
+      "types": "./dist/authority.d.ts",
+      "default": "./dist/authority.mjs"
     }
   },
   "scripts": {

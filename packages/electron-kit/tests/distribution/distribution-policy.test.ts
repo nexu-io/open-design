@@ -93,7 +93,7 @@ describe("Electron distribution policy", () => {
       include: "/tmp/electron-kit-installer.nsh",
     });
     expect(configuration.files).not.toContain("distribution.json");
-    expect(configuration.files).toContain("scene.json");
+    expect(configuration.files).not.toContain("scene.json");
     expect(configuration.files).toContain("renderer-mount-preload.cjs");
     expect(configuration.files).not.toContain("scene-receipt.json");
   });

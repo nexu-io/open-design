@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { scheduleElectronInstallerHandoff } from "@/update/installation/index.js";
+import { scheduleElectronInstallerHandoff, stageElectronInstallerArtifact } from "@/update/installation/index.js";
 
 describe("Electron installer after-quit handoff", () => {
   it("re-verifies the artifact and lets a detached helper observe parent exit", async () => {
@@ -14,6 +14,11 @@ describe("Electron installer after-quit handoff", () => {
     const artifact = Buffer.from("verified fixture installer");
     await writeFile(artifactPath, artifact);
     try {
+      const digest = createHash("sha256").update(artifact).digest("hex");
+      const staged = await stageElectronInstallerArtifact({
+        artifact: { path: artifactPath, sha256: digest, size: artifact.byteLength, mediaType: "application/x-apple-diskimage" },
+        authorityRoot: join(root, "authority"),
+      });
       const receipt = await scheduleElectronInstallerHandoff({
         installAttemptId: "0198f07a-104f-7750-b9ab-4659e48ac69b",
         handoff: {
@@ -21,12 +26,30 @@ describe("Electron installer after-quit handoff", () => {
           releaseVersion: "0.2.0",
           target: "darwin-arm64",
           artifact: {
-            path: artifactPath,
-            sha256: createHash("sha256").update(artifact).digest("hex"),
+            path: staged.artifact.path,
+            sha256: digest,
             size: artifact.byteLength,
             mediaType: "application/x-apple-diskimage",
+            device: staged.artifact.device,
+            inode: staged.artifact.inode,
           },
           shell: { type: "electron", version: "0.2.0", buildHash: "a".repeat(64) },
+        },
+        artifactIdentity: staged.artifact,
+        platformTrust: {
+          schemaVersion: 1,
+          operation: "electron.macos-installer.trust",
+          mode: "verify-only",
+          container: staged.artifact,
+          release: {
+            channel: "betahyx",
+            releaseVersion: "0.2.0",
+            shell: { type: "electron", version: "0.2.0", buildHash: "a".repeat(64) },
+            installIdentity: { appId: "io.open-design.test", executableName: "test", namespace: "test", productName: "Test" },
+            designatedRequirement: 'identifier "io.open-design.test"',
+            teamIdentifier: "adhoc",
+          },
+          app: { provider: "verify-only", appBundleName: "test.app", bundleId: "io.open-design.test", executableName: "test", productName: "Test", designatedRequirement: 'identifier "io.open-design.test"', teamIdentifier: "adhoc", codesignVerified: true, gatekeeperAssessed: false },
         },
         mode: "verify-only",
         nodeExecutablePath: process.execPath,
@@ -38,7 +61,7 @@ describe("Electron installer after-quit handoff", () => {
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const result = await readFile(receipt.resultPath, "utf8").catch(() => null);
         if (result != null) {
-          expect(JSON.parse(result)).toMatchObject({ state: "verified", artifactPath, installAttemptId: receipt.installAttemptId });
+          expect(JSON.parse(result)).toMatchObject({ state: "verified", artifactPath: staged.artifact.path, installAttemptId: receipt.installAttemptId });
           return;
         }
         await new Promise((resolve) => setTimeout(resolve, 25));

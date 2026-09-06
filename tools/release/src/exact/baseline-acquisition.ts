@@ -43,11 +43,16 @@ export async function fetchAcceptedShellBaseline(input: Readonly<{
     throw new Error("accepted Shell baseline pointer JSON is invalid");
   }
   const pointer = record(decoded, "accepted Shell baseline pointer");
-  exactKeys(pointer, ["channel", "operation", "receipt", "schemaVersion", "target"], "accepted Shell baseline pointer");
+  exactKeys(pointer, ["channel", "operation", "receipt", "releaseVersion", "schemaVersion", "sourceCommit", "target"], "accepted Shell baseline pointer");
   const receipt = record(pointer.receipt, "accepted Shell baseline pointer receipt");
   exactKeys(receipt, ["sha256", "size", "url"], "accepted Shell baseline pointer receipt");
   if (pointer.schemaVersion !== 1 || pointer.operation !== "electron.shell-baseline.latest"
-      || pointer.channel !== input.channel || pointer.target !== input.target) throw new Error("accepted Shell baseline pointer scope is invalid");
+      || pointer.channel !== input.channel || pointer.target !== input.target
+      || typeof pointer.releaseVersion !== "string"
+      || !new RegExp(`^\\d+\\.\\d+\\.\\d+-${input.channel.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\.\\d+$`, "u").test(pointer.releaseVersion)
+      || typeof pointer.sourceCommit !== "string" || !/^[a-f0-9]{40}$/u.test(pointer.sourceCommit)) {
+    throw new Error("accepted Shell baseline pointer scope is invalid");
+  }
   if (typeof receipt.url !== "string" || typeof receipt.sha256 !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(receipt.sha256)
       || !Number.isSafeInteger(receipt.size) || (receipt.size as number) < 0) throw new Error("accepted Shell baseline pointer receipt is invalid");
   const receiptUrl = new URL(receipt.url);

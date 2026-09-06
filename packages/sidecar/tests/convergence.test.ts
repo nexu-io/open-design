@@ -28,6 +28,7 @@ import {
   type SidecarResources,
   type SidecarStamp,
 } from "../src/index.js";
+import { launchSidecarWithSupervisor } from "../src/authority.js";
 import { retireSidecarGeneration, sidecarGenerationRef } from "../src/generation.js";
 import { collectSidecarGenerationPids } from "../src/process-tree.js";
 import { resolvePrivateIpcPath } from "../src/stamp.js";
@@ -373,7 +374,7 @@ describe("normalized sidecar client", () => {
 
 describe("server-side atomic operations", () => {
   it("rejects an unbound supervisor path before spawning", async () => {
-    await expect(launchSidecar({
+    await expect(launchSidecarWithSupervisor({
       args: ["/unused/target.mjs"],
       command: process.execPath,
       resources: {

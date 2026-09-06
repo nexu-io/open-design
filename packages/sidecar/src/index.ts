@@ -57,6 +57,7 @@ export {
 } from "./stamp.js";
 export type {
   SidecarLaunchRequest,
+  SidecarAuthorityLaunchRequest,
   SidecarLaunchConvergenceOptions,
   SidecarLaunchConvergenceResult,
   SidecarRestartOptions,
@@ -66,20 +67,23 @@ export type {
   SidecarStopRequest,
   SidecarStopSetResult,
   SpawnedSidecar,
+  SidecarSupervisorBinding,
 } from "./operations.js";
 export {
-  bootstrapSidecarProcess,
   convergeSidecarLaunch,
   findSidecarProcesses,
   getSidecarStatus,
   invokeSidecar,
-  launchSidecar,
   registerSidecarProcess,
-  restartSidecar,
   resolveSidecarLauncherExitCode,
   SidecarLaunchConvergenceError,
   spawnSidecarLauncher,
-  spawnSidecar,
   stopSidecar,
   stopSidecars,
 } from "./operations.js";
+export {
+  bootstrapSidecarProcess,
+  launchSidecar,
+  restartSidecar,
+  spawnSidecar,
+} from "./automatic.js";

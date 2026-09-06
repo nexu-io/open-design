@@ -15,6 +15,14 @@ await build({
 });
 await build({
   bundle: true,
+  entryPoints: ["./src/commands/cdp-control.ts"],
+  format: "esm",
+  outfile: "./dist/cdp-control.mjs",
+  platform: "node",
+  target: "node24",
+});
+await build({
+  bundle: true,
   entryPoints: ["./src/runtime-api.ts"],
   format: "esm",
   outfile: "./dist/runtime-api.mjs",
@@ -39,6 +47,8 @@ const publicEntries = {
   "platform/windows/index": "platform/windows/index",
   "commands/dev": "commands/dev",
   "commands/pack": "commands/pack",
+  "cdp-api": "cdp-api",
+  "update/installation/index": "update/installation/index",
 };
 for (const [entry, output] of Object.entries(publicEntries)) {
   await build({

@@ -71,8 +71,22 @@ export type StandaloneShellUpdaterSnapshot = Readonly<{
     interaction: "restart-and-install";
     releaseVersion: string;
     target: string;
-    artifact: Readonly<{ path: string; sha256: string; size: number; mediaType: string }>;
+    artifact: Readonly<{
+      path: string;
+      sha256: string;
+      size: number;
+      mediaType: string;
+      /** Present only after a Shell authority has staged a local immutable artifact. */
+      device?: string;
+      inode?: string;
+    }>;
     shell: Readonly<{ type: string; version: string; buildHash: string }>;
+    platformTrust?: Readonly<{
+      platform: "macos";
+      mode: "formal" | "verify-only";
+      designatedRequirement: string;
+      teamIdentifier: string;
+    }>;
   }>;
   error?: Readonly<{ code: string; message: string }>;
 }>;
@@ -117,6 +131,14 @@ export function validateShellUpdaterSnapshot(value: unknown): StandaloneShellUpd
   if (["available", "downloading", "ready", "applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.candidateId == null) throw new Error("Shell updater phase lacks a candidate identity");
   if (["applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.installAttemptId == null) throw new Error("Shell updater phase lacks an install attempt identity");
   if (["ready", "applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.handoff == null) throw new Error("Shell updater phase lacks an exact handoff");
+  if (snapshot.handoff != null) {
+    const artifact = snapshot.handoff.artifact;
+    const hasDevice = artifact.device != null;
+    const hasInode = artifact.inode != null;
+    if (hasDevice !== hasInode || (hasDevice && (!/^\d+$/u.test(artifact.device!) || !/^\d+$/u.test(artifact.inode!)))) {
+      throw new Error("Shell updater staged artifact identity is incomplete");
+    }
+  }
   const expectedActions = shellUpdaterActions(snapshot);
   if (snapshot.actions.length !== expectedActions.length || snapshot.actions.some((action, index) => {
     const expected = expectedActions[index];

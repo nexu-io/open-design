@@ -6,6 +6,7 @@ import type {
   StandaloneShellUpdaterActionResult,
   StandaloneShellUpdaterSnapshot,
 } from "@open-design/standalone";
+import { stageElectronInstallerArtifact } from "@open-design/electron-kit/installation";
 
 import type { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
@@ -21,7 +22,11 @@ export class ElectronStandaloneHostUpdater {
     readonly shellType: string,
     private readonly lifecycle: ElectronStandaloneHostLifecycle,
     private readonly ledger: ElectronStandaloneShellUpdaterLedger,
-    private readonly release?: Readonly<{ feed: ElectronReleaseExactFeed; candidates: ElectronStandaloneShellCandidateLedger }>,
+    private readonly release?: Readonly<{
+      authorityRoot: string;
+      feed: ElectronReleaseExactFeed;
+      candidates: ElectronStandaloneShellCandidateLedger;
+    }>,
   ) {}
 
   async #serialize<T>(operation: () => Promise<T>): Promise<T> {
@@ -112,6 +117,10 @@ export class ElectronStandaloneHostUpdater {
       current = await this.ledger.update({ expectedRevision: snapshot.revision, state: "downloading", progress: { completed: 0, total } });
       const downloaded = await this.release!.feed.download(candidate);
       const artifact = candidate.distribution.artifact;
+      const staged = await stageElectronInstallerArtifact({
+        artifact: { path: downloaded.path, sha256: artifact.sha256, size: artifact.size, mediaType: artifact.mediaType },
+        authorityRoot: this.release!.authorityRoot,
+      });
       const ready = await this.ledger.update({
         expectedRevision: current.revision,
         state: "ready",
@@ -120,8 +129,9 @@ export class ElectronStandaloneHostUpdater {
           interaction: "restart-and-install",
           releaseVersion: candidate.candidateId,
           target: candidate.distribution.target,
-          artifact: { path: downloaded.path, sha256: artifact.sha256, size: artifact.size, mediaType: artifact.mediaType },
+          artifact: { ...staged.artifact, mediaType: artifact.mediaType },
           shell: candidate.distribution.shell,
+          ...(candidate.distribution.platformTrust == null ? {} : { platformTrust: candidate.distribution.platformTrust }),
         },
       });
       return result("accepted", ready);
@@ -131,13 +141,13 @@ export class ElectronStandaloneHostUpdater {
     }
   }
 
-  confirmInstalled(proof: StandaloneShellIdentity): Promise<StandaloneShellUpdaterActionResult> {
+  confirmInstalled(_proof: StandaloneShellIdentity): Promise<StandaloneShellUpdaterActionResult> {
     return this.#serialize(async () => {
       const snapshot = await this.ledger.read();
-      const expected = snapshot.handoff?.shell;
-      const matches = expected != null && proof.type === expected.type && proof.version === expected.version && proof.buildHash === expected.buildHash;
-      if ((snapshot.state !== "applying" && snapshot.state !== "handed-off") || !matches) return result("blocked", snapshot);
-      return result("accepted", await this.ledger.update({ expectedRevision: snapshot.revision, state: "installed" }));
+      // Kept only as a fossil protocol method. Installation confirmation is a
+      // Shell authority operation bound to the installer claim and lifecycle
+      // fence; generation/renderer callers can never advance this ledger.
+      return result("blocked", snapshot);
     });
   }
 }

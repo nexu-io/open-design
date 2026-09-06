@@ -23,7 +23,7 @@ describe("accepted baseline acquisition", () => {
     const pointerBody = `${JSON.stringify({
       channel: "betahyx", operation: "electron.shell-baseline.latest",
       receipt: { sha256: `sha256:${createHash("sha256").update(receiptBody).digest("hex")}`, size: Buffer.byteLength(receiptBody), url: receiptUrl },
-      schemaVersion: 1, target: "darwin-arm64",
+      releaseVersion: "0.1.0-betahyx.4", schemaVersion: 1, sourceCommit: "a".repeat(40), target: "darwin-arm64",
     })}\n`;
     const fetcher: AcceptedBaselineFetcher = async (url) => url === pointerUrl
       ? response(url, 200, pointerBody)
@@ -40,7 +40,7 @@ describe("accepted baseline acquisition", () => {
     const escaped = JSON.stringify({
       channel: "betahyx", operation: "electron.shell-baseline.latest",
       receipt: { sha256: `sha256:${"a".repeat(64)}`, size: 1, url: "https://evil.example/receipt.json" },
-      schemaVersion: 1, target: "win32-x64",
+      releaseVersion: "0.1.0-betahyx.4", schemaVersion: 1, sourceCommit: "a".repeat(40), target: "win32-x64",
     });
     await expect(fetchAcceptedShellBaseline({
       channel: "betahyx", pointerUrl, target: "win32-x64", fetcher: async (url) => response(url, 200, escaped),

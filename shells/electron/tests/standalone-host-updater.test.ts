@@ -49,7 +49,23 @@ describe("Electron Standalone host updater", () => {
     expect(await ledger.read()).toEqual(result.snapshot);
   });
 
-  it("confirms only the exact replacement Shell after handoff", async () => {
+  it("blocks a Shell install while a Closure restart owns the shared transition", async () => {
+    const root = await mkdtemp(join(tmpdir(), "electron-host-updater-content-transition-"));
+    roots.push(root);
+    const ledger = await readyLedger(root);
+    const lifecycle = new ElectronStandaloneHostLifecycle(scope);
+    const updater = new ElectronStandaloneHostUpdater("electron", lifecycle, ledger);
+    const content = await lifecycle.beginTransition("content-restart", { attemptId: "content-restart-1" });
+    expect(content).toMatchObject({ state: "acquired", transition: { attemptId: "content-restart-1", phase: "reserved" } });
+
+    const result = await updater.invoke("force-stop-and-install");
+    expect(result).toMatchObject({ outcome: "blocked", snapshot: { state: "ready", handoff, blockedBy: [] } });
+    expect(result.snapshot.installAttemptId).toBeUndefined();
+    expect(await lifecycle.beginTransition("content-restart", { attemptId: "content-restart-1" })).toEqual(content);
+    expect(await ledger.read()).toEqual(result.snapshot);
+  });
+
+  it("keeps fossil confirm-installed blocked outside Shell authority", async () => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-updater-confirm-"));
     roots.push(root);
     const ledger = await readyLedger(root);
@@ -57,6 +73,6 @@ describe("Electron Standalone host updater", () => {
     const applying = await updater.invoke("install");
     expect((await updater.confirmInstalled({ type: "electron", version: "0.2.0", buildHash: "c".repeat(64), digest: "d".repeat(64) })).outcome).toBe("blocked");
     expect(await updater.confirmInstalled({ ...handoff.shell, digest: "d".repeat(64) }))
-      .toMatchObject({ outcome: "accepted", snapshot: { state: "installed", installAttemptId: applying.snapshot.installAttemptId } });
+      .toMatchObject({ outcome: "blocked", snapshot: { state: "applying", installAttemptId: applying.snapshot.installAttemptId } });
   });
 });

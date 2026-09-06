@@ -55,7 +55,7 @@ describe("orthogonal Standalone lifecycle models", () => {
     expect(projectSharedLifecycleStatus(state, 5_000)).toMatchObject({ generationId: generation, instanceId: "instance-a", references: 2 });
   });
 
-  it("makes force-stop sealing irreversible except through exact completion or expiry", () => {
+  it("makes force-stop sealing reversible only through exact completion or explicit fenced abandonment", () => {
     let state = running();
     state = reduceSharedLifecycleState(state, {
       type: "reserve-transition",
@@ -78,6 +78,36 @@ describe("orthogonal Standalone lifecycle models", () => {
       leaseExpiresAt: later,
     });
     expect(state).toMatchObject({ state: "running", generationId: generation, instanceId: "instance-b", transition: null });
+
+    let abandoned = running();
+    abandoned = reduceSharedLifecycleState(abandoned, {
+      type: "reserve-transition",
+      transition: { token: "installer-attempt", kind: "shell-install", phase: "reserved", fence: abandoned.fence, acquiredAt: now, expiresAt: later },
+    });
+    abandoned = reduceSharedLifecycleState(abandoned, { type: "force-stop", token: "installer-attempt", fence: abandoned.fence, requestedAt: now, expiresAt: later });
+    abandoned = reduceSharedLifecycleState(abandoned, { type: "tick", now: later, leaseDurationMs: 30_000 });
+    expect(abandoned).toMatchObject({ state: "stopped", transition: { token: "installer-attempt", kind: "shell-install", phase: "stopped-sealed" } });
+    expect(() => reduceSharedLifecycleState(abandoned, {
+      type: "start",
+      generationId: generation,
+      bindingDigest: "e".repeat(64),
+      instanceId: "must-not-start",
+      attachment,
+      heartbeatAt: later,
+      leaseExpiresAt: "2026-08-25T00:01:00.000Z",
+    })).toThrow("transition is active");
+    expect(() => reduceSharedLifecycleState(abandoned, { type: "abandon-stopped-transition", token: "other-attempt", fence: abandoned.fence }))
+      .toThrow("stale shared lifecycle transition");
+    abandoned = reduceSharedLifecycleState(abandoned, { type: "abandon-stopped-transition", token: "installer-attempt", fence: abandoned.fence });
+    expect(abandoned).toMatchObject({ state: "stopped", transition: null, attachments: [] });
+
+    let expiringContent = running();
+    expiringContent = reduceSharedLifecycleState(expiringContent, {
+      type: "reserve-transition",
+      transition: { token: "content-expiry", kind: "content-restart", phase: "reserved", fence: expiringContent.fence, acquiredAt: now, expiresAt: later },
+    });
+    expiringContent = reduceSharedLifecycleState(expiringContent, { type: "tick", now: later, leaseDurationMs: 30_000 });
+    expect(expiringContent.transition).toBeNull();
   });
 
   it("derives Shell updater actions and binds every install phase to candidate and attempt identities", () => {

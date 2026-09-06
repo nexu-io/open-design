@@ -1,8 +1,10 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { build } from "esbuild";
 
 import { assembleElectronScene, loadElectronScene } from "@/distribution/index.js";
 
@@ -13,6 +15,22 @@ afterEach(async () => {
 });
 
 describe("Electron scene", () => {
+  it("keeps the real Electron CJS closure on the import-meta-free Sidecar authority", async () => {
+    const repositoryRoot = resolve(fileURLToPath(new URL("../../../../", import.meta.url)));
+    const result = await build({
+      bundle: true,
+      entryPoints: [join(repositoryRoot, "shells/electron/src/main.ts")],
+      external: ["electron"],
+      format: "cjs",
+      logLevel: "silent",
+      platform: "node",
+      target: "node24",
+      write: false,
+    });
+    expect(result.warnings.filter(({ id }) => id === "empty-import-meta")).toEqual([]);
+    expect(result.outputFiles?.[0]?.text).not.toContain("var import_meta = {};");
+  });
+
   it("keeps deterministic content metadata inside and path-bearing receipt outside", async () => {
     const root = await mkdtemp(join(tmpdir(), "electron-scene-"));
     roots.push(root);

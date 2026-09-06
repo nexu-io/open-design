@@ -7,8 +7,8 @@ const sidecar = vi.hoisted(() => ({
   withSidecarLifecycleLock: vi.fn(async (_stamps, operation) => await operation()),
 }));
 
-vi.mock("@open-design/sidecar", async (importOriginal) => ({
-  ...await importOriginal<typeof import("@open-design/sidecar")>(),
+vi.mock("@open-design/sidecar/authority", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@open-design/sidecar/authority")>(),
   stopSidecars: sidecar.stopSidecars,
   withSidecarLifecycleLock: sidecar.withSidecarLifecycleLock,
 }));

@@ -108,6 +108,29 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
     }
   });
 
+  it.each([
+    {
+      first: { kind: "shell-install" as const, attemptId: "shell-install-1" },
+      second: { kind: "content-restart" as const, attemptId: "content-restart-1" },
+    },
+    {
+      first: { kind: "content-restart" as const, attemptId: "content-restart-1" },
+      second: { kind: "shell-install" as const, attemptId: "shell-install-1" },
+    },
+  ])("grants only the first of concurrent $first.kind and $second.kind requests", async ({ first, second }) => {
+    const lifecycle = new ElectronStandaloneHostLifecycle(scope);
+    const [winner, blocked] = await Promise.all([
+      lifecycle.beginTransition(first.kind, { attemptId: first.attemptId }),
+      lifecycle.beginTransition(second.kind, { attemptId: second.attemptId }),
+    ]);
+
+    expect(winner).toMatchObject({ state: "acquired", transition: { attemptId: first.attemptId, phase: "reserved" } });
+    expect(blocked).toEqual({ state: "blocked", reason: "transition-active", occupants: [] });
+    expect(await lifecycle.beginTransition(first.kind, { attemptId: first.attemptId })).toEqual(winner);
+    expect(await lifecycle.beginTransition(second.kind, { attemptId: second.attemptId }))
+      .toEqual({ state: "blocked", reason: "transition-active", occupants: [] });
+  });
+
   it("atomically resumes a content restart after the sealed host crashes", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "electron-content-transition-recovery-"));
     try {

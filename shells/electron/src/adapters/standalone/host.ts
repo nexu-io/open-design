@@ -4,11 +4,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
-  bootstrapSidecarProcess,
+  bootstrapSidecarProcessWithSupervisor,
   readCurrentSidecarStamp,
   SidecarClient,
   SidecarFactory,
-} from "@open-design/sidecar";
+} from "@open-design/sidecar/authority";
 import {
   FossilHandoffHost,
   createStandaloneRuntimeLayoutCapabilityHandler,
@@ -47,6 +47,7 @@ type HostConfig = Readonly<{
   supervisorSha256: string;
   supervisorPath: string;
   shell: Readonly<{ type: string; version: string; buildHash: string; digest: string }>;
+  channelHeadUrl: string;
 }>;
 
 function readConfig(): HostConfig {
@@ -54,7 +55,7 @@ function readConfig(): HostConfig {
   if (serialized == null) throw new Error(`${ELECTRON_STANDALONE_HOST_CONFIG_ENV} is required`);
   const value = JSON.parse(serialized) as Partial<HostConfig>;
   const keys = Object.keys(value).sort();
-  if (JSON.stringify(keys) !== JSON.stringify(["hostPath", "hostSha256", "layout", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorPath", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
+  if (JSON.stringify(keys) !== JSON.stringify(["channelHeadUrl", "hostPath", "hostSha256", "layout", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot", "supervisorPath", "supervisorSha256"])) throw new Error("Electron Standalone host configuration fields are invalid");
   if (
     value.schemaVersion !== 1
     || value.scope == null
@@ -64,6 +65,7 @@ function readConfig(): HostConfig {
     || typeof value.runtimeRoot !== "string"
     || typeof value.resourceRoot !== "string"
     || typeof value.hostPath !== "string"
+    || typeof value.channelHeadUrl !== "string"
     || value.layout == null
     || typeof value.supervisorPath !== "string"
     || !/^[a-f0-9]{64}$/u.test(value.hostSha256 ?? "")
@@ -79,8 +81,10 @@ function readConfig(): HostConfig {
     || JSON.stringify(Object.keys(value.shell).sort()) !== JSON.stringify(["buildHash", "digest", "type", "version"])) throw new Error("Electron Standalone host Shell identity is invalid");
   const shell = value.shell as HostConfig["shell"];
   validateShellIdentity(shell);
+  const channelHeadUrl = new URL(value.channelHeadUrl);
+  if ((channelHeadUrl.protocol !== "https:" && channelHeadUrl.protocol !== "http:") || channelHeadUrl.username.length > 0 || channelHeadUrl.password.length > 0 || channelHeadUrl.hash.length > 0) throw new Error("Electron Standalone host channel head URL is invalid");
   const layout = validateStandaloneRuntimeLayout(value.layout);
-  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, layout, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }) });
+  return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, layout, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }), channelHeadUrl: channelHeadUrl.href });
 }
 
 class ElectronStandaloneHostRuntime {
@@ -100,13 +104,14 @@ class ElectronStandaloneHostRuntime {
     const feed = new ElectronReleaseExactFeed({
       cacheRoot: config.storeRoot,
       channel: config.scope.channel,
-      channelHeadUrl: installation.declaration.update.channelHeadUrl,
+      channelHeadUrl: config.channelHeadUrl,
       currentReleaseVersion: installation.declaration.releaseVersion,
       shell: config.shell,
       target: installation.declaration.target,
       trustedKeys: installation.trustedKeys,
     });
     this.updater = new ElectronStandaloneHostUpdater("electron", this.lifecycle, updaterLedger, {
+      authorityRoot: config.storeRoot,
       feed,
       candidates: new ElectronStandaloneShellCandidateLedger(config.storeRoot, config.scope, feed),
     });
@@ -248,7 +253,7 @@ export async function runElectronStandaloneHost(): Promise<void> {
     throw new Error("Electron Standalone host configuration differs from its Sidecar stamp");
   }
   const resources = Object.freeze({ dataRoot: config.storeRoot, ownerPid: null, port: 0, runtimeRoot: config.runtimeRoot });
-  if (await bootstrapSidecarProcess(stamp, resources, {
+  if (await bootstrapSidecarProcessWithSupervisor(stamp, resources, {
     args: [config.hostPath],
     command: process.execPath,
     cwd: process.cwd(),

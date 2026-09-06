@@ -2,7 +2,14 @@ import { createHash, createPrivateKey, createPublicKey, sign, verify } from "nod
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
-import { canonicalBytes, checkedFile, describeFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
+import {
+  canonicalBytes,
+  checkedFile,
+  describeFile,
+  readObject,
+  writeObject,
+  type JsonObject,
+} from "./control-common.js";
 
 const DIGEST = /^[a-f0-9]{64}$/u;
 const IDENTIFIER = /^[a-z][a-z0-9-]{0,31}$/u;
@@ -67,6 +74,10 @@ function semverCore(version: string): number[] {
 function compareCore(left: string, right: string): number {
   const a = semverCore(left), b = semverCore(right);
   return (a[0]! - b[0]!) || (a[1]! - b[1]!) || (a[2]! - b[2]!);
+}
+
+function publicObjectUrl(base: string, file: string): string {
+  return `${base}/${encodeURIComponent(basename(file))}`;
 }
 
 async function previousRequirements(path: unknown, channel: string, keys: readonly SigningKey[]): Promise<Map<string, JsonObject>> {
@@ -212,7 +223,27 @@ async function finalize(request: JsonObject, receiptPath: string): Promise<void>
     const mediaType = String(contribution.artifact.mediaType ?? "application/octet-stream"), artifact = await describeFile(path, mediaType);
     artifacts.push(artifact);
     if (contribution.updater?.protocol !== "standalone-shell-updater-v3") throw new Error(`Shell contribution lacks updater contract: ${key}`);
-    distributions.get(shellType)!.push({ shell: { type: shellType, version: shell!.version, buildHash: scene!.shellBuildHash }, target, artifact: { url: `${prepared.artifactBaseUrl}/${basename(path)}`, sha256: artifact.sha256, size: artifact.size, mediaType }, updater: contribution.updater });
+    if (shellType === "electron") {
+      const identity = contribution.installIdentity;
+      if (identity == null || typeof identity !== "object" || Array.isArray(identity)
+        || ["appId", "executableName", "namespace", "productName"].some((field) => typeof identity[field] !== "string" || identity[field].length === 0)) {
+        throw new Error(`Electron Shell contribution lacks installed identity: ${key}`);
+      }
+      if (target.startsWith("darwin-") && (contribution.platformTrust?.platform !== "macos"
+        || !["formal", "verify-only"].includes(String(contribution.platformTrust.mode))
+        || typeof contribution.platformTrust.designatedRequirement !== "string" || contribution.platformTrust.designatedRequirement.length === 0
+        || typeof contribution.platformTrust.teamIdentifier !== "string" || contribution.platformTrust.teamIdentifier.length === 0)) {
+        throw new Error(`Electron Shell contribution lacks macOS trust identity: ${key}`);
+      }
+    }
+    distributions.get(shellType)!.push({
+      shell: { type: shellType, version: shell!.version, buildHash: scene!.shellBuildHash },
+      target,
+      ...(contribution.installIdentity == null ? {} : { installIdentity: contribution.installIdentity }),
+      ...(contribution.platformTrust == null ? {} : { platformTrust: contribution.platformTrust }),
+      artifact: { url: publicObjectUrl(String(prepared.artifactBaseUrl), path), sha256: artifact.sha256, size: artifact.size, mediaType },
+      updater: contribution.updater,
+    });
   }
   if (seen.size !== expected.size || [...expected].some((key) => !seen.has(key))) throw new Error("Shell contributions do not cover prepared topology");
   const keys = await signingKeys(), output = resolve(String(request.outputDirectory ?? "")), documents = join(output, "documents");
@@ -220,7 +251,7 @@ async function finalize(request: JsonObject, receiptPath: string): Promise<void>
   const contentSource = await checkedFile(prepared.contentMetadata, "content metadata", request.contentMetadataFile), contentFile = join(documents, "content-metadata.json");
   await copyFile(contentSource, contentFile);
   const content = await describeFile(contentFile), base = String(prepared.artifactBaseUrl);
-  const lanes: JsonObject = { content: { releaseVersion: prepared.releaseVersion, url: `${base}/${basename(contentFile)}`, sha256: content.sha256, size: content.size } };
+  const lanes: JsonObject = { content: { releaseVersion: prepared.releaseVersion, url: publicObjectUrl(base, contentFile), sha256: content.sha256, size: content.size } };
   const shellMetadata: JsonObject = {}, shellFiles: string[] = [], requiredAcceptances: JsonObject[] = [];
   for (const shellType of [...distributions.keys()].sort()) {
     const values = distributions.get(shellType)!.sort((a, b) => String(a.target).localeCompare(String(b.target)));
@@ -229,8 +260,16 @@ async function finalize(request: JsonObject, receiptPath: string): Promise<void>
     await writeObject(shellFile, signed("document", shellDocument, keys));
     shellFiles.push(shellFile);
     const description = await describeFile(shellFile); shellMetadata[shellType] = description;
-    lanes[shellType] = { releaseVersion: prepared.releaseVersion, url: `${base}/${basename(shellFile)}`, sha256: description.sha256, size: description.size };
-    for (const value of values) requiredAcceptances.push({ shell: value.shell, target: value.target, artifact: value.artifact, shellMetadata: { url: lanes[shellType].url, sha256: description.sha256, size: description.size } });
+    lanes[shellType] = { releaseVersion: prepared.releaseVersion, url: publicObjectUrl(base, shellFile), sha256: description.sha256, size: description.size };
+    for (const value of values) requiredAcceptances.push({
+      shell: value.shell,
+      target: value.target,
+      ...(value.installIdentity == null ? {} : { installIdentity: value.installIdentity }),
+      ...(value.platformTrust == null ? {} : { platformTrust: value.platformTrust }),
+      artifact: value.artifact,
+      shellMetadata: { url: lanes[shellType].url, sha256: description.sha256, size: description.size },
+      updater: value.updater,
+    });
   }
   const headFile = join(documents, "channel-head.json");
   await writeObject(headFile, signed("head", { schemaVersion: 1, channel: prepared.channel, publishedAt: prepared.publishedAt, lanes }, keys));

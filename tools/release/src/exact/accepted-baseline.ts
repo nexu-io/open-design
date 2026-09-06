@@ -32,14 +32,20 @@ export type AcceptedShellBaselinePayload = Readonly<{
 }>;
 
 export type AcceptedShellBaselineReceipt = Readonly<{
+  acceptance: Readonly<Record<string, unknown>>;
   acceptedIdentities: readonly `sha256:${string}`[];
   baseline: AcceptedShellBaselinePayload;
   baselineIdentity: `sha256:${string}`;
+  channel: string;
   operation: "electron.shell-baseline.accepted";
+  releaseVersion: string;
   schemaVersion: typeof ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION;
+  sourceCommit: string;
+  target: ExactTarget;
 }>;
 
 export type AcceptedShellBaselineResolution = Readonly<{
+  acceptance?: Readonly<Record<string, unknown>>;
   acceptedIdentities: readonly `sha256:${string}`[];
   acceptedReceiptSha256?: `sha256:${string}`;
   baseline: AcceptedShellBaselinePayload | Readonly<{
@@ -64,7 +70,8 @@ export function createAcceptedShellBaselineReceipt(value: unknown, acceptedIdent
   if (credential.schemaVersion !== 1 || credential.operation !== "exact.acceptance" || credential.status !== "accepted"
       || shell.type !== "electron" || installed.target !== credential.target
       || installedShell.type !== shell.type || installedShell.version !== shell.version || installedShell.buildHash !== shell.buildHash
-      || typeof credential.channel !== "string") {
+      || typeof credential.channel !== "string" || typeof credential.releaseVersion !== "string"
+      || typeof credential.sourceCommit !== "string" || !/^[a-f0-9]{40}$/u.test(credential.sourceCommit)) {
     throw new Error("Electron installed acceptance credential identity is invalid");
   }
   if (!Array.isArray(files.seeds)) throw new Error("Electron installed acceptance seeds are invalid");
@@ -88,11 +95,16 @@ export function createAcceptedShellBaselineReceipt(value: unknown, acceptedIdent
     throw new Error("Electron installed acceptance exact identities are invalid");
   }
   return Object.freeze({
+    acceptance: Object.freeze(structuredClone(credential)),
     acceptedIdentities: Object.freeze([...acceptedIdentities].sort()),
     baseline,
     baselineIdentity: acceptedShellBaselineIdentity(baseline),
+    channel: baseline.channel,
     operation: "electron.shell-baseline.accepted",
+    releaseVersion: credential.releaseVersion,
     schemaVersion: ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION,
+    sourceCommit: credential.sourceCommit,
+    target: baseline.target,
   });
 }
 
@@ -183,9 +195,10 @@ export function resolveAcceptedShellBaseline(input: Readonly<{
     throw new Error("accepted Shell baseline receipt JSON is invalid");
   }
   const receipt = record(decoded, "accepted Shell baseline receipt");
-  exactKeys(receipt, ["acceptedIdentities", "baseline", "baselineIdentity", "operation", "schemaVersion"], "accepted Shell baseline receipt");
+  exactKeys(receipt, ["acceptance", "acceptedIdentities", "baseline", "baselineIdentity", "channel", "operation", "releaseVersion", "schemaVersion", "sourceCommit", "target"], "accepted Shell baseline receipt");
   if (receipt.schemaVersion !== ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION || receipt.operation !== "electron.shell-baseline.accepted"
-      || typeof receipt.baselineIdentity !== "string" || !SHA256_IDENTITY.test(receipt.baselineIdentity)) {
+      || typeof receipt.baselineIdentity !== "string" || !SHA256_IDENTITY.test(receipt.baselineIdentity)
+      || typeof receipt.releaseVersion !== "string" || typeof receipt.sourceCommit !== "string") {
     throw new Error("accepted Shell baseline receipt identity is invalid");
   }
   const baseline = payload(receipt.baseline);
@@ -196,7 +209,10 @@ export function resolveAcceptedShellBaseline(input: Readonly<{
   }
   if (baseline.channel !== input.channel || baseline.target !== input.target) throw new Error("accepted Shell baseline scope mismatch");
   if (acceptedShellBaselineIdentity(baseline) !== receipt.baselineIdentity) throw new Error("accepted Shell baseline payload digest mismatch");
+  const reconstructed = createAcceptedShellBaselineReceipt(receipt.acceptance, receipt.acceptedIdentities as `sha256:${string}`[]);
+  if (canonicalMetadataJson(reconstructed) !== canonicalMetadataJson(receipt)) throw new Error("accepted Shell baseline snapshot binding mismatch");
   return Object.freeze({
+    acceptance: reconstructed.acceptance,
     acceptedIdentities: Object.freeze([...(receipt.acceptedIdentities as `sha256:${string}`[])].sort()),
     acceptedReceiptSha256: actualReceiptSha256,
     baseline,

@@ -2,7 +2,7 @@ import {
   invokeSidecar,
   normalizeSidecarStamp,
   type SidecarStamp,
-} from "@open-design/sidecar";
+} from "@open-design/sidecar/authority";
 import type {
   GenerationRecord,
   LifecycleAttachment,
@@ -27,6 +27,14 @@ import {
 
 export type ElectronStandaloneControlTransport = (request: ElectronStandaloneControlRequest) => Promise<unknown>;
 
+export function electronStandaloneControlRequestTimeoutMs(request: Readonly<{ operation: string; timeoutMs?: number }>): number {
+  if (request.operation === "lifecycle.start" || request.operation === "transition.complete-start" || request.operation === "runtime.invoke") return 120_000;
+  if (request.operation === "lifecycle.release" || request.operation === "lifecycle.stop" || request.operation === "transition.force-stop") return 60_000;
+  if (request.operation === "updater.invoke") return 10 * 60_000;
+  if (request.operation === "updater.wait") return (request.timeoutMs ?? 0) + 2_000;
+  return 5_000;
+}
+
 const tokenPattern = /^[A-Za-z0-9._-]{1,128}$/u;
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -47,7 +55,9 @@ function attachmentCapability(value: unknown): string {
 
 export function createElectronStandaloneControlTransport(stampInput: SidecarStamp): ElectronStandaloneControlTransport {
   const stamp = Object.freeze(normalizeSidecarStamp(stampInput));
-  return async (request) => await invokeSidecar(stamp, ELECTRON_STANDALONE_CONTROL_ACTION, request);
+  return async (request) => await invokeSidecar(stamp, ELECTRON_STANDALONE_CONTROL_ACTION, request, {
+    timeoutMs: electronStandaloneControlRequestTimeoutMs(request),
+  });
 }
 
 export class ElectronStandaloneControlClient implements LifecyclePort {

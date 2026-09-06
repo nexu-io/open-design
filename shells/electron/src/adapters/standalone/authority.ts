@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import {
   convergeSidecarLaunch,
   getSidecarStatus,
-} from "@open-design/sidecar";
+} from "@open-design/sidecar/authority";
 import {
   canonicalJson,
   createStandaloneGenerationBinding,
@@ -27,9 +27,29 @@ import {
   type UpdateActivationPolicy,
 } from "@open-design/standalone";
 import type {
+  ElectronInstallerConfirmationReceipt,
+  ElectronInstallerArtifactIdentity,
+  ElectronInstallerHandoffReceipt,
+  ElectronInstallerHandoffRequest,
+  ElectronMacInstallerTrustReceipt,
+  ElectronMacLastKnownGoodCaptureReceipt,
+  ElectronInstallerRecoveryReceipt,
   ElectronShellManifest,
   ElectronStandaloneAuthorityFactory,
 } from "@open-design/electron-kit/runtime";
+import {
+  createMacSystemInstallerTrustVerifier,
+  captureMacElectronLastKnownGood,
+  prepareMacElectronLastKnownGoodRestore,
+  readMacElectronLastKnownGoodRestoreResult,
+  scheduleMacElectronLastKnownGoodRestore,
+  verifyElectronInstallerArtifact,
+  verifyMacElectronInstallerTrust,
+  type ElectronMacLastKnownGoodRestoreArmedReceipt,
+  type ElectronMacLastKnownGoodRestorePreparationReceipt,
+  type ElectronMacLastKnownGoodRestorePreparationRequest,
+  type ElectronMacLastKnownGoodRestoreResult,
+} from "@open-design/electron-kit/installation";
 
 import { ElectronStandaloneControlClient, createElectronStandaloneControlTransport } from "./control-client.js";
 import { ElectronStandaloneControlUpdater } from "./control-updater.js";
@@ -47,12 +67,16 @@ import { withElectronPhysicalResourceSetGuard } from "./guarded-lifecycle.js";
 import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
 import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
 import {
+  assertElectronInstallerClaimIdentity,
+  electronInstallerClaimIdentity,
+  electronInstallerClaimSnapshot,
   electronInstallerHandoffDigest,
   ElectronStandaloneInstallerClaimLedger,
   validateElectronInstallerReceiptForRequest,
 } from "./installer-claim.js";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 import { ElectronReleaseExactFeed } from "./release-feed.js";
+import { serializeInstallerRecoveryIntent } from "../updater/installer-recovery.js";
 
 type HostStatus = Readonly<{
   control: "ready";
@@ -105,18 +129,84 @@ function hostHasNoLogicalReferences(value: unknown): boolean {
     && (lifecycle as { references?: unknown }).references === 0;
 }
 
+function installerInvocationError(error: unknown): Readonly<{ code: string; message: string; observedAt: string }> {
+  const candidate = error as { code?: unknown };
+  return Object.freeze({
+    code: typeof candidate?.code === "string" && candidate.code.length > 0 ? candidate.code : "electron-installer-invocation-failed",
+    message: error instanceof Error ? error.message : String(error),
+    observedAt: new Date().toISOString(),
+  });
+}
+
+function stagedArtifactIdentity(request: Readonly<{ handoff: { artifact: Readonly<{
+  path: string; sha256: string; size: number; device?: string; inode?: string;
+}> } }>): ElectronInstallerArtifactIdentity {
+  const artifact = request.handoff.artifact;
+  if (artifact.device == null || artifact.inode == null) throw new Error("Electron installer handoff lacks its staged artifact identity");
+  return Object.freeze({ path: artifact.path, sha256: artifact.sha256, size: artifact.size, device: artifact.device, inode: artifact.inode });
+}
+
+type VerifyInstallerPlatformTrust = (input: Readonly<{
+  artifact: ElectronInstallerArtifactIdentity;
+  handoff: ElectronInstallerHandoffRequest["handoff"];
+  manifest: ElectronShellManifest;
+  runtimeRoot: string;
+}>) => Promise<ElectronMacInstallerTrustReceipt>;
+
+type CaptureInstallerLastKnownGood = (input: Readonly<{
+  appPath: string;
+  authorityRoot: string;
+  shell: StandaloneShellIdentity;
+  installIdentity: Readonly<{ appId: string; executableName: string; namespace: string; productName: string }>;
+}>) => Promise<ElectronMacLastKnownGoodCaptureReceipt>;
+
+type PrepareInstallerLastKnownGoodRestore = (input: ElectronMacLastKnownGoodRestorePreparationRequest) => Promise<ElectronMacLastKnownGoodRestorePreparationReceipt>;
+type ScheduleInstallerLastKnownGoodRestore = (input: ElectronMacLastKnownGoodRestorePreparationReceipt) => Promise<ElectronMacLastKnownGoodRestoreArmedReceipt>;
+type ReadInstallerLastKnownGoodRestoreResult = (input: ElectronMacLastKnownGoodRestorePreparationReceipt) => Promise<ElectronMacLastKnownGoodRestoreResult | null>;
+
+const verifyInstallerPlatformTrust: VerifyInstallerPlatformTrust = async ({ artifact, handoff, manifest, runtimeRoot }) => {
+  const trust = handoff.platformTrust;
+  if (!handoff.target.startsWith("darwin-") || trust?.platform !== "macos") throw new Error("Electron installer handoff lacks signed macOS trust identity");
+  if (trust.mode === "verify-only" && process.env.ELECTRON_KIT_FIXTURE_INSTALLER_VERIFY_ONLY !== "1") {
+    throw new Error("Electron installer verify-only trust is restricted to explicit local fixtures");
+  }
+  return await verifyMacElectronInstallerTrust({
+    container: artifact,
+    expectation: {
+      channel: manifest.channel,
+      releaseVersion: handoff.releaseVersion,
+      shell: handoff.shell,
+      installIdentity: { appId: manifest.appId, executableName: manifest.executableName, namespace: manifest.namespace, productName: manifest.productName },
+      designatedRequirement: trust.designatedRequirement,
+      teamIdentifier: trust.teamIdentifier,
+    },
+    mode: trust.mode,
+    mountRoot: join(resolve(runtimeRoot), "installer", "mounts", handoff.releaseVersion),
+    verifier: createMacSystemInstallerTrustVerifier(),
+  });
+};
+
 export function createElectronStandaloneAuthorityFactory(
   manifest: ElectronShellManifest,
   resourcesInput: ElectronPhysicalResourceSetDeclaration,
+  options: Readonly<{
+    verifyInstallerPlatformTrust?: VerifyInstallerPlatformTrust;
+    captureInstallerLastKnownGood?: CaptureInstallerLastKnownGood;
+    prepareInstallerLastKnownGoodRestore?: PrepareInstallerLastKnownGoodRestore;
+    scheduleInstallerLastKnownGoodRestore?: ScheduleInstallerLastKnownGoodRestore;
+    readInstallerLastKnownGoodRestoreResult?: ReadInstallerLastKnownGoodRestoreResult;
+    channelHeadUrl?: string;
+  }> = {},
 ): ElectronStandaloneAuthorityFactory {
   const resources = validateElectronPhysicalResourceSet(resourcesInput);
   const runtimeResource = resources.resources.find(({ id }) => id === "standalone-runtime");
   if (runtimeResource == null) throw new Error("Electron physical resource set lacks standalone-runtime");
-  return ({ namespaceRoot, officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
+  return ({ installedShellPath, namespaceRoot, officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
     async prepare(request) {
       if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
       if (canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
+      const channelHeadUrl = options.channelHeadUrl ?? installation.declaration.update.channelHeadUrl;
       const storeRoot = join(runtimeRoot, "standalone-store");
       const sidecarRuntimeRoot = join(runtimeRoot, "standalone-sidecar");
       const layout = Object.freeze({
@@ -170,6 +260,7 @@ export function createElectronStandaloneAuthorityFactory(
         supervisorPath: installation.supervisorPath,
         supervisorSha256: hostExpected.supervisorSha256,
         shell: request.shell,
+        channelHeadUrl,
       });
       const launchHost = async (nextBinding: StandaloneGenerationBinding) => {
         const resourceSet = bindElectronPhysicalResourceSet(resources, nextBinding);
@@ -225,7 +316,7 @@ export function createElectronStandaloneAuthorityFactory(
         new ElectronReleaseExactFeed({
           cacheRoot: storeRoot,
           channel: request.scope.channel,
-          channelHeadUrl: installation.declaration.update.channelHeadUrl,
+          channelHeadUrl,
           currentReleaseVersion: installation.declaration.releaseVersion,
           shell: request.shell,
           target: installation.declaration.target,
@@ -240,7 +331,98 @@ export function createElectronStandaloneAuthorityFactory(
         binding,
         generation,
         updater,
+        async readShellInstallationClaim() {
+          const claim = await installerClaimLedger.read();
+          return claim == null ? null : electronInstallerClaimSnapshot(claim);
+        },
+        async confirmShellInstallation(confirmationRequest) {
+          return await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async (guard) => {
+            let claim = await installerClaimLedger.read();
+            if (claim == null) throw new Error("Electron replacement Shell cannot confirm a missing installer claim");
+            assertElectronInstallerClaimIdentity(claim, confirmationRequest.expected);
+            if ((claim.state === "sealed" || claim.state === "armed") && Date.now() >= Date.parse(claim.expiresAt)) {
+              const expiredClaim = Object.freeze({ ...claim, revision: claim.revision + 1, state: "expired" as const });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), expiredClaim);
+              throw new Error("Electron replacement Shell cannot confirm an expired installer claim");
+            }
+            if (claim.state !== "armed" && claim.state !== "confirmed" && claim.state !== "consumed") {
+              throw new Error("Electron replacement Shell installer claim is not armed");
+            }
+            const snapshot = await updaterLedger.read();
+            if ((snapshot.state !== "applying" && snapshot.state !== "handed-off" && snapshot.state !== "installed")
+              || snapshot.installAttemptId !== claim.installAttemptId || snapshot.handoff == null
+              || electronInstallerHandoffDigest({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId }) !== claim.handoffDigest) {
+              throw new Error("Electron replacement confirmation differs from the durable updater transition");
+            }
+            const expectedShell = snapshot.handoff.shell;
+            const proof = confirmationRequest.proof;
+            if (canonicalJson(proof) !== canonicalJson(request.shell)
+              || proof.type !== expectedShell.type || proof.version !== expectedShell.version || proof.buildHash !== expectedShell.buildHash
+              || claim.receipt?.installAttemptId !== claim.installAttemptId || claim.receipt.artifactPath !== claim.artifact.path
+              || claim.receipt.artifactSha256 !== claim.artifact.sha256) {
+              throw new Error("Electron replacement Shell proof differs from the armed installer claim");
+            }
+            const lifecycleState = await lifecycleLedger.readOrInitial();
+            if (lifecycleState.transition != null) {
+              if (lifecycleState.transition.kind !== "shell-install" || lifecycleState.transition.phase !== "stopped-sealed"
+                || lifecycleState.transition.token !== claim.installAttemptId || lifecycleState.transition.fence !== claim.lifecycleFence) {
+                throw new Error("Electron replacement confirmation lifecycle fence differs from its claim");
+              }
+            } else if (claim.state !== "confirmed" && claim.state !== "consumed") {
+              throw new Error("Electron replacement confirmation lacks its sealed lifecycle transition");
+            } else if (lifecycleState.state !== "stopped" || lifecycleState.attachments.length !== 0) {
+              throw new Error("Electron replacement confirmation cannot prove its sealed lifecycle was consumed");
+            }
+            if (claim.state === "consumed" && snapshot.state === "installed") return claim.confirmation!.receipt!;
+
+            if (claim.state === "armed") {
+              const confirmedClaim = Object.freeze({
+                ...claim,
+                revision: claim.revision + 1,
+                state: "confirmed" as const,
+                confirmation: Object.freeze({ proof: structuredClone(proof) }),
+              });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), confirmedClaim);
+              claim = confirmedClaim;
+            } else if (canonicalJson(claim.confirmation?.proof) !== canonicalJson(proof)) {
+              throw new Error("Electron replacement confirmation proof changed after claim confirmation");
+            }
+
+            await guard.retire();
+            if (lifecycleState.transition != null) {
+              const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+              await continuation.confirmStoppedShellInstall(claim.installAttemptId, claim.lifecycleFence);
+            }
+
+            let confirmationReceipt = claim.confirmation?.receipt;
+            if (claim.state !== "consumed") {
+              const nextIdentity = Object.freeze({ ...electronInstallerClaimIdentity(claim), revision: claim.revision + 1 });
+              confirmationReceipt = Object.freeze({
+                schemaVersion: 1,
+                state: "consumed",
+                claim: nextIdentity,
+                installAttemptId: claim.installAttemptId,
+                updaterRevision: snapshot.state === "installed" ? snapshot.revision : snapshot.revision + 1,
+              }) satisfies ElectronInstallerConfirmationReceipt;
+              const consumedClaim = Object.freeze({
+                ...claim,
+                revision: nextIdentity.revision,
+                state: "consumed" as const,
+                confirmation: Object.freeze({ proof: structuredClone(proof), receipt: confirmationReceipt }),
+              });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), consumedClaim);
+              claim = consumedClaim;
+            }
+            if (snapshot.state !== "installed") {
+              await updaterLedger.update({ expectedRevision: snapshot.revision, state: "installed" });
+            }
+            activeHost = await launchHost(activeHost.binding);
+            return confirmationReceipt!;
+          });
+        },
         async armShellInstallation({ install, request: installationRequest }) {
+          const artifactIdentity = stagedArtifactIdentity(installationRequest);
+          await verifyElectronInstallerArtifact(artifactIdentity);
           const handoffDigest = electronInstallerHandoffDigest(installationRequest);
           const snapshot = await updaterLedger.read();
           if ((snapshot.state !== "applying" && snapshot.state !== "handed-off")
@@ -255,7 +437,9 @@ export function createElectronStandaloneAuthorityFactory(
               || canonicalJson(guardedSnapshot.handoff) !== canonicalJson(installationRequest.handoff)) {
               throw new Error("Electron installer handoff changed before its guarded continuation");
             }
-            const existing = await installerClaimLedger.read();
+            const persisted = await installerClaimLedger.read();
+            const superseded = persisted?.state === "abandoned" || persisted?.state === "consumed" ? persisted : null;
+            let existing = superseded == null ? persisted : null;
             if (existing != null && (existing.bindingDigest !== activeHost.binding.digest
               || existing.generationId !== activeGeneration.id
               || existing.installAttemptId !== installationRequest.installAttemptId
@@ -263,10 +447,31 @@ export function createElectronStandaloneAuthorityFactory(
               || existing.runtimeRoot !== resolve(installationRequest.runtimeRoot))) {
               throw new Error("Electron installer claim differs from the guarded continuation");
             }
+            if (existing != null && (existing.state === "sealed" || existing.state === "armed") && Date.now() >= Date.parse(existing.expiresAt)) {
+              const expiredClaim = Object.freeze({ ...existing, revision: existing.revision + 1, state: "expired" as const });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(existing), expiredClaim);
+              existing = expiredClaim;
+            }
             if (existing?.state === "armed") {
               if (guardedSnapshot.state === "applying") await updaterLedger.update({ expectedRevision: guardedSnapshot.revision, state: "handed-off" });
               return existing.receipt!;
             }
+            if (existing != null) throw new Error("Electron installer claim requires explicit recovery");
+
+            const platformTrust = await (options.verifyInstallerPlatformTrust ?? verifyInstallerPlatformTrust)({
+              artifact: artifactIdentity,
+              handoff: installationRequest.handoff,
+              manifest,
+              runtimeRoot: installationRequest.runtimeRoot,
+            });
+            if (installedShellPath == null) throw new Error("Electron installer cannot capture LKG without the installed Shell path");
+            const lastKnownGood = await (options.captureInstallerLastKnownGood ?? captureMacElectronLastKnownGood)({
+              appPath: resolve(installedShellPath),
+              authorityRoot: storeRoot,
+              shell: request.shell,
+              installIdentity: { appId: manifest.appId, executableName: manifest.executableName, namespace: manifest.namespace, productName: manifest.productName },
+            });
+            const exactInstallationRequest = Object.freeze({ ...installationRequest, artifactIdentity, platformTrust });
 
             const retirement = await guard.retire();
             const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
@@ -288,21 +493,258 @@ export function createElectronStandaloneAuthorityFactory(
             activeAttachment = null;
             const sealedClaim = existing ?? Object.freeze({
               schemaVersion: 1 as const,
+              revision: superseded == null ? 0 : superseded.revision + 1,
               state: "sealed" as const,
               bindingDigest: activeHost.binding.digest,
               generationId: activeGeneration.id,
               installAttemptId: installationRequest.installAttemptId,
               handoffDigest,
               runtimeRoot: resolve(installationRequest.runtimeRoot),
+              lifecycleFence: sealed.fence,
+              createdAt: new Date().toISOString(),
+              expiresAt: sealed.expiresAt,
+              artifact: artifactIdentity,
+              platformTrust,
+              lastKnownGood,
+              invocation: Object.freeze({ state: "pending" as const }),
               retirement,
             });
-            if (existing == null) await installerClaimLedger.write(sealedClaim);
-            const receipt = validateElectronInstallerReceiptForRequest(await install(installationRequest), installationRequest);
-            await installerClaimLedger.write(Object.freeze({ ...sealedClaim, state: "armed" as const, receipt }));
+            if (existing == null) await installerClaimLedger.compareAndSet(superseded == null ? null : electronInstallerClaimIdentity(superseded), sealedClaim);
+            let receipt: Awaited<ReturnType<typeof install>>;
+            try {
+              receipt = validateElectronInstallerReceiptForRequest(await install(exactInstallationRequest), exactInstallationRequest);
+            } catch (error) {
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(sealedClaim), Object.freeze({
+                ...sealedClaim,
+                revision: sealedClaim.revision + 1,
+                invocation: Object.freeze({ state: "failed" as const, lastError: installerInvocationError(error) }),
+              }));
+              throw error;
+            }
+            await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(sealedClaim), Object.freeze({
+              ...sealedClaim,
+              revision: sealedClaim.revision + 1,
+              state: "armed" as const,
+              invocation: Object.freeze({ state: "armed" as const }),
+              receipt,
+            }));
             const current = await updaterLedger.read();
             if (current.state === "applying") await updaterLedger.update({ expectedRevision: current.revision, state: "handed-off" });
             else if (current.state !== "handed-off") throw new Error("Electron updater escaped its installer handoff transition");
             return receipt;
+          });
+        },
+        async recoverShellInstallation({ install, request: recoveryRequest }) {
+          return await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async (guard) => {
+            let claim = await installerClaimLedger.read();
+            if (claim == null) throw new Error("Electron installer recovery claim is unavailable");
+            if (claim.recovery?.recoveryId === recoveryRequest.recoveryId) {
+              if (claim.recovery.receipt.action !== recoveryRequest.action) throw new Error("Electron installer recovery id was reused for another action");
+              if (canonicalJson(claim.recovery.expected) !== canonicalJson(recoveryRequest.expected)) throw new Error("Electron installer recovery id has a different expected claim");
+              return claim.recovery.receipt;
+            }
+            if (claim.restoration != null) {
+              if (recoveryRequest.action !== "abandon-and-restore" || claim.restoration.recoveryId !== recoveryRequest.recoveryId
+                || canonicalJson(claim.restoration.expected) !== canonicalJson(recoveryRequest.expected)) {
+                throw new Error("Electron installer claim has another restoration in progress");
+              }
+            } else {
+              assertElectronInstallerClaimIdentity(claim, recoveryRequest.expected);
+            }
+            if (claim.restoration == null && (claim.state === "sealed" || claim.state === "armed") && Date.now() >= Date.parse(claim.expiresAt)) {
+              const expiredClaim = Object.freeze({ ...claim, revision: claim.revision + 1, state: "expired" as const });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), expiredClaim);
+              claim = expiredClaim;
+            }
+            if (claim.state !== "sealed" && claim.state !== "expired") throw new Error("Electron installer claim is not recoverable");
+            const snapshot = await updaterLedger.read();
+            const updaterContinuesRestoration = claim.restoration != null && snapshot.state === "failed"
+              && snapshot.error?.code === "electron-installer-abandoned";
+            if ((!updaterContinuesRestoration && snapshot.state !== "applying" && snapshot.state !== "handed-off")
+              || snapshot.installAttemptId !== claim.installAttemptId || snapshot.handoff == null
+              || electronInstallerHandoffDigest({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId }) !== claim.handoffDigest) {
+              throw new Error("Electron installer recovery differs from the durable updater transition");
+            }
+            // prepare() may need a control-only Sidecar host to inspect the
+            // durable updater state. No recovery side effect may overlap that
+            // host (or any sibling resource in the bound set): retire and
+            // verify the complete set while retaining this same guard.
+            await guard.retire();
+
+            if (recoveryRequest.action === "retry-original-artifact") {
+                const installerRequest = recoveryRequest.installer;
+                const artifactIdentity = stagedArtifactIdentity(installerRequest);
+              let installerReceipt: ElectronInstallerHandoffReceipt;
+              try {
+                if (install == null) throw new Error("Electron installer retry requires an installer handler");
+                if (installerRequest.installAttemptId !== claim.installAttemptId
+                  || resolve(installerRequest.runtimeRoot) !== claim.runtimeRoot
+                  || electronInstallerHandoffDigest(installerRequest) !== claim.handoffDigest
+                  || installerRequest.handoff.artifact.path !== claim.artifact.path
+                  || installerRequest.handoff.artifact.sha256 !== claim.artifact.sha256
+                  || installerRequest.handoff.artifact.size !== claim.artifact.size) {
+                  throw new Error("Electron installer retry changed the original handoff");
+                }
+                if (canonicalJson(artifactIdentity) !== canonicalJson(claim.artifact)) throw new Error("Electron installer retry original artifact identity mismatch");
+                await verifyElectronInstallerArtifact(claim.artifact);
+                const platformTrust = await (options.verifyInstallerPlatformTrust ?? verifyInstallerPlatformTrust)({
+                  artifact: claim.artifact,
+                  handoff: installerRequest.handoff,
+                  manifest,
+                  runtimeRoot: installerRequest.runtimeRoot,
+                });
+                if (claim.platformTrust == null || canonicalJson(platformTrust) !== canonicalJson(claim.platformTrust)) {
+                  throw new Error("Electron installer retry platform trust differs from the original handoff");
+                }
+                const exactInstallerRequest = Object.freeze({ ...installerRequest, artifactIdentity: claim.artifact, platformTrust });
+                installerReceipt = validateElectronInstallerReceiptForRequest(await install(exactInstallerRequest), exactInstallerRequest);
+              } catch (error) {
+                await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), Object.freeze({
+                  ...claim,
+                  revision: claim.revision + 1,
+                  invocation: Object.freeze({ state: "failed" as const, lastError: installerInvocationError(error) }),
+                }));
+                throw error;
+              }
+              const nextIdentity = Object.freeze({ ...electronInstallerClaimIdentity(claim), revision: claim.revision + 1 });
+              const recoveryReceipt: ElectronInstallerRecoveryReceipt = Object.freeze({
+                schemaVersion: 1,
+                action: "retry-original-artifact",
+                recoveryId: recoveryRequest.recoveryId,
+                claim: nextIdentity,
+                installer: installerReceipt,
+              });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), Object.freeze({
+                ...claim,
+                revision: nextIdentity.revision,
+                state: "armed" as const,
+                expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+                invocation: Object.freeze({ state: "armed" as const }),
+                receipt: installerReceipt,
+                recovery: Object.freeze({ recoveryId: recoveryRequest.recoveryId, expected: recoveryRequest.expected, receipt: recoveryReceipt }),
+              }));
+              if (snapshot.state === "applying") await updaterLedger.update({ expectedRevision: snapshot.revision, state: "handed-off" });
+              return recoveryReceipt;
+            }
+
+            if (claim.lastKnownGood == null || claim.platformTrust == null) {
+              throw new Error("Electron installer abandon cannot restore without its LKG and platform trust receipts");
+            }
+            const restoreCapture = claim.lastKnownGood;
+            const restoreTrust = claim.platformTrust;
+            let scheduledThisInvocation = false;
+            let preparedThisInvocation = false;
+            if (claim.restoration == null) {
+              const next = Object.freeze({
+                ...claim,
+                revision: claim.revision + 1,
+                restoration: Object.freeze({ recoveryId: recoveryRequest.recoveryId, expected: structuredClone(recoveryRequest.expected), phase: "intent-persisted" as const }),
+              });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), next);
+              claim = next;
+            }
+            if (claim.restoration!.phase === "intent-persisted") {
+              const preparation = await (options.prepareInstallerLastKnownGoodRestore ?? prepareMacElectronLastKnownGoodRestore)({
+                capture: restoreCapture,
+                claim: claim.restoration!.expected,
+                trust: restoreTrust,
+                recoveryId: claim.restoration!.recoveryId,
+                nodeExecutablePath: officialNodeExecutablePath,
+                parentPid: process.pid,
+                runtimeRoot: claim.runtimeRoot,
+                relaunchArguments: serializeInstallerRecoveryIntent({ action: "abandon-and-restore", recoveryId: claim.restoration!.recoveryId, expected: claim.restoration!.expected }),
+                mode: restoreTrust.mode,
+              });
+              const next = Object.freeze({
+                ...claim,
+                revision: claim.revision + 1,
+                restoration: Object.freeze({ ...claim.restoration!, phase: "restore-prepared" as const, preparation }),
+              });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), next);
+              claim = next;
+              preparedThisInvocation = true;
+            }
+            if (claim.restoration!.phase === "restore-prepared") {
+              const existingResult = preparedThisInvocation ? null
+                : await (options.readInstallerLastKnownGoodRestoreResult ?? readMacElectronLastKnownGoodRestoreResult)(claim.restoration!.preparation!);
+              if (existingResult != null) {
+                const next = Object.freeze({
+                  ...claim,
+                  revision: claim.revision + 1,
+                  restoration: Object.freeze({ ...claim.restoration!, phase: "result-observed" as const, result: existingResult }),
+                });
+                await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), next);
+                claim = next;
+              } else {
+                const armed = await (options.scheduleInstallerLastKnownGoodRestore ?? scheduleMacElectronLastKnownGoodRestore)(claim.restoration!.preparation!);
+                const next = Object.freeze({
+                  ...claim,
+                  revision: claim.revision + 1,
+                  restoration: Object.freeze({ ...claim.restoration!, phase: "restore-armed" as const, armed }),
+                });
+                await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), next);
+                claim = next;
+                scheduledThisInvocation = true;
+              }
+            }
+            if (claim.restoration!.phase === "restore-armed") {
+              if (scheduledThisInvocation) {
+                return Object.freeze({ schemaVersion: 1, action: "abandon-and-restore", recoveryId: claim.restoration!.recoveryId,
+                  claim: electronInstallerClaimIdentity(claim), state: "quit-required", restore: claim.restoration!.armed! });
+              }
+              const result = await (options.readInstallerLastKnownGoodRestoreResult ?? readMacElectronLastKnownGoodRestoreResult)(claim.restoration!.preparation!);
+              if (result == null) throw new Error("Electron installer LKG restore is armed but has no durable result");
+              const next = Object.freeze({
+                ...claim,
+                revision: claim.revision + 1,
+                restoration: Object.freeze({ ...claim.restoration!, phase: "result-observed" as const, result }),
+              });
+              await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), next);
+              claim = next;
+            }
+            const restoreResult = claim.restoration!.result;
+            if (restoreResult?.state !== "restored") {
+              const failure = restoreResult?.error;
+              throw new Error(`Electron installer LKG restore failed${failure == null ? "" : `: ${failure.code}: ${failure.message}`}`);
+            }
+
+            const lifecycleState = await lifecycleLedger.readOrInitial();
+            if (lifecycleState.transition != null) {
+              if (lifecycleState.transition.kind !== "shell-install" || lifecycleState.transition.phase !== "stopped-sealed"
+                || lifecycleState.transition.token !== claim.installAttemptId || lifecycleState.transition.fence !== claim.lifecycleFence) {
+                throw new Error("Electron installer recovery lifecycle fence differs from its claim");
+              }
+              const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+              await continuation.abandonStoppedTransition(claim.installAttemptId, claim.lifecycleFence);
+            } else {
+              if (lifecycleState.state !== "stopped" || lifecycleState.attachments.length !== 0) {
+                throw new Error("Electron installer abandon cannot prove the sealed lifecycle was restored");
+              }
+            }
+            activeHost = await launchHost(activeHost.binding);
+            const failed = snapshot.state === "failed" ? snapshot : await updaterLedger.update({
+              expectedRevision: snapshot.revision,
+              state: "failed",
+              error: { code: "electron-installer-abandoned", message: "Installer recovery restored the exact last-known-good Shell" },
+            });
+            const nextIdentity = Object.freeze({ ...electronInstallerClaimIdentity(claim), revision: claim.revision + 1 });
+            const recoveryReceipt: ElectronInstallerRecoveryReceipt = Object.freeze({
+              schemaVersion: 1,
+              action: "abandon-and-restore",
+              recoveryId: recoveryRequest.recoveryId,
+              claim: nextIdentity,
+              updaterRevision: failed.revision,
+              state: "restored",
+              result: restoreResult,
+            });
+            const { receipt: _installerReceipt, ...claimWithoutInstallerReceipt } = claim;
+            await installerClaimLedger.compareAndSet(electronInstallerClaimIdentity(claim), Object.freeze({
+              ...claimWithoutInstallerReceipt,
+              revision: nextIdentity.revision,
+              state: "abandoned" as const,
+              recovery: Object.freeze({ recoveryId: recoveryRequest.recoveryId, expected: recoveryRequest.expected, receipt: recoveryReceipt }),
+            }));
+            return recoveryReceipt;
           });
         },
         contentUpdater: Object.freeze({
@@ -410,15 +852,15 @@ export function createElectronStandaloneAuthorityFactory(
           try {
             started = await launcher.start();
           } catch (error) {
-            // A launcher can fail after the fossil host has selected a
-            // generation but before a logical attachment exists. Leaving that
-            // zero-reference host alive pins its in-memory generation forever
-            // and makes the next cold start fail with a misleading generation
-            // conflict. Retire only an unoccupied host; a concurrently shared
-            // runtime must never be sacrificed for this caller's failure.
+            // A client can lose the start response after the host has already
+            // retained its attachment. Retire both a zero-reference host and a
+            // host occupied only by this failed caller; sibling attachments
+            // remain an absolute retirement boundary.
             try {
               const current = await activeHost.lifecycle.status(request.scope);
-              if (current.references === 0) {
+              const occupiedOnlyByFailedCaller = current.occupants.length > 0
+                && current.occupants.every(({ attachmentId }) => attachmentId === attachment.id);
+              if (current.references === 0 || occupiedOnlyByFailedCaller) {
                 await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async (guard) => await guard.retire());
               }
             } catch (cleanupError) {

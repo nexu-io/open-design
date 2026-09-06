@@ -49,6 +49,14 @@
     "./pack": {
       "types": "./dist/commands/pack.d.ts",
       "default": "./dist/commands/pack.mjs"
+    },
+    "./cdp": {
+      "types": "./dist/cdp-api.d.ts",
+      "default": "./dist/cdp-api.mjs"
+    },
+    "./installation": {
+      "types": "./dist/update/installation/index.d.ts",
+      "default": "./dist/update/installation/index.mjs"
     }
   },
   "scripts": {

@@ -15,6 +15,19 @@ import {
 
 import type { ElectronStandaloneTarget } from "./installation.js";
 
+const CHANNEL_HEAD_ARGUMENT = "--od-channel-head-url=";
+
+export function resolveElectronChannelHeadOverride(argv: readonly string[] = process.argv): string | undefined {
+  const values = argv.filter((value) => value.startsWith(CHANNEL_HEAD_ARGUMENT)).map((value) => value.slice(CHANNEL_HEAD_ARGUMENT.length));
+  if (values.length === 0) return undefined;
+  if (values.length !== 1 || values[0]!.length === 0) throw new Error("Electron channel head override must be provided exactly once");
+  const parsed = new URL(values[0]!);
+  if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.username.length > 0 || parsed.password.length > 0 || parsed.hash.length > 0) {
+    throw new Error("Electron channel head override URL is invalid");
+  }
+  return parsed.href;
+}
+
 export type ElectronReleaseExactCandidate = Readonly<{
   candidateId: string;
   distribution: StandaloneShellDistribution;
@@ -113,6 +126,12 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
     const distribution = document.distributions.find(({ shell, target }) => shell.type === "electron" && target === this.options.target);
     if (distribution == null || candidate.distribution == null || canonicalJson(distribution) !== canonicalJson(candidate.distribution)) throw new Error(`persisted Electron release candidate lacks target ${this.options.target}`);
     if (distribution.updater?.handler !== "sidecar-v1") throw new Error("Electron Shell distribution lacks the production updater handler");
+    if (distribution.target.startsWith("darwin-") && (distribution.platformTrust?.platform !== "macos"
+      || (distribution.platformTrust.mode !== "formal" && distribution.platformTrust.mode !== "verify-only")
+      || distribution.platformTrust.designatedRequirement.length === 0
+      || distribution.platformTrust.teamIdentifier.length === 0)) {
+      throw new Error("Electron macOS distribution lacks its signed platform trust identity");
+    }
     if (order === 0 && (distribution.shell.version !== this.options.shell.version || distribution.shell.buildHash !== this.options.shell.buildHash)) {
       throw new Error("persisted Electron immutable exact release collides with the installed Shell identity");
     }

@@ -60,6 +60,13 @@ export type StandaloneShellDistribution = Readonly<{
   shell: Readonly<{ type: string; version: string; buildHash: string }>;
   target: string;
   artifact: ArtifactReference & Readonly<{ mediaType: string }>;
+  /** Native trust identity emitted by the Shell packer and covered by this signed document. */
+  platformTrust?: Readonly<{
+    platform: "macos";
+    mode: "formal" | "verify-only";
+    designatedRequirement: string;
+    teamIdentifier: string;
+  }>;
   updater?: Readonly<{
     protocol: "standalone-shell-updater-v3";
     handler: string;

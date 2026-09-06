@@ -233,6 +233,20 @@ export class ElectronStandaloneHostLifecycle {
     return await this.#transaction((state) => ({ state: SHARED_LIFECYCLE_ALGEBRA.reduce(state, { type: "release-transition", token, fence }), result: Object.freeze({ released: true as const }) }));
   }
 
+  async abandonStoppedTransition(token: string, fence: number): Promise<Readonly<{ abandoned: true }>> {
+    return await this.#transaction((state) => ({
+      state: SHARED_LIFECYCLE_ALGEBRA.reduce(state, { type: "abandon-stopped-transition", token, fence }),
+      result: Object.freeze({ abandoned: true as const }),
+    }));
+  }
+
+  async confirmStoppedShellInstall(token: string, fence: number): Promise<Readonly<{ confirmed: true }>> {
+    return await this.#transaction((state) => ({
+      state: SHARED_LIFECYCLE_ALGEBRA.reduce(state, { type: "confirm-stopped-transition", token, fence }),
+      result: Object.freeze({ confirmed: true as const }),
+    }));
+  }
+
   async forceStopTransition(token: string, fence: number): Promise<ElectronStandaloneHostTransitionDescriptor> {
     return await this.#transaction((state) => {
       const now = this.#iso();

@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 import { buildElectronDistribution, loadElectronScene } from "@open-design/electron-kit/distribution";
+import { inspectMacElectronAppTrust } from "@open-design/electron-kit/installation";
 import { canonicalJson } from "@open-design/standalone";
 
 import { loadElectronStandaloneInstallation } from "../src/adapters/standalone/installation.ts";
+import { assertElectronDistributionBinding } from "../src/composition/release-identity.ts";
 import { parseElectronExactDistributionRequest } from "./exact-adapter-contract.ts";
 
 function argument(name: string): string {
@@ -36,13 +38,18 @@ const sceneManifest = JSON.parse(await readFile(scene.sceneManifestPath, "utf8")
 if (sceneManifest.target !== input.target || typeof sceneManifest.closure?.file !== "string" || typeof sceneManifest.standalone?.entrypoint !== "string") {
   throw new Error("Electron exact distribution differs from its scene target or seeds");
 }
-const manifest = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")) as ElectronShellManifest);
+const sceneIdentity = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")) as ElectronShellManifest);
+const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.releaseManifestFile, "utf8")) as ElectronShellManifest);
 const contentEnvelope = JSON.parse(await readFile(input.acceptedContentMetadataFile, "utf8")) as {
   metadata?: { channel?: unknown; releaseVersion?: unknown; resources?: unknown };
 };
-if (contentEnvelope.metadata?.channel !== manifest.channel || typeof contentEnvelope.metadata.releaseVersion !== "string") {
-  throw new Error("Electron exact content differs from its Shell channel identity");
+if (typeof contentEnvelope.metadata?.channel !== "string" || typeof contentEnvelope.metadata.releaseVersion !== "string") {
+  throw new Error("Electron exact content identity is incomplete");
 }
+assertElectronDistributionBinding(sceneIdentity, manifest, {
+  channel: contentEnvelope.metadata.channel,
+  releaseVersion: contentEnvelope.metadata.releaseVersion,
+});
 
 const stagingRoot = resolve(dirname(input.outputDirectory), `electron-installed-${input.target}`);
 await rm(stagingRoot, { force: true, recursive: true });
@@ -119,12 +126,34 @@ const extension = input.target.startsWith("darwin-") ? ".dmg" : ".exe";
 const artifactPath = built.artifacts.find((path) => path.toLowerCase().endsWith(extension));
 if (artifactPath == null) throw new Error(`Electron distribution lacks its ${extension} installer artifact`);
 const artifact = await descriptor(artifactPath);
+const platformTrust = input.target.startsWith("darwin-") ? await (async () => {
+  const appPath = built.artifacts.find((path) => path.toLowerCase().endsWith(".app"));
+  if (appPath == null) throw new Error("Electron distribution lacks its signed app bundle");
+  let observation = await inspectMacElectronAppTrust({ appPath, mode: "verify-only" });
+  const mode = observation.teamIdentifier === "adhoc" ? "verify-only" as const : "formal" as const;
+  if (mode === "formal") observation = await inspectMacElectronAppTrust({ appPath, mode });
+  if (observation.bundleId !== manifest.appId || observation.executableName !== manifest.executableName
+    || observation.productName !== manifest.productName) throw new Error("Electron signed app identity differs from its release manifest");
+  return Object.freeze({
+    platform: "macos" as const,
+    mode,
+    designatedRequirement: observation.designatedRequirement,
+    teamIdentifier: observation.teamIdentifier,
+  });
+})() : undefined;
 await mkdir(dirname(receiptPath), { recursive: true });
 await writeFile(receiptPath, `${JSON.stringify({
   schemaVersion: 1,
   operation: "shell.distribution.contribute",
   shell: { type: manifest.shell.type, version: manifest.shell.version, buildHash: manifest.shell.buildHash },
   target: input.target,
+  installIdentity: {
+    appId: manifest.appId,
+    executableName: manifest.executableName,
+    namespace: manifest.namespace,
+    productName: manifest.productName,
+  },
   artifact: { ...artifact, mediaType: input.target.startsWith("darwin-") ? "application/x-apple-diskimage" : "application/vnd.microsoft.portable-executable" },
+  ...(platformTrust == null ? {} : { platformTrust }),
   updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
 }, null, 2)}\n`, "utf8");

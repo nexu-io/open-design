@@ -15,8 +15,6 @@ import {
   type StandaloneHandoffRequest,
 } from "@open-design/standalone";
 
-import { repoRoot } from "./helpers.js";
-
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
@@ -56,7 +54,7 @@ describe("Terminal bootloader handoff host", () => {
   it("loads one product-owned generation handoff for Terminal and Electron-shaped attachments", async () => {
     const root = mkdtempSync(join(tmpdir(), "terminal-bootloader-handoff-")); roots.push(root);
     const launcherPath = join(root, "launcher.mjs");
-    copyFileSync(join(repoRoot, "apps/closure/dist/launcher.mjs"), launcherPath);
+    copyFileSync(join(import.meta.dirname, "fixtures/standalone-launcher.mjs"), launcherPath);
     const launcherDigest = sha256Hex(readFileSync(launcherPath));
     const binding = createStandaloneGenerationBinding(generation(launcherPath, launcherDigest), { channel: "somechan", namespace: "shared" });
     const imports = vi.fn(async (selected): Promise<StandaloneGenerationHandoff> => {

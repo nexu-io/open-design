@@ -16,6 +16,12 @@
       "require": "./dist/index.cjs",
       "default": "./dist/index.mjs"
     },
+    "./automation": {
+      "types": "./dist/automation.d.ts",
+      "import": "./dist/automation.mjs",
+      "require": "./dist/automation.cjs",
+      "default": "./dist/automation.mjs"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.mjs",

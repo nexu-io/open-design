@@ -1,7 +1,6 @@
 import { resolve } from "node:path";
 
 import { readObject } from "./control-common.ts";
-import { executeExactPackControl } from "./control-pack.ts";
 import { executeExactReleaseControl, selfCheckExactReleaseControl } from "./control-release.ts";
 
 function argument(name: string): string {
@@ -15,6 +14,5 @@ if (process.argv.includes("--self-check")) selfCheckExactReleaseControl();
 else {
   const request = await readObject(argument("--request"));
   const receipt = argument("--receipt");
-  if (request.operation === "exact.prepare" || request.operation === "exact.finalize") await executeExactPackControl(request, receipt);
-  else await executeExactReleaseControl(request, receipt);
+  await executeExactReleaseControl(request, receipt);
 }

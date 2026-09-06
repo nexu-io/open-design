@@ -1,0 +1,45 @@
+name: release-prerelease
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full commit at the matching release/vX.Y.Z ref
+        required: true
+        type: string
+      source_ref:
+        description: Full release ref, for example refs/heads/release/v1.2.3
+        required: true
+        type: string
+      release_version:
+        description: Counted prerelease version, for example 1.2.3-prerelease.1
+        required: true
+        type: string
+      standalone_version:
+        description: Independently versioned Standalone runtime
+        required: true
+        default: 0.1.0
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: release-prerelease
+  cancel-in-progress: false
+
+jobs:
+  distribute:
+    uses: ./.github/workflows/release-exact.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      profile: prerelease-distribution
+      channel: prerelease
+      release_version: ${{ inputs.release_version }}
+      standalone_version: ${{ inputs.standalone_version }}
+      release_environment: standalone-prerelease-release
+      end_user_distribution: false
+      stable_authorized: false
+    secrets: inherit

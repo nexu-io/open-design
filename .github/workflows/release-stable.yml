@@ -1,0 +1,50 @@
+name: release-stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full commit at the matching release/vX.Y.Z ref
+        required: true
+        type: string
+      source_ref:
+        description: Full release ref, for example refs/heads/release/v1.2.3
+        required: true
+        type: string
+      release_version:
+        description: Stable version, for example 1.2.3
+        required: true
+        type: string
+      standalone_version:
+        description: Independently versioned Standalone runtime
+        required: true
+        default: 0.1.0
+        type: string
+      confirm_end_user_distribution:
+        description: I authorize this stable end-user distribution
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: release-stable
+  cancel-in-progress: false
+
+jobs:
+  distribute:
+    uses: ./.github/workflows/release-exact.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      source_ref: ${{ inputs.source_ref }}
+      profile: stable-distribution
+      channel: stable
+      release_version: ${{ inputs.release_version }}
+      standalone_version: ${{ inputs.standalone_version }}
+      release_environment: standalone-stable-release
+      end_user_distribution: true
+      stable_authorized: ${{ inputs.confirm_end_user_distribution }}
+    secrets: inherit

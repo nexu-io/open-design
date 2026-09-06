@@ -29,7 +29,10 @@
         "pnpm-workspace.yaml",
         "packages/electron-kit/package.json",
         "packages/electron-kit/esbuild.config.mjs",
-        "packages/electron-kit/src",
+        {
+          "path": "packages/electron-kit/src",
+          "excludePaths": ["cdp", "cdp-api.ts", "commands/cdp-control.ts"]
+        },
         "packages/electron-kit/resources",
         "packages/contracts/package.json",
         "packages/contracts/src",
@@ -125,6 +128,7 @@
       ]
     },
     "electron.acceptance.full": {
+      "inherits": ["electron.cdp.control"],
       "paths": [
         ".github/scripts/release/installed_acceptance.py",
         ".github/workflows/release-exact.yml",
@@ -133,6 +137,7 @@
       ]
     },
     "closure.acceptance.hot": {
+      "inherits": ["electron.cdp.control"],
       "paths": [
         "packages/standalone/src",
         "shells/electron/tests/standalone-authority.test.ts",
@@ -140,17 +145,24 @@
         "shells/terminal/tests/bootloader-handoff.test.ts",
         "shells/terminal/tests/sidecar.test.ts"
       ]
+    },
+    "electron.cdp.control": {
+      "paths": [
+        "packages/electron-kit/src/cdp",
+        "packages/electron-kit/src/cdp-api.ts",
+        "packages/electron-kit/src/commands/cdp-control.ts"
+      ]
     }
   },
   "identities": {
     "electron.contract.build": {"schemaVersion": 1, "sourceSets": ["electron.contract.build"], "parameters": ["target"]},
     "electron.contract.test": {"schemaVersion": 1, "sourceSets": ["electron.contract.test"], "parameters": ["target"]},
-    "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target", "acceptedShellBaseline"]},
-    "electron.shell.test": {"schemaVersion": 1, "sourceSets": ["electron.shell.test"], "parameters": ["target", "acceptedShellBaseline"]},
+    "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target"]},
+    "electron.shell.test": {"schemaVersion": 1, "sourceSets": ["electron.shell.test"], "parameters": ["target"]},
     "closure.build": {"schemaVersion": 1, "sourceSets": ["closure.build"], "parameters": ["target"]},
     "closure.test": {"schemaVersion": 1, "sourceSets": ["closure.test"], "parameters": ["target"]},
-    "electron.distribution": {"schemaVersion": 1, "sourceSets": ["electron.distribution"], "parameters": ["target", "acceptedShellBaseline"]},
-    "electron.acceptance.full": {"schemaVersion": 1, "sourceSets": ["electron.acceptance.full"], "parameters": ["target", "acceptedShellBaseline"]},
+    "electron.distribution": {"schemaVersion": 1, "sourceSets": ["electron.distribution"], "parameters": ["target"]},
+    "electron.acceptance.full": {"schemaVersion": 1, "sourceSets": ["electron.acceptance.full"], "parameters": ["target"]},
     "closure.acceptance.hot": {"schemaVersion": 1, "sourceSets": ["closure.acceptance.hot"], "parameters": ["target", "acceptedShellBaseline"]}
   }
 }

@@ -16,8 +16,8 @@ import type {
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 import type { ElectronPreflightResult, ElectronPreflightTopology } from "../runtime/startup/preflight/index.js";
 import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../runtime/startup/warmup/index.js";
-import type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../update/installation/contracts.js";
-export type { ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest } from "../update/installation/contracts.js";
+import type { ElectronInstallerClaimSnapshot, ElectronInstallerConfirmationReceipt, ElectronInstallerConfirmationRequest, ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest, ElectronInstallerRecoveryIntent, ElectronInstallerRecoveryReceipt, ElectronInstallerRecoveryRequest } from "../update/installation/contracts.js";
+export type { ElectronInstallerClaimIdentity, ElectronInstallerClaimSnapshot, ElectronInstallerConfirmationReceipt, ElectronInstallerConfirmationRequest, ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest, ElectronInstallerRecoveryIntent, ElectronInstallerRecoveryReceipt, ElectronInstallerRecoveryRequest } from "../update/installation/contracts.js";
 import type { ElectronMacRuntimePolicy } from "../platform/macos/contracts.js";
 
 export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;
@@ -50,6 +50,10 @@ export type ElectronShellActions = Readonly<{
   openDeepLink?(url: string): void | Promise<void>;
   installUpdate?(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
   observeCommitted?(): void | Promise<void>;
+  resolveInstallerRecovery?(input: Readonly<{
+    claim: ElectronInstallerClaimSnapshot;
+    snapshot: import("@open-design/standalone").StandaloneShellUpdaterSnapshot;
+  }>): ElectronInstallerRecoveryIntent | null | Promise<ElectronInstallerRecoveryIntent | null>;
 }>;
 
 export type ElectronRendererWindow = Readonly<{
@@ -122,10 +126,16 @@ export type ElectronStandalonePreparedRuntime = Readonly<{
   generation: GenerationRecord;
   updater: StandaloneShellUpdaterPort;
   contentUpdater: ElectronStandaloneContentUpdaterPort;
+  readShellInstallationClaim(): Promise<ElectronInstallerClaimSnapshot | null>;
+  confirmShellInstallation(request: ElectronInstallerConfirmationRequest): Promise<ElectronInstallerConfirmationReceipt>;
   armShellInstallation(input: Readonly<{
     request: ElectronInstallerHandoffRequest;
     install(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
   }>): Promise<ElectronInstallerHandoffReceipt>;
+  recoverShellInstallation(input: Readonly<{
+    request: ElectronInstallerRecoveryRequest;
+    install?(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
+  }>): Promise<ElectronInstallerRecoveryReceipt>;
   start(input: Readonly<{
     attachment: StandaloneHandoffAttachment;
     capabilities: StandaloneShellCapabilityPort;
@@ -142,6 +152,7 @@ export interface ElectronStandaloneAuthority {
 
 export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
   officialNodeExecutablePath: string;
+  installedShellPath?: string;
   namespaceRoot: string;
   resourceRoot: string;
   runtimeRoot: string;

@@ -30,6 +30,17 @@ function printLogs(result: { logs: Record<string, { lines: string[]; logPath: st
 }
 
 const cli = cac("tools-pack");
+cli
+  .command("exact-control", "Execute a channel-neutral exact prepare or finalize request")
+  .option("--request <path>", "Exact pack request")
+  .option("--receipt <path>", "Exact pack receipt")
+  .action(async (options: { request?: string; receipt?: string }) => {
+    if (options.request == null || options.receipt == null) throw new Error("--request and --receipt are required");
+    const { readObject } = await import("./exact/control-common.js");
+    const { executeExactPackControl } = await import("./exact/control-pack.js");
+    await executeExactPackControl(await readObject(options.request), options.receipt);
+  });
+
 const mac = cli.command("mac <action>", "Mac Electron Shell commands: build|install|start|stop|logs|uninstall|cleanup|inspect")
     .option("--cache-dir <path>", "advanced escape hatch for relocating tools-pack cache")
     .option("--dir <path>", "tools-pack output/runtime root directory")

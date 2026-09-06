@@ -21,35 +21,36 @@ const baseline: AcceptedShellBaselinePayload = {
   target: "darwin-arm64",
 };
 const ACCEPTED_IDENTITIES = [`sha256:${"1".repeat(64)}`, `sha256:${"2".repeat(64)}`] as const;
+const SOURCE_COMMIT = "f".repeat(40);
+
+function acceptance(value: AcceptedShellBaselinePayload = baseline) {
+  return {
+    schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: value.channel,
+    releaseVersion: "0.1.0-betahyx.4", sourceCommit: SOURCE_COMMIT, target: value.target,
+    shell: value.shell,
+    artifact: { url: "https://releases.example/electron.dmg", ...value.artifact },
+    installed: {
+      shell: value.shell, target: value.target, proof: { files: { seeds: [
+        { file: "standalone-launcher.mjs", ...value.seed.standalone },
+        { file: "closure.mjs", ...value.seed.closure },
+      ] } },
+    },
+  };
+}
 
 function acceptedReceipt(value: AcceptedShellBaselinePayload = baseline) {
-  const bytes = Buffer.from(`${JSON.stringify({
-    acceptedIdentities: ACCEPTED_IDENTITIES,
-    baseline: value,
-    baselineIdentity: acceptedShellBaselineIdentity(value),
-    operation: "electron.shell-baseline.accepted",
-    schemaVersion: 1,
-  })}\n`);
+  const bytes = Buffer.from(`${JSON.stringify(createAcceptedShellBaselineReceipt(acceptance(value), ACCEPTED_IDENTITIES))}\n`);
   return { bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` as const };
 }
 
 describe("accepted Shell baseline resolution", () => {
   it("promotes only a complete installed Electron acceptance into a baseline receipt", () => {
-    const receipt = createAcceptedShellBaselineReceipt({
-      schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx", target: "darwin-arm64",
-      shell: baseline.shell,
-      artifact: { url: "https://releases.example/electron.dmg", ...baseline.artifact },
-      installed: {
-        shell: baseline.shell, target: "darwin-arm64", proof: { files: { seeds: [
-          { file: "standalone-launcher.mjs", ...baseline.seed.standalone },
-          { file: "closure.mjs", ...baseline.seed.closure },
-        ] } },
-      },
-    }, ACCEPTED_IDENTITIES);
+    const receipt = createAcceptedShellBaselineReceipt(acceptance(), ACCEPTED_IDENTITIES);
     expect(receipt.baseline).toEqual(baseline);
     expect(receipt.baselineIdentity).toBe(acceptedShellBaselineIdentity(baseline));
     expect(() => createAcceptedShellBaselineReceipt({
-      schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx", target: "darwin-arm64",
+      schemaVersion: 1, operation: "exact.acceptance", status: "accepted", channel: "betahyx",
+      releaseVersion: "0.1.0-betahyx.4", sourceCommit: SOURCE_COMMIT, target: "darwin-arm64",
       shell: baseline.shell, artifact: baseline.artifact,
       installed: { shell: baseline.shell, target: "darwin-arm64", proof: { files: { seeds: [] } } },
     }, ACCEPTED_IDENTITIES)).toThrow(/Closure seed/u);

@@ -11,9 +11,9 @@ on:
         description: Isolated exact channel
         required: true
         type: choice
-        options: [somechan, somepreview, betahyx]
+        options: [betahyx]
       release_version:
-        description: Counted channel version, for example 0.1.0-somechan.1
+        description: Counted betahyx version, for example 0.1.0-betahyx.1
         required: true
         type: string
       standalone_version:
@@ -21,6 +21,35 @@ on:
         required: true
         default: 0.1.0
         type: string
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      source_ref:
+        required: true
+        type: string
+      profile:
+        required: true
+        type: string
+      channel:
+        required: true
+        type: string
+      release_version:
+        required: true
+        type: string
+      standalone_version:
+        required: true
+        type: string
+      release_environment:
+        required: true
+        type: string
+      end_user_distribution:
+        required: true
+        type: boolean
+      stable_authorized:
+        required: true
+        type: boolean
 
 permissions:
   actions: read
@@ -33,7 +62,6 @@ concurrency:
 jobs:
   plan:
     name: Plan release-neutral Shell scenes
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.convergence.outputs.run }}
@@ -42,15 +70,13 @@ jobs:
       - name: Validate immutable inputs
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
-          DISPATCH_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ inputs.source_ref || github.ref }}
           CHANNEL: ${{ inputs.channel }}
           RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          test "$SOURCE_SHA" = "$DISPATCH_SHA"
-          [[ "$CHANNEL" == "somechan" || "$CHANNEL" == "somepreview" || "$CHANNEL" == "betahyx" ]]
-          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-${CHANNEL}\.[0-9]+$ ]]
+          [[ "$SOURCE_REF" =~ ^refs/heads/(main|release/v[0-9]+\.[0-9]+\.[0-9]+)$ ]]
 
       - uses: actions/checkout@v6.0.2
         with:
@@ -61,10 +87,11 @@ jobs:
       - name: Verify checkout identity
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_REF: ${{ inputs.source_ref || github.ref }}
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          test "$(git ls-remote --refs origin "$SOURCE_REF" | cut -f1)" = "$SOURCE_SHA"
 
       - uses: pnpm/action-setup@v5
         with:
@@ -75,18 +102,43 @@ jobs:
           node-version: 24.18.0
           cache: pnpm
 
-      - name: Build exact control and content-identity planner
+      - name: Build exact controls and content-identity planner
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
           pnpm --filter @open-design/metatool build
+          pnpm --filter @open-design/electron-contract build
+          pnpm --filter @open-design/electron-kit build
+          pnpm --filter @open-design/tools-pack build
           pnpm --filter @open-design/tools-release build
           node tools/release/dist/exact-control.mjs --self-check
           mkdir -p "$RUNNER_TEMP/exact-plan"
-          cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-control.mjs"
+          cp tools/pack/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-pack-control.mjs"
+          cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-release-control.mjs"
+          cp packages/electron-kit/dist/cdp-control.mjs "$RUNNER_TEMP/exact-plan/electron-cdp-control.mjs"
+
+      - name: Resolve tools-release validation profile
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          END_USER_DISTRIBUTION: ${{ inputs.end_user_distribution || false }}
+          PROFILE: ${{ inputs.profile || 'exact-validation' }}
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          SOURCE_REF: ${{ inputs.source_ref || github.ref }}
+          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
+          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
+          STABLE_AUTHORIZED: ${{ inputs.stable_authorized || false }}
+        run: |
+          set -euo pipefail
+          node -e 'const fs=require("node:fs"); const [file,profile,channel,releaseVersion,sourceCommit,sourceRef,endUserDistribution,stableAuthorized,endpointUrl,bucket,publicBaseUrl]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.policy.resolve",profile,channel,releaseVersion,sourceCommit,sourceRef,switches:{endUserDistribution:endUserDistribution==="true",stableAuthorized:stableAuthorized==="true"},target:{endpointUrl,bucket,publicBaseUrl,latestChannelHeadUrl:endpointUrl+"/"+bucket+"/"+channel+"/latest/channel-head.json"}})+"\n")' "$RUNNER_TEMP/exact-plan/release-policy-request.json" "$PROFILE" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA" "$SOURCE_REF" "$END_USER_DISTRIBUTION" "$STABLE_AUTHORIZED" "$STORAGE_ENDPOINT" "$STORAGE_BUCKET" "$PUBLIC_ORIGIN"
+          node tools/release/bin/tools-release.mjs release-policy \
+            --request "$RUNNER_TEMP/exact-plan/release-policy-request.json" \
+            --receipt "$RUNNER_TEMP/exact-plan/release-policy.json"
+          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"plan",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/exact-plan/plan-authorization-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/exact-plan/plan-authorization-request.json" --receipt "$RUNNER_TEMP/exact-plan/plan-authorization.json"
 
       - name: Resolve canonical Electron release plans
-        if: ${{ inputs.channel == 'betahyx' }}
         env:
           CHANNEL: ${{ inputs.channel }}
           PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
@@ -109,21 +161,23 @@ jobs:
         run: |
           python3 - <<'PY'
           import json, os
-          topology = [
-              {"shell": "terminal", "target": "darwin-arm64", "workload": "terminal_scene_darwin_arm64", "runner_class": "terminal_darwin_arm64", "runs_on": "macos-15"},
+          active_topology = [
+              {"shell": "terminal", "target": "darwin-arm64", "workload": "terminal_scene_darwin_arm64", "runner_class": "terminal_darwin_arm64", "runs_on": "macos-15", "mode": "full"},
+              {"shell": "electron", "target": "darwin-arm64", "workload": "electron_scene_darwin_arm64", "runner_class": "electron_darwin_arm64", "runs_on": "macos-15"},
           ]
-          if os.environ["CHANNEL"] == "betahyx":
-              topology.extend([
-                  {"shell": "electron", "target": "darwin-arm64", "workload": "electron_scene_darwin_arm64", "runner_class": "electron_darwin_arm64", "runs_on": "macos-15"},
-                  {"shell": "electron", "target": "win32-x64", "workload": "electron_scene_win32_x64", "runner_class": "electron_win32_x64", "runs_on": "windows-2025"},
-              ])
+          deferred_topology = [
+              {"shell": "electron", "target": "win32-x64", "workload": "electron_scene_win32_x64", "runner_class": "electron_win32_x64", "runs_on": "windows-2025"},
+          ]
           root = os.path.join(os.environ["RUNNER_TEMP"], "exact-plan")
           os.makedirs(root, exist_ok=True)
+          electron_plan = json.load(open(os.path.join(root, "electron-darwin-arm64.json")))
+          electron_actions = {action["id"] for action in electron_plan["actions"]}
+          active_topology[1]["mode"] = "full" if "electron.distribution" in electron_actions else "hot"
           with open(os.path.join(root, "topology.json"), "w") as destination:
-              json.dump(topology, destination, sort_keys=True, separators=(",", ":"))
+              json.dump({"active": active_topology, "deferred": deferred_topology}, destination, sort_keys=True, separators=(",", ":"))
               destination.write("\n")
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("shell_matrix=" + json.dumps({"include": topology}, separators=(",", ":")) + "\n")
+              output.write("shell_matrix=" + json.dumps({"include": active_topology}, separators=(",", ":")) + "\n")
           PY
 
       - name: Resolve reusable scene results
@@ -137,7 +191,7 @@ jobs:
           import json, os
           from pathlib import Path
           root = Path(os.environ["RUNNER_TEMP"], "exact-plan")
-          topology = json.loads(root.joinpath("topology.json").read_text())
+          topology = json.loads(root.joinpath("topology.json").read_text())["active"]
           root.joinpath("scope.json").write_text(json.dumps({"enabled": {item["workload"]: True for item in topology}}, sort_keys=True) + "\n")
           root.joinpath("runners.json").write_text(json.dumps({item["runner_class"]: [item["runs_on"]] for item in topology}, sort_keys=True) + "\n")
           PY
@@ -216,7 +270,6 @@ jobs:
       - name: Build release-neutral scene inputs
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
-          CHANNEL: ${{ inputs.channel }}
           SHELL_TYPE: ${{ matrix.shell }}
           TARGET: ${{ matrix.target }}
         shell: bash
@@ -255,28 +308,17 @@ jobs:
                   "sceneDirectory": str(Path(os.environ["RUNNER_TEMP"], "exact-scene")),
               }
           elif shell_type == "electron":
-              manifest = json.loads(Path("shells/electron/config/shell.json").read_text())
               plan = json.loads(Path(os.environ["RUNNER_TEMP"], "exact-plan", f"electron-{target}.json").read_text())
               shell_identity = plan["plan"]["nodes"]["electron.shell.build"]["identity"]
               if not shell_identity.startswith("sha256:"):
                   raise SystemExit("Electron Shell plan identity is invalid")
               build_hash = shell_identity.removeprefix("sha256:")
-              identity = {"type": shell_type, "version": manifest["version"], "buildHash": build_hash}
-              identity["digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-              channel = os.environ["CHANNEL"]
-              if channel != "betahyx":
-                  raise SystemExit("Electron exact distribution is isolated to betahyx")
-              manifest.update({
-                  "appId": "io.open-design.betahyx",
-                  "productName": "Open Design Betahyx",
-                  "executableName": "open-design-betahyx",
-                  "channel": channel,
-                  "namespace": "release-betahyx",
-                  "window": {**manifest["window"], "title": "Open Design Betahyx"},
-                  "shell": identity,
-              })
-              manifest_path = Path(os.environ["RUNNER_TEMP"], "electron-shell.json")
-              manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n")
+              manifest_path = Path(os.environ["RUNNER_TEMP"], "electron-scene-shell.json")
+              manifest_request = {
+                  "schemaVersion": 1, "operation": "electron.scene-manifest.resolve",
+                  "buildHash": build_hash, "manifestFile": str(manifest_path),
+              }
+              Path(os.environ["RUNNER_TEMP"], "electron-scene-manifest-request.json").write_text(json.dumps(manifest_request, sort_keys=True, separators=(",", ":")) + "\n")
               request = {
                   "schemaVersion": 1, "operation": "electron.scene.build", "target": target,
                   "shellManifestFile": str(manifest_path),
@@ -298,12 +340,13 @@ jobs:
       - name: Build native Electron scene
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && matrix.shell == 'electron' }}
         shell: bash
-        run: pnpm --filter @open-design/shell-electron exact:scene -- --request "$RUNNER_TEMP/exact-scene-request.json" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
+        run: |
+          pnpm --filter @open-design/shell-electron exact:scene-manifest -- --request "$RUNNER_TEMP/electron-scene-manifest-request.json" --receipt "$RUNNER_TEMP/electron-scene-manifest-receipt.json"
+          pnpm --filter @open-design/shell-electron exact:scene -- --request "$RUNNER_TEMP/exact-scene-request.json" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
 
       - name: Verify scene and prepare convergence product
         env:
           ARTIFACT_NAME: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
-          RELEASE_VERSION: ${{ inputs.release_version }}
           TARGET: ${{ matrix.target }}
           WORKLOAD: ${{ matrix.workload }}
         shell: bash
@@ -316,10 +359,20 @@ jobs:
           scene = json.loads((root / "exact-scene" / "scene.json").read_text())
           if scene.get("target") != os.environ["TARGET"] or not isinstance(scene.get("shellBuildHash"), str):
               raise SystemExit("restored or built Shell scene identity mismatch")
-          encoded = json.dumps(scene, sort_keys=True)
-          for release_field in (os.environ["RELEASE_VERSION"], "publishedAt", "artifactBaseUrl", "signatures"):
-              if release_field in encoded:
-                  raise SystemExit(f"Shell scene contains release-owned field: {release_field}")
+          release_owned_fields = {"artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"}
+          def find_release_owned_fields(value, path="$"):
+              if isinstance(value, dict):
+                  for key, nested in value.items():
+                      field_path = f"{path}.{key}"
+                      if key in release_owned_fields:
+                          yield field_path
+                      yield from find_release_owned_fields(nested, field_path)
+              elif isinstance(value, list):
+                  for index, nested in enumerate(value):
+                      yield from find_release_owned_fields(nested, f"{path}[{index}]")
+          violations = sorted(find_release_owned_fields(scene))
+          if violations:
+              raise SystemExit(f"Shell scene contains release-owned fields: {', '.join(violations)}")
           pending = json.loads((root / "exact-plan" / "pending.json").read_text())["workloads"][os.environ["WORKLOAD"]]
           if pending["run"]:
               destination = root / "convergence-products" / os.environ["WORKLOAD"]
@@ -352,7 +405,7 @@ jobs:
     name: Prepare signed exact content
     needs: [plan, scene]
     runs-on: ubuntu-24.04
-    environment: standalone-exact-release
+    environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.2
@@ -373,6 +426,15 @@ jobs:
         with:
           name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/exact-plan
+
+      - name: Authorize prepare capability
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"prepare",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/prepare-authorization-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/prepare-authorization-request.json" --receipt "$RUNNER_TEMP/prepare-authorization.json"
 
       - name: Read previous content floor when available
         env:
@@ -447,7 +509,7 @@ jobs:
           if previous.is_file(): request["previousContentMetadataFile"] = str(previous)
           (root / "exact-prepare-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/exact-prepare-request.json" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-pack-control.mjs" --request "$RUNNER_TEMP/exact-prepare-request.json" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -480,19 +542,24 @@ jobs:
           name: exact-prepared-${{ inputs.channel }}-${{ inputs.release_version }}
           path: ${{ runner.temp }}/prepared
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
       - uses: pnpm/action-setup@v5
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
         with:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
         with:
           node-version: 24.18.0
           cache: pnpm
 
       - name: Prepare Electron distribution toolchain
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -501,6 +568,7 @@ jobs:
           pnpm --filter @open-design/electron-kit build
 
       - name: Write native distribution request
+        if: ${{ matrix.shell != 'electron' || matrix.mode == 'full' }}
         env:
           CHANNEL: ${{ inputs.channel }}
           RELEASE_VERSION: ${{ inputs.release_version }}
@@ -526,9 +594,18 @@ jobs:
                   "releaseDocumentsDirectory": str(root / "prepared" / "documents"),
                   "release": {"channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"], "sourceCommit": os.environ["SOURCE_SHA"], "publishedAt": prepared["publishedAt"], "artifactBaseUrl": prepared["artifactBaseUrl"]}}
           elif os.environ["SHELL_TYPE"] == "electron":
+              scene_manifest = json.loads((scene / "scene.json").read_text())
+              release_manifest = root / "electron-release-shell.json"
+              manifest_request = {
+                  "schemaVersion": 1, "operation": "electron.release-manifest.resolve",
+                  "channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"],
+                  "buildHash": scene_manifest["shellBuildHash"], "manifestFile": str(release_manifest),
+              }
+              (root / "electron-release-manifest-request.json").write_text(json.dumps(manifest_request, sort_keys=True, separators=(",", ":")) + "\n")
               request = {**common, "operation": "electron.distribution.build",
                   "acceptedContentMetadataFile": str(root / "prepared" / "documents" / "content-metadata.json"),
                   "acceptedTrustFile": str(root / "prepared" / "trust" / "keys.json"),
+                  "releaseManifestFile": str(release_manifest),
                   "channelHeadUrl": prepared["artifactBaseUrl"].rsplit("/", 1)[0] + "/latest/channel-head.json"}
           else:
               raise SystemExit(f"unsupported exact Shell: {os.environ['SHELL_TYPE']}")
@@ -541,9 +618,24 @@ jobs:
         run: sh shells/terminal/sh/distribution.sh --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
 
       - name: Build native Electron distribution
-        if: ${{ matrix.shell == 'electron' }}
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
         shell: bash
-        run: pnpm --filter @open-design/shell-electron exact:distribution -- --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
+        run: |
+          pnpm --filter @open-design/shell-electron exact:manifest -- --request "$RUNNER_TEMP/electron-release-manifest-request.json" --receipt "$RUNNER_TEMP/electron-release-manifest-receipt.json"
+          pnpm --filter @open-design/shell-electron exact:distribution -- --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
+
+      - name: Stage accepted Electron distribution
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'const fs=require("node:fs"); const [file,policyReceipt,releasePlan,root,channel,releaseVersion,sourceCommit,target]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"exact.baseline.stage",policyReceipt,releasePlan,registry:root+"/tools/release/resources/exact-plan-identities.json",root,channel,releaseVersion,sourceCommit,target,outputDirectory:process.env.RUNNER_TEMP+"/distribution"})+"\n")' "$RUNNER_TEMP/baseline-stage-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" "$GITHUB_WORKSPACE" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA" "$TARGET"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/baseline-stage-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -556,7 +648,7 @@ jobs:
     name: Finalize and publish exact channel
     needs: [plan, distribution]
     runs-on: ubuntu-24.04
-    environment: standalone-exact-release
+    environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6.0.2
@@ -582,6 +674,15 @@ jobs:
         with:
           name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/exact-plan
+
+      - name: Authorize finalize capability
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"finalize",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/finalize-authorization-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/finalize-authorization-request.json" --receipt "$RUNNER_TEMP/finalize-authorization.json"
 
       - name: Finalize signed Shell sidecar and channel head
         env:
@@ -632,11 +733,12 @@ jobs:
           }
           (root / "exact-finalize-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/exact-finalize-request.json" --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-pack-control.mjs" --request "$RUNNER_TEMP/exact-finalize-request.json" --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
 
       - name: Publish immutable release objects
         env:
           OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
           STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
           STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
         run: |
@@ -645,10 +747,12 @@ jobs:
           import json, os
           from pathlib import Path
           root = Path(os.environ["RUNNER_TEMP"])
-          request = {"schemaVersion": 1, "operation": "exact.publish", "packReceipt": str(root / "exact-final" / "pack-receipt.json"), "endpointUrl": os.environ["STORAGE_ENDPOINT"], "bucket": os.environ["STORAGE_BUCKET"]}
+          request = {"schemaVersion": 1, "operation": "exact.publish", "packReceipt": str(root / "exact-final" / "pack-receipt.json"), "policyReceipt": str(root / "exact-plan" / "release-policy.json"), "endpointUrl": os.environ["STORAGE_ENDPOINT"], "bucket": os.environ["STORAGE_BUCKET"], "publicBaseUrl": os.environ["PUBLIC_ORIGIN"]}
           (root / "exact-publish-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/exact-publish-request.json" --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/exact-publish-request.json" --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
+          cp "$RUNNER_TEMP/exact-plan/release-policy.json" "$RUNNER_TEMP/exact-final/release-policy.json"
+          cp "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" "$RUNNER_TEMP/exact-final/exact-release-control.mjs"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -723,6 +827,15 @@ jobs:
           name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/exact-plan
 
+      - name: Authorize installed acceptance capability
+        env:
+          CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"acceptance",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/acceptance-authorization-request.json" "$RUNNER_TEMP/published/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" --request "$RUNNER_TEMP/acceptance-authorization-request.json" --receipt "$RUNNER_TEMP/acceptance-authorization.json"
+
       - name: Download accepted public artifact
         env:
           SHELL_TYPE: ${{ matrix.shell }}
@@ -744,6 +857,13 @@ jobs:
               raise SystemExit("public Shell artifact binding mismatch")
           (root / "required-acceptance.json").write_text(json.dumps(required, sort_keys=True, separators=(",", ":")) + "\n")
           PY
+
+      - name: Resolve installed Electron identity
+        if: ${{ matrix.shell == 'electron' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'const fs=require("node:fs"); const required=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const identity=required.installIdentity; if (!identity?.executableName || !identity?.namespace) throw new Error("published Electron acceptance lacks installed identity"); fs.appendFileSync(process.env.GITHUB_ENV, "ELECTRON_EXECUTABLE="+identity.executableName+"\nELECTRON_NAMESPACE="+identity.namespace+"\n")' "$RUNNER_TEMP/required-acceptance.json"
 
       - name: Install and exercise Darwin Shell lifecycle
         if: ${{ matrix.shell == 'terminal' && startsWith(matrix.target, 'darwin-') }}
@@ -774,7 +894,7 @@ jobs:
           run_terminal stop
 
       - name: Install and exercise macOS Electron Shell
-        if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'darwin-') }}
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' && startsWith(matrix.target, 'darwin-') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -788,9 +908,52 @@ jobs:
           ditto "$source_app" "$app"
           hdiutil detach "$volume"
           trap - EXIT
-          executable="$app/Contents/MacOS/open-design-betahyx"
+          executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
           test -x "$executable"
           OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/electron-user-data"
+
+      - name: Exercise accepted macOS Shell through CDP hot update
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' && startsWith(matrix.target, 'darwin-') }}
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          volume="$RUNNER_TEMP/electron-volume"
+          app="$RUNNER_TEMP/installed-electron.app"
+          mkdir -p "$volume"
+          hdiutil attach "$RUNNER_TEMP/public-shell-artifact.dmg" -nobrowse -readonly -mountpoint "$volume"
+          trap 'hdiutil detach "$volume" >/dev/null 2>&1 || true' EXIT
+          source_app=$(find "$volume" -maxdepth 1 -type d -name '*.app' -print -quit)
+          test -n "$source_app"
+          ditto "$source_app" "$app"
+          hdiutil detach "$volume"
+          trap - EXIT
+          executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
+          candidate_head=$(node -e 'const receipt=require(process.argv[1]); process.stdout.write(receipt.channelHead.url)' "$RUNNER_TEMP/published/publish-receipt.json")
+          OD_PACKAGED_E2E_HEADLESS=1 "$executable" \
+            --user-data-dir="$RUNNER_TEMP/electron-user-data" \
+            --remote-debugging-address=127.0.0.1 \
+            --remote-debugging-port=0 \
+            --od-channel-head-url="$candidate_head" &
+          electron_pid=$!
+          trap 'kill "$electron_pid" >/dev/null 2>&1 || true; wait "$electron_pid" >/dev/null 2>&1 || true' EXIT
+          node -e 'const fs=require("node:fs"); const [file,userDataRoot]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"electron.cdp.contract.invoke",userDataRoot,timeoutMs:120000,close:true,invocations:[{path:["updater","status"],args:[]},{path:["updater","check"],args:["closure"]},{path:["updater","apply"],args:["closure",{force:true}],settleOnContextDestroyed:true},{path:["updater","status"],args:[]}]})+"\n")' "$RUNNER_TEMP/electron-cdp-request.json" "$RUNNER_TEMP/electron-user-data"
+          node "$RUNNER_TEMP/exact-plan/electron-cdp-control.mjs" --request "$RUNNER_TEMP/electron-cdp-request.json" --receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
+          wait "$electron_pid"
+          trap - EXIT
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          results = json.loads(Path(os.environ["RUNNER_TEMP"], "electron-cdp-receipt.json").read_text())["results"]
+          before, checked, applied, after = results
+          if checked["lines"]["closure"].get("state") != "ready" or checked["lines"]["closure"].get("candidateVersion") != os.environ["RELEASE_VERSION"]:
+              raise SystemExit("CDP did not observe the candidate Closure generation")
+          if applied.get("outcome") != "context-destroyed" and applied.get("lines", {}).get("closure", {}).get("state") != "current":
+              raise SystemExit("CDP did not observe the applied Closure generation")
+          if before["lines"]["shell"].get("currentVersion") != after["lines"]["shell"].get("currentVersion") or after["lines"]["shell"].get("state") == "applying":
+              raise SystemExit("Closure hot acceptance crossed into the Shell installer path")
+          PY
 
       - name: Install and exercise Windows Electron Shell
         if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'win32-') }}
@@ -801,7 +964,7 @@ jobs:
           $installRoot = Join-Path $env:RUNNER_TEMP 'installed-electron'
           $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Electron installer exited with $($install.ExitCode)" }
-          $executable = Join-Path $installRoot 'open-design-betahyx.exe'
+          $executable = Join-Path $installRoot "$env:ELECTRON_EXECUTABLE.exe"
           if (-not (Test-Path $executable)) { throw 'installed Electron executable is missing' }
           $env:OD_PACKAGED_E2E_HEADLESS = '1'
           $env:ELECTRON_KIT_SMOKE_EXIT_MS = '3000'
@@ -824,7 +987,15 @@ jobs:
           fi
           runtime_args=()
           if [[ "$SHELL_TYPE" == "electron" ]]; then
-            runtime_args=(--runtime-log "$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/release-betahyx-headless/runtime/electron/logs/electron-runtime.jsonl")
+            runtime_args=(--runtime-log "$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/${ELECTRON_NAMESPACE}-headless/runtime/electron/logs/electron-runtime.jsonl")
+            if [[ "${{ matrix.mode }}" == "hot" ]]; then
+              standalone_root="$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/${ELECTRON_NAMESPACE}-headless/runtime/electron/standalone-store"
+              runtime_args+=(
+                --hot-acceptance-receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
+                --standalone-state "$standalone_root/channels/${{ inputs.channel }}/namespaces/${ELECTRON_NAMESPACE}-headless/state.json"
+                --standalone-generations-root "$standalone_root/channels/${{ inputs.channel }}/generations"
+              )
+            fi
           fi
           python3 .github/scripts/release/installed_acceptance.py \
             --root "$RUNNER_TEMP" \
@@ -844,7 +1015,7 @@ jobs:
     name: Activate accepted exact channel
     needs: [acceptance]
     runs-on: ubuntu-24.04
-    environment: standalone-exact-release
+    environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6.0.2
@@ -881,10 +1052,34 @@ jobs:
           relocated = root / "published" / "relocated-publish-receipt.json"
           relocated.write_text(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
           credentials = sorted(str(path) for path in (root / "acceptances").glob("*.json"))
-          request = {"schemaVersion": 1, "operation": "exact.activate", "publishReceipt": str(relocated), "acceptanceCredentials": credentials}
+          request = {"schemaVersion": 1, "operation": "exact.activate", "publishReceipt": str(relocated), "policyReceipt": str(root / "published" / "release-policy.json"), "acceptanceCredentials": credentials}
           (root / "activate-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/activate-request.json" --receipt "$RUNNER_TEMP/activate-receipt.json"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" --request "$RUNNER_TEMP/activate-request.json" --receipt "$RUNNER_TEMP/activate-receipt.json"
+
+      - name: Promote accepted Electron baseline snapshot
+        env:
+          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"])
+          electron = root / "acceptances" / "electron-darwin-arm64.json"
+          request = {
+              "schemaVersion": 1,
+              "operation": "exact.baseline.promote",
+              "publishReceipt": str(root / "published" / "relocated-publish-receipt.json"),
+              "activationReceipt": str(root / "activate-receipt.json"),
+              "policyReceipt": str(root / "published" / "release-policy.json"),
+              "acceptanceCredential": str(electron),
+              "registry": str(Path(os.environ["GITHUB_WORKSPACE"]) / "tools/release/resources/exact-plan-identities.json"),
+              "root": os.environ["GITHUB_WORKSPACE"],
+          }
+          (root / "baseline-promote-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
+          PY
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" --request "$RUNNER_TEMP/baseline-promote-request.json" --receipt "$RUNNER_TEMP/baseline-promote-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -892,5 +1087,7 @@ jobs:
           path: |
             ${{ runner.temp }}/activate-request.json
             ${{ runner.temp }}/activate-receipt.json
+            ${{ runner.temp }}/baseline-promote-request.json
+            ${{ runner.temp }}/baseline-promote-receipt.json
           if-no-files-found: error
           retention-days: 30

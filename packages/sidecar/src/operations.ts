@@ -1,6 +1,5 @@
 import type { ChildProcess } from "node:child_process";
 import { isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import type { SpawnProcessRequest } from "@open-design/platform";
 import {
@@ -61,7 +60,17 @@ export type SidecarLaunchRequest = Omit<SpawnProcessRequest, "args" | "env"> & {
   env?: NodeJS.ProcessEnv;
   resources: Omit<SidecarResources, "pid">;
   stamp: SidecarStamp;
-  supervisor?: Readonly<{ command: string; entrypoint: string }>;
+  supervisor?: SidecarSupervisorBinding;
+};
+
+export type SidecarSupervisorBinding = Readonly<{
+  args?: readonly string[];
+  command: string;
+  entrypoint: string;
+}>;
+
+export type SidecarAuthorityLaunchRequest = Omit<SidecarLaunchRequest, "supervisor"> & {
+  supervisor: SidecarSupervisorBinding;
 };
 
 export type SidecarRestartOptions = {
@@ -149,7 +158,7 @@ export function registerSidecarProcess(
   return stamp;
 }
 
-export async function bootstrapSidecarProcess(
+export async function bootstrapSidecarProcessWithSupervisor(
   stampInput: SidecarStamp,
   resources: Omit<SidecarResources, "pid">,
   options: {
@@ -157,17 +166,17 @@ export async function bootstrapSidecarProcess(
     command?: string;
     cwd?: string;
     env?: NodeJS.ProcessEnv;
-    launch?: typeof launchSidecar;
-    supervisor?: SidecarLaunchRequest["supervisor"];
+    launch?: typeof launchSidecarWithSupervisor;
+    supervisor: SidecarSupervisorBinding;
     waitUntilReady?: (stamp: SidecarStamp, pid: number) => Promise<void>;
-  } = {},
+  },
 ): Promise<boolean> {
   const stamp = normalizeSidecarStamp(stampInput);
   if (readSupervisedSidecarContext() != null) {
     registerSidecarProcess(stamp, resources);
     return false;
   }
-  const launched = await (options.launch ?? launchSidecar)({
+  const launched = await (options.launch ?? launchSidecarWithSupervisor)({
     args: removeSidecarLauncherArgs(options.args ?? process.argv.slice(1)),
     command: options.command ?? process.execPath,
     cwd: options.cwd ?? process.cwd(),
@@ -192,7 +201,7 @@ export async function bootstrapSidecarProcess(
   return true;
 }
 
-export async function launchSidecar(request: SidecarLaunchRequest): Promise<{ pid: number }> {
+export async function launchSidecarWithSupervisor(request: SidecarAuthorityLaunchRequest): Promise<{ pid: number }> {
   return await spawnBackgroundProcess(sidecarSpawnRequest(request));
 }
 
@@ -321,7 +330,7 @@ function normalizeDuration(value: number | undefined, fallback: number): number 
     : fallback;
 }
 
-function sidecarSpawnRequest(request: SidecarLaunchRequest): SpawnProcessRequest {
+function sidecarSpawnRequest(request: SidecarAuthorityLaunchRequest): SpawnProcessRequest {
   const stamp = normalizeSidecarStamp(request.stamp);
   const { args = [], command, env, resources, supervisor, ...spawnRequest } = request;
   const preparedEnv = prepareSidecarLaunchEnvironment(env ?? process.env, resources);
@@ -331,17 +340,14 @@ function sidecarSpawnRequest(request: SidecarLaunchRequest): SpawnProcessRequest
     || !isAbsolute(supervisor.entrypoint)
     || resolve(supervisor.entrypoint) !== supervisor.entrypoint
   )) throw new Error("Sidecar supervisor binding must contain absolute normalized paths");
-  const supervisorEntry = supervisor?.entrypoint ?? (import.meta.url.endsWith(".ts")
-    ? fileURLToPath(new URL("./supervisor.ts", import.meta.url))
-    : fileURLToPath(new URL("./supervisor.mjs", import.meta.url)));
   return {
     ...spawnRequest,
     args: [
-      ...(supervisor == null && import.meta.url.endsWith(".ts") ? ["--import", "tsx"] : []),
-      supervisorEntry,
+      ...(supervisor.args ?? []),
+      supervisor.entrypoint,
       ...createProcessStampArgs(stamp, SIDECAR_STAMP_CONTRACT),
     ],
-    command: supervisor?.command ?? process.execPath,
+    command: supervisor.command,
     env: {
       ...preparedEnv,
       ELECTRON_RUN_AS_NODE: "1",
@@ -354,7 +360,7 @@ function sidecarSpawnRequest(request: SidecarLaunchRequest): SpawnProcessRequest
   };
 }
 
-export async function spawnSidecar(request: SidecarLaunchRequest): Promise<SpawnedSidecar> {
+export async function spawnSidecarWithSupervisor(request: SidecarAuthorityLaunchRequest): Promise<SpawnedSidecar> {
   const stamp = normalizeSidecarStamp(request.stamp);
   const child = await spawnLoggedProcess(sidecarSpawnRequest({
     ...request,
@@ -480,8 +486,8 @@ function emptyStopSetResult(): SidecarStopResult {
  * authoritative; zero means dynamic and inherits a known concrete predecessor
  * port unless the caller explicitly asks for a fresh allocation.
  */
-export async function restartSidecar(
-  request: SidecarLaunchRequest,
+export async function restartSidecarWithSupervisor(
+  request: SidecarAuthorityLaunchRequest,
   options: SidecarRestartOptions = {},
 ): Promise<SidecarRestartResult> {
   const stamp = normalizeSidecarStamp(request.stamp);
@@ -489,7 +495,7 @@ export async function restartSidecar(
 }
 
 async function restartSidecarGeneration(
-  request: SidecarLaunchRequest,
+  request: SidecarAuthorityLaunchRequest,
   options: SidecarRestartOptions,
 ): Promise<SidecarRestartResult> {
   const stamp = normalizeSidecarStamp(request.stamp);
@@ -511,7 +517,7 @@ async function restartSidecarGeneration(
   }
 
   const reusedPort = options.reuseKnownPort !== false && requestedPort === 0 && knownPort > 0;
-  const launched = await launchSidecar({
+  const launched = await launchSidecarWithSupervisor({
     ...request,
     resources: {
       ...request.resources,

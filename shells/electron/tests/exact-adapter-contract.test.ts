@@ -24,6 +24,7 @@ describe("Electron exact Shell adapter contract", () => {
       acceptedContentMetadataFile: absolute("content-metadata.json"), acceptedTrustFile: absolute("keys.json"),
       channelHeadUrl: "https://releases.example/betahyx/latest/channel-head.json",
       operation: "electron.distribution.build", outputDirectory: absolute("distribution"), sceneDirectory: absolute("scene"),
+      releaseManifestFile: absolute("release-shell.json"),
       sceneManifestSha256: "a".repeat(64), schemaVersion: 1, target: "win32-x64",
     } as const;
     expect(parseElectronExactDistributionRequest(request)).toEqual(request);

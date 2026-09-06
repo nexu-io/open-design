@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { BrowserWindow, app, dialog, ipcMain, protocol } from "electron";
 import {
@@ -20,6 +20,15 @@ import {
   type ElectronShellManifest,
   type ElectronStandaloneAuthority,
   type ElectronStandalonePreparedRuntime,
+} from "../contracts/index.js";
+export type {
+  ElectronInstallerClaimIdentity,
+  ElectronInstallerClaimSnapshot,
+  ElectronInstallerConfirmationReceipt,
+  ElectronInstallerConfirmationRequest,
+  ElectronInstallerRecoveryIntent,
+  ElectronInstallerRecoveryReceipt,
+  ElectronInstallerRecoveryRequest,
 } from "../contracts/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
@@ -272,6 +281,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         if (carrier == null) throw new Error("official Node carrier is unavailable");
         authority = definition.createStandaloneAuthority({
           officialNodeExecutablePath: carrier.executablePath,
+          installedShellPath: process.platform === "darwin" ? resolve(dirname(process.execPath), "../..") : process.execPath,
           namespaceRoot: paths.namespaceRoot,
           resourceRoot,
           runtimeRoot,
@@ -291,22 +301,44 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
         generationBinding = preparedRuntime.binding;
         startupSignal = context.startup!.bind(generationBinding.digest);
         const installerRecovery = await resolveElectronInstallerRecovery({ shell: manifest.shell, updater: preparedRuntime.updater });
-        if (installerRecovery.state === "arm-and-quit") {
-            if (definition.actions?.installUpdate == null) throw new Error("Electron Shell cannot recover its pending installer handoff");
-            const receipt = await preparedRuntime.armShellInstallation({
-              request: {
-                ...installerRecovery.request,
-                nodeExecutablePath: carrier.executablePath,
-                parentPid: process.pid,
-                runtimeRoot,
-              },
-              install: definition.actions.installUpdate,
-            });
-            context.log?.write("installer.recovered", { installAttemptId: receipt.installAttemptId });
-            app.quit();
-            return;
+        if (installerRecovery.state === "replacement-confirmation-required") {
+            const claim = await preparedRuntime.readShellInstallationClaim();
+            if (claim == null) throw new Error("Electron replacement Shell cannot confirm a missing installer claim");
+            const confirmation = await preparedRuntime.confirmShellInstallation({ expected: claim.identity, proof: manifest.shell });
+            context.log?.write("installer.replacement.confirmed", { installAttemptId: confirmation.installAttemptId });
+            updaterRevisionAtStart = confirmation.updaterRevision;
+        } else if (installerRecovery.state === "recovery-required") {
+            const claim = await preparedRuntime.readShellInstallationClaim();
+            context.log?.write("installer.recovery.required", { claim, installAttemptId: installerRecovery.request.installAttemptId });
+            if (claim == null || definition.actions?.resolveInstallerRecovery == null) {
+              throw new Error("Electron Shell pending installer handoff requires explicit recovery");
+            }
+            const intent = await definition.actions.resolveInstallerRecovery({ claim, snapshot: installerRecovery.snapshot });
+            if (intent == null) throw new Error("Electron Shell pending installer handoff requires explicit recovery");
+            const receipt = intent.action === "retry-original-artifact"
+              ? await preparedRuntime.recoverShellInstallation({
+                  request: {
+                    ...intent,
+                    installer: {
+                      ...installerRecovery.request,
+                      nodeExecutablePath: carrier.executablePath,
+                      parentPid: process.pid,
+                      runtimeRoot,
+                    },
+                  },
+                  install: definition.actions.installUpdate,
+                })
+              : await preparedRuntime.recoverShellInstallation({ request: intent });
+            if (receipt.action === "retry-original-artifact" || receipt.state === "quit-required") {
+              context.log?.write("installer.recovery.scheduled", { action: receipt.action, recoveryId: receipt.recoveryId });
+              app.quit();
+              return;
+            }
+            context.log?.write("installer.recovery.completed", { action: receipt.action, recoveryId: receipt.recoveryId });
+            updaterRevisionAtStart = (await preparedRuntime.updater.readSnapshot()).revision;
+        } else {
+          updaterRevisionAtStart = installerRecovery.snapshot.revision;
         }
-        updaterRevisionAtStart = installerRecovery.snapshot.revision;
       },
       [ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY]: async () => {
         if (preparedRuntime == null || generation == null || generationBinding == null) {

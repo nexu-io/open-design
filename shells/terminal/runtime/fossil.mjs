@@ -86,9 +86,23 @@ async function readUrl(url) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+function sidecarRequestTimeoutMs(message) {
+  if (message.domain === "lifecycle" && message.operation === "start") return 120_000;
+  if (message.domain === "transition" && message.action === "complete-start") return 120_000;
+  if (message.domain === "runtime") return 120_000;
+  if (message.domain === "lifecycle" && new Set(["release", "stop"]).has(message.operation)) return 60_000;
+  if (message.domain === "transition" && message.action === "force-stop") return 60_000;
+  if (message.domain === "generation" && message.operation === "handoff") return 60_000;
+  if (message.domain === "shell-updater" && message.operation === "invoke") return 10 * 60_000;
+  if (message.domain === "shell-updater" && message.operation === "wait") return (message.timeoutMs ?? 0) + 2_000;
+  return 5_000;
+}
+
 async function sidecarRequest(message) {
   if (activeSidecarStamp == null) throw new Error("Terminal Sidecar has not converged");
-  return await invokeSidecar(activeSidecarStamp, sidecarAction, { schemaVersion: 1, ...message });
+  return await invokeSidecar(activeSidecarStamp, sidecarAction, { schemaVersion: 1, ...message }, {
+    timeoutMs: sidecarRequestTimeoutMs(message),
+  });
 }
 
 async function convergeTerminalSidecar(request, installation) {

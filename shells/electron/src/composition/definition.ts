@@ -14,8 +14,10 @@ import type { ElectronWindowsLifecyclePolicy } from "@open-design/electron-kit/w
 
 import { createElectronRendererAdapter } from "../adapters/renderer/renderer.js";
 import { createElectronStandaloneAuthorityFactory } from "../adapters/standalone/authority.js";
+import { resolveElectronChannelHeadOverride } from "../adapters/standalone/release-feed.js";
 import type { ElectronPhysicalResourceSetDeclaration } from "../adapters/standalone/physical-resources.js";
 import { createInstallerHandoffAdapter } from "../adapters/updater/installer.js";
+import { createInstallerRecoveryIntentAdapter } from "../adapters/updater/installer-recovery.js";
 import { createWindowsCommittedObserver } from "../adapters/windows/lifecycle.js";
 import { assertShellWarmupBindings } from "./warmup-bindings.js";
 
@@ -39,10 +41,12 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
         console.info("[shell/electron] deep link", { url });
       },
       installUpdate: createInstallerHandoffAdapter(),
+      resolveInstallerRecovery: createInstallerRecoveryIntentAdapter(),
     }),
     createStandaloneAuthority: createElectronStandaloneAuthorityFactory(
       shellManifest,
       standalone as ElectronPhysicalResourceSetDeclaration,
+      { channelHeadUrl: resolveElectronChannelHeadOverride() },
     ),
   });
 }

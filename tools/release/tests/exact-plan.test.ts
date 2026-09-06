@@ -67,10 +67,17 @@ describe("exact release plan", () => {
     expect(contractPaths).toContain("packages/electron-contract/src");
     expect(contractPaths).not.toContain("packages/electron-kit/src");
 
-    const shellPaths = resolveContentIdentityDeclaration(registry, "electron.shell.build").sources.map(({ path }) => path);
+    const shellSources = resolveContentIdentityDeclaration(registry, "electron.shell.build").sources;
+    const shellPaths = shellSources.map(({ path }) => path);
     expect(shellPaths).toContain("shells/electron/src");
     expect(shellPaths).toContain("packages/electron-kit/src");
+    expect(shellSources.find(({ path }) => path === "packages/electron-kit/src")?.excludePaths).toEqual([
+      "cdp", "cdp-api.ts", "commands/cdp-control.ts",
+    ]);
     expect(shellPaths.some((path) => path.startsWith("apps/web") || path.startsWith("apps/daemon") || path.startsWith("apps/closure"))).toBe(false);
+
+    const hotAcceptancePaths = resolveContentIdentityDeclaration(registry, "closure.acceptance.hot").sources.map(({ path }) => path);
+    expect(hotAcceptancePaths).toContain("packages/electron-kit/src/cdp");
 
     const closurePaths = resolveContentIdentityDeclaration(registry, "closure.build").sources.map(({ path }) => path);
     expect(closurePaths).toContain("apps/closure/src");

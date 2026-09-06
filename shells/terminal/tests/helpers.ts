@@ -205,7 +205,7 @@ export function prepareExactFixture(target: string) {
   const archive = process.env.OD_TERMINAL_NODE_ARCHIVE ?? join(repoRoot, ".tmp/terminal-e2e/node", locked.archive);
   if (!existsSync(archive)) return null;
   const closureFile = join(repoRoot, "apps/closure/dist/index.mjs");
-  const launcherFile = join(repoRoot, "apps/closure/dist/launcher.mjs");
+  const launcherFile = join(terminalRoot, "tests/fixtures/standalone-launcher.mjs");
   const standaloneDirectory = join(repoRoot, "packages/standalone/dist");
   const sidecarDirectory = join(repoRoot, "packages/sidecar/dist");
   const platformDirectory = join(repoRoot, "packages/platform/dist");

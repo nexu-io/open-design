@@ -88,7 +88,7 @@ describe("Terminal Sidecar refinement", () => {
     const launcherA = join(root, "launcher-a.mjs");
     const launcherB = join(root, "launcher-b.mjs");
     const standaloneEntrypoint = resolve(repoRoot, "packages/standalone/dist/index.mjs");
-    const launcherEntrypoint = resolve(repoRoot, "apps/closure/dist/launcher.mjs");
+    const launcherEntrypoint = resolve(import.meta.dirname, "fixtures/standalone-launcher.mjs");
     copyFileSync(launcherEntrypoint, launcherA);
     copyFileSync(launcherEntrypoint, launcherB);
     const firstGeneration = generation(launcherA, sha256Hex(readFileSync(launcherA)), "a".repeat(64));

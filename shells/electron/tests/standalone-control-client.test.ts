@@ -9,6 +9,7 @@ import {
 
 import {
   ElectronStandaloneControlClient,
+  electronStandaloneControlRequestTimeoutMs,
   type ElectronStandaloneControlTransport,
 } from "@/adapters/standalone/control-client.js";
 import type { ElectronStandaloneControlRequest } from "@/adapters/standalone/control-contract.js";
@@ -51,6 +52,15 @@ function stoppedStatus(): LifecycleStatus {
 }
 
 describe("Electron Standalone control client", () => {
+  it("gives physical lifecycle and updater operations bounded operation-level deadlines", () => {
+    expect(electronStandaloneControlRequestTimeoutMs({ operation: "lifecycle.status" })).toBe(5_000);
+    expect(electronStandaloneControlRequestTimeoutMs({ operation: "lifecycle.start" })).toBe(120_000);
+    expect(electronStandaloneControlRequestTimeoutMs({ operation: "lifecycle.release" })).toBe(60_000);
+    expect(electronStandaloneControlRequestTimeoutMs({ operation: "runtime.invoke" })).toBe(120_000);
+    expect(electronStandaloneControlRequestTimeoutMs({ operation: "updater.invoke" })).toBe(600_000);
+    expect(electronStandaloneControlRequestTimeoutMs({ operation: "updater.wait", timeoutMs: 30_000 })).toBe(32_000);
+  });
+
   it("keeps the opaque capability inside lifecycle and runtime requests", async () => {
     const requests: ElectronStandaloneControlRequest[] = [];
     const transport: ElectronStandaloneControlTransport = async (request) => {

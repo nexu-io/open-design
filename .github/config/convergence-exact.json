@@ -9,7 +9,9 @@
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
       ".github/workflows/convergence-exact.atom.yml",
-      ".github/workflows/release-exact.yml"
+      ".github/workflows/release-exact.yml",
+      ".github/workflows/release-prerelease.yml",
+      ".github/workflows/release-stable.yml"
     ],
     "terminal-scene": [
       "package.json",
@@ -51,7 +53,7 @@
           "inputs": ["suite://electron-scene"],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": false
+          "reusable": true
         },
         "electron_scene_win32_x64": {
           "inputs": ["suite://electron-scene"],

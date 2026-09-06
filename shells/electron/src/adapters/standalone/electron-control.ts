@@ -4,13 +4,13 @@ import { inspectElectronCdp } from "@open-design/electron-kit/runtime";
 
 import { APP_KEYS } from "@open-design/sidecar-proto";
 import {
-  bootstrapSidecarProcess,
+  bootstrapSidecarProcessWithSupervisor,
   isCurrentSidecarLauncher,
   readOptionalCurrentSidecarStamp,
   registerSidecarProcess,
   SidecarFactory,
   type SidecarResources,
-} from "@open-design/sidecar";
+} from "@open-design/sidecar/authority";
 
 const CONTROL_RESOURCES_ENV = "OD_ELECTRON_CONTROL_RESOURCES";
 
@@ -35,7 +35,7 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
   const controlResources = resources();
   if (isCurrentSidecarLauncher()) {
     const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
-    await bootstrapSidecarProcess(stamp, controlResources, { supervisor: { command: process.execPath, entrypoint: join(resourceRoot, "supervisor.mjs") } });
+    await bootstrapSidecarProcessWithSupervisor(stamp, controlResources, { supervisor: { command: process.execPath, entrypoint: join(resourceRoot, "supervisor.mjs") } });
     app.exit(0);
     return;
   }

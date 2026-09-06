@@ -4,6 +4,14 @@ import type { OpenDesignElectronBridge, OpenDesignElectronGlobalScope } from "./
 // producers share declarations and accessors, never the physical locator.
 const electronContractSlot = "__od_electron_contract_7c6f3a9d";
 
+export function createElectronContractInvocationExpression(path: readonly string[], args: readonly unknown[]): string {
+  if (path.length === 0 || path.some((part) => !/^[a-z][A-Za-z0-9]*$/u.test(part) || part === "constructor" || part === "prototype")) {
+    throw new Error("Electron contract invocation path is invalid");
+  }
+  const serializedPath = JSON.stringify(path), serializedArgs = JSON.stringify(args);
+  return `(async()=>{const value=globalThis[${JSON.stringify(electronContractSlot)}];const path=${serializedPath};let owner=value;for(let index=0;index<path.length-1;index+=1){owner=owner?.[path[index]];}const method=owner?.[path[path.length-1]];if(typeof method!=="function")throw new Error("Electron contract method is unavailable");return await method.apply(owner,${serializedArgs});})()`;
+}
+
 export function readElectronContractCandidate(scope: OpenDesignElectronGlobalScope): unknown {
   if (electronContractSlot in scope) return scope[electronContractSlot];
   const windowValue = scope.window;

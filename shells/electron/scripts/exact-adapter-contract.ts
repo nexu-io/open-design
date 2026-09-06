@@ -22,6 +22,7 @@ export type ElectronExactDistributionRequest = Readonly<{
   channelHeadUrl: string;
   operation: "electron.distribution.build";
   outputDirectory: string;
+  releaseManifestFile: string;
   sceneDirectory: string;
   sceneManifestSha256: string;
   schemaVersion: typeof ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION;
@@ -68,7 +69,7 @@ export function parseElectronExactSceneRequest(value: unknown): ElectronExactSce
 
 export function parseElectronExactDistributionRequest(value: unknown): ElectronExactDistributionRequest {
   const input = record(value, "Electron exact distribution request");
-  exactKeys(input, ["acceptedContentMetadataFile", "acceptedTrustFile", "channelHeadUrl", "operation", "outputDirectory", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target"], "Electron exact distribution request");
+  exactKeys(input, ["acceptedContentMetadataFile", "acceptedTrustFile", "channelHeadUrl", "operation", "outputDirectory", "releaseManifestFile", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target"], "Electron exact distribution request");
   if (input.schemaVersion !== ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION || input.operation !== "electron.distribution.build") {
     throw new Error("Electron exact distribution request identity is invalid");
   }
@@ -80,6 +81,7 @@ export function parseElectronExactDistributionRequest(value: unknown): ElectronE
     channelHeadUrl: input.channelHeadUrl,
     operation: "electron.distribution.build",
     outputDirectory: absolutePath(input, "outputDirectory", "Electron exact distribution"),
+    releaseManifestFile: absolutePath(input, "releaseManifestFile", "Electron exact distribution"),
     sceneDirectory: absolutePath(input, "sceneDirectory", "Electron exact distribution"),
     sceneManifestSha256: input.sceneManifestSha256,
     schemaVersion: ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION,

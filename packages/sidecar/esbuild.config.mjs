@@ -10,5 +10,6 @@ const shared = {
 
 await Promise.all([
   build({ ...shared, entryPoints: ["./src/index.ts"], outfile: "./dist/index.mjs" }),
+  build({ ...shared, entryPoints: ["./src/authority.ts"], outfile: "./dist/authority.mjs" }),
   build({ ...shared, entryPoints: ["./src/supervisor.ts"], outfile: "./dist/supervisor.mjs" }),
 ]);

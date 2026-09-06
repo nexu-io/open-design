@@ -4,7 +4,7 @@ import {
   type SidecarLifecycleLockOptions,
   type SidecarStopOptions,
   type SidecarStopResult,
-} from "@open-design/sidecar";
+} from "@open-design/sidecar/authority";
 
 import type { ElectronBoundPhysicalResourceSet } from "./physical-resources.js";
 
