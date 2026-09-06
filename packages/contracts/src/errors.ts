@@ -94,6 +94,28 @@ export const API_ERROR_CODES = [
   // body. Returned by `POST /api/projects/:id/files` (and the
   // `tools live-artifacts create` path) as a 422.
   'ARTIFACT_PUBLICATION_BLOCKED',
+  // Deploy-provider failures surfaced by the daemon's deploy/config routes.
+  'NOT_HTML',
+  'MISSING_REFERENCES',
+  'PROVIDER_FORBIDDEN',
+  'VERCEL_TOKEN_REQUIRED',
+  'VERCEL_DEPLOY_FAILED',
+  'VERCEL_BAD_RESPONSE',
+  'CF_TOKEN_REQUIRED',
+  'CF_ACCOUNT_ID_REQUIRED',
+  'CF_PROJECT_NAME_UNRESOLVED',
+  'CF_ZONE_REQUIRED',
+  'CF_ZONE_INVALID',
+  'CF_ZONE_MISMATCH',
+  'CF_ZONE_INACTIVE',
+  'CF_ZONE_PARTIAL',
+  'CF_SUBDOMAIN_INVALID',
+  'CF_DOMAIN_ALREADY_BOUND',
+  'CF_DNS_RECORD_CONFLICT',
+  'CF_DNS_RECORD_MISSING',
+  'CF_UNKNOWN_ASSET_HASH',
+  'CF_ASSET_TOO_LARGE',
+  'CF_BAD_RESPONSE',
   'UPSTREAM_UNAVAILABLE',
   'RATE_LIMITED',
   // PR #974 round-4: desktop-paired daemon received an import request

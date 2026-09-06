@@ -53,6 +53,7 @@ import type {
   PreviewCommentStatus,
   PreviewCommentUpsertRequest,
   CloudflarePagesDeploySelection,
+  DisplayDevDeploySelection,
   CloudflarePagesZonesResponse,
   DeployConfigResponse,
   DeployProjectFileResponse,
@@ -109,9 +110,11 @@ import { PublicFilePublishError } from '../collab/public-file-publish';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
+export const DISPLAYDEV_PROVIDER_ID = 'displaydev-self';
 export const DEPLOY_PROVIDER_IDS = [
   DEFAULT_DEPLOY_PROVIDER_ID,
   CLOUDFLARE_PAGES_PROVIDER_ID,
+  DISPLAYDEV_PROVIDER_ID,
 ] as const;
 
 export type WebDeployProviderId = (typeof DEPLOY_PROVIDER_IDS)[number];
@@ -121,6 +124,7 @@ export type WebUpdateDeployConfigRequest = UpdateDeployConfigRequest;
 export type WebDeploymentInfo = ProjectDeploymentsResponse['deployments'][number];
 export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
+export type WebDisplayDevDeploySelection = DisplayDevDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
 export type WebPublicProjectFileResponse = PublicProjectFilePublication;
@@ -1753,10 +1757,16 @@ export async function fetchDeployConfig(
 ): Promise<WebDeployConfigResponse | null> {
   try {
     const resp = await fetch(`/api/deploy/config${deployProviderQuery(providerId)}`);
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const payload = (await resp.json().catch(() => null)) as
+        | { error?: { message?: string }; message?: string }
+        | null;
+      throw new Error(payload?.error?.message || payload?.message || `Could not load deploy config (${resp.status})`);
+    }
     return (await resp.json()) as WebDeployConfigResponse;
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof Error) throw err;
+    throw new Error('Could not load deploy config');
   }
 }
 
@@ -1802,17 +1812,36 @@ export async function fetchProjectDeployments(
   projectId: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<WebDeploymentInfo[]> {
-  try {
-    const resp = await fetch(
-      `/api/projects/${encodeURIComponent(projectId)}/deployments`,
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return [];
-    const json = (await resp.json()) as ProjectDeploymentsResponse;
-    return (json.deployments ?? []) as WebDeploymentInfo[];
-  } catch {
-    return [];
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/deployments`,
+    workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+  );
+  if (!resp.ok) {
+    const payload = (await resp.json().catch(() => null)) as
+      | { error?: { message?: string }; message?: string }
+      | null;
+    throw new Error(payload?.error?.message || payload?.message || `Could not load deployments (${resp.status})`);
   }
+  const json = (await resp.json()) as ProjectDeploymentsResponse;
+  return (json.deployments ?? []) as WebDeploymentInfo[];
+}
+
+export async function fetchProjectDeployment(
+  projectId: string,
+  deploymentId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<WebDeploymentInfo> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/deployments/${encodeURIComponent(deploymentId)}`,
+    workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+  );
+  if (!resp.ok) {
+    const payload = (await resp.json().catch(() => null)) as
+      | { error?: { message?: string }; message?: string }
+      | null;
+    throw new Error(payload?.error?.message || payload?.message || `Could not load deployment (${resp.status})`);
+  }
+  return (await resp.json()) as WebDeploymentInfo;
 }
 
 export async function deployProjectFile(
@@ -1821,6 +1850,7 @@ export async function deployProjectFile(
   providerId: WebDeployProviderId = DEFAULT_DEPLOY_PROVIDER_ID,
   cloudflarePages?: WebCloudflarePagesDeploySelection,
   target?: 'preview' | 'production',
+  displayDev?: WebDisplayDevDeploySelection,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<WebDeployProjectFileResponse> {
   const body = {
@@ -1828,6 +1858,7 @@ export async function deployProjectFile(
     providerId,
     ...(cloudflarePages ? { cloudflarePages } : {}),
     ...(target ? { target } : {}),
+    ...(displayDev ? { displayDev } : {}),
   };
   const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/deploy`, {
     method: 'POST',

@@ -116,9 +116,11 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   createSocialSharePayload,
   DEFAULT_DEPLOY_PROVIDER_ID,
+  DISPLAYDEV_PROVIDER_ID,
   deployProjectFile,
   fetchCloudflarePagesZones,
   fetchDeployConfig,
+  fetchProjectDeployment,
   fetchProjectDeployments,
   fetchProjectFileVersion,
   fetchProjectFileVersions,
@@ -141,6 +143,7 @@ import {
   updateDeployConfig,
   type WebDeployConfigResponse,
   type WebCloudflarePagesDeploySelection,
+  type WebDisplayDevDeploySelection,
   type WebDeploymentInfo,
   type WebDeployProjectFileResponse,
   type WebDeployProviderId,
@@ -348,17 +351,26 @@ const IMAGE_EXPORT_FORMAT_OPTIONS: Array<{
 ];
 type DeployProviderOption = {
   id: WebDeployProviderId;
-  labelKey: 'fileViewer.vercelProvider' | 'fileViewer.cloudflarePagesProvider';
+  labelKey:
+    | 'fileViewer.vercelProvider'
+    | 'fileViewer.cloudflarePagesProvider'
+    | 'fileViewer.displayDevProvider';
   tokenLink: string;
-  tokenLinkKey: 'fileViewer.vercelTokenGetLink' | 'fileViewer.cloudflareApiTokenGetLink';
+  tokenLinkKey:
+    | 'fileViewer.vercelTokenGetLink'
+    | 'fileViewer.cloudflareApiTokenGetLink'
+    | 'fileViewer.displayDevApiKeyGetLink';
   tokenPlaceholderKey:
     | 'fileViewer.vercelTokenPlaceholder'
-    | 'fileViewer.cloudflareApiTokenPlaceholder';
-  tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
-  tokenRequiredKey: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+    | 'fileViewer.cloudflareApiTokenPlaceholder'
+    | 'fileViewer.displayDevApiKeyPlaceholder';
+  tokenReuseHintKey?: 'fileViewer.vercelTokenReuseHint' | 'fileViewer.cloudflareApiTokenReuseHint';
+  tokenRequiredKey?: 'fileViewer.vercelTokenRequired' | 'fileViewer.cloudflareApiTokenRequired';
+  previewHintKey?: 'fileViewer.vercelPreviewOnly' | 'fileViewer.cloudflarePagesPreviewHint';
   tokenLabelKey:
     | 'fileViewer.vercelToken'
-    | 'fileViewer.cloudflareApiToken';
+    | 'fileViewer.cloudflareApiToken'
+    | 'fileViewer.displayDevApiKey';
   accountIdLabelKey?: 'fileViewer.cloudflareAccountId';
   accountIdHintKey?: 'fileViewer.cloudflareAccountIdHint';
 };
@@ -659,6 +671,7 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.vercelTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.vercelTokenReuseHint',
     tokenRequiredKey: 'fileViewer.vercelTokenRequired',
+    previewHintKey: 'fileViewer.vercelPreviewOnly',
     tokenLabelKey: 'fileViewer.vercelToken',
   },
   {
@@ -669,9 +682,18 @@ const DEPLOY_PROVIDER_OPTIONS: DeployProviderOption[] = [
     tokenPlaceholderKey: 'fileViewer.cloudflareApiTokenPlaceholder',
     tokenReuseHintKey: 'fileViewer.cloudflareApiTokenReuseHint',
     tokenRequiredKey: 'fileViewer.cloudflareApiTokenRequired',
+    previewHintKey: 'fileViewer.cloudflarePagesPreviewHint',
     tokenLabelKey: 'fileViewer.cloudflareApiToken',
     accountIdLabelKey: 'fileViewer.cloudflareAccountId',
     accountIdHintKey: 'fileViewer.cloudflareAccountIdHint',
+  },
+  {
+    id: DISPLAYDEV_PROVIDER_ID,
+    labelKey: 'fileViewer.displayDevProvider',
+    tokenLink: 'https://app.display.dev/settings/api-keys',
+    tokenLinkKey: 'fileViewer.displayDevApiKeyGetLink',
+    tokenPlaceholderKey: 'fileViewer.displayDevApiKeyPlaceholder',
+    tokenLabelKey: 'fileViewer.displayDevApiKey',
   },
 ];
 
@@ -746,8 +768,17 @@ function deployResultState(status?: string): 'ready' | 'delayed' | 'protected' |
   return 'ready';
 }
 
-function publicShareUrlForDeployment(deployment?: WebDeploymentInfo | null): string {
+export function publicShareUrlForDeployment(deployment?: WebDeploymentInfo | null): string {
   if (!deployment) return '';
+  if (deployment.providerId === DISPLAYDEV_PROVIDER_ID) {
+    const displayDev = deployment.displayDev;
+    const hasPublicAccess = displayDev?.mode === 'anonymous' || (
+      displayDev?.mode === 'authenticated' &&
+      'visibility' in displayDev &&
+      displayDev.visibility === 'public'
+    );
+    if (!hasPublicAccess) return '';
+  }
   const cloudflare = deployment.cloudflarePages;
   const customDomainUrl = cloudflare?.customDomain?.status === 'ready'
     ? cloudflare.customDomain.url?.trim()
@@ -1449,6 +1480,64 @@ function pickLatestShareDeployment(
     .filter((deployment): deployment is WebDeploymentInfo =>
       Boolean(deployment && shareUrlForDeployment(deployment) && deployResultState(deployment.status) !== 'failed'))
     .sort(compareDeploymentsByNewest)[0] ?? null;
+}
+
+type DisplayDevVisibility = 'provider' | 'public' | 'company' | 'private';
+type DisplayDevAccessSettings = {
+  visibility: DisplayDevVisibility;
+  sharedWith: string[];
+};
+
+function initialDisplayDevDeployTouched() {
+  return {
+    name: false,
+    visibility: false,
+    sharedWith: false,
+  };
+}
+
+function displayDevAccessSettingsForDeployment(
+  deployment: WebDeploymentInfo | null | undefined,
+): DisplayDevAccessSettings | null {
+  if (deployment?.providerId !== DISPLAYDEV_PROVIDER_ID || deployment.displayDev?.mode !== 'authenticated') {
+    return null;
+  }
+  const displayDev = deployment.displayDev;
+  const visibility = 'visibility' in displayDev ? displayDev.visibility : undefined;
+  const sharedWithValue = 'sharedWith' in displayDev ? displayDev.sharedWith : undefined;
+  if (
+    !isDisplayDevVisibility(visibility) ||
+    !Array.isArray(sharedWithValue)
+  ) {
+    return null;
+  }
+  const sharedWith = sharedWithValue.map((item) => item.trim()).filter(Boolean);
+  return {
+    visibility,
+    sharedWith,
+  };
+}
+
+function displayDevAuthenticatedDeploymentMissingAccessSettings(
+  deployment: WebDeploymentInfo | null | undefined,
+): boolean {
+  return deployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+    deployment.displayDev?.mode === 'authenticated' &&
+    !displayDevAccessSettingsForDeployment(deployment);
+}
+
+function displayDevDeploymentNeedsDetail(
+  deployment: WebDeploymentInfo | null | undefined,
+): boolean {
+  return displayDevAuthenticatedDeploymentMissingAccessSettings(deployment) || (
+    deployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+    deployment.displayDev?.mode === 'anonymous' &&
+    deployment.displayDev.claimUrlRedacted === true
+  );
+}
+
+function isDisplayDevVisibility(value: unknown): value is DisplayDevVisibility {
+  return value === 'public' || value === 'company' || value === 'private';
 }
 
 function manualEditFloatingPanelStyle(
@@ -7897,7 +7986,17 @@ function HtmlViewer({
   const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
   const [deployment, setDeployment] = useState<WebDeploymentInfo | null>(null);
   const [deploymentsByProvider, setDeploymentsByProvider] = useState<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
+  const deploymentsByProviderRef = useRef<Partial<Record<WebDeployProviderId, WebDeploymentInfo>>>({});
   const deploymentsLoadSeqRef = useRef(0);
+  const deploymentOperationRef = useRef<{ identity: string } | null>(null);
+  const deploymentIdentityRef = useRef(srcDocPreviewBaseIdentity);
+  deploymentIdentityRef.current = srcDocPreviewBaseIdentity;
+  function isCurrentDeploymentOperation(operation: { identity: string }) {
+    return deploymentOperationRef.current === operation && deploymentIdentityRef.current === operation.identity;
+  }
+  useEffect(() => {
+    deploymentsByProviderRef.current = deploymentsByProvider;
+  }, [deploymentsByProvider]);
   const [deployModalOpen, setDeployModalOpen] = useState(false);
   const [deployModalIntent, setDeployModalIntent] = useState<'deploy' | 'social-share'>('deploy');
   const closeDeployModal = useCallback(() => {
@@ -7909,10 +8008,15 @@ function HtmlViewer({
   const [deployPhase, setDeployPhase] = useState<'idle' | 'deploying' | 'preparing-link'>('idle');
   const [savingDeployConfig, setSavingDeployConfig] = useState(false);
   const [deployError, setDeployError] = useState<string | null>(null);
+  const [deployProviderLoadError, setDeployProviderLoadError] = useState<string | null>(null);
+  const [deployProviderConfigLoadFailed, setDeployProviderConfigLoadFailed] = useState(false);
   const [deployResult, setDeployResult] = useState<WebDeployProjectFileResponse | null>(null);
   const [copiedDeployLink, setCopiedDeployLink] = useState<string | null>(null);
   const [deployProviderId, setDeployProviderId] = useState<WebDeployProviderId>(DEFAULT_DEPLOY_PROVIDER_ID);
   const [deployTarget, setDeployTarget] = useState<'preview' | 'production'>('production');
+  const deploymentsLoadFailedMessage = t('fileViewer.deploymentsLoadFailed');
+  const displayDevAccessSettingsLoadFailedMessage = t('fileViewer.displayDevAccessSettingsLoadFailed');
+  const [deployProviderLoading, setDeployProviderLoading] = useState(false);
   const [projectSocialShare, setProjectSocialShare] = useState<SocialShareResponse | null>(null);
   const [deployToken, setDeployToken] = useState('');
   const [teamId, setTeamId] = useState('');
@@ -7923,7 +8027,12 @@ function HtmlViewer({
   const [cloudflareZonesError, setCloudflareZonesError] = useState<string | null>(null);
   const [cloudflareZoneId, setCloudflareZoneId] = useState('');
   const [cloudflareDomainPrefix, setCloudflareDomainPrefix] = useState('');
+  const [displayDevArtifactName, setDisplayDevArtifactName] = useState('');
+  const [displayDevVisibility, setDisplayDevVisibility] = useState<DisplayDevVisibility>('provider');
+  const [displayDevSharedWith, setDisplayDevSharedWith] = useState('');
+  const [displayDevDeployTouched, setDisplayDevDeployTouched] = useState(initialDisplayDevDeployTouched);
   const deployProviderLoadSeqRef = useRef(0);
+  const deployProviderLoadingRef = useRef(false);
   const deployTokenInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!workspaceActive || !deployModalOpen) return;
@@ -9254,18 +9363,108 @@ function HtmlViewer({
     const next: Partial<Record<WebDeployProviderId, WebDeploymentInfo>> = {};
     for (const option of DEPLOY_PROVIDER_OPTIONS) {
       const deploymentForProvider = items
-        .filter((item) => item.fileName === file.name && item.providerId === option.id && item.url?.trim())
+        .filter((item) =>
+          item.fileName === file.name &&
+          item.providerId === option.id &&
+          item.url?.trim())
         .sort(compareDeploymentsByNewest)[0];
       if (deploymentForProvider) next[option.id] = deploymentForProvider;
     }
     return next;
   }
 
+  function deploymentMapForCurrentFileFromMap(
+    items: Partial<Record<WebDeployProviderId, WebDeploymentInfo>>,
+  ) {
+    return deploymentMapForCurrentFile(Object.values(items).filter(Boolean));
+  }
+
+  type DeploymentSnapshot = {
+    deploymentsByProvider: Partial<Record<WebDeployProviderId, WebDeploymentInfo>>;
+    currentDeployment: WebDeploymentInfo | null;
+    warning: string | null;
+  };
+
+  async function fetchDeploymentSnapshot(
+    providerId: WebDeployProviderId,
+    options?: { fallbackToExisting?: boolean },
+  ): Promise<DeploymentSnapshot> {
+    const items = await fetchProjectDeployments(projectId, workspaceContext);
+    const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
+    let exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
+    let warning: string | null = null;
+    if (
+      providerId === DISPLAYDEV_PROVIDER_ID &&
+      exactDeployment &&
+      displayDevDeploymentNeedsDetail(exactDeployment)
+    ) {
+      const deploymentId = exactDeployment.id;
+      try {
+        exactDeployment = await fetchProjectDeployment(
+          projectId,
+          deploymentId,
+          workspaceContext,
+        );
+        nextDeploymentsByProvider[DISPLAYDEV_PROVIDER_ID] = exactDeployment;
+        if (displayDevAuthenticatedDeploymentMissingAccessSettings(exactDeployment)) {
+          warning = displayDevAccessSettingsLoadFailedMessage;
+        }
+      } catch {
+        warning = displayDevAccessSettingsLoadFailedMessage;
+      }
+    }
+    const fallbackDeployment = options?.fallbackToExisting && providerId !== DISPLAYDEV_PROVIDER_ID
+      ? Object.values(nextDeploymentsByProvider)[0] ?? null
+      : null;
+    return {
+      deploymentsByProvider: nextDeploymentsByProvider,
+      currentDeployment: exactDeployment ?? fallbackDeployment,
+      warning,
+    };
+  }
+
+  function commitDeploymentSnapshot(snapshot: DeploymentSnapshot) {
+    deploymentsByProviderRef.current = snapshot.deploymentsByProvider;
+    setDeploymentsByProvider(snapshot.deploymentsByProvider);
+    setDeployment(snapshot.currentDeployment);
+    setDeployResult(snapshot.currentDeployment);
+    setDeployProviderLoadError(snapshot.warning);
+  }
+
+  function preserveDeploymentSnapshotAfterFailure(providerId: WebDeployProviderId, message?: string) {
+    const preservedDeployments = deploymentMapForCurrentFileFromMap(deploymentsByProviderRef.current);
+    const existingDeployment = preservedDeployments[providerId] ?? null;
+    const preservedDeployment =
+      providerId === DISPLAYDEV_PROVIDER_ID && existingDeployment?.displayDev?.mode === 'authenticated'
+        ? {
+            ...existingDeployment,
+            displayDev: {
+              mode: 'authenticated' as const,
+              shortId: existingDeployment.displayDev.shortId,
+              accessSettingsMissing: true as const,
+            },
+          }
+        : existingDeployment;
+    const nextDeployments = preservedDeployment
+      ? { ...preservedDeployments, [providerId]: preservedDeployment }
+      : preservedDeployments;
+    commitDeploymentSnapshot({
+      deploymentsByProvider: nextDeployments,
+      currentDeployment: preservedDeployment,
+      warning: providerId === DISPLAYDEV_PROVIDER_ID
+        ? message || deploymentsLoadFailedMessage
+        : null,
+    });
+  }
+
   function syncDeployFormFromConfig(
     providerId: WebDeployProviderId,
     config: WebDeployConfigResponse | null,
+    currentDeployment: WebDeploymentInfo | null = null,
+    options?: { preserveDisplayDevEdits?: boolean },
   ) {
     const matchingConfig = config?.providerId === providerId ? config : null;
+    const displayDevAccessSettings = displayDevAccessSettingsForDeployment(currentDeployment);
     setDeployProviderId(providerId);
     setDeployConfig(matchingConfig);
     setDeployToken(matchingConfig?.tokenMask || '');
@@ -9281,6 +9480,14 @@ function HtmlViewer({
     // match the daemon's documented default for an omitted target on POST deploy, and to match
     // pre-regression behavior.
     setDeployTarget('production');
+    if (providerId === DISPLAYDEV_PROVIDER_ID && options?.preserveDisplayDevEdits) return;
+    setDisplayDevArtifactName(matchingConfig?.displayDev?.defaultArtifactName || '');
+    setDisplayDevVisibility(
+      displayDevAccessSettings?.visibility ||
+      'provider',
+    );
+    setDisplayDevSharedWith((displayDevAccessSettings?.sharedWith || []).join(', '));
+    setDisplayDevDeployTouched(initialDisplayDevDeployTouched());
   }
 
   function cloudflareConfigHintsFromForm() {
@@ -9307,6 +9514,21 @@ function HtmlViewer({
         cloudflarePages: cloudflareConfigHintsFromForm(),
       };
     }
+    if (providerId === DISPLAYDEV_PROVIDER_ID) {
+      const shouldClearToken = Boolean(deployConfig?.tokenMask) && !token;
+      return {
+        providerId,
+        token,
+        ...(shouldClearToken ? { clearToken: true } : {}),
+        ...(!deployProviderConfigLoadFailed
+          ? {
+              displayDev: {
+                defaultArtifactName: displayDevArtifactName.trim(),
+              },
+            }
+          : {}),
+      };
+    }
     return {
       providerId,
       token,
@@ -9315,33 +9537,70 @@ function HtmlViewer({
     };
   }
 
+  function displayDevSharedWithFromForm() {
+    return displayDevSharedWith
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  function displayDevDefaultsChanged() {
+    if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return false;
+    return displayDevArtifactName.trim() !== (deployConfig?.displayDev?.defaultArtifactName || '');
+  }
+
   async function loadDeployProvider(
     providerId: WebDeployProviderId,
-    options?: { fallbackToExisting?: boolean },
+    options?: { fallbackToExisting?: boolean; preserveDisplayDevEdits?: boolean },
   ) {
+    if (deploymentOperationRef.current) return { config: null, currentDeployment: null };
     const requestSeq = ++deployProviderLoadSeqRef.current;
+    deployProviderLoadingRef.current = true;
+    setDeployProviderLoading(true);
     setDeployProviderId(providerId);
-    const deployments = await fetchProjectDeployments(projectId, workspaceContext);
-    const nextDeploymentsByProvider = deploymentMapForCurrentFile(deployments);
-    const exactDeployment = nextDeploymentsByProvider[providerId] ?? null;
-    const fallbackDeployment = options?.fallbackToExisting
-      ? Object.values(nextDeploymentsByProvider)[0] ?? null
-      : null;
-    const currentDeployment = exactDeployment ?? fallbackDeployment;
-    // Use the explicit providerId for config/form so a fallback deployment from
-    // another provider only fills the existing-URL display, never the form/credentials.
-    const config = await fetchDeployConfig(providerId);
-    if (requestSeq !== deployProviderLoadSeqRef.current) {
+    setDeployProviderLoadError(null);
+    setDeployProviderConfigLoadFailed(false);
+    try {
+      const config = await fetchDeployConfig(providerId);
+      let snapshot: DeploymentSnapshot | null = null;
+      let deploymentsLoadError: unknown = null;
+      try {
+        snapshot = await fetchDeploymentSnapshot(providerId, options);
+      } catch (err) {
+        deploymentsLoadError = err;
+      }
+      const currentDeployment = snapshot?.currentDeployment ?? null;
+      // Use the explicit providerId for config/form so a fallback deployment from
+      // another provider only fills the existing-URL display, never the form/credentials.
+      if (requestSeq !== deployProviderLoadSeqRef.current) {
+        return { config: null, currentDeployment: null };
+      }
+      syncDeployFormFromConfig(providerId, config, currentDeployment ?? null, options);
+      if (deploymentsLoadError) {
+        preserveDeploymentSnapshotAfterFailure(
+          providerId,
+          deploymentsLoadError instanceof Error ? deploymentsLoadError.message : undefined,
+        );
+      } else if (snapshot) {
+        commitDeploymentSnapshot(snapshot);
+      }
+      if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
+        void loadCloudflareZones(config, { requestSeq });
+      }
+      return { config, currentDeployment };
+    } catch (err) {
+      if (requestSeq === deployProviderLoadSeqRef.current) {
+        syncDeployFormFromConfig(providerId, null, null, options);
+        setDeployProviderConfigLoadFailed(true);
+        setDeployProviderLoadError(err instanceof Error ? err.message : deploymentsLoadFailedMessage);
+      }
       return { config: null, currentDeployment: null };
+    } finally {
+      if (requestSeq === deployProviderLoadSeqRef.current) {
+        deployProviderLoadingRef.current = false;
+        setDeployProviderLoading(false);
+      }
     }
-    syncDeployFormFromConfig(providerId, config);
-    setDeploymentsByProvider(nextDeploymentsByProvider);
-    setDeployment(currentDeployment ?? null);
-    setDeployResult(currentDeployment ?? null);
-    if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID && config?.configured) {
-      void loadCloudflareZones(config, { requestSeq });
-    }
-    return { config, currentDeployment };
   }
 
   async function loadCloudflareZones(
@@ -9684,25 +9943,68 @@ function HtmlViewer({
   ]);
 
   useEffect(() => {
-    if (!workspaceActive) return;
+    const pendingOperation = deploymentOperationRef.current;
+    if (!workspaceActive || pendingOperation?.identity === srcDocPreviewBaseIdentity) return;
+    // File navigation detaches the old operation; retained-tab activation does not.
+    deploymentOperationRef.current = null;
+    setDeploying(false);
+    if (pendingOperation) {
+      ++deployProviderLoadSeqRef.current;
+      setSavingDeployConfig(false);
+      setCloudflareZonesLoading(false);
+    }
     const requestSeq = ++deploymentsLoadSeqRef.current;
+    const providerRequestSeq = deployProviderLoadSeqRef.current;
     let cancelled = false;
-    setDeployResult(null);
+    const currentFileDeployments = pendingOperation ? {} : deploymentMapForCurrentFileFromMap(deploymentsByProvider);
+    const currentDeployment = currentFileDeployments[deployProviderId] ?? null;
+    deploymentsByProviderRef.current = currentFileDeployments;
+    setDeploymentsByProvider(currentFileDeployments);
+    setDeployment(currentDeployment);
+    setDeployResult(currentDeployment);
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
-    void fetchProjectDeployments(projectId, workspaceContext).then((items) => {
-      if (cancelled || deploymentsLoadSeqRef.current !== requestSeq) return;
-      const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
-      const current = nextDeploymentsByProvider[deployProviderId] ?? null;
-      setDeploymentsByProvider(nextDeploymentsByProvider);
-      setDeployment(current ?? null);
-      setDeployResult(current ?? null);
+    if (deployProviderLoadingRef.current) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    void fetchDeploymentSnapshot(deployProviderId).then((snapshot) => {
+      if (
+        cancelled ||
+        requestSeq !== deploymentsLoadSeqRef.current ||
+        providerRequestSeq !== deployProviderLoadSeqRef.current ||
+        deployProviderLoadingRef.current ||
+        deploymentOperationRef.current
+      ) return;
+      commitDeploymentSnapshot(snapshot);
+    }).catch((err) => {
+      if (
+        cancelled ||
+        requestSeq !== deploymentsLoadSeqRef.current ||
+        providerRequestSeq !== deployProviderLoadSeqRef.current ||
+        deployProviderLoadingRef.current ||
+        deploymentOperationRef.current
+      ) return;
+      preserveDeploymentSnapshotAfterFailure(
+        deployProviderId,
+        err instanceof Error ? err.message : undefined,
+      );
     });
     return () => {
       cancelled = true;
     };
-  }, [projectId, file.name, deployProviderId, workspaceActive, workspaceContext]);
+  }, [
+    projectId,
+    file.name,
+    deployProviderId,
+    deploymentsLoadFailedMessage,
+    workspaceActive,
+    workspaceContext,
+    srcDocPreviewBaseIdentity,
+  ]);
 
   // A retained HtmlViewer stays mounted while the user visits Design Files and
   // comes back, so its initial deployment snapshot can legitimately be older
@@ -9713,13 +10015,35 @@ function HtmlViewer({
     if (!deployMenuOpen) return;
     const requestSeq = ++deploymentsLoadSeqRef.current;
     let cancelled = false;
-    void fetchProjectDeployments(projectId, workspaceContext).then((items) => {
+    void fetchDeploymentSnapshot(deployProviderId).then(async (snapshot) => {
       if (cancelled || deploymentsLoadSeqRef.current !== requestSeq) return;
-      const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
-      const current = nextDeploymentsByProvider[deployProviderId] ?? null;
-      setDeploymentsByProvider(nextDeploymentsByProvider);
-      setDeployment(current ?? null);
-      setDeployResult(current ?? null);
+      const displayDevDeployment = snapshot.deploymentsByProvider[DISPLAYDEV_PROVIDER_ID];
+      if (
+        deployProviderId !== DISPLAYDEV_PROVIDER_ID &&
+        displayDevDeployment &&
+        displayDevDeploymentNeedsDetail(displayDevDeployment)
+      ) {
+        try {
+          const hydrated = await fetchProjectDeployment(
+            projectId,
+            displayDevDeployment.id,
+            workspaceContext,
+          );
+          if (cancelled || deploymentsLoadSeqRef.current !== requestSeq) return;
+          snapshot.deploymentsByProvider[DISPLAYDEV_PROVIDER_ID] = hydrated;
+        } catch {
+          // Public sharing stays fail-closed until access settings can be confirmed.
+        }
+      }
+      if (
+        cancelled ||
+        deploymentsLoadSeqRef.current !== requestSeq ||
+        deploymentOperationRef.current
+      ) return;
+      commitDeploymentSnapshot(snapshot);
+    }).catch(() => {
+      // The menu refresh is best-effort. Provider-specific loading owns any
+      // warning shown after the user chooses a deploy target.
     });
     return () => {
       cancelled = true;
@@ -14206,24 +14530,36 @@ function HtmlViewer({
   ) {
     setDeployMenuOpen(false);
     setDeployModalOpen(true);
+    if (deploymentOperationRef.current || (deployProviderId === DISPLAYDEV_PROVIDER_ID && savingDeployConfig)) return;
     setDeployModalIntent(intent);
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     setDeployPhase('idle');
-    await loadDeployProvider(nextProviderId, { fallbackToExisting: true });
+    await loadDeployProvider(nextProviderId, { fallbackToExisting: intent === 'social-share' });
   }
 
   async function changeDeployProvider(nextProviderId: WebDeployProviderId) {
-    if (nextProviderId === deployProviderId) return;
+    if (nextProviderId === deployProviderId || deploymentOperationRef.current) return;
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setDeployPhase('idle');
     await loadDeployProvider(nextProviderId);
   }
 
-  async function saveDeployConfig() {
+  async function saveDeployConfig(
+    currentDeployment?: WebDeploymentInfo | null,
+    options: { reloadDisplayDevDeployments?: boolean; operation?: { identity: string } } = {},
+  ) {
+    if (deployProviderLoadingRef.current) return null;
+    const ownsForm = () => !options.operation || isCurrentDeploymentOperation(options.operation);
+    const hadDisplayDevLoadWarning = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployProviderLoadError);
     setSavingDeployConfig(true);
     setDeployError(null);
+    if (!hadDisplayDevLoadWarning) {
+      setDeployProviderLoadError(null);
+    }
     setDeployActionToast(null);
     try {
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
@@ -14240,16 +14576,32 @@ function HtmlViewer({
       if (!config || config.providerId !== deployProviderId) {
         throw new Error(t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
       }
-      syncDeployFormFromConfig(deployProviderId, config);
+      if (!ownsForm()) return config;
+      syncDeployFormFromConfig(
+        deployProviderId,
+        config,
+        currentDeployment ?? deployResult ?? deployment,
+        { preserveDisplayDevEdits: true },
+      );
+      setDeployProviderConfigLoadFailed(false);
+      const shouldReloadDisplayDevDeployments =
+        options.reloadDisplayDevDeployments !== false &&
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        (hadDisplayDevLoadWarning || (deployToken.trim() && deployToken.trim() !== deployConfig?.tokenMask));
+      if (shouldReloadDisplayDevDeployments) {
+        await loadDeployProvider(DISPLAYDEV_PROVIDER_ID, { preserveDisplayDevEdits: true });
+      }
       if (deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID) {
         await loadCloudflareZones(config);
       }
       return config;
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
+      if (ownsForm()) {
+        setDeployError(err instanceof Error ? err.message : t('fileViewer.deployProviderConfigSaveFailed', { provider: deployProviderLabel }));
+      }
       return null;
     } finally {
-      setSavingDeployConfig(false);
+      if (ownsForm()) setSavingDeployConfig(false);
     }
   }
 
@@ -14271,10 +14623,75 @@ function HtmlViewer({
     };
   }
 
+  function buildDisplayDevDeploySelection(): WebDisplayDevDeploySelection | undefined {
+    if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return undefined;
+    const currentDeployment = deployResult || deployment;
+    const isAuthenticatedUpdate =
+      currentDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+      currentDeployment.displayDev?.mode === 'authenticated';
+    const name = displayDevArtifactName.trim();
+    const sharedWith = displayDevSharedWithFromForm();
+    const canSendUntouchedName = !deployProviderLoadError;
+    const token = deployToken.trim();
+    const authentication: WebDisplayDevDeploySelection['authentication'] = !token
+      ? { mode: 'anonymous', ...(deployConfig?.tokenMask ? { save: true } : {}) }
+      : token !== deployConfig?.tokenMask
+        ? { mode: 'api-key', apiKey: token, save: true }
+        : { mode: 'saved-key' };
+    if (!token) {
+      const selection: WebDisplayDevDeploySelection = {
+        ...(name && (canSendUntouchedName || displayDevDeployTouched.name) ? { name } : {}),
+        ...(displayDevDefaultsChanged() ? { saveDefaults: true } : {}),
+        authentication,
+      };
+      return selection;
+    }
+    if (!isAuthenticatedUpdate) {
+      const selection: WebDisplayDevDeploySelection = {
+        ...(displayDevDefaultsChanged() ? { saveDefaults: true } : {}),
+        authentication,
+      };
+      if (name && (canSendUntouchedName || displayDevDeployTouched.name)) selection.name = name;
+      if (displayDevDeployTouched.visibility && displayDevVisibility !== 'provider') {
+        selection.visibility = displayDevVisibility;
+      }
+      if (displayDevDeployTouched.sharedWith) {
+        selection.sharedWith = sharedWith;
+      }
+      return selection;
+    }
+    const selection: WebDisplayDevDeploySelection = {
+      ...(displayDevDefaultsChanged() ? { saveDefaults: true } : {}),
+      authentication,
+    };
+    if (displayDevDeployTouched.name && name) selection.name = name;
+    if (displayDevDeployTouched.visibility && displayDevVisibility !== 'provider') {
+      selection.visibility = displayDevVisibility;
+    }
+    if (displayDevDeployTouched.sharedWith) selection.sharedWith = sharedWith;
+    return selection;
+  }
+
   async function deployToSelectedProvider() {
+    if (deployProviderLoadingRef.current || deployProviderConfigLoadFailed || deploymentOperationRef.current) return;
+    const currentDisplayDevDeployment = deployResult || deployment;
+    const ownedDisplayDevDeploymentMissingApiKey =
+      deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+      currentDisplayDevDeployment?.providerId === DISPLAYDEV_PROVIDER_ID &&
+      currentDisplayDevDeployment.displayDev?.mode === 'authenticated' &&
+      !deployToken.trim();
+    if (ownedDisplayDevDeploymentMissingApiKey) {
+      setDeployError(t('fileViewer.displayDevDeployOwnedHint'));
+      deployTokenInputRef.current?.focus();
+      return;
+    }
+    const operation = { identity: srcDocPreviewBaseIdentity };
+    deploymentOperationRef.current = operation;
+    ++deploymentsLoadSeqRef.current;
     setDeploying(true);
     setDeployPhase('deploying');
     setDeployError(null);
+    setDeployProviderLoadError(null);
     setDeployActionToast(null);
     setCopiedDeployLink(null);
     // Real-deploy analytics: report success only after the provider actually
@@ -14282,7 +14699,11 @@ function HtmlViewer({
     // distinct from the share-popover "opened" signal (artifact_export_result).
     const deployStarted = performance.now();
     const providerForTracking: TrackingDeployProvider =
-      deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare_pages' : 'vercel';
+      deployProviderId === DISPLAYDEV_PROVIDER_ID
+        ? 'displaydev'
+        : deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID
+          ? 'cloudflare_pages'
+          : 'vercel';
     const firstConfigure = !deployConfig?.configured;
     let savedNewToken = false;
     const fireDeployResult = (
@@ -14306,51 +14727,101 @@ function HtmlViewer({
     };
     try {
       const cloudflarePagesSelection = buildCloudflarePagesDeploySelection();
+      const displayDevSelection = buildDisplayDevDeploySelection();
       const typedToken = deployToken.trim();
-      const hasNewToken = typedToken && typedToken !== deployConfig?.tokenMask;
-      savedNewToken = Boolean(hasNewToken);
+      const hasNewToken = Boolean(typedToken && typedToken !== deployConfig?.tokenMask);
+      const clearsDisplayDevToken =
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        Boolean(deployConfig?.tokenMask) &&
+        !typedToken;
       const cloudflareHints = cloudflareConfigHintsFromForm();
       const cloudflareHintsChanged = deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID && Boolean(
         cloudflareHints?.lastZoneId !== deployConfig?.cloudflarePages?.lastZoneId ||
         cloudflareHints?.lastZoneName !== deployConfig?.cloudflarePages?.lastZoneName ||
         cloudflareHints?.lastDomainPrefix !== deployConfig?.cloudflarePages?.lastDomainPrefix,
       );
+      const displayDevConfigChanged = displayDevDefaultsChanged();
+      const providerRequiresConfiguredCredentials = deployProviderId !== DISPLAYDEV_PROVIDER_ID;
       const needsConfigSave =
         hasNewToken ||
+        clearsDisplayDevToken ||
+        displayDevConfigChanged ||
         teamId.trim() !== (deployConfig?.teamId || '') ||
         teamSlug.trim() !== (deployConfig?.teamSlug || '') ||
         cloudflareAccountId.trim() !== (deployConfig?.accountId || '') ||
         cloudflareHintsChanged ||
-        !deployConfig?.configured;
-      if (needsConfigSave) {
-        const nextConfig = await saveDeployConfig();
+        (providerRequiresConfiguredCredentials && !deployConfig?.configured);
+      if (needsConfigSave && deployProviderId !== DISPLAYDEV_PROVIDER_ID) {
+        const nextConfig = await saveDeployConfig(undefined, { operation });
         if (!nextConfig) {
           // saveDeployConfig bailed (missing/invalid token, e.g. user clicked
           // Deploy without entering a key) — count as a failed deploy attempt.
           fireDeployResult('failed', 'CONFIG_REQUIRED');
           return;
         }
-        if (!nextConfig?.configured) {
+        if (providerRequiresConfiguredCredentials && !nextConfig?.configured) {
           const option = getDeployProviderOption(deployProviderId);
-          throw new Error(t(option.tokenRequiredKey, { provider: t(option.labelKey) }));
+          const label = t(option.labelKey);
+          throw new Error(
+            option.tokenRequiredKey
+              ? t(option.tokenRequiredKey, { provider: label })
+              : t('fileViewer.deployProviderConfigSaveFailed', { provider: label }),
+          );
         }
+        savedNewToken = Boolean(hasNewToken);
       }
-      setDeployPhase('preparing-link');
+      if (isCurrentDeploymentOperation(operation)) setDeployPhase('preparing-link');
       const next = await deployProjectFile(
         projectId,
         file.name,
         deployProviderId,
         cloudflarePagesSelection,
         deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? deployTarget : undefined,
+        displayDevSelection,
         workspaceContext,
       );
+      const deploySucceeded = deployResultState(next.status) !== 'failed';
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deploySucceeded) {
+        savedNewToken = hasNewToken && !next.displayDevConfigSaveFailed;
+      }
+      if (!isCurrentDeploymentOperation(operation)) {
+        fireDeployResult(deploySucceeded ? 'success' : 'failed', deploySucceeded ? undefined : `STATUS_${next.status ?? 'UNKNOWN'}`);
+        return;
+      }
+      if (
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        displayDevAuthenticatedDeploymentMissingAccessSettings(next)
+      ) {
+        setDeployProviderLoadError(displayDevAccessSettingsLoadFailedMessage);
+      }
+      if (deployProviderId === DISPLAYDEV_PROVIDER_ID && deploySucceeded) {
+        if (next.savedDisplayDevConfig) {
+          syncDeployFormFromConfig(DISPLAYDEV_PROVIDER_ID, next.savedDisplayDevConfig, next, {
+            preserveDisplayDevEdits: true,
+          });
+        }
+        const displayDevAccessSettings = displayDevAccessSettingsForDeployment(next);
+        if (displayDevAccessSettings) {
+          setDisplayDevVisibility(displayDevAccessSettings.visibility);
+          setDisplayDevSharedWith(displayDevAccessSettings.sharedWith.join(', '));
+        }
+        setDisplayDevDeployTouched((current) => ({
+          ...initialDisplayDevDeployTouched(),
+          name: Boolean(next.displayDevConfigSaveFailed && current.name),
+        }));
+      }
       setDeploymentsByProvider((current) => ({
         ...current,
         [next.providerId]: next,
       }));
       setDeployment(next);
       setDeployResult(next);
-      if (deployResultState(next.status) !== 'failed') {
+      if (deploySucceeded) {
+        if (next.displayDevConfigSaveFailed) {
+          setDeployError(t('fileViewer.deployProviderConfigSaveFailed', {
+            provider: deployProviderLabel,
+          }));
+        }
         fireDeployResult('success');
         setDeploySavedToast({
           message: t('fileViewer.deploySuccessToast'),
@@ -14364,34 +14835,53 @@ function HtmlViewer({
       }
     } catch (err) {
       const option = getDeployProviderOption(deployProviderId);
+      const label = t(option.labelKey);
       const message = err instanceof Error
         ? err.message
-        : t('fileViewer.deployProviderFailed', { provider: t(option.labelKey) });
-      const tokenRequired =
-        message === t(option.tokenRequiredKey, { provider: t(option.labelKey) });
-      if (tokenRequired) {
-        setDeployActionToast(message);
-        deployTokenInputRef.current?.focus();
-      } else {
-        setDeployError(message);
+        : t('fileViewer.deployProviderFailed', { provider: label });
+      const tokenRequired = option.tokenRequiredKey
+        ? message === t(option.tokenRequiredKey, { provider: label })
+        : false;
+      if (isCurrentDeploymentOperation(operation)) {
+        if (tokenRequired) {
+          setDeployActionToast(message);
+          deployTokenInputRef.current?.focus();
+        } else {
+          setDeployError(message);
+        }
       }
       fireDeployResult(
         'failed',
         tokenRequired ? 'CONFIG_REQUIRED' : deployErrorCode(err),
       );
     } finally {
-      setDeploying(false);
-      setDeployPhase('idle');
+      // Reads started before or during this operation cannot replace its result.
+      if (deploymentOperationRef.current === operation) {
+        ++deploymentsLoadSeqRef.current;
+        deploymentOperationRef.current = null;
+        setDeploying(false);
+        setDeployPhase('idle');
+      }
     }
   }
 
   async function retryDeploymentLink() {
     const current = deployResult || deployment;
-    if (!current?.id) return;
+    if (!current?.id || deployProviderLoadingRef.current || deploymentOperationRef.current) return;
+    const operation = { identity: srcDocPreviewBaseIdentity };
+    deploymentOperationRef.current = operation;
+    ++deploymentsLoadSeqRef.current;
     setDeployError(null);
     setDeployPhase('preparing-link');
     try {
       const next = await checkDeploymentLink(projectId, current.id, workspaceContext);
+      if (!isCurrentDeploymentOperation(operation)) return;
+      if (
+        deployProviderId === DISPLAYDEV_PROVIDER_ID &&
+        displayDevAuthenticatedDeploymentMissingAccessSettings(next)
+      ) {
+        setDeployProviderLoadError(displayDevAccessSettingsLoadFailedMessage);
+      }
       setDeploymentsByProvider((items) => ({
         ...items,
         [next.providerId]: next,
@@ -14399,9 +14889,14 @@ function HtmlViewer({
       setDeployment(next);
       setDeployResult(next);
     } catch (err) {
-      setDeployError(err instanceof Error ? err.message : t('fileViewer.deployFailed'));
+      const message = err instanceof Error ? err.message : t('fileViewer.deployFailed');
+      if (isCurrentDeploymentOperation(operation)) setDeployError(message);
     } finally {
-      setDeployPhase('idle');
+      if (deploymentOperationRef.current === operation) {
+        ++deploymentsLoadSeqRef.current;
+        deploymentOperationRef.current = null;
+        setDeployPhase('idle');
+      }
     }
   }
 
@@ -15064,6 +15559,27 @@ function HtmlViewer({
     return () => window.clearTimeout(timeout);
   }, [canShare, file.name, projectId]);
 
+  function markDisplayDevShareAccessPending() {
+    setDeploymentsByProvider((current) => {
+      const deployment = current[DISPLAYDEV_PROVIDER_ID];
+      if (
+        deployment?.displayDev?.mode !== 'authenticated' ||
+        displayDevAuthenticatedDeploymentMissingAccessSettings(deployment)
+      ) return current;
+      return {
+        ...current,
+        [DISPLAYDEV_PROVIDER_ID]: {
+          ...deployment,
+          displayDev: {
+            mode: 'authenticated',
+            shortId: deployment.displayDev.shortId,
+            accessSettingsMissing: true,
+          },
+        },
+      };
+    });
+  }
+
   // Chat-side "Share" next-step action: when a new share request arrives, open
   // the share menu (the toolbar's "Share" button → deploy menu, which holds the
   // share-link items AND the "publish online" providers). This is the right
@@ -15081,6 +15597,7 @@ function HtmlViewer({
     consumedShareNonceRef.current = nonce;
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
+    markDisplayDevShareAccessPending();
     setUnifiedActionTab('share');
     setDeployMenuOpen(true);
   }, [shareRequest?.nonce, canShare, projectId, file.name]);
@@ -15133,11 +15650,11 @@ function HtmlViewer({
     fireArtifactHeaderClick(sourceLabel);
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
-    setDeployMenuOpen((v) => {
-      const nextTab = tab === 'share' && !rawCanShare ? 'export' : tab;
-      setUnifiedActionTab(nextTab);
-      return !(v && unifiedActionTab === nextTab);
-    });
+    const nextTab = tab === 'share' && !rawCanShare ? 'export' : tab;
+    const nextOpen = !(deployMenuOpen && unifiedActionTab === nextTab);
+    if (nextOpen && nextTab === 'share') markDisplayDevShareAccessPending();
+    setUnifiedActionTab(nextTab);
+    setDeployMenuOpen(nextOpen);
   };
   const openShareMenu = () => openUnifiedActionMenu('share', 'share_dropdown');
   const openDownloadMenu = () => openUnifiedActionMenu('export', 'download_dropdown');
@@ -15545,16 +16062,54 @@ function HtmlViewer({
       clearBoardComposer();
     }
   }, [activePreviewCommentId, boardMode, effectiveDeck, slideState?.active, visibleSideComments]);
-  const activeDeployment = deployResult || deployment;
+  const rawActiveDeployment = deployResult || deployment;
+  const activeDeployment = rawActiveDeployment?.providerId === deployProviderId ? rawActiveDeployment : null;
   const activeDeployedUrl = activeDeployment?.url?.trim() || '';
   const activeDeploymentDelayed = activeDeployment?.status === 'link-delayed';
   const activeDeploymentProtected = activeDeployment?.status === 'protected';
   const activeCloudflarePages = activeDeployment?.providerId === CLOUDFLARE_PAGES_PROVIDER_ID
     ? activeDeployment.cloudflarePages
     : undefined;
+  const activeDisplayDev = activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
+    ? activeDeployment.displayDev
+    : undefined;
+  const displayDevProviderLoadWarning = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployProviderLoadError);
+  const displayDevFormBusy = deployProviderId === DISPLAYDEV_PROVIDER_ID && (deployProviderLoading || savingDeployConfig || deploying || deployPhase !== 'idle');
+  const hasDisplayDevApiKey = deployProviderId === DISPLAYDEV_PROVIDER_ID && Boolean(deployToken.trim());
+  const displayDevOwnedDeploymentMissingApiKey =
+    activeDisplayDev?.mode === 'authenticated' && !hasDisplayDevApiKey;
+  const displayDevApiKeyHint = activeDisplayDev?.mode === 'authenticated'
+    ? t('fileViewer.displayDevDeployOwnedHint')
+    : hasDisplayDevApiKey
+    ? t('fileViewer.displayDevApiKeyClearHint')
+    : t('fileViewer.displayDevApiKeyBlankHint');
+  const displayDevDeployHint = (() => {
+    if (deployProviderId !== DISPLAYDEV_PROVIDER_ID) return '';
+    if (activeDisplayDev?.mode === 'authenticated') {
+      return '';
+    }
+    if (activeDisplayDev?.mode === 'anonymous' && hasDisplayDevApiKey) {
+      return t('fileViewer.displayDevDeployAnonymousWithKeyHint');
+    }
+    if (hasDisplayDevApiKey) {
+      return t('fileViewer.displayDevDeployAuthenticatedCreateHint');
+    }
+    return '';
+  })();
+  const shouldShowDisplayDevClaimUrl =
+    activeDisplayDev?.mode === 'anonymous' &&
+    Boolean(activeDisplayDev.claimUrl);
   const activeCloudflareCustomDomain = activeCloudflarePages?.customDomain;
   const deployProvider = getDeployProviderOption(deployProviderId);
+  const deployHint = deployProviderId === DISPLAYDEV_PROVIDER_ID
+    ? displayDevDeployHint
+    : deployProvider.previewHintKey
+      ? t(deployProvider.previewHintKey)
+      : '';
   const deployProviderLabel = t(deployProvider.labelKey);
+  const displayDevArtifactNamePlaceholder = activeDisplayDev?.mode === 'authenticated'
+    ? t('fileViewer.displayDevArtifactNameAuthenticatedPlaceholder')
+    : t('fileViewer.displayDevArtifactNamePlaceholder');
   const selectedCloudflareZone = cloudflareZones.find((zone) => zone.id === cloudflareZoneId) ?? null;
   const normalizedCloudflarePrefix = normalizeCloudflareDomainPrefixInput(cloudflareDomainPrefix);
   const cloudflareHostnamePreview =
@@ -15588,35 +16143,64 @@ function HtmlViewer({
         return cards;
       })()
     : activeDeployedUrl
-      ? [{
-          id: 'default',
-          label: activeDeploymentProtected
-            ? t('fileViewer.deployLinkProtectedLabel')
-            : activeDeploymentDelayed
-              ? t('fileViewer.deployLinkPreparingLabel')
-              : t('fileViewer.deployResultLabel'),
-          url: activeDeployedUrl,
-          status: activeDeployment?.status || 'ready',
-          message: activeDeploymentProtected
-            ? t('fileViewer.deployLinkProtected')
-            : activeDeploymentDelayed
-              ? t('fileViewer.deployLinkDelayed')
-              : activeDeployment?.statusMessage,
-        }]
+      ? [
+          {
+            id: 'default',
+            label: activeDeploymentProtected
+              ? t('fileViewer.deployLinkProtectedLabel')
+              : activeDeploymentDelayed
+                ? t('fileViewer.deployLinkPreparingLabel')
+                : t('fileViewer.deployResultLabel'),
+            url: activeDeployedUrl,
+            status: activeDeployment?.status || 'ready',
+            message: activeDeploymentProtected
+              ? t('fileViewer.deployLinkProtected')
+              : activeDeploymentDelayed
+                ? t('fileViewer.deployLinkDelayed')
+                : activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
+                  ? deployResultState(activeDeployment.status) === 'ready'
+                    ? t('fileViewer.displayDevDeploymentReadyDescription')
+                    : undefined
+                  : activeDeployment?.statusMessage,
+          },
+          ...(shouldShowDisplayDevClaimUrl && activeDisplayDev?.claimUrl
+            ? [{
+                id: 'displaydev-claim',
+                label: t('fileViewer.displayDevClaimUrlLabel'),
+                url: activeDisplayDev.claimUrl,
+                status: 'ready',
+                message: activeDisplayDev.expiresAt
+                  ? t('fileViewer.displayDevClaimUrlExpiresMessage', {
+                      date: new Date(activeDisplayDev.expiresAt).toLocaleDateString(),
+                    })
+                  : t('fileViewer.displayDevClaimUrlMessage'),
+              }]
+            : []),
+        ]
       : [];
   const deployActionLabelFor = (providerId: WebDeployProviderId) => {
     const option = getDeployProviderOption(providerId);
-    const label = t(option.labelKey);
     const hasActiveDeploymentForProvider = Boolean(deploymentsByProvider[providerId]?.url?.trim());
+    if (providerId === DISPLAYDEV_PROVIDER_ID) {
+      return hasActiveDeploymentForProvider
+        ? t('fileViewer.redeployToDisplayDev')
+        : t('fileViewer.deployToDisplayDev');
+    }
+    const label = t(option.labelKey);
     return hasActiveDeploymentForProvider
       ? t('fileViewer.redeployToProvider', { provider: label })
       : t('fileViewer.deployToProvider', { provider: label });
   };
+  const shareCandidateDeployments =
+    deployModalOpen && deployModalIntent !== 'social-share'
+      ? { [deployProviderId]: deploymentsByProvider[deployProviderId] }
+      : deploymentsByProvider;
   const deployedEntries = DEPLOY_PROVIDER_OPTIONS
-    .map((option) => deploymentsByProvider[option.id])
+    .map((option) => shareCandidateDeployments[option.id])
     .filter((item): item is WebDeploymentInfo => Boolean(item?.url?.trim()));
   const shareableDeploymentUrl =
-    DEPLOY_PROVIDER_OPTIONS.map((option) => deploymentsByProvider[option.id])
+    DEPLOY_PROVIDER_OPTIONS
+      .map((option) => shareCandidateDeployments[option.id])
       .map((item) => publicShareUrlForDeployment(item))
       .find(Boolean) ?? '';
   // A link is a link: the published-file URL unlocks social sharing exactly
@@ -15631,8 +16215,7 @@ function HtmlViewer({
   const socialShareBlockedState = socialShareBlockedDeployment
     ? deployResultState(socialShareBlockedDeployment.status)
     : null;
-  const socialShareDisplayUrl =
-    shareableDeploymentUrl || publishedFileUrl || socialShareBlockedDeployment?.url?.trim() || activeDeployedUrl;
+  const socialShareDisplayUrl = shareableDeploymentUrl || publishedFileUrl;
   const socialShareUnavailableMessage =
     socialShareBlockedState === 'protected'
       ? t('fileViewer.deployLinkProtected')
@@ -15734,18 +16317,26 @@ function HtmlViewer({
     : deployProviderLabel;
   const deployModalTitle = isSocialShareDeployModal
     ? t('socialShare.publishPageTitle')
-    : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
+    : deployProviderId === DISPLAYDEV_PROVIDER_ID
+      ? t('fileViewer.deployToDisplayDev')
+      : t('fileViewer.deployToProvider', { provider: deployProviderLabel });
   const deployModalSubtitle = isSocialShareDeployModal
     ? t('socialShare.publishPageSubtitle')
-    : t('fileViewer.deployModalSubtitle');
+    : deployProviderId === DISPLAYDEV_PROVIDER_ID
+      ? t('fileViewer.displayDevDeploySubtitle')
+      : t('fileViewer.deployModalSubtitle');
   const deployButtonLabel =
     deployPhase === 'deploying'
-      ? t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
+      ? deployProviderId === DISPLAYDEV_PROVIDER_ID
+        ? t('fileViewer.deployingToDisplayDev')
+        : t('fileViewer.deployingToProvider', { provider: deployProviderLabel })
       : deployPhase === 'preparing-link'
         ? t('fileViewer.preparingPublicLink')
         : isSocialShareDeployModal
           ? t('socialShare.publishPageTitle')
-          : deployMenuLabel;
+          : deployProviderId === DISPLAYDEV_PROVIDER_ID
+            ? deployActionLabelFor(deployProviderId)
+            : deployMenuLabel;
   const copyDeployLabel = (url: string) =>
     copiedDeployLink === url.trim()
       ? t('fileViewer.copied')
@@ -15756,6 +16347,16 @@ function HtmlViewer({
     if (state === 'failed') return t('fileViewer.deployLinkFailed');
     return t('fileViewer.deployLinkPreparingLabel');
   };
+  const activeDeploymentState = deployResultState(activeDeployment?.status);
+  const activeDeploymentStatusMessage = activeDeployment?.providerId === DISPLAYDEV_PROVIDER_ID
+    ? activeDeploymentState === 'ready'
+      ? t('fileViewer.displayDevDeploymentReadyDescription')
+      : activeDeploymentState === 'protected'
+        ? t('fileViewer.deployLinkProtected')
+        : activeDeploymentState === 'delayed'
+          ? t('fileViewer.deployLinkDelayed')
+          : undefined
+    : activeDeployment?.statusMessage;
   const initialPreviewLoading = source === null && !sourceEverLoadedRef.current;
   const sourceModeLoading = mode === 'source' && source === null;
   const manualEditUrlHandoffEligible =
@@ -18142,7 +18743,7 @@ function HtmlViewer({
                   {!activeProjectSocialShare || socialShareBlockedState ? (
                     <p className="hint">{socialShareUnavailableMessage}</p>
                   ) : null}
-                  {activeProjectSocialShare ? (
+                  {activeProjectSocialShare && socialShareDisplayUrl ? (
                     <SocialShareGrid
                       share={activeProjectSocialShare}
                       onAfterShare={closeDeployModal}
@@ -18177,130 +18778,160 @@ function HtmlViewer({
                     </div>
                   ) : null}
                 </div>
-              <label className="deploy-provider-field">
-                <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
-                <select
-                  value={deployProviderId}
-                  onChange={(e) => {
-                    void changeDeployProvider(e.target.value as WebDeployProviderId);
-                  }}
-                >
-                  {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {t(option.labelKey)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <label className="deploy-target-field">
-                  <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
+                <label className="deploy-provider-field">
+                  <span className="deploy-field-title">{t('fileViewer.deployProviderLabel')}</span>
                   <select
-                    value={deployTarget}
+                    value={deployProviderId}
+                    disabled={displayDevFormBusy || deployPhase !== 'idle'}
                     onChange={(e) => {
-                      setDeployTarget(e.target.value as 'preview' | 'production');
+                      void changeDeployProvider(e.target.value as WebDeployProviderId);
                     }}
                   >
-                    <option value="preview">{t('fileViewer.deployTargetPreview')}</option>
-                    <option value="production">{t('fileViewer.deployTargetProduction')}</option>
+                    {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {t(option.labelKey)}
+                      </option>
+                    ))}
                   </select>
                 </label>
-              ) : null}
-              <div className="field-label-row deploy-token-label-row">
-                <label htmlFor="deploy-token" className="deploy-field-title required">{t(deployProvider.tokenLabelKey)}</label>
-                <a
-                  href={deployProvider.tokenLink}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                >
-                  {t(deployProvider.tokenLinkKey)}
-                </a>
-              </div>
-              <div className="deploy-token-input-row">
-                <input
-                  ref={deployTokenInputRef}
-                  id="deploy-token"
-                  type="password"
-                  value={deployToken}
-                  placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
-                  onChange={(e) => setDeployToken(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="ghost-link button-like"
-                  disabled={savingDeployConfig}
-                  onClick={() => {
-                    void saveDeployConfig();
-                  }}
-                >
-                  {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
-                </button>
-              </div>
-              {deployConfig?.configured || deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <div className="deploy-token-hints">
-                  {deployConfig?.configured ? (
-                    <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
-                  ) : null}
-                  {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                    <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
-                  ) : null}
-                </div>
-              ) : null}
-              {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
-                <>
-                  <div className="deploy-field-grid single-field">
-                    <label>
-                      <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
-                      <input
-                        value={cloudflareAccountId}
-                        onChange={(e) => setCloudflareAccountId(e.target.value)}
-                      />
-                      <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
-                    </label>
-                  </div>
-                  <div className="deploy-field-grid cloudflare-domain-grid">
-                    <label>
-                      <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
-                      <input
-                        value={cloudflareDomainPrefix}
-                        placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
-                        onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
-                      />
-                    </label>
-                    <div className="deploy-field-control">
-                      <span className="deploy-field-title-row">
-                        <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
-                          {t('fileViewer.cloudflareZoneLabel')}
-                        </label>
-                        <button
-                          type="button"
-                          className="ghost-link deploy-field-inline-action"
-                          disabled={cloudflareZonesLoading || !deployConfig?.configured}
-                          onClick={() => {
-                            void loadCloudflareZones();
-                          }}
-                        >
-                          <RemixIcon name="refresh-line" size={13} />
-                          {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
-                        </button>
-                      </span>
-                      <select
-                        id="cloudflare-zone-select"
-                        value={cloudflareZoneId}
-                        disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
-                        onChange={(e) => setCloudflareZoneId(e.target.value)}
+                {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                  <label className="deploy-target-field">
+                    <span className="deploy-field-title">{t('fileViewer.deployTargetLabel')}</span>
+                    <select
+                      value={deployTarget}
+                      onChange={(e) => {
+                        setDeployTarget(e.target.value as 'preview' | 'production');
+                      }}
+                    >
+                      <option value="preview">{t('fileViewer.deployTargetPreview')}</option>
+                      <option value="production">{t('fileViewer.deployTargetProduction')}</option>
+                    </select>
+                  </label>
+                ) : null}
+                <div className="deploy-token-field">
+                  <div className="field-label-row">
+                    <span className="field-label-group">
+                      <label
+                        htmlFor="deploy-token"
+                        className={`deploy-field-title${deployProvider.tokenRequiredKey ? ' required' : ''}`}
                       >
-                        {cloudflareZones.length === 0 ? (
-                          <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
-                        ) : null}
-                        {cloudflareZones.map((zone) => (
-                          <option key={zone.id} value={zone.id}>
-                            {zone.name}
-                          </option>
-                        ))}
-                      </select>
+                        {t(deployProvider.tokenLabelKey)}
+                      </label>
+                      {deployProvider.tokenLink ? (
+                        <a
+                          className="field-label-link"
+                          href={deployProvider.tokenLink}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                        >
+                          {t(deployProvider.tokenLinkKey)}
+                        </a>
+                      ) : null}
+                    </span>
+                    <div className="field-label-note">
+                      {deployConfig?.tokenMask && deployProvider.tokenReuseHintKey ? (
+                        <p className="hint">{t(deployProvider.tokenReuseHintKey, { provider: deployProviderLabel })}</p>
+                      ) : null}
+                      {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                        <p className="hint">{t('fileViewer.cloudflareApiTokenScopeHint')}</p>
+                      ) : null}
                     </div>
                   </div>
+                  <div className="deploy-token-input-row">
+                    <input
+                      ref={deployTokenInputRef}
+                      id="deploy-token"
+                      type="password"
+                      disabled={displayDevFormBusy}
+                      value={deployToken}
+                      placeholder={t(deployProvider.tokenPlaceholderKey, { provider: deployProviderLabel })}
+                      onChange={(e) => setDeployToken(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="ghost-link button-like"
+                      disabled={deployProviderLoading || savingDeployConfig || displayDevFormBusy}
+                      onClick={() => {
+                        void saveDeployConfig();
+                      }}
+                    >
+                      {savingDeployConfig ? t('fileViewer.savingConfig') : t('fileViewer.save')}
+                    </button>
+                  </div>
+                  {deployProviderId === DISPLAYDEV_PROVIDER_ID ? (
+                    <span className="field-hint">{displayDevApiKeyHint}</span>
+                  ) : null}
+                </div>
+                {displayDevProviderLoadWarning ? (
+                  <div className="deploy-load-warning" role="status">
+                    <p className="deploy-load-warning-message">{deployProviderLoadError}</p>
+                    <button
+                      type="button"
+                      className="viewer-action"
+                      disabled={deployProviderLoading || displayDevFormBusy}
+                      onClick={() => {
+                        void loadDeployProvider(DISPLAYDEV_PROVIDER_ID);
+                      }}
+                    >
+                      {t('fileViewer.deploymentsLoadRetry')}
+                    </button>
+                  </div>
+                ) : null}
+                {deployProviderId === CLOUDFLARE_PAGES_PROVIDER_ID ? (
+                  <>
+                    <div className="deploy-field-grid single-field">
+                      <label>
+                        <span className="deploy-field-title required">{t('fileViewer.cloudflareAccountId')}</span>
+                        <input
+                          value={cloudflareAccountId}
+                          onChange={(e) => setCloudflareAccountId(e.target.value)}
+                        />
+                        <span className="field-hint">{t('fileViewer.cloudflareAccountIdHint')}</span>
+                      </label>
+                    </div>
+                    <div className="deploy-field-grid cloudflare-domain-grid">
+                      <label>
+                        <span className="deploy-field-title">{t('fileViewer.cloudflareDomainPrefixLabel')}</span>
+                        <input
+                          value={cloudflareDomainPrefix}
+                          placeholder={t('fileViewer.cloudflareDomainPrefixPlaceholder')}
+                          onChange={(e) => setCloudflareDomainPrefix(e.target.value)}
+                        />
+                      </label>
+                      <div className="deploy-field-control">
+                        <span className="deploy-field-title-row">
+                          <label className="deploy-field-title" htmlFor="cloudflare-zone-select">
+                            {t('fileViewer.cloudflareZoneLabel')}
+                          </label>
+                          <button
+                            type="button"
+                            className="ghost-link deploy-field-inline-action"
+                            disabled={cloudflareZonesLoading || !deployConfig?.configured}
+                            onClick={() => {
+                              void loadCloudflareZones();
+                            }}
+                          >
+                            <RemixIcon name="refresh-line" size={13} />
+                            {cloudflareZonesLoading ? t('fileViewer.cloudflareZonesLoading') : t('fileViewer.cloudflareZonesRefresh')}
+                          </button>
+                        </span>
+                        <select
+                          id="cloudflare-zone-select"
+                          value={cloudflareZoneId}
+                          disabled={cloudflareZonesLoading || (!deployConfig?.configured && !cloudflareZones.length)}
+                          onChange={(e) => setCloudflareZoneId(e.target.value)}
+                        >
+                          {cloudflareZones.length === 0 ? (
+                            <option value="">{t('fileViewer.cloudflareZonePlaceholder')}</option>
+                          ) : null}
+                          {cloudflareZones.map((zone) => (
+                            <option key={zone.id} value={zone.id}>
+                              {zone.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   {cloudflareZonesError ? (
                     <p className="deploy-error">{cloudflareZonesError}</p>
                   ) : cloudflareZonesLoading ? (
@@ -18314,6 +18945,70 @@ function HtmlViewer({
                     <p className="hint">
                       {t('fileViewer.cloudflareHostnamePreview', { hostname: cloudflareHostnamePreview })}
                     </p>
+                  ) : null}
+                </>
+              ) : deployProviderId === DISPLAYDEV_PROVIDER_ID ? (
+                <>
+                  <div className="deploy-field-grid single-field">
+                    <label>
+                      <span>{t('fileViewer.displayDevArtifactName')}</span>
+                      <input
+                        value={displayDevArtifactName}
+                        disabled={displayDevFormBusy}
+                        placeholder={displayDevArtifactNamePlaceholder}
+                        onChange={(e) => {
+                          setDisplayDevArtifactName(e.target.value);
+                          setDisplayDevDeployTouched((current) => ({ ...current, name: true }));
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {hasDisplayDevApiKey ? (
+                    <>
+                      <div className="deploy-field-grid single-field">
+                        <label>
+                          <span>{t('fileViewer.displayDevVisibility')}</span>
+                          <select
+                            value={displayDevVisibility}
+                            disabled={displayDevFormBusy}
+                            onChange={(e) => {
+                              const nextVisibility = e.target.value as DisplayDevVisibility;
+                              setDisplayDevVisibility(nextVisibility);
+                              setDisplayDevDeployTouched((current) => ({
+                                ...current,
+                                visibility: true,
+                              }));
+                            }}
+                          >
+                            {activeDisplayDev?.mode !== 'authenticated' ? (
+                              <option value="provider">{t('fileViewer.displayDevVisibilityProvider')}</option>
+                            ) : displayDevVisibility === 'provider' ? (
+                              <option value="provider" disabled>{t('fileViewer.displayDevVisibilityUnchanged')}</option>
+                            ) : null}
+                            <option value="public">{t('fileViewer.displayDevVisibilityPublic')}</option>
+                            <option value="company">{t('fileViewer.displayDevVisibilityCompany')}</option>
+                            <option value="private">{t('fileViewer.displayDevVisibilityPrivate')}</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="deploy-field-grid single-field">
+                        <label>
+                          <span>{t('fileViewer.displayDevShareWith')}</span>
+                          <input
+                            value={displayDevSharedWith}
+                            disabled={displayDevFormBusy}
+                            placeholder={t('fileViewer.displayDevShareWithPlaceholder')}
+                            onChange={(e) => {
+                              setDisplayDevSharedWith(e.target.value);
+                              setDisplayDevDeployTouched((current) => ({ ...current, sharedWith: true }));
+                            }}
+                          />
+                        </label>
+                        {displayDevVisibility === 'public' ? (
+                          <p className="hint">{t('fileViewer.displayDevShareWithPublicHint')}</p>
+                        ) : null}
+                      </div>
+                    </>
                   ) : null}
                 </>
               ) : (
@@ -18336,7 +19031,8 @@ function HtmlViewer({
                   </label>
                 </div>
               )}
-              {deployError ? <p className="deploy-error">{deployError}</p> : null}
+              {deployHint ? <p className="hint">{deployHint}</p> : null}
+              {deployError ? <p className="deploy-error" role="alert">{deployError}</p> : null}
               {!deployError
                 && deployPhase === 'idle'
                 && deployResultCards.length > 0
@@ -18354,8 +19050,8 @@ function HtmlViewer({
                         {statusLabelFor(deployResultState(activeDeployment?.status))}
                       </div>
                     </div>
-                    {activeDeployment?.statusMessage ? (
-                      <p className="deploy-result-message">{activeDeployment.statusMessage}</p>
+                    {activeDeploymentStatusMessage ? (
+                      <p className="deploy-result-message">{activeDeploymentStatusMessage}</p>
                     ) : null}
                     <div className="deploy-result-links">
                       {deployResultCards.map((card) => {
@@ -18437,7 +19133,14 @@ function HtmlViewer({
               <button
                 type="button"
                 className="viewer-action primary"
-                disabled={deploying || savingDeployConfig || deployPhase !== 'idle'}
+                disabled={
+                  deployProviderLoading ||
+                  deployProviderConfigLoadFailed ||
+                  deploying ||
+                  savingDeployConfig ||
+                  deployPhase !== 'idle' ||
+                  displayDevOwnedDeploymentMissingApiKey
+                }
                 onClick={() => {
                   void deployToSelectedProvider();
                 }}

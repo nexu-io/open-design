@@ -8,16 +8,11 @@ import {
   readDeployConfig,
 } from '../deploy.js';
 import { listDeployments } from '../db.js';
+import type { DeploymentLike } from './deployment-response.js';
+
+export { publicDeployment, publicDeployments } from './deployment-response.js';
 
 type JsonObject = Record<string, unknown>;
-
-export interface DeploymentLike {
-  providerId?: string | null;
-  url?: string | null;
-  providerMetadata?: JsonObject | null;
-  cloudflarePages?: JsonObject | null;
-  [key: string]: unknown;
-}
 
 const CLOUDFLARE_PAGES_PROJECT_METADATA_KEY = 'cloudflarePagesProjectName';
 
@@ -62,18 +57,6 @@ export function cloudflarePagesProjectNameForDeploy(
   }
 
   return cloudflarePagesProjectNameForProject(projectId, projectName);
-}
-
-export function publicDeployment<T extends DeploymentLike>(deployment: T): Omit<T, 'providerMetadata'>;
-export function publicDeployment<T>(deployment: T): T;
-export function publicDeployment(deployment: unknown): unknown {
-  if (!deployment || typeof deployment !== 'object') return deployment;
-  const { providerMetadata: _providerMetadata, ...publicShape } = deployment as DeploymentLike;
-  return publicShape;
-}
-
-export function publicDeployments<T extends DeploymentLike>(deployments: readonly T[] | null | undefined): Array<Omit<T, 'providerMetadata'>> {
-  return (deployments || []).map((deployment) => publicDeployment(deployment));
 }
 
 export async function checkCloudflarePagesDeploymentLinks(existing: DeploymentLike): Promise<DeploymentLike> {

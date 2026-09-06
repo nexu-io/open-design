@@ -24,17 +24,20 @@ type TestFixtures = {
 };
 
 type WorkerFixtures = {
+  allowDisplayDevTestApiUrl: boolean;
   toolsDev: PlaywrightToolsDevSuite;
 };
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  allowDisplayDevTestApiUrl: [false, { scope: 'worker', option: true }],
+
   context: async ({ context }, use) => {
     await seedCampaignDismissals(context);
     await use(context);
   },
 
   toolsDev: [
-    async ({}, use, workerInfo) => {
+    async ({ allowDisplayDevTestApiUrl }, use, workerInfo) => {
       const suite = await createPlaywrightToolsDevSuite(
         workerInfo.parallelIndex,
         workerInfo.workerIndex,
@@ -55,6 +58,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         // fake runtime configuration and request headers.
         await toolsDev.startWeb({
           AMR_HOME: join(toolsDev.root, 'scratch', 'amr-home'),
+          ...(allowDisplayDevTestApiUrl ? { OD_DISPLAYDEV_ALLOW_TEST_API_URL: '1' } : {}),
         });
         await warmPlaywrightWebRuntime(toolsDev.url.web('/'));
         await warmPlaywrightDaemonRuntime(toolsDev.url.daemon('/api/health'));

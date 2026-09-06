@@ -191,11 +191,9 @@ describe('run-end artifact manifest reconciliation (#2893)', () => {
     // Pre-existing file: write it, then backdate its mtime to before the run
     await writeProjectFile(projectsRoot, PROJECT_ID, 'old-index.html', '<p>old</p>');
     const oldPath = path.join(projectsRoot, PROJECT_ID, 'old-index.html');
-    const pastTime = new Date('2020-01-01T00:00:00Z');
+    const runStartTimeMs = Date.parse('2024-01-01T00:00:00.000Z');
+    const pastTime = new Date(runStartTimeMs - 2000);
     fs.utimesSync(oldPath, pastTime, pastTime);
-
-    // Run starts here — record the timestamp before the run writes files
-    const runStartTimeMs = Date.now();
 
     // File written during the run
     await writeProjectFile(projectsRoot, PROJECT_ID, 'new-output.html', '<p>new</p>');
