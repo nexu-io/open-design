@@ -15,6 +15,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -967,6 +968,16 @@ export function createLocalMcpBriefStore() {
 /** Handler body for MCP `resources/list`. Exported so tests can call it
  * directly without a real server. Mirrors the inline logic in
  * `runMcpStdio` to keep the test harness cheap. */
+export async function _listMcpResourceTemplates(): Promise<{
+  resourceTemplates: Array<Record<string, unknown>>;
+}> {
+  // OD currently exposes only concrete resources (od://...), not URI
+  // templates. Returning an empty page keeps clients that always call
+  // resources/templates/list after advertising capabilities.resources
+  // from failing with Method not found (#7014).
+  return { resourceTemplates: [] };
+}
+
 export async function _listMcpResources(
   daemonTarget: ReturnType<typeof createMcpDaemonTarget>,
 ): Promise<{ resources: Array<{ uri: string; name: string; description: string; mimeType: string }> }> {
@@ -1923,6 +1934,13 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
 
   server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
     return await _listMcpResources(daemonTarget);
+  }));
+
+  // Advertise resources => clients may call resources/templates/list.
+  // Open Design has concrete resources only (no URI templates yet), so
+  // return an empty page instead of JSON-RPC -32601 Method not found.
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, withMcpActivity(async () => {
+    return await _listMcpResourceTemplates();
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
