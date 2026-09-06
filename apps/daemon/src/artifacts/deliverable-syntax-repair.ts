@@ -26,8 +26,8 @@ function normalizedMaxAttempts(value: number): number {
 
 /**
  * Decide the host-owned repair loop without spending a retry for a passing,
- * skipped, or inconclusive check. `attempt` counts model repair attempts, not
- * validator executions: the initial validation is attempt zero.
+ * skipped, or inconclusive check. `attempt` counts accepted repair patches,
+ * not validator executions: the initial validation is attempt zero.
  */
 export function decideDeliverableSyntaxRepair(input: {
   result: DeliverableSyntaxResult;

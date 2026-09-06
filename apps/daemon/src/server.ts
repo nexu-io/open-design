@@ -558,8 +558,10 @@ import {
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { validateRunDeliverable } from './run-deliverable-validation.js';
-import { finalizeDeliverableSyntax } from './artifacts/deliverable-syntax-finalization.js';
+import {
+  deliverableSyntaxFinalizerEnabled,
+  finalizeSuccessfulRunDeliverable,
+} from './artifacts/successful-run-deliverable-finalization.js';
 import { recordDeliverableSyntaxDelivery } from './artifacts/deliverable-syntax-metrics.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
@@ -1808,7 +1810,6 @@ export function createAgentRuntimeToolPrompt(
     '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
-    '- Only when this run creates or updates a final Web deliverable, invoke `"$OD_NODE_BIN" "$OD_BIN" tools deliverable-syntax check --json` exactly once immediately after the final edit. Do not perform a self-review, manual validation, extra reads, or any other checks before this invocation. If it reports `pass`, stop immediately without further tool calls or edits. Only if it reports `repairable`, fix only the reported syntax location and invoke this same wrapper once more; allow at most 3 repair attempts. Do not run `node --check`, custom validation scripts, tests, or broader correctness reviews as part of this syntax gate. Skip the gate for planning/analysis turns and non-Web deliverables; stop without retrying on `skipped`, `incomplete`, or `exhausted`.',
   ].join('\n');
 }
 
@@ -15692,86 +15693,80 @@ export async function startServer({
           ),
         );
         let processTreeQuiescentForFinalization = true;
-        if (strategyCompletionCandidate) {
-          // The artifact diff, syntax gate, and HTML version snapshot must all
-          // observe the same settled filesystem. ACP adapters can report a
-          // verdict while descendants are still exiting, so wait for their
-          // generation-bound teardown before resolving the final diff.
-          if (acpAttemptTermination) {
-            const termination = await acpAttemptTermination;
-            processTreeQuiescentForFinalization = termination?.quiescent === true;
-          }
-          await resolveRunArtifactOutcomeBeforeFinishAsync();
+        // Every successful physical Run can produce a final Web deliverable,
+        // even when OD Next Runtime State is absent. Resolve the settled
+        // filesystem before deciding whether the host syntax gate applies.
+        if (acpAttemptTermination) {
+          const termination = await acpAttemptTermination;
+          processTreeQuiescentForFinalization = termination?.quiescent === true;
         }
+        await resolveRunArtifactOutcomeBeforeFinishAsync();
+        const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          projectsRoot: PROJECTS_DIR,
+          projectId: run.projectId ?? null,
+          projectMetadata: projectRecord?.metadata,
+          artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+          ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
+          relatedPaths:
+            run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
+          processTreeQuiescent: processTreeQuiescentForFinalization,
+          syntaxFinalizerEnabled: deliverableSyntaxFinalizerEnabled(),
+          ...(run.deliverableSyntaxRepair
+            ? { repairState: run.deliverableSyntaxRepair }
+            : {}),
+          ...(run.deliverableSyntaxValidation?.metrics
+            ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
+            : {}),
+        });
+        const { deliverable } = deliverableFinalization;
         if (strategyCompletionCandidate) {
-          const deliverable = await validateRunDeliverable({
-            projectsRoot: PROJECTS_DIR,
-            projectId: run.projectId ?? null,
-            projectMetadata: projectRecord?.metadata,
-            runStatus: 'succeeded',
-            artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
-            ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
-          });
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
-          // The in-turn syntax tool gives the agent a cheap repair loop while
-          // it still owns the model turn. Re-run the same read-only checker on
-          // the final filesystem state as a backstop: prompt non-compliance or
-          // a late edit must never turn a parse-broken Web artifact into a
-          // successful OD Next completion. This gate is scoped to canonical
-          // HTML delivery only; non-Web outputs and non-completion stages do
-          // not pay for it.
-          if (deliverable.valid && typeof run.projectId === 'string') {
-            const syntaxFinalization = await finalizeDeliverableSyntax({
-              artifactKind: deliverable.artifactKind,
-              projectRoot: resolveProjectDir(
-                PROJECTS_DIR,
-                run.projectId,
-                projectRecord?.metadata,
-              ),
-              entryFile: deliverable.entryFile,
-              relatedPaths:
-                run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
-              processTreeQuiescent: processTreeQuiescentForFinalization,
-              ...(run.deliverableSyntaxRepair
-                ? { repairState: run.deliverableSyntaxRepair }
-                : {}),
-              ...(run.deliverableSyntaxValidation?.metrics
-                ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
-                : {}),
-            });
-            if (syntaxFinalization.action !== 'skip') {
-              run.deliverableSyntaxValidation = syntaxFinalization.validation;
-              design.runs.persistState(run);
-              if (syntaxFinalization.validation.checker) {
-                design.runs.emit(run, 'diagnostic', {
-                  type: 'deliverable_syntax_validation',
-                  source: 'run_finalizer',
-                  status: syntaxFinalization.validation.status,
-                  checker: syntaxFinalization.validation.checker,
-                  candidateHash:
-                    syntaxFinalization.validation.candidateHash ?? null,
-                  checkedFileCount:
-                    syntaxFinalization.validation.checkedFiles?.length ?? 0,
-                  checkCount:
-                    syntaxFinalization.validation.metrics?.checkCount ?? null,
-                  checkerDurationMs:
-                    syntaxFinalization.validation.metrics?.checkerDurationMs ?? null,
-                  repairableCheckCount:
-                    syntaxFinalization.validation.metrics?.repairableCheckCount ?? null,
-                });
-              }
-              if (syntaxFinalization.action === 'fail') {
-                send('error', createSseErrorPayload(
-                  'AGENT_EXECUTION_FAILED',
-                  `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. The bounded in-turn repair loop ended without a valid candidate.`,
-                  { retryable: false },
-                ));
-                finishStrategyAwarePhysicalRun('failed', 1, signal);
-                return;
-              }
-            }
+        }
+        // Host-owned syntax finalization is based on physical delivery, not on
+        // OD Next strategy identity. It never resumes or prompts the Agent.
+        if (deliverableFinalization.syntax.action !== 'skip') {
+          const syntaxFinalization = deliverableFinalization.syntax;
+          run.deliverableSyntaxValidation = syntaxFinalization.validation;
+          if (syntaxFinalization.validation.repairState) {
+            run.deliverableSyntaxRepair = syntaxFinalization.validation.repairState;
           }
+          design.runs.persistState(run);
+          if (syntaxFinalization.validation.checker) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'deliverable_syntax_validation',
+              source: 'run_finalizer',
+              status: syntaxFinalization.validation.status,
+              checker: syntaxFinalization.validation.checker,
+              candidateHash:
+                syntaxFinalization.validation.candidateHash ?? null,
+              checkedFileCount:
+                syntaxFinalization.validation.checkedFiles?.length ?? 0,
+              checkCount:
+                syntaxFinalization.validation.metrics?.checkCount ?? null,
+              checkerDurationMs:
+                syntaxFinalization.validation.metrics?.checkerDurationMs ?? null,
+              repairableCheckCount:
+                syntaxFinalization.validation.metrics?.repairableCheckCount ?? null,
+              repairExecutor:
+                syntaxFinalization.validation.metrics?.repairExecutor ?? null,
+              repairDurationMs:
+                syntaxFinalization.validation.metrics?.repairDurationMs ?? null,
+              appliedRepairRules:
+                syntaxFinalization.validation.metrics?.appliedRepairRules ?? [],
+            });
+          }
+          if (syntaxFinalization.action === 'fail') {
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. Deterministic host repair stopped: ${syntaxFinalization.reason}.`,
+              { retryable: false },
+            ));
+            finishStrategyAwarePhysicalRun('failed', 1, signal);
+            return;
+          }
+        }
+        if (strategyCompletionCandidate) {
           // Observation only (this branch has no repair loop): did a phone-app
           // prototype actually ship inside the staged handset shell? Feeds
           // run_finished analytics so the rollout can measure shell adoption.

@@ -331,6 +331,19 @@ export function projectDeliverableSyntaxTelemetry(
       nonNegativeFinite(metrics?.repairWindowDurationMs) ?? null,
     repairToDeliveryDurationMs:
       nonNegativeFinite(metrics?.repairToDeliveryDurationMs) ?? null,
+    ...(metrics?.repairExecutor || repairState?.mode
+      ? {
+          repairExecutor:
+            metrics?.repairExecutor
+            ?? (repairState?.mode === 'host_safe_fixer' ? 'host_safe_fixer' : 'agent'),
+        }
+      : {}),
+    ...(metrics?.repairDurationMs !== undefined
+      ? { repairDurationMs: nonNegativeFinite(metrics.repairDurationMs) ?? null }
+      : {}),
+    ...(metrics?.appliedRepairRules
+      ? { appliedRepairRules: metrics.appliedRepairRules }
+      : {}),
     repairableCheckCount: nonNegativeInteger(metrics?.repairableCheckCount)
       ?? (validation.status === 'repairable' || validation.status === 'exhausted' ? 1 : 0),
     initialDiagnosticCount: nonNegativeInteger(metrics?.initialDiagnosticCount)

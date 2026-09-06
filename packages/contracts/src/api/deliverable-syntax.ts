@@ -12,6 +12,16 @@ export const DELIVERABLE_SYNTAX_CHECKER = 'web-syntax@1' as const;
 
 export type DeliverableSyntaxChecker = typeof DELIVERABLE_SYNTAX_CHECKER;
 
+export const DELIVERABLE_SYNTAX_SAFE_FIX_RULES = [
+  'insert_missing_closing_delimiter',
+  'close_unterminated_block_comment',
+  'close_unterminated_string',
+  'close_unterminated_template',
+] as const;
+
+export type DeliverableSyntaxSafeFixRule =
+  typeof DELIVERABLE_SYNTAX_SAFE_FIX_RULES[number];
+
 /**
  * Low-cardinality, content-free measurements accumulated across checker calls
  * in one physical Run. Diagnostic text and file paths deliberately stay out
@@ -32,6 +42,12 @@ export interface DeliverableSyntaxMetrics {
   repairWindowDurationMs?: number;
   /** Time from the first repairable result to the physical Run terminal. */
   repairToDeliveryDurationMs?: number;
+  /** Executor that performed the bounded repair, when one was attempted. */
+  repairExecutor?: 'agent' | 'host_safe_fixer';
+  /** Time spent proposing, verifying, and committing deterministic patches. */
+  repairDurationMs?: number;
+  /** Fixed-cardinality rules that produced at least one accepted patch. */
+  appliedRepairRules?: DeliverableSyntaxSafeFixRule[];
 }
 
 export interface DeliverableSyntaxDiagnostic {
@@ -43,9 +59,10 @@ export interface DeliverableSyntaxDiagnostic {
   source: 'file' | 'html' | 'inline_script';
 }
 
-/** Persisted host-owned state. `attempt` counts model repair attempts. */
+/** Persisted host-owned state. `attempt` counts accepted repair patches. */
 export interface DeliverableSyntaxRepairState {
   schema: typeof DELIVERABLE_SYNTAX_REPAIR_SCHEMA;
+  mode?: 'agent_tool' | 'host_safe_fixer';
   attempt: number;
   maxAttempts: number;
   checker: DeliverableSyntaxChecker;

@@ -2,6 +2,7 @@ import {
   DELIVERABLE_SYNTAX_METRICS_SCHEMA,
   type DeliverableSyntaxCheckResult,
   type DeliverableSyntaxMetrics,
+  type DeliverableSyntaxSafeFixRule,
 } from '@open-design/contracts';
 
 function finiteNonNegative(value: unknown): number {
@@ -55,6 +56,32 @@ export function recordDeliverableSyntaxCheck(input: {
     ...(previous?.repairToDeliveryDurationMs !== undefined
       ? { repairToDeliveryDurationMs: previous.repairToDeliveryDurationMs }
       : {}),
+    ...(previous?.repairExecutor ? { repairExecutor: previous.repairExecutor } : {}),
+    ...(previous?.repairDurationMs !== undefined
+      ? { repairDurationMs: previous.repairDurationMs }
+      : {}),
+    ...(previous?.appliedRepairRules
+      ? { appliedRepairRules: previous.appliedRepairRules }
+      : {}),
+  };
+}
+
+/** Add one staged deterministic patch to the persisted per-Run aggregate. */
+export function recordDeliverableSyntaxSafeFix(input: {
+  previous: DeliverableSyntaxMetrics;
+  durationMs: number;
+  rule: DeliverableSyntaxSafeFixRule;
+}): DeliverableSyntaxMetrics {
+  return {
+    ...input.previous,
+    repairExecutor: 'host_safe_fixer',
+    repairDurationMs:
+      finiteNonNegative(input.previous.repairDurationMs)
+      + finiteNonNegative(input.durationMs),
+    appliedRepairRules: [...new Set([
+      ...(input.previous.appliedRepairRules ?? []),
+      input.rule,
+    ])],
   };
 }
 

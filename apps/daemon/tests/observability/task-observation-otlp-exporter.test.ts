@@ -446,6 +446,9 @@ describe('task observation OTLP exporter', () => {
       checkerDurationMs: 16,
       repairWindowDurationMs: 650,
       repairToDeliveryDurationMs: 900,
+      repairExecutor: 'host_safe_fixer',
+      repairDurationMs: 8,
+      appliedRepairRules: ['insert_missing_closing_delimiter'],
       repairableCheckCount: 2,
       initialDiagnosticCount: 1,
       latestDiagnosticCount: 0,
@@ -463,6 +466,9 @@ describe('task observation OTLP exporter', () => {
       deliverable_syntax_checker_duration_ms: 16,
       deliverable_syntax_repair_window_duration_ms: 650,
       deliverable_syntax_repair_to_delivery_duration_ms: 900,
+      deliverable_syntax_repair_executor: 'host_safe_fixer',
+      deliverable_syntax_repair_duration_ms: 8,
+      deliverable_syntax_applied_repair_rules: 'insert_missing_closing_delimiter',
       deliverable_syntax_repair_outcome: 'repaired',
       deliverable_syntax_recovered_delivery_count: 1,
     });
@@ -475,6 +481,13 @@ describe('task observation OTLP exporter', () => {
     expect(root.attributes.find((attribute) => (
       attribute.key === 'langfuse.trace.metadata.deliverable_syntax_checker_duration_ms'
     ))?.value.intValue).toBe('16');
+    expect(stringAttribute(
+      root,
+      'langfuse.trace.metadata.deliverable_syntax_repair_executor',
+    )).toBe('host_safe_fixer');
+    expect(root.attributes.find((attribute) => (
+      attribute.key === 'langfuse.trace.metadata.deliverable_syntax_repair_duration_ms'
+    ))?.value.intValue).toBe('8');
     expect(JSON.stringify(legacy)).not.toContain('index.html');
   });
 

@@ -28,6 +28,10 @@ export interface CheckDeliverableSyntaxInput {
   /** Code files that participate in rendering this canonical entry. The run
    * finalizer should normally pass `artifactOutcome.diff.renderDependencyTouchedPaths`. */
   relatedPaths?: readonly string[];
+  /** In-memory staged file contents used by the host safe-fixer. Keys are
+   * project-relative portable paths. Overrides never bypass containment or
+   * readability checks for the real target file. */
+  contentOverrides?: ReadonlyMap<string, string | Buffer>;
   limits?: Partial<DeliverableSyntaxLimits>;
 }
 
@@ -492,19 +496,26 @@ export async function checkDeliverableSyntax(
     }
 
     let content: Buffer;
-    try {
-      content = await fs.readFile(realPath);
-    } catch {
-      updateHashWithMarker(candidateHash, candidate.displayPath, 'unreadable');
-      incompleteDiagnostics.push({
-        reason: 'file_unreadable',
-        diagnostic: genericFileDiagnostic(
-          'FILE_UNREADABLE',
-          candidate.displayPath,
-          'Source file could not be read.',
-        ),
-      });
-      continue;
+    const contentOverride = input.contentOverrides?.get(candidate.displayPath);
+    if (contentOverride !== undefined) {
+      content = Buffer.isBuffer(contentOverride)
+        ? contentOverride
+        : Buffer.from(contentOverride, 'utf8');
+    } else {
+      try {
+        content = await fs.readFile(realPath);
+      } catch {
+        updateHashWithMarker(candidateHash, candidate.displayPath, 'unreadable');
+        incompleteDiagnostics.push({
+          reason: 'file_unreadable',
+          diagnostic: genericFileDiagnostic(
+            'FILE_UNREADABLE',
+            candidate.displayPath,
+            'Source file could not be read.',
+          ),
+        });
+        continue;
+      }
     }
     if (
       content.byteLength > limits.maxBytesPerFile
