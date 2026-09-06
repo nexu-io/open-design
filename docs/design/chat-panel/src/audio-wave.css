@@ -1,0 +1,102 @@
+/* ---- 音频条:波形 + 播放 ---- */
+/* 取自 beui.dev 的 blocks/file-upload —— 那个组件里 kind="audio" 的那一行。
+   只搬这一行:它的拖放区、图片预览、上传进度这份稿子里已经有主(21 · 待发送附件),
+   再搬一遍就是同一件事两套画法。
+   ------------------------------------------------------------
+   为什么音频产物不能用 14 · 产物卡片那张卡:
+   那张卡的前提是「缩略图能回答『这是不是我要的那一版』」。音频没有缩略图 ——
+   波形不是内容的样子,它只是音量随时间的形状,看着差不多的两段可能完全不是一回事。
+   所以这一条上唯一能作数的判断是【听】,整行的重心就得压在播放键和进度上,
+   而不是像产物卡那样把地方全让给图。
+   ------------------------------------------------------------
+   上游的尺寸(行高 56、按钮 36、波形高 44)是它自己那套 14px 正文的密度,
+   这份稿子是 12–13px、图标 15、按钮 26 的紧排,整条照搬会比旁边任何一块都胖一圈。
+   所以尺寸按本稿重定,形状和结构一比一保留:
+   外层一圈浅底 → 里面一条白行 → 行内 [麦克风][已播][波形][总长][播放],
+   「×」在白行【外面】—— 它删的是整条附件,不是音频里的某一段,不该待在内容里。 */
+
+.aud {
+  display: flex; align-items: center; gap: 3px;
+  padding: 3px; border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+/* 一条最宽 406px,和 21 · 待发送附件那排(.att-demo)同宽 —— 两处都是"输入框那么宽的一条东西",
+   宽度不一致会让人以为它们不在同一个容器里。 */
+.aud-demo { width: 406px; max-width: 100%; }
+
+.aud-in {
+  position: relative; display: flex; align-items: center; gap: 7px;
+  flex: 1; min-width: 0;
+  padding: 3px 7px; border-radius: var(--radius);
+  background: var(--bg);
+}
+.aud-ic { flex: none; display: grid; place-items: center; color: var(--text-soft); }
+.aud-ic svg { width: 15px; height: 15px; }
+
+/* 两个时间都用等宽数字并写死宽度:秒数每跳一下字形宽度就变,不定宽的话
+   整条波形会跟着左右各抖一像素 —— 一条正在播的音频不该看着在晃。 */
+.aud-t {
+  flex: none; width: 26px;
+  font-size: var(--t-cap); color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.aud-t.mod-end { text-align: end; }
+
+/* ---- 波形 ---- */
+/* 28 根柱子的高度是上游那张表原样搬的(WAVEFORM_BARS)。它不是随机数 ——
+   随机波形每次刷新都不一样,而这是一份要被反复截图对照的稿子。
+   高度按 0.68 缩到本稿的行高里,比例不变。 */
+.wave {
+  display: flex; align-items: center; gap: 3px;
+  flex: 1; min-width: 0; height: 30px; overflow: hidden;
+}
+.wave > i {
+  flex: none; width: 3px; border-radius: 999px;
+  height: calc(var(--h) * 0.68px);
+  background: var(--text-faint);
+  transition: background-color var(--duration-faster) var(--ease-out);
+}
+/* 已播的那截变实。分界线就是播放头 —— 不用另画一条竖线:
+   颜色的分界本身就是播放头,多画一条是把同一件事说两遍。 */
+.wave > i.is-on { background: var(--text-strong); }
+
+/* 播着的时候整条轻轻起伏(上游的 0.72 → 1 → 0.78,逐根错开 18ms)。
+   这一下不表示音量 —— 音量已经由柱高定死了;它表示的是【还在响】,
+   和进度条那种"走到哪了"是两件事,所以它是全条一起动,不只动已播那截。 */
+.aud[data-playing] .wave > i { animation: wave-pulse 0.55s var(--ease-out) infinite; animation-delay: calc(var(--i) * 18ms); }
+@keyframes wave-pulse {
+  0%   { transform: scaleY(0.72); }
+  50%  { transform: scaleY(1); }
+  100% { transform: scaleY(0.78); }
+}
+
+/* ---- 播放键 ---- */
+/* 实底圆,是这一条上唯一的主动作 —— 音频这一行别的都在陈述(多长、播到哪),
+   只有它是"你要做的事"。三角比方块小一圈但看着一样大:视觉重心在尖那头,
+   所以给它 1px 的右移把重心推回圆心。 */
+.aud-b {
+  flex: none; display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--text-strong); color: var(--bg);
+  transition: opacity var(--duration-faster) var(--ease-out);
+}
+.aud-b:hover { opacity: 0.86; }
+.aud-b svg { width: 12px; height: 12px; }
+.aud-b .ic-play { transform: translateX(1px); }
+.aud[data-playing] .aud-b .ic-play { display: none; }
+.aud:not([data-playing]) .aud-b .ic-pause { display: none; }
+
+/* 「×」在白行外面,和 21 · 待发送附件那排的「×」同一个尺寸档。 */
+.aud-x {
+  flex: none; display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  transition: background-color var(--duration-faster) var(--ease-out),
+              color var(--duration-faster) var(--ease-out);
+}
+.aud-x:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+.aud-x svg { width: 14px; height: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aud[data-playing] .wave > i { animation: none; }
+}

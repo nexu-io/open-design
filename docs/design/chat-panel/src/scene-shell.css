@@ -1,0 +1,83 @@
+
+/* ============================================================
+   真实场景壳 —— 只在这个文件里,不回流构件墙。
+   面板 460px 是产品里 chat panel 的实际宽度(tokens.json 的 control 组),
+   左边那块灰是工作区,不画内容:这份稿子要评的是面板,不是画布。
+   ============================================================ */
+body { background: var(--bg-subtle); overflow: auto; }
+.scene { display: flex; flex-wrap: wrap; gap: 22px; padding: 22px; align-items: flex-start; }
+.scene-col { flex: none; width: 460px; }
+.scene-cap { margin: 0 0 8px; font-size: var(--t-mini); font-weight: 600; color: var(--text-strong); }
+.scene-cap span { margin-inline-start: 6px; font-weight: 400; color: var(--text-muted); }
+
+/* 面板本体:上下两段固定,中间流水滚动 —— 这是面板真正的骨架,
+   构件墙里看不出来。Queue 和输入框钉在底部,不随流水滚走。 */
+.panel {
+  display: flex; flex-direction: column;
+  height: 997px;  /* 七屏各自所需里的最大值(挑风格 853 内容 + 144 头尾);谁的内容都不用滚,矮的那屏靠 margin-top:auto 贴底 */
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--bg); overflow: hidden;
+}
+.panel-hd {
+  flex: none; display: flex; align-items: center; gap: 8px;
+  padding: 0 14px; height: 44px; border-bottom: 1px solid var(--border-soft);
+  font-size: var(--t-mini); font-weight: 600; color: var(--text-strong);
+}
+.panel-hd .sp { flex: 1; }
+.panel-hd button {
+  display: grid; place-items: center; width: 26px; height: 26px;
+  border-radius: var(--radius-sm); color: var(--text-soft);
+}
+.panel-hd button:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+.panel-hd button svg { width: 15px; height: 15px; }
+
+/* 流水:唯一会滚的区域 */
+/* 间距对齐 apps/web 的 .chat-log:padding 24px 20px、块间 gap 24px。
+   原来写的 14 / 12 是我自己拍的,比真实产品紧了一倍。 */
+.flow { flex: 1; min-height: 0; overflow-y: auto; padding: 24px 20px;
+  display: flex; flex-direction: column; gap: 12px; }
+/* 内容没填满时整段贴底,而不是浮在顶上留一大片空 —— 真实产品
+   .chat-log.is-balanced-transcript 也是拿首个子元素的 auto 上外边距做的。
+   比 justify-content:flex-end 安全:内容溢出时 auto 归零,顶部不会滚不到。 */
+.flow > :first-child { margin-top: auto; }
+/* flex 列的子项默认可压缩,日志一长就把卡片压扁成一条线。日志块只能被滚动,不能被压。 */
+.flow > * { flex: 0 0 auto; }
+
+/* 24 只留给「换人说话」,同一个人连着说的几块之间是 12。
+   ------------------------------------------------------------
+   原来一律 24,结果 Thinking / 开场白 / 已确认 / 计划 / 记忆 / 步骤 这一串
+   明明是同一轮里连着出来的,却被拆成六件互不相干的事。
+   :not(:first-child) 是为了不覆盖上面那条贴底用的 margin-top:auto。 */
+.flow > .msg-me:not(:first-child) { margin-top: 12px; }   /* 12 + 12 = 24,进入用户这一轮 */
+.flow > .msg-me + *               { margin-top: 12px; }   /* 12 + 12 = 24,回到 agent 这一轮 */
+
+/* 回合状态 + 反馈这一行是上一条回答的尾巴,不是新的一块。
+   块间距 12 会把它和正文拆成两件事 —— 真实产品里同类的 .user-actions 只留 4px。
+   flex 的 gap 没法单独给某个子项减,所以用负外边距抵掉一截:12 - 4 = 8。
+   这一招真实产品自己也在用(.chat-log-tail-spacer 靠 margin-top:-24 抵消 gap)。 */
+.flow > .fb { margin-top: -4px; }   /* 12 - 4 = 8 */
+/* 连着几条工具调用是一组,组件自己定的间距是 6;放进流水后被 12 的 gap 顶开成 18,
+   反而比"两个不相干的块"还松。抵掉 6,回到组件的本意。 */
+.flow > .tool + .tool { margin-top: -6px; }   /* 12 - 6 = 6 */
+
+/* 底座:Queue + 输入框,钉住不滚 */
+/* 对齐 .composer:padding 10px 16px、gap 8px */
+.dock { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; }
+
+/* 队列不再是独立的一块,而是压在输入框底下露出来的一截 —— 它们本就是同一个
+   「还没发出去的东西」区。左右各窄 10px + 底边塞进输入框下面,叠出前后关系;
+   最后一行被输入框切掉,顺便当「下面还有」的提示。 */
+.dock .queue {
+  width: calc(100% - 20px); margin-inline: auto;
+  margin-bottom: -18px;                       /* -8 抵掉 dock 的 gap,再往下塞 10 */
+  padding-bottom: 10px;                       /* 被盖住的那截是空白,不是内容 ——
+                                                 否则条数再少,最后一行也被切,
+                                                 看着像「下面还有」 */
+  max-height: 132px;                          /* 122 内容 + 10 藏起来的底边 = 仍是三行半 */
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.dock .composer { position: relative; z-index: 1; }
+
+
+/* dock 上的重连横幅:和输入框之间靠 .dock 的 gap 撑开 */
+.dock-note { display: contents; }

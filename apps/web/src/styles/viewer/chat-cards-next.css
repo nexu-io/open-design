@@ -1,0 +1,472 @@
+/* ============================================================
+   Chat 卡片视觉 — 对齐 design/chat-panel-next
+
+   设计稿：nexu-io/open-design 分支 `design/chat-panel-next` 的
+   `docs/design/chat-panel-next.html`（23 个组件）与
+   `chat-panel-scene.html`（8 屏场景稿）。那条分支不含应用代码，
+   只有静态视觉稿；本文件把稿子的卡片外观落到既有选择器上。
+
+   ── 为什么单开一个文件、且必须排在 index.css 最后 ──
+   `viewer/routines.css` 覆盖了 code.css / tools.css / composio.css
+   里几乎所有卡片规则。只改那几个文件会被静默覆盖。排在它之后
+   + 镜像同样的特异度，就能靠源码顺序取胜，不需要 !important。
+   同时既有样式表一行不改，tests/styles/*.test.ts 与
+   ChatPane.streaming.test.tsx 里那批读原始文件做字面量匹配的断言
+   全部原样保留。
+
+   ── 为什么用 .chat-log 而不是 .app 作特异度把手 ──
+   `.app` 不是通用的：ProjectView.tsx:10824 是 `.app`，但
+   DesignSystemFlow.tsx:2799 是 `.ds-workspace`，并在 2809 行同样
+   挂了一个 ChatPane。用 `.app` 会把那个面板留在旧皮肤上。
+   `.chat-log` 与 routines.css 的 `.app` 规则特异度逐条相等，且与
+   挂载上下文无关。（`.chat-pinned-todo` 在 .chat-log 之外，单列。）
+
+   本文件禁止 hex 字面量 —— 设计稿自己的规矩，颜色全走 token。
+   ============================================================ */
+
+/* ── 字号别名层 ────────────────────────────────────────────────
+   设计稿在 tokens.css 之上加的一层语义别名，仓库没有。
+   `--font-size-11` 不存在，稿子已把原 11px 一档塌进 12px。
+
+   稿子还定义了 `--amber-border`，这里**故意不搬**：
+   workspace/mention-home.css:2032 写的是
+   `var(--amber-border, var(--orange-border, var(--green-border)))`，
+   目前一路回落到绿色。在 :root 定义它会把那处静默翻成琥珀色，
+   而本次改版根本用不到它。要用请就地写 color-mix。 */
+:root {
+  --t-cap: var(--font-size-12);   /* 角标、耗时、类名 */
+  --t-mini: var(--font-size-12);  /* 状态标签、辅助行 */
+  --t-body: var(--font-size-13);  /* 正文、气泡、按钮 */
+  --t-lead: var(--font-size-14);
+  --t-head: var(--font-size-16);
+  --t-disp: var(--font-size-20);
+
+  --lh-tight: 1.35;
+  --lh-body: 1.7;
+  --lh-row: 1.5;
+}
+
+/* ── 1 用户消息 · 反色墨块（稿件组件 1 `.bub`）────────────────
+   浅灰气泡 → --text-strong 实底 + --bg 字。缺口从右上移到右下
+   （12/12/4/12）。380px 是稿子里刻意的常数：对话里有形状的只有
+   「你说的话」和「它问你的话」，两者同宽、一左一右。
+   两个 token 在暗色下互换，所以反色自动成立，不需要额外暗色规则。 */
+.chat-log .msg.user {
+  max-width: min(84%, 380px);
+}
+
+.chat-log .msg.user .user-text {
+  padding: 9px 13px;
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  background: var(--text-strong);
+  color: var(--bg);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+}
+
+/* 稿子的 .msg-row.is-hover：悬停时气泡退一档，不是加深 */
+.chat-log .msg.user .user-text-wrap:hover > .user-text {
+  background: var(--text);
+}
+
+/* 复制按钮 —— 这里**故意不照稿子**。
+   稿子的 `.msg-row.is-hover` 把它浮在气泡左侧、与气泡垂直居中
+   （组件页那一格标的「单行:与气泡居中」）。产品决定改成放在气泡
+   下方、距上方内容 4px；生产的 `.user-actions`(chat.css:916) 本来
+   就是这个位置和间距，所以位置不动，只把按钮本身对齐稿子的规格：
+   30×30 方格、--radius-sm、hover --bg-fill-secondary。 */
+.chat-log .msg.user .user-actions {
+  margin-top: 4px;
+  gap: 4px;
+}
+
+.chat-log .msg.user .user-copy-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+}
+
+.chat-log .msg.user .user-copy-btn:hover {
+  background: var(--bg-fill-secondary);
+  color: var(--text-strong);
+}
+
+.chat-log .msg.user .user-copy-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* ── 2 决策卡 · question-form（稿件组件 5 意图澄清 / 6 Plan）──
+   稿子的 `.card`：外壳 --bg + 1px --border + 8px 圆角，头尾两条
+   --bg-panel 色带用 --border-soft 分隔。去掉投影和强调色渐变 ——
+   这张卡不靠色彩争注意力，靠和气泡同宽。
+   composio.css 里这一族都是裸类选择器，同特异度靠顺序取胜。 */
+.question-form {
+  width: 380px;
+  max-width: 100%;
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: none;
+}
+
+.question-form-head {
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+  font-size: var(--t-mini);
+}
+
+.question-form-icon {
+  width: 20px;
+  height: 20px;
+  font-size: var(--t-cap);
+}
+
+.question-form-title {
+  font-size: var(--t-mini);
+  letter-spacing: normal;
+  color: var(--text-strong);
+}
+
+.question-form-desc {
+  font-size: var(--t-cap);
+}
+
+.question-form-body {
+  gap: 6px;
+  padding: 10px 11px 8px;
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+}
+
+.question-form-foot {
+  gap: 8px;
+  padding: 8px 11px;
+  border-top: 1px solid var(--border-soft);
+  background: var(--bg-panel);
+}
+
+/* 选项：稿子的 `.opt` 是整行卡而不是胶囊，hover 才加深描边 */
+.question-form .qf-chip {
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font-size: var(--t-mini);
+  line-height: var(--lh-row);
+  color: var(--text);
+}
+
+.question-form .qf-options {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.question-form .qf-chip:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-panel);
+}
+
+.question-form .qf-chip-on {
+  border-color: color-mix(in srgb, var(--brand) 82%, var(--border-strong));
+}
+
+/* 「自己填」是选项之一，不是卡外的补充说明 —— 虚线，同列排 */
+.question-form .qf-chip-other {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.question-form .qf-chip-other:hover {
+  border-style: solid;
+  color: var(--text-strong);
+}
+
+/* ── 3 已回答卡（稿件 `.answered`）───────────────────────────
+   AssistantMessage.tsx:2994 的 .question-form-summary 一族。
+   收成一张 fit-content 的安静小卡；稿子刻意删掉了那枚对勾图标 ——
+   「已确认」四个字本身就是状态，再加个勾是重复。 */
+.question-form-summary {
+  width: fit-content;
+  max-width: 100%;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font-size: var(--t-mini);
+  line-height: var(--lh-row);
+}
+
+.question-form-summary-icon {
+  display: none;
+}
+
+.question-form-summary-title {
+  margin-bottom: 3px;
+  font-size: var(--t-mini);
+  color: var(--brand-text);
+}
+
+.question-form-summary-items {
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 键名退一档、答案给最深一档 —— 撤掉胶囊底，它是文本不是标记 */
+.question-form-summary-item {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--text-strong);
+}
+
+.question-form-summary-item > span:first-child {
+  margin-inline-end: 6px;
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+/* ── 4 执行记录 · 拍平的一块（稿件组件 7 `.fold.mod-flat`）────
+   生产的 .task-activity 本来就无外框，等同稿子的 mod-flat 变体。
+   补的是：summary 行负外边距挂角 + 小圆角 hover 底、展开时一条
+   --border 发丝线把标题和内容分开、耗时走等宽小一号。
+   height:auto 是必须的 —— packages/components/src/styles.css:8 的
+   全局 `button { height: 36px }` 会撑高这一行。 */
+.chat-log .task-activity .action-card-toggle {
+  height: auto;
+  margin-inline: -7px;
+  padding: 6px 7px;
+  gap: 7px;
+  border-radius: var(--radius-sm);
+  font-size: var(--t-mini);
+}
+
+.chat-log .task-activity .action-card-toggle:hover {
+  background: var(--bg-fill-tertiary);
+}
+
+.chat-log .task-activity .action-card-toggle .summary {
+  font-size: var(--t-mini);
+  color: var(--text-strong);
+}
+
+/* 稿子把耗时放在标题行右侧：等宽、小一号、最浅一档 */
+.chat-log .task-activity .task-activity-elapsed {
+  font-family: var(--mono);
+  font-size: var(--t-cap);
+  color: var(--text-soft);
+}
+
+.chat-log .task-activity .action-card-body {
+  padding: 6px 0 2px;
+  border-top: var(--stroke-thin) solid var(--border);
+}
+
+/* code.css:1614 在执行记录左侧画了一条 1px 竖脊。稿子里没有这东西 ——
+   它整套靠留白和缩进分层（分支上专门有一次提交叫「折叠展开不再画
+   分隔线,改用留白分层」）。展开时标题下那条横发丝线保留，竖脊去掉。 */
+.chat-log .task-activity .action-card-body::before {
+  display: none;
+}
+
+/* ── 5 工具行（稿件组件 9–12 `.tool`）─────────────────────────
+   ⚠️ 稿子里 `.tool` 单独看是有描边的卡，但那只是组件画廊里的
+   独立形态。真实面板里工具行落在执行记录内，稿子有一条：
+
+     .fold .body.mod-stack > * { border:0; background:none;
+                                 border-radius:0; margin:0; padding:5px 11px }
+     .fold.mod-flat > .body.mod-stack > .tool { margin-inline:-7px;
+                                 padding:5px 7px 5px 29px }
+
+   —— 在上下文里它是**完全扁平**的，只靠 29px 缩进和 15px 状态点
+   分层。所以这里保持无框，不要照画廊那一版加描边。
+   29px = 状态点(15) + 间距(7) + 挂角(7)。 */
+.chat-log .op-card {
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.chat-log .op-card:hover {
+  background: none;
+}
+
+.chat-log .op-card + .op-card {
+  margin-top: 0;
+}
+
+/* 子选择器把特异度提到 (0,3,0)，才压得过 code.css:1644 的
+   `.action-card-body > .op-card .op-card-head { padding: 6px 0 }` */
+.chat-log .op-card > .op-card-head {
+  height: auto;
+  gap: 8px;
+  margin-inline: -7px;
+  padding: 5px 7px 5px 29px;
+  border-radius: var(--radius-sm);
+  font-size: var(--t-body);
+  line-height: var(--lh-row);
+  color: var(--text);
+}
+
+.chat-log .op-card-head:hover {
+  background: var(--bg-fill-tertiary);
+}
+
+/* 文件名走等宽，和上方 thinking 段里提到的同一个名字同一副字 */
+.chat-log .op-card-head .op-title code,
+.chat-log .op-card-head .op-meta {
+  font-family: var(--mono);
+  font-size: var(--t-cap);
+  color: var(--text-soft);
+}
+
+/* 失败行整条转红。ToolCard.tsx:682 的徽标带 data-tool-state */
+.chat-log .op-card:has(.op-status[data-tool-state='error']) {
+  border-color: var(--red-border);
+  background: var(--red-bg);
+}
+
+/* 运行中的紧凑行是刻意贴平的内联态，别被上面的行卡外观污染
+   （routines.css `.app .task-activity-current-row .op-card` 的意图） */
+.chat-log .task-activity-current-row .op-card {
+  border: none;
+  background: transparent;
+}
+
+.chat-log .task-activity-current-row .op-card + .op-card {
+  margin-top: 0;
+}
+
+/* 紧凑行的头部也保持贴平（routines.css:1929 原本就是 4px 0，
+   上面提到 (0,3,0) 之后要在这里重新让路） */
+.chat-log .task-activity-current-row .op-card > .op-card-head {
+  padding: 4px 0;
+}
+
+/* 钉在输入框上方的任务卡不在 .chat-log 里，单列一条 */
+.chat-pinned-todo .op-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.chat-pinned-todo .op-card-head {
+  height: auto;
+  gap: 8px;
+  padding: 7px 11px;
+  font-size: var(--t-body);
+  line-height: var(--lh-row);
+}
+
+/* ── 6 状态点（稿件 `.mk`）───────────────────────────────────
+   24px 圆角方片 → 15px 圆点。完成态 --brand-weak 底 + --brand-text
+   勾；失败态只留红勾不留底。
+
+   运行态一律不碰 color —— tools.css 给 .op-status-running 的
+   --purple 是它的可读性来源，且 .op-status-category 与
+   .op-status-running 同为单类，后写的会盖掉前者
+   （chat-disclosure-accessibility.test.ts 保护的正是这一点，但它
+   只读 tools.css，不会拦住这里的错误）。 */
+.chat-log .action-card-status {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: none;
+}
+
+.chat-log .action-card-status.op-status-ok {
+  background: var(--brand-weak);
+  color: var(--brand-text);
+}
+
+.chat-log .action-card-status.op-status-error {
+  background: none;
+  color: var(--red);
+}
+
+.chat-log .action-card-status > * {
+  width: 10px;
+  height: 10px;
+}
+
+/* 工具行头部的类别图标：稿子的 `.ti` 是 15px 线性图标，没有底片。
+   只改盒子，不设 color。 */
+.chat-log .op-card-head .op-status {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.chat-log .op-card-head .op-status > * {
+  width: 15px;
+  height: 15px;
+}
+
+/* ── 7 产物卡（稿件组件 14 `.art`）────────────────────────────
+   同一个回合只会走 FileOpsSummary 或 ProducedFiles 其中一支
+   （AssistantMessage.tsx:1004-1046 的互斥护栏），两支都要上皮，
+   否则同样的回合在不同项目里长得不一样。
+
+   本轮只做表面。稿子的两列网格 + 16:10 缩略图 + 行内
+   预览/发布/导出 需要改 DOM（缩略图节点根本不存在），留作后续；
+   在缩略图落地前保持单列 —— 两列的无图行卡比现在的列表更差。 */
+.chat-log .produced-file,
+.chat-log .file-ops-row {
+  padding: 7px 9px;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.chat-log .produced-file + .produced-file,
+.chat-log .file-ops-row + .file-ops-row {
+  margin-top: 6px;
+}
+
+.chat-log .produced-file:hover,
+.chat-log .file-ops-row:hover {
+  background: var(--bg-panel);
+}
+
+.chat-log .produced-file-name,
+.chat-log .file-ops-row-path {
+  font-family: var(--mono);
+  font-size: var(--t-mini);
+  color: var(--text-strong);
+}
+
+.chat-log .produced-files-label {
+  font-size: var(--t-cap);
+  color: var(--text-soft);
+}
+
+/* ── 8 卡内按钮（稿件 `.btn`）────────────────────────────────
+   共享的 @open-design/components Button 不动（波及全应用）。
+   逐个点名 chat 卡片里的按钮面，靠 (0,1,1) 压过
+   packages/components/src/styles.css:2 的裸 `button` (0,0,1)。 */
+.chat-log .question-form-foot button,
+.chat-log [data-user-action-footer='true'] button,
+.chat-log .produced-file-actions .ghost,
+.chat-log .file-ops-row-open {
+  height: auto;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  font-size: var(--t-mini);
+  font-weight: 600;
+}

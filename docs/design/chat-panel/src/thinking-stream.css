@@ -1,0 +1,94 @@
+/* ---- Thinking:推理流(固定高度 + 自动滚 + 上下渐隐) ---- */
+/* 取自 hextaui 的 blocks/ai/ai-thinking(21st.dev 上那个 AI Thinking)。
+   ------------------------------------------------------------
+   原来的写法是把整段推理【摊开】,有多长占多长。它的问题在长度不可控:
+   推理是模型边想边吐的,可能三行也可能三十行,一旦长起来,这一屏就全是还没
+   落地的中间过程,而你等的是正文。
+   换成固定高度的一扇窗之后,这一块的高度成了常量,内容自己往上走 —— 说的是
+   同一件事(「它在琢磨什么」),但不再拿走整屏。
+   ------------------------------------------------------------
+   三样东西照搬,一样没搬:
+     ✓ 固定高度的滚动窗    ✓ 上下两道渐隐    ✓ 内容自己匀速往上走(见 .js)
+     ✗ 走秒的耗时。上游头部挂着「… is thinking… 12s」;这一行只活到第一个字
+       落地为止,给一个马上要消失的状态配一个跳动的秒数,只会把注意力钉在一个
+       从此不再相关的数字上。总耗时最后在回合状态行里有。
+   ------------------------------------------------------------
+   只铺浅灰底、不加描边和阴影:16px 圆角把滚动区收成完整底卡,
+   上下各留 8px 与标题和下一段分开;渐隐只落在卡内文字上。 */
+.fold.mod-flat > .body.mod-stream {
+  /* 96px ≈ 5 行,和折叠块里 .mod-scroll 用的是同一个高度,
+     这一屏里所有"够看但不占屏"的窗口都是这一档。 */
+  --stream-h: 96px;
+  /* 渐隐带占上下各约三分之一,和上游 80/150 的比例一致。 */
+  --stream-fade: 32px;
+  /* 固定底卡使用独立浅灰底,不改变 Thinking 标题行和外层卡片。 */
+  --stream-surface: #FAFAFA;
+  --stream-pad: 8px;
+  --stream-gap: 8px;
+  height: var(--stream-h);
+  margin-block: var(--stream-gap);
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: transparent;
+  border-radius: 16px;
+  opacity: 1;
+  -webkit-mask-image: none;
+  mask-image: none;
+  /* 浅灰底内四边统一留 8px,文字滚动与渐隐仍限制在这扇定高窗口里。 */
+  padding: var(--stream-pad);
+}
+/* 底卡单独铺在最下层,不参与滚动、透明度或渐隐计算。 */
+.fold.mod-flat > .body.mod-stream::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--stream-surface);
+  pointer-events: none;
+}
+/* 滚动文字单独在底卡上方成层,渐隐只作用在这个文字窗口。
+   用 mask 而不是上游那两层渐变遮罩 div。
+     遮罩 div 的前提是"背景色等于某个已知值",它铺一层实底把两端盖住;
+     可这一块在画廊里坐着 --bg-panel、在场景稿里坐着 --bg,两处不一样,
+     盖上去必然有一处露色。mask 抠的是元素自己的 alpha,底下是什么颜色都对。 */
+.fold.mod-flat > .body.mod-stream > .stream-viewport {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+  opacity: 1;
+  padding: 0;
+  -webkit-mask-image: linear-gradient(to bottom,
+    transparent 0, #000 var(--stream-fade),
+    #000 calc(100% - var(--stream-fade)), transparent 100%);
+  mask-image: linear-gradient(to bottom,
+    transparent 0, #000 var(--stream-fade),
+    #000 calc(100% - var(--stream-fade)), transparent 100%);
+}
+/* 标题和底卡之间由 8px 外间距分层,不再重复画一条发丝线。 */
+.fold.mod-flat[open] > summary + .body.mod-stream { border-top: 0; }
+/* 滚动流里的推理比普通的 .think 淡:--text-strong → --stream-ink(#bdbdbd,
+   产品指定,定义在 components.css 顶部)。
+   ------------------------------------------------------------
+   收起后的 .think 是【结论】,你是专门去读它的;而这一段是正在往上走的
+   过程,它的作用是"还在想"这件事本身,不是逐字读完 —— 跟正文同一档墨
+   会把注意力钉在一段马上要滚走的字上。淡一档之后它退成背景里的动静,
+   要看的时候仍然读得清。 */
+.fold.mod-flat > .body.mod-stream > .stream-viewport > .think { padding: 0; font-weight: 400; color: var(--stream-ink); }
+/* 段与段之间留一行的气口,不然滚起来是一堵字墙。 */
+.fold.mod-flat > .body.mod-stream > .stream-viewport > .think + .think { margin-top: 0.75em; }
+
+/* 点开折叠不该留一圈蓝框。
+   ------------------------------------------------------------
+   Chrome 把 <summary> 的鼠标点击也算进 :focus-visible,于是点一下收起推理,
+   这一行就套上了 2px 的蓝色焦点框 —— 而你刚做的动作是"把它收走",不是
+   "选中它"。
+   但不能直接把框摘掉:纯键盘的人靠它知道自己走到哪儿了。所以只掐掉鼠标那
+   一路 —— 顶层挂一个「刚才按过 Tab」的标记(见 thinking-stream.js),
+   没有这个标记时,折叠标题的焦点框不出。作用域只到 .fold > summary,
+   别处的 :focus-visible 一律照旧。 */
+:root:not([data-kb]) .fold > summary:focus-visible { outline: none; }

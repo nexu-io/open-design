@@ -166,6 +166,10 @@ const residualAllowedPathPrefixes = [
   "skills/web-clone/scripts/",
   // Vendored upstream Last30Days runtime helper used by the engine (design template).
   "design-templates/last30days/scripts/lib/vendor/",
+  // Standalone chat-panel design demo. These browser scripts are source for a
+  // static review artifact, are not imported by product code, and intentionally
+  // stay as plain JavaScript so the generated HTML can inline them verbatim.
+  "docs/design/chat-panel/",
   // Vendored upstream html-ppt runtime assets (lewislulu/html-ppt-skill, design template).
   "design-templates/html-ppt/assets/",
   // Vendored upstream website-clone recon/mirror/audit helpers

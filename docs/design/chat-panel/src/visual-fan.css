@@ -1,0 +1,166 @@
+/* ---- 视觉方向:默认叠成一沓,右上角可切成网格 ---- */
+/* 为什么默认不铺开。
+   ------------------------------------------------------------
+   四张 1:1 的预览两列排下来是 800 多 px —— 一个还没回答的问题,占掉的地方
+   比它下面整段执行记录还多。而这一屏的主线是"活儿干到哪了",澄清卡是插进来
+   问一句,问完就收走的东西,不该是这一屏最大的那一块。
+   叠成一沓之后它只占两百来 px,前面那张仍然完整可见,后面几张露出侧边说明
+   "还有几个"。要挨个比较的时候点右上角铺成网格 —— 那才是需要占屏的时刻,
+   而那一下是你自己要的。 */
+
+.opts.mod-visual { position: relative; display: block; padding: 0 11px 10px; }
+/* 卡头左右各留 16px:标题组和倒计时分别贴住同一条内边界。只收视觉方向卡,
+   其余确认卡仍沿用通用卡头的 11px。 */
+.card:has(> .cbody > .opts.mod-visual) > .h { padding-inline: 16px; }
+/* 这一沓的高度:.vwrap 要用它撑开,左右箭头要用它对齐垂直中线,
+   两处必须是同一个数,所以提到共同的祖先上。 */
+.opts.mod-visual[data-view="fan"] { --fan-h: 244px; }
+
+/* 顶部操作只管这组预览:换一批和叠放 / 网格切换并排靠右。标题与倒计时仍在
+   卡头里,这里不会长成第二个卡头。 */
+.vbar { display: flex; align-items: center; gap: 4px; padding-bottom: 6px; }
+.vbar .sp { flex: 1; }
+.card > .h .visual-countdown { color: var(--text-soft); font-weight: 400; }
+.visual-refresh {
+  flex: none; min-height: 24px; padding-inline: 8px; border-radius: var(--radius-pill);
+  color: var(--text-muted); font-size: var(--t-cap); font-weight: 400;
+  transition: background-color var(--duration-faster) var(--ease-out),
+              color var(--duration-faster) var(--ease-out);
+}
+.visual-refresh:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+/* 纯图标,不带字也不挂 tooltip。
+   ------------------------------------------------------------
+   两个图标本身已经把话说完了:四格 = 铺开,两张叠着 = 收起。再配「铺开 / 叠起」
+   两个字是同一句话说两遍,而它就压在问句和卡片之间,多两个字就多一行要读的东西。
+   tooltip 也不做:.cbody 上挂着 overflow:hidden,气泡在右上角必然被裁掉一半。
+   读屏那句留在 aria-label 上,点击时由 visual-fan.js 跟着换。 */
+.vswitch {
+  flex: none; display: grid; place-items: center;
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  transition: background-color var(--duration-faster) var(--ease-out),
+              color var(--duration-faster) var(--ease-out);
+}
+.vswitch:hover { background: var(--bg-fill-secondary); color: var(--text-strong); }
+/* 图标画的是【点下去会变成什么】,不是现在是什么 ——
+   叠着的时候给网格图标,铺开的时候给叠放图标。 */
+/* 两枚开关图标换成实心线稿(Remix 那一套的 outline 变体,墨是 fill 画的,
+   不是 stroke)。所以 stroke-width 这条删掉 —— 填充图标根本不吃它,留着是
+   一条永远不生效的规则,下一个人还得先试一遍才知道它没用。 */
+.vswitch > svg { flex: none; width: 15px; height: 15px; }
+.opts.mod-visual[data-view="fan"]  .vswitch .ic-fan  { display: none; }
+.opts.mod-visual[data-view="grid"] .vswitch .ic-grid { display: none; }
+
+/* ---- 网格视图:原来那一套,原样挪到 .vwrap 上 ---- */
+.opts.mod-visual[data-view="grid"] .vwrap {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px;
+}
+/* 铺开时格子按【图本身的画幅】,不切图。
+   ------------------------------------------------------------
+   原来是 1:1,而素材是 422×560 的竖图 —— 方格子配 cover,上下各被切掉一截。
+   叠着的时候切了还说得过去(那是一沓卡片的形状),铺开就是为了挨个比构图,
+   把构图切了等于把要比的东西拿走了。
+   数字直接写素材的像素:四张同一画幅是规格里就定死的(「同一份示例内容、
+   同一画幅」),真素材换进来只要仍是同一画幅,改这一行即可。 */
+.opts.mod-visual[data-view="grid"] .vpv { aspect-ratio: 422 / 560; }
+
+/* ---- 叠放视图 ---- */
+/* 几何取自 21st.dev 的 @tonyzebastian/image-stack —— 那一套的四个数原样搬:
+     x      = i × -12px      往【左】挪
+     y      = i × -8px       往【上】挪
+     rotate = i===0 ? 0 : -(2 + i×3)   即 0 / -5° / -8° / -11°,逆时针
+     支点    = 底边中点
+   之前那版是往右挪、顺时针、绕左下角 —— 像一沓被摊开的牌;上游这套叠得紧,
+   四张几乎重合,只从左上角露出一道边和一点角。区别不只是方向:
+   摊开的那版在说"这里有四张",叠紧的这版在说"这是一沓,最上面这张是当前这张",
+   而这一块的操作正是【拖走最上面那张换下一张】,后者才对得上。
+   ------------------------------------------------------------
+   支点从左下角挪到底边中点,是这套几何自洽的关键:绕中点转,四张的底边中心
+   落在同一点上,叠起来像一沓真的卡片;绕左下角转,越靠后的卡右下角翘得越高,
+   叠紧之后那几个翘角会从下缘支棱出来。
+   ------------------------------------------------------------
+   z-index 没照抄上游的 50/40/30/20,仍用 4/3/2/1:拖拽那段(visual-fan.js)
+   把手上那张顶到 9,换成 50 那套的话 9 会掉到所有卡后面去。顺序一样,数值无关。 */
+.opts.mod-visual[data-view="fan"] .vwrap {
+  --fan-w: 152px;   /* 单张宽度 */
+  --fan-dx: -12px;  /* 每张往左挪 */
+  --fan-dy: -8px;   /* 每张往上挪 */
+  position: relative;
+  height: var(--fan-h);
+}
+.opts.mod-visual[data-view="fan"] .vopt {
+  position: absolute;
+  /* 顶上留出 24px(= 3 × 8),最后一张往上挪完也不会被切掉。
+     左右靠 margin 居中而不是 transform —— transform 那一格归拖拽用,
+     占了的话手一按卡就跳到左上角去了。
+     ------------------------------------------------------------
+     居中的是【整沓的外接框】,不是最前面那张 —— 左右留白要相等。
+     +38 不是拍的,是几何算出来的:四张连同转出去的角一共横跨 227px
+     (不是 152 —— 旋转会往左多支出一截),超出前排卡的那 75px 全在左边,
+     所以整体往右补一半(75 / 2 ≈ 38)才能让两侧留白一样。
+     实测(1500px 视口):不补时左 26.9 / 右 102,补 38 后两侧相等。
+     ------------------------------------------------------------
+     试过改成"让最前面那张居中",结果是整沓明显偏左(左 39 / 右 152)——
+     后面三张露出的边是实打实占地方的,眼睛量的是整块的边界。 */
+  top: 24px; left: 50%;
+  margin-left: calc(var(--fan-w) / -2 + 38px);
+  width: var(--fan-w);
+  transform-origin: bottom center;
+  touch-action: none;   /* 触屏上这一沓是拖着翻的,别让页面先把手势抢走 */
+  transition: transform var(--duration-slower) var(--ease-out),
+              border-color var(--duration-faster) var(--ease-out),
+              background-color var(--duration-faster) var(--ease-out);
+}
+/* 5:7 是上游的画幅。只在叠放时改,网格里仍然是 1:1 —— 那边四张并排比风格,
+   统一画幅才比得出来。 */
+.opts.mod-visual[data-view="fan"] .vpv { aspect-ratio: 5/7; }
+/* 最前面那张是能上手的:光标先说这件事,不用等人试。 */
+.opts.mod-visual[data-view="fan"] .vopt:nth-child(1) { z-index: 4; transform: none; cursor: grab; }
+.opts.mod-visual[data-view="fan"] .vopt:nth-child(1):active { cursor: grabbing; }
+.opts.mod-visual[data-view="fan"] .vopt:nth-child(2) { z-index: 3; transform: translate(var(--fan-dx), var(--fan-dy)) rotate(-5deg); }
+.opts.mod-visual[data-view="fan"] .vopt:nth-child(3) { z-index: 2; transform: translate(calc(var(--fan-dx) * 2), calc(var(--fan-dy) * 2)) rotate(-8deg); }
+.opts.mod-visual[data-view="fan"] .vopt:nth-child(4) { z-index: 1; transform: translate(calc(var(--fan-dx) * 3), calc(var(--fan-dy) * 3)) rotate(-11deg); }
+/* 后面几张只露一道边,那上面放不下方向名 —— 名字只留给最前面这张。
+   要读全部名字就是点右上角铺开的时候,这里不硬塞。 */
+.opts.mod-visual[data-view="fan"] .vopt:not(:nth-child(1)) .vmeta { display: none; }
+/* 同理,勾选圈只在最前面那张给:后面几张的右上角本来就压在别人底下,
+   画一个点不到的控件是骗人。 */
+.opts.mod-visual[data-view="fan"] .vopt:not(:nth-child(1)) .pick { display: none; }
+/* hover 只放大最前面那张(上游是 1.05)。不动后面几张:它们此刻不可点,
+   给反馈等于骗一下手。也不再用位移 —— 位移会把"排第几"这件事说乱,
+   而放大只说"这一张在手边"。 */
+.opts.mod-visual[data-view="fan"] .vopt:nth-child(1):hover { transform: scale(1.05); z-index: 5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .opts.mod-visual[data-view="fan"] .vopt { transition: none; }
+}
+
+/* ---- 左右箭头:翻这一沓 ---- */
+/* 拖着甩是这套形式的主动作,但它有个前提 —— 你得先知道能拖。
+   一沓静止的卡不会自己说这句话,而箭头会:两个方向摆在那儿,"这里有好几张、
+   能一张张过"就成立了,拖拽退回成"知道之后更快的那条路"。
+   ------------------------------------------------------------
+   摆在卡的左右两侧,不塞进顶部那条:顶部那条说的是【怎么排】(叠着还是铺开),
+   箭头说的是【看哪一张】,两件事不该挤在同一行里互相解释。
+   放在 .opts 上而不是 .vwrap 里:.vwrap 的那几条几何规则认的是 nth-child,
+   往里塞两个按钮,四张卡的序号就全错位了;拖拽那段的 appendChild 也会把卡
+   排到按钮后面去。 */
+.opts.mod-visual .vnav {
+  position: absolute; inset-inline: 11px; bottom: 10px;
+  height: var(--fan-h);
+  display: flex; align-items: center; justify-content: space-between;
+  pointer-events: none;   /* 中间那一大片要留给卡片接手势 */
+}
+/* 铺开成网格时四张都在眼前,没有"下一张"这回事。 */
+.opts.mod-visual[data-view="grid"] .vnav { display: none; }
+.vnav-b {
+  pointer-events: auto;
+  flex: none; display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--bg); border: 1px solid var(--border);
+  color: var(--text-muted); box-shadow: var(--shadow-sm);
+  transition: color var(--duration-faster) var(--ease-out),
+              border-color var(--duration-faster) var(--ease-out);
+}
+.vnav-b:hover { color: var(--text-strong); border-color: var(--border-strong); }
+.vnav-b svg { width: 15px; height: 15px; }
