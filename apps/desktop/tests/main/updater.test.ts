@@ -3922,4 +3922,209 @@ describe("desktop updater", () => {
     }
   });
 
+  it("ignores OS-managed artifacts (.DS_Store, Thumbs.db, desktop.ini) at an owned root", async () => {
+    const root = makeRoot();
+    try {
+      await writeFile(join(root, ".open-design-updater-root.json"), JSON.stringify({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        owner: "open-design-updater",
+        source: "tools-pack",
+        version: 1,
+      }));
+      await writeFile(join(root, "metadata.json"), JSON.stringify({ version: 1 }));
+      await writeFile(join(root, ".DS_Store"), "binary-finder-junk");
+      await writeFile(join(root, "Thumbs.db"), "binary-explorer-junk");
+      await writeFile(join(root, "desktop.ini"), "[.ShellClassInfo]");
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv("http://127.0.0.1:9/metadata.json"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const status = await updater.status();
+
+      expect(status.error?.code).not.toBe("update-store-invalid-shape");
+      expect(existsSync(join(root, ".DS_Store"))).toBe(true);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("still reports genuinely unexpected root entries alongside a harmless .DS_Store", async () => {
+    const root = makeRoot();
+    try {
+      await writeFile(join(root, ".open-design-updater-root.json"), JSON.stringify({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        owner: "open-design-updater",
+        source: "tools-pack",
+        version: 1,
+      }));
+      await writeFile(join(root, "metadata.json"), JSON.stringify({ version: 1 }));
+      await writeFile(join(root, ".DS_Store"), "binary-finder-junk");
+      await writeFile(join(root, "stray-file.bin"), "junk");
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv("http://127.0.0.1:9/metadata.json"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const status = await updater.status();
+
+      expect(status.error?.code).toBe("update-store-invalid-shape");
+      expect(status.error?.details).toMatchObject({ details: { unexpected: ["stray-file.bin"] } });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("makes the store failure terminal on a warm re-check after new artifacts appear", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ version: "99.0.0" });
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const first = await updater.checkForUpdates({ autoDownload: false });
+      expect(first.state).toBe(DESKTOP_UPDATE_STATES.AVAILABLE);
+      expect(first.availableVersion).toBe("99.0.0");
+
+      await writeFile(join(root, ".DS_Store"), "binary-finder-junk");
+      await writeFile(join(root, "stray-file.bin"), "junk");
+
+      const second = await updater.checkForUpdates({ autoDownload: false });
+      expect(second.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(second.error?.code).toBe("update-store-invalid-shape");
+      expect(second.error?.details).toMatchObject({ details: { unexpected: ["stray-file.bin"] } });
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("claims a fresh root that contains only OS-managed artifacts", async () => {
+    const root = makeRoot();
+    try {
+      await writeFile(join(root, ".DS_Store"), "binary-finder-junk");
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv("http://127.0.0.1:9/metadata.json"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const status = await updater.status();
+
+      expect(status.error).toBeUndefined();
+      expect(existsSync(join(root, ".open-design-updater-root.json"))).toBe(true);
+      expect(existsSync(join(root, "metadata.json"))).toBe(true);
+      expect(existsSync(join(root, ".DS_Store"))).toBe(true);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not extend the OS-artifact allowance to arbitrary directories such as a stray .git", async () => {
+    const root = makeRoot();
+    try {
+      await writeFile(join(root, ".open-design-updater-root.json"), JSON.stringify({
+        createdAt: "2026-01-01T00:00:00.000Z",
+        owner: "open-design-updater",
+        source: "tools-pack",
+        version: 1,
+      }));
+      await writeFile(join(root, "metadata.json"), JSON.stringify({ version: 1 }));
+      await writeFile(join(root, ".DS_Store"), "binary-finder-junk");
+      await mkdir(join(root, ".git"));
+      await mkdir(join(root, ".omc"));
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv("http://127.0.0.1:9/metadata.json"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const status = await updater.status();
+
+      expect(status.error?.code).toBe("update-store-invalid-shape");
+      const unexpected = (status.error?.details as { details?: { unexpected?: string[] } } | undefined)?.details
+        ?.unexpected;
+      expect(unexpected).toEqual(expect.arrayContaining([".git", ".omc"]));
+      expect(unexpected).not.toContain(".DS_Store");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("does not claim a fresh root whose only entry is a directory named .DS_Store", async () => {
+    const root = makeRoot();
+    try {
+      await mkdir(join(root, ".DS_Store"));
+      await writeFile(join(root, ".DS_Store", "hidden.txt"), "not actually OS litter");
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv("http://127.0.0.1:9/metadata.json"),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const status = await updater.status();
+
+      expect(status.error?.code).toBe("update-root-not-owned");
+      expect(existsSync(join(root, ".open-design-updater-root.json"))).toBe(false);
+      expect(existsSync(join(root, ".DS_Store", "hidden.txt"))).toBe(true);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  const symlinkOsArtifactIt = process.platform === "win32" ? it.skip : it;
+  symlinkOsArtifactIt(
+    "does not extend the OS-artifact allowance to a symlink named .DS_Store",
+    async () => {
+      const root = makeRoot();
+      const outside = makeRoot();
+      const outsideMarker = join(outside, "outside.txt");
+      try {
+        await writeFile(join(root, ".open-design-updater-root.json"), JSON.stringify({
+          createdAt: "2026-01-01T00:00:00.000Z",
+          owner: "open-design-updater",
+          source: "tools-pack",
+          version: 1,
+        }));
+        await writeFile(join(root, "metadata.json"), JSON.stringify({ version: 1 }));
+        await writeFile(outsideMarker, "outside", "utf8");
+        symlinkSync(outside, join(root, ".DS_Store"), "dir");
+
+        const updater = createDesktopUpdater({
+          arch: "arm64",
+          downloadRoot: root,
+          env: updaterEnv("http://127.0.0.1:9/metadata.json"),
+          source: SIDECAR_SOURCES.TOOLS_PACK,
+        });
+
+        const status = await updater.status();
+
+        expect(status.error?.code).toBe("update-store-invalid-shape");
+        const unexpected = (status.error?.details as { details?: { unexpected?: string[] } } | undefined)?.details
+          ?.unexpected;
+        expect(unexpected).toContain(".DS_Store");
+        expect(existsSync(outsideMarker)).toBe(true);
+      } finally {
+        rmSync(root, { force: true, recursive: true });
+        rmSync(outside, { force: true, recursive: true });
+      }
+    },
+  );
+
 });
