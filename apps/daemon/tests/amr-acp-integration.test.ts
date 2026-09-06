@@ -187,6 +187,7 @@ describe('AMR runtime def', () => {
     expect(normalizeVelaModelId('vela/deepseek-v3.2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('deepseek-v3-2')).toBe('deepseek-v3.2');
     expect(normalizeVelaModelId('vela/deepseek-v3-2')).toBe('deepseek-v3.2');
+    expect(normalizeVelaModelId('vela/public_model_kimi_k2_7_code')).toBe('kimi-k2.7-code');
   });
 
   it('parses `vela models` output with fast chat defaults and plain canonical labels', () => {
