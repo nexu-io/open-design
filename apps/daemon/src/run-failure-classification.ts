@@ -334,7 +334,7 @@ function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   // "the prompt does not fit" failure that currently leaks into execution_failed.
   // Claude Code's terminal result uses the distinct literal `Prompt is too
   // long`; keep it here as a fallback for persisted or legacy failures that
-  // do not carry the structured AGENT_PROMPT_TOO_LARGE code.
+  // do not carry the structured AGENT_PROMPT_TOO_LARGE code. See issue #6979.
   if (
     /\b(context window|context size (?:has been )?exceeded|prompt too large|prompt is too long|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
   ) {
