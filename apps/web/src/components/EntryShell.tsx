@@ -3554,6 +3554,12 @@ function OnboardingView({
 
   // Cloud remains the primary identity path. Local CLI and BYOK are independent
   // direct setup paths; authenticated users keep the full source chooser.
+  // INVARIANT: Cloud status loading (amrStatusResolving) blocks only the
+  // primary Cloud button. Local CLI / BYOK must remain enabled while
+  // signed-out so users can set up without Cloud authorization. Regression
+  // guard: e2e/ui/amr-onboarding.test.ts "Cloud status loading does not block
+  // signed-out Local CLI or BYOK setup" asserts primary disabled while alts
+  // are enabled during delayAllStatusMs.
   if (step === 0) {
     const cloudBusy = amrLoginBusy;
     const amrStatusResolving = !amrStatusResolved;
@@ -3650,9 +3656,11 @@ function OnboardingView({
               </button>
             ) : (
               <div className="onboarding-cloud__alts">
+                {/* INVARIANT: Local CLI / BYOK must NOT be disabled by amrStatusResolving — only the Cloud primary is gated by that. */}
                 <Button
                   variant="subtle"
                   className="onboarding-cloud__alt-btn"
+                  disabled={false}
                   onClick={() => {
                     emitOnboardingClick('local_coding_agent', 'select_runtime', {
                       runtime_type: 'local_cli',
@@ -3672,6 +3680,7 @@ function OnboardingView({
                 <Button
                   variant="subtle"
                   className="onboarding-cloud__alt-btn"
+                  disabled={false}
                   onClick={() => {
                     emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
                     setRuntime('byok');
