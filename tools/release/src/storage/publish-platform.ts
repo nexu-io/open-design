@@ -235,10 +235,15 @@ function targetConfig(): TargetConfig {
   }
 
   const appImage = `open-design-${releaseVersion}${assetSuffix}-linux-x64.AppImage`;
+  // Debian package sits alongside the AppImage as a sibling artifact key (same
+  // shape as mac's dmg+zip / win's installer+payload). prepare-platform-assets.sh
+  // stages it; the generic artifacts loop below exposes `deb_url` and
+  // publish-metadata aggregates it into platforms.linux.artifacts.deb.
+  const deb = `open-design-${releaseVersion}${assetSuffix}-linux-x64.deb`;
   return {
     arch: "x64",
-    assetNames: [appImage, `${appImage}.sha256`],
-    artifacts: { appImage: assetEntry(appImage) },
+    assetNames: [appImage, `${appImage}.sha256`, deb, `${deb}.sha256`],
+    artifacts: { appImage: assetEntry(appImage), deb: assetEntry(deb) },
     feed: null,
     label: "Linux x64",
     legacyPlatformKey: "linux",

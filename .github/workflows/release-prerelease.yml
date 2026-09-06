@@ -1343,6 +1343,24 @@ jobs:
           name: open-design-prerelease-linux-e2e-report
           path: ${{ runner.temp }}/release-report/linux_x64
           if-no-files-found: warn
+
+      # Debian package: separate build (deb-scoped productName is mutually
+      # exclusive with the AppImage's), sibling namespace so it does not wipe the
+      # AppImage output. prepare-platform-assets.sh stages it.
+      - name: Build prerelease linux deb
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack linux build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace release-prerelease-linux-deb \
+            --portable \
+            --app-version "$RELEASE_VERSION" \
+            --to deb \
+            --containerized \
+            --json
+
       - name: Prepare linux prerelease assets
         env:
           RELEASE_ASSET_SUFFIX: ""

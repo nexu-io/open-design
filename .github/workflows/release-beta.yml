@@ -1485,6 +1485,27 @@ jobs:
         if: ${{ always() }}
         run: cat "${{ runner.temp }}/release-report/linux_x64/summary.md" >> "$GITHUB_STEP_SUMMARY"
 
+      # Debian package: a second, separate build (the deb-scoped productName
+      # "OpenDesign" is mutually exclusive with the AppImage's "Open Design", so
+      # they cannot share one electron-builder run). Sibling namespace so it does
+      # not wipe the AppImage output. prepare-platform-assets.sh stages it.
+      - name: Build beta linux_x64 deb
+        if: ${{ inputs.publish }}
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          TOOLS_PACK_CACHE_DIR: ${{ runner.temp }}/tools-pack-cache
+        run: |
+          pnpm exec tools-pack linux build \
+            --dir "$TOOLS_PACK_DIR" \
+            --cache-dir "$TOOLS_PACK_CACHE_DIR" \
+            --namespace release-beta-linux-deb \
+            --portable \
+            --app-version "$RELEASE_VERSION" \
+            --to deb \
+            --containerized \
+            --json
+
       - name: Prepare linux_x64 assets
         if: ${{ inputs.publish }}
         env:

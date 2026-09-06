@@ -1042,6 +1042,24 @@ jobs:
           path: ${{ runner.temp }}/release-report/linux
           if-no-files-found: warn
 
+      # Debian package: separate build (deb-scoped productName is mutually
+      # exclusive with the AppImage's), sibling namespace so it does not wipe the
+      # AppImage output. prepare-platform-assets.sh stages it.
+      - name: Build release linux deb
+        env:
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          LINUX_NAMESPACE: ${{ needs.metadata.outputs.linux_namespace }}
+        run: |
+          set -euo pipefail
+          pnpm exec tools-pack linux build \
+            --dir "$RUNNER_TEMP/tools-pack" \
+            --namespace "${LINUX_NAMESPACE}-deb" \
+            --portable \
+            --app-version "$RELEASE_VERSION" \
+            --to deb \
+            --containerized \
+            --json
+
       - name: Prepare linux release assets
         env:
           RELEASE_ASSET_SUFFIX: ""
