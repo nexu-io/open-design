@@ -11131,6 +11131,7 @@ export async function startServer({
           const diff = diffRunArtifacts(
             artifactBaseline.before,
             afterSnapshot ?? snapshotProjectArtifacts(artifactBaseline.cwd),
+            artifactBaseline.cwd,
           );
           outcome = {
             artifactCount: diff.touched,

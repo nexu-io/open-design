@@ -16,18 +16,75 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { parsePersistedManifest } from './artifacts/manifest.js';
 import {
   isArtifactPath,
   isDesignSystemFile,
   isPreviewModulePath,
 } from './runtimes/run-artifacts.js';
 
+// Extensions that the legacy `isArtifactPath` set does not cover but which
+// OpenDesign projects ship as user-facing artifacts (Markdown briefs, DOCX
+// reports, etc.). When one of these files lives next to a valid
+// `<basename>.artifact.json` sidecar, the run-fingerprint counter must count
+// it as a created or modified artifact — otherwise an export-only run that
+// only delivers `fitcv-design-system-export.md` reports `artifactCount: 0`
+// and lifecycle validation flips to `no_artifact` (nexu-io/open-design#7579).
+const MANIFEST_BACKED_EXTENSIONS: ReadonlySet<string> = new Set(['.md', '.markdown', '.docx']);
+
+function isManifestBackedExtension(filePath: string): boolean {
+  return MANIFEST_BACKED_EXTENSIONS.has(extensionOf(filePath));
+}
+
+export const ARTIFACT_MANIFEST_SUFFIX = '.artifact.json';
+
+// True iff `<filePath>.artifact.json` exists next to `filePath` (NOT next to
+// the project root — see issue #7579 review feedback: nested Markdown / DOCX
+// files would silently miss their sidecar otherwise) and parses as a valid
+// persisted manifest.
+//
+// We delegate to `parsePersistedManifest` (the same canonical function the
+// persisted-artifact write path uses) so a sidecar with an unknown kind,
+// missing renderer, missing exports, or unsafe entry is NOT promoted to an
+// artifact. Anything `parsePersistedManifest` rejects is treated as a
+// non-artifact — which matches the lifecycle validator's `no_artifact`
+// semantics.
+export function isManifestBackedArtifactPath(
+  filePath: string,
+  rootDir: string,
+  options: { pathModule?: typeof path; fsModule?: typeof fs } = {},
+): boolean {
+  if (!isManifestBackedExtension(filePath)) return false;
+  const pathModule = options.pathModule ?? path;
+  const fsModule = options.fsModule ?? fs;
+  const sidecarPath = `${filePath}${ARTIFACT_MANIFEST_SUFFIX}`;
+  // Containment guard: keep a future caller that passes a free-form
+  // `filePath` from escaping the project tree. Snapshot keys always
+  // satisfy this invariant; the guard is defense-in-depth.
+  const sep = pathModule.sep;
+  const rootWithSep = rootDir.endsWith(sep) ? rootDir : `${rootDir}${sep}`;
+  if (!sidecarPath.startsWith(rootWithSep)) return false;
+  let raw: string;
+  try {
+    raw = fsModule.readFileSync(sidecarPath, 'utf8');
+  } catch {
+    return false;
+  }
+  return parsePersistedManifest(raw, pathModule.basename(filePath)) !== null;
+}
+
 // A file worth fingerprinting for run-finish bookkeeping: a user-facing
-// artifact (HTML / image / video / audio) OR a design-system marker
-// (`DESIGN.md`). Preview modules (`preview/*.html`) are already covered by the
-// artifact-extension check; they are classified at diff time.
-function isTrackedRunFile(name: string): boolean {
-  return isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name);
+// artifact (HTML / image / video / audio), a design-system marker
+// (`DESIGN.md`), OR a manifest-backed artifact whose extension is not in
+// `ARTIFACT_EXTENSIONS` (Markdown / DOCX — see issue #7579). Preview modules
+// (`preview/*.html`) are already covered by the artifact-extension check; they
+// are classified at diff time.
+function isTrackedRunFile(name: string, rootDir?: string): boolean {
+  if (isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name)) {
+    return true;
+  }
+  if (rootDir && isManifestBackedArtifactPath(name, rootDir)) return true;
+  return false;
 }
 
 const RENDER_DEPENDENCY_EXTENSIONS = new Set([
@@ -161,9 +218,16 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
-        const tracked = isTrackedRunFile(entry.name);
-        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
         const full = path.join(dir, entry.name);
+        // Pass the full native path so the manifest-backed check can resolve
+        // nested `<dir>/<file>.artifact.json` sidecars. Passing only
+        // `entry.name` would force `isTrackedRunFile` to probe the project
+        // root for every sidecar lookup, missing the sidecar in any nested
+        // directory. Walking the full path also makes the per-file cap
+        // decision the same for HTML / image / video / audio as for
+        // manifest-backed Markdown / DOCX.
+        const tracked = isTrackedRunFile(full, rootDir);
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
         try {
           const stat = fs.statSync(full);
           snapshot.set(
@@ -208,9 +272,12 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         await walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
-        const tracked = isTrackedRunFile(entry.name);
+        const full = path.join(dir, entry.name);
+        // See the matching comment in `snapshotProjectArtifacts`: pass the
+        // full native path so nested manifest sidecars resolve correctly.
+        const tracked = isTrackedRunFile(full, rootDir);
         if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
-        files.push({ full: path.join(dir, entry.name), tracked });
+        files.push({ full, tracked });
         if (tracked) trackedCount += 1;
         else otherCount += 1;
       }
@@ -305,9 +372,16 @@ export interface RunArtifactDiff {
 // artifact / design-system / preview-module signals the run_finished event
 // needs. Deletions are intentionally ignored: removing a file is not artifact
 // production.
+//
+// `rootDir` is the project root (the same `cwd` the snapshots were taken in).
+// It is used to detect manifest-backed artifacts whose extension is not in the
+// standard `ARTIFACT_EXTENSIONS` set (Markdown / DOCX) — see
+// nexu-io/open-design#7579. A `null` `rootDir` disables the manifest check
+// (legacy call sites where the project root is not available).
 export function diffRunArtifacts(
   before: ArtifactSnapshot,
   after: ArtifactSnapshot,
+  rootDir: string | null = null,
 ): RunArtifactDiff {
   let created = 0;
   let modified = 0;
@@ -338,10 +412,19 @@ export function diffRunArtifacts(
     ));
     // Snapshot keys are native paths (`path.join` → backslashes on Windows),
     // but `isPreviewModulePath` / `isDesignSystemFile` match forward slashes
-    // only. Normalize separators so the design-system / preview signals work on
-    // Windows project runs, not just POSIX.
+    // only. Normalize separators so the design-system / preview signals work
+    // on Windows project runs, not just POSIX.
     const classifyPath = filePath.replace(/\\/g, '/');
-    if (isArtifactPath(classifyPath)) {
+    // Manifest sidecar lives next to the file on disk. The sidecar predicate
+    // and its containment guard are native-path-only, so we must pass the
+    // native `filePath` (NOT the slash-normalized `classifyPath`) — on
+    // Windows the two diverge (`C:\proj\export.md` vs
+    // `C:/proj/export.md`) and the `startsWith` check would otherwise
+    // reject every valid sidecar under the project root. Slash-only
+    // classifiers (`isArtifactPath`, etc.) continue to use `classifyPath`.
+    const isManifestBacked =
+      rootDir !== null && isManifestBackedArtifactPath(filePath, rootDir);
+    if (isArtifactPath(classifyPath) || isManifestBacked) {
       if (isNew) created += 1;
       else modified += 1;
       touchedPaths.push(filePath);
@@ -349,7 +432,13 @@ export function diffRunArtifacts(
         if (isNew) contentCreated += 1;
         else contentModified += 1;
         contentTouchedPaths.push(filePath);
-        if (isSupportingMediaPath(classifyPath)) supportingMediaTouched += 1;
+        // Manifest-backed extensions are not in the supporting-media set, so
+        // the `isSupportingMediaPath` call only matters for the legacy
+        // artifact-extension branch. We gate it behind `isArtifactPath` to
+        // avoid surprising supporting-media accounting for `.md` / `.docx`.
+        if (isArtifactPath(classifyPath) && isSupportingMediaPath(classifyPath)) {
+          supportingMediaTouched += 1;
+        }
       }
     }
     if (contentChanged && isRenderDependencyPath(classifyPath)) {
