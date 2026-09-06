@@ -12838,10 +12838,26 @@ export async function startServer({
           })()
         : [];
     try {
-      // Optional argv flags are gated on the `--help` capability map, which used
-      // to be filled only by `GET /api/agents`. Probe it here so a daemon that
-      // has never served that route still builds the same argv as one that has.
-      await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
+      // Freeze the selected CLI version on the Run and populate the optional
+      // argv capability map before spawn. Probe both in parallel so a daemon
+      // that has never served `GET /api/agents` has the same provenance and
+      // argv behavior as one whose detection cache is already warm.
+      const [runtimeVersions] = await Promise.all([
+        ensureDetectedRuntimeVersions(def.id, configuredAgentEnv, agentLaunch),
+        ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv, agentLaunch),
+      ]);
+      if (run.cancelRequested || design.runs.isTerminal(run.status)) {
+        lifecycle.mark('launch_preflight_end');
+        antigravityModelLockRelease?.();
+        antigravityModelLockRelease = null;
+        cleanupPromptFile();
+        cleanupOdNextRunInputProjection();
+        return;
+      }
+      if (!run.preflightAgentCliVersion && runtimeVersions?.agentCliVersion) {
+        run.preflightAgentCliVersion = runtimeVersions.agentCliVersion;
+        design.runs.persistState(run);
+      }
       args = def.buildArgs(
         composed,
         promptImagePaths,

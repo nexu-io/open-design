@@ -7,7 +7,11 @@ import {
   mergeFallbackModelMetadata,
   rememberLiveModels,
 } from './models.js';
-import { applyAgentLaunchEnv, resolveAgentLaunch } from './launch.js';
+import {
+  applyAgentLaunchEnv,
+  resolveAgentLaunch,
+  type AgentLaunchResolution,
+} from './launch.js';
 import { spawnEnvForAgent } from './env.js';
 import { probeAgentAuthStatus } from './auth.js';
 import { agentCapabilities } from './capabilities.js';
@@ -91,11 +95,12 @@ export function getDetectedRuntimeVersions(
 export async function ensureDetectedRuntimeVersions(
   agentId: string | null | undefined,
   configuredAgentEnv: Record<string, string> = {},
+  launch?: AgentLaunchResolution,
 ): Promise<DetectedRuntimeVersions | null> {
   if (!agentId) return null;
   const def = AGENT_DEFS.find((candidate) => candidate.id === agentId);
   if (!def) return null;
-  const context = runtimeVersionProbeContext(def, configuredAgentEnv);
+  const context = runtimeVersionProbeContext(def, configuredAgentEnv, launch);
   if (!context) return null;
   const remembered = getDetectedRuntimeVersions(agentId);
   if (
@@ -137,11 +142,12 @@ export async function ensureDetectedRuntimeVersions(
 export async function ensureDetectedRuntimeCapabilities(
   agentId: string | null | undefined,
   configuredAgentEnv: Record<string, string> = {},
+  launch?: AgentLaunchResolution,
 ): Promise<RuntimeCapabilityMap | null> {
   if (!agentId) return null;
   const def = AGENT_DEFS.find((candidate) => candidate.id === agentId);
   if (!def) return null;
-  const context = runtimeVersionProbeContext(def, configuredAgentEnv);
+  const context = runtimeVersionProbeContext(def, configuredAgentEnv, launch);
   if (!context) return null;
   const remembered = agentCapabilities.get(agentId);
   if (
@@ -394,8 +400,9 @@ type RuntimeVersionProbeContext = {
 function runtimeVersionProbeContext(
   def: RuntimeAgentDef,
   configuredEnv: Record<string, string>,
+  capturedLaunch?: AgentLaunchResolution,
 ): RuntimeVersionProbeContext | null {
-  const launch = resolveAgentLaunch(def, configuredEnv);
+  const launch = capturedLaunch ?? resolveAgentLaunch(def, configuredEnv);
   if (!launch.selectedPath || !launch.launchPath) return null;
   const probeEnv = applyAgentLaunchEnv(
     spawnEnvForAgent(
