@@ -15982,6 +15982,18 @@ export async function startServer({
           if (err && err.code !== 'EPIPE') throw err;
         }
         run.stdinOpen = true;
+      } else if (promptInputFormat === 'deepseek-stream-json') {
+        // Serialize prompt into the flat schema expected by the DeepSeek CLI
+        const deepseekMessage = JSON.stringify({
+          type: 'user',
+          content: composed,
+        });
+        try {
+          child.stdin.write(`${deepseekMessage}\n`, 'utf8', markStdinWriteEnd);
+        } catch (err) {
+          if (err && err.code !== 'EPIPE') throw err;
+        }
+        run.stdinOpen = true;
       } else {
         // Split write + close so the boolean backpressure signal survives —
         // see writePromptAndEndStdin for why `end(chunk)` cannot report it.
