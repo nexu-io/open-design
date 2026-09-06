@@ -174,6 +174,19 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   );
   const autoContinuedRef = useRef(false);
   const locked = !interactive || !onSubmit || submittedAnswers !== undefined;
+  /*
+   * 「已回答」是一句关于**用户做过什么**的陈述 —— 只有真的解析到提交答案才兑现。
+   *
+   * `locked` 说的是另一件事:这张表**现在收不了提交**。它有三种来路,其中两种
+   * (不是最后一条助手消息、宿主根本不收提交)跟用户答没答过毫无关系。
+   * 两句话过去共用 `locked`,于是一把锁上去就替用户宣布他答过了 ——
+   * OPEND-2644 里宿主在问卷后面补发一条记忆卡,问卷一个字没答就挂上了「已回答」,
+   * 连表单自带的默认选项都被当成「他确认过的答案」。
+   *
+   * 底部那句说明早就分好了两档(`qf.lockedSubmitted` / `qf.lockedPrev`),
+   * 卡头这一枚跟上。
+   */
+  const answered = submittedAnswers !== undefined;
   // Submitted answers are held by the host in their original wire format.
   // Use the normalized snapshot for rendering so legacy tone values select
   // the same visual card that a new submission will send.
@@ -718,7 +731,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
           </span>
         ) : null}
         {pickedCount > 0 ? <PickedCount t={t} count={pickedCount} /> : null}
-        {locked ? <span className="question-form-pill">{t('qf.answered')}</span> : null}
+        {answered ? <span className="question-form-pill">{t('qf.answered')}</span> : null}
         {/*
           倒计时在【卡头右上】,不在底栏 —— 稿子 `729fa43ce7` 新加的那一处:
             <div class="h">…<b>先定个视觉方向</b>
@@ -2938,11 +2951,21 @@ function AnsweredSummary({
  * 判据因此是**答案本身是不是一个值** —— 色值或数字 —— 而不是「这一格有没有色块」。
  * 按色块判会把数值那一半漏掉:它没有色块,却同样是一个跟标签并排的短值。
  */
-function isShortValueAnswer(item: QuestionFormAnsweredSummary['items'][number]): boolean {
+export function isShortValueAnswer(item: QuestionFormAnsweredSummary['items'][number]): boolean {
   return item.swatch !== undefined || item.numeric === true;
 }
 
-function AnsweredValue({ item }: { item: QuestionFormAnsweredSummary['items'][number] }) {
+/**
+ * 一条已确认答案的值,**唯一**的一处画法。
+ *
+ * 导出是判据的一部分,不是顺手:「已确认」这块有两个渲染方 —— 这里的
+ * {@link AnsweredSummary},和 `AssistantMessage` 里 `FormBlock` 的历史回放块。
+ * 产线上用户看到的是**后者**(`submittedAnswers` 这个 prop 没有产线调用点),
+ * 所以只要两边各写各的 `<b>{value}</b>`,给一边加的东西就到不了用户屏幕上 ——
+ * OPEND-2579 修的色块正是这么丢的,复测成了 OPEND-2642。
+ * 两边都从这里取值,那条缝就不存在了。
+ */
+export function AnsweredValue({ item }: { item: QuestionFormAnsweredSummary['items'][number] }) {
   if (!item.swatch) return <b>{item.value}</b>;
   return (
     <span

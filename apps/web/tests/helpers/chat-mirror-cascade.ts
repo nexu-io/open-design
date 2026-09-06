@@ -391,6 +391,14 @@ export function expand(prop: string, value: string): Array<[string, string]> {
     case 'box-shadow':
     case 'white-space':
     case 'overflow-wrap':
+    /*
+     * `scrollbar-gutter` 是 OPEND-2643(思考过程的滚动条压在正文上)加进来的。
+     * 那条缺陷的病根同样是层叠:`.fold .body.scroll` 里那句「留一点气口」的
+     * `padding-inline-end` 被 (0,5,0) 的 `padding: var(--stream-pad)` 简写整条盖掉,
+     * 规则文本一个字没错,只有谁赢决定正文右边到底留没留出滚动条的位置。
+     * 加进来之前它读回 `<unset>`,任何「断言它是 stable」都会假绿。
+     */
+    case 'scrollbar-gutter':
       return [[prop, v]];
     default:
       return [];

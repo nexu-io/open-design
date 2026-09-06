@@ -71,6 +71,8 @@ import {
 } from "@open-design/contracts";
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
 import {
+  AnsweredValue,
+  isShortValueAnswer,
   parseSubmittedAnswers,
   QuestionFormView,
   summarizeQuestionFormAnswers,
@@ -3266,6 +3268,23 @@ function ProseBlock({
   );
   const segments = useMemo(() => splitOnQuestionForms(head), [head]);
   /**
+   * 这条消息里的问卷**还收不收提交**。
+   *
+   * 判据是「用户有没有从这张表走过去」—— 也就是这条消息之后用户还说没说过话
+   * (`nextUserContent`,由 `ChatPane` 按「下一条 user 消息」配对给出)。说过了,
+   * 这张表就是历史,重新答它会把一段错位的答案发给已经往下走的会话;没说过,
+   * 它仍然是悬着的那一问,不管后面还排了多少条消息。
+   *
+   * ⚠️ 原来这里直接写 `interactive={isLastAssistant}`,拿「是不是最后一条助手
+   * 消息」当那个判据。两者绝大多数时候一致,直到宿主在一轮结束后自己补发一条
+   * 助手消息(`ProjectView` 的 memory-applied 记忆卡)—— 问卷不再是最后一条,
+   * 于是一个字都没答就被锁住、还被标成「已回答」(OPEND-2644)。
+   *
+   * `isLastAssistant` 仍然留在或的前半:流式当轮里 `nextUserContent` 本来就是空的,
+   * 两半同时成立,它是判据的一个特例,不是替代品。
+   */
+  const questionFormAnswerable = isLastAssistant || nextUserContent === undefined;
+  /**
    * 逐字化开(W9):稿子把流式光标删了,新到的字自己化开就是流式的样子。
    * 判据挂在「这是最后一条且还在流」上 —— 历史消息重渲染时不能再化开一遍。
    */
@@ -3366,7 +3385,7 @@ function ProseBlock({
             projectId={projectId}
             conversationId={conversationId}
             nextUserContent={nextUserContent}
-            interactive={isLastAssistant}
+            interactive={questionFormAnswerable}
             onSubmit={onSubmitQuestionForm}
             submitDisabled={questionFormSubmitDisabled}
             strategyBlockedNotice={strategyBlockedNotice}
@@ -3726,6 +3745,14 @@ function FormBlock({
        *
        * 类名与 `QuestionForm` 里的 `AnsweredSummary` 共用(`.answered / .k / .ab / .ak / .al / .av`),
        * 两条路径(历史回放 vs 当轮提交)长得一样,不再各画一套。
+       *
+       * ⚠️ 「长得一样」曾经只是**说**的:一行答案的值,这里自己写过一遍
+       * `<b>{value}</b>`,于是给另一边加的色块到不了这里 —— 那正是
+       * OPEND-2579 修完、复测又开出 OPEND-2642 的原因。而**产线上用户看到的
+       * 就是这一块**(`QuestionFormView` 的 `submittedAnswers` 没有产线调用点),
+       * 所以缝开在这边等于修了个没人看见的地方。
+       * 现在值一律走共用的 `AnsweredValue` / `isShortValueAnswer`,
+       * 别再在这里内联一份画法。
        */
       <div
         className="answered"
@@ -3738,16 +3765,16 @@ function FormBlock({
           <div className="ab">{t("qf.lockedSubmitted")}</div>
         ) : null}
         {single ? (
-          <div className="ab">
+          <div className={`ab${isShortValueAnswer(flat[0]!) ? " mod-value" : ""}`}>
             <span className="ak">{flat[0]!.label}</span>
-            <b>{flat[0]!.value}</b>
+            <AnsweredValue item={flat[0]!} />
           </div>
         ) : flat.length > 0 ? (
           <ul className="al">
             {flat.map((item) => (
               <li key={`${item.label}-${item.value}`}>
                 <span className="ak">{item.label}</span>
-                <b>{item.value}</b>
+                <AnsweredValue item={item} />
               </li>
             ))}
           </ul>

@@ -1659,6 +1659,51 @@
 .fold .body.scroll {
   max-height: 96px;
   overflow-y: auto;
-  /* 越界的字贴着滚动条,留一点气口(限高之前它靠 body 自己的右内距) */
-  padding-inline-end: 4px;
+  /*
+   * ── 滚动条**自己一条车道**,不许画到字上(OPEND-2643)────────────────
+   *
+   * 这里原来写的是 `padding-inline-end: 4px`,注释说「越界的字贴着滚动条,留一点
+   * 气口」。那句话**从来没生效过**:这条规则是 (0,3,0),而灰底容器那两条
+   *   `.fold[open] > summary + .body.stream`          (0,4,0)
+   *   `.fold.thoughts[open] > summary + .body.stack`  (0,5,0)
+   * 写的是 `padding: var(--stream-pad)` —— **四边全给的简写**。逻辑长手和物理简写
+   * 按同一份层叠算,所以右边留的一直是容器那 8px,4px 这句是死码。
+   * (量出来的判据在 `tests/components/chat/opend-2643-thinking-scrollbar-gutter.test.tsx`
+   *  第二条 —— 它钉的是「谁赢」,不是某个字面值。)
+   *
+   * 而 8px 也不够,因为它根本不是「让位」:Chromium 在 macOS 默认用**覆盖式
+   * (overlay)滚动条**,不占布局、直接画在 padding box 的右缘上,悬停/拖动还会
+   * 变宽 —— 正文的右边缘就在那 8px 里,于是滚动条压住最右侧的字(工单截图)。
+   *
+   * 两件事一起做才收得住:
+   *
+   *  1. `::-webkit-scrollbar` 给一个**显式宽度**。Blink 一旦看到这只盒子有自定义
+   *     滚动条,就不再给它覆盖式的那一套,滚动条变成占布局的经典滚动条 ——
+   *     它占掉的宽度从内容盒里扣,字**不可能**再被盖住。这是根治那一步。
+   *  2. `scrollbar-gutter: stable` 把车道**一直**留着。思考是边想边追加的,
+   *     内容一超过 96px 滚动条就冒出来;没有这一条,正文会在那一刻横跳一次
+   *     (工单里「内容持续追加」那半)。
+   *     顺带:gutter 不是 padding,上面那两条简写抢不走它。
+   *
+   * ⚠️ **不要**在这只盒子上加 `scrollbar-width` / `scrollbar-color`。Chromium 121
+   * 起,这两个标准属性一旦给了非 `auto` 的值,`::-webkit-scrollbar` 那一套整体
+   * 失效 —— 第 1 步会被静默撤销,盒子退回系统的覆盖式滚动条,缺陷原样回来。
+   * 不写它们在两个引擎上都是安全的:Gecko 没有覆盖式滚动条,默认那根本来就占布局。
+   */
+  scrollbar-gutter: stable;
+}
+.fold .body.scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.fold .body.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.fold .body.scroll::-webkit-scrollbar-thumb {
+  /* 车道 8px,拇指靠 2px 透明边收成 4px 居中 —— 和字之间因此还剩一段空,
+     不是「贴着」。同 `styles/home/entry-layout.css` 的
+     `.onboarding-view__select-options` 那套写法。 */
+  border: 2px solid transparent;
+  border-radius: var(--chat-radius-pill);
+  background: color-mix(in srgb, var(--chat-text-muted) 30%, transparent);
+  background-clip: padding-box;
 }

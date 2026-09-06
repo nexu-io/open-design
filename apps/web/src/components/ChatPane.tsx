@@ -2377,16 +2377,35 @@ export function ChatPane({
     !displayError &&
     !hasActiveRunMessage &&
     displayMessages.length > 0;
-  // Map each assistant message id to the user message that follows it (if any)
-  // so structured form replies collapse into a readable summary on the
-  // assistant message that asked them.
+  /*
+   * 每条助手消息 → **它之后用户说的下一句话**(没有就不进表)。
+   *
+   * 这张表回答的是同一个问题的两半:「这条消息问出去的表单,用户答了没有」
+   * (`FormBlock` 拿它解析出答案、收成「已确认」摘要),以及「用户有没有从这里
+   * 走过去」(`AssistantMessage` 的 `hasPendingQuestionForm` / 表单可否交互)。
+   *
+   * ⚠️ 判据是**下一条 user 消息**,不是「紧挨着的下一条消息」。
+   * 老写法是 `if (m.role === 'assistant' && next.role === 'user')` —— 只认物理相邻。
+   * 一轮结束后宿主还会自己补发助手消息(`ProjectView` 的 memory-applied 记忆卡、
+   * brand-browser-assist 卡),它们插在中间,配对就整条断了:用户明明答了,
+   * 问卷那条消息却看不见自己的答案,永远收不成摘要(OPEND-2644)。
+   * 中间隔着几条助手消息不改变「用户下一句说了什么」这个事实,所以从后往前扫,
+   * 把最近一次看到的 user 正文一路发给它上面的助手消息。
+   *
+   * 放宽配对**不会**凭空造出答案:`parseSubmittedAnswers` 只认
+   * `[form answers — <id>]` 开头、且标签对得上的文本,用户随口说的话解析回 null。
+   */
   const nextUserContentByAssistantId = useMemo(() => {
     const map = new Map<string, string>();
-    for (let i = 0; i < displayMessages.length - 1; i++) {
+    let nextUserContent: string | undefined;
+    for (let i = displayMessages.length - 1; i >= 0; i--) {
       const m = displayMessages[i]!;
-      const next = displayMessages[i + 1]!;
-      if (m.role === 'assistant' && next.role === 'user') {
-        map.set(m.id, next.content);
+      if (m.role === 'user') {
+        nextUserContent = m.content;
+        continue;
+      }
+      if (m.role === 'assistant' && nextUserContent !== undefined) {
+        map.set(m.id, nextUserContent);
       }
     }
     return map;
