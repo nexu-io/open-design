@@ -55,6 +55,36 @@ describe('settings polish CSS', () => {
     expect(ruleValue(content, 'z-index')).toBe('1');
   });
 
+  it('shows the full skill description when its row is expanded', () => {
+    const collapsed = cssBlock(
+      expandedIndexCss,
+      '.settings-skills .skills-row-summary-desc',
+    );
+    const expandedHead = cssBlock(
+      expandedIndexCss,
+      '.settings-skills .skills-row-expanded .skills-row-head',
+    );
+    const expandedButton = cssBlock(
+      expandedIndexCss,
+      '.settings-skills .skills-row-expanded .skills-row-summary-btn',
+    );
+    const expanded = cssBlock(
+      expandedIndexCss,
+      '.settings-skills .skills-row-expanded .skills-row-summary-desc',
+    );
+
+    expect(ruleValue(collapsed, 'overflow')).toBe('hidden');
+    expect(ruleValue(collapsed, 'text-overflow')).toBe('ellipsis');
+    expect(ruleValue(collapsed, 'white-space')).toBe('nowrap');
+    expect(ruleValue(expandedHead, 'align-items')).toBe('flex-start');
+    expect(ruleValue(expandedButton, 'align-items')).toBe('flex-start');
+    expect(ruleValue(expandedButton, 'height')).toBe('auto');
+    expect(ruleValue(expanded, 'overflow')).toBe('visible');
+    expect(ruleValue(expanded, 'text-overflow')).toBe('clip');
+    expect(ruleValue(expanded, 'white-space')).toBe('normal');
+    expect(ruleValue(expanded, 'overflow-wrap')).toBe('anywhere');
+  });
+
   it('keeps the silent-update checkbox native-sized and aligned horizontally', () => {
     const row = cssBlock(artifactsCss, '.settings-about-diagnostics > .settings-about-toggle');
     const checkbox = cssBlock(artifactsCss, '.settings-about-toggle input');
