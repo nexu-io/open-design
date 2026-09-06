@@ -56,6 +56,45 @@
 - [ ] 聚焦浏览器证据改由远端执行，避免占用本机：`functional-e2e` p0p1 run `33366584600` 覆盖 AMR recovery、workspace restoration 与 Question Form；顺序生图与 Queue witness 仍需单独补齐。首个 run `33366389708` 仅因调度时误传短 SHA 导致 checkout 失败，没有执行测试，不计为产品失败。
 - [x] beta.7 新项目硬刷新曾出现一次 `Minified React error #185`；beta.8 已对精确 project / history 会话连续硬刷新 10 次，renderer 未新增 #185，当前无法复现并以新包证据关闭。
 - [x] beta.7 `od_next_protocol_runtime_state_missing` 已完成归因：QA 探针要求“只回复一句”，但 Home 固定 `sessionMode=design` 并自动进入 OD Next full-plan；run / transport 实际 succeeded，失败卡来自策略协议 fail-closed。此探针不用于证明 cold send；不隐藏失败卡、不做关键词猜测。未来若要支持 Design 模式纯问答，需显式 structured intent，作为独立产品设计而非本次尾项。
+- [ ] **上面那条裁决的边界已量清,并挖出一条它盖不住的真缺陷(2026-09-07 复查)。**
+  为了把「纯问答被判失败」钉成可回归的形状,在 `apps/daemon/tests/strategies/od-next/coordinator.test.ts`
+  写了一条红测(**故意留红、未提交**),复现现场:task `odnext_c4ee010be6b748dc9b92984946bc10a8`,
+  run `e5d6181b-1705-4a44-964b-cdcb3fbcb6ac`。判定链逐跳查清:
+  `protocol.ts:233-238` 零个 runtime block → `coordinator.ts:351-380` 三条免阻塞推断依次拒绝,
+  真正的判定点是 `inferDirectEditCompletionRuntimeState`(`:642-663`)卡在 `:651-654` 的
+  `completionEvidence.deliverableValid !== true` → `tryBeginSerializationRepair` 在 `:877`
+  因无 Plan Contract 退出 → 终态 blocked、sticky。
+  **那个校验不该删**:它的 docblock 写明推断 `completed` 只能靠磁盘上解析出来的证据,
+  "so a silent no-op can never be laundered into a completed task",由 `coordinator.test.ts:1712`
+  的 `refuses to infer a Direct Edit completion without verified physical delivery` 守着。
+  **实测证明两者互斥**:放开 `deliverableValid` 要求后红测转绿、那条既有绿测立刻转红 ——
+  两条 fixture 除了 agent 那段散文**输入完全相同**(`completionEvidence` 一模一样),
+  coordinator 手上没有任何信息能分开「用户只要文字」和「用户要页面但 agent 光说不做」。
+  唯一剩下的杠杆是按散文内容猜,而那正是上一条裁决点名禁止的。
+  **结论:红测断言的是「还没设计的产品行为」,不是缺陷。** 要么产品给出纯问答的显式
+  structured intent 落地形态(intent 长什么样、用哪个 outcome、`strategyTaskDelivered` 怎么算),
+  要么这条红测改成 pending 并挂到那个独立设计上。**待产品拍板。**
+- [ ] **⚠️ 同一个坑里还有一条真缺陷,不在上面那条裁决的覆盖范围内:**
+  **真干了活、但不产生新 artifact 的 Direct Edit** —— 删文件、改名、只读审计,或者这一轮的
+  artifact 记账没算上的编辑。`validateRunDeliverable` 一律给 `no_artifact`
+  (`apps/daemon/src/run-deliverable-validation.ts:164-166`),于是 `deliverableValid: false`,
+  走进和纯问答一模一样的终态 blocked。**但这里用户明确要的是改动,agent 也确实做了** ——
+  和「纯问答没交付物」是两件事,**它是缺陷,该单独立项**。
+- [ ] 同一条链上另外三种合法产出也会掉进去(只记录,未动):一轮里合法地问**两个**问卷
+  (`inferClarificationRuntimeState` 卡死在「正好 1 个」,`coordinator.ts:683`);澄清阶段先用散文
+  思考(`coordinator.test.ts:1550` 已把它钉成 blocked);complex 模式的 production 轮交付了但没声明
+  (`coordinator.ts:595` 显式只认 `simple`,有注释说明是有意的)。
+- [ ] **规范自相矛盾,措辞该收敛**:`plugins/_official/scenarios/od-next-strategy/assets/general-orchestration.md:496`
+  说 `clarification_required` 那轮「no machine-contract block is output」,而
+  `packages/contracts/src/prompts/od-next-strategy.ts:752` 说「Emit exactly one Runtime State block
+  on every response」。daemon 站在后者,靠 `inferClarificationRuntimeState` 把前者兜住。
+- [ ] **前端那条重映射不用单独改**:`apps/web/src/providers/daemon.ts:2224-2247` 只在
+  `outcome === 'blocked'` 时才把 succeeded 的 Run 改写成 failed,daemon 侧一旦不判 blocked 就进不去;
+  `ProjectView.tsx:601` 的 `localBlockedTurnVerdictUnknownToServer` 同理(要 `strategyTaskBlocked`)。
+  ⚠️ **反过来不能只改前端**:把 `deliveredDespiteBlock` 扩到覆盖 `no_artifact` 等于「隐藏失败卡」,
+  正是裁决禁止的,而且会和任务中心对不上(那边 `delivered` 读的是 `outcome === 'completed'`)。
+- [ ] **只有翻现场持久化事件才能定死的一点**:那次 run 到底是**一个 runtime-state block 都没发**,
+  还是**发了一个被解析器拒掉的**。若是后者,根因完全是另一条(走 repair 路径),修法也不同。
 - [x] beta.7 次级日志已排除当前链路影响：`update-store-invalid-shape` 来自 release-beta 历史非空 update store 缺 metadata，可通过现有 Clear update cache 恢复；test Vela `/api/v1/resources` TLS timeout 属 catalog 外部网络波动。两者均未阻塞 cold first output、AMR test 余额或文件打开。
 
 ### C. 工程收口
