@@ -2431,6 +2431,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       attachments: ReturnType<typeof seededUserMessageAttachmentFields>;
       turnMetadata: ReturnType<typeof seededUserMessageTurnMetadataFields>;
     } | null = null;
+    // Normalized attachment fields — the same seed source the user-message
+    // seeding below uses, so the promptless-run gate judges exactly the
+    // values that survive normalization (not raw request fields).
+    const normalizedAttachments = seededUserMessageAttachmentFields(meta);
+    const hasSeedableAttachmentMetadata =
+      (normalizedAttachments.attachments?.length ?? 0) > 0 ||
+      (normalizedAttachments.commentAttachments?.length ?? 0) > 0;
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
@@ -2449,10 +2456,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // message is still seedable when attachment metadata is present so
       // chips/annotations survive reload for omit-pin clients that leave
       // currentPrompt unset.
-      const seededAttachments = seededUserMessageAttachmentFields(meta);
-      const hasSeedableAttachmentMetadata =
-        (seededAttachments.attachments?.length ?? 0) > 0 ||
-        (seededAttachments.commentAttachments?.length ?? 0) > 0;
+      const seededAttachments = normalizedAttachments;
       const originalCurrentPrompt = requestBody.currentPrompt;
       const originalMessage = requestBody.message;
       const promptForUserMessage =
@@ -2474,6 +2478,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ),
         };
       }
+    }
+    // #7040 — reject promptless runs before a run row is minted. The gate
+    // judges the values that actually survive normalization and resolution:
+    // the effective prompt (plugin runs get meta.message replaced by the
+    // rendered brief), the normalized attachment seed, and the resolved
+    // plugin snapshot. Raw request fields alone never pass this gate.
+    const hasPrompt =
+      (typeof meta.message === 'string' && meta.message.trim().length > 0)
+      || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
+    if (!hasPrompt && !hasSeedableAttachmentMetadata && !resolvedSnapshot?.ok) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        'run requires a non-empty message, attachments, or a plugin',
+      );
     }
     const seedRunUserMessage = () => {
       if (!runUserSeed) return;
