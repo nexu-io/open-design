@@ -174,7 +174,8 @@ export type TrackingByokProviderId =
   | 'google_gemini'
   | 'ollama_cloud'
   | 'senseaudio'
-  | 'aihubmix';
+  | 'aihubmix'
+  | 'aimlapi';
 
 // v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
 // `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer

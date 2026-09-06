@@ -536,6 +536,31 @@ describe('streamViaDaemon', () => {
     expect(transcript).toContain('make the second step clearer');
   });
 
+  // ProjectView stamps API-mode assistant turns with apiProtocolAgentId(protocol)
+  // and then routes the run through the BYOK OpenCode agent. An id missing from
+  // API_MODE_AGENT_IDS reads as a foreign agent, so scopeHistoryToAgent drops
+  // everything before it and turn 2 ships only the latest user message — the
+  // model silently loses the conversation it just had.
+  it('keeps aimlapi.com API-mode assistant context when routing through BYOK OpenCode', () => {
+    const transcript = buildDaemonTranscript(
+      [
+        { id: '1', role: 'user', content: 'draft the registration flow' },
+        {
+          id: '2',
+          role: 'assistant',
+          content: 'aimlapi response with design decisions',
+          agentId: 'aimlapi-api',
+        },
+        { id: '3', role: 'user', content: 'make the second step clearer' },
+      ],
+      'byok-opencode',
+    );
+
+    expect(transcript).toContain('draft the registration flow');
+    expect(transcript).toContain('aimlapi response with design decisions');
+    expect(transcript).toContain('make the second step clearer');
+  });
+
   it('extracts only the latest user prompt for telemetry', () => {
     expect(
       latestUserPromptFromHistory([

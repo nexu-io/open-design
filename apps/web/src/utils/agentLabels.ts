@@ -24,6 +24,7 @@ const AGENT_LABELS: Record<string, string> = {
   'ollama-cloud-api': 'Ollama Cloud API via OpenCode',
   'senseaudio-api': 'SenseAudio API via OpenCode',
   'aihubmix-api': 'AIHubMix API via OpenCode',
+  'aimlapi-api': 'aimlapi.com API via OpenCode',
   'bedrock-api': 'AWS Bedrock via OpenCode',
 };
 

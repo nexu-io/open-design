@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
+import { BYOK_OPENCODE_AGENT_ID } from './runtimes/byok-opencode.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
 import { runResource } from './resource-cli.js';
@@ -250,6 +251,14 @@ const PROJECT_STRING_FLAGS = new Set([
   'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
   'source',
+  // `od run start --byok-provider-file <path|->`: the headless-CLI half of
+  // the web BYOK provider snapshot (Settings) — same `<path|->` idiom as
+  // --prompt-file, JSON-parsed as ByokChatProviderConfig. Without this, a
+  // BYOK-only protocol (a native provider with no env-var credential the
+  // daemon can pick up on its own — currently aimlapi) is reachable from
+  // Settings but not from `od`, breaking the dual-track capability-exposure
+  // rule for that protocol.
+  'byok-provider-file',
 ]);
 const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   ...PROJECT_STRING_FLAGS,
@@ -6944,6 +6953,50 @@ async function readRunMessageFromFlags(flags, fallback = null) {
   return fallback;
 }
 
+// `--byok-provider-file <path|->`: the headless-CLI counterpart to the web
+// BYOK Settings form, parsed as ByokChatProviderConfig and forwarded as
+// `byokProvider` on the /api/runs POST body (routes/runs.ts already reads
+// requestBody.byokProvider — this just closes the CLI-side gap for
+// protocols the daemon can't otherwise pick up credentials for, e.g.
+// aimlapi). Same `<path|->` stdin-or-file idiom as --prompt-file so a
+// secret never has to land on the command line / shell history.
+async function readByokProviderFromFlags(flags) {
+  const raw = flags['byok-provider-file'];
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  let text;
+  if (raw === '-') {
+    text = await new Promise((resolve, reject) => {
+      let buf = '';
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', (chunk) => { buf += chunk; });
+      process.stdin.on('end', () => resolve(buf));
+      process.stdin.on('error', reject);
+    });
+  } else {
+    const { readFile } = await import('node:fs/promises');
+    text = await readFile(raw, 'utf8');
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    console.error(`--byok-provider-file must contain valid JSON: ${err.message}`);
+    process.exit(2);
+  }
+  if (
+    !parsed
+    || typeof parsed !== 'object'
+    || typeof parsed.protocol !== 'string'
+    || typeof parsed.apiKey !== 'string'
+  ) {
+    console.error(
+      '--byok-provider-file must be a JSON object with at least { "protocol": "...", "apiKey": "..." } (ByokChatProviderConfig)',
+    );
+    process.exit(2);
+  }
+  return parsed;
+}
+
 async function postJsonToDaemon(base, route, body, headers = {}) {
   let resp;
   try {
@@ -7659,6 +7712,9 @@ async function runRun(args) {
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
                [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
+               [--byok-provider-file <path|->] (JSON ByokChatProviderConfig — BYOK-only
+                                                protocols, e.g. aimlapi, have no other
+                                                CLI-reachable credential path)
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
@@ -7888,6 +7944,18 @@ Common options:
         console.error('--project <projectId> is required');
         process.exit(2);
       }
+      // --prompt-file - and --byok-provider-file - both read process.stdin to
+      // EOF via their own 'data'/'end' listeners. Node only emits 'end' once;
+      // whichever reader runs second attaches after stdin has already ended
+      // and its promise never settles — the process hangs instead of making
+      // the request. Reject the combination up front instead of guessing
+      // which one the caller meant to come from a real file.
+      if (flags['prompt-file'] === '-' && flags['byok-provider-file'] === '-') {
+        console.error(
+          '--prompt-file - and --byok-provider-file - cannot both read from stdin; point one of them at a real file path instead.',
+        );
+        process.exit(2);
+      }
       const body = { projectId: flags.project };
       if (flags.conversation) body.conversationId = flags.conversation;
       const message = await readRunMessageFromFlags(flags);
@@ -7917,6 +7985,30 @@ Common options:
       if (flags['snapshot-id']) body.appliedPluginSnapshotId = flags['snapshot-id'];
       if (flags['task-execution']) body.taskExecutionId = flags['task-execution'];
       if (flags['client-request-id']) body.clientRequestId = flags['client-request-id'];
+      const byokProvider = await readByokProviderFromFlags(flags);
+      if (byokProvider) {
+        // The run route only honors byokProvider when agentId is literally
+        // 'byok-opencode' (hasCompleteByokOpenCodeConfig in routes/runs.ts
+        // treats every other agent as "already complete" and skips it
+        // entirely) — an omitted or different --agent would otherwise run
+        // Claude/Codex/etc. against the installation default and silently
+        // ignore the snapshot. Reject an explicit, incompatible --agent
+        // instead of guessing which one the caller actually wanted.
+        if (flags.agent && flags.agent !== BYOK_OPENCODE_AGENT_ID) {
+          console.error(
+            `--byok-provider-file requires --agent ${BYOK_OPENCODE_AGENT_ID} (or omit --agent); got --agent ${flags.agent}`,
+          );
+          process.exit(2);
+        }
+        body.agentId = BYOK_OPENCODE_AGENT_ID;
+        body.byokProvider = byokProvider;
+        // buildOpenCodeByokProviderConfig() (runtimes/byok-opencode.ts) reads
+        // the model from the top-level run field, not byokProvider.model —
+        // promote it there when the caller didn't already pass --model.
+        if (!flags.model && typeof byokProvider.model === 'string' && byokProvider.model.trim()) {
+          body.model = byokProvider.model.trim();
+        }
+      }
       const resp = await fetch(`${base}/api/runs`, {
         method:  'POST',
         headers: { 'content-type': 'application/json', ...workspaceHeaders },

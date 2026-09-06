@@ -256,6 +256,7 @@ export type ConnectionTestProtocol =
   | 'ollama'
   | 'senseaudio'
   | 'aihubmix'
+  | 'aimlapi'
   | 'bedrock';
 
 export interface ProviderTestRequest extends ReasoningExecutionRequestFields {

@@ -208,13 +208,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     const protocol = body.protocol;
     if (
       typeof protocol !== 'string' ||
-      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
+      !['aimlapi', 'anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
     ) {
       return sendApiError(
         res,
         400,
         'BAD_REQUEST',
-        'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
+        'protocol must be one of aimlapi|anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
       );
     }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
@@ -286,13 +286,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         const protocol = body.protocol;
         if (
           typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
+          !['aimlapi', 'anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
         ) {
           return sendApiError(
             res,
             400,
             'BAD_REQUEST',
-            'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
+            'protocol must be one of aimlapi|anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
         const apiKeyRequired = protocol !== 'bedrock';

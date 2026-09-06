@@ -847,6 +847,10 @@ const API_KEY_CONSOLE_LINKS: Record<ApiProtocol, { host: string; url: string }> 
     host: 'aihubmix.com',
     url: 'https://aihubmix.com/?aff=JA1e',
   },
+  aimlapi: {
+    host: 'aimlapi.com',
+    url: 'https://aimlapi.com/app/keys',
+  },
   bedrock: {
     host: 'aws.amazon.com',
     url: 'https://aws.amazon.com/bedrock/',

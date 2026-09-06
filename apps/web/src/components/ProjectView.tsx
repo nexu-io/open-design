@@ -67,6 +67,7 @@ import {
   type ByokMediaDefaults,
   type ByokChatProtocol,
   type ChatTaskExecutionAnalytics,
+  type ExtractMemoryRequest,
   type ProjectWorkspaceScope,
   type ResearchOptions,
 } from '@open-design/contracts';
@@ -1757,7 +1758,8 @@ function isOpenCodeByokChatProtocol(
     protocol === 'google' ||
     protocol === 'ollama' ||
     protocol === 'senseaudio' ||
-    protocol === 'aihubmix'
+    protocol === 'aihubmix' ||
+    protocol === 'aimlapi'
   );
 }
 
@@ -8463,7 +8465,7 @@ export function ProjectView({
         // Forward the per-call BYOK provider snapshot so "Same as chat"
         // memory extraction uses the same vendor, endpoint, key and model as
         // the run. The daemon consumes it for this request only.
-        const byokChatProvider = byokOpenCodeProvider
+        const chatProvider: ExtractMemoryRequest['chatProvider'] = byokOpenCodeProvider
           ? {
               provider: byokOpenCodeProvider.protocol,
               apiKey: byokOpenCodeProvider.apiKey,
@@ -8474,15 +8476,16 @@ export function ProjectView({
           : undefined;
         if (userText.length > 0) {
           try {
+            const extractRequest: ExtractMemoryRequest = {
+              userMessage: userText,
+              projectId: project.id,
+              conversationId: runConversationId,
+              chatProvider,
+            };
             await fetch('/api/memory/extract', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userMessage: userText,
-                projectId: project.id,
-                conversationId: runConversationId,
-                byokChatProvider,
-              }),
+              body: JSON.stringify(extractRequest),
             });
           } catch {
             // Best-effort: memory extraction must never block the
