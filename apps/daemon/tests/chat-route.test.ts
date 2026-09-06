@@ -133,6 +133,88 @@ describe('/api/chat', () => {
     };
   }
 
+  async function runAmrModelRequest(model: string): Promise<{
+    body: string;
+    invocations: string[];
+    responseOk: boolean;
+  }> {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for AMR model capability tests');
+    }
+    const previousRuntimeKey = process.env.VELA_RUNTIME_KEY;
+    const previousLinkUrl = process.env.VELA_LINK_URL;
+    const previousInvocationLog = process.env.FAKE_VELA_INVOCATION_LOG;
+    const previousLogSetModel = process.env.FAKE_VELA_LOG_SET_MODEL;
+    const previousLogPrompt = process.env.FAKE_VELA_LOG_PROMPT;
+    const invocationLog = join(tmpdir(), `od-amr-model-request-${randomUUID()}.jsonl`);
+    try {
+      process.env.VELA_RUNTIME_KEY = `fake-runtime-key-${randomUUID()}`;
+      process.env.VELA_LINK_URL = 'https://amr-link.open-design.ai/v1';
+      process.env.FAKE_VELA_INVOCATION_LOG = invocationLog;
+      process.env.FAKE_VELA_LOG_SET_MODEL = '1';
+      process.env.FAKE_VELA_LOG_PROMPT = '1';
+      const workspaceFixture = await createPersonalWorkspaceBoundProjectFixture(
+        `AMR model request ${randomUUID()}`,
+      );
+      let body = '';
+      let responseOk = false;
+
+      await withFakeAgent(
+        'vela',
+        `
+const { spawn } = require('node:child_process');
+const fixture = ${JSON.stringify(FAKE_VELA_FIXTURE)};
+const child = spawn(process.execPath, [fixture, ...process.argv.slice(2)], {
+  stdio: 'inherit',
+  env: process.env,
+});
+child.on('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  process.exit(code ?? 0);
+});
+`,
+        async () => {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...workspaceFixture.headers,
+            },
+            body: JSON.stringify({
+              agentId: 'amr',
+              projectId: workspaceFixture.projectId,
+              message: 'Exercise the resolved AMR model.',
+              model,
+            }),
+          });
+          responseOk = response.ok;
+          body = await response.text();
+        },
+      );
+
+      const invocations = existsSync(invocationLog)
+        ? readFileSync(invocationLog, 'utf8')
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => (JSON.parse(line) as { method: string }).method)
+        : [];
+      return { body, invocations, responseOk };
+    } finally {
+      rmSync(invocationLog, { force: true });
+      if (previousRuntimeKey == null) delete process.env.VELA_RUNTIME_KEY;
+      else process.env.VELA_RUNTIME_KEY = previousRuntimeKey;
+      if (previousLinkUrl == null) delete process.env.VELA_LINK_URL;
+      else process.env.VELA_LINK_URL = previousLinkUrl;
+      if (previousInvocationLog == null) delete process.env.FAKE_VELA_INVOCATION_LOG;
+      else process.env.FAKE_VELA_INVOCATION_LOG = previousInvocationLog;
+      if (previousLogSetModel == null) delete process.env.FAKE_VELA_LOG_SET_MODEL;
+      else process.env.FAKE_VELA_LOG_SET_MODEL = previousLogSetModel;
+      if (previousLogPrompt == null) delete process.env.FAKE_VELA_LOG_PROMPT;
+      else process.env.FAKE_VELA_LOG_PROMPT = previousLogPrompt;
+    }
+  }
+
   async function createPluginFixture(args: {
     pluginId: string;
     dirName: string;
@@ -901,6 +983,34 @@ process.exit(1);
         expect(body).toContain('"status":"failed"');
       },
     );
+  });
+
+  it('rejects a requested media-only model before AMR ACP launch', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest('nano-banana-2');
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([]);
+    expect(body).toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('model_not_chat_capable');
+    expect(body).toContain('"status":"failed"');
+    expect(body).not.toContain('Hello from fake vela.');
+  });
+
+  it('forwards an unknown custom-provider chat slug when the AMR catalog is stale', async () => {
+    const { body, invocations, responseOk } = await runAmrModelRequest(
+      'custom-provider/future-chat-2027',
+    );
+
+    expect(responseOk).toBe(true);
+    expect(invocations).toEqual([
+      'new',
+      'set_model:custom-provider/future-chat-2027',
+      'prompt',
+    ]);
+    expect(body).not.toContain('AMR_MODEL_UNAVAILABLE');
+    expect(body).toContain('"type":"text_delta","delta":"Hello from fake "');
+    expect(body).toContain('"type":"text_delta","delta":"vela."');
+    expect(body).toContain('"status":"succeeded"');
   });
 
   it('survives transient AMR Link catalog failures without aborting the run', async () => {

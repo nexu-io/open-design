@@ -284,6 +284,7 @@ import { amrModelLoadingCache } from './runtimes/amr-model-cache.js';
 import {
   fetchVelaPresetModels,
   fetchVelaRemoteModelsWithRetry,
+  isVelaChatCapableModelId,
 } from './runtimes/defs/amr.js';
 import { migrateLegacyDataDirSync } from './migration/index.js';
 import {
@@ -12650,6 +12651,17 @@ export async function startServer({
       // catalog can lag the live one, and a logged-in user picked a concrete
       // id; vela rejects a truly unsupported model at `session/set_model` with
       // a precise error, which beats a pre-emptive block on a flaky metadata read.
+    }
+
+    if (
+      def.id === 'amr' &&
+      safeModel &&
+      !isVelaChatCapableModelId(safeModel)
+    ) {
+      send('error', createAmrModelUnavailablePayload(safeModel, {
+        reason: 'model_not_chat_capable',
+      }));
+      return finishStrategyAwarePhysicalRun('failed', 1, null);
     }
 
     // Plain-streaming adapters that own a "continue most recent
