@@ -982,6 +982,27 @@ describe('buildMediaProvidersForDaemonSave', () => {
   });
 });
 
+describe('KNOWN_PROVIDERS', () => {
+  it('includes EvoLink as an OpenAI-compatible provider preset', () => {
+    expect(KNOWN_PROVIDERS).toContainEqual({
+      label: 'EvoLink',
+      protocol: 'openai',
+      baseUrl: 'https://direct.evolink.ai/v1',
+      model: 'gpt-5.2',
+      models: [
+        'gpt-5.2',
+        'gpt-5.4',
+        'gpt-5.5',
+        'deepseek-v4-flash',
+        'deepseek-v4-pro',
+        'glm-5.2',
+        'minimax-m2.5',
+        'minimax-m3',
+      ],
+    });
+  });
+});
+
 afterEach(() => {
   store.clear();
 });
