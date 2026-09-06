@@ -273,13 +273,20 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
         "--bg",
         "--border",
+        "--ease-standard",
         "--elev-raised",
+        "--fg",
         "--fg-2",
         "--focus-ring",
-        "--radius-sm"
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base"
       ]
     },
     {
@@ -307,9 +314,18 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
+        "--ease-standard",
+        "--fg",
         "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--meta",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -325,7 +341,13 @@
         "card"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border-soft",
+        "--elev-raised",
+        "--radius-md",
+        "--space-6",
+        "--surface"
+      ]
     },
     {
       "id": "badges",
@@ -346,6 +368,7 @@
         "--font-body",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--text-sm"
       ]
     },
@@ -361,7 +384,11 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent-hover",
+        "--ease-standard",
+        "--motion-fast"
+      ]
     },
     {
       "id": "keyboard",
@@ -374,7 +401,13 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -418,11 +451,18 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--fg-2",
         "--font-display",
         "--leading-tight",
         "--muted",
         "--text-2xl",
-        "--text-3xl"
+        "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -440,8 +480,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -456,7 +494,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

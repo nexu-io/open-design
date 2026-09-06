@@ -311,9 +311,20 @@
         "--accent-active",
         "--accent-hover",
         "--accent-on",
+        "--border",
+        "--ease-standard",
+        "--elev-ring",
+        "--fg",
         "--focus-ring",
+        "--font-body",
         "--meta",
-        "--surface"
+        "--motion-fast",
+        "--radius-pill",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-base",
+        "--text-sm"
       ]
     },
     {
@@ -342,10 +353,12 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--bg",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--meta",
         "--motion-fast",
@@ -353,6 +366,7 @@
         "--radius-sm",
         "--space-2",
         "--text-base",
+        "--text-sm",
         "--text-xs"
       ]
     },
@@ -371,7 +385,18 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--elev-raised"
+        "--bg",
+        "--border",
+        "--border-soft",
+        "--ease-standard",
+        "--elev-raised",
+        "--motion-base",
+        "--radius-lg",
+        "--space-3",
+        "--space-4",
+        "--space-6",
+        "--space-8",
+        "--surface-warm"
       ]
     },
     {
@@ -396,6 +421,7 @@
         "--radius-pill",
         "--space-2",
         "--space-3",
+        "--success",
         "--text-xs"
       ]
     },
@@ -414,7 +440,11 @@
         "a"
       ],
       "tokenReferences": [
-        "--accent-active"
+        "--accent-active",
+        "--ease-standard",
+        "--fg",
+        "--motion-fast",
+        "--text-sm"
       ]
     },
     {
@@ -478,11 +508,18 @@
         "p"
       ],
       "tokenReferences": [
+        "--accent",
         "--fg",
+        "--fg-2",
         "--font-display",
+        "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-3xl",
+        "--text-lg",
         "--text-sm",
+        "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -492,12 +529,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".nav",
-        ".nav-brand",
-        ".nav-inner",
-        ".nav-links",
-        ".nav-links a",
-        ".nav-links a:hover",
         ".row-between",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
@@ -506,8 +537,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -523,7 +552,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

@@ -287,9 +287,12 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-md",
@@ -325,9 +328,19 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
         "--meta",
+        "--motion-fast",
+        "--muted",
+        "--radius-md",
+        "--space-2",
+        "--space-3",
+        "--surface",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -349,8 +362,14 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--border-soft",
+        "--elev-raised",
         "--leading-tight",
-        "--radius-md"
+        "--radius-lg",
+        "--radius-md",
+        "--space-3",
+        "--space-6",
+        "--surface"
       ]
     },
     {
@@ -371,8 +390,11 @@
       "elements": [],
       "tokenReferences": [
         "--accent-on",
+        "--muted",
         "--radius-pill",
-        "--success"
+        "--space-2",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -387,7 +409,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent"
+      ]
     },
     {
       "id": "keyboard",
@@ -400,7 +424,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--font-mono",
+        "--muted",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -446,9 +477,15 @@
       "tokenReferences": [
         "--fg",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -468,8 +505,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -484,8 +519,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
-        "--space-4"
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

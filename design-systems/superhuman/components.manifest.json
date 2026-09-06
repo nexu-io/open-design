@@ -283,12 +283,15 @@
         "button"
       ],
       "tokenReferences": [
+        "--bg",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
+        "--space-3",
         "--space-5",
         "--surface-warm",
         "--text-base"
@@ -320,10 +323,20 @@
         "label"
       ],
       "tokenReferences": [
+        "--bg",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
-        "--text-sm"
+        "--radius-sm",
+        "--space-2",
+        "--space-4",
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -343,6 +356,8 @@
       "tokenReferences": [
         "--border",
         "--ease-standard",
+        "--elev-raised",
+        "--fg",
         "--motion-base",
         "--muted",
         "--radius-lg",
@@ -373,7 +388,13 @@
       "tokenReferences": [
         "--accent",
         "--accent-on",
-        "--muted"
+        "--muted",
+        "--radius-pill",
+        "--radius-sm",
+        "--space-2",
+        "--space-3",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -388,7 +409,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--fg"
+      ]
     },
     {
       "id": "keyboard",
@@ -455,10 +478,17 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -478,8 +508,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -495,8 +523,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-5"
+        "--space-4",
+        "--space-5",
+        "--space-6"
       ]
     }
   ],

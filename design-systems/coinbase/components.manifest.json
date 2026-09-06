@@ -315,9 +315,12 @@
         "--accent-hover",
         "--accent-on",
         "--ease-standard",
+        "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--space-2",
+        "--surface",
         "--text-base"
       ]
     },
@@ -348,9 +351,16 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
         "--text-sm"
       ]
     },
@@ -372,11 +382,16 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--bg",
         "--border",
+        "--radius-lg",
         "--radius-md",
         "--radius-pill",
         "--space-3",
-        "--space-6"
+        "--space-4",
+        "--space-6",
+        "--space-8",
+        "--surface"
       ]
     },
     {
@@ -398,9 +413,11 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--muted",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--surface"
       ]
     },
@@ -418,7 +435,10 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent",
+        "--focus-ring"
+      ]
     },
     {
       "id": "keyboard",
@@ -485,8 +505,12 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg",
         "--font-body",
+        "--font-display",
+        "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-4xl",
         "--text-lg",
         "--text-sm",
@@ -500,14 +524,7 @@
       "selectors": [
         ".container",
         ".row-between",
-        ".section-dark",
-        ".section-dark .body-muted",
-        ".section-dark .lead",
         ".section-dark + section",
-        ".section-dark a",
-        ".section-dark h1",
-        ".section-dark h2",
-        ".section-dark h3",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
         ".stack-5 > * + *",
@@ -517,8 +534,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -534,9 +549,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--fg",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-5"
+        "--space-4",
+        "--space-5",
+        "--space-6"
       ]
     }
   ],

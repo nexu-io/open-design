@@ -267,11 +267,14 @@
       ],
       "tokenReferences": [
         "--ease-standard",
+        "--elev-ring",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
+        "--surface",
         "--text-sm"
       ]
     },
@@ -301,9 +304,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--fg-2",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
         "--text-sm",
         "--text-xs"
       ]
@@ -324,7 +335,15 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--ease-standard",
+        "--elev-raised",
+        "--fg-2",
+        "--motion-base",
+        "--radius-md",
+        "--space-3",
+        "--space-6",
+        "--surface"
       ]
     },
     {
@@ -344,7 +363,12 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--success"
+        "--font-body",
+        "--muted",
+        "--radius-pill",
+        "--space-2",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -363,7 +387,8 @@
       ],
       "tokenReferences": [
         "--accent",
-        "--accent-hover"
+        "--accent-hover",
+        "--fg-2"
       ]
     },
     {
@@ -377,7 +402,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--elev-ring",
+        "--font-mono",
+        "--muted",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -423,9 +455,14 @@
         "--fg",
         "--font-body",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -445,8 +482,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -461,7 +496,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

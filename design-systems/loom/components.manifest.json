@@ -279,10 +279,14 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--leading-tight",
         "--motion-fast",
@@ -318,18 +322,23 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--bg",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--leading-tight",
         "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-sm",
         "--space-2",
         "--space-3",
-        "--text-base"
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -373,6 +382,7 @@
       "elements": [],
       "tokenReferences": [
         "--border",
+        "--danger",
         "--muted",
         "--radius-pill",
         "--space-2",
@@ -393,7 +403,8 @@
         "a"
       ],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--accent-hover"
       ]
     },
     {
@@ -457,11 +468,18 @@
         "p"
       ],
       "tokenReferences": [
+        "--accent",
         "--fg",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -481,8 +499,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -497,8 +513,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
-        "--space-4"
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

@@ -297,9 +297,19 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
         "--accent-hover",
+        "--accent-on",
         "--bg",
-        "--focus-ring"
+        "--ease-standard",
+        "--fg",
+        "--focus-ring",
+        "--font-display",
+        "--motion-fast",
+        "--radius-pill",
+        "--radius-sm",
+        "--space-2",
+        "--surface"
       ]
     },
     {
@@ -329,10 +339,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
         "--meta",
-        "--text-sm"
+        "--motion-fast",
+        "--muted",
+        "--radius-pill",
+        "--space-2",
+        "--surface",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -358,9 +375,11 @@
         "--radius-lg",
         "--radius-md",
         "--space-3",
+        "--space-5",
         "--space-6",
         "--space-8",
-        "--surface"
+        "--surface",
+        "--surface-warm"
       ]
     },
     {
@@ -384,12 +403,18 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
+        "--accent-hover",
         "--border",
         "--fg-2",
         "--font-display",
+        "--font-mono",
         "--radius-pill",
+        "--radius-sm",
         "--space-1",
-        "--surface-warm"
+        "--success",
+        "--surface-warm",
+        "--text-xs"
       ]
     },
     {
@@ -406,6 +431,7 @@
         "a"
       ],
       "tokenReferences": [
+        "--accent-hover",
         "--ease-standard",
         "--fg",
         "--focus-ring",
@@ -423,7 +449,13 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--surface-warm",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -467,13 +499,18 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--fg-2",
         "--font-display",
         "--font-mono",
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
         "--text-lg",
-        "--text-xs"
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -492,7 +529,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -507,8 +543,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
         "--space-4",
+        "--space-5",
         "--space-6"
       ]
     }

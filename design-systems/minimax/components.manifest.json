@@ -292,10 +292,18 @@
         "button"
       ],
       "tokenReferences": [
+        "--bg",
         "--border",
+        "--ease-standard",
         "--fg-2",
         "--focus-ring",
-        "--surface-warm"
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--surface-warm",
+        "--text-sm"
       ]
     },
     {
@@ -326,9 +334,20 @@
         "textarea"
       ],
       "tokenReferences": [
+        "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--fg-2",
+        "--focus-ring",
+        "--font-body",
         "--meta",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -355,14 +374,18 @@
         "--bg",
         "--border-soft",
         "--ease-standard",
+        "--elev-raised",
         "--fg-2",
         "--font-display",
+        "--meta",
         "--motion-base",
         "--radius-lg",
         "--radius-md",
+        "--space-2",
         "--space-3",
         "--space-6",
-        "--space-8"
+        "--space-8",
+        "--text-xs"
       ]
     },
     {
@@ -381,6 +404,7 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--muted",
         "--radius-pill",
         "--space-2",
@@ -403,7 +427,15 @@
         "a"
       ],
       "tokenReferences": [
-        "--fg"
+        "--bg",
+        "--ease-standard",
+        "--elev-raised",
+        "--fg",
+        "--fg-2",
+        "--motion-fast",
+        "--muted",
+        "--radius-pill",
+        "--text-sm"
       ]
     },
     {
@@ -471,9 +503,15 @@
         "--fg",
         "--font-body",
         "--font-display",
+        "--leading-body",
+        "--leading-tight",
         "--muted",
         "--text-2xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -491,8 +529,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -509,7 +545,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

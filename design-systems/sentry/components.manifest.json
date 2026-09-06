@@ -272,9 +272,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-active",
         "--accent-on",
+        "--bg",
+        "--ease-standard",
         "--fg",
-        "--focus-ring"
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-md",
+        "--space-2",
+        "--text-sm"
       ]
     },
     {
@@ -310,7 +318,8 @@
         "--muted",
         "--radius-sm",
         "--space-2",
-        "--text-sm"
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -331,6 +340,7 @@
         "--accent",
         "--border",
         "--elev-raised",
+        "--fg",
         "--radius-lg",
         "--space-3",
         "--space-6",
@@ -357,6 +367,7 @@
         "--muted",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--text-xs"
       ]
     },
@@ -375,7 +386,8 @@
         "a"
       ],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--fg"
       ]
     },
     {
@@ -442,11 +454,19 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--fg-2",
         "--font-body",
+        "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-2xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -464,8 +484,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -480,7 +498,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

@@ -299,9 +299,11 @@
         "--accent",
         "--accent-on",
         "--ease-standard",
+        "--elev-raised",
         "--elev-ring",
         "--elev-ring-accent",
         "--fg-2",
+        "--focus-ring",
         "--font-display",
         "--motion-base",
         "--radius-md",
@@ -314,17 +316,11 @@
     {
       "id": "inputs",
       "label": "Form fields and controls",
-      "present": true,
-      "selectors": [
-        ".metric-label"
-      ],
+      "present": false,
+      "selectors": [],
       "classes": [],
       "elements": [],
-      "tokenReferences": [
-        "--font-display",
-        "--muted",
-        "--text-sm"
-      ]
+      "tokenReferences": []
     },
     {
       "id": "cards",
@@ -341,6 +337,7 @@
       "tokenReferences": [
         "--border",
         "--ease-standard",
+        "--elev-raised",
         "--motion-base",
         "--radius-md",
         "--space-3",
@@ -369,6 +366,7 @@
         "--font-display",
         "--radius-sm",
         "--radius-xs",
+        "--tag-bg-faint",
         "--tag-bg-soft",
         "--tag-bg-strong",
         "--text-sm",
@@ -387,7 +385,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent"
+      ]
     },
     {
       "id": "keyboard",
@@ -432,11 +432,17 @@
       ],
       "tokenReferences": [
         "--font-display",
+        "--leading-display",
         "--leading-tight",
+        "--meta",
         "--muted",
         "--space-6",
         "--text-2xl",
-        "--text-sm"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--tracking-display",
+        "--tracking-eyebrow"
       ]
     },
     {
@@ -445,7 +451,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".section-num",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
         ".stack-6 > * + *",
@@ -453,25 +458,24 @@
         "section + section"
       ],
       "classes": [
-        "container",
-        "features-grid"
+        "container"
       ],
       "elements": [
         "main",
         "section"
       ],
       "tokenReferences": [
-        "--accent",
         "--border",
         "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--font-display",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
         "--space-4",
-        "--text-base",
-        "--tracking-label"
+        "--space-6"
       ]
     }
   ],

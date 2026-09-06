@@ -239,8 +239,16 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
         "--accent-hover",
-        "--focus-ring"
+        "--accent-on",
+        "--ease-standard",
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base"
       ]
     },
     {
@@ -263,8 +271,16 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
+        "--ease-standard",
+        "--fg",
         "--fg-2",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--surface-warm",
+        "--text-base",
         "--text-sm"
       ]
     },
@@ -354,8 +370,13 @@
         "--leading-tight",
         "--meta",
         "--muted",
+        "--text-2xl",
         "--text-3xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -371,8 +392,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -386,6 +405,10 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4"
       ]
     }

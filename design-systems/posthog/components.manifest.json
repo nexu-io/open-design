@@ -323,13 +323,19 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--bg",
         "--border",
         "--ease-standard",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
         "--font-display",
         "--motion-fast",
+        "--radius-md",
         "--radius-sm",
         "--space-2",
+        "--surface",
         "--surface-warm",
         "--text-sm",
         "--warn"
@@ -364,10 +370,20 @@
         "select"
       ],
       "tokenReferences": [
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--fg-2",
+        "--focus-ring",
+        "--font-body",
         "--font-display",
         "--meta",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -394,11 +410,13 @@
         "--border",
         "--ease-standard",
         "--elev-raised",
+        "--fg",
         "--motion-fast",
         "--radius-md",
         "--space-3",
         "--space-4",
-        "--space-5"
+        "--space-5",
+        "--surface"
       ]
     },
     {
@@ -422,8 +440,14 @@
       "tokenReferences": [
         "--border",
         "--fg-2",
+        "--font-display",
+        "--radius-pill",
+        "--space-2",
+        "--success",
         "--surface",
-        "--surface-warm"
+        "--surface-warm",
+        "--text-xs",
+        "--warn"
       ]
     },
     {
@@ -442,6 +466,7 @@
         "a"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--ease-standard",
         "--fg-2",
@@ -465,8 +490,10 @@
       "tokenReferences": [
         "--border",
         "--fg-2",
+        "--font-mono",
         "--radius-sm",
-        "--surface"
+        "--surface",
+        "--text-sm"
       ]
     },
     {
@@ -515,7 +542,11 @@
         "--leading-tight",
         "--muted",
         "--text-3xl",
-        "--text-sm"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -524,12 +555,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".nav-links",
-        ".nav-links a",
-        ".nav-links a:hover",
-        ".nav-logo",
-        ".nav-logo:hover",
-        ".nav-row",
         ".row-between",
         ".stack-2 > * + *",
         ".stack-3 > * + *",
@@ -540,8 +565,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-2",
         "stack-3",
@@ -553,16 +576,18 @@
         "section"
       ],
       "tokenReferences": [
-        "--accent",
         "--border",
         "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--fg-2",
-        "--font-display",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
-        "--space-4"
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

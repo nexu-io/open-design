@@ -263,6 +263,7 @@
       ],
       "tokenReferences": [
         "--ease-standard",
+        "--fg",
         "--focus-ring",
         "--font-body",
         "--motion-fast",
@@ -298,8 +299,16 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
         "--text-sm",
         "--text-xs"
       ]
@@ -315,7 +324,13 @@
         "card"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--elev-raised",
+        "--radius-sm",
+        "--space-3",
+        "--space-6",
+        "--surface"
+      ]
     },
     {
       "id": "badges",
@@ -337,6 +352,7 @@
         "--muted",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--text-xs"
       ]
     },
@@ -418,10 +434,16 @@
       ],
       "tokenReferences": [
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-3xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-base",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -439,8 +461,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -455,7 +475,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

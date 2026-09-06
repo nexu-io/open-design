@@ -267,7 +267,10 @@
       "tokenReferences": [
         "--accent",
         "--accent-hover",
+        "--accent-on",
+        "--border",
         "--ease-standard",
+        "--fg",
         "--focus-ring",
         "--font-body",
         "--motion-fast",
@@ -303,10 +306,20 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--focus-ring",
+        "--font-body",
         "--font-mono",
+        "--motion-fast",
         "--muted",
-        "--text-xs"
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-base",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -321,7 +334,13 @@
         "card"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--elev-raised",
+        "--radius-md",
+        "--space-3",
+        "--surface"
+      ]
     },
     {
       "id": "badges",
@@ -359,7 +378,10 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--fg",
+        "--tracking-display"
+      ]
     },
     {
       "id": "keyboard",
@@ -408,11 +430,16 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg-2",
         "--font-display",
         "--font-mono",
+        "--leading-body",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
         "--text-xs",
         "--tracking-display"
       ]
@@ -424,12 +451,6 @@
       "selectors": [
         ".container",
         ".row-between",
-        ".section-dark",
-        ".section-dark .btn-primary",
-        ".section-dark .btn-primary:hover",
-        ".section-dark .card",
-        ".section-dark .eyebrow",
-        ".section-dark p",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
         ".stack-6 > * + *",
@@ -438,8 +459,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -448,13 +467,17 @@
         "section"
       ],
       "tokenReferences": [
-        "--accent",
         "--border",
         "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

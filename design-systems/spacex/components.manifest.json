@@ -271,7 +271,16 @@
         "--accent-active",
         "--accent-hover",
         "--accent-on",
-        "--focus-ring"
+        "--border",
+        "--ease-standard",
+        "--fg",
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2",
+        "--space-6",
+        "--text-sm"
       ]
     },
     {
@@ -300,8 +309,17 @@
       ],
       "tokenReferences": [
         "--accent-hover",
+        "--border",
+        "--ease-standard",
+        "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--space-3",
+        "--text-base",
         "--text-xs"
       ]
     },
@@ -336,7 +354,12 @@
         "a"
       ],
       "tokenReferences": [
-        "--accent-hover"
+        "--accent-hover",
+        "--border",
+        "--ease-standard",
+        "--fg",
+        "--motion-fast",
+        "--text-sm"
       ]
     },
     {
@@ -391,10 +414,15 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-4xl",
+        "--text-base",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -414,7 +442,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "stack-4",
         "stack-6"
       ],
@@ -428,7 +455,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--space-6",
         "--space-8"
       ]
     }

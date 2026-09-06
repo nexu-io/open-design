@@ -281,9 +281,11 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
@@ -317,9 +319,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
         "--text-xs"
       ]
     },
@@ -342,12 +352,15 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--focus-ring",
+        "--font-display",
         "--radius-md",
         "--space-2",
         "--space-4",
         "--space-6",
         "--surface",
+        "--text-2xl",
         "--text-sm"
       ]
     },
@@ -433,7 +446,11 @@
         "--leading-tight",
         "--muted",
         "--text-2xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -453,8 +470,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-4",
         "stack-5"
       ],
@@ -467,7 +482,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--space-5",
         "--space-6"
       ]
     }

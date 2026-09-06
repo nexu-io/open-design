@@ -276,8 +276,13 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--bg",
+        "--border",
         "--ease-standard",
+        "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
@@ -311,9 +316,21 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
         "--fg",
+        "--focus-ring",
+        "--font-body",
         "--meta",
-        "--text-sm"
+        "--motion-fast",
+        "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -361,7 +378,12 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--font-display",
+        "--radius-sm",
+        "--space-2",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -377,6 +399,7 @@
         "a"
       ],
       "tokenReferences": [
+        "--accent",
         "--accent-hover"
       ]
     },
@@ -391,7 +414,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--font-mono",
+        "--muted",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -436,11 +466,17 @@
       "tokenReferences": [
         "--accent",
         "--fg",
+        "--fg-2",
         "--font-display",
         "--leading-tight",
         "--muted",
         "--text-3xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -458,8 +494,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -473,7 +507,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

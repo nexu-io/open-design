@@ -295,11 +295,22 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--bg",
         "--border",
+        "--ease-standard",
+        "--fg",
         "--fg-2",
-        "--focus-ring"
+        "--focus-ring",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2",
+        "--space-6",
+        "--surface",
+        "--text-base"
       ]
     },
     {
@@ -317,8 +328,7 @@
       ],
       "classes": [
         "field",
-        "field-help",
-        "signup-form"
+        "field-help"
       ],
       "elements": [
         "form",
@@ -330,12 +340,17 @@
         "--border",
         "--ease-standard",
         "--fg",
+        "--fg-2",
         "--focus-ring",
+        "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-pill",
         "--space-2",
         "--space-5",
-        "--text-base"
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -353,6 +368,7 @@
       "tokenReferences": [
         "--bg",
         "--border",
+        "--fg",
         "--radius-md",
         "--space-3",
         "--space-6"
@@ -376,6 +392,7 @@
         "--fg-2",
         "--font-mono",
         "--radius-pill",
+        "--space-2",
         "--space-3",
         "--text-xs"
       ]
@@ -454,6 +471,10 @@
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -464,14 +485,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".nav",
-        ".nav-actions",
-        ".nav-brand",
-        ".nav-brand svg",
-        ".nav-links",
-        ".nav-links a",
-        ".nav-signin",
-        ".nav-spacer",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
         ".stack-5 > * + *",
@@ -480,7 +493,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "stack-4"
       ],
       "elements": [
@@ -494,11 +506,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--fg",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
         "--space-5",
-        "--space-6",
-        "--text-base"
+        "--space-6"
       ]
     }
   ],

@@ -276,10 +276,13 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
         "--bg",
         "--ease-standard",
+        "--fg",
         "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--motion-base",
         "--motion-fast",
@@ -314,9 +317,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-base",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -336,7 +347,16 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--elev-raised"
+        "--bg",
+        "--ease-standard",
+        "--elev-raised",
+        "--elev-ring",
+        "--motion-base",
+        "--radius-lg",
+        "--radius-md",
+        "--space-4",
+        "--space-8",
+        "--surface-warm"
       ]
     },
     {
@@ -359,6 +379,7 @@
         "--muted",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--surface",
         "--text-xs"
       ]
@@ -377,6 +398,7 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--ease-standard",
         "--motion-fast"
       ]
@@ -442,12 +464,17 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg",
         "--fg-2",
+        "--font-display",
+        "--leading-tight",
         "--muted",
         "--text-2xl",
         "--text-3xl",
         "--text-4xl",
         "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -467,8 +494,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -484,7 +509,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--space-6",
         "--space-8"
       ]
     }

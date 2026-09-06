@@ -277,7 +277,15 @@
         "button"
       ],
       "tokenReferences": [
-        "--fg"
+        "--ease-standard",
+        "--fg",
+        "--focus-ring",
+        "--font-body",
+        "--motion-base",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2",
+        "--text-base"
       ]
     },
     {
@@ -306,17 +314,21 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--border-soft",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
+        "--meta",
         "--motion-fast",
         "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
         "--text-base",
+        "--text-sm",
         "--text-xs"
       ]
     },
@@ -335,7 +347,17 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--elev-raised"
+        "--accent",
+        "--ease-standard",
+        "--elev-raised",
+        "--elev-ring",
+        "--font-mono",
+        "--motion-base",
+        "--radius-md",
+        "--space-3",
+        "--space-6",
+        "--surface",
+        "--text-xs"
       ]
     },
     {
@@ -356,6 +378,8 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
+        "--border",
         "--muted",
         "--radius-pill",
         "--space-2",
@@ -443,9 +467,14 @@
         "--fg-2",
         "--font-body",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--tracking-display"
       ]
     },
@@ -465,7 +494,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "row-between",
         "stack-4",
         "stack-5",
@@ -481,7 +509,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--space-5",
         "--space-6"
       ]
     }

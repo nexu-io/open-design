@@ -297,12 +297,17 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--bg",
+        "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-display",
         "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-md",
         "--space-2",
         "--space-6",
@@ -337,11 +342,22 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
         "--font-display",
         "--meta",
-        "--text-sm"
+        "--motion-fast",
+        "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--space-4",
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -365,19 +381,22 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--accent-on",
         "--bg",
         "--border",
         "--danger",
         "--ease-standard",
         "--elev-raised",
+        "--fg",
         "--font-display",
         "--motion-fast",
         "--radius-md",
         "--radius-pill",
         "--space-3",
         "--space-6",
-        "--text-xl"
+        "--text-xl",
+        "--warn"
       ]
     },
     {
@@ -398,12 +417,17 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent-on",
+        "--border",
         "--fg",
         "--font-display",
+        "--muted",
         "--radius-pill",
         "--space-1",
         "--space-2",
         "--space-3",
+        "--success",
+        "--surface",
         "--text-xs",
         "--warn"
       ]
@@ -420,7 +444,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent-active"
+      ]
     },
     {
       "id": "keyboard",
@@ -433,7 +459,15 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--bg",
+        "--border",
+        "--font-mono",
+        "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -476,12 +510,22 @@
         "p"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--fg",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
+        "--radius-pill",
+        "--space-1",
+        "--space-3",
         "--text-2xl",
-        "--text-sm"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -500,8 +544,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-2",
         "stack-3",
@@ -518,9 +560,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
         "--space-3",
-        "--space-4"
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

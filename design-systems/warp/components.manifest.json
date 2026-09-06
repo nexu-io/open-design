@@ -273,10 +273,18 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
-        "--space-3"
+        "--font-body",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--space-5"
       ]
     },
     {
@@ -307,13 +315,18 @@
         "--border",
         "--ease-standard",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-sm",
         "--space-2",
         "--space-4",
-        "--surface"
+        "--surface",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -333,6 +346,7 @@
       "tokenReferences": [
         "--border",
         "--ease-standard",
+        "--fg-2",
         "--font-mono",
         "--meta",
         "--motion-base",
@@ -360,7 +374,13 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--success"
+        "--border",
+        "--fg-2",
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -442,11 +462,17 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--fg-2",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
         "--text-2xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -465,8 +491,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -482,7 +506,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--space-5",
         "--space-6"
       ]
     }

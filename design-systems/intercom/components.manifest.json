@@ -299,9 +299,16 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--ease-standard",
         "--fg",
-        "--focus-ring"
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base"
       ]
     },
     {
@@ -315,16 +322,14 @@
         ".field input:focus-visible",
         ".field input:hover",
         ".field label",
-        ".field-help",
-        ".messenger-input"
+        ".field-help"
       ],
       "classes": [
         "field",
         "field-help",
         "form",
         "form-actions",
-        "form-row",
-        "messenger-input"
+        "form-row"
       ],
       "elements": [
         "form",
@@ -333,10 +338,20 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
         "--meta",
-        "--text-sm"
+        "--motion-fast",
+        "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -358,12 +373,14 @@
         "--accent",
         "--border",
         "--ease-standard",
+        "--elev-raised",
         "--font-mono",
         "--motion-base",
         "--radius-lg",
         "--space-3",
         "--space-6",
         "--surface-warm",
+        "--text-2xl",
         "--text-xs"
       ]
     },
@@ -381,16 +398,17 @@
       "classes": [
         "badge",
         "badge-dot",
-        "badge-success",
-        "messenger-status"
+        "badge-success"
       ],
       "elements": [],
       "tokenReferences": [
         "--accent",
         "--font-mono",
+        "--muted",
         "--radius-pill",
         "--space-2",
         "--space-3",
+        "--success",
         "--text-xs"
       ]
     },
@@ -407,7 +425,9 @@
         "a"
       ],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--border",
+        "--fg"
       ]
     },
     {
@@ -421,7 +441,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--font-mono",
+        "--muted",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -467,9 +494,17 @@
       "tokenReferences": [
         "--fg",
         "--font-display",
+        "--font-mono",
         "--leading-tight",
         "--muted",
-        "--text-3xl"
+        "--text-2xl",
+        "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -489,8 +524,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-2",
         "stack-3",
         "stack-4",
@@ -507,8 +540,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
+        "--space-3",
         "--space-4",
+        "--space-5",
         "--space-6"
       ]
     }

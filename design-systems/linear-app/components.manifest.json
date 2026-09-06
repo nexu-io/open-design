@@ -236,8 +236,10 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--accent-on",
         "--ease-standard",
+        "--focus-ring",
         "--font-display",
         "--motion-fast",
         "--radius-sm",
@@ -265,8 +267,16 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
+        "--border",
+        "--ease-standard",
         "--fg-2",
+        "--font-body",
         "--meta",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
         "--text-sm"
       ]
     },
@@ -282,7 +292,13 @@
         "card"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--ease-standard",
+        "--motion-base",
+        "--radius-md",
+        "--space-6"
+      ]
     },
     {
       "id": "badges",
@@ -363,7 +379,12 @@
         "--meta",
         "--muted",
         "--text-2xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -380,8 +401,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -395,7 +414,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

@@ -255,10 +255,12 @@
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
+        "--success",
         "--surface",
         "--text-sm"
       ]
@@ -291,6 +293,7 @@
         "--focus-ring",
         "--font-body",
         "--motion-fast",
+        "--muted",
         "--radius-sm",
         "--space-2",
         "--text-sm"
@@ -377,9 +380,12 @@
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-4xl",
+        "--text-lg",
         "--text-sm",
         "--text-xl",
-        "--text-xs"
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -395,8 +401,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -410,7 +414,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-3"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4"
       ]
     }
   ],

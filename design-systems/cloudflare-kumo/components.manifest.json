@@ -282,16 +282,21 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--accent-on",
         "--border",
+        "--border-soft",
         "--danger",
         "--fg",
+        "--focus-ring",
         "--motion-base",
+        "--muted",
         "--radius-lg",
         "--radius-pill",
         "--space-2",
         "--space-3",
-        "--surface"
+        "--surface",
+        "--surface-warm"
       ]
     },
     {
@@ -320,10 +325,14 @@
         "--border",
         "--danger",
         "--fg",
+        "--focus-ring",
+        "--muted",
         "--radius-lg",
         "--space-2",
         "--space-3",
-        "--surface"
+        "--surface",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -343,8 +352,12 @@
       "elements": [],
       "tokenReferences": [
         "--border-soft",
+        "--elev-raised",
+        "--elev-ring",
+        "--radius-lg",
         "--space-4",
-        "--space-5"
+        "--space-5",
+        "--surface"
       ]
     },
     {
@@ -369,7 +382,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--focus-ring"
+      ]
     },
     {
       "id": "keyboard",
@@ -422,9 +437,12 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg-2",
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-3xl",
+        "--text-base",
         "--text-lg",
         "--text-sm",
         "--tracking-display"
@@ -443,7 +461,6 @@
       "classes": [
         "container",
         "layout-grid",
-        "metric-grid",
         "row-between",
         "stack-2",
         "stack-4"
@@ -454,6 +471,9 @@
         "section"
       ],
       "tokenReferences": [
+        "--container-gutter-desktop",
+        "--container-gutter-phone",
+        "--container-max",
         "--space-2",
         "--space-4"
       ]

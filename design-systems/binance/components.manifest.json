@@ -311,9 +311,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
+        "--ease-standard",
         "--focus-ring",
-        "--radius-pill"
+        "--font-body",
+        "--motion-base",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2",
+        "--text-base"
       ]
     },
     {
@@ -326,8 +334,7 @@
         ".field input::placeholder",
         ".field input:focus-visible",
         ".field label",
-        ".field-help",
-        ".stat-label"
+        ".field-help"
       ],
       "classes": [
         "field",
@@ -345,14 +352,18 @@
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
+        "--meta",
         "--motion-base",
         "--motion-fast",
         "--muted",
         "--radius-sm",
         "--space-2",
         "--surface-warm",
-        "--text-base"
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -375,12 +386,14 @@
         "--accent",
         "--accent-active",
         "--border",
+        "--border-soft",
         "--ease-standard",
         "--elev-raised",
         "--motion-base",
         "--radius-md",
         "--radius-pill",
         "--space-3",
+        "--space-4",
         "--space-6",
         "--surface"
       ]
@@ -405,9 +418,12 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--danger",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--text-xs"
       ]
     },
@@ -424,7 +440,11 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent",
+        "--ease-standard",
+        "--motion-fast"
+      ]
     },
     {
       "id": "keyboard",
@@ -495,8 +515,10 @@
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
         "--text-lg",
         "--text-sm",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -507,11 +529,6 @@
       "selectors": [
         ".container",
         ".row-between",
-        ".section-dark",
-        ".section-dark .body-muted",
-        ".section-dark .eyebrow",
-        ".section-dark .lead",
-        ".section-dark a:hover",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
         ".stack-5 > * + *",
@@ -520,13 +537,10 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4",
         "stack-5",
-        "stack-6",
-        "stat-grid"
+        "stack-6"
       ],
       "elements": [
         "main",
@@ -537,7 +551,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
         "--space-4",
+        "--space-5",
         "--space-6"
       ]
     }

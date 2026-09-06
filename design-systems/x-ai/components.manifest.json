@@ -258,9 +258,21 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
+        "--ease-standard",
         "--fg",
-        "--focus-ring"
+        "--focus-ring",
+        "--font-display",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--space-3",
+        "--space-6",
+        "--surface",
+        "--text-sm"
       ]
     },
     {
@@ -288,8 +300,20 @@
         "textarea"
       ],
       "tokenReferences": [
+        "--ease-standard",
+        "--fg",
         "--fg-2",
         "--focus-ring",
+        "--font-body",
+        "--leading-body",
+        "--meta",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--space-3",
+        "--space-4",
+        "--surface",
+        "--text-base",
         "--text-sm"
       ]
     },
@@ -310,9 +334,19 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--border",
+        "--ease-standard",
+        "--elev-flat",
+        "--fg",
         "--fg-2",
+        "--font-body",
+        "--motion-base",
+        "--radius-md",
+        "--space-6",
+        "--surface",
         "--surface-warm",
-        "--text-base"
+        "--text-base",
+        "--text-xl"
       ]
     },
     {
@@ -334,6 +368,7 @@
         "--radius-sm",
         "--space-1",
         "--space-2",
+        "--space-8",
         "--text-xs"
       ]
     },
@@ -397,11 +432,13 @@
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-4xl",
         "--text-lg",
         "--text-sm",
         "--text-xl",
-        "--text-xs"
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -419,8 +456,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "form-grid",
         "stack-3",
         "stack-4"
       ],
@@ -434,7 +469,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-2",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

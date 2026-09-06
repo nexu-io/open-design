@@ -274,15 +274,21 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-base",
         "--motion-fast",
+        "--muted",
         "--radius-pill",
         "--space-2",
+        "--surface",
         "--text-base"
       ]
     },
@@ -312,9 +318,11 @@
         "label"
       ],
       "tokenReferences": [
+        "--bg",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-base",
         "--motion-fast",
@@ -323,6 +331,7 @@
         "--space-2",
         "--surface",
         "--text-base",
+        "--text-sm",
         "--text-xs"
       ]
     },
@@ -337,7 +346,12 @@
         "card"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--radius-md",
+        "--space-3",
+        "--space-6",
+        "--surface"
+      ]
     },
     {
       "id": "badges",
@@ -361,6 +375,7 @@
         "--radius-pill",
         "--space-2",
         "--space-3",
+        "--success",
         "--surface",
         "--text-xs"
       ]
@@ -379,9 +394,11 @@
         "a"
       ],
       "tokenReferences": [
+        "--bg",
         "--ease-standard",
         "--fg",
-        "--motion-base"
+        "--motion-base",
+        "--muted"
       ]
     },
     {
@@ -446,10 +463,17 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--font-body",
         "--font-display",
+        "--leading-tight",
         "--muted",
         "--text-2xl",
-        "--text-sm"
+        "--text-4xl",
+        "--text-base",
+        "--text-lg",
+        "--text-sm",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -468,8 +492,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -485,8 +507,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-6"
+        "--space-4",
+        "--space-6",
+        "--space-8"
       ]
     }
   ],

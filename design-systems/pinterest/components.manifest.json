@@ -329,11 +329,15 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border-soft",
         "--ease-standard",
         "--fg",
         "--fg-2",
+        "--focus-ring",
         "--font-display",
         "--motion-fast",
         "--radius-md",
@@ -371,10 +375,17 @@
         "label"
       ],
       "tokenReferences": [
+        "--bg",
+        "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-display",
         "--meta",
+        "--motion-fast",
         "--muted",
+        "--radius-md",
+        "--space-2",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -413,6 +424,7 @@
         "--radius-pill",
         "--space-2",
         "--space-3",
+        "--success",
         "--surface-warm",
         "--text-xs"
       ]
@@ -431,7 +443,12 @@
         "a"
       ],
       "tokenReferences": [
-        "--fg"
+        "--border",
+        "--ease-standard",
+        "--fg",
+        "--focus-ring",
+        "--motion-fast",
+        "--radius-sm"
       ]
     },
     {
@@ -492,12 +509,16 @@
         "p"
       ],
       "tokenReferences": [
+        "--accent",
         "--fg",
         "--font-display",
         "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-4xl",
+        "--text-lg",
         "--text-sm",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -507,15 +528,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".nav-cluster",
-        ".nav-logo",
-        ".nav-logo svg",
-        ".nav-row",
-        ".nav-search",
-        ".nav-search input",
-        ".nav-search input::placeholder",
-        ".nav-search svg",
-        ".nav-search:focus-within",
         ".stack-2 > * + *",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
@@ -525,8 +537,6 @@
       ],
       "classes": [
         "container",
-        "hero-grid",
-        "pins-grid",
         "stack-3",
         "stack-4"
       ],
@@ -536,22 +546,18 @@
         "section"
       ],
       "tokenReferences": [
-        "--accent",
         "--border-soft",
         "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--ease-standard",
-        "--font-display",
-        "--motion-fast",
-        "--muted",
-        "--radius-pill",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
+        "--space-3",
         "--space-4",
-        "--surface",
-        "--text-lg",
-        "--tracking-display"
+        "--space-6"
       ]
     }
   ],

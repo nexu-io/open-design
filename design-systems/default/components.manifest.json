@@ -266,7 +266,10 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border",
         "--ease-standard",
         "--fg",
@@ -274,6 +277,7 @@
         "--motion-fast",
         "--radius-sm",
         "--space-2",
+        "--surface",
         "--text-sm"
       ]
     },
@@ -302,15 +306,18 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--motion-fast",
         "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
-        "--text-sm"
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -349,7 +356,11 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--success"
+        "--muted",
+        "--radius-pill",
+        "--space-2",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -364,7 +375,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent"
+      ]
     },
     {
       "id": "keyboard",
@@ -377,7 +390,13 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--font-mono",
+        "--muted",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -424,6 +443,9 @@
         "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-3xl",
+        "--text-lg",
+        "--text-sm",
         "--text-xs",
         "--tracking-display"
       ]
@@ -443,8 +465,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -459,7 +479,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

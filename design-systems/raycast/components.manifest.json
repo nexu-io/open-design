@@ -254,6 +254,8 @@
       ],
       "tokenReferences": [
         "--ease-standard",
+        "--fg",
+        "--focus-ring",
         "--font-display",
         "--motion-fast",
         "--radius-pill",
@@ -286,10 +288,13 @@
         "--fg",
         "--focus-ring",
         "--font-body",
+        "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-sm",
         "--space-2",
-        "--text-base"
+        "--text-base",
+        "--text-sm"
       ]
     },
     {
@@ -306,7 +311,16 @@
         "card-title"
       ],
       "elements": [],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--ease-standard",
+        "--elev-ring",
+        "--fg",
+        "--motion-base",
+        "--radius-lg",
+        "--space-6",
+        "--surface",
+        "--text-xl"
+      ]
     },
     {
       "id": "badges",
@@ -324,7 +338,11 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--fg-2",
+        "--radius-pill",
+        "--space-2",
+        "--text-xs"
       ]
     },
     {
@@ -352,7 +370,10 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--space-2"
+        "--fg-2",
+        "--font-mono",
+        "--space-2",
+        "--text-xs"
       ]
     },
     {
@@ -390,11 +411,18 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--fg-2",
         "--font-display",
+        "--leading-tight",
         "--meta",
         "--muted",
         "--text-3xl",
-        "--text-xs"
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -411,8 +439,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -426,7 +452,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

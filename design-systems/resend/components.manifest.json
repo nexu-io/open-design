@@ -302,10 +302,12 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--ease-standard",
         "--fg",
         "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-pill",
@@ -344,6 +346,8 @@
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
+        "--font-body",
         "--motion-fast",
         "--muted",
         "--radius-sm",
@@ -367,7 +371,13 @@
       "elements": [],
       "tokenReferences": [
         "--bg",
-        "--border"
+        "--border",
+        "--ease-standard",
+        "--motion-base",
+        "--radius-lg",
+        "--space-3",
+        "--space-6",
+        "--surface"
       ]
     },
     {
@@ -390,7 +400,13 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
-        "--success"
+        "--border",
+        "--fg-2",
+        "--font-body",
+        "--radius-pill",
+        "--space-1",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -430,7 +446,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -475,13 +498,18 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--fg-2",
+        "--font-body",
         "--font-display",
         "--font-mono",
         "--leading-tight",
         "--muted",
         "--space-6",
         "--text-3xl",
+        "--text-4xl",
         "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -501,7 +529,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -516,8 +543,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-4"
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

@@ -282,8 +282,16 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--accent-on",
-        "--surface"
+        "--ease-standard",
+        "--focus-ring",
+        "--font-body",
+        "--motion-fast",
+        "--radius-pill",
+        "--space-2",
+        "--surface",
+        "--text-base"
       ]
     },
     {
@@ -313,10 +321,12 @@
       "tokenReferences": [
         "--border",
         "--ease-standard",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--space-2",
-        "--text-base"
+        "--text-base",
+        "--text-sm"
       ]
     },
     {
@@ -347,6 +357,8 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
+        "--accent-on",
         "--border-soft",
         "--elev-raised",
         "--radius-lg",
@@ -378,6 +390,9 @@
         "--radius-pill",
         "--space-2",
         "--space-3",
+        "--success",
+        "--surface",
+        "--text-sm",
         "--text-xs"
       ]
     },
@@ -465,12 +480,16 @@
         "p"
       ],
       "tokenReferences": [
+        "--font-display",
         "--leading-body",
+        "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-4xl",
         "--text-base",
         "--text-lg",
-        "--text-sm"
+        "--text-sm",
+        "--tracking-display"
       ]
     },
     {
@@ -487,8 +506,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -503,7 +520,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

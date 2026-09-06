@@ -264,12 +264,21 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
-        "--surface"
+        "--radius-pill",
+        "--space-2",
+        "--surface",
+        "--text-base"
       ]
     },
     {
@@ -297,16 +306,21 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--ease-standard",
         "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
-        "--text-base"
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -346,7 +360,12 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--accent"
+        "--accent",
+        "--font-mono",
+        "--muted",
+        "--radius-pill",
+        "--space-2",
+        "--text-xs"
       ]
     },
     {
@@ -361,7 +380,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent"
+      ]
     },
     {
       "id": "keyboard",
@@ -374,7 +395,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--font-mono",
+        "--muted",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -419,12 +447,16 @@
       "tokenReferences": [
         "--accent",
         "--fg",
+        "--fg-2",
+        "--font-body",
         "--font-display",
         "--font-mono",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-3xl",
         "--text-4xl",
+        "--text-lg",
         "--text-sm",
         "--text-xl",
         "--tracking-display"
@@ -445,8 +477,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -461,7 +491,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

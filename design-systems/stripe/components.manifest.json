@@ -322,14 +322,17 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-display",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
-        "--text-base"
+        "--text-base",
+        "--text-sm"
       ]
     },
     {
@@ -346,8 +349,7 @@
         ".field select:focus-visible",
         ".field textarea",
         ".field textarea:focus-visible",
-        ".field-help",
-        ".metric-label"
+        ".field-help"
       ],
       "classes": [
         "field",
@@ -364,16 +366,20 @@
         "select"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--ease-standard",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
         "--motion-fast",
         "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
         "--text-base",
-        "--text-sm"
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -394,10 +400,19 @@
       "elements": [],
       "tokenReferences": [
         "--border",
+        "--ease-standard",
+        "--elev-raised",
+        "--fg",
+        "--font-display",
+        "--motion-base",
+        "--radius-lg",
         "--radius-md",
         "--space-3",
+        "--space-4",
         "--space-6",
-        "--surface"
+        "--space-8",
+        "--surface",
+        "--text-xl"
       ]
     },
     {
@@ -420,9 +435,11 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--muted",
         "--radius-sm",
+        "--success",
         "--surface-warm",
         "--text-xs"
       ]
@@ -439,7 +456,9 @@
       "elements": [
         "a"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--accent"
+      ]
     },
     {
       "id": "keyboard",
@@ -452,7 +471,13 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--radius-sm",
+        "--surface-warm"
+      ]
     },
     {
       "id": "icons",
@@ -494,12 +519,16 @@
         "p"
       ],
       "tokenReferences": [
+        "--accent",
         "--fg",
         "--font-display",
         "--leading-tight",
         "--muted",
         "--text-2xl",
+        "--text-4xl",
         "--text-sm",
+        "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -519,9 +548,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "form-grid-2",
-        "pricing-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -532,11 +558,18 @@
         "section"
       ],
       "tokenReferences": [
+        "--border",
+        "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
+        "--container-max",
         "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-6"
+        "--space-4",
+        "--space-6",
+        "--space-8"
       ]
     }
   ],

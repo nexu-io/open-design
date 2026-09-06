@@ -254,11 +254,13 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--accent-on",
         "--border",
         "--ease-standard",
         "--elev-ring",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-md",
@@ -285,13 +287,17 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
         "--radius-sm",
         "--space-2",
         "--space-4",
         "--space-5",
-        "--surface"
+        "--surface",
+        "--text-sm"
       ]
     },
     {
@@ -314,9 +320,16 @@
       "elements": [],
       "tokenReferences": [
         "--border",
+        "--border-soft",
         "--elev-raised",
+        "--muted",
         "--radius-lg",
-        "--surface"
+        "--radius-md",
+        "--space-3",
+        "--space-4",
+        "--space-5",
+        "--surface",
+        "--text-sm"
       ]
     },
     {
@@ -382,9 +395,16 @@
       ],
       "tokenReferences": [
         "--fg-2",
+        "--font-display",
+        "--font-mono",
+        "--leading-tight",
+        "--meta",
+        "--text-3xl",
         "--text-4xl",
         "--text-lg",
-        "--text-xl"
+        "--text-xl",
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -396,17 +416,20 @@
         "section"
       ],
       "classes": [
-        "container",
-        "metric-grid"
+        "container"
       ],
       "elements": [
         "main",
         "section"
       ],
       "tokenReferences": [
+        "--container-gutter-desktop",
         "--container-gutter-phone",
         "--container-gutter-tablet",
-        "--section-y-desktop"
+        "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet"
       ]
     }
   ],

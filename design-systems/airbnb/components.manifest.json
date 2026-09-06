@@ -379,7 +379,10 @@
         "button"
       ],
       "tokenReferences": [
+        "--accent",
+        "--accent-active",
         "--accent-hover",
+        "--accent-on",
         "--border",
         "--ease-standard",
         "--elev-ring",
@@ -388,8 +391,10 @@
         "--font-display",
         "--motion-fast",
         "--radius-lg",
+        "--radius-pill",
         "--radius-sm",
         "--space-2",
+        "--space-3",
         "--surface",
         "--text-base",
         "--text-sm"
@@ -400,8 +405,6 @@
       "label": "Form fields and controls",
       "present": true,
       "selectors": [
-        ".award-label",
-        ".booking-cell-label",
         ".field",
         ".field input",
         ".field input::placeholder",
@@ -411,8 +414,7 @@
         ".field select:focus-visible",
         ".field-error .field-help",
         ".field-error input",
-        ".field-help",
-        ".search-segment-label"
+        ".field-help"
       ],
       "classes": [
         "field",
@@ -431,12 +433,16 @@
         "--danger",
         "--ease-standard",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
         "--motion-fast",
         "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
-        "--text-base"
+        "--text-base",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -470,9 +476,17 @@
       "tokenReferences": [
         "--accent",
         "--accent-on",
+        "--elev-ring",
         "--fg",
+        "--font-display",
         "--radius-md",
-        "--surface-warm"
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--success",
+        "--surface",
+        "--surface-warm",
+        "--text-xs"
       ]
     },
     {
@@ -508,7 +522,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg",
+        "--font-mono",
+        "--radius-sm",
+        "--surface-warm",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -547,11 +568,15 @@
         "p"
       ],
       "tokenReferences": [
+        "--fg",
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
+        "--text-base",
         "--text-sm",
         "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -561,8 +586,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".nav-logo",
-        ".nav-row",
         ".row-between",
         ".stack-2 > * + *",
         ".stack-3 > * + *",
@@ -572,11 +595,7 @@
         "section + section"
       ],
       "classes": [
-        "booking-grid",
-        "booking-grid-cell",
         "container",
-        "hero-grid",
-        "listings-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -592,8 +611,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-2",
-        "--space-4"
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

@@ -232,22 +232,25 @@
         "button"
       ],
       "tokenReferences": [
-        "--fg"
+        "--accent-on",
+        "--bg",
+        "--ease-standard",
+        "--fg",
+        "--font-display",
+        "--motion-fast",
+        "--radius-sm",
+        "--space-2",
+        "--text-base"
       ]
     },
     {
       "id": "inputs",
       "label": "Form fields and controls",
-      "present": true,
-      "selectors": [
-        ".mono-label"
-      ],
+      "present": false,
+      "selectors": [],
       "classes": [],
       "elements": [],
-      "tokenReferences": [
-        "--fg",
-        "--font-mono"
-      ]
+      "tokenReferences": []
     },
     {
       "id": "cards",
@@ -335,7 +338,12 @@
       "tokenReferences": [
         "--font-display",
         "--leading-tight",
-        "--text-3xl"
+        "--muted",
+        "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-xl",
+        "--tracking-display"
       ]
     },
     {
@@ -352,8 +360,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -367,7 +373,11 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6"
       ]
     }

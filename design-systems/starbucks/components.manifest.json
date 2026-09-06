@@ -286,7 +286,9 @@
       "tokenReferences": [
         "--accent",
         "--accent-hover",
+        "--accent-on",
         "--ease-standard",
+        "--fg",
         "--focus-ring",
         "--font-body",
         "--motion-base",
@@ -294,6 +296,7 @@
         "--radius-pill",
         "--space-2",
         "--text-base",
+        "--text-sm",
         "--tracking-display"
       ]
     },
@@ -323,11 +326,21 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--space-4",
+        "--surface",
+        "--text-base",
         "--text-sm",
-        "--text-xs"
+        "--text-xs",
+        "--tracking-display"
       ]
     },
     {
@@ -345,6 +358,11 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--elev-raised",
+        "--radius-md",
+        "--space-3",
+        "--space-6",
+        "--surface",
         "--text-xs"
       ]
     },
@@ -367,7 +385,13 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--success"
+        "--muted",
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--success",
+        "--surface-warm",
+        "--text-xs"
       ]
     },
     {
@@ -451,8 +475,12 @@
       "tokenReferences": [
         "--fg",
         "--font-display",
+        "--leading-body",
         "--leading-tight",
         "--muted",
+        "--text-3xl",
+        "--text-lg",
+        "--text-sm",
         "--text-xl",
         "--text-xs",
         "--tracking-display"
@@ -472,8 +500,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -487,7 +513,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

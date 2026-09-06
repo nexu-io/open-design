@@ -289,9 +289,12 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
@@ -325,9 +328,17 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
+        "--motion-fast",
         "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-base",
         "--text-sm",
         "--text-xs"
       ]
@@ -351,7 +362,15 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
+        "--ease-standard",
+        "--elev-raised",
+        "--motion-base",
+        "--radius-md",
+        "--radius-sm",
         "--space-2",
+        "--space-3",
+        "--space-6",
+        "--surface",
         "--text-sm"
       ]
     },
@@ -376,6 +395,7 @@
         "--fg-2",
         "--radius-pill",
         "--space-2",
+        "--success",
         "--text-xs"
       ]
     },
@@ -392,6 +412,7 @@
         "a"
       ],
       "tokenReferences": [
+        "--accent",
         "--accent-hover"
       ]
     },
@@ -406,7 +427,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -453,10 +481,15 @@
       "tokenReferences": [
         "--accent",
         "--fg",
+        "--fg-2",
         "--font-display",
         "--leading-tight",
         "--muted",
         "--text-3xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -476,8 +509,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -492,8 +523,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-4"
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

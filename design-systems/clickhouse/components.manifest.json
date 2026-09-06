@@ -305,14 +305,17 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
         "--space-8",
+        "--success",
         "--surface",
         "--text-base"
       ]
@@ -327,8 +330,7 @@
         ".field input::placeholder",
         ".field input:focus-visible",
         ".field label",
-        ".field-help",
-        ".stat-label"
+        ".field-help"
       ],
       "classes": [
         "field",
@@ -343,16 +345,20 @@
         "label"
       ],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--ease-standard",
         "--fg",
+        "--focus-ring",
         "--font-body",
         "--meta",
         "--motion-fast",
+        "--muted",
         "--radius-sm",
         "--space-2",
         "--surface",
-        "--text-sm"
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -371,6 +377,7 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--border-soft",
         "--radius-md",
@@ -395,6 +402,7 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--border",
         "--border-soft",
         "--muted",
@@ -438,7 +446,14 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--radius-sm",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -485,7 +500,12 @@
         "--font-display",
         "--leading-tight",
         "--muted",
-        "--text-2xl"
+        "--text-2xl",
+        "--text-4xl",
+        "--text-lg",
+        "--text-sm",
+        "--text-xl",
+        "--tracking-display"
       ]
     },
     {
@@ -504,8 +524,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -521,8 +539,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-5"
+        "--space-4",
+        "--space-5",
+        "--space-6"
       ]
     }
   ],

@@ -302,13 +302,17 @@
       ],
       "tokenReferences": [
         "--bg",
+        "--border",
         "--ease-standard",
         "--fg",
+        "--fg-2",
         "--focus-ring",
         "--font-display",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
+        "--space-3",
+        "--surface",
         "--text-sm"
       ]
     },
@@ -323,8 +327,7 @@
         ".field input:focus-visible",
         ".field input:hover",
         ".field label",
-        ".field-help",
-        ".metric-label"
+        ".field-help"
       ],
       "classes": [
         "field",
@@ -339,12 +342,18 @@
         "label"
       ],
       "tokenReferences": [
+        "--border",
+        "--ease-standard",
         "--fg",
-        "--fg-2",
         "--focus-ring",
         "--meta",
-        "--text-base",
-        "--text-sm"
+        "--motion-fast",
+        "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--surface",
+        "--text-sm",
+        "--text-xs"
       ]
     },
     {
@@ -361,9 +370,11 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--bg",
         "--border",
         "--ease-standard",
         "--elev-raised",
+        "--fg",
         "--motion-base",
         "--radius-lg",
         "--radius-md",
@@ -393,7 +404,15 @@
       "elements": [],
       "tokenReferences": [
         "--accent",
-        "--success"
+        "--bg",
+        "--border",
+        "--fg",
+        "--fg-2",
+        "--font-display",
+        "--radius-pill",
+        "--space-1",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -425,7 +444,13 @@
       "elements": [
         "kbd"
       ],
-      "tokenReferences": []
+      "tokenReferences": [
+        "--border",
+        "--fg-2",
+        "--font-mono",
+        "--surface",
+        "--text-xs"
+      ]
     },
     {
       "id": "icons",
@@ -472,13 +497,17 @@
       "tokenReferences": [
         "--accent",
         "--fg",
+        "--fg-2",
         "--font-display",
         "--font-mono",
         "--leading-tight",
         "--muted",
         "--space-4",
         "--text-3xl",
+        "--text-4xl",
         "--text-lg",
+        "--text-sm",
+        "--text-xl",
         "--text-xs",
         "--tracking-display"
       ]
@@ -498,7 +527,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "row-between",
         "stack-3",
         "stack-4"
@@ -513,8 +541,12 @@
         "--container-gutter-tablet",
         "--container-max",
         "--fg",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
-        "--space-4"
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

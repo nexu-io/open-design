@@ -251,15 +251,19 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--accent-hover",
         "--accent-on",
         "--bg",
         "--border",
         "--ease-standard",
         "--fg",
+        "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
+        "--surface-warm",
         "--text-base"
       ]
     },
@@ -272,8 +276,7 @@
         ".field input",
         ".field input::placeholder",
         ".field input:focus",
-        ".field label",
-        ".label"
+        ".field label"
       ],
       "classes": [
         "field"
@@ -291,10 +294,12 @@
         "--fg",
         "--focus-ring",
         "--font-body",
+        "--meta",
         "--motion-fast",
         "--radius-sm",
         "--space-2",
-        "--text-base"
+        "--text-base",
+        "--text-sm"
       ]
     },
     {
@@ -313,6 +318,7 @@
         "--bg",
         "--border-soft",
         "--ease-standard",
+        "--elev-raised",
         "--motion-base",
         "--radius-md",
         "--space-6"
@@ -332,6 +338,7 @@
       ],
       "elements": [],
       "tokenReferences": [
+        "--accent",
         "--muted",
         "--radius-pill",
         "--surface",
@@ -401,6 +408,7 @@
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-4xl",
         "--text-lg",
         "--text-sm",
@@ -422,8 +430,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
-        "hero-grid",
         "stack-3",
         "stack-4"
       ],
@@ -437,7 +443,12 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-4"
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
+        "--space-3",
+        "--space-4",
+        "--space-6"
       ]
     }
   ],

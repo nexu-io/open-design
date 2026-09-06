@@ -297,8 +297,13 @@
       "tokenReferences": [
         "--accent",
         "--accent-active",
+        "--accent-hover",
         "--accent-on",
+        "--bg",
+        "--border",
         "--ease-standard",
+        "--fg-2",
+        "--focus-ring",
         "--font-body",
         "--meta",
         "--motion-base",
@@ -320,8 +325,7 @@
         ".field input:focus-visible",
         ".field input:hover",
         ".field label",
-        ".field-help",
-        ".hero-canvas-label"
+        ".field-help"
       ],
       "classes": [
         "field",
@@ -337,10 +341,19 @@
       ],
       "tokenReferences": [
         "--accent",
+        "--bg",
+        "--border",
+        "--ease-standard",
         "--fg",
         "--focus-ring",
+        "--font-body",
         "--meta",
-        "--text-base"
+        "--motion-fast",
+        "--muted",
+        "--radius-sm",
+        "--space-2",
+        "--text-base",
+        "--text-sm"
       ]
     },
     {
@@ -368,7 +381,12 @@
       ],
       "elements": [],
       "tokenReferences": [
-        "--success"
+        "--font-body",
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--success",
+        "--text-xs"
       ]
     },
     {
@@ -387,9 +405,12 @@
       ],
       "tokenReferences": [
         "--ease-standard",
+        "--fg",
         "--motion-base",
         "--muted",
-        "--surface"
+        "--radius-sm",
+        "--surface",
+        "--text-base"
       ]
     },
     {
@@ -454,11 +475,16 @@
       ],
       "tokenReferences": [
         "--fg",
+        "--font-body",
         "--font-display",
         "--leading-tight",
         "--muted",
+        "--text-2xl",
         "--text-3xl",
+        "--text-4xl",
         "--text-sm",
+        "--text-xl",
+        "--text-xs",
         "--tracking-display"
       ]
     },
@@ -468,12 +494,6 @@
       "present": true,
       "selectors": [
         ".container",
-        ".nav",
-        ".nav-brand",
-        ".nav-inner",
-        ".nav-links",
-        ".nav-links a",
-        ".nav-links a:hover",
         ".row-between",
         ".stack-3 > * + *",
         ".stack-4 > * + *",
@@ -483,7 +503,6 @@
       ],
       "classes": [
         "container",
-        "features-grid",
         "row-between",
         "stack-3",
         "stack-4",
@@ -500,10 +519,13 @@
         "--container-gutter-phone",
         "--container-gutter-tablet",
         "--container-max",
-        "--space-2",
+        "--section-y-desktop",
+        "--section-y-phone",
+        "--section-y-tablet",
         "--space-3",
+        "--space-4",
         "--space-6",
-        "--surface"
+        "--space-8"
       ]
     }
   ],
