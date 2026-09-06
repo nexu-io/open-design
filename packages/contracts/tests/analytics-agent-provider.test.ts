@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   agentIdToTracking,
   feedbackAgentProviderIdToTracking,
+  handoffTargetIdToTracking,
 } from '../src/analytics/events.js';
 
 describe('agentIdToTracking', () => {
@@ -17,6 +18,7 @@ describe('agentIdToTracking', () => {
   it('keeps mapping known CLI agents and falls back to other for unknowns', () => {
     expect(agentIdToTracking('claude')).toBe('claude_code');
     expect(agentIdToTracking('opencode')).toBe('opencode');
+    expect(agentIdToTracking('omp')).toBe('omp');
     expect(agentIdToTracking('totally-unknown-agent')).toBe('other');
     expect(agentIdToTracking(null)).toBe('other');
     expect(agentIdToTracking(undefined)).toBe('other');
@@ -26,5 +28,11 @@ describe('agentIdToTracking', () => {
     // feedbackAgentProviderIdToTracking falls through to agentIdToTracking
     // for non-BYOK agents, so AMR assistant feedback must also be `amr`.
     expect(feedbackAgentProviderIdToTracking('amr')).toBe('amr');
+  });
+});
+
+describe('handoffTargetIdToTracking', () => {
+  it('keeps OMP as a bounded handoff analytics target', () => {
+    expect(handoffTargetIdToTracking('omp')).toBe('omp');
   });
 });

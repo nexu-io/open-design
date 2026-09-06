@@ -176,9 +176,9 @@ export type TrackingByokProviderId =
   | 'senseaudio'
   | 'aihubmix';
 
-// v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli` and
-// `kilo` over v1, plus `amr` (the vela CLI runtime) so AMR runs no longer
-// fold into the `other` catch-all bucket.
+// v2 CLI provider catalogue (CSV row 63 + image 59). Adds `qoder_cli`,
+// `kilo`, `amr` (the vela CLI runtime), and `omp` (the Oh My Pi runtime) so
+// shipped agents never fold into the `other` catch-all bucket.
 // Every agent the daemon can detect needs its own id here. An agent that falls
 // through to `other` is invisible to any breakdown or alert that asks *which*
 // CLI failed — which is the only question worth asking when an install someone
@@ -197,6 +197,7 @@ export type TrackingCliProviderId =
   | 'qoder_cli'
   | 'github_copilot_cli'
   | 'pi'
+  | 'omp'
   | 'kilo'
   | 'kiro'
   | 'vibe'

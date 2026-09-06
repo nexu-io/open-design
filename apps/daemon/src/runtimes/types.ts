@@ -1,5 +1,6 @@
 import type { ExecFileOptions } from 'node:child_process';
 import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
+import type { PiRpcResumeCommand } from '../agent-protocol/index.js';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -83,6 +84,13 @@ export type RuntimeContext = {
    * than forwarding Child text into the parent UI stream.
    */
   observeNativeChildBehavior?: boolean;
+  // The daemon's resolved data root (RUNTIME_DATA_DIR). Adapters whose CLI
+  // needs a daemon-owned, per-run scratch/state directory outside the
+  // project cwd read this instead of deriving one from `cwd` themselves —
+  // see the daemon data directory contract in the root AGENTS.md. Always
+  // populated for real chat runs; omitted only by call sites that don't
+  // resolve a data root (e.g. isolated smoke/connection tests).
+  dataDir?: string;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
@@ -181,6 +189,38 @@ export type RuntimeAgentDef = {
   // honored for adapters that also set `promptViaStdin: true`.
   promptInputFormat?: 'text' | 'stream-json';
   eventParser?: string;
+  // `streamFormat: 'pi-rpc'` adapters only. The pi family shares one wire
+  // protocol but disagrees on how a prior conversation is reloaded, so the
+  // transport reads the dialect from the def instead of branching on id.
+  //
+  //   'new-session-parent' (default) — pi: `new_session { parentSession }`
+  //                                    replays the parent transcript.
+  //   'switch-session'               — Oh My Pi: `parentSession` is a
+  //                                    lineage-only header field that does NOT
+  //                                    replay entries, so resume must reopen
+  //                                    the transcript with `switch_session`.
+  piRpcResumeCommand?: PiRpcResumeCommand;
+  // `streamFormat: 'pi-rpc'` adapters only. Directory under the project cwd
+  // where the CLI stores its session `.jsonl` files, scanned to capture the
+  // resume handle. Each adapter owns its own name so pi and Oh My Pi runs in
+  // the same project cannot mistake each other's transcripts for their own.
+  // Defaults to pi's `.pi`.
+  piRpcSessionDirName?: string;
+  // `streamFormat: 'pi-rpc'` adapters only. When present, the daemon calls
+  // this to compute the base directory the transport scans for session
+  // `.jsonl` files (and passes to the CLI's own session-directory flag),
+  // INSTEAD OF the project cwd. Absent (pi's default): the transport keeps
+  // scanning under the project cwd, unchanged.
+  //
+  // Oh My Pi's upstream default session store already lives outside the
+  // project tree (a global `~/.omp/agent/sessions/<encoded-cwd>/`); pinning
+  // it to the project cwd instead would write agent runtime state into the
+  // user's own repository — for imported-folder projects, an external tree
+  // outside the daemon's data root. Per the daemon data directory contract
+  // in the root AGENTS.md, that state belongs under `ctx.dataDir`
+  // (RUNTIME_DATA_DIR) instead. Returning `undefined` (e.g. `dataDir` or
+  // `cwd` missing) falls back to the project cwd.
+  piRpcSessionScanBase?: (ctx: { dataDir?: string; cwd?: string }) => string | undefined;
   env?: Record<string, string>;
   listModels?: RuntimeListModels;
   fetchModels?: (

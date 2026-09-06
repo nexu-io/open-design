@@ -1177,6 +1177,114 @@ test('attachPiRpcSession fails and does not send prompt when parentSession is re
   );
 });
 
+// ─── resumeCommand: 'switch-session' (Oh My Pi dialect) ────────────────
+
+test("attachPiRpcSession sends switch_session for resumeCommand 'switch-session'", async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(path.join(tmpdir(), 'od-omp-switch-'));
+  const sessionFile = path.join(dir, 'prior.jsonl');
+  writeFileSync(sessionFile, '{"type":"session"}\n');
+
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    send,
+    parentSession: sessionFile,
+    resumeCommand: 'switch-session',
+  });
+
+  const firstChunk = child.stdin.read();
+  const firstLines = firstChunk ? firstChunk.toString().trim().split('\n').filter(Boolean) : [];
+  assert.equal(firstLines.length, 1, 'should wait for switch_session response before prompt');
+  const first = parseJsonRecord(firstLines[0] ?? '');
+  assert.equal(first.type, 'switch_session', 'first cmd should be switch_session');
+  assert.equal(first.sessionPath, sessionFile, 'switch_session carries sessionPath, not parentSession');
+  assert.equal(first.parentSession, undefined, 'must not send the pi-only parentSession field');
+
+  feedStdoutLines(child, [
+    { type: 'response', id: first.id, command: 'switch_session', success: true, data: { cancelled: false } },
+  ]);
+  const promptChunk = child.stdin.read();
+  const promptLines = promptChunk ? promptChunk.toString().trim().split('\n').filter(Boolean) : [];
+  assert.equal(promptLines.length, 1, 'should send prompt after switch_session succeeds');
+  assert.equal(parseJsonRecord(promptLines[0] ?? '').type, 'prompt');
+});
+
+test("attachPiRpcSession fails without prompting when a 'switch-session' target is missing", () => {
+  // omp answers switch_session for a deleted path with success:true and simply
+  // opens an empty transcript. The daemon already trimmed the prompt to the
+  // latest turn, so proceeding would silently erase the conversation.
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    send,
+    parentSession: path.join('/nonexistent-od-omp', 'gone.jsonl'),
+    resumeCommand: 'switch-session',
+  });
+
+  assert.equal(child.stdin.read(), null, 'must not send any command for a missing session file');
+  const error = events.find((event) => event.channel === 'error');
+  assert.equal(error?.code, 'PI_PARENT_SESSION_FAILED');
+});
+
+test("attachPiRpcSession fails without prompting when 'switch-session' reports cancelled", async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const dir = mkdtempSync(path.join(tmpdir(), 'od-omp-cancel-'));
+  const sessionFile = path.join(dir, 'prior.jsonl');
+  writeFileSync(sessionFile, '{"type":"session"}\n');
+
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    send,
+    parentSession: sessionFile,
+    resumeCommand: 'switch-session',
+  });
+  const first = parseJsonRecord((child.stdin.read()?.toString() ?? '').trim());
+
+  feedStdoutLines(child, [
+    { type: 'response', id: first.id, command: 'switch_session', success: true, data: { cancelled: true } },
+  ]);
+
+  assert.equal(child.stdin.read(), null, 'must not send the trimmed prompt after a cancelled switch');
+  const error = events.find((event) => event.channel === 'error');
+  assert.equal(error?.code, 'PI_PARENT_SESSION_FAILED');
+});
+
+test('attachPiRpcSession keeps new_session for the default resume command', () => {
+  // pi's dialect must be untouched by the Oh My Pi opt-in.
+  const events: TestSentEvent[] = [];
+  const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
+  const child = createMockChild();
+  attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'test',
+    send,
+    parentSession: '/path/to/prior-session.jsonl',
+  });
+  const first = parseJsonRecord((child.stdin.read()?.toString() ?? '').trim());
+  assert.equal(first.type, 'new_session');
+  // A pi `new_session` reporting cancelled keeps its historical pass-through
+  // behaviour — the switch-session guard must not leak across dialects.
+  feedStdoutLines(child, [
+    { type: 'response', id: first.id, success: true, data: { cancelled: true } },
+  ]);
+  const promptChunk = child.stdin.read();
+  assert.ok(promptChunk, 'pi should still receive the prompt');
+  assert.equal(parseJsonRecord(promptChunk.toString().trim()).type, 'prompt');
+});
+
 test('attachPiRpcSession does NOT send new_session when parentSession is omitted', () => {
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });

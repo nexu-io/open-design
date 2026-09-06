@@ -207,6 +207,8 @@ export function agentIdToTracking(agentId: string | null | undefined): TrackingC
       return 'github_copilot_cli';
     case 'pi':
       return 'pi';
+    case 'omp':
+      return 'omp';
     case 'kilo':
       return 'kilo';
     case 'kiro':
