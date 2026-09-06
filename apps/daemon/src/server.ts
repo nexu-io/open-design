@@ -11768,8 +11768,18 @@ export async function startServer({
       if (strategyProtocol && event === 'agent' && data?.type === 'tool_use') {
         strategyToolUseCount += 1;
       }
+      // Only agent output goes through the protocol stream, and only while that
+      // stream is open. `finish()` runs in this attempt's close handler, after
+      // the child has exited, so once it has run there is no model output left
+      // to parse — what the daemon still emits (the filesystem empty-answer
+      // autofill below, an error payload) is text the daemon wrote itself.
+      // Feeding that back into a finished stream is what used to throw
+      // `already finished` out of an uncaught close handler and strand the run
+      // in `running` forever, with the user watching a spinner that never ended
+      // while the files sat finished on disk.
+      const streamingAgentOutput = Boolean(strategyProtocol) && !strategyProtocol.isFinished;
       if (
-        strategyProtocol
+        streamingAgentOutput
         && event === 'agent'
         && data?.type === 'text_delta'
         && typeof data.delta === 'string'
@@ -11779,7 +11789,7 @@ export async function startServer({
         strategyVisibleEmitted += delta;
         data = { ...data, delta };
       } else if (
-        strategyProtocol
+        streamingAgentOutput
         && event === 'stdout'
         && typeof data?.chunk === 'string'
       ) {

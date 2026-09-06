@@ -197,6 +197,26 @@ export class OdNextMachineProtocolStream {
     this.maxMachineBlockBytes = max;
   }
 
+  /**
+   * Whether `finish()` has already run.
+   *
+   * This separates the two windows a run's output stream has. While the stream
+   * is open every byte is agent output, so it must go through `push` and the
+   * protocol withholds anything that might still turn out to be a reserved
+   * `<open-design-…>` block. `finish()` closes that window: it is called from
+   * the child's close handler, so the agent has stopped producing and no model
+   * bytes remain. Whatever the daemon still emits on this run afterwards — the
+   * filesystem empty-answer autofill, an error payload — is daemon-authored
+   * text that was never model output and must not be fed back into the parser.
+   *
+   * Callers emitting on a run's stream check this instead of pushing blindly;
+   * `push` and `finish` keep throwing so a genuine mid-stream misuse still
+   * fails loudly.
+   */
+  get isFinished(): boolean {
+    return this.finished;
+  }
+
   push(chunk: string): string {
     if (this.finished) throw new Error('OD Next machine protocol stream is already finished.');
     if (typeof chunk !== 'string' || chunk.length === 0) return '';

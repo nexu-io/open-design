@@ -291,4 +291,21 @@ describe('OD Next machine protocol stream', () => {
     });
     expect(result.issues).toEqual([]);
   });
+
+  it('reports whether it is finished so emitters can stop routing through it', () => {
+    const stream = new OdNextMachineProtocolStream();
+    expect(stream.isFinished).toBe(false);
+    stream.push('Visible text.');
+    expect(stream.isFinished).toBe(false);
+
+    stream.finish();
+
+    // The daemon still emits on a run after the child closes (the filesystem
+    // empty-answer autofill, error payloads). Those emitters read this instead
+    // of pushing into a finished stream, which throws.
+    expect(stream.isFinished).toBe(true);
+    expect(() => stream.push('daemon-authored text')).toThrow(
+      'OD Next machine protocol stream is already finished.',
+    );
+  });
 });
