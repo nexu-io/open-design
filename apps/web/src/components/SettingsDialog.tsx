@@ -864,6 +864,7 @@ const AGENT_SHORT_DESCRIPTIONS: Record<string, string> = {
   kimi: 'Moonshot Kimi CLI',
   qoder: 'Alibaba coding CLI',
   pi: 'Inflection chat CLI',
+  omp: 'oh-my-pi coding CLI',
   kiro: 'Kiro agent CLI',
   kilo: 'Kilo Code CLI',
   vibe: 'Mistral open-source CLI',

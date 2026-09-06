@@ -197,6 +197,7 @@ export type TrackingCliProviderId =
   | 'qoder_cli'
   | 'github_copilot_cli'
   | 'pi'
+  | 'omp'
   | 'kilo'
   | 'kiro'
   | 'vibe'
