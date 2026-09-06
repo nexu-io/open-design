@@ -95,6 +95,16 @@ export type ScrollFreezeVerdict =
 export interface ScrollFreezeState {
   readonly maxScrollTopSeen: number;
   readonly lastScrollTop: number | null;
+  /**
+   * The content and viewport heights `lastScrollTop` was read alongside.
+   *
+   * They travel WITH the position because the only useful question about a
+   * previous position is whether it is still comparable to the current one,
+   * and that is a question about the layout it was taken in — see
+   * `layoutHeldStill`.
+   */
+  readonly lastScrollHeight: number | null;
+  readonly lastClientHeight: number | null;
   /** scrollTop the current stalled streak is pinned at; null when moving. */
   readonly stallAt: number | null;
   readonly stallWheelCount: number;
@@ -150,15 +160,85 @@ export const FREEZE_REQUESTED_PX = 240;
  */
 export const SNAP_BACK_MIN_PX = 8;
 
+/**
+ * `deltaMode: 1` is lines. Chromium's own line height for wheel input.
+ */
+export const WHEEL_LINE_HEIGHT_PX = 16;
+
+/**
+ * One wheel notch, in CSS pixels, whatever unit the device reported it in.
+ *
+ * Wheel deltas arrive in pixels, lines or pages depending on the device and
+ * the OS. This lives in the pure module rather than beside either caller
+ * because there are now two of them — the probe, which turns notches into the
+ * `requestedPx` its freeze threshold is measured in, and the takeover in
+ * `runtime/chat-scroll-takeover.ts`, which turns the same notches into the
+ * distance it moves the log. Two copies would mean the amount a wheel is
+ * judged to have asked for and the amount it actually delivers could drift
+ * apart, which is the one disagreement neither side could detect.
+ *
+ * `viewportPx` is passed in — never read from an element — so no caller can
+ * be tempted into a layout read on the input path.
+ */
+export function wheelDeltaToPx(
+  deltaY: number,
+  deltaMode: number,
+  viewportPx: number,
+): number {
+  if (deltaMode === 1) return deltaY * WHEEL_LINE_HEIGHT_PX;
+  if (deltaMode === 2) return deltaY * viewportPx;
+  return deltaY;
+}
+
 export function createScrollFreezeState(): ScrollFreezeState {
   return {
     maxScrollTopSeen: 0,
     lastScrollTop: null,
+    lastScrollHeight: null,
+    lastClientHeight: null,
     stallAt: null,
     stallWheelCount: 0,
     stallRequestedPx: 0,
     reported: false,
   };
+}
+
+/**
+ * Did the layout under the scroller hold still between the sample
+ * `lastScrollTop` came from and this one?
+ *
+ * This is the ONE precondition under which "the scroller went backwards"
+ * means anything. When content above the viewport changes height the browser's
+ * own scroll anchoring moves `scrollTop` to keep the reading position still —
+ * that is a correction, not a scroll, and it is indistinguishable from one by
+ * position alone. Measured on this branch: a single anchoring correction moved
+ * `scrollTop` 1036px backwards, against a `SNAP_BACK_MIN_PX` of 8.
+ *
+ * Height is what separates the two, because an anchoring correction cannot
+ * happen without one: the correction exists precisely to absorb a height change
+ * above the anchor. Same criterion, same reasoning, as the `layoutStable` test
+ * in `runtime/chat/stick-to-bottom.ts`, which uses it to tell a user's gesture
+ * from the browser's own bookkeeping. Deliberately NOT a freshness window:
+ * "was this baseline taken less than N milliseconds ago" is a parameter nobody
+ * can validate offline, and it would still convict on a correction that landed
+ * inside N.
+ *
+ * `clientHeight` is in the test as well as `scrollHeight` because a viewport
+ * that changed height moves the ceiling under the scroller just as effectively
+ * as content that grew.
+ *
+ * A state with no previous sample is not stable — there is nothing to have
+ * held still — which keeps this predicate honest when read on its own.
+ */
+export function layoutHeldStill(
+  state: ScrollFreezeState,
+  geometry: ScrollGeometry,
+): boolean {
+  if (state.lastScrollHeight == null || state.lastClientHeight == null) return false;
+  return (
+    state.lastScrollHeight === geometry.scrollHeight
+    && state.lastClientHeight === geometry.clientHeight
+  );
 }
 
 /**
@@ -178,6 +258,8 @@ export function observeScroll(
     ...state,
     maxScrollTopSeen: Math.max(state.maxScrollTopSeen, geometry.scrollTop),
     lastScrollTop: geometry.scrollTop,
+    lastScrollHeight: geometry.scrollHeight,
+    lastClientHeight: geometry.clientHeight,
     stallAt: moved ? null : state.stallAt,
     stallWheelCount: moved ? 0 : state.stallWheelCount,
     stallRequestedPx: moved ? 0 : state.stallRequestedPx,
@@ -205,6 +287,21 @@ export function observeWheelBatch(
   const layoutMaxScrollTop = Math.max(0, geometry.scrollHeight - geometry.clientHeight);
   const unreachablePx = layoutMaxScrollTop - top;
   const previousTop = state.lastScrollTop;
+  const stable = layoutHeldStill(state, geometry);
+  /**
+   * The baseline the NEXT batch will be judged against — position and the
+   * layout it was read in, together. One object spread into every return
+   * below, so a return path cannot advance the position while leaving the
+   * heights behind: a mismatched pair would make the next verdict compare a
+   * fresh scrollTop against a layout that is no longer under it, which is the
+   * exact defect `layoutHeldStill` exists to catch.
+   */
+  const sampled = {
+    maxScrollTopSeen,
+    lastScrollTop: top,
+    lastScrollHeight: geometry.scrollHeight,
+    lastClientHeight: geometry.clientHeight,
+  };
 
   // Upward and horizontal wheels are a different gesture; whatever streak
   // was building is over either way.
@@ -212,8 +309,7 @@ export function observeWheelBatch(
     return {
       state: {
         ...state,
-        maxScrollTopSeen,
-        lastScrollTop: top,
+        ...sampled,
         stallAt: null,
         stallWheelCount: 0,
         stallRequestedPx: 0,
@@ -222,15 +318,31 @@ export function observeWheelBatch(
     };
   }
 
-  // Asked to go down, went UP, and there was room below. The compositor
-  // clamped us onto its own ceiling; no repetition needed.
+  // Asked to go down, went UP, and there was room below — WITH the layout
+  // under it unchanged since the last reading. The compositor clamped us onto
+  // its own ceiling; no repetition needed.
+  //
+  // `stable` is what keeps that "no repetition needed" honest. Without it this
+  // route convicts on the browser's own scroll anchoring: content above the
+  // viewport gets shorter, anchoring pulls `scrollTop` back to hold the
+  // reading position, and the next downward notch is compared against a
+  // position that no longer exists. Measured on this branch, slow-scrolling a
+  // long conversation reported a freeze on 19 of 20 notches — while the log
+  // scrolled perfectly throughout — off single corrections of up to 1036px.
+  //
+  // The four-notch `wheel_stall` route below needs no such gate: a correction
+  // moves the scroller, movement reads as `moving`, and the streak resets. It
+  // is only this one-notch route, which converts a single backwards step
+  // straight into a report, that has to prove the step was not somebody
+  // else's bookkeeping.
   if (
     previousTop != null
+    && stable
     && top <= previousTop - SNAP_BACK_MIN_PX
     && unreachablePx > MIN_UNREACHABLE_PX
   ) {
     return {
-      state: { ...state, maxScrollTopSeen, lastScrollTop: top, reported: true },
+      state: { ...state, ...sampled, reported: true },
       verdict: {
         kind: 'frozen',
         evidence: {
@@ -255,8 +367,7 @@ export function observeWheelBatch(
     return {
       state: {
         ...state,
-        maxScrollTopSeen,
-        lastScrollTop: top,
+        ...sampled,
         stallAt: null,
         stallWheelCount: 0,
         stallRequestedPx: 0,
@@ -268,11 +379,15 @@ export function observeWheelBatch(
   if (previousTop != null && top !== previousTop) {
     // It moved. The streak restarts empty rather than at one: the wheel
     // that produced movement is evidence of health, not of a stall.
+    //
+    // A backwards step that failed the stability gate above lands HERE, which
+    // is the right home for it: the scroller is somewhere new, so the streak
+    // re-anchors and the next notch is judged against a baseline that matches
+    // the layout it was taken in.
     return {
       state: {
         ...state,
-        maxScrollTopSeen,
-        lastScrollTop: top,
+        ...sampled,
         stallAt: top,
         stallWheelCount: 0,
         stallRequestedPx: 0,
@@ -291,8 +406,7 @@ export function observeWheelBatch(
 
   const next: ScrollFreezeState = {
     ...state,
-    maxScrollTopSeen,
-    lastScrollTop: top,
+    ...sampled,
     stallAt: top,
     stallWheelCount: streakWheelCount,
     stallRequestedPx: streakRequestedPx,

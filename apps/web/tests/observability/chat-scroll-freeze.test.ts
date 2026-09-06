@@ -420,6 +420,81 @@ describe('chat-scroll-freeze-detector — freeze decision', () => {
     expect(result.verdict.evidence.maxScrollTopSeen).toBe(800);
   });
 
+  it('will not call the browser\'s own scroll anchoring a snap-back', () => {
+    // The false positive this gate exists for, as arithmetic.
+    //
+    // Content ABOVE the viewport got shorter — a collapsed block, a late
+    // image resolving to less than its placeholder, a thinking block folding
+    // away. The browser's scroll anchoring pulls `scrollTop` back by the same
+    // amount to hold the reading position still, so `scrollHeight` and
+    // `scrollTop` fall TOGETHER. Position alone cannot tell that apart from a
+    // compositor throwing the scroller onto a stale ceiling, and the numbers
+    // are not close: measured on this branch, one correction moved the log
+    // 1036px against a `SNAP_BACK_MIN_PX` of 8.
+    //
+    // Height is what separates them, because an anchoring correction cannot
+    // happen without one.
+    let state = createScrollFreezeState();
+    state = observeScroll(state, { scrollTop: 1700, scrollHeight: 3400, clientHeight: 600 });
+    const result = observeWheelBatch(state, {
+      // 1036px of content vanished above the viewport; anchoring took the
+      // same 1036px off scrollTop, and the user's notch then moved it down
+      // 120 of its own.
+      geometry: { scrollTop: 784, scrollHeight: 2364, clientHeight: 600 },
+      requestedPx: 120,
+      wheelCount: 1,
+    });
+    expect(result.verdict.kind).toBe('moving');
+    expect(result.state.reported).toBe(false);
+  });
+
+  it('still calls a genuine snap-back on the very next notch after a reflow', () => {
+    // The gate must DEFER the verdict, never delete it. One frame sampled
+    // against the settled layout is all it takes to re-arm: the same
+    // backwards step that was excused while the content height was moving is
+    // reported the moment the layout holds still.
+    let state = createScrollFreezeState();
+    state = observeScroll(state, { scrollTop: 1700, scrollHeight: 3400, clientHeight: 600 });
+    // The reflow round — excused, and it re-baselines.
+    state = observeWheelBatch(state, {
+      geometry: { scrollTop: 784, scrollHeight: 2364, clientHeight: 600 },
+      requestedPx: 120,
+      wheelCount: 1,
+    }).state;
+    // Layout has settled at 2364. One downward notch, and the scroller lands
+    // 693px ABOVE where it was — nothing but a stale ceiling does that.
+    const result = observeWheelBatch(state, {
+      geometry: { scrollTop: 91, scrollHeight: 2364, clientHeight: 600 },
+      requestedPx: 120,
+      wheelCount: 1,
+    });
+    expect(result.verdict.kind).toBe('frozen');
+    if (result.verdict.kind !== 'frozen') return;
+    expect(result.verdict.evidence.trigger).toBe('wheel_snap_back');
+    expect(result.verdict.evidence.ceilingScrollTop).toBe(91);
+  });
+
+  it('keeps the four-notch route working through a growing transcript', () => {
+    // The stability gate is on the ONE-notch route only. A wheel that moves
+    // nothing while a turn streams in is still a freeze — and it is the case
+    // a blanket "layout must be still" rule would have silenced, because a
+    // streaming log changes height on almost every frame.
+    let state = createScrollFreezeState();
+    let verdict;
+    for (let i = 0; i < FREEZE_WHEEL_COUNT; i += 1) {
+      verdict = observeWheelBatch(state, {
+        // Stuck at 91 while the content keeps arriving.
+        geometry: { scrollTop: 91, scrollHeight: 2347 + i * 40, clientHeight: 583 },
+        requestedPx: 120,
+        wheelCount: 1,
+      });
+      state = verdict.state;
+    }
+    expect(verdict?.verdict.kind).toBe('frozen');
+    if (verdict?.verdict.kind !== 'frozen') return;
+    expect(verdict.verdict.evidence.trigger).toBe('wheel_stall');
+  });
+
   it('goes quiet for good once it has reported', () => {
     let state = createScrollFreezeState();
     let frozen = 0;
@@ -769,6 +844,116 @@ describe('observability/chat-scroll-freeze — probe', () => {
     expect(report.content_px_at_scrollable_on).toBe(674);
     expect(report.scrollable_since_ms).toBeGreaterThan(0);
     expect(String(report.transitions)).toContain('scrollable_on');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The stale baseline
+// ---------------------------------------------------------------------------
+
+/**
+ * The false positive, end to end.
+ *
+ * Measured on this branch: open a long conversation, scroll to the middle,
+ * then wheel downward one notch every 500ms. Eleven runs produced five
+ * reports, and the run that reported flagged 19 of its 20 notches — while
+ * the log scrolled perfectly the whole time.
+ *
+ * The mechanism is entirely inside this file's own scheduling. Scroll-driven
+ * geometry frames are throttled to one per `SCROLL_SAMPLE_MIN_INTERVAL_MS`
+ * (250), and the throttle DROPS the samples it skips rather than deferring
+ * them. So a scroll event arriving inside that window updates nothing, and
+ * the detector's `lastScrollTop` stays where the last frame left it. In that
+ * window the browser's own scroll anchoring corrects `scrollTop` — by up to
+ * 1036px in the captured case — because content above the viewport got
+ * shorter. The next downward notch is then judged against a position the
+ * scroller left a quarter of a second ago, lands far below it, and the
+ * one-notch `wheel_snap_back` route converts that straight into a report:
+ * `FREEZE_WHEEL_COUNT` never gets a say.
+ *
+ * Why it has to be fixed rather than tolerated: `MAX_REPORTS_PER_SESSION` is
+ * 3, and `attach()` refuses to take a chat log at all once the budget is
+ * spent. Three false positives do not merely add noise — they take the probe
+ * off the surface for the rest of the session, so a real freeze afterwards is
+ * observed by nothing.
+ */
+describe('observability/chat-scroll-freeze — scroll anchoring vs the 250ms sampler', () => {
+  /**
+   * One round of the reproduction: content above the viewport gets shorter
+   * inside the sampler's blind window, anchoring takes the same distance off
+   * `scrollTop`, and the user's next notch arrives after it.
+   *
+   * The scroll event is dispatched deliberately: it is what a real browser
+   * emits for an anchoring correction, and the point of the fixture is that
+   * the probe RECEIVES it and still cannot act on it.
+   */
+  function shrinkAboveThenNotch(
+    log: HTMLElement,
+    geometry: ReturnType<typeof stubGeometry>,
+    round: { contentPx: number; topAfterAnchor: number; topAfterNotch: number },
+  ): void {
+    advanceClock(100);
+    geometry.setContent(round.contentPx);
+    geometry.setTop(round.topAfterAnchor);
+    scrolled(log);
+    advanceClock(400);
+    geometry.setTop(round.topAfterNotch);
+    wheel(log, 120);
+  }
+
+  /** 300px of content leaves above the viewport; the notch moves 120 down. */
+  const SLOW_SCROLL_ROUNDS = [
+    { contentPx: 3100, topAfterAnchor: 1400, topAfterNotch: 1520 },
+    { contentPx: 2800, topAfterAnchor: 1220, topAfterNotch: 1340 },
+    { contentPx: 2500, topAfterAnchor: 1040, topAfterNotch: 1160 },
+    { contentPx: 2200, topAfterAnchor: 860, topAfterNotch: 980 },
+    { contentPx: 1900, topAfterAnchor: 680, topAfterNotch: 800 },
+    { contentPx: 1600, topAfterAnchor: 500, topAfterNotch: 620 },
+  ];
+
+  it('stays silent while a log that scrolls fine reflows above the viewport', () => {
+    const { log } = buildChatSurface();
+    const geometry = stubGeometry(log, {
+      scrollTop: 1700,
+      scrollHeight: 3400,
+      clientHeight: 600,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+
+    for (const round of SLOW_SCROLL_ROUNDS) {
+      shrinkAboveThenNotch(log, geometry, round);
+    }
+
+    // Every round of this gesture moved the log downward by exactly what was
+    // asked for. There is no defect here to report.
+    expect(eventsNamed('client_chat_scroll_frozen')).toEqual([]);
+  });
+
+  it('still reports the real thing when the layout is settled underneath it', () => {
+    // The reverse case, same wiring: no reflow at all, one downward notch,
+    // and the scroller lands 709px ABOVE where it was. Nothing but a stale
+    // compositor ceiling does that, and it must still be reported on the
+    // strength of a single notch.
+    const { log } = buildChatSurface();
+    const geometry = stubGeometry(log, {
+      scrollTop: 800,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+
+    advanceClock(300);
+    geometry.setTop(91);
+    wheel(log, 120);
+
+    const reports = eventsNamed('client_chat_scroll_frozen');
+    expect(reports).toHaveLength(1);
+    const report = reports[0] ?? {};
+    expect(report.trigger).toBe('wheel_snap_back');
+    expect(report.ceiling_scroll_top).toBe(91);
+    expect(report.unreachable_px).toBe(1673);
   });
 });
 

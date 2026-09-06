@@ -30,6 +30,7 @@ import {
   type ScrollFreezeState,
   type ScrollGeometry,
   SNAP_BACK_MIN_PX,
+  layoutHeldStill,
 } from './chat-scroll-freeze-detector';
 
 /**
@@ -257,6 +258,15 @@ export function summariseBlockers(blockers: ReportBlocker[]): string {
 export interface SnapBackRoute {
   armed: boolean;
   lastScrollTop: number | null;
+  /**
+   * Whether the layout has held still since `lastScrollTop` was read.
+   *
+   * Reported beside `armed` rather than folded silently into it, because
+   * "this route is disarmed" and "this route is disarmed BECAUSE the content
+   * height moved under it" are different findings for an operator who has
+   * just watched a chat refuse to scroll.
+   */
+  layoutStable: boolean;
   /** A downward notch landing at or below this reports on the spot. */
   reportsAtOrBelowPx: number | null;
   note: string;
@@ -271,6 +281,7 @@ export function describeSnapBackRoute(
     return {
       armed: false,
       lastScrollTop: previousTop,
+      layoutStable: false,
       reportsAtOrBelowPx: null,
       note: state.reported
         ? 'already reported on this surface'
@@ -279,12 +290,22 @@ export function describeSnapBackRoute(
   }
   const landing = previousTop - SNAP_BACK_MIN_PX;
   const layoutMax = Math.max(0, geometry.scrollHeight - geometry.clientHeight);
+  // The same predicate the verdict uses, against the geometry as it stands
+  // right now. Restating the test here would let this audit call a route armed
+  // that the detector would decline — the one disagreement neither side could
+  // detect.
+  const stable = layoutHeldStill(state, geometry);
   return {
-    armed: landing >= 0 && layoutMax - landing > MIN_UNREACHABLE_PX,
+    armed: stable && landing >= 0 && layoutMax - landing > MIN_UNREACHABLE_PX,
     lastScrollTop: previousTop,
+    layoutStable: stable,
     reportsAtOrBelowPx: landing,
-    note:
-      `A downward notch landing at or below ${px(landing)} reports at once, `
-      + `provided at least ${MIN_UNREACHABLE_PX}px is still unreachable there.`,
+    note: stable
+      ? `A downward notch landing at or below ${px(landing)} reports at once, `
+        + `provided at least ${MIN_UNREACHABLE_PX}px is still unreachable there.`
+      : 'The content or viewport height has moved since the last reading, so a '
+        + 'backwards step here could be the browser\'s own scroll anchoring. '
+        + 'This route stays shut until one frame is sampled against a settled '
+        + 'layout.',
   };
 }
