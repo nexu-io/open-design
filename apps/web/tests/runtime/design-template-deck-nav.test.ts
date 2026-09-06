@@ -1,35 +1,42 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import type { DOMWindow } from 'jsdom';
 
-const tasteEditorialExamplePath = fileURLToPath(
-  new URL('../../../../design-templates/html-ppt-taste-editorial/example.html', import.meta.url),
+const tasteEditorialFixturePath = fileURLToPath(
+  new URL('../fixtures/decks/taste-editorial.html', import.meta.url),
 );
-const simpleDeckExamplePath = fileURLToPath(
-  new URL('../../../../design-templates/simple-deck/example.html', import.meta.url),
+const simpleDeckFixturePath = fileURLToPath(
+  new URL('../fixtures/decks/simple-deck.html', import.meta.url),
 );
+const openDecks: JSDOM[] = [];
+
+afterEach(() => {
+  for (const dom of openDecks.splice(0)) dom.window.close();
+});
 
 function setupTasteEditorialDeck() {
-  const html = readFileSync(tasteEditorialExamplePath, 'utf8');
+  const html = readFileSync(tasteEditorialFixturePath, 'utf8');
   const dom = new JSDOM(html, {
     pretendToBeVisual: true,
     runScripts: 'dangerously',
     url: 'https://example.test/taste-editorial.html',
     virtualConsole: new VirtualConsole(),
   });
+  openDecks.push(dom);
   return dom;
 }
 
 function setupSimpleDeck() {
-  const html = readFileSync(simpleDeckExamplePath, 'utf8');
+  const html = readFileSync(simpleDeckFixturePath, 'utf8');
   const dom = new JSDOM(html, {
     pretendToBeVisual: true,
     runScripts: 'dangerously',
     url: 'https://example.test/simple-deck.html',
     virtualConsole: new VirtualConsole(),
   });
+  openDecks.push(dom);
   const { window: win } = dom;
   Object.defineProperty(win, 'innerWidth', {
     configurable: true,
@@ -105,8 +112,8 @@ function fireTouch(win: DOMWindow, startX: number, endX: number) {
   win.dispatchEvent(end);
 }
 
-describe('design template deck navigation', () => {
-  it('wires the taste editorial example to the deck input contract', () => {
+describe('standalone deck navigation compatibility', () => {
+  it('wires the editorial fixture to the deck input contract', () => {
     const dom = setupTasteEditorialDeck();
     const { window: win } = dom;
     const dots = Array.from(win.document.querySelectorAll<HTMLButtonElement>('#deck-nav .dot'));
