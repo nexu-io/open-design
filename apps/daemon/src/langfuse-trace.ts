@@ -25,6 +25,7 @@ import {
   type SafeObservationStreamTailV1,
   type SafeObservationTextV1,
   type SafeRunDiagnosticsV1,
+  type SafeDeliverableSyntaxTelemetryV1,
   type SafeRunProcessOutcomeV1,
   type SafeRunQualityV1,
 } from '@open-design/contracts';
@@ -299,6 +300,8 @@ export interface EventsSummary {
   durationMs: number;
 }
 
+export type DeliverableSyntaxTelemetry = SafeDeliverableSyntaxTelemetryV1;
+
 export interface RuntimeInfo {
   /** Node.js runtime version (`process.version`, e.g. 'v22.22.0'). */
   nodeVersion?: string;
@@ -361,6 +364,8 @@ export interface ReportContext {
   tools?: ToolCallSummary[];
   agentEvents?: AgentEventSummary[];
   eventsSummary: EventsSummary;
+  /** Content-free syntax gate facts safe for shallow Langfuse filtering. */
+  deliverableSyntax?: DeliverableSyntaxTelemetry;
   prefs: TelemetryPrefs;
   langfuse?: LangfuseDeliveryState;
   /** Per-turn config (model + skill + DS). May vary turn-to-turn within a session. */
@@ -1745,6 +1750,7 @@ export function buildSafeRunQualityProjectionV1(input: {
   stderr?: StreamTailSummary;
   stdout?: StreamTailSummary;
   diagnostics?: RunDiagnosticsAnalytics;
+  deliverableSyntax?: DeliverableSyntaxTelemetry;
 }): SafeRunQualityV1 | undefined {
   const wantsContent = input.prefs.metrics === true && input.prefs.content === true;
   const output = wantsContent
@@ -1816,6 +1822,9 @@ export function buildSafeRunQualityProjectionV1(input: {
     schema: SAFE_RUN_QUALITY_V1_SCHEMA,
     ...(output || error ? { result: { ...(output ? { output } : {}), ...(error ? { error } : {}) } } : {}),
     ...(processOutcome ? { process: processOutcome } : {}),
+    ...(input.deliverableSyntax
+      ? { deliverableSyntax: input.deliverableSyntax }
+      : {}),
     ...(tools && tools.length > 0 ? { tools } : {}),
     ...(hasManifests
       ? {
@@ -1896,6 +1905,7 @@ export function buildTracePayload(
     ...(ctx.manifestCompleteness !== undefined
       ? { manifestCompleteness: ctx.manifestCompleteness }
       : {}),
+    ...(ctx.deliverableSyntax ? { deliverableSyntax: ctx.deliverableSyntax } : {}),
   });
   const safeRunError = safeQuality?.result?.error?.message?.text;
 
@@ -2086,6 +2096,29 @@ export function buildTracePayload(
       ctx.run.retryOriginalFailure?.failure_detail,
     retryOriginalFailureStage:
       ctx.run.retryOriginalFailure?.failure_stage,
+    deliverable_syntax_schema_version: ctx.deliverableSyntax?.schemaVersion,
+    deliverable_syntax_applicable: ctx.deliverableSyntax?.applicable,
+    deliverable_syntax_status: ctx.deliverableSyntax?.status,
+    deliverable_syntax_source: ctx.deliverableSyntax?.source,
+    deliverable_syntax_checker: ctx.deliverableSyntax?.checker,
+    deliverable_syntax_checked_file_count: ctx.deliverableSyntax?.checkedFileCount,
+    deliverable_syntax_check_count: ctx.deliverableSyntax?.checkCount,
+    deliverable_syntax_checker_duration_ms: ctx.deliverableSyntax?.checkerDurationMs,
+    deliverable_syntax_repairable_check_count:
+      ctx.deliverableSyntax?.repairableCheckCount,
+    deliverable_syntax_initial_diagnostic_count:
+      ctx.deliverableSyntax?.initialDiagnosticCount,
+    deliverable_syntax_latest_diagnostic_count:
+      ctx.deliverableSyntax?.latestDiagnosticCount,
+    deliverable_syntax_repair_triggered: ctx.deliverableSyntax?.repairTriggered,
+    deliverable_syntax_repair_attempts: ctx.deliverableSyntax?.repairAttempts,
+    deliverable_syntax_max_repair_attempts:
+      ctx.deliverableSyntax?.maxRepairAttempts,
+    deliverable_syntax_repair_outcome: ctx.deliverableSyntax?.repairOutcome,
+    deliverable_syntax_recovered_delivery_count:
+      ctx.deliverableSyntax?.recoveredDeliveryCount,
+    deliverable_syntax_blocked_broken_delivery_count:
+      ctx.deliverableSyntax?.blockedBrokenDeliveryCount,
     ...promptStackFlatMetadata,
     ...promptStackBlameMetadata,
   };

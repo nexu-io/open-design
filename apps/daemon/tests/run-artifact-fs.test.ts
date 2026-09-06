@@ -236,6 +236,25 @@ test('a CSS-only visible edit modifies the primary HTML artifact without inflati
   }), 'modified');
 });
 
+test('module-script variants participate in render dependency syntax checks', () => {
+  const root = tmpProject();
+  const esm = path.join(root, 'app.mjs');
+  const commonjs = path.join(root, 'legacy.cjs');
+  fs.writeFileSync(esm, 'export const ready = false;');
+  fs.writeFileSync(commonjs, 'module.exports = false;');
+  const before = snapshotProjectArtifacts(root);
+  fs.writeFileSync(esm, 'export const ready = true;');
+  fs.writeFileSync(commonjs, 'module.exports = true;');
+  const after = snapshotProjectArtifacts(root);
+
+  const diff = diffRunArtifacts(before, after);
+  assert.equal(diff.renderDependencyTouched, 2);
+  assert.deepEqual(
+    diff.renderDependencyTouchedPaths.map((file) => path.basename(file)).sort(),
+    ['app.mjs', 'legacy.cjs'],
+  );
+});
+
 test('first generation is created even when the run edits a pre-seeded HTML file', () => {
   const root = tmpProject();
   const page = path.join(root, 'index.html');

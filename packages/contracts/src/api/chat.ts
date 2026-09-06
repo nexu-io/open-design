@@ -37,6 +37,10 @@ import type {
 } from '../analytics/events.js';
 import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { OdNextRolloutDecision } from './strategy-rollout.js';
+import type {
+  DeliverableSyntaxRepairState,
+  DeliverableSyntaxValidationEvidence,
+} from './deliverable-syntax.js';
 
 // The daemon's run-failure taxonomy, re-exported under product-facing names so
 // the run-status/error surface can carry the specific cause the daemon already
@@ -771,6 +775,10 @@ export interface ChatRunStatusResponse {
   deliverableEntryFile?: string;
   /** File kind of deliverableEntryFile, derived from the daemon file index. */
   deliverableArtifactKind?: ProjectFileKind;
+  /** Bounded repair-loop state, when the host asked the active Agent turn to repair. */
+  deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
+  /** Latest parse-only syntax evidence from the Agent tool or run finalizer. */
+  deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */

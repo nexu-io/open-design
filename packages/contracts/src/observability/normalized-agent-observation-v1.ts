@@ -676,6 +676,35 @@ export const SafeRunProcessOutcomeV1Schema = z.object({
 }).strict();
 export type SafeRunProcessOutcomeV1 = z.infer<typeof SafeRunProcessOutcomeV1Schema>;
 
+export const SafeDeliverableSyntaxTelemetryV1Schema = z.object({
+  schemaVersion: z.literal('deliverable-syntax-telemetry-v1'),
+  applicable: z.boolean(),
+  status: z.enum(['pass', 'repairable', 'incomplete', 'exhausted', 'skipped']),
+  source: z.enum(['agent_tool', 'run_finalizer']),
+  checker: z.string().max(128).nullable(),
+  checkedFileCount: z.number().int().nonnegative(),
+  checkCount: z.number().int().nonnegative(),
+  checkerDurationMs: z.number().nonnegative().nullable(),
+  repairableCheckCount: z.number().int().nonnegative(),
+  initialDiagnosticCount: z.number().int().nonnegative().nullable(),
+  latestDiagnosticCount: z.number().int().nonnegative().nullable(),
+  repairTriggered: z.boolean(),
+  repairAttempts: z.number().int().nonnegative(),
+  maxRepairAttempts: z.number().int().nonnegative().nullable(),
+  repairOutcome: z.enum([
+    'not_applicable',
+    'not_needed',
+    'repaired',
+    'exhausted',
+    'unresolved',
+  ]),
+  recoveredDeliveryCount: z.union([z.literal(0), z.literal(1)]),
+  blockedBrokenDeliveryCount: z.union([z.literal(0), z.literal(1)]),
+}).strict();
+export type SafeDeliverableSyntaxTelemetryV1 = z.infer<
+  typeof SafeDeliverableSyntaxTelemetryV1Schema
+>;
+
 export const SafeRunQualityV1Schema = z.object({
   schema: z.literal(SAFE_RUN_QUALITY_V1_SCHEMA),
   result: z.object({
@@ -690,6 +719,7 @@ export const SafeRunQualityV1Schema = z.object({
     inputTextSnapshots: z.array(SafeObservationManifestEntryV1Schema).max(50),
   }).strict().optional(),
   process: SafeRunProcessOutcomeV1Schema.optional(),
+  deliverableSyntax: SafeDeliverableSyntaxTelemetryV1Schema.optional(),
 }).strict();
 export type SafeRunQualityV1 = z.infer<typeof SafeRunQualityV1Schema>;
 

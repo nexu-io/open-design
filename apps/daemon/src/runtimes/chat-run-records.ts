@@ -180,6 +180,8 @@ export interface ChatRun {
   deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
   deliverableEntryFile?: string;
   deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
+  deliverableSyntaxRepair?: ChatRunStatusResponse['deliverableSyntaxRepair'];
+  deliverableSyntaxValidation?: ChatRunStatusResponse['deliverableSyntaxValidation'];
   /** Shells staged for an OD Next prototype run, project-relative. */
   odNextStagedDeviceFrames?: string[];
   /** Run-finish observation: did the delivered entry carry the staged handset shell? */

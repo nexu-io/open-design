@@ -609,6 +609,12 @@ function durableRunState(run) {
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.deliverableSyntaxRepair
+      ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
+      : {}),
+    ...(run.deliverableSyntaxValidation
+      ? { deliverableSyntaxValidation: run.deliverableSyntaxValidation }
+      : {}),
     ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     ...(run.odNextTaskInputSnapshot
       ? { odNextTaskInputSnapshot: run.odNextTaskInputSnapshot }
@@ -965,6 +971,8 @@ export function createChatRunService({
       artifactCount: undefined as number | undefined,
       artifactPaths: undefined as string[] | undefined,
       artifactOutcome: undefined,
+      deliverableSyntaxRepair: undefined,
+      deliverableSyntaxValidation: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
       eventsLogStream: null,
@@ -1225,6 +1233,8 @@ export function createChatRunService({
     run.deliverableValidation = undefined;
     run.deliverableEntryFile = undefined;
     run.deliverableArtifactKind = undefined;
+    run.deliverableSyntaxRepair = undefined;
+    run.deliverableSyntaxValidation = undefined;
     run.endedWithUnfinishedWork = false;
     run.child = null;
     run.acpSession = null;
@@ -1404,6 +1414,12 @@ export function createChatRunService({
     ...(typeof run.deliverableArtifactKind === 'string'
       ? { deliverableArtifactKind: run.deliverableArtifactKind }
       : {}),
+    ...(run.deliverableSyntaxRepair
+      ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
+      : {}),
+    ...(run.deliverableSyntaxValidation
+      ? { deliverableSyntaxValidation: run.deliverableSyntaxValidation }
+      : {}),
     ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     ...(run.terminalLifecycle ? { terminalLifecycle: run.terminalLifecycle } : {}),
     ...(TERMINAL_RUN_STATUSES.has(run.status)
@@ -1471,6 +1487,12 @@ export function createChatRunService({
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
+      ...(run.deliverableSyntaxRepair
+        ? { deliverableSyntaxRepair: run.deliverableSyntaxRepair }
+        : {}),
+      ...(run.deliverableSyntaxValidation
+        ? { deliverableSyntaxValidation: run.deliverableSyntaxValidation }
+        : {}),
       ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),
     }, terminalAt, false);
     for (const sse of run.clients) sse.end();
