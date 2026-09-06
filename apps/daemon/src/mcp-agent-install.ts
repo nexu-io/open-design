@@ -47,6 +47,7 @@ export const AGENT_SLUGS = [
   'kiro',
   'trae',
   'opencode',
+  'kimchi',
   'claude-desktop',
 ] as const;
 
@@ -296,6 +297,15 @@ export function planAgentInstall(
         kind: 'json',
         slug,
         configPath: traeConfigPath(home, platform),
+        keyPath: ['mcpServers'],
+        serverKey: serverName,
+        entry: jsonEntry(spec),
+      };
+    case 'kimchi':
+      return {
+        kind: 'json',
+        slug,
+        configPath: path.join(home, '.config', 'kimchi', 'harness', 'mcp.json'),
         keyPath: ['mcpServers'],
         serverKey: serverName,
         entry: jsonEntry(spec),

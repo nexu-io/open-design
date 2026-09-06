@@ -222,6 +222,7 @@ const AGENT_CLI_ENV_KEYS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ['kimi', new Set(['KIMI_BIN'])],
   ['kiro', new Set(['KIRO_BIN'])],
   ['kilo', new Set(['KILO_BIN'])],
+  ['kimchi', new Set(['KIMCHI_BIN', 'KIMCHI_API_KEY'])],
   ['opencode', new Set(['OPENCODE_BIN'])],
   ['pi', new Set(['PI_BIN'])],
   ['qoder', new Set(['QODER_BIN'])],
@@ -241,6 +242,10 @@ const AGENT_CLI_AUTH_ENV_KEYS: ReadonlyMap<string, {
   ['codex', {
     auth: new Set(['CODEX_API_KEY', 'OPENAI_API_KEY']),
     baseUrl: new Set(['OPENAI_BASE_URL']),
+  }],
+  ['kimchi', {
+    auth: new Set(['KIMCHI_API_KEY']),
+    baseUrl: new Set<string>(),
   }],
 ]);
 

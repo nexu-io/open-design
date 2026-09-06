@@ -553,6 +553,7 @@ const CANONICAL_AGENT_ORDER = [
   'pi',
   'kiro',
   'kilo',
+  'kimchi',
   'vibe',
   'deepseek',
   'aider',

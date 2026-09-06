@@ -414,7 +414,18 @@ the active-run staging implementation is in
   may expose its own reasoning-effort choices; OD validates and forwards only
   one of the choices advertised for that selected model.
 
-### 5.13 Plain stream artifact handoff
+### 5.13 Kimchi
+
+- Invocation: `kimchi --mode rpc [--model <id>] [--thinking <level>] [--append-system-prompt <dir> …]`, with the composed prompt delivered over stdin via JSON-RPC. Kimchi is built on the [pi-mono](https://github.com/badlogic/pi-mono) coding agent SDK and inherits pi's RPC transport. Using `--mode rpc` (instead of `--mode acp`) gives us multimodal image support, reasoning levels, richer event stream, and avoids the ACP `mcpServers` rejection issue.
+- Streaming: `pi-rpc` JSON-RPC over stdio. Events include `agent_start`, `turn_start/end`, `message_update` (text deltas, thinking deltas, tool calls), `tool_execution_start/end`, `compaction_start`, `auto_retry_start/end`, `extension_error`. `apps/daemon/src/pi-rpc.ts` maps these onto the same UI event set as the other stream parsers.
+- Models: dynamic — `kimchi --list-models` prints a TSV table to stdout that the daemon parses into provider/model picker entries. Fallback hints for the default orchestrator/builder/explorer models (`kimi-k2.7`, `minimax-m3`, `deepseek-v4-flash`) are shipped for when the list command times out.
+- Images: kimchi's RPC `prompt` command supports an `images` field (base64-encoded `ImageContent` objects), inherited from pi-mono. The daemon reads validated `imagePaths` at session attach time and includes them in the prompt command.
+- Thinking: the daemon exposes kimchi's `--thinking` levels (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`) in the Settings model picker.
+- Skills: prompt injection in v1. `extraAllowedDirs` (skill seed and design-system directories) are forwarded as `--append-system-prompt` repeatable flags so the agent knows these directories exist and can Read files inside them. Same pattern as the pi adapter.
+- MCP: Kimchi does not accept `mcpServers` in the ACP `session/new` message — it rejects with `Invalid params: mcpServers is not supported`. MCP servers are configured via `~/.config/kimchi/harness/mcp.json` (same `mcpServers` JSON schema as Claude Desktop / Cursor). `od mcp install kimchi` writes to the JSON config file directly.
+- Auth: API key resolved from `KIMCHI_API_KEY` env var or `~/.config/kimchi/config.json`. Run `kimchi setup` for interactive first-time configuration.
+
+### 5.14 Plain stream artifact handoff
 
 Adapters with `streamFormat: 'plain'` do not expose structured file-write tool calls to the daemon. Their stdout is still a valid artifact handoff when the model emits Anthropic-style source blocks:
 
