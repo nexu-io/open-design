@@ -1685,6 +1685,11 @@
   color: var(--text-muted);
   transition: background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
+/* Split file tabs use 240px; keep this before the live-artifact rule so its
+   equal-specificity 260px cap wins. */
+.ws-tab:has(.ws-tab-label-stem) {
+  max-width: 240px;
+}
 .ws-tab.live-artifact-tab {
   /* Wide enough to hold the icon, a truncated title, the status badges
      (LIVE + REFRESH FAILED) and the close button without any of them
@@ -1751,6 +1756,32 @@
   text-overflow: ellipsis;
   max-width: 96px;
   line-height: 1;
+}
+/* Split labels reserve the extension while truncating the stem; plain labels
+   keep the base cap. */
+.ws-tab-label:has(.ws-tab-label-stem) {
+  display: flex;
+  align-items: baseline;
+  white-space: normal;
+  text-overflow: clip;
+  max-width: 240px;
+  /* Keep filename order stable in RTL locales. */
+  direction: ltr;
+}
+.ws-tab-label-stem {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-tab-label-ext {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+/* Keep the dirty marker visible beside the extension. */
+.ws-tab-label-dirty {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .ws-tab.has-meta {
   max-width: 320px;

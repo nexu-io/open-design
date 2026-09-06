@@ -2593,6 +2593,51 @@ describe('FileWorkspace launcher tab creation', () => {
     ]);
   });
 
+  it('renders side-chat and terminal tabs with a plain label (no file-extension split)', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('index.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{
+          tabs: ['index.html', 'terminal:term-1', 'chat:conversation-1'],
+          active: 'index.html',
+        }}
+        conversations={[
+          {
+            id: 'conversation-1',
+            projectId: 'project-1',
+            title: 'Review.Notes',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const tabs = Array.from(document.querySelectorAll<HTMLElement>('.ws-tabs-bar .ws-tab'));
+    const bar = tabs.find((tab) => (tab.textContent ?? '').includes('Review.Notes'));
+    const term = tabs.find((tab) => (tab.textContent ?? '').includes('New Terminal'));
+    const file = tabs.find((tab) => (tab.textContent ?? '').includes('index.html'));
+    expect(bar, 'side-chat tab missing').toBeTruthy();
+    expect(term, 'terminal tab missing').toBeTruthy();
+    expect(file, 'file tab missing').toBeTruthy();
+
+    expect(bar!.querySelector('.ws-tab-label-stem'), 'side-chat label split into stem span').toBeNull();
+    expect(bar!.querySelector('.ws-tab-label-ext'), 'side-chat picked up extension span').toBeNull();
+    expect(bar!.querySelector('.ws-tab-label')?.textContent).toBe('Review.Notes');
+
+    expect(term!.querySelector('.ws-tab-label-stem'), 'terminal label split into stem span').toBeNull();
+    expect(term!.querySelector('.ws-tab-label-ext'), 'terminal picked up extension span').toBeNull();
+
+    expect(file!.querySelector('.ws-tab-label-stem'), 'file tab lost its stem span').toBeTruthy();
+    expect(file!.querySelector('.ws-tab-label-ext')?.textContent).toBe('.html');
+  });
+
   it('shows project sync progress on the Design Files root tab without hiding materialized files', () => {
     render(
       <FileWorkspace
