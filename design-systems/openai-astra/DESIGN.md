@@ -122,7 +122,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Site Header
 - Fixed, `54px` tall (`3.375rem`; `64px` above 1440px). At the top of the page it is fully transparent over the canvas; as soon as the page scrolls a solid `#000000` surface fades in over `400ms cubic-bezier(0.33, 1, 0.68, 1)`, with a masked `brightness(95%) contrast(105%)` strip beneath it. No blur.
-- Content is centred in the `1088px` container with `24px` gutters. Left group: wordmark `17px` tall, nav links `13px / 500` with `16px` side padding (white, hover `#ffffff99`), then the `40px` round search button in `#ffffff99` closing the group. Right group: glass pill **Log in** with a chevron and white pill **Try …** with an outward arrow, both `40px` tall with `0.3em` icon gap.
+- Content is centred in the `1088px` container with `24px` gutters. Left group: wordmark `17px` tall, nav links `13px / 500` with `16px` side padding (white, hover `#ffffff99`), then the `40px` round search button in `#ffffff99` closing the group. Right group: glass pill **Log in** with a chevron and white pill **Try …** with an outward arrow, both `36px` tall (`!h-9`), `20px` side padding, `14px / 500` label, `12px` icons, `0.3em` icon gap; the white pill hovers to `#ffffffcc`.
 
 ### Segmented Control
 - Hairline pill container (`1px #ffffff33`, `4px` inner padding, `4px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.
@@ -212,7 +212,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Don't
 - Don't add gradients, coloured buttons, tinted cards, or a coloured link colour.
-- Don't lift the background to charcoal, add noise, or add a vignette in CSS; the engine draws the vignette.
+- Don't lift the background to charcoal, add noise, or add a vignette; the page has none. The only tint is the ambient glow, which reads as a near-uniform blue-black with slightly brighter corners.
 - Don't use a serif, a second sans, weight 600+, or italics.
 - Don't animate copy on scroll, pin sections, or add scroll-snap.
 - Don't put cards, illustrations, or screenshots in the star rails.
