@@ -479,6 +479,21 @@ export function applyIdentity(installationId: string | null): void {
   }
 }
 
+// Called when the authenticated user logs out (e.g. AmrLoginPill handleLogout).
+// Clears PostHog's anonymous ID and all persisted identity so that a
+// subsequent login on the same device starts from a clean anonymous session
+// rather than inheriting the previous user's distinct_id and person record.
+// Also clears resolvedDeviceId so the next init re-registers fresh properties.
+export function resetAnalyticsOnLogout(): void {
+  if (!client) return;
+  try {
+    client.reset();
+    resolvedDeviceId = null;
+  } catch {
+    // best-effort — never throw out of a logout path.
+  }
+}
+
 // Push the cached super-property payload back onto the PostHog client. Used
 // after reset()/identify() flows; takes an optional override patch so the
 // caller can swap fields (e.g. a rotated device_id) without re-deriving the
