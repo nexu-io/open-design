@@ -287,29 +287,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
-    id: 'web-clone',
-    label: 'Website clone',
-    icon: 'globe',
-    group: 'create',
-    description: 'Source-first site reproduction',
-    hint: 'Paste a target URL, then reconstruct the site and audit the clone.',
-    // Website reproduction binds the bundled `example-web-clone` plugin.
-    // Stored as a prototype so the artifact keeps prototype preview
-    // behavior; `intent: 'web-clone'` is what routes the scenario plugin
-    // (see `defaultScenarioPluginIdForProjectMetadata`) and splits these
-    // projects into their own `web_clone` analytics kind.
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-web-clone',
-      projectKind: 'prototype',
-      projectMetadata: {
-        kind: 'prototype',
-        intent: 'web-clone',
-        fidelity: 'high-fidelity',
-      },
-    },
-  },
-  {
     id: 'image',
     label: 'Image',
     icon: 'image',
