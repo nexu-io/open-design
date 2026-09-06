@@ -98,7 +98,9 @@ import {
   ensureProject,
   kindFor,
   mimeFor,
+  resolveSafeReal,
   sanitizeName,
+  sanitizePath,
 } from '../projects.js';
 import {
   AIHUBMIX_DEFAULT_BASE_URL,
@@ -486,10 +488,52 @@ export async function generateMedia(args: {
   const warnings = [lengthClamp.warning, durationClamp.warning].filter(Boolean);
 
   const dir = await ensureProject(projectsRoot, projectId);
-  const safeOut = sanitizeName(
-    output || autoOutputName(surface, model, resolvedAudioKind),
-  );
-  const target = path.join(dir, safeOut);
+  // Resolve the desired output name. Path-bearing names ("assets/hero.png")
+  // are routed through sanitizePath() so the subdirectory survives; bare
+  // filenames keep using sanitizeName() for byte-level sanity. When the
+  // caller does not pass an output we fall back to autoOutputName() (a
+  // bare filename, sanitized for character safety).
+  let safeOut: string;
+  try {
+    const rawRequested =
+      output || autoOutputName(surface, model, resolvedAudioKind);
+    // Treat one leading `./` like a shell-relative prefix. Strip it before
+    // choosing the filename/path sanitizer so `./hero.png` stays at the
+    // project root and `./assets/hero.png` keeps its nested directory. Other
+    // dot segments still reach sanitizePath() and remain invalid.
+    const requested = rawRequested.replace(/^\.\//, '');
+    if (requested.includes('/') || requested.includes('\\')) {
+      safeOut = sanitizePath(requested);
+    } else {
+      safeOut = sanitizeName(requested);
+    }
+  } catch (err) {
+    // sanitizePath() throws on traversal attempts and reserved paths.
+    // Re-throw with a friendlier message so the CLI/HTTP error reflects
+    // the caller's actual input.
+    throw new Error(
+      `invalid output path: ${(err as Error).message}`,
+    );
+  }
+  // After lexical validation, walk the resolved path through
+  // resolveSafeReal() so that a symlinked intermediate directory
+  // pointing outside the project cannot turn the validated path into
+  // a write that escapes the project root. The existing helpers in
+  // projects.ts already use this for every file write under the
+  // project; media generation must do the same. The bound is
+  // `dir` (the project root), not a deeper path — anything inside
+  // is fine as long as the resolved real path is contained.
+  let target: string;
+  try {
+    target = await resolveSafeReal(dir, safeOut);
+  } catch (err) {
+    if (err && (err as { code?: string }).code === 'EPATHESCAPE') {
+      throw new Error(
+        `invalid output path: ${(err as Error).message}`,
+      );
+    }
+    throw err;
+  }
   await mkdir(path.dirname(target), { recursive: true });
 
   // Reference image for image-to-video / image-edit flows. The agent
@@ -843,11 +887,59 @@ export async function generateMedia(args: {
   // (.png vs .jpg vs .webp) before it knows what the model emits.
   let finalOut = safeOut;
   if (suggestedExt) {
-    const dot = safeOut.lastIndexOf('.');
-    const stem = dot > 0 ? safeOut.slice(0, dot) : safeOut;
+    // Scope extension replacement to the basename. A dot in a parent
+    // directory (for example, assets.v2/hero) is not a file extension.
+    const ext = path.posix.extname(safeOut);
+    const stem = ext ? safeOut.slice(0, -ext.length) : safeOut;
     finalOut = `${stem}${suggestedExt}`;
   }
-  const finalTarget = path.join(dir, finalOut);
+  // Validate the rewritten finalOut through the symlink-aware
+  // project boundary. resolveSafeReal() walks the existing prefix
+  // when the leaf doesn't exist yet, so even though the file isn't
+  // there before this line, an existing intermediate directory
+  // symlink (for example, <project>/assets -> /etc) is caught
+  // before any mkdir/writeFile follows it. The provider can also
+  // rewrite the leaf's extension, so we re-run the check on the
+  // post-rewrite finalOut instead of reusing the first target.
+  let finalTarget: string;
+  try {
+    finalTarget = await resolveSafeReal(dir, finalOut);
+  } catch (err) {
+    if (err && (err as { code?: string }).code === 'EPATHESCAPE') {
+      throw new Error(
+        `invalid output path: ${(err as Error).message}`,
+      );
+    }
+    throw err;
+  }
+  // resolveSafeReal only checks the path-string against the project
+  // dir, not the symlink-resolved target of the final leaf. If
+  // <project>/assets/hero.jpg itself is a symlink to an external
+  // file, realpath() resolves it and the write would follow the
+  // symlink outside the project. We have to also assert that the
+  // realpath of the final target is still under the project's
+  // realpath, so even a leaf-level symlink can't escape.
+  const { realpath: realpathAsync } = await import('node:fs/promises');
+  const rootReal = await realpathAsync(dir).catch(() => dir);
+  const targetReal = await realpathAsync(finalTarget).catch(
+    (err) => {
+      // ENOENT on the final leaf is fine: the leaf is the file
+      // we're about to write. Reuse resolveSafeReal's existing-prefix
+      // trick: walk up until we find an existing parent and
+      // realpath that.
+      if (!err || (err as { code?: string }).code !== 'ENOENT') {
+        throw err;
+      }
+      return finalTarget;
+    },
+  );
+  if (!targetReal.startsWith(rootReal + path.sep) && targetReal !== rootReal) {
+    const e = new Error(
+      'final output escapes project dir via symlink at the leaf',
+    );
+    (e as { code?: string }).code = 'EPATHESCAPE';
+    throw new Error(`invalid output path: ${e.message}`);
+  }
   await writeFile(finalTarget, bytes);
   const st = await stat(finalTarget);
   return {
