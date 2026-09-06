@@ -186,7 +186,7 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('allows a selected model without a client-side entitlement catalog', async () => {
+  it('does not block a selected model without a client-side entitlement catalog', async () => {
     const empty = snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
@@ -195,16 +195,19 @@ describe('checkAmrBalanceGate', () => {
       .mockResolvedValueOnce({ ...empty, source: 'daemon_cache' })
       .mockResolvedValueOnce(empty);
 
+    // Not `hard` is the invariant. The reminder rides along (OPEND-2600): a
+    // plan means the run may still start, not that an empty wallet is unworthy
+    // of mention.
     await expect(
       checkAmrBalanceGate(undefined, 'new-coding-plan-model'),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({ kind: 'soft', snapshot: empty });
   });
 
   it.each([
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
     ['max', 'minimax-m2.7'],
-  ])('lets Vela decide a selected %s plan model at low balance', async (plan, modelId) => {
+  ])('warns without blocking a selected %s plan model at low balance', async (plan, modelId) => {
     const low = snapshot({
       balanceUsd: '1.20',
       user: { id: 'u1', email: 'user@example.com', plan },
@@ -212,7 +215,8 @@ describe('checkAmrBalanceGate', () => {
     mockedFetch.mockResolvedValueOnce(low);
 
     await expect(checkAmrBalanceGate(undefined, modelId)).resolves.toEqual({
-      kind: 'allow',
+      kind: 'soft',
+      snapshot: low,
     });
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
@@ -224,9 +228,10 @@ describe('checkAmrBalanceGate', () => {
     });
     mockedFetch.mockResolvedValueOnce(low);
 
+    // Still no metering guess — the run is not blocked. It is only flagged.
     await expect(
       checkAmrBalanceGate(undefined, 'minimax-m2.7'),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({ kind: 'soft', snapshot: low });
   });
 
   it('skips the soft warning once the user opted out — but never the hard block', async () => {
@@ -263,7 +268,7 @@ describe('checkAmrBalanceGate', () => {
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
     ['max', 'glm-5.1'],
-  ])('lets Vela decide a selected %s model with a fresh zero-dollar wallet', async (plan, modelId) => {
+  ])('does not block a selected %s model with a fresh zero-dollar wallet', async (plan, modelId) => {
     const planAccount = snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan },
@@ -274,11 +279,11 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, modelId),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({ kind: 'soft', snapshot: planAccount });
     expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
   });
 
-  it('allows a selected model when the fresh wallet omits the plan', async () => {
+  it('does not block a selected model when the fresh wallet omits the plan', async () => {
     const emptyWallet = snapshot({
       balanceUsd: '0',
     });
@@ -295,7 +300,7 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, 'glm-5.2'),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({ kind: 'soft', snapshot: emptyWallet });
   });
 
   it('does not infer plan exclusion for a selected model', async () => {
@@ -309,20 +314,18 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, 'glm-5.1'),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({ kind: 'soft', snapshot: plusAccount });
   });
 
-  // OPEND-2448. A free account has no plan that funds a run without the
-  // wallet, so an empty wallet means the run cannot start at all — selecting a
-  // model does not change that, and letting it through only manufactures the
-  // mid-run AMR_INSUFFICIENT_BALANCE failure this pre-run gate exists to
-  // prevent. Vela reports a free account either as plan 'free' or with no plan
-  // field at all (the daemon omits falsy plans), so both shapes must block.
-  it.each([
-    ['an explicit free plan', { id: 'u1', email: 'user@example.com', plan: 'free' }],
-    ['no plan field at all', { id: 'u1', email: 'user@example.com' }],
-  ])('hard-blocks a selected model on an empty wallet with %s', async (_label, user) => {
-    const freeAccount = snapshot({ balanceUsd: '0', user });
+  // OPEND-2448. An account that is PROVABLY free has nothing but the wallet
+  // behind it, so its empty wallet is a real hard block — selecting a model
+  // does not change that, and letting it through only manufactures the mid-run
+  // AMR_INSUFFICIENT_BALANCE failure this pre-run gate exists to prevent.
+  it('hard-blocks a selected model on an empty wallet for an explicitly free plan', async () => {
+    const freeAccount = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com', plan: 'free' },
+    });
     mockedFetch
       .mockResolvedValueOnce({ ...freeAccount, source: 'daemon_cache' })
       .mockResolvedValueOnce(freeAccount);
@@ -356,6 +359,28 @@ describe('checkAmrBalanceGate', () => {
       reason: 'insufficient',
       snapshot: freeAccount,
     });
+  });
+
+  // The counterpart to the two cases above, and the reason the gate asks the
+  // FREE question rather than the PAID one. `isFreeAmrPlan` and a paid-plan
+  // predicate are NOT complements: an unresolved plan is neither. Product
+  // ruling 2026-09-03 (T39) puts that third state on the allow side — a single
+  // failed read must never block someone who paid — so the block is scoped to
+  // a definitive `free`, and the real enforcement stays with Vela at admission.
+  // It is still `soft`, not `allow`: failing open means "not blocked", and an
+  // empty wallet is always worth mentioning (T37).
+  it('does not block a selected model on an empty wallet when the plan cannot be read', async () => {
+    const unknownPlan = snapshot({
+      balanceUsd: '0',
+      user: { id: 'u1', email: 'user@example.com' },
+    });
+    mockedFetch
+      .mockResolvedValueOnce({ ...unknownPlan, source: 'daemon_cache' })
+      .mockResolvedValueOnce(unknownPlan);
+
+    const result = await checkAmrBalanceGate(undefined, 'deepseek-v4-flash');
+    expect(result.kind).not.toBe('hard');
+    expect(result).toEqual({ kind: 'soft', snapshot: unknownPlan });
   });
 
   it('hard-blocks a signed-out account after refresh confirmation', async () => {
@@ -516,7 +541,7 @@ describe('checkAmrBalanceGate', () => {
     })).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('lets Vela decide a selected model in a zero-dollar Personal workspace', async () => {
+  it('does not block a selected model in a zero-dollar Personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
@@ -539,7 +564,39 @@ describe('checkAmrBalanceGate', () => {
         workspaceId: 'ws-personal-go',
         workspaceMemberId: 'wm-personal-go',
       }, 'deepseek-v4-pro'),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({
+      kind: 'soft',
+      snapshot: expect.objectContaining({ balanceUsd: '0' }),
+    });
+  });
+
+  // OPEND-2600 reverse control. The plan check must guard the HARD branch
+  // only. Asked ahead of both tiers it returns a whole-gate `allow`, which is
+  // how the reported Pro account at $1.79 got no card at all — the exact shape
+  // this file must never accept back.
+  it('still warns a subscriber between the hard-block and low-balance lines', async () => {
+    mockedFetch.mockResolvedValue(snapshot({
+      balanceUsd: '1.79',
+      user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
+    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(
+        JSON.stringify(authoritativeWorkspaceBillingResponse(
+          'ws-personal-1379',
+          'wm-personal-1379',
+          '1.79',
+        )),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      )),
+    );
+
+    const result = await checkAmrBalanceGate({
+      workspaceType: 'personal',
+      workspaceId: 'ws-personal-1379',
+      workspaceMemberId: 'wm-personal-1379',
+    }, 'glm-5.2');
+    expect(result.kind).toBe('soft');
   });
 
   // OPEND-2448, workspace-scoped half of the same invariant: the personal
@@ -574,7 +631,7 @@ describe('checkAmrBalanceGate', () => {
     });
   });
 
-  it('lets Vela decide a selected model in a low-balance Personal workspace', async () => {
+  it('warns without blocking a selected model in a low-balance Personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '1.50',
       user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
@@ -597,7 +654,10 @@ describe('checkAmrBalanceGate', () => {
         workspaceId: 'ws-personal-pro',
         workspaceMemberId: 'wm-personal-pro',
       }, 'glm-5.2'),
-    ).resolves.toEqual({ kind: 'allow' });
+    ).resolves.toEqual({
+      kind: 'soft',
+      snapshot: expect.objectContaining({ balanceUsd: '1.50' }),
+    });
   });
 
   it('does not use a personal Go plan to bypass a team workspace zero balance', async () => {
