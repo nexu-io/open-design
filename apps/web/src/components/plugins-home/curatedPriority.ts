@@ -7,11 +7,11 @@
 import type { InstalledPluginRecord } from '@open-design/contracts';
 
 const CURATED_PROTOTYPE_PLUGIN_IDS = [
+  'example-velar-luxury-real-estate',
+  'example-hr-onboarding',
+  'example-pricing-page',
+  'example-gamified-app',
   'example-open-design-landing',
-  'example-kanban-board',
-  'example-social-carousel',
-  'example-blog-post',
-  'example-doc-kami-parchment',
 ] as const;
 
 // Wireframe scenario: lo-fi / sketch explorations across distinct styles —
