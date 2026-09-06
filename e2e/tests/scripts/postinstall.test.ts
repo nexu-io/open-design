@@ -252,7 +252,7 @@ describe("postinstall script contract", () => {
     expect(targets.indexOf("packages/contracts")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/metatool")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/release")).toBeLessThan(targets.indexOf("packages/contracts"));
-    expect(dependencySpecifier(readJson("tools/release/package.json"), "@open-design/metatool")).toBe("workspace:*");
+    expect(dependencySpecifier(readJsonObject("tools/release/package.json"), "@open-design/metatool")).toBe("workspace:*");
 
   });
 
