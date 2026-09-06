@@ -21,6 +21,7 @@ import {
   isAmrResumeFailure,
   isClaudeResumeFailure,
   isCodexResumeFailure,
+  isCursorAgentResumeFailure,
   isOpencodeResumeFailure,
   persistCapturedAgentSession,
   resolveAgentResumeContext,
@@ -646,6 +647,41 @@ describe('isOpencodeResumeFailure', () => {
   });
 });
 
+describe('isCursorAgentResumeFailure', () => {
+  it('matches cursor-agent stale chat errors from stderr', () => {
+    expect(isCursorAgentResumeFailure('Error: chat not found')).toBe(true);
+    expect(isCursorAgentResumeFailure('Chat cursor-chat-123 not found')).toBe(true);
+    expect(isCursorAgentResumeFailure('could not find chat cursor-chat-123')).toBe(true);
+  });
+
+  it('matches structured cursor-agent error events from stdout', () => {
+    expect(
+      isCursorAgentResumeFailure('', JSON.stringify({
+        type: 'error',
+        message: 'Chat cursor-chat-123 not found',
+      })),
+    ).toBe(true);
+    expect(
+      isCursorAgentResumeFailure('', JSON.stringify({
+        type: 'result',
+        is_error: true,
+        errors: ['chat not found'],
+      })),
+    ).toBe(true);
+  });
+
+  it('ignores unrelated cursor-agent errors and assistant output', () => {
+    expect(isCursorAgentResumeFailure('rate limit exceeded')).toBe(false);
+    expect(
+      isCursorAgentResumeFailure('', JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'The phrase chat not found appears in docs.' }] },
+      })),
+    ).toBe(false);
+    expect(isCursorAgentResumeFailure('')).toBe(false);
+  });
+});
+
 describe('isAmrResumeFailure', () => {
   it('matches vela\'s structured resume_failed ACP error on stdout', () => {
     expect(
@@ -717,6 +753,15 @@ describe('isAgentResumeFailure dispatch', () => {
     ).toBe(false);
   });
 
+  it('routes cursor-agent to the chat-not-found detector', () => {
+    expect(
+      isAgentResumeFailure('cursor-agent', 'Error: chat not found', ''),
+    ).toBe(true);
+    expect(
+      isAgentResumeFailure('cursor-agent', 'No conversation found with session ID: abc', ''),
+    ).toBe(false);
+  });
+
   it('does NOT treat a generic phrase in successful assistant stdout as a resume miss (#4629 nettee)', () => {
     // A turn that SUCCEEDS but whose model output literally says "session not
     // found" must not be failed + have its session cleared — the phrase is only
@@ -726,6 +771,12 @@ describe('isAgentResumeFailure dispatch', () => {
     ).toBe(false);
     expect(
       isAgentResumeFailure('codex', '', 'The logs mention "no rollout found for thread id" as an example.'),
+    ).toBe(false);
+    expect(
+      isAgentResumeFailure('cursor-agent', '', JSON.stringify({
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'The old chat was not found.' }] },
+      })),
     ).toBe(false);
   });
 

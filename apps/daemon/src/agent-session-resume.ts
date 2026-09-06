@@ -416,6 +416,65 @@ export function isOpencodeResumeFailure(text: string): boolean {
   return OPENCODE_RESUME_FAILURE_PATTERNS.some((re) => re.test(text));
 }
 
+// Signature cursor-agent prints when `--resume <chatId>` targets a chat that
+// no longer exists in Cursor's local chat store. Cursor owns the chat id and
+// the daemon captures/replays it, so a stale handle must clear the row and
+// re-seed from the full transcript instead of retrying the dead `--resume`.
+const CURSOR_AGENT_RESUME_FAILURE_PATTERNS: RegExp[] = [
+  /chat not found/i,
+  /no chat found/i,
+  /chat .* not found/i,
+  /could not find chat/i,
+  /chat .* does not exist/i,
+];
+
+function hasCursorAgentResumeFailurePattern(text: string): boolean {
+  if (!text) return false;
+  return CURSOR_AGENT_RESUME_FAILURE_PATTERNS.some((re) => re.test(text));
+}
+
+function hasCursorAgentResumeFailureErrorEvent(stdout: string): boolean {
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    let event: {
+      type?: unknown;
+      is_error?: unknown;
+      message?: unknown;
+      error?: unknown;
+      detail?: unknown;
+      errors?: unknown;
+    };
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    const errorLike =
+      event.type === 'error' ||
+      event.is_error === true ||
+      (typeof event.error === 'string' && event.error.length > 0) ||
+      (Array.isArray(event.errors) && event.errors.length > 0);
+    if (!errorLike) continue;
+    const parts = [
+      event.message,
+      event.error,
+      event.detail,
+      ...(Array.isArray(event.errors) ? event.errors : []),
+    ]
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+      .join('\n');
+    if (hasCursorAgentResumeFailurePattern(parts)) return true;
+  }
+  return false;
+}
+
+/** True when cursor-agent output indicates a resume target chat is missing. */
+export function isCursorAgentResumeFailure(stderr: string, stdout = ''): boolean {
+  if (hasCursorAgentResumeFailurePattern(stderr)) return true;
+  return stdout ? hasCursorAgentResumeFailureErrorEvent(stdout) : false;
+}
+
 /**
  * Per-agent dispatch for "the session/thread I asked to resume is gone".
  * Generalizes resume-fallback classification so every native-resume adapter
@@ -438,6 +497,7 @@ export function isAgentResumeFailure(
   }
   if (agentId === 'codex') return isCodexResumeFailure(stderr);
   if (agentId === 'opencode') return isOpencodeResumeFailure(stderr);
+  if (agentId === 'cursor-agent') return isCursorAgentResumeFailure(stderr, stdout);
   if (agentId === 'amr') {
     return (
       isAmrResumeFailure(stdout) ||
