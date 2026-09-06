@@ -10,15 +10,23 @@ DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
 COMPOSE_FILE="${DEPLOY_DIR}/docker-compose.yml"
 OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.override.yml"
 LINUX_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.linux.yml"
+SNAP_OVERRIDE_FILE="${DEPLOY_DIR}/docker-compose.snap.yml"
+APPLY_SNAP_COMPOSE_OVERRIDE=0
 HEALTH_TIMEOUT=60
 
-COMPOSE_FILES=(-f "$COMPOSE_FILE")
-if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
-  COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
-fi
-if [ -f "$OVERRIDE_FILE" ]; then
-  COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
-fi
+rebuild_compose_files() {
+  COMPOSE_FILES=(-f "$COMPOSE_FILE")
+  if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+    COMPOSE_FILES+=(-f "$LINUX_OVERRIDE_FILE")
+  fi
+  if [ "$APPLY_SNAP_COMPOSE_OVERRIDE" = "1" ] && [ -f "$SNAP_OVERRIDE_FILE" ]; then
+    COMPOSE_FILES+=(-f "$SNAP_OVERRIDE_FILE")
+  fi
+  if [ -f "$OVERRIDE_FILE" ]; then
+    COMPOSE_FILES+=(-f "$OVERRIDE_FILE")
+  fi
+}
+rebuild_compose_files
 
 # ---------------------------------------------------------------------------
 # Colors & formatting
@@ -52,10 +60,44 @@ else
   exit 1
 fi
 
-# Same guard as install.sh: the Linux override uses !reset (Docker Compose v2.17+).
+# Snap Docker + base hardening blocks ENTRYPOINT tini (#6488). Match install.sh.
+is_snap_confined_docker() {
+  [ "$COMPOSE_CMD" = "docker compose" ] || [ "$COMPOSE_CMD" = "docker-compose" ] || return 1
+  command -v docker >/dev/null 2>&1 || return 1
+  _docker_bin="$(command -v docker)"
+  case "$_docker_bin" in
+    /snap/*) return 0 ;;
+  esac
+  if command -v readlink >/dev/null 2>&1; then
+    _docker_resolved="$(readlink -f "$_docker_bin" 2>/dev/null || true)"
+    case "$_docker_resolved" in
+      /snap/*) return 0 ;;
+    esac
+  fi
+  if docker info 2>/dev/null | grep -q '/var/snap/docker'; then
+    return 0
+  fi
+  return 1
+}
+
+if is_snap_confined_docker && [ -f "$SNAP_OVERRIDE_FILE" ]; then
+  APPLY_SNAP_COMPOSE_OVERRIDE=1
+  rebuild_compose_files
+  warn "Snap-packaged Docker detected; applying docker-compose.snap.yml escape hatch."
+  step "Details: deploy/README.md → Snap Docker (Linux)"
+fi
+
+# Same guard as install.sh: Linux / snap overrides use !reset (Compose v2.17+).
+_needs_compose_reset_tag=0
 if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
+  _needs_compose_reset_tag=1
+fi
+if [ "$APPLY_SNAP_COMPOSE_OVERRIDE" = "1" ]; then
+  _needs_compose_reset_tag=1
+fi
+if [ "$_needs_compose_reset_tag" = "1" ]; then
   if [ "$COMPOSE_CMD" != "docker compose" ]; then
-    error "The Linux host-network override requires 'docker compose' v2."
+    error "The Linux / snap compose overrides require 'docker compose' v2."
     error "Found: ${COMPOSE_CMD}"
     step "Install the Docker Compose plugin: https://docs.docker.com/compose/install/"
     exit 1
@@ -64,7 +106,7 @@ if [ "$(uname -s)" = "Linux" ] && [ -f "$LINUX_OVERRIDE_FILE" ]; then
   _compose_major="$(echo "$_compose_ver" | cut -d. -f1)"
   _compose_minor="$(echo "$_compose_ver" | cut -d. -f2)"
   if [ "$_compose_major" -lt 2 ] || { [ "$_compose_major" -eq 2 ] && [ "$_compose_minor" -lt 17 ]; }; then
-    error "Docker Compose v2.17 or later required for the Linux override (found v${_compose_ver})."
+    error "Docker Compose v2.17 or later required for the Linux / snap overrides (found v${_compose_ver})."
     step "Upgrade: https://docs.docker.com/compose/install/"
     exit 1
   fi
