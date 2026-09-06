@@ -566,6 +566,8 @@ import {
 } from './run-retry-policy.js';
 import {
   amrUserIdForRunAnalytics,
+  createRunPerRequestUsageLedger,
+  foldEventIntoPerRequestUsageLedger,
   scanRunEventsForUsageAnalytics,
 } from './run-analytics-observability.js';
 import {
@@ -7531,6 +7533,8 @@ export async function startServer({
       onEventEmitted: (run, record) => {
         if (!run.sideEffectLedger) run.sideEffectLedger = createRunSideEffectLedger();
         foldEventIntoRunSideEffectLedger(run.sideEffectLedger, record);
+        if (!run.perRequestUsageLedger) run.perRequestUsageLedger = createRunPerRequestUsageLedger();
+        foldEventIntoPerRequestUsageLedger(run.perRequestUsageLedger, record);
         const data = record.data && typeof record.data === 'object' && !Array.isArray(record.data)
           ? record.data
           : null;

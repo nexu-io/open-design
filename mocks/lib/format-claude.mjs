@@ -26,6 +26,42 @@ export async function renderAsClaude(events, opts = {}) {
   const results = new Map();
   for (const e of events) if (e.type === 'tool_result') results.set(e.obs_id, e);
 
+  // Per-request usage distribution. Each assistant message carries its own
+  // `message.usage` (input/output/cache tokens) so the daemon's per-request
+  // capture path can be validated by replay without burning provider budget.
+  // The run-level `result.usage` below is the sum of these per-message usages,
+  // so the per-request reconciliation invariant (sum === result) holds.
+  const assistantCount = events.filter(
+    e => e.type === 'tool_call' || e.type === 'report',
+  ).length;
+  const totalOutput = meta?.total_tokens ?? 0;
+  const agg = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+  };
+  let assistantIndex = 0;
+  // Deterministic per-message usage that sums cleanly back to the totals: the
+  // run output is split evenly across messages (last one absorbs the
+  // remainder), and each message reports a small fixed input/cache footprint.
+  const perMessageUsage = () => {
+    const remaining = assistantCount - assistantIndex;
+    const output = remaining > 0 ? Math.floor((totalOutput - agg.output_tokens) / remaining) : 0;
+    assistantIndex += 1;
+    const usage = {
+      input_tokens: 12,
+      output_tokens: output,
+      cache_creation_input_tokens: 0,
+      cache_read_input_tokens: 3,
+    };
+    agg.input_tokens += usage.input_tokens;
+    agg.output_tokens += usage.output_tokens;
+    agg.cache_creation_input_tokens += usage.cache_creation_input_tokens;
+    agg.cache_read_input_tokens += usage.cache_read_input_tokens;
+    return usage;
+  };
+
   let lastT = 0;
   for (const e of events) {
     if (e.type === 'meta' || e.type === 'stdout' || e.type === 'tool_result') continue;
@@ -47,6 +83,7 @@ export async function renderAsClaude(events, opts = {}) {
             type: 'tool_use', id: e.obs_id, name: e.name, input: e.input ?? {},
           }],
           stop_reason: 'tool_use',
+          usage: perMessageUsage(),
         },
       }) + '\n');
       emit(JSON.stringify({
@@ -70,6 +107,7 @@ export async function renderAsClaude(events, opts = {}) {
           role: 'assistant',
           content: [{ type: 'text', text: e.content }],
           stop_reason: 'end_turn',
+          usage: perMessageUsage(),
         },
       }) + '\n');
       if (opts.reportFile) await writeFile(opts.reportFile, e.content).catch(() => {});
@@ -79,11 +117,13 @@ export async function renderAsClaude(events, opts = {}) {
   emit(JSON.stringify({
     type: 'result',
     subtype: 'success',
+    // Sum of the per-message `message.usage` emitted above, so the daemon's
+    // per-request sum reconciles against this run-level aggregate.
     usage: {
-      input_tokens: 0,
-      output_tokens: meta?.total_tokens ?? 0,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: 0,
+      input_tokens: agg.input_tokens,
+      output_tokens: agg.output_tokens,
+      cache_creation_input_tokens: agg.cache_creation_input_tokens,
+      cache_read_input_tokens: agg.cache_read_input_tokens,
     },
     total_cost_usd: 0,
     duration_ms: meta?.duration_ms ?? 0,

@@ -943,6 +943,18 @@ export type PersistedAgentEvent =
        *  projection can read a truncation as incomplete after reload (#1247). */
       stopReason?: string;
     }
+  // Per-request token usage for one model request (assistant `message`),
+  // keyed by `requestId` (provider `msg_…` id). Persisted alongside the
+  // run-level `usage` record so request-level cost/percentile analysis has a
+  // durable source; the per-request token sum reconciles with `usage`.
+  | {
+      kind: 'request_usage';
+      requestId: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheCreationInputTokens?: number;
+      cacheReadInputTokens?: number;
+    }
   | { kind: 'raw'; line: string };
 
 export interface ChatMessage {

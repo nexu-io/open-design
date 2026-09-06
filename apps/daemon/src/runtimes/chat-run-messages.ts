@@ -465,6 +465,21 @@ export function daemonAgentPayloadToPersistedAgentEvent(data: unknown): Persiste
       ...(typeof data.stopReason === 'string' ? { stopReason: data.stopReason } : {}),
     };
   }
+  if (type === 'request_usage' && typeof data.requestId === 'string') {
+    const usage = isRecord(data.usage) ? data.usage : {};
+    return {
+      kind: 'request_usage',
+      requestId: data.requestId,
+      ...(typeof usage.input_tokens === 'number' ? { inputTokens: usage.input_tokens } : {}),
+      ...(typeof usage.output_tokens === 'number' ? { outputTokens: usage.output_tokens } : {}),
+      ...(typeof usage.cache_creation_input_tokens === 'number'
+        ? { cacheCreationInputTokens: usage.cache_creation_input_tokens }
+        : {}),
+      ...(typeof usage.cache_read_input_tokens === 'number'
+        ? { cacheReadInputTokens: usage.cache_read_input_tokens }
+        : {}),
+    };
+  }
   if (type === 'diagnostic' && typeof data.name === 'string') {
     return {
       kind: 'diagnostic',

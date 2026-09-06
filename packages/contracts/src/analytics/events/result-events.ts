@@ -601,6 +601,17 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // where session reuse applies.
   is_followup_turn?: boolean;
   cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
+  // Per-request token coverage (#4610). `request_usage_count` is how many model
+  // requests in the run carry a per-request usage record (request_id + tokens);
+  // 0 means only the run-level aggregate was available. The `_sum` fields are
+  // the per-request token totals, and `request_usage_reconciles_aggregate` is
+  // whether that sum matches the run-level `result.usage` (the #4610 invariant).
+  // Together these let request-level cost/percentile analysis graduate off the
+  // run-level floor for claude_code.
+  request_usage_count?: number;
+  request_usage_input_tokens_sum?: number;
+  request_usage_output_tokens_sum?: number;
+  request_usage_reconciles_aggregate?: boolean;
   queue_duration_ms?: number;
   pre_spawn_duration_ms?: number;
   prompt_build_duration_ms?: number;

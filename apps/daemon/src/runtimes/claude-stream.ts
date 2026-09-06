@@ -47,6 +47,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+/** Token fields carried on a single assistant `message.usage`. Mirrors the
+ *  raw claude stream-json shape so the per-request sum reconciles with the
+ *  run-level `result.usage` aggregate. */
+export interface ClaudePerRequestUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
+/** Extract the per-request token fields from an assistant `message.usage`,
+ *  keeping only finite numbers. Returns null when `usage` is absent or carries
+ *  no token field, so the parser does not emit empty per-request records. */
+function perRequestUsageFrom(usage: unknown): ClaudePerRequestUsage | null {
+  if (!isRecord(usage)) return null;
+  const out: ClaudePerRequestUsage = {};
+  const keys = [
+    'input_tokens',
+    'output_tokens',
+    'cache_creation_input_tokens',
+    'cache_read_input_tokens',
+  ] as const;
+  let seen = false;
+  for (const key of keys) {
+    const value = usage[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      out[key] = value;
+      seen = true;
+    }
+  }
+  return seen ? out : null;
+}
+
 export interface ClaudeStreamHandlerOptions {
   suppressHtmlArtifactsAfterFileWrite?: boolean;
   onChildRuntimeFact?: (fact: ClaudeChildRuntimeFact) => void;
@@ -441,6 +474,21 @@ export function createClaudeStreamHandler(
       const textMsgId = explicitMsgId ?? (currentMessageStreamedText ? currentMessageId : null);
       const thinkingMsgId = explicitMsgId ?? (currentMessageStreamedThinking ? currentMessageId : null);
       if (explicitMsgId) currentMessageId = explicitMsgId;
+      // Per-request usage: every assistant message carries its own
+      // `message.usage` (per-turn input/output/cache tokens). The run-level
+      // `result.usage` collapses these into one aggregate, which is why
+      // request-level cost/percentile analysis can't graduate from run-level
+      // (#3408 / #3547 follow-up B). Surface the per-request record here,
+      // keyed by `message.id` (the provider `msg_…` request id), so the per-
+      // request token sum reconciles against `result.usage`. Emitted before
+      // the content-block loop so the record exists even if the message has
+      // only tool_use blocks.
+      if (explicitMsgId) {
+        const perRequest = perRequestUsageFrom(obj.message.usage);
+        if (perRequest) {
+          onEvent({ type: 'request_usage', requestId: explicitMsgId, usage: perRequest });
+        }
+      }
       const textAlreadyStreamed = textMsgId ? textStreamed.has(textMsgId) : false;
       const thinkingAlreadyStreamed = thinkingMsgId ? thinkingStreamed.has(thinkingMsgId) : false;
       // Per-turn `stop_reason` is emitted as `turn_end` AFTER the content
