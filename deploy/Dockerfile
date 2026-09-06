@@ -74,6 +74,7 @@ RUN pnpm --filter @open-design/daemon build && \
 COPY skills ./skills
 COPY design-systems ./design-systems
 COPY craft ./craft
+COPY design-templates ./design-templates
 COPY prompt-templates ./prompt-templates
 COPY assets ./assets
 # `data/plugin-previews/manifest.json` is committed by the bake pipeline and is
@@ -95,6 +96,7 @@ COPY --from=build --chown=open-design:open-design /app/apps/web/out ./apps/web/o
 COPY --from=build --chown=open-design:open-design /app/skills ./skills
 COPY --from=build --chown=open-design:open-design /app/design-systems ./design-systems
 COPY --from=build --chown=open-design:open-design /app/craft ./craft
+COPY --from=build --chown=open-design:open-design /app/design-templates ./design-templates
 COPY --from=build --chown=open-design:open-design /app/prompt-templates ./prompt-templates
 COPY --from=build --chown=open-design:open-design /app/data ./data
 COPY --from=build --chown=open-design:open-design /app/assets/frames ./assets/frames
