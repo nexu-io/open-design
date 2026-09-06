@@ -5,6 +5,7 @@ import {
   BYOK_OPENCODE_API_KEY_ENV,
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
+  describeOpenCodeByokResolution,
   opencodeByokModelId,
 } from '../../src/runtimes/byok-opencode.js';
 import { byokOpenCodeAgentDef } from '../../src/runtimes/defs/byok-opencode.js';
@@ -426,5 +427,146 @@ describe('byok-opencode runtime config', () => {
     const provider = (out?.config.provider as Record<string, { options?: Record<string, unknown> }> | undefined)
       ?.[BYOK_OPENCODE_PROVIDER_ID];
     expect(provider?.options).not.toHaveProperty('apiKey');
+  });
+
+  it('completes schemeless DeepSeek base URLs for the OpenAI-compatible package', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-deepseek', baseUrl: 'api.deepseek.com/v1' },
+      'deepseek-v4-pro',
+    );
+
+    expect(out?.modelId).toBe('open-design-byok/deepseek-v4-pro');
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://api.deepseek.com/v1',
+          },
+        },
+      },
+    });
+  });
+
+  it('keeps hosts that stay unparseable after scheme completion on the OpenAI-compatible package', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-relay', baseUrl: 'https://exa mple.com/v1' },
+      'model',
+    );
+
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://exa mple.com/v1',
+          },
+        },
+      },
+    });
+  });
+
+  it('completes schemeless native OpenAI origins before applying exact-origin rules', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-openai', baseUrl: 'api.openai.com' },
+      'gpt-5.5',
+    );
+
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai',
+          options: {
+            baseURL: 'https://api.openai.com/v1',
+          },
+        },
+      },
+    });
+  });
+
+  it('completes scheme-like custom-host URLs that URL parsing treats as protocols', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-local', baseUrl: 'localhost:1147/v1' },
+      'model',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://localhost:1147/v1',
+          },
+        },
+      },
+    });
+  });
+
+  it('describes the OpenCode BYOK resolution without exposing credentials', () => {
+    const info = describeOpenCodeByokResolution(
+      { protocol: 'openai', apiKey: 'sk-deepseek-secret', baseUrl: 'api.deepseek.com/v1' },
+      'deepseek-v4-pro',
+    );
+
+    expect(info).toEqual({
+      baseUrlHost: 'api.deepseek.com',
+      npm: '@ai-sdk/openai-compatible',
+      modelId: 'open-design-byok/deepseek-v4-pro',
+      baseURL: 'https://api.deepseek.com/v1',
+      requestPath: '/chat/completions',
+    });
+    expect(describeOpenCodeByokResolution(null, 'deepseek-v4-pro')).toBeNull();
+    expect(describeOpenCodeByokResolution(undefined, undefined)).toBeNull();
+    expect(JSON.stringify(info)).not.toContain('sk-deepseek-secret');
+  });
+
+  it('completes schemeless loopback hosts to https before local-ollama rules apply', () => {
+    const out = buildOpenCodeByokProviderConfig(
+      { protocol: 'ollama', apiKey: '', baseUrl: 'localhost:11434' },
+      'model',
+    );
+
+    expect(out?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://localhost:11434/v1',
+          },
+        },
+      },
+    });
+  });
+
+  it('keeps explicit-scheme base URLs byte-identical', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'openai',
+        apiKey: '',
+        baseUrl: 'http://localhost:4000/v1',
+        requiresApiKey: false,
+      },
+      'model',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'http://localhost:4000/v1',
+          },
+        },
+      },
+    });
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', apiKey: 'sk-gateway', baseUrl: 'https://x.dev/v1' },
+      'model',
+    )?.config).toMatchObject({
+      provider: {
+        [BYOK_OPENCODE_PROVIDER_ID]: {
+          npm: '@ai-sdk/openai-compatible',
+          options: {
+            baseURL: 'https://x.dev/v1',
+          },
+        },
+      },
+    });
   });
 });

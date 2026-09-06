@@ -14,7 +14,7 @@ import {
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { delimiter, join, resolve } from 'node:path';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, afterAll, describe, expect, it, vi } from 'vitest';
 import {
   bufferedAntigravityGeminiFirstTokenAt,
   composeLiveInstructionPrompt,
@@ -625,6 +625,75 @@ process.stdin.on('end', () => {
         });
         expect(provider?.options).not.toHaveProperty('apiKey');
         expect(rawConfig).not.toContain('OPEN_DESIGN_BYOK_API_KEY');
+      },
+    );
+  });
+
+  it('logs a redacted resolution breadcrumb when spawning byok-opencode runs', async () => {
+    if (!process.env.OD_DATA_DIR) {
+      throw new Error('OD_DATA_DIR is required for BYOK OpenCode config tests');
+    }
+
+    const projectId = `proj-${randomUUID()}`;
+    const createProjectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'BYOK breadcrumb fixture' }),
+    });
+    expect(createProjectResponse.ok).toBe(true);
+
+    await withFakeAgent(
+      'opencode',
+      `
+console.log(JSON.stringify({ type: 'step_start' }));
+console.log(JSON.stringify({ type: 'text', part: { text: 'byok-opencode-breadcrumb-ok' } }));
+console.log(JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 1 } } }));
+process.exit(0);
+`,
+      async () => {
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        let body = '';
+        let loggedLines: string[] = [];
+        let warnedLines: string[] = [];
+        try {
+          const response = await fetch(`${baseUrl}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              agentId: 'byok-opencode',
+              projectId,
+              message: 'hello',
+              model: 'deepseek-v4-flash',
+              byokProvider: {
+                protocol: 'openai',
+                apiKey: 'sk-breadcrumb-secret',
+                baseUrl: 'api.deepseek.com/v1',
+                model: 'deepseek-v4-flash',
+              },
+            }),
+          });
+          expect(response.ok).toBe(true);
+          body = await response.text();
+          loggedLines = logSpy.mock.calls.map((args) => args.map(String).join(' '));
+          warnedLines = warnSpy.mock.calls.map((args) => args.map(String).join(' '));
+        } finally {
+          logSpy.mockRestore();
+          warnSpy.mockRestore();
+        }
+
+        expect(body).toContain('byok-opencode-breadcrumb-ok');
+
+        const breadcrumb = loggedLines.find((line) =>
+          line.includes('[byok-opencode] run ') && line.includes('provider=@ai-sdk/openai-compatible'),
+        );
+        expect(breadcrumb).toBeTruthy();
+        expect(breadcrumb).toContain('host=api.deepseek.com');
+        expect(breadcrumb).toContain('model=open-design-byok/deepseek-v4-flash');
+        expect(breadcrumb).toContain('endpoint=POST https://api.deepseek.com/v1/chat/completions');
+        expect(loggedLines.join('\n')).not.toContain('sk-breadcrumb-secret');
+        expect(warnedLines.join('\n'))
+          .not.toContain('spawning without OPENCODE_CONFIG_CONTENT');
       },
     );
   });

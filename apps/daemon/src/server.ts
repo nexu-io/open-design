@@ -256,6 +256,7 @@ import { TerminalControlSequenceStripper } from './runtimes/terminal-control.js'
 import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
+  describeOpenCodeByokResolution,
 } from './runtimes/byok-opencode.js';
 import {
   extractPlainStreamArtifacts,
@@ -10556,6 +10557,19 @@ export async function startServer({
         BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
       );
     }
+    if (def.id === 'byok-opencode' && byokOpenCodeProvider) {
+      const resolution = describeOpenCodeByokResolution(
+        byokProvider,
+        typeof model === 'string' ? model : null,
+      );
+      console.log(
+        `[byok-opencode] run ${run.id}`
+          + ` provider=${resolution?.npm ?? 'none'}`
+          + ` model=${resolution?.modelId ?? 'none'}`
+          + ` host=${resolution?.baseUrlHost ?? 'none'}`
+          + ` endpoint=POST ${resolution?.baseURL ?? ''}${resolution?.requestPath ?? ''}`,
+      );
+    }
     const requestedRuntimeModel = def.id === 'byok-opencode'
       ? byokOpenCodeProvider?.modelId ?? null
       : model;
@@ -13460,6 +13474,13 @@ export async function startServer({
         def.streamFormat === 'dsh-profile-jsonl'
           ? 'pipe'
           : 'ignore';
+      if (def.id === 'byok-opencode' && byokOpenCodeProvider && !opencodeConfigContent) {
+        console.warn(
+          `[byok-opencode] run ${run.id} spawning without OPENCODE_CONFIG_CONTENT`
+            + ' — provider config was dropped (mcp-config build failure);'
+            + ' the agent will start without the BYOK provider',
+        );
+      }
       const env = applyAgentLaunchEnv({
         ...agentSpawnEnv,
         ...(mmdRouteLaunchEnv || {}),
