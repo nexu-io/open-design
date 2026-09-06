@@ -111,10 +111,31 @@ export interface ScrollFreezeState {
 export const EDGE_TOLERANCE_PX = 1;
 /**
  * A stalled wheel only counts as a defect when a visible amount of the log
- * is unreachable. Below this a rounding artefact or a one-line overflow
- * would read as a freeze.
+ * is unreachable.
+ *
+ * Was 24, which the one live capture this probe ever made shows to be far
+ * too high. That capture (see "The shortfall ledger" below) has the deficit
+ * opening at 1px and growing 0 → 1 → 5 → 9 → 12 → 27: a 24px bar discards
+ * the first five rounds of every such run and reports NOTHING AT ALL for a
+ * drift that settles anywhere below 24 — which is still a chat the user
+ * cannot scroll to the bottom of by a line and a half.
+ *
+ * What sets the floor is rounding, not noise. `scrollHeight` and
+ * `clientHeight` are integers while `scrollTop` is fractional and device-pixel
+ * aligned, so the static error is bounded by well under a pixel by
+ * construction; a 540-round real-wheel sweep over a healthy scroller measured
+ * it at ±0.5px. 8 is an order of magnitude above that floor and still below
+ * the 12px round the old bar was throwing away.
+ *
+ * It is also not the only guard. This threshold is consulted only AFTER
+ * `FREEZE_WHEEL_COUNT` consecutive downward notches asking for
+ * `FREEZE_REQUESTED_PX` in total have moved the scroller by nothing — at
+ * which point "the scroller will not move" is already established, and the
+ * only remaining question is whether the gap is big enough for a human to
+ * see. `EDGE_TOLERANCE_PX` still owns the "genuinely at the end" case
+ * underneath, so nothing here can turn a pinned-to-newest chat into a report.
  */
-export const MIN_UNREACHABLE_PX = 24;
+export const MIN_UNREACHABLE_PX = 8;
 /** Consecutive stalled wheel events before we will call it. */
 export const FREEZE_WHEEL_COUNT = 4;
 /**

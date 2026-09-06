@@ -592,6 +592,14 @@ describe('observability/chat-scroll-freeze — probe', () => {
     const log = buildChatLog();
     stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
     const inner = document.createElement('pre');
+    // `.markdown-rendered pre { overflow: auto }` — the rule this `<pre>`
+    // stands for. Stated as the LONGHAND because jsdom loads no stylesheets
+    // and does not expand the `overflow` shorthand for `getComputedStyle`:
+    // `overflow: auto` reads back there as `overflow-y: visible`. Real
+    // engines fill the longhand in, and the longhand is what the gate reads.
+    // Without it this fixture claims "inner scroller" while modelling a box
+    // no wheel can move — which is the very confusion being fixed.
+    inner.style.overflowY = 'auto';
     log.appendChild(inner);
     stubGeometry(inner, { scrollTop: 0, scrollHeight: 900, clientHeight: 200 });
 

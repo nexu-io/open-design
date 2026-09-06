@@ -118,7 +118,12 @@ import {
   type ChatActivityLog,
   type ChatActivityRole,
   EDGE_TOLERANCE_PX,
+  FREEZE_REQUESTED_PX,
+  FREEZE_WHEEL_COUNT,
+  type FirstShortfall,
   type LayerStyleProbe,
+  MIN_UNREACHABLE_PX,
+  SNAP_BACK_MIN_PX,
   type ScrollFreezeEvidence,
   type ScrollFreezeState,
   type ScrollGeometry,
@@ -144,6 +149,24 @@ import {
   sliceActivityBefore,
   sliceActivityWindow,
 } from './chat-scroll-freeze-detector';
+import {
+  type ReportBlocker,
+  type SnapBackRoute,
+  describeSnapBackRoute,
+  evaluateReportBlockers,
+  summariseBlockers,
+} from './chat-scroll-freeze-blockers';
+import {
+  type ScrollWriteRecord,
+  armScrollWriteTrace,
+  clearScrollWrites,
+  disarmScrollWriteTrace,
+  isScrollWriteTraceArmed,
+  listScrollWrites,
+  scrollWriteTraceFlagSet,
+  scrollWriteTraceStats,
+  setScrollWriteTraceFlag,
+} from './chat-scroll-write-trace';
 
 /**
  * The chat log is identified by the test id it already ships with. A
@@ -252,6 +275,15 @@ interface Surface {
   /** In-flight `requestIdleCallback` handle, so `detach()` can cancel it. */
   idleHandle: number | null;
   reported: boolean;
+  /**
+   * Frozen verdicts the inner-scroller gate threw away.
+   *
+   * Incremented only inside that gate's own branch, which has just walked an
+   * ancestor chain reading layout — so this costs nothing measurable and it
+   * is the ONLY record that the probe saw a freeze and chose silence. Without
+   * it, suppression and "no defect ever happened" are the same observation.
+   */
+  innerScrollerSuppressions: number;
   resizeObserver: ResizeObserver | null;
 
   // -- parallel activity ----------------------------------------------------
@@ -313,6 +345,15 @@ export function installChatScrollFreezeObserver(): () => void {
 
   document.addEventListener('scroll', onScrollCapture, { capture: true, passive: true });
   armWheelDiscovery();
+  // One object, published once. No listener, no timer, no observer, and
+  // nothing computed: the handle does all of its work on the stack of
+  // whoever calls it, so a session that never calls it pays for this line
+  // and nothing else.
+  installHandle();
+  // The write trace stays off unless a previous session asked for it. One
+  // synchronous storage read at boot, then either a patched prototype or
+  // nothing at all.
+  if (scrollWriteTraceFlagSet()) armScrollWriteTrace(CHAT_LOG_SELECTOR);
 
   return () => {
     document.removeEventListener('scroll', onScrollCapture, { capture: true });
@@ -321,6 +362,11 @@ export function installChatScrollFreezeObserver(): () => void {
     installed = false;
     disarmWheelDiscovery();
     detach();
+    uninstallHandle();
+    // Leaving a rewritten `Element.prototype` behind after teardown would be
+    // the worst possible residue: invisible, global, and outliving the module
+    // that explains it.
+    disarmScrollWriteTrace();
   };
 }
 
@@ -476,6 +522,7 @@ function attach(element: HTMLElement): Surface | null {
     idlePending: false,
     idleHandle: null,
     reported: false,
+    innerScrollerSuppressions: 0,
     resizeObserver: null,
     activity: createActivityLog(),
     shell: null,
@@ -1098,6 +1145,10 @@ function runFrame(active: Surface): void {
   // tool-output box in a transcript is such a box.
   const innerScrollerCount = countAbsorbingScrollers(active.element, wheelTarget);
   if (innerScrollerCount > 0) {
+    // The only trace this decision leaves. A suppressed freeze and a chat
+    // that never froze are otherwise indistinguishable from outside, which is
+    // how a real 1493px failure produced no event and no explanation.
+    active.innerScrollerSuppressions += 1;
     // Clear the streak as well as the verdict. Leaving it at the threshold
     // would re-run this ancestor walk — which does read layout — on every
     // single frame for as long as the user keeps scrolling that inner box.
@@ -1250,6 +1301,66 @@ function pushTransition(
 }
 
 /**
+ * The one test for "this box could legitimately have eaten a downward
+ * wheel", used by the suppression gate and by the handle that reports on
+ * it, so the two can never again describe different sets.
+ *
+ * Both halves are required, and an earlier version asked only the second:
+ *
+ *   1. It is a vertical SCROLLPORT. `overflow-y` has to be a value the
+ *      engine gives a scrollbar to.
+ *   2. It has travel left below where it currently sits.
+ *
+ * Geometry alone cannot tell a scroller from a box that overflows its
+ * content and clips it — and a chat transcript is built out of the latter
+ * on purpose. A user message at `-webkit-line-clamp: 6`, a collapsed code
+ * block at `max-height: 7em`, a closed accordion, an action card: every one
+ * of them reports content taller than its box while ignoring the wheel
+ * completely. Counting those as consumers threw away the freeze verdict AND
+ * cleared the streak, so a genuine freeze anywhere near normal chat
+ * furniture was silent, and the only surviving trace was
+ * `innerScrollerSuppressions`.
+ *
+ * `overflow-y` is read as the COMPUTED value rather than reasoned about from
+ * the declarations, because the engine has already resolved the awkward
+ * corner of the grid: a box specified `overflow-x: auto; overflow-y:
+ * visible` computes `overflow-y: auto` (CSS Overflow 3 — it genuinely is a
+ * vertical scrollport, and a vertical wheel genuinely does scroll it),
+ * whereas an explicit `overflow-y: hidden` next to a scrolling x-axis
+ * genuinely is not. Asking `getComputedStyle` gets that grid right for free;
+ * inferring it here would get it wrong. `hidden` and `clip` are excluded
+ * deliberately — `hidden` is scrollable from script and inert to a wheel,
+ * which is the entire defect.
+ *
+ * Order is chosen for cost. Geometry first: those are property reads on a
+ * layout tree the caller has just made clean, and they reject most of an
+ * ancestor chain outright, so `getComputedStyle` is only paid for the few
+ * boxes that actually overflow.
+ *
+ * A style that cannot be read counts as NOT absorbing. Suppression has to be
+ * earned by proof: a false report is visible and correctable, and a false
+ * silence is what cost a day.
+ */
+const WHEEL_SCROLLABLE_OVERFLOW_Y: ReadonlySet<string> = new Set([
+  'auto',
+  'scroll',
+  // Legacy alias some engines still compute rather than normalising to
+  // `auto`. It scrolls; it belongs here.
+  'overlay',
+]);
+
+function absorbsDownwardWheel(el: HTMLElement): boolean {
+  const travel = el.scrollHeight - el.clientHeight;
+  if (travel <= EDGE_TOLERANCE_PX) return false;
+  if (travel - el.scrollTop <= EDGE_TOLERANCE_PX) return false;
+  try {
+    return WHEEL_SCROLLABLE_OVERFLOW_Y.has(getComputedStyle(el).overflowY);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Scrollable boxes between the wheel target and the chat log that still
  * had travel in the downward direction.
  *
@@ -1265,9 +1376,7 @@ function countAbsorbingScrollers(root: HTMLElement, target: Element | null): num
   let node: Element | null = target;
   while (node != null && node !== root) {
     const el = node as HTMLElement;
-    if (el.scrollHeight - el.clientHeight > EDGE_TOLERANCE_PX) {
-      if (el.scrollHeight - el.clientHeight - el.scrollTop > EDGE_TOLERANCE_PX) count += 1;
-    }
+    if (absorbsDownwardWheel(el)) count += 1;
     node = el.parentElement;
   }
   return count;
@@ -1511,6 +1620,430 @@ function readRuntimeIdentity(): RuntimeIdentity {
 }
 
 // ---------------------------------------------------------------------------
+// The runtime handle — `window.__chatScrollFreeze`
+// ---------------------------------------------------------------------------
+//
+// Why this exists
+// ---------------
+// A user hit a 1493px freeze on a dogfood build and PostHog received nothing.
+// The transport was alive and the observer was installed — both provable from
+// neighbouring events — so the failure was inside this module's own chain of
+// conditions, and this module could not say which one, because it exposed no
+// state whatsoever. Getting any number at all meant hand-injecting a script
+// into the running renderer, which dies with the window.
+//
+// So there is now a read-only way to ask. It answers, in one call: what is
+// attached, what the geometry is RIGHT NOW, what is accumulated, what the
+// ledger holds, and — the field this was really built for — every gate
+// between here and a report, with its current value beside the value it
+// needs.
+//
+// The cost contract, which is not negotiable
+// ------------------------------------------
+// Nobody calling it must cost nothing. That is enforced structurally:
+//
+//   - No listener, no observer, no timer and no frame is created for the
+//     handle, at install or ever. Installing it is one property assignment.
+//   - NOTHING is pre-computed. Every geometry read, every element
+//     description, every subtree walk happens inside `snapshot()`, on the
+//     stack of whoever asked. A cached "current scrollHeight" kept fresh in
+//     the background would be a layout read on somebody else's frame, which
+//     is the exact tax this module refuses to levy.
+//   - The one piece of new bookkeeping in the hot path is
+//     `innerScrollerSuppressions`, and it lives inside a branch that has
+//     already walked an ancestor chain reading layout.
+//
+// `snapshot()` itself is expensive — it forces layout and walks the
+// transcript. That is correct: it runs when a human is looking, and at that
+// moment cost has stopped mattering.
+
+/** Elements examined when listing boxes that could absorb a wheel. */
+const MAX_ABSORBING_SCAN = 400;
+/** …and how many of them are named in the sample. */
+const MAX_ABSORBING_SAMPLE = 12;
+/** The property `window.__chatScrollFreeze` is published under. */
+const HANDLE_KEY = '__chatScrollFreeze';
+
+export interface ChatScrollFreezeGeometrySnapshot extends ScrollGeometry {
+  /** `scrollHeight - clientHeight` — the ceiling layout would permit. */
+  layoutMax: number;
+  /** …minus where the scroller is. What the wheel cannot reach. */
+  unreachablePx: number;
+}
+
+export interface ChatScrollFreezeSurfaceSnapshot {
+  probeId: string;
+  /** How long this element has been watched. */
+  ageMs: number;
+  /** Tag, classes, test id, rendered size and child count. */
+  element: string;
+  elementConnected: boolean;
+  messageRowCount: number;
+  /** Read live, on this call. */
+  geometry: ChatScrollFreezeGeometrySnapshot;
+  /** What the last frame callback saw — stale on purpose, so drift is visible. */
+  geometryAtLastFrame: ScrollGeometry | null;
+  pendingWheel: { px: number; count: number; target: string | null };
+  /** Frozen verdicts the inner-scroller gate has discarded on this surface. */
+  innerScrollerSuppressions: number;
+  /** Boxes in the transcript that would suppress a report if wheeled over. */
+  absorbingScrollers: { count: number; truncated: boolean; sample: string[] };
+  detector: ScrollFreezeState;
+  shape: ScrollShapeMemo | null;
+  transitions: string;
+  scrollableOn: { contentPx: number; agoMs: number } | null;
+  ledger: {
+    stepCount: number;
+    probeCount: number;
+    steps: string;
+    probes: string;
+    first: FirstShortfall | null;
+  };
+  activity: { size: number; dropped: number; counts: string; trail: string };
+  jump: {
+    activeAtAttach: boolean;
+    active: boolean;
+    firstActiveMs: number | null;
+    activeVsScrollNodeMs: number | null;
+  };
+  streaming: boolean;
+  parts: {
+    shell: string | null;
+    floatHost: string | null;
+    jumpButton: string | null;
+    ancestorCount: number;
+  };
+  scheduling: {
+    framePending: boolean;
+    idlePending: boolean;
+    scrollSamplePending: boolean;
+    msSinceScrollSample: number | null;
+    layerCountAtAttach: number | null;
+  };
+  observers: { log: boolean; host: boolean; structure: boolean; stream: boolean };
+}
+
+export interface ChatScrollFreezeSnapshot {
+  version: 1;
+  at: number;
+  installed: boolean;
+  attached: boolean;
+  reportedThisSession: number;
+  wheelDiscoveryArmed: boolean;
+  thresholds: {
+    minUnreachablePx: number;
+    freezeWheelCount: number;
+    freezeRequestedPx: number;
+    snapBackMinPx: number;
+    edgeTolerancePx: number;
+    maxReportsPerSession: number;
+    scrollSampleMinIntervalMs: number;
+  };
+  surface: ChatScrollFreezeSurfaceSnapshot | null;
+  /** Every condition between a wheel and an event, with actual vs needed. */
+  blockers: ReportBlocker[];
+  /** `ready`, or `blocked_by=` every failing gate. */
+  verdict: string;
+  /** The one-notch route, which the four-notch gates say nothing about. */
+  snapBack: SnapBackRoute | null;
+  writeTrace: {
+    armed: boolean;
+    flagSet: boolean;
+    recorded: number;
+    dropped: number;
+    capacity: number;
+  };
+}
+
+export interface ChatScrollFreezeHandle {
+  readonly version: 1;
+  /** Everything, read at this instant. */
+  snapshot(): ChatScrollFreezeSnapshot;
+  /** Just the verdict line, for a console one-liner. */
+  why(): string;
+  writes: {
+    enabled(): boolean;
+    /** Patches `Element.prototype` and persists the switch. */
+    enable(): boolean;
+    /** Restores the prototype verbatim and clears the switch. */
+    disable(): void;
+    list(): ScrollWriteRecord[];
+    clear(): void;
+  };
+}
+
+interface ProbeGlobals {
+  [HANDLE_KEY]?: ChatScrollFreezeHandle;
+}
+
+/**
+ * Enough to pick an element out of a screenshot: what it is, what it is
+ * called, how big it is and how much it contains.
+ *
+ * `getBoundingClientRect` forces layout. It is called from `snapshot()` and
+ * nowhere else, which is the whole reason the handle computes nothing ahead
+ * of time.
+ */
+function describeElement(el: Element | null): string | null {
+  if (el == null) return null;
+  try {
+    const tag = el.tagName.toLowerCase();
+    const classes = (el.getAttribute('class') ?? '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 8)
+      .map((token) => `.${token}`)
+      .join('');
+    const testId = el.getAttribute('data-testid');
+    const rect = el.getBoundingClientRect();
+    return (
+      `${tag}${classes}`
+      + (testId != null ? `[data-testid=${testId}]` : '')
+      + ` ${Math.round(rect.width)}x${Math.round(rect.height)}`
+      + ` children=${el.children.length}`
+    );
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Boxes inside the log that `countAbsorbingScrollers` would count.
+ *
+ * Prospective where the suppression counter is historical: "which boxes in
+ * this transcript can eat a wheel" is answerable at any moment, and the
+ * answer is what turns "it never reported" into a reason.
+ *
+ * It calls the gate's own predicate rather than restating it. The two were
+ * separate copies of the same geometry test once, which meant this list
+ * named every clipped user message and collapsed code block in the
+ * transcript as a suppressor — the exact wrong conclusion the operator comes
+ * here to avoid. One predicate, so a reader of this list is reading the
+ * gate.
+ */
+function scanAbsorbingScrollers(root: HTMLElement): {
+  count: number;
+  truncated: boolean;
+  sample: string[];
+} {
+  let count = 0;
+  let truncated = false;
+  const sample: string[] = [];
+  try {
+    const all = root.getElementsByTagName('*');
+    const limit = Math.min(all.length, MAX_ABSORBING_SCAN);
+    truncated = all.length > MAX_ABSORBING_SCAN;
+    for (let i = 0; i < limit; i += 1) {
+      const el = all[i];
+      if (el == null || !(el instanceof HTMLElement)) continue;
+      if (!absorbsDownwardWheel(el)) continue;
+      count += 1;
+      if (sample.length < MAX_ABSORBING_SAMPLE) {
+        const described = describeElement(el);
+        if (described != null) sample.push(described);
+      }
+    }
+  } catch {
+    // A diagnostic that throws is worse than a diagnostic that is short.
+  }
+  return { count, truncated, sample };
+}
+
+function snapshotSurface(
+  active: Surface,
+  geometry: ChatScrollFreezeGeometrySnapshot,
+  at: number,
+): ChatScrollFreezeSurfaceSnapshot {
+  const activity = listActivity(active.activity);
+  return {
+    probeId: active.probeId,
+    ageMs: Math.round(at - active.attachedAt),
+    element: describeElement(active.element) ?? 'unknown',
+    elementConnected: active.element.isConnected,
+    messageRowCount: active.element.children.length,
+    geometry,
+    geometryAtLastFrame: active.geometry,
+    pendingWheel: {
+      px: Math.round(active.pendingWheelPx),
+      count: active.pendingWheelCount,
+      target: describeElement(active.pendingWheelTarget),
+    },
+    innerScrollerSuppressions: active.innerScrollerSuppressions,
+    absorbingScrollers: scanAbsorbingScrollers(active.element),
+    detector: active.state,
+    shape: active.shape,
+    transitions: serialiseTransitions(active.transitions),
+    scrollableOn:
+      active.scrollableOnContentPx != null && active.scrollableOnAt != null
+        ? {
+            contentPx: Math.round(active.scrollableOnContentPx),
+            agoMs: Math.round(at - active.scrollableOnAt),
+          }
+        : null,
+    ledger: {
+      stepCount: active.ledger.stepCount,
+      probeCount: active.ledger.probeCount,
+      steps: serialiseContentSteps(active.ledger.steps, active.attachedAt),
+      probes: serialiseCeilingProbes(active.ledger.probes, active.attachedAt),
+      first: active.ledger.first,
+    },
+    activity: {
+      size: active.activity.size,
+      dropped: active.activity.dropped,
+      counts: countActivity(activity),
+      trail: serialiseActivity(activity, active.attachedAt),
+    },
+    jump: {
+      activeAtAttach: active.jumpActiveAtAttach,
+      active: active.jumpActive,
+      firstActiveMs:
+        active.jumpFirstActiveAt != null
+          ? Math.round(active.jumpFirstActiveAt - active.attachedAt)
+          : null,
+      activeVsScrollNodeMs:
+        active.jumpFirstActiveAt != null && active.scrollableOnAt != null
+          ? Math.round(active.jumpFirstActiveAt - active.scrollableOnAt)
+          : null,
+    },
+    streaming: active.streamingOn,
+    parts: {
+      shell: describeElement(active.shell),
+      floatHost: describeElement(active.floatHost),
+      jumpButton: describeElement(active.jumpButton),
+      ancestorCount: active.ancestors.size,
+    },
+    scheduling: {
+      framePending: active.framePending,
+      idlePending: active.idlePending,
+      scrollSamplePending: active.scrollSamplePending,
+      msSinceScrollSample: Number.isFinite(active.lastScrollSampleAt)
+        ? Math.round(at - active.lastScrollSampleAt)
+        : null,
+      layerCountAtAttach: active.layerCountAtAttach,
+    },
+    observers: {
+      log: active.resizeObserver != null,
+      host: active.hostResizeObserver != null,
+      structure: active.structureObserver != null,
+      stream: active.streamObserver != null,
+    },
+  };
+}
+
+function buildSnapshot(): ChatScrollFreezeSnapshot {
+  const at = now();
+  const active = surface;
+  const thresholds = {
+    minUnreachablePx: MIN_UNREACHABLE_PX,
+    freezeWheelCount: FREEZE_WHEEL_COUNT,
+    freezeRequestedPx: FREEZE_REQUESTED_PX,
+    snapBackMinPx: SNAP_BACK_MIN_PX,
+    edgeTolerancePx: EDGE_TOLERANCE_PX,
+    maxReportsPerSession: MAX_REPORTS_PER_SESSION,
+    scrollSampleMinIntervalMs: SCROLL_SAMPLE_MIN_INTERVAL_MS,
+  };
+  const frameSchedulerAvailable = typeof requestAnimationFrame === 'function';
+  const trace = scrollWriteTraceStats();
+  const writeTrace = { ...trace, flagSet: scrollWriteTraceFlagSet() };
+
+  if (active == null) {
+    const blockers = evaluateReportBlockers({
+      installed,
+      frameSchedulerAvailable,
+      reportedThisSession,
+      maxReportsPerSession: MAX_REPORTS_PER_SESSION,
+      surface: null,
+    });
+    return {
+      version: 1,
+      at,
+      installed,
+      attached: false,
+      reportedThisSession,
+      wheelDiscoveryArmed,
+      thresholds,
+      surface: null,
+      blockers,
+      verdict: summariseBlockers(blockers),
+      snapBack: null,
+      writeTrace,
+    };
+  }
+
+  // The one place this file reads layout outside a frame callback, and it is
+  // deliberate: the caller is a human at a console, not a scroll handler.
+  const live: ScrollGeometry = {
+    scrollTop: active.element.scrollTop,
+    scrollHeight: active.element.scrollHeight,
+    clientHeight: active.element.clientHeight,
+  };
+  const layoutMax = Math.max(0, live.scrollHeight - live.clientHeight);
+  const geometry: ChatScrollFreezeGeometrySnapshot = {
+    ...live,
+    layoutMax,
+    unreachablePx: layoutMax - live.scrollTop,
+  };
+
+  const blockers = evaluateReportBlockers({
+    installed,
+    frameSchedulerAvailable,
+    reportedThisSession,
+    maxReportsPerSession: MAX_REPORTS_PER_SESSION,
+    surface: {
+      elementConnected: active.element.isConnected,
+      reported: active.reported,
+      geometry: live,
+      state: active.state,
+      innerScrollerSuppressions: active.innerScrollerSuppressions,
+    },
+  });
+
+  return {
+    version: 1,
+    at,
+    installed,
+    attached: true,
+    reportedThisSession,
+    wheelDiscoveryArmed,
+    thresholds,
+    surface: snapshotSurface(active, geometry, at),
+    blockers,
+    verdict: summariseBlockers(blockers),
+    snapBack: describeSnapBackRoute(active.state, live),
+    writeTrace,
+  };
+}
+
+function installHandle(): void {
+  if (typeof globalThis === 'undefined') return;
+  const globals = globalThis as unknown as ProbeGlobals;
+  globals[HANDLE_KEY] = {
+    version: 1,
+    snapshot: buildSnapshot,
+    why: () => buildSnapshot().verdict,
+    writes: {
+      enabled: isScrollWriteTraceArmed,
+      enable: () => {
+        setScrollWriteTraceFlag(true);
+        return armScrollWriteTrace(CHAT_LOG_SELECTOR);
+      },
+      disable: () => {
+        setScrollWriteTraceFlag(false);
+        disarmScrollWriteTrace();
+      },
+      list: listScrollWrites,
+      clear: clearScrollWrites,
+    },
+  };
+}
+
+function uninstallHandle(): void {
+  if (typeof globalThis === 'undefined') return;
+  const globals = globalThis as unknown as ProbeGlobals;
+  delete globals[HANDLE_KEY];
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -1592,5 +2125,8 @@ export function __resetChatScrollFreezeForTest(): void {
   installed = false;
   disarmWheelDiscovery();
   detach();
+  uninstallHandle();
+  disarmScrollWriteTrace();
+  clearScrollWrites();
   reportedThisSession = 0;
 }
