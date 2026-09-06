@@ -1,0 +1,19 @@
+{
+  "candidateId": "ace552d1-f027-4688-8629-fe7fc74bfe44",
+  "projectId": "88d27246-4041-4609-887d-d23c1439ced7",
+  "runId": "81cbefaf-ec3b-4b9a-8513-91aa50099ea6",
+  "conversationId": "a99604d6-f34c-4db5-8866-d07171bfe93a",
+  "provenance": {
+    "summary": "Detected from generated-plugin/SKILL.md after a successful run.",
+    "detectedAt": 1788679375588
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "generated-plugin/SKILL.md",
+      "label": "generated-plugin/SKILL.md",
+      "size": 3981,
+      "copied": true
+    }
+  ]
+}
