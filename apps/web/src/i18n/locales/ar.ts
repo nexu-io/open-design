@@ -3233,6 +3233,7 @@ export const ar: Dict = {
   'fileViewer.exportingElapsed': 'جارٍ التصدير… {seconds}ث',
   'fileViewer.exportSlideEta': 'الشريحة {current}/{total} · يتبقى ~{seconds}ث',
   'fileViewer.exportFailed': 'فشل التصدير. يرجى المحاولة مرة أخرى.',
+  'fileViewer.exportReady': 'جاهز للحفظ',
   'fileViewer.exportDone': 'اكتمل التصدير',
   'fileViewer.exportImageFailed': 'فشل التقاط الصورة. يرجى المحاولة مرة أخرى أو استخدام أداة لقطة الشاشة في المتصفح.',
   'fileViewer.exportImageModalSubtitle': 'اختر تنسيقًا، ثم نزّل المعاينة الحالية كصورة.',

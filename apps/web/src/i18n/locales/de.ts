@@ -3233,6 +3233,7 @@ export const de: Dict = {
   'fileViewer.exportingElapsed': 'Exportieren… {seconds}s',
   'fileViewer.exportSlideEta': 'Folie {current}/{total} · noch ca. {seconds}s',
   'fileViewer.exportFailed': 'Export fehlgeschlagen. Bitte erneut versuchen.',
+  'fileViewer.exportReady': 'Zum Speichern bereit',
   'fileViewer.exportDone': 'Export abgeschlossen',
   'fileViewer.exportImageFailed': 'Bildaufnahme fehlgeschlagen. Bitte versuchen Sie es erneut oder verwenden Sie das Screenshot-Tool Ihres Browsers.',
   'fileViewer.exportImageModalSubtitle': 'Wählen Sie ein Format und laden Sie dann die aktuelle Vorschau als Bild herunter.',

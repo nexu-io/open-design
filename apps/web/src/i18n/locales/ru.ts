@@ -3233,6 +3233,7 @@ export const ru: Dict = {
   'fileViewer.exportingElapsed': 'Экспорт… {seconds}с',
   'fileViewer.exportSlideEta': 'Слайд {current}/{total} · осталось ~{seconds}с',
   'fileViewer.exportFailed': 'Не удалось экспортировать. Повторите попытку.',
+  'fileViewer.exportReady': 'Готово к сохранению',
   'fileViewer.exportDone': 'Экспорт завершён',
   'fileViewer.exportImageFailed': 'Не удалось сделать снимок. Попробуйте ещё раз или воспользуйтесь инструментом скриншотов вашего браузера.',
   'fileViewer.exportImageModalSubtitle': 'Выберите формат, затем скачайте текущий предпросмотр как изображение.',

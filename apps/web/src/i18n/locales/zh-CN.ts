@@ -3407,6 +3407,7 @@ export const zhCN: Dict = {
   "fileViewer.exportSlideEta":
     "正在导出第 {current}/{total} 页 · 约剩 {seconds} 秒",
   "fileViewer.exportFailed": "导出失败，请重试。",
+  "fileViewer.exportReady": "可以保存了",
   "fileViewer.exportDone": "导出完成",
   "fileViewer.exportImageFailed":
     "图片捕获失败，请重试或使用浏览器的截图工具。",
