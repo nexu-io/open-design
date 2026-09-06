@@ -570,7 +570,7 @@ export async function ensureReferencedProjectDir(
   await ensureProject(projectsRoot, project.id, project.metadata);
 }
 
-const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
+export const URL_PREVIEW_SCROLL_BRIDGE = `<script data-od-url-scroll-bridge>
 (function(){
   if (window.__odUrlScrollBridge) return;
   window.__odUrlScrollBridge = true;
@@ -742,11 +742,12 @@ function sameOrchestratorWorkspace(a: unknown, b: unknown): boolean {
   return JSON.stringify(parsedA.value) === JSON.stringify(parsedB.value);
 }
 
-const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
+export const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
 (function(){
   if (window.__odUrlSelectionBridge) return;
   window.__odUrlSelectionBridge = true;
   var commentEnabled = false;
+  var inspectEnabled = false;
   var mode = 'picker';
   var hoveredId = null;
   var drawing = false;
@@ -757,6 +758,24 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  var inspectOverrides = Object.create(null);
+  // #7008: a replayed override keyed by a frame-qualified id (frame:[...])
+  // has no matching selector in THIS document's DOM, so it can never be
+  // validated/applied locally. Keep the raw, per-child entries here (keyed
+  // by framePath, then by the child's own local elementId) so they can be
+  // forwarded once -- immediately if the child frame already exists, and
+  // again on a later od:url-selection-bridge-ready in case the replay
+  // arrived before the child finished mounting or reloaded afterward.
+  var pendingFrameInspectOverrides = Object.create(null);
+  var inspectStyle = null;
+  var ALLOWED_INSPECT_PROPS = {
+    'color': true, 'background-color': true, 'font-size': true,
+    'font-weight': true, 'font-family': true, 'line-height': true,
+    'text-align': true, 'padding': true, 'padding-top': true,
+    'padding-right': true, 'padding-bottom': true, 'padding-left': true,
+    'border-radius': true
+  };
+  var UNSAFE_INSPECT_VALUE = /[;{}<>\\n\\r]/;
   function postReady(){
     window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
   }
@@ -811,15 +830,279 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     style.setAttribute('data-od-url-selection-style', '');
     style.textContent =
       'html[data-od-comment-mode] body * { cursor: crosshair !important; }' +
+      'html[data-od-inspect-mode] body * { cursor: crosshair !important; }' +
       'html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }' +
-      'html[data-od-comment-mode] body iframe,html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed { pointer-events: none !important; }';
+      'html[data-od-comment-mode] body iframe:not([data-od-project-frame]),html[data-od-comment-mode] body object,html[data-od-comment-mode] body embed,html[data-od-inspect-mode] body iframe:not([data-od-project-frame]) { pointer-events: none !important; }';
     (document.head || document.documentElement).appendChild(style);
   }
-  function active(){ return commentEnabled; }
+  function active(){ return commentEnabled || inspectEnabled; }
+  // Keep the URL-load bridge on the same one-depth project-frame contract as
+  // srcdoc: only direct HTML children served under this minted preview scope
+  // may receive input or identify a child source file.
+  //
+  // Validates and extracts the in-scope project path from an already-
+  // resolved href string, without touching a frame's reflected src
+  // attribute at all -- src is set by the PARENT and does not update
+  // when the CHILD navigates itself (an internal link, a
+  // window.location assignment), so deriving path from it goes stale the
+  // moment that happens. Callers that have a live, child-reported href
+  // (a ready ping) should use this instead of projectFramePath(frame).
+  function projectFramePathFromHref(hrefString){
+    try {
+      var base = new URL(document.baseURI);
+      var baseMatch = base.pathname.match(/^\\/api\\/projects\\/([^/]+)\\/preview\\/([^/]+)\\//);
+      var child = new URL(hrefString, document.baseURI);
+      if (!baseMatch || child.origin !== base.origin) return null;
+      var prefix = '/api/projects/' + baseMatch[1] + '/preview/' + baseMatch[2] + '/';
+      if (child.pathname.indexOf(prefix) !== 0) return null;
+      var path = decodeURIComponent(child.pathname.slice(prefix.length));
+      return path && path.indexOf('..') < 0 && /\.html?$/i.test(path) ? path : null;
+    } catch (_) { return null; }
+  }
+  // Keep live paths outside artifact-controlled DOM. The cached src snapshot
+  // makes a parent src mutation invalidate synchronously before observers run.
+  var liveFramePaths = new WeakMap();
+  // #7296 review (R9-2): once a frame is KNOWN to have navigated (its native
+  // load event fired), its parent src attribute staying unchanged no longer
+  // proves anything -- a child navigating itself never touches that
+  // attribute. Simply clearing the cache and falling back to re-deriving
+  // from that same stale attribute would let a departed document (an
+  // external site, a non-HTML file) keep answering to the frame's old,
+  // still-declared identity. This frame is unavailable until a fresh ready
+  // ping confirms it is back at that SAME declared identity -- not any
+  // other self-navigated path, which stays unauthorized per the R8-1/R8-2
+  // fix regardless of caching.
+  var frameUnavailable = new WeakSet();
+  var frameLoadListeners = new WeakSet();
+  function observeFrameLoad(frame){
+    if (!frame || frameLoadListeners.has(frame)) return;
+    frameLoadListeners.add(frame);
+    frame.addEventListener('load', function(){
+      try { liveFramePaths.delete(frame); } catch (_) {}
+      try { frameUnavailable.add(frame); } catch (_) {}
+    });
+  }
+  function projectFramePath(frame){
+    // A validated ready ping (see od:url-selection-bridge-ready below)
+    // caches the child's own reported path here -- ground truth from the
+    // child itself, once known, always wins over re-deriving from the
+    // parent's possibly-stale src attribute.
+    try {
+      var cachedFramePath = frame && liveFramePaths.get(frame);
+      var currentFrameSrc = frame && frame.getAttribute ? (frame.getAttribute('src') || '') : '';
+      if (cachedFramePath && cachedFramePath.srcAtCache === currentFrameSrc) return cachedFramePath.path;
+    } catch (_) {}
+    try {
+      if (frame && frameUnavailable.has(frame)) return null;
+      return projectFramePathFromHref(frame.src);
+    } catch (_) { return null; }
+  }
+  // DOM-identity-only lookup: frame.contentWindow === source cannot be
+  // forged by any script (it is the browser's own WindowProxy identity),
+  // unlike anything a message payload claims. Used by the ready-ping
+  // handler specifically because it must be able to locate a frame that is
+  // CURRENTLY unavailable (see frameUnavailable above) in order to
+  // re-validate and potentially clear that state -- projectFrameForSource
+  // below intentionally cannot see an unavailable frame at all, which would
+  // otherwise deadlock the very ready ping meant to clear it.
+  function frameElementForSource(source){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      if (frames[i].contentWindow === source) return frames[i];
+    }
+    return null;
+  }
+  function projectFrameForSource(source){
+    var frame = frameElementForSource(source);
+    return frame && projectFramePath(frame) ? frame : null;
+  }
+  function markProjectFrames(){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      var path = projectFramePath(frames[i]);
+      frames[i].toggleAttribute('data-od-project-frame', !!path);
+    }
+  }
+  markProjectFrames();
+  try {
+    new MutationObserver(function(){
+      markProjectFrames();
+    }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+  } catch (_) {}
+  hydrateInspectOverridesFromDom();
+  function parseProjectFrameTarget(elementId){
+    var raw = String(elementId || '');
+    if (raw.indexOf('frame:') !== 0) return null;
+    try {
+      var parts = JSON.parse(decodeURIComponent(raw.slice(6)));
+      return Array.isArray(parts) && parts.length === 2 && typeof parts[0] === 'string' && parts[0] &&
+        typeof parts[1] === 'string' && parts[1] ? { framePath: parts[0], localElementId: parts[1] } : null;
+    } catch (_) { return null; }
+  }
+  function projectFrameTargetId(framePath, localElementId){
+    try { return 'frame:' + encodeURIComponent(JSON.stringify([framePath, localElementId])); } catch (_) { return null; }
+  }
+  function projectFrameForPath(framePath){
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) if (projectFramePath(frames[i]) === framePath) return frames[i];
+    return null;
+  }
+  function routeProjectFrameCommand(data){
+    if (!data || !data.type) return false;
+    var allowed = { 'od:comment-active-target': true, 'od:inspect-set': true, 'od:inspect-reset': true };
+    if (!allowed[data.type]) return false;
+    var target = parseProjectFrameTarget(data.elementId);
+    if (!target) return false;
+    var frame = projectFrameForPath(target.framePath);
+    if (!frame || !frame.contentWindow) return true;
+    var message = { type: data.type, elementId: target.localElementId };
+    if (typeof data.selector === 'string') message.selector = data.selector;
+    if (typeof data.prop === 'string') message.prop = data.prop;
+    if (typeof data.value === 'string') message.value = data.value;
+    try { frame.contentWindow.postMessage(message, '*'); } catch (_) {}
+    return true;
+  }
+  function relayFrameInspectOverrides(framePath){
+    var entries = pendingFrameInspectOverrides[framePath];
+    if (!entries) return;
+    var frame = projectFrameForPath(framePath);
+    if (!frame || !frame.contentWindow) return;
+    try { frame.contentWindow.postMessage({ type: 'od:inspect-replay', overrides: entries }, '*'); } catch (_) {}
+  }
+  function broadcastProjectFrameMode(data){
+    if (!data || (data.type !== 'od:comment-mode' && data.type !== 'od:inspect-mode')) return;
+    var frames = document.querySelectorAll('iframe[data-od-project-frame]');
+    for (var i = 0; i < frames.length; i++) try { frames[i].contentWindow && frames[i].contentWindow.postMessage(data, '*'); } catch (_) {}
+  }
+  function relayProjectFrameSelection(ev){
+    if (!active()) return;
+    var data = ev && ev.data;
+    if (data && data.type === 'od:comment-leave') {
+      // Carries no target identity — the pointer simply left whatever it was
+      // over. Relay as-is once the sender is confirmed a real project frame.
+      if (projectFrameForSource(ev.source)) window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+      return;
+    }
+    var allowed = { 'od:comment-target': true, 'od:comment-hover': true, 'od:comment-active-target-update': true };
+    if (!data || !allowed[data.type] || !data.position || !data.elementId || !data.selector) return;
+    var frame = projectFrameForSource(ev.source);
+    if (!frame) return;
+    var rect = frame.getBoundingClientRect();
+    var width = Number(frame.clientWidth || 0), height = Number(frame.clientHeight || 0);
+    if (!(width > 0) || !(height > 0)) return;
+    var path = projectFramePath(frame);
+    var targetId = path && projectFrameTargetId(path, String(data.elementId));
+    if (!targetId) return;
+    var position = data.position;
+    if (![position.x, position.y, position.width, position.height].every(function(v){ return Number.isFinite(Number(v)); })) return;
+    var message = { type: data.type, elementId: targetId, localElementId: String(data.elementId), framePath: path,
+      selector: String(data.selector), label: typeof data.label === 'string' ? data.label : '', text: typeof data.text === 'string' ? data.text : '',
+      position: { x: Math.round(rect.x + Number(position.x) * rect.width / width), y: Math.round(rect.y + Number(position.y) * rect.height / height), width: Math.round(Number(position.width) * rect.width / width), height: Math.round(Number(position.height) * rect.height / height) },
+      htmlHint: typeof data.htmlHint === 'string' ? data.htmlHint : '', style: data.style || null };
+    if (data.clickedDescendant && typeof data.clickedDescendant === 'object') message.clickedDescendant = { label: typeof data.clickedDescendant.label === 'string' ? data.clickedDescendant.label : '', text: typeof data.clickedDescendant.text === 'string' ? data.clickedDescendant.text : '' };
+    if (data.hoverPoint && Number.isFinite(Number(data.hoverPoint.x)) && Number.isFinite(Number(data.hoverPoint.y))) message.hoverPoint = { x: Math.round(Number(data.hoverPoint.x)), y: Math.round(Number(data.hoverPoint.y)) };
+    if (Number.isFinite(Number(data.slideIndex)) && Number(data.slideIndex) >= 0) message.slideIndex = Math.floor(Number(data.slideIndex));
+    window.parent.postMessage(message, '*');
+  }
+  window.addEventListener('message', relayProjectFrameSelection);
   function annotatedSelectorFor(el){
     var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
     if (!id) return null;
     return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+  }
+  function inspectSelectorFor(elementId, hint){
+    var id = String(elementId || '');
+    var attr = typeof hint === 'string' && hint.indexOf('[data-screen-label=') === 0
+      ? 'data-screen-label'
+      : 'data-od-id';
+    try {
+      var exact = document.querySelector('[' + attr + '="' + esc(id) + '"]');
+      if (exact) return '[' + attr + '="' + esc(id) + '"]';
+      var fallback = attr === 'data-od-id' ? 'data-screen-label' : 'data-od-id';
+      if (document.querySelector('[' + fallback + '="' + esc(id) + '"]')) {
+        return '[' + fallback + '="' + esc(id) + '"]';
+      }
+    } catch (_) {}
+    return null;
+  }
+  function ensureInspectStyle(){
+    if (inspectStyle && inspectStyle.isConnected) return inspectStyle;
+    inspectStyle = document.querySelector('style[data-od-inspect-overrides]');
+    if (!inspectStyle) {
+      inspectStyle = document.createElement('style');
+      inspectStyle.setAttribute('data-od-inspect-overrides', '');
+      (document.head || document.documentElement).appendChild(inspectStyle);
+    }
+    return inspectStyle;
+  }
+  function hydrateInspectOverridesFromDom(){
+    // #7008 review: unlike the srcDoc bridge's own hydrateOverridesFromDom(),
+    // this URL-load bridge previously started inspectOverrides empty even
+    // when the served document already had a persisted
+    // <style data-od-inspect-overrides> block -- the first od:inspect-set
+    // or od:inspect-reset would then rebuild that style element from only
+    // the in-memory map, wiping every other persisted rule out of the live
+    // preview (the host's own on-disk copy is unaffected until Save, but
+    // the visible preview and the source it will save silently diverge).
+    var existing = document.querySelector('style[data-od-inspect-overrides]');
+    if (!existing) return;
+    var text = existing.textContent || '';
+    var ruleRe = /(\\[data-(?:od-id|screen-label)="[^"]*"\\])\\s*\\{\\s*([^}]*)\\}/g;
+    var match;
+    while ((match = ruleRe.exec(text)) !== null) {
+      var selector = match[1];
+      var declBody = match[2];
+      var idMatch = selector.match(/="([^"]*)"/);
+      if (!idMatch) continue;
+      var elementId = idMatch[1];
+      var props = Object.create(null);
+      var decls = declBody.split(';');
+      for (var d = 0; d < decls.length; d++) {
+        var raw = decls[d];
+        if (!raw) continue;
+        var colon = raw.indexOf(':');
+        if (colon <= 0) continue;
+        var name = raw.slice(0, colon).trim().toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(ALLOWED_INSPECT_PROPS, name)) continue;
+        var value = raw.slice(colon + 1).replace(/!important/i, '').trim();
+        if (!value || UNSAFE_INSPECT_VALUE.test(value)) continue;
+        props[name] = value;
+      }
+      if (Object.keys(props).length) inspectOverrides[elementId] = { selector: selector, props: props };
+    }
+    inspectStyle = existing;
+  }
+  function rebuildInspectStyle(){
+    var lines = [];
+    Object.keys(inspectOverrides).forEach(function(id){
+      var entry = inspectOverrides[id];
+      var props = entry && entry.props;
+      if (!props || !Object.keys(props).length) return;
+      var body = Object.keys(props).map(function(prop){
+        return prop + ': ' + props[prop] + ' !important';
+      }).join('; ');
+      lines.push(entry.selector + ' { ' + body + ' }');
+    });
+    ensureInspectStyle().textContent = lines.join('\\n');
+  }
+  function applyInspectOverride(elementId, selector, prop, value){
+    if (!elementId || !Object.prototype.hasOwnProperty.call(ALLOWED_INSPECT_PROPS, prop)) return;
+    var safeSelector = inspectSelectorFor(elementId, selector);
+    if (!safeSelector) return;
+    var safeValue = value == null ? '' : String(value).trim();
+    if (safeValue && UNSAFE_INSPECT_VALUE.test(safeValue)) return;
+    var entry = inspectOverrides[elementId];
+    if (!entry) entry = inspectOverrides[elementId] = { selector: safeSelector, props: Object.create(null) };
+    entry.selector = safeSelector;
+    if (safeValue) entry.props[prop] = safeValue;
+    else delete entry.props[prop];
+    if (!Object.keys(entry.props).length) delete inspectOverrides[elementId];
+    rebuildInspectStyle();
+  }
+  function resetInspectOverrides(elementId){
+    if (elementId) delete inspectOverrides[String(elementId)];
+    else inspectOverrides = Object.create(null);
+    rebuildInspectStyle();
   }
   function domSelectorFor(el){
     if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
@@ -934,7 +1217,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     return payload;
   }
   function allTargets(){
-    var includeDomFallback = commentEnabled && mode === 'picker';
+    var includeDomFallback = commentEnabled && !inspectEnabled && mode === 'picker';
     var nodes = includeDomFallback ? document.querySelectorAll('body *') : document.querySelectorAll('[data-od-id], [data-screen-label]');
     var items = [];
     var seen = Object.create(null);
@@ -980,7 +1263,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     if (!active() || !activeCommentElementId) return;
     var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
     if (!el) return;
-    var payload = targetFrom(el, commentEnabled && mode === 'picker');
+    var payload = targetFrom(el, commentEnabled && !inspectEnabled && mode === 'picker');
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
   }
   function schedulePostActiveCommentTarget(){
@@ -1017,7 +1300,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   }
   function closestTarget(event){
     var candidates = eventCandidateElements(event);
-    var allowDomFallback = commentEnabled && mode === 'picker';
+    var allowDomFallback = commentEnabled && !inspectEnabled && mode === 'picker';
     var annotatedFallback = null;
     for (var i = 0; i < candidates.length; i++) {
       var clicked = candidates[i];
@@ -1228,6 +1511,41 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (data.type === 'od:url-selection-bridge-ready') {
+      // A project child can load after the root's initial mode broadcast.
+      // Its ready ping is accepted only from the current direct, scoped frame
+      // (window-identity check below); the href itself is validated against
+      // the scope, not against the frame's possibly-stale src attribute --
+      // that attribute is set by the PARENT and does not update when the
+      // CHILD navigates itself (an internal link, a window.location
+      // assignment), so comparing against it would falsely reject a
+      // legitimate ready ping the moment that happens (#7008 review).
+      var readyFrame = frameElementForSource(ev.source);
+      if (!readyFrame) return;
+      var readyFramePath = projectFramePathFromHref(data.href);
+      if (!readyFramePath) return;
+      observeFrameLoad(readyFrame);
+      try {
+        liveFramePaths.set(readyFrame, { path: readyFramePath, srcAtCache: readyFrame.getAttribute('src') || '' });
+      } catch (_) {}
+      // #7296 review (R9-2): a ready ping only clears the post-departure
+      // "unavailable" gate when it confirms the frame is back at its OWN
+      // declared identity -- a ready ping reporting some OTHER
+      // self-navigated path leaves the gate in place, since that path was
+      // never authorized to begin with (R8-1/R8-2).
+      try {
+        var declaredPath = projectFramePathFromHref(readyFrame.src);
+        if (declaredPath && declaredPath === readyFramePath) frameUnavailable.delete(readyFrame);
+      } catch (_) {}
+      try { ev.source.postMessage({ type: 'od:comment-mode', enabled: commentEnabled, mode: mode }, '*'); } catch (_) {}
+      try { ev.source.postMessage({ type: 'od:inspect-mode', enabled: inspectEnabled }, '*'); } catch (_) {}
+      // #7008: a replay that arrived before this child mounted (or before it
+      // reloaded, e.g. a scope rotation) was queued rather than dropped --
+      // deliver it now that the child's own bridge is confirmed ready.
+      relayFrameInspectOverrides(readyFramePath);
+      return;
+    }
+    if (routeProjectFrameCommand(data)) return;
     if (data.type === 'od:url-selection-bridge-probe') {
       postReady();
       return;
@@ -1245,7 +1563,8 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       mode = data.mode === 'pod' ? 'pod' : 'picker';
       document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
       document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
-      if (commentEnabled) setTimeout(postTargets, 0);
+      broadcastProjectFrameMode(data);
+      if (active()) setTimeout(postTargets, 0);
       else {
         hoveredId = null;
         activeCommentElementId = null;
@@ -1258,6 +1577,68 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
       }
       return;
     }
+    if (data.type === 'od:inspect-mode') {
+      inspectEnabled = !!data.enabled;
+      document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      broadcastProjectFrameMode(data);
+      if (active()) setTimeout(postTargets, 0);
+      else hoveredId = null;
+      return;
+    }
+    if (data.type === 'od:inspect-set') {
+      applyInspectOverride(data.elementId, data.selector, data.prop, data.value);
+      return;
+    }
+    if (data.type === 'od:inspect-reset') {
+      resetInspectOverrides(data.elementId);
+      return;
+    }
+    if (data.type === 'od:inspect-replay') {
+      // Replace the in-memory map with the host's authoritative set so
+      // unsaved edits survive a reload (toggling inspect off/on, switching
+      // to comment, a scope rotation that re-navigates this document).
+      // Re-validate every entry: a parent able to postMessage to this
+      // bridge is otherwise trusted, but applying its payload through the
+      // same allow-list / value sanitizer keeps the override sheet under
+      // the bridge's own contract instead of whatever the parent sent.
+      var replayRaw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
+      inspectOverrides = Object.create(null);
+      // This replay's map is the host's FULL authoritative set, not an
+      // incremental patch, so the per-child breakdown is also replaced
+      // wholesale rather than merged.
+      var nextPendingFrameOverrides = Object.create(null);
+      var replayIds = Object.keys(replayRaw);
+      for (var ri = 0; ri < replayIds.length; ri++) {
+        var replayId = replayIds[ri];
+        var replayEntry = replayRaw[replayId];
+        if (!replayEntry || typeof replayEntry.props !== 'object' || !replayEntry.props) continue;
+        var replayFrameTarget = parseProjectFrameTarget(replayId);
+        if (replayFrameTarget) {
+          if (!nextPendingFrameOverrides[replayFrameTarget.framePath]) nextPendingFrameOverrides[replayFrameTarget.framePath] = Object.create(null);
+          nextPendingFrameOverrides[replayFrameTarget.framePath][replayFrameTarget.localElementId] = replayEntry;
+          continue;
+        }
+        var replaySafeSelector = inspectSelectorFor(replayId, replayEntry.selector);
+        if (!replaySafeSelector) continue;
+        var replayClean = Object.create(null);
+        var replayPropKeys = Object.keys(replayEntry.props);
+        for (var rp = 0; rp < replayPropKeys.length; rp++) {
+          var replayPropName = String(replayPropKeys[rp]).toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(ALLOWED_INSPECT_PROPS, replayPropName)) continue;
+          var replayRawValue = replayEntry.props[replayPropKeys[rp]];
+          if (replayRawValue == null) continue;
+          var replayValue = String(replayRawValue).trim();
+          if (!replayValue || UNSAFE_INSPECT_VALUE.test(replayValue)) continue;
+          replayClean[replayPropName] = replayValue;
+        }
+        if (Object.keys(replayClean).length) inspectOverrides[replayId] = { selector: replaySafeSelector, props: replayClean };
+      }
+      pendingFrameInspectOverrides = nextPendingFrameOverrides;
+      var pendingFramePaths = Object.keys(pendingFrameInspectOverrides);
+      for (var pf = 0; pf < pendingFramePaths.length; pf++) relayFrameInspectOverrides(pendingFramePaths[pf]);
+      rebuildInspectStyle();
+      return;
+    }
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
@@ -1265,16 +1646,16 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     }
   });
   document.addEventListener('mouseover', function(ev){
-    if (!commentEnabled || mode !== 'picker') return;
+    if (!active() || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (!result) return;
-    var payload = targetFrom(result.target, true);
+    var payload = targetFrom(result.target, commentEnabled && !inspectEnabled);
     if (!payload || payload.elementId === hoveredId) return;
     hoveredId = payload.elementId;
     window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
   }, true);
   document.addEventListener('mouseout', function(ev){
-    if (!commentEnabled || mode !== 'picker') return;
+    if (!active() || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (!result) return;
     var next = ev.relatedTarget;
@@ -1303,17 +1684,24 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     }, '*');
   }, true);
   document.addEventListener('click', function(ev){
-    if (!commentEnabled || mode !== 'picker') return;
+    if (!active() || mode !== 'picker') return;
     var result = closestTarget(ev);
     if (result) {
       ev.preventDefault();
       ev.stopPropagation();
-      var payload = targetFrom(result.target, true, result.clicked, { x: ev.clientX, y: ev.clientY });
+      var payload = targetFrom(result.target, commentEnabled && !inspectEnabled, result.clicked, { x: ev.clientX, y: ev.clientY });
       if (payload) {
         activeCommentElementId = payload.elementId || activeCommentElementId;
         activeCommentSelector = payload.selector || activeCommentSelector;
         window.parent.postMessage(payload, '*');
       }
+      return;
+    }
+    // Inspect has no free-pin fallback: it must resolve an annotated target
+    // so a later override command has a stable selector to route back here.
+    if (inspectEnabled) {
+      ev.preventDefault();
+      ev.stopPropagation();
       return;
     }
     var t = ev.target;
@@ -6720,14 +7108,22 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         relPath,
         project.metadata,
         () => setProjectPreviewHeaders(res),
-        async (file) => maybeResolveVitePreviewHtml({
-          file,
-          projectId: project.id,
-          relPath,
-          metadata: project.metadata,
-          projectsRoot: PROJECTS_DIR,
-          readProjectFile,
-        }),
+        async (file) => {
+          const transformed = await maybeResolveVitePreviewHtml({
+            file,
+            projectId: project.id,
+            relPath,
+            metadata: project.metadata,
+            projectsRoot: PROJECTS_DIR,
+            readProjectFile,
+          });
+          // Every document served beneath a minted preview scope is a
+          // server-known project file. This is the one safe place to add the
+          // child-side picker bridge: relative iframe navigation remains on
+          // this route through the injected preview <base>, while raw and
+          // cross-origin URLs retain the old outer-frame fallback.
+          return applyUrlPreviewBridgesToHtml(transformed, file.mime, 'selection');
+        },
       );
     } catch (err: any) {
       const status = err && err.code === 'ENOENT' ? 404 : 400;
