@@ -386,7 +386,12 @@ export function attachPiRpcSession({
 
   stdout.on('data', (chunk: Buffer | string) => {
     try {
-      parser.feed(typeof chunk === 'string' ? chunk : chunk.toString('utf8'));
+      // `feed` decodes raw Buffer chunks itself with a stateful stream
+      // decoder (see json-line-stream.ts) -- do not pre-decode here. A
+      // per-chunk `chunk.toString('utf8')` would corrupt any multi-byte
+      // UTF-8 character split across a chunk boundary into U+FFFD before
+      // `feed` ever sees it, defeating that decoder entirely.
+      parser.feed(chunk);
     } catch (err) {
       fail(`parser: ${errorMessage(err)}`);
     }
