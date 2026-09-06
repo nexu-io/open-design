@@ -176,17 +176,17 @@
       kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
 
       /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
-      .site-header { height: 54px; border-radius: var(--radius-md); background: #ffffff0a; }
+      .site-header { height: 64px; border-radius: var(--radius-md); background: #ffffff0a; }
       .site-header.scrolled { background: #000000; box-shadow: var(--elev-ring); }
-      .site-header .bar { display: flex; align-items: center; gap: var(--space-5); height: 100%; max-width: var(--container-max); margin: 0 auto; padding: 0 var(--space-6); }
+      .site-header .bar { display: flex; align-items: center; gap: var(--space-5); height: 100%; max-width: 1440px; margin: 0 auto; padding: 0 var(--space-8); }
       .site-header .wordmark { display: inline-flex; align-items: center; height: 17px; font: 500 var(--text-lg) / 1 var(--font-display); letter-spacing: -0.02em; color: var(--fg); text-decoration: none; }
       .site-header nav { display: flex; align-items: center; align-self: stretch; flex: 1; min-width: 0; }
       .site-header nav a { display: inline-flex; align-items: center; height: 100%; padding: 0 var(--space-4); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--fg); text-decoration: none; transition: color var(--motion-fast); }
       .site-header nav a:hover { color: var(--muted); }
       .site-header .actions { display: flex; align-items: center; gap: var(--space-2); }
       .site-header .search { width: 40px; height: 40px; color: var(--muted); }
-      .site-header .btn { height: 40px; min-height: 32px; gap: 0.3em; }
-      .site-header .btn svg { width: 16px; height: 16px; }
+      .site-header .btn { height: 36px; min-height: 0; padding: 0 20px; gap: 0.3em; }
+      .site-header .btn svg { width: 12px; height: 12px; }
 
       /* ── Segmented control ── */
       .segmented { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-pill); }
@@ -296,7 +296,7 @@
             </div>
           </div>
         </header>
-        <p class="note">54px tall (3.375rem; 64px on wide screens), fixed over the canvas. Content is centred in the 1088px container: wordmark 17px, nav links 13px / 500 with 16px side padding, the 40px search button closing the nav group, then the glass "Log in" pill and the white "Try" pill. Transparent at the top of the page; once scrolled, a solid #000000 surface fades in over 400ms cubic-bezier(.33,1,.68,1). No blur.</p>
+        <p class="note">64px tall on desktop (4rem; 54px below 1020px), fixed over the canvas. Content sits in a 1440px container with 32px gutters: wordmark 17px, nav links 13px / 500 with 16px side padding, the 40px search button closing the nav group, then the glass "Log in" pill and the white "Try" pill, both 36px tall with 20px side padding and 12px icons. Transparent at the top of the page; once scrolled, a solid #000000 surface fades in over 400ms cubic-bezier(.33,1,.68,1). No blur.</p>
       </section>
 
       <section id="hero">
