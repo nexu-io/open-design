@@ -24,7 +24,8 @@ import {
   updateCurrentApiProtocolConfig,
 } from '../../src/components/SettingsDialog';
 import { deriveUpdaterModel } from '../../src/lib/updater';
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
+import type { OpenDesignElectronUpdaterStatusSnapshot } from '@open-design/electron-contract';
+import { electronUpdaterStatus } from '../helpers/electron-updater';
 import type { AppConfig, AppVersionInfo, ConnectionTestResponse } from '../../src/types';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 
@@ -51,25 +52,9 @@ const packagedVersion: AppVersionInfo = {
 };
 
 function updateStatus(
-  overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {},
-): OpenDesignHostUpdaterStatusSnapshot {
-  return {
-    arch: 'arm64',
-    capabilities: {
-      canApplyInPlace: false,
-      canDownload: true,
-      canOpenInstaller: true,
-      requiresManualInstall: true,
-    },
-    channel: 'beta',
-    currentVersion: '1.2.3-beta.3',
-    enabled: true,
-    mode: 'package-launcher',
-    platform: 'darwin',
-    state: 'idle',
-    supported: true,
-    ...overrides,
-  };
+  overrides: Record<string, any> = {},
+): OpenDesignElectronUpdaterStatusSnapshot {
+  return electronUpdaterStatus(overrides);
 }
 
 afterEach(() => {
@@ -121,7 +106,7 @@ describe('SettingsDialog about update control', () => {
 
   it('shows up-to-date status without turning the primary action into a release link', () => {
     const control = deriveAboutUpdateControl(
-      deriveUpdaterModel(updateStatus({ state: 'not-available' }), { hostAvailable: true }),
+      deriveUpdaterModel(updateStatus({ state: 'current' }), { hostAvailable: true }),
       packagedVersion,
     );
 
@@ -138,7 +123,7 @@ describe('SettingsDialog about update control', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
-          availableVersion: '1.2.3-beta.4',
+          candidateVersion: '1.2.3-beta.4',
           state: 'available',
         }),
         { hostAvailable: true },
@@ -158,21 +143,10 @@ describe('SettingsDialog about update control', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
-          incoming: {
-            arch: 'arm64',
-            artifact: {
-              name: 'Open Design Beta.dmg',
-              platformKey: 'macAppleSilicon',
-              type: 'dmg',
-              url: 'https://fixture.test/Open Design Beta.dmg',
-            },
-            channel: 'beta',
-            progress: {
-              receivedBytes: 25,
-              totalBytes: 100,
-            },
-            startedAt: '2026-06-16T00:00:00.000Z',
-            version: '1.2.3-beta.4',
+          candidateVersion: '1.2.3-beta.4',
+          progress: {
+            receivedBytes: 25,
+            totalBytes: 100,
           },
           state: 'downloading',
         }),
@@ -193,15 +167,8 @@ describe('SettingsDialog about update control', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
-          artifact: {
-            name: 'Open Design Beta.dmg',
-            platformKey: 'macAppleSilicon',
-            type: 'dmg',
-            url: 'https://fixture.test/Open Design Beta.dmg',
-          },
-          availableVersion: '1.2.3-beta.4',
-          downloadPath: '/tmp/Open Design Beta.dmg',
-          state: 'downloaded',
+          candidateVersion: '1.2.3-beta.4',
+          state: 'ready',
         }),
         { hostAvailable: true },
       ),
@@ -220,21 +187,9 @@ describe('SettingsDialog about update control', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
-          artifact: {
-            name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-            platformKey: 'mac',
-            type: 'payload',
-            url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-          },
-          availableVersion: '1.2.3-beta.4',
-          capabilities: {
-            canApplyInPlace: true,
-            canDownload: true,
-            canOpenInstaller: false,
-            requiresManualInstall: false,
-          },
-          downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-          state: 'downloaded',
+          target: 'closure',
+          candidateVersion: '1.2.3-beta.4',
+          state: 'ready',
         }),
         { hostAvailable: true },
       ),
@@ -249,24 +204,12 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
-  it('shows installer handoff without claiming that quit failed', () => {
+  it('shows the applying lifecycle without exposing a second quit action', () => {
     const control = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
-          artifact: {
-            name: 'Open Design Beta.dmg',
-            platformKey: 'macAppleSilicon',
-            type: 'dmg',
-            url: 'https://fixture.test/Open Design Beta.dmg',
-          },
-          availableVersion: '1.2.3-beta.4',
-          downloadPath: '/tmp/Open Design Beta.dmg',
-          installResult: {
-            dryRun: true,
-            openedAt: '2026-05-19T00:00:00.000Z',
-            path: '/tmp/Open Design Beta.dmg',
-          },
-          state: 'downloaded',
+          candidateVersion: '1.2.3-beta.4',
+          state: 'applying',
         }),
         { hostAvailable: true },
       ),
@@ -274,10 +217,10 @@ describe('SettingsDialog about update control', () => {
     );
 
     expect(control).toMatchObject({
-      primaryAction: 'quit',
-      primaryLabelKey: 'updater.quitButton',
+      primaryAction: null,
+      primaryLabelKey: 'updater.installingRestart',
       showReleaseLink: false,
-      statusKey: 'updater.opening',
+      statusKey: 'settings.updateStatusInstalling',
       statusTone: 'neutral',
     });
   });
@@ -296,10 +239,10 @@ describe('SettingsDialog about update control', () => {
     });
   });
 
-  it('retries updater errors from the last actionable phase', () => {
+  it('rechecks a finite line after an updater error', () => {
     const downloadRetry = deriveAboutUpdateControl(
       deriveUpdaterModel(
-        updateStatus({ availableVersion: '1.2.3-beta.4', state: 'error' }),
+        updateStatus({ candidateVersion: '1.2.3-beta.4', state: 'error' }),
         { hostAvailable: true },
       ),
       packagedVersion,
@@ -307,8 +250,7 @@ describe('SettingsDialog about update control', () => {
     const installRetry = deriveAboutUpdateControl(
       deriveUpdaterModel(
         updateStatus({
-          availableVersion: '1.2.3-beta.4',
-          downloadPath: '/tmp/Open Design Beta.dmg',
+          candidateVersion: '1.2.3-beta.4',
           state: 'error',
         }),
         { hostAvailable: true },
@@ -316,8 +258,8 @@ describe('SettingsDialog about update control', () => {
       packagedVersion,
     );
 
-    expect(downloadRetry.primaryAction).toBe('download');
-    expect(installRetry.primaryAction).toBe('install');
+    expect(downloadRetry.primaryAction).toBe('check');
+    expect(installRetry.primaryAction).toBe('check');
   });
 
   it('does not offer in-app update actions in development or web-only contexts', () => {

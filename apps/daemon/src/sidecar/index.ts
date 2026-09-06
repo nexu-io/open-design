@@ -2,10 +2,6 @@ import { APP_KEYS, SIDECAR_MESSAGES, isSidecarSource } from "@open-design/sideca
 import { SidecarFactory, type SidecarClient } from "@open-design/sidecar";
 
 import { startDaemonSidecar, type DaemonSidecarHandle } from "./server.js";
-import {
-  executeLegacyPayloadDesktopHandoff,
-  prepareLegacyPayloadDesktopHandoff,
-} from "./payload-desktop-handoff.js";
 import { waitForParentMonitorRelease } from "./parent-monitor-gate.js";
 
 async function main(): Promise<void> {
@@ -55,30 +51,6 @@ async function main(): Promise<void> {
   });
   await client.start();
   if (!isSidecarSource(client.stamp.source)) throw new Error(`unsupported daemon sidecar source: ${client.stamp.source}`);
-  const desktopHandoff = client.resources.dataRoot == null ? null : await prepareLegacyPayloadDesktopHandoff({
-    dataRoot: client.resources.dataRoot,
-    namespace: client.stamp.namespace,
-    outerPid: client.resources.ownerPid,
-    requestDesktopStatus: async () => await client.status(APP_KEYS.DESKTOP, { timeoutMs: 800 }),
-    runtimeRoot: client.resources.runtimeRoot,
-    source: client.stamp.source,
-  }).catch((error: unknown) => {
-    console.warn("[packaged desktop handoff] prepare failed", error);
-    return null;
-  });
-  if (desktopHandoff?.kind === "none") {
-    console.info("[packaged desktop handoff] skipped", { reason: desktopHandoff.reason });
-  } else if (desktopHandoff?.kind === "prepared") {
-    void executeLegacyPayloadDesktopHandoff(desktopHandoff, {
-      requestDesktop: async (message) => message === "status"
-        ? await client.status(APP_KEYS.DESKTOP, { timeoutMs: 800 })
-        : await client.requestStop(APP_KEYS.DESKTOP, { timeoutMs: 800 }),
-    }).then((result) => {
-      console.info("[packaged desktop handoff]", result);
-    }).catch((error: unknown) => {
-      console.warn("[packaged desktop handoff] execute failed", error);
-    });
-  }
   await client.waitUntilStopped();
 }
 

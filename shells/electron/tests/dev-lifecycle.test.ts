@@ -22,7 +22,7 @@ describe("Electron dev lifecycle adapter", () => {
   });
 
   it("accepts status and stop without acquisition inputs", () => {
-    for (const operation of ["electron.dev.status", "electron.dev.stop"] as const) {
+    for (const operation of ["electron.dev.inspect", "electron.dev.status", "electron.dev.stop"] as const) {
       expect(parseElectronDevLifecycleRequest({ schemaVersion: 1, operation, channel: "dev", namespace: "isolated-electron", controlRuntimeRoot })).toMatchObject({ operation });
     }
   });

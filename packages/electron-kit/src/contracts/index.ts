@@ -33,6 +33,16 @@ export type ElectronShellManifest = Readonly<{
   namespace: string;
   protocol: string;
   window: Readonly<{ width: number; height: number; title: string }>;
+  splash: Readonly<{
+    width: number;
+    height: number;
+    minimumVisibleMs: number;
+    backgroundColor: string;
+    foregroundColor: string;
+    mutedColor: string;
+    initialLabel: string;
+    readyLabel: string;
+  }>;
   shell: StandaloneShellIdentity;
 }>;
 
@@ -101,6 +111,7 @@ export type ElectronShellRenderer = Readonly<{
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
     contentUpdater: ElectronStandaloneContentUpdaterPort;
+    shellUpdater: StandaloneShellUpdaterPort;
     runtime: ElectronStandaloneRuntimeAccess;
     window: BrowserWindow;
   }>): Readonly<{ dispose(): void | Promise<void> }> | Promise<Readonly<{ dispose(): void | Promise<void> }>>;
@@ -151,6 +162,7 @@ export type ElectronShellDefinition = Readonly<{
 
 const token = /^[a-z][a-z0-9.-]{1,127}$/u;
 const digest = /^[a-f0-9]{64}$/u;
+const version = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 
 export function validateElectronShellManifest(value: ElectronShellManifest): ElectronShellManifest {
   if (value.schemaVersion !== ELECTRON_KIT_CONTRACT_VERSION) throw new Error("unsupported Electron Shell manifest schema");
@@ -165,12 +177,22 @@ export function validateElectronShellManifest(value: ElectronShellManifest): Ele
   }
   if (value.productName.trim().length === 0 || value.publisher.trim().length === 0 || value.publisher.length > 128
     || value.window.title.trim().length === 0) throw new Error("Electron Shell display identity is required");
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(value.version)) throw new Error("invalid Electron Shell version");
+  if (!version.test(value.version)) throw new Error("invalid Electron Shell version");
   if (!Number.isSafeInteger(value.window.width) || !Number.isSafeInteger(value.window.height) || value.window.width < 320 || value.window.height < 240) {
     throw new Error("invalid Electron Shell window dimensions");
   }
-  if (value.shell.type !== "electron" || value.shell.version !== value.version || !digest.test(value.shell.buildHash) || !digest.test(value.shell.digest)) {
-    throw new Error("Electron Shell identity does not match its manifest");
+  if (!Number.isSafeInteger(value.splash.width) || !Number.isSafeInteger(value.splash.height)
+    || value.splash.width < 240 || value.splash.height < 160
+    || !Number.isSafeInteger(value.splash.minimumVisibleMs) || value.splash.minimumVisibleMs < 0
+    || value.splash.minimumVisibleMs > 30_000
+    || !/^#[0-9a-f]{6}$/iu.test(value.splash.backgroundColor)
+    || !/^#[0-9a-f]{6}$/iu.test(value.splash.foregroundColor)
+    || !/^#[0-9a-f]{6}$/iu.test(value.splash.mutedColor)
+    || value.splash.initialLabel.trim().length === 0 || value.splash.readyLabel.trim().length === 0) {
+    throw new Error("invalid Electron Shell splash policy");
+  }
+  if (value.shell.type !== "electron" || !version.test(value.shell.version) || !digest.test(value.shell.buildHash) || !digest.test(value.shell.digest)) {
+    throw new Error("Electron Shell compatibility identity is invalid");
   }
   return structuredClone(value);
 }

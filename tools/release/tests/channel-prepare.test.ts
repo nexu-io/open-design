@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 const testDir = dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = resolve(testDir, "..", "..", "..");
 const tsxCliPath = require.resolve("tsx/cli");
-const packagedPackageJsonPath = join(workspaceRoot, "apps", "packaged", "package.json");
+const channelVersionsPath = join(workspaceRoot, "tools", "release", "resources", "channel-versions.json");
 
 type MetadataServer = {
   close: () => Promise<void>;
@@ -164,11 +164,14 @@ async function createHermeticTagRepoEnv(stableTags: string[]): Promise<Record<st
 }
 
 async function readPackagedVersion(): Promise<string> {
-  const packageJson = JSON.parse(await readFile(packagedPackageJsonPath, "utf8")) as { version?: unknown };
-  if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
-    throw new Error("apps/packaged/package.json must define a version");
+  const registry = JSON.parse(await readFile(channelVersionsPath, "utf8")) as {
+    channels?: { stable?: { baseVersion?: unknown } };
+  };
+  const version = registry.channels?.stable?.baseVersion;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error("stable channel must define a base version");
   }
-  return packageJson.version;
+  return version;
 }
 
 function countedMetadata(

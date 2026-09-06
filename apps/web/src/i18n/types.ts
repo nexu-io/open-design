@@ -1093,7 +1093,7 @@ export interface Dict {
   'updater.ready': string;
   'updater.readyGeneric': string;
   'updater.readyVersion': string;
-  // Forced installer reinstall (feed control.launcher.version.min gate).
+  // Explicit installer recovery guidance.
   // Copy priority: operator jump link (reinstall.url) > these defaults.
   'updater.reinstallLearnMore': string;
   'updater.reinstallReadyGeneric': string;

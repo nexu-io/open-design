@@ -28,6 +28,7 @@ import {
 
 import {
   ALL_APPS,
+  DEFAULT_OBSERVE_APPS,
   DEFAULT_START_APPS,
   DEFAULT_STOP_APPS,
   parseParentPidOption,
@@ -550,10 +551,13 @@ async function writeWebDevTsconfig(config: ToolDevConfig): Promise<void> {
   );
 }
 
-type ElectronLifecycleOperation = "electron.dev.start" | "electron.dev.status" | "electron.dev.stop";
+type ElectronLifecycleOperation = "electron.dev.inspect" | "electron.dev.start" | "electron.dev.status" | "electron.dev.stop";
 
 async function invokeElectronLifecycle(config: ToolDevConfig, operation: ElectronLifecycleOperation, options: CliOptions): Promise<Record<string, unknown>> {
   const logHandle = await openAppLog(config, APP_KEYS.DESKTOP);
+  const operationFileName = operation.replaceAll(".", "-");
+  const requestPath = path.join(config.apps.desktop.controlRuntimeRoot, `${operationFileName}-request.json`);
+  const receiptPath = path.join(config.apps.desktop.controlRuntimeRoot, `${operationFileName}-receipt.json`);
   try {
     const request = {
       schemaVersion: 1,
@@ -571,17 +575,17 @@ async function invokeElectronLifecycle(config: ToolDevConfig, operation: Electro
       throw new Error("--standalone-bootstrap-url is required for tools-dev desktop");
     }
     await mkdir(config.apps.desktop.controlRuntimeRoot, { recursive: true });
-    await rm(config.apps.desktop.receiptPath, { force: true });
-    await writeFile(config.apps.desktop.requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
+    await rm(receiptPath, { force: true });
+    await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
     await logHandle.write(`\n[tools-dev] ${operation} via shells/electron at ${new Date().toISOString()}\n`);
     await runLoggedCommand({
-      args: [config.apps.desktop.lifecycleScriptPath, "--request", config.apps.desktop.requestPath, "--receipt", config.apps.desktop.receiptPath],
+      args: [config.apps.desktop.lifecycleScriptPath, "--request", requestPath, "--receipt", receiptPath],
       command: process.execPath,
       cwd: config.workspaceRoot,
       env: process.env,
       logFd: logHandle.fd,
     });
-    return JSON.parse(await readFile(config.apps.desktop.receiptPath, "utf8")) as Record<string, unknown>;
+    return JSON.parse(await readFile(receiptPath, "utf8")) as Record<string, unknown>;
   } finally {
     await logHandle.close();
   }
@@ -841,7 +845,7 @@ function summarizeStatus(apps: Record<ToolDevAppName, any>): string {
 }
 
 async function status(config: ToolDevConfig, appName: string | undefined) {
-  const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
+  const targets = resolveTargetApps(appName, DEFAULT_OBSERVE_APPS);
   if (targets.length === 1) return await inspectAppStatus(config, targets[0]);
 
   const apps = Object.fromEntries(
@@ -866,7 +870,38 @@ async function restartTargets(config: ToolDevConfig, appName: string | undefined
 
 async function readLogs(config: ToolDevConfig, appName: ToolDevAppName) {
   const logPath = appConfig(config, appName).latestLogPath;
-  return { app: appName, lines: await readLogTail(logPath, 200), logPath };
+  const primary = Object.freeze({ id: "adapter", logPath, lines: await readLogTail(logPath, 200) });
+  if (appName !== APP_KEYS.DESKTOP) return { app: appName, lines: primary.lines, logPath, sources: [primary] };
+  const status = asRecord((await invokeElectronLifecycle(config, "electron.dev.status", {})).status);
+  const roots = Array.isArray(status?.logRoots) ? status.logRoots : [];
+  const files: Array<{ id: string; logPath: string }> = [];
+  const visit = async (scope: string, root: string, current = root): Promise<void> => {
+    const entries = await readdir(current, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      const entryPath = path.join(current, entry.name);
+      if (entry.isDirectory()) await visit(scope, root, entryPath);
+      else if (entry.isFile() && (entry.name.endsWith(".log") || entry.name.endsWith(".jsonl"))) {
+        files.push({ id: `${scope}:${path.relative(root, entryPath)}`, logPath: entryPath });
+      }
+    }
+  };
+  for (const candidate of roots) {
+    const root = asRecord(candidate);
+    const scope = root == null ? null : stringField(root, "scope");
+    const rootPath = root == null ? null : stringField(root, "path");
+    if (scope != null && rootPath != null && path.isAbsolute(rootPath)) await visit(scope, rootPath);
+  }
+  const runtimeSources = await Promise.all(files.sort((left, right) => left.id.localeCompare(right.id)).map(async (file) => Object.freeze({
+    ...file,
+    lines: await readLogTail(file.logPath, 200),
+  })));
+  const sources = [primary, ...runtimeSources];
+  return {
+    app: appName,
+    lines: sources.flatMap((source) => [`[${source.id}] ${source.logPath}`, ...source.lines]),
+    logPath,
+    sources,
+  };
 }
 
 function createLogDiagnostics(logs: Record<string, LogResult>): Record<string, LogDiagnostic[]> {
@@ -933,7 +968,11 @@ function printCheckResult(result: unknown, options: CliOptions): void {
 async function inspectDesktop(config: ToolDevConfig, target: string | undefined, options: CliOptions) {
   const operation = target ?? "status";
   if (operation !== "status") throw new Error(`desktop ${operation} has not yet migrated to the Electron Shell handler surface`);
-  return asRecord((await invokeElectronLifecycle(config, "electron.dev.status", options)).status) ?? { state: "idle" };
+  const receipt = await invokeElectronLifecycle(config, "electron.dev.inspect", options);
+  return {
+    cdp: asRecord(receipt.cdp) ?? { discovery: { state: "disabled" }, targets: [] },
+    status: asRecord(receipt.status) ?? { state: "idle" },
+  };
 }
 
 async function inspect(config: ToolDevConfig, appName: string, target: string | undefined, options: CliOptions) {
@@ -1070,7 +1109,7 @@ addPortOptions(addSharedOptions(cli.command("restart [app]", "Restart daemon, we
 addSharedOptions(cli.command("logs [app]", "Show log tail for daemon, web, desktop, or all")).action(
   async (appName: string | undefined, options: CliOptions) => {
     const config = resolveToolDevConfig(options);
-    const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
+    const targets = resolveTargetApps(appName, DEFAULT_OBSERVE_APPS);
     const result = targets.length === 1
       ? await readLogs(config, targets[0])
       : Object.fromEntries(await Promise.all(targets.map(async (target) => [target, await readLogs(config, target)] as const)));
@@ -1088,7 +1127,7 @@ addSharedOptions(
 addSharedOptions(cli.command("check [app]", "Print status and recent logs for quick diagnostics")).action(
   async (appName: string | undefined, options: CliOptions) => {
     const config = resolveToolDevConfig(options);
-    const targets = resolveTargetApps(appName, DEFAULT_START_APPS);
+    const targets = resolveTargetApps(appName, DEFAULT_OBSERVE_APPS);
     const apps = Object.fromEntries(
       await Promise.all(targets.map(async (target) => [target, await inspectAppStatus(config, target)] as const)),
     );

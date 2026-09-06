@@ -10,6 +10,7 @@ import { validateElectronShellManifest, type ElectronShellManifest } from "@open
 import { resolveElectronStandaloneTarget } from "../src/adapters/standalone/installation.ts";
 import { loadElectronStandaloneAuthorityResources } from "./build-authority.ts";
 import { materializeElectronDevInstallation } from "./dev-installation.ts";
+import { inspectElectronCdpStatus } from "./cdp-inspection.ts";
 
 export const ELECTRON_DEV_LIFECYCLE_SCHEMA_VERSION = 1 as const;
 
@@ -25,7 +26,7 @@ export type ElectronDevLifecycleRequest = Readonly<RequestScope & {
   installationRoot: string;
   operation: "electron.dev.start";
   ownerPid: number | null;
-}> | Readonly<RequestScope & { operation: "electron.dev.status" | "electron.dev.stop" }>;
+}> | Readonly<RequestScope & { operation: "electron.dev.inspect" | "electron.dev.status" | "electron.dev.stop" }>;
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} is invalid`);
@@ -51,7 +52,7 @@ export function parseElectronDevLifecycleRequest(value: unknown): ElectronDevLif
   const operation = request.operation;
   const baseKeys = ["channel", "controlRuntimeRoot", "namespace", "operation", "schemaVersion"];
   if (operation === "electron.dev.start") exactKeys(request, [...baseKeys, "bootstrapUrl", "installationRoot", "ownerPid"], "Electron dev start request");
-  else if (operation === "electron.dev.status" || operation === "electron.dev.stop") exactKeys(request, baseKeys, "Electron dev lifecycle request");
+  else if (operation === "electron.dev.inspect" || operation === "electron.dev.status" || operation === "electron.dev.stop") exactKeys(request, baseKeys, "Electron dev lifecycle request");
   else throw new Error("Electron dev lifecycle operation is unsupported");
   if (request.schemaVersion !== 1) throw new Error("Electron dev lifecycle schema is unsupported");
   const base = {
@@ -105,7 +106,7 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
   const environment: NodeJS.ProcessEnv = { ...process.env, OD_ELECTRON_CONTROL_RESOURCES: JSON.stringify(resources) };
   for (const key of Object.keys(environment)) if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") delete environment[key];
   const launched = await launchSidecar({
-    args: [prepared.scene.sceneRoot],
+    args: ["--remote-debugging-port=0", prepared.scene.sceneRoot],
     command: prepared.electronPath,
     cwd: prepared.scene.sceneRoot,
     detached: true,
@@ -135,6 +136,11 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
 
 export async function executeElectronDevLifecycle(request: ElectronDevLifecycleRequest) {
   if (request.operation === "electron.dev.start") return await start(request);
+  if (request.operation === "electron.dev.inspect") {
+    const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
+    const status = current ?? Object.freeze({ state: "idle" as const });
+    return Object.freeze({ operation: request.operation, schemaVersion: 1 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status, cdp: await inspectElectronCdpStatus(status) });
+  }
   if (request.operation === "electron.dev.status") {
     const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
     return Object.freeze({ operation: request.operation, schemaVersion: 1 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status: current ?? Object.freeze({ state: "idle" as const }) });

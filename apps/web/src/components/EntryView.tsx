@@ -7,7 +7,7 @@ import {
   type SetStateAction,
 } from 'react';
 import type { ChatSessionMode, ConnectorDetail } from '@open-design/contracts';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { OpenDesignElectronProjectImportSuccess } from '@open-design/electron-contract';
 import {
   DEFAULT_AUDIO_MODEL,
   DEFAULT_IMAGE_MODEL,
@@ -127,7 +127,7 @@ interface Props {
     file: File,
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
-  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignElectronProjectImportSuccess) => Promise<void> | void;
   onOpenProject: (
     id: string,
     fileName?: string,

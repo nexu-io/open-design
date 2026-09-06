@@ -2,8 +2,8 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 're
 import { createPortal } from 'react-dom';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 import { createTabToTracking } from '@open-design/contracts/analytics';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { isOpenDesignElectronAvailable, pickElectronWorkingDir } from '@open-design/electron-contract';
+import type { OpenDesignElectronProjectImportSuccess } from '@open-design/electron-contract';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackDesignSystemApplyResult,
@@ -163,7 +163,7 @@ interface Props {
   // never sees the path or the HMAC token; it only receives the
   // host-owned project identifiers and forwards them here so App-level
   // state can refresh through the daemon API.
-  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignElectronProjectImportSuccess) => Promise<void> | void;
   mediaProviders?: Record<string, MediaProviderCredentials>;
   connectors?: ConnectorDetail[];
   connectorsLoading?: boolean;
@@ -794,8 +794,8 @@ export function NewProjectPanel({
     setWorkingDirPicking(true);
     setWorkingDirError(null);
     try {
-      if (isOpenDesignHostAvailable()) {
-        const result = await pickHostWorkingDir();
+      if (isOpenDesignElectronAvailable()) {
+        const result = await pickElectronWorkingDir();
         if (result.ok) {
           setWorkingDir(result.baseDir);
           setWorkingDirToken(result.token);

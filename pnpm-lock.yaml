@@ -56,6 +56,9 @@ importers:
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@open-design/electron-contract':
+        specifier: workspace:*
+        version: link:../../packages/electron-contract
       '@open-design/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
@@ -65,6 +68,9 @@ importers:
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../../packages/standalone
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -102,9 +108,6 @@ importers:
       '@open-design/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
-      '@open-design/launcher-proto':
-        specifier: workspace:*
-        version: link:../../packages/launcher-proto
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -203,95 +206,6 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@20.19.39)(jsdom@29.1.1)(vite@7.3.3(@types/node@20.19.39)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
-  apps/desktop:
-    dependencies:
-      '@open-design/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@open-design/diagnostics':
-        specifier: workspace:*
-        version: link:../../packages/diagnostics
-      '@open-design/download':
-        specifier: workspace:*
-        version: link:../../packages/download
-      '@open-design/host':
-        specifier: workspace:*
-        version: link:../../packages/host
-      '@open-design/launcher-proto':
-        specifier: workspace:*
-        version: link:../../packages/launcher-proto
-      '@open-design/platform':
-        specifier: workspace:*
-        version: link:../../packages/platform
-      '@open-design/release':
-        specifier: workspace:*
-        version: link:../../packages/release
-      '@open-design/sidecar':
-        specifier: workspace:*
-        version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
-        specifier: workspace:*
-        version: link:../../packages/sidecar-proto
-    devDependencies:
-      '@types/node':
-        specifier: 24.12.2
-        version: 24.12.2
-      electron:
-        specifier: 41.3.0
-        version: 41.3.0
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
-
-  apps/packaged:
-    dependencies:
-      '@open-design/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@open-design/daemon':
-        specifier: workspace:*
-        version: link:../daemon
-      '@open-design/desktop':
-        specifier: workspace:*
-        version: link:../desktop
-      '@open-design/launcher-proto':
-        specifier: workspace:*
-        version: link:../../packages/launcher-proto
-      '@open-design/platform':
-        specifier: workspace:*
-        version: link:../../packages/platform
-      '@open-design/release':
-        specifier: workspace:*
-        version: link:../../packages/release
-      '@open-design/sidecar':
-        specifier: workspace:*
-        version: link:../../packages/sidecar
-      '@open-design/sidecar-proto':
-        specifier: workspace:*
-        version: link:../../packages/sidecar-proto
-      '@open-design/web':
-        specifier: workspace:*
-        version: link:../web
-    devDependencies:
-      '@types/node':
-        specifier: 24.12.2
-        version: 24.12.2
-      electron:
-        specifier: 41.3.0
-        version: 41.3.0
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
-
   apps/web:
     dependencies:
       '@anthropic-ai/sdk':
@@ -315,9 +229,9 @@ importers:
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@open-design/host':
+      '@open-design/electron-contract':
         specifier: workspace:*
-        version: link:../../packages/host
+        version: link:../../packages/electron-contract
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -616,8 +530,26 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
+  packages/electron-contract:
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+
   packages/electron-kit:
     dependencies:
+      '@open-design/electron-contract':
+        specifier: workspace:*
+        version: link:../electron-contract
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../standalone
@@ -640,47 +572,6 @@ importers:
       electron:
         specifier: 41.3.0
         version: 41.3.0
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
-
-  packages/host:
-    dependencies:
-      '@open-design/release':
-        specifier: workspace:*
-        version: link:../release
-    devDependencies:
-      '@types/node':
-        specifier: 24.12.2
-        version: 24.12.2
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
-
-  packages/launcher-proto:
-    dependencies:
-      '@open-design/release':
-        specifier: workspace:*
-        version: link:../release
-      '@open-design/sidecar-proto':
-        specifier: workspace:*
-        version: link:../sidecar-proto
-    devDependencies:
-      '@types/node':
-        specifier: 24.12.2
-        version: 24.12.2
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -846,6 +737,12 @@ importers:
       '@open-design/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@open-design/diagnostics':
+        specifier: workspace:*
+        version: link:../../packages/diagnostics
+      '@open-design/electron-contract':
+        specifier: workspace:*
+        version: link:../../packages/electron-contract
       '@open-design/electron-kit':
         specifier: workspace:*
         version: link:../../packages/electron-kit
@@ -929,15 +826,6 @@ importers:
 
   tools/pack:
     dependencies:
-      '@electron/notarize':
-        specifier: 3.1.1
-        version: 3.1.1
-      '@electron/rebuild':
-        specifier: 4.0.4
-        version: 4.0.4
-      '@open-design/launcher-proto':
-        specifier: workspace:*
-        version: link:../../packages/launcher-proto
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -953,12 +841,6 @@ importers:
       cac:
         specifier: 6.7.14
         version: 6.7.14
-      electron-builder:
-        specifier: 26.8.1
-        version: 26.8.1(electron-builder-squirrel-windows@26.8.1)
-      resedit:
-        specifier: 1.7.2
-        version: 1.7.2
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -975,16 +857,9 @@ importers:
       vitest:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
-    optionalDependencies:
-      '@powerformer/vela-cli':
-        specifier: 0.0.35
-        version: 0.0.35
 
   tools/release:
     dependencies:
-      '@open-design/launcher-proto':
-        specifier: workspace:*
-        version: link:../../packages/launcher-proto
       '@open-design/metatool':
         specifier: workspace:*
         version: link:../../packages/metatool
@@ -1442,10 +1317,6 @@ packages:
   '@electron/notarize@2.5.0':
     resolution: {integrity: sha512-jNT8nwH1f9X5GEITXaQ8IF/KdskvIkOFfB2CvwumsveVidzpSc+mvhhTMdAGSYF3O+Nq49lJ7y+ssODRXu06+A==}
     engines: {node: '>= 10.0.0'}
-
-  '@electron/notarize@3.1.1':
-    resolution: {integrity: sha512-uQQSlOiJnqRkTL1wlEBAxe90nVN/Fc/hEmk0bqpKk8nKjV1if/tXLHKUPePtv9Xsx90PtZU8aidx5lAiOpjkQQ==}
-    engines: {node: '>= 22.12.0'}
 
   '@electron/osx-sign@1.3.3':
     resolution: {integrity: sha512-KZ8mhXvWv2rIEgMbWZ4y33bDHyUKMXnx4M0sTyPNK/vcB81ImdeY9Ggdqy0SWbMDgmbqyQ+phgejh6V3R2QuSg==}
@@ -2681,35 +2552,6 @@ packages:
 
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
-
-  '@powerformer/vela-cli-darwin-arm64@0.0.35':
-    resolution: {integrity: sha512-XmjZXzmrtwXIHfYucsz8mJTk5L2QxfBpgi6eab0XC1GAoC6qMjM4qRwR9Xry05ZoH5p1RuAnCqNhNrTNGxVCeg==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@powerformer/vela-cli-darwin-x64@0.0.35':
-    resolution: {integrity: sha512-nhBJxu0pmsaCyN9gw1YtWv0DWyDhRZ/tEiC1TSBmyDJcM6TKlJqfrO2q1O9iYidYDyN34/eW9L2nUNksJKYvBQ==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@powerformer/vela-cli-linux-arm64@0.0.35':
-    resolution: {integrity: sha512-xqLyWwj3oDNKNYw+NI9Sh84vUKuEb/05gBxCQwxK98DWJgcdn3X0tkK29Z2Jdz8k9jBqm1yYJIFis3OrKWaRvw==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@powerformer/vela-cli-linux-x64@0.0.35':
-    resolution: {integrity: sha512-5ZBfweh6qF9rUTqvUdW9yAq4o5n8YoQ3TwFhxmy2M6DRZE0LFhhkWfz2EciRaw1nj5GmFtGH2HGDRkPOKLrfIw==}
-    cpu: [x64]
-    os: [linux]
-
-  '@powerformer/vela-cli-win32-x64@0.0.35':
-    resolution: {integrity: sha512-k/BwOaCMhC8J39YckQX5OEaHQzCeSc3rr07xkc/XaALL0dlPYmdzQY7ViWCQGhHY8x96d3KS9oF3cS5/UrJaTw==}
-    cpu: [x64]
-    os: [win32]
-
-  '@powerformer/vela-cli@0.0.35':
-    resolution: {integrity: sha512-10wYoZdjAXtWAetxeJpYV5kwsa6LPdM3br0+RH4tMi+u7xS3hCHQJJ0dfCxD4LMxsc5DNfbvFX6KSWnYlvLRiQ==}
-    hasBin: true
 
   '@preact/signals-core@1.14.2':
     resolution: {integrity: sha512-RZHdBj9ZF4n40Rp4jS052EHHjBWf96P9oNdXPfhQTovCuWY9iQn3Gq+gOTJSgBO9A/JBuPfMOWsSX/lIU9Pc/A==}
@@ -7373,13 +7215,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@electron/notarize@3.1.1':
-    dependencies:
-      debug: 4.4.3
-      promise-retry: 2.0.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@electron/osx-sign@1.3.3':
     dependencies:
       compare-version: 0.1.2
@@ -8399,30 +8234,6 @@ snapshots:
       '@posthog/types': 1.374.2
 
   '@posthog/types@1.374.2': {}
-
-  '@powerformer/vela-cli-darwin-arm64@0.0.35':
-    optional: true
-
-  '@powerformer/vela-cli-darwin-x64@0.0.35':
-    optional: true
-
-  '@powerformer/vela-cli-linux-arm64@0.0.35':
-    optional: true
-
-  '@powerformer/vela-cli-linux-x64@0.0.35':
-    optional: true
-
-  '@powerformer/vela-cli-win32-x64@0.0.35':
-    optional: true
-
-  '@powerformer/vela-cli@0.0.35':
-    optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': 0.0.35
-      '@powerformer/vela-cli-darwin-x64': 0.0.35
-      '@powerformer/vela-cli-linux-arm64': 0.0.35
-      '@powerformer/vela-cli-linux-x64': 0.0.35
-      '@powerformer/vela-cli-win32-x64': 0.0.35
-    optional: true
 
   '@preact/signals-core@1.14.2': {}
 

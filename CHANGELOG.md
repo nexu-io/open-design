@@ -141,7 +141,7 @@ The rebuilt-core release: **everything is a plugin**, **headless by default**, *
 ### Added
 
 #### Plugin engine, registry & publishing
-- **Plugin engine rebuild** with `packages/plugin-runtime`, `packages/registry-protocol`, and `packages/host` — the engine surfaces the plugin lifecycle through a small, neutral API so design systems, slices, prototypes, exports, and even Figma itself can live as plugins.
+- **Plugin engine rebuild** with `packages/plugin-runtime`, `packages/registry-protocol`, and `packages/electron-contract` — the engine surfaces the plugin lifecycle through a small, neutral API so design systems, slices, prototypes, exports, and even Figma itself can live as plugins.
 - **Plugin registry detail drawer** with trust badges and marketplace metadata. ([#2087])
 - **GitHub rate-limit fallback for marketplace plugins** keeps install / refresh flows reliable when GitHub API is throttled. ([#2064])
 - **Plugin Publish-repo flow creates the author's repo correctly.** ([#2332], [#2363])

@@ -160,7 +160,7 @@ import {
   extractBrandFromHtml,
   finalizeBrandProject,
 } from '../runtime/brands';
-import { isOpenDesignHostAvailable } from '@open-design/host';
+import { isOpenDesignElectronAvailable } from '@open-design/electron-contract';
 import {
   getBrandBrowser,
   BRAND_BROWSER_TAB_ID,
@@ -4556,7 +4556,7 @@ export function ProjectView({
       // desktop host: the web-only host never exposes a webview, so retrying
       // can't change an `unavailable` verdict.
       let snapshot = await readBrandBrowserSnapshot(tabId, 8000);
-      if (snapshot.status === 'ready' || !isOpenDesignHostAvailable()) return snapshot;
+      if (snapshot.status === 'ready' || !isOpenDesignElectronAvailable()) return snapshot;
       // Retries cover the mount/registration race only — a ready webview resolves
       // these reads almost instantly. Use a short per-retry cap so a genuinely
       // hung/walled page fails fast instead of stacking full timeout windows.
@@ -10848,10 +10848,10 @@ export function ProjectView({
           daemonOutcome.result.conversationId,
         );
         if (daemonOutcome.result.status === 'ready') return;
-        if (!isOpenDesignHostAvailable() && !hasBrowserFallback()) return;
+        if (!isOpenDesignElectronAvailable() && !hasBrowserFallback()) return;
       } else {
         fallbackMessage = daemonOutcome.error;
-        if (!isOpenDesignHostAvailable() && !hasBrowserFallback()) {
+        if (!isOpenDesignElectronAvailable() && !hasBrowserFallback()) {
           setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
           setProjectActionsToast({
             message: daemonOutcome.error,
@@ -10869,7 +10869,7 @@ export function ProjectView({
       // from the preview tab, the browser <webview> may be `display:none` and
       // Electron can throttle its renderer; a focus-only request wakes it
       // without navigating/re-triggering a wall.
-      if (isOpenDesignHostAvailable() && brandExtractionSourceUrl) {
+      if (isOpenDesignElectronAvailable() && brandExtractionSourceUrl) {
         setBrowserOpenRequest({
           tabId: BRAND_BROWSER_TAB_ID,
           url: brandExtractionSourceUrl,
@@ -10890,7 +10890,7 @@ export function ProjectView({
       // Still no readable local source. Recoverable — clear/settle/download the
       // Browser page and click Continue again, or use the agent fallback.
       setBrandExtractionStatusOverride({ brandId, status: 'needs_input' });
-      if (isOpenDesignHostAvailable() && brandExtractionSourceUrl) {
+      if (isOpenDesignElectronAvailable() && brandExtractionSourceUrl) {
         setBrowserOpenRequest({
           tabId: BRAND_BROWSER_TAB_ID,
           url: brandExtractionSourceUrl,

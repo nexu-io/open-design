@@ -1,0 +1,23 @@
+/** Product-owned, finite IPC vocabulary. Never exported from electron-contract. */
+export const ELECTRON_RENDERER_IPC = Object.freeze({
+  appearanceSetTheme: "od:appearance:set-theme:v1",
+  browserClearData: "od:browser:clear-data:v1",
+  capturePage: "od:capture:page:v1",
+  diagnosticsExport: "od:diagnostics:export:v1",
+  pdfPrint: "od:pdf:print:v1",
+  petSetVisible: "od:pet:set-visible:v1",
+  previewNavigationFailed: "od:preview:navigation-failed:v1",
+  projectPickAndImport: "od:project:pick-and-import:v1",
+  projectPickAndReplaceWorkingDir: "od:project:pick-and-replace-working-dir:v1",
+  projectPickWorkingDir: "od:project:pick-working-dir:v1",
+  shellOpenExternal: "od:shell:open-external:v1",
+  shellOpenProjectPath: "od:shell:open-project-path:v1",
+  updaterApply: "od:updater:apply:v1",
+  updaterCheck: "od:updater:check:v1",
+  updaterDownload: "od:updater:download:v1",
+  updaterLater: "od:updater:later:v1",
+  updaterOpenDialog: "od:updater:open-dialog:v1",
+  updaterSetMenuLabels: "od:updater:set-menu-labels:v1",
+  updaterStatus: "od:updater:status:v1",
+  updaterStatusChanged: "od:updater:status-changed:v1",
+});

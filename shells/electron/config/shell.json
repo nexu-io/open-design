@@ -1,17 +1,27 @@
 {
   "schemaVersion": 1,
-  "appId": "io.nexu.electron-foundation",
-  "productName": "Open Design Electron Foundation",
+  "appId": "io.open-design.dev",
+  "productName": "Open Design Dev",
   "publisher": "Open Design",
-  "executableName": "open-design-electron-foundation",
+  "executableName": "open-design-dev",
   "version": "0.1.0",
   "channel": "dev",
-  "namespace": "electron-foundation",
+  "namespace": "open-design-dev",
   "protocol": "od",
   "window": {
     "width": 1040,
     "height": 700,
-    "title": "Open Design Electron Foundation"
+    "title": "Open Design"
+  },
+  "splash": {
+    "width": 520,
+    "height": 320,
+    "minimumVisibleMs": 1800,
+    "backgroundColor": "#f2f4f5",
+    "foregroundColor": "#1f2529",
+    "mutedColor": "#7a838a",
+    "initialLabel": "Starting Open Design…",
+    "readyLabel": "Open Design is ready"
   },
   "shell": {
     "type": "electron",

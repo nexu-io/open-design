@@ -9,7 +9,7 @@
 
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 
 import { DesignBrowserPanel } from '../../src/components/DesignBrowserPanel';
 import { FileViewer } from '../../src/components/FileViewer';
@@ -34,7 +34,7 @@ let restoreHost: (() => void) | null = null;
 beforeEach(() => {
   window.localStorage.clear();
   vi.mocked(writeProjectTextFile).mockResolvedValue(null);
-  restoreHost = installMockOpenDesignHost();
+  restoreHost = installMockOpenDesignElectron();
 });
 
 afterEach(() => {

@@ -9,7 +9,7 @@ const {
   downloadImageDataUrlMock,
   exportProjectImageDataUrlMock,
   imageDataUrlToBlobMock,
-  isOpenDesignHostAvailableMock,
+  isOpenDesignElectronAvailableMock,
   prepareImageExportTargetMock,
   requestPreviewSnapshotMock,
   saveImageBlobMock,
@@ -20,7 +20,7 @@ const {
   imageDataUrlToBlobMock: vi.fn(),
   // Default: no desktop host, so existing tests exercise the host-snapshot
   // fallback path exactly as before. The runtime-deck test flips this on.
-  isOpenDesignHostAvailableMock: vi.fn(() => false),
+  isOpenDesignElectronAvailableMock: vi.fn(() => false),
   prepareImageExportTargetMock: vi.fn(),
   requestPreviewSnapshotMock: vi.fn(),
   saveImageBlobMock: vi.fn(),
@@ -36,7 +36,7 @@ vi.mock('../../src/runtime/exports', async () => {
     downloadImageDataUrl: downloadImageDataUrlMock,
     exportProjectImageDataUrl: exportProjectImageDataUrlMock,
     imageDataUrlToBlob: imageDataUrlToBlobMock,
-    isOpenDesignHostAvailable: isOpenDesignHostAvailableMock,
+    isOpenDesignElectronAvailable: isOpenDesignElectronAvailableMock,
     prepareImageExportTarget: prepareImageExportTargetMock,
     requestPreviewSnapshot: requestPreviewSnapshotMock,
   };
@@ -305,7 +305,7 @@ describe('FileViewer image export', () => {
   });
 
   it('passes the selected mobile viewport to the off-screen image exporter', async () => {
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    isOpenDesignElectronAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
       ok: true,
       snapshot: {
@@ -339,7 +339,7 @@ describe('FileViewer image export', () => {
   });
 
   it('keeps desktop page exports on the renderer defaults', async () => {
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    isOpenDesignElectronAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
       ok: true,
       snapshot: {
@@ -370,7 +370,7 @@ describe('FileViewer image export', () => {
   });
 
   it('keeps deck exports on the renderer defaults when mobile preview is selected', async () => {
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    isOpenDesignElectronAvailableMock.mockReturnValue(true);
     exportProjectImageDataUrlMock.mockResolvedValueOnce({
       ok: true,
       snapshot: {
@@ -459,7 +459,7 @@ describe('FileViewer image export', () => {
     // affordance: the export menu's 截图 row was removed (export produces files
     // and links; a capture is a different job). Both always shared this one
     // `captureExportImageSnapshot` path, which is what this test pins.
-    isOpenDesignHostAvailableMock.mockReturnValue(true);
+    isOpenDesignElectronAvailableMock.mockReturnValue(true);
     captureHostIframeSnapshotMock.mockResolvedValue({ dataUrl: 'data:image/png;base64,host', w: 1280, h: 720 });
 
     render(

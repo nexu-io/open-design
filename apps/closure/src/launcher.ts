@@ -7,6 +7,7 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_SOURCES,
   type DaemonStatusSnapshot,
+  type RegisterDesktopAuthResult,
   type RegisterWebUrlResult,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
@@ -22,6 +23,10 @@ import {
   OPEN_DESIGN_PRODUCT_RUNTIME_COMMAND,
   validateOpenDesignProductRuntimeReadRequest,
 } from "@open-design/contracts/runtime/product-runtime";
+import {
+  OPEN_DESIGN_ELECTRON_AUTH_REGISTER_COMMAND,
+  validateOpenDesignElectronAuthRegisterRequest,
+} from "@open-design/electron-contract/runtime-auth";
 import {
   createStandaloneGenerationBootloader,
   createStandaloneShellUpdaterCapabilityClient,
@@ -198,7 +203,9 @@ async function startOpenDesignGeneration(request: StandaloneHandoffRequest): Pro
       entrypoint: daemonResource.entrypoint,
       env: {
         [SIDECAR_ENV.DAEMON_PORT]: "0",
+        ...(request.attachment.shell.type === "electron" ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
         OD_DATA_DIR: layout.dataRoot,
+        OD_DAEMON_CLI_PATH: join(daemonResource.path, "daemon-cli.mjs"),
         OD_INSTALLATION_DIR: dirname(layout.dataRoot),
         OD_RESOURCE_ROOT: daemonResource.path,
         OD_RESOURCE_STORE_ROOT: layout.resourceStoreRoot,
@@ -260,6 +267,24 @@ async function startOpenDesignGeneration(request: StandaloneHandoffRequest): Pro
     readStatus: async () => status(),
     async invoke(command: StandaloneRuntimeCommand): Promise<StandaloneRuntimeCommandResult> {
       const base = resultBase(command);
+      if (command.command === OPEN_DESIGN_ELECTRON_AUTH_REGISTER_COMMAND) {
+        try {
+          const input = validateOpenDesignElectronAuthRegisterRequest(command.input);
+          if (request.attachment.shell.type !== "electron" || state !== "running" || daemon == null) {
+            throw new Error("Electron auth registration is unavailable");
+          }
+          const registered = await invokeSidecar<RegisterDesktopAuthResult>(
+            daemon.stamp,
+            SIDECAR_MESSAGES.REGISTER_DESKTOP_AUTH,
+            { secret: input.secret },
+            { timeoutMs: 1_200 },
+          );
+          if (registered.accepted !== true) throw new Error("daemon rejected Electron auth registration");
+          return Object.freeze({ ...base, outcome: "accepted" as const, output: Object.freeze({ schemaVersion: 1 as const, accepted: true as const }) });
+        } catch {
+          return Object.freeze({ ...base, outcome: "failed" as const, error: Object.freeze({ code: "electron-auth-registration-failed" }) });
+        }
+      }
       if (command.command !== OPEN_DESIGN_PRODUCT_RUNTIME_COMMAND) return Object.freeze({ ...base, outcome: "unsupported", error: Object.freeze({ code: "closure-command-unavailable" }) });
       try {
         validateOpenDesignProductRuntimeReadRequest(command.input);

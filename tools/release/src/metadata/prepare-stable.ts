@@ -15,6 +15,7 @@ import {
   type ReleaseBaseVersionTuple,
   type ReleaseChannel,
 } from "@open-design/release";
+import { readChannelBaseVersion } from "./channel-version.ts";
 
 const execFile = promisify(execFileCallback);
 
@@ -76,13 +77,13 @@ async function execGh(args: string[]): Promise<{ stdout: string }> {
   return execFile(process.env.OPEN_DESIGN_GH_BIN ?? "gh", args);
 }
 
-function parseChannel(value: string | undefined): ReleaseChannel {
+function parseChannel(value: string | undefined): "prerelease" | "stable" {
   const channel = value == null || value.length === 0 ? "stable" : value;
   const descriptor = releaseChannelDescriptor(channel);
   if (descriptor.channel !== "stable" && descriptor.channel !== "prerelease") {
     fail(`OPEN_DESIGN_RELEASE_CHANNEL must be stable or prerelease; got ${channel}`);
   }
-  return descriptor.channel;
+  return descriptor.channel as "prerelease" | "stable";
 }
 
 function parseStableDryRunMode(value: string | undefined): StableDryRunMode {
@@ -441,21 +442,6 @@ async function validateStablePrereleaseMetadata(options: {
   };
 }
 
-async function readPackagedVersion(): Promise<string> {
-  const packageJsonPath = join(process.cwd(), "apps", "packaged", "package.json");
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
-
-  if (typeof packageJson.version !== "string") {
-    fail(`missing version in ${packageJsonPath}`);
-  }
-
-  if (parseReleaseBaseVersion(packageJson.version) == null) {
-    fail(`apps/packaged/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
-  }
-
-  return packageJson.version;
-}
-
 async function fetchReleases(repository: string): Promise<GitHubRelease[]> {
   const releases: GitHubRelease[] = [];
   for (let page = 1; ; page += 1) {
@@ -551,7 +537,7 @@ const dryRun = stableDryRunMode.length > 0;
 const runPrepublishJobs = channel !== "stable" || stableDryRunMode === "prepublish" || stableDryRunMode === "";
 const publishSideEffectsEnabled = channel !== "stable" || stableDryRunMode === "";
 const namespaces = releaseNamespaces(channel);
-const packagedVersion = await readPackagedVersion();
+const packagedVersion = await readChannelBaseVersion(channel);
 const commit = process.env.GITHUB_SHA ?? "";
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const stableBaseVersion =
@@ -561,7 +547,7 @@ const stableBaseVersion =
 const packagedParsed = stableBaseVersion.parsed;
 if (stableBaseVersion.value !== packagedVersion) {
   fail(
-    `${stableBaseVersion.source ?? "release base"} version ${stableBaseVersion.value} must match apps/packaged/package.json version ${packagedVersion}`,
+    `${stableBaseVersion.source ?? "release base"} version ${stableBaseVersion.value} must match ${channel} channel base version ${packagedVersion}`,
   );
 }
 
@@ -576,7 +562,7 @@ for (const release of releases) {
   if (parsedRelease == null) continue;
 
   if (release.tag_name === versionTag) {
-    fail(`stable release ${versionTag} already exists; bump apps/packaged/package.json before publishing`);
+    fail(`stable release ${versionTag} already exists; advance the stable channel version before publishing`);
   }
 
   if (latestStable == null || compareReleaseBaseVersions(parsedRelease.parsed, latestStable.parsed) > 0) {
@@ -585,7 +571,7 @@ for (const release of releases) {
 }
 
 if (latestStable != null && compareReleaseBaseVersions(packagedParsed, latestStable.parsed) <= 0) {
-  fail(`packaged stable version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
+  fail(`stable channel version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
 }
 
 let releaseVersion = packagedVersion;

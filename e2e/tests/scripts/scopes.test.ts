@@ -62,34 +62,16 @@ describe("workflow scope planner", () => {
       scopes: { web_tests_required: true, ui_p0_validation_required: true, visual_validation_required: true },
       enabled: { web_workspace_tests: true, e2e_vitest: true, ui_p0: true, playwright_visual: true },
     });
-    expect(plan("pr", ["apps/desktop/src/main.ts"])).toMatchObject({
-      scopes: { tools_dev_tests_required: true, tools_pack_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: false, ui_p0: false, playwright_critical: false },
+    expect(plan("pr", ["shells/electron/src/main.ts"])).toMatchObject({
+      scopes: { tools_dev_tests_required: false, tools_pack_tests_required: false },
+      enabled: { ui_p0: false, playwright_critical: false },
     });
-    expect(plan("pr", ["tools/pack/src/win/payload.ts"])).toMatchObject({
-      scopes: { tools_pack_tests_required: true, windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true, ui_p0: false, playwright_critical: false },
-    });
-    expect(plan("pr", ["tools/pack/src/launcher/layout.ts"])).toMatchObject({
-      scopes: { tools_pack_tests_required: true, windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true },
-    });
-    expect(plan("pr", ["tools/pack/src/mac/payload.ts"])).toMatchObject({
-      scopes: { tools_pack_tests_required: true, windows_tools_pack_payload_tests_required: false },
-      enabled: { windows_tools_pack_payload_tests: false },
+    expect(plan("pr", ["tools/pack/src/mac/lifecycle.ts"])).toMatchObject({
+      scopes: { tools_pack_tests_required: true },
     });
     expect(plan("pr", ["tools/pack/src/future-root-helper.ts"])).toMatchObject({
-      scopes: { tools_pack_tests_required: true, windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true },
+      scopes: { tools_pack_tests_required: true },
       trace: { ruleHits: { "tools-pack-root-source-fallback": 1 } },
-    });
-    expect(plan("pr", ["packages/launcher-proto/src/index.ts"])).toMatchObject({
-      scopes: { windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true },
-    });
-    expect(plan("pr", ["pnpm-lock.yaml"])).toMatchObject({
-      scopes: { windows_tools_pack_payload_tests_required: true },
-      enabled: { windows_tools_pack_payload_tests: true },
     });
     expect(plan("pr", ["docs/spec.md"])).toMatchObject({
       scopes: { workspace_validation_required: false },
@@ -136,8 +118,8 @@ describe("workflow scope planner", () => {
       "apps/closure/src/index.ts",
       "packages/standalone/src/store.ts",
       "shells/terminal/src/cli.ts",
-      ".github/scripts/pack.py",
-      ".github/scripts/release.py",
+      "tools/release/src/exact/control-cli.ts",
+      "tools/release/src/exact/control-release.ts",
       ".github/workflows/convergence-exact.atom.yml",
       ".github/workflows/release-exact.yml",
     ]) {
@@ -166,12 +148,12 @@ describe("workflow scope planner", () => {
       enabled: { daemon_unit_tests: true, e2e_vitest: true, ui_p0: true, web_workspace_tests: false },
       trace: { escalations: [] },
     });
-    expect(plan("merge-queue", ["apps/desktop/src/main.ts"])).toMatchObject({
-      enabled: { windows_tools_pack_payload_tests: false, workspace_unit_tests: true, e2e_vitest: false },
+    expect(plan("merge-queue", ["shells/electron/src/main.ts"])).toMatchObject({
+      enabled: { workspace_unit_tests: false, e2e_vitest: false },
       trace: { escalations: [] },
     });
-    expect(plan("merge-queue", ["tools/pack/src/win/custom-installer.ts"])).toMatchObject({
-      enabled: { windows_tools_pack_payload_tests: true, workspace_unit_tests: true, e2e_vitest: false },
+    expect(plan("merge-queue", ["tools/pack/src/mac/lifecycle.ts"])).toMatchObject({
+      enabled: { workspace_unit_tests: true, e2e_vitest: false },
       trace: { escalations: [] },
     });
     const medium = plan("merge-queue", ["apps/web/src/App.tsx"]);
@@ -179,12 +161,7 @@ describe("workflow scope planner", () => {
     expect(Object.values(medium.scopes).filter((value) => typeof value === "boolean")).not.toContain(false);
 
     const unknown = plan("merge-queue", ["some-new-root/file.ts"]);
-    expect(unknown).toMatchObject({ enabled: { windows_tools_pack_payload_tests: true } });
     expect(unknown.trace.escalations).toHaveLength(1);
-  });
-
-  test("keeps the Windows payload workload in forced-full plans", () => {
-    expect(plan("full")).toMatchObject({ enabled: { windows_tools_pack_payload_tests: true } });
   });
 
   test("preserves the four-domain runtime-definition shadow candidate", () => {
@@ -200,11 +177,6 @@ describe("workflow scope planner", () => {
     const workflow = readFileSync(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
     expect(workflow).toContain("python3 .github/scripts/scopes.py github-output");
     expect(workflow).not.toContain("scripts/scopes.ts");
-    const windowsPayload = workflow.slice(
-      workflow.indexOf("  windows_tools_pack_payload_tests:"),
-      workflow.indexOf("  web_workspace_tests:"),
-    );
-    expect(windowsPayload).not.toMatch(/\.github\/scripts\/(?:scopes|convergence|runners)\.py/);
     expect(workflow).not.toContain("  terminal_scene:");
   });
 });

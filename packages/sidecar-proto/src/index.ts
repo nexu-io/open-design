@@ -506,7 +506,7 @@ export type DesktopUpdateReinstallReason =
  * physically installed outer package version (not the running payload version);
  * it is omitted when the outer bundle config could not be read. `url` is an
  * optional operator-supplied explanation link from
- * `control.launcher.version.url`.
+ * a typed installer-recovery explanation URL.
  */
 export type DesktopUpdateReinstallSnapshot = {
   installedVersion?: string;

@@ -64,14 +64,3 @@ export async function runPnpm(
     windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
 }
-
-export async function runNpmInstall(appRoot: string): Promise<void> {
-  await execFileAsync("npm", ["install", "--omit=dev", "--no-package-lock"], {
-    cwd: appRoot,
-    env: process.env,
-  });
-}
-
-export async function runEsbuild(config: ToolPackConfig, args: string[]): Promise<void> {
-  await runPnpm(config, ["--filter", "@open-design/packaged", "exec", "esbuild", ...args]);
-}

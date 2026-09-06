@@ -5,7 +5,7 @@ name: backport-automerge
 # so neither GitHub auto-merge nor enqueuePullRequest applies. Instead we react to ci.yml
 # finishing for a backport-* branch:
 #   - CI success + clean (non-draft) PR  -> squash-merge it (App token, so the push to
-#     release/* re-triggers notify-release-feishu / the nightly).
+#     release/* re-triggers the release branch automation).
 #   - CI failure                         -> Feishu ping for manual follow-up.
 #   - conflict (draft PR)                -> left for a human; release-gate blocks the release
 #                                           until it lands.

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
+import type { OpenDesignElectronUpdaterStatusSnapshot } from '@open-design/electron-contract';
 
 import { Icon } from './Icon';
 import { useAnalytics } from '../analytics/provider';
@@ -16,9 +16,7 @@ import {
   deriveUpdaterModel,
   downloadUpdaterUpdate,
   openUpdaterInstaller,
-  quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
-  restartSafetyFromActionResult,
   restartSafetyFromUpdaterStatus,
   subscribeToUpdaterOpenDialog,
   subscribeToUpdaterStatus,
@@ -34,8 +32,8 @@ function withEllipsis(value: string): string {
   return `${value.replace(/[.\u2026]+$/u, '')}…`;
 }
 
-function shouldRunManualCheck(status: OpenDesignHostUpdaterStatusSnapshot): boolean {
-  return status.state === 'idle' || status.state === 'not-available' || status.state === 'error';
+function shouldRunManualCheck(status: OpenDesignElectronUpdaterStatusSnapshot): boolean {
+  return deriveUpdaterModel(status, { hostAvailable: true }).canCheck;
 }
 
 export function UpdateDialog() {
@@ -43,12 +41,12 @@ export function UpdateDialog() {
   const analytics = useAnalytics();
   const analyticsTrackRef = useRef(analytics.track);
   analyticsTrackRef.current = analytics.track;
-  const statusRef = useRef<OpenDesignHostUpdaterStatusSnapshot | null>(null);
+  const statusRef = useRef<OpenDesignElectronUpdaterStatusSnapshot | null>(null);
   const statusRevisionRef = useRef(0);
   const laterRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const primaryRef = useRef<HTMLButtonElement | null>(null);
-  const [status, setStatus] = useState<OpenDesignHostUpdaterStatusSnapshot | null>(null);
+  const [status, setStatus] = useState<OpenDesignElectronUpdaterStatusSnapshot | null>(null);
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState(MENU_SOURCE);
   const [actionBusy, setActionBusy] = useState(false);
@@ -60,7 +58,7 @@ export function UpdateDialog() {
     ...(model.availableVersion ? { app_version_after: model.availableVersion } : {}),
   }), [model.availableVersion, model.currentVersion]);
 
-  const applyStatus = useCallback((next: OpenDesignHostUpdaterStatusSnapshot) => {
+  const applyStatus = useCallback((next: OpenDesignElectronUpdaterStatusSnapshot) => {
     statusRevisionRef.current += 1;
     statusRef.current = next;
     setStatus(next);
@@ -110,17 +108,19 @@ export function UpdateDialog() {
         if (!mounted) return;
         if (result.ok) {
           applyStatus(result.status);
+          const checked = deriveUpdaterModel(result.status, { hostAvailable: true });
+          const checkedErrorCode = checked.target == null ? undefined : result.status.lines[checked.target].error?.code;
           trackUpdateCheckResult(analyticsTrackRef.current, {
             area: 'update_dialog',
             page_name: 'app',
-            result: result.status.state === 'not-available'
+            result: checked.state === 'current'
               ? 'up_to_date'
-              : result.status.state === 'error'
+              : checked.state === 'error'
                 ? 'failed'
                 : 'available',
-            ...(result.status.currentVersion ? { app_version_before: result.status.currentVersion } : {}),
-            ...(result.status.availableVersion ? { app_version_after: result.status.availableVersion } : {}),
-            ...(result.status.error?.code ? { error_code: result.status.error.code } : {}),
+            ...(checked.currentVersion ? { app_version_before: checked.currentVersion } : {}),
+            ...(checked.availableVersion ? { app_version_after: checked.availableVersion } : {}),
+            ...(checkedErrorCode ? { error_code: checkedErrorCode } : {}),
           });
         } else {
           setActionError(result.reason);
@@ -164,7 +164,7 @@ export function UpdateDialog() {
   useEffect(() => {
     if (!open || restartSafety != null) return;
     (primaryRef.current ?? closeRef.current)?.focus();
-  }, [open, restartSafety, status?.state]);
+  }, [model.state, open, restartSafety]);
 
   const close = useCallback(() => {
     if (actionBusy) return;
@@ -197,13 +197,15 @@ export function UpdateDialog() {
       const result = await checkForUpdaterUpdate({ payload: { autoDownload: true, source } });
       if (result.ok) {
         applyStatus(result.status);
+        const checked = deriveUpdaterModel(result.status, { hostAvailable: true });
+        const checkedErrorCode = checked.target == null ? undefined : result.status.lines[checked.target].error?.code;
         trackUpdateCheckResult(analytics.track, {
           area: 'update_dialog',
           page_name: 'app',
-          result: result.status.state === 'not-available' ? 'up_to_date' : result.status.state === 'error' ? 'failed' : 'available',
-          ...(result.status.currentVersion ? { app_version_before: result.status.currentVersion } : {}),
-          ...(result.status.availableVersion ? { app_version_after: result.status.availableVersion } : {}),
-          ...(result.status.error?.code ? { error_code: result.status.error.code } : {}),
+          result: checked.state === 'current' ? 'up_to_date' : checked.state === 'error' ? 'failed' : 'available',
+          ...(checked.currentVersion ? { app_version_before: checked.currentVersion } : {}),
+          ...(checked.availableVersion ? { app_version_after: checked.availableVersion } : {}),
+          ...(checkedErrorCode ? { error_code: checkedErrorCode } : {}),
         });
       } else {
         setActionError(result.reason);
@@ -269,34 +271,12 @@ export function UpdateDialog() {
         return;
       }
       applyStatus(installResult.status);
-      const quitResult = await quitAfterUpdaterInstallerOpen(options);
-      const quitSafety = restartSafetyFromActionResult(quitResult);
-      if (quitSafety != null) {
-        setRestartSafety(quitSafety);
-        trackUpdateInstallResult(analytics.track, {
-          area: 'update_dialog',
-          error_code: quitSafety.state === 'blocked' ? 'active-runs-blocked' : 'active-runs-unknown',
-          page_name: 'app',
-          result: 'failed',
-          ...versionProps,
-        });
-      } else if (!quitResult.ok) {
-        setActionError(quitResult.reason);
-        trackUpdateInstallResult(analytics.track, {
-          area: 'update_dialog',
-          error_code: quitResult.reason,
-          page_name: 'app',
-          result: 'failed',
-          ...versionProps,
-        });
-      } else {
-        trackUpdateInstallResult(analytics.track, {
-          area: 'update_dialog',
-          page_name: 'app',
-          result: 'success',
-          ...versionProps,
-        });
-      }
+      trackUpdateInstallResult(analytics.track, {
+        area: 'update_dialog',
+        page_name: 'app',
+        result: 'success',
+        ...versionProps,
+      });
     } finally {
       setActionBusy(false);
     }
@@ -315,12 +295,12 @@ export function UpdateDialog() {
 
   if (!open) return null;
 
-  const state = status?.state;
-  const ready = state === 'downloaded' && model.hasDownloadedInstaller;
+  const state = model.state;
+  const ready = state === 'ready' && model.hasDownloadedInstaller;
   const available = state === 'available';
   const checking = state === 'checking';
   const downloading = state === 'downloading';
-  const installing = state === 'installing' || model.installerOpened;
+  const installing = state === 'applying';
   const unsupported = state === 'unsupported';
   const progress = model.downloadProgress?.percent;
   const statusMessage = (() => {
@@ -333,16 +313,11 @@ export function UpdateDialog() {
         ? t('settings.updateActionFailed')
         : t('updater.dialogCheckFailed');
     }
-    if (status?.error != null && restartSafetyFromUpdaterStatus(status) == null) {
+    if (model.errorMessage != null && restartSafetyFromUpdaterStatus(status) == null) {
       return state === 'error' ? t('updater.dialogCheckFailed') : t('settings.updateActionFailed');
     }
     // A forced installer reinstall reads differently from a routine update:
     // the same copy covers both the not-yet-downloaded and ready states.
-    if ((ready || available) && model.reinstall != null) {
-      return model.availableVersion == null
-        ? t('updater.reinstallReadyGeneric')
-        : t('updater.reinstallReadyVersion', { version: model.availableVersion });
-    }
     if (ready) {
       if (model.availableVersion != null) {
         return t('updater.dialogReadyVersion', { version: model.availableVersion });
@@ -362,8 +337,8 @@ export function UpdateDialog() {
     }
     if (installing) return t('settings.updateStatusInstalling');
     if (model.upToDate) {
-      if (status?.currentVersion == null) return t('updater.upToDate');
-      const version = `v${status.currentVersion}`;
+      if (model.currentVersion == null) return t('updater.upToDate');
+      const version = `v${model.currentVersion}`;
       return locale === 'zh-CN' || locale === 'zh-TW'
         ? `${t('updater.upToDate')}（${version}）`
         : `${t('updater.upToDate')} (${version})`;
@@ -373,7 +348,6 @@ export function UpdateDialog() {
   })();
 
   const showSafety = restartSafety != null;
-  const reinstallUrl = model.reinstall?.url ?? null;
   const title = showSafety ? t('updater.activeRunsTitle') : t('settings.updateCheck');
   const primaryLabel = (() => {
     if (ready) return model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
@@ -425,24 +399,9 @@ export function UpdateDialog() {
         ) : null}
         {!showSafety && (available || ready) ? (
           <div className={styles.metaRow}>
-            {reinstallUrl != null ? (
-              <button
-                className={styles.releaseLink}
-                data-testid="update-dialog-reinstall-learn-more"
-                onClick={() => void openExternalUrl(reinstallUrl)}
-                type="button"
-              >
-                {t('updater.reinstallLearnMore')} <Icon name="external-link" size={13} />
-              </button>
-            ) : (
-              <button
-                className={styles.releaseLink}
-                onClick={openReleaseNotes}
-                type="button"
-              >
-                {t('updater.viewVersionFeatures')} <Icon name="external-link" size={13} />
-              </button>
-            )}
+            <button className={styles.releaseLink} onClick={openReleaseNotes} type="button">
+              {t('updater.viewVersionFeatures')} <Icon name="external-link" size={13} />
+            </button>
           </div>
         ) : null}
         <div className={`${styles.actions} ${model.upToDate ? styles.actionsCentered : ''}`}>

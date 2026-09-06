@@ -11,9 +11,9 @@
 
 import { useMemo } from 'react';
 import {
-  isOpenDesignHostAvailable,
-  openHostProjectPath,
-} from '@open-design/host';
+  isOpenDesignElectronAvailable,
+  openElectronProjectPath,
+} from '@open-design/electron-contract';
 
 export interface TerminalLaunchResult {
   kind: 'host' | 'web-fallback';
@@ -27,14 +27,14 @@ export interface TerminalLauncher {
 
 export function useTerminalLaunch(): TerminalLauncher {
   return useMemo<TerminalLauncher>(() => {
-    const isHost = isOpenDesignHostAvailable();
+    const isHost = isOpenDesignElectronAvailable();
 
     async function open(projectId: string): Promise<TerminalLaunchResult> {
       if (!isHost) {
         return { kind: 'web-fallback', ok: true };
       }
       try {
-        const result = await openHostProjectPath(projectId);
+        const result = await openElectronProjectPath(projectId);
         return { kind: 'host', ok: result.ok };
       } catch {
         return { kind: 'host', ok: false };

@@ -8,6 +8,7 @@ export type ElectronExactTarget = (typeof ELECTRON_EXACT_TARGETS)[number];
 export type ElectronExactSceneRequest = Readonly<{
   acceptedClosureBaselineFile: string;
   operation: "electron.scene.build";
+  resourceReceiptFile: string;
   sceneDirectory: string;
   schemaVersion: typeof ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION;
   shellManifestFile: string;
@@ -49,13 +50,14 @@ function absolutePath(input: Record<string, unknown>, field: string, label: stri
 
 export function parseElectronExactSceneRequest(value: unknown): ElectronExactSceneRequest {
   const input = record(value, "Electron exact scene request");
-  exactKeys(input, ["acceptedClosureBaselineFile", "operation", "sceneDirectory", "schemaVersion", "shellManifestFile", "standaloneLauncherFile", "target"], "Electron exact scene request");
+  exactKeys(input, ["acceptedClosureBaselineFile", "operation", "resourceReceiptFile", "sceneDirectory", "schemaVersion", "shellManifestFile", "standaloneLauncherFile", "target"], "Electron exact scene request");
   if (input.schemaVersion !== ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION || input.operation !== "electron.scene.build") {
     throw new Error("Electron exact scene request identity is invalid");
   }
   return Object.freeze({
     acceptedClosureBaselineFile: absolutePath(input, "acceptedClosureBaselineFile", "Electron exact scene"),
     operation: "electron.scene.build",
+    resourceReceiptFile: absolutePath(input, "resourceReceiptFile", "Electron exact scene"),
     sceneDirectory: absolutePath(input, "sceneDirectory", "Electron exact scene"),
     schemaVersion: ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION,
     shellManifestFile: absolutePath(input, "shellManifestFile", "Electron exact scene"),

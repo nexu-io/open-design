@@ -20,8 +20,8 @@ import { readJson, writeJson } from "./fs-io.js";
  * renders, independent of anything this package does. Their mere presence
  * must never be treated as "not empty": Finder writes .DS_Store the moment a
  * managed base is viewed even once, and Explorer does the same with
- * Thumbs.db/desktop.ini. Mirrors apps/desktop's isOsManagedRootArtifact —
- * duplicated rather than shared since apps/desktop depends on this package,
+ * Thumbs.db/desktop.ini. This remains a download-store-local boundary because
+ * the Electron Shell depends on this package,
  * not the reverse.
  *
  * Matched by name only — callers MUST additionally confirm the entry is a
@@ -46,7 +46,7 @@ function isOsManagedRootArtifact(name: string): boolean {
  * isOsManagedRootArtifact}. An entry that disappears or fails to stat
  * between `readdir` and this check is treated as unverified (excluded),
  * which fails closed into the existing rejection path rather than silently
- * trusting it. Mirrors apps/desktop's verifiedOsManagedRootArtifacts.
+ * trusting it. Shell callers apply the same verified-artifact rule.
  */
 async function verifiedOsManagedRootArtifacts(basePath: string, entries: string[]): Promise<Set<string>> {
   const candidates = entries.filter((entry) => isOsManagedRootArtifact(entry));

@@ -5,10 +5,11 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
-  OpenDesignHostUpdaterOpenDialogListener,
-  OpenDesignHostUpdaterStatusSnapshot,
-} from '@open-design/host';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+  OpenDesignElectronUpdaterOpenDialogListener,
+  OpenDesignElectronUpdaterStatusSnapshot,
+} from '@open-design/electron-contract';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
+import { electronUpdaterStatus } from '../helpers/electron-updater';
 
 import { App } from '../../src/App';
 import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
@@ -155,25 +156,9 @@ const baseConfig: AppConfig = {
 };
 
 function idleStatus(
-  overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {},
-): OpenDesignHostUpdaterStatusSnapshot {
-  return {
-    arch: 'arm64',
-    capabilities: {
-      canApplyInPlace: true,
-      canDownload: true,
-      canOpenInstaller: false,
-      requiresManualInstall: false,
-    },
-    channel: 'beta',
-    currentVersion: '1.2.3',
-    enabled: true,
-    mode: 'js-incremental',
-    platform: 'darwin',
-    state: 'idle',
-    supported: true,
-    ...overrides,
-  };
+  overrides: Record<string, any> = {},
+): OpenDesignElectronUpdaterStatusSnapshot {
+  return electronUpdaterStatus({ target: 'closure', ...overrides });
 }
 
 function jsonResponse(body: unknown): Response {
@@ -219,7 +204,7 @@ describe('App updater dialog integration', () => {
   });
 
   it('exposes the desktop host platform on the workspace shell', () => {
-    restoreHost = installMockOpenDesignHost({
+    restoreHost = installMockOpenDesignElectron({
       host: {
         client: {
           platform: 'win32',
@@ -236,14 +221,14 @@ describe('App updater dialog integration', () => {
   });
 
   it('mounts the updater open-dialog subscription and handles the mac app menu request', async () => {
-    let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
-    const check = vi.fn(async () => idleStatus({ state: 'not-available' }));
+    let openDialogListener: OpenDesignElectronUpdaterOpenDialogListener | null = null;
+    const check = vi.fn(async () => idleStatus({ state: 'current' }));
     const unsubscribeOpenDialog = vi.fn();
-    const subscribeOpenDialog = vi.fn((listener: OpenDesignHostUpdaterOpenDialogListener) => {
+    const subscribeOpenDialog = vi.fn((listener: OpenDesignElectronUpdaterOpenDialogListener) => {
       openDialogListener = listener;
       return unsubscribeOpenDialog;
     });
-    restoreHost = installMockOpenDesignHost({
+    restoreHost = installMockOpenDesignElectron({
       host: {
         updater: {
           check,
@@ -262,9 +247,7 @@ describe('App updater dialog integration', () => {
     });
 
     expect(await screen.findByRole('dialog', { name: 'Check for updates' })).toBeTruthy();
-    await waitFor(() => expect(check).toHaveBeenCalledWith({
-      payload: { autoDownload: true, source: 'mac-app-menu' },
-    }));
+    await waitFor(() => expect(check).toHaveBeenCalledWith(undefined));
     expect(check).toHaveBeenCalledTimes(1);
 
     unmount();
@@ -273,13 +256,12 @@ describe('App updater dialog integration', () => {
 
   it('shows the update-ready rocket in the project-detail account cluster', async () => {
     routeState.current = { kind: 'project', projectId: 'project-1' };
-    restoreHost = installMockOpenDesignHost({
+    restoreHost = installMockOpenDesignElectron({
       host: {
         updater: {
           status: vi.fn(async () => idleStatus({
-            availableVersion: '1.2.4',
-            downloadPath: '/tmp/open-design-updater/Open Design Beta.dmg',
-            state: 'downloaded',
+            candidateVersion: '1.2.4',
+            state: 'ready',
           })),
         },
       },

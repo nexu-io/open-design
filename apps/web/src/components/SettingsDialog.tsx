@@ -148,13 +148,10 @@ import type { MediaProvider } from '../media/models';
 import { Toast } from './Toast';
 import {
   checkForUpdaterUpdate,
-  clearUpdaterCache,
   deriveUpdaterModel,
   downloadUpdaterUpdate,
   openUpdaterInstaller,
-  quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
-  restartSafetyFromActionResult,
   restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterActionResult,
@@ -295,7 +292,7 @@ export type SettingsHighlight = 'amr' | null;
 
 const OPEN_DESIGN_RELEASES_URL = 'https://github.com/nexu-io/open-design/releases';
 
-type AboutUpdatePrimaryAction = 'check' | 'download' | 'install' | 'quit';
+type AboutUpdatePrimaryAction = 'check' | 'download' | 'install';
 type AboutUpdateTone = 'neutral' | 'success' | 'warning' | 'error';
 
 export interface AboutUpdateControl {
@@ -331,7 +328,7 @@ export function deriveAboutUpdateControl(
     };
   }
 
-  switch (model.status?.state) {
+  switch (model.state) {
     case 'checking':
       return {
         primaryAction: null,
@@ -340,7 +337,7 @@ export function deriveAboutUpdateControl(
         statusKey: 'settings.updateStatusChecking',
         statusTone: 'neutral',
       };
-    case 'not-available':
+    case 'current':
       return {
         primaryAction: 'check',
         primaryLabelKey: 'settings.updateRecheck',
@@ -372,16 +369,7 @@ export function deriveAboutUpdateControl(
         ...(typeof percent === 'number' ? { statusVars: { percent } } : {}),
       };
     }
-    case 'downloaded': {
-      if (model.installerOpened && model.canQuitAfterInstallerOpen) {
-        return {
-          primaryAction: 'quit',
-          primaryLabelKey: 'updater.quitButton',
-          showReleaseLink: false,
-          statusKey: model.updateKind === 'payload' ? 'updater.installingRestart' : 'updater.opening',
-          statusTone: 'neutral',
-        };
-      }
+    case 'ready': {
       const canInstallUpdate = model.canOpenInstaller || model.canApplyInPlace;
       return {
         primaryAction: canInstallUpdate ? 'install' : null,
@@ -398,7 +386,7 @@ export function deriveAboutUpdateControl(
         ...(model.availableVersion ? { statusVars: { version: model.availableVersion } } : {}),
       };
     }
-    case 'installing':
+    case 'applying':
       return {
         primaryAction: null,
         primaryLabelKey: 'updater.installingRestart',
@@ -407,8 +395,7 @@ export function deriveAboutUpdateControl(
         statusTone: 'neutral',
       };
     case 'error': {
-      const canRetryInstall = model.status.downloadPath != null
-        && (model.canOpenInstaller || model.canApplyInPlace);
+      const canRetryInstall = model.canOpenInstaller || model.canApplyInPlace;
       const primaryAction: AboutUpdatePrimaryAction = canRetryInstall
         ? 'install'
         : model.availableVersion != null && model.canDownload
@@ -1905,11 +1892,7 @@ export function SettingsDialog({
   >(() => new Set());
   const [aboutUpdaterModel, setAboutUpdaterModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [aboutUpdateActionBusy, setAboutUpdateActionBusy] = useState(false);
-  const [aboutUpdateQuitFailed, setAboutUpdateQuitFailed] = useState(false);
   const [aboutToast, setAboutToast] = useState<string | null>(null);
-  // Two-stage inline confirm for the destructive manual cache clear.
-  const [clearUpdaterCacheStage, setClearUpdaterCacheStage] = useState<'idle' | 'confirm'>('idle');
-  const [clearUpdaterCacheBusy, setClearUpdaterCacheBusy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -1917,13 +1900,11 @@ export function SettingsDialog({
       if (!mounted) return;
       const nextModel = deriveUpdaterModel(status, { hostAvailable: true });
       setAboutUpdaterModel(nextModel);
-      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
     });
     void readUpdaterStatus({ payload: { source: 'settings-about:mount' } }).then((result) => {
       if (!mounted) return;
       const nextModel = result.ok ? result.model : deriveUpdaterModel(null, { hostAvailable: false });
       setAboutUpdaterModel(nextModel);
-      if (!nextModel.installerOpened) setAboutUpdateQuitFailed(false);
     });
     return () => {
       mounted = false;
@@ -1931,18 +1912,10 @@ export function SettingsDialog({
     };
   }, []);
 
-  const aboutUpdateControl = useMemo(() => {
-    const control = deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo);
-    if (!aboutUpdateQuitFailed || !aboutUpdaterModel.installerOpened) return control;
-    return {
-      ...control,
-      primaryAction: 'quit' as const,
-      primaryLabelKey: 'updater.quitButton' as const,
-      showReleaseLink: false,
-      statusKey: 'updater.quitFailedTitle' as const,
-      statusTone: 'warning' as const,
-    };
-  }, [aboutUpdateQuitFailed, aboutUpdaterModel, appVersionInfo]);
+  const aboutUpdateControl = useMemo(
+    () => deriveAboutUpdateControl(aboutUpdaterModel, appVersionInfo),
+    [aboutUpdaterModel, appVersionInfo],
+  );
 
   // Restart-safety preflight denials stay hard-blocked in Settings → About
   // (the force path lives in the app-menu UpdateDialog), but the toast must
@@ -1974,34 +1947,16 @@ export function SettingsDialog({
   const handleAboutUpdateAction = useCallback(async () => {
     if (aboutUpdateActionBusy || aboutUpdaterModel.busy || aboutUpdateControl.primaryAction == null) return;
     setAboutUpdateActionBusy(true);
-    setAboutUpdateQuitFailed(false);
-    let quitAttempted = false;
     try {
       const options = { payload: { source: 'settings-about' } };
       if (aboutUpdateControl.primaryAction === 'check') {
         applyAboutUpdaterResult(await checkForUpdaterUpdate(options));
       } else if (aboutUpdateControl.primaryAction === 'download') {
         applyAboutUpdaterResult(await downloadUpdaterUpdate(options));
-      } else if (aboutUpdateControl.primaryAction === 'quit') {
-        quitAttempted = true;
-        const quitResult = await quitAfterUpdaterInstallerOpen(options);
-        if (!quitResult.ok) {
-          setAboutUpdateQuitFailed(true);
-          setAboutToast(aboutUpdaterToastText(restartSafetyFromActionResult(quitResult), t('updater.quitFailedTitle')));
-        }
       } else {
-        const installed = applyAboutUpdaterResult(await openUpdaterInstaller(options));
-        if (installed) {
-          quitAttempted = true;
-          const quitResult = await quitAfterUpdaterInstallerOpen(options);
-          if (!quitResult.ok) {
-            setAboutUpdateQuitFailed(true);
-            setAboutToast(aboutUpdaterToastText(restartSafetyFromActionResult(quitResult), t('updater.quitFailedTitle')));
-          }
-        }
+        applyAboutUpdaterResult(await openUpdaterInstaller(options));
       }
     } catch {
-      if (quitAttempted) setAboutUpdateQuitFailed(true);
       setAboutToast(t('settings.updateActionFailed'));
     } finally {
       setAboutUpdateActionBusy(false);
@@ -2018,29 +1973,6 @@ export function SettingsDialog({
   const handleOpenReleaseNotes = useCallback(() => {
     void openExternalUrl(OPEN_DESIGN_RELEASES_URL);
   }, []);
-
-  // Manual updater/launcher cache clear — the disaster-recovery action for
-  // stuck update state. The desktop owns the capability; this handler only
-  // reports the outcome and refreshes the About updater model.
-  const handleClearUpdaterCache = useCallback(() => {
-    if (clearUpdaterCacheBusy) return;
-    setClearUpdaterCacheBusy(true);
-    void (async () => {
-      try {
-        const result = await clearUpdaterCache();
-        if (result.ok) {
-          setAboutUpdaterModel(result.model);
-          setAboutToast(t('settings.clearUpdaterCacheSuccess'));
-        } else {
-          setAboutToast(t('settings.clearUpdaterCacheFailed'));
-        }
-      } finally {
-        setClearUpdaterCacheBusy(false);
-        setClearUpdaterCacheStage('idle');
-      }
-    })();
-  }, [clearUpdaterCacheBusy, t]);
-
 
   // Imperative handle for the External MCP section. The dialog footer Save
   // routes through this when the MCP tab is active so the user can press the
@@ -6083,7 +6015,6 @@ export function SettingsDialog({
                           className={`settings-about-update-button${
                             aboutUpdateControl.primaryAction === 'download'
                               || aboutUpdateControl.primaryAction === 'install'
-                              || aboutUpdateControl.primaryAction === 'quit'
                               ? ' settings-about-update-button--primary'
                               : ''
                           }`}
@@ -6203,41 +6134,6 @@ export function SettingsDialog({
                   </span>
                 </label>
               </div>
-              {aboutUpdaterModel.environment === 'desktop'
-                && aboutUpdaterModel.supported
-                && appVersionInfo?.packaged !== false ? (
-                <div className="settings-about-diagnostics">
-                  <div className="settings-about-diagnostics-text">
-                    <h4>{t('settings.clearUpdaterCacheTitle')}</h4>
-                    <p className="hint">{t('settings.clearUpdaterCacheHint')}</p>
-                  </div>
-                  {clearUpdaterCacheStage === 'confirm' ? (
-                    <>
-                      <Button
-                        disabled={clearUpdaterCacheBusy}
-                        onClick={() => setClearUpdaterCacheStage('idle')}
-                      >
-                        {t('common.cancel')}
-                      </Button>
-                      <Button
-                        data-testid="settings-clear-updater-cache-confirm"
-                        disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
-                        onClick={handleClearUpdaterCache}
-                      >
-                        {t('settings.clearUpdaterCacheConfirmButton')}
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      data-testid="settings-clear-updater-cache"
-                      disabled={clearUpdaterCacheBusy || aboutUpdaterModel.busy}
-                      onClick={() => setClearUpdaterCacheStage('confirm')}
-                    >
-                      {t('settings.clearUpdaterCacheButton')}
-                    </Button>
-                  )}
-                </div>
-              ) : null}
               <div className="settings-about-diagnostics">
                 <div className="settings-about-diagnostics-text">
                   <h4>{t('diagnostics.exportTitle')}</h4>

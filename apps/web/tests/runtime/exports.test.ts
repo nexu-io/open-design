@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 import {
   archiveFilenameFrom,
   archiveRootFromFilePath,
@@ -224,7 +224,7 @@ describe('injected print-ready parent cache script — runtime behavior (#4458)'
   // is rejected so it cannot blank the page (viewport fallback) or poison it.
   async function extractCacheScript(): Promise<{ body: string; nonce: string }> {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
-    const restoreHost = installMockOpenDesignHost({ host: { pdf: { print: printPdfMock } } });
+    const restoreHost = installMockOpenDesignElectron({ host: { pdf: { print: printPdfMock } } });
     try {
       await exportAsPdf('<div style="height:4000px">tall artifact</div>', 'Cache Eval');
     } finally {
@@ -1303,7 +1303,7 @@ describe('sandboxed preview Blob exports', () => {
 
   it('uses the desktop native print bridge when the host PDF bridge is available', async () => {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { pdf: { print: printPdfMock } },
     });
 
@@ -1335,7 +1335,7 @@ describe('sandboxed preview Blob exports', () => {
 
   it('passes deck intent through the desktop native print bridge', async () => {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { pdf: { print: printPdfMock } },
     });
 
@@ -1352,7 +1352,7 @@ describe('sandboxed preview Blob exports', () => {
 
   it('injects image-waiting logic into the print-ready handshake for the desktop bridge', async () => {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { pdf: { print: printPdfMock } },
     });
 
@@ -1400,7 +1400,7 @@ describe('sandboxed preview Blob exports', () => {
 
   it('reports the artifact content size through the handshake so the desktop page is sized to the content, not the wrapper viewport (issue #4067)', async () => {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { pdf: { print: printPdfMock } },
     });
 
@@ -1441,7 +1441,7 @@ describe('sandboxed preview Blob exports', () => {
 
   it('injects the readiness cache for non-sandboxed desktop exports too', async () => {
     const printPdfMock = vi.fn().mockResolvedValue({ ok: true });
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { pdf: { print: printPdfMock } },
     });
 

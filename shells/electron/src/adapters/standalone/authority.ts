@@ -97,6 +97,14 @@ function exactHostStatus(value: unknown, expected: Omit<HostStatus, "control" | 
     && canonicalJson(status.shell) === canonicalJson(expected.shell);
 }
 
+function hostHasNoLogicalReferences(value: unknown): boolean {
+  if (value == null || typeof value !== "object") return false;
+  const lifecycle = (value as { lifecycle?: unknown }).lifecycle;
+  return lifecycle != null
+    && typeof lifecycle === "object"
+    && (lifecycle as { references?: unknown }).references === 0;
+}
+
 export function createElectronStandaloneAuthorityFactory(
   manifest: ElectronShellManifest,
   resourcesInput: ElectronPhysicalResourceSetDeclaration,
@@ -190,7 +198,11 @@ export function createElectronStandaloneAuthorityFactory(
       let activeHost!: Awaited<ReturnType<typeof launchHost>>;
       await withElectronPhysicalResourceSetGuard(initialResourceSet, async (guard) => {
         const existing = await getSidecarStatus<unknown>(initialStamp, { timeoutMs: 500 }).catch(() => null);
-        if (existing != null && !exactHostStatus(existing, hostExpected)) await guard.retire();
+        // A fossil host deliberately keeps its first launcher selection for
+        // its entire process lifetime. Once it has no logical references it
+        // must be retired before a later cold start, otherwise a newly
+        // installed generation can never be selected in this namespace.
+        if (existing != null && (!exactHostStatus(existing, hostExpected) || hostHasNoLogicalReferences(existing))) await guard.retire();
         activeHost = await launchHost(binding);
       });
       feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
@@ -394,7 +406,26 @@ export function createElectronStandaloneAuthorityFactory(
         async start({ attachment }): Promise<StandaloneRuntimeHandle> {
           if (activeAttachment != null) throw new Error("Electron Standalone prepared runtime already owns an attachment");
           const launcher = new VersionedLauncher(store, activeHost.lifecycle, request.shell, attachment.id, observeFeedback);
-          const started = await launcher.start();
+          let started: Awaited<ReturnType<VersionedLauncher["start"]>>;
+          try {
+            started = await launcher.start();
+          } catch (error) {
+            // A launcher can fail after the fossil host has selected a
+            // generation but before a logical attachment exists. Leaving that
+            // zero-reference host alive pins its in-memory generation forever
+            // and makes the next cold start fail with a misleading generation
+            // conflict. Retire only an unoccupied host; a concurrently shared
+            // runtime must never be sacrificed for this caller's failure.
+            try {
+              const current = await activeHost.lifecycle.status(request.scope);
+              if (current.references === 0) {
+                await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async (guard) => await guard.retire());
+              }
+            } catch (cleanupError) {
+              throw new AggregateError([error, cleanupError], "Electron Standalone start and zero-reference host retirement failed");
+            }
+            throw error;
+          }
           activeAttachment = attachment;
           sealedRuntimeStatus = null;
           let closed: StandaloneRuntimeStatus | null = null;

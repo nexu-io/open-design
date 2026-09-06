@@ -307,62 +307,29 @@ zero-effect plans (11.6%). Root markdown such as `README.md` remains medium
 because bare filename literals are widespread as fixture data and cannot be
 distinguished locally from repository-root reads.
 
-### Packaged leaf and Windows payload
+### Electron Shell and Closure identities
 
-Rule `certain-packaged-leaf-sources` covers only:
+The general CI planner keeps a narrow `tools-pack-leaf` source unit for the
+thin macOS request/receipt CLI. Electron release reuse is owned separately by
+the exact plan registry and `convergence-exact.json`.
 
-- `apps/desktop/{src,tests}/`
-- `apps/packaged/{src,tests}/`
-- `tools/pack/{src,tests,resources}/`
+Exact identities split `electron.contract`, `electron.shell`, and `closure`
+build/test nodes. Distribution, signing, and installed acceptance bind exact
+upstream receipts. A web/daemon-only change may therefore reuse an already
+accepted Shell artifact while running the Closure hot-update and cold-restart
+proof. Unknown, mixed, or incomplete inputs remain fail-closed to the broader
+plan.
 
-It claims `tools_dev_tests_required`, `tools_pack_tests_required`, and
-`workspace_validation_required`. A pure matching merge group keeps
-preflight/typecheck, workspace unit tests, desktop/packaged/tools-pack tests,
-and the focused packaged launcher update-loop fallback. It skips web workspace
-tests, broad E2E Vitest, UI P0, critical Playwright, and visual Playwright.
-
-Windows launcher-payload validation is a separate test set. Rule
-`certain-windows-launcher-payload` maps the Windows pack source unit to
-`windows_tools_pack_payload_tests_required`, which alone arms its Windows
-workload outside forced-full plans. The source unit includes the Windows
-tools-pack implementation and resources, its explicit shared-module closure,
-the Windows-only test file, launcher-proto and sidecar-proto sources, and the
-narrow platform/release/sidecar exports consumed by that closure.
-
-That exact shared-module closure is also a diagnostic signal: the flat
-`tools/pack/src/` root does not yet expose stable core, launcher, and
-platform-specific source units. The enumeration records the current dependency
-shape, but it is not a durable pattern to copy or a substitute for decomposing
-that source hierarchy. Until the source boundary or its conservative fallback
-is strengthened, this route remains an active migration surface.
-
-Desktop, packaged-runtime, mac-only, and unrelated tools-pack changes retain
-Linux package coverage without starting a Windows runner. Package manifests,
-workspace/lock configuration, build configuration, bins, vendor content,
-unknown inputs, and below-threshold queue inputs retain conservative broad or
-full behavior.
-
-Current evidence:
-
-- The latest 400 first-parent merges contain 23 pure packaged-leaf groups.
-- Direct merge-queue replay retains the Windows workload for 5 groups and omits
-  it for 18 desktop, packaged-runtime, mac-only, or unrelated tools-pack groups.
-- Nineteen earlier pure-leaf groups have successful narrow PR validation paired
-  with successful full merge-queue validation.
-- Recent pure-leaf PR runs spend about 3.4–4.7 elapsed minutes in the Windows
-  payload job, which can determine the validation critical path.
-- A current full merge-group run measures about 11.8 elapsed minutes and 68
-  runner-minutes. A representative pure-leaf narrow PR run measures about 4.2
-  elapsed minutes and 8.1 runner-minutes.
-- Expected savings are about 7.5 elapsed minutes and 60 runner-minutes per
-  qualifying single-PR group, before queue batching discounts.
+The current release target is roughly a five-minute Closure-only activation
+path when trusted products are reusable. This is an operational reference,
+not a timeout or evidence that safety checks may be omitted.
 
 ### Certain daemon core
 
 Rule `certain-daemon-core` covers `apps/daemon/src/` and
 `apps/daemon/tests/`, excluding `apps/daemon/src/sidecar/` and the
 `daemon-runtime-definition` UI P0 shadow surface. Package manifests, build
-configuration, bins, the packaged sidecar compatibility bridge, and runtime
+configuration, bins, the Electron Shell sidecar adapter boundary, and runtime
 definition source/companion tests stay medium-tier.
 
 A pure matching merge group keeps preflight and workspace typecheck, workspace

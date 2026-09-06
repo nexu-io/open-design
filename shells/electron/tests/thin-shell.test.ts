@@ -54,9 +54,9 @@ describe("Electron product shell", () => {
     });
     expect(macRuntime).not.toHaveProperty("dock.pinned");
     expect(JSON.parse(shellSource)).toMatchObject({
-      appId: "io.nexu.electron-foundation",
-      productName: "Open Design Electron Foundation",
-      executableName: "open-design-electron-foundation",
+      appId: "io.open-design.dev",
+      productName: "Open Design Dev",
+      executableName: "open-design-dev",
     });
     expect(policy.mac.targets).toEqual(["dir", "dmg"]);
     expect(policy.windows.targets).toEqual(["dir", "nsis"]);
@@ -123,11 +123,14 @@ describe("Electron product shell", () => {
     expect(rendererSource).toContain("createElectronRendererAdapter");
     expect(rendererSource).toContain("readElectronProductRuntime");
     expect(rendererSource).not.toContain("placeholder");
-    expect(preloadSource).toContain("DOMContentLoaded");
+    expect(preloadSource).not.toContain("DOMContentLoaded");
+    expect(preloadSource).toContain("acknowledgedReady");
+    expect(preloadSource).toContain("lifecycle:");
+    expect(preloadSource).toContain("installElectronRendererContract");
     expect(rendererSource).not.toContain("executeJavaScript");
     expect(preloadSource).toContain("@open-design/electron-kit/renderer");
     expect(preloadSource).toContain("ipcRenderer.send");
-    expect(preloadSource).toContain("ELECTRON_CONTENT_UPDATE_CHANNELS");
+    expect(preloadSource).toContain("OpenDesignElectronUpdaterStatusSnapshot");
     expect(rendererSource).toContain("createElectronContentUpdateHandler(contentUpdater)");
     expect(rendererSource).toContain("sender === window.webContents");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);

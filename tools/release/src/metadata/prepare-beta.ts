@@ -1,8 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
-import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   compareReleaseBaseVersions,
@@ -11,6 +9,7 @@ import {
   parseReleaseBaseVersion,
   type ReleaseBaseVersionTuple,
 } from "@open-design/release";
+import { readChannelBaseVersion } from "./channel-version.ts";
 
 const execFile = promisify(execFileCallback);
 
@@ -148,21 +147,6 @@ function parseStableMetadataJson(value: string): ParsedStableVersion {
   return { parsed: parsedStable, value: stableVersion };
 }
 
-async function readPackagedVersion(): Promise<string> {
-  const packageJsonPath = join(process.cwd(), "apps", "packaged", "package.json");
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
-
-  if (typeof packageJson.version !== "string") {
-    fail(`missing version in ${packageJsonPath}`);
-  }
-
-  if (parseReleaseBaseVersion(packageJson.version) == null) {
-    fail(`apps/packaged/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
-  }
-
-  return packageJson.version;
-}
-
 async function fetchGitTags(pattern: string): Promise<string[]> {
   const { stdout } = await execFile("git", ["tag", "--list", pattern]);
   return stdout
@@ -274,8 +258,8 @@ function readBooleanEnv(name: string): boolean {
   return value === "1" || value === "true" || value === "yes";
 }
 
-const packagedVersion = await readPackagedVersion();
-const packagedParsed = parseReleaseBaseVersion(packagedVersion) ?? fail(`invalid packaged version: ${packagedVersion}`);
+const channelVersion = await readChannelBaseVersion("beta");
+const channelParsed = parseReleaseBaseVersion(channelVersion) ?? fail(`invalid beta channel base version: ${channelVersion}`);
 const force = readBooleanEnv("OPEN_DESIGN_RELEASE_FORCE") || readBooleanEnv("RELEASE_FORCE");
 
 let latestStable: ParsedStableVersion | null = null;
@@ -300,12 +284,12 @@ if (stableMetadataUrl != null && stableMetadataUrl.length > 0) {
   }
 }
 
-if (latestStable != null && compareReleaseBaseVersions(packagedParsed, latestStable.parsed) <= 0) {
+if (latestStable != null && compareReleaseBaseVersions(channelParsed, latestStable.parsed) <= 0) {
   if (!force) {
-    fail(`packaged base version ${packagedVersion} must be strictly greater than latest stable ${latestStable.value}`);
+    fail(`beta channel base version ${channelVersion} must be strictly greater than latest stable ${latestStable.value}`);
   }
   console.warn(
-    `[release-beta] force enabled: allowing packaged base version ${packagedVersion} against latest stable ${latestStable.value}`,
+    `[release-beta] force enabled: allowing beta channel base version ${channelVersion} against latest stable ${latestStable.value}`,
   );
 }
 
@@ -324,9 +308,9 @@ if (latestMetadataJson == null) {
   // is an intentional cold-start/reset behavior for a missing beta metadata
   // object, not a fallback to any updater feed or GitHub release state.
   latestBeta = {
-    baseVersion: packagedVersion,
+    baseVersion: channelVersion,
     betaNumber: 0,
-    betaVersion: `${packagedVersion}-beta.0`,
+    betaVersion: `${channelVersion}-beta.0`,
   };
   stateSource = "missing beta metadata.json fallback beta.0";
   console.log("[release-beta] beta metadata.json: not found; using beta.0 fallback");
@@ -342,13 +326,13 @@ if (latestBeta != null) {
     fail(`invalid beta base version in ${stateSource}: ${beta.baseVersion}`);
   }
 
-  const ordering = compareReleaseBaseVersions(packagedParsed, existingBase);
+  const ordering = compareReleaseBaseVersions(channelParsed, existingBase);
   if (ordering < 0) {
     if (!force) {
-      fail(`packaged base version ${packagedVersion} regressed below current beta base version ${beta.baseVersion}`);
+      fail(`beta channel base version ${channelVersion} regressed below current beta base version ${beta.baseVersion}`);
     }
     console.warn(
-      `[release-beta] force enabled: ignoring current beta base version ${beta.baseVersion} for packaged base version ${packagedVersion}`,
+      `[release-beta] force enabled: ignoring current beta base version ${beta.baseVersion} for beta channel base version ${channelVersion}`,
     );
   }
 
@@ -357,13 +341,13 @@ if (latestBeta != null) {
   }
 }
 
-const betaVersion = `${packagedVersion}-beta.${betaNumber}`;
+const betaVersion = `${channelVersion}-beta.${betaNumber}`;
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const commit = process.env.GITHUB_SHA ?? "";
 const releaseName = `Open Design Beta ${betaVersion}`;
 
 console.log(`[release-beta] channel: beta`);
-console.log(`[release-beta] base version: ${packagedVersion}`);
+console.log(`[release-beta] base version: ${channelVersion}`);
 console.log(`[release-beta] beta version: ${betaVersion}`);
 console.log(`[release-beta] force: ${force ? "true" : "false"}`);
 console.log(`[release-beta] beta state source: ${stateSource}`);
@@ -371,7 +355,7 @@ if (latestStable != null) console.log(`[release-beta] latest stable: ${latestSta
 if (latestBeta != null) console.log(`[release-beta] latest beta: ${latestBeta.betaVersion}`);
 
 setOutput("asset_version_suffix", "");
-setOutput("base_version", packagedVersion);
+setOutput("base_version", channelVersion);
 setOutput("beta_number", String(betaNumber));
 setOutput("beta_version", betaVersion);
 setOutput("branch", branch);

@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { act, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 
 import { DesignBrowserPanel } from '../../src/components/DesignBrowserPanel';
 import { I18nProvider } from '../../src/i18n';
@@ -30,9 +30,9 @@ let restoreHost: (() => void) | null = null;
 beforeEach(() => {
   window.localStorage.clear();
   vi.mocked(writeProjectTextFile).mockResolvedValue(null);
-  // Makes isOpenDesignHostAvailable() true so the panel renders the desktop
+  // Makes isOpenDesignElectronAvailable() true so the panel renders the desktop
   // <webview> branch (rather than the iframe fallback).
-  restoreHost = installMockOpenDesignHost();
+  restoreHost = installMockOpenDesignElectron();
 });
 
 afterEach(() => {
@@ -869,7 +869,7 @@ describe('DesignBrowserPanel <webview> navigation', () => {
       expect(document.querySelector('.preview-draw-toolbar')).toBeNull();
       return { ok: true as const, dataUrl: 'data:image/png;base64,cG5n', w: 10, h: 10 };
     });
-    restoreHost = installMockOpenDesignHost({
+    restoreHost = installMockOpenDesignElectron({
       host: { capture: { page: capturePage } },
     });
 

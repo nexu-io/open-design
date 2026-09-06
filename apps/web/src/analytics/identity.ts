@@ -5,7 +5,7 @@
 // headers (see @open-design/contracts/analytics).
 
 import type { AnalyticsClientType } from '@open-design/contracts/analytics';
-import { detectOpenDesignHostClientType } from '@open-design/host';
+import { detectOpenDesignElectronClientType } from '@open-design/electron-contract';
 
 const ANONYMOUS_ID_KEY = 'open-design:analytics.anonymous_id';
 const SESSION_ID_KEY = 'open-design:analytics.session_id';
@@ -152,7 +152,7 @@ export function claimProjectTurnIndex(
 // Falls back to 'web' when the host bridge isn't present.
 export function detectClientType(): AnalyticsClientType {
   if (typeof window === 'undefined') return 'web';
-  return detectOpenDesignHostClientType();
+  return detectOpenDesignElectronClientType();
 }
 
 // Read the launch_source for app_launch. Best-effort: PerformanceNavigation

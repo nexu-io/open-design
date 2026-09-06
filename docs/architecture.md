@@ -30,16 +30,17 @@ receives the selected daemon port and rewrites `/api/*`, `/artifacts/*`, and
 `/frames/*` to the sibling Express process. Ports are transport details; they
 do not define process identity, namespaces, or daemon data roots.
 
-### Packaged desktop and packaged headless
+### Electron Shell
 
-`apps/packaged` starts the packaged daemon and web sidecars. The Electron entry
-also starts the desktop shell; the headless entry omits desktop. Packaged code
-resolves channel/namespace-scoped runtime and data identities before spawning
-the daemon, and the desktop discovers the web URL through sidecar IPC rather
-than assuming a port.
+`shells/electron` is the only Electron product composition root. It resolves a
+signed Standalone generation, declares the complete daemon/web resource set,
+and uses Sidecar's guarded lifecycle atomics before revealing the renderer.
+`electron-kit` owns reusable Electron mechanics; tools call only typed Shell
+request/receipt adapters. Channel and namespace scope persistent/runtime
+identity, while ports remain transient transport details.
 
-Read `tools/pack/AGENTS.md` before changing packaged launch, update, installer,
-or channel identity behavior.
+Read `shells/electron/AGENTS.md` before changing launch, update, installer, or
+channel identity behavior.
 
 ### Container and daemon-served production
 
@@ -270,7 +271,7 @@ Shared DTOs live in `packages/contracts`.
 | Shared web/daemon DTOs and prompt contracts | `packages/contracts/src/` |
 | Runtime definitions and engine | `apps/daemon/src/runtimes/` |
 | Functional-skill loader | `apps/daemon/src/skills.ts` |
-| Packaged launch | `apps/packaged/`, `tools/pack/` |
+| Electron Shell and package lifecycle | `shells/electron/`, `packages/electron-kit/`, `tools/pack/` |
 | Development lifecycle | `tools/dev/` |
 | User-level validation | `e2e/` |
 

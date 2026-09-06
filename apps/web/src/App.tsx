@@ -224,7 +224,7 @@ import {
   removeProjectFromDisplaySnapshots,
   writeProjectDisplaySnapshot,
 } from './state/project-display-cache';
-import { getOpenDesignHost, type OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import { getOpenDesignElectron, signalElectronReady, type OpenDesignElectronProjectImportSuccess } from '@open-design/electron-contract';
 import { useI18n } from './i18n';
 import { liveArtifactTabId } from './types';
 import type {
@@ -857,7 +857,7 @@ function AppInner() {
   const { t } = useI18n();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
   const clientType = useMemo(() => detectClientType(), []);
-  const hostPlatform = useMemo(() => getOpenDesignHost()?.client.platform, []);
+  const hostPlatform = useMemo(() => getOpenDesignElectron()?.client.platform, []);
   useModalWindowDragGuard();
   const workspaceContextState = useWorkspaceContext();
   const {
@@ -920,6 +920,7 @@ function AppInner() {
     if (typeof document !== 'undefined') {
       document.documentElement.setAttribute('data-od-app-mounted', '1');
       document.querySelectorAll('.od-loading-shell').forEach((node) => node.remove());
+      signalElectronReady();
     }
   }, []);
   // Desktop vibrancy focus response: an unfocused window drops the cream
@@ -1378,7 +1379,7 @@ function AppInner() {
   // callbacks. Stacked live streams are what deadlocked the packaged app —
   // each navigation/focus refresh opened another slow cold-probe stream,
   // and once they pinned every upstream connection slot the whole od://
-  // proxy starved (see apps/packaged/src/index.ts ignore-connections-limit
+  // proxy starved (see the Electron Shell's ignore-connections-limit
   // note for the other half of that fix).
   const beginAgentStreamRequest = useCallback(() => {
     agentStreamAbortRef.current?.abort();
@@ -3501,7 +3502,7 @@ function AppInner() {
   // atomically. The renderer never sees the path, token, or daemon DTO;
   // it receives host-owned project identifiers and refreshes project state
   // through the normal daemon API.
-  const handleImportFolderResponse = useCallback(async (result: OpenDesignHostProjectImportSuccess) => {
+  const handleImportFolderResponse = useCallback(async (result: OpenDesignElectronProjectImportSuccess) => {
     rememberLocalProject(result.projectId);
     const importedProjectContext = workspaceContextRef.current;
     const project = await getProject(result.projectId, importedProjectContext);

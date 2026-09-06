@@ -1,82 +1,81 @@
-import { ToolPackCache } from "../cache/index.js";
-import type { ToolPackConfig } from "../config/index.js";
-import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from "./app.js";
-import { seedPackagedAppConfig } from "./app-config.js";
-import { finalizeMacArtifacts } from "./artifacts.js";
-import { resolveElectronBuilderTargets, runElectronBuilder } from "./builder.js";
-import { scrubMacExtendedAttributes } from "./fs.js";
-import { createMacLauncherPayloadArchive } from "./payload.js";
-import { resolveMacPaths } from "./paths.js";
-import { collectMacSizeReport } from "./report.js";
-import type { MacBuildOutput, MacPackResult, MacPackTiming } from "./types.js";
-import { ensureMacWorkspaceBuild } from "./workspace.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
-function logMacBuildProgress(message: string, fields: Record<string, unknown> = {}): void {
-  const suffix = Object.entries(fields)
-    .map(([key, value]) => `${key}=${String(value)}`)
-    .join(" ");
-  process.stderr.write(`[tools-pack mac] ${message}${suffix.length === 0 ? "" : ` ${suffix}`}\n`);
+import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
+
+import type { ToolPackConfig } from "../config/index.js";
+import { runPnpm } from "./commands.js";
+
+type ShellPackReceipt = Readonly<{
+  schemaVersion: 1;
+  operation: "electron.pack.build";
+  channel: string;
+  namespace: string;
+  releaseVersion: string;
+  shellVersion: string;
+  identity: Readonly<{
+    appId: string;
+    appBundleName: string;
+    executableName: string;
+    productName: string;
+    version: string;
+  }>;
+  distribution: Readonly<{
+    schemaVersion: 1;
+    platform: "mac" | "win";
+    outputRoot: string;
+    artifacts: readonly string[];
+  }>;
+}>;
+
+function artifact(receipt: ShellPackReceipt, suffix: string): string | null {
+  return receipt.distribution.artifacts.find((path) => path.toLowerCase().endsWith(suffix)) ?? null;
 }
 
-export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
-  const paths = resolveMacPaths(config);
-  const targets = resolveElectronBuilderTargets(config.to as MacBuildOutput);
-  const cache = new ToolPackCache(config.roots.cacheRoot);
-  const timings: MacPackTiming[] = [];
-  const runPhase = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {
-    const startedAt = Date.now();
-    logMacBuildProgress("phase:start", { phase });
-    try {
-      const result = await task();
-      logMacBuildProgress("phase:done", { durationMs: Date.now() - startedAt, phase });
-      return result;
-    } catch (error) {
-      logMacBuildProgress("phase:failed", {
-        durationMs: Date.now() - startedAt,
-        error: error instanceof Error ? error.message : String(error),
-        phase,
-      });
-      throw error;
-    } finally {
-      timings.push({ durationMs: Date.now() - startedAt, phase });
-    }
-  };
-
-  await runPhase("workspace-build", async () => {
-    await ensureMacWorkspaceBuild(config, cache);
-  });
-  await runPhase("seed-app-config", async () => {
-    await seedPackagedAppConfig(config);
-  });
-  await runPhase("resource-tree", async () => {
-    await copyResourceTree(config, paths);
-  });
-  const tarballs = await runPhase("workspace-tarballs", async () => collectWorkspaceTarballs(config, paths));
-  await runPhase("assembled-app", async () => {
-    await writeAssembledApp(config, paths, tarballs);
-  });
-  await runPhase("electron-builder", async () => {
-    await runElectronBuilder(config, paths, targets);
-  });
-  await runPhase("xattr-scrub", async () => {
-    await scrubMacExtendedAttributes(paths.appPath);
-  });
-  const payloadPath = await runPhase("payload-artifact", async () => createMacLauncherPayloadArchive(config, paths));
-  const artifacts = await runPhase("artifacts", async () => finalizeMacArtifacts(config, paths));
-  const sizeReport = await runPhase("size-report", async () => collectMacSizeReport(config, paths, artifacts, targets));
-
-  return {
-    appPath: paths.appPath,
-    cacheReport: cache.report(),
-    dmgPath: artifacts.dmgPath,
-    latestMacYmlPath: artifacts.latestMacYmlPath,
-    outputRoot: config.roots.output.namespaceRoot,
-    payloadPath,
-    resourceRoot: paths.resourceRoot,
+export async function packMac(config: ToolPackConfig) {
+  if (config.standaloneBootstrapUrl == null) {
+    throw new Error("tools-pack mac build requires --standalone-bootstrap-url (or OD_ELECTRON_STANDALONE_BOOTSTRAP_URL)");
+  }
+  const version = config.appVersion ?? "0.1.0";
+  const channel = releaseChannelFromVersion(version)
+    ?? releaseChannelFromNamespace(config.namespace)
+    ?? "stable";
+  const requestPath = join(config.roots.output.namespaceRoot, "shell-pack-request.json");
+  const receiptPath = join(config.roots.output.namespaceRoot, "shell-pack-receipt.json");
+  await mkdir(config.roots.output.namespaceRoot, { recursive: true });
+  await writeFile(requestPath, `${JSON.stringify({
+    schemaVersion: 1,
+    operation: "electron.pack.build",
+    bootstrapUrl: config.standaloneBootstrapUrl,
+    channel,
+    installationRoot: join(config.roots.cacheRoot, "standalone", channel),
+    namespace: config.namespace,
+    outputDirectory: config.roots.output.namespaceRoot,
+    releaseVersion: version,
+  }, null, 2)}\n`, "utf8");
+  const startedAt = Date.now();
+  await runPnpm(config, ["--filter", "@open-design/shell-electron", "pack:adapter", "--", "--request", requestPath, "--receipt", receiptPath]);
+  const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as ShellPackReceipt;
+  if (receipt.schemaVersion !== 1 || receipt.operation !== "electron.pack.build" || receipt.distribution.platform !== "mac") {
+    throw new Error("Shell pack adapter returned an invalid mac receipt");
+  }
+  const appPath = artifact(receipt, ".app");
+  if (appPath == null) throw new Error("Shell pack adapter did not produce a mac app bundle");
+  return Object.freeze({
+    schemaVersion: 1 as const,
+    operation: "tools-pack.build" as const,
+    platform: "mac" as const,
+    channel,
+    namespace: config.namespace,
+    releaseVersion: version,
+    shellVersion: receipt.shellVersion,
+    identity: receipt.identity,
+    appPath,
+    dmgPath: artifact(receipt, ".dmg"),
+    artifacts: receipt.distribution.artifacts,
+    outputRoot: receipt.distribution.outputRoot,
+    receiptPath,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-    sizeReport,
-    timings,
-    to: config.to,
-    zipPath: artifacts.zipPath,
-  };
+    timings: [Object.freeze({ phase: "shell-pack", durationMs: Date.now() - startedAt })],
+  });
 }

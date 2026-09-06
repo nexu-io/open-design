@@ -1,4 +1,4 @@
-import { getOpenDesignHost } from '@open-design/host';
+import { getOpenDesignElectron } from '@open-design/electron-contract';
 import type { AppTheme } from '../types';
 
 const ACCENT_VARS = [
@@ -82,7 +82,7 @@ export function applyAppearanceToDocument({
   // follows the OS appearance, so the light app over a dark OS sat on dark
   // glass and read as a muddy gray (#94). Feature-detected — browsers and
   // older host builds have no appearance capability.
-  getOpenDesignHost()?.appearance?.setTheme(FORCED_APP_THEME);
+  getOpenDesignElectron()?.appearance?.setTheme(FORCED_APP_THEME);
 
   const normalized = resolveAccentColor(accentColor);
   const vars = accentVars(normalized);

@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
+import type { OpenDesignElectronUpdaterStatusSnapshot } from '@open-design/electron-contract';
 
-import { Icon } from './Icon';
 import { popoverIn } from '../motion';
-import { openExternalUrl } from '../providers/registry';
 import {
   deriveUpdaterModel,
   openUpdaterInstaller,
-  quitAfterUpdaterInstallerOpen,
   readUpdaterStatus,
-  restartSafetyFromActionResult,
   restartSafetyFromUpdaterStatus,
   subscribeToUpdaterStatus,
   type UpdaterModel,
@@ -27,8 +23,6 @@ import {
 } from '../analytics/events';
 import styles from './UpdaterPopup.module.css';
 
-const INSTALL_HANDOFF_WATCHDOG_MS = 10_000;
-
 /** Rocket badge from the update visual language, on the ready indicator. */
 function RocketBadgeIcon({ className }: { className?: string }) {
   return (
@@ -44,7 +38,7 @@ function RocketBadgeIcon({ className }: { className?: string }) {
   );
 }
 
-type InstallState = 'idle' | 'opening' | 'handoff' | 'quitting' | 'recoverable';
+type InstallState = 'idle' | 'applying' | 'handoff';
 type Translator = (key: keyof Dict, vars?: Record<string, string | number>) => string;
 type UpdaterPopupProps = {
   allowSilentUpdates?: boolean;
@@ -60,9 +54,6 @@ type UpdaterPopupProps = {
 
 function versionText(t: Translator, model: UpdaterModel): string {
   const version = model.availableVersion;
-  if (model.reinstall != null) {
-    return version == null ? t('updater.reinstallReadyGeneric') : t('updater.reinstallReadyVersion', { version });
-  }
   if (model.updateKind === 'payload') {
     return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
   }
@@ -99,7 +90,7 @@ function updateVersionProps(model: UpdaterModel, appVersionBefore: string | null
 }
 
 function updaterErrorCode(model: UpdaterModel): string | undefined {
-  return model.status?.error?.code;
+  return model.target == null ? undefined : model.status?.lines[model.target].error?.code;
 }
 
 /**
@@ -121,7 +112,6 @@ export function UpdaterPopup({
   const t = useT();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const actionInFlightRef = useRef(false);
-  const handoffWatchdogRef = useRef<number | null>(null);
   const [model, setModel] = useState<UpdaterModel>(() => deriveUpdaterModel(null));
   const [panelOpen, setPanelOpen] = useState(false);
   const [installState, setInstallState] = useState<InstallState>('idle');
@@ -141,28 +131,6 @@ export function UpdaterPopup({
       mountedRef.current = false;
     };
   }, []);
-
-  const clearHandoffWatchdog = useCallback(() => {
-    if (handoffWatchdogRef.current == null) return;
-    window.clearTimeout(handoffWatchdogRef.current);
-    handoffWatchdogRef.current = null;
-  }, []);
-
-  const recoverFromInstallerHandoff = useCallback(() => {
-    handoffWatchdogRef.current = null;
-    actionInFlightRef.current = false;
-    setInstallState('recoverable');
-    setPanelOpen(true);
-  }, []);
-
-  const startHandoffWatchdog = useCallback(() => {
-    clearHandoffWatchdog();
-    // The quit IPC can resolve before Electron has actually torn down the
-    // renderer. Keep the handoff UI up, but do not leave it stuck forever.
-    handoffWatchdogRef.current = window.setTimeout(recoverFromInstallerHandoff, INSTALL_HANDOFF_WATCHDOG_MS);
-  }, [clearHandoffWatchdog, recoverFromInstallerHandoff]);
-
-  useEffect(() => clearHandoffWatchdog, [clearHandoffWatchdog]);
 
   useEffect(() => {
     if (installState !== 'idle') return;
@@ -230,7 +198,7 @@ export function UpdaterPopup({
 
   useEffect(() => {
     let mounted = true;
-    const applyStatus = (status: OpenDesignHostUpdaterStatusSnapshot) => {
+    const applyStatus = (status: OpenDesignElectronUpdaterStatusSnapshot) => {
       if (!mounted) return;
       setModel(deriveUpdaterModel(status, { hostAvailable: true }));
     };
@@ -250,9 +218,9 @@ export function UpdaterPopup({
   }, []);
 
   const ready = model.environment === 'desktop' && model.shouldShowControl;
-  const installBusy = installState === 'opening' || installState === 'handoff' || installState === 'quitting';
-  const quitRecoverable = installState === 'recoverable' || installState === 'quitting';
-  const canStartInstall = ready || installState === 'recoverable';
+  const installBusy = installState === 'applying' || installState === 'handoff';
+  const quitRecoverable = false;
+  const canStartInstall = ready;
   const showControl = ready || installState !== 'idle';
   const installFailureText = model.canOpenInstaller ? t('updater.openFailedFallback') : t('updater.failed');
   const controlLabel = quitRecoverable
@@ -268,7 +236,7 @@ export function UpdaterPopup({
     [appVersionBefore, model.availableVersion],
   );
 
-  const indicatorSurfaceKey = `${model.currentVersion ?? 'unknown'}->${model.availableVersion ?? 'unknown'}:${model.status?.downloadPath ?? 'unknown'}`;
+  const indicatorSurfaceKey = `${model.currentVersion ?? 'unknown'}->${model.availableVersion ?? 'unknown'}:${model.target ?? 'unknown'}:${model.target == null ? 0 : model.status?.lines[model.target].revision ?? 0}`;
   const lastIndicatorSurfaceKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!ready) {
@@ -333,9 +301,8 @@ export function UpdaterPopup({
   const installAndQuit = async () => {
     if (actionInFlightRef.current || !canStartInstall) return;
     actionInFlightRef.current = true;
-    clearHandoffWatchdog();
     setInstallError(null);
-    setInstallState('opening');
+    setInstallState('applying');
     setPanelOpen(true);
     trackUpdateIndicatorClick(analytics.track, {
       page_name: 'home',
@@ -383,24 +350,13 @@ export function UpdaterPopup({
       setModel(result.model);
       setInstallError(null);
       setInstallState('handoff');
-      startHandoffWatchdog();
       trackUpdateInstallResult(analytics.track, {
         page_name: 'home',
         area: 'update_prompt',
         result: 'success',
         ...versionProps,
       });
-      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
-      if (!quitResult.ok) {
-        const quitSafety = restartSafetyFromActionResult(quitResult);
-        if (quitSafety != null) setInstallError(restartSafetyText(t, quitSafety));
-        clearHandoffWatchdog();
-        actionInFlightRef.current = false;
-        setInstallState('recoverable');
-        setPanelOpen(true);
-      }
     } catch (error) {
-      clearHandoffWatchdog();
       actionInFlightRef.current = false;
       setInstallError(installFailureText);
       setInstallState('idle');
@@ -412,24 +368,6 @@ export function UpdaterPopup({
         ...versionProps,
       });
     }
-  };
-
-  const retryQuit = async () => {
-    if (actionInFlightRef.current || installState !== 'recoverable') return;
-    actionInFlightRef.current = true;
-    clearHandoffWatchdog();
-    setInstallState('quitting');
-    startHandoffWatchdog();
-    try {
-      const quitResult = await quitAfterUpdaterInstallerOpen({ payload: { source: 'updater-prompt' } });
-      if (quitResult.ok) return;
-    } catch {
-      // Keep the explicit quit recovery action available.
-    }
-    clearHandoffWatchdog();
-    actionInFlightRef.current = false;
-    setInstallState('recoverable');
-    setPanelOpen(true);
   };
 
   if (!showControl) return null;
@@ -477,11 +415,7 @@ export function UpdaterPopup({
             t={t}
             onClose={close}
             onInstall={() => {
-              if (installState === 'recoverable') {
-                void retryQuit();
-              } else {
-                void installAndQuit();
-              }
+              void installAndQuit();
             }}
             onSilentUpdatesChange={(next) => {
               void handleSilentUpdatesChange(next);
@@ -490,19 +424,6 @@ export function UpdaterPopup({
         ) : null}
       </AnimatePresence>
     </div>
-  );
-}
-
-function ReinstallLearnMoreLink({ t, url }: { t: Translator; url: string }) {
-  return (
-    <button
-      className="updater-popup__link"
-      data-testid="updater-reinstall-learn-more"
-      type="button"
-      onClick={() => void openExternalUrl(url)}
-    >
-      {t('updater.reinstallLearnMore')} <Icon name="external-link" size={12} />
-    </button>
   );
 }
 
@@ -553,9 +474,6 @@ function UpdaterPopupPanel({
         {quitRecoverable && model.updateKind === 'payload'
           ? null
           : <p>{quitRecoverable ? t('updater.quitFailedBody') : versionText(t, model)}</p>}
-        {!quitRecoverable && model.reinstall?.url != null ? (
-          <ReinstallLearnMoreLink t={t} url={model.reinstall.url} />
-        ) : null}
         {channelLabel != null ? <span className="updater-popup__badge">{channelLabel}</span> : null}
         {installError != null ? (
           <p className="updater-popup__error" data-testid="updater-install-error" role="alert">

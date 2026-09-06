@@ -61,7 +61,7 @@ host created the target file, then the write failed or was blocked.
   file extension/MIME mapping, and UI disabled/error states.
 - Run focused export tests, then `pnpm --filter @open-design/web typecheck`.
 - If Electron download handling changed, also run
-  `pnpm --filter @open-design/desktop typecheck`.
+  `pnpm --filter @open-design/shell-electron typecheck`.
 - Before landing, run `pnpm guard`, inspect the staged diff for unrelated files,
   generated artifacts, and accidental secrets, then use the repository's PR
   quality-gate workflow if the fix is being prepared for review.

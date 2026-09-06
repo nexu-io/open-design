@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "channels": {
+    "beta": { "baseVersion": "0.21.1" },
+    "prerelease": { "baseVersion": "0.21.1" },
+    "preview": { "baseVersion": "0.21.1" },
+    "stable": { "baseVersion": "0.21.1" }
+  }
+}

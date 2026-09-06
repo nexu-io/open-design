@@ -10,7 +10,7 @@ describe("Electron exact Shell adapter contract", () => {
   it("accepts only the finite scene request", () => {
     const request = {
       acceptedClosureBaselineFile: absolute("closure.mjs"), operation: "electron.scene.build", sceneDirectory: absolute("scene"), schemaVersion: 1,
-      shellManifestFile: absolute("shell.json"), standaloneLauncherFile: absolute("standalone-launcher.mjs"), target: "darwin-arm64",
+      resourceReceiptFile: absolute("closure-resources.json"), shellManifestFile: absolute("shell.json"), standaloneLauncherFile: absolute("standalone-launcher.mjs"), target: "darwin-arm64",
     } as const;
     expect(parseElectronExactSceneRequest(request)).toEqual(request);
     expect(() => parseElectronExactSceneRequest({ ...request, target: "linux-x64" })).toThrow(/target/u);

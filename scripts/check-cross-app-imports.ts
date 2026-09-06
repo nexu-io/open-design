@@ -40,16 +40,9 @@ type CrossAppImportAllowlistEntry = {
   reason: string;
 };
 
-// Only deliberate, documented exceptions belong here. Prefer promoting the
-// shared logic to packages/ instead.
-const crossAppImportAllowlist: CrossAppImportAllowlistEntry[] = [
-  {
-    pathPattern: /^apps\/packaged\/(?:src|tests)\//,
-    specifierPattern: /^@open-design\/desktop\/main$/,
-    reason:
-      "apps/packaged is the thin packaged Electron entry that wraps the desktop shell through its declared ./main package export",
-  },
-];
+// Only deliberate, documented exceptions belong here. Prefer promoting shared
+// logic to packages/. There are currently no cross-app exceptions.
+const crossAppImportAllowlist: CrossAppImportAllowlistEntry[] = [];
 
 function appDirectoryForRepositoryPath(repositoryPath: string): string | null {
   const [scope, appDirectory] = repositoryPath.split("/");

@@ -13,16 +13,19 @@
   },
   "scripts": {
     "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build:resources": "node ./scripts/build-resources.ts",
     "pretest": "pnpm --filter @open-design/standalone build",
     "test": "vitest run",
     "pretypecheck": "pnpm --filter @open-design/standalone build",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@open-design/contracts": "workspace:*",
+    "@open-design/electron-contract": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "@open-design/standalone": "workspace:*"
+    "@open-design/standalone": "workspace:*",
+    "jszip": "3.10.1"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

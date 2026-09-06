@@ -1,4 +1,4 @@
-import type { OpenDesignHostProjectImportResult } from '@open-design/host';
+import type { OpenDesignElectronProjectImportResult } from '@open-design/electron-contract';
 
 /**
  * Best-effort flattening of the `details` field that the
@@ -31,7 +31,7 @@ export function formatPickAndImportErrorDetails(details: unknown): string | unde
 }
 
 export function formatPickAndImportFailure(
-  result: OpenDesignHostProjectImportResult,
+  result: OpenDesignElectronProjectImportResult,
 ): { message: string; details?: string } {
   const reason = 'reason' in result && typeof result.reason === 'string'
     ? result.reason

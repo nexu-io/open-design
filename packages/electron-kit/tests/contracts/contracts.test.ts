@@ -9,20 +9,21 @@ import {
 const hash = "a".repeat(64);
 
 describe("Electron integration boundary", () => {
-  it("requires Shell identity to match the manifest", () => {
+  it("keeps channel release identity independent from Shell compatibility", () => {
     expect(validateElectronShellManifest({
       schemaVersion: 1,
       appId: "io.nexu.electron-foundation",
       productName: "Electron Foundation",
       publisher: "Example Company",
       executableName: "electron-foundation",
-      version: "0.1.0",
+      version: "0.1.0-dev.7",
       channel: "dev",
       namespace: "electron-foundation",
       protocol: "od",
       window: { width: 960, height: 640, title: "Electron Foundation" },
+      splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
       shell: { type: "electron", version: "0.1.0", buildHash: hash, digest: hash },
-    }).namespace).toBe("electron-foundation");
+    })).toMatchObject({ namespace: "electron-foundation", version: "0.1.0-dev.7", shell: { version: "0.1.0" } });
   });
 
   it("does not publish or implement the upstream Sidecar transport", async () => {

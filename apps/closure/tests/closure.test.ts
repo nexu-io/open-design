@@ -11,7 +11,10 @@ import {
   type GenerationRecord,
 } from "@open-design/standalone";
 
-const sidecars = vi.hoisted(() => ({ spawned: [] as Array<{ app: string; env: NodeJS.ProcessEnv }> }));
+const sidecars = vi.hoisted(() => ({
+  invoked: [] as Array<{ app: string; input: unknown; type: string }>,
+  spawned: [] as Array<{ app: string; env: NodeJS.ProcessEnv }>,
+}));
 vi.mock("@open-design/sidecar", () => ({
   async stopSidecar() { return { forcedPids: [], remainingPids: [] }; },
   async spawnSidecar(input: { env: NodeJS.ProcessEnv; stamp: { app: string } }) {
@@ -26,7 +29,10 @@ vi.mock("@open-design/sidecar", () => ({
       ? { state: "running", url: "http://127.0.0.1:17578" }
       : { state: "running", url: "http://127.0.0.1:17579" };
   },
-  async invokeSidecar() { return { accepted: true }; },
+  async invokeSidecar(stamp: { app: string }, type: string, input: unknown) {
+    sidecars.invoked.push({ app: stamp.app, input, type });
+    return { accepted: true };
+  },
 }));
 
 import { prepareClosureShellUpdate } from "../src/index.js";
@@ -35,6 +41,7 @@ import { standaloneGenerationHandoff } from "../src/launcher.js";
 describe("Closure generation runtime", () => {
   it("starts exact daemon/Web resources and projects their attachment-fenced endpoints", async () => {
     sidecars.spawned.length = 0;
+    sidecars.invoked.length = 0;
     const runtimeRoot = join(tmpdir(), "closure-runtime-test");
     const generation: GenerationRecord = {
       schemaVersion: 4,
@@ -83,8 +90,18 @@ describe("Closure generation runtime", () => {
       outcome: "accepted",
       output: { daemon: { url: "http://127.0.0.1:17578" }, web: { url: "http://127.0.0.1:17579" } },
     });
+    const authSecret = Buffer.alloc(32, 9).toString("base64");
+    await expect(handle.invoke({
+      requestId: "electron-auth",
+      attachmentId: request.attachment.id,
+      bindingDigest: request.binding.digest,
+      command: "open-design.electron-auth.register.v1",
+      input: { schemaVersion: 1, operation: "register", secret: authSecret },
+    })).resolves.toMatchObject({ outcome: "accepted", output: { schemaVersion: 1, accepted: true } });
     expect(sidecars.spawned.map(({ app }) => app)).toEqual(["daemon", "web"]);
+    expect(sidecars.spawned[0]!.env).toMatchObject({ OD_REQUIRE_DESKTOP_AUTH: "1" });
     expect(sidecars.spawned[1]!.env).toMatchObject({ OD_PORT: "17578", OD_WEB_OUTPUT_MODE: "standalone" });
+    expect(sidecars.invoked).toContainEqual({ app: "daemon", type: "register-desktop-auth", input: { secret: authSecret } });
     await expect(handle.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
   });
 

@@ -8,15 +8,15 @@ vi.mock('../../src/components/home-hero/PlaceholderCarousel', () => ({
 }));
 
 import { HomeView } from '../../src/components/HomeView';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignElectronAvailable, pickElectronWorkingDir } from '@open-design/electron-contract';
 import { openFolderDialog } from '../../src/providers/registry';
 
-vi.mock('@open-design/host', async () => {
-  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+vi.mock('@open-design/electron-contract', async () => {
+  const actual = await vi.importActual<typeof import('@open-design/electron-contract')>('@open-design/electron-contract');
   return {
     ...actual,
-    isOpenDesignHostAvailable: vi.fn(),
-    pickHostWorkingDir: vi.fn(),
+    isOpenDesignElectronAvailable: vi.fn(),
+    pickElectronWorkingDir: vi.fn(),
   };
 });
 
@@ -31,8 +31,8 @@ vi.mock('../../src/providers/registry', async () => {
   };
 });
 
-const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
-const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
+const mockedIsHostAvailable = vi.mocked(isOpenDesignElectronAvailable);
+const mockedPickHostWorkingDir = vi.mocked(pickElectronWorkingDir);
 const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
 
 function renderHome() {

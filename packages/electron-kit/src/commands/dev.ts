@@ -48,7 +48,10 @@ export async function prepareElectronDevShell(input: PrepareElectronDevShellInpu
 
 export async function devElectronShell(input: PrepareElectronDevShellInput): Promise<number> {
   const prepared = await prepareElectronDevShell(input);
-  const child = spawn(prepared.electronPath, [prepared.scene.sceneRoot, ...normalizeElectronDevArgv(input.argv ?? [])], { env: process.env, stdio: "inherit" });
+  // Native Electron/Chromium switches must precede the app path. Keeping the
+  // caller's sequence untouched also means an explicitly repeated Chromium
+  // switch retains Electron's own last-value-wins behavior.
+  const child = spawn(prepared.electronPath, [...normalizeElectronDevArgv(input.argv ?? []), prepared.scene.sceneRoot], { env: process.env, stdio: "inherit" });
   return await new Promise<number>((resolveCode, reject) => {
     child.once("error", reject);
     child.once("exit", (exitCode) => resolveCode(exitCode ?? 1));

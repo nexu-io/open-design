@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { useLayoutEffect, useRef, useState, type ReactElement } from 'react';
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 import type {
-  OpenDesignHostPreviewNavigationFailure,
-  OpenDesignHostPreviewNavigationFailureListener,
-} from '@open-design/host';
+  OpenDesignElectronPreviewNavigationFailure,
+  OpenDesignElectronPreviewNavigationFailureListener,
+} from '@open-design/electron-contract';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 
@@ -7232,7 +7232,7 @@ describe('FileViewer SVG artifacts', () => {
         exports: ['html'],
       },
     });
-    const restoreHost = installMockOpenDesignHost();
+    const restoreHost = installMockOpenDesignElectron();
     const fetchMock = vi.fn(async (input: unknown) => {
       const url = typeof input === 'string'
         ? input
@@ -7290,7 +7290,7 @@ describe('FileViewer SVG artifacts', () => {
       mime: 'text/html',
       kind: 'html',
     });
-    const restoreHost = installMockOpenDesignHost();
+    const restoreHost = installMockOpenDesignElectron();
     const fetchMock = vi.fn(async (input: unknown) => {
       const url = typeof input === 'string'
         ? input
@@ -9329,13 +9329,13 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('keeps a verified srcDoc frame visible when Electron reports a late ERR_ABORTED', () => {
     vi.useFakeTimers();
-    let latestNavigationFailure: OpenDesignHostPreviewNavigationFailure | null = null;
-    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
-    const emitNavigationFailure = (failure: OpenDesignHostPreviewNavigationFailure) => {
+    let latestNavigationFailure: OpenDesignElectronPreviewNavigationFailure | null = null;
+    let navigationFailureListener: OpenDesignElectronPreviewNavigationFailureListener | null = null;
+    const emitNavigationFailure = (failure: OpenDesignElectronPreviewNavigationFailure) => {
       latestNavigationFailure = failure;
       navigationFailureListener?.(failure);
     };
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: {
         preview: {
           getLatestNavigationFailure: () => latestNavigationFailure,
@@ -9411,8 +9411,8 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('uses an exact active ERR_ABORTED to probe an unverified generation once', () => {
     vi.useFakeTimers();
-    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
-    const restoreHost = installMockOpenDesignHost({
+    let navigationFailureListener: OpenDesignElectronPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignElectron({
       host: {
         preview: {
           subscribeNavigationFailure: (listener) => {
@@ -9460,8 +9460,8 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('immediately recovers an exact active Open Design blob navigation abort', () => {
     vi.useFakeTimers();
-    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
-    const restoreHost = installMockOpenDesignHost({
+    let navigationFailureListener: OpenDesignElectronPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignElectron({
       host: {
         preview: {
           subscribeNavigationFailure: (listener) => {
@@ -9507,8 +9507,8 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('probes the active unverified frame when Electron loses the aborted frame name', () => {
     vi.useFakeTimers();
-    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
-    const restoreHost = installMockOpenDesignHost({
+    let navigationFailureListener: OpenDesignElectronPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignElectron({
       host: {
         preview: {
           subscribeNavigationFailure: (listener) => {
@@ -9557,8 +9557,8 @@ describe('FileViewer tweaks toolbar', () => {
 
   it('keeps live edit styles on the replacement frame and replays them when its bridge becomes ready', async () => {
     vi.useFakeTimers();
-    let navigationFailureListener: OpenDesignHostPreviewNavigationFailureListener | null = null;
-    const restoreHost = installMockOpenDesignHost({
+    let navigationFailureListener: OpenDesignElectronPreviewNavigationFailureListener | null = null;
+    const restoreHost = installMockOpenDesignElectron({
       host: {
         preview: {
           subscribeNavigationFailure: (listener) => {

@@ -85,9 +85,9 @@ import type {
 import type { ArtifactManifest } from '../artifacts/types';
 import { GENERIC_DEPLOY_ENVELOPE_CODES } from '../analytics/deploy-error-code';
 import {
-  isOpenDesignHostAvailable,
-  openHostExternalUrl,
-} from '@open-design/host';
+  isOpenDesignElectronAvailable,
+  openElectronExternalUrl,
+} from '@open-design/electron-contract';
 import {
   coalescedGet,
   evictCoalescedGet,
@@ -1338,8 +1338,8 @@ function popupBlockedMessage(): string {
 export async function openExternalUrl(url: string): Promise<boolean> {
   const bridgedUrl = await bridgeFirstPartyUrl(url);
   const targetUrl = bridgedUrl ?? url;
-  if (isOpenDesignHostAvailable()) {
-    const opened = await openHostExternalUrl(targetUrl);
+  if (isOpenDesignElectronAvailable()) {
+    const opened = await openElectronExternalUrl(targetUrl);
     if (opened.ok) return true;
   }
   try {
@@ -1391,7 +1391,7 @@ async function decodeConnectorError(resp: Response): Promise<string> {
 
 export async function connectConnector(connectorId: string): Promise<ConnectorActionResult> {
   let authWindow: Window | null = null;
-  const useExternalBrowser = isOpenDesignHostAvailable();
+  const useExternalBrowser = isOpenDesignElectronAvailable();
   try {
     if (!useExternalBrowser) {
       authWindow = window.open('about:blank', '_blank');
@@ -1420,7 +1420,7 @@ export async function connectConnector(connectorId: string): Promise<ConnectorAc
     const json = (await resp.json()) as ConnectorConnectResponse;
     if (json.auth?.kind === 'redirect_required' && json.auth.redirectUrl) {
       if (useExternalBrowser) {
-        const opened = await openHostExternalUrl(json.auth.redirectUrl);
+        const opened = await openElectronExternalUrl(json.auth.redirectUrl);
         if (!opened.ok) {
           return {
             connector: json.connector ?? null,

@@ -45,6 +45,7 @@ const manifest: ElectronShellManifest = {
   namespace: "example-desktop",
   protocol: "example",
   window: { width: 1024, height: 768, title: "Example Desktop" },
+  splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
   shell: {
     type: "electron",
     version: "1.2.3",

@@ -109,6 +109,7 @@ describe("Electron production Standalone authority", () => {
       namespace: `authority-${process.pid}`,
       protocol: "od",
       window: { width: 800, height: 600, title: "Electron Foundation" },
+      splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
       shell: { type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) },
     };
     const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources)({

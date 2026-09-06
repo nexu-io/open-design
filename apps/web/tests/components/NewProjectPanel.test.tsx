@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignElectronAvailable, pickElectronWorkingDir } from '@open-design/electron-contract';
 import {
   buildDesignSystemCreateSelection,
   defaultDesignSystemSelection,
@@ -13,12 +13,12 @@ import {
 import { openFolderDialog } from '../../src/providers/registry';
 import type { DesignSystemSummary, ProjectTemplate, SkillSummary } from '../../src/types';
 
-vi.mock('@open-design/host', async () => {
-  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+vi.mock('@open-design/electron-contract', async () => {
+  const actual = await vi.importActual<typeof import('@open-design/electron-contract')>('@open-design/electron-contract');
   return {
     ...actual,
-    isOpenDesignHostAvailable: vi.fn(),
-    pickHostWorkingDir: vi.fn(),
+    isOpenDesignElectronAvailable: vi.fn(),
+    pickElectronWorkingDir: vi.fn(),
   };
 });
 
@@ -32,8 +32,8 @@ vi.mock('../../src/providers/registry', async () => {
   };
 });
 
-const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
-const mockedPickHostWorkingDir = vi.mocked(pickHostWorkingDir);
+const mockedIsHostAvailable = vi.mocked(isOpenDesignElectronAvailable);
+const mockedPickHostWorkingDir = vi.mocked(pickElectronWorkingDir);
 const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
 
 const skills: SkillSummary[] = [

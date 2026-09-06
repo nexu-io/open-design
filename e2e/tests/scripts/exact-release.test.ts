@@ -1,168 +1,61 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { afterEach, describe, expect, it } from 'vitest';
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 
-const roots: string[] = [];
-afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))));
+import { describe, expect, it } from "vitest";
 
-const execFileAsync = promisify(execFile);
+const workspaceRoot = resolve("..");
 
-async function runPython(script: string, ...args: string[]) {
-  try {
-    const result = await execFileAsync('python3', [script, ...args], { cwd: resolve('..'), encoding: 'utf8' });
-    return { status: 0, ...result };
-  } catch (error) {
-    const failure = error as Error & { code?: number; stdout?: string; stderr?: string };
-    return { status: failure.code ?? 1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' };
-  }
-}
+describe("exact Electron release topology", () => {
+  it("keeps Terminal channels and adds the complete betahyx Electron topology", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    const convergence = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
 
-describe('exact release scripts', () => {
-  it('derives publication time from the immutable source commit', async () => {
-    const workflow = await readFile(resolve('../.github/workflows/release-exact.yml'), 'utf8');
-    expect(workflow).toContain("subprocess.check_output(['git', 'show', '--no-patch', '--format=%cI', os.environ['SOURCE_SHA']]");
-    expect(workflow).not.toContain('datetime.now');
-  });
-
-  it('keeps Terminal channels intact and adds the complete betahyx Electron topology', async () => {
-    const workflow = await readFile(resolve('../.github/workflows/release-exact.yml'), 'utf8');
-    const convergence = JSON.parse(await readFile(resolve('../.github/config/convergence-exact.json'), 'utf8'));
-    expect(workflow).toContain('options: [somechan, somepreview, betahyx]');
-    expect(workflow).toContain('electron_scene_darwin_arm64');
-    expect(workflow).toContain('electron_scene_win32_x64');
-    expect(workflow).toContain('@open-design/shell-electron exact:scene');
-    expect(workflow).toContain('@open-design/shell-electron exact:distribution');
-    expect(workflow).toContain('exact-release-plan');
-    expect(workflow).toContain('plan["plan"]["nodes"]["electron.shell.build"]["identity"]');
-    expect(workflow).not.toContain('"sourceCommit": os.environ["SOURCE_SHA"], "target": target');
-    expect(workflow).toContain('Install and exercise macOS Electron Shell');
-    expect(workflow).toContain('Install and exercise Windows Electron Shell');
-    expect(workflow).toContain('exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}');
-    expect(convergence.workflows['release-exact']).toMatchObject({
-      policy: 'shell-scenes-v2',
+    expect(workflow).toContain("options: [somechan, somepreview, betahyx]");
+    expect(workflow).toContain("electron_scene_darwin_arm64");
+    expect(workflow).toContain("electron_scene_win32_x64");
+    expect(workflow).toContain("@open-design/shell-electron exact:scene");
+    expect(workflow).toContain("@open-design/shell-electron exact:distribution");
+    expect(workflow).toContain("@open-design/closure build:resources");
+    expect(workflow).toContain("tools/release/dist/exact-control.mjs");
+    expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-control.mjs');
+    expect(workflow).toContain("Install and exercise macOS Electron Shell");
+    expect(workflow).toContain("Install and exercise Windows Electron Shell");
+    expect(convergence.workflows["release-exact"]).toMatchObject({
+      policy: "shell-scenes-v2",
       workloads: {
         terminal_scene_darwin_arm64: { reusable: true },
-        electron_scene_darwin_arm64: { runnerClass: 'electron_darwin_arm64', reusable: false },
-        electron_scene_win32_x64: { runnerClass: 'electron_win32_x64', reusable: false },
+        electron_scene_darwin_arm64: { runnerClass: "electron_darwin_arm64", reusable: false },
+        electron_scene_win32_x64: { runnerClass: "electron_win32_x64", reusable: false },
       },
     });
   });
 
-  it('binds Electron acceptance to the installed exact resource set and real headless exit', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'exact-electron-acceptance-'));
-    roots.push(root);
-    const publishedRoot = join(root, 'published');
-    const installedRoot = join(root, 'installed');
-    await Promise.all([mkdir(publishedRoot), mkdir(installedRoot)]);
-    const shell = { type: 'electron', version: '0.1.0', buildHash: 'a'.repeat(64) };
-    const artifact = { url: 'https://releases.invalid/app.dmg', sha256: 'b'.repeat(64), size: 7, mediaType: 'application/x-apple-diskimage' };
-    const shellMetadata = { url: 'https://releases.invalid/electron-metadata.json', sha256: 'c'.repeat(64), size: 11 };
-    const descriptor = async (file: string, body: string) => {
-      const path = join(installedRoot, file);
-      await writeFile(path, body);
-      return { file, sha256: createHash('sha256').update(body).digest('hex'), size: Buffer.byteLength(body) };
-    };
-    const installation = {
-      schemaVersion: 1, channel: 'betahyx', releaseVersion: '0.1.0-betahyx.1', target: 'darwin-arm64',
-      host: await descriptor('standalone-host.mjs', 'host'),
-      supervisor: await descriptor('supervisor.mjs', 'supervisor'),
-      content: await descriptor('standalone-content.json', 'content'),
-      trust: await descriptor('standalone-trust.json', 'trust'),
-      seeds: [await descriptor('closure.mjs', 'closure')],
-      update: { channelHeadUrl: 'https://releases.invalid/betahyx/latest/channel-head.json' },
-    };
-    await writeFile(join(installedRoot, 'standalone-installation.json'), JSON.stringify(installation));
-    await writeFile(join(publishedRoot, 'publish-receipt.json'), JSON.stringify({ channel: 'betahyx', releaseVersion: '0.1.0-betahyx.1', sourceCommit: 'd'.repeat(40) }));
-    await writeFile(join(root, 'required-acceptance.json'), JSON.stringify({ shell, target: 'darwin-arm64', artifact, shellMetadata }));
-    const runtimeLog = join(root, 'electron-runtime.jsonl');
-    await writeFile(runtimeLog, [
-      { attemptId: 'installed-attempt', event: 'startup.committed' },
-      { attemptId: 'installed-attempt', event: 'shutdown.complete' },
-    ].map((event) => JSON.stringify(event)).join('\n') + '\n');
-    const result = await runPython('.github/scripts/release/installed_acceptance.py', '--root', root, '--installed-root', installedRoot, '--shell-type', 'electron', '--target', 'darwin-arm64', '--runtime-log', runtimeLog);
-    expect(result).toMatchObject({ status: 0, stderr: '' });
-    const credential = JSON.parse(await readFile(join(root, 'acceptance', 'electron-darwin-arm64.json'), 'utf8'));
-    expect(credential).toMatchObject({ status: 'accepted', shell, installed: { shell, target: 'darwin-arm64', proof: { runtime: { outcome: 'ready', attemptId: 'installed-attempt' } } } });
+  it("uses the TypeScript exact control plane with no temporary Python bridge", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+
+    expect(workflow).toContain('"operation": "exact.prepare"');
+    expect(workflow).toContain('"operation": "exact.finalize"');
+    expect(workflow).toContain('"operation": "exact.publish"');
+    expect(workflow).toContain('"operation": "exact.activate"');
+    expect(workflow).not.toContain(".github/scripts/pack.py");
+    expect(workflow).not.toContain(".github/scripts/release.py");
+    expect(workflow).not.toContain("node tools/release/src/exact/control-cli.ts");
   });
 
-  it('rejects a reused Terminal scene for a different standalone version', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'exact-pack-version-'));
-    roots.push(root);
-    const scene = join(root, 'scene');
-    await mkdir(scene);
-    await writeFile(join(scene, 'scene.json'), JSON.stringify({ standaloneVersion: '0.1.0' }));
-    const request = join(root, 'request.json');
-    await writeFile(request, JSON.stringify({
-      schemaVersion: 1,
-      operation: 'exact.pack',
-      channel: 'betahyx',
-      releaseVersion: '0.1.0-betahyx.1',
-      standaloneVersion: '0.2.0',
-      sourceCommit: 'a'.repeat(40),
-      outputDirectory: join(root, 'output'),
-      sceneDirectory: scene,
-      targets: [{ target: 'darwin-arm64' }, { target: 'win32-x64' }],
-    }));
-    const result = await runPython('.github/scripts/pack.py', '--request', request, '--receipt', join(root, 'receipt.json'));
-    expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('requested standaloneVersion differs from Terminal scene');
-  });
-
-  it('replays identical immutable documents on a repeated publish', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'exact-release-replay-'));
-    roots.push(root);
-    const objects = new Map<string, Buffer>();
-    const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
-      const path = request.url ?? '/';
-      if (request.method === 'GET') {
-        const body = objects.get(path);
-        response.statusCode = body == null ? 404 : 200;
-        if (body != null) response.setHeader('ETag', `"${body.length}"`);
-        response.end(body);
-        return;
-      }
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      const body = Buffer.concat(chunks);
-      if (request.headers['if-none-match'] === '*' && objects.has(path)) response.statusCode = 412;
-      else { objects.set(path, body); response.statusCode = 200; response.setHeader('ETag', `"${body.length}"`); }
-      response.end();
-    });
-    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
-    try {
-      const address = server.address();
-      if (address == null || typeof address === 'string') throw new Error('missing fixture address');
-      const output = join(root, 'output');
-      await mkdir(output);
-      const artifact = join(output, 'artifact.bin');
-      const document = join(output, 'closure-metadata.json');
-      const head = join(output, 'channel-head.json');
-      await writeFile(artifact, 'artifact');
-      await writeFile(document, '{"document":true}\n');
-      await writeFile(head, '{"head":{"lanes":{"closure":{"releaseVersion":"0.1.0-betahyx.1"},"terminal":{"releaseVersion":"0.1.0-betahyx.1"}}}}\n');
-      const digest = async (file: string) => createHash('sha256').update(await readFile(file)).digest('hex');
-      const described = async (file: string) => ({ file, sha256: await digest(file), size: (await readFile(file)).length });
-      const pack = join(root, 'pack.json');
-      await writeFile(pack, JSON.stringify({
-        channel: 'betahyx', releaseVersion: '0.1.0-betahyx.1',
-        artifacts: [await described(artifact)], documents: [await described(document)], channelHeadFile: head,
-      }));
-      const request = join(root, 'release.json');
-      await writeFile(request, JSON.stringify({ schemaVersion: 1, operation: 'exact.release', packReceipt: pack, endpointUrl: `http://127.0.0.1:${address.port}`, bucket: 'fixture' }));
-      const first = await runPython('.github/scripts/release.py', '--request', request, '--receipt', join(root, 'first.json'));
-      const second = await runPython('.github/scripts/release.py', '--request', request, '--receipt', join(root, 'second.json'));
-      expect(first.stderr).toBe('');
-      expect(first.status).toBe(0);
-      expect(second.stderr).toBe('');
-      expect(second.status).toBe(0);
-      expect(JSON.parse(await readFile(join(root, 'second.json'), 'utf8')).replayed).toBe(true);
-    } finally {
-      await new Promise<void>((done, reject) => server.close((error) => error == null ? done() : reject(error)));
+  it("contains no legacy Electron application or launcher authority", async () => {
+    const files = [
+      "AGENTS.md",
+      ".github/workflows/ci.yml",
+      ".github/workflows/release-exact.yml",
+      ".github/config/scopes.json",
+      ".github/config/convergence.json",
+      "scripts/guard.ts",
+      "scripts/check-cross-app-imports.ts",
+      "pnpm-lock.yaml",
+    ];
+    const contents = await Promise.all(files.map(async (file) => await readFile(resolve(workspaceRoot, file), "utf8")));
+    for (const content of contents) {
+      expect(content).not.toMatch(/apps\/(?:desktop|packaged)|@open-design\/(?:desktop|packaged|launcher-proto)|desktop-handoff\.json/u);
     }
   });
 });

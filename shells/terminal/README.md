@@ -145,8 +145,8 @@ external orchestrator without teaching that orchestrator the installed layout.
 line; it is not part of `ci.yml`. Its separate convergence declaration may
 restore a byte-verified, release-neutral target scene. A hit never promotes the
 cached directory directly: native distribution still copies the scene and adds
-release documents, then `.github/scripts/pack.py` creates signed content and
-Shell sidecars and `.github/scripts/release.py` performs immutable publication
+release documents, then `tools-release exact-control` creates signed content and
+Shell sidecars and performs immutable publication
 before the channel-scoped latest CAS. Convergence therefore knows only Git
 inputs, execution class and an opaque scene product; channel, version, trust,
 minimum Shell version and artifact URL remain promotion concerns.

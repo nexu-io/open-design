@@ -184,14 +184,15 @@ test("cross-app import check ignores relatives that escape apps/ without hitting
   assert.deepEqual(violations, []);
 });
 
-test("cross-app import check allows allowlisted packaged -> desktop main export", () => {
+test("cross-app import check rejects package imports across app boundaries", () => {
   const violations = collectCrossAppImportViolationsFromSource(
-    "apps/packaged/src/index.ts",
-    "import { applyOsLocaleSwitch, createSplashWindow } from '@open-design/desktop/main';",
-    { packageNameByDirectory: new Map([["packaged", "@open-design/packaged"], ["desktop", "@open-design/desktop"]]) },
+    "apps/web/src/runtime.ts",
+    "import { startServer } from '@open-design/daemon';",
+    registry,
   );
 
-  assert.deepEqual(violations, []);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.targetApp, "daemon");
 });
 
 test("cross-app import check ignores files outside apps/", () => {

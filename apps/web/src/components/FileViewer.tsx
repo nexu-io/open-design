@@ -2,10 +2,10 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, 
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import {
-  getLatestHostPreviewNavigationFailure,
-  subscribeHostPreviewNavigationFailure,
-  type OpenDesignHostPreviewNavigationFailure,
-} from '@open-design/host';
+  getLatestElectronPreviewNavigationFailure,
+  subscribeElectronPreviewNavigationFailure,
+  type OpenDesignElectronPreviewNavigationFailure,
+} from '@open-design/electron-contract';
 import { CenteredLoader } from './Loading';
 import { APP_CHROME_FILE_ACTIONS_ID, APP_CHROME_FILE_ACTIONS_SELECTOR } from './AppChromeHeader';
 import {
@@ -168,7 +168,7 @@ import {
   exportReactComponentAsZip,
   captureHostIframeSnapshot,
   imageDataUrlToBlob,
-  isOpenDesignHostAvailable,
+  isOpenDesignElectronAvailable,
   openSandboxedPreviewInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
@@ -11186,7 +11186,7 @@ function HtmlViewer({
     scheduleSrcDocTransportTimeout,
   ]);
   const handleHostPreviewNavigationFailure = useCallback((
-    failure: OpenDesignHostPreviewNavigationFailure,
+    failure: OpenDesignElectronPreviewNavigationFailure,
   ) => {
     const aboutSrcDocFailure = failure.validatedUrl === 'about:srcdoc';
     const localBlobFailure = failure.validatedUrl.startsWith('blob:od://app/');
@@ -11242,10 +11242,10 @@ function HtmlViewer({
     probeSrcDocTransport(generation, true);
   }, [mode, probeSrcDocTransport, recoverUnacknowledgedSrcDocTransport, useUrlLoadPreview]);
   useEffect(() => {
-    const unsubscribe = subscribeHostPreviewNavigationFailure(
+    const unsubscribe = subscribeElectronPreviewNavigationFailure(
       handleHostPreviewNavigationFailure,
     );
-    const latestFailure = getLatestHostPreviewNavigationFailure();
+    const latestFailure = getLatestElectronPreviewNavigationFailure();
     if (latestFailure) handleHostPreviewNavigationFailure(latestFailure);
     return unsubscribe;
   }, [handleHostPreviewNavigationFailure, workspaceActive]);
@@ -14997,7 +14997,7 @@ function HtmlViewer({
     const pdfTitle = context?.title ?? exportTitle;
     const pdfSource = context?.content ?? source ?? '';
     const pdfDeck = deckExportSignalForContext(context);
-    if (isOpenDesignHostAvailable()) {
+    if (isOpenDesignElectronAvailable()) {
       const res = await exportProjectScreenshotPdf({
         projectId,
         fileName: file.name,
@@ -15164,7 +15164,7 @@ function HtmlViewer({
     // reports; otherwise (Copy screenshot, Mark/Draw capture) it grabs the
     // CURRENT slide, mirroring what's on screen. An ordinary page is its
     // full-page capture either way.
-    if (isOpenDesignHostAvailable() && projectId && file.name) {
+    if (isOpenDesignElectronAvailable() && projectId && file.name) {
       // Deck-vs-page uses the same signal as PDF export — broader than the viewer's nav
       // signal — so runtime-managed decks (`<deck-stage>` / `data-screen-label`,
       // no literal `.slide`) export as a deck instead of a single page-mode shot
@@ -17088,7 +17088,7 @@ function HtmlViewer({
                       // Chinese-first product. Falls back to the vector/browser
                       // print path on web or on failure.
                       fireShareExport('pdf', async () => {
-                        if (isOpenDesignHostAvailable()) {
+                        if (isOpenDesignElectronAvailable()) {
                           const res = await exportProjectScreenshotPdf({
                             projectId,
                             fileName: file.name,

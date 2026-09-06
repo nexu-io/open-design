@@ -1,23 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { exportElectronDiagnostics } from '@open-design/electron-contract';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
-
-// Mirrors what apps/desktop preload exposes via contextBridge. Kept inline
-// so the web bundle does not import the desktop package.
-type DesktopExportResult =
-  | { ok: true; path: string }
-  | { ok: false; cancelled: true }
-  | { ok: false; cancelled: false; message: string };
-
-interface OpenDesignDesktopApi {
-  exportDiagnostics(): Promise<DesktopExportResult>;
-}
-
-declare global {
-  interface Window {
-    openDesignDesktop?: OpenDesignDesktopApi;
-  }
-}
 
 const DIAGNOSTICS_EXPORT_PATH = '/api/diagnostics/export';
 const DIAGNOSTICS_FILENAME_PREFIX = 'open-design-diagnostics';
@@ -78,7 +62,7 @@ async function exportViaHttp(): Promise<{ filename: string }> {
 /**
  * Designed for the Settings → About panel. Renders a labeled button with a
  * short status line below it. Works in both the Electron shell (uses native
- * save dialog via window.openDesignDesktop) and the browser (triggers a
+ * save dialog through the Electron capability contract) and the browser (triggers a
  * browser download via the daemon HTTP endpoint).
  */
 export function ExportDiagnosticsRow() {
@@ -99,8 +83,9 @@ export function ExportDiagnosticsRow() {
     if (status.kind === 'busy') return;
     setStatus({ kind: 'busy' });
     try {
-      if (window.openDesignDesktop != null) {
-        const result = await window.openDesignDesktop.exportDiagnostics();
+      const nativeResult = await exportElectronDiagnostics();
+      if (nativeResult != null) {
+        const result = nativeResult;
         if (result.ok) {
           setStatus({ kind: 'success', message: t('diagnostics.exportSuccess').replace('{path}', result.path) });
           scheduleClear();

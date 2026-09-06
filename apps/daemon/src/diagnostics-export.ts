@@ -164,7 +164,7 @@ async function buildSidecarLogSources(
       tailBytes: TAIL_BYTES_PER_LOG,
     });
     // The packaged launcher truncates latest.log on every start and rotates
-    // the prior session's file aside as previous.log (apps/packaged/src/
+    // the prior session's file aside as previous.log (the Electron Shell
     // sidecars.ts openLog). After an incident-triggered relaunch that rotated
     // file IS the incident-time log, so bundle it whenever it exists. The
     // entry is existence-conditional because non-rotating launchers
@@ -182,7 +182,7 @@ async function buildSidecarLogSources(
       });
     }
     // Only desktop runs an Electron renderer that writes `renderer.log`
-    // (see apps/desktop/src/main/runtime.ts). daemon and web are pure Node
+    // (see the Electron Shell runtime adapter). daemon and web are pure Node
     // services with no renderer process, so listing the file there only
     // produces missing-file placeholders and manifest warnings.
     if (app === APP_KEYS.DESKTOP) {
@@ -207,7 +207,7 @@ async function buildSidecarLogSources(
 }
 
 // The desktop relocates Electron's crashDumps to `<logs/desktop>/crashes` (see
-// apps/desktop/src/main/crash-diagnostics.ts) so the minidumps live inside the
+// the Electron Shell crash diagnostics adapter) so the minidumps live inside the
 // same log tree this export already collects. Derive that dir the same way.
 function resolveDesktopCrashDumpsDir(runtime: SidecarRuntimeContext<LegacySidecarRuntimeLayout> | null): string | null {
   if (runtime == null) return null;

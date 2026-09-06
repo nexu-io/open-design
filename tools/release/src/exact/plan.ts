@@ -15,6 +15,8 @@ export type ExactPlanNodeId =
   | "closure.acceptance.hot"
   | "closure.build"
   | "closure.test"
+  | "electron.contract.build"
+  | "electron.contract.test"
   | "electron.acceptance.full"
   | "electron.distribution"
   | "electron.shell.build"
@@ -41,15 +43,19 @@ export type ExactPlanAction = Readonly<{
 
 const NODE_DEPENDENCIES: Readonly<Record<ExactPlanNodeId, readonly ExactPlanNodeId[]>> = {
   "closure.acceptance.hot": ["electron.distribution", "closure.build"],
-  "closure.build": [],
-  "closure.test": ["closure.build"],
+  "closure.build": ["electron.contract.build"],
+  "closure.test": ["closure.build", "electron.contract.test"],
+  "electron.contract.build": [],
+  "electron.contract.test": ["electron.contract.build"],
   "electron.acceptance.full": ["electron.distribution"],
   "electron.distribution": ["electron.shell.build"],
-  "electron.shell.build": [],
-  "electron.shell.test": ["electron.shell.build"],
+  "electron.shell.build": ["electron.contract.build"],
+  "electron.shell.test": ["electron.shell.build", "electron.contract.test"],
 };
 
 const NODE_ORDER = Object.freeze([
+  "electron.contract.build",
+  "electron.contract.test",
   "electron.shell.build",
   "electron.shell.test",
   "closure.build",

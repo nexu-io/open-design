@@ -11,6 +11,7 @@ import { ELECTRON_CONTENT_UPDATE_CHANNELS } from "../../contracts/content-update
 import { createElectronContentUpdateHandler } from "../updater/content.js";
 import { readElectronProductRuntime } from "../standalone/product-runtime.js";
 import { installElectronRendererSecurity } from "./security.js";
+import { installElectronProductHandlers } from "./product-handlers.js";
 
 export const RENDERER_RESOURCE_EXECUTOR = "shell.renderer-resource";
 
@@ -33,7 +34,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
         },
       };
     },
-    async mount({ acknowledgement, contentUpdater, manifest, runtime, window }) {
+    async mount({ acknowledgement, contentUpdater, manifest, runtime, shellUpdater, window }) {
       const product = await readElectronProductRuntime({
         attachmentId: runtime.attachment.id,
         bindingDigest: runtime.binding.digest,
@@ -52,6 +53,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
         return await handler.apply(force);
       });
       const entryUrl = product.web.url;
+      const productHandlers = await installElectronProductHandlers({ contentUpdater, daemonUrl: product.daemon.url, runtime, shellUpdater, window });
       const security = installElectronRendererSecurity({
         openExternal: (url) => systemShell.openExternal(url),
         shellProtocol: manifest.protocol,
@@ -61,6 +63,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
       try {
         await window.loadURL(entryUrl);
       } catch (error) {
+        productHandlers.dispose();
         security.dispose();
         ipcMain.removeHandler(ELECTRON_CONTENT_UPDATE_CHANNELS.prepare);
         ipcMain.removeHandler(ELECTRON_CONTENT_UPDATE_CHANNELS.apply);
@@ -68,6 +71,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
       }
       return Object.freeze({
         dispose() {
+          productHandlers.dispose();
           security.dispose();
           ipcMain.removeHandler(ELECTRON_CONTENT_UPDATE_CHANNELS.prepare);
           ipcMain.removeHandler(ELECTRON_CONTENT_UPDATE_CHANNELS.apply);

@@ -17,6 +17,7 @@ import {
   validateElectronShellManifest,
   type ElectronRendererLease,
   type ElectronShellDefinition,
+  type ElectronShellManifest,
   type ElectronStandaloneAuthority,
   type ElectronStandalonePreparedRuntime,
 } from "../contracts/index.js";
@@ -56,6 +57,7 @@ import {
 } from "./window/mount-acknowledgement.js";
 
 export * from "./session/logging.js";
+export * from "./session/cdp.js";
 export * from "./session/namespace-paths.js";
 export * from "./session/process-errors.js";
 export * from "./session/shutdown.js";
@@ -66,8 +68,13 @@ export * from "./startup/cancellation.js";
 export * from "./window/presentation.js";
 export * from "./window/mount-acknowledgement.js";
 
-function splashHtml(title: string): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><style>html{font-family:ui-sans-serif,system-ui;background:#151515;color:#fff}body{margin:0;display:grid;min-height:100vh;place-items:center;text-align:center}p{color:#aaa}</style><body><main><h2>${title}</h2><p id="stage">Preparing Electron…</p></main></body></html>`)}`;
+function escapeHtml(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function splashHtml(manifest: ElectronShellManifest): string {
+  const policy = manifest.splash;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html><html><style>html{font-family:ui-sans-serif,system-ui;background:${policy.backgroundColor};color:${policy.foregroundColor}}body{margin:0;display:grid;min-height:100vh;place-items:center;text-align:center}main{display:grid;gap:12px}h2{font-size:20px;font-weight:600;margin:0}p{color:${policy.mutedColor};font-size:13px;margin:0}</style><body><main><h2>${escapeHtml(manifest.productName)}</h2><p id="stage">${escapeHtml(policy.initialLabel)}</p></main></body></html>`)}`;
 }
 
 function setSplashStage(window: BrowserWindow | null, stage: string): void {
@@ -244,10 +251,10 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   await context.startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
   const splashStartedAt = Date.now();
   if (presentation === "interactive") {
-    splash = new BrowserWindow({ width: 520, height: 320, frame: false, resizable: false, show: true, webPreferences: { sandbox: true } });
-    await context.startupQuit.guard(splash.loadURL(splashHtml(manifest.productName)));
+    splash = new BrowserWindow({ width: manifest.splash.width, height: manifest.splash.height, frame: false, resizable: false, show: true, backgroundColor: manifest.splash.backgroundColor, webPreferences: { sandbox: true } });
+    await context.startupQuit.guard(splash.loadURL(splashHtml(manifest)));
   }
-  setSplashStage(splash, "Preparing…");
+  setSplashStage(splash, manifest.splash.initialLabel);
 
   warmup = runElectronWarmupTopology({
     topology: warmupTopology,
@@ -355,6 +362,7 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
             integration = await definition.renderer.mount({
               acknowledgement,
               contentUpdater: preparedRuntime!.contentUpdater,
+              shellUpdater: preparedRuntime!.updater,
               manifest,
               preflight,
               presentation,
@@ -410,8 +418,8 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   requireWarmupState(status as StandaloneRuntimeStatus | null, "Standalone readiness");
   const runtimeUpdaterRevisionAtStart = requireWarmupState(updaterRevisionAtStart as number | null, "the updater revision");
   const runtimeRendererLease = requireWarmupState(rendererLease as ElectronRendererLease | null, "a renderer lease");
-  setSplashStage(splash, "Ready");
-  const remaining = presentation === "headless" ? 0 : 350 - (Date.now() - splashStartedAt);
+  setSplashStage(splash, manifest.splash.readyLabel);
+  const remaining = presentation === "headless" ? 0 : manifest.splash.minimumVisibleMs - (Date.now() - splashStartedAt);
   if (remaining > 0) await context.startupQuit.guard(new Promise((resolve) => setTimeout(resolve, remaining)));
   const pendingHandoffs = handoffs.drain();
   focusElectronWindow(

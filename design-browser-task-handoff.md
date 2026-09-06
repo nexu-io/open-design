@@ -118,14 +118,14 @@ Files changed so far:
 - `apps/web/src/components/Icon.tsx`
 - `apps/web/src/styles/workspace/design-files.css`
 - `apps/web/src/styles/workspace/drawer.css`
-- `apps/desktop/src/main/index.ts`
-- `apps/desktop/src/main/preload.cts`
-- `apps/desktop/src/main/runtime.ts`
-- `apps/desktop/tests/main/preload-host-boundary.test.ts`
-- `apps/packaged/tests/desktop-url-allowlist.test.ts`
-- `packages/host/src/index.ts`
-- `packages/host/src/testing.ts`
-- `packages/host/tests/index.test.ts`
+- `shells/electron/src/main.ts`
+- `shells/electron/src/adapters/renderer/preload.ts`
+- `shells/electron/src/adapters/renderer/product-handlers.ts`
+- `shells/electron/tests/renderer-security.test.ts`
+- `packages/electron-contract/tests/index.test.ts`
+- `packages/electron-contract/src/index.ts`
+- `packages/electron-contract/src/testing.ts`
+- `packages/electron-contract/tests/index.test.ts`
 
 Implemented behavior:
 
@@ -134,17 +134,17 @@ Implemented behavior:
 - Browser panel has address input, suggestions, history persistence, back/forward/reload controls, menu actions, reference cards, screenshot saving, page brief saving, and browser-harness task saving.
 - Desktop runtime enables Electron `webviewTag` only for the main window and validates embedded browser startup URLs.
 - Desktop host bridge exposes browser data clearing for the dedicated browser partition.
-- Host package has helper `clearHostBrowserData`.
+- Host package has helper `clearElectronBrowserData`.
 
 ## Verification Status
 
 Passed:
 
 - `pnpm --filter @open-design/web typecheck`
-- `pnpm --filter @open-design/desktop typecheck`
-- `pnpm --filter @open-design/host typecheck`
-- `pnpm --filter @open-design/host test`
-- `pnpm --filter @open-design/packaged test -- desktop-url-allowlist`
+- `pnpm --filter @open-design/shell-electron typecheck`
+- `pnpm --filter @open-design/electron-contract typecheck`
+- `pnpm --filter @open-design/electron-contract test`
+- `pnpm --filter @open-design/shell-electron test`
 - Direct targeted web tests from `apps/web`:
   - `pnpm exec vitest run -c vitest.config.ts tests/components/FileWorkspace.test.tsx tests/components/FileWorkspace.design-system.test.tsx`
   - Result: 2 files passed, 38 tests passed.

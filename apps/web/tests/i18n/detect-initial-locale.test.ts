@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 import { detectInitialLocale } from '../../src/i18n';
 
 const LS_KEY = 'open-design:locale';
@@ -28,13 +28,13 @@ function setNavigatorLanguages(languages: readonly string[]): void {
 }
 
 // Track the installed mock so each test can swap it out without leaking
-// state into the next case (installMockOpenDesignHost returns an
+// state into the next case (installMockOpenDesignElectron returns an
 // uninstall callback that restores the previous value).
 let uninstallHost: (() => void) | null = null;
 
 function installHostWithOsLocale(value: unknown): void {
   uninstallHost?.();
-  uninstallHost = installMockOpenDesignHost({
+  uninstallHost = installMockOpenDesignElectron({
     host: {
       // The mock host's defaultHost() already sets client.type to
       // 'desktop'; we only override the field exercised here.

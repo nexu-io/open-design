@@ -1,5 +1,6 @@
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { BrowserWindow, app } from "electron";
+import { inspectElectronCdp } from "@open-design/electron-kit/runtime";
 
 import { APP_KEYS } from "@open-design/sidecar-proto";
 import {
@@ -33,20 +34,35 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
   if (stamp.app !== APP_KEYS.ELECTRON) throw new Error(`Electron Shell cannot run Sidecar app ${stamp.app}`);
   const controlResources = resources();
   if (isCurrentSidecarLauncher()) {
-    await bootstrapSidecarProcess(stamp, controlResources, { supervisor: { command: process.execPath, entrypoint: join(app.getAppPath(), "supervisor.mjs") } });
+    const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+    await bootstrapSidecarProcess(stamp, controlResources, { supervisor: { command: process.execPath, entrypoint: join(resourceRoot, "supervisor.mjs") } });
     app.exit(0);
     return;
   }
   // Registration is deliberately synchronous in a supervised Electron
   // generation: Shell preflight must execute before Chromium reports ready.
   registerSidecarProcess(stamp, controlResources);
+  const cdpBootstrapUserDataRoot = app.getPath("userData");
   const running = run();
   const client = SidecarFactory.create<{ startedAt: string }>({
     lifecycle: {
       async start() { await running; return Object.freeze({ startedAt: new Date().toISOString() }); },
       status(runtime) {
         const window = BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed()) ?? null;
-        return Object.freeze({ pid: process.pid, startedAt: runtime.startedAt, state: "running", title: window?.getTitle() ?? null, url: window?.webContents.getURL() ?? null, windowVisible: window?.isVisible() ?? false });
+        const namespaceRoot = dirname(app.getPath("userData"));
+        return Object.freeze({
+          pid: process.pid,
+          startedAt: runtime.startedAt,
+          state: "running",
+          title: window?.getTitle() ?? null,
+          url: window?.webContents.getURL() ?? null,
+          windowVisible: window?.isVisible() ?? false,
+          cdp: inspectElectronCdp(app, cdpBootstrapUserDataRoot),
+          logRoots: Object.freeze([
+            Object.freeze({ scope: "shell", path: join(namespaceRoot, "runtime", "electron", "logs") }),
+            Object.freeze({ scope: "product", path: join(namespaceRoot, "logs", "product") }),
+          ]),
+        });
       },
       async stop() {
         if (!app.isReady()) return;

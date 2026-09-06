@@ -17,6 +17,8 @@
     "dev": "node ./scripts/dev.mjs",
     "exact:distribution": "node ./scripts/exact-distribution.ts",
     "exact:scene": "node ./scripts/exact-scene.ts",
+    "pack:adapter": "node ./scripts/pack-lifecycle.ts",
+    "runtime:adapter": "node ./scripts/runtime-lifecycle.ts",
     "prepack": "node ./scripts/pack.mjs",
     "pack": "node ./scripts/pack.mjs",
     "test": "vitest run",
@@ -24,6 +26,8 @@
   },
   "dependencies": {
     "@open-design/contracts": "workspace:*",
+    "@open-design/diagnostics": "workspace:*",
+    "@open-design/electron-contract": "workspace:*",
     "@open-design/electron-kit": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",

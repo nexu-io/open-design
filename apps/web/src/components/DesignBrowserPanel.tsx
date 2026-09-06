@@ -11,9 +11,9 @@ import {
 } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import {
-  clearHostBrowserData,
-  isOpenDesignHostAvailable,
-} from '@open-design/host';
+  clearElectronBrowserData,
+  isOpenDesignElectronAvailable,
+} from '@open-design/electron-contract';
 import type { TrackingReferenceBoardCategory } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -933,7 +933,7 @@ export function DesignBrowserPanel({
 }: DesignBrowserPanelProps) {
   const t = useT();
   const { workspaceContext } = useProjectCollabContext();
-  const desktopHostAvailable = isOpenDesignHostAvailable();
+  const desktopHostAvailable = isOpenDesignElectronAvailable();
   const initialState = initialBrowserState(initialUrl, initialTitle);
   // `loadUrl` is the navigation target bound to the <webview>/<iframe> `src`.
   // It changes ONLY on user-initiated navigation. `currentUrl` is the committed
@@ -2006,7 +2006,7 @@ export function DesignBrowserPanel({
       setStatusMessage(t('designBrowser.status.desktopDataUnavailable'));
       return;
     }
-    const result = await clearHostBrowserData({ cookies: true, storage });
+    const result = await clearElectronBrowserData({ cookies: true, storage });
     setStatusMessage(
       result.ok
         ? t('designBrowser.status.browserDataCleared')

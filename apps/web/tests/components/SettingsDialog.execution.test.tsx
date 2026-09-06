@@ -2,8 +2,9 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { OpenDesignElectronUpdaterStatusSnapshot } from '@open-design/electron-contract';
+import { electronUpdaterStatus } from '../helpers/electron-updater';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
 
@@ -327,28 +328,12 @@ const sampleDesignSystems = [
   },
 ];
 
-let restoreOpenDesignHost: (() => void) | null = null;
+let restoreOpenDesignElectron: (() => void) | null = null;
 
 function updateStatus(
-  overrides: Partial<OpenDesignHostUpdaterStatusSnapshot> = {},
-): OpenDesignHostUpdaterStatusSnapshot {
-  return {
-    arch: 'arm64',
-    capabilities: {
-      canApplyInPlace: false,
-      canDownload: true,
-      canOpenInstaller: true,
-      requiresManualInstall: true,
-    },
-    channel: 'beta',
-    currentVersion: '1.2.3-beta.3',
-    enabled: true,
-    mode: 'package-launcher',
-    platform: 'darwin',
-    state: 'idle',
-    supported: true,
-    ...overrides,
-  };
+  overrides: Record<string, any> = {},
+): OpenDesignElectronUpdaterStatusSnapshot {
+  return electronUpdaterStatus(overrides);
 }
 
 function renderSettingsDialog(
@@ -554,8 +539,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  restoreOpenDesignHost?.();
-  restoreOpenDesignHost = null;
+  restoreOpenDesignElectron?.();
+  restoreOpenDesignElectron = null;
 });
 
 describe('SettingsDialog privacy settings interactions', () => {
@@ -5922,22 +5907,15 @@ describe('SettingsDialog about interactions', () => {
 
   it('downloads an available packaged update from the about page', async () => {
     const available = updateStatus({
-      availableVersion: '1.2.3-beta.4',
+      candidateVersion: '1.2.3-beta.4',
       state: 'available',
     });
     const downloaded = updateStatus({
-      artifact: {
-        name: 'Open Design Beta.dmg',
-        platformKey: 'macAppleSilicon',
-        type: 'dmg',
-        url: 'https://fixture.test/Open Design Beta.dmg',
-      },
-      availableVersion: '1.2.3-beta.4',
-      downloadPath: '/tmp/open-design-updater/Open Design Beta.dmg',
-      state: 'downloaded',
+      candidateVersion: '1.2.3-beta.4',
+      state: 'ready',
     });
     const download = vi.fn(async () => downloaded);
-    restoreOpenDesignHost = installMockOpenDesignHost({
+    restoreOpenDesignElectron = installMockOpenDesignElectron({
       host: {
         updater: {
           download,
@@ -5967,18 +5945,15 @@ describe('SettingsDialog about interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: en['updater.download'] }));
 
     await waitFor(() => {
-      expect(download).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+      expect(download).toHaveBeenCalledWith('shell');
     });
     expect(screen.getByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
   });
 
-  it('clears the updater cache from the about page after inline confirmation', async () => {
-    const cleared = updateStatus({ state: 'idle' });
-    const clearCache = vi.fn(async () => cleared);
-    restoreOpenDesignHost = installMockOpenDesignHost({
+  it('does not expose lifecycle-owned cache mutation in the renderer', async () => {
+    restoreOpenDesignElectron = installMockOpenDesignElectron({
       host: {
         updater: {
-          'clear-cache': clearCache,
           status: vi.fn(async () => updateStatus()),
         },
       },
@@ -5998,21 +5973,12 @@ describe('SettingsDialog about interactions', () => {
       },
     );
 
-    // Two-stage inline confirm: the first click only arms the action.
-    const trigger = await screen.findByTestId('settings-clear-updater-cache');
-    fireEvent.click(trigger);
-    expect(clearCache).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByTestId('settings-clear-updater-cache-confirm'));
-
-    await waitFor(() => {
-      expect(clearCache).toHaveBeenCalled();
-    });
-    expect(await screen.findByText(en['settings.clearUpdaterCacheSuccess'])).toBeTruthy();
+    await screen.findByText(en['settings.updateStatusNotChecked']);
+    expect(screen.queryByTestId('settings-clear-updater-cache')).toBeNull();
   });
 
   it('hides updater cache recovery when packaged updates are unsupported', async () => {
-    restoreOpenDesignHost = installMockOpenDesignHost({
+    restoreOpenDesignElectron = installMockOpenDesignElectron({
       host: {
         updater: {
           status: vi.fn(async () => updateStatus({
@@ -6044,33 +6010,20 @@ describe('SettingsDialog about interactions', () => {
 
   it('installs a downloaded payload update from the about page', async () => {
     const payloadReady = updateStatus({
-      artifact: {
-        name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-        platformKey: 'mac',
-        type: 'payload',
-        url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-      },
-      availableVersion: '1.2.3-beta.4',
-      capabilities: {
-        canApplyInPlace: true,
-        canDownload: true,
-        canOpenInstaller: false,
-        requiresManualInstall: false,
-      },
-      downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-      state: 'downloaded',
+      target: 'closure',
+      candidateVersion: '1.2.3-beta.4',
+      state: 'ready',
     });
     const installing = updateStatus({
-      ...payloadReady,
-      state: 'installing',
+      target: 'closure',
+      candidateVersion: '1.2.3-beta.4',
+      state: 'applying',
     });
     const install = vi.fn(async () => installing);
-    const quit = vi.fn(async () => ({ ok: true as const }));
-    restoreOpenDesignHost = installMockOpenDesignHost({
+    restoreOpenDesignElectron = installMockOpenDesignElectron({
       host: {
         updater: {
-          install,
-          quit,
+          apply: install,
           status: vi.fn(async () => payloadReady),
         },
       },
@@ -6095,51 +6048,26 @@ describe('SettingsDialog about interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: en['updater.installRestart'] }));
 
     await waitFor(() => {
-      expect(install).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
-    });
-    await waitFor(() => {
-      expect(quit).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+      expect(install).toHaveBeenCalledWith('closure', { force: false });
     });
   });
 
-  it('keeps a quit retry action when update install succeeds but quit throws or fails', async () => {
+  it('treats apply as the complete Closure lifecycle operation', async () => {
     const payloadReady = updateStatus({
-      artifact: {
-        name: 'open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-        platformKey: 'mac',
-        type: 'payload',
-        url: 'https://fixture.test/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-      },
-      availableVersion: '1.2.3-beta.4',
-      capabilities: {
-        canApplyInPlace: true,
-        canDownload: true,
-        canOpenInstaller: false,
-        requiresManualInstall: false,
-      },
-      downloadPath: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-      state: 'downloaded',
+      target: 'closure',
+      candidateVersion: '1.2.3-beta.4',
+      state: 'ready',
     });
     const installed = updateStatus({
-      ...payloadReady,
-      installResult: {
-        dryRun: true,
-        openedAt: '2026-05-19T00:00:00.000Z',
-        path: '/tmp/open-design-updater/open-design-1.2.3-beta.4-mac-arm64-payload.zip',
-      },
+      target: 'closure',
+      candidateVersion: '1.2.3-beta.4',
+      state: 'applying',
     });
     const install = vi.fn(async () => installed);
-    const quit = vi.fn()
-      .mockRejectedValueOnce(new Error('desktop quit failed'))
-      .mockResolvedValue({
-        ok: false as const,
-        reason: 'desktop quit is not available',
-      });
-    restoreOpenDesignHost = installMockOpenDesignHost({
+    restoreOpenDesignElectron = installMockOpenDesignElectron({
       host: {
         updater: {
-          install,
-          quit,
+          apply: install,
           status: vi.fn(async () => payloadReady),
         },
       },
@@ -6162,19 +6090,9 @@ describe('SettingsDialog about interactions', () => {
     fireEvent.click(await screen.findByRole('button', { name: en['updater.installRestart'] }));
 
     await waitFor(() => {
-      expect(install).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
+      expect(install).toHaveBeenCalledWith('closure', { force: false });
     });
-    await waitFor(() => {
-      expect(quit).toHaveBeenCalledTimes(1);
-    });
-    expect(screen.getByRole('button', { name: en['updater.quitButton'] })).toBeTruthy();
-    expect(screen.getAllByText(en['updater.quitFailedTitle']).length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole('button', { name: en['updater.quitButton'] }));
-
-    await waitFor(() => {
-      expect(quit).toHaveBeenCalledTimes(2);
-    });
+    expect(screen.queryByRole('button', { name: en['updater.quitButton'] })).toBeNull();
     expect(install).toHaveBeenCalledTimes(1);
   });
 

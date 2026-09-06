@@ -17,14 +17,8 @@ export type UpdaterFixtureOptions = {
   artifactBody?: Buffer | string;
   artifactPath?: string;
   channel?: UpdaterFixtureChannel;
-  controlLauncherVersionMin?: string;
-  controlLauncherVersionUrl?: string;
   host?: string;
-  includePayload?: boolean;
-  launcherSchema?: number;
   platform?: "mac" | "win";
-  payloadBody?: Buffer | string;
-  payloadPath?: string;
   port?: number;
   version?: string;
 };
@@ -36,10 +30,6 @@ export type UpdaterFixtureInfo = {
   checksumUrl: string;
   metadataUrl: string;
   origin: string;
-  payloadChecksumUrl: string | null;
-  payloadPath: string | null;
-  payloadSha256: string | null;
-  payloadUrl: string | null;
   platform: "mac" | "win";
   sha256: string;
   version: string;
@@ -234,25 +224,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const sha256 = options.artifactPath == null
     ? createHash("sha256").update(artifactBody).digest("hex")
     : await sha256File(options.artifactPath);
-  const payloadName = options.payloadPath == null
-    ? platform === "win"
-      ? `open-design-${version}-win-x64-payload.7z`
-      : `open-design-${version}-mac-arm64-payload.zip`
-    : basename(options.payloadPath);
   const artifactPathSegment = encodeURIComponent(artifactName);
-  const payloadPathSegment = encodeURIComponent(payloadName);
-  const includePayload = options.includePayload === true || options.payloadPath != null;
-  const payloadBody = Buffer.isBuffer(options.payloadBody)
-    ? options.payloadBody
-    : Buffer.from(options.payloadBody ?? `Open Design launcher payload fixture ${version}\n`, "utf8");
-  const payloadFileStat = options.payloadPath == null ? null : await stat(options.payloadPath);
-  if (payloadFileStat != null && (!payloadFileStat.isFile() || payloadFileStat.size <= 0)) {
-    throw new Error(`updater fixture payload path must be a non-empty file: ${options.payloadPath}`);
-  }
-  const payloadSize = payloadFileStat?.size ?? payloadBody.byteLength;
-  const payloadSha256 = options.payloadPath == null
-    ? createHash("sha256").update(payloadBody).digest("hex")
-    : await sha256File(options.payloadPath);
 
   let info: UpdaterFixtureInfo | null = null;
   const server = createServer((request, response) => {
@@ -268,19 +240,6 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
         channel,
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
-        ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
-        ...(options.controlLauncherVersionMin != null || options.controlLauncherVersionUrl != null
-          ? {
-              control: {
-                launcher: {
-                  version: {
-                    ...(options.controlLauncherVersionMin != null ? { min: options.controlLauncherVersionMin } : {}),
-                    ...(options.controlLauncherVersionUrl != null ? { url: options.controlLauncherVersionUrl } : {}),
-                  },
-                },
-              },
-            }
-          : {}),
         platforms: {
           [platformKey]: {
             arch: platform === "win" ? "x64" : "arm64",
@@ -292,17 +251,6 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
                 size: artifactSize,
                 url: info.artifactUrl,
               },
-              ...(includePayload && info.payloadUrl != null && info.payloadChecksumUrl != null
-                ? {
-                    payload: {
-                      contentType: platform === "win" ? "application/x-7z-compressed" : "application/zip",
-                      name: payloadName,
-                      sha256Url: info.payloadChecksumUrl,
-                      size: payloadSize,
-                      url: info.payloadUrl,
-                    },
-                  }
-                : {}),
             },
             channel,
             enabled: true,
@@ -325,22 +273,9 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       sendArtifact(request, response, artifactBody, contentType);
       return;
     }
-    if (includePayload && path === `/${channel}/versions/${version}/${payloadPathSegment}`) {
-      if (options.payloadPath != null && payloadFileStat != null) {
-        sendFileArtifact(request, response, options.payloadPath, payloadFileStat.size, platform === "win" ? "application/x-7z-compressed" : "application/zip");
-        return;
-      }
-      sendArtifact(request, response, payloadBody, platform === "win" ? "application/x-7z-compressed" : "application/zip");
-      return;
-    }
     if (path === `/${channel}/versions/${version}/${artifactPathSegment}.sha256`) {
       response.setHeader("content-type", "text/plain; charset=utf-8");
       response.end(`${sha256}  ${artifactName}\n`);
-      return;
-    }
-    if (includePayload && path === `/${channel}/versions/${version}/${payloadPathSegment}.sha256`) {
-      response.setHeader("content-type", "text/plain; charset=utf-8");
-      response.end(`${payloadSha256}  ${payloadName}\n`);
       return;
     }
     response.statusCode = 404;
@@ -350,7 +285,6 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   await listen(server, port, host);
   const origin = serverOrigin(server);
   const artifactUrl = `${origin}/${channel}/versions/${version}/${artifactPathSegment}`;
-  const payloadUrl = includePayload ? `${origin}/${channel}/versions/${version}/${payloadPathSegment}` : null;
   info = {
     artifactPath: options.artifactPath ?? null,
     artifactUrl,
@@ -358,10 +292,6 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     checksumUrl: `${artifactUrl}.sha256`,
     metadataUrl: `${origin}/${channel}/latest/metadata.json`,
     origin,
-    payloadChecksumUrl: payloadUrl == null ? null : `${payloadUrl}.sha256`,
-    payloadPath: options.payloadPath ?? null,
-    payloadSha256: includePayload ? payloadSha256 : null,
-    payloadUrl,
     platform,
     sha256,
     version,

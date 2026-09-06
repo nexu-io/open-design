@@ -81,7 +81,7 @@ import {
   openFolderDialog,
   pushRecentLinkedDir,
 } from '../providers/registry';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignElectronAvailable, pickElectronWorkingDir } from '@open-design/electron-contract';
 import type {
   DesignSystemSummary,
   Project,
@@ -2148,8 +2148,8 @@ export function HomeView({
   async function handlePickWorkingDir() {
     // On desktop the working-dir POST is gated behind a host-minted token, so
     // pick through the host bridge to capture { baseDir, token } together.
-    if (isOpenDesignHostAvailable()) {
-      const result = await pickHostWorkingDir();
+    if (isOpenDesignElectronAvailable()) {
+      const result = await pickElectronWorkingDir();
       if (result.ok) {
         setWorkingDir(result.baseDir);
         setWorkingDirToken(result.token);
@@ -2184,8 +2184,8 @@ export function HomeView({
   }
 
   async function handlePickLocalCodeDir() {
-    if (isOpenDesignHostAvailable()) {
-      const result = await pickHostWorkingDir();
+    if (isOpenDesignElectronAvailable()) {
+      const result = await pickElectronWorkingDir();
       if (result.ok) {
         void rememberRecentDir(result.baseDir);
         return result.baseDir;

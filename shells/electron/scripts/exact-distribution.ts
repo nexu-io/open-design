@@ -37,7 +37,9 @@ if (sceneManifest.target !== input.target || typeof sceneManifest.closure?.file 
   throw new Error("Electron exact distribution differs from its scene target or seeds");
 }
 const manifest = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")) as ElectronShellManifest);
-const contentEnvelope = JSON.parse(await readFile(input.acceptedContentMetadataFile, "utf8")) as { metadata?: { channel?: unknown; releaseVersion?: unknown } };
+const contentEnvelope = JSON.parse(await readFile(input.acceptedContentMetadataFile, "utf8")) as {
+  metadata?: { channel?: unknown; releaseVersion?: unknown; resources?: unknown };
+};
 if (contentEnvelope.metadata?.channel !== manifest.channel || typeof contentEnvelope.metadata.releaseVersion !== "string") {
   throw new Error("Electron exact content differs from its Shell channel identity");
 }
@@ -59,6 +61,26 @@ const supervisor = required("supervisor.mjs");
 const closure = required(sceneManifest.closure.file);
 const launcher = required(sceneManifest.standalone.entrypoint);
 for (const resource of [host, supervisor, closure, launcher]) await copyFile(resource.path, join(stagingRoot, resource.name));
+const closureResources = JSON.parse(await readFile(required("closure-resources.json").path, "utf8")) as { resources?: unknown };
+if (!Array.isArray(closureResources.resources) || !Array.isArray(contentEnvelope.metadata.resources)) {
+  throw new Error("Electron exact content lacks its Closure resource binding");
+}
+const contentResources = new Map(contentEnvelope.metadata.resources.map((candidate) => {
+  if (candidate == null || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error("Electron exact content resource is invalid");
+  const value = candidate as { id?: unknown; blob?: unknown };
+  if (typeof value.id !== "string" || typeof value.blob !== "string") throw new Error("Electron exact content resource is incomplete");
+  return [value.id, value.blob] as const;
+}));
+const resourceSeeds = await Promise.all(closureResources.resources.map(async (candidate) => {
+  if (candidate == null || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error("Electron Closure resource binding is invalid");
+  const value = candidate as { id?: unknown; file?: unknown; sha256?: unknown; size?: unknown };
+  if (typeof value.id !== "string" || typeof value.file !== "string" || typeof value.sha256 !== "string" || typeof value.size !== "number"
+    || contentResources.get(value.id) !== value.sha256) throw new Error("Electron Closure resource differs from accepted content");
+  const resource = required(value.file);
+  if (resource.sha256 !== value.sha256 || resource.size !== value.size) throw new Error(`Electron Closure resource failed scene binding: ${value.id}`);
+  await copyFile(resource.path, join(stagingRoot, resource.name));
+  return Object.freeze({ ...await descriptor(resource.path, resource.name), blobSha256: value.sha256 });
+}));
 const installation = Object.freeze({
   schemaVersion: 1,
   channel: manifest.channel,
@@ -72,6 +94,7 @@ const installation = Object.freeze({
   seeds: Object.freeze([
     Object.freeze({ ...await descriptor(launcher.path, launcher.name), blobSha256: sceneManifest.standalone.sha256 }),
     Object.freeze({ ...await descriptor(closure.path, closure.name), blobSha256: sceneManifest.closure.sha256 }),
+    ...resourceSeeds,
   ]),
 });
 const installationPath = join(stagingRoot, "standalone-installation.json");

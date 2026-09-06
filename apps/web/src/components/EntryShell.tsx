@@ -34,7 +34,7 @@ import {
   type ProjectScenarioTaskProfile,
   type WorkspaceProjectSummary,
 } from '@open-design/contracts';
-import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
+import type { OpenDesignElectronProjectImportSuccess } from '@open-design/electron-contract';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackHomeNavClick,
@@ -507,7 +507,7 @@ interface Props {
     file: File,
   ) => Promise<ImportClaudeDesignOutcome | void> | ImportClaudeDesignOutcome | void;
   onImportFolder?: (baseDir: string) => Promise<void> | void;
-  onImportFolderResponse?: (response: OpenDesignHostProjectImportSuccess) => Promise<void> | void;
+  onImportFolderResponse?: (response: OpenDesignElectronProjectImportSuccess) => Promise<void> | void;
   onOpenProject: (
     id: string,
     fileName?: string,

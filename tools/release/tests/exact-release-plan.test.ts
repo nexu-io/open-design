@@ -21,7 +21,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "od-exact-release-plan-"));
   roots.push(root);
   const ids = [
-    "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
+    "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ] as const;
   await Promise.all(ids.map(async (id) => {
@@ -31,7 +31,7 @@ async function fixture() {
   return {
     registry: parseContentIdentityRegistry({
       identities: Object.fromEntries(ids.map((id) => [id, {
-        parameters: id.startsWith("electron.") || id === "closure.acceptance.hot" ? ["target", "acceptedShellBaseline"] : ["target"],
+        parameters: (id.startsWith("electron.") && !id.startsWith("electron.contract.")) || id === "closure.acceptance.hot" ? ["target", "acceptedShellBaseline"] : ["target"],
         schemaVersion: 1, sourceSets: [id],
       }])),
       schemaVersion: 1,
@@ -49,7 +49,7 @@ describe("exact release plan", () => {
     });
     expect(first.baseline.mode).toBe("bootstrap");
     expect(first.actions.map(({ id }) => id)).toEqual([
-      "electron.shell.build", "electron.shell.test", "closure.build", "closure.test", "electron.distribution",
+      "electron.contract.build", "electron.contract.test", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test", "electron.distribution",
       "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
     ]);
 

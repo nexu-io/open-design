@@ -1,4 +1,6 @@
 import { cac } from "cac";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { ReleaseChannel } from "@open-design/release";
 
 import {
@@ -13,17 +15,14 @@ type CliOptions = {
   artifactPath?: string;
   channel?: string;
   closurePath?: string;
-  controlLauncherVersionMin?: string;
-  controlLauncherVersionUrl?: string;
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
   port?: string;
-  includePayload?: boolean;
-  payloadPath?: string;
   launcherPath?: string;
   releaseVersion?: string;
   resource?: string | string[];
+  resourceReceipt?: string;
   shellBuildHash?: string;
   shellVersion?: string;
   sourceCommit?: string;
@@ -49,6 +48,25 @@ function parseStandaloneResources(value: string | string[] | undefined) {
     }
     return resource as { entrypoint: string; file: string; id: string; path: string; treeSha256: string };
   });
+}
+
+async function standaloneResources(options: CliOptions) {
+  const inline = parseStandaloneResources(options.resource);
+  if (options.resourceReceipt == null) return inline;
+  const receipt = JSON.parse(await readFile(resolve(options.resourceReceipt), "utf8")) as {
+    schemaVersion?: unknown;
+    operation?: unknown;
+    resources?: unknown;
+  };
+  if (receipt.schemaVersion !== 1 || receipt.operation !== "closure.resources.build" || !Array.isArray(receipt.resources)) {
+    throw new Error("--resource-receipt is not a Closure resource receipt");
+  }
+  const serialized = receipt.resources.map((resource) => {
+    if (resource == null || typeof resource !== "object" || Array.isArray(resource)) throw new Error("Closure resource receipt contains an invalid resource");
+    const value = resource as Record<string, unknown>;
+    return JSON.stringify({ entrypoint: value.entrypoint, file: value.file, id: value.id, path: value.path, treeSha256: value.treeSha256 });
+  });
+  return [...inline, ...parseStandaloneResources(serialized)];
 }
 
 function parsePort(value: string | undefined): number {
@@ -83,7 +101,7 @@ async function start(service: string, options: CliOptions): Promise<void> {
       launcherPath: options.launcherPath,
       port: parsePort(options.port),
       releaseVersion: options.releaseVersion ?? `0.1.0-${channel}.1`,
-      resources: parseStandaloneResources(options.resource),
+      resources: await standaloneResources(options),
       shell: { buildHash: options.shellBuildHash, type: "electron", version: options.shellVersion ?? "0.1.0" },
       sourceCommit: options.sourceCommit,
       standaloneVersion: options.standaloneVersion,
@@ -145,12 +163,8 @@ async function start(service: string, options: CliOptions): Promise<void> {
   const server = await startUpdaterFixtureServer({
     artifactPath: options.artifactPath,
     channel: options.channel as ReleaseChannel | undefined,
-    controlLauncherVersionMin: options.controlLauncherVersionMin,
-    controlLauncherVersionUrl: options.controlLauncherVersionUrl,
     host: options.host,
     platform: parsePlatform(options.platform),
-    includePayload: options.includePayload,
-    payloadPath: options.payloadPath,
     port: parsePort(options.port),
     version: options.version,
   });
@@ -183,18 +197,15 @@ cli
   .option("--artifact-path <path>", "Serve a local update artifact file")
   .option("--channel <channel>", "Fixture channel")
   .option("--closure-path <path>", "standalone-exact: Closure content artifact")
-  .option("--control-launcher-version-min <version>", "Publish control.launcher.version.min in fixture metadata")
-  .option("--control-launcher-version-url <url>", "Publish control.launcher.version.url in fixture metadata")
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
-  .option("--include-payload", "Include launcher payload metadata")
   .option("--launcher-path <path>", "standalone-exact: generation launcher artifact")
-  .option("--payload-path <path>", "Serve launcher payload bytes from a real archive")
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
   .option("--token <token>", "collab-cloud: shared bearer token clients must present")
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--release-version <version>", "standalone-exact: channel release version")
   .option("--resource <json>", "standalone-exact: repeatable signed zip resource descriptor")
+  .option("--resource-receipt <path>", "standalone-exact: Closure resource build receipt")
   .option("--shell-build-hash <digest>", "standalone-exact: accepted Electron Shell build hash")
   .option("--shell-version <version>", "standalone-exact: minimum Electron Shell version")
   .option("--source-commit <sha>", "standalone-exact: source commit identity")

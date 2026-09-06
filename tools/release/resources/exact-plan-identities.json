@@ -4,6 +4,22 @@
     "excludeDirectoryNames": [".next", ".tmp", "coverage", "dist", "node_modules", "out"]
   },
   "sourceSets": {
+    "electron.contract.build": {
+      "normalizePackageVersion": true,
+      "paths": [
+        "packages/electron-contract/package.json",
+        "packages/electron-contract/esbuild.config.mjs",
+        "packages/electron-contract/tsconfig.json",
+        "packages/electron-contract/src"
+      ]
+    },
+    "electron.contract.test": {
+      "paths": [
+        "packages/electron-contract/tests",
+        "packages/electron-contract/tsconfig.tests.json",
+        "packages/electron-contract/vitest.config.ts"
+      ]
+    },
     "electron.shell.build": {
       "normalizePackageVersion": true,
       "paths": [
@@ -53,13 +69,16 @@
         "pnpm-workspace.yaml",
         "apps/closure/package.json",
         "apps/closure/esbuild.config.ts",
+        "apps/closure/scripts",
         "apps/closure/tsconfig.json",
+        "apps/closure/tsconfig.scripts.json",
         "apps/closure/src",
         "apps/daemon/package.json",
         "apps/daemon/tsconfig.json",
         "apps/daemon/src",
         "apps/web/package.json",
         "apps/web/next.config.ts",
+        "apps/web/public",
         "apps/web/tsconfig.json",
         "apps/web/tsconfig.sidecar.json",
         "apps/web/src",
@@ -72,8 +91,6 @@
         "packages/contracts/src",
         "packages/diagnostics/package.json",
         "packages/diagnostics/src",
-        "packages/host/package.json",
-        "packages/host/src",
         "packages/platform/package.json",
         "packages/platform/src",
         "packages/plugin-runtime/package.json",
@@ -109,11 +126,10 @@
     },
     "electron.acceptance.full": {
       "paths": [
-        "e2e/lib/desktop",
-        "e2e/lib/vitest",
-        "e2e/scripts/release-smoke.ts",
-        "e2e/specs/mac.spec.ts",
-        "e2e/specs/win.spec.ts"
+        ".github/scripts/release/installed_acceptance.py",
+        ".github/workflows/release-exact.yml",
+        "e2e/tests/scripts/exact-release.test.ts",
+        "shells/electron/tests/runtime-lifecycle.test.ts"
       ]
     },
     "closure.acceptance.hot": {
@@ -127,6 +143,8 @@
     }
   },
   "identities": {
+    "electron.contract.build": {"schemaVersion": 1, "sourceSets": ["electron.contract.build"], "parameters": ["target"]},
+    "electron.contract.test": {"schemaVersion": 1, "sourceSets": ["electron.contract.test"], "parameters": ["target"]},
     "electron.shell.build": {"schemaVersion": 1, "sourceSets": ["electron.shell.build"], "parameters": ["target", "acceptedShellBaseline"]},
     "electron.shell.test": {"schemaVersion": 1, "sourceSets": ["electron.shell.test"], "parameters": ["target", "acceptedShellBaseline"]},
     "closure.build": {"schemaVersion": 1, "sourceSets": ["closure.build"], "parameters": ["target"]},

@@ -14,7 +14,7 @@
 // supervisor relocate just the credentials file. (2) means installs
 // that already set OD_DATA_DIR for the rest of the daemon's runtime
 // state (immutable-image installs and the packaged daemon at
-// apps/packaged/src/sidecars.ts:createPackagedDaemonManagedPathEnv)
+// the Electron Shell's daemon sidecar environment projection)
 // get media-config there too without
 // any extra plumbing. Both env values are resolved with the same
 // semantics as OD_DATA_DIR in server.ts:resolveDataDir(): the shared

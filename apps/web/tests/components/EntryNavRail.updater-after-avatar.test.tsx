@@ -21,8 +21,9 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
-import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { OpenDesignElectronUpdaterStatusSnapshot } from '@open-design/electron-contract';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
+import { electronUpdaterStatus } from '../helpers/electron-updater';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -59,32 +60,16 @@ function freeContext(): WorkspaceCollabContext {
   } as unknown as WorkspaceCollabContext;
 }
 
-function idleStatus(): OpenDesignHostUpdaterStatusSnapshot {
-  return {
-    arch: 'arm64',
-    capabilities: {
-      canApplyInPlace: false,
-      canDownload: true,
-      canOpenInstaller: true,
-      requiresManualInstall: true,
-    },
-    channel: 'beta',
-    currentVersion: '0.16.2-beta.145',
-    enabled: true,
-    mode: 'package-launcher',
-    platform: 'darwin',
-    state: 'idle',
-    supported: true,
-  };
+function idleStatus(): OpenDesignElectronUpdaterStatusSnapshot {
+  return electronUpdaterStatus({ currentVersion: 'betahyx-0.16.2-beta.145' });
 }
 
-function downloadedStatus(): OpenDesignHostUpdaterStatusSnapshot {
-  return {
-    ...idleStatus(),
-    availableVersion: '0.16.2-beta.146',
-    downloadPath: '/tmp/open-design-updater/Open Design Beta.dmg',
-    state: 'downloaded',
-  };
+function downloadedStatus(): OpenDesignElectronUpdaterStatusSnapshot {
+  return electronUpdaterStatus({
+    currentVersion: 'betahyx-0.16.2-beta.145',
+    candidateVersion: '0.16.2-beta.146',
+    state: 'ready',
+  });
 }
 
 function renderRail(context: WorkspaceCollabContext | null) {
@@ -136,7 +121,7 @@ afterEach(() => {
 });
 
 async function renderWithDownloadedUpdate(context: WorkspaceCollabContext | null = teamContext()) {
-  restoreHost = installMockOpenDesignHost({
+  restoreHost = installMockOpenDesignElectron({
     host: { updater: { status: vi.fn(async () => downloadedStatus()) } },
   });
   const view = renderRail(context);
@@ -230,7 +215,7 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
   });
 
   it('leaves an empty standalone slot after the capsule while no update is in flight', async () => {
-    restoreHost = installMockOpenDesignHost({
+    restoreHost = installMockOpenDesignElectron({
       host: { updater: { status: vi.fn(async () => idleStatus()) } },
     });
 
@@ -260,7 +245,7 @@ describe('standalone updater rocket placement in the top-right cluster', () => {
   });
 
   it('keeps the signed-out top-right cluster absent while the updater is idle', async () => {
-    restoreHost = installMockOpenDesignHost({
+    restoreHost = installMockOpenDesignElectron({
       host: { updater: { status: vi.fn(async () => idleStatus()) } },
     });
 

@@ -1,38 +1,29 @@
 import {
-  OPEN_DESIGN_HOST_UPDATER_STATES,
-  checkHostUpdater,
-  clearHostUpdaterCache,
-  downloadHostUpdater,
-  getHostUpdaterStatus,
-  installHostUpdater,
-  isOpenDesignHostAvailable,
-  quitHostAfterUpdaterInstallerOpen,
-  setHostUpdaterMenuLabels,
-  subscribeHostUpdater,
-  subscribeHostUpdaterOpenDialog,
-  type OpenDesignHostActionResult,
-  type OpenDesignHostFailure,
-  type OpenDesignHostUpdaterActionOptions,
-  type OpenDesignHostUpdaterMenuLabels,
-  type OpenDesignHostUpdaterOpenDialogListener,
-  type OpenDesignHostUpdaterReinstallSnapshot,
-  type OpenDesignHostUpdaterResult,
-  type OpenDesignHostUpdaterStatusListener,
-  type OpenDesignHostUpdaterStatusSnapshot,
-} from '@open-design/host';
+  applyElectronUpdater,
+  checkElectronUpdater,
+  downloadElectronUpdater,
+  getElectronUpdaterStatus,
+  isOpenDesignElectronAvailable,
+  setElectronUpdaterMenuLabels,
+  subscribeElectronUpdater,
+  subscribeElectronUpdaterOpenDialog,
+  type OpenDesignElectronActionResult,
+  type OpenDesignElectronFailure,
+  type OpenDesignElectronUpdaterLineSnapshot,
+  type OpenDesignElectronUpdaterMenuLabels,
+  type OpenDesignElectronUpdaterOpenDialogListener,
+  type OpenDesignElectronUpdaterResult,
+  type OpenDesignElectronUpdaterStatusListener,
+  type OpenDesignElectronUpdaterStatusSnapshot,
+  type OpenDesignElectronUpdaterTarget,
+} from '@open-design/electron-contract';
 
 export type UpdaterEnvironment = 'desktop' | 'web';
-
-export type UpdaterDownloadProgress = {
-  percent: number | null;
-  receivedBytes: number;
-  totalBytes: number | null;
-};
-
+export type UpdaterActionContext = { payload?: Record<string, unknown> };
+export type UpdaterDownloadProgress = { percent: number | null; receivedBytes: number; totalBytes: number | null };
 export type UpdaterActionResult =
-  | { ok: true; model: UpdaterModel; status: OpenDesignHostUpdaterStatusSnapshot }
-  | OpenDesignHostFailure;
-
+  | { ok: true; model: UpdaterModel; status: OpenDesignElectronUpdaterStatusSnapshot }
+  | OpenDesignElectronFailure;
 export type UpdaterRestartSafety =
   | { activeRunCount: number; state: 'blocked' }
   | { activeRunCount: null; state: 'unknown' };
@@ -44,204 +35,111 @@ export type UpdaterModel = {
   canCheck: boolean;
   canDownload: boolean;
   canOpenInstaller: boolean;
-  canQuitAfterInstallerOpen: boolean;
   currentVersion: string | null;
   downloadProgress: UpdaterDownloadProgress | null;
   enabled: boolean;
   environment: UpdaterEnvironment;
   errorMessage: string | null;
   hasDownloadedInstaller: boolean;
-  installerOpened: boolean;
-  updateKind: 'installer' | 'payload' | 'unknown';
   promptKey: string | null;
-  /**
-   * Present when the feed requires a full installer reinstall (broken or
-   * outdated installed outer package). UI copy priority: `reinstall.url`
-   * jump link > default i18n reinstall copy.
-   */
-  reinstall: OpenDesignHostUpdaterReinstallSnapshot | null;
   requiresManualInstall: boolean;
-  upToDate: boolean;
-  shouldShowControl: boolean;
   shouldPrompt: boolean;
-  status: OpenDesignHostUpdaterStatusSnapshot | null;
+  shouldShowControl: boolean;
+  state: OpenDesignElectronUpdaterLineSnapshot['state'] | null;
+  status: OpenDesignElectronUpdaterStatusSnapshot | null;
   supported: boolean;
+  target: OpenDesignElectronUpdaterTarget | null;
+  updateKind: 'installer' | 'payload' | 'unknown';
+  upToDate: boolean;
 };
 
-function modelFromHostResult(result: OpenDesignHostUpdaterResult): UpdaterActionResult {
-  if (!result.ok) return result;
-  return {
-    ok: true,
-    model: deriveUpdaterModel(result.status, { hostAvailable: true }),
-    status: result.status,
-  };
-}
-
-function clampPercent(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, Math.round(value)));
-}
-
-function downloadProgressFromStatus(
-  status: OpenDesignHostUpdaterStatusSnapshot | null,
-): UpdaterDownloadProgress | null {
+function activeLine(status: OpenDesignElectronUpdaterStatusSnapshot | null): OpenDesignElectronUpdaterLineSnapshot | null {
   if (status == null) return null;
-  if (status.state !== OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADING) return null;
-  const sourceProgress = status.incoming?.progress ?? status.progress;
-
-  const receivedBytes = Math.max(0, sourceProgress?.receivedBytes ?? 0);
-  const totalBytes =
-    typeof sourceProgress?.totalBytes === 'number' && sourceProgress.totalBytes > 0
-      ? sourceProgress.totalBytes
-      : null;
-  const percent = totalBytes == null ? null : clampPercent((receivedBytes / totalBytes) * 100);
-  return {
-    percent,
-    receivedBytes,
-    totalBytes,
-  };
+  const lines = [status.lines.shell, status.lines.closure];
+  return lines.find((line) => line.state === 'ready' || line.state === 'blocked')
+    ?? lines.find((line) => ['available', 'downloading', 'applying', 'checking', 'error'].includes(line.state))
+    ?? status.lines.shell;
 }
 
-export function deriveUpdaterModel(
-  status: OpenDesignHostUpdaterStatusSnapshot | null,
-  options: { hostAvailable?: boolean } = {},
-): UpdaterModel {
-  const hostAvailable = options.hostAvailable ?? isOpenDesignHostAvailable();
-  const environment: UpdaterEnvironment = hostAvailable ? 'desktop' : 'web';
-  const state = status?.state;
-  const busy =
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.CHECKING ||
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADING ||
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.INSTALLING;
-  const canOpenInstaller = Boolean(
-    hostAvailable &&
-    status?.enabled &&
-    status.supported &&
-    status.capabilities.canOpenInstaller,
-  );
-  const canApplyInPlace = Boolean(
-    hostAvailable &&
-    status?.enabled &&
-    status.supported &&
-    status.capabilities.canApplyInPlace,
-  );
-  const canInstallUpdate = canOpenInstaller || canApplyInPlace;
-  const hasDownloadedInstaller = Boolean(
-    state === OPEN_DESIGN_HOST_UPDATER_STATES.DOWNLOADED &&
-    status?.downloadPath,
-  );
-  const installerOpened = status?.installResult != null;
-  const artifactType = status?.artifact?.type ?? status?.incoming?.artifact?.type;
-  const updateKind = artifactType === 'payload' ? 'payload' : artifactType === 'dmg' || artifactType === 'installer' ? 'installer' : 'unknown';
-  const availableVersion = status?.availableVersion ?? null;
-  const currentVersion = status?.currentVersion ?? null;
-  const downloadProgress = downloadProgressFromStatus(status);
-  const upToDate = state === OPEN_DESIGN_HOST_UPDATER_STATES.NOT_AVAILABLE;
-  const promptKey =
-    status == null || availableVersion == null
-      ? null
-      : [
-          status.channel,
-          currentVersion ?? 'unknown-current',
-          availableVersion,
-          status.downloadPath ?? status.artifactUrl ?? status.artifact?.url ?? 'unknown-artifact',
-        ].join(':');
-  const canQuitAfterInstallerOpen = hostAvailable && installerOpened;
+function modelFromElectronResult(result: OpenDesignElectronUpdaterResult): UpdaterActionResult {
+  return result.ok
+    ? { ok: true, model: deriveUpdaterModel(result.status, { hostAvailable: true }), status: result.status }
+    : result;
+}
 
+function progress(line: OpenDesignElectronUpdaterLineSnapshot | null): UpdaterDownloadProgress | null {
+  if (line?.state !== 'downloading' || line.progress == null) return null;
+  const receivedBytes = Math.max(0, line.progress.receivedBytes);
+  const totalBytes = typeof line.progress.totalBytes === 'number' && line.progress.totalBytes > 0 ? line.progress.totalBytes : null;
+  return { receivedBytes, totalBytes, percent: totalBytes == null ? null : Math.max(0, Math.min(100, Math.round(receivedBytes / totalBytes * 100))) };
+}
+
+export function deriveUpdaterModel(status: OpenDesignElectronUpdaterStatusSnapshot | null, options: { hostAvailable?: boolean } = {}): UpdaterModel {
+  const hostAvailable = options.hostAvailable ?? isOpenDesignElectronAvailable();
+  const line = activeLine(status);
+  const target = line?.target ?? null;
+  const busy = line != null && ['checking', 'downloading', 'applying'].includes(line.state);
+  const ready = line?.state === 'ready';
+  const canApply = Boolean(hostAvailable && line?.actions.includes('apply'));
+  const candidateVersion = line?.candidateVersion ?? null;
   return {
-    availableVersion,
+    availableVersion: candidateVersion,
     busy,
-    canApplyInPlace,
-    canCheck: hostAvailable && Boolean(status?.enabled) && !busy,
-    canDownload: hostAvailable && Boolean(status?.enabled && status.capabilities.canDownload) && !busy,
-    canOpenInstaller,
-    canQuitAfterInstallerOpen,
-    currentVersion,
-    downloadProgress,
-    enabled: Boolean(status?.enabled),
-    environment,
-    errorMessage: status?.error?.message ?? null,
-    hasDownloadedInstaller,
-    installerOpened,
-    updateKind,
-    promptKey,
-    reinstall: status?.reinstall ?? null,
-    requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
-    upToDate,
-    shouldShowControl: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
-    shouldPrompt: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
+    canApplyInPlace: canApply && target === 'closure',
+    canCheck: Boolean(hostAvailable && !busy && line?.actions.includes('check')),
+    canDownload: Boolean(hostAvailable && !busy && line?.actions.includes('download')),
+    canOpenInstaller: canApply && target === 'shell',
+    currentVersion: line?.currentVersion ?? null,
+    downloadProgress: progress(line),
+    enabled: line != null,
+    environment: hostAvailable ? 'desktop' : 'web',
+    errorMessage: line?.error?.message ?? null,
+    hasDownloadedInstaller: ready,
+    promptKey: candidateVersion == null || target == null ? null : `${status?.channel}:${target}:${line?.revision}:${candidateVersion}`,
+    requiresManualInstall: false,
+    shouldPrompt: canApply && ready,
+    shouldShowControl: canApply && ready,
+    state: line?.state ?? null,
     status,
-    supported: Boolean(status?.supported),
+    supported: line != null && line.state !== 'unsupported',
+    target,
+    updateKind: target === 'closure' ? 'payload' : target === 'shell' ? 'installer' : 'unknown',
+    upToDate: line?.state === 'current',
   };
 }
 
-export async function readUpdaterStatus(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
-  return modelFromHostResult(await getHostUpdaterStatus(options));
+export async function readUpdaterStatus(_context?: UpdaterActionContext): Promise<UpdaterActionResult> {
+  return modelFromElectronResult(await getElectronUpdaterStatus());
+}
+export async function checkForUpdaterUpdate(_context?: UpdaterActionContext): Promise<UpdaterActionResult> {
+  return modelFromElectronResult(await checkElectronUpdater());
 }
 
-export async function checkForUpdaterUpdate(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
-  return modelFromHostResult(await checkHostUpdater(options));
+async function actionableTarget(action: 'apply' | 'download'): Promise<OpenDesignElectronUpdaterTarget> {
+  const result = await getElectronUpdaterStatus();
+  if (!result.ok) throw new Error(result.reason);
+  const line = [result.status.lines.shell, result.status.lines.closure].find((candidate) => candidate.actions.includes(action));
+  if (line == null) throw new Error(`No updater line can ${action}`);
+  return line.target;
 }
 
-export async function downloadUpdaterUpdate(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
-  return modelFromHostResult(await downloadHostUpdater(options));
+export async function downloadUpdaterUpdate(_context?: UpdaterActionContext): Promise<UpdaterActionResult> {
+  return modelFromElectronResult(await downloadElectronUpdater(await actionableTarget('download')));
 }
-
-export async function openUpdaterInstaller(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
-  return modelFromHostResult(await installHostUpdater(options));
+export async function openUpdaterInstaller(context?: UpdaterActionContext): Promise<UpdaterActionResult> {
+  return modelFromElectronResult(await applyElectronUpdater(await actionableTarget('apply'), { force: context?.payload?.force === true }));
 }
-
-export async function clearUpdaterCache(options?: OpenDesignHostUpdaterActionOptions): Promise<UpdaterActionResult> {
-  return modelFromHostResult(await clearHostUpdaterCache(options));
+export function subscribeToUpdaterStatus(listener: OpenDesignElectronUpdaterStatusListener): () => void {
+  return subscribeElectronUpdater(listener);
 }
-
-export async function quitAfterUpdaterInstallerOpen(
-  options?: OpenDesignHostUpdaterActionOptions,
-): Promise<OpenDesignHostActionResult> {
-  return await quitHostAfterUpdaterInstallerOpen(options);
+export function subscribeToUpdaterOpenDialog(listener: OpenDesignElectronUpdaterOpenDialogListener): () => void {
+  return subscribeElectronUpdaterOpenDialog(listener);
 }
-
-export function subscribeToUpdaterStatus(listener: OpenDesignHostUpdaterStatusListener): () => void {
-  return subscribeHostUpdater(listener);
+export async function syncUpdaterMenuLabels(labels: OpenDesignElectronUpdaterMenuLabels): Promise<OpenDesignElectronActionResult> {
+  return await setElectronUpdaterMenuLabels(labels);
 }
-
-export function subscribeToUpdaterOpenDialog(listener: OpenDesignHostUpdaterOpenDialogListener): () => void {
-  return subscribeHostUpdaterOpenDialog(listener);
-}
-
-export async function syncUpdaterMenuLabels(
-  labels: OpenDesignHostUpdaterMenuLabels,
-): Promise<OpenDesignHostActionResult> {
-  return await setHostUpdaterMenuLabels(labels);
-}
-
-export function restartSafetyFromUpdaterStatus(
-  status: OpenDesignHostUpdaterStatusSnapshot | null,
-): UpdaterRestartSafety | null {
-  const code = status?.error?.code;
-  if (code !== 'active-runs-blocked' && code !== 'active-runs-unknown') return null;
-  const details = status?.error?.details;
-  const activeRunCount =
-    typeof details === 'object' && details != null && 'activeRunCount' in details
-      ? (details as { activeRunCount?: unknown }).activeRunCount
-      : null;
-  if (code === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
-    return { activeRunCount, state: 'blocked' };
-  }
-  return { activeRunCount: null, state: 'unknown' };
-}
-
-export function restartSafetyFromActionResult(result: OpenDesignHostActionResult): UpdaterRestartSafety | null {
-  if (result.ok || (result.reason !== 'active-runs-blocked' && result.reason !== 'active-runs-unknown')) {
-    return null;
-  }
-  const details = result.details;
-  const activeRunCount =
-    typeof details === 'object' && details != null && 'activeRunCount' in details
-      ? (details as { activeRunCount?: unknown }).activeRunCount
-      : null;
-  if (result.reason === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
-    return { activeRunCount, state: 'blocked' };
-  }
-  return { activeRunCount: null, state: 'unknown' };
+export function restartSafetyFromUpdaterStatus(status: OpenDesignElectronUpdaterStatusSnapshot | null): UpdaterRestartSafety | null {
+  const line = activeLine(status);
+  if (line?.state !== 'blocked') return null;
+  return line.blockedBy > 0 ? { activeRunCount: line.blockedBy, state: 'blocked' } : { activeRunCount: null, state: 'unknown' };
 }

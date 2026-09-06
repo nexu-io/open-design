@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { installMockOpenDesignHost } from '@open-design/host/testing';
+import { installMockOpenDesignElectron } from '@open-design/electron-contract/testing';
 import { advanceWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 import {
   buildWorkspacePermissions,
@@ -1925,7 +1925,7 @@ describe('connectConnector', () => {
     vi.stubGlobal('window', {
       open,
     } as unknown as Window & typeof globalThis);
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { shell: { openExternal } },
     });
     const fetchMock = vi.fn(async (url: string) => {
@@ -1961,7 +1961,7 @@ describe('connectConnector', () => {
     vi.stubGlobal('window', {
       open,
     } as unknown as Window & typeof globalThis);
-    const restoreHost = installMockOpenDesignHost({
+    const restoreHost = installMockOpenDesignElectron({
       host: { shell: { openExternal } },
     });
     const fetchMock = vi.fn(async (url: string) => {

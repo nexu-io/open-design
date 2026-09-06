@@ -4,17 +4,17 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BrandSummary } from '@open-design/contracts';
-import { isOpenDesignHostAvailable, pickHostWorkingDir } from '@open-design/host';
+import { isOpenDesignElectronAvailable, pickElectronWorkingDir } from '@open-design/electron-contract';
 import { NewProjectPanel } from '../../src/components/NewProjectPanel';
 import { openFolderDialog } from '../../src/providers/registry';
 import type { DesignSystemSummary, SkillSummary } from '../../src/types';
 
-vi.mock('@open-design/host', async () => {
-  const actual = await vi.importActual<typeof import('@open-design/host')>('@open-design/host');
+vi.mock('@open-design/electron-contract', async () => {
+  const actual = await vi.importActual<typeof import('@open-design/electron-contract')>('@open-design/electron-contract');
   return {
     ...actual,
-    isOpenDesignHostAvailable: vi.fn(),
-    pickHostWorkingDir: vi.fn(),
+    isOpenDesignElectronAvailable: vi.fn(),
+    pickElectronWorkingDir: vi.fn(),
   };
 });
 
@@ -38,7 +38,7 @@ vi.mock('../../src/runtime/brands', () => ({
   useBrandsByDesignSystemId: () => brandsByDesignSystem,
 }));
 
-const mockedIsHostAvailable = vi.mocked(isOpenDesignHostAvailable);
+const mockedIsHostAvailable = vi.mocked(isOpenDesignElectronAvailable);
 const mockedOpenFolderDialog = vi.mocked(openFolderDialog);
 
 const skills: SkillSummary[] = [

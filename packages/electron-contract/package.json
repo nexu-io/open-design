@@ -1,0 +1,52 @@
+{
+  "name": "@open-design/electron-contract",
+  "version": "0.21.1",
+  "private": true,
+  "type": "module",
+  "description": "Pure OpenDesign Electron renderer capability contract.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.mjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.mjs",
+      "require": "./dist/testing.cjs",
+      "default": "./dist/testing.mjs"
+    },
+    "./provider": {
+      "types": "./dist/provider.d.ts",
+      "import": "./dist/provider.mjs",
+      "require": "./dist/provider.cjs",
+      "default": "./dist/provider.mjs"
+    },
+    "./runtime-auth": {
+      "types": "./dist/runtime-auth.d.ts",
+      "import": "./dist/runtime-auth.mjs",
+      "require": "./dist/runtime-auth.cjs",
+      "default": "./dist/runtime-auth.mjs"
+    }
+  },
+  "scripts": {
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

@@ -20,6 +20,8 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   const root = await mkdtemp(join(tmpdir(), "od-exact-plan-"));
   roots.push(root);
   const ids = [
+    "electron.contract.build",
+    "electron.contract.test",
     "electron.shell.build",
     "electron.shell.test",
     "closure.build",
@@ -35,7 +37,7 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   return {
     registry: parseContentIdentityRegistry({
       identities: Object.fromEntries(ids.map((id) => [id, {
-        parameters: id.startsWith("electron.") || id === "closure.acceptance.hot"
+        parameters: (id.startsWith("electron.") && !id.startsWith("electron.contract.")) || id === "closure.acceptance.hot"
           ? ["target", "acceptedShellBaseline"]
           : ["target"],
         schemaVersion: 1,
@@ -59,12 +61,21 @@ describe("exact release plan", () => {
     for (const id of Object.keys(registry.identities)) {
       const paths = resolveContentIdentityDeclaration(registry, id).sources.map(({ path }) => path);
       await Promise.all(paths.map(async (path) => await access(join(repositoryRoot, path))));
-      expect(paths).not.toContain("apps/desktop");
-      expect(paths).not.toContain("apps/packaged");
       expect(paths.some((path) => path.includes("linux"))).toBe(false);
     }
+    const contractPaths = resolveContentIdentityDeclaration(registry, "electron.contract.build").sources.map(({ path }) => path);
+    expect(contractPaths).toContain("packages/electron-contract/src");
+    expect(contractPaths).not.toContain("packages/electron-kit/src");
+
     const shellPaths = resolveContentIdentityDeclaration(registry, "electron.shell.build").sources.map(({ path }) => path);
+    expect(shellPaths).toContain("shells/electron/src");
+    expect(shellPaths).toContain("packages/electron-kit/src");
     expect(shellPaths.some((path) => path.startsWith("apps/web") || path.startsWith("apps/daemon") || path.startsWith("apps/closure"))).toBe(false);
+
+    const closurePaths = resolveContentIdentityDeclaration(registry, "closure.build").sources.map(({ path }) => path);
+    expect(closurePaths).toContain("apps/closure/src");
+    expect(closurePaths).not.toContain("shells/electron/src");
+    expect(closurePaths).not.toContain("packages/electron-kit/src");
   });
 
   it("uses hot acceptance for a Closure-only change while reusing the accepted Shell", async () => {

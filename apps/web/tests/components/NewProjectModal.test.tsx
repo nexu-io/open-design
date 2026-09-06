@@ -3,9 +3,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@open-design/host', () => ({
-  isOpenDesignHostAvailable: () => true,
-  pickAndImportHostProject: vi.fn(),
+vi.mock('@open-design/electron-contract', () => ({
+  isOpenDesignElectronAvailable: () => true,
+  pickAndImportElectronProject: vi.fn(),
 }));
 
 vi.mock('../../src/collab/useWorkspaceContext', () => ({
@@ -37,7 +37,7 @@ vi.mock('../../src/collab/useWorkspaceContext', () => ({
   }),
 }));
 
-import { pickAndImportHostProject } from '@open-design/host';
+import { pickAndImportElectronProject } from '@open-design/electron-contract';
 import { NewProjectModal } from '../../src/components/NewProjectModal';
 import { I18nProvider } from '../../src/i18n';
 import type {
@@ -92,7 +92,7 @@ class ResizeObserverMock {
 beforeEach(() => {
   globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
   Element.prototype.scrollIntoView = vi.fn();
-  vi.mocked(pickAndImportHostProject).mockReset();
+  vi.mocked(pickAndImportElectronProject).mockReset();
 });
 
 describe('NewProjectModal layout', () => {
@@ -162,7 +162,7 @@ describe('NewProjectModal layout', () => {
       projectId: 'project-host',
     } as const;
     let resolveImport!: (value: typeof importResult) => void;
-    vi.mocked(pickAndImportHostProject).mockImplementation(
+    vi.mocked(pickAndImportElectronProject).mockImplementation(
       () => new Promise<typeof importResult>((resolve) => {
         resolveImport = resolve;
       }),
@@ -186,7 +186,7 @@ describe('NewProjectModal layout', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
 
     await waitFor(() => {
-      expect(pickAndImportHostProject).toHaveBeenCalledWith({
+      expect(pickAndImportElectronProject).toHaveBeenCalledWith({
         skillId: 'prototype-skill',
         workspaceContext: expect.objectContaining({
           workspaceId: 'workspace-modal',

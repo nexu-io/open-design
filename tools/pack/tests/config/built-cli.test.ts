@@ -14,12 +14,12 @@ describe("built tools-pack CLI", () => {
 
     const invocation = execFileAsync(
       process.execPath,
-      ["dist/index.mjs", "linux", "unsupported-built-smoke"],
+      ["dist/index.mjs", "mac", "unsupported-built-smoke"],
       { cwd: toolPackRoot },
     );
 
     await expect(invocation).rejects.toMatchObject({
-      stderr: expect.stringContaining("unsupported linux action: unsupported-built-smoke"),
+      stderr: expect.stringContaining("unsupported mac action: unsupported-built-smoke"),
     });
   });
 });

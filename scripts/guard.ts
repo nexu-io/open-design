@@ -68,8 +68,7 @@ const residualAllowedExactPaths = new Set([
   "packages/diagnostics/esbuild.config.mjs",
   "packages/download/esbuild.config.mjs",
   "packages/electron-kit/esbuild.config.mjs",
-  "packages/host/esbuild.config.mjs",
-  "packages/launcher-proto/esbuild.config.mjs",
+  "packages/electron-contract/esbuild.config.mjs",
   "packages/metatool/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
@@ -82,13 +81,8 @@ const residualAllowedExactPaths = new Set([
   "scripts/postinstall.mjs",
   // Checked-in bin shim so pnpm can link `od` before daemon dist output exists.
   "apps/daemon/bin/od.mjs",
-  "apps/packaged/esbuild.config.mjs",
   // Browser service workers must be served as JavaScript files.
   "apps/web/public/od-notifications-sw.js",
-  // Vendored dom-to-pptx browser bundle used by the packaged desktop renderer
-  // for editable PPTX export. It is loaded into the off-screen Chromium page as
-  // an upstream browser asset, not compiled as project-owned TypeScript.
-  "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
@@ -1371,8 +1365,6 @@ const htmlBoundaryOwnerPath = "packages/contracts/src/runtime/html-injection-poi
 const htmlBoundarySkippedDirectories = new Set([".git", ".od", ".tmp", "dist", "node_modules", "out", "test-results"]);
 const htmlBoundaryCheckedPathPrefixes = [
   "apps/daemon/src/",
-  "apps/desktop/src/",
-  "apps/packaged/src/",
   "apps/web/src/",
   "packages/",
   "tools/",

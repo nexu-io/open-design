@@ -39,7 +39,7 @@ describe("DeepSeek Harness bootstrap publisher", () => {
     const sourceDir = await mkdtemp(join(tmpdir(), "od-dsh-bootstrap-publish-"));
     const server = await startReleaseStorageFixtureServer();
     const files = {
-      "install-dsh.cmd": "@echo off\r\necho cmd\r\n",
+      "install-dsh.cmd": "@echo off\r\necho https://open-design.ai/install-dsh.ps1?version=1\r\n",
       "install-dsh.ps1": "Write-Host 'powershell'\n",
       "install-dsh.sh": "#!/usr/bin/env sh\necho posix\n",
     };
@@ -68,11 +68,14 @@ describe("DeepSeek Harness bootstrap publisher", () => {
         "bootstrap/dsh/v1/install-dsh.ps1",
         "bootstrap/dsh/v1/install-dsh.sh",
       ]);
-      for (const [name, body] of Object.entries(files)) {
-        expect(server.getObject(`bootstrap/dsh/v1/${name}`)?.toString("utf8")).toBe(body);
+      expect(server.getObject("bootstrap/dsh/v1/install-dsh.cmd")?.toString("utf8")).toContain(
+        "https://releases.example.test/bootstrap/dsh/v1/install-dsh.ps1",
+      );
+      for (const name of ["install-dsh.ps1", "install-dsh.sh"] as const) {
+        expect(server.getObject(`bootstrap/dsh/v1/${name}`)?.toString("utf8")).toBe(files[name]);
       }
       expect(server.getObject("bootstrap/dsh/v1/SHA256SUMS")?.toString("utf8")).toMatch(
-        /^[a-f0-9]{64}  install-dsh\.cmd\n[a-f0-9]{64}  install-dsh\.ps1\n[a-f0-9]{64}  install-dsh\.sh\n$/,
+        /^[a-f0-9]{64}  install-dsh\.ps1\n[a-f0-9]{64}  install-dsh\.sh\n[a-f0-9]{64}  install-dsh\.cmd\n$/,
       );
       expect(JSON.parse(server.getObject("bootstrap/dsh/latest.json")?.toString("utf8") ?? "{}")).toMatchObject({
         version: "v1",
@@ -95,12 +98,12 @@ describe("DeepSeek Harness bootstrap publisher", () => {
         version: "v2",
       });
 
-      // Rolling back to the earlier bytes reuses the version that already holds
-      // them rather than minting a third copy.
+      // The CMD wrapper is materialized against its version-local PS1, so a
+      // later source rollback is still a distinct immutable bundle.
       await writeFile(join(sourceDir, "install-dsh.sh"), files["install-dsh.sh"], "utf8");
       const rolledBack = await runPublisher(repoRoot, env);
-      expect(rolledBack).toContain("https://releases.example.test/bootstrap/dsh/v1/install-dsh.sh");
-      expect(server.listObjectKeys()).not.toContain("bootstrap/dsh/v3/SHA256SUMS");
+      expect(rolledBack).toContain("https://releases.example.test/bootstrap/dsh/v3/install-dsh.sh");
+      expect(server.listObjectKeys()).toContain("bootstrap/dsh/v3/SHA256SUMS");
     } finally {
       await server.close();
       await rm(sourceDir, { force: true, recursive: true });
@@ -113,7 +116,7 @@ describe("DeepSeek Harness bootstrap publisher", () => {
     const server = await startReleaseStorageFixtureServer();
     await Promise.all(
       Object.entries({
-        "install-dsh.cmd": "@echo off\r\necho cmd\r\n",
+        "install-dsh.cmd": "@echo off\r\necho https://open-design.ai/install-dsh.ps1?version=1\r\n",
         "install-dsh.ps1": "Write-Host 'powershell'\n",
         "install-dsh.sh": "#!/usr/bin/env sh\necho posix\n",
       }).map(([name, body]) => writeFile(join(sourceDir, name), body, "utf8")),

@@ -3,6 +3,28 @@ import { cac } from "cac";
 const cli = cac("tools-release");
 
 cli
+  .command("exact-control", "Execute a finite exact prepare, finalize, publish, or activate request")
+  .option("--request <path>", "Exact control request")
+  .option("--receipt <path>", "Exact control receipt")
+  .action(async (options: { request?: string; receipt?: string }) => {
+    if (options.request == null || options.receipt == null) throw new Error("--request and --receipt are required");
+    const { readObject } = await import("./exact/control-common.ts");
+    const request = await readObject(options.request);
+    if (request.operation === "exact.prepare" || request.operation === "exact.finalize") {
+      const { executeExactPackControl } = await import("./exact/control-pack.ts");
+      await executeExactPackControl(request, options.receipt);
+      return;
+    }
+    const { executeExactReleaseControl } = await import("./exact/control-release.ts");
+    await executeExactReleaseControl(request, options.receipt);
+  });
+
+cli.command("exact-self-check", "Verify exact channel transition algebra").action(async () => {
+  const { selfCheckExactReleaseControl } = await import("./exact/control-release.ts");
+  selfCheckExactReleaseControl();
+});
+
+cli
   .command("exact-release-plan", "Resolve accepted baseline, exact identities, and release actions")
   .option("--root <path>", "Repository root", { default: "." })
   .option("--registry <path>", "Content identity registry", { default: "tools/release/resources/exact-plan-identities.json" })
@@ -113,18 +135,6 @@ cli
   });
 
 cli
-  .command("publish-platform", "Publish one platform's release artifacts and manifest")
-  .action(async () => {
-    await import("./storage/publish-platform.ts");
-  });
-
-cli
-  .command("publish-dogfood", "Upload unpublished build artifacts to the dogfood prefix for manual distribution")
-  .action(async () => {
-    await import("./storage/publish-dogfood.ts");
-  });
-
-cli
   .command("publish-dsh-bootstrap", "Publish immutable DeepSeek Harness bootstrap installers")
   .action(async () => {
     await import("./storage/publish-dsh-bootstrap.ts");
@@ -183,12 +193,6 @@ cli
   });
 
 cli
-  .command("prepare-github-assets", "Prepare the public GitHub Release asset set")
-  .action(async () => {
-    await import("./storage/prepare-github-assets.ts");
-  });
-
-cli
   .command("download-platform-manifest", "Download one platform manifest from release storage")
   .action(async () => {
     await import("./storage/download-platform-manifest.ts");
@@ -204,12 +208,6 @@ cli
   .command("summary-metadata", "Write a release metadata summary")
   .action(async () => {
     await import("./storage/summary-metadata.ts");
-  });
-
-cli
-  .command("write-report", "Write a release report JSON and Markdown summary")
-  .action(async () => {
-    await import("./report/write-report.ts");
   });
 
 cli

@@ -44,6 +44,7 @@ describe("Electron scene", () => {
         namespace: "example-electron",
         protocol: "example",
         window: { width: 800, height: 600, title: "Example Electron" },
+        splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
         shell: { type: "electron", version: "1.2.3", buildHash: "a".repeat(64), digest: "b".repeat(64) },
       })}\n`, "utf8"),
       writeFile(paths.nodeCarrierLockPath, `${JSON.stringify({ schemaVersion: 1, version: "24.18.0", targets: {} })}\n`, "utf8"),

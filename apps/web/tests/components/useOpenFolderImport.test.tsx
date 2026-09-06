@@ -3,9 +3,9 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@open-design/host', () => ({
-  isOpenDesignHostAvailable: () => true,
-  pickAndImportHostProject: vi.fn(),
+vi.mock('@open-design/electron-contract', () => ({
+  isOpenDesignElectronAvailable: () => true,
+  pickAndImportElectronProject: vi.fn(),
 }));
 
 vi.mock('../../src/collab/useWorkspaceContext', () => ({
@@ -16,12 +16,12 @@ vi.mock('../../src/collab/useWorkspaceContext', () => ({
   }),
 }));
 
-import { pickAndImportHostProject } from '@open-design/host';
+import { pickAndImportElectronProject } from '@open-design/electron-contract';
 import { useOpenFolderImport } from '../../src/components/useOpenFolderImport';
 
 afterEach(() => {
   cleanup();
-  vi.mocked(pickAndImportHostProject).mockReset();
+  vi.mocked(pickAndImportElectronProject).mockReset();
 });
 
 describe('useOpenFolderImport', () => {
@@ -34,7 +34,7 @@ describe('useOpenFolderImport', () => {
       await hook.result.current.openFolder();
     });
 
-    expect(pickAndImportHostProject).not.toHaveBeenCalled();
+    expect(pickAndImportElectronProject).not.toHaveBeenCalled();
     expect(hook.result.current.error).toEqual({
       message: 'Workspace context is unavailable. Try again when workspace sync finishes.',
     });

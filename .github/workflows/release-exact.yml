@@ -66,27 +66,24 @@ jobs:
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           git merge-base --is-ancestor "$SOURCE_SHA" origin/main
 
-      - name: Verify exact release transition algebra
-        run: python3 .github/scripts/release.py --self-check
-
       - uses: pnpm/action-setup@v5
-        if: ${{ inputs.channel == 'betahyx' }}
         with:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
-        if: ${{ inputs.channel == 'betahyx' }}
         with:
           node-version: 24.18.0
           cache: pnpm
 
-      - name: Build exact content-identity planner
-        if: ${{ inputs.channel == 'betahyx' }}
+      - name: Build exact control and content-identity planner
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
           pnpm --filter @open-design/metatool build
           pnpm --filter @open-design/tools-release build
+          node tools/release/dist/exact-control.mjs --self-check
+          mkdir -p "$RUNNER_TEMP/exact-plan"
+          cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-control.mjs"
 
       - name: Resolve canonical Electron release plans
         if: ${{ inputs.channel == 'betahyx' }}
@@ -175,11 +172,6 @@ jobs:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
 
-      - uses: actions/download-artifact@v8
-        with:
-          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan
-
       - name: Restore converged scene
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
@@ -235,7 +227,11 @@ jobs:
           pnpm --filter @open-design/sidecar build
           pnpm --filter @open-design/standalone build
           pnpm --filter @open-design/closure build
+          pnpm --filter @open-design/electron-contract build
           pnpm --filter @open-design/electron-kit build
+          if [[ "$SHELL_TYPE" == "electron" ]]; then
+            pnpm --filter @open-design/closure build:resources -- --output "$RUNNER_TEMP/exact-closure-resources" --workspace "$GITHUB_WORKSPACE"
+          fi
           python3 - <<'PY'
           import hashlib, json, os, urllib.request
           from pathlib import Path
@@ -267,14 +263,26 @@ jobs:
               build_hash = shell_identity.removeprefix("sha256:")
               identity = {"type": shell_type, "version": manifest["version"], "buildHash": build_hash}
               identity["digest"] = hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-              manifest.update({"channel": os.environ["CHANNEL"], "shell": identity})
+              channel = os.environ["CHANNEL"]
+              if channel != "betahyx":
+                  raise SystemExit("Electron exact distribution is isolated to betahyx")
+              manifest.update({
+                  "appId": "io.open-design.betahyx",
+                  "productName": "Open Design Betahyx",
+                  "executableName": "open-design-betahyx",
+                  "channel": channel,
+                  "namespace": "release-betahyx",
+                  "window": {**manifest["window"], "title": "Open Design Betahyx"},
+                  "shell": identity,
+              })
               manifest_path = Path(os.environ["RUNNER_TEMP"], "electron-shell.json")
               manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n")
               request = {
                   "schemaVersion": 1, "operation": "electron.scene.build", "target": target,
                   "shellManifestFile": str(manifest_path),
                   "acceptedClosureBaselineFile": str(Path("apps/closure/dist/index.mjs").resolve()),
-                  "standaloneLauncherFile": str(Path("packages/standalone/dist/index.mjs").resolve()),
+                  "standaloneLauncherFile": str(Path("apps/closure/dist/launcher.mjs").resolve()),
+                  "resourceReceiptFile": str(Path(os.environ["RUNNER_TEMP"], "exact-closure-resources", "resource-receipt.json")),
                   "sceneDirectory": str(Path(os.environ["RUNNER_TEMP"], "exact-scene")),
               }
           else:
@@ -361,6 +369,11 @@ jobs:
           pattern: exact-*-scene-*-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/scenes
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
       - name: Read previous content floor when available
         env:
           CHANNEL: ${{ inputs.channel }}
@@ -399,7 +412,7 @@ jobs:
           root = Path(os.environ["RUNNER_TEMP"])
           topology = json.loads(os.environ["SHELL_MATRIX"])["include"]
           shell_records = {}
-          closure_artifact = standalone_artifact = None
+          closure_artifact = standalone_artifact = resource_receipt = None
           for item in topology:
               shell_type, target = item["shell"], item["target"]
               directory = root / "scenes" / f"exact-{shell_type}-scene-{target}-{os.environ['SOURCE_SHA']}"
@@ -411,6 +424,7 @@ jobs:
               record["scenes"].append({"target": target, "sceneDirectory": str(directory), "sceneManifestSha256": hashlib.sha256(manifest.read_bytes()).hexdigest()})
               closure_artifact = closure_artifact or directory / scene["closure"]["file"]
               standalone_artifact = standalone_artifact or directory / scene["standalone"]["entrypoint"]
+              if shell_type == "electron": resource_receipt = resource_receipt or directory / "closure-resources.json"
           if closure_artifact is None or standalone_artifact is None:
               raise SystemExit("exact topology contains no Shell scenes")
           published_at = subprocess.check_output(['git', 'show', '--no-patch', '--format=%cI', os.environ['SOURCE_SHA']], text=True).strip()
@@ -428,11 +442,12 @@ jobs:
               "shells": sorted(shell_records.values(), key=lambda value: value["type"]),
               "outputDirectory": str(root / "exact-prepare"),
           }
+          if resource_receipt is not None: request["resourceReceiptFile"] = str(resource_receipt)
           previous = root / "previous-content-metadata.json"
           if previous.is_file(): request["previousContentMetadataFile"] = str(previous)
           (root / "exact-prepare-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          python3 .github/scripts/pack.py --request "$RUNNER_TEMP/exact-prepare-request.json" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/exact-prepare-request.json" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -563,6 +578,11 @@ jobs:
           pattern: exact-distribution-*-${{ inputs.release_version }}
           path: ${{ runner.temp }}/distributions
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
       - name: Finalize signed Shell sidecar and channel head
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
@@ -612,7 +632,7 @@ jobs:
           }
           (root / "exact-finalize-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          python3 .github/scripts/pack.py --request "$RUNNER_TEMP/exact-finalize-request.json" --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/exact-finalize-request.json" --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
 
       - name: Publish immutable release objects
         env:
@@ -628,7 +648,7 @@ jobs:
           request = {"schemaVersion": 1, "operation": "exact.publish", "packReceipt": str(root / "exact-final" / "pack-receipt.json"), "endpointUrl": os.environ["STORAGE_ENDPOINT"], "bucket": os.environ["STORAGE_BUCKET"]}
           (root / "exact-publish-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          python3 .github/scripts/release.py --request "$RUNNER_TEMP/exact-publish-request.json" --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/exact-publish-request.json" --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -636,11 +656,6 @@ jobs:
           path: ${{ runner.temp }}/exact-final
           if-no-files-found: error
           retention-days: 1
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/exact-plan
 
       - uses: actions/download-artifact@v8
         continue-on-error: true
@@ -702,6 +717,11 @@ jobs:
         with:
           name: exact-published-${{ inputs.channel }}-${{ inputs.release_version }}
           path: ${{ runner.temp }}/published
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
 
       - name: Download accepted public artifact
         env:
@@ -768,7 +788,7 @@ jobs:
           ditto "$source_app" "$app"
           hdiutil detach "$volume"
           trap - EXIT
-          executable="$app/Contents/MacOS/open-design-electron-foundation"
+          executable="$app/Contents/MacOS/open-design-betahyx"
           test -x "$executable"
           OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/electron-user-data"
 
@@ -781,7 +801,7 @@ jobs:
           $installRoot = Join-Path $env:RUNNER_TEMP 'installed-electron'
           $install = Start-Process -FilePath $installer -ArgumentList @('/S', "/D=$installRoot") -Wait -PassThru
           if ($install.ExitCode -ne 0) { throw "Electron installer exited with $($install.ExitCode)" }
-          $executable = Join-Path $installRoot 'open-design-electron-foundation.exe'
+          $executable = Join-Path $installRoot 'open-design-betahyx.exe'
           if (-not (Test-Path $executable)) { throw 'installed Electron executable is missing' }
           $env:OD_PACKAGED_E2E_HEADLESS = '1'
           $env:ELECTRON_KIT_SMOKE_EXIT_MS = '3000'
@@ -804,7 +824,7 @@ jobs:
           fi
           runtime_args=()
           if [[ "$SHELL_TYPE" == "electron" ]]; then
-            runtime_args=(--runtime-log "$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/electron-foundation-headless/runtime/electron/logs/electron-runtime.jsonl")
+            runtime_args=(--runtime-log "$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/release-betahyx-headless/runtime/electron/logs/electron-runtime.jsonl")
           fi
           python3 .github/scripts/release/installed_acceptance.py \
             --root "$RUNNER_TEMP" \
@@ -831,6 +851,10 @@ jobs:
         with:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
 
       - uses: actions/download-artifact@v8
         with:
@@ -860,7 +884,7 @@ jobs:
           request = {"schemaVersion": 1, "operation": "exact.activate", "publishReceipt": str(relocated), "acceptanceCredentials": credentials}
           (root / "activate-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
           PY
-          python3 .github/scripts/release.py --request "$RUNNER_TEMP/activate-request.json" --receipt "$RUNNER_TEMP/activate-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-control.mjs" --request "$RUNNER_TEMP/activate-request.json" --receipt "$RUNNER_TEMP/activate-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -25,6 +25,7 @@ export const ALL_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP] as con
 export const DEFAULT_START_APPS = [APP_KEYS.DESKTOP] as const;
 export const DEFAULT_RUN_APPS = [APP_KEYS.DAEMON, APP_KEYS.WEB] as const;
 export const DEFAULT_STOP_APPS = [APP_KEYS.DESKTOP] as const;
+export const DEFAULT_OBSERVE_APPS = ALL_APPS;
 
 export type ToolDevAppName = (typeof ALL_APPS)[number];
 
@@ -53,8 +54,6 @@ export type ToolDevConfig = {
       controlRuntimeRoot: string;
       installationRoot: string;
       lifecycleScriptPath: string;
-      receiptPath: string;
-      requestPath: string;
     };
     web: ToolDevAppConfig & {
       nextDistDir: string;
@@ -170,8 +169,6 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
         controlRuntimeRoot: electronControlRoot,
         installationRoot: path.join(electronControlRoot, "installation"),
         lifecycleScriptPath: path.join(WORKSPACE_ROOT, "shells/electron/scripts/dev-lifecycle.ts"),
-        receiptPath: path.join(electronControlRoot, "receipt.json"),
-        requestPath: path.join(electronControlRoot, "request.json"),
       },
       web: {
         ...web,

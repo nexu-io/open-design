@@ -18,6 +18,19 @@ function argument(name: string): string {
 const requestPath = argument("--request");
 const receiptPath = argument("--receipt");
 const input = parseElectronExactSceneRequest(JSON.parse(await readFile(requestPath, "utf8")));
+const rawResources = JSON.parse(await readFile(input.resourceReceiptFile, "utf8")) as { schemaVersion?: unknown; operation?: unknown; resources?: unknown };
+if (rawResources.schemaVersion !== 1 || rawResources.operation !== "closure.resources.build" || !Array.isArray(rawResources.resources)) {
+  throw new Error("Electron exact scene requires a Closure resource receipt");
+}
+const resources = rawResources.resources.map((candidate) => {
+  if (candidate == null || typeof candidate !== "object" || Array.isArray(candidate)) throw new Error("Closure resource receipt entry is invalid");
+  const value = candidate as Record<string, unknown>;
+  if (typeof value.id !== "string" || typeof value.file !== "string" || typeof value.path !== "string" || typeof value.entrypoint !== "string"
+    || typeof value.sha256 !== "string" || typeof value.size !== "number" || typeof value.treeSha256 !== "string") throw new Error("Closure resource receipt entry is incomplete");
+  return { id: value.id, file: value.file, path: resolve(value.path), entrypoint: value.entrypoint, sha256: value.sha256, size: value.size, treeSha256: value.treeSha256 };
+});
+const normalizedReceiptPath = resolve(dirname(input.sceneDirectory), "closure-resources.json");
+await writeFile(normalizedReceiptPath, `${JSON.stringify({ schemaVersion: 1, operation: "closure.resources.build", resources: resources.map(({ path: _path, ...resource }) => resource) }, null, 2)}\n`, "utf8");
 const authority = await buildElectronStandaloneAuthority(resolve(dirname(input.sceneDirectory), "electron-authority-build"));
 const receipt = await assembleElectronScene({
   authorityResources: [
@@ -25,6 +38,8 @@ const receipt = await assembleElectronScene({
     authority.supervisor,
     { name: "closure.mjs", path: input.acceptedClosureBaselineFile },
     { name: "standalone-launcher.mjs", path: input.standaloneLauncherFile },
+    { name: "closure-resources.json", path: normalizedReceiptPath },
+    ...resources.map((resource) => ({ name: resource.file, path: resource.path })),
   ],
   entryPath: fileURLToPath(new URL("../src/main.ts", import.meta.url)),
   manifestPath: input.shellManifestFile,

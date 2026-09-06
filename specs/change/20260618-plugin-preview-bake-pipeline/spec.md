@@ -300,7 +300,7 @@ A new standalone workflow, triggered on `push` to `release/**` plus
 - **Loop guard (required — this path commits back to the same branch it triggers
   on).** Unlike the pre-merge path, a `release/**` trigger + a manifest writeback
   to that release branch is a self-retrigger risk (the same shape as
-  `notify-release-feishu.yml`, which fires on every `release/**` push). Break the
+  the release notification automation active at the time). Break the
   loop with **both** belts: (a) a `paths-ignore: ['data/plugin-previews/**']`
   trigger filter so the bot's own manifest commit does not re-fire the workflow,
   and (b) an early `if` guard that skips when the head commit author is the bake
@@ -324,7 +324,7 @@ structure.
 
 The middle term is load-bearing: tags alone do **not** cover the long-lived
 channels that publish from non-tagged refs. Per root AGENTS.md, `nightly` is
-built on **every** `release/**` push (see `notify-release-feishu.yml`) and
+built on **every** `release/**` push under the historical pipeline and
 `preview` is an independent channel published under `preview/latest` — both ship
 clients carrying manifests that no git tag protects. So the GC job must discover
 manifests not only from tags but from:

@@ -80,7 +80,7 @@ describe("shared release metadata publisher", () => {
             {
               ...base,
               arch: "arm64",
-              artifacts: { dmg: { url: "https://example.test/dmg" }, payload: { url: "https://example.test/mac-payload" } },
+              artifacts: { dmg: { url: "https://example.test/dmg" } },
               feed: null,
               legacyPlatformKey: "mac",
               platformKey: "mac_arm64",
@@ -98,7 +98,7 @@ describe("shared release metadata publisher", () => {
             {
               ...base,
               arch: "x64",
-              artifacts: { installer: { url: "https://example.test/exe" }, payload: { url: "https://example.test/win-payload" } },
+              artifacts: { installer: { url: "https://example.test/exe" } },
               feed: null,
               legacyPlatformKey: "win",
               platformKey: "win_x64",
@@ -140,18 +140,6 @@ describe("shared release metadata publisher", () => {
           STATE_SOURCE: "local-tools-serve",
           WIN_X64_RESULT: "success",
           ...(channel === "beta" ? { RELEASE_LATEST_CAS_REQUIRED: "true" } : {}),
-          // The launcher version floor rides through publish + verify on one
-          // channel via its channel-suffixed repo-vars pair; the others must
-          // publish without a control block (their pairs and the stable
-          // fallback pair stay unset).
-          RELEASE_LAUNCHER_VERSION_MIN_STABLE: "",
-          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: "",
-          ...(channel === "beta"
-            ? {
-                RELEASE_LAUNCHER_VERSION_MIN_BETA: "1.2.3-beta.4",
-                RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: "https://example.test/reinstall-help",
-              }
-            : {}),
         };
         await runNode(["--experimental-strip-types", "tools/release/src/release-note/prepare.ts"], {
           cwd: repoRoot,
@@ -176,12 +164,7 @@ describe("shared release metadata publisher", () => {
 
         const metadata = JSON.parse(await readFile(join(metadataDir, "metadata.json"), "utf8")) as {
           channel?: string;
-          control?: { launcher?: { version?: { min?: string; url?: string } } };
           releaseState?: string;
-          releaseTargets?: {
-            mac_arm64?: { artifacts?: { payload?: { url?: string } } };
-            win_x64?: { artifacts?: { payload?: { url?: string } } };
-          };
           allReadyTargetsSigned?: boolean;
           signed?: boolean;
           stableVersion?: string;
@@ -197,8 +180,6 @@ describe("shared release metadata publisher", () => {
         expect(metadata.releaseState).toBe("complete");
         expect(metadata.signed).toBe(true);
         expect(metadata.allReadyTargetsSigned).toBe(false);
-        expect(metadata.releaseTargets?.mac_arm64?.artifacts?.payload?.url).toBe("https://example.test/mac-payload");
-        expect(metadata.releaseTargets?.win_x64?.artifacts?.payload?.url).toBe("https://example.test/win-payload");
         // github attribution must round-trip from the RELEASE_* env the workflow
         // passes; the stable promotion gate checks metadata.github.commit.
         expect(metadata.github?.commit).toBe("abc123");
@@ -210,14 +191,6 @@ describe("shared release metadata publisher", () => {
         expect(metadata.releaseNote?.content?.locales?.en?.mediaType).toBe("text/markdown; charset=utf-8");
         if (channel === "stable") {
           expect(metadata.stableVersion).toBe("1.2.3");
-        }
-        if (channel === "beta") {
-          expect(metadata.control?.launcher?.version).toEqual({
-            min: "1.2.3-beta.4",
-            url: "https://example.test/reinstall-help",
-          });
-        } else {
-          expect(metadata.control).toBeUndefined();
         }
         expect(server.getObject(`${channel}/latest/metadata.json`)).not.toBeNull();
         expect(server.getObject(`${channel}/versions/${version}/release-notes/en.md`)?.toString("utf8")).toContain(
@@ -245,28 +218,6 @@ describe("shared release metadata publisher", () => {
     }
   });
 
-  it("rejects a launcher version floor above the release version", async () => {
-    // A floor the published release cannot satisfy would make the updater's
-    // same-version reinstall offer nag forever; publication must refuse it.
-    const repoRoot = resolve(import.meta.dirname, "../../..");
-    const root = await mkdtemp(join(tmpdir(), "od-release-metadata-floor-"));
-    await expect(runNode(["--experimental-strip-types", "tools/release/src/storage/publish-metadata.ts"], {
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        RELEASE_CHANNEL: "beta",
-        RELEASE_LAUNCHER_VERSION_MIN_BETA: "9.9.9",
-        RELEASE_MANIFEST_DIR: root,
-        RELEASE_METADATA_DIR: root,
-        RELEASE_OUTPUTS_PATH: join(root, "outputs.json"),
-        RELEASE_PUBLIC_ORIGIN: "https://releases.example.test",
-        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
-        RELEASE_VERSION: "1.2.3-beta.4",
-        STATE_SOURCE: "local-tools-serve",
-      },
-    })).rejects.toThrow(/exceeds release version/);
-  });
-
   it("builds planned release-note and metadata artifacts without storage access in dry-run mode", async () => {
     const repoRoot = resolve(import.meta.dirname, "../../..");
     const root = await mkdtemp(join(tmpdir(), "od-release-metadata-dry-run-"));
@@ -282,7 +233,7 @@ describe("shared release metadata publisher", () => {
     await writeFile(
       join(manifestDir, "mac_arm64.json"),
       JSON.stringify({
-        artifacts: { payload: { url: "https://releases.example.test/mac-payload" } },
+        artifacts: { dmg: { url: "https://releases.example.test/mac.dmg" } },
         channel: "stable",
         enabled: true,
         github: { commit: "dry123", runId: 77 },

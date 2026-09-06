@@ -10,8 +10,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - Historical product baseline: `docs/spec.md`, `docs/roadmap.md` (both explicitly archived; do not treat their dated decisions as current behavior).
 - References and current plans: `docs/references.md`, `docs/code-review-guidelines.md`, `specs/current/maintainability-roadmap.md`, `specs/current/ci.md` (CI scope confidence methodology — required before changing planner confidence, routing, or omission policy in `.github/config/scopes.json` and `.github/scripts/scopes.py`).
 - Directory-level agent guidance: `.github/AGENTS.md`, `apps/AGENTS.md`, `packages/AGENTS.md`, `tools/AGENTS.md`, `e2e/AGENTS.md`.
-- Packaged auto-update architecture and high-confidence local harness: read `tools/pack/AGENTS.md` section "Packaged auto-update architecture and harness" before touching packaged updater code, release-channel identity, installer behavior, or updater UI.
-- Packaged build cache contract: `tools/pack/CACHE.md` (determinant rules, materialization-time parameters, confidence grading — required before changing any build-cache node key).
+- Electron product architecture and local package acceptance: read `shells/electron/AGENTS.md` before changing Shell lifecycle, release identity, native behavior, or package assembly.
 - Prompt composition has two independent implementations behind a rollout switch: `docs/prompt-composition.md` (fork point, variant axes, host runtime contract table, worked examples — required before changing any prompt text, in `apps/daemon/src/prompts/`, `packages/contracts/src/prompts/`, or under `plugins/_official/scenarios/od-next-strategy/`). See "Prompt variants" below.
 
 ## Workspace directories
@@ -20,17 +19,18 @@ This file is the single source of truth for agents entering this repository. Rea
 - Top-level content directories: `skills/` (functional skills the agent invokes mid-task — utilities, briefs, packagers; see `skills/AGENTS.md`), `design-templates/` (rendering catalogue: decks, prototypes, image/video/audio templates; see `design-templates/AGENTS.md` and `specs/current/skills-and-design-templates.md`), `design-systems/` (brand `DESIGN.md` files), `craft/` (universal brand-agnostic craft rules a skill can opt into via `od.craft.requires`), `mocks/` (replay-based mock CLIs for `opencode`/`claude`/`codex`/`gemini`/`cursor-agent`/`deepseek`/`qwen`/`grok`, the ACP family `devin`/`hermes`/`kilo`/`kimi`/`kiro`/`vibe`, and the AMR `vela` CLI (login + models + ACP), built from anonymized Langfuse traces — PATH-overlay drop-in for tests and self-validation; see `mocks/README.md`).
 - `apps/web` is the Next.js 16 App Router + React 18 web runtime; do not restore `apps/nextjs`.
 - `apps/daemon` is the local privileged daemon and `od` bin. It owns `/api/*`, agent spawning, skills, design systems, artifacts, and static serving.
-- `apps/desktop` is the Electron shell; it consumes web/daemon status through the sidecar client boundary.
-- `apps/packaged` is the thin packaged Electron runtime entry; it starts packaged sidecars and owns the `od://` entry glue only.
 - `apps/closure` owns the independently distributable OpenDesign Closure content. It does not own acquisition, generation state, or shell policy.
+- `packages/electron-contract` owns the browser-safe renderer/main declaration contract without exposing its physical bridge.
+- `packages/electron-kit` owns reusable Electron runtime, platform, distribution, and packaging implementation.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/sidecar-proto` owns business DTOs and action names; `packages/sidecar` owns the complete business-agnostic sidecar client boundary and protocol implementation; `packages/platform` owns generic OS process primitives.
 - `packages/standalone` owns the shell-neutral exact metadata, verification, materialization, generation, and launcher contract.
 - `shells/terminal` owns the official Node carrier and terminal-facing lifecycle commands. Shells consume standalone contracts and must not import Closure app source.
+- `shells/electron` owns the Electron product Shell, its policy/configuration, and the typed lifecycle adapters consumed by tools.
 - `tools/dev` is the local development lifecycle control plane.
-- `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
+- `tools/pack` is the thin local macOS package build/install/start/stop/logs control plane. It delegates Electron behavior to typed adapters under `shells/electron/scripts`.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
-- `tools/release` owns release metadata, storage publishing, release reports, and notification-facing data contracts; packaged artifact construction and smoke testing remain in `tools/pack`.
+- `tools/release` owns release planning, channel-version lifecycle, metadata, immutable publication, release reports, and notification-facing data contracts.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
 
 ## Inactive or placeholder directories
@@ -104,8 +104,9 @@ Development propagation:
 
 Packaged propagation:
 
-- `tools-pack` / `apps/packaged` own packaged channel and namespace layout.
-- Packaged code resolves the final namespace-scoped daemon data root before
+- The Electron Shell owns packaged channel and namespace layout; `tools-pack`
+  supplies explicit local lifecycle inputs through its typed Shell adapter.
+- Shell runtime code resolves the final namespace-scoped daemon data root before
   spawning the daemon.
 - The packaged daemon receives that final data root as `OD_DATA_DIR`; daemon
   code must not infer packaged data paths from app names, Electron `userData`,
@@ -224,7 +225,7 @@ confidence methodology in `specs/current/ci.md`.
 - `preview` is an independent early-access channel with stable-like release rigor. It should use preview versions such as `X.Y.Z-preview.N`, publish to the `preview` R2 channel, publish updater feeds under `preview/latest`, and follow stable's platform policy including the existing optional Linux enablement.
 - `stable` is the formal delivery channel. Do not make stable promotion depend on preview; stable continues to depend on prerelease only.
 - Public packaged app identity must stay channel-distinct: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Do not ship beta, prerelease, or preview mac DMGs whose drag-install app bundle is `Open Design.app`.
-- Windows beta updater validation must use the real beta namespace `release-beta-win`; otherwise a local beta-like namespace can create a separate uninstall registry key while looking like the same `Open Design Beta` app. See `tools/pack/AGENTS.md` for the architecture map and high-confidence acceptance harness.
+- Channel identity remains a Shell/distribution invariant. Platform capability is accepted only in a workflow that builds and validates that platform through `electron-kit`; tools-pack availability is not evidence of delivery support.
 
 ## Boundary constraints
 
@@ -239,7 +240,7 @@ confidence methodology in `specs/current/ci.md`.
 - Shared web/daemon app contracts belong in `packages/contracts`; that package must not depend on Next.js, Express, Node filesystem/process APIs, browser APIs, SQLite, daemon internals, or the sidecar control-plane protocol.
 - Sidecar process stamps must have exactly five fields: `channel`, `namespace`, `source`, `mode`, and `app`. IPC is private implementation detail and is never a stamp field.
 - Sidecar identity is argv-only. Do not create identity/state files derived from a stamp.
-- Orchestration layers (`tools-dev`, `tools-pack`, packaged launchers) must call `@open-design/sidecar` client/atomic primitives; do not expose argv assembly, IPC paths, or process scans.
+- Tool orchestration layers (`tools-dev`, `tools-pack`) must call typed Shell adapters. Shell runtime adapters own `@open-design/sidecar` client/atomic primitives and must not expose argv assembly, IPC paths, or process scans to tools.
 - Packaged runtime paths must be namespace-scoped and independent from daemon/web ports; ports are transient transport details only.
 - Default runtime files live under `<project-root>/.tmp/<source>/<namespace>/...`; private IPC endpoints are derived by `@open-design/sidecar` from the five-field stamp and the current OS principal. POSIX endpoints use a principal-scoped, hashed directory under the OS temporary directory; callers must treat the concrete path as opaque.
 
@@ -409,7 +410,7 @@ pnpm --filter @open-design/web test
 pnpm --filter @open-design/web build
 pnpm --filter @open-design/daemon test
 pnpm --filter @open-design/daemon build
-pnpm --filter @open-design/desktop build
+pnpm --filter @open-design/shell-electron typecheck
 pnpm --filter @open-design/tools-dev build
 pnpm --filter @open-design/tools-pack build
 pnpm --filter @open-design/tools-serve build
@@ -419,12 +420,6 @@ pnpm --filter @open-design/tools-serve build
 pnpm tools-pack mac build --to all
 pnpm tools-pack mac install
 pnpm tools-pack mac cleanup
-pnpm tools-pack win build --to nsis
-pnpm tools-pack win install
-pnpm tools-pack win cleanup
-pnpm tools-pack linux build --to appimage
-pnpm tools-pack linux install
-pnpm tools-pack linux build --containerized
 ```
 
 # FAQ
