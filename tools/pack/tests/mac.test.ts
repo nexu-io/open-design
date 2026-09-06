@@ -10,12 +10,14 @@ import {
   copyMacPrebundleRuntimeDependencies,
   copyResourceTree,
   createMacElectronRebuildOptions,
+  renderMacAssembledPackageManifest,
   renderMacPackagedConfig,
   toRelativeImportSpecifier,
   validateMacNativeRebuildOutput,
 } from "@/mac/app.js";
 import macBuilderSource from "@/mac/builder.ts?raw";
 import { runElectronBuilder } from "@/mac/builder.js";
+import { formatNpmPackageManagerIdentity } from "@/mac/commands.js";
 import { resolveSeededAppConfigPaths, seedPackagedAppConfig, writeLaunchPackagedConfig } from "@/mac/index.js";
 import { resolveMacPaths } from "@/mac/paths.js";
 
@@ -372,6 +374,12 @@ describe("runElectronBuilder", () => {
       ...overrides,
     });
     const paths = resolveMacPaths(config);
+    await mkdir(paths.assembledAppRoot, { recursive: true });
+    await writeFile(
+      paths.assembledPackageJsonPath,
+      '{"dependencies":{},"name":"open-design-packaged-app","version":"1.2.3"}\n',
+      "utf8",
+    );
     const nodePtyPrebuildRoot = join(
       paths.appPath,
       "Contents",
@@ -428,6 +436,79 @@ describe("runElectronBuilder", () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+
+  it("rejects packaged runtime dependencies quarantined under node_modules/.ignored", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root, {
+        appVersion: "1.2.3",
+        signed: false,
+        webOutputMode: "server",
+      });
+      const paths = resolveMacPaths(config);
+      const runtimeDependencies = [
+        "@open-design/packaged",
+        "better-sqlite3",
+        "blake3-wasm",
+        "fsevents",
+      ];
+      await mkdir(paths.assembledAppRoot, { recursive: true });
+      await writeFile(
+        paths.assembledPackageJsonPath,
+        `${JSON.stringify(
+          {
+            dependencies: Object.fromEntries(runtimeDependencies.map((name) => [name, "1.0.0"])),
+            name: "open-design-packaged-app",
+            version: "1.2.3",
+          },
+          null,
+          2,
+        )}\n`,
+        "utf8",
+      );
+
+      const packagedAppRoot = join(paths.appPath, "Contents", "Resources", "app");
+      const cliPath = join(root, "fake-electron-builder.mjs");
+      await writeFile(
+        cliPath,
+        [
+          'import { mkdir, writeFile } from "node:fs/promises";',
+          'import { join } from "node:path";',
+          `const appRoot = ${JSON.stringify(packagedAppRoot)};`,
+          `const dependencies = ${JSON.stringify(runtimeDependencies)};`,
+          "for (const dependency of dependencies) {",
+          '  const packageRoot = join(appRoot, "node_modules", ".ignored", ...dependency.split("/"));',
+          "  await mkdir(packageRoot, { recursive: true });",
+          '  await writeFile(join(packageRoot, "package.json"), JSON.stringify({ name: dependency, version: "1.0.0" }));',
+          "}",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+      config.electronBuilderCliPath = cliPath;
+
+      await expect(runElectronBuilder(config, paths, ["dir"]))
+        .rejects.toThrow(/node_modules\/\.ignored.*better-sqlite3/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("formatNpmPackageManagerIdentity", () => {
+  it("records the npm version that owns the assembled node_modules tree in the generated manifest", () => {
+    const packageManager = formatNpmPackageManagerIdentity("11.12.1\n");
+    const manifest = JSON.parse(
+      renderMacAssembledPackageManifest({
+        dependencies: { "better-sqlite3": "12.10.0" },
+        packageManager,
+        productName: "Open Design",
+        version: "1.2.3",
+      }),
+    ) as Record<string, unknown>;
+
+    expect(manifest.packageManager).toBe("npm@11.12.1");
   });
 });
 
