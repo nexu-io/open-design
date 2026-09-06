@@ -83,6 +83,12 @@ export type RuntimeContext = {
    * than forwarding Child text into the parent UI stream.
    */
   observeNativeChildBehavior?: boolean;
+  /**
+   * Absolute skill-package directories to load via a runtime-native skill
+   * flag (today: `pi --skill`). Distinct from `extraAllowedDirs`, which also
+   * carries design-system and linked directories that are not skills.
+   */
+  skillDirs?: string[];
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
