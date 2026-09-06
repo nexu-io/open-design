@@ -216,6 +216,18 @@ export type OfficialSkillDiscoveryCatalogV1 = z.infer<
   typeof OfficialSkillDiscoveryCatalogV1Schema
 >;
 
+/** Local observer diagnostics; contains only product-owned public metadata. */
+export interface OfficialSkillDiscoveryDiagnosticsV1 {
+  schema: 'open-design.skill-discovery-diagnostics/v1';
+  enabled: boolean;
+  transportSchema: 'open-design.od-next-prompt-bundle/v2';
+  promptStrategy: 'od-next-plan-build-v2';
+  catalog: OfficialSkillDiscoveryCatalogV1;
+  policyMarkdown: string;
+  catalogMarkdown: string;
+  orchestrationDigests: Record<string, string | null>;
+}
+
 export const OfficialSkillDiscoverySearchRequestV1Schema = z.object({
   query: z.string().trim().min(1).max(8_000),
   role: ResolvedSkillDiscoveryRoleV1Schema.optional(),

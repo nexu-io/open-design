@@ -281,6 +281,7 @@ const DAEMON_OWNED_PRODUCTION_ROUTES = {
   ppt: new Set(['ppt-html', 'html', 'deck-html']),
   marketing: new Set(['marketing-html', 'html', 'image-html']),
   hyperframes: new Set(['hyperframes-html', 'html']),
+  generic: new Set(['html', 'file', 'image', 'document', 'source']),
 } as const;
 
 const DAEMON_OWNED_OUTPUT_KINDS = {
@@ -288,11 +289,20 @@ const DAEMON_OWNED_OUTPUT_KINDS = {
   ppt: new Set(['presentation', 'ppt', 'deck', 'html', 'source']),
   marketing: new Set(['image', 'marketing', 'html', 'source']),
   hyperframes: new Set(['video', 'hyperframes', 'html', 'source', 'rendered-video']),
+  generic: new Set(['html', 'image', 'document', 'pdf', 'text', 'markdown', 'source']),
 } as const;
 
 export function daemonOwnedOdNextPlanningCatalog(
   taskType: keyof typeof DAEMON_OWNED_PRODUCTION_ROUTES,
 ): { productionRoutes: string[]; outputKinds: string[] } {
+  if (taskType === 'generic') {
+    // Admission is unbound, so expose available capabilities without choosing
+    // a task. Execution preflight still validates the Agent's exact profile.
+    return {
+      productionRoutes: [...new Set(Object.values(DAEMON_OWNED_PRODUCTION_ROUTES).flatMap((routes) => [...routes]))],
+      outputKinds: [...new Set(Object.values(DAEMON_OWNED_OUTPUT_KINDS).flatMap((kinds) => [...kinds]))],
+    };
+  }
   return {
     productionRoutes: [...DAEMON_OWNED_PRODUCTION_ROUTES[taskType]],
     outputKinds: [...DAEMON_OWNED_OUTPUT_KINDS[taskType]],

@@ -49,6 +49,43 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  it('keeps the real V2 core, orchestration and Discovery for an unbound generic request', () => {
+    const generic: OdNextStrategyRequestRecipeV2 = {
+      ...recipe, taskType: 'generic', taskProfileDigest: null, taskSkill: null,
+      skillDiscovery: {
+        policy: '# Discovery\n\nRead matching official Skills on demand.',
+        catalog: '# Official catalog\n\nprototype: interactive websites',
+        catalogRevision: `sha256:${A}`,
+        taskProfileVersions: { prototype: '2.0.1' },
+      },
+      planningFacts: { capabilitySnapshotHash: B, inputRefs: ['user-request'],
+        productionRoutes: ['generic'], outputKinds: ['document'], nativeChildLifecycleVerified: false },
+    };
+    const head = composeOdNextStrategyBundleHeadV2(generic);
+    expect(head.coreSystemPrompt.coreStrategy).toBe(recipe.coreStrategy);
+    expect(head.sessionSkills.generalOrchestrationSkill.body).toBe(recipe.generalOrchestration);
+    expect(head.sessionSkills.taskTypeSkill).toBeUndefined();
+    expect(head.sessionSkills.discoverySkill?.body).toContain('# Official catalog');
+    expect(head.coreSystemPrompt.outputContract).toContain('outcome answered');
+    expect(head.coreSystemPrompt.outputContract).toContain('skillDecision');
+    expect(renderOdNextRuntimeFactsV2(generic)).toContain('"prototype": "2.0.1"');
+    const prompt = composeOdNextStrategyRequestPromptV2(generic);
+    expect(prompt).not.toContain('Exactly this one Task Skill');
+    expect(prompt).toContain('# Discovery');
+    expect(() => composeOdNextStrategyBundleHeadV2({ ...generic, skillDiscovery: undefined })).toThrow();
+    expect(() => composeOdNextStrategyBundleHeadV2({ ...generic, taskType: 'prototype' })).toThrow();
+    expect(() => composeOdNextStrategyBundleHeadV2({ ...generic, taskSkill: '# Fake generic Skill' })).toThrow();
+  });
+
+  it('injects Discovery alongside an explicit Task Skill without changing that selection', () => {
+    const head = composeOdNextStrategyBundleHeadV2({
+      ...recipe, skillDiscovery: { policy: '# Discovery', catalog: '# Catalog',
+        catalogRevision: `sha256:${A}`, explicitTaskType: 'prototype' },
+    });
+    expect(head.sessionSkills.taskTypeSkill?.body).toBe(recipe.taskSkill);
+    expect(head.sessionSkills.discoverySkill?.body).toContain('client explicitly selected prototype');
+  });
+
   it('pins the canonical Deck Protocol v1 framework into PPT requests only', () => {
     const pptRecipe: OdNextStrategyRequestRecipeV2 = {
       ...recipe,
@@ -58,7 +95,7 @@ describe('OD Next V2 prompt recipe', () => {
 
     const prompt = composeOdNextStrategyRequestPromptV2(pptRecipe);
     const bundledTaskSkill = composeOdNextStrategyBundleHeadV2(pptRecipe)
-      .sessionSkills.taskTypeSkill.body;
+      .sessionSkills.taskTypeSkill?.body;
 
     expect(prompt).toContain('OD Deck Protocol v1');
     expect(prompt).toContain('data-od-deck-protocol="1"');
@@ -92,7 +129,7 @@ describe('OD Next V2 prompt recipe', () => {
     };
     const textArtifactPrompt = composeOdNextStrategyRequestPromptV2(textArtifactRecipe);
     const textArtifactBundleSkill = composeOdNextStrategyBundleHeadV2(textArtifactRecipe)
-      .sessionSkills.taskTypeSkill.body;
+      .sessionSkills.taskTypeSkill?.body;
     const textArtifactStableContext = composeOdNextStrategyStableRequestContextV2(
       { deckIntent: true },
       'text_artifact',

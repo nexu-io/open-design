@@ -351,13 +351,15 @@ describe('official Skill Discovery catalog v1', () => {
         role: 'primary',
       },
     });
-    expect(loaded.profileMarkdown).toContain('Prototype execution profile v1');
-    expect(loaded.profileMarkdown).toContain('does not activate OD Next v2');
-    expect(loaded.profileMarkdown).not.toContain('RunManifest');
+    expect(loaded.profileMarkdown).toBe(await readFile(
+      path.join(strategyFolder, 'assets/task-profiles/prototype.md'), 'utf8',
+    ));
     expect(loaded.generalOrchestration?.markdown).toContain(
-      'ordinary Agent-turn orchestration v1',
+      'OD Next General Orchestration v2',
     );
-    expect(loaded.generalOrchestration?.markdown).not.toContain('ship-on-write');
+    expect(loaded.generalOrchestration?.markdown).toBe(await readFile(
+      path.join(strategyFolder, 'assets/general-orchestration.md'), 'utf8',
+    ));
     expect(loaded.generalOrchestration).not.toBeNull();
     if (!loaded.generalOrchestration) throw new Error('Prototype orchestration missing.');
     expect(loaded.generalOrchestration?.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
@@ -412,7 +414,7 @@ describe('official Skill Discovery catalog v1', () => {
 
     const adapterPath = path.join(
       strategyFolder,
-      'agent-discovery/task-profiles/prototype.md',
+      'assets/task-profiles/prototype.md',
     );
     const adapter = await readFile(adapterPath, 'utf8');
     await writeFile(adapterPath, `${adapter}\n<!-- adapter drift -->\n`, 'utf8');

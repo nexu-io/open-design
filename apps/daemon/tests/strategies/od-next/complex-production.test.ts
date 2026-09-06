@@ -150,7 +150,7 @@ function planContract(
     taskProfile: {
       schemaVersion: '2',
       taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
+      taskProfileVersion: strategy.selectedTaskProfile!.version,
       goal: 'Build a prototype',
       contextAndAudience: 'Product operators',
       inputsAndReferences: ['request'],

@@ -181,7 +181,7 @@ function planContract(snapshot: AppliedPluginSnapshot): OpenDesignPlanContractV2
     taskProfile: {
       schemaVersion: '2',
       taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
+      taskProfileVersion: strategy.selectedTaskProfile!.version,
       goal: 'Build a prototype',
       contextAndAudience: 'Product team',
       inputsAndReferences: [],

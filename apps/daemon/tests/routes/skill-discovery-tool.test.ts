@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { resolvePluginFolder } from '../../src/plugins/registry.js';
 import { registerSkillDiscoveryToolRoutes } from '../../src/routes/skill-discovery-tool.js';
+import { migrateStrategyTaskStore } from '../../src/strategies/task-store.js';
 import {
   ensureSkillDiscoveryForRun,
   migrateSkillDiscoveryState,
@@ -43,6 +44,7 @@ beforeEach(async () => {
     INSERT INTO conversations (id, project_id) VALUES ('conversation-1', 'project-1');
   `);
   migrateSkillDiscoveryState(db);
+  migrateStrategyTaskStore(db);
 
   const bundledStrategyPlugin = await resolveStrategyRecord();
   ensureSkillDiscoveryForRun(db, {
@@ -73,10 +75,12 @@ beforeEach(async () => {
       },
     },
     http: {
+      requireLocalDaemonRequest: (_req, _res, next) => next(),
       sendApiError: (res, status, code, message, extras = {}) => {
         res.status(status).json({ error: { code, message, ...extras } });
       },
     },
+    discoveryEnabled: () => true,
     db,
     resolveCatalogSources: () => ({
       bundledStrategyPlugin,
@@ -182,6 +186,25 @@ async function preparePrototype() {
   });
 }
 
+it('exports a local observer snapshot without selecting or reading a task Skill', async () => {
+  const before = readSkillDiscoveryState(db, 'conversation-1');
+  const result = await request('/api/diagnostics/skill-discovery-catalog');
+  expect(result.status).toBe(200);
+  expect(result.body.schema).toBe('open-design.skill-discovery-diagnostics/v1');
+  expect(result.body.enabled).toBe(true);
+  expect(result.body.transportSchema).toBe('open-design.od-next-prompt-bundle/v2');
+  expect(result.body.promptStrategy).toBe('od-next-plan-build-v2');
+  expect(result.body.catalog.candidates).toHaveLength(64);
+  expect(Object.keys(result.body.orchestrationDigests)).toHaveLength(64);
+  expect(result.body.orchestrationDigests.prototype).toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect(result.body.catalogMarkdown).toContain(result.body.catalog.revision);
+  expect(result.body.policyMarkdown).toContain('Agent-native Skill Discovery');
+  expect(JSON.stringify(result.body)).not.toContain(STRATEGY_SOURCE);
+  expect(JSON.stringify(result.body)).not.toContain('profileMarkdown');
+  expect(operations).toEqual([]);
+  expect(readSkillDiscoveryState(db, 'conversation-1')).toEqual(before);
+});
+
 describe('agent-native Skill discovery tool routes', () => {
   it('prepares verified bytes without ledger mutation, then commits a matching receipt', async () => {
     const searched = await request('/api/tools/skills/search', {
@@ -213,7 +236,7 @@ describe('agent-native Skill discovery tool routes', () => {
     });
 
     expect(prepared.status).toBe(200);
-    expect(prepared.body.loaded.profileMarkdown).toContain('Prototype execution profile v1');
+    expect(prepared.body.loaded.profileMarkdown).toContain('OD Next Prototype Task Profile v2');
     expect(prepared.body.loaded.materialization).toBeUndefined();
     expect(prepared.body.pendingToken).toMatch(/^odsp_[A-Za-z0-9_-]{43}$/u);
     expect(prepared.body.expectedStateRevision).toBe(1);
@@ -232,8 +255,7 @@ describe('agent-native Skill discovery tool routes', () => {
 
     const loaded = await commitPrepared(prepared.body);
     expect(loaded.status).toBe(200);
-    expect(loaded.body.loaded.profileMarkdown).toContain('Prototype execution profile v1');
-    expect(loaded.body.loaded.profileMarkdown).not.toContain('RunManifest');
+    expect(loaded.body.loaded.profileMarkdown).toContain('OD Next Prototype Task Profile v2');
     expect(loaded.body.loaded.strategyBinding).toBeUndefined();
     expect(loaded.body.loaded.materialization.materializedRoot)
       .toMatch(/^\.od-skills\/discovered-prototype-[a-f0-9]{12}$/u);

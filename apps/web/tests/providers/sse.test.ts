@@ -2143,6 +2143,7 @@ describe('streamViaDaemon', () => {
   it.each([
     { outcome: 'blocked', physicalStatus: 'succeeded', expectedStatus: 'failed', expectsError: true },
     { outcome: 'canceled', physicalStatus: 'failed', expectedStatus: 'canceled', expectsError: false },
+    { outcome: 'answered', physicalStatus: 'failed', expectedStatus: 'succeeded', expectsError: false },
   ])('renders terminal task outcome $outcome instead of the physical Run status', async ({
     outcome,
     physicalStatus,

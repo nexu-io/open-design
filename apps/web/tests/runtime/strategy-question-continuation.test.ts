@@ -119,6 +119,18 @@ describe('strategySettledMessageFields', () => {
     });
   });
 
+  it('suppresses stale continuation for a Host-verified answer-only terminal task', () => {
+    expect(strategySettledMessageFields(blockedProjection({
+      outcome: 'answered',
+      terminal: true,
+      blockedContext: undefined,
+    }))).toEqual({ strategyTaskDelivered: true });
+    expect(strategySettledMessageFields(blockedProjection({
+      outcome: 'answered',
+      terminal: false,
+    }))).toBeNull();
+  });
+
   it('stamps nothing while the task is still running', () => {
     expect(strategySettledMessageFields(blockedProjection({
       outcome: 'running',

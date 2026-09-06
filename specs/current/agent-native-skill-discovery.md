@@ -1,5 +1,10 @@
 # Agent-native Skill Discovery v1 决策记录
 
+> 历史决策记录：下文的 ordinary/v1 adapter 路线已被本分支的
+> [Agent-native Skill Discovery V2](agent-native-skill-discovery-v2.md) 取代。
+> 不再据此限制“仅未选类型才注入”或加载已移除的 v1 adapter。
+> 旧评测目录和 ground truth 保留原版本，不随本次协议升级覆盖。
+
 ## 状态
 
 - 状态：Phase 0 实现已落地且默认关闭；真实模型质量、原生副作用观测、性能/成本与灰度控制门禁尚未完成，当前不得宣称 `canary` 或 `active` ready

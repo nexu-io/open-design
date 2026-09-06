@@ -35,6 +35,7 @@ export type StrategyExecutionModeV2 = z.infer<typeof StrategyExecutionModeV2Sche
 export const StrategyOutcomeV2Schema = z.enum([
   'clarification_required',
   'plan_ready',
+  'answered',
   'completed',
   'blocked',
   'canceled',
@@ -42,6 +43,7 @@ export const StrategyOutcomeV2Schema = z.enum([
 export type StrategyOutcomeV2 = z.infer<typeof StrategyOutcomeV2Schema>;
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+const discoveryDigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const relativeAssetPathSchema = z.string().min(1).refine(
   (path) => path.startsWith('./') && !path.includes('..'),
   { message: 'Strategy asset paths must be plugin-relative and may not traverse upward.' },
@@ -165,16 +167,30 @@ const SelectedStrategyTaskProfileV2Schema = z.object({
   sha256: sha256Schema,
 }).strict();
 
-export const AppliedStrategyBindingV2Schema = z.object({
+const AppliedStrategyBindingBaseV2Schema = z.object({
   schema: z.literal(OD_NEXT_APPLIED_STRATEGY_SCHEMA),
   id: z.literal(OD_NEXT_STRATEGY_ID),
   version: z.string().min(1),
   packageHash: sha256Schema,
   assetDigests: z.array(StrategyAssetDigestV2Schema).min(1),
-  selectedTaskProfile: SelectedStrategyTaskProfileV2Schema,
   taskProfileVersions: z.array(z.string().min(1)).min(1),
   promptRecipe: z.literal(OD_NEXT_PROMPT_RECIPE_ID),
-}).strict().superRefine((value, context) => {
+  discoveryCatalogRevision: discoveryDigestSchema.optional(),
+}).strict();
+
+export const AppliedStrategyBindingV2Schema = z.union([
+  AppliedStrategyBindingBaseV2Schema.extend({
+    selectionMode: z.undefined().optional(),
+    selectedTaskProfile: SelectedStrategyTaskProfileV2Schema,
+  }).strict(),
+  AppliedStrategyBindingBaseV2Schema.extend({
+    selectionMode: z.literal('agent-discovery'),
+    selectedTaskProfile: z.null(),
+    availableTaskProfiles: z.array(SelectedStrategyTaskProfileV2Schema).length(4),
+    genericProfileVersion: z.literal('2.0.0'),
+    discoveryCatalogRevision: discoveryDigestSchema,
+  }).strict(),
+]).superRefine((value, context) => {
   const paths = value.assetDigests.map((asset) => asset.path);
   if (new Set(paths).size !== paths.length) {
     context.addIssue({
@@ -191,22 +207,29 @@ export const AppliedStrategyBindingV2Schema = z.object({
       message: 'Applied strategy asset digests must use stable path order.',
     });
   }
-  const selectedDigest = value.assetDigests.find(
-    (asset) => asset.path === value.selectedTaskProfile.path,
-  );
-  if (selectedDigest?.sha256 !== value.selectedTaskProfile.sha256) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['selectedTaskProfile'],
-      message: 'Selected task profile digest must match the package asset roster.',
-    });
+  const profiles = value.selectionMode === 'agent-discovery'
+    ? value.availableTaskProfiles
+    : [value.selectedTaskProfile];
+  if (new Set(profiles.map((profile) => profile.taskType)).size !== profiles.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['availableTaskProfiles'],
+      message: 'Available task profiles must have unique task types.' });
   }
-  if (!value.taskProfileVersions.includes(value.selectedTaskProfile.version)) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ['taskProfileVersions'],
-      message: 'Selected task profile version must be recorded in taskProfileVersions.',
-    });
+  for (const profile of profiles) {
+    const digest = value.assetDigests.find((asset) => asset.path === profile.path);
+    if (digest?.sha256 !== profile.sha256) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [value.selectionMode === 'agent-discovery' ? 'availableTaskProfiles' : 'selectedTaskProfile'],
+        message: 'Task profile digest must match the package asset roster.',
+      });
+    }
+    if (!value.taskProfileVersions.includes(profile.version)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['taskProfileVersions'],
+        message: 'Task profile version must be recorded in taskProfileVersions.',
+      });
+    }
   }
 });
 export type AppliedStrategyBindingV2 = z.infer<typeof AppliedStrategyBindingV2Schema>;
@@ -408,9 +431,34 @@ const PlanContractStrategyIdentityV2Schema = z.object({
   snapshotId: z.string().min(1),
 }).strict();
 
+/** Agent-authored selection, verified against the task's frozen catalog and load ledger by the Host. */
+export const StrategySkillDecisionV2Schema = z.object({
+  catalogRevision: discoveryDigestSchema,
+  primarySkillId: z.string().min(1).nullable(),
+  auxiliarySkillIds: z.array(z.string().min(1)).max(2),
+  skills: z.array(z.object({
+    id: z.string().min(1),
+    role: z.enum(['primary', 'auxiliary']),
+    candidateDigest: discoveryDigestSchema,
+    contentDigest: discoveryDigestSchema,
+  }).strict()).max(3),
+}).strict().superRefine((value, context) => {
+  const ids = [...(value.primarySkillId ? [value.primarySkillId] : []), ...value.auxiliarySkillIds];
+  if (new Set(ids).size !== ids.length
+    || new Set(value.skills.map((skill) => skill.id)).size !== value.skills.length
+    || ids.length !== value.skills.length
+    || value.skills.some((skill) => !ids.includes(skill.id)
+      || skill.role !== (skill.id === value.primarySkillId ? 'primary' : 'auxiliary'))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['skills'],
+      message: 'Skill decision digests must match exactly one primary (or none) and the unique auxiliary ids.' });
+  }
+});
+export type StrategySkillDecisionV2 = z.infer<typeof StrategySkillDecisionV2Schema>;
+
 export const OpenDesignPlanContractV2Schema = z.object({
   schema: z.literal(OD_NEXT_PLAN_CONTRACT_SCHEMA),
   strategy: PlanContractStrategyIdentityV2Schema,
+  skillDecision: StrategySkillDecisionV2Schema.optional(),
   taskProfile: ResolvedTaskProfileV2Schema,
   fullPlan: FullPlanV2Schema,
   runManifest: z.object({
@@ -444,6 +492,14 @@ export const StrategyRuntimeStateV2Schema = z.object({
   reasonCodes: z.array(z.string().min(1)),
 }).strict().superRefine((value, context) => {
   rejectForbiddenStrategySemantics(value, context);
+
+  if (value.outcome === 'answered') {
+    if (value.route !== 'full_plan' || value.inputStage !== 'request' || value.executionMode !== null) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['outcome'],
+        message: 'Answer-only completion is confined to a Full Plan request with no execution mode.' });
+    }
+    return;
+  }
 
   if (value.route === 'direct_edit') {
     if (value.inputStage !== 'request') {
@@ -709,7 +765,7 @@ export const StrategyTaskProjectionV2Schema = z.object({
   terminal: z.boolean(),
   blockedContext: StrategyTaskBlockedContextV2Schema.optional(),
 }).strict().superRefine((value, context) => {
-  const isTerminalOutcome = ['completed', 'blocked', 'canceled'].includes(value.outcome);
+  const isTerminalOutcome = ['completed', 'answered', 'blocked', 'canceled'].includes(value.outcome);
   if (value.terminal !== isTerminalOutcome) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

@@ -82,7 +82,8 @@ recognizable in the resolved Task Profile.
 
 ## The ship-on-write boundary (non-negotiable)
 
-Writing the primary HTML deliverable to disk IS the delivery. Never perform
+Writing the primary HTML deliverable, or the declared canonical format of a
+generic artifact task, to disk IS the delivery. Never perform
 any post-generation action on a generated artifact for the purpose of quality
 checking:
 
@@ -111,7 +112,7 @@ while writing the source.
 
 Use the stage supplied by Open Design:
 
-- `request`: the user raises a new design or change requirement; choose and
+- `request`: the user raises a new requirement; choose and
   lock the route for the new logical task.
 - `clarification`: questions were asked last turn; merge the user's one
   allowed answer round into the Full Plan.
@@ -203,10 +204,30 @@ escapes the locked Direct Edit after Build begins:
 
 ## Full Plan
 
+When the request includes Skill Discovery, use its complete official metadata
+and load receipts before finalizing the task type. Respect any explicit client
+task selection. An initial unbound `generic` profile is an internal execution
+path, not a Skill to load or a user constraint to confirm. Select a matching
+primary, or resolve no primary and retain `generic`; auxiliary Skills may help
+either case. Choosing a primary does not start Build. Put the actual selection
+and receipt digests in `skillDecision`; Open Design freezes them when accepting
+the Plan. No-primary artifact work, including document or image work supported
+by the supplied runtime facts, still follows Plan → Production with a concrete
+canonical format, route, and required outputs. Never force it into HTML merely
+because there is no primary profile, or invent a missing production capability.
+
+If an unbound Discovery request needs only a direct answer, resolve no primary,
+answer visibly, and emit `answered` under the V2 output contract. This is the
+only exception to preparing an artifact Plan: it is confined to Full Plan /
+request with execution mode null, no active primary and no Plan. It does not
+apply to missing deliverables, Production, or a blocked artifact task.
+
 For a Full Plan request, proceed in this order:
 
-1. Resolve the task type from explicit project metadata and mapping. Use
-   `generic` or report blocked when the task type cannot be identified.
+1. Resolve the task type from explicit project metadata and mapping, or the
+   unbound Discovery decision above. Use `generic` with no primary when
+   supported; report blocked for an unavailable required execution capability,
+   not merely because no primary Skill fits.
 2. Draft the Task Profile from the request, project, baseline artifact,
    attachments, and brand references, per the drafting rules below. Mark
    assumptions and conflicts.
@@ -470,12 +491,14 @@ disk write is finalization.
 
 ## Outcome
 
-Use exactly one logical outcome — these five terms are the only outcome
+Use exactly one logical outcome — these six terms are the only outcome
 vocabulary:
 
 - `clarification_required` after the initial Full Plan request needs its one
   answer round;
 - `plan_ready` when a valid Full Plan and locked execution mode can continue;
+- `answered` only for the answer-only Discovery request defined above, never
+  as a substitute for producing required artifacts;
 - `completed` when Direct Edit or Production produced all required outputs —
   assumptions, asset substitutions, and other non-blocking risks do not
   change the outcome; disclose them in the prose summary;
@@ -514,7 +537,8 @@ vocabulary:
 
 ### Final delivery
 
-- The actual deliverables and how to really open them.
+- The actual deliverables and how to really open them; for `answered`, the
+  answer itself, without invented artifact links or delivery claims.
 - The final outcome.
 - Adopted assumptions, unresolved issues, capability limits, or usage notes.
 

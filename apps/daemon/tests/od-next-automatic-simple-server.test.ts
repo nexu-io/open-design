@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
@@ -152,10 +152,15 @@ describe('OD Next automatic production through the real server', () => {
   let binDir: string | null = null;
   let sequence = 0;
 
+  // These pre-existing fixtures exercise typed V2 independently of discovery.
+  // Discovery-on acceptance is explicit below and uses actual tool receipts.
+  beforeEach(() => { process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'off'; });
+
   afterEach(async () => {
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
     delete process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS;
+    delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
     await stopServer(started);
@@ -164,6 +169,123 @@ describe('OD Next automatic production through the real server', () => {
     if (binDir) await rm(binDir, { recursive: true, force: true });
     binDir = null;
   });
+
+  it('starts untyped discovery as a genuine V2 Bundle and accepts the Agent explicit answer', async () => {
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    const fixture = await createPublicRolloutFixture('discovery-answer', 'design');
+    started = fixture.started;
+    binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const response = await fetch(`${started.url}/api/projects`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: `untyped-${Date.now()}`, name: 'Untyped fixture',
+        metadata: { kind: 'other' }, conversationMode: 'design', skipDiscoveryBrief: true,
+        skillDiscovery: { mode: 'agent', catalog: 'open-design-official' } }),
+    });
+    expect(response.status).toBe(200);
+    const project = await response.json() as { project: { id: string }; conversationId: string };
+    const request = { projectId: project.project.id, conversationId: project.conversationId };
+    const created = await postRun(started.url, publicRunRequest(request, 'Explain this concept.', 'discovery-answer'));
+    expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+    const terminal = await waitForRunTerminal(started.url, created.runId as string);
+    expect(terminal).toMatchObject({ status: 'succeeded', strategyTask: { outcome: 'answered', terminal: true } });
+    const calls = await readProjectInvocations(fixture.logPath, request.projectId);
+    expect(calls).toHaveLength(1);
+    const bundle = parseOdNextPromptBundleV2(calls[0]!.stdin);
+    expect(bundle.taskMetadata.taskType).toBe('generic');
+    expect(bundle.sessionSkills.taskTypeSkill).toBeUndefined();
+    expect(bundle.sessionSkills.discoverySkill?.body).toContain('Agent-native Skill Discovery');
+    expect(bundle.sessionSkills.discoverySkill?.body).toContain('prototype');
+    expect(bundle.sessionSkills.discoverySkill?.body).toContain('hyperframes');
+    expect(getStrategyTaskExecution(database(), terminal.strategyTask!.taskExecutionId)?.planContract).toBeUndefined();
+  }, 60_000);
+
+  it('injects Discovery for explicit typed V2 and continues a receipt-bound Plan into production', async () => {
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    const fixture = await createPublicRolloutFixture('discovery-typed-plan', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, publicRunRequest(fixture, 'Build the requested prototype.', 'discovery-typed-plan'));
+    const initial = await waitForRunTerminal(started.url, created.runId as string);
+    const task = await waitForTask(initial.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+    expect(task.planContract?.skillDecision).toMatchObject({ primarySkillId: 'prototype', auxiliarySkillIds: [] });
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls).toHaveLength(2);
+    const bundle = parseOdNextPromptBundleV2(calls[0]!.stdin);
+    expect(bundle.sessionSkills.taskTypeSkill?.skillName).toBe('prototype');
+    expect(bundle.sessionSkills.discoverySkill?.body).toContain('prototype');
+    expect(bundle.sessionSkills.discoverySkill?.body).toContain('The client explicitly selected prototype');
+    expect(calls[1]!.argv).toContain('resume');
+    expect(calls[1]!.stdin).toContain('native continuation — production');
+  }, 60_000);
+
+  it('runs a generic non-HTML Plan through the real V2 production continuation', async () => {
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    const fixture = await createPublicRolloutFixture('discovery-generic-plan', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const response = await fetch(`${started.url}/api/projects`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: `generic-${Date.now()}`, name: 'Generic fixture',
+        metadata: { kind: 'other', entryFile: 'document.md' }, conversationMode: 'design', skipDiscoveryBrief: true,
+        skillDiscovery: { mode: 'agent', catalog: 'open-design-official' } }),
+    });
+    expect(response.status).toBe(200);
+    const project = await response.json() as { project: { id: string }; conversationId: string };
+    const request = { projectId: project.project.id, conversationId: project.conversationId };
+    const created = await postRun(started.url, publicRunRequest(request, 'Write a short Markdown document.', 'generic-plan'));
+    const initial = await waitForRunTerminal(started.url, created.runId as string);
+    const task = await waitForTask(initial.strategyTask!.taskExecutionId, 'completed');
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'production']);
+    expect(task.planContract?.skillDecision).toMatchObject({ primarySkillId: null, auxiliarySkillIds: [] });
+    expect(task.planContract?.taskProfile).toMatchObject({ taskType: 'generic',
+      canonicalDeliverable: { kind: 'document', format: 'markdown' } });
+    const calls = await readProjectInvocations(fixture.logPath, request.projectId);
+    expect(calls).toHaveLength(2);
+    expect(parseOdNextPromptBundleV2(calls[0]!.stdin).sessionSkills.taskTypeSkill).toBeUndefined();
+    expect(calls[1]!.argv).toContain('resume');
+    expect(await readFile(path.join(calls[1]!.cwd, 'document.md'), 'utf8')).toContain('Generic document');
+    await expect(readFile(path.join(calls[1]!.cwd, 'index.html'))).rejects.toMatchObject({ code: 'ENOENT' });
+  }, 60_000);
+
+  it.each(['chat', 'plan'] as const)('injects first-turn Discovery without overriding explicit %s mode', async (mode) => {
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    const fixture = await createPublicRolloutFixture(`discovery-${mode}`, mode);
+    started = fixture.started; binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, { ...publicRunRequest(fixture, 'Discuss the request.', `discovery-${mode}`), sessionMode: mode });
+    expect(created.strategyTask).toBeUndefined();
+    await waitForRunTerminal(started.url, created.runId as string);
+    const calls = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.stdin).toContain('Agent-native Skill Discovery');
+    expect(calls[0]!.stdin).toContain('Candidate count: 64');
+    expect(calls[0]!.stdin).not.toContain('<open_design_prompt_bundle');
+    expect(calls[0]!.stdin).toContain(mode === 'chat'
+      ? 'Keep this turn conversational' : 'do NOT create the final design artifact first');
+  }, 60_000);
+
+  it('preserves legacy typed admission when Discovery is off and the request uses Chat mode', async () => {
+    const fixture = await createPublicRolloutFixture('legacy-chat-profile', 'design');
+    started = fixture.started; binDir = fixture.binDir;
+    clearOdNextRolloutStop(database());
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
+    process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
+    const created = await postRun(started.url, { ...publicRunRequest(fixture,
+      'Hold the public rollout run open until canceled.', 'legacy-chat-profile'), sessionMode: 'chat' });
+    const task = created.strategyTask;
+    await fetch(`${started.url}/api/runs/${created.runId}/cancel`, { method: 'POST' });
+    expect(task).toMatchObject({ inputStage: 'request', terminal: false });
+  }, 60_000);
 
   it('keeps off/observe public POST behavior ordinary and idempotent with zero strategy tasks', async () => {
     const fixture = await createPublicRolloutFixture('inert');
@@ -2682,8 +2804,12 @@ async function writePublicRolloutCodex(
 ): Promise<{ bin: string; logPath: string }> {
   const bin = path.join(dir, `codex-public-${label}`);
   const logPath = path.join(dir, `codex-public-${label}.jsonl`);
+  const template = ['discovery-typed-plan', 'discovery-generic-plan'].includes(label) ? await createStrategyTemplate() : null;
+  const discoveryPlan = template ? planContract(template.snapshotId, template.strategy) : null;
   await writeFile(bin, `#!/usr/bin/env node
 const fs = require('node:fs');
+const path = require('node:path');
+const cp = require('node:child_process');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
 if (argv.includes('--version')) { console.log(${JSON.stringify(agentCliVersion)}); process.exit(0); }
@@ -2691,7 +2817,7 @@ if (argv.includes('--help')) { console.log('Usage: codex exec'); process.exit(0)
 let stdin = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });
-process.stdin.on('end', () => {
+process.stdin.on('end', async () => {
   fs.appendFileSync(logPath, JSON.stringify({ argv, stdin, cwd: process.cwd(), startedAt: Date.now() }) + '\\n');
   console.log(JSON.stringify({ type: 'thread.started', thread_id: 'public-rollout-session' }));
   console.log(JSON.stringify({ type: 'turn.started' }));
@@ -2699,9 +2825,71 @@ process.stdin.on('end', () => {
     setInterval(() => {}, 1 << 30);
     return;
   }
+  let answer = 'Ordinary public run completed.';
+  if (${JSON.stringify(label)} === 'discovery-answer') {
+    const resolved = await fetch(process.env.OD_DAEMON_URL + '/api/tools/skills/resolve', {
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + process.env.OD_TOOL_TOKEN },
+      body: JSON.stringify({ resolution: 'none', reason: 'This fixture asks for a direct explanation.' }),
+    });
+    if (!resolved.ok) throw new Error('fixture none resolution failed: ' + await resolved.text());
+    answer = 'Here is the requested explanation.\\n<open-design-runtime-state>\\n'
+      + JSON.stringify({ schema: 'open-design.strategy-state/v2', route: 'full_plan', inputStage: 'request',
+        outcome: 'answered', executionMode: null, reasonCodes: [] }) + '\\n</open-design-runtime-state>\\n';
+  }
+  if (['discovery-typed-plan', 'discovery-generic-plan'].includes(${JSON.stringify(label)})) {
+    const generic = ${JSON.stringify(label)} === 'discovery-generic-plan';
+    const production = stdin.includes('native continuation — production');
+    if (production) {
+      fs.writeFileSync(path.join(process.cwd(), generic ? 'document.md' : 'index.html'),
+        generic ? '# Generic document\\n\\nRequested document content.\\n' : '<!doctype html><title>Typed discovery</title>');
+      answer = 'Produced the requested artifact.\\n';
+    } else {
+      const record = stdin.split('\\n').map((line) => {
+        try { return JSON.parse(line.trim()); } catch { return null; }
+      }).find((item) => item?.id === 'prototype' && item.candidateDigest);
+      const revision = /"discoveryCatalogRevision"\\s*:\\s*"(sha256:[a-f0-9]{64})"/.exec(stdin)?.[1];
+      if (!record || !revision) throw new Error('Discovery metadata missing');
+      let receipt;
+      if (generic) {
+        const resolved = await fetch(process.env.OD_DAEMON_URL + '/api/tools/skills/resolve', {
+          method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + process.env.OD_TOOL_TOKEN },
+          body: JSON.stringify({ resolution: 'none', reason: 'A generic document does not require a primary profile.' }),
+        });
+        if (!resolved.ok) throw new Error('fixture none resolution failed: ' + await resolved.text());
+      } else {
+        const raw = cp.execFileSync(process.env.OD_NODE_BIN, [process.env.OD_BIN, 'tools', 'skills', 'load',
+          '--id', 'prototype', '--catalog-revision', revision, '--candidate-digest', record.candidateDigest,
+          '--role', 'primary', '--purpose', 'Build the explicit prototype.', '--json'], { encoding: 'utf8' });
+        receipt = JSON.parse(raw).loaded;
+        if (!receipt?.profileMarkdown) throw new Error('Full body receipt missing');
+      }
+      const plan = ${JSON.stringify(discoveryPlan)};
+      plan.strategy.snapshotId = /applied_snapshot="([a-f0-9-]{36})"/.exec(stdin)?.[1];
+      plan.strategy.packageHash = /"packageHash"\\s*:\\s*"([a-f0-9]{64})"/.exec(stdin)?.[1];
+      plan.runManifest.capabilitySnapshotHash = [...stdin.matchAll(/"capabilitySnapshotHash"\\s*:\\s*"([a-f0-9]{64})"/g)]
+        .map((match) => match[1]).findLast((value) => value !== '0'.repeat(64));
+      plan.skillDecision = generic ? { catalogRevision: revision, primarySkillId: null, auxiliarySkillIds: [], skills: [] }
+        : { catalogRevision: revision, primarySkillId: 'prototype', auxiliarySkillIds: [],
+        skills: [{ id: 'prototype', role: 'primary', candidateDigest: receipt.candidate.candidateDigest,
+          contentDigest: receipt.candidate.contentDigest }] };
+      if (generic) {
+        plan.taskProfile.taskType = 'generic';
+        plan.taskProfile.taskProfileVersion = '2.0.0';
+        plan.taskProfile.canonicalDeliverable = { id: 'document', kind: 'document', format: 'markdown' };
+        plan.taskProfile.requiredDeliverables = [{ id: 'document', kind: 'document' }];
+        plan.fullPlan.steps = [{ id: 'write', objective: 'Write document', outputs: ['document'] }];
+        plan.runManifest.productionRoutes = ['file'];
+        plan.decisionSummary.deliverables = ['document'];
+      }
+      answer = 'Prepared the typed plan.\\n<open-design-plan-contract>\\n' + JSON.stringify(plan) + '\\n</open-design-plan-contract>\\n';
+    }
+    answer += '<open-design-runtime-state>\\n' + JSON.stringify({ schema: 'open-design.strategy-state/v2', route: 'full_plan',
+      inputStage: production ? 'production' : 'request', outcome: production ? 'completed' : 'plan_ready',
+      executionMode: 'simple', reasonCodes: [] }) + '\\n</open-design-runtime-state>\\n';
+  }
   console.log(JSON.stringify({
     type: 'item.completed',
-    item: { id: 'answer', type: 'agent_message', text: 'Ordinary public run completed.' },
+    item: { id: 'answer', type: 'agent_message', text: answer },
   }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
   setTimeout(() => process.exit(0), 5);
@@ -2842,7 +3030,7 @@ function planContract(
     taskProfile: {
       schemaVersion: '2',
       taskType: 'prototype',
-      taskProfileVersion: strategy.selectedTaskProfile.version,
+      taskProfileVersion: strategy.selectedTaskProfile!.version,
       goal: 'Build an operator prototype',
       contextAndAudience: 'Product operators',
       inputsAndReferences: ['request'],

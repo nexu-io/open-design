@@ -200,7 +200,7 @@ export interface CreateTaskObservationRolloutServiceOptions {
 }
 
 const CONTEXT_VALUE_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$/;
-const TERMINAL_TASK_OUTCOMES = new Set(['completed', 'blocked', 'canceled']);
+const TERMINAL_TASK_OUTCOMES = new Set(['completed', 'answered', 'blocked', 'canceled']);
 const PRIVACY_DROP_REASONS = new Set(['metrics_consent_off', 'content_consent_off']);
 const LOCAL_COMPATIBILITY_REASONS = new Set([
   'payload_build_error',

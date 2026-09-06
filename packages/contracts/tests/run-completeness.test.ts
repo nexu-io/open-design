@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   eventsEndedWithUnfinishedWork,
   isTodoWriteToolName,
+  strategyTaskProvesDelivery,
   todoSnapshotHasUnfinishedWork,
   todoStatusIsUnfinished,
 } from '../src/api/run-completeness';
@@ -10,6 +11,18 @@ import {
 // classifier and the web chat footer (#1247 / #1060). These tests pin the exact
 // boundary so the two surfaces can never drift.
 
+describe('strategyTaskProvesDelivery', () => {
+  it('recognizes only Host-validated successful terminal outcomes', () => {
+    expect(strategyTaskProvesDelivery({ outcome: 'answered', terminal: true })).toBe(true);
+    expect(strategyTaskProvesDelivery({ outcome: 'completed', terminal: true })).toBe(true);
+    for (const outcome of ['answered', 'completed', 'running', 'plan_ready', 'clarification_required', 'blocked', 'canceled']) {
+      expect(strategyTaskProvesDelivery({ outcome, terminal: false })).toBe(false);
+    }
+    expect(strategyTaskProvesDelivery({ outcome: 'blocked', terminal: true })).toBe(false);
+    expect(strategyTaskProvesDelivery(undefined)).toBe(false);
+  });
+});
+
 describe('todoStatusIsUnfinished', () => {
   it('treats only `completed` as finished', () => {
     expect(todoStatusIsUnfinished('completed')).toBe(false);
@@ -17,7 +30,7 @@ describe('todoStatusIsUnfinished', () => {
     expect(todoStatusIsUnfinished('in_progress')).toBe(true);
     // `stopped` (a task the agent marked failed/canceled) counts as unfinished,
     // matching the web footer. Narrowing to pending/in_progress only would
-    // reintroduce the divergence this predicate exists to kill.
+// reintroduce the divergence this predicate exists to kill.
     expect(todoStatusIsUnfinished('stopped')).toBe(true);
     expect(todoStatusIsUnfinished(undefined)).toBe(true);
   });

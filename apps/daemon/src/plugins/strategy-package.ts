@@ -59,6 +59,17 @@ export interface BundledStrategyPromptAssetsV2 {
 export function createBundledStrategyBindingV2(input: {
   plugin: InstalledPluginRecord;
   taskType: SelectableStrategyTaskTypeV2;
+  discoveryCatalogRevision?: string;
+}): Extract<AppliedStrategyBindingV2, { selectedTaskProfile: object }>;
+export function createBundledStrategyBindingV2(input: {
+  plugin: InstalledPluginRecord;
+  taskType: StrategyTaskTypeV2;
+  discoveryCatalogRevision?: string;
+}): AppliedStrategyBindingV2;
+export function createBundledStrategyBindingV2(input: {
+  plugin: InstalledPluginRecord;
+  taskType: StrategyTaskTypeV2;
+  discoveryCatalogRevision?: string;
 }): AppliedStrategyBindingV2 {
   return readBundledStrategyPackageV2(input).binding;
 }
@@ -74,7 +85,12 @@ export function loadBundledStrategyPromptAssetsV2(input: {
 }): BundledStrategyPromptAssetsV2 {
   const loaded = readBundledStrategyPackageV2({
     plugin: input.plugin,
-    taskType: input.binding.selectedTaskProfile.taskType,
+    taskType: input.binding.selectionMode === 'agent-discovery'
+      ? 'generic'
+      : input.binding.selectedTaskProfile.taskType,
+    ...(input.binding.discoveryCatalogRevision
+      ? { discoveryCatalogRevision: input.binding.discoveryCatalogRevision }
+      : {}),
   });
   if (JSON.stringify(loaded.binding) !== JSON.stringify(input.binding)) {
     throw new StrategyPackageIdentityError(
@@ -101,7 +117,7 @@ export function loadBundledStrategyPromptAssetsV2(input: {
     binding: loaded.binding,
     coreStrategy: decode(loaded.corePath),
     generalOrchestration: decode(loaded.orchestrationPath),
-    taskSkill: decode(loaded.selectedProfilePath),
+    taskSkill: loaded.selectedProfilePath ? decode(loaded.selectedProfilePath) : '',
     taskResources: loaded.selectedResourcePaths.map((resourcePath) => ({
       path: resourcePath,
       text: decode(resourcePath),
@@ -111,13 +127,14 @@ export function loadBundledStrategyPromptAssetsV2(input: {
 
 function readBundledStrategyPackageV2(input: {
   plugin: InstalledPluginRecord;
-  taskType: SelectableStrategyTaskTypeV2;
+  taskType: StrategyTaskTypeV2;
+  discoveryCatalogRevision?: string;
 }): {
   binding: AppliedStrategyBindingV2;
   assets: Map<string, Uint8Array>;
   corePath: string;
   orchestrationPath: string;
-  selectedProfilePath: string;
+  selectedProfilePath: string | null;
   selectedResourcePaths: string[];
 } {
   const provenance = inspectBundledStrategyProvenanceV2(input.plugin);
@@ -139,7 +156,7 @@ function readBundledStrategyPackageV2(input: {
   const selectedProfile = declaration.assets.taskProfiles.find(
     (profile) => profile.taskType === input.taskType,
   );
-  if (!selectedProfile) {
+  if (!selectedProfile && input.taskType !== 'generic') {
     throw new StrategyPackageIdentityError(
       `Bundled strategy does not declare task profile ${input.taskType}.`,
     );
@@ -154,19 +171,21 @@ function readBundledStrategyPackageV2(input: {
   // The selected profile's resources join the roster with the profile that
   // declares them; other profiles' resources stay out so the package hash for
   // one task type does not move when another task type's shell changes.
-  const selectedResources = selectedProfile.resources ?? [];
+  const profiles = selectedProfile ? [selectedProfile] : declaration.assets.taskProfiles;
+  const selectedResources = profiles.flatMap((profile) => profile.resources ?? []);
   const declaredPaths = [
     './open-design.json',
     './SKILL.md',
     declaration.assets.core.path,
     declaration.assets.orchestration.path,
-    selectedProfile.path,
+    ...profiles.map((profile) => profile.path),
     declaration.assets.taskProfileMapping.path,
     ...selectedResources.map((resource) => resource.path),
+    ...(input.discoveryCatalogRevision ? ['./agent-discovery/SKILL.md'] : []),
   ];
   const assets = new Map<string, Uint8Array>();
   let identity;
-  let selectedPath: string;
+  let selectedPath: string | null;
   try {
     for (const assetPath of declaredPaths) {
       assets.set(
@@ -180,7 +199,7 @@ function readBundledStrategyPackageV2(input: {
         bytes,
       })),
     });
-    selectedPath = normalizeStrategyAssetPath(selectedProfile.path);
+    selectedPath = selectedProfile ? normalizeStrategyAssetPath(selectedProfile.path) : null;
   } catch (error) {
     if (error instanceof StrategyPackageIdentityError) throw error;
     throw new StrategyPackageIdentityError(
@@ -190,7 +209,7 @@ function readBundledStrategyPackageV2(input: {
   const selectedDigest = identity.assetDigests.find(
     (asset) => asset.path === selectedPath,
   );
-  if (!selectedDigest) {
+  if (selectedProfile && !selectedDigest) {
     throw new StrategyPackageIdentityError('Selected task profile is missing from strategy identity.');
   }
 
@@ -200,13 +219,30 @@ function readBundledStrategyPackageV2(input: {
     version: input.plugin.version,
     packageHash: identity.packageHash,
     assetDigests: identity.assetDigests,
-    selectedTaskProfile: {
-      taskType: selectedProfile.taskType,
-      version: selectedProfile.version,
-      path: selectedDigest.path,
-      sha256: selectedDigest.sha256,
-    },
-    taskProfileVersions: [selectedProfile.version],
+    ...(selectedProfile && selectedDigest
+      ? { selectedTaskProfile: {
+          taskType: selectedProfile.taskType,
+          version: selectedProfile.version,
+          path: selectedDigest.path,
+          sha256: selectedDigest.sha256,
+        } }
+      : {
+          selectionMode: 'agent-discovery',
+          selectedTaskProfile: null,
+          genericProfileVersion: '2.0.0',
+          availableTaskProfiles: profiles.map((profile) => ({
+            taskType: profile.taskType,
+            version: profile.version,
+            path: normalizeStrategyAssetPath(profile.path),
+            sha256: identity.assetDigests.find(
+              (asset) => asset.path === normalizeStrategyAssetPath(profile.path),
+            )!.sha256,
+          })),
+        }),
+    ...(input.discoveryCatalogRevision
+      ? { discoveryCatalogRevision: input.discoveryCatalogRevision }
+      : {}),
+    taskProfileVersions: [...new Set(profiles.map((profile) => profile.version))],
     promptRecipe: declaration.promptRecipe,
   });
   if (!parsed.success) {
@@ -218,7 +254,9 @@ function readBundledStrategyPackageV2(input: {
     corePath: normalizeStrategyAssetPath(declaration.assets.core.path),
     orchestrationPath: normalizeStrategyAssetPath(declaration.assets.orchestration.path),
     selectedProfilePath: selectedPath,
-    selectedResourcePaths: selectedResources.map((resource) => normalizeStrategyAssetPath(resource.path)),
+    selectedResourcePaths: selectedProfile
+      ? selectedResources.map((resource) => normalizeStrategyAssetPath(resource.path))
+      : [],
   };
 }
 

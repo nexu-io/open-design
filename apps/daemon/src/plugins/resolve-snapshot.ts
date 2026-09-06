@@ -99,7 +99,8 @@ export interface ResolveSnapshotInput {
    * CLI request body, so ordinary catalog/apply paths stay fail closed.
    */
   internalStrategyActivation?: {
-    taskType: SelectableStrategyTaskTypeV2;
+    taskType: SelectableStrategyTaskTypeV2 | 'generic';
+    discoveryCatalogRevision?: string;
     /** Trusted record resolved directly from the hidden bundled resource. */
     plugin: InstalledPluginRecord;
   } | undefined;
@@ -306,6 +307,9 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
         ? createBundledStrategyBindingV2({
             plugin,
             taskType: input.internalStrategyActivation.taskType,
+            ...(input.internalStrategyActivation.discoveryCatalogRevision
+              ? { discoveryCatalogRevision: input.internalStrategyActivation.discoveryCatalogRevision }
+              : {}),
           })
         : undefined;
     applyComputed = applyPlugin({

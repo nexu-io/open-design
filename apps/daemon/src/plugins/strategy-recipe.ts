@@ -174,13 +174,15 @@ export async function resolveOdNextStrategyRequestRecipeV2(input: {
       strategyVersion: binding.version,
       snapshotId,
       packageHash: binding.packageHash,
-      taskProfileDigest: binding.selectedTaskProfile.sha256,
-      taskProfileVersion: binding.selectedTaskProfile.version,
-      taskType: binding.selectedTaskProfile.taskType,
+      taskProfileDigest: binding.selectedTaskProfile?.sha256 ?? null,
+      taskProfileVersion: binding.selectionMode === 'agent-discovery'
+        ? binding.genericProfileVersion
+        : binding.selectedTaskProfile.version,
+      taskType: binding.selectedTaskProfile?.taskType ?? 'generic',
       executionProfile: input.executionProfile,
       coreStrategy: assets.coreStrategy,
       generalOrchestration: assets.generalOrchestration,
-      taskSkill: assets.taskSkill,
+      taskSkill: assets.taskSkill || null,
       activeStages,
       taskResources: assets.taskResources,
     };

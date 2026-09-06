@@ -19,10 +19,11 @@ import {
   type SkillDiscoveryToolResolveRequestV1,
 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
-import type { Express, Request, Response } from 'express';
+import type { Express, Request, RequestHandler, Response } from 'express';
 
 import {
   OfficialSkillDiscoveryCatalogError,
+  readOfficialSkillDiscoveryDiagnosticsV1,
   resolveOfficialSkillDiscoveryResourceBundleV1,
   resolveOfficialSkillDiscoveryLoadV1,
   searchOfficialSkillDiscoveryCatalogV1,
@@ -43,6 +44,7 @@ import {
   type SkillDiscoveryState,
 } from '../skill-discovery/state.js';
 import type { ToolTokenGrant } from '../tool-tokens.js';
+import { getStrategyTaskExecutionByRunId } from '../strategies/task-store.js';
 
 type SendApiError = (
   res: Response,
@@ -82,7 +84,9 @@ export interface RegisterSkillDiscoveryToolRoutesDeps {
   };
   http: {
     sendApiError: SendApiError;
+    requireLocalDaemonRequest: RequestHandler;
   };
+  discoveryEnabled: () => boolean;
   db: Database.Database;
   /** Re-read official sources on every request so search/load cannot trust a stale snapshot. */
   resolveCatalogSources: () => OfficialSkillDiscoveryCatalogSourcesV1;
@@ -97,6 +101,20 @@ export function registerSkillDiscoveryToolRoutes(
   ctx: RegisterSkillDiscoveryToolRoutesDeps,
 ): void {
   const pendingLoads = new Map<string, PendingSkillDiscoveryLoad>();
+
+  // Observer-only, product-owned metadata. Never returns a tool token, user
+  // state, local source path, resource bytes, or full task-profile bodies.
+  app.get('/api/diagnostics/skill-discovery-catalog',
+    ctx.http.requireLocalDaemonRequest, (_req, res) => {
+      try {
+        res.json(readOfficialSkillDiscoveryDiagnosticsV1(
+          ctx.resolveCatalogSources(), ctx.discoveryEnabled(),
+        ));
+      } catch {
+        ctx.http.sendApiError(res, 503, 'INTERNAL_ERROR',
+          'Official Skill Discovery catalog diagnostics are unavailable.');
+      }
+    });
 
   app.post('/api/tools/skills/search', (req, res) => {
     withAuthorizedScope(req, res, ctx, 'skills:search', (scope) => {
@@ -140,6 +158,13 @@ export function registerSkillDiscoveryToolRoutes(
       const loadedBeforeMaterialization = resolveOfficialSkillDiscoveryLoadV1({
         ...catalogSources,
         request: catalogRequest,
+      });
+      assertFrozenSkillDecision(ctx, scope, {
+        kind: 'load', id: loadedBeforeMaterialization.candidate.id,
+        role: loadedBeforeMaterialization.resolvedRole,
+        candidateDigest: loadedBeforeMaterialization.candidate.candidateDigest,
+        contentDigest: loadedBeforeMaterialization.candidate.contentDigest,
+        ...(replaceId ? { replaceId } : {}),
       });
       const plannedAt = ctx.now?.() ?? Date.now();
       const loadInput = {
@@ -265,6 +290,12 @@ export function registerSkillDiscoveryToolRoutes(
         ...freshPreparedLoad,
         materialization: parsed.data.materialization,
       });
+      assertFrozenSkillDecision(ctx, scope, {
+        kind: 'load', id: loaded.candidate.id, role: loaded.resolvedRole,
+        candidateDigest: loaded.candidate.candidateDigest,
+        contentDigest: loaded.candidate.contentDigest,
+        ...(pending.loadInput.replaceId ? { replaceId: pending.loadInput.replaceId } : {}),
+      });
       const state = applySkillDiscoveryLoad(ctx.db, {
         ...pending.loadInput,
         expectedStateRevision: pending.expectedStateRevision,
@@ -280,6 +311,7 @@ export function registerSkillDiscoveryToolRoutes(
       if (!parsed.success) {
         return sendValidationError(ctx, res, parsed.error.issues);
       }
+      assertFrozenSkillDecision(ctx, scope, { kind: parsed.data.resolution });
       const state = resolveSkillDiscovery(ctx.db, {
         conversationId: scope.conversationId,
         runId: scope.runId,
@@ -297,6 +329,7 @@ export function registerSkillDiscoveryToolRoutes(
       if (!parsed.success) {
         return sendValidationError(ctx, res, parsed.error.issues);
       }
+      assertFrozenSkillDecision(ctx, scope, { kind: 'deactivate' });
       const state = deactivateSkillDiscoveryAuxiliary(ctx.db, {
         conversationId: scope.conversationId,
         runId: scope.runId,
@@ -337,6 +370,28 @@ export function registerSkillDiscoveryToolRoutes(
       });
     });
   });
+}
+
+function assertFrozenSkillDecision(
+  ctx: RegisterSkillDiscoveryToolRoutesDeps,
+  scope: SkillDiscoveryRunScope,
+  mutation: { kind: 'none' | 'clarify' | 'deactivate' }
+    | { kind: 'load'; id: string; role: string; candidateDigest: string; contentDigest: string; replaceId?: string },
+): void {
+  const task = getStrategyTaskExecutionByRunId(ctx.db, scope.runId);
+  const decision = task?.planContract?.skillDecision;
+  if (!decision) return;
+  const allowed = mutation.kind === 'deactivate'
+    || (mutation.kind === 'load' && mutation.role === 'auxiliary')
+    || (mutation.kind === 'none' ? decision.primarySkillId === null
+    : mutation.kind === 'load' && !mutation.replaceId && decision.skills.some((skill) => (
+      skill.id === mutation.id && skill.role === mutation.role
+      && skill.candidateDigest === mutation.candidateDigest
+      && skill.contentDigest === mutation.contentDigest
+    )));
+  if (!allowed) throw new SkillDiscoveryStateError(
+    'The accepted OD Next Plan freezes primary selection; primary replacement is not allowed.',
+  );
 }
 
 async function withAuthorizedScope(

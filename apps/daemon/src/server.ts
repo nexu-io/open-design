@@ -1158,7 +1158,6 @@ import { renderOAuthResultPage } from './http/oauth-result-page.js';
 import { bearerTokenFromRequest, createToolRequestAuth } from './http/tool-request-auth.js';
 import {
   agentNativeSkillDiscoveryBehaviorEnabled,
-  readVerifiedProjectSkillDiscoveryBinding,
 } from './skill-discovery/binding.js';
 import {
   readOfficialSkillDiscoveryPromptContextV1,
@@ -7624,14 +7623,6 @@ export async function startServer({
     readAnalyticsContext,
   };
   resolveSkillDiscoveryGrantState = (grant) => {
-    if (!agentNativeSkillDiscoveryBehaviorEnabled(process.env)) return null;
-    let project;
-    try {
-      project = getProject(db, grant.projectId);
-    } catch {
-      return null;
-    }
-    if (!readVerifiedProjectSkillDiscoveryBinding(project?.metadata)) return null;
     const activeRun = design.runs.get(grant.runId);
     if (
       !activeRun
@@ -7639,9 +7630,8 @@ export async function startServer({
     ) {
       return { status: 'pending' };
     }
-    // A verified project binding is conversation eligibility, not authority to
-    // gate every later run. Explicit task/profile/Skill runs deliberately set
-    // this flag false and must retain their normal wrapper capabilities.
+    // Run-scoped admission is authoritative, including typed V2 discovery and
+    // frozen continuations; project kind is not a Skill classifier.
     if (activeRun.skillDiscoveryEnabled !== true) return null;
     if (
       typeof activeRun.conversationId !== 'string'
@@ -7976,7 +7966,8 @@ export async function startServer({
   });
   registerSkillDiscoveryToolRoutes(app, {
     auth: { authorizeToolRequest },
-    http: { sendApiError },
+    http: { sendApiError, requireLocalDaemonRequest },
+    discoveryEnabled: () => agentNativeSkillDiscoveryBehaviorEnabled(process.env),
     db,
     resolveCatalogSources: () => {
       const bundledStrategyPlugin = officialSkillDiscoveryStrategyPlugin;
@@ -10122,6 +10113,11 @@ export async function startServer({
       atomPromptsEnabled: bundledAtomPromptsEnabled,
       syntheticCanary: odNextSyntheticCanary,
       automaticAdmission: odNextAutomaticAdmission,
+      ...(officialSkillDiscoveryStrategyPlugin ? { skillDiscoverySources: {
+        bundledStrategyPlugin: officialSkillDiscoveryStrategyPlugin,
+        builtInFunctionalSkillsRoot: SKILLS_DIR,
+        builtInDesignTemplatesRoot: DESIGN_TEMPLATES_DIR,
+      } } : {}),
       runtimeCapabilitySnapshot,
       getRuntimeVersions: () => ensureDetectedRuntimeVersions(
         agentId,
@@ -10894,27 +10890,15 @@ export async function startServer({
     let skillDiscoveryCatalogMarkdown = '';
     let skillDiscoveryCatalogCandidateCount = 0;
     let skillDiscoveryCatalogRevisionChanged = false;
-    const explicitRunSkillSelection = (
-      typeof skillId === 'string' && skillId.trim().length > 0
-    ) || (
-      Array.isArray(skillIds)
-      && skillIds.some((candidate) => typeof candidate === 'string' && candidate.trim().length > 0)
-    ) || (
-      typeof projectRecord?.skillId === 'string'
-      && projectRecord.skillId.trim().length > 0
-    );
-    const hasExplicitContextPluginSelection = Array.isArray(projectRecord?.metadata?.contextPlugins)
-      && projectRecord.metadata.contextPlugins.length > 0;
-    const skillDiscoveryBinding =
-      agentNativeSkillDiscoveryBehaviorEnabled(process.env)
-      && runSessionMode === 'design'
-      && !strategyTaskAtStart
-      && !run.appliedPluginSnapshotId
-      && !explicitRunSkillSelection
-      && !hasExplicitContextPluginSelection
-        ? readVerifiedProjectSkillDiscoveryBinding(projectRecord?.metadata)
-        : null;
-    if (skillDiscoveryBinding) {
+    const strategyDiscoveryRevision = strategyTaskAtStart
+      ? getSnapshot(db, strategyTaskAtStart.snapshotId)?.strategy?.discoveryCatalogRevision
+      : null;
+    const discoveryEnabled = Boolean(strategyDiscoveryRevision)
+      || (agentNativeSkillDiscoveryBehaviorEnabled(process.env)
+        && !strategyTaskAtStart
+        && typeof projectId === 'string' && projectId.length > 0
+        && typeof conversationId === 'string' && conversationId.length > 0);
+    if (discoveryEnabled) {
       try {
         const bundledStrategyPlugin = officialSkillDiscoveryStrategyPlugin;
         if (!bundledStrategyPlugin) {
@@ -10927,6 +10911,9 @@ export async function startServer({
         };
         const discoveryPromptContext = readOfficialSkillDiscoveryPromptContextV1(catalogSources);
         const officialCatalog = discoveryPromptContext.catalog;
+        if (strategyDiscoveryRevision && officialCatalog.revision !== strategyDiscoveryRevision) {
+          throw new Error('OD Next discovery catalog differs from the immutable task snapshot.');
+        }
         skillDiscoveryBootstrapMarkdown = discoveryPromptContext.policyMarkdown;
         skillDiscoveryCatalogMarkdown = discoveryPromptContext.catalogMarkdown;
         skillDiscoveryCatalogCandidateCount = officialCatalog.candidates.length;
@@ -15934,13 +15921,16 @@ export async function startServer({
             || mayInferDirectEditCompletion
           )
         ) {
+          const genericChangedPaths = strategyTaskAtStart.planContract?.taskProfile.taskType === 'generic'
+            ? run.artifactOutcome?.diff?.filesWrittenPaths as string[] | undefined : undefined;
           const deliverable = await validateRunDeliverable({
             projectsRoot: PROJECTS_DIR,
             projectId: run.projectId ?? null,
             projectMetadata: projectRecord?.metadata,
             runStatus: 'succeeded',
-            artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
-            ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
+            artifactCount: genericChangedPaths?.length ?? (Number.isFinite(run.artifactCount) ? run.artifactCount : 0),
+            ...(genericChangedPaths ? { touchedPaths: genericChangedPaths }
+              : Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
           });
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
@@ -16047,6 +16037,7 @@ export async function startServer({
               ...(complexRuntimeEvidence ? { complexRuntimeEvidence } : {}),
               ...(
                 strategyProtocolResult.runtimeState?.outcome === 'completed'
+                || strategyProtocolResult.runtimeState?.outcome === 'answered'
                 || mayInferDirectEditCompletion
                   ? {
                       completionEvidence: {
@@ -16431,7 +16422,7 @@ export async function startServer({
     design,
     resources: { listAllSkillLikeEntries },
     http: httpDeps,
-    paths: { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR },
+    paths: { BUNDLED_PLUGINS_DIR, PROJECTS_DIR, RUNTIME_DATA_DIR, SKILLS_DIR, DESIGN_TEMPLATES_DIR },
     agents: { detectAgents, getAgentDef },
     chat: { prepareOdNextInitialPromptBundle, startChatRun },
     lifecycle: { isDaemonShuttingDown: () => daemonShuttingDown },

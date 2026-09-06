@@ -39,7 +39,8 @@ export interface OdNextPromptBundleHeadV2 {
   };
   sessionSkills: {
     generalOrchestrationSkill: { skillName: string; body: string };
-    taskTypeSkill: { skillName: string; body: string };
+    taskTypeSkill?: { skillName: string; body: string } | undefined;
+    discoverySkill?: { skillName: string; body: string } | undefined;
     userSelectedSkills?: { skillNames: ReadonlyArray<string>; body: string } | undefined;
   };
   activeStages: ReadonlyArray<OdNextPromptBundleStageV2>;
@@ -118,6 +119,7 @@ const CORE_SYSTEM_PROMPT_SLOTS = [
 const SESSION_SKILL_SLOTS = [
   'general_orchestration_skill',
   'task_type_skill',
+  'discovery_skill',
   'user_selected_skills',
 ] as const;
 const TASK_METADATA_SLOTS = [
@@ -232,6 +234,9 @@ function buildTree(input: OdNextPromptBundleV2): CanonicalXmlNode {
     throw new TypeError('nativeExecution.profile must be filesystem or text_artifact.');
   }
   const skills = input.sessionSkills;
+  if (!skills.taskTypeSkill && !skills.discoverySkill) {
+    throw new TypeError('A Prompt Bundle requires a Task Skill or a Discovery Skill.');
+  }
   if (input.activeStages.length === 0) {
     throw new TypeError('activeStages must declare at least one stage.');
   }
@@ -278,12 +283,18 @@ function buildTree(input: OdNextPromptBundleV2): CanonicalXmlNode {
               'generalOrchestrationSkill.body',
             ),
           },
-          {
+          skills.taskTypeSkill ? {
             kind: 'text',
             tag: 'task_type_skill',
             attributes: [['skill_name', skills.taskTypeSkill.skillName]],
             text: requireBody(skills.taskTypeSkill.body, 'taskTypeSkill.body'),
-          },
+          } : null,
+          skills.discoverySkill ? {
+            kind: 'text',
+            tag: 'discovery_skill',
+            attributes: [['skill_name', skills.discoverySkill.skillName]],
+            text: requireBody(skills.discoverySkill.body, 'discoverySkill.body'),
+          } : null,
           selected
             ? {
               kind: 'text',
@@ -420,7 +431,13 @@ export function parseOdNextPromptBundleV2(source: string): OdNextPromptBundleV2 
     skills.get('general_orchestration_skill'),
     'general_orchestration_skill',
   );
-  const taskTypeSkill = requireCanonicalXmlText(skills.get('task_type_skill'), 'task_type_skill');
+  const taskTypeNode = skills.get('task_type_skill');
+  const taskTypeSkill = taskTypeNode ? requireCanonicalXmlText(taskTypeNode, 'task_type_skill') : undefined;
+  const discoveryNode = skills.get('discovery_skill');
+  const discoverySkill = discoveryNode ? requireCanonicalXmlText(discoveryNode, 'discovery_skill') : undefined;
+  if (!taskTypeSkill && !discoverySkill) {
+    throw new TypeError('A Prompt Bundle requires a Task Skill or a Discovery Skill.');
+  }
   const selectedNode = skills.get('user_selected_skills');
   const metadataNode = requireCanonicalXmlElement(top.get('task_metadata'), 'task_metadata');
   const metadata = indexCanonicalXmlChildren(metadataNode, TASK_METADATA_SLOTS, 'task_metadata');
@@ -461,10 +478,14 @@ export function parseOdNextPromptBundleV2(source: string): OdNextPromptBundleV2 
         ),
         body: general.text,
       },
-      taskTypeSkill: {
+      ...(taskTypeSkill ? { taskTypeSkill: {
         skillName: requireCanonicalXmlAttribute(taskTypeSkill, 'skill_name', 'task_type_skill'),
         body: taskTypeSkill.text,
-      },
+      } } : {}),
+      ...(discoverySkill ? { discoverySkill: {
+        skillName: requireCanonicalXmlAttribute(discoverySkill, 'skill_name', 'discovery_skill'),
+        body: discoverySkill.text,
+      } } : {}),
       ...(selectedNode
         ? {
           userSelectedSkills: {

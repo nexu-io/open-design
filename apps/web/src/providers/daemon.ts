@@ -10,6 +10,7 @@
  *                 non-zero (tail appended to the error message).
  */
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
+import { strategyTaskProvesDelivery } from '@open-design/contracts';
 import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
   AmrAuthErrorKind,
@@ -1601,7 +1602,7 @@ async function consumeDaemonPhysicalRun({
           endStatus = 'failed';
           pendingStructuredError ??= new Error('The strategy task could not continue.');
         }
-      } else if (endStrategyTask.outcome === 'completed') {
+      } else if (strategyTaskProvesDelivery(endStrategyTask)) {
         endStatus = 'succeeded';
         serverDeclaredSuccess = true;
       }

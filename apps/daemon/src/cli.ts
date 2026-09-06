@@ -9577,11 +9577,27 @@ async function runSkills(args) {
   od skill list
   od skill show <id>
   od skill uninstall <id>
+  od skill discovery-catalog --json [--daemon-url <url>]
 
 \`od skills …\` remains an alias for compatibility.`);
     process.exit(args[0] ? 0 : 2);
   }
   if (args[0] === 'install' || args[0] === 'add') return runSkillInstall(args.slice(1));
+  if (args[0] === 'discovery-catalog') {
+    const flags = parseFlags(args.slice(1), {
+      string: LIBRARY_STRING_FLAGS,
+      boolean: LIBRARY_BOOLEAN_FLAGS,
+    });
+    const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+    const response = await fetch(`${base}/api/diagnostics/skill-discovery-catalog`);
+    if (!response.ok) {
+      console.error(`Discovery catalog diagnostics failed (${response.status}).`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(JSON.stringify(await response.json(), null, 2) + '\n');
+    return;
+  }
   if (args[0] === 'uninstall' || args[0] === 'remove') return runSkillUninstall(args.slice(1));
   return runLibraryList('skills', args);
 }

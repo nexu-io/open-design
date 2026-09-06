@@ -57,6 +57,22 @@ async function resolveStrategyRecord(folder = SOURCE): Promise<InstalledPluginRe
 }
 
 describe('bundled OD Next strategy package identity', () => {
+  it('freezes all discoverable profiles without selecting or staging one', async () => {
+    const plugin = await resolveStrategyRecord();
+    const binding = createBundledStrategyBindingV2({ plugin, taskType: 'generic',
+      discoveryCatalogRevision: `sha256:${'a'.repeat(64)}` });
+    expect(binding.selectionMode).toBe('agent-discovery');
+    expect(binding.selectedTaskProfile).toBeNull();
+    if (binding.selectionMode !== 'agent-discovery') throw new Error('Expected discovery binding');
+    expect(binding.availableTaskProfiles.map((profile) => profile.taskType).sort())
+      .toEqual(['hyperframes', 'marketing', 'ppt', 'prototype']);
+    expect(binding.assetDigests.map((asset) => asset.path)).toContain('./agent-discovery/SKILL.md');
+    const assets = loadBundledStrategyPromptAssetsV2({ plugin, binding });
+    expect(assets.taskSkill).toBe('');
+    expect(assets.taskResources).toEqual([]);
+    expect(assets.generalOrchestration).toContain('OD Next General Orchestration v2');
+  });
+
   it('reads only the explicit manifest, skill, core, orchestration, selected profile, its resources, and reference', async () => {
     const plugin = await resolveStrategyRecord();
     const prototype = createBundledStrategyBindingV2({ plugin, taskType: 'prototype' });

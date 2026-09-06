@@ -12,6 +12,7 @@ import {
   PluginManifestSchema,
   ResolvedTaskProfileV2Schema,
   StrategyRuntimeStateV2Schema,
+  StrategySkillDecisionV2Schema,
   StrategyRuntimeTransitionV2Schema,
   StrategyTaskProjectionV2Schema,
 } from '../src/index.js';
@@ -131,6 +132,25 @@ function planContract(fullPlan = simplePlan()) {
 }
 
 describe('OD Next V2 bundled declaration and applied identity', () => {
+  it('binds an unselected Discovery task to all four immutable profiles, not a made-up generic Skill', () => {
+    const profiles = ['hyperframes', 'marketing', 'ppt', 'prototype'].map((taskType) => ({
+      taskType, version: '2.0.0', path: `./profiles/${taskType}.md`, sha256: hash,
+    }));
+    const binding = {
+      schema: OD_NEXT_APPLIED_STRATEGY_SCHEMA, id: 'od-next-strategy', version: '2.0.0',
+      packageHash: hash, promptRecipe: 'od-next-plan-build-v2', taskProfileVersions: ['2.0.0'],
+      selectionMode: 'agent-discovery', selectedTaskProfile: null,
+      availableTaskProfiles: profiles, genericProfileVersion: '2.0.0',
+      discoveryCatalogRevision: `sha256:${hash}`,
+      assetDigests: profiles.map(({ path, sha256 }) => ({ path, sha256 })),
+    };
+    expect(AppliedStrategyBindingV2Schema.parse(binding)).toEqual(binding);
+    expect(() => AppliedStrategyBindingV2Schema.parse({ ...binding, discoveryCatalogRevision: undefined })).toThrow();
+    expect(() => AppliedStrategyBindingV2Schema.parse({ ...binding, availableTaskProfiles: [...profiles.slice(1), profiles[1]] })).toThrow(/unique/);
+    expect(() => AppliedStrategyBindingV2Schema.parse({ ...binding, assetDigests: [] })).toThrow();
+    expect(() => AppliedStrategyBindingV2Schema.parse({ ...binding, selectedTaskProfile: profiles[0] })).toThrow();
+  });
+
   it('parses the versioned asset declaration without changing legacy manifests', () => {
     const legacy = PluginManifestSchema.parse({
       name: 'legacy-scenario',
@@ -217,6 +237,39 @@ describe('OD Next V2 bundled declaration and applied identity', () => {
 });
 
 describe('OD Next V2 planning contracts', () => {
+  it('validates exact selected ids, roles, and digest records while preserving old Plans', () => {
+    const decision = {
+      catalogRevision: `sha256:${hash}`, primarySkillId: 'prototype', auxiliarySkillIds: ['minimalist-ui'],
+      skills: [
+        { id: 'prototype', role: 'primary', candidateDigest: `sha256:${hash}`, contentDigest: `sha256:${hash}` },
+        { id: 'minimalist-ui', role: 'auxiliary', candidateDigest: `sha256:${hash}`, contentDigest: `sha256:${hash}` },
+      ],
+    };
+    expect(StrategySkillDecisionV2Schema.parse(decision)).toEqual(decision);
+    expect(OpenDesignPlanContractV2Schema.parse({ ...planContract(), skillDecision: decision }).skillDecision).toEqual(decision);
+    expect(() => StrategySkillDecisionV2Schema.parse({ ...decision, skills: [decision.skills[0]] })).toThrow();
+    expect(() => StrategySkillDecisionV2Schema.parse({ ...decision, primarySkillId: null })).toThrow();
+    expect(() => StrategySkillDecisionV2Schema.parse({ ...decision, auxiliarySkillIds: ['prototype'] })).toThrow();
+    expect(() => StrategySkillDecisionV2Schema.parse({ ...decision, catalogRevision: hash })).toThrow();
+    expect(StrategySkillDecisionV2Schema.parse({ ...decision, primarySkillId: null, auxiliarySkillIds: [], skills: [] }).skills).toEqual([]);
+  });
+
+  it('permits explicit answer-only termination only on an unlocked Full Plan request', () => {
+    const state = { schema: OD_NEXT_RUNTIME_STATE_SCHEMA, route: 'full_plan', inputStage: 'request',
+      outcome: 'answered', executionMode: null, reasonCodes: [] };
+    expect(StrategyRuntimeStateV2Schema.parse(state)).toEqual(state);
+    for (const overrides of [{ route: 'direct_edit' }, { inputStage: 'production' },
+      { inputStage: 'clarification' }, { inputStage: 'contract_repair' }, { executionMode: 'simple' }, { executionMode: 'complex' }]) {
+      expect(() => StrategyRuntimeStateV2Schema.parse({ ...state, ...overrides })).toThrow();
+    }
+    const projection = { taskExecutionId: 'task-answer', strategy: planContract().strategy,
+      inputStage: 'request', outcome: 'answered', route: 'full_plan', executionMode: null,
+      activeRunId: 'run-answer', terminal: true };
+    expect(StrategyTaskProjectionV2Schema.parse(projection)).toEqual(projection);
+    expect(() => StrategyTaskProjectionV2Schema.parse({ ...projection, terminal: false })).toThrow();
+    expect(() => StrategyTaskProjectionV2Schema.parse({ ...projection, nextRunId: 'unexpected' })).toThrow();
+  });
+
   it('parses profile, simple plan, complex packages, and a complete Plan Contract', () => {
     expect(ResolvedTaskProfileV2Schema.parse(taskProfile()).taskType).toBe('prototype');
     expect(FullPlanV2Schema.parse(simplePlan()).buildPackages).toEqual([]);

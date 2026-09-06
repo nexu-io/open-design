@@ -33,6 +33,7 @@ import {
   type InstalledPluginRecord,
   type OfficialSkillDiscoveryCandidateV1,
   type OfficialSkillDiscoveryCatalogV1,
+  type OfficialSkillDiscoveryDiagnosticsV1,
   type OfficialSkillDiscoveryLoadedOrchestrationV1,
   type OfficialSkillDiscoveryLoadRequestV1,
   type OfficialSkillDiscoveryLoadResponseV1,
@@ -52,9 +53,6 @@ const DISCOVERY_CATALOG_RELATIVE_PATH = 'agent-discovery/catalog.json';
 const DISCOVERY_FUNCTIONAL_CATALOG_RELATIVE_PATH =
   'agent-discovery/functional-catalog.json';
 const DISCOVERY_BOOTSTRAP_RELATIVE_PATH = 'agent-discovery/SKILL.md';
-const DISCOVERY_ORDINARY_ORCHESTRATION_RELATIVE_PATH =
-  'agent-discovery/ordinary-orchestration.md';
-const DISCOVERY_TASK_PROFILE_ROOT = 'agent-discovery/task-profiles';
 const SKILL_MANIFEST = 'SKILL.md';
 const MAX_CATALOG_BYTES = 256 * 1024;
 const MAX_SKILL_MANIFEST_BYTES = 256 * 1024;
@@ -211,6 +209,29 @@ export function readOfficialSkillDiscoveryPromptContextV1(
     catalog: built.catalog,
     policyMarkdown: built.bootstrapMarkdown,
     catalogMarkdown: renderOfficialSkillDiscoveryCatalogMarkdownV1(built.catalog),
+  };
+}
+
+/** One snapshot for an external local observer; never loads a Skill for a Run. */
+export function readOfficialSkillDiscoveryDiagnosticsV1(
+  sources: OfficialSkillDiscoveryCatalogSourcesV1,
+  enabled: boolean,
+): OfficialSkillDiscoveryDiagnosticsV1 {
+  const built = buildOfficialCatalog(sources);
+  return {
+    schema: 'open-design.skill-discovery-diagnostics/v1',
+    enabled,
+    transportSchema: 'open-design.od-next-prompt-bundle/v2',
+    promptStrategy: 'od-next-plan-build-v2',
+    catalog: built.catalog,
+    policyMarkdown: built.bootstrapMarkdown,
+    catalogMarkdown: renderOfficialSkillDiscoveryCatalogMarkdownV1(built.catalog),
+    orchestrationDigests: Object.fromEntries(
+      [...built.entries].map(([id, entry]) => [
+        id,
+        entry.kind === 'task-profile' ? entry.generalOrchestration.digest : null,
+      ]),
+    ),
   };
 }
 
@@ -479,21 +500,6 @@ function buildOfficialCatalog(sources: OfficialSkillDiscoveryCatalogSourcesV1): 
   });
   const bootstrapDigest = digestBytes(bootstrapBytes);
   const bootstrapMarkdown = parseDiscoveryBootstrapMarkdown(bootstrapBytes);
-  const ordinaryOrchestrationBytes = readControlledFile({
-    root: pluginRoot,
-    relativePath: DISCOVERY_ORDINARY_ORCHESTRATION_RELATIVE_PATH,
-    maxBytes: MAX_SKILL_MANIFEST_BYTES,
-    label: 'Official ordinary Agent-turn orchestration',
-  });
-  const ordinaryOrchestrationMarkdown = decodeUtf8(
-    ordinaryOrchestrationBytes,
-    'Official ordinary Agent-turn orchestration',
-  ).trim();
-  if (ordinaryOrchestrationMarkdown === '') {
-    throw new OfficialSkillDiscoveryCatalogError(
-      'Official ordinary Agent-turn orchestration is empty.',
-    );
-  }
   if (functionalCatalogDeclaration.version !== catalogDeclaration.version) {
     throw new OfficialSkillDiscoveryCatalogError(
       'Official task-profile and functional Skill discovery catalog versions differ.',
@@ -504,8 +510,6 @@ function buildOfficialCatalog(sources: OfficialSkillDiscoveryCatalogSourcesV1): 
       plugin: sources.bundledStrategyPlugin,
       declaration: catalogDeclaration,
       pluginRoot,
-      ordinaryOrchestrationMarkdown,
-      ordinaryOrchestrationDigest: digestText(ordinaryOrchestrationMarkdown),
     }),
     ...buildFunctionalCandidates({
       root: sources.builtInFunctionalSkillsRoot,
@@ -637,8 +641,6 @@ function buildTaskProfileCandidates(input: {
   plugin: InstalledPluginRecord;
   declaration: { version: string; taskProfiles: OfficialTaskProfileDiscoveryDeclarationV1[] };
   pluginRoot: string;
-  ordinaryOrchestrationMarkdown: string;
-  ordinaryOrchestrationDigest: string;
 }): InternalTaskProfileCandidate[] {
   return input.declaration.taskProfiles.map((metadata) => {
     let binding: AppliedStrategyBindingV2;
@@ -656,31 +658,22 @@ function buildTaskProfileCandidates(input: {
     }
 
     const v2ProfileDigest = digestText(loaded.taskSkill);
-    if (v2ProfileDigest !== prefixDigest(binding.selectedTaskProfile.sha256)) {
+    if (!binding.selectedTaskProfile
+      || v2ProfileDigest !== prefixDigest(binding.selectedTaskProfile.sha256)) {
       throw new OfficialSkillDiscoveryCatalogError(
         `Official task profile ${metadata.id} body digest does not match its binding.`,
       );
     }
-    const adapterRelativePath = `${DISCOVERY_TASK_PROFILE_ROOT}/${metadata.taskType}.md`;
-    const adapterBytes = readControlledFile({
-      root: input.pluginRoot,
-      relativePath: adapterRelativePath,
-      maxBytes: MAX_SKILL_MANIFEST_BYTES,
-      label: `Official task profile ${metadata.id} ordinary adapter`,
-    });
-    const profileMarkdown = decodeUtf8(
-      adapterBytes,
-      `Official task profile ${metadata.id} ordinary adapter`,
-    ).trim();
+    const profileMarkdown = loaded.taskSkill;
     if (profileMarkdown === '') {
       throw new OfficialSkillDiscoveryCatalogError(
-        `Official task profile ${metadata.id} ordinary adapter is empty.`,
+        `Official task profile ${metadata.id} V2 body is empty.`,
       );
     }
     const profileDigest = digestText(profileMarkdown);
     const generalOrchestration: OfficialSkillDiscoveryLoadedOrchestrationV1 = {
-      markdown: input.ordinaryOrchestrationMarkdown,
-      digest: input.ordinaryOrchestrationDigest,
+      markdown: loaded.generalOrchestration,
+      digest: digestText(loaded.generalOrchestration),
     };
     const sourceResourcePrefix = `assets/task-profiles/${metadata.taskType}/`;
     const resources = loaded.taskResources.map((resource) => {

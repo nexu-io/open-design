@@ -379,8 +379,9 @@ describe('OD Next V2 request recipe wiring', () => {
       ...snapshot,
       strategy: {
         ...snapshot.strategy!,
+        selectionMode: undefined,
         selectedTaskProfile: {
-          ...snapshot.strategy!.selectedTaskProfile,
+          ...snapshot.strategy!.selectedTaskProfile!,
           sha256: 'f'.repeat(64),
         },
       },

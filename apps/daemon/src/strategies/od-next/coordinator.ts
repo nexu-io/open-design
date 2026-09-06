@@ -18,6 +18,7 @@ import {
   type StrategyTaskExecutionRecord,
 } from '../task-store.js';
 import type { OdNextMachineProtocolStream } from './protocol.js';
+import { validateOdNextAnsweredDecision, validateOdNextDirectEditDecision, validateOdNextSkillDecision } from './skill-decision.js';
 import {
   decideStrategyRequestRoute,
   runExecutionPreflight,
@@ -75,6 +76,7 @@ export interface OdNextCoordinatorResult {
     | 'contract_repair'
     | 'plan_ready'
     | 'completed'
+    | 'answered'
     | 'blocked'
     | 'canceled';
   task: StrategyTaskExecutionRecord;
@@ -737,6 +739,23 @@ function validateAcceptedTurn(
     }
     reasonCodes.push(...(input.productionEnforcementReasonCodes ?? []));
   }
+  if (state.outcome === 'answered') {
+    const binding = AppliedStrategyBindingV2Schema.safeParse(getSnapshot(db, task.snapshotId)?.strategy);
+    if (!binding.success) reasonCodes.push('od_next_answered_decision_invalid');
+    else reasonCodes.push(...validateOdNextAnsweredDecision(db, task, binding.data));
+    if (!visibleText.trim() || plan) reasonCodes.push('od_next_answered_visible_reply_missing');
+    if (input.completionEvidence?.physicalStatus !== 'succeeded') {
+      reasonCodes.push('od_next_physical_run_not_succeeded');
+    }
+  }
+  if (state.outcome === 'completed' && task.planContract) {
+    reasonCodes.push(...validateTaskProfileBinding(db, task, task.planContract));
+  }
+  if (state.outcome === 'completed' && state.route === 'direct_edit' && !task.planContract) {
+    const binding = AppliedStrategyBindingV2Schema.safeParse(getSnapshot(db, task.snapshotId)?.strategy);
+    if (!binding.success) reasonCodes.push('od_next_direct_edit_decision_invalid');
+    else reasonCodes.push(...validateOdNextDirectEditDecision(db, task, binding.data));
+  }
   return uniqueReasonCodes(reasonCodes);
 }
 
@@ -896,11 +915,13 @@ function validateTaskProfileBinding(
 ): string[] {
   const snapshot = getSnapshot(db, task.snapshotId);
   const binding = AppliedStrategyBindingV2Schema.safeParse(snapshot?.strategy);
-  if (
-    !binding.success
+  if (!binding.success) return ['od_next_plan_task_profile_mismatch'];
+  if (binding.data.discoveryCatalogRevision) {
+    return validateOdNextSkillDecision(db, task, binding.data, plan);
+  }
+  if (binding.data.selectionMode === 'agent-discovery'
     || plan.taskProfile.taskType !== binding.data.selectedTaskProfile.taskType
-    || plan.taskProfile.taskProfileVersion !== binding.data.selectedTaskProfile.version
-  ) {
+    || plan.taskProfile.taskProfileVersion !== binding.data.selectedTaskProfile.version) {
     return ['od_next_plan_task_profile_mismatch'];
   }
   return [];
