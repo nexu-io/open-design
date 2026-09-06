@@ -202,8 +202,9 @@ async function main(): Promise<void> {
   }
   const activeConfig = launcherRuntime.config;
   const paths = launcherRuntime.paths;
-  const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
+  const mcpBootstrap = await resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: launcherRuntime.installedLaunchPath,
+    launcherNamespaceRoot: launcherRuntime.launcherPaths.namespaceRoot,
   });
 
   // Arm fatal-exit telemetry now that we know the channel key/version. The
