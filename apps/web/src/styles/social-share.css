@@ -10,6 +10,16 @@
   appearance: none;
   min-width: 0;
   min-height: 34px;
+  /* Undo the global `button` primitive's height, justify-content,
+     font-weight, and line-height so <button> elements (used by the
+     copy-open platforms Instagram and Xiaohongshu) render identically
+     to the <a> elements used by the intent-based platforms. Without
+     these overrides the last grid row is visibly taller, centered,
+     and heavier than the rows above it. */
+  height: auto;
+  justify-content: flex-start;
+  font-weight: inherit;
+  line-height: inherit;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: var(--bg-panel);
@@ -35,13 +45,27 @@
   outline: none;
 }
 
+/* Neutralise the global `button:active { transform: translateY(1px) }`
+   primitive so button-based share targets don't shift on press while
+   link-based ones stay put. */
+.social-share-button:active:not(:disabled) {
+  transform: none;
+}
+
 .social-share-button__icon {
   flex: 0 0 auto;
   width: 18px;
+  height: 18px;
   color: var(--social-share-brand);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.social-share-button__icon svg,
+.social-share-button__icon i {
+  width: 15px;
+  height: 15px;
 }
 
 .social-share-button span:last-child {
