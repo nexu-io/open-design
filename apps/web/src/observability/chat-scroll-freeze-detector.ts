@@ -242,6 +242,66 @@ export function layoutHeldStill(
 }
 
 /**
+ * Is this frame's resting position something the WHEEL put us at?
+ *
+ * The ceiling probe's entire claim is "a downward wheel asked to go further
+ * and this is as far as it got", and `shortfallPx` is that claim in pixels.
+ * `reachedPx` and `layoutMax` are both read this frame, so they are never
+ * wrong on their own — what can be wrong is the attribution. If something
+ * else moved the scroller between the baseline and now, the wheel never had
+ * its say and the number describes somebody else's bookkeeping.
+ *
+ * The baseline can be a quarter of a second old. `SCROLL_SAMPLE_MIN_INTERVAL_MS`
+ * throttles scroll-driven frames and DROPS the samples it skips, and in that
+ * window the browser's own scroll anchoring can move `scrollTop` by a
+ * four-figure number of pixels. Comparing raw positions across that gap is the
+ * same mistake the one-notch `wheel_snap_back` verdict had to be rescued from,
+ * and it lands somewhere worse: `ShortfallLedger.first` is never evicted, so a
+ * single false round owns "where the drift began" for the life of the surface.
+ *
+ * ## Why this is not `layoutHeldStill`
+ *
+ * Requiring a settled layout would be the obvious patch and it would gut the
+ * ledger. The ledger exists to pair a CONTENT CHANGE with the distance the
+ * wheel could not cover; a real freeze is usually happening while a reply
+ * streams in, so demanding that content stop growing throws away exactly the
+ * rounds worth keeping. The criterion has to survive growth.
+ *
+ * ## What it asks instead
+ *
+ * Two routes, and each is sound for its own reason:
+ *
+ *   1. **The scroller is exactly where the baseline left it.** Nothing moved
+ *      it — not anchoring, not an auto-scroll write, not the wheel. An
+ *      anchoring correction that changes no position is not a correction, and
+ *      content growing BELOW the viewport moves the ceiling without touching
+ *      `scrollTop`. So a pinned position is attributable no matter what the
+ *      content height did, which is precisely the streaming-freeze case.
+ *      Exact equality, not a tolerance: `observeWheelBatch` already treats
+ *      `top !== previousTop` as movement, and the two must not disagree about
+ *      what "did not move" means.
+ *   2. **It went BACKWARDS and the layout held still.** A downward notch that
+ *      lands above where the scroller was is the compositor clamping onto its
+ *      own stale ceiling — but only if no height changed, because a height
+ *      change is what anchoring corrections are made of. Same gate, same
+ *      reasoning, as the `wheel_snap_back` verdict; it applies here and only
+ *      here, on the route where a height change is the competing explanation.
+ *
+ * Everything else — a scroller that advanced, or one that went backwards
+ * across a height change — is refused. A refused round costs one missing
+ * probe; a wrong one costs the field the whole report is read for.
+ */
+export function ceilingProbeAttributable(
+  state: ScrollFreezeState,
+  geometry: ScrollGeometry,
+): boolean {
+  const previousTop = state.lastScrollTop;
+  if (previousTop == null) return false;
+  if (geometry.scrollTop === previousTop) return true;
+  return geometry.scrollTop < previousTop && layoutHeldStill(state, geometry);
+}
+
+/**
  * Fold in a scroll position we did not cause — an auto-scroll, a
  * programmatic write, a keyboard scroll.
  *

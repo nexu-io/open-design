@@ -83,7 +83,9 @@
 //     probe that leaves a frame, an idle callback, an observer or a
 //     listener in flight after its element is gone is a probe that runs
 //     inside somebody else's work.
-//   - One report per chat log element, and a hard per-session cap.
+//   - One report per chat log element. There is no session-level cap; see
+//     the note beside `SCROLL_SAMPLE_MIN_INTERVAL_MS` for why the one that
+//     used to live there was removed.
 //
 // Parallel activity
 // -----------------
@@ -139,6 +141,7 @@ import {
   type ScrollLayerTrigger,
   type ScrollShapeMemo,
   type ShortfallLedger,
+  ceilingProbeAttributable,
   classifyActivityRole,
   classifyLayerTriggers,
   countActivity,
@@ -190,12 +193,26 @@ const CHAT_LOG_SELECTOR = '[data-testid="chat-log"]';
 const MAX_TRANSITIONS = 20;
 /** Minimum gap between two scroll-driven geometry reads. */
 const SCROLL_SAMPLE_MIN_INTERVAL_MS = 250;
-/**
- * A conversation switch remounts the log, so a session can legitimately
- * see several surfaces. Three reports is enough to establish a pattern;
- * past that we are describing the same defect repeatedly.
- */
-const MAX_REPORTS_PER_SESSION = 3;
+// There is NO session-level report cap, and that absence is deliberate.
+//
+// There used to be one — three per session, enforced by `attach()` returning
+// null once it was spent. It cost far more than the events it saved, because
+// `attach()` is not the reporting step: it is where the ResizeObserver, the
+// two MutationObservers, the shortfall ledger and the activity ring get wired
+// up. Refusing to attach did not throttle the fourth event, it switched the
+// OBSERVER off for the rest of the session — no ledger, no trail, no
+// `subscribeChatScrollFreeze` signal (the on-the-spot forensic capture hangs
+// off that one), and a `window.__chatScrollFreeze` handle whose `attached` was
+// permanently false. A conversation switch remounts the log, so an ordinary
+// working day spends that budget by lunchtime, after which a session that
+// froze and a session that never froze again look exactly alike. Silence
+// reading as "no defect" is the one failure mode this module exists to avoid.
+//
+// What remains is `Surface.reported`: one report per chat log element. That is
+// de-duplication, not rate limiting — a frozen surface has one story, and
+// repeating it says nothing new — and it is per element, so it can never take
+// the probe off a surface it has not yet described.
+
 /** Element budget for the compositing-layer census. */
 const MAX_LAYER_SCAN = 600;
 
@@ -338,6 +355,12 @@ let installed = false;
  * ONLY while no chat log is attached; see the cost-discipline note above.
  */
 let wheelDiscoveryArmed = false;
+/**
+ * How many freezes this session has reported. A COUNT, not a budget: nothing
+ * reads it to decide anything, and `snapshot()` publishes it only so an
+ * operator can tell "this session has sent five" from "this session has sent
+ * none". See the note beside `SCROLL_SAMPLE_MIN_INTERVAL_MS`.
+ */
 let reportedThisSession = 0;
 
 // ---------------------------------------------------------------------------
@@ -535,9 +558,7 @@ function onWheelDiscover(event: WheelEvent): void {
   if (!(target instanceof Element)) return;
   const element = target.closest(CHAT_LOG_SELECTOR);
   if (element == null) return;
-  const active = attach(element as HTMLElement);
-  if (active == null) return;
-  ingestWheel(active, event);
+  ingestWheel(attach(element as HTMLElement), event);
 }
 
 /**
@@ -587,8 +608,7 @@ function matchesChatLog(el: Element): boolean {
 // Attach / detach
 // ---------------------------------------------------------------------------
 
-function attach(element: HTMLElement): Surface | null {
-  if (reportedThisSession >= MAX_REPORTS_PER_SESSION) return null;
+function attach(element: HTMLElement): Surface {
   detach();
   const active: Surface = {
     element,
@@ -1212,12 +1232,16 @@ function runFrame(active: Surface): void {
   }
 
   // One round of "the wheel asked to go further; this is where it stopped".
-  // Read BEFORE `observeWheelBatch`, which replaces `lastScrollTop`. A batch
-  // that did not advance — including one thrown backwards — has found the
-  // compositor's current ceiling, whether or not it is far enough from
-  // layout's to be worth reporting on its own.
-  const previousTop = active.state.lastScrollTop;
-  if (wheelPx > 0 && previousTop != null && geometry.scrollTop <= previousTop) {
+  // Read BEFORE `observeWheelBatch`, which replaces the baseline this is
+  // judged against.
+  //
+  // `ceilingProbeAttributable` is the whole test, and it is stricter than the
+  // `scrollTop <= previousTop` this used to be: across the sampler's 250ms
+  // blind window the browser's own scroll anchoring can leave the scroller far
+  // below a baseline it never actually failed to pass, and banking that as a
+  // shortfall permanently claims `ledger.first` — the field the report exists
+  // for — with a number the wheel had nothing to do with.
+  if (wheelPx > 0 && ceilingProbeAttributable(active.state, geometry)) {
     recordCeilingProbe(active.ledger, {
       at,
       reachedPx: geometry.scrollTop,
@@ -1862,7 +1886,6 @@ export interface ChatScrollFreezeSnapshot {
     freezeRequestedPx: number;
     snapBackMinPx: number;
     edgeTolerancePx: number;
-    maxReportsPerSession: number;
     scrollSampleMinIntervalMs: number;
   };
   surface: ChatScrollFreezeSurfaceSnapshot | null;
@@ -2065,7 +2088,6 @@ function buildSnapshot(): ChatScrollFreezeSnapshot {
     freezeRequestedPx: FREEZE_REQUESTED_PX,
     snapBackMinPx: SNAP_BACK_MIN_PX,
     edgeTolerancePx: EDGE_TOLERANCE_PX,
-    maxReportsPerSession: MAX_REPORTS_PER_SESSION,
     scrollSampleMinIntervalMs: SCROLL_SAMPLE_MIN_INTERVAL_MS,
   };
   const frameSchedulerAvailable = typeof requestAnimationFrame === 'function';
@@ -2076,8 +2098,6 @@ function buildSnapshot(): ChatScrollFreezeSnapshot {
     const blockers = evaluateReportBlockers({
       installed,
       frameSchedulerAvailable,
-      reportedThisSession,
-      maxReportsPerSession: MAX_REPORTS_PER_SESSION,
       surface: null,
     });
     return {
@@ -2113,8 +2133,6 @@ function buildSnapshot(): ChatScrollFreezeSnapshot {
   const blockers = evaluateReportBlockers({
     installed,
     frameSchedulerAvailable,
-    reportedThisSession,
-    maxReportsPerSession: MAX_REPORTS_PER_SESSION,
     surface: {
       elementConnected: active.element.isConnected,
       reported: active.reported,

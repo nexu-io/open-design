@@ -1582,23 +1582,34 @@ Expected output:
     const log = screen.getByTestId('chat-log') as HTMLDivElement;
     const strip = screen.getByTestId('chat-queued-send-strip');
 
-    Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => 600 });
-    Object.defineProperty(log, 'clientHeight', { configurable: true, get: () => 200 });
+    /*
+     * 这一条量的是「队列条长高之后,跟随有没有把位置追回底部」。
+     *
+     * 夹具按真实滚动条来:`scrollTop` 的上限就是 `scrollHeight - clientHeight`,
+     * 写超了由 setter 夹住 —— 老写法 `scrollTop !== scrollHeight` 恒真,正是因为
+     * 这个上限永远够不到 `scrollHeight`。原来的夹具不夹取,600/200/400 其实**已经
+     * 贴在底上**,断言 `scrollTop === 600` 量到的是「有没有发生过一次写」,而不是
+     * 「有没有贴回底」;那次写在真实浏览器里被夹回 400,一个像素都没动。
+     *
+     * 现在照着真实场景摆:队列条长高 50px 把视口压到 150,底部于是从 400 挪到
+     * 450,位置还停在 400 —— 跟随必须把这 50px 追回来。
+     */
+    let top = 400;
+    const CONTENT_PX = 600;
+    const VIEWPORT_PX = 150;
+    Object.defineProperty(log, 'scrollHeight', { configurable: true, get: () => CONTENT_PX });
+    Object.defineProperty(log, 'clientHeight', { configurable: true, get: () => VIEWPORT_PX });
     Object.defineProperty(log, 'scrollTop', {
       configurable: true,
-      get() {
-        return (this as HTMLDivElement).dataset.scrollTop
-          ? Number((this as HTMLDivElement).dataset.scrollTop)
-          : 400;
-      },
+      get: () => top,
       set(value: number) {
-        (this as HTMLDivElement).dataset.scrollTop = String(value);
+        top = Math.min(Math.max(0, value), CONTENT_PX - VIEWPORT_PX);
       },
     });
 
     MockResizeObserver.triggerObserved(strip);
 
-    expect(log.scrollTop).toBe(600);
+    expect(log.scrollTop).toBe(450);
   });
 });
 

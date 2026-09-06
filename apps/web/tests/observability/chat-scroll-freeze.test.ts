@@ -35,6 +35,7 @@ import {
 import {
   __resetChatScrollFreezeForTest,
   installChatScrollFreezeObserver,
+  subscribeChatScrollFreeze,
 } from '../../src/observability/chat-scroll-freeze';
 
 /**
@@ -848,6 +849,116 @@ describe('observability/chat-scroll-freeze — probe', () => {
 });
 
 // ---------------------------------------------------------------------------
+// How much this probe is allowed to say
+// ---------------------------------------------------------------------------
+
+/**
+ * There is exactly ONE limit on reporting — one report per chat log element —
+ * and it is a de-duplicator, not a rate limit: the same frozen surface has one
+ * story and repeating it adds nothing.
+ *
+ * What used to sit beside it was a session-level ceiling of three, enforced
+ * inside `attach()`. That is what these specs exist to keep out. `attach()` is
+ * where the ResizeObserver, the two MutationObservers, the ledger and the
+ * activity ring are wired up, so refusing to attach did not merely stop the
+ * fourth event — it stopped the OBSERVING. From the fourth conversation switch
+ * onward a session had no activity trail, no shortfall ledger, no
+ * `subscribeChatScrollFreeze` signal (the on-the-spot forensic capture hangs off
+ * that one), and a `window.__chatScrollFreeze` handle whose `attached` was
+ * permanently false — which is exactly what a session that never froze again
+ * looks like. A silent observer is the failure mode this whole module exists to
+ * avoid, and a budget that switches it off mid-session manufactures it.
+ *
+ * This probe is temporary forensics shipped to colleagues to find one specific
+ * defect. Ten thousand events cost less than one blind session.
+ */
+describe('observability/chat-scroll-freeze — one report per surface, no session cap', () => {
+  /** Mount a chat log, drive it to a freeze, and take it back out again. */
+  function freezeOneSurface(): void {
+    const log = buildChatLog();
+    stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+    advanceClock(500);
+    // The previous surface is already out of the document, so this scroll is
+    // what makes the probe let go of the corpse and adopt the replacement.
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    log.remove();
+  }
+
+  it('keeps reporting surface after surface, past the old ceiling of three', () => {
+    installChatScrollFreezeObserver();
+    for (let i = 0; i < 6; i += 1) freezeOneSurface();
+    // Six conversation switches, six freezes, six events. Under the old
+    // session budget this stopped at three and the probe went dark.
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(6);
+  });
+
+  it('keeps observing the surfaces past the old ceiling, not just reporting them', () => {
+    // The reason the budget was harmful is not the missing events, it is the
+    // missing observation behind them: the seventh surface must still be
+    // watched closely enough to produce a full ledger and activity trail.
+    installChatScrollFreezeObserver();
+    for (let i = 0; i < 6; i += 1) freezeOneSurface();
+
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, { scrollTop: 0, scrollHeight: 900, clientHeight: 583 });
+    advanceClock(500);
+    scrolled(log);
+    advanceClock(300);
+    geometry.setContent(1434);
+    geometry.setTop(851);
+    scrolled(log);
+    advanceClock(300);
+    geometry.setTop(824);
+    wheel(log, 120);
+
+    const report = eventsNamed('client_chat_scroll_frozen')[6] ?? {};
+    expect(report.trigger).toBe('wheel_snap_back');
+    // The ledger and the shape memo are both wired up by `attach()`, so a
+    // seventh report carrying its own drift history is proof the seventh
+    // surface was genuinely watched and not merely counted.
+    expect(String(report.content_steps)).toContain('c1434');
+    expect(report.shortfall_first_px).toBe(27);
+    expect(report.ceiling_probe_count).toBeGreaterThan(0);
+    expect(String(report.transitions)).toContain('probe_attach');
+  });
+
+  it('keeps handing freeze signals to subscribers past the old ceiling', () => {
+    // The on-the-spot forensic capture is a `subscribeChatScrollFreeze`
+    // consumer, so a probe that stops attaching also stops the capture — the
+    // one artefact a colleague can actually send back.
+    installChatScrollFreezeObserver();
+    const seen: string[] = [];
+    const unsubscribe = subscribeChatScrollFreeze((signal) => {
+      if (signal.kind === 'frozen') seen.push(signal.probeId);
+    });
+    for (let i = 0; i < 5; i += 1) freezeOneSurface();
+    unsubscribe();
+
+    expect(seen).toHaveLength(5);
+    // Five different elements, so five different probe ids — not one surface
+    // shouting five times.
+    expect(new Set(seen).size).toBe(5);
+  });
+
+  it('still refuses to report the same surface twice', () => {
+    // The de-duplicator that survives. One frozen element has one story.
+    const log = buildChatLog();
+    stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 40; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The stale baseline
 // ---------------------------------------------------------------------------
 
@@ -871,11 +982,11 @@ describe('observability/chat-scroll-freeze — probe', () => {
  * one-notch `wheel_snap_back` route converts that straight into a report:
  * `FREEZE_WHEEL_COUNT` never gets a say.
  *
- * Why it has to be fixed rather than tolerated: `MAX_REPORTS_PER_SESSION` is
- * 3, and `attach()` refuses to take a chat log at all once the budget is
- * spent. Three false positives do not merely add noise — they take the probe
- * off the surface for the rest of the session, so a real freeze afterwards is
- * observed by nothing.
+ * Why it has to be fixed rather than tolerated: a false report burns the
+ * one-report-per-surface latch, so the genuine freeze that arrives afterwards
+ * on that same log is never described — and a false ceiling probe burns
+ * `ledger.first`, which is never evicted, so it owns "where the drift began"
+ * for the life of the surface. Both are permanent, and both are silent.
  */
 describe('observability/chat-scroll-freeze — scroll anchoring vs the 250ms sampler', () => {
   /**
@@ -954,6 +1065,56 @@ describe('observability/chat-scroll-freeze — scroll anchoring vs the 250ms sam
     expect(report.trigger).toBe('wheel_snap_back');
     expect(report.ceiling_scroll_top).toBe(91);
     expect(report.unreachable_px).toBe(1673);
+  });
+
+  /**
+   * The same stale baseline, one layer down.
+   *
+   * Silencing the `wheel_snap_back` verdict fixed the EVENT. It did not fix
+   * the ceiling probe that runs a few lines above it, which was asking the
+   * same question of the same stale `previousTop`: "did this wheel fail to
+   * advance us". After an anchoring correction that question cannot be
+   * answered from position alone, and answering it anyway writes a
+   * several-hundred-pixel `shortfallPx` into the ledger.
+   *
+   * That number does not merely add noise. `ledger.first` is the one field
+   * NEVER evicted — "which content change did the compositor first fail to
+   * keep up with" is the headline of the whole report — so a single false
+   * round poisons it for the life of the surface, and the genuine first
+   * shortfall that arrives afterwards can no longer take the slot.
+   */
+  it('does not write an anchoring correction into the shortfall ledger', () => {
+    const { log } = buildChatSurface();
+    const geometry = stubGeometry(log, {
+      scrollTop: 1700,
+      scrollHeight: 3400,
+      clientHeight: 600,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+
+    // Six rounds of a log that scrolls perfectly while reflowing above the
+    // viewport. Not one of them is a ceiling probe.
+    for (const round of SLOW_SCROLL_ROUNDS) {
+      shrinkAboveThenNotch(log, geometry, round);
+    }
+
+    // Now a real stall on the same surface, with the layout settled: content
+    // 1600, viewport 600, so 1000px of travel — and the wheel pinned at 620.
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(300);
+      wheel(log, 120);
+    }
+
+    const report = eventsNamed('client_chat_scroll_frozen')[0] ?? {};
+    expect(report.trigger).toBe('wheel_stall');
+    // 1000 - 620. The genuine first shortfall, not the 980px the first
+    // anchoring round would have banked at t=500.
+    expect(report.shortfall_first_px).toBe(380);
+    expect(report.shortfall_first_reached_px).toBe(620);
+    expect(report.shortfall_first_layout_max_px).toBe(1000);
+    // And no probe at all was taken during the healthy gesture.
+    expect(String(report.ceiling_probes)).not.toContain('r1520');
   });
 });
 
@@ -1733,6 +1894,49 @@ describe('observability/chat-scroll-freeze — shortfall wiring', () => {
     expect(report.shortfall_first_reached_px).toBe(850);
     expect(report.shortfall_first_layout_max_px).toBe(851);
     expect(report.shortfall_first_ms).toBe(1600);
+  });
+
+  /**
+   * The other half of the ceiling probe's job, and the reason its gate cannot
+   * simply be `layoutHeldStill`.
+   *
+   * The whole point of the ledger is to pair a CONTENT CHANGE with the
+   * distance the wheel could not cover, and a real freeze is usually happening
+   * while a reply streams in — content growing every frame. A probe gate that
+   * demanded a settled layout would throw away precisely the rounds the ledger
+   * was built for, and `shortfall_first_*` would come back empty from every
+   * capture taken mid-turn.
+   *
+   * So: the scroller pinned at 851 while the content climbs 1434 → 1800. The
+   * deficit is real, it opens at 66px, and it must be banked.
+   */
+  it('records the drift while the content is still growing under it', () => {
+    const { log } = buildChatSurface();
+    const geometry = stubGeometry(log, { scrollTop: 0, scrollHeight: 900, clientHeight: 583 });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+
+    advanceClock(1000);
+    geometry.setContent(1434);
+    geometry.setTop(851);
+    scrolled(log);
+
+    // Four notches, each landing on the same frozen ceiling while the reply
+    // grows another 100px underneath it.
+    for (const contentPx of [1500, 1600, 1700, 1800]) {
+      advanceClock(300);
+      geometry.setContent(contentPx);
+      wheel(log, 120);
+    }
+
+    const report = eventsNamed('client_chat_scroll_frozen')[0] ?? {};
+    expect(report.trigger).toBe('wheel_stall');
+    // 917 - 851, on the first round where the growth outran the ceiling.
+    expect(report.shortfall_first_px).toBe(66);
+    expect(report.shortfall_first_content_px).toBe(1500);
+    expect(report.shortfall_first_reached_px).toBe(851);
+    expect(String(report.ceiling_probes)).toContain('r851/m917/s66');
+    expect(String(report.ceiling_probes)).toContain('r851/m1217/s366');
   });
 
   it('records every content-height change, not only the 200px steps', () => {

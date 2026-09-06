@@ -210,8 +210,6 @@ describe('chat-scroll-freeze-blockers — why a report has not happened', () => 
   const READY = {
     installed: true,
     frameSchedulerAvailable: true,
-    reportedThisSession: 0,
-    maxReportsPerSession: 3,
     surface: {
       elementConnected: true,
       reported: false,
@@ -236,7 +234,6 @@ describe('chat-scroll-freeze-blockers — why a report has not happened', () => 
     // would quietly make the audit lie by omission — cannot pass.
     expect(blockers.map((b) => b.id)).toEqual([
       'observer_installed',
-      'session_report_budget',
       'frame_scheduler',
       'surface_attached',
       'element_connected',
@@ -256,13 +253,17 @@ describe('chat-scroll-freeze-blockers — why a report has not happened', () => 
     }
   });
 
-  it('names the session cap, and says what the cap is', () => {
-    const blockers = evaluateReportBlockers({ ...READY, reportedThisSession: 3 });
-    const gate = blockers.find((b) => b.id === 'session_report_budget');
-    expect(gate?.ok).toBe(false);
-    expect(gate?.actual).toContain('3');
-    expect(gate?.needed).toContain('3');
-    expect(summariseBlockers(blockers)).toContain('session_report_budget');
+  it('has no session-level report budget to name', () => {
+    // There used to be a `session_report_budget` gate here, backed by a cap of
+    // three inside `attach()`. It is gone on purpose: the cap did not throttle
+    // events, it switched the OBSERVER off — no ledger, no activity trail, no
+    // freeze signal — for the rest of the session, which is indistinguishable
+    // from a session that never froze again. The audit must not describe a gate
+    // that no longer exists, and no number of prior reports may block a report.
+    const blockers = evaluateReportBlockers(READY);
+    expect(blockers.some((b) => b.id.includes('budget'))).toBe(false);
+    expect(blockers.some((b) => b.id.includes('session'))).toBe(false);
+    expect(summariseBlockers(blockers)).toBe('ready');
   });
 
   it('stops at "nothing attached" instead of inventing surface numbers', () => {
@@ -343,7 +344,7 @@ describe('chat-scroll-freeze-blockers — why a report has not happened', () => 
   it('lists every failing gate in the summary, not just the first', () => {
     const blockers = evaluateReportBlockers({
       ...READY,
-      reportedThisSession: 3,
+      installed: false,
       surface: {
         ...READY.surface,
         innerScrollerSuppressions: 2,
@@ -351,7 +352,7 @@ describe('chat-scroll-freeze-blockers — why a report has not happened', () => 
       },
     });
     const summary = summariseBlockers(blockers);
-    expect(summary).toContain('session_report_budget');
+    expect(summary).toContain('observer_installed');
     expect(summary).toContain('stall_wheel_count');
     expect(summary).toContain('stall_requested_px');
     expect(summary).toContain('inner_scroller_free');
@@ -667,6 +668,41 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     expect(snapshot.reportedThisSession).toBe(1);
     expect(snapshot.blockers.find((b) => b.id === 'surface_unreported')?.ok).toBe(false);
     expect(snapshot.verdict).toContain('surface_unreported');
+  });
+
+  it('is still attached and still ready after more reports than the old cap allowed', () => {
+    // The handle is how a colleague running the forensic build answers "is this
+    // thing even watching". Under the old session cap of three that answer went
+    // permanently false partway through a normal day of conversation switches,
+    // and read exactly like "nothing froze after lunch".
+    installChatScrollFreezeObserver();
+    for (let round = 0; round < 5; round += 1) {
+      const log = buildChatLog();
+      stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+      advanceClock(500);
+      scrolled(log);
+      for (let i = 0; i < 12; i += 1) {
+        advanceClock(16);
+        wheel(log, 120);
+      }
+      log.remove();
+    }
+
+    const sixth = buildChatLog();
+    stubGeometry(sixth, { scrollTop: 300, scrollHeight: 2347, clientHeight: 583 });
+    advanceClock(500);
+    scrolled(sixth);
+
+    const snapshot = handle().snapshot();
+    expect(snapshot.reportedThisSession).toBe(5);
+    expect(snapshot.attached).toBe(true);
+    expect(snapshot.surface?.elementConnected).toBe(true);
+    // A geometry frame ran on this surface — it is being measured, not merely
+    // held.
+    expect(snapshot.surface?.detector.lastScrollTop).toBe(300);
+    // Not one gate left standing between this surface and its own report.
+    expect(snapshot.verdict).not.toContain('budget');
+    expect(snapshot.blockers.every((b) => b.id !== 'surface_attached' || b.ok)).toBe(true);
   });
 });
 

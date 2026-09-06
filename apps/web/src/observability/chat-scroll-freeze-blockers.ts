@@ -39,12 +39,17 @@ import {
  * The prerequisites come first (is anything even watching), then the surface
  * gates, then the verdict gates. Reading top to bottom is meant to answer
  * "how far did this get" without knowing the source.
+ *
+ * There is deliberately no session-level budget gate. One used to sit second in
+ * this list, backed by a cap of three inside `attach()` — and that cap did not
+ * throttle events, it stopped the probe attaching at all, so a session that
+ * spent it had no ledger, no activity trail and no freeze signal for the rest
+ * of its life while looking identical to a session that simply never froze
+ * again. The cap is gone; do not reintroduce a gate for it here.
  */
 export type ReportBlockerId =
   /** `installChatScrollFreezeObserver()` ran and has not been torn down. */
   | 'observer_installed'
-  /** The per-session report cap is not spent. */
-  | 'session_report_budget'
   /** Geometry is only ever read inside a frame callback; there is no fallback. */
   | 'frame_scheduler'
   /** A chat log has been found and is being watched. */
@@ -92,8 +97,6 @@ export interface ReportBlockerSurface {
 export interface ReportBlockerInput {
   installed: boolean;
   frameSchedulerAvailable: boolean;
-  reportedThisSession: number;
-  maxReportsPerSession: number;
   surface: ReportBlockerSurface | null;
 }
 
@@ -118,16 +121,6 @@ export function evaluateReportBlockers(input: ReportBlockerInput): ReportBlocker
     actual: String(input.installed),
     needed: 'true',
     note: 'installChatScrollFreezeObserver() must have run and not been torn down.',
-  });
-
-  out.push({
-    id: 'session_report_budget',
-    ok: input.reportedThisSession < input.maxReportsPerSession,
-    actual: `${input.reportedThisSession} sent`,
-    needed: `< ${input.maxReportsPerSession} per session`,
-    note:
-      'attach() refuses to take a new chat log once the cap is spent, so a '
-      + 'spent budget also means no surface is being watched any more.',
   });
 
   out.push({

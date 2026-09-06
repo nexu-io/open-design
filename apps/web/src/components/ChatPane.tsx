@@ -3123,6 +3123,31 @@ export function ChatPane({
     rememberScrollSample(el);
   }
 
+  /**
+   * 位置已经落在**这根真实滚动条能到的最远处**了吗 —— 跟随时「这一帧要不要写」的判据。
+   *
+   * 老写法是 `el.scrollTop !== el.scrollHeight`。`scrollTop` 的上限是
+   * `scrollHeight - clientHeight`,**永远够不到 `scrollHeight`**,所以那个条件恒真:
+   * 跟随期间每一帧都往 DOM 里白写一次 `scrollTop`,哪怕纹丝不动地贴在底上。
+   *
+   * 屏幕上看不出来,但它污染的是**排查滚动冻结的唯一证据**:「是我们自己的代码把位置
+   * 写回去了」和「合成器根本不动」只能靠 `scrollTop` 写入记录区分
+   * (`observability/chat-scroll-write-trace.ts`),而一个无条件写的跟随循环会把那份
+   * 记录塞满什么都没改变的写入 —— 每一份取证看上去都有人在拼命写。
+   *
+   * 判据换成**真正的落点**:离能到的最远处还有没有距离。容差取 1px 而不是
+   * `AT_BOTTOM_TOLERANCE_PX`(8px)—— 那 8px 回答的是另一个问题(「用户算不算还贴着底」,
+   * 见 `stick-to-bottom.ts`),拿来当写入判据会让流式期间每帧长高不到 8px 的内容一直
+   * 攒到超过 8px 才被追上,跟随就成了肉眼可见的一顿一顿。1px 只吃掉高 DPI /
+   * 分数缩放下 `scrollHeight`、`clientHeight` 取整与分数 `scrollTop` 之间的那点误差:
+   * 那种差额没有像素可以显示,不值得一次写。
+   */
+  const FOLLOW_PIN_TOLERANCE_PX = 1;
+  function isPinnedToLogBottom(el: HTMLDivElement): boolean {
+    const maxTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    return maxTop - el.scrollTop <= FOLLOW_PIN_TOLERANCE_PX;
+  }
+
   /** 此刻是不是真的在跟着最新输出跑。anchor-to-top 期间不是:那时用户消息钉在顶端,回复在下面长。 */
   function isFollowingTail(): boolean {
     return (
@@ -3148,7 +3173,9 @@ export function ChatPane({
     if (isFollowingTail()) {
       // 瞬时贴底,不用平滑滚动:平滑滚动会吐出一串中间 scroll 事件,
       // 那些事件看起来就像用户在滚,会把跟随打断(这也是当初写死 instant 的原因)。
-      if (el.scrollTop !== el.scrollHeight) writeLogScrollTop(el, el.scrollHeight);
+      // 写的还是 `scrollHeight`(交给浏览器夹取,和以前一模一样);变的只有
+      // 「要不要写」——见 `isPinnedToLogBottom`。
+      if (!isPinnedToLogBottom(el)) writeLogScrollTop(el, el.scrollHeight);
     }
     // 浮标问的是「底下还有没有**内容**」,所以这里用扣掉预留空白的那份。
     const sample = readContentSample(el);

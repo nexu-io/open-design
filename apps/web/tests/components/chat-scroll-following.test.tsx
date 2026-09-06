@@ -189,12 +189,32 @@ afterEach(() => {
   }
 });
 
+/**
+ * 布局跑完之后,浏览器会把滚动偏移夹回新的可滚动范围里。
+ *
+ * jsdom 不做布局,所以夹具要替它补这一下。**内容变矮的时候才看得出差别**:
+ * 占位块一收,`scrollHeight` 掉几百像素,停在旧底部的 `scrollTop` 在真实浏览器里
+ * 会被同一次布局夹下来(并且发一个 scroll 事件)。这里的 setter 只在**写入**时夹
+ * (见上面),内容自己变矮不经过 setter —— 于是夹具会留下一个真实浏览器永远造不出
+ * 的状态:`scrollTop` 大于最大可滚动距离。
+ *
+ * 那个状态不是无害的:任何「已经贴底了就别再写」的判据(`ChatPane` 的
+ * `isPinnedToLogBottom`)在那里都会读到一个负的「离底距离」,于是这条用例量到的就
+ * 不再是产品行为,而是夹具的一个洞。
+ */
+function settleScrollAfterLayout() {
+  const max = maxScrollTop();
+  if (geom.scrollTop > max) geom.scrollTop = max;
+}
+
 async function flushFrames() {
   await act(async () => {
     for (let round = 0; round < 5; round += 1) {
       const callbacks = rafCallbacks.splice(0);
       if (callbacks.length === 0) break;
       callbacks.forEach((callback) => callback(performance.now()));
+      // 这一批帧回调里可能改了占位块的高度 —— 浏览器紧接着就会重排并夹取。
+      settleScrollAfterLayout();
       await Promise.resolve();
     }
   });
@@ -203,6 +223,7 @@ async function flushFrames() {
 async function triggerResize() {
   await act(async () => {
     [...resizeCallbacks].forEach((callback) => callback([], {} as ResizeObserver));
+    settleScrollAfterLayout();
     await Promise.resolve();
   });
 }

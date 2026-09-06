@@ -81,7 +81,18 @@ beforeEach(() => {
       return isChatLog(this) ? geom.scrollTop : 0;
     },
     set(this: HTMLElement, v: number) {
-      if (isChatLog(this)) geom.scrollTop = v;
+      if (!isChatLog(this)) return;
+      // The setter CLAMPS, exactly as a real scroller does: `scrollTop` can
+      // never exceed `scrollHeight - clientHeight`. Without this the fixture
+      // stores whatever was written — so `scrollTop = scrollHeight` parked the
+      // log at a position no browser can produce, and the assertions below
+      // then read "we wrote scrollHeight" rather than "we ended up at the
+      // bottom". Those are different claims, and only the second one is the
+      // behaviour these tests exist to protect.
+      geom.scrollTop = Math.min(
+        Math.max(0, v),
+        Math.max(0, geom.scrollHeight - geom.clientHeight),
+      );
     },
   });
   Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
@@ -225,16 +236,19 @@ describe('chat scroll behavior', () => {
     renderChatPane(sampleMessages);
     await flushFrame();
 
-    expect(geom.scrollTop).toBe(1000);
+    // The initial bottom-pin lands on the real ceiling, 1000 - 400. (It asks
+    // for `scrollHeight`; the scroller clamps, here and in a browser alike.)
+    expect(geom.scrollTop).toBe(600);
 
     // A message body can grow after the messages effect has already run
     // (markdown/tool rows/forms/images/layout). If the user was pinned to
-    // the bottom, that DOM resize must still carry them to the latest turn.
+    // the bottom, that DOM resize must still carry them to the latest turn:
+    // the ceiling moved 600 -> 800 and they have to move with it.
     setGeom({ scrollHeight: 1200 });
     await triggerResize();
     await flushFrame();
 
-    expect(geom.scrollTop).toBe(1200);
+    expect(geom.scrollTop).toBe(800);
   });
 
   it('lands new conversation at its own bottom when switching conversations', async () => {
@@ -250,9 +264,9 @@ describe('chat scroll behavior', () => {
     rerender(chatPaneEl(sampleMessages, 'conv-B'));
     await flushFrame();
 
-    // Saved state was cleared by the activeConversationId-reset effect,
-    // so the new conversation lands at its own scrollHeight rather than
+    // Saved state was cleared by the activeConversationId-reset effect, so
+    // the new conversation lands at its own bottom (1000 - 400) rather than
     // the browser default 0.
-    expect(geom.scrollTop).toBe(1000);
+    expect(geom.scrollTop).toBe(600);
   });
 });

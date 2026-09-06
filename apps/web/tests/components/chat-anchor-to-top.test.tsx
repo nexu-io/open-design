@@ -280,12 +280,30 @@ afterEach(() => {
   }
 });
 
+/**
+ * 布局跑完之后,浏览器会把滚动偏移夹回新的可滚动范围里。
+ *
+ * jsdom 不做布局,所以夹具要替它补这一下,而**这个文件正是最需要它的地方**:
+ * W105 收占位块会让 `scrollHeight` 一口气掉五百像素,停在旧底部的 `scrollTop`
+ * 在真实浏览器里会被同一次布局夹下来(并且发一个 scroll 事件)。上面的 setter
+ * 只在**写入**时夹,内容自己变矮不经过 setter —— 不补这一下,夹具就会留下一个真实
+ * 浏览器永远造不出的状态:`scrollTop` 大于最大可滚动距离,于是
+ * 「贴着底时露出来的空白 = 占位块 − 离底距离」这条算式会读到一个负的离底距离,
+ * 算出一整块根本不在屏幕上的空白。
+ */
+function settleScrollAfterLayout() {
+  const max = maxScrollTop();
+  if (geom.scrollTop > max) geom.scrollTop = max;
+}
+
 async function flushFrames() {
   await act(async () => {
     for (let round = 0; round < 6; round += 1) {
       const callbacks = rafCallbacks.splice(0);
       if (callbacks.length === 0) break;
       callbacks.forEach((callback) => callback(performance.now()));
+      // 这一批帧回调里可能改了占位块的高度 —— 浏览器紧接着就会重排并夹取。
+      settleScrollAfterLayout();
       await Promise.resolve();
     }
   });
@@ -762,6 +780,9 @@ describe('W105 松手之后的尾部占位块:空白戳到眼前才收', () => {
   async function stepFrame() {
     await act(async () => {
       rafCallbacks.splice(0).forEach((callback) => callback(performance.now()));
+      // 收占位块就发生在这一帧里,浏览器接着重排并夹取 —— 见
+      // `settleScrollAfterLayout`。
+      settleScrollAfterLayout();
       await Promise.resolve();
     });
   }
