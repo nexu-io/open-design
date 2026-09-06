@@ -11,6 +11,7 @@ import type {
 } from '@open-design/sidecar-proto';
 import express from 'express';
 import multer from 'multer';
+import { createCompressionMiddleware, createStaticMiddleware } from './static-serving.js';
 import JSZip from 'jszip';
 import { execFile, spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
@@ -3414,7 +3415,10 @@ export async function startServer({
   });
 
   if (fs.existsSync(staticDir)) {
-    app.use(express.static(staticDir));
+    // Compression before static so it can wrap write/end before headers flush.
+    // /api/** bails out early; SSE is also skipped by content-type.
+    app.use(createCompressionMiddleware());
+    app.use(createStaticMiddleware(staticDir));
   }
 
   // ---- Projects (DB-backed) -------------------------------------------------
