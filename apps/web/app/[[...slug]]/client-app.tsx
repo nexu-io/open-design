@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { installErrorHandlers } from '../../src/analytics/error-tracking';
 import { MatrixLoader } from '../../src/components/MatrixLoader';
 import { installWebObservability } from '../../src/observability/install';
+import { installChatScrollTakeover } from '../../src/runtime/chat-scroll-takeover';
 
 // Install browser exception handlers at module-load time, before any other
 // client code can throw. The hooks buffer events until AnalyticsProvider
@@ -17,6 +18,14 @@ installErrorHandlers();
 // Same buffer + consent-bypass transport as the exception handler above
 // so events fired before AnalyticsProvider initialises still flush.
 installWebObservability();
+
+// The one consumer of the scroll-freeze probe's verdict: when the chat log's
+// compositor-side scroll extent goes stale, answer the wheel from JavaScript
+// instead. Deliberately NOT part of `installWebObservability()` — that entry
+// point is for observers, and this changes behaviour. It is off unless an
+// operator has set `open-design:chat-scroll-takeover` to `'1'`, in which case
+// this call reads one storage key and returns without registering anything.
+installChatScrollTakeover();
 
 // The product is a fully client-driven SPA — every component reads
 // localStorage, window.location, etc. — so we opt out of static-time
