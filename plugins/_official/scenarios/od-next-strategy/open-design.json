@@ -37,7 +37,7 @@
       "assets": {
         "core": {
           "path": "./assets/core-system-prompt.md",
-          "version": "2.1.0"
+          "version": "2.2.0"
         },
         "orchestration": {
           "path": "./assets/general-orchestration.md",
