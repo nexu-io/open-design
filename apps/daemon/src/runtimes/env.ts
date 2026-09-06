@@ -2,11 +2,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import {
+  mergeProxyAwareEnv,
+  normalizeNoProxyForHttpx,
+  resolveSystemProxyEnv,
+} from '@open-design/platform';
 import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
 import { resolveAmrOpenCodeExecutable } from './executables.js';
+import { getAgentDef } from './registry.js';
 import { amrVelaProfileEnv } from '../integrations/vela-profile.js';
 import { resolveProjectRootFromNestedModule } from '../project-root.js';
 import {
@@ -24,6 +29,22 @@ type SpawnEnvOptions = {
 const RUNTIME_MODULE_PROJECT_ROOT = resolveProjectRootFromNestedModule(
   path.dirname(fileURLToPath(import.meta.url)),
 );
+
+function applyAgentProxyCompatibility(
+  agentId: string,
+  env: NodeJS.ProcessEnv,
+): void {
+  if (getAgentDef(agentId)?.proxyEnvCompatibility !== 'httpx') return;
+  const noProxy = env.NO_PROXY ?? env.no_proxy;
+  if (noProxy == null) return;
+
+  const normalized = normalizeNoProxyForHttpx(noProxy);
+  delete env.NO_PROXY;
+  delete env.no_proxy;
+  if (normalized == null) return;
+  env.NO_PROXY = normalized;
+  if (process.platform !== 'win32') env.no_proxy = normalized;
+}
 
 // Build the env passed to spawn() for a given agent adapter.
 //
@@ -83,6 +104,7 @@ export function spawnEnvForAgent(
     baseEnv,
     expandedConfiguredEnv,
   );
+  applyAgentProxyCompatibility(agentId, env);
   if (agentId === 'amr') {
     Object.assign(env, amrVelaProfileEnv(env));
     Object.assign(env, amrAnalyticsIdentityEnv(env));
