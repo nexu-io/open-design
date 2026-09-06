@@ -431,6 +431,7 @@ export const TOOL_DEFS = [
           description:
             'BCP-47 Host locale used only when collect_brief had no request or tool-call locale.',
         },
+        pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG,
       },
       required: ['briefDraftId', 'nonce', 'answers'],
       additionalProperties: false,
@@ -1250,6 +1251,15 @@ export class McpObservabilitySession {
     if (name === 'confirm_brief') {
       const inherited = briefStore.attributionForDraft(args.briefDraftId);
       if (inherited) {
+        if (
+          args.pluginWorkflowId !== undefined
+          && validatePluginWorkflowId(args.pluginWorkflowId)
+            !== inherited.pluginWorkflowId
+        ) {
+          throw pluginContractError(
+            'pluginWorkflowId does not match the brief draft',
+          );
+        }
         this.workflows.set(
           inherited.pluginWorkflowId,
           inherited.externalPluginContext,
@@ -1258,6 +1268,12 @@ export class McpObservabilitySession {
           context: inherited.externalPluginContext,
           pluginWorkflowId: inherited.pluginWorkflowId,
         };
+      }
+      if (args.pluginWorkflowId !== undefined) {
+        validatePluginWorkflowId(args.pluginWorkflowId);
+        throw pluginContractError(
+          'pluginWorkflowId requires an attributed brief draft',
+        );
       }
     }
 
