@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "convert-html-slides-to-a-marp-deck-mtphkqcc",
+  "title": "Convert HTML Slides to a Marp Deck",
+  "version": "0.1.0",
+  "description": "--- name: html-to-marp description: Convert existing HTML slides into a Marp (Markdown presentation) slide deck while retaining the source design and styling, ready to export to HTML, PDF, or PPTX. Use when the user want",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
