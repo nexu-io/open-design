@@ -116,6 +116,13 @@ QA 报的是「专业版余额 $1.79 发新任务,没有任何低余额提示」
 - ~~**Home 那张旧弹窗的「不再提醒」会不会把升级卡一起关掉**~~ → **已拍板:拆掉这颗 opt-out**(产品 2026-09-04,原话「拆掉吧」)。会。`AmrLowBalanceDialog` 勾选后写 `open-design:amr-low-balance-warn-optout:v1`,而项目页发送前那道闸门的 soft 档读同一个位(`amr-balance-gate.ts:381`、缓存快路径 `:402`),读到就返回 `allow` —— 用户以为关的是首页那个弹窗,实际把项目页的升级卡也永久静音了。影响面限于 **soft 档**(硬拦不受 opt-out 约束,`:146` 注释如此)和**发送前**那道闸门(跑到一半那条路不读这个位)。与 T51「升级卡不该有关闭态,余额条件成立就一直在」直接冲突,故整颗拆除。
 - **`onShowFailure` 现在没有生产调用点**。`ToolRow` 定义了这个回调,但全仓没人传,`failButton` 一直走的是 `<span>` 回落分支。它原本要干的事(点一下看原因)T49 已经在行内做了。**没删** —— 是个没接线的扩展点,删它属另一轮。
 
+## 五之五、2026-09-06 口述裁决(T52–T53)
+
+| # | 裁决 | 依据 / 代价 |
+|---|---|---|
+| **T53** | **软提醒弹窗 `AmrLowBalanceDialog` 整个删除;软那一档只保留交付稿那张对话内升级卡。首页在这一档什么都不显示,直接放行。**<br>三个界面的终态:<br>· **项目页**(`ProjectView.handleSend` → `ChatPane` 的 `UpgradeCard`)—— 不变,本来就是这张卡,不挡发送(D4)<br>· **首页**(`EntryShell.handlePluginLoopSubmit`)—— **什么都不显示,直接建项目跑起来**。`soft` 这一档在提交路径上**故意没有分支**,落下去就是行为本身<br>· **硬拦档**(= $0,`gate.kind === 'hard'`)—— 不变,仍是带插画的 `AmrBalanceDialog`(无账单权限那一支仍走 `AmrOwnerTopUpDialog`) | 产品口述 2026-09-06:「**软提醒弹窗就是产品告诉我不要这个的,只用弹那个插画的就行**」;首页那一档追问后原话「**什么都不显示,有余额就允许运行**」。<br>⚠️ **这是软弹窗去留的第一次书面裁决。** 此前 `UpgradeCard.tsx` 的注释写着「那个的去留另记(见规格 T40)」—— 那是个**断指针**,T40 讲的是「软提醒不许拖慢运行」,和去留无关;`docs/design/chat-mirror/mirror-exec.html`(经 `mirror-gallery.test.tsx` 的 notes 生成)里复制了同一个坏指针。本次一并改掉。<br>⚠️ **代价:首页在 $0–$2 之间彻底静默。** 用户在首页发起的任务可能跑到一半因余额耗尽而停,事前没有任何提示 —— 产品知情并接受(「有余额就允许运行」)。<br>⚠️ 2026-08-26 的 D-01(`run-error-catalog.md:303`)只把软档的弹窗→卡片改在了 `ProjectView` + `ChatPane`,**落点栏没点首页**;所以首页保留弹窗至今不是漏做,是从没被覆盖过。<br>**遗留未清**:埋点 source `chat_low_balance_warn_recharge` / `home_low_balance_warn_recharge` 现在都是死值,但它们在 `packages/contracts` 的 `TrackingAmrEntrySource` 联合类型里,且 `apps/web/src/analytics/amr-attribution.ts` 的 `ENTRY_PAGE_BY_SOURCE` 是 `Record<TrackingAmrEntrySource, …>` 穷举映射 —— 删它要动跨包分析契约 + 重建 contracts dist,牵连面大于收益,**留着并记在这里** |
+| **T52** | **升级卡软档的阈值取 `< $2`,不采纳交付稿的「< 5 美金」。** 这是**对交付稿的有意偏离**,记在这里以免后来人以为是漏改。<br>· 交付稿:`docs/design/chat-panel-next.html`(git ref `729fa43ce7`)组件 **18 · 升级**,`cmp-meta` 逐字写「出现时机 额度 &lt; 5 美金 / 额度 = 0 美金」,第一格状态标签逐字写「额度不足 · &lt; 5 美金」。<br>· 代码取值:`AMR_LOW_BALANCE_WARN_USD = 2`(`apps/web/src/runtime/amr-balance-gate.ts`),硬拦那一档 `AMR_HARD_BLOCK_BALANCE_USD = 0` 与稿子的「额度耗尽 · = 0 美金」一致,只有软档这一条偏离 | 产品口述 2026-09-06:「**&lt;2 就行,不用管设计稿的 5 美金**」。<br>⚠️ **产品没有给出依据**,这里不代为补写理由。<br>这是 2026-09-04 那次「已拍板:$2」的再次确认(见下方「同日未决」里已划掉的那一条),两次结论一致 |
+
 ## 六、需要我做实测才能定的(3 条,不用你们操心)
 
 T10(Claude 到底发不发原生清单)、T1(AMR 打码与归一)、T2(提测分不分批)—— 我来。

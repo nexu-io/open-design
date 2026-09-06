@@ -69,9 +69,13 @@ interface Props {
 //
 // Both variants keep the benefits list (they sell the service to exactly the
 // not-yet-committed cohort). The caller preserves the payload (home keeps
-// the composer draft; chat parks the full send in the queue). The softer
-// low-balance reminder lives in AmrLowBalanceDialog; this hard tier is never
-// subject to its opt-out.
+// the composer draft; chat parks the full send in the queue).
+//
+// This is now the ONLY balance dialog. The softer low-balance reminder used to
+// have its own centered dialog (AmrLowBalanceDialog); product deleted it on
+// 2026-09-06 — "软提醒弹窗就是产品告诉我不要这个的,只用弹那个插画的就行" (T53).
+// The soft tier survives only as the project page's in-conversation UpgradeCard,
+// and Home shows nothing at all for it.
 export function AmrBalanceDialog({
   reason,
   balanceUsd,

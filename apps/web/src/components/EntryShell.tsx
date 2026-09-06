@@ -120,7 +120,6 @@ import {
   resolveAmrBalanceBranch,
 } from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
-import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   amrBalanceGateScopeForWorkspaceContext,
   checkAmrBalanceGate,
@@ -1120,15 +1119,13 @@ export function EntryShell({
       resolve: (decision: 'retry' | 'dismiss') => void;
     } | null
   >(null);
-  // Soft low-balance warning holding a pending home submit: the dialog
-  // resolves the promise the submit handler is awaiting ('proceed' continues
-  // the very same create-and-run).
-  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    {
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: AmrLowBalanceDecision) => void;
-    } | null
-  >(null);
+  // Home has NO soft-tier surface. Product ruling 2026-09-06 (T53): between $0
+  // and the warning line Home shows nothing at all and the run just starts —
+  // "什么都不显示,有余额就允许运行". The soft reminder lives only where the
+  // delivered design put it, as the in-conversation UpgradeCard on the project
+  // page; Home has no conversation to hang it on, so it stays silent rather
+  // than growing a Home-only invention. That is why `handlePluginLoopSubmit`
+  // has no `soft` branch: falling through IS the behavior.
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
@@ -1454,24 +1451,14 @@ export function EntryShell({
           );
         }
         if (gate.kind === 'unavailable') return false;
-        if (gate.kind === 'soft') {
-          // Hold THIS submit while the reminder waits for a decision; 'proceed'
-          // resumes the same create-and-run below, so HomeView's normal accept
-          // path (draft clearing, context consumption) still applies.
-          //
-          // The reminder used to be gated on `isPaidAmrPlan(await
-          // resolveAmrPlan(...))`. Product ruling 2026-09-03 (OPEND-2600) opens
-          // it to every tier — a free account's wallet is the ONLY thing funding
-          // its runs, so it is the tier that most needs the warning — and the
-          // plan read that filter needed was a network roundtrip standing
-          // between the user and their run. The gate already decided that a
-          // reminder is warranted; Home just shows it.
-          const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-            setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
-          });
-          setAmrLowBalanceWarn(null);
-          if (decision !== 'proceed') return 'blocked' as const;
-        }
+        // `soft` is deliberately unhandled: it falls through and the run starts.
+        // Home used to hold the submit open behind a centered reminder dialog
+        // ("额度不多了" + 仍要发起任务 / 去充值). Product ruled it away on
+        // 2026-09-06 — "软提醒弹窗就是产品告诉我不要这个的" — and ruled Home's
+        // replacement to be nothing at all: "什么都不显示,有余额就允许运行"
+        // (T53). Do not re-add a branch here; anything short of falling through
+        // reintroduces a block the user does not want. The only survivor of the
+        // soft tier is the project page's in-conversation UpgradeCard.
         if (
           currentWorkspaceAccountGeneration() !== gateAccountGeneration
           || workspaceIdentityCacheKey(
@@ -1736,7 +1723,6 @@ export function EntryShell({
             view === 'home'
             && goPlanSunsetMessagePending
             && amrBalanceGateBlock == null
-            && amrLowBalanceWarn == null
           }
           onPriorityAnnouncementPendingChange={setGoPlanSunsetMessagePending}
           priorityAnnouncementCurrentPlanId={deepSeekCampaignPlan}
@@ -1779,16 +1765,6 @@ export function EntryShell({
               installationId={config.installationId}
               onClose={() => amrBalanceGateBlock.resolve('dismiss')}
               onResolved={() => amrBalanceGateBlock.resolve('retry')}
-            />
-          ) : null}
-          {amrLowBalanceWarn ? (
-            <AmrLowBalanceDialog
-              balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-              profile={amrLowBalanceWarn.snapshot.profile}
-              entrySource="home_low_balance_warn_recharge"
-              metricsConsent={config.telemetry?.metrics === true}
-              installationId={config.installationId}
-              onDecision={amrLowBalanceWarn.resolve}
             />
           ) : null}
           <div

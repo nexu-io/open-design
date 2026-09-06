@@ -1,12 +1,21 @@
 // @vitest-environment jsdom
 //
-// 红测 · OPEND-2600 在**首页**那一半。
+// 红测 · 首页在**软那一档**($0 < 余额 < $2)什么都不显示,并且**直接放行**。
 //
-// 首页没有流水可以挂卡,低余额提醒走的是 `AmrLowBalanceDialog`。它和项目页那张
-// 卡共用同一道被删掉的过滤:`isPaidAmrPlan(await resolveAmrPlan(...))`。
+// 这个文件原本测的是 OPEND-2600 的首页那一半:低余额提醒走居中弹窗
+// `AmrLowBalanceDialog`,各档位都要出、且不许多打一次套餐读数。
 //
-// 产品裁决(2026-09-03):提醒对**所有档位**可见,呈现层不再读套餐。
-// 同一条红线也在这里量:出这张提醒**不许多打一次网络往返**。
+// 产品 2026-09-06 把那张弹窗整个撤了 —— 原话「软提醒弹窗就是产品告诉我不要
+// 这个的,只用弹那个插画的就行」;首页那一档的替代物也一并拍了 —— 原话
+// 「什么都不显示,有余额就允许运行」(规格 T53)。
+//
+// 所以这一档的**覆盖没有丢,只是判据翻了个面**:从「必须出提醒」变成
+// 「一个提醒都不许出,而且这次发送必须照常建项目跑起来」。
+//
+// ⚠️ 命门在「放行」这半边。只断言「没有弹窗」的话,把整段余额闸门删掉、
+// 或者留一个不显示却仍然挡住发送的空壳,两种都会假绿 —— 前者由下面
+// 「反向对照 · 闸门本身还活着」那一组挡住(硬拦档照旧弹带插画的那张),
+// 后者由每一条 soft 用例里的 `onCreateProject` 断言挡住。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
@@ -42,26 +51,6 @@ vi.mock('../../src/runtime/amr-low-balance-plan', async (importOriginal) => {
   >();
   return { ...actual, resolveAmrPlan: vi.fn().mockResolvedValue('pro') };
 });
-
-vi.mock('../../src/components/AmrLowBalanceDialog', () => ({
-  AmrLowBalanceDialog: ({
-    balanceUsd,
-    onDecision,
-  }: {
-    balanceUsd: string | null;
-    onDecision: (decision: 'proceed' | 'recharge' | 'dismiss') => void;
-  }) => (
-    <div data-testid="amr-low-balance-dialog" data-balance={balanceUsd ?? ''}>
-      <button
-        type="button"
-        data-testid="low-balance-proceed"
-        onClick={() => onDecision('proceed')}
-      >
-        proceed
-      </button>
-    </div>
-  ),
-}));
 
 const mockedCheckAmrBalanceGate = vi.mocked(checkAmrBalanceGate);
 const mockedResolveAmrPlan = vi.mocked(resolveAmrPlan);
@@ -193,7 +182,7 @@ async function submitHome(prompt: string) {
   fireEvent.click(await screen.findByTestId('home-hero-submit'));
 }
 
-describe('OPEND-2600 · 首页低余额提醒对所有档位可见', () => {
+describe('T53 · 首页软余额档静默放行', () => {
   beforeEach(() => {
     globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
     window.sessionStorage.clear();
@@ -238,7 +227,7 @@ describe('OPEND-2600 · 首页低余额提醒对所有档位可见', () => {
   });
 
   it.each(['free', 'pro', 'go', 'max'])(
-    '%s 档拿到告警判定时,首页都要出提醒',
+    '%s 档拿到告警判定时,首页什么都不显示,并且照常把这次发送跑起来',
     async (plan) => {
       mockedResolveAmrPlan.mockResolvedValue(plan);
       mockedCheckAmrBalanceGate.mockResolvedValue({
@@ -250,56 +239,52 @@ describe('OPEND-2600 · 首页低余额提醒对所有档位可见', () => {
 
       await submitHome('Make me a poster.');
 
-      const dialog = await screen.findByTestId('amr-low-balance-dialog');
-      expect(dialog.getAttribute('data-balance')).toBe(REPORTED_BALANCE);
-      // 提醒 ≠ 拦截:选「照样开始」这一次就正常建项目跑起来。
-      fireEvent.click(screen.getByTestId('low-balance-proceed'));
+      // 放行:没有任何东西挡在中间,项目直接建出来。这半边是命门 ——
+      // 一个「不显示但仍然挡住」的空壳会在这里变红。
       await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+      // 静默:那张撤掉的弹窗不许以任何形式回来。
+      expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
+      // 硬拦那张也不许被拿来顶替 —— 软档不是拦截档。
+      expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+      // 屏幕上一个对话框都没有:这一档是「什么都不显示」,不是「换一张显示」。
+      expect(document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length)
+        .toBe(0);
     },
   );
 
-  it('套餐读不出来(null 档)也要出提醒 —— 这一档不能掉进缝里', async () => {
+  it('套餐读不出来(null 档)同样静默放行 —— 这一档不能掉进缝里', async () => {
     mockedResolveAmrPlan.mockResolvedValue(null);
     mockedCheckAmrBalanceGate.mockResolvedValue({
       kind: 'soft',
       snapshot: lowBalanceSnapshot(),
     });
-    renderHome(vi.fn(async () => true));
+    const onCreateProject = vi.fn(async () => true);
+    renderHome(onCreateProject);
 
     await submitHome('Make me a poster.');
 
-    const dialog = await screen.findByTestId('amr-low-balance-dialog');
-    expect(dialog.getAttribute('data-balance')).toBe(REPORTED_BALANCE);
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
   });
 
-  it('红线:套餐读数吊死也照样出提醒(软提醒不许拖慢发送)', async () => {
-    // 一个永远不 resolve 的套餐读数 = 一次挂住的网络往返。
+  it('红线:软档一次套餐读数都不发(T40),而且不因为它多等一步', async () => {
+    // 一个永远不 resolve 的套餐读数 = 一次挂住的网络往返。软档要是还读它,
+    // 这次发送就永远建不出项目,下面的 waitFor 会超时变红。
     mockedResolveAmrPlan.mockReturnValue(new Promise<string | null>(() => {}));
     mockedCheckAmrBalanceGate.mockResolvedValue({
       kind: 'soft',
       snapshot: lowBalanceSnapshot(),
     });
-    renderHome(vi.fn(async () => true));
+    const onCreateProject = vi.fn(async () => true);
+    renderHome(onCreateProject);
 
     await submitHome('Make me a poster.');
 
-    await screen.findByTestId('amr-low-balance-dialog');
-  });
-
-  it('红线:告警这一路一次套餐读数都不发', async () => {
-    mockedCheckAmrBalanceGate.mockResolvedValue({
-      kind: 'soft',
-      snapshot: lowBalanceSnapshot(),
-    });
-    renderHome(vi.fn(async () => true));
-
-    await submitHome('Make me a poster.');
-
-    await screen.findByTestId('amr-low-balance-dialog');
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     expect(mockedResolveAmrPlan).not.toHaveBeenCalled();
   });
 
-  it('反向对照:判定放行时首页不出提醒,也不发套餐读数', async () => {
+  it('反向对照:判定放行时行为一致 —— 同样不出弹窗、同样跑起来', async () => {
     mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
     const onCreateProject = vi.fn(async () => true);
     renderHome(onCreateProject);
@@ -309,5 +294,37 @@ describe('OPEND-2600 · 首页低余额提醒对所有档位可见', () => {
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
     expect(mockedResolveAmrPlan).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ 没有这一组,把整段余额闸门从首页删掉也会让上面全绿 ——
+  // 那样 soft 一样「什么都不显示、照常跑」,可硬拦档也跟着没了。
+  // 嵌在同一个 describe 里是为了继承上面那套 fetch / workspace 夹具。
+  describe('反向对照 · 闸门本身还活着', () => {
+    it('硬拦档(余额耗尽)照旧弹带插画的那张,并且**不**建项目', async () => {
+      mockedCheckAmrBalanceGate.mockResolvedValue({
+        kind: 'hard',
+        reason: 'insufficient',
+        snapshot: { ...lowBalanceSnapshot(), balanceUsd: '0' },
+      });
+      const onCreateProject = vi.fn(async () => true);
+      renderHome(onCreateProject);
+
+      await submitHome('Make me a poster.');
+
+      await screen.findByTestId('amr-balance-dialog');
+      expect(onCreateProject).not.toHaveBeenCalled();
+    });
+
+    it('首页确实问过闸门 —— 软档的静默不是因为根本没查', async () => {
+      mockedCheckAmrBalanceGate.mockResolvedValue({
+        kind: 'soft',
+        snapshot: lowBalanceSnapshot(),
+      });
+      renderHome(vi.fn(async () => true));
+
+      await submitHome('Make me a poster.');
+
+      await waitFor(() => expect(mockedCheckAmrBalanceGate).toHaveBeenCalled());
+    });
   });
 });

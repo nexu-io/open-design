@@ -175,8 +175,14 @@ describe('i18n locales', () => {
       'chat.amrError.balanceMessage',
       'chat.amrBalanceGate.message',
       'chat.amrBalanceGate.watchingWallet',
-      'chat.amrLowBalance.title',
-      'chat.amrLowBalance.message',
+      // `chat.amrLowBalance.title` / `.message` 曾经也在这张表里 —— 那两条属于
+      // 首页的软提醒弹窗 `AmrLowBalanceDialog`,产品 2026-09-06 裁决删掉整张弹窗
+      // (规格 T53),key 随之清掉。
+      //
+      // 软那一档现在只剩项目页流水里的升级卡,而它的 `chat.upgrade.balance`
+      // **不能**加进这张表:zh-CN「剩余额度」/ zh-TW「剩餘額度」里天然含有
+      // 「余额」/「餘額」这两个子串,会被下面那条反向断言判红。术语一致性对
+      // 那一族另说,不在这条用例的范围里。
       'chat.runError.title.balance',
       'entry.creditsAria',
       'entry.creditsAriaWithBalance',

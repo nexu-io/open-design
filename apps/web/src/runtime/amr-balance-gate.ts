@@ -38,6 +38,13 @@ export const AMR_HARD_BLOCK_BALANCE_USD = 0;
  * exhaust the wallet before finishing. Tune from data: the starting-balance
  * distribution of AMR_INSUFFICIENT_BALANCE failures tells you where this
  * line should actually sit.
+ *
+ * DELIBERATE DEVIATION from the delivered design — do not "fix" it. The draft
+ * (`docs/design/chat-panel-next.html` @ 729fa43ce7, component 18 · 升级) writes
+ * this tier as 「额度不足 · < 5 美金」. Product ruled 2026-09-06 to keep $2 and
+ * ignore the draft's $5. Recorded as T52 in
+ * `specs/current/chat-panel-decisions-sheet.md`; the hard line below is NOT a
+ * deviation (the draft's second tier is 「额度耗尽 · = 0 美金」).
  */
 export const AMR_LOW_BALANCE_WARN_USD = 2;
 

@@ -2830,10 +2830,6 @@ export interface Dict {
   'chat.amrBalanceGate.signedOutMessage': string;
   'chat.amrBalanceGate.signInCta': string;
   'chat.amrBalanceGate.watchingWallet': string;
-  'chat.amrLowBalance.title': string;
-  'chat.amrLowBalance.message': string;
-  'chat.amrLowBalance.rechargeCta': string;
-  'chat.amrLowBalance.proceedCta': string;
   'chat.amrArtifactUpgrade.title': string;
   'chat.amrArtifactUpgrade.message': string;
   'chat.amrArtifactUpgrade.benefit1': string;
