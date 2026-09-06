@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_AMR_RECHARGE_URL,
-  OPEN_DESIGN_PRICING_URL,
   amrConsoleUrlForWorkspace,
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
@@ -91,21 +90,25 @@ describe('amr-guidance origin literals', () => {
       'utf8',
     );
     const origins = [...source.matchAll(/https?:\/\/[^'"`\s)]+/g)].map((match) => match[0]);
-    // Exactly four: public prod console + Pricing, the local dev server, and
-    // the one grandfathered internal entry that predates this rule. A fifth means
+    // Exactly three: the public prod console, the local dev server, and the one
+    // grandfathered internal entry that predates this rule. A fourth means
     // someone hardcoded an environment hostname instead of injecting it.
-    expect(origins).toHaveLength(4);
+    // (Was four while a public Pricing literal lived here; T54 routed 升级 back
+    // onto the profile's own console and the literal went with it.)
+    expect(origins).toHaveLength(3);
   });
 });
 
 describe('workspace-scoped AMR URLs', () => {
-  it('pins console links to the workspace and sends plan discovery to Pricing', () => {
+  // T54 (product 2026-09-06): plan discovery goes back onto the workspace's own
+  // console plan surface. Full coverage in `amr-plans-console-deeplink.test.ts`.
+  it('pins both console links to the workspace', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(amrConsoleUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
       `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a`,
     );
     expect(amrPlansUrlForWorkspace('feature-test', ' workspace-a ')).toBe(
-      OPEN_DESIGN_PRICING_URL,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&workspaceId=workspace-a&billing=plan`,
     );
   });
 

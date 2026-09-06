@@ -117,6 +117,7 @@ import { AmrBalanceDialog } from './AmrBalanceDialog';
 import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
 import {
   amrBalanceBlockedDialog,
+  amrBalanceDialogUpgradeIntent,
   resolveAmrBalanceBranch,
 } from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
@@ -1108,13 +1109,16 @@ export function EntryShell({
     {
       reason: 'insufficient' | 'signed_out';
       /**
-       * 哪一张弹窗 —— 身份 × 订阅的分支(规格 §6.V)。
+       * 哪一张弹窗 —— 身份的分支(规格 §6.V)。
        *
-       * 首页和聊天流水的差别只有一处:这里**没有那张升级卡**兜底。所以
-       * 「Max · owner 不弹窗」那一支在首页会退回原来的升级弹窗 —— 不然拦住了
-       * 发送却什么都不显示,那是把一个死胡同换成一片空白。
+       * 这里曾经还挂着一条 `?? 'upgrade'` 的兜底,理由是「首页没有那张升级卡,
+       * 『Max · owner 不弹窗』那一支落到首页会变成一片空白」。T58 之后那一支
+       * 不存在了(owner 两格共用同一张会员转化弹窗),兜底随之删除 —— 它当时把
+       * Max 所有者兜成了**转化弹窗 + 套餐页链接**,等于让他买一个已经在用的套餐。
        */
       dialog: 'upgrade' | 'ask_owner';
+      /** 那张弹窗的主按钮去哪(T58);和 `dialog` 同一个 branch 快照算出来。 */
+      upgradeIntent: 'pricing' | 'auto_recharge';
       snapshot: AmrWalletSnapshot;
       resolve: (decision: 'retry' | 'dismiss') => void;
     } | null
@@ -1426,20 +1430,25 @@ export function EntryShell({
         // wallet is empty) → the dialog re-shows with the fresh snapshot.
         while (gate.kind === 'hard') {
           const blocked = gate;
+          // 「哪张弹窗」和「它的主按钮去哪」问的是同一个 branch 快照,免得两次
+          // 分别求值之间的一次工作区切换让两者各说各话(规格 §6.V / T58)。
+          const blockedBranch = resolveAmrBalanceBranch({
+            context: gateWorkspaceContext,
+            billing: workspaceBilling,
+          });
           const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
             setAmrBalanceGateBlock({
               reason: blocked.reason,
-              // 被登出说的是登录不是钱,无条件走原来那张(主按钮是应用内登录)。
-              // 余额耗尽才按身份分支;首页没有卡兜底,所以 `null` 退回 `upgrade`。
+              // 被登出说的是登录不是钱,无条件走原来那张(主按钮是应用内登录,
+              // 落点那一位那时用不上)。余额耗尽才按身份 × 订阅分支。
               dialog:
                 blocked.reason === 'signed_out'
                   ? 'upgrade'
-                  : amrBalanceBlockedDialog(
-                      resolveAmrBalanceBranch({
-                        context: gateWorkspaceContext,
-                        billing: workspaceBilling,
-                      }),
-                    ) ?? 'upgrade',
+                  : amrBalanceBlockedDialog(blockedBranch),
+              upgradeIntent:
+                blocked.reason === 'signed_out'
+                  ? 'pricing'
+                  : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: blocked.snapshot,
               resolve,
             });
@@ -1761,6 +1770,7 @@ export function EntryShell({
               balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
               profile={amrBalanceGateBlock.snapshot.profile}
               entrySource="home_balance_gate_upgrade"
+              upgradeIntent={amrBalanceGateBlock.upgradeIntent}
               metricsConsent={config.telemetry?.metrics === true}
               installationId={config.installationId}
               onClose={() => amrBalanceGateBlock.resolve('dismiss')}

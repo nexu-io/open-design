@@ -170,6 +170,7 @@ import {
 } from '../runtime/amr-balance-gate';
 import {
   amrBalanceBlockedDialog,
+  amrBalanceDialogUpgradeIntent,
   amrBalanceUpgradeIntent,
   resolveAmrBalanceBranch,
   type AmrBalanceBlockedDialogKind,
@@ -2809,16 +2810,20 @@ export function ProjectView({
     {
       reason: 'insufficient' | 'signed_out';
       /**
-       * 这一档同时唤起哪个弹窗 —— 由**身份 × 订阅**决定(规格 §6.V):
-       * `upgrade` 是现有的余额不足升级弹窗(非 Max · owner);`ask_owner` 是
-       * 「找所有者充值」那张(所有非 owner 成员);`null` 是不弹窗
-       * (Max · owner —— 他没有更高的套餐可买,卡上那颗按钮直接落在自动充值上,
-       * 中间再插一张弹窗只是多一次点击)。
+       * 这一档同时唤起哪个弹窗 —— 由**身份**决定(规格 §6.V):`upgrade` 是会员
+       * 转化弹窗(owner 那两格共用同一张,T58);`ask_owner` 是「找所有者充值」
+       * 那张(所有非 owner 成员)。
        *
        * 决定在**拦截发生的那一刻**做完并记下来,而不是渲染时再算:身份换了
        * (切工作区)不该把一张已经开着的弹窗换成另一张。
        */
       dialog: AmrBalanceBlockedDialogKind;
+      /**
+       * 那张会员转化弹窗的主按钮去哪 —— 订阅档的差别全落在这一位上(T58)。
+       * 和 `dialog` 同一刻、同一个 branch 快照算出来,免得弹窗开着的时候切了
+       * 工作区,按钮突然指向另一个工作区的账单页。
+       */
+      upgradeIntent: 'pricing' | 'auto_recharge';
       snapshot: AmrWalletSnapshot;
       conversationId: string;
     } | null
@@ -8222,21 +8227,28 @@ export function ProjectView({
               recoveryActionType: 'manual_retry',
               recoveryActionInstanceId,
             };
-            // 「同时唤起什么弹窗」是四组分支唯一的差别(规格 §6.V)。
+            // 「唤起哪张弹窗、它的主按钮去哪」是四组分支唯一的差别(规格 §6.V,
+            // 第三格见 T58)。两个问题必须问**同一个 branch 快照**,否则一次
+            // 工作区切换能让弹窗和它的按钮各说各话。
             //
-            // 被登出不在这四组里:那一档说的是登录,不是钱,主按钮是应用内登录,
-            // 所以它无条件走原来那张弹窗。
+            // 被登出不在这四组里:那一档说的是登录,不是钱,主按钮是应用内登录
+            // (`upgradeIntent` 那时根本用不上),所以它无条件走那张弹窗。
+            const blockedBranch = amrBalanceBranchRef.current;
             setAmrBalanceGateBlock({
               reason: gate.reason,
               dialog:
                 gate.reason === 'signed_out'
                   ? 'upgrade'
-                  : amrBalanceBlockedDialog(amrBalanceBranchRef.current),
+                  : amrBalanceBlockedDialog(blockedBranch),
+              upgradeIntent:
+                gate.reason === 'signed_out'
+                  ? 'pricing'
+                  : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: gate.snapshot,
               conversationId: gateConversationId,
             });
-            // 拦截档:把流水里那张卡点亮 —— 弹窗一关就什么都不剩(Max · owner 那组
-            // 干脆没有弹窗),而人回到聊天里仍然需要看到「为什么开不了」。
+            // 拦截档:把流水里那张卡点亮 —— 弹窗一关就什么都不剩,而人回到聊天
+            // 里仍然需要看到「为什么开不了」。
             //
             // 只对「余额耗尽」出卡。被登出也走这条硬拦截,但那张卡说的是钱的事,
             // 摆一个 $0.00 去解释一次登录过期是在误导 —— 那一档交给弹窗。
@@ -13390,6 +13402,7 @@ export function ProjectView({
           balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
           profile={amrBalanceGateBlock.snapshot.profile}
           entrySource="chat_balance_gate_upgrade"
+          upgradeIntent={amrBalanceGateBlock.upgradeIntent}
           metricsConsent={config.telemetry?.metrics === true}
           installationId={config.installationId}
           onClose={() => setAmrBalanceGateBlock(null)}

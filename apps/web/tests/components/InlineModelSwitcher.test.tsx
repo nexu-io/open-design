@@ -661,9 +661,12 @@ describe('InlineModelSwitcher AMR row', () => {
 
     const [url, target, features] = openSpy.mock.calls[0] ?? [];
     const parsed = new URL(String(url));
-    expect(parsed.origin).toBe('https://open-design.ai');
-    expect(parsed.pathname).toBe('/pricing/');
-    expect(parsed.searchParams.get('billing')).toBeNull();
+    // The point of this case is the PROFILE: a signed-in test-profile account
+    // must not be handed a production upgrade link. While the plans URL ignored
+    // its profile argument this assertion read the prod host (T54).
+    expect(parsed.origin).toBe('https://vela.powerformer.net');
+    expect(parsed.pathname).toBe('/dashboard');
+    expect(parsed.searchParams.get('billing')).toBe('plan');
     expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
     expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
     expect(target).toBe('_blank');

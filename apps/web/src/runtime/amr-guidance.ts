@@ -24,32 +24,57 @@ export const AMR_CONSOLE_URL =
   'https://open-design.ai/amr/dashboard?source=open_design';
 export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
-export const OPEN_DESIGN_PRICING_URL = 'https://open-design.ai/pricing/';
 
 // Path + attribution the console is always reached through, so a runtime
 // origin only has to carry the host.
 const AMR_CONSOLE_PATH = '/dashboard?source=open_design';
 
 /**
+ * The console's `billing=<intent>` value that means "open the upgrade surface
+ * that matches THIS workspace".
+ *
+ * B's dashboard resolves it against the workspace's own subscription state
+ * rather than trusting the caller: a personal owner gets the personal plan
+ * modal (the same one the console's 「升级订阅」 hero button opens), a team that
+ * never subscribed gets first-checkout, and a subscribed team gets change-plan.
+ * That is why this client links one intent for every state instead of guessing
+ * a per-state parameter — a wrong guess used to open nothing at all
+ * (recvpSQKna0LwR).
+ *
+ * RESTORED 2026-09-06 (spec T54). origin/main had removed this constant in
+ * #7122 (Go-plan launch: "public Pricing is the single comparison surface"),
+ * with #7167 following up on Pricing's own copy/layout. Neither removal was a
+ * technical constraint — it was an information-architecture choice for that
+ * campaign — and it left `amrPlansUrlForProfile` ignoring its `profile`
+ * argument, so every non-prod build sent 升级 to PRODUCTION Pricing, whose cards
+ * hand plan + interval to production Vela for direct checkout. Product ruled
+ * the upgrade entries back onto the profile's own console plan surface.
+ *
+ * B-side support is not in doubt for THIS value: `billing=plan` is one of the
+ * two intents vela's `apps/web/src/routes/team-dashboard.tsx` deep-link effect
+ * recognizes today. When its `ownerBillingActionsAvailable` guard is false the
+ * dialog simply does not open and the user lands on `/dashboard` — the same
+ * page the shipped balance/recharge links already target, so an unsatisfiable
+ * intent degrades to today's behavior rather than to an error.
+ */
+export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
+
+/**
  * The console's `billing=<intent>` value that means "open the auto-recharge
  * (auto top-up) settings dialog for THIS workspace".
  *
- * NOTE(sync/main): the sibling `AMR_CONSOLE_UPGRADE_INTENT = 'plan'` was
- * REMOVED by origin/main (#7122 / #7167 / #5459): generic plan comparison no
- * longer deep-links into the Cloud console, it goes to public Pricing. This
- * intent survives because it names a DIFFERENT destination — the console's own
- * auto-recharge settings — which Pricing does not own. The client states an
- * intent and B decides which surface satisfies it. It exists because the
- * 2026-08-26 balance ruling gives a Max owner no dialog of our own — clicking
- * Upgrade must land them directly on 触发阈值 / 充值金额 / 每月上限, since a Max
- * subscriber has no higher plan to sell and topping up IS the fix.
+ * Sibling of {@link AMR_CONSOLE_UPGRADE_INTENT}; it names a DIFFERENT
+ * destination — the console's own auto-recharge settings. It exists because a
+ * Max subscriber has no higher plan to sell, so topping up IS the fix: both the
+ * in-conversation UpgradeCard and (since spec T58) the balance dialog's primary
+ * CTA must land that owner directly on 触发阈值 / 充值金额 / 每月上限.
  *
- * ⚠️ UNCONFIRMED ON B. As of this change B's dashboard deep-link effect only
- * recognizes `checkout` and `plan` (vela `apps/web/src/routes/team-dashboard.tsx`);
- * its auto top-up surface is opened by in-page interaction only. An
- * unrecognized `billing` value is inert there, so today this link still lands
- * the owner on the dashboard that owns the setting — it just does not pop the
- * dialog open. Needs a B-side handler before the ruling is fully satisfied.
+ * ✅ CONFIRMED ON B since 2026-09-06. vela #1900 (`feat(billing): open
+ * auto-recharge settings from a dashboard deep link`) taught the dashboard's
+ * deep-link effect this third intent, so the link now opens the settings dialog
+ * rather than merely landing on the page that owns it. The comment here
+ * previously warned the value was inert on B; that was true when it was written
+ * and is no longer.
  */
 export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
 
@@ -114,11 +139,13 @@ export function amrRechargeUrlForProfile(profile: string | null | undefined): st
 function amrWorkspaceUrl(
   profile: string | null | undefined,
   workspaceId: string | null | undefined,
+  intent?: 'plans',
 ): string | null {
   const normalizedWorkspaceId = workspaceId?.trim();
   if (!normalizedWorkspaceId) return null;
   const url = new URL(amrConsoleUrlForProfile(profile));
   url.searchParams.set('workspaceId', normalizedWorkspaceId);
+  if (intent === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
   return url.toString();
 }
 
@@ -130,17 +157,28 @@ export function amrConsoleUrlForWorkspace(
 }
 
 export function amrPlansUrlForWorkspace(
-  _profile: string | null | undefined,
+  profile: string | null | undefined,
   workspaceId: string | null | undefined,
 ): string | null {
-  return workspaceId?.trim() ? OPEN_DESIGN_PRICING_URL : null;
+  return amrWorkspaceUrl(profile, workspaceId, 'plans');
 }
 
-// Public comparison surface used by every generic Upgrade / View plans entry.
-// A selected Pricing card still carries plan + interval back to Vela for
-// direct checkout; generic discovery never opens the Cloud plan modal.
-export function amrPlansUrlForProfile(_profile: string | null | undefined): string {
-  return OPEN_DESIGN_PRICING_URL;
+/**
+ * Where every generic Upgrade / View plans entry lands: the console's plan
+ * surface **for this runtime's own profile** (spec T54, product 2026-09-06).
+ *
+ * `profile` is load-bearing, and that is the whole point of the ruling. While
+ * this returned a hardcoded public Pricing URL the parameter was prefixed `_`
+ * and deliberately unused, so a test / local / feature-test build sent 升级 to
+ * PRODUCTION Pricing — and a card selected there carries plan + interval back
+ * to production Vela for direct checkout. Routing through
+ * {@link amrConsoleUrlForProfile} reuses the one origin decision the runtime
+ * already owns (daemon `/api/integrations/vela/status` → consoleOrigin →
+ * `setRuntimeAmrConsoleOrigin`), so there is no second source of truth for
+ * "which environment am I".
+ */
+export function amrPlansUrlForProfile(profile: string | null | undefined): string {
+  return amrConsoleUrlWithBillingIntent(profile, AMR_CONSOLE_UPGRADE_INTENT);
 }
 
 /**

@@ -161,7 +161,7 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
       } satisfies Partial<WorkspaceBillingSummary>,
     },
   ])(
-    'routes a $name to public Pricing',
+    'routes a $name to the console plan surface',
     ({ context: contextOverrides, billing: billingOverrides }) => {
       const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
       renderRail({
@@ -182,8 +182,10 @@ describe('account menu billing card — workspace-aware upgrade routing', () => 
 
       expect(openSpy).toHaveBeenCalledTimes(1);
       const target = new URL(String(openSpy.mock.calls[0]![0]));
-      expect(`${target.origin}${target.pathname}`).toBe('https://open-design.ai/pricing/');
-      expect(target.searchParams.get('billing')).toBeNull();
+      expect(`${target.origin}${target.pathname}`).toBe(
+        'https://open-design.ai/amr/dashboard',
+      );
+      expect(target.searchParams.get('billing')).toBe('plan');
     },
   );
 

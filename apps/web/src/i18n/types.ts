@@ -4400,10 +4400,10 @@ export interface Dict {
   'chat.support.channel.feishu': string;
   'chat.support.channel.discord': string;
   'chat.amrBalanceOwner.title': string;
+  /** {name} = the workspace owner's display name. */
   'chat.amrBalanceOwner.message': string;
-  'chat.amrBalanceOwner.requestTemplate': string;
-  'chat.amrBalanceOwner.copyCta': string;
-  'chat.amrBalanceOwner.copiedCta': string;
+  /** Same sentence with the owner's role in place of their name (T57). */
+  'chat.amrBalanceOwner.messageNoOwnerName': string;
   'chat.amrBalanceOwner.dismissCta': string;
   'assistant.outTokens': string;
   'assistant.producedFiles': string;

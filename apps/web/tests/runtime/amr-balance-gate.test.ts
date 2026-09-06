@@ -184,7 +184,11 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('does not block a selected model without a client-side entitlement catalog', async () => {
+  // T55 (2026-09-06) overturned the half of this that read "a plan means the run
+  // may still start". A READABLE tier — go included — now blocks at $0; only an
+  // unreadable one fails open. The half that survives is the one this case was
+  // really about: no model-level entitlement is ever guessed client-side.
+  it('blocks a readable plan at $0 without guessing per-model entitlement', async () => {
     const empty = snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
@@ -193,12 +197,9 @@ describe('checkAmrBalanceGate', () => {
       .mockResolvedValueOnce({ ...empty, source: 'daemon_cache' })
       .mockResolvedValueOnce(empty);
 
-    // Not `hard` is the invariant. The reminder rides along (OPEND-2600): a
-    // plan means the run may still start, not that an empty wallet is unworthy
-    // of mention.
     await expect(
       checkAmrBalanceGate(undefined, 'new-coding-plan-model'),
-    ).resolves.toEqual({ kind: 'soft', snapshot: empty });
+    ).resolves.toEqual({ kind: 'hard', reason: 'insufficient', snapshot: empty });
   });
 
   it.each([
@@ -265,12 +266,14 @@ describe('checkAmrBalanceGate', () => {
     expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
   });
 
+  // T55: a subscriber's $0 is no longer a reason to stand down. The refresh
+  // handshake this case also pins (never block on a cached zero) is unchanged.
   it.each([
     ['go', 'glm-5.2'],
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
     ['max', 'glm-5.1'],
-  ])('does not block a selected %s model with a fresh zero-dollar wallet', async (plan, modelId) => {
+  ])('blocks a selected %s model with a fresh zero-dollar wallet', async (plan, modelId) => {
     const planAccount = snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan },
@@ -281,11 +284,18 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, modelId),
-    ).resolves.toEqual({ kind: 'soft', snapshot: planAccount });
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: planAccount,
+    });
     expect(mockedFetch).toHaveBeenNthCalledWith(2, { refresh: true });
   });
 
-  it('does not block a selected model when the fresh wallet omits the plan', async () => {
+  // The tier is READABLE here — it just comes from the login status rather than
+  // the wallet snapshot — so T55 blocks. The unreadable case is separate and
+  // still fails open (see the personal fail-open guard below).
+  it('reads the tier off the login status when the fresh wallet omits it', async () => {
     const emptyWallet = snapshot({
       balanceUsd: '0',
     });
@@ -302,9 +312,15 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, 'glm-5.2'),
-    ).resolves.toEqual({ kind: 'soft', snapshot: emptyWallet });
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: emptyWallet,
+    });
   });
 
+  // Still no per-model reasoning: the model id changes nothing, only the tier's
+  // readability does.
   it('does not infer plan exclusion for a selected model', async () => {
     const plusAccount = snapshot({
       balanceUsd: '0',
@@ -316,7 +332,11 @@ describe('checkAmrBalanceGate', () => {
 
     await expect(
       checkAmrBalanceGate(undefined, 'glm-5.1'),
-    ).resolves.toEqual({ kind: 'soft', snapshot: plusAccount });
+    ).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
+      snapshot: plusAccount,
+    });
   });
 
   it('hard-blocks a signed-out account after refresh confirmation', async () => {
@@ -477,7 +497,10 @@ describe('checkAmrBalanceGate', () => {
     })).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('does not block a selected model in a zero-dollar Personal workspace', async () => {
+  // T55: full per-tier coverage of this cell lives in
+  // `amr-balance-gate-personal-tiers.test.ts`; this one keeps the workspace-scoped
+  // wiring (authoritative read → decision) honest.
+  it('blocks a selected model in a zero-dollar Personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan: 'go' },
@@ -501,7 +524,8 @@ describe('checkAmrBalanceGate', () => {
         workspaceMemberId: 'wm-personal-go',
       }, 'deepseek-v4-pro'),
     ).resolves.toEqual({
-      kind: 'soft',
+      kind: 'hard',
+      reason: 'insufficient',
       snapshot: expect.objectContaining({ balanceUsd: '0' }),
     });
   });
@@ -755,16 +779,21 @@ describe('checkAmrBalanceGate', () => {
  * selected", and because $0 <= $2 the early return started eating the $0 hard
  * block too.
  *
- * These cases pin the half that is still knowable: an account with NO plan has
- * nothing but the wallet, so its empty wallet is a real block. A subscriber's
- * $0 is never blocked — that is #7187's whole point and must not regress.
+ * These cases pin the half that is still knowable: a READABLE tier at $0 has
+ * nothing left to spend, so its empty wallet is a real block.
  *
  * OPEND-2600 narrowed WHAT the stand-down is allowed to cancel. It used to end
  * the whole gate in `allow`, which also deleted the soft reminder for every
  * subscriber below the warning line (the reported Pro account at $1.79 saw
- * nothing at all). It now cancels the hard branch only, so these cases read
- * `soft` where they used to read `allow`. The invariant they exist to defend is
- * unchanged and stated explicitly below: never `hard`.
+ * nothing at all). It now cancels the hard branch only, so the low-balance cases
+ * read `soft` where they used to read `allow`.
+ *
+ * T55 (product 2026-09-06) then overturned #7187's premise itself. "A
+ * subscriber's $0 is never blocked" was the invariant this block used to defend;
+ * the out-of-credits matrix now governs Personal workspaces, so a readable paid
+ * tier blocks exactly like a free one. What remains of the stand-down is
+ * `amrPlanTierUnreadable`: a tier we could not read at all still fails open, and
+ * that is what the last cases here pin.
  */
 describe('checkAmrBalanceGate personal fail-open guard', () => {
   const freeUser = { id: 'u1', email: 'user@example.com', plan: 'free' };
@@ -863,10 +892,18 @@ describe('checkAmrBalanceGate personal fail-open guard', () => {
     });
   });
 
-  // --- Reverse controls: the T15 shape this fix must never produce ---
+  // --- Overturned reverse controls (T15 → T55, product 2026-09-06) ---
+  //
+  // These two used to read "still never blocks a zero-dollar subscriber": a
+  // subscribed $0 was treated as a NORMAL state because the day-to-day models
+  // are plan-funded. Product ruled on 2026-09-06 that the out-of-credits matrix
+  // governs Personal workspaces as well, and the product doc's 四、升级情况 lists
+  // Free / Basic / Plus / Pro AND Max as tiers that see the blocked treatment at
+  // $0. They are kept (rather than deleted) because they are the cases that will
+  // hurt first if the ruling is ever walked back.
 
   it.each(['go', 'plus', 'pro', 'max'])(
-    'still never blocks a zero-dollar %s subscriber (a subscribed $0 is normal)',
+    'blocks a zero-dollar %s subscriber (T15 overturned by T55)',
     async (plan) => {
       const planAccount = snapshot({
         balanceUsd: '0',
@@ -876,31 +913,34 @@ describe('checkAmrBalanceGate personal fail-open guard', () => {
         .mockResolvedValueOnce({ ...planAccount, source: 'daemon_cache' })
         .mockResolvedValueOnce(planAccount);
 
-      const result = await checkAmrBalanceGate(undefined, 'glm-5.2');
-      expect(result.kind).not.toBe('hard');
-      expect(result).toEqual({ kind: 'soft', snapshot: planAccount });
+      await expect(checkAmrBalanceGate(undefined, 'glm-5.2')).resolves.toEqual({
+        kind: 'hard',
+        reason: 'insufficient',
+        snapshot: planAccount,
+      });
     },
   );
 
-  it('still never blocks a zero-dollar subscribed Personal workspace', async () => {
+  it('blocks a zero-dollar subscribed Personal workspace (T15 overturned by T55)', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '0',
       user: { id: 'u1', email: 'user@example.com', plan: 'max' },
     }));
     vi.stubGlobal('fetch', workspaceBillingStub('ws-max', 'wm-max', '0'));
 
-    const result = await checkAmrBalanceGate({
+    await expect(checkAmrBalanceGate({
       workspaceType: 'personal',
       workspaceId: 'ws-max',
       workspaceMemberId: 'wm-max',
-    }, 'glm-5.2');
-    expect(result.kind).not.toBe('hard');
-    expect(result).toEqual({
-      kind: 'soft',
+    }, 'glm-5.2')).resolves.toEqual({
+      kind: 'hard',
+      reason: 'insufficient',
       snapshot: expect.objectContaining({ balanceUsd: '0' }),
     });
   });
 
+  // The half of `cf00c80bd1` that T55 explicitly preserved: an unreadable tier
+  // is neither free nor paid, and a failed read must never manufacture a block.
   it('fails open at zero balance when the plan cannot be resolved at all', async () => {
     // An unreadable tier is not free, and it is not paid either — "free" and
     // "paid" are not complements, so this tier needs its own pin. Failing open

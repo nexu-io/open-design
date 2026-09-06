@@ -1,14 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { teamConsoleUrl, workspaceUpgradeUrl } from '../../src/components/EntryNavRail';
-import {
-  OPEN_DESIGN_PRICING_URL,
-  setRuntimeAmrConsoleOrigin,
-} from '../../src/runtime/amr-guidance';
+import { setRuntimeAmrConsoleOrigin } from '../../src/runtime/amr-guidance';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
 
 // Stand-in for an internal deployment's console origin — the real hostnames are
 // injected at build time and reported by the daemon, never literals in source.
 const RUNTIME_CONSOLE_ORIGIN = 'https://vela.example.invalid';
+
+/**
+ * Where 升级 lands on the prod profile since spec T54 (product 2026-09-06):
+ * the console's own plan surface, not public Pricing. These expectations used
+ * to read the public Pricing URL — that was #7122's Go-launch routing, and
+ * the ruling put the upgrade entries back on the console.
+ */
+const PROD_CONSOLE_PLAN_URL =
+  'https://open-design.ai/amr/dashboard?source=open_design&billing=plan';
 
 afterEach(() => {
   setRuntimeAmrConsoleOrigin(null);
@@ -98,27 +104,27 @@ describe('workspaceUpgradeUrl', () => {
     workspaceBalance: null,
   });
 
-  it('sends a personal workspace to public Pricing', () => {
+  it('sends a personal workspace to the console plan surface', () => {
     const context: WorkspaceCollabContext = {
       ...baseContext,
       workspaceType: 'personal',
     };
-    expect(workspaceUpgradeUrl(context, null)).toBe(OPEN_DESIGN_PRICING_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
   });
 
-  it('sends a never-subscribed team to public Pricing', () => {
-    expect(workspaceUpgradeUrl(baseContext, null)).toBe(OPEN_DESIGN_PRICING_URL);
+  it('sends a never-subscribed team to the console plan surface', () => {
+    expect(workspaceUpgradeUrl(baseContext, null)).toBe(PROD_CONSOLE_PLAN_URL);
     expect(workspaceUpgradeUrl(baseContext, billingSummary(''))).toBe(
-      OPEN_DESIGN_PRICING_URL,
+      PROD_CONSOLE_PLAN_URL,
     );
   });
 
-  it('sends an already-subscribed team to public Pricing', () => {
+  it('sends an already-subscribed team to the console plan surface', () => {
     expect(
       workspaceUpgradeUrl({ ...baseContext, planId: 'team_pro', billingState: 'active' }, null),
-    ).toBe(OPEN_DESIGN_PRICING_URL);
+    ).toBe(PROD_CONSOLE_PLAN_URL);
     expect(workspaceUpgradeUrl(baseContext, billingSummary('team_pro'))).toBe(
-      OPEN_DESIGN_PRICING_URL,
+      PROD_CONSOLE_PLAN_URL,
     );
   });
 
@@ -146,14 +152,21 @@ describe('workspaceUpgradeUrl', () => {
   it('does not require a console URL when workspace ownership is known', () => {
     const context: WorkspaceCollabContext = { ...baseContext };
     delete context.workspaceSettingsUrl;
-    expect(workspaceUpgradeUrl(context, null)).toBe(OPEN_DESIGN_PRICING_URL);
+    expect(workspaceUpgradeUrl(context, null)).toBe(PROD_CONSOLE_PLAN_URL);
     expect(workspaceUpgradeUrl(null, null)).toBeNull();
   });
 
-  it('falls back to Pricing for CTA callers that must always link somewhere', () => {
+  // The fallback path is where T54's profile-awareness actually shows: with no
+  // workspace identity to authorize yet, the caller's profile is the ONLY thing
+  // choosing the origin. While this returned a hardcoded Pricing URL a
+  // feature-test build linked production checkout.
+  it('follows the caller profile for CTA callers that must always link somewhere', () => {
     setRuntimeAmrConsoleOrigin(RUNTIME_CONSOLE_ORIGIN);
     expect(workspaceUpgradeUrl(null, null, { fallbackProfile: 'feature-test' })).toBe(
-      OPEN_DESIGN_PRICING_URL,
+      `${RUNTIME_CONSOLE_ORIGIN}/dashboard?source=open_design&billing=plan`,
+    );
+    expect(workspaceUpgradeUrl(null, null, { fallbackProfile: 'prod' })).toBe(
+      PROD_CONSOLE_PLAN_URL,
     );
   });
 });

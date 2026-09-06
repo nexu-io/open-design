@@ -55,7 +55,7 @@ describe('AmrBalanceDialog', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('lands the upgrade CTA on Pricing when a team has never subscribed', async () => {
+  it('lands the upgrade CTA on the console plan surface when a team has never subscribed', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
@@ -100,12 +100,14 @@ describe('AmrBalanceDialog', () => {
       fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
-      expect(`${target.origin}${target.pathname}`).toBe('https://open-design.ai/pricing/');
-      expect(target.searchParams.get('billing')).toBeNull();
+      expect(`${target.origin}${target.pathname}`).toBe(
+        'https://open-design.ai/amr/dashboard',
+      );
+      expect(target.searchParams.get('billing')).toBe('plan');
     });
   });
 
-  it('lands the upgrade CTA on Pricing when a team already has an active plan', async () => {
+  it('lands the upgrade CTA on the console plan surface when a team already has an active plan', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
@@ -150,12 +152,14 @@ describe('AmrBalanceDialog', () => {
       fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
-      expect(`${target.origin}${target.pathname}`).toBe('https://open-design.ai/pricing/');
-      expect(target.searchParams.get('billing')).toBeNull();
+      expect(`${target.origin}${target.pathname}`).toBe(
+        'https://open-design.ai/amr/dashboard',
+      );
+      expect(target.searchParams.get('billing')).toBe('plan');
     });
   });
 
-  it('lands the upgrade CTA on Pricing for a personal workspace', async () => {
+  it('lands the upgrade CTA on the console plan surface for a personal workspace', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input);
@@ -200,8 +204,10 @@ describe('AmrBalanceDialog', () => {
       fireEvent.click(screen.getByTestId('amr-balance-dialog-plans'));
       expect(open).toHaveBeenCalled();
       const target = new URL(String(open.mock.calls.at(-1)?.[0]));
-      expect(`${target.origin}${target.pathname}`).toBe('https://open-design.ai/pricing/');
-      expect(target.searchParams.get('billing')).toBeNull();
+      expect(`${target.origin}${target.pathname}`).toBe(
+        'https://open-design.ai/amr/dashboard',
+      );
+      expect(target.searchParams.get('billing')).toBe('plan');
     });
   });
 
@@ -257,7 +263,7 @@ describe('AmrBalanceDialog', () => {
     },
   );
 
-  it('falls back to public Pricing when no workspace context is known', async () => {
+  it('falls back to the profile console plan surface when no workspace context is known', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
 
@@ -277,7 +283,9 @@ describe('AmrBalanceDialog', () => {
     fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
 
     const target = new URL(String(open.mock.calls.at(-1)?.[0]));
-    expect(`${target.origin}${target.pathname}`).toBe('https://open-design.ai/pricing/');
-    expect(target.searchParams.get('billing')).toBeNull();
+    expect(`${target.origin}${target.pathname}`).toBe(
+      'https://open-design.ai/amr/dashboard',
+    );
+    expect(target.searchParams.get('billing')).toBe('plan');
   });
 });

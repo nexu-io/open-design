@@ -10,7 +10,7 @@ import {
   recordAmrEntry,
 } from '../analytics/amr-attribution';
 import { useWorkspaceBilling, useWorkspaceContext } from '../collab/useWorkspaceContext';
-import { workspaceUpgradeUrl } from './EntryNavRail';
+import { workspaceAutoRechargeUrl, workspaceUpgradeUrl } from './EntryNavRail';
 import {
   AMR_HARD_BLOCK_BALANCE_USD,
   amrWalletBalanceUsd,
@@ -35,6 +35,22 @@ interface Props {
   profile: string | null;
   /** Which surface blocked the send — keys the amr_entry attribution. */
   entrySource: 'home_balance_gate_upgrade' | 'chat_balance_gate_upgrade';
+  /**
+   * Where THIS caller's primary CTA has to land — the one thing that differs
+   * between the two owner cells of the balance matrix (spec T58). The dialog
+   * itself, including every word of its copy, is identical in both.
+   *
+   *   pricing        — 非 Max 所有者:the console's plan surface (`billing=plan`).
+   *   auto_recharge  — Max 所有者:the console's auto-recharge settings. A Max
+   *                    subscriber has no higher plan to buy, so the plan surface
+   *                    would sell them what they already own.
+   *
+   * Resolved by the caller from `amrBalanceDialogUpgradeIntent`, so the dialog
+   * and the in-conversation UpgradeCard cannot drift apart. Defaults to
+   * `pricing` — the destination that needs no billing permission, and the
+   * behavior every caller had before T58.
+   */
+  upgradeIntent?: 'pricing' | 'auto_recharge';
   metricsConsent: boolean;
   installationId: string | null | undefined;
   /** Dismissal only ("not now" / Esc); the blocked payload stays parked. */
@@ -51,11 +67,17 @@ interface Props {
 // user just wrote a task and pressed send — so it must read as "one step from
 // starting", never as an error. Two variants with distinct copy AND CTAs:
 //
-//   insufficient — signed in, wallet definitively empty. The CTA reads
-//     「升级套餐」, so it must LAND on the plan picker rather than drop the user
-//     on a page to hunt for it: it opens the team dashboard with B's
-//     `billing=checkout` deep link, which auto-opens the checkout dialog on
-//     arrival. Balance badge shown.
+//   insufficient — signed in, wallet definitively empty. The CTA must LAND on
+//     the surface that fixes it rather than drop the user on a page to hunt for
+//     it, and WHICH surface that is depends on the caller's plan (spec T58):
+//     a 非 Max owner is sold a plan (`workspaceUpgradeUrl` → this runtime
+//     profile's console plan surface, `/dashboard?…&billing=plan`, spec T54),
+//     while a Max owner — who has no higher plan to buy — lands on the console's
+//     auto-recharge settings (`workspaceAutoRechargeUrl`). The caller picks via
+//     `upgradeIntent`; both destinations are the same shared decision points the
+//     account menu and the UpgradeCard use. It has NOT been `billing=checkout`
+//     since #7122; the older comment here said so long after that stopped being
+//     true. Balance badge shown.
 //
 //   signed_out — OpenDesign Cloud selected but no account session. The CTA
 //     is the in-app sign-in (AmrLoginPill: spawns vela login, surfaces the
@@ -81,6 +103,7 @@ export function AmrBalanceDialog({
   balanceUsd,
   profile,
   entrySource,
+  upgradeIntent = 'pricing',
   metricsConsent,
   installationId,
   onClose,
@@ -99,16 +122,26 @@ export function AmrBalanceDialog({
   // resume the parked task via onResolved. Bounded so an abandoned recharge
   // doesn't poll forever; guarded against double-fires.
   const [watchingWallet, setWatchingWallet] = useState(false);
-  // `workspaceUpgradeUrl` keeps every generic upgrade affordance on the public
-  // Pricing comparison surface. A concrete card there owns the Cloud handoff.
   const {
     context: workspaceContext,
     loading: workspaceContextLoading,
   } = useWorkspaceContext();
   const workspaceBilling = useWorkspaceBilling();
+  // Both destinations come from the two shared decision points in
+  // `EntryNavRail`, so this dialog cannot grow a link the account menu, the
+  // settings panel and the in-conversation UpgradeCard do not agree with.
+  //
+  // The auto-recharge link is withheld for a readable-but-not-writable
+  // workspace (`canManageAutoRecharge` is `writable && isOwner`, one notch
+  // stricter than billing's `readable && isOwner`). Falling back to the plan
+  // surface there is the same rule the UpgradeCard follows: one fewer
+  // capability beats one dead button.
   const upgradeUrl = workspaceContextLoading
     ? null
-    : workspaceUpgradeUrl(workspaceContext, workspaceBilling, {
+    : (upgradeIntent === 'auto_recharge'
+        ? workspaceAutoRechargeUrl(workspaceContext, { fallbackProfile: profile })
+        : null)
+      ?? workspaceUpgradeUrl(workspaceContext, workspaceBilling, {
         fallbackProfile: profile,
       });
   const resolvedRef = useRef(false);

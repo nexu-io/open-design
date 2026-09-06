@@ -1,11 +1,15 @@
-// 红测:余额不足的**身份 × 订阅**四种分支(规格 §6.V,2026-08-26 用户裁决)。
+// 红测:余额不足的**身份 × 订阅**四种分支(规格 §6.V,2026-08-26 用户裁决;
+// 第三格 2026-09-06 由 T58 定终态)。
 //
 // 卡片永远保留,四组的差别只在「同时唤起什么弹窗、点了跳哪」:
 //
-//   非 Max · owner    卡 + 现有升级弹窗          卡和弹窗都跳 Pricing
+//   非 Max · owner    卡 + 会员转化弹窗          卡和弹窗都跳 console 套餐页
 //   非 Max · 非 owner 卡 + 新的「告知所有者」弹窗  不跳
-//   Max   · owner     卡,不弹窗                跳 vela web 并唤起团队自动充值
+//   Max   · owner     卡 + **同一张**会员转化弹窗  卡和弹窗都跳自动充值
 //   Max   · 非 owner  卡 + 新的「告知所有者」弹窗  不跳
+//
+// 第三格的弹窗**和第一格是同一张、文案一字不差**(产品文档第四节第 3 行),
+// 差别只在主按钮的落点:第一格 `billing=plan`,第三格 `billing=auto-recharge`。
 //
 // 「Max」= 个人 Max 和团队 Max 都算(用户修正)。
 //
@@ -22,6 +26,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   amrBalanceBlockedDialog,
+  amrBalanceDialogUpgradeIntent,
   amrBalanceUpgradeIntent,
   resolveAmrBalanceAudience,
   resolveAmrBalanceBranch,
@@ -114,13 +119,16 @@ describe('身份判据:谁算 owner', () => {
 });
 
 describe('四种分支', () => {
-  it('非 Max · owner:卡 + 现有升级弹窗,都跳 Pricing', () => {
+  // 反向对照(T58 的对照组):这一格**没有变**。它和第三格出的是同一张弹窗,
+  // 但主按钮必须仍然落在套餐页 —— 少了这条,把两格合并成「都跳自动充值」也会绿。
+  it('非 Max · owner:卡 + 会员转化弹窗,卡和弹窗都跳套餐页', () => {
     const branch = resolveAmrBalanceBranch({
       context: context({ role: 'owner', planId: 'team_pro' }),
     });
     expect(branch).toEqual({ tier: 'below_max', audience: 'owner' });
     expect(amrBalanceBlockedDialog(branch)).toBe('upgrade');
     expect(amrBalanceUpgradeIntent(branch)).toBe('pricing');
+    expect(amrBalanceDialogUpgradeIntent(branch)).toBe('pricing');
   });
 
   it('非 Max · 非 owner:卡 + 告知所有者弹窗,不跳', () => {
@@ -132,13 +140,16 @@ describe('四种分支', () => {
     expect(amrBalanceUpgradeIntent(branch)).toBe('ask_owner');
   });
 
-  it('Max · owner:只出卡不弹窗,点击跳自动充值', () => {
+  // T58(2026-09-06):这一格从「不弹窗」改成**和第一格同一张会员转化弹窗**,
+  // 只有主按钮的落点不同 —— 他没有更高的套餐可买,充值才是解法。
+  it('Max · owner:卡 + 同一张会员转化弹窗,卡和弹窗都跳自动充值', () => {
     const branch = resolveAmrBalanceBranch({
       context: context({ role: 'owner', planId: 'team_max' }),
     });
     expect(branch).toEqual({ tier: 'max', audience: 'owner' });
-    expect(amrBalanceBlockedDialog(branch)).toBeNull();
+    expect(amrBalanceBlockedDialog(branch)).toBe('upgrade');
     expect(amrBalanceUpgradeIntent(branch)).toBe('auto_recharge');
+    expect(amrBalanceDialogUpgradeIntent(branch)).toBe('auto_recharge');
   });
 
   it('个人 Max · owner 与团队 Max 同档', () => {
@@ -146,7 +157,9 @@ describe('四种分支', () => {
       context: context({ role: 'owner', workspaceType: 'personal', planId: 'max' }),
     });
     expect(branch).toEqual({ tier: 'max', audience: 'owner' });
+    expect(amrBalanceBlockedDialog(branch)).toBe('upgrade');
     expect(amrBalanceUpgradeIntent(branch)).toBe('auto_recharge');
+    expect(amrBalanceDialogUpgradeIntent(branch)).toBe('auto_recharge');
   });
 
   it('Max · 非 owner:和非 Max 的成员同一条路', () => {
@@ -156,6 +169,17 @@ describe('四种分支', () => {
     expect(branch).toEqual({ tier: 'max', audience: 'member' });
     expect(amrBalanceBlockedDialog(branch)).toBe('ask_owner');
     expect(amrBalanceUpgradeIntent(branch)).toBe('ask_owner');
+  });
+
+  // 会员转化弹窗只在 owner 那两格出现,所以 `amrBalanceDialogUpgradeIntent`
+  // 对成员是**不会被问到**的。这里把它钉在安全默认值上,免得哪天有人在成员
+  // 那一格错误地渲染这张弹窗时,主按钮把他送进一个他没有权限的自动充值面板。
+  it('成员那两格不出这张弹窗,落点退回套餐页这个安全默认值', () => {
+    expect(
+      amrBalanceDialogUpgradeIntent(
+        resolveAmrBalanceBranch({ context: context({ role: 'member', planId: 'team_max' }) }),
+      ),
+    ).toBe('pricing');
   });
 });
 
@@ -192,5 +216,7 @@ describe('档次读数的来源优先级', () => {
     const branch = resolveAmrBalanceBranch({ context: context({ role: 'owner' }) });
     expect(branch.tier).toBe('below_max');
     expect(amrBalanceBlockedDialog(branch)).toBe('upgrade');
+    // 读数失败不该把人送进一个他可能根本没有的自动充值面板。
+    expect(amrBalanceDialogUpgradeIntent(branch)).toBe('pricing');
   });
 });

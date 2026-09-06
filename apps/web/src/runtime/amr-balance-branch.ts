@@ -12,10 +12,16 @@
  *
  * | 身份 × 订阅      | 卡片 | 弹窗                   | 点击行为                       |
  * |------------------|------|------------------------|--------------------------------|
- * | 非 Max · owner   | 保留 | 现有的余额不足升级弹窗 | 卡和弹窗都直接跳 Pricing       |
+ * | 非 Max · owner   | 保留 | 会员转化弹窗           | 卡和弹窗都跳 console 套餐页    |
  * | 非 Max · 非 owner| 保留 | 新弹窗:告知所有者充值 | ——                             |
- * | Max   · owner    | 保留 | ——                     | 跳 vela web + 唤起团队自动充值 |
+ * | Max   · owner    | 保留 | **同一张**会员转化弹窗 | 卡和弹窗都跳自动充值           |
  * | Max   · 非 owner | 保留 | 同「非 Max · 非 owner」| ——                             |
+ *
+ * 第三格 2026-09-06 由 **T58** 定终态(规格
+ * `specs/current/chat-panel-decisions-sheet.md`),推翻了它原来的「不弹窗」。
+ * 依据是产品文档第四节第 3 行:那一格画的就是**和第一格同一张**会员转化弹窗,
+ * 文案一字不差。所以两格共用一个 `AmrBalanceBlockedDialogKind`,唯一的差别落在
+ * 主按钮的落点上 —— 见 `amrBalanceDialogUpgradeIntent`。
  *
  * 「Max」= **个人 Max 和团队 Max 都算**(用户修正),见 `isMaxPlanTier`。
  */
@@ -35,10 +41,17 @@ export interface AmrBalanceBranch {
 }
 
 /**
- * 拦截档同时唤起哪个弹窗。`null` = 不弹窗(Max · owner 那一组:卡片自己就把话
- * 说完了,点一下直接落在自动充值上,再插一个弹窗只是多一次点击)。
+ * 拦截档同时唤起哪个弹窗。**两支,没有第三支**:
+ *
+ *   upgrade    — 会员转化弹窗。owner 那两格共用**同一张**(T58);它们的差别在
+ *                主按钮的落点上,不在弹窗本身,见 `amrBalanceDialogUpgradeIntent`。
+ *   ask_owner  — 「找所有者充值」。所有没有账单权限的成员。
+ *
+ * 这里曾经有第三支 `null`(「Max · owner 不弹窗」)。T58 把它去掉了 —— 留着一个
+ * 谁都不会返回的 `null`,只会让每个调用点继续背一条 `?? 'upgrade'` 的兜底,
+ * 而首页那条兜底正是把 Max 所有者送去套餐页的地方。
  */
-export type AmrBalanceBlockedDialogKind = 'upgrade' | 'ask_owner' | null;
+export type AmrBalanceBlockedDialogKind = 'upgrade' | 'ask_owner';
 
 /**
  * 卡上那颗 Upgrade 点下去要去哪。
@@ -116,8 +129,9 @@ export function resolveAmrBalanceBranch(
 export function amrBalanceBlockedDialog(
   branch: AmrBalanceBranch,
 ): AmrBalanceBlockedDialogKind {
-  if (branch.audience === 'member') return 'ask_owner';
-  return branch.tier === 'max' ? null : 'upgrade';
+  // 订阅档在这里**不参与判断**:两个 owner 格看到的是同一张会员转化弹窗(T58),
+  // 分档只影响它的主按钮去哪。
+  return branch.audience === 'member' ? 'ask_owner' : 'upgrade';
 }
 
 export function amrBalanceUpgradeIntent(
@@ -125,4 +139,20 @@ export function amrBalanceUpgradeIntent(
 ): AmrBalanceUpgradeIntent {
   if (branch.audience === 'member') return 'ask_owner';
   return branch.tier === 'max' ? 'auto_recharge' : 'pricing';
+}
+
+/**
+ * 会员转化弹窗那颗主按钮的落点。
+ *
+ * 和卡上那颗共用 `amrBalanceUpgradeIntent` 这一个决策点 —— 产品文档第四节把卡和
+ * 弹窗画成同一格的两件东西,两者跳去不同的地方是缺陷而不是特性。
+ *
+ * 这张弹窗只在 owner 那两格出现(成员走 `AmrOwnerTopUpDialog`),所以 `ask_owner`
+ * 在这里**问不到**。真被问到时退回 `pricing`:那是不需要任何账单权限就能打开的
+ * 那一个,比把一个没有权限的人送进自动充值面板安全。
+ */
+export function amrBalanceDialogUpgradeIntent(
+  branch: AmrBalanceBranch,
+): 'pricing' | 'auto_recharge' {
+  return amrBalanceUpgradeIntent(branch) === 'auto_recharge' ? 'auto_recharge' : 'pricing';
 }

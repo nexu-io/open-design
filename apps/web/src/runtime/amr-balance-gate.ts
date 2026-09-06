@@ -24,7 +24,7 @@ import type {
   WorkspaceBillingResponse,
 } from '@open-design/contracts';
 import { fetchAmrWalletSnapshot } from '../providers/daemon';
-import { isFreeAmrPlan, resolveAmrPlan } from './amr-low-balance-plan';
+import { resolveAmrPlan } from './amr-low-balance-plan';
 
 /**
  * Hard-block line (USD): at or below this the wallet cannot fund any part of
@@ -155,27 +155,33 @@ export function amrWalletBalanceInsufficient(
 }
 
 /**
- * Whether something OTHER than the wallet might fund this Personal run, so the
- * wallet-balance preflight must stand down and let Vela decide at admission.
+ * Whether this run's plan tier is UNKNOWABLE from the client.
  *
- * This is the surviving half of a two-part question. The gate originally asked
- * "is the caller on a Coding Plan, AND is this model unlimited on that plan";
- * the model half was retired with the client-side entitlement catalog, so Vela
- * is now the only authority on whether a GIVEN model is metered. The plan half
- * is still readable, and it is the half that decides whether standing down can
- * ever be right: a subscriber's $0 wallet is a NORMAL state (their day-to-day
- * models are plan-funded and never touch it), while an account with no plan at
- * all has nothing but the wallet — so its empty wallet is a real hard block,
- * not a wallet the run might route around.
+ * This is the one surviving reason the hard block stands down, and it is a
+ * statement about our own read, not about the user: we could not resolve a tier
+ * at all, so we have no basis for a definitive block and Vela decides at
+ * admission instead (product 2026-09-06, 「放,具体由远程兜底」). It is the
+ * half of `cf00c80bd1` that outlived the ruling below.
  *
- * Only a DEFINITIVE free answer lets the gate run. An unresolved plan fails
- * open exactly like the retired catalog lookup did on an unavailable list, so a
- * subscriber whose tier cannot be read is never blocked by a failed read.
+ * What used to live here — and is now GONE — was the other half: `!isFreeAmrPlan`,
+ * "any tier other than the literal string `free` may fund this run outside the
+ * wallet". Two things were wrong with it at once. Narrowly, `isFreeAmrPlan`
+ * matches `'free'` exactly, so `basic` counted as "not free" and a Basic
+ * subscriber at $0 was treated like an unlimited Max one. Broadly, the premise
+ * itself was overturned: product ruled 2026-09-06 that the out-of-credits matrix
+ * governs Personal workspaces too (product doc 四、升级情况 lists Free / Basic /
+ * Plus / Pro AND Max as tiers that see the blocked treatment at $0), so a
+ * readable paid tier is no longer a reason to let an empty wallet through.
+ * Recorded as T55 in `specs/current/chat-panel-decisions-sheet.md`.
+ *
+ * The asymmetry that made the old predicate ask the FREE question is why this
+ * one asks about readability instead: "free" and "paid" are not complements, and
+ * an unreadable tier is neither. Only the unreadable case may fail open.
  */
-async function planMayFundRunOutsideWallet(
+async function amrPlanTierUnreadable(
   snapshot: AmrWalletSnapshot,
 ): Promise<boolean> {
-  return !isFreeAmrPlan(await resolveAmrPlan(snapshot));
+  return (await resolveAmrPlan(snapshot)) == null;
 }
 
 /**
@@ -195,13 +201,18 @@ async function planMayFundRunOutsideWallet(
  * and the soft tier must not add one to the send path. Call this ONLY once the
  * balance is already at or below the hard-block line — the one case that was
  * always going to block, and is therefore already allowed to wait.
+ *
+ * Scope note 2 (T55, product 2026-09-06). The only surviving reason to stand
+ * down is that the tier could not be read at all — see
+ * {@link amrPlanTierUnreadable}. A readable paid tier no longer stands down,
+ * because the out-of-credits matrix governs Personal workspaces too.
  */
 async function hardBlockMustStandDown(
   snapshot: AmrWalletSnapshot,
   modelId: string | null | undefined,
 ): Promise<boolean> {
   if (!modelId?.trim()) return false;
-  return planMayFundRunOutsideWallet(snapshot);
+  return amrPlanTierUnreadable(snapshot);
 }
 
 /**
@@ -351,12 +362,12 @@ async function checkWorkspaceBalanceGate(
   const balance = amrWalletBalanceUsd(workspaceSnapshot);
   if (balance == null) return { kind: 'unavailable' };
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {
-    // Coding Plan model membership is no longer exposed to the client, so Vela
-    // enforces the authoritative billing and Model Limit decision at admission
-    // time. The client still proves the caller HAS a plan first — without one
-    // there is nothing but the wallet, and failing open would delete this hard
-    // block for every empty personal wallet. Team wallets never stand down: a
-    // member's personal plan does not fund their team's runs.
+    // The out-of-credits matrix governs Personal workspaces too (T55), so a
+    // readable tier — free or paid — blocks here just like a team's does. The
+    // Personal branch survives for the one case that still fails open: a tier
+    // we could not read at all, where Vela decides at admission. Team wallets
+    // never stand down even then: a member's personal plan does not fund their
+    // team's runs, and the account tier is not the team's tier to begin with.
     const standsDown =
       scope.workspaceType === 'personal'
       && (await hardBlockMustStandDown(workspaceSnapshot!, modelId));

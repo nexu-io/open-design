@@ -84,19 +84,9 @@
 }
 
 /*
- * 那句可以直接发给所有者的话。做成一块可选中的引文,而不是输入框 ——
- * 它不是给人改的,是给人抄走的;复制按钮失灵时这一块就是备用出路。
+ * `.request`(那句可以直接发给所有者的话)随「复制请求」一起删除 —— 产品
+ * 2026-09-06 裁决弹窗只留 标题 / 正文 / 知道了 三件(规格 T56)。
  */
-.request {
-  margin: 10px 0 0;
-  padding: 9px 11px;
-  border-radius: var(--chat-radius-sm);
-  background: var(--chat-bg-fill-secondary);
-  font-size: var(--chat-t-mini);
-  line-height: 1.6;
-  color: var(--chat-text-strong);
-  user-select: text;
-}
 
 .actions {
   display: flex;

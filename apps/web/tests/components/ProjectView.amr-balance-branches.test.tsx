@@ -5,17 +5,26 @@
 //
 // 卡片永远保留,四组的差别只在「同时唤起什么弹窗、点了跳哪」:
 //
-//   非 Max · owner    卡 + 现有升级弹窗           卡和弹窗都直接跳 Pricing
+//   非 Max · owner    卡 + 会员转化弹窗            卡和弹窗都跳 console 的套餐页
 //   非 Max · 非 owner 卡 + 新的「找所有者充值」弹窗  不外跳
-//   Max   · owner     卡,**不弹窗**              跳 vela web 并唤起团队自动充值
+//   Max   · owner     卡 + **同一张**会员转化弹窗   卡和弹窗都跳 vela web 的自动充值
 //   Max   · 非 owner  卡 + 新的「找所有者充值」弹窗  不外跳
+//
+// ⚠️ 第三格 2026-09-06 由 **T58** 定终态,推翻了这里原来那条「Max · owner
+// **不弹窗**」。依据是产品文档第四节第 3 行:那一格画的就是**和第一格同一张**
+// 会员转化弹窗,文案一字不差(此前记录里那句「未达到 $100.00/月的额度」是飞书
+// 导出时 AI 生成的图片 alt 描述,不是产品文案,以图为准)。两格唯一的差别是
+// 主按钮的落点:第一格 `billing=plan`,第三格 `billing=auto-recharge`。
 //
 // 另外两条守卫:
 //
-//   ① 「付费档余额 0 = 不限量,不拦」(#7190 / R-010)是**判定**那一层的口径。
-//      这次只改呈现,所以这里钉的是:判定放行时,四种分支一个都不许冒出来。
-//   ② §6.Y 的死胡同:没有账单权限的成员,弹窗上必须有**一条前进的路**,
-//      不能只剩一颗「暂不需要」。
+//   ① 判定放行时,四种分支一个都不许冒出来。(原措辞挂在「付费档余额 0 =
+//      不限量,不拦」#7190 / R-010 上 —— 那条口径 2026-09-06 已被 T55 推翻,
+//      个人工作区付费档 $0 现在照拦;但这一组守卫要钉的东西不变:判定说放行,
+//      呈现层就不许自己冒出弹窗。)
+//   ② §6.Y 的死胡同:没有账单权限的成员,必须拿到**属于他的那张弹窗**,
+//      不是他点不动的升级弹窗。(原措辞是「弹窗上不能只剩一颗『暂不需要』」,
+//      依据那颗「复制请求」;产品 2026-09-06 删掉了它,T56,这一档回到单出口。)
 //
 // `ChatPane` 在这一层是 mock 的(它自带半个应用),所以「卡点了跳哪」是按下
 // ProjectView 交给它的那个回调来断言的;真卡把这个回调接到按钮上这件事,
@@ -527,7 +536,9 @@ describe('余额不足:身份 × 订阅的四种分支', () => {
     return screen.getByTestId('amr-balance-card-prop').textContent ?? '';
   }
 
-  it('非 Max · owner:卡 + 现有升级弹窗,两边都跳 Pricing', async () => {
+  // 反向对照(T58 的对照组)。这一格**没有变**:同一张弹窗、主按钮仍然落在
+  // 套餐页。少了它,把两格合并成「都跳自动充值」也会全绿。
+  it('非 Max · owner:卡 + 会员转化弹窗,卡和弹窗都跳 console 的套餐页', async () => {
     await sendAs(callerContext('owner', 'team_pro'), EMPTY_WALLET);
 
     await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
@@ -536,14 +547,20 @@ describe('余额不足:身份 × 订阅的四种分支', () => {
 
     fireEvent.click(screen.getByTestId('upgrade-card-click'));
     expect(mockedWindowOpen).toHaveBeenCalledTimes(1);
-    // 「Pricing」在合并 origin/main 之后换了指代:通用的升级/比价入口不再深链
-    // 到 Cloud 控制台的套餐弹窗(`billing=plan`),而是公开的 Pricing 页
-    // (#7122 / #7167 / #5459)。这一条钉的仍是「卡和弹窗去同一个地方」,
-    // 只是那个地方现在是 open-design.ai/pricing。
-    // 反向对照:确认它真的不再是控制台深链。
+    // 这一条钉的始终是「卡和弹窗去同一个地方」;那个地方变过两次。
+    // 合并 origin/main 后是公开 Pricing(#7122 / #7167),2026-09-06 产品把它
+    // 改回 console 的套餐页并要求 **profile-aware**(T54)—— 写死 Pricing 时
+    // 非生产的包会把人送去生产结账。
     const upgradeUrl = String(mockedWindowOpen.mock.calls[0]?.[0]);
-    expect(upgradeUrl).toContain('open-design.ai/pricing');
-    expect(upgradeUrl).not.toContain('billing=plan');
+    expect(upgradeUrl).toContain('billing=plan');
+    expect(upgradeUrl).not.toContain('/pricing');
+
+    // **弹窗那颗主按钮**也是套餐页 —— 卡走对了、弹窗走错了同样是缺陷。
+    fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
+    expect(mockedWindowOpen).toHaveBeenCalledTimes(2);
+    const dialogUrl = String(mockedWindowOpen.mock.calls[1]?.[0]);
+    expect(dialogUrl).toContain('billing=plan');
+    expect(dialogUrl).not.toContain('billing=auto-recharge');
   });
 
   it('非 Max · 非 owner:卡 + 找所有者充值弹窗,不外跳', async () => {
@@ -559,16 +576,27 @@ describe('余额不足:身份 × 订阅的四种分支', () => {
     expect(mockedWindowOpen).not.toHaveBeenCalled();
   });
 
-  it('Max · owner:只出卡,不弹窗;点击跳 vela web 的自动充值', async () => {
+  // T58:这一格现在**也出弹窗** —— 和第一格同一张会员转化弹窗,文案一字不差。
+  // 差别只在主按钮:第一格 `billing=plan`,这里 `billing=auto-recharge`。
+  it('Max · owner:卡 + 同一张会员转化弹窗,卡和弹窗都跳 vela web 的自动充值', async () => {
     await sendAs(callerContext('owner', 'team_max'), EMPTY_WALLET);
 
     await waitFor(() => expect(cardBalance()).toBe('0'));
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
+    // 成员那张不许顶替:这一格的人**有**账单权限。
     expect(screen.queryByTestId('amr-balance-owner-dialog')).toBeNull();
 
     fireEvent.click(screen.getByTestId('upgrade-card-click'));
     expect(mockedWindowOpen).toHaveBeenCalledTimes(1);
     expect(String(mockedWindowOpen.mock.calls[0]?.[0])).toContain('billing=auto-recharge');
+
+    // 命门:弹窗那颗主按钮走的是**自动充值**,不是套餐页 —— 他没有更高的套餐
+    // 可买,把他送去套餐页是让他买一个已经在用的东西。
+    fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
+    expect(mockedWindowOpen).toHaveBeenCalledTimes(2);
+    const dialogUrl = String(mockedWindowOpen.mock.calls[1]?.[0]);
+    expect(dialogUrl).toContain('billing=auto-recharge');
+    expect(dialogUrl).not.toContain('billing=plan');
   });
 
   // 上面那条 Max·owner 是把 `planId` 直接写在 context 上的。**真实后端不会这样报。**
@@ -619,8 +647,8 @@ describe('余额不足:身份 × 订阅的四种分支', () => {
     await sendAs(callerContext('owner', null), EMPTY_WALLET);
 
     await waitFor(() => expect(cardBalance()).toBe('0'));
-    // Max·owner 那一格:卡片自己把话说完,不再多插一个弹窗。
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    // T58:Max·owner 现在也出会员转化弹窗(和第一格同一张)。
+    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
     expect(screen.queryByTestId('amr-balance-owner-dialog')).toBeNull();
 
     fireEvent.click(screen.getByTestId('upgrade-card-click'));
@@ -629,22 +657,29 @@ describe('余额不足:身份 × 订阅的四种分支', () => {
     expect(url).toContain('billing=auto-recharge');
     // 反向对照:确认他没有被送去买一个他已经在用的套餐。
     expect(url).not.toContain('open-design.ai/pricing');
+
+    // 弹窗那颗主按钮同样要认出这个生产形状(context 不带 planId)。
+    fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
+    expect(String(mockedWindowOpen.mock.calls[1]?.[0])).toContain('billing=auto-recharge');
   });
 
   // 「Max」= 个人 Max 和团队 Max 都算(用户修正)。个人档走的是另一条链路
   // (个人工作区 + 账号档),但结论必须一样。
-  it('个人 Max · owner:同样只出卡,同样跳自动充值', async () => {
+  it('个人 Max · owner:同样出那张弹窗,同样跳自动充值', async () => {
     await sendAs(
       callerContext('owner', 'max', { workspaceType: 'personal' }),
       EMPTY_WALLET,
     );
 
     await waitFor(() => expect(cardBalance()).toBe('0'));
-    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    await waitFor(() => expect(screen.getByTestId('amr-balance-dialog')).toBeTruthy());
     expect(screen.queryByTestId('amr-balance-owner-dialog')).toBeNull();
 
     fireEvent.click(screen.getByTestId('upgrade-card-click'));
     expect(String(mockedWindowOpen.mock.calls[0]?.[0])).toContain('billing=auto-recharge');
+
+    fireEvent.click(await screen.findByTestId('amr-balance-dialog-plans'));
+    expect(String(mockedWindowOpen.mock.calls[1]?.[0])).toContain('billing=auto-recharge');
   });
 
   it('Max · 非 owner:和非 Max 的成员同一条路', async () => {
@@ -709,24 +744,29 @@ describe('死胡同:没有账单权限的成员必须拿到一条前进的路', 
   });
 
   /**
-   * §6.Y:`AmrBalanceDialog` 的主按钮取自 `workspaceUpgradeUrl`,而它对没有
-   * `canManageBilling` 的成员返回 `null` —— 于是那个三元落空,弹窗上只剩一颗
-   * 「暂不需要」。这条测试钉的是**结果**:这类成员看到的弹窗里,除了关闭之外
-   * 还得有别的可点的东西。
+   * §6.Y 的出口是**这张弹窗本身**,不是它上面有几颗按钮。
+   *
+   * 原来 `AmrBalanceDialog` 的主按钮取自 `workspaceUpgradeUrl`,而它对没有
+   * `canManageBilling` 的成员返回 `null` —— 三元落空,弹窗上只剩一颗
+   * 「暂不需要」,任务就那么 park 在队列里。换成 `AmrOwnerTopUpDialog` 之后,
+   * 这类成员至少被告知了「该找谁」。
+   *
+   * ⚠️ 这条测试在 2026-09-06 被**改写**(T56)。它原来钉的是「弹窗里除了关闭
+   * 之外还得有别的可点的东西」,依据是那颗「复制请求」。产品裁决删掉那颗按钮
+   * (「不要保留,严格按产品稿,不要私自发挥」),这一档因此**回到单出口** ——
+   * 所以判据从「按钮数 > 2」改成「按身份出对的那张弹窗」。文案与按钮数的判据
+   * 移到 `AmrOwnerTopUpDialog.copy.test.tsx`。
    */
-  it('成员的弹窗上不能只有一颗「暂不需要」', async () => {
+  it('成员拿到的是「找所有者充值」,不是他点不动的升级弹窗', async () => {
     workspaceScopeMocks.ambientContext = callerContext('member', 'team_pro');
     mockedCheckAmrBalanceGate.mockResolvedValue(EMPTY_WALLET as never);
     render(projectViewElement({ project: { ...project(), pendingPrompt: null } as never }));
     await clickSendWhenReady();
 
-    const dialog = await screen.findByTestId('amr-balance-owner-dialog');
-    // 一条真正的前进的路:把该说的话交到他手上,而不是让他自己猜该找谁。
-    expect(screen.getByTestId('amr-balance-owner-copy')).toBeTruthy();
-    // 而且这条路不是「再点一次也还是关掉」——它在弹窗里是一颗独立的动作。
-    expect(
-      dialog.querySelectorAll('button').length,
-    ).toBeGreaterThan(2);
+    await screen.findByTestId('amr-balance-owner-dialog');
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    // 那颗「复制请求」是产品明确删掉的,不许有人顺手加回来。
+    expect(screen.queryByTestId('amr-balance-owner-copy')).toBeNull();
   });
 });
 
