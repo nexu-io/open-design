@@ -274,7 +274,7 @@ describe('ChatPane session switcher', () => {
     expect(parsedConsoleUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
   });
 
-  it('opens public Pricing from the AMR tier upgrade action', () => {
+  it('opens the profile console plan surface from the AMR tier upgrade action', () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(
       <ChatPane
@@ -307,11 +307,14 @@ describe('ChatPane session switcher', () => {
     const [plansUrl, target, features] = openSpy.mock.calls[0] ?? [];
     expect(target).toBe('_blank');
     expect(features).toBe('noopener,noreferrer');
+    // The rendered profile is `test`, and T54 (2026-09-06) made the plans link
+    // honor it: this used to assert the PRODUCTION Pricing URL, which is how a
+    // non-prod build sent people to production checkout.
     const parsedPlansUrl = new URL(String(plansUrl));
     expect(`${parsedPlansUrl.origin}${parsedPlansUrl.pathname}`).toBe(
-      'https://open-design.ai/pricing/',
+      'https://vela.powerformer.net/dashboard',
     );
-    expect(parsedPlansUrl.searchParams.get('billing')).toBeNull();
+    expect(parsedPlansUrl.searchParams.get('billing')).toBe('plan');
     expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');
   });
 });
