@@ -58,7 +58,7 @@ import {
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
 import { useI18n, useT } from '../i18n';
-import { localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
+import { localizeHomePresetTitle, localizePluginDescription, localizePluginTitle } from './plugins-home/localization';
 import {
   examplePresetSeedPrompt,
   pluginPresetQuery,
@@ -2633,7 +2633,7 @@ function PluginPromptPresets({
   );
 }
 
-// One example per row: the template's own name on top — the same label the
+// One example per row: its Home-facing title on top — the same label the
 // composer's chip carries once the row is picked — and under it the very text
 // the composer would be seeded with (`examplePresetSeedPrompt`), so the row
 // both names the example and shows the prompt it applies.
@@ -2668,7 +2668,7 @@ function PluginPromptPresetRow({
   // Collapse the seed's own line breaks: the detail is a single line, and a
   // multi-paragraph seed would otherwise leave its tail invisible mid-clip.
   const line = seedPrompt.replace(/\s+/g, ' ').trim();
-  const title = localizePluginTitle(locale, record).trim() || line;
+  const title = localizeHomePresetTitle(locale, record).trim() || line;
   return (
     <button
       type="button"
@@ -4093,6 +4093,32 @@ const EXAMPLE_PRESET_HIDDEN_PLUGIN_IDS = new Set<string>([
   'example-web-clone',
 ]);
 
+// Keep the five Home recommendations in the selected editorial order;
+// popularity still orders the remaining library and the Community surface.
+const HOME_PRESET_PLUGIN_IDS_BY_CHIP: Partial<Record<string, readonly string[]>> = {
+  deck: [
+    'example-fs-creative-voltage',
+    'example-fs-electric-studio',
+    'example-html-ppt-zhangzara-block-frame',
+    'example-fs-notebook-tabs',
+    'example-guizang-ppt',
+  ],
+  document: [
+    'example-pm-spec',
+    'example-finance-report',
+    'example-clinical-case-report',
+    'example-resume-modern',
+    'example-invoice',
+  ],
+  image: [
+    'image-template-vr-headset-exploded-view-poster',
+    'image-template-social-media-post-psg-transfer-announcement-poster',
+    'image-template-social-media-post-vintage-sign-painter-sketch',
+    'image-template-profile-avatar-cyberpunk-anime-portrait-with-neon-face-text',
+    'image-template-profile-avatar-monochrome-studio-portrait',
+  ],
+};
+
 export function homeHeroExamplePluginsForChip(
   chipId: string,
   plugins: InstalledPluginRecord[],
@@ -4127,6 +4153,16 @@ function comparePluginPresetOrder(
   b: InstalledPluginRecord,
   chipId: string,
 ): number {
+  const homePresetIds = HOME_PRESET_PLUGIN_IDS_BY_CHIP[chipId];
+  if (homePresetIds) {
+    const aIndex = homePresetIds.indexOf(a.id);
+    const bIndex = homePresetIds.indexOf(b.id);
+    if (aIndex >= 0 || bIndex >= 0) {
+      if (aIndex < 0) return 1;
+      if (bIndex < 0) return -1;
+      return aIndex - bIndex;
+    }
+  }
   // Gallery order (OPEND-449): pins first, default seeds + no-preview tiles sunk
   // to the bottom, then usage popularity for non-prototype chips. The prototype
   // chip stays curation-governed, so popularity is skipped and it keeps its

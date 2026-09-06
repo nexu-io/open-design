@@ -559,6 +559,19 @@ async function bakeOne(browser, id, hash, motion) {
   } catch {}
   await sleep(600);
 
+  // Animated previews can hold capture until their opening sequence finishes.
+  // Pages without the marker keep the existing capture timing. Never publish
+  // a loading-screen poster when an opted-in page fails to become ready.
+  try {
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute('data-od-preview-ready') !== 'false',
+      { timeout: 15000 },
+    );
+  } catch {
+    await page.close();
+    return { id, skipped: 'preview readiness timeout' };
+  }
+
   if (isDeck) {
     const crop = await cropDeckViewportToSlide(page, capW, capH);
     capW = crop.width;
