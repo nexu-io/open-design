@@ -13,6 +13,7 @@ import type {
 } from '@open-design/sidecar-proto';
 import { createProjectFileVersion } from '../src/project-file-versions.js';
 import { startServer } from '../src/server.js';
+import { installImportTokenAutoMint } from './import-token-shim.js';
 
 // ---------------------------------------------------------------------------
 // Screenshot export — desktop renderer file handoff.
@@ -85,6 +86,7 @@ describe('screenshot export desktop renderer file handoff', () => {
     })) as { url: string; server: http.Server };
     baseUrl = started.url;
     server = started.server;
+    installImportTokenAutoMint();
 
     const dataDir = process.env.OD_DATA_DIR!;
     // The daemon derives the scratch dir from the realpath-resolved data root

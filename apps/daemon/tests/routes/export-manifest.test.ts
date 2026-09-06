@@ -8,6 +8,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../../src/server.js';
+import { installImportTokenAutoMint } from '../import-token-shim.js';
 
 describe('project export manifest route', () => {
   let server: http.Server;
@@ -22,6 +23,7 @@ describe('project export manifest route', () => {
     };
     baseUrl = started.url;
     server = started.server;
+    installImportTokenAutoMint();
   });
 
   afterAll(async () => {
