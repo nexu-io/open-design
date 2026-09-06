@@ -7986,6 +7986,7 @@ export async function startServer({
       return {
         bundledStrategyPlugin,
         builtInFunctionalSkillsRoot: SKILLS_DIR,
+        builtInDesignTemplatesRoot: DESIGN_TEMPLATES_DIR,
       };
     },
     resolveRunScope: (grant) => {
@@ -10922,6 +10923,7 @@ export async function startServer({
         const catalogSources = {
           bundledStrategyPlugin,
           builtInFunctionalSkillsRoot: SKILLS_DIR,
+          builtInDesignTemplatesRoot: DESIGN_TEMPLATES_DIR,
         };
         const discoveryPromptContext = readOfficialSkillDiscoveryPromptContextV1(catalogSources);
         const officialCatalog = discoveryPromptContext.catalog;

@@ -3,1405 +3,31 @@
   "version": "1.0.0",
   "skills": [
     {
-      "sourceFolder": "8-bit-orbit-video-template",
-      "id": "8-bit-orbit-video-template",
+      "source": "design-templates",
+      "sourceFolder": "bergside-trade-terminal",
+      "id": "bergside-trade-terminal",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "template"
+        "prototype",
+        "dashboard"
       ],
       "positiveExamples": [
-        "hyperframes video template",
-        "video template",
-        "pixel motion deck",
-        "retro presentation video",
-        "Hyperframes 模板",
-        "视频模板",
-        "像素风动效"
+        "Build a dark terminal-style trading dashboard: watchlist with sparklines, live price chart, open orders, order book with depth bars, and a recent-trades tape.",
+        "交易终端",
+        "trading dashboard",
+        "trading terminal",
+        "crypto dashboard",
+        "stock terminal",
+        "order book",
+        "watchlist",
+        "交易面板",
+        "行情看板",
+        "加密货币仪表盘",
+        "订单簿"
       ],
       "negativeExamples": [
-        "Explain or analyze \"hyperframes video template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"hyperframes video template\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "ad-creative",
-      "id": "ad-creative",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "marketing-creative",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "ad creative",
-        "ad headline",
-        "ad copy",
-        "paid social ad",
-        "search ad"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"ad creative\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"ad creative\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "after-hours-editorial-template",
-      "id": "after-hours-editorial-template",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "template"
-      ],
-      "positiveExamples": [
-        "after hours editorial template",
-        "dark fashion hyperframes template",
-        "haute couture motion pages",
-        "magazine style cinematic slides",
-        "高级暗黑时尚风模板",
-        "高定杂志风动效"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"after hours editorial template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"after hours editorial template\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "agent-browser",
-      "id": "agent-browser",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "browser",
-        "current browser tab",
-        "selected tab",
-        "open website",
-        "test this web app",
-        "take a screenshot",
-        "element screenshot",
-        "extract logo",
-        "extract fonts",
-        "extract colors",
-        "extract images",
-        "extract motion",
-        "OG metadata",
-        "accessibility",
-        "a11y",
-        "click a button",
-        "fill out a form",
-        "scrape page",
-        "QA",
-        "dogfood",
-        "bug hunt"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"browser\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"browser\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "ai-music-album",
-      "id": "ai-music-album",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "audio-music",
-        "audio"
-      ],
-      "positiveExamples": [
-        "ai music",
-        "music album",
-        "lyric writing",
-        "track sequencing",
-        "album production"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"ai music\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"ai music\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "algorithmic-art",
-      "id": "algorithmic-art",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "algorithmic art",
-        "generative art",
-        "p5js",
-        "procedural art",
-        "seeded randomness",
-        "生成艺术"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"algorithmic art\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"algorithmic art\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "apple-hig",
-      "id": "apple-hig",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "apple hig",
-        "human interface",
-        "ios design",
-        "macos design",
-        "visionos design"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"apple hig\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"apple hig\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "article-magazine",
-      "id": "article-magazine",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「杂志文章」模板把我的内容做成一份「Huashu / huashu-md-html-inspired magazine article layout for turning Markdown or notes into a polished long-form HTML essay」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Magazine Article template to turn my content into a Huashu / huashu-md-html-inspired long-form HTML essay. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"article-magazine\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"article-magazine\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "artifacts-builder",
-      "id": "artifacts-builder",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "web-artifacts",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "artifacts builder",
-        "html artifact",
-        "multi component artifact",
-        "react artifact"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"artifacts builder\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"artifacts builder\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "brainstorming",
-      "id": "brainstorming",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "brainstorm",
-        "ideation",
-        "concept exploration",
-        "rough ideas",
-        "design alternatives"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"brainstorm\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"brainstorm\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "brand-extract",
-      "id": "brand-extract",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design"
-      ],
-      "positiveExamples": [
-        "extract a brand",
-        "extract brand",
-        "brand from url",
-        "brand extraction",
-        "pull the brand",
-        "extract the colors",
-        "extract the fonts",
-        "extract the logo",
-        "build a brand kit"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"extract a brand\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"extract a brand\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "templates/brand-kit.html"
-      ]
-    },
-    {
-      "sourceFolder": "brand-guidelines",
-      "id": "brand-guidelines",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "brand guidelines",
-        "brand colors",
-        "brand typography",
-        "visual identity"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"brand guidelines\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"brand guidelines\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "brandkit",
-      "id": "brandkit",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "brand kit",
-        "brand guidelines board",
-        "logo system",
-        "identity board"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"brand kit\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"brand kit\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "brutalist-skill",
-      "id": "industrial-brutalist-ui",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "industrial brutalist UI",
-        "tactical telemetry",
-        "swiss industrial",
-        "brutalist interface"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"industrial brutalist UI\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"industrial brutalist UI\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "canvas-design",
-      "id": "canvas-design",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "canvas design",
-        "visual art",
-        "poster design",
-        "create poster",
-        "illustration",
-        "海报",
-        "插画"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"canvas design\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"canvas design\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "card-twitter",
-      "id": "card-twitter",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「Twitter 分享卡」模板把我的内容做成一份「推特金句 / 数据卡, 适合配推文」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Twitter Share Card template to turn my content into a Twitter quote or data card designed to pair with a post. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"card-twitter\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"card-twitter\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "card-xiaohongshu",
-      "id": "card-xiaohongshu",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「小红书图文卡片」模板把我的内容做成一份「小红书风格知识卡片, 多张联排可滑动浏览」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Xiaohongshu Card template to turn my content into a Xiaohongshu-style swipeable knowledge-card carousel. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"card-xiaohongshu\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"card-xiaohongshu\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "chat-motion-overlay",
-      "id": "chat-motion-overlay",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "utility"
-      ],
-      "positiveExamples": [
-        "chat motion overlay",
-        "animated chat",
-        "chat bubbles",
-        "message overlay",
-        "transparent chat video",
-        "微信聊天动效",
-        "聊天气泡动效",
-        "透明聊天视频"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"chat motion overlay\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"chat motion overlay\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "agents/openai.yaml",
-        "assets/avatar-library/female-bunny-pink.png",
-        "assets/avatar-library/female-cat-orange.png",
-        "assets/avatar-library/female-fox-yellow.png",
-        "assets/avatar-library/male-bear-mint.png",
-        "assets/avatar-library/male-koala-lilac.png",
-        "assets/avatar-library/male-penguin-blue.png",
-        "assets/examples/chat-transcript.txt",
-        "assets/examples/config-wechat-phone.json",
-        "assets/remotion-template/package.json",
-        "assets/remotion-template/remotion.config.ts",
-        "assets/remotion-template/src/chatSpec.ts",
-        "assets/remotion-template/src/components/avatarLibrary.tsx",
-        "assets/remotion-template/src/components/BubbleScene.tsx",
-        "assets/remotion-template/src/components/ChatMotionOverlay.tsx",
-        "assets/remotion-template/src/components/DeviceFrame.tsx",
-        "assets/remotion-template/src/components/types.ts",
-        "assets/remotion-template/src/index.ts",
-        "assets/remotion-template/src/Root.tsx",
-        "assets/remotion-template/tsconfig.json",
-        "references/config-schema.md",
-        "references/input-format.md",
-        "references/output-modes.md",
-        "references/question-strategy.md",
-        "references/test-matrix.md",
-        "references/test-report.md",
-        "scripts/build_chat_overlay_spec.py",
-        "scripts/prepare_chat_overlay_bundle.py",
-        "scripts/run_test_matrix.py"
-      ]
-    },
-    {
-      "sourceFolder": "color-expert",
-      "id": "color-expert",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "color theory",
-        "palette generator",
-        "color science",
-        "oklch palette",
-        "contrast check"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"color theory\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"color theory\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "competitive-ads-extractor",
-      "id": "competitive-ads-extractor",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "marketing-creative",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "competitive ads",
-        "ad library extract",
-        "competitor creative",
-        "ad teardown"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"competitive ads\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"competitive ads\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "copywriting",
-      "id": "copywriting",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "marketing-creative",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "copywriting",
-        "landing copy",
-        "ad copy",
-        "homepage copy",
-        "rewrite copy"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"copywriting\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"copywriting\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "creative-director",
-      "id": "creative-director",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "creative director",
-        "campaign concept",
-        "creative critique",
-        "cannes review",
-        "scamper"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"creative director\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"creative director\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "d3-visualization",
-      "id": "d3-visualization",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "diagrams",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "d3",
-        "d3.js",
-        "interactive chart",
-        "data visualization",
-        "editorial chart",
-        "d3 bar chart",
-        "d3 line chart",
-        "d3 map",
-        "d3 force graph",
-        "d3 sankey",
-        "d3 treemap",
-        "d3 sunburst",
-        "d3 choropleth",
-        "d3 animation",
-        "d3 scroll",
-        "snow-d3"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"d3\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"d3\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "data-report",
-      "id": "data-report",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「数据可视化报告」模板把我的内容做成一份「把 CSV/Excel/JSON 数据转成漂亮的可视化报告页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Data Visualization Report template to turn my CSV, Excel, or JSON data into a polished visual report page. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"data-report\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"data-report\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "deck-guizang-editorial",
-      "id": "deck-guizang-editorial",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "deck"
-      ],
-      "positiveExamples": [
-        "用「归藏编辑墨水 Deck」模板把我的内容做成一套「电子杂志 × 电子墨水; 10 个版面 + 5 套调色板 (墨水/靛蓝瓷/森林墨/牛皮纸/沙丘)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Guizang Editorial E-Ink Deck template to turn my content into an editorial magazine x e-ink horizontal deck with 10 layouts and 5 palettes. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"deck-guizang-editorial\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"deck-guizang-editorial\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "deck-open-slide-canvas",
-      "id": "deck-open-slide-canvas",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "deck"
-      ],
-      "positiveExamples": [
-        "用「1920 画布自由 Deck」模板把我的内容做成一套「锁死 1920×1080 画布, React 组件级自由组合, 不绑模板」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Open-Slide 1920 Canvas Deck template to turn my content into a locked 1920x1080 free-composition deck with React component-level layout. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"deck-open-slide-canvas\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"deck-open-slide-canvas\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "deck-swiss-international",
-      "id": "deck-swiss-international",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "deck"
-      ],
-      "positiveExamples": [
-        "用「瑞士国际主义 Deck」模板把我的内容做成一套「16 列网格 + 单一饱和 accent + 22 个锁死版面 (Klein Blue / Lemon / Mint / Safety Orange)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Swiss International Deck template to turn my content into a 16-column-grid deck with one saturated accent and 22 locked layouts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"deck-swiss-international\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"deck-swiss-international\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "design-brief",
-      "id": "design-brief",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-system"
-      ],
-      "positiveExamples": [
-        "design brief",
-        "create a design brief",
-        "ilang brief",
-        "structured brief"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"design brief\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design brief\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "design-consultation",
-      "id": "design-consultation",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "design consultation",
-        "design from scratch",
-        "design system kickoff",
-        "brand workshop"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"design consultation\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design consultation\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "design-md",
-      "id": "design-md",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "design.md",
-        "design doc",
-        "design tokens doc",
-        "visual rules doc"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"design.md\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design.md\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "design-review",
-      "id": "design-review",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "design review",
-        "visual audit",
-        "before after",
-        "pre launch design check"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"design review\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design review\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "digits-fintech-swiss-template",
-      "id": "digits-fintech-swiss-template",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "template"
-      ],
-      "positiveExamples": [
-        "swiss fintech template",
-        "data-driven finance deck",
-        "neon lime editorial grid",
-        "high contrast strategy slides",
-        "数字金融瑞士风模板"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"swiss fintech template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"swiss fintech template\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "doc",
-      "id": "doc",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "documents",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "openai doc",
-        "docx fidelity",
-        "word doc edit",
-        "layout doc"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"openai doc\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"openai doc\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "doc-kami-parchment",
-      "id": "doc-kami-parchment",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「Kami 羊皮纸文档」模板把我的内容做成一份「暖羊皮纸底 (#f5f4ed) + 墨蓝单色 accent (#1B365D) + 单一衬线字体, 编辑级排印」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Kami Parchment Document template to turn my content into a warm parchment document with monochrome ink-blue accents, one serif family, and editorial-grade typography. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"doc-kami-parchment\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"doc-kami-parchment\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "docx",
-      "id": "docx",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "documents",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "docx",
-        "word document",
-        "tracked changes",
-        "design brief doc",
-        "copy doc"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"docx\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"docx\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "domain-name-brainstormer",
-      "id": "domain-name-brainstormer",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "marketing-creative",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "domain name",
-        "brainstorm domain",
-        "tld check",
-        "startup name",
-        "product name"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"domain name\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"domain name\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "ecommerce-image-workflow",
-      "id": "ecommerce-image-workflow",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "ecommerce product images",
-        "product image set",
-        "product photography workflow",
-        "product main image",
-        "product feature shot",
-        "reference product commerce images",
-        "lifestyle product image",
-        "amazon product images",
-        "shopify product images",
-        "taobao product images"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"ecommerce product images\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"ecommerce product images\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "editorial-burgundy-principles-template",
-      "id": "editorial-burgundy-principles-template",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "template"
-      ],
-      "positiveExamples": [
-        "editorial burgundy template",
-        "studio salon deck",
-        "principles manifesto slides",
-        "pink burgundy premium presentation",
-        "酒红粉金编辑风模板"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"editorial burgundy template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"editorial burgundy template\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "emil-design-eng",
-      "id": "emil-design-eng",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-engineering",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "emil kowalski",
-        "design engineering",
-        "UI polish philosophy",
-        "animation philosophy",
-        "component design",
-        "invisible details",
-        "界面哲学",
-        "设计工程"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"emil kowalski\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"emil kowalski\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "emilkowalski-motion",
-      "id": "emilkowalski-motion",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "emil kowalski",
-        "motion polish",
-        "micro interaction",
-        "interaction animation",
-        "tasteful animation",
-        "动效润色"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"emil kowalski\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"emil kowalski\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "enhance-prompt",
-      "id": "enhance-prompt",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "enhance prompt",
-        "design prompt",
-        "ui prompt",
-        "design vocabulary"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"enhance prompt\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"enhance prompt\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "export-download-debugging",
-      "id": "export-download-debugging",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "web-artifacts",
-        "utility"
-      ],
-      "positiveExamples": [
-        "export image failed",
-        "image export",
-        "download is 0kb",
-        "0 KB file",
-        "showSaveFilePicker",
-        "createWritable",
-        "blob URL",
-        "Electron download"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"export image failed\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"export image failed\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-3d",
-      "id": "fal-3d",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "3d-shaders",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal 3d",
-        "text to 3d",
-        "image to 3d",
-        "3d model gen",
-        "game asset 3d"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal 3d\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal 3d\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-generate",
-      "id": "fal-generate",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal generate",
-        "fal.ai image",
-        "flux image",
-        "sdxl",
-        "ideogram"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal generate\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal generate\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-image-edit",
-      "id": "fal-image-edit",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal image edit",
-        "inpaint",
-        "style transfer",
-        "background removal",
-        "object removal"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal image edit\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal image edit\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-kling-o3",
-      "id": "fal-kling-o3",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video-generation",
-        "video"
-      ],
-      "positiveExamples": [
-        "fal kling",
-        "kling o3",
-        "kling video",
-        "kling image"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal kling\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal kling\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-lip-sync",
-      "id": "fal-lip-sync",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video-generation",
-        "video"
-      ],
-      "positiveExamples": [
-        "lip sync",
-        "talking head",
-        "audio to video",
-        "avatar video",
-        "fal lipsync"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"lip sync\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"lip sync\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-realtime",
-      "id": "fal-realtime",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal realtime",
-        "streaming image",
-        "realtime image gen",
-        "moodboard"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal realtime\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal realtime\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-restore",
-      "id": "fal-restore",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal restore",
-        "restore image",
-        "deblur",
-        "denoise",
-        "fix faces",
-        "document restore"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal restore\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal restore\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-train",
-      "id": "fal-train",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal train",
-        "train lora",
-        "custom model",
-        "personalized image gen",
-        "brand lora"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal train\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal train\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-tryon",
-      "id": "fal-tryon",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "virtual tryon",
-        "fal tryon",
-        "try on clothes",
-        "lookbook",
-        "ecommerce styling"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"virtual tryon\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"virtual tryon\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-upscale",
-      "id": "fal-upscale",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal upscale",
-        "upscale image",
-        "super resolution",
-        "4k upscale",
-        "enhance resolution"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal upscale\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal upscale\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-video-edit",
-      "id": "fal-video-edit",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video-generation",
-        "video"
-      ],
-      "positiveExamples": [
-        "fal video edit",
-        "video upscale",
-        "video style transfer",
-        "remove video bg",
-        "video remix"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal video edit\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal video edit\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "fal-vision",
-      "id": "fal-vision",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "fal vision",
-        "image analysis",
-        "object detection",
-        "ocr image",
-        "visual qa",
-        "segment"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"fal vision\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"fal vision\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "faq-page",
-      "id": "faq-page",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "faq",
-        "FAQ",
-        "frequently asked questions",
-        "help center",
-        "support page",
-        "Q&A",
-        "常见问题",
-        "帮助中心"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"faq\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"faq\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
@@ -1410,2659 +36,2032 @@
       ]
     },
     {
-      "sourceFolder": "field-notes-editorial-template",
-      "id": "field-notes-editorial-template",
+      "source": "design-templates",
+      "sourceFolder": "document-branded-pdf-report",
+      "id": "document-branded-pdf-report",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "template"
-      ],
-      "positiveExamples": [
-        "field notes editorial template",
-        "editorial report template",
-        "magazine style business report",
-        "pastel insight dashboard",
-        "高级编辑风报告模板",
-        "奶油底粉彩卡片数据报告"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"field notes editorial template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"field notes editorial template\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "figma-code-connect-components",
-      "id": "figma-code-connect-components",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma code connect",
-        "design to code",
-        "figma components",
-        "code connect"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma code connect\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma code connect\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "figma-create-design-system-rules",
-      "id": "figma-create-design-system-rules",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma rules",
-        "design system rules",
-        "figma to code rules",
-        "figma tokens"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma rules\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma rules\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "figma-create-new-file",
-      "id": "figma-create-new-file",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma new file",
-        "figjam new",
-        "create figma file"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma new file\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma new file\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "figma-generate-design",
-      "id": "figma-generate-design",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma generate design",
-        "code to figma",
-        "screen generation",
-        "figma from code"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma generate design\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma generate design\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "figma-generate-library",
-      "id": "figma-generate-library",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma library",
-        "design system library",
-        "figma from codebase",
-        "sync figma"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma library\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma library\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "figma-implement-design",
-      "id": "figma-implement-design",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma to code",
-        "implement figma",
-        "figma fidelity"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma to code\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma to code\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "figma-use",
-      "id": "figma-use",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "figma",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "figma use",
-        "figma plugin api",
-        "figma canvas",
-        "figma scripts"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"figma use\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"figma use\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "flutter-animating-apps",
-      "id": "flutter-animating-apps",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
+        "document",
         "prototype"
       ],
       "positiveExamples": [
-        "flutter animation",
-        "flutter motion",
-        "mobile animation",
-        "flutter transitions"
+        "Turn my brand update into a polished one-page branded PDF report: editorial narrative, brand signals, imagery, and a clear next action.",
+        "品牌报告",
+        "brand report",
+        "pdf report",
+        "brand brief",
+        "one-page report",
+        "PDF 报告",
+        "品牌简报",
+        "一页报告"
       ],
       "negativeExamples": [
-        "Explain or analyze \"flutter animation\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"flutter animation\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "frame-data-chart-nyt",
-      "id": "frame-data-chart-nyt",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video"
-      ],
-      "positiveExamples": [
-        "用「NYT 风数据图表帧」模板把我的内容做成一段「NYT-newsroom 排版 + 错峰揭示动画 + 编辑级图表 (折线/柱/范围带)」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the NYT-Style Data Chart Frame template to turn my content into a frame with NYT-newsroom typography, staggered reveal animation, and editorial-grade charts. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"frame-data-chart-nyt\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-data-chart-nyt\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frame-flowchart-sticky",
-      "id": "frame-flowchart-sticky",
+      "source": "design-templates",
+      "sourceFolder": "document-branded-proposal",
+      "id": "document-branded-proposal",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video"
+        "document",
+        "prototype"
       ],
       "positiveExamples": [
-        "用「便利贴流程图帧」模板把我的内容做成一段「SVG 曲线连接 + 便利贴节点 + 光标交互, 像白板 brainstorm」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Sticky Flowchart Frame template to turn my content into a whiteboard-brainstorm frame with SVG curve connectors, sticky-note nodes, and cursor interaction. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Turn my pilot outline into a branded partner proposal covering recommendation, approach, scope, governance, and delivery.",
+        "提案",
+        "proposal",
+        "partner proposal",
+        "pilot proposal",
+        "scope document",
+        "statement of work",
+        "合作提案",
+        "方案书",
+        "项目建议书",
+        "SOW"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frame-flowchart-sticky\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-flowchart-sticky\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frame-glitch-title",
-      "id": "frame-glitch-title",
+      "source": "design-templates",
+      "sourceFolder": "document-data-visualization-report",
+      "id": "document-data-visualization-report",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video"
+        "document",
+        "prototype"
       ],
       "positiveExamples": [
-        "用「故障艺术标题帧」模板把我的内容做成一段「数字故障 / 像散偏移 / 数据腐败标题, 适合视频转场 / cyberpunk hero」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Glitch Title Frame template to turn my content into a digital-glitch, chromatic-offset, data-corruption title frame for a video transition or cyberpunk hero. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Turn this quarter's numbers into a two-page data visualization report: executive signal, directly labeled charts, decisions, and a validation plan.",
+        "数据报告",
+        "data report",
+        "visualization report",
+        "executive report",
+        "chart report",
+        "quarterly report",
+        "可视化报告",
+        "经营分析报告",
+        "季度报告",
+        "图表报告"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frame-glitch-title\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-glitch-title\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frame-light-leak-cinema",
-      "id": "frame-light-leak-cinema",
+      "source": "design-templates",
+      "sourceFolder": "document-decision-memo",
+      "id": "document-decision-memo",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video"
+        "document",
+        "prototype"
       ],
       "positiveExamples": [
-        "用「胶片漏光电影帧」模板把我的内容做成一段「胶片漏光 + 颗粒噪点 + 16:9 letterbox + 衬线大字, 电影感开场 / 章节卡」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Light-Leak Cinematic Frame template to turn my content into a cinematic opening or chapter card with film light leaks, grain, letterbox framing, and large serif type. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Write a one-page decision memo: recommendation, evidence, option trade-offs, controls, and next action.",
+        "决策备忘录",
+        "decision memo",
+        "memo",
+        "recommendation memo",
+        "options analysis",
+        "one-pager",
+        "备忘录",
+        "决策文档",
+        "方案对比",
+        "一页纸"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frame-light-leak-cinema\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-light-leak-cinema\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frame-liquid-bg-hero",
-      "id": "frame-liquid-bg-hero",
+      "source": "design-templates",
+      "sourceFolder": "document-docx-workspace",
+      "id": "document-docx-workspace",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video"
+        "document",
+        "prototype"
       ],
       "positiveExamples": [
-        "用「流体背景 Hero 帧」模板把我的内容做成一段「WebGL 风流体置换背景 + 顶部叠加金句, 适合视频片头 / landing hero / 海报」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Liquid Background Hero template to turn my content into a WebGL-style fluid displacement background with a quote overlay for a video intro, landing hero, or poster. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Build an editable DOCX update from these source notes: decision-ready structure, headings, and tracked open items.",
+        "docx 文档",
+        "docx",
+        "word document",
+        "editable document",
+        "word template",
+        "Word 文档",
+        "可编辑文档",
+        "Word 模板"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frame-liquid-bg-hero\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-liquid-bg-hero\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frame-logo-outro",
-      "id": "frame-logo-outro",
+      "source": "design-templates",
+      "sourceFolder": "document-pdf-workspace",
+      "id": "document-pdf-workspace",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video"
+        "document",
+        "prototype"
       ],
       "positiveExamples": [
-        "用「品牌 Logo 收尾帧」模板把我的内容做成一段「Logo 分块组装入场 + glow bloom + tagline 揭示, 适合视频片尾 / 品牌闭幕」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Logo Outro Frame template to turn my content into a video outro or brand closing frame with segmented logo assembly, glow bloom, and tagline reveal. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Fill the supplied facts into a review-ready, printable PDF service agreement.",
+        "协议",
+        "agreement",
+        "contract pdf",
+        "fill in form",
+        "printable pdf",
+        "service agreement",
+        "合同 PDF",
+        "填写表单",
+        "可打印 PDF",
+        "服务协议"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frame-logo-outro\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-logo-outro\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frame-macos-notification",
-      "id": "frame-macos-notification",
+      "source": "design-templates",
+      "sourceFolder": "document-resume",
+      "id": "document-resume",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video"
+        "document",
+        "prototype"
       ],
       "positiveExamples": [
-        "用「macOS 通知横幅」模板把我的内容做成一段「拟真 macOS 通知 banner + app icon + 标题正文, 适合 video overlay / 产品发布预告」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the macOS Notification Banner template to turn my content into a realistic macOS notification banner for a video overlay or product teaser. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Turn my experience into a refined one-page resume that emphasizes evidence, selected outputs, and measurable results.",
+        "简历",
+        "resume",
+        "cv",
+        "curriculum vitae",
+        "job application",
+        "个人简历",
+        "求职简历"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frame-macos-notification\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frame-macos-notification\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "example.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "frontend-design",
-      "id": "frontend-design",
+      "source": "design-templates",
+      "sourceFolder": "document-writing-quality-review",
+      "id": "document-writing-quality-review",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "web-artifacts",
+        "document",
         "prototype"
       ],
       "positiveExamples": [
-        "frontend design",
-        "ui design",
-        "ux design",
-        "web design",
-        "production ui",
-        "landing page",
-        "dashboard design",
-        "react component design"
+        "Review this draft: prioritized findings, what to keep, and a concrete replacement draft.",
+        "文章评审",
+        "writing review",
+        "editorial review",
+        "proofread",
+        "copy review",
+        "improve my writing",
+        "写作评审",
+        "润色",
+        "校对",
+        "文案审查"
       ],
       "negativeExamples": [
-        "Explain or analyze \"frontend design\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frontend design\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE.txt"
-      ]
-    },
-    {
-      "sourceFolder": "frontend-dev",
-      "id": "frontend-dev",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "web-artifacts",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "frontend dev",
-        "cinematic frontend",
-        "generative web",
-        "hero page",
-        "showcase site"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"frontend dev\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"frontend dev\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "frontend-skill",
-      "id": "frontend-skill",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "landing page",
-        "frontend playbook",
-        "ui composition",
-        "restrained ui"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"landing page\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"landing page\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "frontend-slides",
-      "id": "frontend-slides",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "slides",
-        "deck"
-      ],
-      "positiveExamples": [
-        "html slides",
-        "animation slides",
-        "interactive deck",
-        "web ppt",
-        "reveal slides"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"html slides\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"html slides\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "full-page-screenshot",
-      "id": "full-page-screenshot",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "screenshots",
-        "image"
-      ],
-      "positiveExamples": [
-        "full page screenshot",
-        "long screenshot",
-        "devtools screenshot",
-        "web capture"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"full page screenshot\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"full page screenshot\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gif-sticker-maker",
-      "id": "gif-sticker-maker",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "gif sticker",
-        "funko sticker",
-        "animated sticker",
-        "pop mart",
-        "表情包"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gif sticker\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gif sticker\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gpt-tasteskill",
-      "id": "gpt-taste",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gpt taste",
-        "codex frontend taste",
-        "gsap motion landing",
-        "premium codex UI"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gpt taste\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gpt taste\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "gsap-core",
-      "id": "gsap-core",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap",
-        "gsap core",
-        "web animation",
-        "tween",
-        "easing"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-frameworks",
-      "id": "gsap-frameworks",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap vue",
-        "gsap svelte",
-        "nuxt animation",
-        "sveltekit animation",
-        "framework animation"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap vue\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap vue\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-performance",
-      "id": "gsap-performance",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap performance",
-        "animation jank",
-        "60fps animation",
-        "will-change",
-        "layout thrashing"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap performance\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap performance\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-plugins",
-      "id": "gsap-plugins",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap plugins",
-        "gsap plugin registration",
-        "flip animation",
-        "draggable",
-        "morphsvg",
-        "splittext"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap plugins\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap plugins\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-react",
-      "id": "gsap-react",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap react",
-        "usegsap",
-        "react animation",
-        "gsap context",
-        "react motion"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap react\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap react\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-scrolltrigger",
-      "id": "gsap-scrolltrigger",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "scrolltrigger",
-        "scroll animation",
-        "gsap scroll",
-        "scroll pin",
-        "scroll scrub"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"scrolltrigger\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"scrolltrigger\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-timeline",
-      "id": "gsap-timeline",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap timeline",
-        "animation timeline",
-        "sequenced animation",
-        "motion choreography"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap timeline\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap timeline\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "gsap-utils",
-      "id": "gsap-utils",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "animation-motion",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "gsap utils",
-        "clamp animation value",
-        "maprange",
-        "snap animation",
-        "gsap random"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gsap utils\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gsap utils\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "hand-drawn-diagrams",
-      "id": "hand-drawn-diagrams",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "diagrams",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "excalidraw",
-        "hand drawn diagram",
-        "sketch diagram",
-        "whiteboard diagram"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"excalidraw\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"excalidraw\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "hatch-pet",
-      "id": "hatch-pet",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image"
-      ],
-      "positiveExamples": [
-        "hatch a pet",
-        "hatch pet",
-        "codex pet",
-        "spritesheet pet",
-        "animated pet",
-        "孵化宠物",
-        "电子宠物"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"hatch a pet\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"hatch a pet\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "agents/openai.yaml",
-        "LICENSE.txt",
-        "README.md",
-        "references/animation-rows.md",
-        "references/codex-pet-contract.md",
-        "references/qa-rubric.md",
-        "scripts/compose_atlas.py",
-        "scripts/derive_running_left_from_running_right.py",
-        "scripts/extract_strip_frames.py",
-        "scripts/finalize_pet_run.py",
-        "scripts/generate_pet_images.py",
-        "scripts/inspect_frames.py",
-        "scripts/make_contact_sheet.py",
-        "scripts/package_custom_pet.py",
-        "scripts/pet_job_status.py",
-        "scripts/prepare_pet_run.py",
-        "scripts/queue_pet_repairs.py",
-        "scripts/record_imagegen_result.py",
-        "scripts/render_animation_videos.py",
-        "scripts/render_animation_videos.sh",
-        "scripts/test_generate_pet_images.py",
-        "scripts/validate_atlas.py"
-      ]
-    },
-    {
-      "sourceFolder": "html-ppt-retro-quarterly-review",
-      "id": "html-ppt-retro-quarterly-review",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "template"
-      ],
-      "positiveExamples": [
-        "retro quarterly review",
-        "quarterly review template",
-        "roadmap slide style",
-        "blue orange presentation",
-        "vintage business deck",
-        "季度复盘复古风",
-        "蓝橙复古汇报模板"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"retro quarterly review\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"retro quarterly review\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "image-enhancer",
-      "id": "image-enhancer",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "enhance image",
-        "upscale image",
-        "image quality",
-        "sharpen",
-        "denoise"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"enhance image\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"enhance image\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "image-to-code-skill",
-      "id": "image-to-code",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "web-artifacts",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "image to code",
-        "reference image to frontend",
-        "generate then code",
-        "visual implementation"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"image to code\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"image to code\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "imagegen",
-      "id": "imagegen",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "generate image",
-        "create image",
-        "image gen",
-        "openai image",
-        "icon design",
-        "mockup"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"generate image\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"generate image\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "imagegen-frontend-mobile",
-      "id": "imagegen-frontend-mobile",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "mobile app image",
-        "mobile UI concept",
-        "ios app mockup",
-        "android app mockup"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"mobile app image\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"mobile app image\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "imagegen-frontend-web",
-      "id": "imagegen-frontend-web",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "website image reference",
-        "landing page comp",
-        "web design reference",
-        "section images"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"website image reference\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"website image reference\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "imagen",
-      "id": "imagen",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "gemini image",
-        "imagen",
-        "google image gen",
-        "illustration",
-        "icon"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"gemini image\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"gemini image\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "impeccable-design-polish",
-      "id": "impeccable-design-polish",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "impeccable",
-        "design polish",
-        "polish page",
-        "anti ai polish",
-        "critique design",
-        "animate page",
-        "harden ui",
-        "live review",
-        "反 AI 味"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"impeccable\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"impeccable\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "library-curator",
-      "id": "library-curator",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "assets",
-        "utility"
-      ],
-      "positiveExamples": [
-        "from my library",
-        "library asset",
-        "use the image I captured",
-        "insert from library"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"from my library\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"from my library\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "login-flow",
-      "id": "login-flow",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "login",
-        "sign in",
-        "注册登录",
-        "登录注册",
-        "手机号登录",
-        "验证码登录",
-        "密码登录"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"login\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"login\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
+      "version": "0.1.0",
       "resources": [
         "example.html",
-        "references/checklist.md"
+        "example.webp",
+        "template.json"
       ]
     },
     {
-      "sourceFolder": "marketing-psychology",
-      "id": "marketing-psychology",
+      "source": "design-templates",
+      "sourceFolder": "hallmark-artisan-landing",
+      "id": "hallmark-artisan-landing",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "marketing-creative",
-        "design-system"
+        "prototype",
+        "landing-page"
       ],
       "positiveExamples": [
-        "marketing psychology",
-        "behavioral copy",
-        "persuasion",
-        "framing",
-        "cognitive bias"
+        "Build a warm serif editorial page for a local coffee roasting studio: almanac masthead, two-column menu catalogue with line-art icons and prices, and a visit section.",
+        "手工艺",
+        "local business page",
+        "artisan",
+        "coffee roaster",
+        "bakery website",
+        "menu page",
+        "craft studio",
+        "咖啡店网页",
+        "小店官网",
+        "菜单页",
+        "本地商家"
       ],
       "negativeExamples": [
-        "Explain or analyze \"marketing psychology\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"marketing psychology\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "minimalist-skill",
-      "id": "minimalist-ui",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "minimalist ui",
-        "editorial product UI",
-        "linear style",
-        "warm monochrome"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"minimalist ui\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"minimalist ui\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "LICENSE"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "minimax-docx",
-      "id": "minimax-docx",
+      "source": "design-templates",
+      "sourceFolder": "hallmark-terminal-landing",
+      "id": "hallmark-terminal-landing",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "documents",
-        "prototype"
+        "prototype",
+        "landing-page"
       ],
       "positiveExamples": [
-        "minimax docx",
-        "openxml docx",
-        "branded report",
-        "proposal doc",
-        "template authoring"
+        "Build a dark terminal-style landing page for a CLI deployment tool: mono type, pipeline panel in the hero, step-by-step command walkthrough, and pricing tiers.",
+        "开发者工具官网",
+        "developer tool landing",
+        "cli landing page",
+        "devtool website",
+        "terminal style",
+        "command line tool",
+        "CLI 工具落地页",
+        "终端风格",
+        "命令行工具"
       ],
       "negativeExamples": [
-        "Explain or analyze \"minimax docx\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"minimax docx\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "minimax-pdf",
-      "id": "minimax-pdf",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "documents",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "minimax pdf",
-        "branded pdf",
-        "cover style pdf",
-        "e-guide pdf",
-        "design system pdf"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"minimax pdf\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"minimax pdf\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "mockup-device-3d",
-      "id": "mockup-device-3d",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「iPhone × MacBook 立体展架」模板把我的内容做成一份「iPhone + MacBook 仿 GLTF 静态展架, 屏幕内嵌真实 HTML 内容, 玻璃镜头折射, 360° 转盘构图」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Device 3D Showcase template to turn my content into a static iPhone and MacBook 3D-style showcase with real HTML embedded on the screens. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"mockup-device-3d\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"mockup-device-3d\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "nanobanana-ppt",
-      "id": "nanobanana-ppt",
+      "source": "design-templates",
+      "sourceFolder": "huashu-editorial-brutalism",
+      "id": "huashu-editorial-brutalism",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "image-generation",
-        "deck"
+        "prototype",
+        "editorial-page"
       ],
       "positiveExamples": [
-        "nanobanana ppt",
-        "ai ppt",
-        "styled ppt",
-        "document to ppt",
-        "banana ppt"
+        "Design the issue front page for an AI-industry weekly newsletter in a bold Businessweek-style editorial layout.",
+        "编辑野兽派",
+        "editorial brutalism",
+        "businessweek style",
+        "newsletter front page",
+        "magazine web",
+        "bold editorial",
+        "杂志风网页",
+        "newsletter 首页",
+        "商业周刊风格"
       ],
       "negativeExamples": [
-        "Explain or analyze \"nanobanana ppt\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"nanobanana ppt\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "output-skill",
-      "id": "full-output-enforcement",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "agent-workflow",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "full output",
-        "no placeholders",
-        "complete code",
-        "unabridged implementation"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"full output\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"full output\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "LICENSE"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "paywall-upgrade-cro",
-      "id": "paywall-upgrade-cro",
+      "source": "design-templates",
+      "sourceFolder": "huashu-ios-tiled-prototype",
+      "id": "huashu-ios-tiled-prototype",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "marketing-creative",
-        "design-system"
+        "prototype",
+        "mobile-app"
       ],
       "positiveExamples": [
-        "paywall",
-        "upgrade screen",
-        "cro paywall",
-        "upsell modal",
-        "pricing screen"
+        "Prototype a focus-timer iOS app as 4 iPhone screens side by side: today view, live session, insights, settings.",
+        "iOS 原型",
+        "ios prototype",
+        "multiple screens",
+        "app screens side by side",
+        "iphone mockup set",
+        "app flow overview",
+        "多屏",
+        "多个页面并排",
+        "app 流程图",
+        "iPhone 多屏"
       ],
       "negativeExamples": [
-        "Explain or analyze \"paywall\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"paywall\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
-      "resources": []
+      "resources": [
+        "example.html"
+      ]
     },
     {
-      "sourceFolder": "pdf",
-      "id": "pdf",
+      "source": "design-templates",
+      "sourceFolder": "huashu-white-gallery",
+      "id": "huashu-white-gallery",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "documents",
-        "prototype"
+        "prototype",
+        "gallery"
       ],
       "positiveExamples": [
-        "pdf",
-        "create pdf",
-        "pdf form",
-        "branded pdf",
-        "one pager"
+        "Make a quiet, museum-like gallery page for a studio's poster collection where the works carry all the color.",
+        "画廊页",
+        "gallery page",
+        "white gallery",
+        "masonry grid",
+        "curation",
+        "museum",
+        "artwork collection",
+        "作品集网格",
+        "瀑布流",
+        "策展",
+        "极简白"
       ],
       "negativeExamples": [
-        "Explain or analyze \"pdf\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"pdf\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
-      "resources": []
+      "resources": [
+        "example.html"
+      ]
     },
     {
-      "sourceFolder": "pixelbin-media",
-      "id": "pixelbin-media",
+      "source": "design-templates",
+      "sourceFolder": "image-brand-character",
+      "id": "image-brand-character",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "image-generation",
-        "image"
+        "image",
+        "brand-character"
       ],
       "positiveExamples": [
-        "pixelbin",
-        "media generation",
-        "image transform",
-        "video transform",
-        "cdn media"
+        "Create a brand character sheet for a streetwear label: one locked mascot shown as hero art, three poses, four expressions, and a color reference strip.",
+        "吉祥物",
+        "mascot",
+        "brand character",
+        "character sheet",
+        "sticker set",
+        "brand IP",
+        "品牌角色",
+        "角色设定",
+        "IP 形象",
+        "贴纸"
       ],
       "negativeExamples": [
-        "Explain or analyze \"pixelbin\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"pixelbin\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
-      "resources": []
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
     },
     {
-      "sourceFolder": "plan-design-review",
-      "id": "plan-design-review",
+      "source": "design-templates",
+      "sourceFolder": "image-editorial-collage",
+      "id": "image-editorial-collage",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "creative-direction",
-        "design-system"
+        "image",
+        "editorial-collage"
       ],
       "positiveExamples": [
-        "plan design review",
-        "senior designer review",
-        "design rating",
-        "ai slop check"
+        "Create a vertical editorial fashion collage: one hero portrait, torn-paper layers, two exact headline strings, and visible tape and paper fibers.",
+        "拼贴",
+        "collage",
+        "cut-paper",
+        "editorial collage",
+        "fashion editorial",
+        "zine",
+        "剪纸",
+        "杂志拼贴",
+        "时尚大片"
       ],
       "negativeExamples": [
-        "Explain or analyze \"plan design review\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"plan design review\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
-      "resources": []
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
     },
     {
-      "sourceFolder": "platform-design",
-      "id": "platform-design",
+      "source": "design-templates",
+      "sourceFolder": "image-event-poster",
+      "id": "image-event-poster",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "design-systems",
-        "design-system"
+        "image",
+        "event-poster"
       ],
       "positiveExamples": [
-        "platform design",
-        "cross platform design",
+        "Create a 4:5 event poster for an indie music night: exact strings for title, date, city and doors time, oversized condensed type, screen-print texture.",
+        "活动海报",
+        "event poster",
+        "festival poster",
+        "exhibition poster",
+        "gig poster",
+        "talk poster",
+        "展览海报",
+        "音乐节海报",
+        "讲座海报",
+        "发布会海报"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-instagram-carousel-cover",
+      "id": "image-instagram-carousel-cover",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "social-cover"
+      ],
+      "positiveExamples": [
+        "Create a 4:5 Instagram carousel cover with one photographic hook, a short exact headline, and a visible 01 / 06 series index.",
+        "小红书封面",
+        "instagram cover",
+        "carousel cover",
+        "xiaohongshu cover",
+        "social cover",
+        "first slide",
+        "轮播封面",
+        "ins 封面",
+        "社媒封面",
+        "首图"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-promotion-poster",
+      "id": "image-promotion-poster",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "promotion-poster"
+      ],
+      "positiveExamples": [
+        "Create a 4:5 promotion poster for a beverage buy-one-get-one offer: product hero, exact offer copy, one forceful composition, bright retail energy.",
+        "促销海报",
+        "promotion poster",
+        "sale poster",
+        "product drop",
+        "limited offer",
+        "retail campaign",
+        "social ad",
+        "优惠海报",
+        "新品海报",
+        "活动促销",
+        "买一送一"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "impeccable-insight-dashboard",
+      "id": "impeccable-insight-dashboard",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Build a light, editorial product-analytics dashboard: KPI band, weekly-active-users trend with prior-period comparison, signups-by-channel table, and a funnel.",
+        "数据分析仪表盘",
+        "analytics dashboard",
+        "product analytics",
+        "kpi dashboard",
+        "light dashboard",
+        "weekly active users",
+        "产品分析",
+        "KPI 看板",
+        "浅色仪表盘",
+        "增长看板"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "impeccable-serif-landing",
+      "id": "impeccable-serif-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Build a warm cream SaaS landing page for a team knowledge-base product: huge serif hero with an italic accent word, pill buttons, feature cards, and a dark CTA band.",
+        "SaaS 落地页",
+        "saas landing",
+        "serif landing page",
+        "warm landing",
+        "cream landing page",
+        "product website",
+        "衬线字落地页",
+        "暖色官网",
+        "产品官网"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "jp-ops-console",
+      "id": "jp-ops-console",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "settings"
+      ],
+      "positiveExamples": [
+        "Build a calm SaaS admin settings console: sidebar navigation, KPI cards, a notification settings form, and a job status table.",
+        "后台设置",
+        "admin console",
+        "settings console",
+        "saas admin",
+        "ops console",
+        "settings form",
+        "job table",
+        "管理控制台",
+        "运营后台",
+        "设置表单",
+        "任务列表"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "m3-habit-app",
+      "id": "m3-habit-app",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "mobile-app"
+      ],
+      "positiveExamples": [
+        "Design a Material 3 Android habit-tracker home screen: streak card, habit checklist, FAB, and bottom navigation in a phone frame.",
+        "打卡 app",
         "material design",
-        "hig rules",
-        "wcag rules"
+        "material you",
+        "md3",
+        "android app",
+        "habit tracker",
+        "daily checklist",
+        "streak",
+        "习惯养成",
+        "安卓 app",
+        "Material 风格",
+        "每日清单"
       ],
       "negativeExamples": [
-        "Explain or analyze \"platform design\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"platform design\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "poster-hero",
-      "id": "poster-hero",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「营销海报」模板把我的内容做成一份「竖版海报 / 朋友圈分享图, 强视觉冲击」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Marketing Poster template to turn my content into a vertical poster or Moments-style share image with strong visual impact. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"poster-hero\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"poster-hero\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "ppt-keynote",
-      "id": "ppt-keynote",
+      "source": "design-templates",
+      "sourceFolder": "m3-ops-dashboard",
+      "id": "m3-ops-dashboard",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "deck"
+        "prototype",
+        "dashboard"
       ],
       "positiveExamples": [
-        "用「Keynote 风格 PPT」模板把我的内容做成一套「苹果 Keynote 级别幻灯片, 一屏一卡, 键盘左右切换」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Keynote-style Slides template to turn my content into Apple Keynote-quality slides with one card per screen and keyboard left/right navigation. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Build a Material Design 3 operations dashboard: navigation rail, tonal service status cards, incident timeline, and resource usage rings.",
+        "运维仪表盘",
+        "material dashboard",
+        "md3 dashboard",
+        "ops dashboard",
+        "monitoring dashboard",
+        "incident timeline",
+        "service status",
+        "监控面板",
+        "Material 仪表盘",
+        "服务状态",
+        "事件时间线"
       ],
       "negativeExamples": [
-        "Explain or analyze \"ppt-keynote\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"ppt-keynote\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "pptx",
-      "id": "pptx",
+      "source": "design-templates",
+      "sourceFolder": "promax-health-dashboard",
+      "id": "promax-health-dashboard",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "slides",
-        "deck"
+        "prototype",
+        "dashboard"
       ],
       "positiveExamples": [
-        "pptx",
-        "powerpoint",
-        "slide deck",
-        "create slides",
-        "edit pptx"
+        "Build a hospital operations dashboard with KPI cards, an admissions trend chart, a department donut chart, a recent-patients table, and today's schedule.",
+        "医疗仪表盘",
+        "healthcare dashboard",
+        "hospital dashboard",
+        "clinical analytics",
+        "patient records",
+        "medical admin",
+        "医院后台",
+        "门诊数据",
+        "病患列表",
+        "医疗数据看板"
       ],
       "negativeExamples": [
-        "Explain or analyze \"pptx\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"pptx\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "pptx-generator",
-      "id": "pptx-generator",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "slides",
-        "deck"
-      ],
-      "positiveExamples": [
-        "pptx generator",
-        "minimax ppt",
-        "deck generator",
-        "auto pptx"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"pptx generator\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"pptx generator\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "pptx-html-fidelity-audit",
-      "id": "pptx-html-fidelity-audit",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "utility"
-      ],
-      "positiveExamples": [
-        "pptx fidelity",
-        "pptx audit",
-        "ppt 跑掉",
-        "字型不對",
-        "footer overlap",
-        "verify pptx",
-        "html to pptx"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"pptx fidelity\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"pptx fidelity\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "references/audit-table-template.md",
-        "references/font-discipline.md",
-        "references/layout-discipline.md",
-        "scripts/.gitignore",
-        "scripts/extract_pptx.py",
-        "scripts/verify_layout.py"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "pr-feedback-quality-gate",
-      "id": "pr-feedback-quality-gate",
+      "source": "design-templates",
+      "sourceFolder": "promax-pet-app",
+      "id": "promax-pet-app",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "utility"
+        "prototype",
+        "mobile-app"
       ],
       "positiveExamples": [
-        "PR feedback",
-        "review comments",
-        "merge conflicts",
-        "cross-review",
-        "Claude CLI review",
-        "monitor PR"
+        "Design a cute pet-care mobile app home screen with a pet profile hero card, daily quick actions, an activity timeline, and a bottom tab bar.",
+        "宠物 app",
+        "pet app",
+        "pet care",
+        "cute app",
+        "playful mobile app",
+        "clay style app",
+        "养宠",
+        "萌系 app",
+        "可爱风",
+        "宠物管理"
       ],
       "negativeExamples": [
-        "Explain or analyze \"PR feedback\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"PR feedback\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "redesign-skill",
-      "id": "redesign-existing-projects",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "creative-direction",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "redesign existing project",
-        "improve current UI",
-        "premium redesign",
-        "audit UI"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"redesign existing project\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"redesign existing project\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "LICENSE"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "reference-design-contract",
-      "id": "reference-design-contract",
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-coming-soon",
+      "id": "qiaomu-coming-soon",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "design-systems",
-        "design-system"
+        "prototype",
+        "landing-page"
       ],
       "positiveExamples": [
-        "design contract",
-        "reference design brief",
-        "style contract",
-        "visual direction handoff",
-        "turn references into DESIGN.md",
-        "make it feel like this",
-        "做同款但不照抄",
-        "把参考图转成设计规范"
+        "Design a coming-soon page for a product launch: space voyage theme, launch countdown, and an email waitlist signup.",
+        "即将上线",
+        "coming soon",
+        "waitlist page",
+        "launch countdown",
+        "teaser page",
+        "pre-launch",
+        "预约页",
+        "倒计时页",
+        "候补名单",
+        "预热页"
       ],
       "negativeExamples": [
-        "Explain or analyze \"design contract\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design contract\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "references/checklist.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "release-notes-one-pager",
-      "id": "release-notes-one-pager",
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-dashboard",
+      "id": "qiaomu-dashboard",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "prototype"
+        "prototype",
+        "dashboard"
       ],
       "positiveExamples": [
-        "release notes",
-        "changelog",
-        "what's new",
-        "version update",
-        "change log",
-        "release summary"
+        "Make an operations dashboard for an e-commerce team: KPI cards, weekly sales bar chart, category donut, and a recent orders table.",
+        "电商后台",
+        "dark dashboard",
+        "ecommerce dashboard",
+        "orders table",
+        "sales dashboard",
+        "admin dashboard",
+        "订单看板",
+        "销售仪表盘",
+        "深色仪表盘",
+        "运营后台"
       ],
       "negativeExamples": [
-        "Explain or analyze \"release notes\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"release notes\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md",
-        "references/layouts.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "remotion",
-      "id": "remotion",
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-landing",
+      "id": "qiaomu-landing",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video-generation",
-        "video"
+        "prototype",
+        "landing-page"
       ],
       "positiveExamples": [
-        "remotion",
-        "react video",
-        "programmatic video",
-        "motion graphics",
-        "video composition"
+        "Build a dark landing page for an AI meeting-notes SaaS: split hero with product mockup, feature grid, pricing tiers, and testimonials.",
+        "SaaS 官网",
+        "saas landing page",
+        "dark landing",
+        "linear style",
+        "ai product landing",
+        "pricing section",
+        "深色落地页",
+        "AI 产品官网",
+        "定价页",
+        "产品落地页"
       ],
       "negativeExamples": [
-        "Explain or analyze \"remotion\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"remotion\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "replicate",
-      "id": "replicate",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "replicate",
-        "run ai model",
-        "model comparison",
-        "replicate api"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"replicate\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"replicate\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "research-decision-room",
-      "id": "research-decision-room",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "research decision room",
-        "user research synthesis",
-        "research synthesis dashboard",
-        "evidence-backed product decision",
-        "interview synthesis",
-        "opportunity solution tree",
-        "usability findings dashboard",
-        "qualitative research board"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"research decision room\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"research decision room\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "references/checklist.md",
-        "references/evidence-model.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "resume-modern",
-      "id": "resume-modern",
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-portfolio",
+      "id": "qiaomu-portfolio",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "prototype"
+        "prototype",
+        "portfolio"
       ],
       "positiveExamples": [
-        "用「极简简历」模板把我的内容做成一份「现代极简简历, A4 单页, 适合打印或导出 PDF」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Modern Resume template to turn my content into a modern minimal single-page A4 resume ready for print or PDF export. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Design a personal portfolio site for an independent product designer: editorial hero, selected work grid, about, and contact.",
+        "作品集",
+        "portfolio",
+        "personal site",
+        "designer website",
+        "selected work",
+        "case studies",
+        "个人网站",
+        "设计师主页",
+        "个人主页",
+        "案例展示"
       ],
       "negativeExamples": [
-        "Explain or analyze \"resume-modern\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"resume-modern\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "review-animations",
-      "id": "review-animations",
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-settings",
+      "id": "qiaomu-settings",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "animation-motion",
-        "prototype"
+        "prototype",
+        "settings"
       ],
       "positiveExamples": [
-        "review animations",
-        "animation review",
-        "motion review",
-        "audit animations",
-        "check motion code",
-        "animation craft",
-        "动效审查"
+        "Create a settings center for a SaaS app: sidebar sections, profile form, and a danger zone where deleting the workspace requires typing its name.",
+        "设置页",
+        "settings page",
+        "account settings",
+        "preferences",
+        "danger zone",
+        "profile form",
+        "账号设置",
+        "偏好设置",
+        "危险操作",
+        "个人资料表单"
       ],
       "negativeExamples": [
-        "Explain or analyze \"review animations\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"review animations\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "LICENSE",
-        "STANDARDS.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "screenshot",
-      "id": "screenshot",
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-wizard",
+      "id": "qiaomu-wizard",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "screenshots",
-        "image"
+        "prototype",
+        "wizard"
       ],
       "positiveExamples": [
-        "screenshot",
-        "capture screen",
-        "window screenshot",
-        "pixel region capture"
+        "Build a three-step flight booking wizard: pick a flight, enter passenger details with validation, confirm payment, then show a success state.",
+        "多步表单",
+        "wizard",
+        "multi-step form",
+        "booking flow",
+        "checkout steps",
+        "onboarding steps",
+        "stepper",
+        "预订流程",
+        "分步向导",
+        "下单流程",
+        "步骤条"
       ],
       "negativeExamples": [
-        "Explain or analyze \"screenshot\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"screenshot\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "screenshots-marketing",
-      "id": "screenshots-marketing",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "screenshots",
-        "image"
-      ],
-      "positiveExamples": [
-        "marketing screenshot",
-        "playwright screenshot",
-        "hero shot",
-        "app store screenshot"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"marketing screenshot\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"marketing screenshot\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "shadcn-ui",
-      "id": "shadcn-ui",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "shadcn",
-        "shadcn ui",
-        "shadcn components",
-        "accessible components"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"shadcn\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"shadcn\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "shader-dev",
-      "id": "shader-dev",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "3d-shaders",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "shader",
-        "glsl",
-        "ray marching",
-        "fluid simulation",
-        "procedural generation"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"shader\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"shader\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "slack-gif-creator",
-      "id": "slack-gif-creator",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "slack gif",
-        "animated gif",
-        "reaction gif",
-        "tiny gif"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"slack gif\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"slack gif\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "slides",
-      "id": "slides",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "slides",
-        "deck"
-      ],
-      "positiveExamples": [
-        "slides",
-        "pptxgenjs",
-        "sales deck",
-        "design showcase deck"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"slides\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"slides\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "social-reddit-card",
-      "id": "social-reddit-card",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "用「Reddit 帖子卡」模板把我的内容做成一份「拟真 Reddit 帖子卡 + 上下投票 + 评论数, 适合视频叠加 / 故事分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Reddit Post Card template to turn my content into a realistic Reddit post card with vote rail and comment count for a video overlay or story share. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"social-reddit-card\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"social-reddit-card\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "social-spotify-card",
-      "id": "social-spotify-card",
+      "source": "design-templates",
+      "sourceFolder": "skill-brutalist",
+      "id": "skill-brutalist",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "prototype"
+        "prototype",
+        "style"
       ],
       "positiveExamples": [
-        "用「Spotify 正在播放卡」模板把我的内容做成一份「Spotify Now Playing 风格卡: 专辑封面 + 进度条 + 播放控制, 适配视频叠加 / 个人主页」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Spotify Now-Playing Card template to turn my content into a Spotify Now Playing-style card with album art, progress bar, and playback controls for a video overlay or personal homepage. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Make a brutalist terminal-style landing page for a deploy orchestration CLI: dark CRT look with red accents.",
+        "野兽派",
+        "brutalist",
+        "industrial",
+        "tactical terminal",
+        "crt",
+        "monospace ui",
+        "hazard red",
+        "工业风",
+        "战术终端",
+        "CRT 纹理",
+        "硬核界面"
       ],
       "negativeExamples": [
-        "Explain or analyze \"social-spotify-card\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"social-spotify-card\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "social-x-post-card",
-      "id": "social-x-post-card",
+      "source": "design-templates",
+      "sourceFolder": "skill-compact-landing",
+      "id": "skill-compact-landing",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "prototype"
+        "prototype",
+        "landing-page"
       ],
       "positiveExamples": [
-        "用「X (Twitter) 帖子卡」模板把我的内容做成一份「拟真 X 推文卡片 + 互动数据 (likes/reposts/views), 适配视频叠加或图卡分享」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the X / Twitter Post Card template to turn my content into a realistic X post card with engagement metrics for a video overlay or shareable image card. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
+        "Build a compact premium landing page for a webhook delivery tool: narrow column, quiet type, one clear CTA.",
+        "紧凑落地页",
+        "compact landing",
+        "minimal landing",
+        "narrow column",
+        "quiet landing page",
+        "developer tool page",
+        "窄版心",
+        "安静排版",
+        "小而精官网"
       ],
       "negativeExamples": [
-        "Explain or analyze \"social-x-post-card\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"social-x-post-card\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "example.html",
-        "example.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "soft-skill",
-      "id": "high-end-visual-design",
+      "source": "design-templates",
+      "sourceFolder": "skill-interface-design",
+      "id": "skill-interface-design",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "creative-direction",
-        "prototype"
+        "prototype",
+        "dashboard"
       ],
       "positiveExamples": [
-        "high end visual design",
-        "soft premium UI",
-        "luxury landing page",
-        "expensive website"
+        "Design a dark ops dashboard for a solar fleet monitoring SaaS with a clear focal metric and quiet layered surfaces.",
+        "SaaS 后台",
+        "saas dashboard",
+        "admin panel",
+        "product ui",
+        "focal metric",
+        "layered surfaces",
+        "产品界面",
+        "管理面板",
+        "仪表盘设计",
+        "数据产品 UI"
       ],
       "negativeExamples": [
-        "Explain or analyze \"high end visual design\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"high end visual design\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "LICENSE"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "sora",
-      "id": "sora",
+      "source": "design-templates",
+      "sourceFolder": "skill-mengto-landing",
+      "id": "skill-mengto-landing",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video-generation",
-        "video"
+        "prototype",
+        "landing-page"
       ],
       "positiveExamples": [
-        "sora",
-        "openai video",
-        "short video",
-        "b roll",
-        "cinematic clip"
+        "Create a high-converting landing page for a reporting automation SaaS: one offer, one CTA, proof, FAQ, risk reversal.",
+        "高转化",
+        "high converting",
+        "conversion landing",
+        "single offer",
+        "sales page",
+        "faq section",
+        "risk reversal",
+        "转化落地页",
+        "单一 CTA",
+        "销售页",
+        "营销落地页"
       ],
       "negativeExamples": [
-        "Explain or analyze \"sora\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"sora\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "speech",
-      "id": "speech",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "audio-music",
-        "audio"
-      ],
-      "positiveExamples": [
-        "openai speech",
-        "tts openai",
-        "narrated audio",
-        "voice over"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"openai speech\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"openai speech\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "stitch-loop",
-      "id": "stitch-loop",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "stitch loop",
-        "design to code",
-        "design iteration",
-        "fidelity loop"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"stitch loop\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"stitch loop\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "stitch-skill",
-      "id": "stitch-design-taste",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "stitch design taste",
-        "generate DESIGN.md",
-        "semantic design system",
-        "premium design system"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"stitch design taste\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"stitch design taste\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "DESIGN.md",
-        "LICENSE"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "swiftui-design",
-      "id": "swiftui-design",
+      "source": "design-templates",
+      "sourceFolder": "skill-minimalist",
+      "id": "skill-minimalist",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "design-systems",
-        "design-system"
+        "prototype",
+        "style"
       ],
       "positiveExamples": [
-        "swiftui design",
-        "ios design",
-        "native ui design",
-        "apple frontend",
-        "swiftui slop"
+        "Design a quiet editorial-minimal product page for a research notes app: serif hero, bento grid, no gradients.",
+        "极简",
+        "minimalist",
+        "minimal product page",
+        "monochrome",
+        "editorial minimal",
+        "no gradients",
+        "极简产品页",
+        "单色",
+        "编辑极简",
+        "无渐变"
       ],
       "negativeExamples": [
-        "Explain or analyze \"swiftui design\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"swiftui design\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "swiss-creative-mode-template",
-      "id": "swiss-creative-mode-template",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "template"
-      ],
-      "positiveExamples": [
-        "swiss creative mode template",
-        "editorial presentation template",
-        "brutalist deck style html",
-        "creative mode deck",
-        "瑞士风演示模板",
-        "高级设计语言模板"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"swiss creative mode template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"swiss creative mode template\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "swiss-user-research-video-template",
-      "id": "swiss-user-research-video-template",
+      "source": "design-templates",
+      "sourceFolder": "skill-swiss-design",
+      "id": "skill-swiss-design",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "template"
+        "prototype",
+        "style"
       ],
       "positiveExamples": [
-        "swiss user research template",
-        "editorial research deck template",
-        "minimal user research slides",
-        "warm paper swiss style",
-        "research synthesis template",
-        "瑞士风用户研究模板",
-        "高级调性研究汇报"
+        "Design a Swiss-style editorial homepage for a design journal: strict grid, one red accent, grotesque type.",
+        "瑞士风格",
+        "swiss design",
+        "international style",
+        "12-column grid",
+        "grotesque type",
+        "one red accent",
+        "国际主义",
+        "网格排版",
+        "瑞士网页",
+        "红色强调"
       ],
       "negativeExamples": [
-        "Explain or analyze \"swiss user research template\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"swiss user research template\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "taste-skill",
-      "id": "design-taste-frontend",
+      "source": "design-templates",
+      "sourceFolder": "slides-style-bauhaus-geometry",
+      "id": "slides-style-bauhaus-geometry",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "creative-direction",
-        "prototype"
+        "ppt",
+        "deck",
+        "slides-style"
       ],
       "positiveExamples": [
-        "design taste",
-        "anti slop frontend",
-        "premium landing page",
-        "portfolio redesign",
-        "visual taste"
+        "包豪斯几何幻灯片",
+        "Bauhaus Geometry Slides",
+        "slides-style-bauhaus-geometry",
+        "Bauhaus Geometry slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "bauhaus",
+        "geometric slides",
+        "cobalt vermilion yellow",
+        "asymmetric deck",
+        "包豪斯",
+        "几何风 PPT",
+        "三色几何",
+        "战略汇报 PPT"
       ],
       "negativeExamples": [
-        "Explain or analyze \"design taste\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design taste\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
-        "LICENSE"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "taste-skill-v1",
-      "id": "design-taste-frontend-v1",
+      "source": "design-templates",
+      "sourceFolder": "slides-style-bauhaus-primary",
+      "id": "slides-style-bauhaus-primary",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "creative-direction",
-        "prototype"
+        "ppt",
+        "deck",
+        "slides-style"
       ],
       "positiveExamples": [
-        "design taste v1",
-        "high agency frontend",
-        "anti slop v1",
-        "visual density"
+        "包豪斯原色幻灯片",
+        "Bauhaus Primary Slides",
+        "slides-style-bauhaus-primary",
+        "Bauhaus Primary slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "bauhaus primary",
+        "primary colors",
+        "red blue yellow",
+        "modernist deck",
+        "三原色",
+        "包豪斯 PPT",
+        "红蓝黄",
+        "现代主义幻灯片"
       ],
       "negativeExamples": [
-        "Explain or analyze \"design taste v1\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"design taste v1\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "LICENSE"
-      ]
-    },
-    {
-      "sourceFolder": "theme-factory",
-      "id": "theme-factory",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "theme factory",
-        "apply theme",
-        "design theme",
-        "theme generator",
-        "preset theme"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"theme factory\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"theme factory\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "threejs",
-      "id": "threejs",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "3d-shaders",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "threejs",
-        "three.js",
-        "3d web",
-        "webgl scene",
-        "3d interactive"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"threejs\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"threejs\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "ui-skills",
-      "id": "ui-skills",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "ui constraints",
-        "ui guide",
-        "opinionated ui",
-        "ui rules"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"ui constraints\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"ui constraints\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "ui-ux-pro-max",
-      "id": "ui-ux-pro-max",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "ui ux patterns",
-        "design patterns",
-        "ux heuristics",
-        "usability"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"ui ux patterns\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"ui ux patterns\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "venice-audio-music",
-      "id": "venice-audio-music",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "audio-music",
-        "audio"
-      ],
-      "positiveExamples": [
-        "venice music",
-        "music gen",
-        "jingle",
-        "background loop",
-        "score"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"venice music\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"venice music\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "venice-audio-speech",
-      "id": "venice-audio-speech",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "audio-music",
-        "audio"
-      ],
-      "positiveExamples": [
-        "tts",
-        "venice speech",
-        "text to speech",
-        "voiceover",
-        "narration"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"tts\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"tts\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "venice-image-edit",
-      "id": "venice-image-edit",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "venice image edit",
-        "venice upscale",
-        "venice background removal"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"venice image edit\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"venice image edit\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "venice-image-generate",
-      "id": "venice-image-generate",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "image-generation",
-        "image"
-      ],
-      "positiveExamples": [
-        "venice image",
-        "venice generate",
-        "venice ai image"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"venice image\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"venice image\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "venice-video",
-      "id": "venice-video",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video-generation",
-        "video"
-      ],
-      "positiveExamples": [
-        "venice video",
-        "venice video gen",
-        "venice transcribe"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"venice video\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"venice video\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "vfx-text-cursor",
-      "id": "vfx-text-cursor",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video"
-      ],
-      "positiveExamples": [
-        "用「VFX 文字光标」模板把我的内容做成一段「光标拖光 + 彩色像散射线 + 定向光斑, 适合视频片头逐字揭示金句」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the VFX Text Cursor template to turn my content into a video-intro quote reveal with cursor light trails, chromatic rays, and directional flares. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"vfx-text-cursor\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"vfx-text-cursor\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "video-downloader",
-      "id": "video-downloader",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video-generation",
-        "video"
-      ],
-      "positiveExamples": [
-        "download video",
-        "youtube download",
-        "archive video",
-        "offline video"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"download video\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"download video\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "video-hyperframes",
-      "id": "video-hyperframes",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "video"
-      ],
-      "positiveExamples": [
-        "用「Hyperframes 视频脚本」模板把我的内容做成一段「Hyperframes / Remotion 兼容的连续帧动画, 可自动播放」。保持模板的视觉签名，使用真实内容和数据，避免 lorem ipsum 和占位图片。",
-        "Use the Hyperframes Video template to turn my content into a Hyperframes / Remotion-compatible continuous frame animation with autoplay support. Preserve the template's visual signature, use real content and data, and avoid lorem ipsum or placeholder images."
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"video-hyperframes\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"video-hyperframes\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "example.html",
-        "example.md"
-      ]
-    },
-    {
-      "sourceFolder": "web-artifacts-builder",
-      "id": "web-artifacts-builder",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "web-artifacts",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "web artifacts",
-        "tailwind artifact",
-        "react artifact",
-        "anthropic artifact"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"web artifacts\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"web artifacts\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "web-clone",
-      "id": "web-clone",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "prototype"
-      ],
-      "positiveExamples": [
-        "网站复刻",
-        "复刻网站",
-        "clone website",
-        "reproduce site",
-        "仿站"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"网站复刻\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"网站复刻\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
         "LICENSE",
-        "references/assessment.md",
-        "references/complex-playbooks.md",
-        "references/deliverables.md",
-        "references/design-dna.md",
-        "references/effect-extraction.md",
-        "references/marbles-case.md",
-        "references/reverse-engineering.md",
-        "references/static-mirror.md",
-        "scripts/asset-harvest.mjs",
-        "scripts/audit-clone.mjs",
-        "scripts/compare-recon.mjs",
-        "scripts/dna-scaffold.mjs",
-        "scripts/init-clone.mjs",
-        "scripts/interaction-probe.mjs",
-        "scripts/lib/playwright-loader.mjs",
-        "scripts/lib/system-browser.mjs",
-        "scripts/mirror-site.mjs",
-        "scripts/network-capture.mjs",
-        "scripts/od-preview-rewrite.mjs",
-        "scripts/recon-site.mjs",
-        "scripts/route-crawl.mjs",
-        "scripts/sourcemap-hunt.mjs",
-        "scripts/visual-diff.mjs"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "web-design-guidelines",
-      "id": "web-design-guidelines",
+      "source": "design-templates",
+      "sourceFolder": "slides-style-block-frame",
+      "id": "slides-style-block-frame",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "design-systems",
-        "design-system"
+        "ppt",
+        "deck",
+        "slides-style"
       ],
       "positiveExamples": [
-        "web design guidelines",
-        "vercel design",
-        "product ui standards",
-        "design checklist",
-        "review my UI",
-        "check accessibility",
-        "audit design",
-        "review UX",
-        "设计审查"
+        "拼贴框架幻灯片",
+        "Block Frame Slides",
+        "slides-style-block-frame",
+        "Block Frame slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "block frame",
+        "collage deck",
+        "creative brief deck",
+        "design audit slides",
+        "portfolio deck",
+        "块状框架",
+        "拼贴 PPT",
+        "创意简报",
+        "设计评审 PPT",
+        "作品集 PPT"
       ],
       "negativeExamples": [
-        "Explain or analyze \"web design guidelines\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"web design guidelines\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
         "LICENSE",
-        "references/guidelines.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "weread-year-in-review-video-template",
-      "id": "weread-year-in-review-video-template",
+      "source": "design-templates",
+      "sourceFolder": "slides-style-creative-voltage",
+      "id": "slides-style-creative-voltage",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "template"
+        "ppt",
+        "deck",
+        "slides-style"
       ],
       "positiveExamples": [
-        "WeRead year in review",
-        "WeRead annual report",
-        "reading year in review video",
-        "annual reading report template",
-        "微信读书年度报告",
-        "读书年度总结视频",
-        "阅读年报 HyperFrames"
+        "创意伏特幻灯片",
+        "Creative Voltage Slides",
+        "slides-style-creative-voltage",
+        "Creative Voltage slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "electric blue",
+        "neon yellow",
+        "halftone",
+        "launch deck",
+        "fundraising deck",
+        "bold pitch",
+        "电光蓝",
+        "荧光黄",
+        "发布会 PPT",
+        "融资 PPT",
+        "创意科技"
       ],
       "negativeExamples": [
-        "Explain or analyze \"WeRead year in review\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"WeRead year in review\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": [
-        "assets/template.html",
-        "example.html",
-        "references/checklist.md"
-      ]
-    },
-    {
-      "sourceFolder": "wpds",
-      "id": "wpds",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "design-systems",
-        "design-system"
-      ],
-      "positiveExamples": [
-        "wpds",
-        "wordpress design",
-        "wp tokens",
-        "wp design system"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"wpds\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"wpds\" could help, but do not perform the workflow."
-      ],
-      "conflictsWith": [],
-      "version": "1.0.0",
-      "resources": []
-    },
-    {
-      "sourceFolder": "writing-guidelines",
-      "id": "writing-guidelines",
-      "autoSelectable": true,
-      "role": "auxiliary",
-      "outputKinds": [
-        "documentation",
-        "prototype"
-      ],
-      "positiveExamples": [
-        "review my docs",
-        "check writing style",
-        "audit prose",
-        "review docs voice and tone",
-        "writing handbook",
-        "文档审查"
-      ],
-      "negativeExamples": [
-        "Explain or analyze \"review my docs\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"review my docs\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
       "resources": [
         "LICENSE",
-        "references/guidelines.md"
+        "example.html"
       ]
     },
     {
-      "sourceFolder": "youtube-clipper",
-      "id": "youtube-clipper",
+      "source": "design-templates",
+      "sourceFolder": "slides-style-daisy-days",
+      "id": "slides-style-daisy-days",
       "autoSelectable": true,
       "role": "auxiliary",
       "outputKinds": [
-        "video-generation",
-        "video"
+        "ppt",
+        "deck",
+        "slides-style"
       ],
       "positiveExamples": [
-        "youtube clip",
-        "video clip",
-        "highlight reel",
-        "auto caption clip"
+        "雏菊日幻灯片",
+        "Daisy Days Slides",
+        "slides-style-daisy-days",
+        "Daisy Days slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "daisy",
+        "friendly deck",
+        "onboarding slides",
+        "workshop deck",
+        "pastel slides",
+        "community programme",
+        "雏菊",
+        "入职培训 PPT",
+        "工作坊 PPT",
+        "柔和粉彩",
+        "社区活动 PPT"
       ],
       "negativeExamples": [
-        "Explain or analyze \"youtube clip\" without creating, editing, generating, downloading, or executing anything.",
-        "Discuss whether \"youtube clip\" could help, but do not perform the workflow."
+        "The user explicitly requests a different template or an incompatible visual style."
       ],
       "conflictsWith": [],
       "version": "1.0.0",
-      "resources": []
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-editorial-forest",
+      "id": "slides-style-editorial-forest",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "林间编辑幻灯片",
+        "Editorial Forest Slides",
+        "slides-style-editorial-forest",
+        "Editorial Forest slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "forest green",
+        "editorial deck",
+        "annual report slides",
+        "magazine style deck",
+        "research recap",
+        "森林绿",
+        "杂志风 PPT",
+        "年报 PPT",
+        "研究汇报",
+        "品牌故事 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-electric-studio",
+      "id": "slides-style-electric-studio",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "钴蓝工作室幻灯片",
+        "Electric Studio Slides",
+        "slides-style-electric-studio",
+        "Electric Studio slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "cobalt split",
+        "b2b proposal deck",
+        "operating plan",
+        "product strategy deck",
+        "executive recommendation",
+        "钴蓝分割",
+        "B2B 提案 PPT",
+        "运营计划",
+        "产品战略 PPT",
+        "高管汇报"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-emerald-editorial",
+      "id": "slides-style-emerald-editorial",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "祖母绿编辑幻灯片",
+        "Emerald Editorial Slides",
+        "slides-style-emerald-editorial",
+        "Emerald Editorial slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "emerald",
+        "bodoni",
+        "fashion magazine deck",
+        "brand launch slides",
+        "campaign deck",
+        "祖母绿",
+        "时尚杂志风",
+        "品牌发布 PPT",
+        "campaign 汇报",
+        "高端报告"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-japanese-paper",
+      "id": "slides-style-japanese-paper",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "日式和纸编辑幻灯片",
+        "Japanese Paper Editorial Slides",
+        "slides-style-japanese-paper",
+        "Japanese Paper Editorial slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "washi",
+        "japanese paper",
+        "sumi ink",
+        "vertical text",
+        "mincho",
+        "exhibition deck",
+        "和纸",
+        "日式",
+        "墨色",
+        "竖排",
+        "展览 PPT",
+        "文化项目 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-kami-research",
+      "id": "slides-style-kami-research",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "和纸研究幻灯片",
+        "Kami Research Slides",
+        "slides-style-kami-research",
+        "Kami Research slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "research deck",
+        "academic slides",
+        "lab meeting",
+        "parchment",
+        "evidence-led",
+        "investment review",
+        "研究汇报 PPT",
+        "学术 PPT",
+        "组会",
+        "羊皮纸",
+        "投资评审"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-material-expressive",
+      "id": "slides-style-material-expressive",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "Material 表现主义流行幻灯片",
+        "Material Expressive Pop Slides",
+        "slides-style-material-expressive",
+        "Material Expressive Pop slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "material expressive",
+        "lavender lime coral",
+        "organic shapes",
+        "consumer tech deck",
+        "product launch slides",
+        "Material 风 PPT",
+        "薰衣草青柠",
+        "有机形状",
+        "消费科技",
+        "产品发布 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-notebook-tabs",
+      "id": "slides-style-notebook-tabs",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "活页标签幻灯片",
+        "Notebook Tabs Slides",
+        "slides-style-notebook-tabs",
+        "Notebook Tabs slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "notebook",
+        "binder tabs",
+        "ruled paper",
+        "coursework deck",
+        "thesis defense",
+        "study notes",
+        "笔记本",
+        "活页",
+        "课程 PPT",
+        "答辩 PPT",
+        "学习笔记"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-peoples-platform",
+      "id": "slides-style-peoples-platform",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "人民平台幻灯片",
+        "People's Platform Slides",
+        "slides-style-peoples-platform",
+        "People's Platform slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "campaign deck",
+        "public programme",
+        "community plan",
+        "civic",
+        "manifesto slides",
+        "竞选 PPT",
+        "公共项目",
+        "社区计划",
+        "公益汇报",
+        "政策宣讲"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-soft-editorial",
+      "id": "slides-style-soft-editorial",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "柔光编辑幻灯片",
+        "Soft Editorial Slides",
+        "slides-style-soft-editorial",
+        "Soft Editorial slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "soft editorial",
+        "cormorant",
+        "consulting deck",
+        "advisory",
+        "literary spacing",
+        "calm research",
+        "柔和编辑",
+        "咨询 PPT",
+        "顾问汇报",
+        "文学感",
+        "品牌长文"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-swiss-cobalt",
+      "id": "slides-style-swiss-cobalt",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "瑞士钴蓝场幻灯片",
+        "Swiss Cobalt Field Slides",
+        "slides-style-swiss-cobalt",
+        "Swiss Cobalt Field slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "swiss cobalt",
+        "cobalt field",
+        "grotesk",
+        "corporate strategy deck",
+        "investor deck",
+        "operating plan slides",
+        "瑞士钴蓝",
+        "企业战略 PPT",
+        "融资路演",
+        "运营计划 PPT",
+        "瑞士风 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-swiss-red-axis",
+      "id": "slides-style-swiss-red-axis",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "瑞士红轴幻灯片",
+        "Swiss Red Axis Slides",
+        "slides-style-swiss-red-axis",
+        "Swiss Red Axis slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "swiss red",
+        "red axis",
+        "manifesto deck",
+        "brand positioning slides",
+        "executive recommendation deck",
+        "瑞士红轴",
+        "宣言 PPT",
+        "品牌定位",
+        "高管建议",
+        "决策汇报"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-takram-soft-tech",
+      "id": "slides-style-takram-soft-tech",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "东方柔光科技幻灯片",
+        "Takram Soft Tech Slides",
+        "slides-style-takram-soft-tech",
+        "Takram Soft Tech slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "soft tech",
+        "takram",
+        "museum diagram",
+        "technology strategy deck",
+        "systems thinking",
+        "procurement",
+        "软科技",
+        "技术战略 PPT",
+        "系统思维",
+        "采购方案",
+        "研究提案"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-bento-grid",
+      "id": "style-bento-grid",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Make a product features overview page as a bento grid: Apple-style cards with mixed sizes, stats and a testimonial.",
+        "便当网格",
+        "bento grid",
+        "bento layout",
+        "apple style",
+        "feature grid",
+        "modular cards",
+        "Bento 布局",
+        "苹果风格",
+        "功能网格",
+        "模块卡片"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-claymorphism",
+      "id": "style-claymorphism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Design a claymorphism home screen for a children's learning app: soft 3D pastel cards, a mascot and progress bars.",
+        "黏土风",
+        "claymorphism",
+        "clay style",
+        "soft 3d",
+        "pastel ui",
+        "kids app",
+        "children learning app",
+        "粘土风格",
+        "软 3D",
+        "儿童 app",
+        "粉彩界面"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-glassmorphism",
+      "id": "style-glassmorphism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Design a music streaming app home screen in a glassmorphism style: frosted glass cards over a vibrant gradient background.",
+        "毛玻璃",
+        "glassmorphism",
+        "frosted glass",
+        "backdrop blur",
+        "translucent cards",
+        "music app",
+        "磨砂玻璃",
+        "玻璃拟态",
+        "半透明",
+        "音乐 app"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-neubrutalism",
+      "id": "style-neubrutalism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Build a neubrutalist landing page for a creative studio: thick black borders, hard offset shadows and loud pop colors.",
+        "新野兽派",
+        "neubrutalism",
+        "neo-brutalism",
+        "thick black borders",
+        "offset shadows",
+        "pop colors",
+        "粗黑边框",
+        "偏移阴影",
+        "扁平撞色",
+        "创意工作室官网"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-retro-futurism",
+      "id": "style-retro-futurism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Make a synthwave music festival promo page with neon glow, a retro sun, CRT scanlines and a glitching title.",
+        "复古未来",
+        "retro futurism",
+        "synthwave",
+        "cyberpunk",
+        "neon glow",
+        "vaporwave",
+        "80s",
+        "合成波",
+        "赛博朋克",
+        "霓虹",
+        "蒸汽波"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
     }
   ]
 }

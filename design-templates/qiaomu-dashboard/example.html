@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0d0f12">
+<title>OpenDesign — Team usage analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Syne:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== Design System — Dark Pro ===== */
+:root {
+  --ease-out:    cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Dark cold-grey palette */
+  --bg:       #0d0f12;
+  --bg-2:     #13161b;
+  --bg-3:     #1a1e25;
+  --bg-4:     #222730;
+  --border:   rgba(255,255,255,.07);
+  --border-2: rgba(255,255,255,.12);
+
+  /* Text */
+  --text-1: rgba(255,255,255,.88);
+  --text-2: rgba(255,255,255,.55);
+  --text-3: rgba(255,255,255,.28);
+
+  /* Accent — teal, not purple-blue */
+  --accent:       #2dd4bf;   /* teal-400 */
+  --accent-dim:   rgba(45,212,191,.12);
+  --accent-border: rgba(45,212,191,.25);
+
+  /* Functional */
+  --success:  #34d399;
+  --warning:  #fb923c;
+  --danger:   #f87171;
+  --info:     #60a5fa;
+
+  /* Sidebar */
+  --sidebar-w: 220px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { color-scheme: dark; }
+
+body {
+  font-family: "Syne", -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  background: var(--bg);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+  display: flex; min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  flex-shrink: 0;
+  position: fixed; top: 0; left: 0; bottom: 0;
+  z-index: 50;
+  transition: transform 250ms var(--ease-out);
+}
+.sidebar-logo {
+  padding: 20px 16px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+  text-decoration: none;
+}
+.sidebar-logo-mark {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--accent); display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.sidebar-logo-mark svg { width: 16px; height: 16px; fill: none; stroke: var(--bg); stroke-width: 2.5; stroke-linecap: round; }
+.sidebar-logo-text {
+  font-family: "Syne", sans-serif;
+  font-size: 1.05rem; font-weight: 700;
+  color: var(--text-1); letter-spacing: -0.02em;
+}
+.sidebar-logo-sub { font-size: .65rem; color: var(--text-3); margin-top: 1px; }
+
+.sidebar-nav { padding: 12px 0; flex: 1; overflow-y: auto; }
+.sidebar-section-title {
+  font-size: .64rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-3); padding: 10px 16px 4px;
+}
+.sidebar-link {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 16px; text-decoration: none;
+  font-size: .82rem; font-weight: 500; color: var(--text-2);
+  border-radius: 0;
+  transition: color 150ms var(--ease-out), background 150ms var(--ease-out);
+  touch-action: manipulation;
+  position: relative;
+}
+.sidebar-link svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.sidebar-link.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.sidebar-link.active::before {
+  content: '';
+  position: absolute; left: 0; top: 4px; bottom: 4px;
+  width: 3px; border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-link:hover:not(.active) { color: var(--text-1); background: rgba(255,255,255,.04); }
+}
+.sidebar-badge {
+  margin-left: auto; font-family: "JetBrains Mono", monospace;
+  font-size: .65rem; font-weight: 500;
+  background: rgba(251,146,60,.18); color: var(--warning);
+  padding: 1px 6px; border-radius: 100px;
+}
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-user-avatar {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: linear-gradient(135deg, #2dd4bf, #0ea5e9);
+  flex-shrink: 0; display: grid; place-items: center;
+  font-size: .7rem; font-weight: 700; color: var(--bg);
+}
+.sidebar-user-name { font-size: .8rem; font-weight: 600; color: var(--text-1); }
+.sidebar-user-role { font-size: .7rem; color: var(--text-3); }
+
+/* ===== MAIN LAYOUT ===== */
+.main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex; flex-direction: column;
+  min-width: 0;
+}
+
+/* ===== TOPBAR ===== */
+.topbar {
+  height: 56px;
+  background: rgba(13,15,18,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding-inline: 24px; gap: 16px;
+  position: sticky; top: 0; z-index: 40;
+}
+.topbar-title { font-size: .95rem; font-weight: 600; color: var(--text-1); }
+.topbar-date { font-size: .78rem; color: var(--text-3); font-family: "JetBrains Mono", monospace; margin-right: auto; }
+
+.topbar-search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg-3); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 12px;
+  width: 220px;
+  transition: border-color 150ms var(--ease-out);
+}
+.topbar-search:focus-within { border-color: var(--border-2); }
+.topbar-search svg { width: 14px; height: 14px; fill: none; stroke: var(--text-3); stroke-width: 2; flex-shrink: 0; }
+.topbar-search input {
+  background: none; border: none; outline: none;
+  font-family: "Syne", sans-serif; font-size: .8rem; color: var(--text-1);
+  width: 100%;
+}
+.topbar-search input::placeholder { color: var(--text-3); }
+
+.topbar-icon-btn {
+  width: 36px; height: 36px; border-radius: 8px;
+  background: none; border: 1px solid var(--border);
+  cursor: pointer; color: var(--text-2);
+  display: grid; place-items: center;
+  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out), transform 160ms var(--ease-out);
+  touch-action: manipulation;
+  position: relative;
+}
+@media (hover: hover) and (pointer: fine) {
+  .topbar-icon-btn:hover { border-color: var(--border-2); color: var(--text-1); }
+}
+.topbar-icon-btn:active { transform: scale(0.95); }
+.topbar-icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.notif-dot {
+  position: absolute; top: 6px; right: 6px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--warning); border: 1.5px solid var(--bg);
+}
+.topbar-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #2dd4bf, #0ea5e9);
+  cursor: pointer; border: 2px solid var(--border-2);
+  display: grid; place-items: center;
+  font-size: .7rem; font-weight: 700; color: var(--bg);
+}
+
+/* ===== CONTENT AREA ===== */
+.content { padding: 24px; flex: 1; }
+
+/* ===== KPI CARDS ===== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.kpi {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 200ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .kpi:hover { border-color: var(--border-2); }
+}
+.kpi-label { font-size: .72rem; color: var(--text-3); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+.kpi-label svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; opacity: .5; }
+.kpi-value {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 1.75rem; font-weight: 600;
+  line-height: 1; margin-bottom: 8px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  color: var(--text-1);
+}
+.kpi-delta {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .72rem; font-weight: 500;
+  padding: 3px 7px; border-radius: 100px;
+}
+.kpi-delta.up   { background: rgba(52,211,153,.12); color: var(--success); }
+.kpi-delta.down { background: rgba(248,113,113,.12); color: var(--danger); }
+.kpi-delta svg  { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
+.kpi-compare { font-size: .7rem; color: var(--text-3); margin-top: 6px; }
+
+/* Mini sparkline (pure SVG) */
+.kpi-spark { margin-top: 12px; height: 32px; }
+.kpi-spark svg { width: 100%; height: 32px; }
+
+/* ===== CHART SECTION ===== */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.chart-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.chart-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 20px;
+}
+.chart-title { font-size: .875rem; font-weight: 600; color: var(--text-1); }
+.chart-sub { font-size: .72rem; color: var(--text-3); margin-top: 3px; }
+.chart-controls { display: flex; gap: 6px; }
+.chart-tab {
+  font-size: .7rem; font-weight: 500;
+  padding: 4px 10px; border-radius: 6px;
+  cursor: pointer; border: 1px solid var(--border);
+  background: none; color: var(--text-2);
+  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out), background 150ms var(--ease-out);
+  touch-action: manipulation;
+}
+.chart-tab.active { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .chart-tab:not(.active):hover { border-color: var(--border-2); color: var(--text-1); }
+}
+
+/* Bar Chart (pure CSS/SVG) */
+.bar-chart-wrap { position: relative; }
+.bar-chart-y {
+  display: flex; flex-direction: column; justify-content: space-between;
+  height: 180px; padding-right: 8px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .65rem; color: var(--text-3);
+  position: absolute; left: 0; top: 0; bottom: 0;
+  pointer-events: none;
+}
+.bar-chart-grid { margin-left: 44px; }
+.bar-chart-grid svg { width: 100%; display: block; overflow: visible; }
+
+/* Donut Chart (pure SVG) */
+.donut-wrap { display: flex; flex-direction: column; align-items: center; }
+.donut-legend { width: 100%; margin-top: 16px; }
+.donut-legend-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: .78rem; margin-bottom: 8px;
+}
+.donut-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.donut-legend-val {
+  margin-left: auto;
+  font-family: "JetBrains Mono", monospace;
+  font-size: .75rem; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== RUNS TABLE ===== */
+.orders-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.orders-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.orders-header-title { font-size: .875rem; font-weight: 600; color: var(--text-1); }
+.orders-header-sub { font-size: .72rem; color: var(--text-3); margin-top: 2px; }
+.btn-sm {
+  font-size: .75rem; font-weight: 500; padding: 7px 14px;
+  border-radius: 7px; border: 1px solid var(--border);
+  background: none; color: var(--text-2); cursor: pointer;
+  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out), transform 160ms var(--ease-out);
+  text-decoration: none; display: inline-flex; align-items: center; gap: 5px;
+  touch-action: manipulation;
+}
+@media (hover: hover) and (pointer: fine) {
+  .btn-sm:hover { border-color: var(--border-2); color: var(--text-1); }
+}
+.btn-sm:active { transform: scale(0.97); }
+.btn-sm svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+
+.orders-table { width: 100%; border-collapse: collapse; }
+.orders-table th {
+  font-size: .68rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-3); text-align: left;
+  padding: 10px 20px; border-bottom: 1px solid var(--border);
+}
+.orders-table th.right { text-align: right; }
+.orders-table td {
+  padding: 13px 20px; border-bottom: 1px solid var(--border);
+  font-size: .82rem; color: var(--text-2);
+  vertical-align: middle;
+}
+.orders-table tr:last-child td { border-bottom: none; }
+.orders-table tbody tr {
+  transition: background 150ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .orders-table tbody tr:hover td { background: rgba(255,255,255,.02); }
+}
+.order-id { font-family: "JetBrains Mono", monospace; font-size: .75rem; color: var(--text-3); }
+.order-product { display: flex; align-items: center; gap: 10px; }
+.order-thumb {
+  width: 32px; height: 32px; border-radius: 6px;
+  flex-shrink: 0;
+}
+.order-name { font-weight: 500; color: var(--text-1); font-size: .82rem; }
+.order-sku  { font-family: "JetBrains Mono", monospace; font-size: .68rem; color: var(--text-3); }
+.order-amount {
+  text-align: right;
+  font-family: "JetBrains Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: .82rem; font-weight: 500; color: var(--text-1);
+}
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: .7rem; font-weight: 500; padding: 3px 9px; border-radius: 100px;
+}
+.status-delivered  { background: rgba(52,211,153,.1);  color: var(--success); }
+.status-shipped    { background: rgba(96,165,250,.1);   color: var(--info); }
+.status-processing { background: rgba(251,146,60,.1);  color: var(--warning); }
+.status-cancelled  { background: rgba(248,113,113,.1); color: var(--danger); }
+.status-badge::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.orders-table .right { text-align: right; }
+
+/* Scrollable table on mobile */
+.table-scroll { overflow-x: auto; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1100px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 768px) {
+  :root { --sidebar-w: 0px; }
+  .sidebar { transform: translateX(-220px); }
+  .sidebar.open { transform: translateX(0); --sidebar-w: 220px; }
+  .main { margin-left: 0; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .content { padding: 16px; }
+}
+
+/* ===== ACCESSIBILITY ===== */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ===== REDUCED MOTION ===== */
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" role="navigation" aria-label="Main sidebar">
+  <a href="#" class="sidebar-logo" aria-label="OpenDesign analytics home">
+    <div class="sidebar-logo-mark" aria-hidden="true">
+      <svg viewBox="0 0 16 16"><path d="M2 8 L5 5 L8 10 L11 3 L14 8"/></svg>
+    </div>
+    <div>
+      <div class="sidebar-logo-text">OpenDesign</div>
+      <div class="sidebar-logo-sub">Team usage analytics</div>
+    </div>
+  </a>
+
+  <nav class="sidebar-nav" aria-label="Sidebar navigation">
+    <p class="sidebar-section-title">Overview</p>
+    <a href="#" class="sidebar-link active" aria-current="page">
+      <svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+      Dashboard
+    </a>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><path d="M3 3h10v10H3z"/><path d="M3 7h10M7 3v10"/></svg>
+      Live activity
+    </a>
+
+    <p class="sidebar-section-title">Production</p>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><path d="M2 2h12v2H2zM2 7h12v2H2zM2 12h8v2H2z"/></svg>
+      Prototypes
+      <span class="sidebar-badge">47</span>
+    </a>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><path d="M8 2a6 6 0 100 12A6 6 0 008 2z"/><path d="M8 5v3l2 2"/></svg>
+      Slide decks
+      <span class="sidebar-badge">12</span>
+    </a>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><path d="M2 12L6 8l3 3 5-7"/></svg>
+      Image runs
+    </a>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><circle cx="5" cy="5" r="3"/><circle cx="11" cy="11" r="3"/><path d="M8 5l3 6"/></svg>
+      Agents
+    </a>
+
+    <p class="sidebar-section-title">Library</p>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><path d="M3 3h10v10H3zM3 8h10M8 3v10"/></svg>
+      Templates
+    </a>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><path d="M14 4L8 10L6 8L2 12"/></svg>
+      Design systems
+    </a>
+    <a href="#" class="sidebar-link">
+      <svg viewBox="0 0 16 16"><circle cx="8" cy="6" r="3"/><path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/></svg>
+      Members
+    </a>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="sidebar-user-avatar" aria-hidden="true">A</div>
+    <div>
+      <div class="sidebar-user-name">Ava Lin</div>
+      <div class="sidebar-user-role">Design ops lead</div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div>
+      <div class="topbar-title">Dashboard</div>
+      <div class="topbar-date">2026-07-03  Thu</div>
+    </div>
+
+    <div class="topbar-search" role="search">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+      <input type="search" placeholder="Search runs, templates…" aria-label="Search" autocomplete="off" spellcheck="false">
+    </div>
+
+    <button class="topbar-icon-btn" aria-label="Filter">
+      <svg viewBox="0 0 16 16"><path d="M2 4h12M5 8h6M7 12h2"/></svg>
+    </button>
+    <button class="topbar-icon-btn" aria-label="Notifications (3 unread)">
+      <svg viewBox="0 0 16 16"><path d="M8 2a5 5 0 00-5 5v3l-1 2h12l-1-2V7a5 5 0 00-5-5zM6.5 13.5a1.5 1.5 0 003 0"/></svg>
+      <div class="notif-dot" aria-hidden="true"></div>
+    </button>
+    <button class="topbar-icon-btn" aria-label="Settings">
+      <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.53 11.53l1.42 1.42M3.05 12.95l1.42-1.42M11.53 4.47l1.42-1.42"/></svg>
+    </button>
+    <div class="topbar-avatar" aria-label="User menu — Ava Lin" role="button" tabindex="0">A</div>
+  </header>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- KPI CARDS -->
+    <section aria-label="Key metrics">
+      <div class="kpi-grid">
+
+        <!-- Prototypes shipped -->
+        <div class="kpi">
+          <div class="kpi-label">
+            Prototypes shipped
+            <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1a6 6 0 100 12A6 6 0 007 1zM7 9V7M7 5h.01"/></svg>
+          </div>
+          <div class="kpi-value">148</div>
+          <div>
+            <span class="kpi-delta up" aria-label="Up 12.1% versus last week">
+              <svg viewBox="0 0 10 10"><path d="M5 8V2M2 5l3-3 3 3"/></svg>
+              +12.1%
+            </span>
+          </div>
+          <p class="kpi-compare">Last week 132</p>
+          <div class="kpi-spark" aria-hidden="true">
+            <svg viewBox="0 0 120 32" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#2dd4bf" stop-opacity=".3"/>
+                  <stop offset="100%" stop-color="#2dd4bf" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,24 L10,22 L20,20 L30,18 L40,19 L50,14 L60,15 L70,10 L80,8 L90,6 L100,5 L110,4 L120,2 L120,32 L0,32 Z" fill="url(#g1)"/>
+              <path d="M0,24 L10,22 L20,20 L30,18 L40,19 L50,14 L60,15 L70,10 L80,8 L90,6 L100,5 L110,4 L120,2" fill="none" stroke="#2dd4bf" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Templates remixed -->
+        <div class="kpi">
+          <div class="kpi-label">
+            Templates remixed
+            <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 3h10v9H2zM5 3V2a2 2 0 014 0v1"/></svg>
+          </div>
+          <div class="kpi-value">386</div>
+          <div>
+            <span class="kpi-delta up" aria-label="Up 8.7% versus last week">
+              <svg viewBox="0 0 10 10"><path d="M5 8V2M2 5l3-3 3 3"/></svg>
+              +8.7%
+            </span>
+          </div>
+          <p class="kpi-compare">Last week 355</p>
+          <div class="kpi-spark" aria-hidden="true">
+            <svg viewBox="0 0 120 32" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#60a5fa" stop-opacity=".3"/>
+                  <stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,20 L10,18 L20,22 L30,16 L40,17 L50,12 L60,14 L70,9 L80,11 L90,8 L100,6 L110,7 L120,3 L120,32 L0,32 Z" fill="url(#g2)"/>
+              <path d="M0,20 L10,18 L20,22 L30,16 L40,17 L50,12 L60,14 L70,9 L80,11 L90,8 L100,6 L110,7 L120,3" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Active designers -->
+        <div class="kpi">
+          <div class="kpi-label">
+            Active designers
+            <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M2 12L5 9l3 3 4-6"/></svg>
+          </div>
+          <div class="kpi-value">46</div>
+          <div>
+            <span class="kpi-delta down" aria-label="Down 4.2% versus last week">
+              <svg viewBox="0 0 10 10"><path d="M5 2v6M2 5l3 3 3-3"/></svg>
+              −4.2%
+            </span>
+          </div>
+          <p class="kpi-compare">Last week 48</p>
+          <div class="kpi-spark" aria-hidden="true">
+            <svg viewBox="0 0 120 32" preserveAspectRatio="none">
+              <path d="M0,8 L10,9 L20,7 L30,8 L40,10 L50,9 L60,11 L70,13 L80,12 L90,15 L100,16 L110,18 L120,20" fill="none" stroke="#f87171" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <!-- Failed runs -->
+        <div class="kpi">
+          <div class="kpi-label">
+            Failed runs
+            <svg viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3L2 6l3 3M2 6h8a2 2 0 010 4H8"/></svg>
+          </div>
+          <div class="kpi-value">1.28%</div>
+          <div>
+            <span class="kpi-delta up" aria-label="Improved 0.42% versus last month">
+              <svg viewBox="0 0 10 10"><path d="M5 8V2M2 5l3-3 3 3"/></svg>
+              −0.42%
+            </span>
+          </div>
+          <p class="kpi-compare">Last month 1.70%</p>
+          <div class="kpi-spark" aria-hidden="true">
+            <svg viewBox="0 0 120 32" preserveAspectRatio="none">
+              <path d="M0,20 L10,19 L20,21 L30,18 L40,17 L50,16 L60,15 L70,13 L80,12 L90,11 L100,10 L110,8 L120,7" fill="none" stroke="#34d399" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CHARTS -->
+    <section class="charts-grid" aria-label="Chart analysis">
+      <!-- Bar Chart — artifacts shipped, 7 days -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Artifacts shipped</div>
+            <div class="chart-sub">Last 7 days, all output types</div>
+          </div>
+          <div class="chart-controls" role="group" aria-label="Time range">
+            <button class="chart-tab">1M</button>
+            <button class="chart-tab active" aria-pressed="true">7D</button>
+            <button class="chart-tab">24H</button>
+          </div>
+        </div>
+        <!-- Pure SVG bar chart -->
+        <div style="position:relative; height: 200px;" aria-label="Bar chart of artifacts shipped over the last 7 days">
+          <svg width="100%" height="200" viewBox="0 0 560 200" preserveAspectRatio="none" aria-hidden="true">
+            <!-- Grid lines -->
+            <line x1="0" y1="170" x2="560" y2="170" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+            <line x1="0" y1="128" x2="560" y2="128" stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+            <line x1="0" y1="85"  x2="560" y2="85"  stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+            <line x1="0" y1="43"  x2="560" y2="43"  stroke="rgba(255,255,255,.06)" stroke-width="1"/>
+            <!-- Y labels -->
+            <text x="0" y="173" fill="rgba(255,255,255,.25)" font-size="10" font-family="JetBrains Mono">0</text>
+            <text x="0" y="131" fill="rgba(255,255,255,.25)" font-size="10" font-family="JetBrains Mono">15</text>
+            <text x="0" y="88"  fill="rgba(255,255,255,.25)" font-size="10" font-family="JetBrains Mono">30</text>
+            <text x="0" y="46"  fill="rgba(255,255,255,.25)" font-size="10" font-family="JetBrains Mono">45</text>
+            <!-- Bars (data: 38 27 43 35 41 29 49) -->
+            <defs>
+              <linearGradient id="bar-g" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#2dd4bf" stop-opacity=".9"/>
+                <stop offset="100%" stop-color="#2dd4bf" stop-opacity=".4"/>
+              </linearGradient>
+            </defs>
+            <!-- 06/27: 38 → height=(38/50)*170=129.2, y=170-129.2=40.8 -->
+            <rect x="40"  y="40"  width="48" height="130" rx="3" fill="url(#bar-g)" opacity=".7"/>
+            <!-- 06/28: 27 → height=91.8, y=78.2 -->
+            <rect x="116" y="78"  width="48" height="92"  rx="3" fill="url(#bar-g)" opacity=".7"/>
+            <!-- 06/29: 43 → height=146.2, y=23.8 -->
+            <rect x="192" y="24"  width="48" height="146" rx="3" fill="url(#bar-g)" opacity=".7"/>
+            <!-- 06/30: 35 → height=119, y=51 -->
+            <rect x="268" y="51"  width="48" height="119" rx="3" fill="url(#bar-g)" opacity=".7"/>
+            <!-- 07/01: 41 → height=139.4, y=30.6 -->
+            <rect x="344" y="31"  width="48" height="139" rx="3" fill="url(#bar-g)" opacity=".7"/>
+            <!-- 07/02: 29 → height=98.6, y=71.4 -->
+            <rect x="420" y="72"  width="48" height="98"  rx="3" fill="url(#bar-g)" opacity=".7"/>
+            <!-- 07/03 (today): 49 — highlighted -->
+            <rect x="496" y="3"   width="48" height="167" rx="3" fill="#2dd4bf"/>
+            <!-- X labels -->
+            <text x="64"  y="190" fill="rgba(255,255,255,.3)" font-size="10" font-family="JetBrains Mono" text-anchor="middle">06/27</text>
+            <text x="140" y="190" fill="rgba(255,255,255,.3)" font-size="10" font-family="JetBrains Mono" text-anchor="middle">06/28</text>
+            <text x="216" y="190" fill="rgba(255,255,255,.3)" font-size="10" font-family="JetBrains Mono" text-anchor="middle">06/29</text>
+            <text x="292" y="190" fill="rgba(255,255,255,.3)" font-size="10" font-family="JetBrains Mono" text-anchor="middle">06/30</text>
+            <text x="368" y="190" fill="rgba(255,255,255,.3)" font-size="10" font-family="JetBrains Mono" text-anchor="middle">07/01</text>
+            <text x="444" y="190" fill="rgba(255,255,255,.3)" font-size="10" font-family="JetBrains Mono" text-anchor="middle">07/02</text>
+            <text x="520" y="190" fill="#2dd4bf" font-size="10" font-family="JetBrains Mono" text-anchor="middle" font-weight="600">Today</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Donut Chart — output mix -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Output mix</div>
+            <div class="chart-sub">This month</div>
+          </div>
+        </div>
+        <div class="donut-wrap" aria-label="Donut chart of output mix by artifact type">
+          <!-- Pure SVG donut -->
+          <svg width="160" height="160" viewBox="0 0 160 160" aria-hidden="true">
+            <!-- Background circle -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="20"/>
+            <!-- Segments (circumference = 2π×60 ≈ 376.99) -->
+            <!-- Prototypes 38% = 143.3 -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="#2dd4bf" stroke-width="20"
+              stroke-dasharray="143.3 376.99" stroke-dashoffset="94.25" transform="rotate(-90 80 80)"/>
+            <!-- Slide decks 24% = 90.5 -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="#60a5fa" stroke-width="20"
+              stroke-dasharray="90.5 376.99" stroke-dashoffset="-49.05" transform="rotate(-90 80 80)"/>
+            <!-- Images 19% = 71.6 -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="#fb923c" stroke-width="20"
+              stroke-dasharray="71.6 376.99" stroke-dashoffset="-139.55" transform="rotate(-90 80 80)"/>
+            <!-- Design systems 12% = 45.2 -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="#f472b6" stroke-width="20"
+              stroke-dasharray="45.2 376.99" stroke-dashoffset="-211.15" transform="rotate(-90 80 80)"/>
+            <!-- Other 7% = 26.4 -->
+            <circle cx="80" cy="80" r="60" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="20"
+              stroke-dasharray="26.4 376.99" stroke-dashoffset="-256.35" transform="rotate(-90 80 80)"/>
+            <!-- Center text -->
+            <text x="80" y="75" text-anchor="middle" fill="rgba(255,255,255,.88)" font-size="18" font-weight="700" font-family="JetBrains Mono">1,284</text>
+            <text x="80" y="91" text-anchor="middle" fill="rgba(255,255,255,.35)" font-size="10" font-family="JetBrains Mono">artifacts</text>
+          </svg>
+          <div class="donut-legend" aria-label="Output type legend">
+            <div class="donut-legend-item">
+              <div class="donut-dot" style="background:#2dd4bf"></div>
+              <span>Prototypes</span>
+              <span class="donut-legend-val">38%</span>
+            </div>
+            <div class="donut-legend-item">
+              <div class="donut-dot" style="background:#60a5fa"></div>
+              <span>Slide decks</span>
+              <span class="donut-legend-val">24%</span>
+            </div>
+            <div class="donut-legend-item">
+              <div class="donut-dot" style="background:#fb923c"></div>
+              <span>Images</span>
+              <span class="donut-legend-val">19%</span>
+            </div>
+            <div class="donut-legend-item">
+              <div class="donut-dot" style="background:#f472b6"></div>
+              <span>Design systems</span>
+              <span class="donut-legend-val">12%</span>
+            </div>
+            <div class="donut-legend-item">
+              <div class="donut-dot" style="background:rgba(255,255,255,.2)"></div>
+              <span>Other</span>
+              <span class="donut-legend-val">7%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RUNS TABLE -->
+    <section class="orders-card" aria-labelledby="orders-heading">
+      <div class="orders-header">
+        <div>
+          <div class="orders-header-title" id="orders-heading">Recent agent runs</div>
+          <div class="orders-header-sub">1,284 runs this month, showing the latest 8</div>
+        </div>
+        <a href="#" class="btn-sm">
+          View all
+          <svg viewBox="0 0 12 12"><path d="M2 6h8M7 3l3 3-3 3"/></svg>
+        </a>
+      </div>
+      <div class="table-scroll">
+        <table class="orders-table">
+          <thead>
+            <tr>
+              <th scope="col">Run</th>
+              <th scope="col">Artifact</th>
+              <th scope="col">Designer</th>
+              <th scope="col">Time</th>
+              <th scope="col">Status</th>
+              <th scope="col" class="right" aria-sort="descending">Tokens</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="order-id">#OD-284991</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#2dd4bf22,#2dd4bf55)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">SaaS landing page v3</div>
+                    <div class="order-sku">prototype · saas-landing</div>
+                  </div>
+                </div>
+              </td>
+              <td>Maya Chen</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">14:37</td>
+              <td><span class="status-badge status-delivered">Shipped</span></td>
+              <td class="order-amount">32.8K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284990</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#60a5fa22,#60a5fa55)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Series A pitch deck</div>
+                    <div class="order-sku">slides · pitch-deck</div>
+                  </div>
+                </div>
+              </td>
+              <td>Daniel Ortiz</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">14:29</td>
+              <td><span class="status-badge status-shipped">In review</span></td>
+              <td class="order-amount">119.2K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284989</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#fb923c22,#fb923c55)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Launch hero images ×6</div>
+                    <div class="order-sku">image · launch-set</div>
+                  </div>
+                </div>
+              </td>
+              <td>Priya Nair</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">14:11</td>
+              <td><span class="status-badge status-processing">Generating</span></td>
+              <td class="order-amount">58.9K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284988</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#f472b622,#f472b655)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Mobile onboarding flow</div>
+                    <div class="order-sku">prototype · onboarding</div>
+                  </div>
+                </div>
+              </td>
+              <td>Jonas Weber</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">13:58</td>
+              <td><span class="status-badge status-delivered">Shipped</span></td>
+              <td class="order-amount">17.8K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284987</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#2dd4bf22,#60a5fa33)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Q3 all-hands deck</div>
+                    <div class="order-sku">slides · all-hands</div>
+                  </div>
+                </div>
+              </td>
+              <td>Sofia Ramos</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">13:42</td>
+              <td><span class="status-badge status-shipped">In review</span></td>
+              <td class="order-amount">234.9K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284986</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#a78bfa22,#a78bfa55)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Brand refresh moodboard</div>
+                    <div class="order-sku">image · moodboard</div>
+                  </div>
+                </div>
+              </td>
+              <td>Alex Kim</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">13:35</td>
+              <td><span class="status-badge status-cancelled">Cancelled</span></td>
+              <td class="order-amount" style="text-decoration:line-through;opacity:.4">46.8K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284985</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#34d39922,#34d39955)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Docs site wireframe</div>
+                    <div class="order-sku">prototype · docs-site</div>
+                  </div>
+                </div>
+              </td>
+              <td>Tom Iversen</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">13:19</td>
+              <td><span class="status-badge status-delivered">Shipped</span></td>
+              <td class="order-amount">29.9K</td>
+            </tr>
+            <tr>
+              <td><span class="order-id">#OD-284984</span></td>
+              <td>
+                <div class="order-product">
+                  <div class="order-thumb" style="background:linear-gradient(135deg,#fb923c22,#fbbf2422)" aria-hidden="true"></div>
+                  <div>
+                    <div class="order-name">Holiday campaign banners</div>
+                    <div class="order-sku">image · campaign-q4</div>
+                  </div>
+                </div>
+              </td>
+              <td>Nadia Hassan</td>
+              <td style="font-family:'JetBrains Mono',monospace;font-size:.75rem">13:07</td>
+              <td><span class="status-badge status-processing">Generating</span></td>
+              <td class="order-amount">62.4K</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </div><!-- /content -->
+</main>
+
+<script>
+// Chart tab switching
+document.querySelectorAll('.chart-tab').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var group = this.closest('.chart-controls');
+    group.querySelectorAll('.chart-tab').forEach(function(b) {
+      b.classList.remove('active');
+      b.removeAttribute('aria-pressed');
+    });
+    this.classList.add('active');
+    this.setAttribute('aria-pressed', 'true');
+  });
+});
+
+// Stagger KPI cards entrance
+(function() {
+  var kpis = document.querySelectorAll('.kpi');
+  kpis.forEach(function(el, i) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(12px)';
+    el.style.transition = 'opacity 300ms cubic-bezier(0.23,1,0.32,1), transform 300ms cubic-bezier(0.23,1,0.32,1)';
+    setTimeout(function() {
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    }, 80 + i * 60);
+  });
+})();
+</script>
+</body>
+</html>

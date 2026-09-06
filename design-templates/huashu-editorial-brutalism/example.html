@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THE CIRCUIT · Weekly Briefing No. 214</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --ink: #000000;
+    --paper: #ffffff;
+    --link: #0000EE;
+    --signal: #FF433D;
+    --up: #00A33E;
+  }
+  body {
+    font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  a { color: var(--link); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:hover { background: var(--link); color: #fff; text-decoration: none; }
+  .mono { font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+
+  /* ---- masthead ---- */
+  .topbar {
+    border-bottom: 2px solid var(--ink);
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
+  }
+  .topbar .ticker span { margin-right: 22px; }
+  .tick-up { color: var(--up); }
+  .tick-down { color: var(--signal); }
+  .masthead {
+    display: grid; grid-template-columns: 1fr auto; align-items: end;
+    padding: 22px 0 16px; border-bottom: 1px solid var(--ink);
+  }
+  .masthead h1 {
+    font-size: 64px; font-weight: 900; letter-spacing: -0.04em; line-height: .9;
+    text-transform: uppercase;
+  }
+  .masthead h1 em { font-style: normal; color: var(--signal); }
+  .edition { text-align: right; font-size: 11px; font-weight: 700; text-transform: uppercase; line-height: 1.7; }
+  .edition .no { font-size: 28px; display: block; letter-spacing: -.02em; }
+
+  nav.sections {
+    display: flex; border-bottom: 1px solid var(--ink);
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  }
+  nav.sections a {
+    color: var(--ink); text-decoration: none;
+    padding: 9px 18px 8px; border-right: 1px solid var(--ink);
+  }
+  nav.sections a:first-child { padding-left: 0; }
+  nav.sections a:hover { background: var(--ink); color: var(--paper); }
+  nav.sections .live { margin-left: auto; border-right: 0; color: var(--signal); display: flex; align-items: center; gap: 7px; padding-right: 0; }
+  nav.sections .live i { width: 8px; height: 8px; background: var(--signal); border-radius: 50%; display: inline-block; }
+  nav.sections .live:hover { background: var(--signal); color: #fff; }
+
+  /* ---- lead ---- */
+  .lead {
+    display: grid; grid-template-columns: 7.2fr 3fr; gap: 0;
+    border-bottom: 1px solid var(--ink);
+  }
+  .lead-main { padding: 34px 34px 34px 0; border-right: 1px solid var(--ink); }
+  .kicker {
+    display: inline-block; background: var(--ink); color: var(--paper);
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+    padding: 4px 8px; margin-bottom: 18px;
+  }
+  .lead-main h2 {
+    font-size: 96px; font-weight: 900; line-height: .92; letter-spacing: -0.045em;
+    text-transform: uppercase; margin-bottom: 24px;
+  }
+  .lead-main h2 .u { box-shadow: inset 0 -0.18em 0 var(--signal); }
+  .lead-dek {
+    font-size: 17px; line-height: 1.5; max-width: 560px; margin-bottom: 18px; font-weight: 500;
+  }
+  .byline { font-size: 12px; text-transform: uppercase; font-weight: 700; letter-spacing: .04em; }
+  .byline .dot { color: var(--signal); }
+
+  .lead-side { display: flex; flex-direction: column; }
+  .side-item { padding: 18px 0 16px 22px; border-bottom: 1px solid var(--ink); }
+  .side-item:last-child { border-bottom: 0; }
+  .side-item .n { font-weight: 700; font-size: 11px; margin-bottom: 6px; }
+  .side-item h3 { font-size: 17px; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; margin-bottom: 6px; }
+  .side-item h3 a { color: var(--ink); text-decoration: none; }
+  .side-item h3 a:hover { background: none; color: var(--link); text-decoration: underline; }
+  .side-item p { font-size: 12.5px; color: #333; }
+
+  /* ---- data band ---- */
+  .databand {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--ink);
+  }
+  .stat { padding: 18px 22px 16px; border-right: 1px solid var(--ink); }
+  .stat:last-child { border-right: 0; }
+  .stat .label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+  .stat .value { font-size: 40px; font-weight: 900; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .stat .delta { font-size: 12px; font-weight: 700; margin-top: 5px; }
+
+  /* ---- story grid ---- */
+  .grid-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 14px 0 10px; border-bottom: 1px solid var(--ink);
+  }
+  .grid-head h4 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+  .grid-head a { font-size: 12px; font-weight: 700; }
+  .stories {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    border-bottom: 2px solid var(--ink);
+  }
+  .story { padding: 20px 24px 24px 0; border-right: 1px solid var(--ink); }
+  .story + .story { padding-left: 24px; }
+  .story:last-child { border-right: 0; padding-right: 0; }
+  .story .tag { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--signal); margin-bottom: 8px; }
+  .story h5 { font-size: 24px; font-weight: 900; letter-spacing: -.025em; line-height: 1.05; margin-bottom: 10px; text-transform: uppercase; }
+  .story p { font-size: 13px; color: #222; margin-bottom: 10px; }
+  .story .meta { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #555; }
+
+  /* ---- bottom split ---- */
+  .bottom { display: grid; grid-template-columns: 2fr 1fr; }
+  .quote-block { padding: 30px 34px 34px 0; border-right: 1px solid var(--ink); }
+  .quote-block blockquote {
+    font-size: 34px; font-weight: 900; letter-spacing: -.03em; line-height: 1.08; text-transform: uppercase;
+  }
+  .quote-block blockquote .q { color: var(--signal); }
+  .quote-block cite { display: block; margin-top: 14px; font-style: normal; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+  .subscribe { padding: 30px 0 34px 26px; }
+  .subscribe h6 { font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
+  .subscribe p { font-size: 12.5px; margin-bottom: 14px; }
+  .subscribe form { display: flex; border: 2px solid var(--ink); }
+  .subscribe input {
+    flex: 1; border: 0; padding: 10px 12px; font-size: 13px; font-family: inherit; outline: none; min-width: 0;
+  }
+  .subscribe button {
+    border: 0; background: var(--ink); color: var(--paper); font-family: inherit;
+    font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em;
+    padding: 10px 16px; cursor: pointer;
+  }
+  .subscribe button:hover { background: var(--signal); }
+  footer {
+    border-top: 2px solid var(--ink); padding: 12px 0 30px;
+    display: flex; justify-content: space-between;
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar mono">
+    <div class="ticker">
+      <span>NVDA <b class="tick-up">▲ 2.4%</b></span>
+      <span>TOKENS/DAY <b class="tick-up">▲ 18.1B</b></span>
+      <span>GPU SPOT <b class="tick-down">▼ 6.2%</b></span>
+      <span>SEED MEDIAN <b class="tick-up">▲ $6.5M</b></span>
+    </div>
+    <div>TUESDAY 08.25 · SAN FRANCISCO · 06:00 PT</div>
+  </div>
+
+  <header class="masthead">
+    <h1>The&nbsp;Circuit<em>.</em></h1>
+    <div class="edition mono">
+      <span class="no">No. 214</span>
+      The machine economy,<br>audited weekly
+    </div>
+  </header>
+
+  <nav class="sections">
+    <a href="#">Compute</a>
+    <a href="#">Capital</a>
+    <a href="#">Labs</a>
+    <a href="#">Policy</a>
+    <a href="#">Opinion</a>
+    <a href="#" class="live"><i></i>Live: Earnings</a>
+  </nav>
+
+  <section class="lead">
+    <div class="lead-main">
+      <span class="kicker">The Big Read</span>
+      <h2>Compute is<br>the new <span class="u">crude</span>.</h2>
+      <p class="lead-dek">Datacenter capacity is being traded like an OPEC commodity: forward contracts, spot shortages, sovereign stockpiles. Inside the cartel nobody voted for.</p>
+      <p class="byline">By Mara Okafor <span class="dot">●</span> 14 min read <span class="dot">●</span> <a href="#">Read the series</a></p>
+    </div>
+    <aside class="lead-side">
+      <div class="side-item">
+        <div class="n mono">01</div>
+        <h3><a href="#">Brussels drafts a token tax, and every lab lawyer books a flight</a></h3>
+        <p>The levy would price inference like carbon. Labs call it unworkable. Auditors call it Tuesday.</p>
+      </div>
+      <div class="side-item">
+        <div class="n mono">02</div>
+        <h3><a href="#">The eval racket: who grades the models that grade the graders</a></h3>
+        <p>Benchmark shops are the new ratings agencies. That comparison should worry you.</p>
+      </div>
+      <div class="side-item">
+        <div class="n mono">03</div>
+        <h3><a href="#">Open weights, closed wallets</a></h3>
+        <p>Free models, paid moats. The quarter's most profitable contradiction, in four charts.</p>
+      </div>
+    </aside>
+  </section>
+
+  <section class="databand mono">
+    <div class="stat">
+      <div class="label">Global training runs &gt;10²⁶ FLOP</div>
+      <div class="value">37</div>
+      <div class="delta tick-up">▲ 9 vs Q1</div>
+    </div>
+    <div class="stat">
+      <div class="label">Median GW per frontier campus</div>
+      <div class="value">2.4</div>
+      <div class="delta tick-up">▲ 0.6 YoY</div>
+    </div>
+    <div class="stat">
+      <div class="label">Agent labor priced, annualized</div>
+      <div class="value">$81B</div>
+      <div class="delta tick-up">▲ 212%</div>
+    </div>
+    <div class="stat">
+      <div class="label">Frontier labs cash-flow positive</div>
+      <div class="value">3/9</div>
+      <div class="delta tick-down">▼ 1 this week</div>
+    </div>
+  </section>
+
+  <div class="grid-head">
+    <h4>This Week</h4>
+    <a href="#">All 12 stories →</a>
+  </div>
+  <section class="stories">
+    <article class="story">
+      <div class="tag">Compute</div>
+      <h5>The grid blinked first</h5>
+      <p>Texas regulators quietly capped new datacenter interconnects at 800MW. Three hyperscalers had filings in the queue. None of them saw it coming; all of them priced it in by Friday.</p>
+      <div class="meta">D. Reyes · 8 min</div>
+    </article>
+    <article class="story">
+      <div class="tag">Capital</div>
+      <h5>Seed rounds are pre-revenue. Now they're pre-product. Next: pre-founder</h5>
+      <p>A fund closed a $40M round on a domain name and an eval score. We read the memo so you don't have to.</p>
+      <div class="meta">J. Lindqvist · 6 min</div>
+    </article>
+    <article class="story">
+      <div class="tag">Labs</div>
+      <h5>Distillation wars, cont'd</h5>
+      <p>Every lab claims its model is being copied and denies copying anyone's. The arithmetic requires at least one of them to be wrong. Our money is on all of them.</p>
+      <div class="meta">Editorial Board · 5 min</div>
+    </article>
+  </section>
+
+  <section class="bottom">
+    <div class="quote-block">
+      <blockquote><span class="q">“</span>We stopped hiring analysts. Then the analysts stopped needing us.<span class="q">”</span></blockquote>
+      <cite>Anonymous managing director, quoted in “The Last Spreadsheet,” p. 214-07</cite>
+    </div>
+    <div class="subscribe">
+      <h6>Get the briefing</h6>
+      <p>One email. Tuesday, 06:00 PT. The week's machine economy, audited. No sponsors in the copy, ever.</p>
+      <form onsubmit="return false">
+        <input type="email" placeholder="you@firm.com" aria-label="Email">
+        <button type="submit">Subscribe</button>
+      </form>
+    </div>
+  </section>
+
+  <footer class="mono">
+    <span>© 2026 The Circuit Press, Inc.</span>
+    <span><a href="#">Archive</a> · <a href="#">Masthead</a> · <a href="#">RSS</a></span>
+  </footer>
+
+</div>
+</body>
+</html>

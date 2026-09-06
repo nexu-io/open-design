@@ -82,6 +82,7 @@ export type OfficialFunctionalSkillDiscoveryMetadataV1 = z.infer<
 >;
 
 export const OfficialFunctionalSkillDiscoveryDeclarationV1Schema = z.object({
+  source: z.enum(['skills', 'design-templates']).optional(),
   sourceFolder: canonicalSkillIdSchema,
   id: canonicalSkillIdSchema,
   ...OfficialFunctionalSkillDiscoveryMetadataV1Schema.shape,
@@ -95,7 +96,7 @@ export const OfficialFunctionalSkillDiscoveryCatalogFileV1Schema = z.object({
   version: versionSchema,
   skills: z.array(OfficialFunctionalSkillDiscoveryDeclarationV1Schema).min(1),
 }).strict().superRefine((value, context) => {
-  const sourceFolders = value.skills.map((skill) => skill.sourceFolder);
+  const sourceFolders = value.skills.map((skill) => `${skill.source ?? 'skills'}/${skill.sourceFolder}`);
   if (!uniqueStrings(sourceFolders)) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -163,15 +164,31 @@ export const OfficialSkillDiscoveryCandidateOriginV1Schema = z.discriminatedUnio
   z.object({
     kind: z.literal('built-in-functional'),
   }).strict(),
+  z.object({
+    kind: z.literal('built-in-design-template'),
+  }).strict(),
 ]);
 export type OfficialSkillDiscoveryCandidateOriginV1 = z.infer<
   typeof OfficialSkillDiscoveryCandidateOriginV1Schema
 >;
 
+/** Source-authored routing context; full workflow instructions stay in SKILL.md. */
+export const OfficialSkillDiscoveryRoutingMetadataV1Schema = z.object({
+  enName: boundedTextSchema.optional(),
+  zhName: boundedTextSchema.optional(),
+  zhDescription: boundedTextSchema.optional(),
+  taskType: controlledSlugSchema.optional(),
+  platform: controlledSlugSchema.optional(),
+  scenario: controlledSlugSchema.optional(),
+  category: controlledSlugSchema.optional(),
+  examplePrompt: boundedTextSchema.optional(),
+}).strict();
+
 export const OfficialSkillDiscoveryCandidateV1Schema = z.object({
   id: canonicalSkillIdSchema,
   name: boundedTextSchema,
   description: boundedTextSchema,
+  routingMetadata: OfficialSkillDiscoveryRoutingMetadataV1Schema.optional(),
   autoSelectable: z.literal(true),
   role: SkillDiscoveryRoleV1Schema,
   outputKinds: outputKindsSchema,
@@ -306,7 +323,7 @@ export type SkillDiscoveryToolLoadRequestV1 = z.infer<
 >;
 
 const preparedResourceBytesSchema = z.string()
-  .max(350_000)
+  .max(4 * Math.ceil((512 * 1024) / 3))
   .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/, {
     message: 'Prepared Skill resource bytes must use canonical base64.',
   });

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raster Journal · Issue 24</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page:#fafaf9;
+    --surface:#f5f5f4;
+    --ink:#1c1917;
+    --rule:#d6d3d1;
+    --red:#C8102E;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{color-scheme:light;}
+  body{
+    background:var(--page);
+    color:var(--ink);
+    font-family:'IBM Plex Sans','Hanken Grotesk','Barlow',system-ui,sans-serif;
+    font-size:16px;
+    line-height:1.65;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none;}
+  .shell{max-width:1160px;margin:0 auto;padding:0 32px;}
+  .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:32px;}
+  .cap{
+    font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;
+    color:rgba(28,25,23,.7);font-weight:400;
+  }
+  .cap-ghost{color:rgba(28,25,23,.4);}
+  .rule{border:0;border-top:1px solid var(--rule);}
+  .num{font-variant-numeric:tabular-nums;}
+
+  /* ---------- top bar ---------- */
+  header{border-bottom:1px solid var(--rule);}
+  .topbar{display:flex;align-items:center;justify-content:space-between;height:72px;}
+  .wordmark{font-size:1.15rem;font-weight:500;letter-spacing:.02em;}
+  .wordmark span{color:var(--red);}
+  nav ul{display:flex;gap:40px;list-style:none;}
+  nav a{
+    font-size:.78rem;text-transform:uppercase;letter-spacing:.1em;
+    color:rgba(28,25,23,.7);padding-bottom:4px;border-bottom:1px solid transparent;
+    transition:color .18s ease,border-color .18s ease;
+  }
+  nav a:hover{color:var(--red);border-color:var(--red);}
+  .issue-chip{font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(28,25,23,.4);}
+
+  /* ---------- masthead ---------- */
+  .masthead{padding:88px 0 80px;}
+  .masthead .meta{grid-column:1 / span 12;display:flex;justify-content:space-between;margin-bottom:40px;}
+  .display{
+    grid-column:1 / span 9;
+    font-size:clamp(3rem,7vw,5.6rem);
+    font-weight:300;letter-spacing:-0.02em;line-height:1.0;
+    text-wrap:balance;
+  }
+  .display em{font-style:normal;color:var(--red);}
+  .motif{
+    grid-column:10 / span 3;align-self:end;
+    display:grid;grid-template-columns:repeat(3,1fr);gap:8px;aspect-ratio:1/1;max-height:220px;
+  }
+  .motif div{background:var(--surface);border:1px solid var(--rule);}
+  .motif .solid{background:var(--ink);border-color:var(--ink);}
+  .motif .accent{background:var(--red);border-color:var(--red);}
+  .motif .disc{border-radius:0;position:relative;overflow:hidden;}
+  .motif .disc::after{
+    content:"";position:absolute;inset:14%;background:var(--ink);border-radius:50%;
+  }
+  .stand{
+    grid-column:1 / span 5;margin-top:48px;max-width:60ch;
+    color:rgba(28,25,23,.7);
+  }
+  .stand strong{font-weight:500;color:var(--ink);}
+
+  /* ---------- lead story ---------- */
+  .lead{padding:72px 0;}
+  .lead .kicker{grid-column:1 / span 2;}
+  .lead h2{
+    grid-column:3 / span 7;
+    font-size:2.1rem;font-weight:300;letter-spacing:-0.01em;line-height:1.15;text-wrap:balance;
+  }
+  .lead h2 a{transition:color .18s ease;}
+  .lead h2 a:hover{color:var(--red);}
+  .lead .dek{grid-column:10 / span 3;color:rgba(28,25,23,.7);font-size:.92rem;}
+  .lead .dek .byline{display:block;margin-top:20px;}
+
+  /* ---------- index ---------- */
+  .index{padding:64px 0 88px;}
+  .index-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+  .articles{display:grid;grid-template-columns:repeat(3,1fr);gap:0 32px;}
+  .article{
+    border-top:1px solid var(--rule);
+    padding:28px 0 44px;
+    display:flex;flex-direction:column;gap:14px;
+  }
+  .article .no{
+    font-size:.78rem;color:rgba(28,25,23,.4);
+    display:flex;justify-content:space-between;
+    transition:color .18s ease;
+  }
+  .article h3{
+    font-size:1.28rem;font-weight:400;line-height:1.3;letter-spacing:-0.005em;
+    transition:color .18s ease;
+  }
+  .article p{font-size:.9rem;color:rgba(28,25,23,.7);max-width:38ch;}
+  .article .more{
+    margin-top:auto;font-size:.72rem;text-transform:uppercase;letter-spacing:.12em;
+    color:rgba(28,25,23,.4);transition:color .18s ease;
+  }
+  .article:hover h3{color:var(--red);}
+  .article:hover .no{color:var(--red);}
+  .article:hover .more{color:var(--ink);}
+
+  /* ---------- quote ---------- */
+  .quote{background:var(--surface);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);}
+  .quote-inner{padding:88px 0;}
+  .quote .mark{grid-column:1 / span 1;}
+  .quote .mark span{
+    display:block;width:48px;height:6px;background:var(--red);
+  }
+  .quote blockquote{
+    grid-column:2 / span 9;
+    font-size:clamp(1.6rem,3vw,2.4rem);font-weight:300;line-height:1.3;letter-spacing:-0.01em;
+    text-wrap:balance;
+  }
+  .quote cite{
+    grid-column:2 / span 9;margin-top:28px;font-style:normal;
+    font-size:.78rem;text-transform:uppercase;letter-spacing:.12em;color:rgba(28,25,23,.55);
+  }
+
+  /* ---------- colophon table ---------- */
+  .colophon{padding:72px 0 88px;}
+  .colophon .grid{row-gap:0;}
+  .colophon h4{grid-column:1 / span 3;font-size:.78rem;font-weight:500;text-transform:uppercase;letter-spacing:.12em;}
+  .contrib-table{grid-column:4 / span 9;}
+  .contrib-row{
+    display:grid;grid-template-columns:60px 1fr 1fr 110px;gap:24px;
+    padding:16px 0;border-bottom:1px solid var(--rule);font-size:.9rem;
+    transition:background .18s ease;
+  }
+  .contrib-row:first-child{border-top:1px solid var(--rule);}
+  .contrib-row:hover{background:rgba(200,16,46,.05);}
+  .contrib-row .role{color:rgba(28,25,23,.55);}
+  .contrib-row .place{color:rgba(28,25,23,.4);text-align:right;}
+
+  /* ---------- footer ---------- */
+  footer{border-top:1px solid var(--ink);}
+  .foot{padding:44px 0 64px;display:grid;grid-template-columns:repeat(12,1fr);gap:32px;}
+  .foot .fm{grid-column:1 / span 4;}
+  .foot .fm .wordmark{font-size:1.6rem;font-weight:300;}
+  .foot ul{list-style:none;grid-column:span 2;display:flex;flex-direction:column;gap:10px;}
+  .foot li a{font-size:.85rem;color:rgba(28,25,23,.7);transition:color .18s ease;}
+  .foot li a:hover{color:var(--red);}
+  .foot .legal{grid-column:11 / span 2;text-align:right;}
+
+  @media (max-width:900px){
+    .grid{grid-template-columns:repeat(6,1fr);gap:24px;}
+    .display{grid-column:1 / span 6;}
+    .motif{display:none;}
+    .stand{grid-column:1 / span 6;}
+    .lead .kicker{grid-column:1 / span 6;}
+    .lead h2{grid-column:1 / span 6;}
+    .lead .dek{grid-column:1 / span 6;}
+    .articles{grid-template-columns:1fr;}
+    .quote .mark{grid-column:1 / span 6;margin-bottom:24px;}
+    .quote blockquote,.quote cite{grid-column:1 / span 6;}
+    .colophon h4{grid-column:1 / span 6;margin-bottom:24px;}
+    .contrib-table{grid-column:1 / span 6;}
+    .foot{grid-template-columns:repeat(2,1fr);}
+    .foot .fm,.foot .legal{grid-column:span 2;text-align:left;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="shell topbar">
+    <a class="wordmark" href="#">Raster<span>.</span></a>
+    <nav>
+      <ul>
+        <li><a href="#">Essays</a></li>
+        <li><a href="#">Interviews</a></li>
+        <li><a href="#">Archive</a></li>
+        <li><a href="#">Colophon</a></li>
+      </ul>
+    </nav>
+    <span class="issue-chip num">Issue 24 · Autumn 2026</span>
+  </div>
+</header>
+
+<section class="masthead">
+  <div class="shell grid">
+    <div class="meta">
+      <span class="cap">A journal of graphic order</span>
+      <span class="cap cap-ghost num">Zürich · Basel · Ulm</span>
+    </div>
+    <h1 class="display">Structure is<br>not the opposite<br>of <em>freedom.</em></h1>
+    <div class="motif" aria-hidden="true">
+      <div></div><div class="solid"></div><div></div>
+      <div class="disc"></div><div></div><div class="accent"></div>
+      <div></div><div></div><div class="solid"></div>
+    </div>
+    <p class="stand">
+      Issue 24 revisits the systems that taught the century to read:
+      <strong>the grid, the grotesque, the unjustified left edge.</strong>
+      Twelve columns, one accent, and everything in its place.
+    </p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="lead">
+  <div class="shell grid">
+    <span class="cap kicker">Lead essay</span>
+    <h2><a href="#">Josef Müller-Brockmann never drew a decoration in his life, and his posters still stop traffic</a></h2>
+    <p class="dek">
+      A close reading of the Tonhalle concert series, 1955 to 1972, and what its
+      diagonal systems can still teach interface designers.
+      <span class="byline cap">By Anneke Vogt · 18 min read</span>
+    </p>
+  </div>
+</section>
+
+<section class="index">
+  <div class="shell">
+    <div class="index-head">
+      <span class="cap">In this issue</span>
+      <span class="cap cap-ghost num">06 pieces</span>
+    </div>
+    <div class="articles">
+      <a class="article" href="#">
+        <span class="no num"><span>01</span><span>Essay</span></span>
+        <h3>The 8-point unit: arithmetic as a design material</h3>
+        <p>Why every distance on this page divides by eight, and what happens to a layout when it stops.</p>
+        <span class="more">Read the essay</span>
+      </a>
+      <a class="article" href="#">
+        <span class="no num"><span>02</span><span>Interview</span></span>
+        <h3>Lora Beck on drawing a grotesque for screens</h3>
+        <p>The Utrecht type designer on ink traps, pixel grids, and refusing a second weight for four years.</p>
+        <span class="more">Read the interview</span>
+      </a>
+      <a class="article" href="#">
+        <span class="no num"><span>03</span><span>Archive</span></span>
+        <h3>Ulm, 1958: the syllabus that banned ornament</h3>
+        <p>Scans and marginalia from the Hochschule für Gestaltung foundation course, annotated.</p>
+        <span class="more">Open the archive</span>
+      </a>
+      <a class="article" href="#">
+        <span class="no num"><span>04</span><span>Essay</span></span>
+        <h3>Opacity is a hierarchy, color is a shout</h3>
+        <p>A field guide to signaling importance without ever reaching for a second hue.</p>
+        <span class="more">Read the essay</span>
+      </a>
+      <a class="article" href="#">
+        <span class="no num"><span>05</span><span>Practice</span></span>
+        <h3>Setting a timetable: tabular figures in the wild</h3>
+        <p>Railway boards, stock tickers, invoice totals. Where aligned digits quietly hold the world together.</p>
+        <span class="more">Read the piece</span>
+      </a>
+      <a class="article" href="#">
+        <span class="no num"><span>06</span><span>Review</span></span>
+        <h3>Four reissued Lohse monographs, ranked by their margins</h3>
+        <p>The paintings are systems; the books about them should be too. Only one publisher agrees.</p>
+        <span class="more">Read the review</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="quote">
+  <div class="shell grid quote-inner">
+    <div class="mark" aria-hidden="true"><span></span></div>
+    <blockquote>&ldquo;The grid is a proclamation of order, and order is nothing more than a courtesy extended to the reader.&rdquo;</blockquote>
+    <cite>Emil Ruder · Typographie, 1967 · quoted in Issue 24</cite>
+  </div>
+</section>
+
+<section class="colophon">
+  <div class="shell grid">
+    <h4>Contributors, Issue 24</h4>
+    <div class="contrib-table">
+      <div class="contrib-row num">
+        <span class="cap-ghost">01</span><span>Anneke Vogt</span><span class="role">Lead essay</span><span class="place">Zürich</span>
+      </div>
+      <div class="contrib-row num">
+        <span class="cap-ghost">02</span><span>Lora Beck</span><span class="role">Type design, interview</span><span class="place">Utrecht</span>
+      </div>
+      <div class="contrib-row num">
+        <span class="cap-ghost">03</span><span>Daniel Frei</span><span class="role">Archive research</span><span class="place">Basel</span>
+      </div>
+      <div class="contrib-row num">
+        <span class="cap-ghost">04</span><span>Mara Iten</span><span class="role">Photography, reprographics</span><span class="place">Ulm</span>
+      </div>
+      <div class="contrib-row num">
+        <span class="cap-ghost">05</span><span>Studio Achtel</span><span class="role">Issue design, litho</span><span class="place">Geneva</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="shell foot">
+    <div class="fm">
+      <span class="wordmark">Raster<span style="color:var(--red)">.</span></span>
+      <p style="margin-top:16px;font-size:.85rem;color:rgba(28,25,23,.55);max-width:32ch;">
+        Published four times a year on 120gsm uncoated stock and, reluctantly, on the web.
+      </p>
+    </div>
+    <ul>
+      <li><span class="cap cap-ghost">Journal</span></li>
+      <li><a href="#">Current issue</a></li>
+      <li><a href="#">Back issues</a></li>
+      <li><a href="#">Subscriptions</a></li>
+    </ul>
+    <ul>
+      <li><span class="cap cap-ghost">Studio</span></li>
+      <li><a href="#">About</a></li>
+      <li><a href="#">Submissions</a></li>
+      <li><a href="#">Stockists</a></li>
+    </ul>
+    <ul>
+      <li><span class="cap cap-ghost">Elsewhere</span></li>
+      <li><a href="#">Newsletter</a></li>
+      <li><a href="#">Are.na</a></li>
+      <li><a href="#">Mastodon</a></li>
+    </ul>
+    <div class="legal">
+      <span class="cap cap-ghost num">© 2026 Raster Verlag AG<br>ISSN 2296-0114</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

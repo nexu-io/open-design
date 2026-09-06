@@ -25,6 +25,14 @@ function railChip(chipId: string) {
 }
 
 describe('create rail chips claim the automatic default', () => {
+  it('uses retained scenarios without selecting any visual template', () => {
+    for (const chip of HOME_HERO_CHIPS) {
+      if (chip.action.kind !== 'apply-scenario') continue;
+      expect(['od-new-generation', 'od-media-generation'], chip.id)
+        .toContain(chip.action.pluginId);
+    }
+  });
+
   it('marks every first-level output type as a product-owned automatic scenario', () => {
     const unmarked = CREATE_RAIL_ORDER.filter((chipId) => !railChip(chipId).automaticDefault);
     expect(unmarked).toEqual([]);

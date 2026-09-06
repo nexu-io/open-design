@@ -26,6 +26,7 @@ import {
   OfficialSkillDiscoveryCatalogV1Schema,
   OfficialSkillDiscoveryLoadRequestV1Schema,
   OfficialSkillDiscoveryLoadResponseV1Schema,
+  OfficialSkillDiscoveryRoutingMetadataV1Schema,
   OfficialSkillDiscoverySearchRequestV1Schema,
   OfficialSkillDiscoverySearchResponseV1Schema,
   type AppliedStrategyBindingV2,
@@ -41,7 +42,7 @@ import {
   type OfficialTaskProfileDiscoveryDeclarationV1,
 } from '@open-design/contracts';
 
-import { parseFrontmatter } from '../design-systems/frontmatter.js';
+import { parseFrontmatter, type FrontmatterObject } from '../design-systems/frontmatter.js';
 import {
   createBundledStrategyBindingV2,
   loadBundledStrategyPromptAssetsV2,
@@ -57,7 +58,8 @@ const DISCOVERY_TASK_PROFILE_ROOT = 'agent-discovery/task-profiles';
 const SKILL_MANIFEST = 'SKILL.md';
 const MAX_CATALOG_BYTES = 256 * 1024;
 const MAX_SKILL_MANIFEST_BYTES = 256 * 1024;
-const MAX_RESOURCE_BYTES = 256 * 1024;
+// Official template previews reach 417,378 bytes; retain bounded per-file reads.
+const MAX_RESOURCE_BYTES = 512 * 1024;
 const MAX_RESOURCE_COUNT = 32;
 const MAX_RESOURCE_PACKAGE_BYTES = 2 * 1024 * 1024;
 const CANONICAL_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
@@ -111,6 +113,8 @@ export interface OfficialSkillDiscoveryCatalogSourcesV1 {
   bundledStrategyPlugin: InstalledPluginRecord;
   /** The product-owned built-in functional Skill root, never a merged/user-first root. */
   builtInFunctionalSkillsRoot: string;
+  /** Product-owned templates only; never the user's merged template catalog. */
+  builtInDesignTemplatesRoot?: string;
 }
 
 type InternalCandidate = InternalTaskProfileCandidate | InternalFunctionalCandidate;
@@ -255,6 +259,7 @@ export function renderOfficialSkillDiscoveryCatalogMarkdownV1(
         : [candidate.role],
       name: candidate.name,
       description: candidate.description,
+      ...(candidate.routingMetadata ? { routingMetadata: candidate.routingMetadata } : {}),
       outputKinds: candidate.outputKinds,
       useWhen: candidate.positiveExamples.slice(0, 2),
       avoidWhen: candidate.negativeExamples.slice(0, 2),
@@ -309,9 +314,7 @@ function roleSortOrder(role: OfficialSkillDiscoveryCandidateV1['role']): number 
 }
 
 /** Deterministic metadata-only lexical retrieval, capped at five summaries. */
-export function searchOfficialSkillDiscoveryCatalogV1(input: {
-  bundledStrategyPlugin: InstalledPluginRecord;
-  builtInFunctionalSkillsRoot: string;
+export function searchOfficialSkillDiscoveryCatalogV1(input: OfficialSkillDiscoveryCatalogSourcesV1 & {
   request: OfficialSkillDiscoverySearchRequestV1;
 }): OfficialSkillDiscoverySearchResponseV1 {
   const catalog = buildOfficialCatalog(input).catalog;
@@ -507,7 +510,16 @@ function buildOfficialCatalog(sources: OfficialSkillDiscoveryCatalogSourcesV1): 
     ...buildFunctionalCandidates({
       root: sources.builtInFunctionalSkillsRoot,
       catalogVersion: catalogDeclaration.version,
-      declarations: functionalCatalogDeclaration.skills,
+      declarations: functionalCatalogDeclaration.skills.filter(
+        (declaration) => (declaration.source ?? 'skills') === 'skills',
+      ),
+    }),
+    ...buildDesignTemplateCandidates({
+      root: sources.builtInDesignTemplatesRoot,
+      catalogVersion: catalogDeclaration.version,
+      declarations: functionalCatalogDeclaration.skills.filter(
+        (declaration) => declaration.source === 'design-templates',
+      ),
     }),
   ];
   const entryMap = new Map<string, InternalCandidate>();
@@ -744,10 +756,25 @@ function buildTaskProfileCandidates(input: {
   });
 }
 
+function buildDesignTemplateCandidates(input: {
+  root: string | undefined;
+  catalogVersion: string;
+  declarations: OfficialFunctionalSkillDiscoveryDeclarationV1[];
+}): InternalFunctionalCandidate[] {
+  if (!input.root) {
+    if (input.declarations.length === 0) return [];
+    throw new OfficialSkillDiscoveryCatalogError(
+      'Built-in design template root is required for its discovery declarations.',
+    );
+  }
+  return buildFunctionalCandidates({ ...input, root: input.root, designTemplates: true });
+}
+
 function buildFunctionalCandidates(input: {
   root: string;
   catalogVersion: string;
   declarations: OfficialFunctionalSkillDiscoveryDeclarationV1[];
+  designTemplates?: boolean;
 }): InternalFunctionalCandidate[] {
   const root = resolveDirectoryRoot(input.root, 'Built-in functional Skill root', true);
   let directoryEntries;
@@ -881,6 +908,9 @@ function buildFunctionalCandidates(input: {
         id: metadata.id,
         name,
         description,
+        ...(input.designTemplates
+          ? { routingMetadata: readTemplateRoutingMetadata(parsed.data, metadata.id) }
+          : {}),
         autoSelectable: metadata.autoSelectable,
         role: metadata.role,
         outputKinds: metadata.outputKinds,
@@ -888,7 +918,7 @@ function buildFunctionalCandidates(input: {
         negativeExamples: metadata.negativeExamples,
         conflictsWith: metadata.conflictsWith,
       },
-      origin: { kind: 'built-in-functional' },
+      origin: { kind: input.designTemplates ? 'built-in-design-template' : 'built-in-functional' },
       version: metadata.version,
       contentDigest,
       resourceRosterDigest,
@@ -903,6 +933,32 @@ function buildFunctionalCandidates(input: {
     });
   }
   return candidates;
+}
+
+function readTemplateRoutingMetadata(
+  data: FrontmatterObject,
+  skillId: string,
+): OfficialSkillDiscoveryCandidateV1['routingMetadata'] {
+  const od = data['od'];
+  if (od === null || typeof od !== 'object' || Array.isArray(od)) {
+    throw new OfficialSkillDiscoveryCatalogError(
+      `Built-in design template ${skillId} routing metadata is invalid.`,
+    );
+  }
+  return parseOrThrow(
+    OfficialSkillDiscoveryRoutingMetadataV1Schema,
+    {
+      enName: data['en_name'],
+      zhName: data['zh_name'],
+      zhDescription: data['zh_description'],
+      taskType: od['task_type'],
+      platform: od['platform'],
+      scenario: od['scenario'],
+      category: od['category'],
+      examplePrompt: od['example_prompt'],
+    },
+    `Built-in design template ${skillId} routing metadata is invalid.`,
+  );
 }
 
 function inspectFunctionalResources(input: {
@@ -1060,6 +1116,7 @@ function createCandidate(input: {
     id: string;
     name: string;
     description: string;
+    routingMetadata?: OfficialSkillDiscoveryCandidateV1['routingMetadata'];
     autoSelectable: true;
     role: 'primary' | 'auxiliary' | 'either';
     outputKinds: string[];
@@ -1069,7 +1126,7 @@ function createCandidate(input: {
   };
   origin:
     | { kind: 'bundled-task-profile'; taskType: 'prototype' | 'ppt' | 'marketing' | 'hyperframes' }
-    | { kind: 'built-in-functional' };
+    | { kind: 'built-in-functional' | 'built-in-design-template' };
   version: string;
   contentDigest: string;
   resourceRosterDigest: string;
@@ -1079,6 +1136,7 @@ function createCandidate(input: {
     id: input.metadata.id,
     name: input.metadata.name,
     description: input.metadata.description,
+    ...(input.metadata.routingMetadata ? { routingMetadata: input.metadata.routingMetadata } : {}),
     autoSelectable: input.metadata.autoSelectable,
     role: input.metadata.role,
     outputKinds: [...input.metadata.outputKinds],

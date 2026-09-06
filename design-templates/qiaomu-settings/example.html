@@ -1,0 +1,1355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0F1117">
+<title>OpenDesign · Workspace Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+    /* Dark theme */
+    --bg: #0F1117;
+    --surface-0: #0F1117;
+    --surface-1: #161B25;
+    --surface-2: #1E2434;
+    --surface-3: #252B3B;
+    --border: rgba(255,255,255,.08);
+    --border-active: rgba(255,255,255,.18);
+    --text-primary: rgba(255,255,255,.92);
+    --text-secondary: rgba(255,255,255,.55);
+    --text-disabled: rgba(255,255,255,.25);
+    --accent: #4A9EFF;
+    --accent-bg: rgba(74,158,255,.1);
+    --success: #34C472;
+    --success-bg: rgba(52,196,114,.1);
+    --error: #FF5A5A;
+    --error-bg: rgba(255,90,90,.1);
+    --warning: #F5A623;
+    --warning-bg: rgba(245,166,35,.1);
+    --danger: #E53E3E;
+    --sidebar-width: 220px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { color-scheme: dark; }
+
+  body {
+    font-family: "IBM Plex Sans", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    height: 52px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+    background: var(--surface-1);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .logo-icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #4A9EFF, #7B5CF0);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .topbar-sep { flex: 1; }
+
+  .topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4A9EFF 0%, #7B5CF0 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--surface-1);
+    border-right: 1px solid var(--border);
+    padding: 16px 8px;
+    flex-shrink: 0;
+    overflow-y: auto;
+    position: sticky;
+    top: 52px;
+    height: calc(100dvh - 52px);
+  }
+
+  .sidebar-section-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-disabled);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 12px 10px 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 7px;
+    font-size: 13.5px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 150ms var(--ease-out), color 150ms;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    touch-action: manipulation;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .nav-item:hover { background: var(--surface-3); color: var(--text-primary); }
+  }
+
+  .nav-item.active {
+    background: var(--accent-bg);
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  .nav-item:active { transform: scale(0.98); }
+
+  .nav-icon { flex-shrink: 0; opacity: 0.7; }
+  .nav-item.active .nav-icon { opacity: 1; }
+
+  /* ── Content area ── */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px;
+    max-width: 860px;
+  }
+
+  .content-panel {
+    display: none;
+  }
+
+  .content-panel.active {
+    display: block;
+    animation: fadeIn 200ms var(--ease-out) both;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .page-title {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+
+  .page-subtitle {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    margin-bottom: 32px;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 28px;
+    gap: 0;
+  }
+
+  .tab-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    transition: color 150ms, border-color 150ms;
+    font-family: inherit;
+    touch-action: manipulation;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .tab-btn:hover { color: var(--text-primary); }
+  }
+
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 500;
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; animation: fadeIn 180ms var(--ease-out) both; }
+
+  /* ── Settings sections ── */
+  .settings-section {
+    margin-bottom: 32px;
+  }
+
+  .section-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-disabled);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+
+  .settings-group {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+  }
+
+  .setting-row:last-child { border-bottom: none; }
+
+  .setting-info { flex: 1; min-width: 0; }
+
+  .setting-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .setting-desc {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    line-height: 1.5;
+  }
+
+  .setting-control { flex-shrink: 0; }
+
+  /* ── Toggle ── */
+  .toggle {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    flex-shrink: 0;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+  }
+
+  .toggle-track {
+    position: absolute;
+    inset: 0;
+    background: var(--surface-3);
+    border-radius: 11px;
+    border: 1px solid var(--border-active);
+    cursor: pointer;
+    transition: background 200ms var(--ease-out), border-color 200ms;
+  }
+
+  .toggle-thumb {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text-disabled);
+    top: 2px;
+    left: 2px;
+    transition: transform 200ms var(--ease-out), background 200ms;
+    pointer-events: none;
+  }
+
+  .toggle input:checked ~ .toggle-track { background: var(--accent); border-color: var(--accent); }
+  .toggle input:checked ~ .toggle-thumb { transform: translateX(18px); background: #fff; }
+  .toggle input:focus-visible ~ .toggle-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── Slider ── */
+  .slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 180px;
+  }
+
+  .slider-value {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    width: 40px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 130px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--surface-3);
+    outline: none;
+    cursor: pointer;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--surface-0);
+    box-shadow: 0 0 0 1px var(--accent);
+    transition: transform 150ms var(--ease-out);
+  }
+
+  input[type=range]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 2px solid var(--surface-0);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    input[type=range]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+  }
+
+  input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
+
+  /* ── Select ── */
+  .select-wrap {
+    position: relative;
+  }
+
+  .select-wrap::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--text-secondary);
+  }
+
+  .settings-select {
+    height: 34px;
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-active);
+    border-radius: 7px;
+    padding: 0 30px 0 10px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    min-width: 140px;
+    transition: border-color 150ms;
+  }
+
+  .settings-select:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(74,158,255,.2); }
+
+  /* ── Input field ── */
+  .settings-input {
+    height: 34px;
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-active);
+    border-radius: 7px;
+    padding: 0 10px;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    min-width: 200px;
+    transition: border-color 150ms;
+  }
+
+  .settings-input:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(74,158,255,.2); }
+
+  /* ── Buttons ── */
+  .btn {
+    height: 34px;
+    border-radius: 7px;
+    border: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    transition: transform 160ms var(--ease-out), background 150ms, opacity 150ms;
+    touch-action: manipulation;
+  }
+
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover { background: #6AB4FF; }
+  }
+
+  .btn-secondary {
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-active);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-secondary:hover { background: var(--surface-2); border-color: rgba(255,255,255,.25); }
+  }
+
+  .btn-danger {
+    background: var(--error-bg);
+    color: var(--error);
+    border: 1px solid rgba(255,90,90,.2);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-danger:hover { background: rgba(255,90,90,.18); }
+  }
+
+  .btn-save-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 24px;
+  }
+
+  /* ── Danger zone ── */
+  .danger-zone {
+    background: var(--error-bg);
+    border: 1px solid rgba(255,90,90,.2);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 32px;
+  }
+
+  .danger-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--error);
+    margin-bottom: 4px;
+  }
+
+  .danger-desc {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.55;
+  }
+
+  .danger-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ── Modal ── */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.7);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    animation: backdropIn 200ms var(--ease-out) both;
+    overscroll-behavior: contain;
+  }
+
+  .modal-backdrop.open { display: flex; }
+
+  @keyframes backdropIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .modal {
+    background: var(--surface-1);
+    border: 1px solid var(--border-active);
+    border-radius: 14px;
+    padding: 28px;
+    width: 100%;
+    max-width: 440px;
+    margin: 16px;
+    box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    animation: modalIn 250ms var(--ease-out) both;
+    overscroll-behavior: contain;
+  }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(8px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    gap: 12px;
+  }
+
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 150ms, background 150ms;
+    touch-action: manipulation;
+    flex-shrink: 0;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .modal-close:hover { color: var(--text-primary); background: var(--surface-3); }
+  }
+
+  .modal-body { font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; margin-bottom: 20px; }
+  .modal-body strong { color: var(--error); }
+
+  .modal-input-label {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+    display: block;
+  }
+
+  .modal-input {
+    width: 100%;
+    height: 38px;
+    background: var(--surface-3);
+    color: var(--text-primary);
+    border: 1px solid var(--border-active);
+    border-radius: 8px;
+    padding: 0 12px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 150ms;
+    margin-bottom: 16px;
+  }
+
+  .modal-input:focus-visible { border-color: var(--error); box-shadow: 0 0 0 2px rgba(255,90,90,.2); }
+
+  .modal-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .btn-modal-danger {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  .btn-modal-danger:disabled { background: var(--surface-3); color: var(--text-disabled); }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-modal-danger:not(:disabled):hover { background: #C53030; }
+  }
+
+  /* ── Toast ── */
+  .toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .toast {
+    background: var(--surface-2);
+    border: 1px solid var(--border-active);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13.5px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    pointer-events: all;
+    min-width: 260px;
+    max-width: 360px;
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 250ms var(--ease-out), transform 250ms var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+
+  .toast.exiting {
+    opacity: 0;
+    transform: translateY(8px);
+    transition-duration: 180ms;
+  }
+
+  .toast-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .toast-dot.success { background: var(--success); }
+  .toast-dot.error { background: var(--error); }
+  .toast-dot.info { background: var(--accent); }
+
+  .toast-msg { flex: 1; }
+
+  .toast-close {
+    background: none;
+    border: none;
+    color: var(--text-disabled);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    font-size: 16px;
+    line-height: 1;
+    transition: color 150ms;
+    touch-action: manipulation;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .toast-close:hover { color: var(--text-primary); }
+  }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .badge-success { background: var(--success-bg); color: var(--success); }
+  .badge-warning { background: var(--warning-bg); color: var(--warning); }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .content { padding: 20px 16px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<header class="topbar" role="banner">
+  <a class="logo" href="#" aria-label="OpenDesign home">
+    <div class="logo-icon" aria-hidden="true">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+      </svg>
+    </div>
+    OpenDesign
+  </a>
+  <span class="topbar-sep"></span>
+  <div class="topbar-user">
+    <div class="avatar" aria-hidden="true">A</div>
+    Ava Lin
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar" aria-label="Settings navigation">
+    <div class="sidebar-section-label">Account</div>
+    <button class="nav-item active" data-panel="profile" aria-current="page">
+      <svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profile
+    </button>
+    <button class="nav-item" data-panel="security">
+      <svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Security
+    </button>
+    <button class="nav-item" data-panel="notifications">
+      <svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications
+    </button>
+
+    <div class="sidebar-section-label">Workspace</div>
+    <button class="nav-item" data-panel="workspace">
+      <svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Workspace
+    </button>
+    <button class="nav-item" data-panel="team">
+      <svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Members
+    </button>
+    <button class="nav-item" data-panel="billing">
+      <svg class="nav-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      Usage
+    </button>
+  </nav>
+
+  <!-- Content area -->
+  <main class="content" id="content-area">
+
+    <!-- Profile -->
+    <div class="content-panel active" id="panel-profile">
+      <h1 class="page-title">Profile</h1>
+      <p class="page-subtitle">Manage your account details and preferences</p>
+
+      <!-- Tabs -->
+      <div class="tabs" role="tablist" aria-label="Profile tabs">
+        <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tab-basic" id="tab-basic-btn">Basics</button>
+        <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-pref" id="tab-pref-btn">Preferences</button>
+        <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-api" id="tab-api-btn">BYOK keys</button>
+      </div>
+
+      <div id="tab-basic" role="tabpanel" aria-labelledby="tab-basic-btn" class="tab-content active">
+        <div class="settings-section">
+          <p class="section-title">Account details</p>
+          <div class="settings-group">
+            <div class="setting-row" style="flex-wrap:wrap;gap:10px">
+              <div class="setting-info">
+                <div class="setting-name">Display name</div>
+                <div class="setting-desc">How your name appears to workspace members</div>
+              </div>
+              <div class="setting-control">
+                <input class="settings-input" type="text" value="Ava Lin" aria-label="Display name" autocomplete="name" style="min-width:160px">
+              </div>
+            </div>
+            <div class="setting-row" style="flex-wrap:wrap;gap:10px">
+              <div class="setting-info">
+                <div class="setting-name">Email address</div>
+                <div class="setting-desc">Used for notifications and account recovery</div>
+              </div>
+              <div class="setting-control" style="display:flex;align-items:center;gap:8px">
+                <input class="settings-input" type="email" value="ava@studio-north.co" aria-label="Email address" autocomplete="email" spellcheck="false" style="min-width:200px">
+                <span class="badge badge-success">Verified</span>
+              </div>
+            </div>
+            <div class="setting-row" style="flex-wrap:wrap;gap:10px">
+              <div class="setting-info">
+                <div class="setting-name">Timezone</div>
+                <div class="setting-desc">Affects timestamps in run logs</div>
+              </div>
+              <div class="setting-control">
+                <div class="select-wrap">
+                  <select class="settings-select" aria-label="Timezone">
+                    <option value="Europe/Lisbon" selected>UTC+0 Western European Time</option>
+                    <option value="America/New_York">UTC-5 Eastern Time</option>
+                    <option value="Asia/Shanghai">UTC+8 China Standard Time</option>
+                    <option value="Asia/Tokyo">UTC+9 Japan Standard Time</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-save-row">
+          <button class="btn btn-primary" id="save-profile-btn" type="button">Save changes</button>
+          <button class="btn btn-secondary" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div id="tab-pref" role="tabpanel" aria-labelledby="tab-pref-btn" class="tab-content">
+        <div class="settings-section">
+          <p class="section-title">Notification preferences</p>
+          <div class="settings-group">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">Email notifications</div>
+                <div class="setting-desc">Get an email when an agent run fails</div>
+              </div>
+              <div class="setting-control">
+                <label class="toggle" aria-label="Email notifications">
+                  <input type="checkbox" checked role="switch" aria-checked="true">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-thumb"></span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">Slack integration</div>
+                <div class="setting-desc">Send run alerts to a connected Slack channel</div>
+              </div>
+              <div class="setting-control">
+                <label class="toggle" aria-label="Slack integration">
+                  <input type="checkbox" role="switch" aria-checked="false">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-thumb"></span>
+                </label>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">Weekly digest</div>
+                <div class="setting-desc">A Monday summary of artifacts shipped and model usage</div>
+              </div>
+              <div class="setting-control">
+                <label class="toggle" aria-label="Weekly digest">
+                  <input type="checkbox" checked role="switch" aria-checked="true">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-thumb"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <p class="section-title">Display</p>
+          <div class="settings-group">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">Run log lines</div>
+                <div class="setting-desc">Lines of agent log loaded per page</div>
+              </div>
+              <div class="setting-control">
+                <div class="slider-wrap">
+                  <input type="range" id="log-lines" min="50" max="500" value="200" step="50"
+                    aria-valuenow="200" aria-valuemin="50" aria-valuemax="500"
+                    aria-label="Run log lines" style="background:linear-gradient(to right,var(--accent) 37.5%,var(--surface-3) 37.5%)">
+                  <span class="slider-value" id="log-lines-val" aria-live="polite">200</span>
+                </div>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">Interface language</div>
+                <div class="setting-desc">Language for the workspace UI</div>
+              </div>
+              <div class="setting-control">
+                <div class="select-wrap">
+                  <select class="settings-select" aria-label="Interface language">
+                    <option value="en" selected>English</option>
+                    <option value="de">Deutsch</option>
+                    <option value="pt">Português</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="btn-save-row">
+          <button class="btn btn-primary" id="save-pref-btn" type="button">Save preferences</button>
+          <button class="btn btn-secondary" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div id="tab-api" role="tabpanel" aria-labelledby="tab-api-btn" class="tab-content">
+        <div class="settings-section">
+          <p class="section-title">Model provider keys</p>
+          <div class="settings-group">
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">anthropic-prod-key</div>
+                <div class="setting-desc">Added 2026-06-03 · Last used 3 days ago</div>
+              </div>
+              <div class="setting-control" style="display:flex;align-items:center;gap:8px">
+                <span class="badge badge-success">Active</span>
+                <button class="btn btn-secondary" type="button" style="height:30px;font-size:12px">Revoke</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div class="setting-info">
+                <div class="setting-name">openai-image-key</div>
+                <div class="setting-desc">Added 2026-04-11 · Last used yesterday</div>
+              </div>
+              <div class="setting-control" style="display:flex;align-items:center;gap:8px">
+                <span class="badge badge-warning">Expiring soon</span>
+                <button class="btn btn-secondary" type="button" style="height:30px;font-size:12px">Revoke</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-secondary" type="button">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6.5" y1="1" x2="6.5" y2="12"/><line x1="1" y1="6.5" x2="12" y2="6.5"/></svg>
+          Add a key
+        </button>
+      </div>
+
+      <!-- Danger zone -->
+      <div class="danger-zone" role="region" aria-label="Danger zone">
+        <p class="danger-title">Danger zone</p>
+        <p class="danger-desc">These actions cannot be undone. Deleting the workspace permanently removes every project, run log, and configuration.</p>
+        <div class="danger-actions">
+          <button class="btn btn-danger" id="open-delete-modal" type="button">Delete workspace</button>
+          <button class="btn btn-danger" type="button">Transfer ownership</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Other panels (condensed) -->
+    <div class="content-panel" id="panel-security">
+      <h1 class="page-title">Security</h1>
+      <p class="page-subtitle">Manage sign-in methods and two-factor authentication</p>
+      <div class="settings-section">
+        <p class="section-title">Authentication</p>
+        <div class="settings-group">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Two-factor authentication (2FA)</div>
+              <div class="setting-desc">Add a second step with an authenticator app</div>
+            </div>
+            <div class="setting-control">
+              <label class="toggle" aria-label="Two-factor authentication">
+                <input type="checkbox" role="switch" aria-checked="false">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Sign-in alerts</div>
+              <div class="setting-desc">Email me when a new device signs in</div>
+            </div>
+            <div class="setting-control">
+              <label class="toggle" aria-label="Sign-in alerts">
+                <input type="checkbox" checked role="switch" aria-checked="true">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-save-row">
+        <button class="btn btn-primary" id="save-security-btn" type="button">Save</button>
+      </div>
+    </div>
+
+    <div class="content-panel" id="panel-notifications">
+      <h1 class="page-title">Notifications</h1>
+      <p class="page-subtitle">Choose what you hear about and where it lands</p>
+      <div class="settings-section">
+        <p class="section-title">Channels</p>
+        <div class="settings-group">
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Failed agent runs</div>
+              <div class="setting-desc">Ping immediately when a generation fails</div>
+            </div>
+            <div class="setting-control">
+              <label class="toggle" aria-label="Failed agent runs">
+                <input type="checkbox" checked role="switch" aria-checked="true">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Model spend threshold</div>
+              <div class="setting-desc">Notify when daily BYOK spend passes your limit</div>
+            </div>
+            <div class="setting-control">
+              <label class="toggle" aria-label="Model spend threshold">
+                <input type="checkbox" checked role="switch" aria-checked="true">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Artifact shipped</div>
+              <div class="setting-desc">Confirm every time an artifact is exported</div>
+            </div>
+            <div class="setting-control">
+              <label class="toggle" aria-label="Artifact shipped">
+                <input type="checkbox" role="switch" aria-checked="false">
+                <span class="toggle-track"></span>
+                <span class="toggle-thumb"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-save-row">
+        <button class="btn btn-primary" id="save-notif-btn" type="button">Save</button>
+      </div>
+    </div>
+
+    <div class="content-panel" id="panel-workspace">
+      <h1 class="page-title">Workspace</h1>
+      <p class="page-subtitle">Name, defaults, and retention for this workspace</p>
+      <div class="settings-section">
+        <p class="section-title">Basics</p>
+        <div class="settings-group">
+          <div class="setting-row" style="flex-wrap:wrap;gap:10px">
+            <div class="setting-info">
+              <div class="setting-name">Workspace name</div>
+            </div>
+            <div class="setting-control">
+              <input class="settings-input" type="text" value="studio-north" aria-label="Workspace name" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Default design system</div>
+            </div>
+            <div class="setting-control">
+              <div class="select-wrap">
+                <select class="settings-select" aria-label="Default design system">
+                  <option value="studio-north" selected>Studio North brand</option>
+                  <option value="minimal-mono">Minimal mono</option>
+                  <option value="none">None (choose per project)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">Run history retention</div>
+              <div class="setting-desc">Runs older than this are cleaned up automatically</div>
+            </div>
+            <div class="setting-control">
+              <div class="slider-wrap">
+                <input type="range" id="log-retain" min="7" max="90" value="30" step="1"
+                  aria-valuenow="30" aria-valuemin="7" aria-valuemax="90"
+                  aria-label="Run history retention in days" style="background:linear-gradient(to right,var(--accent) 26%,var(--surface-3) 26%)">
+                <span class="slider-value" id="log-retain-val" aria-live="polite">30 d</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="btn-save-row">
+        <button class="btn btn-primary" id="save-ws-btn" type="button">Save</button>
+      </div>
+    </div>
+
+    <div class="content-panel" id="panel-team">
+      <h1 class="page-title">Members</h1>
+      <p class="page-subtitle">3 members in this workspace</p>
+    </div>
+
+    <div class="content-panel" id="panel-billing">
+      <h1 class="page-title">Usage</h1>
+      <p class="page-subtitle">Model usage is billed by your own providers. OpenDesign adds no markup.</p>
+    </div>
+
+  </main>
+</div>
+
+<!-- Delete workspace modal -->
+<div class="modal-backdrop" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="modal-title" id="modal-title">Delete workspace</h2>
+      <button class="modal-close" id="modal-close-btn" type="button" aria-label="Close dialog">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="4" x2="14" y2="14"/><line x1="14" y1="4" x2="4" y2="14"/></svg>
+      </button>
+    </div>
+    <p class="modal-body">This action <strong>cannot be undone</strong>. Deleting removes every project, run log, configuration, and stored key reference in this workspace.<br><br>To confirm, type the workspace name <strong style="color:var(--text-primary);font-family:'IBM Plex Mono',monospace">studio-north</strong> to unlock the button.</p>
+    <label class="modal-input-label" for="confirm-name-input">Type the workspace name</label>
+    <input class="modal-input" id="confirm-name-input" type="text" placeholder="studio-north" autocomplete="off" spellcheck="false" aria-describedby="delete-hint">
+    <p id="delete-hint" style="font-size:12px;color:var(--text-secondary);margin-top:-10px;margin-bottom:16px">Exact match, case sensitive</p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel-btn" type="button">Cancel</button>
+      <button class="btn btn-modal-danger" id="modal-confirm-btn" type="button" disabled>Permanently delete workspace</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+  'use strict';
+
+  const WORKSPACE_NAME = 'studio-north';
+
+  // ── Sidebar navigation ──
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const panel = this.dataset.panel;
+      document.querySelectorAll('.nav-item').forEach(b => {
+        b.classList.remove('active');
+        b.removeAttribute('aria-current');
+      });
+      this.classList.add('active');
+      this.setAttribute('aria-current', 'page');
+
+      document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(`panel-${panel}`)?.classList.add('active');
+    });
+  });
+
+  // ── Tabs ──
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const parent = this.closest('.content-panel');
+      parent.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+      });
+      parent.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+      this.classList.add('active');
+      this.setAttribute('aria-selected', 'true');
+      const id = this.getAttribute('aria-controls');
+      document.getElementById(id)?.classList.add('active');
+    });
+  });
+
+  // ── Toggle accessibility sync ──
+  document.querySelectorAll('.toggle input').forEach(inp => {
+    inp.addEventListener('change', function() {
+      this.setAttribute('aria-checked', this.checked ? 'true' : 'false');
+    });
+  });
+
+  // ── Live slider updates ──
+  function initSlider(id, valId, suffix = '', updateFn) {
+    const slider = document.getElementById(id);
+    const valEl = document.getElementById(valId);
+    if (!slider || !valEl) return;
+
+    const update = () => {
+      const v = slider.value;
+      valEl.textContent = suffix ? `${v}${suffix}` : v;
+      slider.setAttribute('aria-valuenow', v);
+      const pct = ((v - slider.min) / (slider.max - slider.min)) * 100;
+      slider.style.background = `linear-gradient(to right,var(--accent) ${pct}%,var(--surface-3) ${pct}%)`;
+      if (updateFn) updateFn(v);
+    };
+
+    slider.addEventListener('input', update);
+    update();
+  }
+
+  initSlider('log-lines', 'log-lines-val', '');
+  initSlider('log-retain', 'log-retain-val', ' d');
+
+  // ── Toast ──
+  function showToast(msg, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.setAttribute('role', 'status');
+    toast.innerHTML = `
+      <div class="toast-dot ${type}" aria-hidden="true"></div>
+      <span class="toast-msg">${msg}</span>
+      <button class="toast-close" aria-label="Dismiss notification" type="button">×</button>
+    `;
+
+    container.appendChild(toast);
+
+    const closeBtn = toast.querySelector('.toast-close');
+    const dismiss = () => {
+      toast.classList.add('exiting');
+      setTimeout(() => toast.remove(), 200);
+    };
+
+    closeBtn.addEventListener('click', dismiss);
+    const timer = setTimeout(dismiss, 4000);
+
+    // Pause when the tab is hidden (visibility API)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) clearTimeout(timer);
+    });
+  }
+
+  // ── Save button wiring ──
+  const saveMap = {
+    'save-profile-btn': 'Profile saved',
+    'save-pref-btn': 'Preferences updated',
+    'save-security-btn': 'Security settings saved',
+    'save-notif-btn': 'Notification settings saved',
+    'save-ws-btn': 'Workspace settings updated',
+  };
+
+  Object.entries(saveMap).forEach(([id, msg]) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = 'Save changes';
+        showToast(msg, 'success');
+      }, 800);
+    });
+  });
+
+  // ── Modal ──
+  const modal = document.getElementById('delete-modal');
+  const openBtn = document.getElementById('open-delete-modal');
+  const closeBtn = document.getElementById('modal-close-btn');
+  const cancelBtn = document.getElementById('modal-cancel-btn');
+  const confirmBtn = document.getElementById('modal-confirm-btn');
+  const nameInput = document.getElementById('confirm-name-input');
+
+  let previouslyFocused = null;
+
+  function openModal() {
+    previouslyFocused = document.activeElement;
+    modal.classList.add('open');
+    nameInput.value = '';
+    confirmBtn.disabled = true;
+    // Focus trap: move focus into the dialog
+    requestAnimationFrame(() => nameInput.focus());
+    document.addEventListener('keydown', trapFocus);
+    document.addEventListener('keydown', handleEsc);
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    document.removeEventListener('keydown', trapFocus);
+    document.removeEventListener('keydown', handleEsc);
+    previouslyFocused?.focus();
+  }
+
+  function handleEsc(e) {
+    if (e.key === 'Escape') closeModal();
+  }
+
+  function trapFocus(e) {
+    if (e.key !== 'Tab') return;
+    const focusable = modal.querySelectorAll('button:not(:disabled), input, [href], select, textarea, [tabindex]:not([tabindex="-1"])');
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+
+  // Click on the backdrop closes the dialog
+  modal.addEventListener('click', e => {
+    if (e.target === modal) closeModal();
+  });
+
+  // Typing the exact name unlocks the button
+  nameInput.addEventListener('input', () => {
+    confirmBtn.disabled = nameInput.value !== WORKSPACE_NAME;
+  });
+
+  // Confirm deletion
+  confirmBtn.addEventListener('click', () => {
+    closeModal();
+    showToast('Workspace permanently deleted', 'error');
+  });
+</script>
+</body>
+</html>

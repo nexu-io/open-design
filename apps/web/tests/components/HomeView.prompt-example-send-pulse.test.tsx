@@ -16,7 +16,7 @@ import { I18nProvider } from '../../src/i18n';
 import { writeHomeGuideStage } from '../../src/components/home-hero/firstRunGuide';
 
 const WEB_PROTOTYPE_PLUGIN = {
-  id: 'example-web-prototype',
+  id: 'od-new-generation',
   title: 'Web Prototype',
   version: '0.1.0',
   trust: 'bundled' as const,
@@ -27,7 +27,7 @@ const WEB_PROTOTYPE_PLUGIN = {
   installedAt: 0,
   updatedAt: 0,
   manifest: {
-    name: 'example-web-prototype',
+    name: 'od-new-generation',
     title: 'Web Prototype',
     version: '0.1.0',
     description: 'General-purpose desktop web prototype.',

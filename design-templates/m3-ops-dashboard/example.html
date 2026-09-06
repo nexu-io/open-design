@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pulse Ops — Material 3 Ops Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* M3 baseline light scheme (seed #6750A4) */
+      --md-sys-color-primary: #6750A4;
+      --md-sys-color-on-primary: #FFFFFF;
+      --md-sys-color-primary-container: #EADDFF;
+      --md-sys-color-on-primary-container: #21005D;
+      --md-sys-color-secondary: #625B71;
+      --md-sys-color-on-secondary: #FFFFFF;
+      --md-sys-color-secondary-container: #E8DEF8;
+      --md-sys-color-on-secondary-container: #1D192B;
+      --md-sys-color-tertiary: #7D5260;
+      --md-sys-color-tertiary-container: #FFD8E4;
+      --md-sys-color-on-tertiary-container: #31111D;
+      --md-sys-color-error: #B3261E;
+      --md-sys-color-on-error: #FFFFFF;
+      --md-sys-color-error-container: #F9DEDC;
+      --md-sys-color-on-error-container: #410E0B;
+      --md-sys-color-surface: #FEF7FF;
+      --md-sys-color-on-surface: #1D1B20;
+      --md-sys-color-on-surface-variant: #49454F;
+      --md-sys-color-surface-container-lowest: #FFFFFF;
+      --md-sys-color-surface-container-low: #F7F2FA;
+      --md-sys-color-surface-container: #F3EDF7;
+      --md-sys-color-surface-container-high: #ECE6F0;
+      --md-sys-color-surface-container-highest: #E6E0E9;
+      --md-sys-color-outline: #79747E;
+      --md-sys-color-outline-variant: #CAC4D0;
+      /* Shape scale */
+      --md-sys-shape-corner-small: 8px;
+      --md-sys-shape-corner-medium: 12px;
+      --md-sys-shape-corner-large: 16px;
+      --md-sys-shape-corner-extra-large: 28px;
+      --md-sys-shape-corner-full: 9999px;
+      /* Type */
+      --md-font: 'Roboto Flex', Roboto, 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; }
+
+    body {
+      font-family: var(--md-font);
+      background: var(--md-sys-color-surface);
+      color: var(--md-sys-color-on-surface);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* ---------- Navigation rail ---------- */
+    .nav-rail {
+      width: 80px;
+      flex: 0 0 80px;
+      background: var(--md-sys-color-surface);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 0 20px;
+      gap: 4px;
+      border-right: 1px solid var(--md-sys-color-outline-variant);
+    }
+
+    .rail-fab {
+      width: 56px;
+      height: 56px;
+      border: none;
+      border-radius: var(--md-sys-shape-corner-large);
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+      display: grid;
+      place-items: center;
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: border-radius 200ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .rail-fab:hover { border-radius: var(--md-sys-shape-corner-full); }
+
+    .rail-dest {
+      width: 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 0;
+      cursor: pointer;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+
+    .rail-dest .pill {
+      width: 56px;
+      height: 32px;
+      border-radius: var(--md-sys-shape-corner-full);
+      display: grid;
+      place-items: center;
+      color: var(--md-sys-color-on-surface-variant);
+      transition: background 150ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .rail-dest:hover .pill { background: var(--md-sys-color-surface-container-high); }
+    .rail-dest.active .pill {
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+    }
+    .rail-dest .lbl {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      color: var(--md-sys-color-on-surface-variant);
+    }
+    .rail-dest.active .lbl { color: var(--md-sys-color-on-surface); font-weight: 600; }
+
+    .rail-spacer { flex: 1; }
+
+    .rail-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: var(--md-sys-color-tertiary-container);
+      color: var(--md-sys-color-on-tertiary-container);
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    /* ---------- Main column ---------- */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .top-bar {
+      height: 64px;
+      flex: 0 0 64px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 24px;
+      background: var(--md-sys-color-surface);
+    }
+    .top-bar h1 {
+      font-size: 22px;
+      font-weight: 500;
+      line-height: 28px;
+    }
+    .top-bar .crumb {
+      font-size: 12px;
+      color: var(--md-sys-color-on-surface-variant);
+      letter-spacing: 0.4px;
+    }
+    .top-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 40px;
+      padding: 0 24px;
+      border: none;
+      border-radius: var(--md-sys-shape-corner-full);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      letter-spacing: 0.1px;
+      cursor: pointer;
+      transition: box-shadow 150ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .btn-filled { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+    .btn-tonal { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+    .btn-filled:hover { box-shadow: 0 1px 3px rgba(103, 80, 164, 0.35); }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: none;
+      color: var(--md-sys-color-on-surface-variant);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .icon-btn:hover { background: var(--md-sys-color-surface-container-high); }
+
+    /* ---------- Content ---------- */
+    .content {
+      flex: 1;
+      min-height: 0;
+      padding: 8px 24px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .status-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .status-card {
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: var(--md-sys-shape-corner-medium);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .status-card.alert { background: var(--md-sys-color-error-container); }
+
+    .card-head { display: flex; align-items: center; justify-content: space-between; }
+    .svc-name { font-size: 14px; font-weight: 600; letter-spacing: 0.1px; }
+    .status-card.alert .svc-name { color: var(--md-sys-color-on-error-container); }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 24px;
+      padding: 0 10px;
+      border-radius: var(--md-sys-shape-corner-small);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+    }
+    .chip-ok { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+    .chip-warn { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
+    .chip-err { background: var(--md-sys-color-error); color: var(--md-sys-color-on-error); }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+    .svc-metric { font-size: 28px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .status-card.alert .svc-metric { color: var(--md-sys-color-on-error-container); }
+    .svc-sub { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+    .status-card.alert .svc-sub { color: var(--md-sys-color-on-error-container); opacity: 0.8; }
+
+    .panel-row {
+      display: grid;
+      align-items: start;
+      grid-template-columns: 7fr 5fr;
+      gap: 16px;
+    }
+
+    .panel {
+      background: var(--md-sys-color-surface-container);
+      border-radius: var(--md-sys-shape-corner-large);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .panel-head h2 { font-size: 16px; font-weight: 600; letter-spacing: 0.15px; }
+    .panel-head .link {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--md-sys-color-primary);
+      text-decoration: none;
+    }
+
+    /* Timeline */
+    .timeline { list-style: none; padding: 0; overflow: hidden; }
+    .tl-item {
+      display: grid;
+      grid-template-columns: 56px 20px 1fr auto;
+      align-items: start;
+      gap: 0 10px;
+      padding-bottom: 18px;
+      position: relative;
+    }
+    .tl-item:last-child { padding-bottom: 0; }
+    .tl-time {
+      font-size: 12px;
+      color: var(--md-sys-color-on-surface-variant);
+      font-variant-numeric: tabular-nums;
+      padding-top: 2px;
+    }
+    .tl-node {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      padding-top: 4px;
+    }
+    .tl-node::after {
+      content: "";
+      position: absolute;
+      top: 18px;
+      bottom: -6px;
+      width: 2px;
+      background: var(--md-sys-color-outline-variant);
+    }
+    .tl-item:last-child .tl-node::after { display: none; }
+    .tl-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--md-sys-color-primary);
+      z-index: 1;
+    }
+    .tl-dot.err { background: var(--md-sys-color-error); }
+    .tl-dot.warn { background: var(--md-sys-color-tertiary); }
+    .tl-title { font-size: 14px; font-weight: 500; }
+    .tl-desc { font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-top: 2px; }
+
+    /* Rings */
+    .rings {
+      padding: 28px 0 24px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      align-items: center;
+      justify-items: center;
+      gap: 8px;
+    }
+    .ring-block { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+    .ring-wrap { position: relative; width: 108px; height: 108px; }
+    .ring-wrap svg { transform: rotate(-90deg); }
+    .ring-val {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .ring-lbl { font-size: 13px; font-weight: 600; letter-spacing: 0.2px; }
+    .ring-sub { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
+
+    .tl-foot,
+    .ring-foot {
+      margin-top: 16px;
+      padding: 12px 16px;
+      background: var(--md-sys-color-surface-container-high);
+      border-radius: var(--md-sys-shape-corner-medium);
+      font-size: 12px;
+      color: var(--md-sys-color-on-surface-variant);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tl-foot strong { color: var(--md-sys-color-on-surface); font-weight: 600; }
+    .tl-foot .btn { margin-left: auto; height: 32px; padding: 0 16px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <!-- Navigation rail -->
+  <nav class="nav-rail" aria-label="Main navigation">
+    <button class="rail-fab" aria-label="New incident">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+
+    <button class="rail-dest active">
+      <span class="pill"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="3" width="8" height="5" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="13" y="10" width="8" height="11" rx="2" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" stroke-width="1.8"/></svg></span>
+      <span class="lbl">Overview</span>
+    </button>
+    <button class="rail-dest">
+      <span class="pill"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 17l4-6 4 3 4-8 4 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span class="lbl">Metrics</span>
+    </button>
+    <button class="rail-dest">
+      <span class="pill"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></span>
+      <span class="lbl">Alerts</span>
+    </button>
+    <button class="rail-dest">
+      <span class="pill"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3.2" stroke="currentColor" stroke-width="1.8"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+      <span class="lbl">Config</span>
+    </button>
+
+    <span class="rail-spacer"></span>
+    <span class="rail-avatar">RK</span>
+  </nav>
+
+  <div class="main">
+    <!-- Top app bar -->
+    <header class="top-bar">
+      <div>
+        <div class="crumb">Pulse Ops · Production</div>
+        <h1>Platform overview</h1>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" aria-label="Search">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="6.5" stroke="currentColor" stroke-width="1.8"/><path d="M16 16l4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        <button class="btn btn-tonal">Last 24 h</button>
+        <button class="btn btn-filled">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+          New report
+        </button>
+      </div>
+    </header>
+
+    <div class="content">
+      <!-- Service status cards -->
+      <section class="status-row" aria-label="Service status">
+        <article class="status-card">
+          <div class="card-head">
+            <span class="svc-name">API Gateway</span>
+            <span class="chip chip-ok"><span class="dot"></span>Healthy</span>
+          </div>
+          <div class="svc-metric">99.98%</div>
+          <div class="svc-sub">Uptime, 30 days · p95 latency 84 ms</div>
+        </article>
+
+        <article class="status-card">
+          <div class="card-head">
+            <span class="svc-name">Auth Service</span>
+            <span class="chip chip-ok"><span class="dot"></span>Healthy</span>
+          </div>
+          <div class="svc-metric">99.95%</div>
+          <div class="svc-sub">Uptime, 30 days · p95 latency 120 ms</div>
+        </article>
+
+        <article class="status-card">
+          <div class="card-head">
+            <span class="svc-name">Job Queue</span>
+            <span class="chip chip-warn"><span class="dot"></span>Elevated</span>
+          </div>
+          <div class="svc-metric">4,210</div>
+          <div class="svc-sub">Queued jobs · draining at 310/min</div>
+        </article>
+
+        <article class="status-card alert">
+          <div class="card-head">
+            <span class="svc-name">Media Pipeline</span>
+            <span class="chip chip-err"><span class="dot"></span>Degraded</span>
+          </div>
+          <div class="svc-metric">6.4%</div>
+          <div class="svc-sub">Error rate · transcode workers restarting</div>
+        </article>
+      </section>
+
+      <div class="panel-row">
+        <!-- Incident timeline -->
+        <section class="panel" aria-label="Incident timeline">
+          <div class="panel-head">
+            <h2>Incident timeline</h2>
+            <a class="link" href="#">View all</a>
+          </div>
+          <ul class="timeline">
+            <li class="tl-item">
+              <span class="tl-time">14:32</span>
+              <span class="tl-node"><span class="tl-dot err"></span></span>
+              <div>
+                <div class="tl-title">Media pipeline error rate crossed 5%</div>
+                <div class="tl-desc">Auto-paged on-call · transcode worker pool scaled from 12 to 20</div>
+              </div>
+              <span class="chip chip-err">Open</span>
+            </li>
+            <li class="tl-item">
+              <span class="tl-time">13:05</span>
+              <span class="tl-node"><span class="tl-dot warn"></span></span>
+              <div>
+                <div class="tl-title">Job queue depth above threshold</div>
+                <div class="tl-desc">Backlog from nightly export batch · draining normally</div>
+              </div>
+              <span class="chip chip-warn">Watching</span>
+            </li>
+            <li class="tl-item">
+              <span class="tl-time">09:47</span>
+              <span class="tl-node"><span class="tl-dot"></span></span>
+              <div>
+                <div class="tl-title">Deploy v2.41.0 to production</div>
+                <div class="tl-desc">Rolled out to 100% in 18 min · no regression detected</div>
+              </div>
+              <span class="chip chip-ok">Done</span>
+            </li>
+            <li class="tl-item">
+              <span class="tl-time">08:12</span>
+              <span class="tl-node"><span class="tl-dot"></span></span>
+              <div>
+                <div class="tl-title">Database maintenance window closed</div>
+                <div class="tl-desc">Index rebuild on analytics cluster completed ahead of schedule</div>
+              </div>
+              <span class="chip chip-ok">Done</span>
+            </li>
+            <li class="tl-item">
+              <span class="tl-time">06:30</span>
+              <span class="tl-node"><span class="tl-dot"></span></span>
+              <div>
+                <div class="tl-title">Nightly backup verified</div>
+                <div class="tl-desc">Restore drill on staging passed · snapshot size 412 GB</div>
+              </div>
+              <span class="chip chip-ok">Done</span>
+            </li>
+            <li class="tl-item">
+              <span class="tl-time">02:15</span>
+              <span class="tl-node"><span class="tl-dot warn"></span></span>
+              <div>
+                <div class="tl-title">Certificate expiring in 14 days</div>
+                <div class="tl-desc">edge.pulseops.example · renewal ticket assigned to platform team</div>
+              </div>
+              <span class="chip chip-warn">Watching</span>
+            </li>
+          </ul>
+          <div class="tl-foot">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.2" stroke="#49454F" stroke-width="1.8"/><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" stroke="#49454F" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <span>On-call now: <strong>Rhea Kim</strong> (platform) &middot; handoff at 18:00</span>
+            <button class="btn btn-tonal">Page on-call</button>
+          </div>
+        </section>
+
+        <!-- Resource usage -->
+        <section class="panel" aria-label="Resource usage">
+          <div class="panel-head">
+            <h2>Resource usage</h2>
+            <a class="link" href="#">Details</a>
+          </div>
+          <div class="rings">
+            <div class="ring-block">
+              <div class="ring-wrap">
+                <svg width="108" height="108" viewBox="0 0 108 108">
+                  <circle cx="54" cy="54" r="46" fill="none" stroke="#E6E0E9" stroke-width="10"/>
+                  <circle cx="54" cy="54" r="46" fill="none" stroke="#6750A4" stroke-width="10" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="98"/>
+                </svg>
+                <span class="ring-val">66%</span>
+              </div>
+              <span class="ring-lbl">CPU</span>
+              <span class="ring-sub">24 / 36 vCPU allocated</span>
+            </div>
+            <div class="ring-block">
+              <div class="ring-wrap">
+                <svg width="108" height="108" viewBox="0 0 108 108">
+                  <circle cx="54" cy="54" r="46" fill="none" stroke="#E6E0E9" stroke-width="10"/>
+                  <circle cx="54" cy="54" r="46" fill="none" stroke="#625B71" stroke-width="10" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="150"/>
+                </svg>
+                <span class="ring-val">48%</span>
+              </div>
+              <span class="ring-lbl">Memory</span>
+              <span class="ring-sub">61 GB of 128 GB in use</span>
+            </div>
+            <div class="ring-block">
+              <div class="ring-wrap">
+                <svg width="108" height="108" viewBox="0 0 108 108">
+                  <circle cx="54" cy="54" r="46" fill="none" stroke="#E6E0E9" stroke-width="10"/>
+                  <circle cx="54" cy="54" r="46" fill="none" stroke="#7D5260" stroke-width="10" stroke-linecap="round" stroke-dasharray="289" stroke-dashoffset="55"/>
+                </svg>
+                <span class="ring-val">81%</span>
+              </div>
+              <span class="ring-lbl">Storage</span>
+              <span class="ring-sub">3.2 TB of 4 TB used</span>
+            </div>
+          </div>
+          <div class="ring-foot">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 8v5m0 3.5v.5" stroke="#49454F" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="#49454F" stroke-width="1.8"/></svg>
+            Storage projected to reach 90% in 11 days. Consider expanding the analytics volume.
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

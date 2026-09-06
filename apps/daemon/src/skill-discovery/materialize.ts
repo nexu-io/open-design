@@ -10,7 +10,7 @@ const PORTABLE_RELATIVE_PATH = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/u;
 const CANONICAL_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/u;
 const SHA256 = /^sha256:[a-f0-9]{64}$/u;
 const MAX_FILES = 32;
-const MAX_FILE_BYTES = 256 * 1024;
+const MAX_FILE_BYTES = 512 * 1024;
 const MAX_PACKAGE_BYTES = 2 * 1024 * 1024;
 
 export interface VerifiedSkillDiscoveryResource {

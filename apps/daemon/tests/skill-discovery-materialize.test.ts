@@ -44,6 +44,25 @@ describe('Skill discovery materialization', () => {
     })).rejects.toBeInstanceOf(SkillDiscoveryMaterializationError);
   });
 
+  it('materializes official template previews while keeping the 512 KiB file bound', async () => {
+    const cwd = await mkdtemp(path.join(os.tmpdir(), 'od-discovery-template-'));
+    const preview = resource('example.webp', 'x'.repeat(417_378));
+    const receipt = await materializeVerifiedSkillDiscoveryResources({
+      cwd,
+      alias: 'discovered-image-event-poster-aaaaaaaaaaaa',
+      resources: [preview],
+    });
+    expect(await readFile(path.join(cwd, receipt.materializedRoot!, 'example.webp')))
+      .toEqual(preview.bytes);
+    await expect(materializeVerifiedSkillDiscoveryResources({
+      cwd,
+      alias: 'discovered-image-event-poster-aaaaaaaaaaaa',
+      resources: [resource('example.webp', 'x'.repeat(512 * 1024 + 1))],
+    })).rejects.toBeInstanceOf(SkillDiscoveryMaterializationError);
+    expect(await readFile(path.join(cwd, receipt.materializedRoot!, 'example.webp')))
+      .toEqual(preview.bytes);
+  });
+
   it('refuses a symbolic staging root', async () => {
     const cwd = await mkdtemp(path.join(os.tmpdir(), 'od-discovery-stage-'));
     const outside = await mkdtemp(path.join(os.tmpdir(), 'od-discovery-outside-'));

@@ -7,19 +7,10 @@
 // client and the server never disagree about what counts as the
 // "default" plugin for a given project kind / task kind.
 //
-// Kind → scenario plugin mapping. Surfaces that have a battle-tested
-// bundled skill+template (decks, web prototypes) point to the
-// specialised plugin so the agent gets a real seed (`assets/template.html`),
-// a layout vocabulary (`references/layouts.md`), and a P0 checklist —
-// instead of routing through the generic od-new-generation router and
-// re-inventing every slide/section's CSS from scratch. The latter is
-// the root cause of decks that overflow the 1080px canvas, mismatched
-// type scales, and "different aesthetic every turn" drift.
-//
-// Generic / catch-all kinds (template, other) keep od-new-generation,
-// which runs discovery → plan → generate → critique without a
-// surface-specific seed. Media kinds keep od-media-generation, which
-// dispatches through the media contract instead of emitting HTML.
+// Creation defaults use the retained scenario infrastructure without pinning
+// a visual template. The four OD Next task profiles are selected independently
+// from exact task metadata; untyped tasks choose Skills through Discovery.
+// Media kinds keep od-media-generation for their media contract.
 
 import type {
   ProjectKind,
@@ -30,14 +21,8 @@ import type { AppliedPluginSnapshot } from './apply.js';
 
 export type TaskKind = AppliedPluginSnapshot['taskKind'];
 
-// Plugin ids the kind/task-kind defaults can resolve to. Two tiers:
-//   1. `od-*` scenarios (under `plugins/_official/scenarios/`) — generic
-//      routers / pipelines without per-surface templates.
-//   2. `example-*` scenarios (under `plugins/_official/examples/`) —
-//      specialised bundled skills that ship a seed template + layout
-//      vocabulary + checklist. Promoted to first-class defaults here so
-//      the chip rail / project create paths bind them without the user
-//      having to manually pick the skill.
+// Current default routers plus legacy ids retained for persisted bindings.
+// New defaults below use only the retained scenario infrastructure.
 // Kept as a string-literal union so a typo surfaces as a type error in
 // both the web shell and the daemon resolver.
 export type DefaultScenarioPluginId =
@@ -121,14 +106,8 @@ export function automaticStrategyTaskProfileForProjectMetadata(
 }
 
 export const DEFAULT_SCENARIO_PLUGIN_BY_KIND: Record<ProjectKind, DefaultScenarioPluginId> = {
-  // Prototypes bind to web-prototype's seed template (single-file HTML,
-  // 1280×800 frame, section layouts library, P0 checklist).
-  prototype: 'example-web-prototype',
-  // Decks bind to simple-deck's seed (1920×1080 canvas, 8-pattern
-  // layout vocabulary including cover / body / big-stat / pipeline /
-  // closing, plus an overflow checklist that catches the
-  // "headline + subtitle + absolute footer" collision).
-  deck:      'example-simple-deck',
+  prototype: 'od-new-generation',
+  deck:      'od-new-generation',
   template:  'od-new-generation',
   brand:     'od-new-generation',
   image:     'od-media-generation',
@@ -154,17 +133,11 @@ export function defaultScenarioPluginIdForKind(
 export function defaultScenarioPluginIdForProjectMetadata(
   metadata: Pick<ProjectMetadata, 'kind' | 'intent'> | null | undefined,
 ): DefaultScenarioPluginId | null {
-  if (metadata?.intent === 'live-artifact') return 'example-live-artifact';
-  if (metadata?.intent === 'web-clone') return 'example-web-clone';
-  // The powered-preview GPU card is a first-level output type on the create
-  // rail and binds `example-webgl-experience`, so that plugin is this
-  // metadata's automatic default the same way `example-web-clone` is
-  // web-clone's. Leaving it out resolved a WebGL project to the generic
-  // prototype seed, so the card's own binding read as a user pin and
-  // restoring it would have bound the wrong plugin.
-  if (metadata?.intent === 'webgl-experience') return 'example-webgl-experience';
-  if (metadata?.intent === 'hyperframes') return 'example-hyperframes';
-  if (metadata?.intent === 'marketing') return 'example-web-prototype';
+  if (metadata?.intent === 'live-artifact'
+    || metadata?.intent === 'web-clone'
+    || metadata?.intent === 'webgl-experience'
+    || metadata?.intent === 'hyperframes'
+    || metadata?.intent === 'marketing') return 'od-new-generation';
   return defaultScenarioPluginIdForKind(metadata?.kind);
 }
 
@@ -179,17 +152,8 @@ export function defaultScenarioTaskProfileForProjectMetadata(
     | undefined,
   pluginId: string,
 ): ProjectScenarioTaskProfile | null {
-  const taskProfile = automaticStrategyTaskProfileForProjectMetadata(metadata);
-  if (taskProfile === 'prototype' || taskProfile === 'marketing') {
-    return pluginId === 'example-web-prototype' ? taskProfile : null;
-  }
-  if (taskProfile === 'ppt') {
-    return pluginId === 'example-simple-deck' ? taskProfile : null;
-  }
-  if (taskProfile === 'hyperframes') {
-    return pluginId === 'example-hyperframes' ? taskProfile : null;
-  }
-  return null;
+  if (pluginId !== 'od-new-generation') return null;
+  return automaticStrategyTaskProfileForProjectMetadata(metadata);
 }
 
 export function defaultScenarioPluginIdForTaskKind(

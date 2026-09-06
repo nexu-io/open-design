@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lorekeep — The knowledge base your team actually reads</title>
+<meta name="description" content="Lorekeep keeps your team's decisions, docs, and know-how in one warm, readable place — and keeps them current without anyone being the librarian." />
+<link rel="icon" href="data:," />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  /* Warm cream SaaS landing · oversized Fraunces serif hero with italic accent word,
+   * peach gradient ground, pill buttons, dark inverted CTA band */
+  :root {
+    --cream: #faf6ef;
+    --cream-warm: #f4ebdc;
+    --peach: #f6dfcb;
+    --ink: #1f1a15;
+    --soft: #5b4f44;
+    --line: #e6dccb;
+    --accent: #c8552b;
+    --accent-deep: #a8431f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--cream);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.55;
+  }
+  .serif { font-family: 'Fraunces', Georgia, serif; font-optical-sizing: auto; }
+
+  /* Nav */
+  .nav {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(10px);
+    background: rgba(250, 246, 239, 0.85);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner {
+    max-width: 1180px; margin: 0 auto;
+    padding: 18px 32px;
+    display: flex; align-items: center; gap: 40px;
+  }
+  .logo {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 600; font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  .logo-dot {
+    display: inline-block; width: 8px; height: 8px;
+    background: var(--accent); border-radius: 50%;
+    margin-right: 8px; vertical-align: middle;
+  }
+  .nav-links { display: flex; gap: 28px; font-size: 14px; }
+  .nav-links a { color: var(--soft); text-decoration: none; }
+  .nav-cta { margin-left: auto; display: flex; gap: 16px; align-items: center; }
+  .nav-cta a:not(.pill) { font-size: 14px; color: var(--soft); text-decoration: none; }
+  .pill {
+    background: var(--ink); color: var(--cream);
+    padding: 9px 18px; border-radius: 999px;
+    font-weight: 500; font-size: 14px;
+    text-decoration: none;
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(180deg, var(--cream) 0%, var(--peach) 100%);
+    padding: 120px 32px 140px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent-deep);
+    margin-bottom: 32px;
+  }
+  .h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(48px, 7vw, 88px);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    max-width: 920px;
+    margin: 0 auto 28px;
+  }
+  .h1 em { font-style: italic; color: var(--accent-deep); }
+  .lede {
+    font-size: 20px;
+    color: var(--soft);
+    max-width: 620px;
+    margin: 0 auto 44px;
+  }
+  .ctas { display: flex; gap: 16px; justify-content: center; margin-bottom: 48px; }
+  .btn {
+    padding: 14px 28px;
+    border-radius: 999px;
+    font-weight: 500;
+    font-size: 15px;
+    text-decoration: none;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: transform 0.15s ease;
+  }
+  .btn-primary { background: var(--ink); color: var(--cream); }
+  .btn-ghost { color: var(--ink); border: 1px solid var(--ink); }
+  .btn:hover { transform: translateY(-1px); }
+  .trust { font-size: 13px; color: var(--soft); }
+  .trust strong { color: var(--ink); font-weight: 600; }
+
+  /* Logo strip */
+  .logos {
+    padding: 56px 32px;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    background: var(--cream);
+  }
+  .logos-inner {
+    max-width: 1100px; margin: 0 auto;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 32px;
+    font-family: 'Fraunces', Georgia, serif;
+    font-style: italic; font-size: 22px; color: var(--soft);
+  }
+
+  /* Features */
+  .features {
+    padding: 120px 32px;
+    max-width: 1180px;
+    margin: 0 auto;
+  }
+  .features-head {
+    text-align: center;
+    max-width: 720px;
+    margin: 0 auto 80px;
+  }
+  .features-head h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(36px, 4.5vw, 52px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+  }
+  .features-head p { font-size: 18px; color: var(--soft); margin: 0; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+  .card {
+    background: var(--cream-warm);
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 40px 32px;
+    text-align: center;
+  }
+  .icon {
+    width: 56px; height: 56px;
+    border-radius: 14px;
+    background: var(--cream);
+    border: 1px solid var(--line);
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-bottom: 24px;
+    color: var(--accent-deep);
+  }
+  .icon svg {
+    width: 26px; height: 26px;
+    fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .card h3 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 500;
+    font-size: 22px;
+    margin: 0 0 12px;
+    letter-spacing: -0.01em;
+  }
+  .card p {
+    font-size: 15px;
+    color: var(--soft);
+    margin: 0;
+  }
+
+  /* CTA */
+  .cta-section {
+    background: var(--ink);
+    color: var(--cream);
+    padding: 120px 32px;
+    text-align: center;
+  }
+  .cta-section h2 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 400;
+    font-size: clamp(36px, 5vw, 60px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    margin: 0 0 20px;
+    max-width: 720px;
+    margin-left: auto; margin-right: auto;
+  }
+  .cta-section p {
+    font-size: 18px;
+    color: rgba(250, 246, 239, 0.7);
+    margin: 0 auto 40px;
+    max-width: 540px;
+  }
+  .cta-section .btn-primary {
+    background: var(--cream);
+    color: var(--ink);
+  }
+
+  /* Footer */
+  .footer {
+    padding: 40px 32px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--soft);
+    border-top: 1px solid var(--line);
+    background: var(--cream);
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="logo"><span class="logo-dot"></span>Lorekeep</div>
+    <div class="nav-links">
+      <a href="#">Product</a>
+      <a href="#">Templates</a>
+      <a href="#">Pricing</a>
+      <a href="#">Changelog</a>
+      <a href="#">Docs</a>
+    </div>
+    <div class="nav-cta">
+      <a href="#">Sign in</a>
+      <a href="#" class="pill">Start writing</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="eyebrow">Team knowledge, kept alive</div>
+  <h1 class="h1">The knowledge base your team <em>actually</em> reads</h1>
+  <p class="lede">Decisions, runbooks, and hard-won context in one warm, readable home — with stale pages flagged before they mislead anyone, and answers that cite their sources.</p>
+  <div class="ctas">
+    <a href="#" class="btn btn-primary">Start a workspace →</a>
+    <a href="#" class="btn btn-ghost">See a sample wiki</a>
+  </div>
+  <div class="trust">Loved by teams who were <strong>tired of the docs graveyard</strong></div>
+</section>
+
+<section class="logos">
+  <div class="logos-inner">
+    <span>Wrenfield</span>
+    <span>Cobble &amp; Pine</span>
+    <span>Saltmarsh</span>
+    <span>Novella</span>
+    <span>Harrow Labs</span>
+    <span>Bracken</span>
+  </div>
+</section>
+
+<section class="features">
+  <div class="features-head">
+    <h2>Written once, useful for years</h2>
+    <p>Lorekeep treats documentation as a living thing — reviewed, dated, and owned, not dumped and forgotten.</p>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 v16 M12 4 q-3 -2 -8 -1 v15 q5 -1 8 2 M12 4 q3 -2 8 -1 v15 q-5 -1 -8 2"/></svg>
+      </div>
+      <h3>Pages with owners</h3>
+      <p>Every page has a named owner and a review date. When a page goes stale, the owner hears about it — readers never have to guess what is still true.</p>
+    </div>
+    <div class="card">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 L21 21"/><path d="M8 10.5 h5"/></svg>
+      </div>
+      <h3>Answers that cite</h3>
+      <p>Ask a question in plain words and get an answer assembled from your own pages — with links to the exact paragraphs it came from.</p>
+    </div>
+    <div class="card">
+      <div class="icon">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 17 L4 7 M4 12 h9"/><path d="M13 7 v10"/><path d="M17 9 l3 3 -3 3"/></svg>
+      </div>
+      <h3>Decisions on the record</h3>
+      <p>Capture the why behind every choice as a lightweight decision log. Six months later, nobody re-argues a settled question from scratch.</p>
+    </div>
+  </div>
+
+</section>
+
+<section class="cta-section">
+  <h2>Give your team's memory a home</h2>
+  <p>Import your existing docs in an afternoon and let Lorekeep keep them honest from then on.</p>
+  <a href="#" class="btn btn-primary">Start a workspace →</a>
+</section>
+
+<footer class="footer">
+  © 2026 Lorekeep — Written, kept, and read with care.
+</footer>
+
+</body>
+</html>

@@ -540,36 +540,34 @@ describe('HomeHero intent rail', () => {
   });
 
   it('marks prototype and slide-deck as daemon-owned automatic scenarios', () => {
-    // Prototype now binds to web-prototype's seed template instead of
-    // the generic od-new-generation router. Same for Slide deck →
-    // simple-deck. See packages/contracts/src/plugins/scenario-defaults.ts
-    // for the rationale (battle-tested seed + layouts + checklist).
+    // The retained generic scenario supplies the composer entry without
+    // selecting a visual template; the task profile owns execution guidance.
     expect(findChip('prototype')?.action).toMatchObject({
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
       automaticDefault: true,
     });
     expect(findChip('deck')?.action).toMatchObject({
-      pluginId: 'example-simple-deck',
+      pluginId: 'od-new-generation',
       projectKind: 'deck',
       automaticDefault: true,
     });
   });
 
-  it('specialised category chips route to their bundled scenario plugin', () => {
+  it('specialised category chips retain their intent through the generic scenario', () => {
     // HyperFrames is the motion-graphics specialisation of Video,
     // surfaced as a separate chip so users can target it directly
     // instead of routing through the generic Video chip.
     expect(findChip('hyperframes')?.action).toMatchObject({
       kind: 'apply-scenario',
-      pluginId: 'example-hyperframes',
+      pluginId: 'od-new-generation',
       projectKind: 'video',
       automaticDefault: true,
       projectMetadata: expect.objectContaining({ intent: 'hyperframes' }),
     });
     expect(findChip('live-artifact')?.action).toMatchObject({
       kind: 'apply-scenario',
-      pluginId: 'example-live-artifact',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
       automaticDefault: true,
       projectMetadata: {

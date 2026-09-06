@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sprout — Material 3 Habit Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      /* M3 light scheme from a green tonal seed */
+      --md-sys-color-primary: #3B6939;
+      --md-sys-color-on-primary: #FFFFFF;
+      --md-sys-color-primary-container: #BCF0B4;
+      --md-sys-color-on-primary-container: #002204;
+      --md-sys-color-secondary: #52634F;
+      --md-sys-color-on-secondary: #FFFFFF;
+      --md-sys-color-secondary-container: #D5E8CF;
+      --md-sys-color-on-secondary-container: #101F10;
+      --md-sys-color-tertiary: #38656A;
+      --md-sys-color-on-tertiary: #FFFFFF;
+      --md-sys-color-tertiary-container: #BCEBF0;
+      --md-sys-color-on-tertiary-container: #002023;
+      --md-sys-color-surface: #F7FBF1;
+      --md-sys-color-on-surface: #191D17;
+      --md-sys-color-on-surface-variant: #424940;
+      --md-sys-color-surface-container-lowest: #FFFFFF;
+      --md-sys-color-surface-container-low: #F1F5EB;
+      --md-sys-color-surface-container: #EBEFE6;
+      --md-sys-color-surface-container-high: #E6E9E0;
+      --md-sys-color-surface-container-highest: #E0E4DA;
+      --md-sys-color-outline: #72796F;
+      --md-sys-color-outline-variant: #C2C9BD;
+      /* Shape */
+      --md-sys-shape-corner-small: 8px;
+      --md-sys-shape-corner-medium: 12px;
+      --md-sys-shape-corner-large: 16px;
+      --md-sys-shape-corner-extra-large: 28px;
+      --md-sys-shape-corner-full: 9999px;
+      --md-font: 'Roboto Flex', Roboto, 'Segoe UI', system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; }
+
+    body {
+      font-family: var(--md-font);
+      background: var(--md-sys-color-surface-container);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      color: var(--md-sys-color-on-surface);
+    }
+
+    /* ---------- iPhone device frame ---------- */
+    .frame {
+      width: 390px;
+      height: 740px;
+      background: black;
+      border-radius: 56px;
+      padding: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+      position: relative;
+    }
+    .frame::before {
+      content: '';
+      position: absolute;
+      top: 22px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 124px;
+      height: 36px;
+      background: black;
+      border-radius: 999px;
+      z-index: 5;
+    }
+
+    /* ---------- Phone screen ---------- */
+    .phone {
+      width: 100%;
+      height: 100%;
+      background: var(--md-sys-color-surface);
+      border-radius: 44px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ---------- Status bar ---------- */
+    .status {
+      flex: 0 0 auto;
+      padding: 16px 24px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+      font-weight: 600;
+      background: var(--md-sys-color-surface);
+      color: var(--md-sys-color-on-surface);
+    }
+    .status .right { display: flex; gap: 6px; align-items: center; }
+
+    /* ---------- Top app bar ---------- */
+    .top-bar {
+      flex: 0 0 64px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 8px 0 16px;
+      background: var(--md-sys-color-surface);
+    }
+    .top-bar h1 { font-size: 22px; font-weight: 500; flex: 1; }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border: none;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: none;
+      color: var(--md-sys-color-on-surface-variant);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+    .icon-btn:hover { background: var(--md-sys-color-surface-container-high); }
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--md-sys-shape-corner-full);
+      background: var(--md-sys-color-tertiary-container);
+      color: var(--md-sys-color-on-tertiary-container);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 600;
+      margin: 0 8px;
+    }
+
+    .scroll {
+      flex: 1;
+      min-height: 0;
+      padding: 4px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
+    }
+
+    /* ---------- Streak card ---------- */
+    .streak {
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+      border-radius: var(--md-sys-shape-corner-large);
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .streak-num { font-size: 44px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .streak-copy { flex: 1; }
+    .streak-title { font-size: 15px; font-weight: 600; }
+    .streak-sub { font-size: 12.5px; opacity: 0.8; margin-top: 3px; }
+    .streak-days { display: flex; gap: 6px; margin-top: 10px; }
+    .day {
+      width: 24px;
+      height: 24px;
+      border-radius: var(--md-sys-shape-corner-full);
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      font-weight: 600;
+      background: rgba(255, 255, 255, 0.55);
+      color: var(--md-sys-color-on-primary-container);
+    }
+    .day.done { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+
+    /* ---------- Section label ---------- */
+    .sect {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .sect h2 { font-size: 14px; font-weight: 600; letter-spacing: 0.1px; }
+    .sect span { font-size: 12px; color: var(--md-sys-color-on-surface-variant); font-variant-numeric: tabular-nums; }
+
+    /* ---------- Habit list ---------- */
+    .habits { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+    .habit {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--md-sys-color-surface-container-low);
+      border-radius: var(--md-sys-shape-corner-medium);
+      padding: 13px 16px;
+    }
+    .habit-icon {
+      width: 40px;
+      height: 40px;
+      flex: 0 0 40px;
+      border-radius: var(--md-sys-shape-corner-medium);
+      display: grid;
+      place-items: center;
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+    }
+    .habit-icon.t { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
+    .habit-body { flex: 1; min-width: 0; }
+    .habit-name { font-size: 15px; font-weight: 500; }
+    .habit-meta { font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-top: 2px; }
+    .habit.done .habit-name { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); }
+
+    /* M3 checkbox */
+    .cbx {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      border-radius: 4px;
+      border: 2px solid var(--md-sys-color-outline);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      background: transparent;
+    }
+    .cbx.on {
+      background: var(--md-sys-color-primary);
+      border-color: var(--md-sys-color-primary);
+      color: var(--md-sys-color-on-primary);
+    }
+
+    /* ---------- FAB ---------- */
+    .fab {
+      position: absolute;
+      right: 20px;
+      bottom: 100px;
+      width: 56px;
+      height: 56px;
+      border: none;
+      border-radius: var(--md-sys-shape-corner-large);
+      background: var(--md-sys-color-primary-container);
+      color: var(--md-sys-color-on-primary-container);
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: border-radius 200ms cubic-bezier(0.2, 0, 0, 1);
+    }
+    .fab:hover { border-radius: var(--md-sys-shape-corner-full); }
+
+    /* ---------- Bottom navigation bar ---------- */
+    .nav-bar {
+      flex: 0 0 80px;
+      background: var(--md-sys-color-surface-container);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      align-items: center;
+      padding: 8px 12px 12px;
+    }
+    .nav-dest {
+      border: none;
+      background: none;
+      font-family: inherit;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .nav-pill {
+      width: 64px;
+      height: 32px;
+      border-radius: var(--md-sys-shape-corner-full);
+      display: grid;
+      place-items: center;
+      color: var(--md-sys-color-on-surface-variant);
+    }
+    .nav-dest.active .nav-pill {
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+    }
+    .nav-lbl {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--md-sys-color-on-surface-variant);
+      letter-spacing: 0.5px;
+    }
+    .nav-dest.active .nav-lbl { color: var(--md-sys-color-on-surface); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+  <div class="phone">
+    <!-- Status bar -->
+    <div class="status"><span>9:41</span><span class="right">·· 5G · 100%</span></div>
+
+    <!-- Top app bar -->
+    <header class="top-bar">
+      <h1>Today</h1>
+      <button class="icon-btn" aria-label="Calendar">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="15.5" rx="3" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 9.5h17M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <span class="avatar">MJ</span>
+    </header>
+
+    <div class="scroll">
+      <!-- Streak card -->
+      <section class="streak" aria-label="Current streak">
+        <span class="streak-num">12</span>
+        <div class="streak-copy">
+          <div class="streak-title">Day streak. Keep it going!</div>
+          <div class="streak-sub">3 of 5 habits done today</div>
+          <div class="streak-days">
+            <span class="day done">M</span>
+            <span class="day done">T</span>
+            <span class="day done">W</span>
+            <span class="day done">T</span>
+            <span class="day">F</span>
+            <span class="day">S</span>
+            <span class="day">S</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="sect">
+        <h2>Morning</h2>
+        <span>2 / 3 done</span>
+      </div>
+
+      <ul class="habits">
+        <li class="habit done">
+          <span class="habit-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6 20c0-6 3-11 6-14 3 3 6 8 6 14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M12 6v14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <div class="habit-body">
+            <div class="habit-name">Morning stretch</div>
+            <div class="habit-meta">10 min · every day</div>
+          </div>
+          <span class="cbx on">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </li>
+
+        <li class="habit done">
+          <span class="habit-icon t">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7 4h10v4a5 5 0 0 1-10 0V4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M17 5h2.5a1.5 1.5 0 0 1 0 3H17M9 20h6M12 13v7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <div class="habit-body">
+            <div class="habit-name">Drink a glass of water</div>
+            <div class="habit-meta">Before coffee · every day</div>
+          </div>
+          <span class="cbx on">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </li>
+
+        <li class="habit">
+          <span class="habit-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 19.5V6a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v12.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 19.5A1.5 1.5 0 0 1 5.5 18H20v3H5.5A1.5 1.5 0 0 1 4 19.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </span>
+          <div class="habit-body">
+            <div class="habit-name">Read 20 pages</div>
+            <div class="habit-meta">Current book: field notes · 5 days a week</div>
+          </div>
+          <span class="cbx" role="checkbox" aria-checked="false" aria-label="Mark read 20 pages done"></span>
+        </li>
+      </ul>
+
+      <div class="sect">
+        <h2>Evening</h2>
+        <span>1 / 2 done</span>
+      </div>
+
+      <ul class="habits">
+        <li class="habit">
+          <span class="habit-icon t">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M20 13.5A8 8 0 1 1 10.5 4 6.5 6.5 0 0 0 20 13.5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+          </span>
+          <div class="habit-body">
+            <div class="habit-name">Wind-down, no screens</div>
+            <div class="habit-meta">After 10 pm · every day</div>
+          </div>
+          <span class="cbx" role="checkbox" aria-checked="false" aria-label="Mark wind-down done"></span>
+        </li>
+
+        <li class="habit done">
+          <span class="habit-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v9m0 0l-3.5-3.5M12 13l3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 16v2.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </span>
+          <div class="habit-body">
+            <div class="habit-name">Journal one line</div>
+            <div class="habit-meta">Streak 27 · every day</div>
+          </div>
+          <span class="cbx on">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- FAB -->
+    <button class="fab" aria-label="Add habit">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+
+    <!-- Bottom navigation bar -->
+    <nav class="nav-bar" aria-label="Bottom navigation">
+      <button class="nav-dest active">
+        <span class="nav-pill">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M9 17h6M4.5 10.5L12 4l7.5 6.5V19a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 19v-8.5z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="nav-lbl">Today</span>
+      </button>
+      <button class="nav-dest">
+        <span class="nav-pill">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 19V10M12 19V5M19 19v-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="nav-lbl">Stats</span>
+      </button>
+      <button class="nav-dest">
+        <span class="nav-pill">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.8"/><path d="M5 20a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="nav-lbl">Profile</span>
+      </button>
+    </nav>
+  </div>
+  </div>
+</body>
+</html>

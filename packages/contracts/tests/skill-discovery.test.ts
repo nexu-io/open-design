@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PublicSkillDiscoveryStateV1Schema,
+  OfficialFunctionalSkillDiscoveryDeclarationV1Schema,
   SKILL_DISCOVERY_MAX_SUPERSEDED_V1,
   SkillDiscoveryPreparedResourceV1Schema,
   SkillDiscoveryToolLoadCommitRequestV1Schema,
@@ -25,6 +26,40 @@ function loadedRef(index: number) {
 }
 
 describe('Skill discovery two-phase contracts', () => {
+  it('accepts only product-owned resource sources with the existing auxiliary role', () => {
+    const declaration = {
+      source: 'design-templates',
+      sourceFolder: 'document-decision-memo',
+      id: 'document-decision-memo',
+      autoSelectable: true,
+      role: 'auxiliary',
+      outputKinds: ['document'],
+      positiveExamples: ['Write a decision memo'],
+      negativeExamples: ['Use an incompatible reference'],
+      conflictsWith: [],
+      version: '0.1.0',
+      resources: ['template.json'],
+    };
+    expect(OfficialFunctionalSkillDiscoveryDeclarationV1Schema.safeParse(declaration).success).toBe(true);
+    expect(OfficialFunctionalSkillDiscoveryDeclarationV1Schema.safeParse({
+      ...declaration, source: 'user-templates',
+    }).success).toBe(false);
+    expect(OfficialFunctionalSkillDiscoveryDeclarationV1Schema.safeParse({
+      ...declaration, role: 'primary',
+    }).success).toBe(false);
+  });
+
+  it('transports the largest official template preview with a bounded base64 payload', () => {
+    const resource = {
+      relativePath: 'example.webp', digest, size: 417_378, mode: 0o644,
+      bytesBase64: 'A'.repeat(4 * Math.ceil(417_378 / 3)),
+    };
+    expect(SkillDiscoveryPreparedResourceV1Schema.safeParse(resource).success).toBe(true);
+    expect(SkillDiscoveryPreparedResourceV1Schema.safeParse({
+      ...resource, bytesBase64: 'A'.repeat(4 * Math.ceil((512 * 1024) / 3) + 4),
+    }).success).toBe(false);
+  });
+
   it('accepts bounded base64 resources and strict commit receipts', () => {
     expect(SkillDiscoveryPreparedResourceV1Schema.parse({
       relativePath: 'device-frames/iphone.html',

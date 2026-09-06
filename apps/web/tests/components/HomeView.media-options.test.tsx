@@ -35,8 +35,7 @@ import type { DesignSystemSummary, PromptTemplateSummary } from '../../src/types
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
 const MEDIA_PLUGIN = pluginRecord('od-media-generation', 'Media generation');
-const PROTOTYPE_PLUGIN = pluginRecord('example-web-prototype', 'Web prototype');
-const HYPERFRAMES_PLUGIN = pluginRecord('example-hyperframes', 'HyperFrames');
+const DEFAULT_PLUGIN = pluginRecord('od-new-generation', 'New generation');
 
 const PROMPT_TEMPLATES: PromptTemplateSummary[] = [
   {
@@ -671,7 +670,7 @@ function stubFetch(options: {
     : MEDIA_PLUGIN;
   const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return json({ plugins: [mediaPlugin, PROTOTYPE_PLUGIN, HYPERFRAMES_PLUGIN] });
+      return json({ plugins: [mediaPlugin, DEFAULT_PLUGIN] });
     }
     if (typeof url === 'string' && url === '/api/mcp/servers') {
       return json({ servers: [], templates: [] });

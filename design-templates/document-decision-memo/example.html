@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Decision Memo — One-page Preview</title>
+  <style>
+    :root {
+      --paper: #fbfaf6;
+      --paper-soft: #f3f5f1;
+      --paper-blue: #edf4ef;
+      --ink: #17251d;
+      --ink-soft: #43554a;
+      --muted: #6c796f;
+      --line: #d5ddd7;
+      --line-strong: #b9cabf;
+      --blue: #256348;
+      --yellow: #e8b83f;
+      --yellow-ink: #3d3209;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+
+    body {
+      padding: 48px 22px;
+      color: var(--ink);
+      background: #e9ebe6;
+      font-family: "Albert Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .report { width: min(100%, 940px); margin: 0 auto; }
+
+    .page {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 210 / 297;
+      overflow: hidden;
+      background: var(--paper);
+      border: 1px solid rgba(37, 99, 72, .10);
+      box-shadow: 0 34px 80px -42px rgba(23, 37, 29, .32);
+    }
+
+    .page::before {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 7px;
+      background: var(--blue);
+      content: "";
+    }
+
+    .page::after {
+      position: absolute;
+      inset: 0;
+      z-index: 8;
+      pointer-events: none;
+      opacity: .018;
+      content: "";
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 140 140' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.74' numOctaves='3' stitchTiles='stitchTiles'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+      mix-blend-mode: multiply;
+    }
+
+    .inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      min-height: 100%;
+      flex-direction: column;
+      padding: 29px 54px 42px;
+    }
+
+    .masthead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 13px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .brand-lockup svg { width: 24px; height: 24px; flex: 0 0 24px; }
+
+    .document-meta {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 9.5px;
+      font-weight: 690;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .title-block {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 190px;
+      gap: 38px;
+      align-items: start;
+      padding: 20px 0 10px;
+    }
+
+    h1 {
+      max-width: 640px;
+      margin: 0;
+      font-size: 39px;
+      line-height: 1.02;
+      letter-spacing: -.045em;
+    }
+
+    .title-deck {
+      max-width: 650px;
+      margin: 9px 0 0;
+      color: var(--ink-soft);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .title-facts {
+      display: grid;
+      gap: 13px;
+      align-self: start;
+      padding-left: 18px;
+      border-left: 1px solid var(--line);
+    }
+
+    .title-fact { display: flex; flex-direction: column; justify-content: flex-end; }
+    .title-fact + .title-fact { padding-top: 0; border-top: 0; }
+
+    .fact-label, .section-label {
+      color: var(--blue);
+      font-size: 9.5px;
+      font-weight: 800;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+
+    .fact-value {
+      margin-top: 2px;
+      color: var(--ink-soft);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .recommendation {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      margin-top: 10px;
+      padding: 14px 22px;
+      overflow: hidden;
+      color: #fff;
+      background: var(--ink);
+      border-radius: 10px;
+    }
+
+    .recommendation::after {
+      position: absolute;
+      right: -18px;
+      bottom: -18px;
+      width: 280px;
+      height: 120px;
+      content: "";
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 280 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='white' stroke-opacity='.11' stroke-width='2'%3E%3Cpath d='M28 120L138 10'/%3E%3Cpath d='M70 120L180 10'/%3E%3Cpath d='M112 120L222 10'/%3E%3Cpath d='M154 120L264 10'/%3E%3Cpath d='M196 120L280 36'/%3E%3C/g%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-size: 100% 100%;
+      pointer-events: none;
+    }
+
+    .recommendation-label {
+      position: absolute;
+      top: 14px;
+      right: 22px;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .recommendation .section-label { color: rgba(255, 255, 255, .72); }
+
+    .recommendation-copy { position: relative; z-index: 1; padding: 0 190px 0 0; }
+    .recommendation-copy .section-label { display: block; margin-bottom: 6px; }
+    .recommendation-copy h2 { margin: 0; color: #fff; font-size: 22px; line-height: 1.18; letter-spacing: -.03em; }
+
+    .recommendation-copy p {
+      margin: 5px 0 0;
+      color: rgba(255, 255, 255, .8);
+      font-size: 12.5px;
+      line-height: 1.48;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      padding: 5px 9px;
+      color: var(--yellow-ink);
+      background: var(--yellow);
+      border-radius: 999px;
+      font-size: 9.5px;
+      font-weight: 840;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .section { margin-top: 24px; }
+
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 10px;
+    }
+
+    .section-head h2 { margin: 0; font-size: 17px; line-height: 1.2; letter-spacing: -.025em; }
+    .section-head p { margin: 0; color: var(--muted); font-size: 11.5px; letter-spacing: .02em; }
+
+    .evidence-list {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .evidence-item {
+      display: grid;
+      grid-template-columns: 92px 100px minmax(0, 1fr);
+      gap: 14px;
+      min-height: 58px;
+      align-items: center;
+      padding: 9px 16px;
+    }
+
+    .evidence-item + .evidence-item { border-top: 1px solid var(--line); }
+    .evidence-index { color: var(--blue); font-size: 9.5px; font-weight: 820; letter-spacing: .12em; text-transform: uppercase; }
+    .evidence-value { color: var(--blue); font-size: 24px; font-weight: 780; line-height: 1; letter-spacing: -.035em; }
+    .evidence-copy { min-width: 0; }
+    .evidence-copy strong { display: block; font-size: 12.5px; line-height: 1.3; }
+    .evidence-copy p { margin: 3px 0 0; color: var(--ink-soft); font-size: 11.5px; line-height: 1.42; }
+
+    .option-table {
+      width: 100%;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-spacing: 0;
+      border-radius: 10px;
+      border-collapse: separate;
+    }
+
+    .option-table th {
+      padding: 7px 13px;
+      color: var(--muted);
+      background: var(--paper-soft);
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-align: left;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .option-table td {
+      padding: 8px 13px;
+      color: var(--ink-soft);
+      border-top: 1px solid var(--line);
+      font-size: 12.5px;
+      line-height: 1.3;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .option-table tr.recommended td { background: var(--paper-blue); }
+    .option-name { color: var(--ink); white-space: normal; }
+    .option-name strong { display: block; color: var(--ink); font-weight: 740; }
+    .option-note { display: block; margin-top: 3px; color: var(--muted); font-size: 10.5px; font-weight: 500; line-height: 1.35; }
+
+    .rating {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--ink-soft);
+      font-size: 11.5px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .rating::before {
+      width: 6px;
+      height: 6px;
+      content: "";
+      background: var(--line-strong);
+      border-radius: 50%;
+    }
+
+    .rating--high::before { background: #d9912f; }
+    .rating--medium::before { background: var(--yellow); }
+    .rating--low::before { background: #aac5b4; }
+
+    .disposition {
+      color: var(--blue);
+      font-size: 10.5px;
+      font-weight: 820;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .disposition--muted { color: var(--muted); }
+
+    .recommended .disposition {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      color: #fff;
+      background: var(--blue);
+      border-radius: 999px;
+      font-size: 9.5px;
+      line-height: 1;
+    }
+
+    .decision-details {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 13px;
+      margin-top: 22px;
+      padding-top: 0;
+    }
+
+    .detail-block {
+      padding: 15px 18px;
+      color: var(--ink);
+      background: var(--paper-blue);
+      border: 0;
+      border-radius: 10px;
+    }
+
+    .detail-block h2 { margin: 0 0 9px; color: var(--ink); font-size: 16px; letter-spacing: -.02em; }
+    .detail-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+
+    .detail-list li {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      gap: 9px;
+      color: var(--ink-soft);
+      font-size: 12.5px;
+      line-height: 1.42;
+    }
+
+    .detail-list b {
+      display: grid;
+      width: 18px;
+      height: 18px;
+      place-items: center;
+      color: var(--yellow);
+      background: var(--ink);
+      border: 0;
+      border-radius: 50%;
+      font-size: 8.5px;
+    }
+
+    .detail-list strong { color: var(--ink); }
+
+    .action-band {
+      position: relative;
+      margin-top: 20px;
+      padding: 22px 126px 22px 22px;
+      overflow: hidden;
+      color: #fff;
+      background: var(--ink);
+      border: 1px solid var(--ink);
+      border-radius: 10px;
+    }
+
+    .action-band::after {
+      position: absolute;
+      top: 50%;
+      right: 22px;
+      width: 78px;
+      height: 58px;
+      content: "";
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 78 58' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='0'%3E%3Cstop offset='0' stop-color='white' stop-opacity='0'/%3E%3Cstop offset='.38' stop-color='white' stop-opacity='.06'/%3E%3Cstop offset='1' stop-color='white' stop-opacity='.18'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M7 19H41V8C41 5.7 43.7 4.5 45.4 6L73.2 27C74.8 28.2 74.8 29.8 73.2 31L45.4 52C43.7 53.5 41 52.3 41 50V39H7C5.3 39 4 37.7 4 36V22C4 20.3 5.3 19 7 19Z' fill='url(%23g)'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-size: contain;
+      transform: translateY(-50%);
+    }
+
+    .action-band .section-label { color: rgba(255, 255, 255, .72); }
+
+    .action-copy {
+      position: relative;
+      z-index: 1;
+    }
+
+    .action-copy .section-label { display: block; margin-bottom: 6px; }
+    .action-copy strong { display: block; color: #fff; font-size: 14px; line-height: 1.25; }
+    .action-detail { display: block; margin-top: 4px; color: rgba(255, 255, 255, .76); font-size: 10.5px; }
+    .action-owner { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; color: rgba(255, 255, 255, .62); font-size: 10.5px; line-height: 1.35; }
+    .action-owner b { color: var(--yellow); font-size: 11.5px; }
+
+    @media (max-width: 720px) {
+      body { padding: 0; }
+      .report { width: 100%; }
+      .page { aspect-ratio: auto; overflow: visible; border: 0; box-shadow: none; }
+      .inner { min-height: auto; padding: 28px 22px 34px; }
+      .document-meta { display: none; }
+      .title-block, .recommendation, .decision-details { grid-template-columns: 1fr; }
+      .title-facts { padding: 16px 0 0; border-top: 1px solid var(--line); border-left: 0; }
+      h1 { font-size: 33px; }
+      .recommendation-copy { padding: 0; }
+      .recommendation-label { position: static; justify-content: flex-start; padding-top: 14px; }
+      .evidence-item { grid-template-columns: 78px 82px minmax(0, 1fr); }
+      .option-table { display: block; overflow-x: auto; }
+      .action-band { padding-right: 96px; }
+    }
+
+    @media print {
+      @page { size: A4; margin: 0; }
+      html, body { background: #fff; }
+      body { padding: 0; }
+      .report { width: 940px; margin: 0; zoom: .84436254; }
+      .page { width: 940px; height: 1329.4286px; aspect-ratio: auto; border: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="report">
+    <article class="page" aria-label="Decision memo, one A4 page">
+      <div class="inner">
+        <header class="masthead">
+          <div class="brand-lockup">
+            <svg viewBox="19 18.7266 82 82" fill="none" aria-hidden="true">
+              <path d="M101 59.7266C101 95.3019 95.5753 100.727 60 100.727C24.4247 100.727 19 95.3019 19 59.7266C19 24.1512 24.4247 18.7266 60 18.7266C95.5753 18.7266 101 24.1512 101 59.7266Z" fill="#202020"/>
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M59.8885 34.4258C73.8627 34.4258 85.191 45.7541 85.191 59.7283C85.191 73.7025 73.8627 85.0309 59.8885 85.0309H37.9523C36.0891 85.0309 34.5861 83.528 34.586 81.6648C34.586 76.0216 34.5859 64.7754 34.5859 59.7283C34.5859 45.7541 45.9143 34.4258 59.8885 34.4258ZM59.8886 39.4864C48.7092 39.4864 39.6465 48.5491 39.6465 59.7284C39.6465 70.9078 48.7092 79.9704 59.8886 79.9704C71.0679 79.9704 80.1305 70.9078 80.1306 59.7284C80.1306 48.5491 71.0679 39.4864 59.8886 39.4864Z" fill="white"/>
+              <path d="M58.3164 71.6047L50.602 51.3039C50.3524 50.6469 50.994 50.0028 51.6467 50.2553L71.957 58.113C72.7928 58.4364 72.5625 59.6841 71.667 59.6841H59.8788V71.3146C59.8788 72.2163 58.6364 72.447 58.3164 71.6047Z" fill="white"/>
+            </svg>
+            <span>Open Design</span>
+          </div>
+          <div class="document-meta"><span>Decision memo / 01</span><span>27 Aug 2026</span></div>
+        </header>
+
+        <section class="title-block">
+          <div>
+            <h1>Which document workflow should we build next?</h1>
+            <p class="title-deck">Use 60 days of observed reach, run volume, and repeat intensity to choose the next reusable document-template investment.</p>
+          </div>
+          <aside class="title-facts" aria-label="Decision metadata">
+            <div class="title-fact"><span class="fact-label">Owner</span><span class="fact-value">Product &amp; template systems</span></div>
+            <div class="title-fact"><span class="fact-label">Evidence scope</span><span class="fact-value">60 days · 191 runs</span></div>
+          </aside>
+        </section>
+
+        <section class="recommendation" aria-label="Recommendation">
+          <div class="recommendation-copy">
+            <h2>Approve a guided data-report workflow.</h2>
+            <p>Use PDF as the discovery surface, deepen DOCX as the repeat workflow, and connect both through directly annotated evidence.</p>
+          </div>
+          <div class="recommendation-label"><span class="status-pill">Approval needed</span></div>
+        </section>
+
+        <section class="section" aria-labelledby="evidence-heading">
+          <div class="section-head"><h2 id="evidence-heading">Why this decision</h2></div>
+          <div class="evidence-list">
+            <article class="evidence-item"><span class="evidence-index">Volume</span><span class="evidence-value">72%</span><div class="evidence-copy"><strong>Editable work leads volume.</strong><p>DOCX variants account for most observed runs.</p></div></article>
+            <article class="evidence-item"><span class="evidence-index">Repetition</span><span class="evidence-value">13.5×</span><div class="evidence-copy"><strong>Professional DOCX repeats.</strong><p>The strongest observed runs-per-user intensity.</p></div></article>
+            <article class="evidence-item"><span class="evidence-index">Reach</span><span class="evidence-value">8</span><div class="evidence-copy"><strong>PDF reaches widest.</strong><p>The broadest distinct-user coverage in the sample.</p></div></article>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="options-heading">
+          <div class="section-head"><h2 id="options-heading">Options considered</h2><p>Choose for decision value, reuse, and differentiation</p></div>
+          <table class="option-table">
+            <colgroup><col style="width:42%"><col style="width:14%"><col style="width:14%"><col style="width:15%"><col style="width:15%"></colgroup>
+            <thead><tr><th>Option</th><th>Decision value</th><th>Reuse fit</th><th>Differentiation</th><th>Outcome</th></tr></thead>
+            <tbody>
+              <tr class="recommended"><td class="option-name"><strong>Guided data-report workflow</strong><span class="option-note">Connects evidence, decision, and export.</span></td><td><span class="rating rating--high">High</span></td><td><span class="rating rating--high">High</span></td><td><span class="rating rating--high">High</span></td><td><span class="disposition">Recommend</span></td></tr>
+              <tr><td class="option-name"><strong>Magazine-style report</strong><span class="option-note">Expressive, but overlaps existing templates.</span></td><td><span class="rating rating--medium">Medium</span></td><td><span class="rating rating--low">Low</span></td><td><span class="rating rating--low">Low</span></td><td><span class="disposition disposition--muted">Hold</span></td></tr>
+              <tr><td class="option-name"><strong>General DOCX improvements</strong><span class="option-note">Supports retention without a distinct workflow.</span></td><td><span class="rating rating--medium">Medium</span></td><td><span class="rating rating--high">High</span></td><td><span class="rating rating--low">Low</span></td><td><span class="disposition disposition--muted">Maintain</span></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="decision-details" aria-label="Trade-offs and decision controls">
+          <div class="detail-block">
+            <h2>What we accept</h2>
+            <ul class="detail-list">
+              <li><b>1</b><span><strong>More structure.</strong> A guided flow adds discipline, so sections must remain modular for short reports.</span></li>
+              <li><b>2</b><span><strong>Aggregate evidence.</strong> User totals cannot be summed across capabilities because overlap is unknown.</span></li>
+            </ul>
+          </div>
+          <div class="detail-block">
+            <h2>How we reduce risk</h2>
+            <ul class="detail-list">
+              <li><b>1</b><span><strong>One baseline.</strong> Validate adoption and repeat use against the same 60-day definitions.</span></li>
+              <li><b>2</b><span><strong>Two output checks.</strong> Verify editable hierarchy and the fixed A4 review view together.</span></li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="action-band" aria-label="Next action">
+          <div class="action-copy">
+            <span class="section-label">Next action</span>
+            <strong>Start with one bounded use case and an explicit owner.</strong>
+            <span class="action-detail">Record the decision, prepare the first source dataset, and review adoption after the next 60-day window.</span>
+            <div class="action-owner"><span>Owner</span><b>Product &amp; template systems</b></div>
+          </div>
+        </section>
+
+      </div>
+    </article>
+  </main>
+</body>
+</html>

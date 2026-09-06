@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product Insight Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,420;9..144,560&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Warm paper neutrals: tinted, never pure black or gray */
+    --paper: #faf9f6;
+    --surface: #ffffff;
+    --ink: #23201a;
+    --ink-secondary: #6d675c;
+    --ink-faint: #a39b8d;
+    --hairline: #e7e2d8;
+    --hairline-strong: #d8d2c5;
+    /* One accent, owning chart + actions */
+    --accent: #1d6a5e;
+    --accent-soft: #e3efec;
+    --accent-wash: #f2f7f6;
+    /* Semantics, tinted toward the paper */
+    --up: #1e7a4a;
+    --up-wash: #e8f2ec;
+    --down: #a83c2e;
+    --down-wash: #f7ebe8;
+    --sans: "Public Sans", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+  ::selection { background: var(--accent); color: #f4faf8; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .page { max-width: 1280px; margin: 0 auto; padding: 0 40px 44px; }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 22px 0 18px; border-bottom: 1px solid var(--hairline-strong);
+  }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .brand-name { font-family: var(--serif); font-weight: 560; font-size: 1.25rem; letter-spacing: -0.01em; }
+  .brand-scope { font-size: 0.8rem; color: var(--ink-secondary); border-left: 1px solid var(--hairline-strong); padding-left: 14px; }
+  .masthead-tools { display: flex; align-items: center; gap: 20px; }
+  .range { display: flex; align-items: center; gap: 8px; font-size: 0.82rem; color: var(--ink-secondary); }
+  .range strong { color: var(--ink); font-weight: 600; }
+  .btn {
+    font: 600 0.82rem var(--sans); color: #f6faf9; background: var(--accent);
+    border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer;
+    box-shadow: 0 1px 2px rgba(29, 74, 64, 0.25), 0 4px 12px rgba(29, 74, 64, 0.12);
+  }
+  .btn:hover { background: #17594f; }
+  .btn:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---------- Page title row ---------- */
+  .titlerow { display: flex; align-items: baseline; justify-content: space-between; padding: 26px 0 6px; }
+  h1 { font-family: var(--serif); font-weight: 560; font-size: 1.9rem; letter-spacing: -0.015em; line-height: 1.15; text-wrap: balance; }
+  .titlerow p { font-size: 0.88rem; color: var(--ink-secondary); max-width: 52ch; }
+
+  /* ---------- KPI band ---------- */
+  .kpis {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--hairline); border-bottom: 1px solid var(--hairline);
+    margin-top: 18px;
+  }
+  .kpi { padding: 18px 24px 20px 0; }
+  .kpi + .kpi { border-left: 1px solid var(--hairline); padding-left: 24px; }
+  .kpi-label { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-secondary); }
+  .kpi-value { font-family: var(--serif); font-weight: 560; font-size: 2.05rem; letter-spacing: -0.01em; line-height: 1.1; margin-top: 8px; }
+  .kpi-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.8rem; color: var(--ink-secondary); }
+  .delta { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; border-radius: 99px; padding: 2px 9px 2px 6px; }
+  .delta svg { display: block; }
+  .delta.up { color: var(--up); background: var(--up-wash); }
+  .delta.down { color: var(--down); background: var(--down-wash); }
+
+  /* ---------- Main grid ---------- */
+  .grid { display: grid; grid-template-columns: 1fr 336px; gap: 40px; margin-top: 30px; align-items: start; }
+
+  section h2 { font-family: var(--serif); font-weight: 560; font-size: 1.18rem; letter-spacing: -0.01em; }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .sec-head .hint { font-size: 0.78rem; color: var(--ink-secondary); }
+
+  /* Chart */
+  .legend { display: flex; gap: 18px; margin: 10px 0 6px; font-size: 0.78rem; color: var(--ink-secondary); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .swatch { width: 16px; height: 0; border-top: 2.5px solid var(--accent); border-radius: 2px; }
+  .swatch.prev { border-top: 2px dashed var(--ink-faint); }
+  .chart-wrap { border: 1px solid var(--hairline); border-radius: 10px; background: var(--surface); padding: 18px 18px 10px; box-shadow: 0 1px 2px rgba(46, 40, 29, 0.05), 0 10px 28px rgba(46, 40, 29, 0.05); }
+  .chart-wrap svg { display: block; width: 100%; height: auto; }
+  .axis-text { font: 500 11px var(--sans); fill: var(--ink-secondary); }
+  .grid-line { stroke: var(--hairline); stroke-width: 1; }
+  .annotation-text { font: 600 11px var(--sans); fill: var(--accent); }
+
+  /* Channel table */
+  .channels { margin-top: 34px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.88rem; }
+  thead th {
+    text-align: right; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--ink-secondary); padding: 0 0 10px; border-bottom: 1px solid var(--hairline-strong);
+  }
+  thead th:first-child { text-align: left; }
+  tbody td { padding: 11px 0; border-bottom: 1px solid var(--hairline); text-align: right; color: var(--ink); }
+  tbody td:first-child { text-align: left; font-weight: 600; }
+  tbody tr:hover td { background: var(--accent-wash); }
+  td .sub { display: block; font-size: 0.76rem; font-weight: 400; color: var(--ink-secondary); margin-top: 1px; }
+  .share-cell { display: flex; justify-content: flex-end; align-items: center; gap: 10px; }
+  .share-bar { width: 72px; height: 4px; border-radius: 2px; background: var(--hairline); overflow: hidden; }
+  .share-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+  .tick { font-weight: 600; }
+  .tick.up { color: var(--up); }
+  .tick.down { color: var(--down); }
+
+  /* ---------- Insights rail ---------- */
+  .rail { border-left: 1px solid var(--hairline); padding-left: 32px; }
+  .rail h2 { margin-bottom: 2px; }
+  .rail > p { font-size: 0.8rem; color: var(--ink-secondary); }
+  .insight { padding: 18px 0 20px; border-bottom: 1px solid var(--hairline); }
+  .insight:last-of-type { border-bottom: none; }
+  .insight-head { display: flex; align-items: center; gap: 10px; }
+  .insight-head svg { flex: none; }
+  .insight h3 { font-size: 0.94rem; font-weight: 700; letter-spacing: -0.005em; }
+  .insight p { font-size: 0.84rem; color: var(--ink-secondary); margin-top: 7px; }
+  .insight p strong { color: var(--ink); font-weight: 600; }
+  .insight a { display: inline-block; margin-top: 9px; font-size: 0.8rem; font-weight: 600; color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(29, 106, 94, 0.35); padding-bottom: 1px; }
+  .insight a:hover { border-bottom-color: var(--accent); }
+  .rail-note { margin-top: 16px; font-size: 0.76rem; color: var(--ink-faint); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <div class="brand">
+      <span class="brand-name">Meridian</span>
+      <span class="brand-scope">Workspace analytics &middot; Atlas app</span>
+    </div>
+    <div class="masthead-tools">
+      <span class="range num">Reporting on <strong>May 26 &ndash; Aug 24, 2026</strong> &middot; weekly</span>
+      <button class="btn" type="button">Export report</button>
+    </div>
+  </header>
+
+  <div class="titlerow">
+    <h1>Product Insight Dashboard</h1>
+    <p>Activation is compounding: the June onboarding rewrite is still lifting weekly actives while paid channels cool off.</p>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="kpi-label">Weekly active users</div>
+      <div class="kpi-value num">48,214</div>
+      <div class="kpi-meta">
+        <span class="delta up num"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 8.5V1.5M5 1.5L1.8 4.7M5 1.5l3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>12.4%</span>
+        vs. prior 13 weeks
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Activation rate</div>
+      <div class="kpi-value num">37.8%</div>
+      <div class="kpi-meta">
+        <span class="delta up num"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 8.5V1.5M5 1.5L1.8 4.7M5 1.5l3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>5.1 pts</span>
+        signup &rarr; first project
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Net revenue retention</div>
+      <div class="kpi-value num">108%</div>
+      <div class="kpi-meta">
+        <span class="delta up num"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 8.5V1.5M5 1.5L1.8 4.7M5 1.5l3.2 3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>2 pts</span>
+        trailing 12 months
+      </div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Median time to value</div>
+      <div class="kpi-value num">9m 40s</div>
+      <div class="kpi-meta">
+        <span class="delta down num"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 1.5v7M5 8.5L1.8 5.3M5 8.5l3.2-3.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>48s slower</span>
+        watch: template gallery
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div>
+      <section>
+        <div class="sec-head">
+          <h2>Weekly active users, 13 weeks</h2>
+          <span class="hint num">Week ending Sunday &middot; thousands</span>
+        </div>
+        <div class="legend">
+          <span><i class="swatch"></i>This period</span>
+          <span><i class="swatch prev"></i>Prior period</span>
+        </div>
+        <div class="chart-wrap">
+          <svg viewBox="0 0 760 264" role="img" aria-label="Line chart of weekly active users over thirteen weeks, rising from 36.9 thousand to 48.2 thousand">
+            <!-- horizontal gridlines: 30k..50k -->
+            <line class="grid-line" x1="46" y1="216" x2="748" y2="216"/>
+            <line class="grid-line" x1="46" y1="163" x2="748" y2="163"/>
+            <line class="grid-line" x1="46" y1="110" x2="748" y2="110"/>
+            <line class="grid-line" x1="46" y1="57" x2="748" y2="57"/>
+            <text class="axis-text num" x="38" y="220" text-anchor="end">30k</text>
+            <text class="axis-text num" x="38" y="167" text-anchor="end">36k</text>
+            <text class="axis-text num" x="38" y="114" text-anchor="end">42k</text>
+            <text class="axis-text num" x="38" y="61" text-anchor="end">48k</text>
+            <!-- x labels -->
+            <text class="axis-text num" x="58" y="244">May 31</text>
+            <text class="axis-text num" x="228" y="244">Jun 28</text>
+            <text class="axis-text num" x="398" y="244">Jul 26</text>
+            <text class="axis-text num" x="568" y="244">Aug 23</text>
+            <!-- prior period, dashed -->
+            <path d="M58 196 L115 199 L172 193 L229 197 L286 190 L343 192 L400 186 L457 188 L514 182 L571 184 L628 179 L685 181 L742 177"
+                  fill="none" stroke="#a39b8d" stroke-width="2" stroke-dasharray="5 5" stroke-linecap="round"/>
+            <!-- this period, area wash + line -->
+            <path d="M58 155 L115 158 L172 149 L229 141 L286 128 L343 131 L400 114 L457 104 L514 108 L571 92 L628 84 L685 76 L742 60 L742 216 L58 216 Z"
+                  fill="#1d6a5e" opacity="0.07"/>
+            <path d="M58 155 L115 158 L172 149 L229 141 L286 128 L343 131 L400 114 L457 104 L514 108 L571 92 L628 84 L685 76 L742 60"
+                  fill="none" stroke="#1d6a5e" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+            <!-- annotation: onboarding rewrite ship -->
+            <line x1="286" y1="46" x2="286" y2="216" stroke="#1d6a5e" stroke-width="1" stroke-dasharray="2 4"/>
+            <text class="annotation-text" x="294" y="46">Onboarding v2 ships</text>
+            <!-- last point -->
+            <circle cx="742" cy="60" r="4.5" fill="#1d6a5e"/>
+            <circle cx="742" cy="60" r="8.5" fill="#1d6a5e" opacity="0.15"/>
+            <text class="annotation-text num" x="742" y="42" text-anchor="end">48.2k</text>
+          </svg>
+        </div>
+      </section>
+
+      <section class="channels">
+        <div class="sec-head">
+          <h2>Signups by channel</h2>
+          <span class="hint">Last 13 weeks &middot; sorted by volume</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Channel</th>
+              <th scope="col">Signups</th>
+              <th scope="col">Activation</th>
+              <th scope="col">&Delta; vs. prior</th>
+              <th scope="col">Share</th>
+            </tr>
+          </thead>
+          <tbody class="num">
+            <tr>
+              <td>Organic search<span class="sub">Docs and comparison pages</span></td>
+              <td>12,481</td>
+              <td>41.2%</td>
+              <td class="tick up">+18.6%</td>
+              <td><span class="share-cell">34%<span class="share-bar"><i style="width:100%"></i></span></span></td>
+            </tr>
+            <tr>
+              <td>Direct &amp; referral<span class="sub">Shared workspaces</span></td>
+              <td>9,867</td>
+              <td>44.9%</td>
+              <td class="tick up">+9.3%</td>
+              <td><span class="share-cell">27%<span class="share-bar"><i style="width:79%"></i></span></span></td>
+            </tr>
+            <tr>
+              <td>Community<span class="sub">Forum, newsletter, events</span></td>
+              <td>6,412</td>
+              <td>39.5%</td>
+              <td class="tick up">+22.1%</td>
+              <td><span class="share-cell">18%<span class="share-bar"><i style="width:53%"></i></span></span></td>
+            </tr>
+            <tr>
+              <td>Paid social<span class="sub">Two retargeting campaigns</span></td>
+              <td>4,905</td>
+              <td>21.7%</td>
+              <td class="tick down">&minus;11.4%</td>
+              <td><span class="share-cell">13%<span class="share-bar"><i style="width:38%"></i></span></span></td>
+            </tr>
+            <tr>
+              <td>Partner integrations<span class="sub">Marketplace listings</span></td>
+              <td>2,958</td>
+              <td>47.3%</td>
+              <td class="tick up">+6.0%</td>
+              <td><span class="share-cell">8%<span class="share-bar"><i style="width:24%"></i></span></span></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <aside class="rail">
+      <h2>This week&rsquo;s readout</h2>
+      <p>Written Monday, from the weekend close.</p>
+
+      <article class="insight">
+        <div class="insight-head">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M2.5 12.5l4-4.2 3 2.6 5.5-6.4" stroke="#1d6a5e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.5 4.5H15v3.5" stroke="#1d6a5e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>Onboarding v2 is still compounding</h3>
+        </div>
+        <p>Eight weeks after ship, cohorts entering through the rebuilt flow activate at <strong>41% versus 29%</strong> for the old flow, and the gap has not narrowed. Worth porting the same pattern to the mobile signup.</p>
+        <a href="#cohorts">Open cohort view</a>
+      </article>
+
+      <article class="insight">
+        <div class="insight-head">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="6.5" stroke="#a83c2e" stroke-width="1.5"/><path d="M9 5.8v3.6" stroke="#a83c2e" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="12" r="0.9" fill="#a83c2e"/></svg>
+          <h3>Paid social is buying the wrong users</h3>
+        </div>
+        <p>Retargeting spend rose 9% while activation from the channel fell to <strong>21.7%</strong>, half the product average. Recommend pausing the lookalike campaign before the September budget review.</p>
+        <a href="#channels">See channel detail</a>
+      </article>
+
+      <article class="insight">
+        <div class="insight-head">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true"><path d="M9 2.8v3M9 12.2v3M2.8 9h3M12.2 9h3" stroke="#6d675c" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="9" r="2.6" stroke="#6d675c" stroke-width="1.5"/></svg>
+          <h3>Time to value slipped 48 seconds</h3>
+        </div>
+        <p>The regression traces to the new template gallery: users browse <strong>3.2 templates</strong> before committing, up from 1.9. A default recommendation should recover most of the loss.</p>
+        <a href="#funnels">Trace the funnel</a>
+      </article>
+
+      <p class="rail-note num">Data refreshed 06:00 UTC &middot; sources: product events, billing, ad platforms.</p>
+    </aside>
+  </div>
+
+</div>
+</body>
+</html>

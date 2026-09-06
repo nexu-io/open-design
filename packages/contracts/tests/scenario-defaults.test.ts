@@ -66,12 +66,12 @@ describe('automaticStrategyTaskProfileForRouteId', () => {
     expect(defaultScenarioTaskProfileForProjectMetadata({
       kind: 'prototype',
       fidelity: 'wireframe',
-    }, 'example-web-prototype')).toBe('prototype');
+    }, 'od-new-generation')).toBe('prototype');
     expect(defaultScenarioTaskProfileForProjectMetadata({
       kind: 'prototype',
       platformTargets: ['mobile-ios'],
-    }, 'example-web-prototype')).toBe('prototype');
-    // The profile stays pinned to the plugin that owns it.
+    }, 'od-new-generation')).toBe('prototype');
+    // Removed templates cannot acquire a new automatic task-profile binding.
     expect(defaultScenarioTaskProfileForProjectMetadata({
       kind: 'prototype',
       fidelity: 'wireframe',
@@ -102,11 +102,8 @@ describe('automaticStrategyTaskProfileForRouteId', () => {
 describe('defaultScenarioPluginIdForKind', () => {
   it('maps every supported ProjectKind to a bundled scenario id', () => {
     const expected: Record<string, string> = {
-      // Surfaces with a battle-tested seed template + layouts +
-      // checklist bind to the specialised example plugin, not the
-      // generic od-new-generation router. See scenario-defaults.ts.
-      prototype: 'example-web-prototype',
-      deck:      'example-simple-deck',
+      prototype: 'od-new-generation',
+      deck:      'od-new-generation',
       template:  'od-new-generation',
       brand:     'od-new-generation',
       image:     'od-media-generation',
@@ -124,17 +121,21 @@ describe('defaultScenarioPluginIdForKind', () => {
     expect(defaultScenarioPluginIdForKind(undefined)).toBeNull();
   });
 
-  it('routes live-artifact intent to the dedicated bundled live artifact scenario', () => {
+  it('routes specialized visual intents through the retained generic scenario', () => {
     expect(defaultScenarioPluginIdForProjectMetadata({
       kind: 'prototype',
       intent: 'live-artifact',
-    })).toBe('example-live-artifact');
+    })).toBe('od-new-generation');
     expect(defaultScenarioPluginIdForProjectMetadata({
       kind: 'prototype',
       intent: 'webgl-experience',
-    })).toBe('example-webgl-experience');
+    })).toBe('od-new-generation');
+    expect(defaultScenarioPluginIdForProjectMetadata({
+      kind: 'prototype',
+      intent: 'web-clone',
+    })).toBe('od-new-generation');
     expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'prototype' }))
-      .toBe('example-web-prototype');
+      .toBe('od-new-generation');
     expect(defaultScenarioPluginIdForProjectMetadata(undefined)).toBeNull();
   });
 
@@ -142,11 +143,11 @@ describe('defaultScenarioPluginIdForKind', () => {
     expect(defaultScenarioPluginIdForProjectMetadata({
       kind: 'prototype',
       intent: 'marketing',
-    })).toBe('example-web-prototype');
+    })).toBe('od-new-generation');
     expect(defaultScenarioPluginIdForProjectMetadata({
       kind: 'video',
       intent: 'hyperframes',
-    })).toBe('example-hyperframes');
+    })).toBe('od-new-generation');
     expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'image' }))
       .toBe('od-media-generation');
     expect(defaultScenarioPluginIdForProjectMetadata({ kind: 'video' }))
@@ -156,19 +157,19 @@ describe('defaultScenarioPluginIdForKind', () => {
   it('limits automatic OD Next profiles to the four approved routes', () => {
     expect(defaultScenarioTaskProfileForProjectMetadata(
       { kind: 'prototype' },
-      'example-web-prototype',
+      'od-new-generation',
     )).toBe('prototype');
     expect(defaultScenarioTaskProfileForProjectMetadata(
       { kind: 'deck' },
-      'example-simple-deck',
+      'od-new-generation',
     )).toBe('ppt');
     expect(defaultScenarioTaskProfileForProjectMetadata(
       { kind: 'prototype', intent: 'marketing' },
-      'example-web-prototype',
+      'od-new-generation',
     )).toBe('marketing');
     expect(defaultScenarioTaskProfileForProjectMetadata(
       { kind: 'video', intent: 'hyperframes' },
-      'example-hyperframes',
+      'od-new-generation',
     )).toBe('hyperframes');
     expect(defaultScenarioTaskProfileForProjectMetadata(
       { kind: 'image' },

@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relaykit · Webhooks that arrive</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F2EA;
+    --bg-deep:#EFEBE0;
+    --panel:#FFFEFA;
+    --panel-soft:#FBF9F2;
+    --ink:#1D1A12;
+    --muted:#6C6555;
+    --faint:#9C947F;
+    --line:#E3DCCB;
+    --line-soft:#ECE6D7;
+    --accent:#1E6B50;
+    --accent-deep:#14503B;
+    --accent-wash:#E4EEE7;
+    --ok:#1E6B50;
+    --warn:#A16207;
+    --err:#B3341F;
+    --shadow-card:0 1px 2px rgba(29,26,18,.05),0 12px 32px -16px rgba(29,26,18,.18);
+    --shadow-lift:0 1px 2px rgba(29,26,18,.06),0 18px 44px -18px rgba(29,26,18,.24);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{color-scheme:light;}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(29,26,18,.055) 1px, transparent 1.6px),
+      linear-gradient(180deg, rgba(255,254,250,.7) 0%, rgba(255,254,250,0) 340px);
+    background-size:26px 26px,100% 100%;
+  }
+  a{color:inherit;text-decoration:none;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,'SF Mono',monospace;}
+  .frame{max-width:1128px;margin:0 auto;padding:0 32px;}
+
+  /* buttons: compact discipline */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:6px;
+    height:30px;padding:0 14px;border-radius:5px;border:1px solid transparent;
+    font-size:12.5px;font-weight:600;letter-spacing:.01em;cursor:pointer;
+    font-family:'Inter',sans-serif;
+    transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .1s ease;
+    position:relative;
+  }
+  .btn::after{content:"";position:absolute;inset:-6px;}
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{
+    background:var(--accent);color:#FBFAF5;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 1px 2px rgba(20,80,59,.35);
+  }
+  .btn.primary:hover{background:var(--accent-deep);box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 3px 8px -2px rgba(20,80,59,.45);}
+  .btn.quiet{background:transparent;color:var(--muted);border-color:var(--line);}
+  .btn.quiet:hover{border-color:var(--faint);color:var(--ink);background:var(--panel);}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  /* header */
+  header{padding:24px 0 0;}
+  .bar{display:flex;align-items:center;justify-content:space-between;}
+  .logo{display:flex;align-items:baseline;gap:9px;font-family:'Fraunces',Georgia,serif;font-weight:600;font-size:17px;letter-spacing:-.01em;}
+  .logo i{
+    width:15px;height:15px;border-radius:4px;background:var(--accent);display:inline-block;position:relative;
+    transform:translateY(2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
+  }
+  .logo i::after{content:"";position:absolute;left:4px;top:4px;width:7px;height:7px;border-radius:2px;background:#FBFAF5;}
+  .bar nav{display:flex;gap:22px;align-items:center;font-size:12.5px;font-weight:500;color:var(--muted);}
+  .bar nav a{transition:color .12s ease;}
+  .bar nav a:hover{color:var(--ink);}
+
+  /* hero layout */
+  .hero{
+    display:grid;grid-template-columns:minmax(0,1fr) 460px;gap:64px;
+    padding:64px 0 8px;align-items:start;
+  }
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:600;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--accent-deep);
+    border:1px solid var(--line);border-radius:999px;padding:4px 12px;
+    background:linear-gradient(180deg,var(--panel) 0%,var(--panel-soft) 100%);
+    box-shadow:0 1px 2px rgba(29,26,18,.05);
+  }
+  .eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-wash);}
+  h1{
+    font-family:'Fraunces',Georgia,serif;font-optical-sizing:auto;
+    font-size:46px;font-weight:600;letter-spacing:-.015em;line-height:1.08;
+    margin:22px 0 16px;text-wrap:balance;
+  }
+  h1 em{font-style:italic;font-weight:500;color:var(--accent-deep);}
+  .lede{color:var(--muted);font-size:15px;line-height:1.65;max-width:50ch;}
+  .lede code{
+    font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--panel);
+    border:1px solid var(--line);border-radius:4px;padding:1px 6px;color:var(--ink);
+  }
+  .cta-row{display:flex;gap:10px;align-items:center;margin:26px 0 8px;}
+  .cta-note{font-size:11.5px;color:var(--faint);}
+
+  /* stat strip */
+  .stats{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-top:40px;
+    border-top:1px solid var(--line);
+  }
+  .stat{padding:16px 18px 0 0;border-right:1px solid var(--line-soft);}
+  .stat:last-child{border-right:0;}
+  .stat + .stat{padding-left:18px;}
+  .stat .k{
+    font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;
+    font-size:19px;font-weight:500;letter-spacing:-.01em;color:var(--ink);
+  }
+  .stat .k small{font-size:12px;color:var(--faint);font-weight:400;}
+  .stat .l{display:block;font-size:11px;color:var(--muted);margin-top:2px;letter-spacing:.02em;}
+
+  /* signature artifact: delivery ledger */
+  .ledger-wrap{position:relative;}
+  .ledger-wrap::before{
+    content:"";position:absolute;inset:14px -10px -12px 10px;border-radius:12px;
+    background:var(--bg-deep);border:1px solid var(--line-soft);z-index:0;
+  }
+  .ledger{
+    position:relative;z-index:1;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    box-shadow:var(--shadow-card);overflow:hidden;
+    transition:box-shadow .2s ease;
+  }
+  .ledger:hover{box-shadow:var(--shadow-lift);}
+  .ledger-head{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:12px 16px;border-bottom:1px solid var(--line-soft);
+    background:linear-gradient(180deg,var(--panel) 0%,var(--panel-soft) 100%);
+  }
+  .ledger-head .t{
+    font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);
+    display:flex;align-items:center;gap:8px;
+  }
+  .ledger-head .t .env{
+    font-family:'JetBrains Mono',monospace;font-size:10.5px;text-transform:none;letter-spacing:0;
+    color:var(--accent-deep);background:var(--accent-wash);border-radius:4px;padding:1px 7px;font-weight:500;
+  }
+  .live{display:inline-flex;gap:7px;align-items:center;font-size:11px;font-weight:500;color:var(--muted);}
+  .live i{width:7px;height:7px;border-radius:50%;background:var(--ok);position:relative;}
+  .live i::after{
+    content:"";position:absolute;inset:-3px;border-radius:50%;border:1px solid var(--ok);
+    opacity:.5;animation:ping 2.2s ease-out infinite;
+  }
+  @keyframes ping{0%{transform:scale(.6);opacity:.6}70%{transform:scale(1.5);opacity:0}100%{opacity:0}}
+
+  .log-row{
+    display:grid;grid-template-columns:12px 68px minmax(0,1fr) 34px 90px 56px;gap:9px;align-items:center;
+    padding:10px 16px;border-bottom:1px solid var(--line-soft);font-size:12px;min-height:41px;
+    transition:background .12s ease;
+  }
+  .log-row:last-of-type{border-bottom:0;}
+  @media (hover:hover){
+    .log-row:hover{background:var(--panel-soft);}
+    .log-row .replay{opacity:.55;}
+    .log-row:hover .replay{opacity:1;}
+  }
+  .dot{width:7px;height:7px;border-radius:50%;justify-self:center;}
+  .dot.ok{background:var(--ok);box-shadow:0 0 0 3px rgba(30,107,80,.14);}
+  .dot.warn{background:var(--warn);box-shadow:0 0 0 3px rgba(161,98,7,.16);}
+  .dot.err{background:var(--err);box-shadow:0 0 0 3px rgba(179,52,31,.14);}
+  .log-row .ts{font-family:'JetBrains Mono',monospace;color:var(--faint);font-size:11px;font-variant-numeric:tabular-nums;}
+  .log-row .ev{
+    font-family:'JetBrains Mono',monospace;color:var(--ink);font-size:11.5px;font-weight:500;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .log-row .code{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;font-weight:500;font-size:11.5px;}
+  .s-ok{color:var(--ok);} .s-warn{color:var(--warn);} .s-err{color:var(--err);}
+  .lat{display:flex;align-items:center;gap:7px;justify-content:flex-end;}
+  .lat .n{
+    font-family:'JetBrains Mono',monospace;color:var(--muted);font-size:11px;
+    font-variant-numeric:tabular-nums;min-width:48px;text-align:right;white-space:nowrap;
+  }
+  .lat .bar{width:26px;height:3px;border-radius:2px;background:var(--line-soft);overflow:hidden;flex:none;}
+  .lat .bar i{display:block;height:100%;border-radius:2px;background:var(--faint);}
+  .lat .bar i.ok{background:var(--ok);} .lat .bar i.warn{background:var(--warn);} .lat .bar i.err{background:var(--err);}
+  .replay{
+    height:23px;padding:0 9px;font-size:10.5px;font-weight:600;border-radius:4px;white-space:nowrap;
+    border:1px solid var(--line);background:var(--panel);color:var(--muted);cursor:pointer;
+    font-family:'Inter',sans-serif;transition:color .12s ease,border-color .12s ease,background .12s ease,transform .08s ease,opacity .12s ease;
+    position:relative;justify-self:end;
+  }
+  .replay::after{content:"";position:absolute;inset:-8px;}
+  .replay:hover{color:var(--accent-deep);border-color:var(--accent);background:var(--accent-wash);}
+  .replay:active{transform:scale(.95);}
+  .replay:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .ledger-foot{
+    display:flex;justify-content:space-between;align-items:center;padding:9px 16px;
+    background:var(--panel-soft);font-size:11px;color:var(--faint);border-top:1px solid var(--line-soft);
+  }
+  .ledger-foot .sig{
+    font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);
+    display:inline-flex;align-items:center;gap:6px;
+  }
+  .ledger-foot .sig b{color:var(--ok);font-weight:500;}
+
+  /* receipt chip under ledger */
+  .receipt{
+    position:relative;z-index:1;margin:22px 0 0 26px;max-width:390px;
+    background:var(--ink);color:#D8D2C2;border-radius:8px;padding:12px 16px;
+    font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.75;
+    box-shadow:var(--shadow-card);
+  }
+  .receipt .c{color:#8C8676;}
+  .receipt .k2{color:#9DBDA9;}
+  .receipt .v{color:#EFEAD9;}
+
+  /* steps */
+  .steps-zone{display:grid;grid-template-columns:minmax(0,1fr) 460px;gap:64px;padding:56px 0 0;}
+  .sec-label{
+    font-family:'Fraunces',Georgia,serif;font-size:21px;font-weight:600;letter-spacing:-.01em;margin-bottom:6px;
+  }
+  .steps{display:grid;gap:0;margin-top:10px;}
+  .step{
+    display:grid;grid-template-columns:46px 1fr;gap:14px;padding:18px 0;border-top:1px solid var(--line);
+  }
+  .step .n{
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);padding-top:3px;
+    font-variant-numeric:tabular-nums;
+  }
+  .step h3{font-size:14px;font-weight:600;letter-spacing:-.01em;font-family:'Inter',sans-serif;}
+  .step p{color:var(--muted);font-size:13px;max-width:52ch;margin-top:4px;}
+  .step code{
+    font-family:'JetBrains Mono',monospace;font-size:11.5px;background:var(--panel);
+    border:1px solid var(--line);border-radius:4px;padding:1px 6px;
+  }
+
+  /* pricing card */
+  .price{
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:22px 24px;box-shadow:var(--shadow-card);align-self:start;
+  }
+  .price .p-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;}
+  .price b{font-family:'Fraunces',Georgia,serif;font-size:17px;font-weight:600;letter-spacing:-.01em;}
+  .price .amount{
+    font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums;font-weight:500;
+  }
+  .price .amount small{font-size:11px;color:var(--faint);font-weight:400;}
+  .price p{font-size:12.5px;color:var(--muted);margin:8px 0 14px;}
+  .price ul{list-style:none;margin:0 0 18px;display:grid;gap:7px;}
+  .price li{
+    font-size:12.5px;color:var(--muted);display:flex;gap:9px;align-items:baseline;
+  }
+  .price li::before{
+    content:"";width:5px;height:5px;border-radius:1.5px;background:var(--accent);flex:none;transform:translateY(-1.5px) rotate(45deg);
+  }
+  .price .btn{width:100%;}
+
+  footer{border-top:1px solid var(--line);margin-top:68px;padding:22px 0 44px;}
+  .foot{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--faint);}
+  .foot a{transition:color .12s ease;}
+  .foot a:hover{color:var(--ink);}
+
+  @media (max-width:980px){
+    .hero,.steps-zone{grid-template-columns:1fr;gap:40px;}
+    .receipt{margin-left:0;}
+  }
+  @media (max-width:640px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .stat:nth-child(2){border-right:0;}
+    .stat:nth-child(n+3){border-top:1px solid var(--line-soft);margin-top:14px;}
+    .log-row{grid-template-columns:14px 70px minmax(0,1fr) 40px;}
+    .lat,.replay{display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none !important;animation:none !important;}
+  }
+</style>
+</head>
+<body>
+
+<div class="frame">
+  <header>
+    <div class="bar">
+      <a class="logo" href="#"><i></i>relaykit</a>
+      <nav>
+        <a href="#">Docs</a>
+        <a href="#">Pricing</a>
+        <a href="#">Status</a>
+        <a class="btn quiet" href="#" style="height:27px">Sign in</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div>
+      <span class="eyebrow"><i></i>v1.9 · signed replay</span>
+      <h1>Webhooks that <em>arrive.</em><br>And prove it.</h1>
+      <p class="lede">
+        Relaykit sits between your API and your customers' endpoints: it queues, signs,
+        retries with backoff, and keeps a searchable ledger of every delivery.
+        Point your events at <code>relay.yourapp.com</code> and stop writing retry loops.
+      </p>
+      <div class="cta-row">
+        <a class="btn primary" href="#">Create endpoint</a>
+        <a class="btn quiet" href="#">Read the docs</a>
+      </div>
+      <p class="cta-note">Free up to 10,000 deliveries/month. No card required.</p>
+
+      <div class="stats">
+        <div class="stat">
+          <span class="k">4,218,067</span>
+          <span class="l">delivered this month</span>
+        </div>
+        <div class="stat">
+          <span class="k">211<small> ms</small></span>
+          <span class="l">median delivery</span>
+        </div>
+        <div class="stat">
+          <span class="k">99.98<small> %</small></span>
+          <span class="l">retries recovered</span>
+        </div>
+        <div class="stat">
+          <span class="k">1,340</span>
+          <span class="l">teams shipping</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="ledger-wrap">
+        <div class="ledger">
+          <div class="ledger-head">
+            <span class="t">Delivery ledger <span class="env">acme-prod</span></span>
+            <span class="live"><i></i>streaming</span>
+          </div>
+          <div role="table" aria-label="Recent webhook deliveries">
+            <div class="log-row">
+              <span class="dot ok"></span>
+              <span class="ts">14:02:11.4</span>
+              <span class="ev">invoice.paid</span>
+              <span class="code s-ok">200</span>
+              <span class="lat"><span class="bar"><i class="ok" style="width:18%"></i></span><span class="n">187 ms</span></span>
+              <button class="replay">Replay</button>
+            </div>
+            <div class="log-row">
+              <span class="dot ok"></span>
+              <span class="ts">14:02:09.1</span>
+              <span class="ev">refund.created</span>
+              <span class="code s-ok">200</span>
+              <span class="lat"><span class="bar"><i class="ok" style="width:20%"></i></span><span class="n">203 ms</span></span>
+              <button class="replay">Replay</button>
+            </div>
+            <div class="log-row">
+              <span class="dot warn"></span>
+              <span class="ts">14:01:58.8</span>
+              <span class="ev">payout.created</span>
+              <span class="code s-warn">429</span>
+              <span class="lat"><span class="bar"><i class="warn" style="width:8%"></i></span><span class="n">64 ms</span></span>
+              <button class="replay">Retry #2</button>
+            </div>
+            <div class="log-row">
+              <span class="dot err"></span>
+              <span class="ts">14:01:41.2</span>
+              <span class="ev">payment.failed</span>
+              <span class="code s-err">500</span>
+              <span class="lat"><span class="bar"><i class="err" style="width:92%"></i></span><span class="n">1,204 ms</span></span>
+              <button class="replay">Replay</button>
+            </div>
+            <div class="log-row">
+              <span class="dot ok"></span>
+              <span class="ts">14:01:37.9</span>
+              <span class="ev">customer.created</span>
+              <span class="code s-ok">200</span>
+              <span class="lat"><span class="bar"><i class="ok" style="width:15%"></i></span><span class="n">156 ms</span></span>
+              <button class="replay">Replay</button>
+            </div>
+          </div>
+          <div class="ledger-foot">
+            <span>Last 5 of 41,209 today</span>
+            <span class="sig">sig <b>verified</b> · ed25519</span>
+          </div>
+        </div>
+      </div>
+      <div class="receipt" aria-label="Signed delivery receipt example">
+        <span class="c"># every attempt ships a signed receipt</span><br>
+        <span class="k2">relay-signature:</span> <span class="v">t=1767881531,v1=6f2a…c19d</span><br>
+        <span class="k2">relay-attempt:</span> <span class="v">3</span> <span class="c"># backoff 4m 30s</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="steps-zone">
+    <div>
+      <h2 class="sec-label">Three moves, then it's boring</h2>
+      <div class="steps">
+        <div class="step">
+          <span class="n">01</span>
+          <div>
+            <h3>Point your events at Relaykit</h3>
+            <p>One POST to <code>https://in.relaykit.dev/acme</code>. We verify, queue, and fan out to every subscribed endpoint.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="n">02</span>
+          <div>
+            <h3>We retry so you don't</h3>
+            <p>Exponential backoff over 72 hours, circuit breaking for dead endpoints, and automatic pause emails to your customer, not your on-call.</p>
+          </div>
+        </div>
+        <div class="step">
+          <span class="n">03</span>
+          <div>
+            <h3>Prove any delivery, forever</h3>
+            <p>Every attempt is signed and archived. Support disputes end with a permalink instead of a shrug.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="price">
+      <div class="p-top">
+        <b>Metered, and that's it</b>
+        <span class="amount">$0.40 <small>/ 1k deliveries</small></span>
+      </div>
+      <p>After the free tier. No platform fee, no seat pricing, no enterprise call to unlock signatures.</p>
+      <ul>
+        <li>Signed receipts and replay on every plan</li>
+        <li>90-day searchable delivery logs</li>
+        <li>Endpoint health emails to your customers</li>
+      </ul>
+      <a class="btn primary" href="#">Start free</a>
+    </div>
+  </section>
+
+  <footer>
+    <div class="foot">
+      <span>© 2026 Relaykit Systems OÜ</span>
+      <span><a href="#">Docs</a> · <a href="#">Changelog</a> · <a href="#">Security</a> · <a href="#">Terms</a></span>
+      <span class="mono">uptime 99.99% · 90d</span>
+    </div>
+  </footer>
+</div>
+
+</body>
+</html>

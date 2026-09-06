@@ -81,6 +81,7 @@ beforeEach(async () => {
     resolveCatalogSources: () => ({
       bundledStrategyPlugin,
       builtInFunctionalSkillsRoot: BUILT_IN_SKILLS_ROOT,
+      builtInDesignTemplatesRoot: path.resolve(import.meta.dirname, '../../../../design-templates'),
     }),
     resolveRunScope: (grant) => ({
       runId: grant.runId,
@@ -496,10 +497,10 @@ describe('agent-native Skill discovery tool routes', () => {
 
   it('deactivates an obsolete auxiliary before another auxiliary can replace it', async () => {
     const searched = await request('/api/tools/skills/search', {
-      body: { query: '复刻网站', role: 'auxiliary', limit: 5 },
+      body: { query: 'decision memo', role: 'auxiliary', limit: 5 },
     });
     const candidate = searched.body.search.candidates.find(
-      (item: { id: string }) => item.id === 'web-clone',
+      (item: { id: string }) => item.id === 'document-decision-memo',
     );
     expect(candidate).toBeDefined();
     const loaded = await prepareAndCommit({
@@ -507,20 +508,29 @@ describe('agent-native Skill discovery tool routes', () => {
         revision: searched.body.search.revision,
         candidateDigest: candidate.candidateDigest,
         role: 'auxiliary',
-        purpose: 'Clone the referenced website accurately.',
+        purpose: 'Write the requested decision memo with its reference structure.',
     });
     expect(loaded.status).toBe(200);
     expect(loaded.body.state.activeAuxiliaries).toEqual([
-      expect.objectContaining({ id: 'web-clone' }),
+      expect.objectContaining({ id: 'document-decision-memo' }),
     ]);
 
+    const resolved = await request('/api/tools/skills/resolve', {
+      body: { resolution: 'none', reason: 'No primary task profile fits this document deliverable.' },
+    });
+    expect(resolved).toMatchObject({ status: 200, body: { state: {
+      status: 'resolved_none',
+      activePrimary: null,
+      activeAuxiliaries: [expect.objectContaining({ id: 'document-decision-memo' })],
+    } } });
+
     const deactivated = await request('/api/tools/skills/deactivate', {
-      body: { id: 'web-clone', reason: 'The user changed from cloning to a new design.' },
+      body: { id: 'document-decision-memo', reason: 'The user changed from a memo to a new design.' },
     });
     expect(deactivated.status).toBe(200);
     expect(deactivated.body.state.activeAuxiliaries).toEqual([]);
     expect(deactivated.body.state.superseded).toEqual([
-      expect.objectContaining({ id: 'web-clone' }),
+      expect.objectContaining({ id: 'document-decision-memo' }),
     ]);
     expect(operations.at(-1)).toBe('skills:deactivate');
   });

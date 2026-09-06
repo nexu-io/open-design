@@ -122,21 +122,20 @@ skillDiscoveryBinding: {
 
 v1 官方来源只有：
 
-1. Open Design 随产品发布的 built-in functional Skills，且必须从 built-in root 直接解析；
+1. Open Design 随产品发布的 built-in functional Skills 与已声明的 design templates，且必须从各自 built-in root 直接解析；
 2. Open Design bundled strategy package 中经过 manifest、版本、资源 roster 和 digest 验证的 task profiles，经 adapter 归一化成可发现 Skill；
 3. 后续新增的其他 first-party provider，必须先通过同等级身份校验后才能加入。
 
-当前 v1 catalog 对产品仓库 `skills/` 下 162 个 regular built-in functional
-Skill 做 exact-set 覆盖，并加入 4 个 task profile，共 166 个候选。四个 task
-profile 固定可作 primary；162 个 functional Skill 固定只作 auxiliary，以免一个
-功能工具越权接管整项任务。产品目标是将 auto-selectable 官方候选收敛到约 20 个；
-协议和 renderer 不依赖固定数量，但当前 166 个候选的 prompt 体积必须作为迁移态
-成本明确观测，不能据此推断未来约 20 个候选的稳定 token 成本。
+当前验证分支移除旧的 162 个 functional Skill，改为对 `7d44e4062` 新增的
+60 个 `design-templates/` 目录做 exact-set 覆盖，并保留 4 个 task profile，
+共 64 个可选择候选。四个 task profile 固定可作 primary；60 个具体模板作
+auxiliary。编排随 task profile 加载，不占一个候选名额。来源和数量口径见
+`skill-discovery-routing-catalog.md`；协议和 renderer 不依赖固定数量。
 
 明确排除：
 
 - user、team、community 或远程临时安装的 Skill；
-- design templates；
+- 未列入官方中央声明的 design templates；
 - design systems；
 - craft；
 - Discovery Skill 自身；
@@ -148,23 +147,25 @@ profile 固定可作 primary；162 个 functional Skill 固定只作 auxiliary�
 
 ### 4.2 中央 discovery metadata gate
 
-v1 不把自动选择字段写回 162 个 Skill body。Daemon 从官方 strategy package
+v1 不把自动选择字段写回原始 Skill body。Daemon 从官方 strategy package
 中的独立 `agent-discovery/functional-catalog.json` 读取 product-owned 声明，并
-要求其 `sourceFolder` 与产品 `skills/` regular root exact-set 一致。每个候选
+按 `source` 将其 `sourceFolder` 与产品 `skills/` 或 `design-templates/`
+regular root 做 exact-set 校验。省略 `source` 时兼容原有的 `skills`。每个候选
 必须显式声明：
 
 ```json
 {
-  "sourceFolder": "frontend-design",
-  "id": "frontend-design",
+  "source": "design-templates",
+  "sourceFolder": "huashu-white-gallery",
+  "id": "huashu-white-gallery",
   "autoSelectable": true,
   "role": "auxiliary",
   "outputKinds": ["web-experience"],
-  "positiveExamples": ["Create a distinctive production frontend"],
-  "negativeExamples": ["Explain what a frontend is"],
+  "positiveExamples": ["Make a quiet gallery page for a poster collection"],
+  "negativeExamples": ["Use an explicitly requested incompatible visual style"],
   "conflictsWith": [],
   "version": "1",
-  "resources": []
+  "resources": ["example.html"]
 }
 ```
 
@@ -173,7 +174,7 @@ v1 不把自动选择字段写回 162 个 Skill body。Daemon 从官方 strategy
 - `sourceFolder` 必须覆盖且只覆盖一个 regular built-in Skill 目录；`id` 必须
   精确等于该 `SKILL.md` frontmatter 的 canonical `name`。
 - `autoSelectable` 必须显式为 `true`；缺失、类型错误或 `false` 都 fail closed。
-- functional `role` 固定为 `auxiliary`；task profile declaration 固定为
+- functional Skill 与具体模板的 `role` 固定为 `auxiliary`；task profile declaration 固定为
   `primary`。协议 DTO 仍保留 `either`，但当前官方 provider 不签发该角色。
 - `outputKinds` 必须是非空、受控枚举或受控 slug 列表。
 - `positiveExamples` 与 `negativeExamples` 都必须非空，且进入 75/150 条评测集的覆盖审计。
@@ -237,7 +238,7 @@ od tools skills rehydrate --json
 
 ### 5.1 Catalog metadata exposure
 
-- lifecycle Markdown 暴露 pinned `catalogVersion`、`revision`、candidate count，以及每个候选的 `id`、声明 `role`、可用于 load 的 `allowedRoles`、`name`、`description`、`outputKinds`、最多两个正例和两个反例作为边界校准、`conflictsWith`、`version` 和 `candidateDigest`。Catalog 可以保留更多评测/检索例子，但 prompt renderer 不枚举全部同义表达；若未来 provider 签发 `either`，Agent 必须从 `allowedRoles=[primary, auxiliary]` 中明确选择一个 resolved role。
+- lifecycle Markdown 暴露 pinned `catalogVersion`、`revision`、candidate count，以及每个候选的 `id`、声明 `role`、可用于 load 的 `allowedRoles`、`name`、`description`、`outputKinds`、最多两个正例和两个反例作为边界校准、`conflictsWith`、`version` 和 `candidateDigest`。模板还暴露来自原 frontmatter 的 `routingMetadata`：双语名称、中文描述、taskType、platform、scenario、category、examplePrompt；这些分类提示不创建 catalog 中不存在的主任务类型。Catalog 可以保留更多评测/检索例子，但 prompt renderer 不枚举全部同义表达；若未来 provider 签发 `either`，Agent 必须从 `allowedRoles=[primary, auxiliary]` 中明确选择一个 resolved role。
 - primary 记录稳定排在 auxiliary 之前；同角色按 canonical id 排序。排序只服务可读性，不是 platform 分类结果。
 - 不返回完整 body、orchestration 或 side-file bytes。只有 Agent 选择后，`load` 才返回对应完整正文与 verified resource receipt。
 - Agent 必须比较完整候选集进行语义判断，可以直接 `load`、clarify 或进入 `resolve --none`；不能因为某个候选在文字上最相似就强制选择。
@@ -283,7 +284,7 @@ Discovery Skill 只在 verified 无类型 conversation 的首轮完整注入一�
 - 错选比漏选严重，不确定时优先 `resolve --none` 或提出一个会实质改变任务的 clarification；
 - 清晰的“帮我做一个官网”属于 Prototype 正例；官网、landing page、web app 和产品网站都可以由 Prototype profile 承担；
 - 对全部 metadata 做语义比较，词法 search 不是正常链路的前置条件；候选显示顺序不是 platform decision；
-- functional Skill 当前只作 auxiliary；只有成功 primary `load`、exact primary
+- functional Skill 与具体模板当前只作 auxiliary；只有成功 primary `load`、exact primary
   reuse 或 `resolve --none` 才完成 resolution，auxiliary-only load 不会解锁 wrapper；
 - 在完成 resolution 前，不得开始会改变项目或外部状态的工作；
 - 所有候选只暴露精简 metadata；完整 Skill body 仍只在真正需要时按需加载；
@@ -600,7 +601,7 @@ Rollback 优先使用可恢复的配置降级，不删除 ledger、不改写 pro
 
 - 不做每轮 platform classifier；后续是否重新检查 catalog/load 由 Agent 判断。
 - 不允许 user/community Skill 进入自动选择。
-- 不用 embedding 或词法 Top-K 作为正常选择链路；在约 20 个官方候选的产品目标下直接暴露完整、确定性的 metadata 闭集。
+- 不用 embedding 或词法 Top-K 作为正常选择链路；直接暴露当前验证目录完整、确定性的 metadata 闭集。
 - 不把所有 Skill body 预注入首轮。
 - 不修改已冻结的 OD Next v2 Skill package。
 - 不把普通 Prototype load 记成 OD Next task execution。

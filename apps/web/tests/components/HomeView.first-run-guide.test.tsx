@@ -158,7 +158,7 @@ describe('Home first-run guide trail', () => {
     // Nothing matches the picked chip's example filter, so it renders static
     // prompt-example cards and the guide's beat 2 lands on the first one.
     const WEB_PROTOTYPE_PLUGIN = {
-      id: 'example-web-prototype',
+      id: 'od-new-generation',
       title: 'Web Prototype',
       version: '0.1.0',
       trust: 'bundled' as const,
@@ -169,7 +169,7 @@ describe('Home first-run guide trail', () => {
       installedAt: 0,
       updatedAt: 0,
       manifest: {
-        name: 'example-web-prototype',
+        name: 'od-new-generation',
         title: 'Web Prototype',
         version: '0.1.0',
         description: 'General-purpose desktop web prototype.',

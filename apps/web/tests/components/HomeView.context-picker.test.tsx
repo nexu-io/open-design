@@ -101,7 +101,7 @@ const WORKSPACE_DESIGN_SYSTEM: DesignSystemSummary = {
   status: 'published',
 };
 
-const WEB_PROTOTYPE_PLUGIN = makePlugin('example-web-prototype', 'Web Prototype');
+const WEB_PROTOTYPE_PLUGIN = makePlugin('od-new-generation', 'New generation');
 const MCP_SERVER: McpServerConfig = {
   id: 'linear',
   label: 'Linear',
