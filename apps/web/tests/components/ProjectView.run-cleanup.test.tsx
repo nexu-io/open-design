@@ -230,6 +230,7 @@ async function waitForReadyChatPaneProps() {
       url?: string;
     }) => Promise<{ ok: boolean; action?: string; message?: string } | void> | { ok: boolean; action?: string; message?: string } | void;
     onContinueBrandExtraction?: () => void;
+    onShowToast?: (message: string) => void;
     onSend?: (prompt: string, attachments: unknown[], comments: unknown[]) => Promise<void>;
     initialDraft?: string;
   };
@@ -1263,6 +1264,146 @@ describe('ProjectView daemon cleanup', () => {
       expect(toast.closest('.chat-log-wrap')?.className).toContain('has-chat-log-tray');
     } finally {
       registerBrandBrowser('brand-project', BRAND_BROWSER_TAB_ID, null);
+    }
+  });
+
+  it('portals ChatPane operation-result toasts to document body during comment mode', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    render(
+      <ProjectView
+        project={{ id: 'project-toast', name: 'Project', skillId: null, designSystemId: null } as never}
+        routeFileName={null}
+        config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+        agents={[{ id: 'agent-1', name: 'Agent', models: [] } as never]}
+        skills={[]}
+        designTemplates={[]}
+        designSystems={[]}
+        daemonLive
+        onModeChange={() => {}}
+        onAgentChange={() => {}}
+        onAgentModelChange={() => {}}
+        onRefreshAgents={() => {}}
+        onOpenSettings={() => {}}
+        onBack={() => {}}
+        onClearPendingPrompt={() => {}}
+        onTouchProject={() => {}}
+        onProjectChange={() => {}}
+        onProjectsRefresh={() => {}}
+      />,
+    );
+
+    const chatProps = await waitForReadyChatPaneProps();
+    const workspaceProps = fileWorkspaceSpy.mock.calls.at(-1)?.[0] as {
+      onCommentModeChange?: (active: boolean) => void;
+    };
+    const onCommentModeChange = workspaceProps?.onCommentModeChange;
+    if (!onCommentModeChange) {
+      throw new Error('Expected FileWorkspace comment-mode callback');
+    }
+    act(() => {
+      onCommentModeChange(true);
+      chatProps.onShowToast?.('Operation failed. Please retry.');
+    });
+
+    const toast = await waitFor(() => {
+      const node = document.body.querySelector<HTMLElement>('.od-toast');
+      expect(node?.textContent).toContain('Operation failed. Please retry.');
+      return node as HTMLElement;
+    });
+    expect(toast.parentElement).toBe(document.body);
+    expect(toast.closest('.project-actions-toast-anchor')).toBeNull();
+  });
+
+  it('keeps comment-save failure toasts above the composer in comment mode', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-comment', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    upsertPreviewComment.mockResolvedValue(null);
+
+    const originalElementFromPoint = Object.getOwnPropertyDescriptor(document, 'elementFromPoint');
+    const composer = document.createElement('div');
+    composer.className = 'chat-composer-fixed-layer';
+    document.body.appendChild(composer);
+
+    try {
+      render(
+        <ProjectView
+          project={{ id: 'project-comment-toast', name: 'Project', skillId: null, designSystemId: null } as never}
+          routeFileName={null}
+          routeConversationId="conv-comment"
+          config={{ mode: 'daemon', agentId: 'agent-1', notifications: undefined, agentModels: {} } as never}
+          agents={[{ id: 'agent-1', name: 'Agent', models: [] } as never]}
+          skills={[]}
+          designTemplates={[]}
+          designSystems={[]}
+          daemonLive
+          onModeChange={() => {}}
+          onAgentChange={() => {}}
+          onAgentModelChange={() => {}}
+          onRefreshAgents={() => {}}
+          onOpenSettings={() => {}}
+          onBack={() => {}}
+          onClearPendingPrompt={() => {}}
+          onTouchProject={() => {}}
+          onProjectChange={() => {}}
+          onProjectsRefresh={() => {}}
+        />,
+      );
+
+      await waitFor(() => expect(fileWorkspaceSpy).toHaveBeenCalled());
+      const workspaceProps = fileWorkspaceSpy.mock.calls.at(-1)?.[0] as {
+        onCommentModeChange?: (active: boolean) => void;
+        onSavePreviewComment?: (
+          target: { kind: 'point'; x: number; y: number },
+          note: string,
+          attachAfterSave: boolean,
+        ) => Promise<unknown>;
+      };
+      workspaceProps.onCommentModeChange?.(true);
+      await workspaceProps.onSavePreviewComment?.(
+        { kind: 'point', x: 10, y: 20 },
+        'Comment that cannot be saved',
+        false,
+      );
+
+      const toast = await waitFor(() => {
+        const node = document.body.querySelector<HTMLElement>('.od-toast');
+        if (!node?.textContent?.includes('project.previewCommentSaveFailed')) {
+          throw new Error('Expected comment-save failure toast');
+        }
+        return node;
+      });
+
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: () => (toast.parentElement === document.body ? toast : composer),
+      });
+      expect(document.elementFromPoint(500, 700)).toBe(toast);
+      expect(toast.parentElement).toBe(document.body);
+    } finally {
+      composer.remove();
+      if (originalElementFromPoint) {
+        Object.defineProperty(document, 'elementFromPoint', originalElementFromPoint);
+      } else {
+        Reflect.deleteProperty(document, 'elementFromPoint');
+      }
     }
   });
 

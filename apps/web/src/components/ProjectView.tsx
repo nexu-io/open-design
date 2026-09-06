@@ -13,6 +13,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
+import { createPortal } from 'react-dom';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
@@ -11726,7 +11727,7 @@ export function ProjectView({
                 onProjectChange(updatedProject);
               }}
               onShowToast={(message) => {
-                setProjectActionsToast({ message, details: null });
+                setProjectActionsToast({ message, details: null, scope: 'chat-pane' });
               }}
               onBack={onBack}
               onCollapse={() => setWorkspaceFocused(true)}
@@ -11972,8 +11973,10 @@ export function ProjectView({
           onDecision={amrLowBalanceWarn.resolve}
         />
       ) : null}
+      {projectActionsToast && !projectActionsToastInChatPane && typeof document !== 'undefined'
+        ? createPortal(projectActionsToastNode, document.body)
+        : null}
       <AnimatePresence>
-        {projectActionsToast && !projectActionsToastInChatPane ? projectActionsToastNode : null}
         {brandReadyPrompt ? (
           <BrandReadyPrompt
             key="brand-ready-prompt"
