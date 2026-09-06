@@ -21,10 +21,23 @@
  * 推理卡住了,唯一还活着的事实就只剩「已经等了多久」,于是计时接手。
  * 两个数同时摆着,读者会去**比**它们,而不是**读**它们。
  *
- * ⚠️ 这**不是**把今早刚收走的那个计时又放回来。整轮头一格的计时被收掉,是因为它和
- * 壳头那个数同起同终、写的是同一个事实(`first-thoughts-no-elapsed.test.tsx`)。
- * token 不是复读 —— 它是那一格**一直缺的**那个数。所以头一格这个槽此后归 token,
- * 别看见「头一格又有数了」就顺手把 `formatElapsed` 接回去。
+ * ⚠️ 这**不是**把今早刚收走的那个计时又放回来。整轮头一格**还在想时**的计时被收掉,
+ * 是因为它和壳头那个数同起同终、写的是同一个事实(`first-thoughts-no-elapsed.test.tsx`)。
+ * token 不是复读 —— 它是那一格**一直缺的**那个数。所以头一格这个槽在**思考中**归 token,
+ * 别看见「头一格思考中又有秒数了」就顺手把 `formatElapsed` 接回去。
+ *
+ * ── 2026-09-06 那条裁决**碰不到这个文件的产品规则** ────────────────────
+ *
+ * 用户「结束还是要显示的吧?」让头一格**想完之后**把秒数写出来
+ * (`ThoughtsRow` 的 `muted && live`)。它和 token 在时间上不重叠:
+ * token 只挂在 `live` 那一格上(`group-thinking.ts` 的 `if (live)`,
+ * `build-turn-blocks` 更是只发给 `block.thinking === true` 的壳),
+ * 想完的那一刻 `tokens` 已经是 `null`。所以「一个槽、一个数」原样成立,
+ * 一格之内也只切换一次、方向单向,不会来回闪。
+ *
+ * 下面**改了三处夹具的期望值**,改的都是同一件事:那几张壳的**头一格早就想完了**
+ * (后面压着一次带时刻的调用),它写出的 `1m 2s` 是它自己那 62 秒。
+ * 每一处都在就近注释里写了。token 相关的断言一条没动。
  *
  * ── 「很久」定在 8 秒,量出来的 ────────────────────────────────────────
  *
@@ -115,22 +128,30 @@ describe('推理 token 计数落在思考行上', () => {
     expect(seen).toEqual(['50 tokens', '1.2k tokens', '3.3k tokens']);
   });
 
+  /**
+   * 「同时出现」问的是**一个槽里**有没有两个数 —— `thoughtsSlot` 那个
+   * `<N 个槽>` 哨兵守的就是这一句,和别的行写不写数无关。
+   *
+   * ⚠️ 头一格从 `''` 改成 `1m 2s`:那一格后面压着一次调用,它**早就想完了**,
+   * 2026-09-06 的裁决让它报自己那 62 秒。还在流的是第三格,它照旧只写 token。
+   */
   it('一个槽、一个数 —— 计时和 token 绝不同时出现', () => {
     // 后面那一格既算得出耗时、又拿得到 token:产品要的是**只写 token**
     const { container } = render(show(shellOf(
       [thought('开场那一段。', 62_000), tool('a.ts'), thought('还在想…', 1_710_000)],
       { thinking: true, thinkingTokens: { count: 3_278, stale: false } },
     )));
-    expect(thoughtsSlot(container)).toEqual(['', '3.3k tokens']);
+    expect(thoughtsSlot(container)).toEqual(['1m 2s', '3.3k tokens']);
     expect(container.textContent, '那一格的秒数不许同时摆着').not.toContain('28m 30s');
   });
 
+  /** 头一格那个 `1m 2s` 的来历同上一条;这里钉的是**第二格**让位给 `28m 30s`。 */
   it('token 很久没变了,后面那一格把槽让给计时', () => {
     const { container } = render(show(shellOf(
       [thought('开场那一段。', 62_000), tool('a.ts'), thought('还在想…', 1_710_000)],
       { thinking: true, thinkingTokens: { count: 3_278, stale: true } },
     )));
-    expect(thoughtsSlot(container)).toEqual(['', '28m 30s']);
+    expect(thoughtsSlot(container)).toEqual(['1m 2s', '28m 30s']);
     expect(container.textContent, '让位就是让位,不许两个都写').not.toContain('3.3k');
   });
 
@@ -138,12 +159,17 @@ describe('推理 token 计数落在思考行上', () => {
    * 让位的判据是「**有没有表可让**」,不是「是不是头一格」——
    * 一条判据同时盖住产品那三句话,不必给头一格再写一条特例。
    *
-   * 头一格的计时今早刚因为「和壳头重复」被收掉(槽在、值空);claude 空推理那一档
-   * 更是连槽都没有(那一格是 `groupThinking` 补出来的,压根算不出耗时)。
-   * 两种情况下槽里都没有第二个数可写,所以 token 停了也照旧写着最后那个读数 ——
-   * 退回空槽等于把刚说清楚的事又抹掉。
+   * 头一格**还在想的时候**的计时因为「和壳头重复」被收掉(槽在、值空);
+   * claude 空推理那一档更是连槽都没有(那一格是 `groupThinking` 补出来的,
+   * 压根算不出耗时)。两种情况下槽里都没有第二个数可写,所以 token 停了也照旧写着
+   * 最后那个读数 —— 退回空槽等于把刚说清楚的事又抹掉。
+   *
+   * ⚠️ 2026-09-06 之后这条判据**一个字没改**,因为两条规则的相位不重叠:
+   * 这张壳是 `thinking: true` 且头一格就是还在流的那一格,压制仍然生效
+   * (`elapsed` 是空串)→ 没有表可让 → 照旧写 token。等它想完,`tokens` 会同时
+   * 变成 `null`,槽直接归秒数,不经过这条三元的第一个分支。
    */
-  it('头一格永远是 token —— 计时被收走了,数停了也不退回空槽', () => {
+  it('头一格还在流:永远是 token —— 计时被压着,数停了也不退回空槽', () => {
     const { container } = render(show(shellOf(
       [thought('还在想…', 1_710_000)],
       { thinking: true, thinkingTokens: { count: 3_278, stale: true } },
@@ -159,12 +185,21 @@ describe('推理 token 计数落在思考行上', () => {
     expect(thoughtsSlot(container)).toEqual(['3.3k tokens']);
   });
 
-  it('反向守卫:拿不到 token 时一切照旧 —— 头一格空槽、后面那格写秒数', () => {
+  /**
+   * ⚠️ 这一条原来叫「头一格**空槽**、后面那格写秒数」,断言 `['', '28m 30s']`。
+   *
+   * 那个 `''` 是当时的现状被顺手钉成了预期:这张壳的头一格后面压着一次调用,
+   * 它**早就想完**,压制不覆盖这个相位(用户 2026-09-06)。
+   * 「拿不到 token 时一切照旧」这句话本身没变 —— 变的是「照旧」指的是什么:
+   * 没有 token 的那一档,每一格都写自己那段推理的耗时,一格不多、一格不少。
+   * 「思考中的头一格仍然空槽」由 `first-thoughts-no-elapsed.test.tsx` 第一节守。
+   */
+  it('反向守卫:拿不到 token 时一切照旧 —— 两格各写各的秒数', () => {
     const { container } = render(show(shellOf(
       [thought('开场那一段。', 62_000), tool('a.ts'), thought('还在想…', 1_710_000)],
       { thinking: true, thinkingTokens: null },
     )));
-    expect(thoughtsSlot(container)).toEqual(['', '28m 30s']);
+    expect(thoughtsSlot(container)).toEqual(['1m 2s', '28m 30s']);
     expect(container.textContent).not.toContain('tokens');
   });
 

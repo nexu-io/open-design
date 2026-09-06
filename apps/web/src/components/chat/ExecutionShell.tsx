@@ -356,10 +356,16 @@ function liveTextIndexOf(items: GroupedShellItem[], running: boolean): number {
 }
 
 /**
- * 整轮**头一格**推理落在哪一摞里 —— 只有那一摞的第一格「思考」不报时长。
+ * 整轮**头一格**推理落在哪一摞里 —— 只有那一摞的第一格「思考」**在它还没想完时**不报时长。
  *
  * 产品 2026-09-04,看着一轮正在跑的执行记录:「这里首次 thinking 我看是有一个计时的,
  * 能不能不要计时, 不然跟上面一行的进行中的计时有点重复」。
+ *
+ * ⚠️ 用户 2026-09-06 给这条裁决**加了到期时刻**:「即使是第一个 thinking,思考过程中
+ * 不显示耗时,但**结束还是要显示的吧**?」压制因此只覆盖 `live` 那一段 ——
+ * 这个函数**一个字没改**(它只回答「哪一格」),到期判据写在 `ThoughtsRow` 的
+ * `elapsed` 那一行。下面「两行贴着,写的是同一个数」那段推导也随之只对 `live` 成立:
+ * 一被下一件带时刻的事结账,这一格就冻住,而壳头继续走到轮次收尾。
  *
  * **这不是样式偏好,是两个数说的同一件事。** thinking 事件一个时刻都不带
  * (`contract.ts` 的 `ShellText.elapsedMs` 逐字记着:daemon 送出的 `thinking_delta`
@@ -454,7 +460,8 @@ function renderItem(item: GroupedShellItem, index: number, ctx: RenderCtx): Reac
         texts={item.texts}
         elapsedMs={item.elapsedMs}
         tokens={item.tokens ?? null}
-        /* 整轮头一格:数照旧算得出,只是不写出来(理由在 `stackOwningFirstThoughts`) */
+        /* 整轮头一格:数照旧算得出,只是**在它想完之前**不写出来
+           (理由在 `stackOwningFirstThoughts`,到期判据在 `ThoughtsRow` 的 `elapsed`) */
         muted={index === ctx.mutedThoughtsIndex}
         /*
          * 一段推理都没落下来的那一格才可能是「在等首批输出」——
@@ -564,7 +571,9 @@ function ThoughtsRow({ texts, elapsedMs, tokens, muted, waiting, live, t, deferB
   /** 还在想的那一格想了多少;别的档一律 `null`(见 `ThinkingTokens`) */
   tokens: ThinkingTokens | null;
   /**
-   * 整轮**头一格** —— 它的数和壳头那个是同一个,写两遍就是复读(产品 2026-09-04)。
+   * 整轮**头一格** —— 它**还在想的时候**的数和壳头那个是同一个,写两遍就是复读
+   * (产品 2026-09-04)。想完之后两个数分叉,压制到期(用户 2026-09-06),
+   * 所以这只闩要和 `live` 一起读,不是单独读 —— 见 `elapsed` 那一行。
    * 判据与完整理由在 `stackOwningFirstThoughts`。
    */
   muted: boolean;
@@ -585,8 +594,43 @@ function ThoughtsRow({ texts, elapsedMs, tokens, muted, waiting, live, t, deferB
    * `<span class="ms"></span>` —— **槽在、值空**(`Foldable` 里 `!= null` 那一条)。
    * 槽留着,思考行和它下面的工具行左右两栏对得上,箭头也不会因为少一个槽而挪位;
    * 而真的**拿不到**数那一档仍然连槽都没有,两件事在 DOM 上分得开。
+   *
+   * ── 头一格的压制**只活到这一格想完为止**(用户 2026-09-06)────────────
+   *
+   * 这一行原来是 `muted ? '' : …` —— 压一整轮。用户看着实物问:
+   * 「即使是第一个 thinking,思考过程中不显示耗时,但**结束还是要显示的吧**?」
+   * (同一轮他先报的是「现在思考耗时好像只有第一次的 thinking 没显示耗时?」)
+   *
+   * **裁决没有推翻 2026-09-04,是把它还原成它自己的理由。** 收掉这个数的依据从来
+   * 不是「头一格特殊」,而是那两个数**同起同终、写的是同一个事实**
+   * (`stackOwningFirstThoughts` 抄了完整推导)。那句话只在这一格**还在流**的时候成立:
+   *   · 还在流 —— 这一格的终点是 `build-turn-blocks` 里全轮共用的 `liveEndMs`,
+   *     壳头 `shellElapsed` 的 `isLast` 分支取的是同一个 `nowMs`,起点又同是
+   *     `input.startedAtMs`(`isFirst` 分支)。两行贴着,逐秒同值,确实是复读。
+   *   · 想完了 —— 这一格被下一件**带时刻**的事结账
+   *     (`stamp()` → `closeThink(at)`),数字就此冻住;壳头那个数继续走到轮次收尾。
+   *     两个数当场分叉,「复读」这个理由自己消失,压制也就该跟着到期。
+   *
+   * ── 为什么判据是 `live` 而不是「整轮还在跑」 ────────────────────────────
+   *
+   * `live` 在这一层是**这一格自己的相位**,不是轮次的:它由
+   * `groupThinking(items, …)` 只发给**结尾那一格**(`group-thinking.ts` 的 `if (live)`),
+   * 而传进去的那个参数是「模型此刻正写在这一摞里」(`thinkingNow && !activeTodo`,
+   * 抽屉那边是 `thinkingNow && segment.status === 'in_progress'`)。
+   * 于是它和这一行**上面**那个 `summary` 三元、和 `key` 里的 `live`/`done`
+   * 是**同一只开关**:形态从「球 + 思考中」翻成「brain + 思考过程」的那一帧,
+   * 数字才出现。换成轮次级的 `running` 两者就会脱钩 —— 这一格明明已经写着
+   * 「思考过程」,右边却还空着,直到整轮收尾才凭空冒出一个数。
+   *
+   * ⚠️ 冻不住的那一档**不会**留下一个跟着壳头一起跳的数:后面落下来的若是
+   * 不带时刻的事件(正文),`closeThink` 的 `ownsGap` 判定这段空白不是它一个人的,
+   * 整段作废 → `elapsedMs` 是 `null` → 这里**连槽都不出**(不是空槽)。
+   * 所以「想完了却还在跳」这个坏画面在数据层就出不来,不必在这一层再加一条守卫。
+   *
+   * 判据:进行中仍然空白钉在 `first-thoughts-no-elapsed.test.tsx` 第一节,
+   * 想完之后要有数钉在 `amr-thinking-slot-blank.test.tsx`。
    */
-  const elapsed = muted ? '' : formatElapsed(elapsedMs);
+  const elapsed = muted && live ? '' : formatElapsed(elapsedMs);
   /**
    * ── 槽里写哪个数(产品 2026-09-04)────────────────────────────────────
    *
@@ -600,18 +644,28 @@ function ThoughtsRow({ texts, elapsedMs, tokens, muted, waiting, live, t, deferB
    * 所以这里是一个槽、一个值,不是两个 `.meta`(生图批次行那种两枚并排的写法
    * 在这一行是禁止的)。
    *
-   * ── ⚠️ 这不是把今早刚收走的计时放回来 ─────────────────────────────────
+   * ── ⚠️ 这不是把当时刚收走的计时放回来 ─────────────────────────────────
    *
-   * 整轮头一格的计时被收掉,是因为它和壳头那个数**同起同终、写的是同一个事实**
+   * 整轮头一格**还在想的时候**的计时被收掉,是因为它和壳头那个数
+   * **同起同终、写的是同一个事实**
    * (`stackOwningFirstThoughts` / `first-thoughts-no-elapsed.test.tsx`)。
    * token **不是**复读:它是那一格从来没有过的那个数,也是 claude 那档只计费、
-   * 不给字的推理里唯一说得出口的进度。所以这个槽此后归 token ——
-   * 看见「头一格又有数了」别顺手把 `formatElapsed` 接回去,那会把裁决改回去。
+   * 不给字的推理里唯一说得出口的进度。所以这个槽在**思考中**归 token ——
+   * 看见「头一格思考中又有秒数了」别顺手把 `formatElapsed` 接回去,那会把裁决改回去。
+   *
+   * ⚠️ 2026-09-06 的裁决**没有动这一段**:它只让头一格**想完之后**把秒数写出来
+   * (上面 `elapsed` 那一行)。两条互不打架,因为 token 和「想完了」在时间上
+   * 根本不重叠 —— 见下一节第一条。
    *
    * ── 让位的判据是「有没有表可让」,不是「是不是头一格」 ────────────────
    *
    * 一条判据同时盖住产品那三句话,不必给头一格再写特例:
-   *   · 头一格 —— 计时被收走了,`elapsed` 是空串,没有表可让 → 数停了也照旧写 token;
+   *   · 头一格**思考中** —— 计时被压着,`elapsed` 是空串,没有表可让 → 数停了也照旧写 token。
+   *     想完之后 `elapsed` 变回真的秒数,但那一刻 `tokens` 已经是 `null`
+   *     (`group-thinking.ts` 的 `if (live)` 只把它挂给还活着的那一格,
+   *     `build-turn-blocks` 更是只发给 `block.thinking === true` 的壳),
+   *     整条三元的第一个条件当场为假 → 槽直接归秒数。**不存在两者互抢的中间态**,
+   *     所以 token 与计时不会来回闪:一格之内只切换一次,方向单向。
    *   · claude 空推理那一格 —— 是 `groupThinking` 补出来的,连耗时都算不出来
    *     (`elapsed` 是 `null`),同样没有表可让 → 照旧写 token;
    *   · 后面几格 —— `elapsed` 是一个真的秒数,token 停了就把槽让出去。

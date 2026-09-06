@@ -881,6 +881,43 @@ git 报 0 冲突、合并语义我也核对过是对的,结果 8 条测试红,�
 > 那是**结算**值,块跑完才有,而且比估算值低 20–60%。屏幕上要的是块**跑着时**的进度,
 > 那一刻结算值不存在;等它到了,那一格也收掉了。两个数不可互换。
 
+> **2026-09-06 更正:上面「那一格恒为 token」这句话的前提塌了 —— 现已落地。**
+>
+> 写下那句话时的默认是「头一格没有计时可让」。它在**两处**不成立:
+>
+> · **AMR 没有 token 可恒。** `thinking_tokens` 全仓只有两个生产者
+>   (`runtimes/claude-stream.ts` 的 claude、`agent-protocol/codex-app-server/normalize.ts`
+>   的 codex);ACP 那条路(`agent-protocol/acp/session.ts`)一个都不发。
+>   实测本机 beta 数据目录 25 条 `agentId=amr` 的 run,该事件出现 **0 次**
+>   (同期 claude run 每轮 22–2537 次)。于是那一格两半都空:token 没有,计时被压着。
+> · **claude 自己在收尾之后也拿不到。** token 只挂给还活着的那一格
+>   (`group-thinking.ts` 的 `if (live)`),`build-turn-blocks` 更是只发给
+>   `block.thinking === true` 的壳。回合一结束两者同时为假,头一格退回空槽。
+>
+> 用户 2026-09-06 逐字裁决:「即使是第一个 thinking,思考过程中不显示耗时,
+> 但**结束还是要显示的吧**?」—— **思考进行中不显示耗时(维持现状),但收尾之后要显示。**
+>
+> **这不是推翻 2026-09-04,是给它补上到期时刻。** 收走计时的理由是它和壳头
+> 「同起同终、写的是同一个事实」,而那只在这一格**还在流**的时候成立:一旦下一件
+> 带时刻的事把它结账(`build-turn-blocks` 的 `stamp()` → `closeThink(at)`),
+> 这一格的数字就冻住,壳头那个数继续走到轮次收尾 —— 两个数当场分叉,「重复」消失。
+>
+> 落地形态:`ThoughtsRow` 的 `const elapsed = muted && live ? '' : formatElapsed(elapsedMs)`。
+> 判据 `live` 是**这一格自己的相位**(`groupThinking` 只发给结尾那一格),和同一个组件里
+> 决定「球 + 思考中」还是「brain + 思考过程」的是**同一只开关** —— 数字和形态同一帧翻面,
+> 不会出现「已经写着思考过程、右边还空着」。
+>
+> token 那条规则**一个字没改**:两者相位不重叠(想完的那一刻 `tokens` 已是 `null`),
+> 所以一格之内只切换一次、方向单向,不会在 token 和秒数之间来回闪。
+>
+> ⚠️ 用户同一轮报的另一条「AMR 没有 token 输出计数」**没有修**:裁决明说进行中维持现状,
+> 而它的真因是 ACP 不发 `thinking_tokens`(daemon/协议侧的缺口)。在渲染层拿耗时去顶
+> token 的位置等于替产品决定「AMR 的思考中改成显示秒数」,没有这条裁决不许自造。
+>
+> 判据:`tests/components/chat/first-thoughts-no-elapsed.test.tsx`(进行中仍然空白)、
+> `tests/components/chat/amr-thinking-slot-blank.test.tsx`(想完之后要有数,含 AMR 那一档
+> 维持空白的守卫)、`tests/components/chat/thinking-token-count.test.tsx`(token 规则未动)。
+
 ### 缩进:在真 Chrome 里量的(不是只 diff CSS 文本)
 
 harness 做法:把组件真实渲染出的 DOM(CSS Module 类名去哈希)+ `record.module.css`
