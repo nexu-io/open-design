@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { expect, test, vi } from 'vitest';
 import { attachAcpSession, buildAcpSessionNewParams, createJsonLineStream, normalizeModels } from '../src/agent-protocol/index.js';
 import {
@@ -503,6 +504,96 @@ test('attachAcpSession preserves duplicate ordinary image resource links', () =>
       { type: 'text', text: 'describe both image occurrences' },
       { type: 'resource_link', uri: imagePath },
       { type: 'resource_link', uri: imagePath },
+    ],
+  });
+});
+
+test('attachAcpSession converts strict ACP image paths to file URLs for Kilo', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const imagePath = path.resolve('/tmp/od-project/reference image.png');
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'describe this image',
+    cwd: '/tmp/od-project',
+    imagePaths: [imagePath],
+    imagePathFormat: 'file-url',
+    resourceMimePolicy: 'kilo',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+  const requests = parseRpcWrites(writes);
+  const promptRequest = requests.find((entry) => entry.method === 'session/prompt');
+  assert.deepEqual(promptRequest?.params, {
+    sessionId: 'session-1',
+    prompt: [
+      { type: 'text', text: 'describe this image' },
+      {
+        type: 'resource_link',
+        uri: pathToFileURL(imagePath).href,
+        mimeType: 'image/png',
+      },
+    ],
+  });
+});
+
+test('attachAcpSession applies the Kilo MIME matrix to every accepted extension', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const accepted = {
+    'shot.png': 'image/png',
+    'anim.gif': 'image/gif',
+    'photo.jpg': 'image/jpeg',
+    'photo.jpeg': 'image/jpeg',
+    'still.webp': 'image/webp',
+    'brief.pdf': 'application/pdf',
+  } as const;
+  const rejected = ['icon.svg', 'hdr.avif', 'scan.bmp', 'notes.txt'];
+  const projectRoot = path.resolve('/tmp/od-project');
+  const acceptedPaths = Object.keys(accepted).map((name) => path.join(projectRoot, name));
+  const rejectedPaths = rejected.map((name) => path.join(projectRoot, name));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'use these attachments',
+    cwd: projectRoot,
+    imagePaths: acceptedPaths.filter((item) => !item.endsWith('.pdf')),
+    resourcePaths: [
+      ...acceptedPaths.filter((item) => item.endsWith('.pdf')),
+      ...rejectedPaths,
+    ],
+    imagePathFormat: 'file-url',
+    resourceMimePolicy: 'kilo',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+
+  const requests = parseRpcWrites(writes);
+  const promptRequest = requests.find((entry) => entry.method === 'session/prompt');
+  assert.deepEqual(promptRequest?.params, {
+    sessionId: 'session-1',
+    prompt: [
+      { type: 'text', text: 'use these attachments' },
+      {
+        type: 'resource_link',
+        uri: pathToFileURL(path.join(projectRoot, 'brief.pdf')).href,
+        mimeType: 'application/pdf',
+      },
+      ...(['shot.png', 'anim.gif', 'photo.jpg', 'photo.jpeg', 'still.webp'] as const).map(
+        (name) => ({
+          type: 'resource_link',
+          uri: pathToFileURL(path.join(projectRoot, name)).href,
+          mimeType: accepted[name],
+        }),
+      ),
     ],
   });
 });
@@ -3762,6 +3853,7 @@ test('attachAcpSession resumes via session/load when resumeSessionId is set', ()
   assert.deepEqual(loadReq?.params, {
     sessionId: 'oc-prev',
     cwd: path.resolve('/tmp/od-project'),
+    mcpServers: [],
   });
   assert.equal(requests.some((entry) => entry.method === 'session/new'), false);
 });
@@ -3779,6 +3871,119 @@ test('attachAcpSession captures the durable session handle from the result', () 
   writeAcpResult(child, 2, { sessionId: 'vela-opencode-1', openCodeSessionId: 'oc-handle' });
 
   assert.equal(session.getDurableSessionId(), 'oc-handle');
+});
+
+test('attachAcpSession captures a standard ACP session id only when declared durable', () => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    captureSessionIdAsDurable: true,
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'ses_kilo_created' });
+
+  assert.equal(session.getDurableSessionId(), 'ses_kilo_created');
+});
+
+test('attachAcpSession skips legacy set_model on a durable ACP resume without config options', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'continue with the selected model',
+    cwd: '/tmp/od-project',
+    model: 'claude-opus-4-6-thinking',
+    resumeSessionId: 'ses_kilo_persisted',
+    captureSessionIdAsDurable: true,
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  // Kilo's successful session/load omits sessionId and configOptions.
+  writeAcpResult(child, 2, { configOptions: [] });
+  writeAcpResult(child, 3, {});
+
+  const requests = parseRpcWrites(writes);
+  assert.equal(requests.some((entry) => entry.method === 'session/set_model'), false);
+  assert.equal(requests.some((entry) => entry.method === 'session/set_config_option'), false);
+  assert.equal(
+    (requests.find((entry) => entry.method === 'session/prompt')?.params as {
+      sessionId?: unknown;
+    })?.sessionId,
+    'ses_kilo_persisted',
+  );
+  assert.deepEqual(agentModelStatuses(events), ['claude-opus-4-6-thinking']);
+  assert.equal(session.getDurableSessionId(), 'ses_kilo_persisted');
+  assert.equal(session.completedSuccessfully(), true);
+});
+
+test('attachAcpSession still sets the model on a non-durable ACP resume without config options', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'continue',
+    cwd: '/tmp/od-project',
+    model: 'legacy-model',
+    resumeSessionId: 'oc-prev',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpResult(child, 3, { models: { currentModelId: 'legacy-model' } });
+  writeAcpResult(child, 4, {});
+
+  const requests = parseRpcWrites(writes);
+  assert.deepEqual(
+    requests.find((entry) => entry.method === 'session/set_model')?.params,
+    { sessionId: 'session-1', modelId: 'legacy-model' },
+  );
+});
+
+test('attachAcpSession resumes standard durable ACP session ids', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'continue',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'ses_kilo_persisted',
+    captureSessionIdAsDurable: true,
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {});
+  // Kilo's session/load response intentionally omits the already-known id.
+  writeAcpResult(child, 2, { configOptions: [] });
+  writeAcpResult(child, 3, {});
+
+  const requests = parseRpcWrites(writes);
+  assert.deepEqual(
+    requests.find((entry) => entry.method === 'session/load')?.params,
+    {
+      sessionId: 'ses_kilo_persisted',
+      cwd: path.resolve('/tmp/od-project'),
+      mcpServers: [],
+    },
+  );
+  assert.equal(
+    (requests.find((entry) => entry.method === 'session/prompt')?.params as {
+      sessionId?: unknown;
+    })?.sessionId,
+    'ses_kilo_persisted',
+  );
+  assert.equal(session.getDurableSessionId(), 'ses_kilo_persisted');
+  assert.equal(session.completedSuccessfully(), true);
 });
 
 test('createJsonLineStream replays absorbed complete frames when a value-position aggregate turns invalid', () => {
