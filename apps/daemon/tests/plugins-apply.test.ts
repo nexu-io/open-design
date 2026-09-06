@@ -103,11 +103,28 @@ describe('applyPlugin', () => {
     expect(result.result.appliedPlugin.query).toBe('生成一份关于 {{topic}} 的简报。');
   });
 
-  it('grants trusted defaults plus required caps for a trusted plugin', () => {
-    const result = applyPlugin({ plugin: pluginFixture(), inputs: { topic: 'design' }, registry: REGISTRY });
-    for (const cap of TRUSTED_DEFAULT_CAPABILITIES) {
-      expect(result.result.capabilitiesGranted).toContain(cap);
-    }
+  it('uses persisted capabilitiesGranted for a restricted plugin', () => {
+    const capabilitiesGranted = ['pipeline:*', 'prompt:inject'];
+    const result = applyPlugin({
+      plugin: pluginFixture({ trust: 'restricted', capabilitiesGranted }),
+      inputs: { topic: 'design' },
+      registry: REGISTRY,
+    });
+
+    expect(result.result.capabilitiesGranted).toEqual(capabilitiesGranted);
+    expect(result.result.appliedPlugin.capabilitiesGranted).toEqual(capabilitiesGranted);
+  });
+
+  it('does not resurrect a persisted capability revoked from a trusted plugin', () => {
+    const capabilitiesGranted = TRUSTED_DEFAULT_CAPABILITIES.filter((cap) => cap !== 'pipeline:*');
+    const result = applyPlugin({
+      plugin: pluginFixture({ capabilitiesGranted }),
+      inputs: { topic: 'design' },
+      registry: REGISTRY,
+    });
+
+    expect(result.result.capabilitiesGranted).not.toContain('pipeline:*');
+    expect(result.result.appliedPlugin.capabilitiesGranted).not.toContain('pipeline:*');
   });
 
   it('emits skill+atom items in resolvedContext.items', () => {
