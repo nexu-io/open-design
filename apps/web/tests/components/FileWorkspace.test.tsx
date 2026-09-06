@@ -4349,6 +4349,115 @@ describe('FileWorkspace empty-project generation contract', () => {
     expect(screen.queryByTestId('design-files-empty')).toBeNull();
   });
 
+  // OPEND-2283. An empty list and a list that has not arrived read identically
+  // here, and the CTAs below ("新建草图" / "上传") actively mislead someone whose
+  // project does have files. The panel already draws this distinction for a
+  // team mirror that is still downloading; a local list that has not returned
+  // yet deserves the same treatment.
+  it('does not offer the empty-project CTAs before an authoritative file list arrives', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+      />,
+    );
+
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
+  // Suppressing the empty-state CTAs removed a false claim but left the panel
+  // blank, which reads as "stuck" rather than "loading" -- a worse first
+  // impression than the wrong copy it replaced. Say we are working instead.
+  it('shows a loading placeholder while the file list is still unknown', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative={false}
+      />,
+    );
+
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+    expect(screen.getByTestId('design-files-loading')).toBeTruthy();
+  });
+
+  it('offers them once the list is known to be empty', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={vi.fn()}
+        filesAuthoritative
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+  });
+
+  // OPEND-2283. Read-only is fail-closed while ownership is still unproven, and
+  // that is correct — but the banner states a FACT ("this is a shared project"),
+  // and during that window the fact is unknown. Entering your own personal
+  // project cold showed it for seconds before the workspace context resolved.
+  // Disable the controls, do not assert the reason.
+  it('does not claim a project is shared while ownership is still unproven', () => {
+    const file = workspaceFile('artifact.html');
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [file.name], active: file.name }}
+        onTabsStateChange={vi.fn()}
+        viewerOnly
+      />,
+    );
+
+    expect(document.querySelector('.workspace-readonly-notice')).toBeNull();
+  });
+
+  it('states the reason once the project is confirmed shared', () => {
+    const file = workspaceFile('artifact.html');
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[file]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [file.name], active: file.name }}
+        onTabsStateChange={vi.fn()}
+        viewerOnly
+        readonlyNotice="这是 麻薯 创建的共享项目。"
+      />,
+    );
+
+    const notice = document.querySelector('.workspace-readonly-notice');
+    expect(notice).not.toBeNull();
+    expect(notice?.textContent).toContain('麻薯');
+  });
+
   it('keeps an already-materialized viewer and header actions mounted during route revalidation', () => {
     const file = workspaceFile('artifact.html');
     const tabsState = { tabs: [file.name], active: file.name };

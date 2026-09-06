@@ -6841,8 +6841,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
                   workspaceMemberId: headerContext.workspaceMemberId,
                 }
               : null;
-          const scope = projectPreviewScopes.mint(projectId, previewWorkspace);
-          const expiresAt = projectPreviewScopes.expiresAt(projectId, scope);
+          const scope = projectPreviewScopes.acquire(projectId, previewWorkspace);
+          // The document's own expiry, not the live one: renewal must keep the
+          // scope alive without changing a single byte of what this read
+          // returns.
+          const expiresAt = projectPreviewScopes.documentExpiresAt(projectId, scope);
           if (expiresAt === undefined) return html;
           return injectProjectPreviewBase(
             html,
