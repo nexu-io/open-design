@@ -1219,6 +1219,38 @@ async function wireOnboardingMocks(
     ? '11111111-1111-4111-8111-111111111111'
     : null;
 
+  /**
+   * Route handlers are async but the Playwright route interceptor does not wait
+   * for a pending handler before the page navigates (e.g. page.reload()).
+   * If the handler calls page.evaluate() while the old document is being
+   * destroyed it throws:
+   *   "Execution context was destroyed, most likely because of a navigation"
+   *
+   * Instrumenting the test state from inside a route handler should not crash
+   * the test — it is not a test assertion.  Swallow only the navigation-race
+   * flavour of error; every other failure should still surface.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const safeEvaluate = async (fn: (...args: any[]) => unknown, ...args: any[]): Promise<unknown> => {
+    try {
+      // Playwright runs the function in the page VM. Forward each Node-side
+      // argument explicitly via page.evaluate(), because the page VM does not
+      // share Node closures and will throw ReferenceError on any local we
+      // would otherwise capture here.
+      return await page.evaluate(fn as never, ...args);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('Execution context was destroyed') ||
+        message.includes('Target page, context or browser has been closed') ||
+        message.includes('Cannot find context with specified id')
+      ) {
+        return undefined;
+      }
+      throw error;
+    }
+  };
+
   await page.route('**/api/health', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
@@ -1294,7 +1326,7 @@ async function wireOnboardingMocks(
 
   await page.route('**/api/integrations/vela/status', async (route) => {
     statusCalls += 1;
-    await page.evaluate((calls) => {
+    await safeEvaluate((calls) => {
       window.__amrOnboardingStatusCalls = calls;
     }, statusCalls);
     if (options.statusGate) {
@@ -1307,12 +1339,12 @@ async function wireOnboardingMocks(
         body: JSON.stringify({ error: 'status unavailable' }),
       });
       statusResponses += 1;
-      await page.evaluate((responses) => {
+      await safeEvaluate((responses) => {
         window.__amrOnboardingStatusResponses = responses;
       }, statusResponses);
       return;
     }
-    if (loginInFlight && await page.evaluate(() => (
+    if (loginInFlight && await safeEvaluate(() => (
       window.__amrOnboardingCompleteLogin === true
     ))) {
       loggedIn = true;
@@ -1325,7 +1357,7 @@ async function wireOnboardingMocks(
       (!loggedIn &&
         typeof options.delaySignedOutStatusMs === 'number' &&
         options.delaySignedOutStatusMs > 0 &&
-        (await page.evaluate(() => {
+        (await safeEvaluate(() => {
           if (!window.__amrOnboardingDelayNextSignedOutStatus) return false;
           window.__amrOnboardingDelayNextSignedOutStatus = false;
           return true;
@@ -1359,11 +1391,11 @@ async function wireOnboardingMocks(
           },
     });
     statusResponses += 1;
-    await page.evaluate((responses) => {
+    await safeEvaluate((responses) => {
       window.__amrOnboardingStatusResponses = responses;
     }, statusResponses);
     if (shouldDelaySignedOutStatus) {
-      await page.evaluate(() => {
+      await safeEvaluate(() => {
         window.__amrOnboardingSlowStatusResolved = true;
       });
     }
@@ -1390,7 +1422,7 @@ async function wireOnboardingMocks(
       loggedIn = true;
       loginInFlight = false;
     }
-    await page.evaluate((calls) => {
+    await safeEvaluate((calls) => {
       window.__amrOnboardingLoginCalls = calls;
     }, loginCalls);
     await route.fulfill({
@@ -1408,7 +1440,7 @@ async function wireOnboardingMocks(
     expect(route.request().postDataJSON()).toEqual({ authAttemptId });
     cancelCalls += 1;
     loginInFlight = false;
-    await page.evaluate((calls) => {
+    await safeEvaluate((calls) => {
       window.__amrOnboardingCancelCalls = calls;
     }, cancelCalls);
     await route.fulfill({ json: { canceled: true, pids: [4242] } });
