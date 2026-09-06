@@ -10,6 +10,7 @@ import { PRODUCT_NAME } from "./constants.js";
 
 export type MacInstallIdentity = {
   appId: string;
+  displayName: string;
   executableName: string;
   installerTitle: string;
   productName: string;
@@ -26,7 +27,12 @@ export function resolveMacInstallIdentity(config: Pick<ToolPackConfig, "namespac
   const channel = releaseChannelFromVersion(config.appVersion)
     ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace);
   const channelIdentity = channel == null
-    ? { appId: "io.open-design.desktop", productName: PRODUCT_NAME }
+    ? {
+        appId: "io.open-design.desktop",
+        displayName: PRODUCT_NAME,
+        executableName: PRODUCT_NAME,
+        productName: PRODUCT_NAME,
+      }
     : releaseInstallIdentity(channel);
   const publicAppBundleName = `${channelIdentity.productName}.app`;
   const systemAppBundleName = channel != null
@@ -35,8 +41,7 @@ export function resolveMacInstallIdentity(config: Pick<ToolPackConfig, "namespac
 
   return {
     ...channelIdentity,
-    executableName: channelIdentity.productName,
-    installerTitle: channel == null ? `${PRODUCT_NAME}-${namespaceToken}` : channelIdentity.productName,
+    installerTitle: channel == null ? `${PRODUCT_NAME}-${namespaceToken}` : channelIdentity.displayName,
     publicAppBundleName,
     systemAppBundleName,
   };

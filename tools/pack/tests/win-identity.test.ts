@@ -18,8 +18,10 @@ const execFileAsync = promisify(execFile);
 describe("resolveWinInstallIdentity", () => {
   it("keeps the default namespace on the canonical Windows display name", () => {
     expect(resolveWinInstallIdentity({ namespace: "default" })).toMatchObject({
-      displayName: "Open Design",
-      shortcutName: "Open Design.lnk",
+      displayName: "OpenDesign",
+      installDirectoryName: "Open Design",
+      legacyShortcutName: "Open Design.lnk",
+      shortcutName: "OpenDesign.lnk",
       uninstallerName: "Uninstall Open Design.exe",
     });
   });
@@ -27,9 +29,11 @@ describe("resolveWinInstallIdentity", () => {
   it("uses the canonical Windows display name for stable release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-stable-win" })).toMatchObject({
       appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design.exe",
-      displayName: "Open Design",
+      displayName: "OpenDesign",
+      installDirectoryName: "Open Design",
+      legacyShortcutName: "Open Design.lnk",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-stable-win",
-      shortcutName: "Open Design.lnk",
+      shortcutName: "OpenDesign.lnk",
       uninstallerName: "Uninstall Open Design.exe",
     });
   });
@@ -37,9 +41,11 @@ describe("resolveWinInstallIdentity", () => {
   it("uses first-class beta display identity for beta release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-beta-win" })).toMatchObject({
       appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Beta.exe",
-      displayName: "Open Design Beta",
+      displayName: "OpenDesign Beta",
+      installDirectoryName: "Open Design Beta",
+      legacyShortcutName: "Open Design Beta.lnk",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-beta-win",
-      shortcutName: "Open Design Beta.lnk",
+      shortcutName: "OpenDesign Beta.lnk",
       uninstallerName: "Uninstall Open Design Beta.exe",
     });
   });
@@ -57,9 +63,11 @@ describe("resolveWinInstallIdentity", () => {
   it("uses first-class preview display identity for preview release namespaces", () => {
     expect(resolveWinInstallIdentity({ namespace: "release-preview-win" })).toMatchObject({
       appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Preview.exe",
-      displayName: "Open Design Preview",
+      displayName: "OpenDesign Preview",
+      installDirectoryName: "Open Design Preview",
+      legacyShortcutName: "Open Design Preview.lnk",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-preview-win",
-      shortcutName: "Open Design Preview.lnk",
+      shortcutName: "OpenDesign Preview.lnk",
       uninstallerName: "Uninstall Open Design Preview.exe",
     });
   });
@@ -70,14 +78,16 @@ describe("resolveWinInstallIdentity", () => {
       namespace: "release-stable-win",
     })).toMatchObject({
       appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Prerelease.exe",
-      displayName: "Open Design Prerelease",
+      displayName: "OpenDesign Prerelease",
+      installDirectoryName: "Open Design Prerelease",
+      legacyShortcutName: "Open Design Prerelease.lnk",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-release-stable-win",
-      shortcutName: "Open Design Prerelease.lnk",
+      shortcutName: "OpenDesign Prerelease.lnk",
       uninstallerName: "Uninstall Open Design Prerelease.exe",
     });
     expect(resolveWinInstallIdentity({ namespace: "release-prerelease-win" })).toMatchObject({
-      displayName: "Open Design Prerelease",
-      shortcutName: "Open Design Prerelease.lnk",
+      displayName: "OpenDesign Prerelease",
+      shortcutName: "OpenDesign Prerelease.lnk",
     });
   });
 
@@ -85,6 +95,14 @@ describe("resolveWinInstallIdentity", () => {
     const source = winCustomInstallerSource;
     expect(source).toContain('WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"');
     expect(source).not.toContain('"DisplayName" "${productName} \\${APP_VERSION}"');
+  });
+
+  it("keeps install and data identities stable while migrating public shortcuts", () => {
+    const source = winCustomInstallerSource;
+    expect(source).toContain('InstallDir "$LOCALAPPDATA\\\\Programs\\\\${installDirectoryName}"');
+    expect(source).toContain('Delete "$SMPROGRAMS\\\\${legacyShortcutName}"');
+    expect(source).toContain('Delete "$DESKTOP\\\\${legacyShortcutName}"');
+    expect(source).toContain('CreateShortCut "$SMPROGRAMS\\\\${shortcutName}"');
   });
 
   it("emits a valid NSIS command literal for executable paths containing spaces", () => {

@@ -418,6 +418,8 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const launcher = resolveToolPackLauncherLayout(config);
   const productName = escapeNsisString(identity.displayName);
   const exeName = escapeNsisString(identity.exeName);
+  const installDirectoryName = escapeNsisString(identity.installDirectoryName);
+  const legacyShortcutName = escapeNsisString(identity.legacyShortcutName);
   const uninstallerName = escapeNsisString(identity.uninstallerName);
   const shortcutName = escapeNsisString(identity.shortcutName);
   const registryKey = escapeNsisString(identity.registryKey);
@@ -479,7 +481,7 @@ RequestExecutionLevel user
 
 Name "${productName}"
 OutFile "\${OUTPUT_EXE}"
-InstallDir "$LOCALAPPDATA\\Programs\\${productName}"
+InstallDir "$LOCALAPPDATA\\Programs\\${installDirectoryName}"
 InstallDirRegKey HKCU "${registryKey}" "InstallLocation"
 Icon "\${APP_ICON}"
 UninstallIcon "\${APP_ICON}"
@@ -825,6 +827,7 @@ FunctionEnd
 Function CreateDesktopShortcut
   SetShellVarContext current
   SetOutPath "$INSTDIR"
+  Delete "$DESKTOP\\${legacyShortcutName}"
   !insertmacro LOG_PATH_STATE "desktop_shortcut_before_create" "$DESKTOP\\${shortcutName}"
   CreateShortCut "$DESKTOP\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
   !insertmacro LOG_PATH_STATE "desktop_shortcut_after_create" "$DESKTOP\\${shortcutName}"
@@ -980,11 +983,16 @@ prepare_install_dir:
   WriteUninstaller "$INSTDIR\\${uninstallerName}"
   !insertmacro LOG_PATH_STATE "uninstaller_after_write" "$INSTDIR\\${uninstallerName}"
   SetOutPath "$INSTDIR"
+  IfFileExists "$DESKTOP\\${legacyShortcutName}" 0 desktop_shortcut_migration_done
+  Delete "$DESKTOP\\${legacyShortcutName}"
+  CreateShortCut "$DESKTOP\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
+desktop_shortcut_migration_done:
   IfSilent 0 skip_silent_desktop_shortcut
   !insertmacro LOG_PATH_STATE "desktop_shortcut_before_create" "$DESKTOP\\${shortcutName}"
   CreateShortCut "$DESKTOP\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
   !insertmacro LOG_PATH_STATE "desktop_shortcut_after_create" "$DESKTOP\\${shortcutName}"
 skip_silent_desktop_shortcut:
+  Delete "$SMPROGRAMS\\${legacyShortcutName}"
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_before_create" "$SMPROGRAMS\\${shortcutName}"
   CreateShortCut "$SMPROGRAMS\\${shortcutName}" "$INSTDIR\\${exeName}" "" "$INSTDIR\\${exeName}" 0
   !insertmacro LOG_PATH_STATE "start_menu_shortcut_after_create" "$SMPROGRAMS\\${shortcutName}"
@@ -1014,13 +1022,16 @@ Section "Uninstall"
 check_desktop_shortcut_state:
   \${If} $RemoveDesktopShortcutState == \${BST_CHECKED}
     Delete "$DESKTOP\\${shortcutName}"
+    Delete "$DESKTOP\\${legacyShortcutName}"
   \${EndIf}
   Goto after_desktop_shortcut
 delete_desktop_shortcut:
   Delete "$DESKTOP\\${shortcutName}"
+  Delete "$DESKTOP\\${legacyShortcutName}"
 after_desktop_shortcut:
   !insertmacro UN_LOG_PATH_STATE "desktop_shortcut_after_delete" "$DESKTOP\\${shortcutName}"
   Delete "$SMPROGRAMS\\${shortcutName}"
+  Delete "$SMPROGRAMS\\${legacyShortcutName}"
   !insertmacro UN_LOG_PATH_STATE "start_menu_shortcut_after_delete" "$SMPROGRAMS\\${shortcutName}"
   DeleteRegKey HKCU "${registryKey}"
   DeleteRegKey HKCU "${appPathsKey}"

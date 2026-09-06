@@ -131,6 +131,9 @@ export async function runElectronBuilder(
       electronLanguages: MAC_ELECTRON_LANGUAGES,
       entitlements: config.signed ? macResources.entitlements : undefined,
       entitlementsInherit: config.signed ? macResources.entitlementsInherit : undefined,
+      extendInfo: {
+        CFBundleDisplayName: identity.displayName,
+      },
       gatekeeperAssess: false,
       hardenedRuntime: config.signed,
       icon: macResources.icon,

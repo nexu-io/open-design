@@ -16,6 +16,8 @@ export type WinInstallIdentity = {
   appPathsKey: string;
   displayName: string;
   exeName: string;
+  installDirectoryName: string;
+  legacyShortcutName: string;
   registryKey: string;
   shortcutName: string;
   uninstallerName: string;
@@ -25,14 +27,18 @@ export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespac
   const namespaceToken = resolveWindowsReleaseNamespaceToken(config.namespace);
   const channel = releaseChannelFromVersion(config.appVersion)
     ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace);
-  const displayName = channel == null ? `${PRODUCT_NAME} ${namespaceToken}` : releaseInstallIdentity(channel).productName;
+  const releaseIdentity = channel == null ? null : releaseInstallIdentity(channel);
+  const productName = releaseIdentity?.productName ?? `${PRODUCT_NAME} ${namespaceToken}`;
+  const displayName = releaseIdentity?.displayName ?? productName;
 
   return {
-    appPathsKey: `Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${displayName}.exe`,
+    appPathsKey: `Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${productName}.exe`,
     displayName,
     exeName: `${PRODUCT_NAME}.exe`,
+    installDirectoryName: productName,
+    legacyShortcutName: `${productName}.lnk`,
     registryKey: resolveWindowsUninstallRegistryKey(config.namespace),
     shortcutName: `${displayName}.lnk`,
-    uninstallerName: `Uninstall ${displayName}.exe`,
+    uninstallerName: `Uninstall ${productName}.exe`,
   };
 }
