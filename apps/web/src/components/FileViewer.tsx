@@ -14626,13 +14626,15 @@ function HtmlViewer({
     // exit that really IS broken, and shown to say so.
     // ============================================================
     if (typeof document !== 'undefined') {
-      const flashed = Array.from(
-        document.querySelectorAll<HTMLElement>('.viewer .viewer-body iframe'),
-      );
+      // Every iframe on the page, not the ones under `.viewer .viewer-body`:
+      // the retained preview frames live in the runtime pool's own container
+      // and are positioned over the viewer, so scoping to the viewer body
+      // matched nothing and the first version of this probe was a no-op.
+      const flashed = Array.from(document.querySelectorAll<HTMLElement>('iframe'));
       for (const frame of flashed) frame.style.visibility = 'hidden';
       setTimeout(() => {
         for (const frame of flashed) frame.style.visibility = '';
-      }, 300);
+      }, 600);
     }
     // Leaving is the mirror of entering: if the ground is still opaque when the
     // layout returns to normal, the frame between the two is black. Dropping
