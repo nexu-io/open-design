@@ -170,6 +170,7 @@ import {
   imageDataUrlToBlob,
   isOpenDesignHostAvailable,
   openSandboxedPreviewInNewTab,
+  openSandboxedPreviewUrlInNewTab,
   prepareImageExportTarget,
   planDeckImageCapture,
   requestPreviewSnapshot,
@@ -212,6 +213,7 @@ import {
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
+  presentUrlLoadDecision,
   shouldUrlLoadHtmlPreview,
   type UrlLoadDecision,
 } from './file-viewer-render-mode';
@@ -14077,6 +14079,45 @@ function HtmlViewer({
 
   function openInNewTab() {
     if (!source) return;
+    // A multi-file artifact cannot survive being inlined into a srcdoc: its
+    // siblings are reachable only through scoped daemon URLs, and `<base href>`
+    // cannot carry the query that scope lives in (URL resolution discards a
+    // base's query), so `./styles.css` 400s and the page renders unstyled.
+    //
+    // Ask the daemon for the same containment document the inline preview
+    // uses. Presence of `odPreviewBridge` makes it mint a preview scope and
+    // inject a path-scoped `<base href=".../preview/<token>/">` with no query
+    // to lose, so rewritten attributes AND a runtime `fetch('./data.json')`
+    // both resolve. An empty value asks for the base without any bridge
+    // scripts, which Present has no parent listener for.
+    //
+    // Two paths that look right and are not: serving `/raw/` plain fixes only
+    // attributes, because the daemon cannot rewrite a URL inside a script, so
+    // a data fetch silently falls back to whatever the artifact embeds; and
+    // navigating to the `/preview/<token>/` document directly is served with
+    // `connect-src 'none'`, which blocks every fetch outright.
+    //
+    // Reuse the viewer's own URL-vs-srcDoc gate rather than a bespoke
+    // condition, so Present inherits every render-safety rule the inline
+    // preview already enforces: sandbox-shim artifacts that throw
+    // SecurityError at an opaque origin, self-redirecting documents that need
+    // buildSrcdoc's redirect guard (#710), and root-relative asset refs that
+    // only resolve after the srcDoc rewrite. A file with unsaved manual edits
+    // also stays inlined, since the daemon would serve the version on disk.
+    const presentViaUrl =
+      !manualEditFrozenSource
+      && !manualEditRequiresSrcDoc
+      && shouldUrlLoadHtmlPreview(presentUrlLoadDecision(urlLoadDecision));
+    if (presentViaUrl) {
+      openSandboxedPreviewUrlInNewTab(
+        appendResourceQuery(
+          projectRawUrl(projectId, file.name, workspaceContext),
+          'odPreviewBridge=',
+        ),
+        exportTitle,
+      );
+      return;
+    }
     openSandboxedPreviewInNewTab(source, exportTitle, {
       deck: effectiveDeck,
       baseHref: latestSrcDocPreviewBaseHref,
