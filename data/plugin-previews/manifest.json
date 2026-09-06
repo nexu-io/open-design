@@ -338,11 +338,11 @@
       "hash": "7b884ba518d75c52"
     },
     "example-open-design-landing": {
-      "video": "example-open-design-landing/8a69e5e7664328c7/preview.mp4",
-      "poster": "example-open-design-landing/8a69e5e7664328c7/poster.jpg",
+      "video": "example-open-design-landing/681f373a773f9cc7/preview.mp4",
+      "poster": "example-open-design-landing/681f373a773f9cc7/poster.jpg",
       "durationMs": 10067,
       "holdMs": 2500,
-      "hash": "8a69e5e7664328c7"
+      "hash": "681f373a773f9cc7"
     },
     "example-orbit-general": {
       "video": "example-orbit-general/65935e27858c8c48/preview.mp4",
@@ -1010,11 +1010,11 @@
       "hash": "b4f19c1086194053"
     },
     "example-ib-pitch-book": {
-      "video": "example-ib-pitch-book/8bca422b2430247e/preview.mp4",
-      "poster": "example-ib-pitch-book/8bca422b2430247e/poster.jpg",
+      "video": "example-ib-pitch-book/ad457a422c543aaa/preview.mp4",
+      "poster": "example-ib-pitch-book/ad457a422c543aaa/poster.jpg",
       "durationMs": 1267,
       "holdMs": 1267,
-      "hash": "8bca422b2430247e"
+      "hash": "ad457a422c543aaa"
     },
     "example-image-poster": {
       "video": "example-image-poster/827e5514edd44925/preview.mp4",
