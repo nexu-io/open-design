@@ -521,6 +521,66 @@ describe('FileViewer manual edit regressions', () => {
     }
   });
 
+  it('preserves consecutive panel text breaks after save and reload', async () => {
+    let persistedSource = '<!doctype html><html><body><p data-od-id="hero">First</p></body></html>';
+    const savedSources: string[] = [];
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      if (url.includes('/api/projects/project-1/files') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body)) as { content: string };
+        persistedSource = payload.content;
+        savedSources.push(payload.content);
+        return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/api/projects/project-1/raw/preview.html')) {
+        return new Response(persistedSource, { status: 200, headers: { 'Content-Type': 'text/html' } });
+      }
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const view = render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+        liveHtml={persistedSource}
+      />,
+    );
+
+    await enterManualEditMode();
+    await selectManualEditTarget({
+      ...heroTarget(),
+      tagName: 'p',
+      text: 'First',
+      fields: { text: 'First' },
+      outerHtml: '<p data-od-id="hero">First</p>',
+    });
+
+    fireEvent.change(screen.getByLabelText('Text'), {
+      target: { value: 'First\nSecond\n\nFourth' },
+    });
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(savedSources).toHaveLength(1);
+      expect(document.querySelector('.manual-edit-right')).toBeNull();
+    });
+    expect(savedSources[0]).toContain('<p data-od-id="hero">First<br>Second<br><br>Fourth</p>');
+
+    view.unmount();
+    render(
+      <FileViewer projectId="project-1" projectKind="prototype" file={htmlPreviewFile()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Code' }));
+    await waitFor(() => {
+      expect(document.querySelector('.viewer-source')?.textContent).toContain(
+        '<p data-od-id="hero">First<br>Second<br><br>Fourth</p>',
+      );
+    });
+  });
+
   it('applies a saved panel text edit to the retained iframe without waiting for a style change', async () => {
     const source = '<!doctype html><html><body><main data-od-id="hero">Hero</main></body></html>';
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
