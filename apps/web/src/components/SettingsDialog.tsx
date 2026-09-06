@@ -8637,6 +8637,16 @@ function IntegrationsSection() {
 
         {/* Setup flow */}
         <div className="mcp-setup-card">
+          <p style={{ margin: 0 }}>
+            {t('settings.mcpLocalRuntimeOnly')}{' '}
+            <a
+              href="https://github.com/nexu-io/open-design/blob/main/docs/deployment/docker.md#connect-a-remote-coding-agent-over-mcp"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('settings.mcpRemoteSetup')}
+            </a>
+          </p>
           <div
             className="ds-picker"
             ref={pickerRef}
