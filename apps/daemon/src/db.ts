@@ -202,6 +202,9 @@ function migrate(db: SqliteDb): void {
       model           TEXT,
       cwd             TEXT,
       last_message_id TEXT,
+      -- Last provider-reported effective input usage for this exact session.
+      -- Observability only: never used to admit, reject, compact, or roll over.
+      last_input_tokens INTEGER,
       updated_at      INTEGER NOT NULL,
       PRIMARY KEY (conversation_id, agent_id),
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
@@ -555,6 +558,9 @@ function migrate(db: SqliteDb): void {
   }
   if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'last_message_id')) {
     db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_message_id TEXT`);
+  }
+  if (agentSessionCols.length > 0 && !agentSessionCols.some((c: DbRow) => c.name === 'last_input_tokens')) {
+    db.exec(`ALTER TABLE agent_sessions ADD COLUMN last_input_tokens INTEGER`);
   }
   const tabsStateCols = db.prepare(`PRAGMA table_info(tabs_state)`).all() as DbRow[];
   if (tabsStateCols.length > 0 && !tabsStateCols.some((c: DbRow) => c.name === 'state_json')) {
@@ -2508,13 +2514,21 @@ export function upsertAgentSession(
     model?: string | null;
     cwd?: string | null;
     lastMessageId?: string | null;
+    lastInputTokens?: number | null;
   },
 ): void {
+  const lastInputTokens =
+    typeof input.lastInputTokens === 'number' &&
+    Number.isSafeInteger(input.lastInputTokens) &&
+    input.lastInputTokens >= 0 &&
+    input.lastInputTokens <= 1_000_000_000
+      ? input.lastInputTokens
+      : null;
   db.prepare(
     `INSERT INTO agent_sessions
        (conversation_id, agent_id, session_id, stable_prompt_hash, stable_prompt_sections,
-        model, cwd, last_message_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model, cwd, last_message_id, last_input_tokens, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(conversation_id, agent_id)
        DO UPDATE SET session_id = excluded.session_id,
                      stable_prompt_hash = excluded.stable_prompt_hash,
@@ -2522,6 +2536,11 @@ export function upsertAgentSession(
                      model = excluded.model,
                      cwd = excluded.cwd,
                      last_message_id = excluded.last_message_id,
+                     last_input_tokens = CASE
+                       WHEN excluded.session_id = agent_sessions.session_id
+                         THEN COALESCE(excluded.last_input_tokens, agent_sessions.last_input_tokens)
+                       ELSE excluded.last_input_tokens
+                     END,
                      updated_at = excluded.updated_at`,
   ).run(
     input.conversationId,
@@ -2532,6 +2551,7 @@ export function upsertAgentSession(
     input.model ?? null,
     input.cwd ?? null,
     input.lastMessageId ?? null,
+    lastInputTokens,
     Date.now(),
   );
 }
@@ -2547,10 +2567,12 @@ export function getAgentSessionRecord(
   model: string | null;
   cwd: string | null;
   lastMessageId: string | null;
+  lastInputTokens: number | null;
 } | null {
   const row = db
     .prepare(
-      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id
+      `SELECT session_id, stable_prompt_hash, stable_prompt_sections, model, cwd, last_message_id,
+              last_input_tokens
          FROM agent_sessions
         WHERE conversation_id = ? AND agent_id = ?`,
     )
@@ -2565,6 +2587,13 @@ export function getAgentSessionRecord(
     model: typeof row.model === 'string' ? row.model : null,
     cwd: typeof row.cwd === 'string' ? row.cwd : null,
     lastMessageId: typeof row.last_message_id === 'string' ? row.last_message_id : null,
+    lastInputTokens:
+      typeof row.last_input_tokens === 'number' &&
+      Number.isSafeInteger(row.last_input_tokens) &&
+      row.last_input_tokens >= 0 &&
+      row.last_input_tokens <= 1_000_000_000
+        ? row.last_input_tokens
+        : null,
   };
 }
 

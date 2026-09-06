@@ -61,6 +61,135 @@ test('ACP session params preserve caller-provided type and env fields', () => {
   assert.deepEqual(server.env, [{ key: 'TOKEN', value: 'secret' }]);
 });
 
+test('attachAcpSession emits exact bounded prompt_budget_v1 facts for a new session', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  const events: Array<{ event: string; payload: any }> = [];
+  const prompt = '多字节\n"escaped"\\tail';
+  const peerOpaqueModel = 'opaque_peer_controlled_identifier';
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+
+  attachAcpSession({
+    child: child as never,
+    prompt,
+    cwd: '/private/customer/workspace',
+    model: 'claude-opus-5',
+    resourcePaths: ['/private/customer/secret-input.txt'],
+    mcpServers: [],
+    promptBudgetContext: {
+      modelId: 'claude-opus-5',
+      modelIdSource: 'model_catalog',
+      contextWindowTokens: 200_000,
+      contextWindowSource: 'model_metadata',
+      priorSessionUsageSource: 'unknown',
+    },
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, {
+    sessionId: 'private-session-id',
+    models: { currentModelId: peerOpaqueModel },
+  });
+  writeAcpResult(child, 3, { models: { currentModelId: peerOpaqueModel } });
+  writeAcpResult(child, 4, {});
+
+  const promptFrame = writes.find((frame) => JSON.parse(frame).method === 'session/prompt');
+  assert.ok(promptFrame);
+  const diagnostic = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload)
+    .find((payload) => payload.type === 'diagnostic' && payload.name === 'prompt_budget_v1');
+  const promptBytes = Buffer.byteLength(prompt, 'utf8');
+  assert.deepEqual(diagnostic, {
+    type: 'diagnostic',
+    name: 'prompt_budget_v1',
+    source: 'acp-json-rpc',
+    schemaVersion: 1,
+    frameBytes: Buffer.byteLength(promptFrame, 'utf8'),
+    promptBytes,
+    promptTokenEstimate: Math.ceil(promptBytes / 3),
+    tokenEstimateMethod: 'utf8_bytes_div_3_ceil_v1',
+    sessionMode: 'new',
+    modelId: 'claude-opus-5',
+    contextWindowSource: 'model_metadata',
+    contextWindowTokens: 200_000,
+    priorSessionUsageSource: 'unknown',
+  });
+  const serializedDiagnostic = JSON.stringify(diagnostic);
+  assert.equal(serializedDiagnostic.includes(prompt), false);
+  assert.equal(serializedDiagnostic.includes(peerOpaqueModel), false);
+  assert.equal(serializedDiagnostic.includes('private-session-id'), false);
+  assert.equal(serializedDiagnostic.includes('/private/customer'), false);
+});
+
+test('attachAcpSession buckets unavailable resume context without identifiers', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: any }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'resume safely',
+    cwd: '/private/customer/workspace',
+    model: null,
+    resumeSessionId: 'private-resume-session-id',
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'private-resume-session-id' });
+  writeAcpResult(child, 3, {});
+
+  const diagnostic = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload)
+    .find((payload) => payload.type === 'diagnostic' && payload.name === 'prompt_budget_v1');
+  assert.equal(diagnostic.sessionMode, 'resume');
+  assert.equal(diagnostic.modelId, 'default');
+  assert.equal(diagnostic.contextWindowSource, 'unknown');
+  assert.equal('contextWindowTokens' in diagnostic, false);
+  assert.equal(diagnostic.priorSessionUsageSource, 'unknown');
+  assert.equal('priorSessionInputTokens' in diagnostic, false);
+  assert.equal(JSON.stringify(diagnostic).includes('private-'), false);
+});
+
+test('attachAcpSession buckets non-catalog model identities as other', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: any }> = [];
+  const requestedOpaqueModel = 'requested_opaque_identifier';
+  const peerOpaqueModel = 'peer_opaque_identifier';
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'model privacy',
+    model: requestedOpaqueModel,
+    mcpServers: [],
+    promptBudgetContext: {
+      modelId: null,
+      modelIdSource: 'unknown',
+    },
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, {
+    sessionId: 'session-1',
+    models: { currentModelId: peerOpaqueModel },
+  });
+  writeAcpResult(child, 3, { models: { currentModelId: peerOpaqueModel } });
+  writeAcpResult(child, 4, {});
+
+  const diagnostic = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload)
+    .find((payload) => payload.type === 'diagnostic' && payload.name === 'prompt_budget_v1');
+  assert.equal(diagnostic.modelId, 'other');
+  const serialized = JSON.stringify(diagnostic);
+  assert.equal(serialized.includes(requestedOpaqueModel), false);
+  assert.equal(serialized.includes(peerOpaqueModel), false);
+});
+
 test('ACP model normalization prefers session configOptions models', () => {
   const models = normalizeModels(
     {
@@ -824,7 +953,10 @@ test('attachAcpSession preserves AMR assistant and model-step lifecycle diagnost
   const diagnostics = events
     .filter((entry) => entry.event === 'agent')
     .map((entry) => entry.payload as Record<string, unknown>)
-    .filter((payload) => payload.type === 'diagnostic');
+    .filter(
+      (payload) =>
+        payload.type === 'diagnostic' && payload.name !== 'prompt_budget_v1',
+    );
   assert.deepEqual(
     diagnostics.map((payload) => payload.name),
     [

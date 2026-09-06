@@ -97,6 +97,17 @@ describe("workflow scope planner", () => {
     });
   });
 
+  test("routes canonical DSH installer sources to E2E Vitest", () => {
+    expect(plan("pr", ["tools/release/resources/dsh-bootstrap/install-dsh.sh"])).toMatchObject({
+      scopes: { web_tests_required: true },
+      enabled: { e2e_vitest: true },
+    });
+    expect(plan("pr", ["tools/release/resources/dsh-bootstrap/install-dsh.ps1"])).toMatchObject({
+      scopes: { web_tests_required: true },
+      enabled: { e2e_vitest: true },
+    });
+  });
+
   test("runs planner contract tests for CI control-plane changes", () => {
     const controlPlaneFiles = [
       ".github/config/scopes.json",
@@ -120,25 +131,30 @@ describe("workflow scope planner", () => {
     }
   });
 
-  test("routes Terminal exact sources and release orchestration to scene validation", () => {
+  test("keeps Terminal exact sources on the independent release validation line", () => {
     for (const file of [
       "apps/closure/src/index.ts",
       "packages/standalone/src/store.ts",
       "shells/terminal/src/cli.ts",
       ".github/scripts/pack.py",
       ".github/scripts/release.py",
+      ".github/workflows/convergence-exact.atom.yml",
       ".github/workflows/release-exact.yml",
     ]) {
-      expect(plan("pr", [file]), file).toMatchObject({
-        scopes: { terminal_scene_required: true, workspace_validation_required: true },
-        enabled: { terminal_scene: true, workspace_unit_tests: true },
+      const prPlan = plan("pr", [file]);
+      expect(prPlan, file).toMatchObject({
+        scopes: { workspace_validation_required: false },
+        enabled: { workspace_unit_tests: true },
+        trace: { escalations: [] },
+      });
+      expect(prPlan.enabled, file).not.toHaveProperty("terminal_scene");
+
+      expect(plan("merge-queue", [file]), file).toMatchObject({
+        scopes: { workspace_validation_required: false },
+        enabled: { workspace_unit_tests: false },
         trace: { escalations: [] },
       });
     }
-    expect(plan("pr", ["docs/spec.md"])).toMatchObject({
-      scopes: { terminal_scene_required: false },
-      enabled: { terminal_scene: false },
-    });
   });
 
   test("directly owns promoted merge-queue routing", () => {
@@ -189,5 +205,6 @@ describe("workflow scope planner", () => {
       workflow.indexOf("  web_workspace_tests:"),
     );
     expect(windowsPayload).not.toMatch(/\.github\/scripts\/(?:scopes|convergence|runners)\.py/);
+    expect(workflow).not.toContain("  terminal_scene:");
   });
 });

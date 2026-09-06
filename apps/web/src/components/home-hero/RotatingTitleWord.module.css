@@ -1,0 +1,84 @@
+/* The slot holds the revealing word and the cursor on one baseline. It has no
+   reserved width: the word's own `width: 0 → auto` animation is the reveal, so
+   the sentence's tail rides along with it — that is the effect. */
+.slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: bottom;
+}
+
+/* The animating box. `overflow: hidden` is what turns the width animation into
+   a wipe: the glyphs keep their full width inside and are uncovered left to
+   right instead of being squashed. */
+.reveal {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Plate behind the word: #00FF08 at the trailing edge, transparent at the
+   leading one, so the reveal still appears to pull the colour along with it —
+   the direction is the animation's whole point, and it parks the strongest
+   green right where the caret stands. */
+.plate {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(
+    to right,
+    transparent,
+    var(--rotating-title-plate)
+  );
+  /* 50% (per product, walked down from 80). On the element rather than on the
+     gradient's own stop: the plate is one flat wash and this scales the whole
+     ramp uniformly, so the fade still lands on transparent at the leading edge
+     instead of being re-derived per stop. The word above is a sibling, not a
+     child, so its ink keeps full strength. */
+  opacity: 0.5;
+}
+
+/* The word reads in the headline's own colour (per product: 和前边的「我们来设计
+   点」一致), so `inherit` rather than a fill of its own — the plate behind it is
+   what carries the accent. The gradient clipped to the glyphs this started as
+   is long gone. The trailing padding stays: it keeps the last glyph's overhang
+   clear of the reveal's `overflow: hidden` edge. */
+.ink {
+  position: relative;
+  display: inline-block;
+  padding-right: 0.06em;
+  color: inherit;
+}
+
+/* Bar cursor beside the word: the original's #00FF08 at full strength, dipping
+   to half on the breath (per product: 默认条的颜色是 00FF08，闪烁的时候是透明度
+   下降). It does NOT follow the plate down to 50% — halving both stops was tried
+   and left the bar washed out; the plate is a wash behind text, the caret is a
+   mark of its own. */
+.caret {
+  flex: 0 0 auto;
+  width: 4px;
+  height: 1.05em;
+  margin-left: 0.06em;
+  background: var(--rotating-title-cursor);
+  animation: rotating-title-caret 1.6s ease-in-out infinite;
+}
+
+/* The rest value has to live in the keyframes, not in an `opacity` on the rule
+   above: an animation that touches the property owns it for the whole run, so
+   a static value there would simply be overridden. */
+@keyframes rotating-title-caret {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+}

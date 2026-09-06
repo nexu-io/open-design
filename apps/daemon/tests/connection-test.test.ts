@@ -3140,6 +3140,48 @@ process.stdin.on('end', () => {
     }
   });
 
+  it('reports the concrete model resolved from a Claude alias', async () => {
+    await withFakeClaude(
+      `
+console.log(JSON.stringify({
+  type: 'system',
+  subtype: 'init',
+  model: 'claude-opus-5',
+  session_id: 'test-session',
+}));
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  JSON.parse(input.trim());
+  console.log(JSON.stringify({
+    type: 'assistant',
+    message: {
+      id: 'msg_1',
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+    },
+  }));
+});
+`,
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'claude',
+          model: 'opus',
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          kind: 'success',
+          model: 'opus',
+          resolvedModel: 'claude-opus-5',
+          agentName: 'Claude Code',
+          sample: 'ok',
+        });
+      },
+    );
+  });
+
   it('waits for the Codex process before accepting early success text', async () => {
     await withFakeCodex(
       `

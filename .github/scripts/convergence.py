@@ -654,7 +654,7 @@ def validated_provenance(value: Any) -> dict[str, Any]:
     required = {"event", "runId", "runAttempt", "headSha", "baseSha", "treeSha", "validatedAt"}
     if set(provenance) != required:
         raise ConfigError("provenance fields differ")
-    if provenance["event"] not in {"pull_request", "merge_group"}:
+    if provenance["event"] not in {"pull_request", "merge_group", "workflow_dispatch"}:
         raise ConfigError("provenance.event is not admissible")
     for name in ("runId", "runAttempt"):
         if not isinstance(provenance[name], int) or provenance[name] <= 0:
@@ -749,6 +749,9 @@ def producer_context(payload: dict[str, Any]) -> dict[str, Any]:
         source = object_value(payload.get("merge_group"), "merge_group event")
         head_sha = require_string(source.get("head_sha"), "merge_group.head_sha")
         base_sha = require_string(source.get("base_sha"), "merge_group.base_sha")
+    elif event == "workflow_dispatch":
+        head_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+        base_sha = head_sha
     else:
         raise ConfigError(f"unsupported convergence producer event: {event!r}")
     repository = require_string(os.environ.get("GITHUB_REPOSITORY"), "GITHUB_REPOSITORY")
@@ -890,7 +893,7 @@ def workflow_run_context(payload: dict[str, Any]) -> dict[str, Any]:
     for field in ("run_id", "run_attempt"):
         if not isinstance(context[field], int) or context[field] <= 0:
             raise ConfigError(f"workflow_run {field} must be positive")
-    if context["event"] not in {"pull_request", "merge_group"}:
+    if context["event"] not in {"pull_request", "merge_group", "workflow_dispatch"}:
         raise ConfigError("workflow_run event is not admissible")
     return context
 

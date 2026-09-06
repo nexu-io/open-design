@@ -428,11 +428,53 @@ export type TrackingRunAdmissionStatus =
   | 'unknown';
 export type TrackingRunTerminalIntegrity =
   | 'canonical'
+  | 'duplicate'
   | 'late'
   | 'reconciled'
   | 'overwritten'
   | 'permanently_missing'
   | 'post_terminal_activity';
+export type TrackingRunTerminationOrigin =
+  | 'user_cancel'
+  | 'project_cleanup'
+  | 'watchdog_cleanup'
+  | 'daemon_quit'
+  | 'update_apply'
+  | 'unknown';
+export type TrackingRunTerminalPersistenceStatus =
+  | 'acknowledged'
+  | 'failed'
+  | 'unknown';
+export type TrackingRunTerminalPersistenceErrorType =
+  | 'permission_denied'
+  | 'read_only_storage'
+  | 'storage_full'
+  | 'storage_unavailable'
+  | 'serialization_failed'
+  | 'unknown';
+export type TrackingRunPosthogDeliveryStatus =
+  | 'unknown'
+  | 'in_flight'
+  | 'queued'
+  | 'not_expected'
+  | 'failed';
+export type TrackingRunPosthogAcknowledgement =
+  | 'unknown'
+  | 'local_buffer'
+  | 'none';
+export type TrackingRunPosthogErrorType =
+  | 'not_configured'
+  | 'metrics_consent_disabled'
+  | 'config_read_failed'
+  | 'enqueue_failed';
+export type TrackingRunMatureUnfinishedState =
+  | 'still_running'
+  | 'terminated_persistence_missing'
+  | 'terminal_persisted_posthog_failed'
+  | 'recovery_pending'
+  | 'permanently_missing'
+  | 'unknown';
+export type TrackingRunReconciliationIntegrity = 'recovered';
 export type TrackingRunLifecyclePhase =
   | 'queued'
   | 'prompt_build'

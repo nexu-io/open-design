@@ -11,9 +11,76 @@
 }
 
 .triggerRow {
+  /* Positioning context for the clear button that sits over the trigger's
+     leading icon (see `.triggerClear`). */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 2px;
+}
+/* The × that replaces the folder glyph while the row is hovered, once a
+   directory is actually chosen. Absolutely placed ON the glyph rather than
+   laid out beside it, so the swap happens in place and the label never
+   shifts: 20x20 hit box centred on the 16px icon, which the trigger insets by
+   6 — hence 6 − (20 − 16) / 2 = 4. */
+.triggerClear {
+  position: absolute;
+  left: 4px;
+  /* Centred by auto margins, NOT by `translateY(-50%)`: primitives.css presses
+     every button with `button:active { transform: translateY(1px) }`, which
+     REPLACES a centering transform rather than adding to it — so the × jumped
+     half its own height down the instant it was pressed (per product: 点击不要
+     抖动). On a 20px target that jump is enough to move the button out from
+     under the cursor, which is why the click sometimes did not register at
+     all. Auto margins cannot be clobbered by a transform. */
+  top: 0;
+  bottom: 0;
+  margin: auto 0;
+  z-index: 1;
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted, var(--text));
+  cursor: pointer;
+  /* Hidden until the row is hovered. `opacity` + `pointer-events`, not
+     `display`, so the button stays in the tab order and can reveal itself on
+     keyboard focus below — a display-toggled control would be unreachable
+     without a mouse, which is the whole risk of dropping the menu row. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.triggerRow:hover .triggerClear,
+.triggerClear:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.triggerClear:hover,
+.triggerClear:focus-visible {
+  background: transparent;
+  color: var(--text-strong);
+}
+/* And no press-nudge either: a 1px hop on a control this small reads as the
+   target flinching away from the pointer. */
+.triggerClear:active:not(:disabled) {
+  transform: none;
+}
+/* Hide the folder glyph under the ×, `visibility` rather than `display` so the
+   trigger's own layout never moves during the swap. Gated on the × actually
+   being there (`:has(.triggerClear)`): with no directory chosen there is
+   nothing to clear and no button rendered, and an ungated rule would blank the
+   folder glyph on hover with nothing taking its place. */
+.triggerRow:has(.triggerClear):hover .triggerIcon,
+.triggerRow:has(.triggerClear:focus-visible) .triggerIcon {
+  visibility: hidden;
 }
 
 /* Borderless text trigger — no card chrome, just icon + label + chevron. */
@@ -64,6 +131,11 @@
 .triggerChevron {
   flex: 0 0 auto;
   opacity: 0.55;
+  transition: transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+/* Open: the caret flips up, pointing back at the control it belongs to. */
+.trigger[aria-expanded='true'] .triggerChevron {
+  transform: rotate(180deg);
 }
 
 .clear {
@@ -163,10 +235,18 @@
   cursor: pointer;
   transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.item:hover,
-.item:focus-visible {
+.item:hover:not(:disabled),
+.item:focus-visible:not(:disabled) {
   outline: none;
   background: var(--bg-subtle);
+}
+/* One slot: with something already attached every row is inert until the
+   trigger's × frees it. Muted rather than hidden — the menu still has to show
+   what it OFFERS, or the row reads as a feature that vanished. */
+.item:disabled {
+  opacity: 0.4;
+  cursor: default;
+  background: transparent;
 }
 .itemIcon {
   flex: 0 0 auto;
@@ -182,6 +262,15 @@
 .itemChevron {
   margin-left: auto;
   opacity: 0.55;
+}
+
+/* Splits the folder's own actions (choose / recent / clear) from the other
+   context sources that attach alongside it — reference a project, link local
+   code. One menu, two groups. */
+.divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-soft, var(--border));
 }
 
 .submenuRow {

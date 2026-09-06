@@ -57,8 +57,8 @@ interface Props {
    * Trigger styling only; the popover is identical across variants.
    *   - 'project' (default): the chrome-header pill (`project-ds-picker-*`).
    *   - 'footer': the home composer input-card footer pill.
-   *   - 'home': the borderless trigger in the home composer's row below the
-   *     card, sitting flush with the working-directory picker.
+   *   - 'home': the home composer's persistent picker, sitting directly after
+   *     the upload disc in the card's foot row and matching its metrics.
    *   - 'icon': a text-free palette icon button matching the composer
    *     icon row (#5517's in-composer picker).
    */
@@ -311,7 +311,13 @@ export function DesignSystemPicker({
             }}
           >
             <div className="project-ds-picker-search">
-              <Icon name="search" size={12} />
+              {/* Sized to READ the same as the composer row's type-pill glyph
+                  above (per product), which is a 14px Remix mark whose ink
+                  covers ~83% of its box = 11.7px. `search-line` covers 84.6%,
+                  so the row's nominal 14 lands it on 11.9 — the same mark, no
+                  correction needed. The `add-line` below is the exception; see
+                  there. */}
+              <Icon name="search" size={14} />
               <input
                 ref={inputRef}
                 type="text"
@@ -335,7 +341,14 @@ export function DesignSystemPicker({
                   data-testid="project-ds-picker-create"
                   onClick={createDesignSystem}
                 >
-                  <Icon name="plus" size={12} strokeWidth={2} />
+                  {/* 20, not the 14 the search glyph beside it takes:
+                      `add-line` is a bare cross that covers only 58.3% of its
+                      own box, where the type-pill mark this is being matched to
+                      covers ~83%. 20 x 0.583 = 11.7px of ink — the same drawn
+                      size, reached from a bigger box. (`strokeWidth` used to
+                      ride along here and never did anything: `plus` resolves
+                      through REMIX_ICON to a filled path, not a stroked one.) */}
+                  <Icon name="plus" size={20} />
                   <span>{t('common.create')}</span>
                 </button>
               ) : null}
@@ -495,6 +508,8 @@ export function DesignSystemPicker({
   }
 
   if (variant === 'home') {
+    const triggerLabel = selected?.title ?? t('newproj.designSystem');
+    const clearLabel = selected ? `${t('common.clear')}: ${selected.title}` : undefined;
     return (
       <div
         ref={wrapRef}
@@ -504,22 +519,50 @@ export function DesignSystemPicker({
         <button
           ref={triggerRef}
           type="button"
-          className="home-hero__ds-row-trigger"
+          className={`home-hero__ds-row-trigger${selected ? ' is-selected' : ' is-icon-only'}`}
           data-testid="home-hero-design-system-trigger"
           aria-haspopup="listbox"
           aria-expanded={open}
           disabled={triggerDisabled}
-          title={selected?.title ?? t('newproj.designSystem')}
+          title={triggerLabel}
+          /* Unselected the control is the palette glyph alone (per product:
+             不选择不显示文案), so the field name lives on the tooltip + this
+             label rather than in the pill. */
+          aria-label={triggerLabel}
           onClick={() => setOpen((v) => !v)}
         >
-          <Icon name="palette" size={13} className="home-hero__ds-row-trigger-icon" />
-          <span className="home-hero__ds-row-trigger-label">
-            {loading
-              ? t('designSystemPicker.loading')
-              : selected?.title ?? t('newproj.designSystem')}
+          {/* 16px is the composer row's icon size — the upload disc, this
+              palette and the type pill's glyph all match the working-directory
+              picker below them (per product: 这个位置的 icon 全部统一 16，包括
+              hover 后的 icon; was 14 across the same set). No chevron for the
+              same reason: the upload trigger opens a menu without one. */}
+          <span className="home-hero__ds-row-trigger-icon" aria-hidden>
+            <Icon name="palette" size={16} className="home-hero__ds-row-trigger-icon-default" />
           </span>
-          <Icon name="chevron-down" size={11} className="home-hero__ds-row-trigger-chevron" />
+          {selected ? (
+            <span className="home-hero__ds-row-trigger-label">{selected.title}</span>
+          ) : null}
         </button>
+        {selected ? (
+          <button
+            type="button"
+            className="home-hero__ds-row-clear"
+            aria-label={clearLabel}
+            title={clearLabel}
+            disabled={triggerDisabled}
+            onClick={() => {
+              setOpen(false);
+              onChange(null);
+            }}
+          >
+            {/* 16, matching the type pill's clear next to it and the palette
+                this replaces on hover — the row's icons all carry the same box
+                and none of them changes size on hover (per product: 两个叉号和
+                没有 hover 时的图标一样大). See TemplatePicker for the optical
+                argument that once put both at 22; product overruled it. */}
+            <Icon name="close" size={16} />
+          </button>
+        ) : null}
         {popover}
         {previewModal}
       </div>
@@ -550,7 +593,7 @@ export function DesignSystemPicker({
               ? t('designSystemPicker.loading')
               : selected?.title ?? t('designSystemPicker.noneTitle')}
           </span>
-          <Icon name="chevron-down" size={12} aria-hidden />
+          <Icon name="chevron-down" size={14} aria-hidden />
         </button>
         {popover}
         {previewModal}

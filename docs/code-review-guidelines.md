@@ -70,7 +70,7 @@ A generally reasonable direction (e.g. "add Arabic/RTL coverage") is **not** suf
 
 This is the canonical list. Any PR that recreates one of these is out of scope until the surface is removed:
 
-- Removed app and package boundaries: `apps/nextjs`, `packages/shared`.
+- Removed app and package boundaries: `apps/nextjs`, `packages/shared`, `apps/landing-page`.
 - Root lifecycle aliases: `pnpm dev`, `pnpm dev:all`, `pnpm daemon`, `pnpm preview`, `pnpm start`.
 - Root aggregate aliases: `pnpm test`, `pnpm build`.
 - Root e2e aliases (e2e commands belong in the `e2e/` package — see `e2e/AGENTS.md`).
