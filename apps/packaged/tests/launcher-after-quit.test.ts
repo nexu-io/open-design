@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { SidecarStamp, SidecarStopResult } from "@open-design/sidecar";
+import { JsonIpcTimeoutError, type SidecarStamp, type SidecarStopResult } from "@open-design/sidecar";
 import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import type { StopProcessesResult, stopProcesses, waitForProcessExit } from "@open-design/platform";
 import { describe, expect, it, vi } from "vitest";
@@ -103,6 +103,52 @@ describe("inspectExistingDesktopForLauncher", () => {
         paths: fakePaths(root), stopSidecar: stop,
       })).resolves.toEqual({ action: "continue", reason: "stale-sidecar" });
       expect(stop).toHaveBeenCalledWith(stamp());
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("focuses a desktop whose daemon peer is busy instead of restarting it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-busy-peer-"));
+    const stop = vi.fn(async () => sidecarStop());
+    const invoke = vi.fn(async () => ({ accepted: true }));
+    const getStatus = vi.fn(async (target: SidecarStamp) => {
+      if (target.app === APP_KEYS.DAEMON) throw new JsonIpcTimeoutError("od-daemon-ipc", 350);
+      return target.app === APP_KEYS.DESKTOP
+        ? { pid: 1234, state: "running", updatedAt: new Date().toISOString(), windowVisible: true }
+        : { state: "running", url: "http://127.0.0.1:1234" };
+    });
+    try {
+      await expect(inspectExistingDesktopForLauncher(stamp(), {
+        getStatus: getStatus as never, invoke: invoke as never, paths: fakePaths(root), stopSidecar: stop,
+      })).resolves.toEqual({ action: "exit", reason: "existing-focused" });
+      expect(stop).not.toHaveBeenCalled();
+      expect(invoke).toHaveBeenCalledWith(stamp(), "show", {}, { timeoutMs: 800 });
+      expect(getStatus).toHaveBeenCalledWith({ ...stamp(), app: APP_KEYS.DAEMON }, { timeoutMs: 350 });
+      expect(getStatus).toHaveBeenCalledWith({ ...stamp(), app: APP_KEYS.DAEMON }, { timeoutMs: 1500 });
+      expect(await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8")).toContain("peer=busy apps=daemon pid=1234");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts a daemon peer that answers on the slower retry probe", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-launcher-retry-peer-"));
+    const stop = vi.fn(async () => sidecarStop());
+    let daemonProbes = 0;
+    const getStatus = vi.fn(async (target: SidecarStamp) => {
+      if (target.app === APP_KEYS.DAEMON && daemonProbes++ === 0) throw new JsonIpcTimeoutError("od-daemon-ipc", 350);
+      return target.app === APP_KEYS.DESKTOP
+        ? { pid: 1234, state: "running", updatedAt: new Date().toISOString(), windowVisible: true }
+        : { state: "running", url: "http://127.0.0.1:1234" };
+    });
+    try {
+      await expect(inspectExistingDesktopForLauncher(stamp(), {
+        getStatus: getStatus as never, invoke: vi.fn(async () => ({ accepted: true })) as never, paths: fakePaths(root), stopSidecar: stop,
+      })).resolves.toEqual({ action: "exit", reason: "existing-focused" });
+      expect(stop).not.toHaveBeenCalled();
+      expect(daemonProbes).toBe(2);
+      expect(await readFile(join(root, "logs", "launcher", "after-quit.log"), "utf8")).not.toContain("peer=busy");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
