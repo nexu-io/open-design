@@ -1,0 +1,54 @@
+# Open Design ships as a bundled Electron application: the package carries its own
+# Electron/Chromium runtime and a production node_modules tree. The tags below are
+# inherent to that model — the same class of deviations VS Code, Slack and Discord
+# document via their own /usr/share/lintian/overrides file. They are assumed and
+# recorded here rather than "fixed", which would mean unbundling the runtime.
+
+# --- Third-party install location (FHS /opt, not the Debian archive) ---
+open-design: dir-or-file-in-opt
+
+# --- Bundled runtime libraries / binaries (Electron, Chromium, prebuilt *.node) ---
+open-design: embedded-library
+open-design: embedded-javascript-library
+open-design: unstripped-binary-or-object
+open-design: statically-linked-binary
+open-design: shared-library-is-executable
+open-design: odd-permissions-on-shared-library
+open-design: hardening-no-pie
+open-design: hardening-no-relro
+
+# --- Permissions of the bundled tree (as produced by electron-builder) ---
+open-design: non-standard-file-perm
+open-design: non-standard-dir-perm
+open-design: non-standard-executable-perm
+open-design: executable-not-elf-or-script
+
+# --- Bundled fonts / web assets that reference external resources ---
+open-design: duplicate-font-file
+open-design: opentype-font-prohibits-installable-embedding
+open-design: privacy-breach-generic
+open-design: privacy-breach-uses-embedded-file
+open-design: privacy-breach-twitter
+
+# --- Bundled scripts executed by the app's own Node/Electron runtime, or shipped
+#     for other platforms and never run by a system interpreter on Linux, so their
+#     interpreters are intentionally not package dependencies. ---
+open-design: missing-dep-for-interpreter
+open-design: python3-script-but-no-python3-dep
+open-design: unusual-interpreter
+open-design: script-not-executable
+
+# --- fpm-emitted control fields (informational; not standard Debian control
+#     fields). The authoritative license lives in the DEP-5 copyright file. ---
+open-design: unknown-field Vendor
+open-design: unknown-field License
+
+# --- electron-builder maintainer scripts (update-alternatives symlink management) ---
+open-design: maintainer-script-ignores-errors
+open-design: command-with-path-in-maintainer-script
+open-design: postrm-removes-alternative
+
+# --- Misc bundled-tree artifacts ---
+open-design: package-contains-timestamped-gzip
+open-design: package-contains-vcs-control-file
+open-design: missing-depends-on-sensible-utils

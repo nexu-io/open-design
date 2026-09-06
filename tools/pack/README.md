@@ -96,6 +96,7 @@ Local lifecycle commands:
 
 - `tools-pack linux build --to all` (default; produces AppImage)
 - `tools-pack linux build --to appimage` (explicit AppImage)
+- `tools-pack linux build --to deb` (standards-compliant Debian package; build target only — no install/start/stop lifecycle smoke)
 - `tools-pack linux build --to dir` (unpacked output for fast iteration)
 - `tools-pack linux build --containerized` (run electron-builder inside `electronuserland/builder:base` Docker for a wider glibc compatibility target — requires Docker)
 - `tools-pack linux build --to all --portable` (release artifacts that must not bake local tools-pack runtime paths)
@@ -170,14 +171,19 @@ Verified smoke coverage in this repository currently includes:
 
 ### Format choice: why AppImage first
 
-Linux desktop apps in this space split across formats: VS Code ships `.deb` + `.rpm` + Snap; Discord ships AppImage + `.deb`; Slack ships `.deb` + `.rpm`; Cursor and Obsidian ship AppImage. We start with AppImage because one artifact can cover the widest glibc-compatible target without distro repositories, store packaging, signing infrastructure, or per-format install scripts, and it integrates cleanly with the namespace-scoped install layout. `.deb` / `.rpm` / Snap / Flatpak can land incrementally when user demand justifies the extra release ownership.
+Linux desktop apps in this space split across formats: VS Code ships `.deb` + `.rpm` + Snap; Discord ships AppImage + `.deb`; Slack ships `.deb` + `.rpm`; Cursor and Obsidian ship AppImage. We started with AppImage because one artifact can cover the widest glibc-compatible target without distro repositories, store packaging, signing infrastructure, or per-format install scripts, and it integrates cleanly with the namespace-scoped install layout. A standards-compliant `.deb` target is now also supported (`--to deb`); `.rpm` / Snap / Flatpak can still land incrementally when user demand justifies the extra release ownership.
 
 ### Out of scope (later phases)
 
 - AppImage signing (`--signed`) — deferred pending a GPG key infrastructure decision and a user-facing verification flow design (no ETA).
 - AppImage auto-update feed (`latest-linux.yml`) — the linux electron-builder config has no `publish` block wired, so a generated feed would point users at a feed that never updates. Tracked alongside signing.
-- Additional package formats: `.deb`, `.rpm`, Snap, Flatpak — deferred until there is demand and an owner for per-distro metadata, signing/store/repository plumbing, install/remove hooks, and release validation.
-- Full Linux AppImage and headless packaged smoke remain outside the main PR gate; run the applicable tools-pack validation manually or through a release lane when Linux packaging changes.
+- `.deb` build is supported via `--to deb` — a standards-compliant Debian package (`Package: open-design`, install under `/opt/OpenDesign`, section `devel`, RFC822 maintainer, `libc6` + t64-aware `depends`, DEP-5 `copyright`, a valid Debian `changelog`, and a `/usr/share/lintian/overrides` file documenting the bundled-Electron deviations; verified with `dpkg-deb`, `lintian`, and a real boot). Current scope is **build-only**:
+  - the tools-pack lifecycle (`install`/`start`/`stop`) and its smoke coverage stay **AppImage-only** — there is no `dpkg -i` acceptance smoke yet (planned);
+  - the release pipeline (`tools/release`), CI, and the landing page are **not** wired for `.deb` in this increment (release-lane wiring is a separate change);
+  - package **signing** and an **APT repository** remain deferred (GPG key + hosting decision).
+- `.rpm` is the planned next increment — `linux.maintainer` is already rpm-ready — but needs its own per-distro `depends`/section and `rpmlint` + install validation, so it is deferred rather than shipped untested.
+- Snap, Flatpak — deferred until there is demand and an owner for per-distro metadata, signing/store/repository plumbing, install/remove hooks, and release validation.
+- Full Linux AppImage PR smoke remains release-lane only; PR validation runs the Linux headless packaged smoke because it does not require a display server.
 
 `--to dmg` is manual-install DMG output only. Any builder-generated updater metadata such as `latest-mac.yml` or
 `.blockmap` files is treated as scratch and cleaned from the builder directory; release-beta generates the authoritative
