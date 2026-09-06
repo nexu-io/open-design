@@ -14625,17 +14625,27 @@ function HtmlViewer({
     // tears down. It exists so the L2 lane can be run against a presentation
     // exit that really IS broken, and shown to say so.
     // ============================================================
+    // The white has to be PAINTED before the rest of this handler runs, or it
+    // is not a defect a user could see: hiding the frames and then letting
+    // React commit in the same task blocks the main thread for ~250 ms, and
+    // the hidden state never reaches the screen inside the measured window.
+    // That was the first two versions of this probe, and the lane was right to
+    // stay green on them. Two animation frames put the white on screen first.
     if (typeof document !== 'undefined') {
-      // Every iframe on the page, not the ones under `.viewer .viewer-body`:
-      // the retained preview frames live in the runtime pool's own container
-      // and are positioned over the viewer, so scoping to the viewer body
-      // matched nothing and the first version of this probe was a no-op.
       const flashed = Array.from(document.querySelectorAll<HTMLElement>('iframe'));
       for (const frame of flashed) frame.style.visibility = 'hidden';
-      setTimeout(() => {
-        for (const frame of flashed) frame.style.visibility = '';
-      }, 600);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        setTimeout(() => {
+          for (const frame of flashed) frame.style.visibility = '';
+        }, 600);
+        finishClosingInTabPresentation();
+      }));
+      return;
     }
+    finishClosingInTabPresentation();
+  }
+
+  function finishClosingInTabPresentation() {
     // Leaving is the mirror of entering: if the ground is still opaque when the
     // layout returns to normal, the frame between the two is black. Dropping
     // the ground and the layout in the same handler does NOT order them —
