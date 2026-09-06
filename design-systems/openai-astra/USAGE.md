@@ -17,6 +17,7 @@ Package guide for Open Design agents and reviewers.
 - Monochrome pill chrome: white CTA, 12% glass pills, 20% hairlines
 - The only chroma is the ambient glow (`#23435f`) and the star palette; neither is UI colour
 - Scroll is the narrative: tilt, scatter to side rails, re-form into cursor and knot shapes
+- `components.html` covers the page chrome too: 54px transparent header, segmented control, chart card, quote card, media frame, comparison table, five-column footer
 
 ## Do
 

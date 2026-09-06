@@ -60,6 +60,9 @@ Everything around the stars is quiet on purpose. One typeface, OpenAI Sans, at w
 }
 ```
 
+### Chart Series (extension, data only)
+- Series use the site's chart palette, never UI tokens: **Blue 3** `#539af8` (featured model, star marker), **Blue 2** `#2c67c5` (previous generation, circle), **Orange 2** `#ac4f23` (comparison, diamond), **Orange 1** `#653218` (comparison, triangle), **Gray 3** `#8f8f8f` (neutral). Reference lines are `#ac4f23` dashed `8 6`. Axes, ticks and labels stay white.
+
 ## 3. Typography Rules
 
 ### Font Family
@@ -117,6 +120,32 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 ### Footnotes & Meta
 - `FOOTNOTES` as a `p2` heading in `#ffffff99`, entries in `#ffffff70`, hairline above.
 
+### Site Header
+- Fixed, `54px` tall (`3.375rem`; `64px` above 1440px), transparent over the canvas; a masked `brightness(95%) contrast(105%)` backdrop strip fades out below it. No blur.
+- Left: wordmark `17px` tall. Nav links `13px / 500`, `16px` side padding, white, hover `#ffffff99`. Right: `40px` round search button in `#ffffff99`, glass pill **Log in** with a chevron, white pill **Try …** with an outward arrow. Pills are `40px` tall with `0.3em` icon gap.
+
+### Segmented Control
+- Hairline pill container (`1px #ffffff33`, `4px` inner padding, `4px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.
+
+### Chart Card
+- `16px` radius, `1px #ffffff33` border, `32px` padding, black fill. Header row: title at h4 size, a glass select pill (`API Cost ▾`) beneath it, a download icon button on the right.
+- Legend: `17px` labels with shape markers per series (star, circle, diamond, triangle) and a dashed swatch for "reported score only". Plot: white `1px` axes, mono `13px` ticks, `17px` axis titles, dashed reference line, `2px` series lines with `5px` markers.
+- Caption: italic `14px`, centred, max `640px`, white. Series colours from the chart palette in §2.
+
+### Quote Card
+- `#1f1f1f` fill, `1px #ffffff1f` border, `10px` radius, `32px` vertical and `24px` horizontal padding, the page's `0 18px 60px rgba(0,0,0,0.08)` shadow (invisible on black, kept for light embeds).
+- Logo row `32px` tall, quote at h5 size `/ 500` with `-0.01em` tracking and `0.5em` indent, attribution `14px / 500` in `#ffffff99`.
+
+### Media Frame & Two-up Comparison
+- Any screenshot, video or side-by-side product UI sits in a `10px`-radius frame with a `1px #ffffff14` hairline on `#0a0a0a`; `overflow: hidden`, no shadow. Two-up: two columns, `16px` gap, `24px` padding, centred labels at h4 size above each pane.
+
+### Comparison Table
+- Fixed layout, first column `34%`, `20px` row padding, `24px` column gap, `1px #ffffff33` rule above every row and below the last. Cells `17px / 400`, header `500`, missing values as a muted `-`. No zebra stripes, no highlighted winner column; emphasis comes from the copy.
+
+### Footer
+- `120px` above, `13px / 500` throughout. Five columns of link groups: heading in `#ffffff99` with `16px` below, links `20px` apart, groups `44px` apart, external links carry a `10px` outward arrow.
+- Bottom bar: `16px` social glyphs, copyright, underlined **Manage Cookies** (`#ffffff70` underline), and a glass language pill with a globe icon.
+
 ## 5. Layout Principles
 
 ### Grid & Container
@@ -144,7 +173,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - **Glass for hierarchy**: resting `#ffffff1f`, hover `#ffffff33`, ring `0 0 0 1px #ffffff33`.
 - **Light for emphasis**: bloom (intensity 0.7, threshold 0.08, radius 0.72) and a lens flare on the galaxy core; hero labels carry `text-shadow: 0 0 24px #fafafa14`.
 - **Radii**: 6px chips and code, 10px inputs and small cards, 16px media, 9999px everything interactive.
-- Never use `backdrop-filter` over the canvas; the stars repaint every frame and the blur will be re-computed each time.
+- Never use `backdrop-filter: blur()` over the canvas; the stars repaint every frame and the blur would be re-computed each time. The only backdrop effect on the page is the header's masked brightness/contrast strip.
 
 ## 7. Motion & Scroll Choreography
 
@@ -224,6 +253,10 @@ Motion: 300ms cubic-bezier(.6,0,.4,1) · reveals 1s cubic-bezier(.22,1,.36,1) ·
 - "A 676px copy block with an h2 at 48px and two p1 paragraphs in #ffffff99, 26vh padding, nothing on either side."
 - "A shape cue: a 576px × 80vh frame reserving a cursor path, caption 'It takes action' at 14px 500 tracking 0.08em, note in #ffffff70."
 - "A benchmark table: h5 labels, tabular figures, our model in white and three comparisons in #ffffff99, hairlines between rows, no colour bars."
+- "A 54px transparent site header: wordmark left, five 13px nav links, a search icon, a glass 'Log in ▾' pill and a white 'Try Nova ↗' pill."
+- "A chart card: 16px radius and hairline border, title, glass 'API Cost ▾' select, legend with star/circle/diamond markers, dashed reference line, italic centred caption."
+- "A quote card on #1f1f1f: 32px logo row, quote at 18px / 500, attribution in #ffffff99."
+- "A five-column footer at 13px / 500: group headings in #ffffff99, links 20px apart, outward arrows on external links, bottom bar with social glyphs, copyright and a language pill."
 
 ### Iteration Guide
 - If the page looks like a generic dark template, remove colour, shadows and cards first; then check the column width and the empty rails.

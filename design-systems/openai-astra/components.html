@@ -174,11 +174,113 @@
       .footnotes h3 { margin: 0 0 var(--space-3); font: 400 var(--text-sm) / 1.6 var(--font-body); color: var(--muted); letter-spacing: 0.02em; }
       .footnotes p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--meta); }
       kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
+
+      /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
+      .site-header { display: flex; align-items: center; gap: var(--space-5); height: 54px; padding: 0 var(--space-6); border-radius: var(--radius-md); background: #ffffff0a; }
+      .site-header .wordmark { display: inline-flex; align-items: center; height: 17px; font: 500 var(--text-lg) / 1 var(--font-display); letter-spacing: -0.02em; color: var(--fg); text-decoration: none; }
+      .site-header nav { display: flex; align-items: center; align-self: stretch; flex: 1; min-width: 0; }
+      .site-header nav a { display: inline-flex; align-items: center; height: 100%; padding: 0 var(--space-4); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; color: var(--fg); text-decoration: none; transition: color var(--motion-fast); }
+      .site-header nav a:hover { color: var(--muted); }
+      .site-header .actions { display: flex; align-items: center; gap: var(--space-2); }
+      .site-header .search { width: 40px; height: 40px; color: var(--muted); }
+      .site-header .btn { height: 40px; min-height: 32px; gap: 0.3em; }
+      .site-header .btn svg { width: 16px; height: 16px; }
+
+      /* ── Segmented control ── */
+      .segmented { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-pill); }
+      .segmented button { min-height: 40px; padding: var(--space-3) var(--space-4); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-base) var(--ease-standard); }
+      .segmented button:hover { background: var(--border-soft); }
+      .segmented button[aria-selected="true"] { background: #ffffff1f; }
+      .segmented button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+      /* ── Chart card ── */
+      .chart-card { padding: var(--space-8); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
+      .chart-card .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+      .chart-card h3 { margin: 0 0 var(--space-3); font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
+      .chart-card .chart-head .icon-btn { color: var(--muted); }
+      .chart-card .select { height: 40px; min-height: 32px; gap: 0.3em; }
+      .chart-card .select svg { width: 14px; height: 14px; }
+      .legend { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-5) 0 var(--space-4); font-size: var(--text-base); letter-spacing: -0.01em; }
+      .legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+      .legend svg { width: 22px; height: 22px; }
+      .legend .ref { color: var(--fg); }
+      .legend .ref svg { width: 40px; }
+      .plot { display: block; width: 100%; height: auto; font: 400 13px / 1 var(--font-mono); letter-spacing: 0; }
+      .plot .axis { stroke: var(--fg); stroke-width: 1; }
+      .plot .tick { fill: var(--fg); }
+      .plot .label { fill: var(--fg); font: 400 var(--text-base) / 1 var(--font-body); letter-spacing: -0.01em; }
+      .plot .ref { stroke: #ac4f23; stroke-width: 1.5; stroke-dasharray: 8 6; }
+      .chart-card .astra { fill: #539af8; stroke: #539af8; }
+      .chart-card .sol { fill: #2c67c5; stroke: #2c67c5; }
+      .chart-card .fable { fill: #ac4f23; }
+      .chart-card .opus { fill: #653218; }
+      .plot .line { fill: none; stroke-width: 2; }
+      .chart-card figcaption { max-width: 640px; margin: var(--space-6) auto 0; text-align: center; font-style: italic; font-size: var(--text-sm); line-height: 1.64; color: var(--fg); text-wrap: pretty; }
+
+      /* ── Quote card ── */
+      .quote { padding: var(--space-8) var(--space-6); border: 1px solid #ffffff1f; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-raised); }
+      .quote .logo { display: flex; align-items: center; gap: var(--space-2); height: 32px; margin-bottom: var(--space-4); font: 500 var(--text-xl) / 1 var(--font-display); letter-spacing: -0.02em; }
+      .quote .logo svg { width: 28px; height: 28px; }
+      .quote blockquote { margin: 0 0 var(--space-5) 0.5em; font: 500 var(--text-lg) / 1.32 var(--font-body); letter-spacing: -0.01em; text-wrap: pretty; }
+      .quote figcaption { margin-left: 0.5em; font: 500 var(--text-sm) / 1.4 var(--font-body); letter-spacing: 0; color: var(--muted); }
+
+      /* ── Media frame + two-up comparison ── */
+      .media-frame { overflow: hidden; border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface-warm); }
+      .two-up { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); padding: var(--space-6); }
+      .two-up h4 { margin: 0 0 var(--space-3); text-align: center; font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
+      .two-up .screen { min-height: 180px; padding: var(--space-4); border: 1px solid var(--border-soft); border-radius: var(--radius-md); background: var(--surface); font-size: var(--text-sm); color: var(--muted); }
+      .two-up .screen .bubble { width: fit-content; max-width: 82%; margin: 0 0 var(--space-4) auto; padding: var(--space-3) var(--space-4); border-radius: var(--radius-lg); background: #ffffff1f; color: var(--fg); }
+      .two-up .screen .status { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
+      .two-up .screen .status.done { color: var(--fg); }
+
+      /* ── Comparison table ── */
+      .compare { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      .compare th, .compare td { padding: var(--space-5) var(--space-6) var(--space-5) 0; border-top: 1px solid var(--border); text-align: left; vertical-align: top; font: 400 var(--text-base) / 1.5 var(--font-body); letter-spacing: -0.01em; color: var(--fg); }
+      .compare thead th { font-weight: 500; }
+      .compare th:first-child { width: 34%; }
+      .compare :is(th, td):last-child { padding-right: 0; }
+      .compare tbody tr:last-child td { border-bottom: 1px solid var(--border); }
+      .compare .dash { color: var(--muted); }
+
+      /* ── Footer ── */
+      .site-footer { margin-top: var(--space-12); padding-top: var(--space-12); font: 500 var(--text-xs) / 1.5 var(--font-body); letter-spacing: 0; }
+      .footer-columns { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-8); margin-bottom: var(--space-12); }
+      .footer-group + .footer-group { margin-top: 44px; }
+      .footer-group h4 { margin: 0 0 var(--space-4); font: inherit; color: var(--muted); }
+      .footer-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-5); }
+      .footer-group a { display: inline-flex; align-items: center; gap: 0.3em; color: var(--fg); text-decoration: none; transition: color 250ms linear; }
+      .footer-group a:hover { color: var(--muted); }
+      .footer-group a svg { width: 10px; height: 10px; }
+      .footer-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); padding-top: var(--space-8); }
+      .footer-bar .social { display: flex; gap: var(--space-4); }
+      .footer-bar .social a { display: grid; place-items: center; width: 24px; height: 24px; color: var(--fg); }
+      .footer-bar .social svg { width: 16px; height: 16px; }
+      .footer-bar .legal { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); }
+      .footer-bar .legal button { padding: 0; border: 0; background: none; color: var(--fg); font: inherit; text-decoration: underline; text-decoration-color: var(--meta); text-underline-offset: 2px; cursor: pointer; }
+      .footer-bar .lang { height: 40px; min-height: 32px; gap: 0.3em; color: var(--fg); }
+      .footer-bar .lang span { color: var(--muted); }
+      @media (max-width: 720px) { .footer-columns { grid-template-columns: 1fr 1fr; } .two-up { grid-template-columns: 1fr; } }
     </style>
   </head>
   <body>
     <main>
       <h1>OpenAI Astra components</h1>
+
+      <section id="site-header">
+        <h2 class="kicker">Site header</h2>
+        <header class="site-header">
+          <a class="wordmark" href="#">Astra</a>
+          <nav aria-label="Primary">
+            <a href="#">Research</a><a href="#">Products</a><a href="#">Business</a><a href="#">Developers</a><a href="#">Company</a>
+          </nav>
+          <div class="actions">
+            <button class="icon-btn search" type="button" aria-label="Search"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg></button>
+            <button class="btn btn-glass" type="button">Log in <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+            <a class="btn btn-primary" href="#">Try ChatGPT <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></a>
+          </div>
+        </header>
+        <p class="note">54px tall (3.375rem; 64px on wide screens), fixed over the canvas and transparent. Wordmark 17px, nav links 13px / 500 with 16px side padding, 40px search button in #ffffff99, glass "Log in" pill with chevron, white "Try" pill with an outward arrow.</p>
+      </section>
 
       <section id="hero">
         <h2 class="kicker">Hero chrome</h2>
@@ -315,6 +417,104 @@
         <p class="note">h5 labels, tabular figures, white for the featured row, white-at-alpha bars. No colour.</p>
       </section>
 
+      <section id="segmented">
+        <h2 class="kicker">Segmented control</h2>
+        <div class="segmented" role="tablist" aria-label="Benchmark">
+          <button type="button" role="tab" aria-selected="true">Agents’ Last Exam</button>
+          <button type="button" role="tab" aria-selected="false">ScreenSpot-Pro</button>
+          <button type="button" role="tab" aria-selected="false">OSWorld</button>
+        </div>
+        <p class="note">Hairline pill container with 4px inner padding; items are 40px pills at 14px / 500, the selected one filled #ffffff1f. Used to switch the chart below.</p>
+      </section>
+
+      <section id="chart">
+        <h2 class="kicker">Chart card</h2>
+        <figure class="chart-card" style="margin: 0">
+          <div class="chart-head">
+            <div>
+              <h3>Agents’ Last Exam</h3>
+              <button class="btn btn-glass select" type="button" aria-haspopup="listbox">API Cost <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+            </div>
+            <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+          </div>
+          <div class="legend">
+            <span><svg viewBox="0 0 22 22"><path class="astra" d="m11 2 2.6 6h6.4l-5.2 3.8 2 6.2L11 14.2 5.2 18l2-6.2L2 8h6.4z"/></svg>GPT‑6 Astra</span>
+            <span><svg viewBox="0 0 22 22"><circle class="sol" cx="11" cy="11" r="7"/></svg>GPT‑5.6 Sol</span>
+            <span><svg viewBox="0 0 22 22"><path class="fable" d="M11 3l8 8-8 8-8-8z"/></svg>Claude Fable 5</span>
+            <span><svg viewBox="0 0 22 22"><path class="opus" d="M11 3l8 15H3z"/></svg>Claude Opus 5</span>
+            <span class="ref"><svg viewBox="0 0 40 22"><path class="ref" d="M2 11h36" stroke="#ac4f23" stroke-width="1.5" stroke-dasharray="8 6"/></svg>Reported score only</span>
+          </div>
+          <svg class="plot" viewBox="0 0 640 360" role="img" aria-label="Accuracy against API cost">
+            <line class="axis" x1="70" y1="20" x2="70" y2="300"/>
+            <line class="axis" x1="70" y1="300" x2="600" y2="300"/>
+            <g class="tick" text-anchor="end">
+              <text x="60" y="24">65%</text><text x="60" y="80">60%</text><text x="60" y="136">55%</text><text x="60" y="192">50%</text><text x="60" y="248">45%</text><text x="60" y="304">35%</text>
+            </g>
+            <g class="tick" text-anchor="middle"><text x="70" y="326">$0</text><text x="247" y="326">$10</text><text x="424" y="326">$20</text><text x="600" y="326">$30</text></g>
+            <text class="label" x="335" y="352" text-anchor="middle">API Cost</text>
+            <text class="label" x="22" y="170" text-anchor="middle" transform="rotate(-90 22 170)">Accuracy</text>
+            <line class="ref" x1="70" y1="132" x2="600" y2="132"/>
+            <polyline class="line sol" points="90,258 130,164 160,146 200,158"/>
+            <circle class="sol" cx="90" cy="258" r="5"/><circle class="sol" cx="130" cy="164" r="5"/><circle class="sol" cx="160" cy="146" r="5"/><circle class="sol" cx="200" cy="158" r="5"/>
+            <polyline class="line astra" points="130,150 158,96 176,92 196,84 226,66"/>
+            <g class="astra"><path d="m130 141 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path d="m158 87 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path d="m196 75 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path d="m226 57 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/></g>
+            <path class="fable" d="M574 180l7 7-7 7-7-7z"/>
+            <path class="opus" d="M612 124l7 12h-14z"/>
+          </svg>
+          <figcaption>Agents’ Last Exam tests agents on complex professional tasks in real software. The featured model reaches a new high in the comparison shown, scoring 59.3%, compared with 55.5% and 53.6% for the two closest models.</figcaption>
+        </figure>
+        <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a glass select pill, a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
+      </section>
+
+      <section id="quote">
+        <h2 class="kicker">Quote card</h2>
+        <figure class="quote" style="margin: 0">
+          <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Higgsfield</div>
+          <blockquote>“Astra gives us a significant advantage in both capability and efficiency. It successfully executes our most complex creative workflows while using up to 20% fewer tokens than other models we’ve tested.”</blockquote>
+          <figcaption>Alex Mashrabov, CEO and Co-founder, Higgsfield AI</figcaption>
+        </figure>
+        <p class="note">Solid #1f1f1f card with a #ffffff1f border, 10px radius, 32px vertical and 24px horizontal padding. Logo row 32px, quote at h5 size / 500 with -0.01em tracking, attribution 14px / 500 in #ffffff99.</p>
+      </section>
+
+      <section id="media">
+        <h2 class="kicker">Media frame and two-up comparison</h2>
+        <div class="media-frame">
+          <div class="two-up">
+            <div>
+              <h4>GPT‑5.6 Sol</h4>
+              <div class="screen">
+                <div class="bubble">I’m changing careers. Make me a personal website using my profile as background.</div>
+                <p class="status">Worked for 13m 15s ›</p>
+                <p class="status done">Your personal website is live and private.</p>
+              </div>
+            </div>
+            <div>
+              <h4>GPT‑6 Astra</h4>
+              <div class="screen">
+                <div class="bubble">I’m changing careers. Make me a personal website using my profile as background.</div>
+                <p class="status">Working for 20s</p>
+                <p class="status done">I’ll use your background to build a site that supports the move. One question first: what role are you moving into?</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note">Media (screenshots, video, side-by-side product UI) sits in a 10px-radius frame with a soft hairline on #0a0a0a; nothing inside gets a shadow. Column labels at h4 size, centred.</p>
+      </section>
+
+      <section id="compare">
+        <h2 class="kicker">Comparison table</h2>
+        <table class="compare">
+          <thead><tr><th>Alignment</th><th>GPT‑6 Astra</th><th>GPT‑5.6 Sol</th><th>Claude Fable 5.1</th><th>Gemini 3.8 Flash</th></tr></thead>
+          <tbody>
+            <tr><td>Internal computer use safety benchmark (lower is better)</td><td>2.4%</td><td>22.0%</td><td>9.5%</td><td class="dash">-</td></tr>
+            <tr><td>Internal circumvention benchmark (lower is better)</td><td>0.00%</td><td>0.29%</td><td class="dash">-</td><td class="dash">-</td></tr>
+            <tr><td>ExploitGym honeypot (lower is better)</td><td>0.0%</td><td>48.2%</td><td class="dash">-</td><td class="dash">-</td></tr>
+            <tr><td>Internal hallucination benchmark (lower is better)</td><td>4.2%</td><td>12.2%</td><td class="dash">-</td><td class="dash">-</td></tr>
+          </tbody>
+        </table>
+        <p class="note">Fixed layout, first column 34%, 20px row padding, hairline #ffffff33 above every row and below the last, 17px / 400 cells, 500 header, missing values as a muted dash. No zebra stripes, no highlighted column.</p>
+      </section>
+
       <section id="panels">
         <h2 class="kicker">Panels and bands</h2>
         <div class="row" style="align-items: stretch">
@@ -325,6 +525,43 @@
             <p>2. Availability varies by region.</p>
           </div>
         </div>
+      </section>
+      <section id="footer">
+        <h2 class="kicker">Footer</h2>
+        <footer class="site-footer">
+          <div class="footer-columns">
+            <div>
+              <div class="footer-group"><h4>Research</h4><ul><li><a href="#">Research Index</a></li><li><a href="#">Research Overview</a></li><li><a href="#">Economic Research</a></li></ul></div>
+              <div class="footer-group"><h4>Latest Advancements</h4><ul><li><a href="#">GPT‑6</a></li><li><a href="#">GPT‑5.6</a></li><li><a href="#">GPT‑5.5</a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>Products</h4><ul><li><a href="#">ChatGPT <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li><li><a href="#">ChatGPT Business <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li><li><a href="#">Codex</a></li><li><a href="#">Release Notes</a></li></ul></div>
+              <div class="footer-group"><h4>API Platform</h4><ul><li><a href="#">Overview</a></li><li><a href="#">Docs <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>Business</h4><ul><li><a href="#">Overview</a></li><li><a href="#">Solutions</a></li><li><a href="#">Customer Stories</a></li><li><a href="#">Contact Sales</a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>Company</h4><ul><li><a href="#">About Us</a></li><li><a href="#">Our Charter</a></li><li><a href="#">Careers</a></li><li><a href="#">News</a></li></ul></div>
+              <div class="footer-group"><h4>Support</h4><ul><li><a href="#">Help Center <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M2 8 8 2M3 2h5v5"/></svg></a></li></ul></div>
+            </div>
+            <div>
+              <div class="footer-group"><h4>More</h4><ul><li><a href="#">Stories</a></li><li><a href="#">Podcast</a></li><li><a href="#">RSS</a></li></ul></div>
+              <div class="footer-group"><h4>Terms &amp; Policies</h4><ul><li><a href="#">Terms of Use</a></li><li><a href="#">Privacy Policy</a></li></ul></div>
+            </div>
+          </div>
+          <div class="footer-bar">
+            <div class="social" aria-label="Social">
+              <a href="#" aria-label="X"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3l10 10M13 3 3 13"/></svg></a>
+              <a href="#" aria-label="YouTube"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h9A1.5 1.5 0 0 1 14 4.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5zM6.5 6v4L10 8z"/></svg></a>
+              <a href="#" aria-label="GitHub"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.5"/><path d="M6 13.5v-2c0-.6.2-1 .5-1.3C5 10 4 9.3 4 7.5c0-.6.2-1.1.6-1.5-.1-.4-.1-1 .1-1.5.6 0 1.2.3 1.6.6a5 5 0 0 1 3.4 0c.4-.3 1-.6 1.6-.6.2.5.2 1.1.1 1.5.4.4.6.9.6 1.5 0 1.8-1 2.5-2.5 2.7.3.3.5.7.5 1.3v2"/></svg></a>
+              <a href="#" aria-label="Instagram"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="3"/><circle cx="8" cy="8" r="2.5"/><circle cx="11.2" cy="4.8" r=".6" fill="currentColor"/></svg></a>
+            </div>
+            <div class="legal"><span>OpenAI © 2015–2026</span><button type="button">Manage Cookies</button></div>
+            <button class="btn btn-glass lang" type="button"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.5 2.5 2.5 9.5 0 12M8 2c-2.5 2.5-2.5 9.5 0 12"/></svg>English <span>United States</span></button>
+          </div>
+        </footer>
+        <p class="note">120px top margin on the page, 13px / 500 throughout. Five columns; group headings in #ffffff99 with 16px below, links 20px apart, groups 44px apart, outward arrows on external links. Bottom bar: 16px social glyphs, copyright, underlined “Manage Cookies”, glass language pill.</p>
       </section>
     </main>
   </body>
