@@ -12,6 +12,10 @@ import {
   buildWorkspaceSeatSummary,
   type WorkspaceCollabContext,
 } from '@open-design/contracts';
+import {
+  PREVIEW_RUNTIME_PROTOCOL_VERSION,
+  type PreviewRuntimeCapability,
+} from '@open-design/contracts/runtime/preview-runtime';
 
 import {
   DESIGN_FILES_TAB,
@@ -26,6 +30,7 @@ import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
 import {
   fetchProjectFileText,
+  fetchProjectScopedPreviewNavigation,
   uploadProjectFiles,
   writeProjectTextFile,
   fetchProjectFolders,
@@ -37,6 +42,7 @@ import {
 } from '../../src/collab/collab-context';
 import { IframeKeepAliveProvider } from '../../src/components/IframeKeepAlivePool';
 import { navigate } from '../../src/router';
+import { projectPreviewNavigationCache } from '../../src/runtime/project-preview-navigation-cache';
 
 describe('settleManualEditExit', () => {
   it.each([
@@ -67,6 +73,7 @@ vi.mock('../../src/providers/registry', async () => {
   return {
     ...actual,
     fetchProjectFileText: vi.fn(),
+    fetchProjectScopedPreviewNavigation: vi.fn(),
     uploadProjectFiles: vi.fn(),
     writeProjectBase64File: vi.fn(),
     writeProjectTextFile: vi.fn(),
@@ -226,6 +233,9 @@ vi.mock('../../src/components/DesignFilesPanel', async () => {
 });
 
 const mockedFetchProjectFileText = vi.mocked(fetchProjectFileText);
+const mockedFetchProjectScopedPreviewNavigation = vi.mocked(
+  fetchProjectScopedPreviewNavigation,
+);
 const mockedUploadProjectFiles = vi.mocked(uploadProjectFiles);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
 const chatCss = readFileSync(join(process.cwd(), 'src/styles/chat.css'), 'utf8');
@@ -234,6 +244,8 @@ const routinesCss = readFileSync(join(process.cwd(), 'src/styles/viewer/routines
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;
 let composerCssStyle: HTMLStyleElement | null = null;
+let previewRuntimeObserver: MutationObserver | null = null;
+let previewNavigationMintSequence = 0;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -247,7 +259,87 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  projectPreviewNavigationCache.clear();
   mockedFetchProjectFileText.mockResolvedValue('');
+  previewNavigationMintSequence = 0;
+  mockedFetchProjectScopedPreviewNavigation.mockImplementation(async (projectId, fileName) => {
+    previewNavigationMintSequence += 1;
+    const scope = `scope-${projectId}-${previewNavigationMintSequence}`;
+    const documentVersion = `${fileName}:${previewNavigationMintSequence}`;
+    const normalUrl = `http://n-${scope}.localhost:43111/${fileName}`;
+    const poweredUrl = `http://p-${scope}.localhost:43111/${fileName}`;
+    return {
+      sessionId: scope,
+      normalUrl,
+      poweredUrl,
+      documentVersion,
+      runtimeProtocol: 'universal',
+      previewPolicy: {
+        sandboxProfile: 'normal',
+        guards: { storage: false, focus: false, redirect: false },
+      },
+      renewalScope: {
+        href: `http://localhost/api/projects/${projectId}/preview/${scope}/`,
+        expiresAt: Date.now() + 60 * 60 * 1000,
+      },
+    };
+  });
+  // jsdom neither completes iframe navigation nor executes the injected
+  // runtime. Settle ordinary universal frames through their protocol and the
+  // old-daemon compatibility adapter through its browser-load contract.
+  previewRuntimeObserver = new MutationObserver(() => {
+    for (const frame of document.querySelectorAll<HTMLIFrameElement>('iframe')) {
+      if (frame.dataset.odStandby !== 'true') {
+        delete frame.dataset.odTestLoadDispatched;
+        continue;
+      }
+      if (frame.dataset.odTestLoadDispatched === 'true') continue;
+      frame.dataset.odTestLoadDispatched = 'true';
+      if (
+        frame.dataset.odRuntimeProtocol === 'universal'
+        && !frame.dataset.odSessionId?.startsWith('scope-project-')
+      ) continue;
+      window.setTimeout(() => {
+        if (frame.dataset.odRuntimeProtocol === 'legacy-url') {
+          frame.dispatchEvent(new Event('load'));
+          return;
+        }
+        const availableCapabilities: PreviewRuntimeCapability[] = [
+          'content_measurement',
+          'scroll',
+          'snapshot',
+          'observability',
+          'selection',
+          'tweaks',
+          'palette',
+        ];
+        for (const type of [
+          'od:preview:hello',
+          'od:preview:capabilities-applied',
+          'od:preview:ready',
+          'od:preview:presentation-state-applied',
+        ] as const) {
+          window.dispatchEvent(new MessageEvent('message', {
+            source: frame.contentWindow,
+            data: {
+              type,
+              protocolVersion: PREVIEW_RUNTIME_PROTOCOL_VERSION,
+              sessionId: frame.dataset.odSessionId,
+              documentVersion: frame.dataset.odDocumentVersion,
+              ...(type === 'od:preview:hello' ? { availableCapabilities } : {}),
+              ...(type === 'od:preview:capabilities-applied'
+                ? { enabledCapabilities: availableCapabilities }
+                : {}),
+              ...(type === 'od:preview:presentation-state-applied'
+                ? { revision: 1 }
+                : {}),
+            },
+          }));
+        }
+      }, 0);
+    }
+  });
+  previewRuntimeObserver.observe(document.body, { childList: true, subtree: true });
 });
 
 afterEach(() => {
@@ -263,6 +355,8 @@ afterEach(() => {
   composerCssStyle = null;
   host?.remove();
   host = null;
+  previewRuntimeObserver?.disconnect();
+  previewRuntimeObserver = null;
   window.history.replaceState(null, '', '/');
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -281,6 +375,15 @@ function baseFile(overrides: Partial<ProjectFile> = {}): ProjectFile {
     mime: 'image/png',
     ...overrides,
   };
+}
+
+function presentedRuntimeFrame(): HTMLIFrameElement {
+  const frame = document.querySelector<HTMLIFrameElement>(
+    '[data-testid="retained-file-viewer"]:not([aria-hidden="true"]) '
+      + 'iframe[data-testid="preview-runtime-frame-current"]',
+  );
+  expect(frame).not.toBeNull();
+  return frame!;
 }
 
 function workspaceFile(name: string): ProjectFile {
@@ -1406,8 +1509,8 @@ describe('FileWorkspace launcher tab creation', () => {
     await waitFor(() => {
       expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
     });
-    const firstFrame = screen.getByTestId('artifact-preview-frame');
-    const initialSrc = firstFrame.getAttribute('src');
+    let activeFrame = presentedRuntimeFrame();
+    const initialSrc = activeFrame.getAttribute('src');
     const retainedViewer = screen.getByTestId('retained-file-viewer');
     expect(retainedViewer.style.display).toBe('flex');
 
@@ -1428,22 +1531,31 @@ describe('FileWorkspace launcher tab creation', () => {
 
       if (round === 0) {
         fireEvent.click(screen.getByTestId('advance-artifact-revision'));
-        await waitFor(() => expect(firstFrame.getAttribute('src')).toContain('v=2000000000'));
+        await waitFor(() => {
+          const replacement = document.querySelector<HTMLIFrameElement>(
+            'iframe[title="artifact.html"][data-testid="preview-runtime-frame-current"]',
+          );
+          expect(replacement).not.toBe(activeFrame);
+          expect(replacement).not.toBeNull();
+        });
+        activeFrame = document.querySelector<HTMLIFrameElement>(
+          'iframe[title="artifact.html"][data-testid="preview-runtime-frame-current"]',
+        )!;
       }
 
-      const prewarmedSrc = firstFrame.getAttribute('src');
+      const prewarmedSrc = activeFrame.getAttribute('src');
 
       fireEvent.click(screen.getByRole('tab', { name: /artifact\.html/i }));
-      expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
+      expect(presentedRuntimeFrame()).toBe(activeFrame);
       expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
       expect(retainedViewer.style.display).toBe('flex');
       expect(retainedViewer.style.opacity).toBe('');
       expect(retainedViewer.style.visibility).toBe('');
       expect(retainedViewer.hasAttribute('inert')).toBe(false);
-      expect(firstFrame.getAttribute('src')).toBe(prewarmedSrc);
+      expect(activeFrame.getAttribute('src')).toBe(prewarmedSrc);
     }
 
-    expect(firstFrame.getAttribute('src')).not.toBe(initialSrc);
+    expect(activeFrame.getAttribute('src')).not.toBe(initialSrc);
     expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
   });
 
@@ -1479,11 +1591,12 @@ describe('FileWorkspace launcher tab creation', () => {
 
     const { container } = render(<Harness />);
     await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1));
-    const alphaFrame = screen.getByTestId('artifact-preview-frame');
+    const alphaFrame = presentedRuntimeFrame();
 
     fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
-    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2));
-    const betaFrame = screen.getByTestId('artifact-preview-frame');
+    await waitFor(() => expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(presentedRuntimeFrame().getAttribute('title')).toBe(beta.name));
+    const betaFrame = presentedRuntimeFrame();
     expect(betaFrame).not.toBe(alphaFrame);
     expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
     expect(document.body.contains(alphaFrame)).toBe(true);
@@ -1494,11 +1607,286 @@ describe('FileWorkspace launcher tab creation', () => {
     ]);
 
     fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(alphaFrame);
+    expect(presentedRuntimeFrame()).toBe(alphaFrame);
     expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
     expect(document.body.contains(betaFrame)).toBe(true);
     expect(screen.getAllByTestId('retained-file-viewer')).toEqual(retainedAfterBeta);
     expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps converged runtime frames and scopes stable across rapid HTML file switches', async () => {
+    const alpha = workspaceFile('terminal-alpha.html');
+    const beta = workspaceFile('terminal-beta.html');
+    const files = [alpha, beta];
+    projectPreviewNavigationCache.clear();
+    mockedFetchProjectScopedPreviewNavigation.mockImplementation(async (_projectId, fileName) => {
+      const stem = fileName.replace('.html', '');
+      return {
+        sessionId: `scope-project-${stem}-0001`,
+        normalUrl: `http://n-scope-project-${stem}-0001.localhost:43111/${fileName}`,
+        poweredUrl: `http://p-scope-project-${stem}-0001.localhost:43111/${fileName}`,
+        documentVersion: `${stem}-v1`,
+        runtimeProtocol: 'universal',
+        previewPolicy: {
+          sandboxProfile: 'normal',
+          guards: { storage: false, focus: false, redirect: false },
+        },
+        renewalScope: {
+          href: `http://localhost/api/projects/project-1/preview/scope-${stem}-0001/`,
+          expiresAt: Date.now() + 60 * 60 * 1000,
+        },
+      };
+    });
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<!doctype html><html><body><main>${fileName}</main></body></html>`
+    ));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const rawUrl = typeof input === 'string' ? input : input.toString();
+      const url = new URL(rawUrl, window.location.href);
+      if (url.pathname === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files }), { status: 200 });
+      }
+      if (url.pathname === '/api/projects/project-1/preview-url') {
+        const fileName = url.searchParams.get('file');
+        if (!fileName) return new Response(null, { status: 400 });
+        const stem = fileName.startsWith('terminal-alpha') ? 'alpha' : 'beta';
+        const sessionId = `scope-${stem}-0001`;
+        return new Response(JSON.stringify({
+          url: `/api/projects/project-1/preview/legacy-${stem}/${fileName}`,
+          file: fileName,
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          scopedOrigin: {
+            normalUrl: `http://n-${sessionId}.localhost:43111/${fileName}`,
+            poweredUrl: `http://p-${sessionId}.localhost:43111/${fileName}`,
+            documentVersion: `${stem}-v1`,
+            previewPolicy: {
+              sandboxProfile: 'normal',
+              guards: { storage: false, focus: false, redirect: false },
+            },
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: files.map((file) => file.name),
+        active: alpha.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    render(<Harness />);
+    const alphaFrame = await waitFor(() => {
+      const frame = document.querySelector(
+        'iframe[title="terminal-alpha.html"][data-testid="preview-runtime-frame-current"]',
+      ) as HTMLIFrameElement | null;
+      expect(frame).not.toBeNull();
+      return frame!;
+    });
+    expect(alphaFrame.dataset.odActive).toBe('true');
+    const alphaUrl = alphaFrame.src;
+
+    fireEvent.click(screen.getByRole('tab', { name: /terminal-beta\.html/i }));
+    const betaFrame = await waitFor(() => {
+      const frame = document.querySelector(
+        'iframe[title="terminal-beta.html"][data-testid="preview-runtime-frame-current"]',
+      ) as HTMLIFrameElement | null;
+      expect(frame).not.toBeNull();
+      return frame!;
+    });
+    expect(betaFrame.dataset.odActive).toBe('true');
+    const betaUrl = betaFrame.src;
+    const mintCount = mockedFetchProjectScopedPreviewNavigation.mock.calls.length;
+    expect(mintCount).toBe(2);
+
+    for (let round = 0; round < 6; round += 1) {
+      const targetName = round % 2 === 0 ? alpha.name : beta.name;
+      fireEvent.click(screen.getByRole('tab', { name: new RegExp(targetName, 'i') }));
+      const activeFrame = targetName === alpha.name ? alphaFrame : betaFrame;
+      const inactiveFrame = targetName === alpha.name ? betaFrame : alphaFrame;
+      await waitFor(() => {
+        expect(activeFrame.dataset.odActive).toBe('true');
+        expect(inactiveFrame.dataset.odActive).toBe('false');
+      });
+      expect(document.body.contains(alphaFrame)).toBe(true);
+      expect(document.body.contains(betaFrame)).toBe(true);
+      expect(alphaFrame.src).toBe(alphaUrl);
+      expect(betaFrame.src).toBe(betaUrl);
+      expect(alphaFrame.src).not.toBe('about:blank');
+      expect(betaFrame.src).not.toBe('about:blank');
+    }
+    expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(mintCount);
+  });
+
+  it('never shows another file as last-good while an evicted HTML tab rematerializes', async () => {
+    const files = ['alpha.html', 'beta.html', 'gamma.html', 'delta.html'].map(workspaceFile);
+    projectPreviewNavigationCache.clear();
+    mockedFetchProjectScopedPreviewNavigation.mockImplementation(async (_projectId, fileName) => {
+      const stem = fileName.replace('.html', '');
+      return {
+        sessionId: `scope-${stem}`,
+        normalUrl: `http://n-scope-${stem}.localhost:43111/${fileName}`,
+        poweredUrl: `http://p-scope-${stem}.localhost:43111/${fileName}`,
+        documentVersion: `${stem}-v1`,
+        runtimeProtocol: 'universal',
+        previewPolicy: {
+          sandboxProfile: 'normal',
+          guards: { storage: false, focus: false, redirect: false },
+        },
+        renewalScope: {
+          href: `http://localhost/api/projects/project-1/preview/scope-${stem}/`,
+          expiresAt: Date.now() + 60 * 60 * 1000,
+        },
+      };
+    });
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<!doctype html><html><body><main>${fileName}</main></body></html>`
+    ));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const rawUrl = typeof input === 'string' ? input : input.toString();
+      const url = new URL(rawUrl, window.location.href);
+      if (url.pathname === '/api/projects/project-1/files') {
+        return new Response(JSON.stringify({ files }), { status: 200 });
+      }
+      if (url.pathname === '/api/projects/project-1/preview-url') {
+        const fileName = url.searchParams.get('file');
+        if (!fileName) return new Response(null, { status: 400 });
+        const stem = fileName.replace('.html', '');
+        return new Response(JSON.stringify({
+          url: `/api/projects/project-1/preview/legacy-${stem}/${fileName}`,
+          file: fileName,
+          expiresAt: Date.now() + 60 * 60 * 1000,
+          scopedOrigin: {
+            normalUrl: `http://n-scope-${stem}.localhost:43111/${fileName}`,
+            poweredUrl: `http://p-scope-${stem}.localhost:43111/${fileName}`,
+            documentVersion: `${stem}-v1`,
+            previewPolicy: {
+              sandboxProfile: 'normal',
+              guards: { storage: false, focus: false, redirect: false },
+            },
+          },
+        }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: files.map((file) => file.name),
+        active: files[0]!.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const settle = async (name: string) => {
+      const stem = name.replace('.html', '');
+      const frame = await waitFor(() => {
+        const candidate = document.querySelector(
+          `iframe[title="${name}"][data-testid="preview-runtime-frame-standby"]`,
+        ) as HTMLIFrameElement | null;
+        expect(candidate).not.toBeNull();
+        return candidate!;
+      });
+      for (const type of [
+        'od:preview:hello',
+        'od:preview:capabilities-applied',
+        'od:preview:ready',
+        'od:preview:presentation-state-applied',
+      ] as const) {
+        act(() => {
+          window.dispatchEvent(new MessageEvent('message', {
+            source: frame.contentWindow,
+            data: {
+              type,
+              protocolVersion: PREVIEW_RUNTIME_PROTOCOL_VERSION,
+              sessionId: `scope-${stem}`,
+              documentVersion: `${stem}-v1`,
+              ...(type === 'od:preview:hello' ? { availableCapabilities: [] } : {}),
+              ...(type === 'od:preview:capabilities-applied'
+                ? { enabledCapabilities: [] }
+                : {}),
+              ...(type === 'od:preview:presentation-state-applied'
+                ? { revision: 1 }
+                : {}),
+            },
+          }));
+        });
+      }
+      await waitFor(() => expect(frame.dataset.odActive).toBe('true'));
+      return frame;
+    };
+    const viewer = (name: string) => document.querySelector(
+      `[data-testid="retained-file-viewer"][data-file-name="${name}"]`,
+    ) as HTMLElement | null;
+
+    render(<Harness />);
+    await settle('alpha.html');
+    for (const name of ['beta.html', 'gamma.html', 'delta.html']) {
+      fireEvent.click(screen.getByRole('tab', { name: new RegExp(name.replace('.', '\\.')) }));
+      await settle(name);
+    }
+    await waitFor(() => expect(viewer('alpha.html')).toBeNull());
+
+    fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
+    await waitFor(() => expect(document.querySelector(
+      'iframe[title="alpha.html"][data-testid="preview-runtime-frame-standby"]',
+    )).not.toBeNull());
+
+    // last-good is scoped to versions of the same file. Present alpha's own
+    // loading surface instead of silently showing delta under the wrong tab.
+    expect(viewer('delta.html')?.style.opacity).toBe('0');
+    expect(viewer('alpha.html')?.style.opacity).toBe('');
+    expect(viewer('delta.html')?.querySelector<HTMLElement>('.viewer-toolbar')?.style.visibility)
+      .toBe('hidden');
+    expect(viewer('alpha.html')?.querySelector<HTMLElement>('.viewer-toolbar')?.style.visibility)
+      .toBe('');
+    expect(viewer('delta.html')?.hasAttribute('inert')).toBe(true);
+    expect(viewer('alpha.html')?.hasAttribute('inert')).toBe(false);
+    expect(viewer('delta.html')?.querySelector('iframe')?.dataset.odActive).toBe('false');
+    expect(viewer('alpha.html')?.querySelector('iframe')?.dataset.odActive).toBe('false');
+
+    await settle('alpha.html');
+    await waitFor(() => {
+      expect(viewer('alpha.html')?.style.opacity).toBe('');
+      expect(viewer('delta.html')?.style.opacity).toBe('0');
+      expect(viewer('alpha.html')?.hasAttribute('inert')).toBe(false);
+      expect(viewer('alpha.html')?.querySelector('iframe')?.dataset.odActive).toBe('true');
+      expect(viewer('delta.html')?.querySelector('iframe')?.dataset.odActive).toBe('false');
+    });
   });
 
   it('evicts the fourth HTML tab without reattaching the three surviving preview frames', async () => {
@@ -1532,26 +1920,64 @@ describe('FileWorkspace launcher tab creation', () => {
 
     render(<Harness />);
     fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
-    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(2));
     fireEvent.click(screen.getByRole('tab', { name: /gamma\.html/i }));
-    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(3));
     const survivingFrames = ['beta.html', 'gamma.html'].map((name) => (
-      document.querySelector(`iframe[title="${name}"][data-od-render-mode="url-load"]`)
+      document.querySelector(`iframe[title="${name}"][data-od-render-mode="runtime-url"]`)
     ));
     expect(survivingFrames.every(Boolean)).toBe(true);
     const appendSpy = vi.spyOn(Node.prototype, 'appendChild');
 
     fireEvent.click(screen.getByRole('tab', { name: /delta\.html/i }));
-    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(4));
     await waitFor(() => expect(document.querySelector('iframe[title="alpha.html"]')).toBeNull());
 
     for (const [index, name] of ['beta.html', 'gamma.html'].entries()) {
       const frame = survivingFrames[index];
       expect(document.querySelector(
-        `iframe[title="${name}"][data-od-render-mode="url-load"]`,
+        `iframe[title="${name}"][data-od-render-mode="runtime-url"]`,
       )).toBe(frame);
       expect(appendSpy.mock.calls.filter(([node]) => node === frame)).toHaveLength(0);
     }
+  });
+
+  it('remints an HTML preview when a newer project resource generation supersedes its file key', async () => {
+    const file = workspaceFile('index.html');
+    const workspaceContext = teamContext('workspace-a', 'member-a');
+
+    function Harness({ resourceGeneration }: { resourceGeneration: number }) {
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(workspaceContext)}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={[file]}
+              fileContentRefreshKeys={new Map([
+                ['index.html', 1],
+                ['', resourceGeneration],
+              ])}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={{ tabs: [file.name], active: file.name }}
+              onTabsStateChange={vi.fn()}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { rerender } = render(<Harness resourceGeneration={1} />);
+    await waitFor(() => expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(1));
+    const first = await waitFor(() => presentedRuntimeFrame());
+
+    rerender(<Harness resourceGeneration={2} />);
+
+    await waitFor(() => expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(presentedRuntimeFrame()).not.toBe(first));
+    expect(presentedRuntimeFrame().src).toContain('n-scope-project-1-2.localhost');
   });
 
   it('deletes the active HTML viewer without reattaching a surviving warm iframe', async () => {
@@ -1587,14 +2013,14 @@ describe('FileWorkspace launcher tab creation', () => {
 
     const { rerender } = render(<Harness files={[alpha, beta]} generation={1} />);
     await waitFor(() => expect(document.querySelector(
-      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+      'iframe[title="alpha.html"][data-od-render-mode="runtime-url"]',
     )).not.toBeNull());
     fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
     await waitFor(() => expect(document.querySelector(
-      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+      'iframe[title="alpha.html"][data-od-render-mode="runtime-url"]',
     )).not.toBeNull());
     const alphaFrame = document.querySelector(
-      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+      'iframe[title="alpha.html"][data-od-render-mode="runtime-url"]',
     );
     expect(alphaFrame).not.toBeNull();
     const readsBeforeDelete = mockedFetchProjectFileText.mock.calls.length;
@@ -1604,7 +2030,7 @@ describe('FileWorkspace launcher tab creation', () => {
 
     await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBeNull());
     expect(document.querySelector(
-      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+      'iframe[title="alpha.html"][data-od-render-mode="runtime-url"]',
     )).toBe(alphaFrame);
     expect(appendSpy.mock.calls.filter(([node]) => node === alphaFrame)).toHaveLength(0);
     expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(readsBeforeDelete);
@@ -1659,7 +2085,7 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
     await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1));
-    const alphaFrame = screen.getByTestId('artifact-preview-frame');
+    const alphaFrame = presentedRuntimeFrame();
 
     rerender(
       <Harness
@@ -1670,7 +2096,7 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
     await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2));
-    const betaFrame = screen.getByTestId('artifact-preview-frame');
+    const betaFrame = presentedRuntimeFrame();
 
     // Ambient workspace refreshes can briefly publish an empty file snapshot.
     // Open tabs are the durable witness that these files were not closed or
@@ -1697,7 +2123,7 @@ describe('FileWorkspace launcher tab creation', () => {
         workspaceContext={{ ...workspaceContext }}
       />,
     );
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(alphaFrame);
+    expect(presentedRuntimeFrame()).toBe(alphaFrame);
     expect(document.body.contains(betaFrame)).toBe(true);
     expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
 
@@ -1712,7 +2138,7 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
     await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBeNull());
-    expect(screen.getByTestId('artifact-preview-frame')).toBe(alphaFrame);
+    expect(presentedRuntimeFrame()).toBe(alphaFrame);
   });
 
   it('evicts a deleted HTML viewer after a committed file refresh even when its tab persists', async () => {
@@ -1759,7 +2185,7 @@ describe('FileWorkspace launcher tab creation', () => {
     rerender(<Harness files={[workspaceFile(alphaName)]} refreshKey={2} />);
 
     await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBeNull());
-    expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(alphaName);
+    expect(presentedRuntimeFrame().getAttribute('title')).toBe(alphaName);
   });
 
   describe('protected viewer deletion revalidation', () => {
@@ -1828,7 +2254,7 @@ describe('FileWorkspace launcher tab creation', () => {
       fireEvent.click(toggle);
       await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('true'));
       await waitFor(() => {
-        expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+        expect(presentedRuntimeFrame().getAttribute('data-od-render-mode')).toBe('runtime-url');
       });
       return toggle;
     }
@@ -1838,7 +2264,7 @@ describe('FileWorkspace launcher tab creation', () => {
       const onFresh = vi.fn();
       render(<Harness revalidatedFiles={[]} onFresh={onFresh} />);
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame');
+      const frame = presentedRuntimeFrame();
 
       fireEvent.click(screen.getByTestId('commit-r1-missing'));
 
@@ -1872,7 +2298,7 @@ describe('FileWorkspace launcher tab creation', () => {
       const onFresh = vi.fn();
       render(<Harness revalidatedFiles={initialFiles} onFresh={onFresh} />);
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const frame = presentedRuntimeFrame() as HTMLIFrameElement;
       act(() => {
         window.dispatchEvent(new MessageEvent('message', {
           source: frame.contentWindow,
@@ -1959,7 +2385,7 @@ describe('FileWorkspace launcher tab creation', () => {
       vi.stubGlobal('fetch', fetchMock);
       render(<RacingHarness />);
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const frame = presentedRuntimeFrame() as HTMLIFrameElement;
       act(() => {
         window.dispatchEvent(new MessageEvent('message', {
           source: frame.contentWindow,
@@ -2103,7 +2529,7 @@ describe('FileWorkspace launcher tab creation', () => {
         />,
       );
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const frame = presentedRuntimeFrame() as HTMLIFrameElement;
       await dirtyActiveViewer(frame);
       fireEvent.click(screen.getByTestId('failed-r2-r1-missing'));
 
@@ -2133,7 +2559,7 @@ describe('FileWorkspace launcher tab creation', () => {
         />,
       );
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const frame = presentedRuntimeFrame() as HTMLIFrameElement;
       await dirtyActiveViewer(frame);
       fireEvent.click(screen.getByTestId('failed-r2-r1-missing'));
 
@@ -2164,7 +2590,7 @@ describe('FileWorkspace launcher tab creation', () => {
         />,
       );
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const frame = presentedRuntimeFrame() as HTMLIFrameElement;
       await dirtyActiveViewer(frame);
       fireEvent.click(screen.getByTestId('failed-r2-r1-missing'));
 
@@ -2191,7 +2617,7 @@ describe('FileWorkspace launcher tab creation', () => {
         />,
       );
       await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame');
+      const frame = presentedRuntimeFrame();
 
       fireEvent.click(screen.getByTestId('commit-r1-missing'));
 
@@ -2223,7 +2649,7 @@ describe('FileWorkspace launcher tab creation', () => {
       const onFresh = vi.fn();
       render(<Harness revalidatedFiles={[]} onFresh={onFresh} />);
       const toggle = await enterManualEdit();
-      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      const frame = presentedRuntimeFrame() as HTMLIFrameElement;
       act(() => {
         window.dispatchEvent(new MessageEvent('message', {
           source: frame.contentWindow,
@@ -2278,7 +2704,7 @@ describe('FileWorkspace launcher tab creation', () => {
     for (let index = 0; index < files.length; index += 1) {
       const currentName = files[index]!.name;
       await waitFor(() => {
-        expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(currentName);
+        expect(presentedRuntimeFrame().getAttribute('title')).toBe(currentName);
       });
       const activeViewer = document.querySelector<HTMLElement>(
         `[data-testid="retained-file-viewer"][data-file-name="${currentName}"]`,
@@ -2293,7 +2719,7 @@ describe('FileWorkspace launcher tab creation', () => {
         const nextName = files[index + 1]!.name;
         fireEvent.click(screen.getByRole('tab', { name: new RegExp(nextName.replace('.', '\\.')) }));
         await waitFor(() => {
-          expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(nextName);
+          expect(presentedRuntimeFrame().getAttribute('title')).toBe(nextName);
         });
       }
       expect(screen.getAllByTestId('retained-file-viewer').length).toBeLessThanOrEqual(3);
@@ -2333,7 +2759,7 @@ describe('FileWorkspace launcher tab creation', () => {
     const toggle = await screen.findByTestId('manual-edit-mode-toggle');
     fireEvent.click(toggle);
     await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('true'));
-    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    const frame = presentedRuntimeFrame() as HTMLIFrameElement;
     act(() => {
       window.dispatchEvent(new MessageEvent('message', {
         source: frame.contentWindow,
@@ -2367,7 +2793,7 @@ describe('FileWorkspace launcher tab creation', () => {
     expect(toggle.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('evicts the previous project preview pool when the workspace changes', async () => {
+  it('parks a previous project preview and reattaches the same runtime on return', async () => {
     const workspaceContext = teamContext('workspace-a', 'member-a');
     function Harness({ projectId, fileName }: { projectId: string; fileName: string }) {
       const file = workspaceFile(fileName);
@@ -2396,8 +2822,15 @@ describe('FileWorkspace launcher tab creation', () => {
     rerender(<Harness projectId="project-2" fileName="new.html" />);
 
     await waitFor(() => expect(document.querySelector('iframe[title="new.html"]')).not.toBeNull());
-    expect(document.body.contains(oldFrame)).toBe(false);
-    expect(document.querySelector('.iframe-keep-alive-pool iframe[title="old.html"]')).toBeNull();
+    expect(document.body.contains(oldFrame)).toBe(true);
+    expect(document.querySelector('.iframe-keep-alive-pool iframe[title="old.html"]')).toBe(oldFrame);
+
+    rerender(<Harness projectId="project-1" fileName="old.html" />);
+
+    await waitFor(() => {
+      expect(document.querySelector('iframe[title="old.html"]')).toBe(oldFrame);
+      expect(oldFrame?.getAttribute('data-od-active')).toBe('true');
+    });
   });
 
   it('evicts the least-recently-used HTML viewer after the fourth warm tab', async () => {
@@ -2432,20 +2865,20 @@ describe('FileWorkspace launcher tab creation', () => {
     render(<Harness />);
     for (const name of files.slice(1).map((file) => file.name)) {
       fireEvent.click(screen.getByRole('tab', { name: new RegExp(name.replace('.', '\\.')) }));
-      await waitFor(() => expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(name));
+      await waitFor(() => expect(presentedRuntimeFrame().getAttribute('title')).toBe(name));
     }
     await waitFor(() => {
       expect(screen.getAllByTestId('retained-file-viewer').map((viewer) => viewer.getAttribute('data-file-name')))
         .toEqual(['beta.html', 'gamma.html', 'delta.html']);
     });
     expect(document.querySelector('iframe[title="alpha.html"]')).toBeNull();
-    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(4);
+    expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(4);
 
     fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
-    await waitFor(() => expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe('alpha.html'));
+    await waitFor(() => expect(presentedRuntimeFrame().getAttribute('title')).toBe('alpha.html'));
     // The evicted frame remounts from its exact-version source snapshot. It
     // must not add a fifth raw read before the file revision changes.
-    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(4);
+    expect(mockedFetchProjectScopedPreviewNavigation).toHaveBeenCalledTimes(4);
     await waitFor(() => {
       expect(screen.getAllByTestId('retained-file-viewer').map((viewer) => viewer.getAttribute('data-file-name')))
         .toEqual(['alpha.html', 'gamma.html', 'delta.html']);

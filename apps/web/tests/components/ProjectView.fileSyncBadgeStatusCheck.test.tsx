@@ -251,6 +251,7 @@ describe('ProjectView file-sync badge — status check on local file change', ()
       attach: vi.fn(),
       release: vi.fn(),
       evict: vi.fn(),
+      evictFrame: vi.fn(),
       evictProject: vi.fn(),
       evictMatching: vi.fn(),
       subscribe: vi.fn(() => () => {}),

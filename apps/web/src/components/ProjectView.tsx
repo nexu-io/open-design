@@ -13,7 +13,11 @@ import {
   type SetStateAction,
 } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
+import {
+  artifactManifestSubjectPath,
+  createHtmlArtifactManifest,
+  inferLegacyManifest,
+} from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
 import { validateHtmlArtifact } from '../artifacts/validate';
 import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
@@ -2388,10 +2392,14 @@ export function ProjectView({
     files: ProjectFile[];
     refreshKey: number;
     generation: number;
-  }>({ files: [], refreshKey: 0, generation: 0 });
+    fileContentRefreshKeys: ReadonlyMap<string, number>;
+  }>({ files: [], refreshKey: 0, generation: 0, fileContentRefreshKeys: new Map() });
   const projectFiles = projectFilesSnapshot.files;
   const committedFilesRefreshKey = projectFilesSnapshot.refreshKey;
   const committedFilesGeneration = projectFilesSnapshot.generation;
+  const committedFileContentRefreshKeys = projectFilesSnapshot.fileContentRefreshKeys;
+  const fileContentRefreshGenerationRef = useRef(0);
+  const pendingFileContentRefreshKeysRef = useRef(new Map<string, number>());
   const projectFilesGenerationRef = useRef(committedFilesGeneration);
   const committedFilesRefreshKeyRef = useRef(committedFilesRefreshKey);
   committedFilesRefreshKeyRef.current = committedFilesRefreshKey;
@@ -3560,6 +3568,9 @@ export function ProjectView({
   ): Promise<ProjectFile[]> => {
     const requestSeq = ++projectFilesRequestSeqRef.current;
     const requestedRefreshKey = filesRefreshRequestKeyRef.current;
+    const requestedFileContentRefreshKeys = new Map(
+      pendingFileContentRefreshKeysRef.current,
+    );
     let next: ProjectFile[];
     try {
       next = await fetchProjectFiles(project.id, {
@@ -3580,11 +3591,23 @@ export function ProjectView({
       // Commit the list and both observation witnesses atomically. A refresh
       // request must never publish a new key or generation alongside an older
       // file snapshot.
-      setProjectFilesSnapshot({
-        files: next,
-        refreshKey: requestedRefreshKey,
-        generation: acceptedGeneration,
+      setProjectFilesSnapshot((previous) => {
+        const fileContentRefreshKeys = new Map(previous.fileContentRefreshKeys);
+        for (const [path, refreshKey] of requestedFileContentRefreshKeys) {
+          fileContentRefreshKeys.set(path, refreshKey);
+        }
+        return {
+          files: next,
+          refreshKey: requestedRefreshKey,
+          generation: acceptedGeneration,
+          fileContentRefreshKeys,
+        };
       });
+      for (const [path, refreshKey] of requestedFileContentRefreshKeys) {
+        if (pendingFileContentRefreshKeysRef.current.get(path) === refreshKey) {
+          pendingFileContentRefreshKeysRef.current.delete(path);
+        }
+      }
       onAcceptedGeneration?.(acceptedGeneration);
     }
     return next;
@@ -4048,7 +4071,86 @@ export function ProjectView({
   const refreshPreviewCommentsRef = useRef<(() => Promise<void>) | null>(null);
   const handleProjectEvent = useCallback((evt: ProjectEvent) => {
     if (evt.type === 'file-changed') {
-      iframeKeepAlivePool.evictProject(project.id);
+      const changedPath = normalizeComparableFilePath(evt.path);
+      // An artifact manifest is generated metadata about one document: a title,
+      // a kind, an export list. The daemon keeps it out of the file listing and
+      // the app keeps it out of the file tree, so no page can reference it, and
+      // it cannot change a single pixel of the document it describes — so no
+      // preview is entitled to a new document identity because of it. Every
+      // artifact save writes one alongside the document, so reading it as an
+      // ordinary project file first made one save look like a project-wide
+      // mutation, and then made the saved document itself navigate twice.
+      //
+      // The project still re-reads its file list below, which is what actually
+      // carries a new title or export list into the UI.
+      if (artifactManifestSubjectPath(changedPath) !== changedPath) {
+        coalescedFileChangedRefresh();
+        void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
+        return;
+      }
+      const hasOtherHtmlDocument = projectFilesRef.current.some((file) => (
+        isHtmlProjectFile(file)
+        && normalizeComparableFilePath(file.path || file.name) !== changedPath
+      ));
+      // The first HTML document already receives a fresh URL from its file
+      // identity. Giving that same document a content-refresh witness makes it
+      // navigate twice.
+      //
+      // Which OTHER previews a mutation is entitled to disturb follows from
+      // what it is. A stylesheet, script, image or data file is authored to be
+      // REFERENCED, and by whom is undecidable — dynamic `import()`, `fetch`,
+      // CSS `url()` and JS-built URLs put a real dependency graph out of reach
+      // — so the honest conservative answer is the project wildcard, which
+      // refreshes every open preview. Appearing and disappearing files keep the
+      // wildcard for the same reason at a different moment: a reference that
+      // was 404ing and now resolves, or resolved and now 404s, leaves an open
+      // page showing a BROKEN embed that only a reload repairs.
+      //
+      // Editing an existing HTML document is the one case that carries none of
+      // that. It is authored to be opened rather than referenced, and an
+      // embedder of it is showing stale-but-working content, not breakage. So
+      // its own edit scopes to itself. Without this line, saving one page
+      // re-navigated every other open preview and discarded its JS heap,
+      // timers, canvas and scroll — the exact loss the retained-frame runtime
+      // exists to prevent — and edits are the high-frequency event, one per
+      // agent write and per manual save.
+      //
+      // Residual risk, narrow and nameable: page A embeds page B, B is edited,
+      // and A keeps showing the previous B until anything else in the project
+      // changes or A is reloaded by hand.
+      //
+      // Collab's atomic directory replacement reports `change` with an empty
+      // path, which is not an HTML document path and so naturally remains the
+      // project wildcard.
+      const changeScopesToItself = (
+        evt.kind === 'change' && isHtmlProjectFilePath(changedPath)
+      );
+      if (
+        evt.kind !== 'add'
+        || !isHtmlProjectFilePath(changedPath)
+        || hasOtherHtmlDocument
+      ) {
+        const refreshGeneration = ++fileContentRefreshGenerationRef.current;
+        pendingFileContentRefreshKeysRef.current.set(
+          changedPath,
+          refreshGeneration,
+        );
+        if (!changeScopesToItself) {
+          pendingFileContentRefreshKeysRef.current.set('', refreshGeneration);
+        }
+      }
+      // Same scope rule as the refresh key above, applied to the retained
+      // frames themselves. Evicting the whole project on every file change
+      // destroyed the parked browsing contexts of documents that did not
+      // change, so the next visit to one had to re-navigate from scratch.
+      if (changeScopesToItself) {
+        iframeKeepAlivePool.evictMatching((entry) => (
+          entry.projectId === project.id
+          && normalizeComparableFilePath(entry.fileName) === changedPath
+        ));
+      } else {
+        iframeKeepAlivePool.evictProject(project.id);
+      }
       invalidateHtmlSourceSnapshotProject(project.id);
       coalescedFileChangedRefresh();
       void recoverMaterializedConversations(project.id, projectRunAuthorityKey);
@@ -4287,7 +4389,16 @@ export function ProjectView({
     // otherwise this first tab-sync pass strips `/conversations/:cid` and the
     // subsequent list load can no longer select the requested conversation.
     const effectiveConversationId = activeConversationId ?? routeConversationId;
-    const nextKey = `${effectiveConversationId ?? ''}:${target ?? ''}`;
+    // Same reasoning as the conversation id above, for the file. While the tab
+    // state is still hydrating there is no active tab yet, so `target` is null
+    // — and writing `fileName: null` here strips the file a deep link named.
+    // That is not just a cosmetic URL edit: the auto-open guard below is
+    // `if (routeFileName) return`, and it reads the live route, so stripping
+    // the file also disarms the only thing stopping auto-selection from
+    // opening a different file (the newest by mtime) and latching it.
+    // The routed file keeps authority until the tab state is authoritative.
+    const effectiveFileName = target ?? (tabsLoadedRef.current ? null : routeFileName);
+    const nextKey = `${effectiveConversationId ?? ''}:${effectiveFileName ?? ''}`;
     if (nextKey === lastSyncedRouteKeyRef.current) return;
     lastSyncedRouteKeyRef.current = nextKey;
     lastSyncedConversationIdRef.current = effectiveConversationId;
@@ -4304,7 +4415,7 @@ export function ProjectView({
         kind: 'project',
         projectId: project.id,
         conversationId: effectiveConversationId,
-        fileName: target,
+        fileName: effectiveFileName,
       },
       { replace: true },
     );
@@ -4314,6 +4425,7 @@ export function ProjectView({
     project.id,
     activeConversationId,
     routeConversationId,
+    routeFileName,
   ]);
 
   const handleEnsureProject = useCallback(async (): Promise<string | null> => {
@@ -11830,6 +11942,7 @@ export function ProjectView({
           files={projectFiles}
           liveArtifacts={liveArtifacts}
           filesRefreshKey={committedFilesRefreshKey}
+          fileContentRefreshKeys={committedFileContentRefreshKeys}
           filesGeneration={committedFilesGeneration}
           onRefreshFiles={refreshFileWorkspace}
           isDeck={isDeck}
@@ -12927,7 +13040,11 @@ export async function findSameTurnHtmlWriteForRecoveredArtifact({
 
 function isHtmlProjectFile(file: ProjectFile): boolean {
   const name = (file.path || file.name).toLowerCase();
-  return file.kind === 'html' || /\.(?:html?|xhtml)$/u.test(name);
+  return file.kind === 'html' || isHtmlProjectFilePath(name);
+}
+
+function isHtmlProjectFilePath(path: string): boolean {
+  return /\.(?:html?|xhtml)$/iu.test(path);
 }
 
 function normalizeHtmlForRecoveredArtifactComparison(value: string | null | undefined): string {

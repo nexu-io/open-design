@@ -135,6 +135,8 @@ export function PluginDesignSystemDetail({
   // from the primary CTA.
   const views: PreviewView[] = dsRef
     ? [
+        // Not yet converged to the real-URL transport — see the note on the
+        // matching views in DesignSystemPreviewModal.
         { id: 'showcase', label: t('ds.showcase'), html: showcaseHtml },
         { id: 'tokens', label: t('ds.tokens'), html: tokensHtml },
       ]

@@ -1,0 +1,4435 @@
+/**
+ * Wrap an artifact's HTML for a sandboxed iframe. Corresponds to
+ * buildSrcdoc in packages/runtime/src/index.ts — the reference version also
+ * injects an edit-mode overlay and tweak bridge, which this starter omits.
+ *
+ * If the model returned a full document, pass it through unchanged; otherwise
+ * wrap the fragment in a minimal doctype shell.
+ *
+ * When `options.deck` is set we also inject a `postMessage` listener that
+ * lets the host advance / rewind slides without relying on the iframe
+ * having keyboard focus. The host posts:
+ *   { type: 'od:slide', action: 'next' | 'prev' | 'first' | 'last' | 'go', index?: number }
+ *   { type: 'od:slide-state-probe' }
+ * and the iframe responds with:
+ *   { type: 'od:slide-state', active: number, count: number }
+ * after every navigation or state probe so the host can render its own
+ * counter / dots after atomic promotion.
+ */
+import {
+  DECK_EXPLICIT_SLIDE_SELECTOR,
+  DECK_LEGACY_SCREEN_LABEL_RE_SOURCE,
+  DECK_LEGACY_SCREEN_SLIDE_SELECTOR,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  injectDeckStageFallback,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_PROTOCOL_VERSION,
+  DECK_READY_MESSAGE_TYPE,
+} from '@open-design/contracts/runtime/deck-protocol';
+import {
+  DECK_CHROME_HIDE_CSS,
+  DECK_CHROME_HIDE_STYLE_MARKER,
+  DECK_STAGE_SHADOW_CHROME_HIDE_CSS,
+  DECK_STAGE_SHADOW_CHROME_HIDE_STYLE_ID,
+} from '@open-design/contracts/runtime/deck-presentation';
+import {
+  buildPreviewBaseHrefBridge,
+  buildPreviewObservabilityBridge,
+} from '@open-design/contracts/runtime/preview-observability';
+import {
+  PREVIEW_RUNTIME_STATE_LIMITS,
+  PREVIEW_RUNTIME_STATE_VERSION,
+} from '@open-design/contracts/runtime/preview-runtime-state';
+import {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
+import {
+  findRealElementRange,
+  findRealTagEnd,
+  findRealTagOffset,
+  HTML_TAG_PATTERNS,
+} from '@open-design/contracts/runtime/html-injection-points';
+
+export {
+  PREVIEW_REDIRECT_GUARD_MAX_HOPS,
+  PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS,
+  PREVIEW_REDIRECT_GUARD_WINDOW_MS,
+  PREVIEW_REDIRECT_LOOP_MESSAGE,
+} from '@open-design/contracts/runtime/preview-guards';
+
+import {
+  buildManualEditBridge,
+  buildManualEditBridgeStyle,
+  buildManualEditKeyboardGuard,
+  MANUAL_EDIT_DISCOVERY_SELECTOR,
+  MANUAL_EDIT_SOURCE_PATH_ATTR,
+} from './manual-edit.js';
+import { isApprovedFontStylesheetHref } from './font-stylesheet.js';
+
+export type SrcdocOptions = {
+  deck?: boolean;
+  baseHref?: string;
+  initialSlideIndex?: number;
+  hideDeckChrome?: boolean;
+  deckClickNavigation?: boolean;
+  commentBridge?: boolean;
+  inspectBridge?: boolean;
+  selectionBridge?: boolean;
+  editBridge?: boolean;
+  paletteBridge?: boolean;
+  initialPalette?: string | null;
+  previewFocusGuard?: boolean;
+  /** Install the live-preview error and white-screen reporting bridge. Keep
+   * this disabled for exports, captures, thumbnails, and historical previews. */
+  previewObservability?: boolean;
+  /** Let trusted font-CDN stylesheets load without blocking the live preview's
+   * first paint. Keep disabled for exports and other capture surfaces. */
+  deferFontStylesheets?: boolean;
+  /**
+   * Force every CSS animation/transition to complete instantly so the
+   * document settles at its final visual state and stops repainting. Meant
+   * for static miniatures (deck thumbnail rail): a looping deck animation in
+   * N thumbnail iframes otherwise keeps N compositor layers rasterizing
+   * forever.
+   */
+  freezeMotion?: boolean;
+  /** Monotonically-increasing reload counter. When provided, it is embedded as
+   * a `data-od-reload-key` attribute on `<html>` so that the srcdoc string
+   * differs across reloads even when the underlying HTML bytes are identical.
+   * This guarantees that the iframe's `srcdoc` attribute is updated in the DOM
+   * and the browser re-parses the document (issue #4650). */
+  reloadKey?: number;
+  /** Document-owned identity for preview content-size reports. The host rejects
+   * reports from a previous srcdoc document even if it echoed a newer request. */
+  previewMeasurementEpoch?: string;
+  /** Identity of this exact srcdoc artifact generation. The injected bridge
+   * echoes it only after all document-side listeners are installed, allowing
+   * the host to reject a stale ready signal from the document being replaced. */
+  transportActivationGeneration?: string;
+};
+
+// --- Redirect-loop guard -------------------------------------------------
+//
+// A generated (or hand-edited) artifact can carry a self-redirecting "script"
+// — most reliably a `<meta http-equiv="refresh">` that reloads the same
+// document, or a chain of meta refreshes that cycles (A → B → A → …). In the
+// preview iframe that redirect fires forever, pegging the main thread until the
+// whole design workspace freezes (nexu-io/open-design#710). buildSrcdoc always
+// injects `injectPreviewRedirectGuard`, an in-iframe circuit breaker that:
+//
+//   1. counts meta-refresh navigations across reloads (persisted in
+//      `window.name`, the one store that survives an iframe navigating itself),
+//   2. resets that count once a full window passes with no further refresh, so
+//      a slow, legitimate auto-refresh never accumulates (the timeout half of
+//      the safeguard), and
+//   3. once the count crosses `PREVIEW_REDIRECT_GUARD_MAX_HOPS` inside the
+//      window — or immediately for a near-instant self-refresh, which can only
+//      loop in a static preview — strips the offending `<meta>` and posts
+//      `PREVIEW_REDIRECT_LOOP_MESSAGE` to the host so it can park the iframe.
+//
+// The message is the reliable stop: the browser makes `window.location`
+// unforgeable, so a JS `location.reload()` storm can only be halted host-side
+// by swapping the iframe to static content (see FileViewer). The in-iframe half
+// still fully covers the canonical meta-refresh redirect loop on its own.
+
+export interface RedirectGuardState {
+  /** Meta-refresh navigations counted in the current window. */
+  hops: number;
+  /** Timestamp (ms) the current window started at. */
+  windowStart: number;
+}
+
+/**
+ * Pure hop-accounting used by the injected guard (and exercised directly in
+ * tests). Given the previous state (or `null` on the first refresh) and the
+ * current time, return the next state and whether the hop budget is now
+ * exceeded. The window resets whenever more than `windowMs` has elapsed since
+ * it started, so only a tight burst of refreshes accumulates toward the cap.
+ */
+export function nextRedirectGuardState(
+  prev: RedirectGuardState | null,
+  now: number,
+  opts: { maxHops?: number; windowMs?: number } = {},
+): { state: RedirectGuardState; tripped: boolean } {
+  const maxHops = opts.maxHops ?? PREVIEW_REDIRECT_GUARD_MAX_HOPS;
+  const windowMs = opts.windowMs ?? PREVIEW_REDIRECT_GUARD_WINDOW_MS;
+  const withinWindow =
+    prev != null &&
+    Number.isFinite(prev.windowStart) &&
+    now - prev.windowStart <= windowMs;
+  const windowStart = withinWindow ? prev!.windowStart : now;
+  const hops = (withinWindow ? prev!.hops : 0) + 1;
+  return { state: { hops, windowStart }, tripped: hops > maxHops };
+}
+
+/**
+ * A static, self-contained document the host swaps into the preview iframe once
+ * a redirect loop is detected. It carries no meta refresh and no script, so it
+ * ends the loop the moment it loads; the user re-runs the artifact with the
+ * viewer's existing reload control.
+ */
+export function buildRedirectLoopBlockedDoc(): string {
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: #0d1117; color: #e6edf3; text-align: center; padding: 24px;
+      }
+      .card { max-width: 420px; }
+      h1 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
+      p { font-size: 13px; line-height: 1.5; margin: 0; color: #9ba7b4; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Preview stopped: redirect loop detected</h1>
+      <p>This document kept redirecting to itself, which would freeze the
+      preview. Reload the preview to try again.</p>
+    </div>
+  </body>
+</html>`;
+}
+
+/**
+ * Sanitize a document title string so the resulting PDF filename is accepted by
+ * Microsoft Teams. Teams rejects filenames that contain any of:
+ *   : # % & * { } \ < > ? / + | "
+ * as well as leading/trailing spaces and the prefix sequence "~$".
+ *
+ * Each disallowed character (or run of disallowed characters) is replaced with
+ * a single hyphen. The result is trimmed of leading and trailing whitespace.
+ * Titles that are already safe pass through unchanged.
+ *
+ * Invariant: the returned string contains none of the Teams-disallowed
+ * characters and has no leading or trailing spaces, and does not start
+ * with the ~$ prefix.
+ */
+export function sanitizePreviewTitle(text: string): string {
+  // Trim first so that leading whitespace cannot hide a ~$ prefix from the
+  // anchor-based check below (e.g. "  ~$Invoice" would otherwise survive).
+  let result = text.trim();
+  // Remove every leading ~$ prefix. A single replace(/^~\$/, '') is not
+  // enough when the prefix is doubled ("~$~$Doc"). Loop until stable, then
+  // re-trim in case a space followed the prefix ("~$ Invoice" → " Invoice").
+  let prev: string;
+  do {
+    prev = result;
+    result = result.replace(/^~\$/, '').trim();
+  } while (result !== prev);
+  // Replace each disallowed character (or run of them) with a single hyphen.
+  // Character class: : # % & * { } \ < > ? / + | "
+  // eslint-disable-next-line no-useless-escape
+  result = result.replace(/[:#%&*{}\\<>?/+|"]+/g, '-');
+  // Final trim to remove any spaces exposed by the substitution.
+  return result.trim();
+}
+
+/**
+ * A small set of common named non-ASCII entities that appear in real-world
+ * titles (e.g. &ccedil; → ç, &eacute; → é). Keeping this narrow avoids
+ * shipping a full HTML entity table while still preventing the "orphaned
+ * name;" garbage that results when & is stripped before entity detection.
+ * Characters produced here that are Teams-disallowed get cleaned up by the
+ * subsequent sanitizePreviewTitle pass.
+ */
+const NAMED_ENTITY_MAP: Record<string, string> = {
+  // Latin-1 letters most likely to appear in design/business titles
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', auml: 'ä', aring: 'å',
+  aelig: 'æ', ccedil: 'ç',
+  egrave: 'è', eacute: 'é', ecirc: 'ê', euml: 'ë',
+  igrave: 'ì', iacute: 'í', icirc: 'î', iuml: 'ï',
+  eth: 'ð', ntilde: 'ñ',
+  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ouml: 'ö', oslash: 'ø',
+  ugrave: 'ù', uacute: 'ú', ucirc: 'û', uuml: 'ü',
+  yacute: 'ý', thorn: 'þ', yuml: 'ÿ',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Auml: 'Ä', Aring: 'Å',
+  AElig: 'Æ', Ccedil: 'Ç',
+  Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Euml: 'Ë',
+  Igrave: 'Ì', Iacute: 'Í', Icirc: 'Î', Iuml: 'Ï',
+  ETH: 'Ð', Ntilde: 'Ñ',
+  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ouml: 'Ö', Oslash: 'Ø',
+  Ugrave: 'Ù', Uacute: 'Ú', Ucirc: 'Û', Uuml: 'Ü',
+  Yacute: 'Ý', THORN: 'Þ',
+  // Common punctuation / symbols that can appear in business document titles
+  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’',
+  ldquo: '“', rdquo: '”', hellip: '…', trade: '™', reg: '®',
+  copy: '©', deg: '°', euro: '€', pound: '£', yen: '¥',
+};
+
+/**
+ * Safe wrapper around String.fromCodePoint that returns U+FFFD for
+ * out-of-range values instead of throwing RangeError.
+ */
+function safeFromCodePoint(cp: number): string {
+  if (cp < 0 || cp > 0x10ffff) return '�';
+  return String.fromCodePoint(cp);
+}
+
+/**
+ * Decode the minimal HTML entities that browsers render in <title> text:
+ * &amp; → & , &lt; → < , &gt; → > , &quot; → " , &apos; → ' , &#N; / &#xN;
+ * Also decodes a small set of common named non-ASCII entities (e.g. &ccedil;)
+ * so they do not leave orphaned "name;" fragments after the & is sanitized.
+ * Numeric entities with out-of-range code points fall back to U+FFFD instead
+ * of throwing RangeError.
+ */
+function decodeHtmlEntitiesForTitle(encoded: string): string {
+  return encoded
+    // Named non-ASCII entities first — before the standard 5 named entities
+    // below, so &amp; still converts to & (not left as a lookup miss).
+    .replace(/&([A-Za-z]+);/g, (match, name: string) => NAMED_ENTITY_MAP[name] ?? match)
+    // Standard 5 named entities.
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    // Numeric entities — range-checked to avoid RangeError on huge code points.
+    .replace(/&#(\d+);/g, (_, n: string) => safeFromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => safeFromCodePoint(parseInt(h, 16)));
+}
+
+/**
+ * Rewrite the <title> element in an HTML string so its text content is
+ * Teams-filename-safe. Only the real `<title>` in the `<head>` region is
+ * changed — `<title>` occurrences inside HTML comments, `<script>` blocks,
+ * or `<style>` blocks are left untouched.
+ *
+ * Strategy:
+ *   1. Locate the `<head>`…`</head>` region (or the area before `<body>`).
+ *   2. Within that region, scan past comments and script/style blocks to find
+ *      the first unambiguous `<title>` start tag.
+ *   3. Decode HTML entities in its text, sanitize, and splice back.
+ *
+ * Pure string operations — no DOMParser — so it works identically in Node
+ * test environments and in the browser.
+ *
+ * @public — exported for daemon-side URL-load title sanitization.
+ */
+export function sanitizeTitleInDoc(html: string): string {
+  // Only the head's own <title> names the document; an <svg><title> in the body
+  // is an accessible label for that graphic. Bound the search to the head
+  // region, located structurally so a </head> or <body> an author wrote into a
+  // script string cannot move the boundary.
+  const headClose = findRealTagOffset(html, HTML_TAG_PATTERNS.headClose);
+  const bodyOpen = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyOpen);
+  const searchLimit = headClose >= 0 ? headClose : bodyOpen >= 0 ? bodyOpen : html.length;
+
+  // Locate both ends by the parser's rules, so quoted `>` characters and close
+  // tags with valid whitespace cannot make the rewrite span author scripts.
+  const range = findRealElementRange(html, HTML_TAG_PATTERNS.titleOpen, 'title');
+  if (!range || range.start >= searchLimit) return html;
+
+  const titleStart = range.start;
+  const closingTagEnd = range.end - 1;
+  const openTag = html.slice(range.start, range.contentStart);
+  const rawContent = html.slice(range.contentStart, range.contentEnd);
+  const closeTag = html.slice(range.contentEnd, range.end);
+
+  const decoded = decodeHtmlEntitiesForTitle(rawContent);
+  const safe = sanitizePreviewTitle(decoded);
+
+  return html.slice(0, titleStart) + openTag + safe + closeTag + html.slice(closingTagEnd + 1);
+}
+
+export function buildSrcdoc(
+  html: string,
+  options: SrcdocOptions = {}
+): string {
+  const head = html.trimStart().slice(0, 64).toLowerCase();
+  const isFullDoc = head.startsWith("<!doctype") || head.startsWith("<html");
+  const wrapped = isFullDoc
+    ? html
+    : normalizeHtmlFragmentLikeNavigation(html);
+  // Sanitize <title> text before any other transformation so that when the
+  // user prints the preview iframe (Cmd+P → Save as PDF), Chromium uses the
+  // sanitized title as the default filename — one that Microsoft Teams will
+  // accept. Only the title text changes; visible page content is untouched.
+  const withSafeTitle = sanitizeTitleInDoc(wrapped);
+  const withOdIds = annotateMissingOdIds(withSafeTitle);
+  const withSourcePaths = options.editBridge ? annotateManualEditSourcePaths(withOdIds) : withOdIds;
+  const withBase = options.baseHref ? injectBaseHref(withSourcePaths, options.baseHref) : withSourcePaths;
+  const withPreviewBaseBridge = options.baseHref
+    ? injectPreviewBaseHrefBridge(withBase)
+    : withBase;
+  const withDeferredFonts = options.deferFontStylesheets
+    ? deferTrustedFontStylesheets(withPreviewBaseBridge)
+    : withPreviewBaseBridge;
+  const withShim = injectSandboxShim(withDeferredFonts);
+  const blockLoadTimeScriptRedirect = htmlHasLoadTimeLocationNavigation(withPreviewBaseBridge);
+  // Always on: a redirect loop can freeze ANY previewed artifact, and the guard
+  // is inert on documents that never self-redirect. Injected right after the
+  // sandbox shim so it is installed before any author script or meta refresh.
+  const withRedirectGuard = injectPreviewRedirectGuard(withShim, { blockLoadTimeScriptRedirect });
+  // Runtime errors stay in the iframe's Window and never bubble to the host.
+  // Live previews opt in so exports and other off-screen srcdoc consumers do
+  // not emit diagnostics that no host observer is prepared to consume.
+  const withObservability = options.previewObservability
+    ? injectAfterHeadOpen(withRedirectGuard, buildPreviewObservabilityBridge())
+    : withRedirectGuard;
+  const withKeydownRegistry = options.deck ? injectDeckKeydownRegistryHook(withObservability) : withObservability;
+  const withFocusGuard = options.previewFocusGuard
+    ? injectPreviewFocusGuard(withKeydownRegistry)
+    : withKeydownRegistry;
+  const withMotionFreeze = options.freezeMotion ? injectMotionFreeze(withFocusGuard) : withFocusGuard;
+  const withDeckStageFallback = options.deck
+    ? injectDeckStageFallback(withMotionFreeze)
+    : withMotionFreeze;
+  const withDeckChrome = options.deck && options.hideDeckChrome
+    ? injectDeckStageShadowChromeHiding(injectDeckChromeHiding(withDeckStageFallback))
+    : withDeckStageFallback;
+  const withDeck = options.deck
+    ? injectDeckBridge(withDeckChrome, {
+        initialSlideIndex: options.initialSlideIndex,
+        clickNavigation: !!options.deckClickNavigation,
+        artifactHasKeydownNavigation: detectArtifactKeyboardNavigation(html),
+      })
+    : withDeckChrome;
+  // Comment + Inspect share an element-selection bridge: both pick a
+  // [data-od-id] / [data-screen-label] node and route the host's reply
+  // to either the comment popover (annotate) or the inspect panel
+  // (live-style overrides). Inject once when either mode is on. Pass the
+  // requested modes through so the bridge boots with picking already
+  // active — without that initial seed there is a window after each
+  // srcdoc rebuild where the host's `od:*-mode` postMessage races the
+  // bridge's own listener install and the iframe ignores clicks.
+  const withSelection = options.selectionBridge || options.commentBridge || options.inspectBridge
+    ? injectSelectionBridge(withDeck, {
+        initialCommentMode: !!options.commentBridge,
+        initialInspectMode: !!options.inspectBridge,
+        runtimeStateGeneration: options.transportActivationGeneration ?? '',
+      })
+    : withDeck;
+  const withPalette = options.paletteBridge
+    ? injectPaletteBridge(withSelection, { initialPalette: options.initialPalette ?? null })
+    : withSelection;
+  const withEdit = options.editBridge ? injectManualEditBridge(withPalette) : withPalette;
+  // The tweaks bridge is always injected — it's a passive listener that
+  // toggles a `.tw-panel`'s visibility in response to host postMessage. Tying
+  // it to a per-call option would force iframe srcdoc regeneration (and a
+  // visible flash) every time the host toggle flips.
+  const withTweaks = injectTweaksBridge(withEdit);
+  const withTransport = injectSrcdocTransportActivationBridge(
+    injectExportCaptureBridge(injectSnapshotBridge(injectPreviewContentSizeBridge(
+      withTweaks,
+      options.previewMeasurementEpoch ?? '',
+    ))),
+    options.transportActivationGeneration ?? '',
+  );
+  // Embed the reload counter so the srcdoc string differs across reloads even
+  // when the underlying HTML bytes are identical.  This ensures the browser
+  // sees a changed `srcdoc` attribute and re-parses the document (issue #4650).
+  return options.reloadKey !== undefined
+    ? withTransport.replace(/(<html\b)([^>]*>)/i, `$1 data-od-reload-key="${options.reloadKey}"$2`)
+    : withTransport;
+}
+
+/**
+ * Give fragment-shaped artifacts the same document structure and compat mode
+ * they receive when Chromium navigates directly to the raw URL.
+ *
+ * Wrapping every fragment in a standards-mode `<body>` changes two observable
+ * browser behaviours:
+ *   - a source without a doctype switches from URL-load quirks mode to srcDoc
+ *     standards mode; and
+ *   - leading metadata such as `<title>`, `<link>`, and `<style>` becomes a
+ *     body child. Runtime-state handoff later replaces `body.innerHTML`, which
+ *     deletes those authored styles and leaves Edit visibly unstyled.
+ *
+ * DOMParser applies the same tree-builder rules as a document navigation: it
+ * synthesizes html/head/body, promotes leading metadata into head, and retains
+ * the absence of a doctype. In non-DOM environments, leaving the fragment
+ * untouched lets the eventual iframe parser perform that normalization.
+ */
+function normalizeHtmlFragmentLikeNavigation(html: string): string {
+  if (typeof DOMParser === 'undefined') return html;
+  try {
+    return serializeHtmlDocument(new DOMParser().parseFromString(html, 'text/html'));
+  } catch {
+    return html;
+  }
+}
+
+/**
+ * Build the lazy transport shell.
+ *
+ * The shell does two things:
+ *   1. Register a listener for `od:srcdoc-transport-activate` that replaces
+ *      its own document with the real artifact HTML.
+ *   2. Post `od:srcdoc-transport-ready` to the parent as soon as the listener
+ *      is installed. This `ready` signal is the only reliable way for the
+ *      host to know the listener is live; without it, the host risks posting
+ *      `activate` before the iframe's script has executed (e.g. right after a
+ *      key-driven re-mount), in which case the message is dropped and the
+ *      iframe stays stuck on the empty shell. See #2253.
+ */
+export function buildLazySrcdocTransport(options: { quirksMode?: boolean } = {}): string {
+  const doctype = options.quirksMode ? '' : '<!doctype html>\n';
+  return `${doctype}<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script data-od-lazy-srcdoc-transport>(function(){
+      var readyInterval = null;
+      var readyAttempts = 0;
+      function stopReadyAnnouncements(){
+        if (readyInterval !== null && typeof clearInterval === 'function') {
+          clearInterval(readyInterval);
+        }
+        readyInterval = null;
+      }
+      function announceReady(){
+        try {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'od:srcdoc-transport-ready' }, '*');
+          }
+        } catch (_) { /* sandboxed parent — host falls back to onLoad */ }
+      }
+      function handleTransportMessage(ev){
+        var data = ev && ev.data;
+        if (data && data.type === 'od:srcdoc-transport-shell-probe') {
+          announceReady();
+          return;
+        }
+        if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
+        stopReadyAnnouncements();
+        if (typeof window.removeEventListener === 'function') {
+          window.removeEventListener('message', handleTransportMessage);
+        }
+        document.open();
+        document.write(data.html);
+        document.close();
+      }
+      window.addEventListener('message', handleTransportMessage);
+      announceReady();
+      // A cached app-lifetime Blob can finish long before React attaches the
+      // parent's listener. Keep announcing until activation instead of
+      // guessing a host-mount delay; cap the retries so a broken host cannot
+      // leave a background timer running forever. The host's probe remains a
+      // recovery path after this ten-second window.
+      if (window.parent && window.parent !== window && typeof setInterval === 'function') {
+        readyInterval = setInterval(function(){
+          announceReady();
+          readyAttempts += 1;
+          if (readyAttempts >= 100) stopReadyAnnouncements();
+        }, 100);
+      }
+    })();</script>
+  </head>
+  <body></body>
+</html>`;
+}
+
+export interface SrcDocActivationInputs {
+  /** The real artifact HTML the host wants to inject into the shell. */
+  srcDoc: string;
+  /** Host is currently showing the URL-loaded iframe (srcDoc iframe is hidden). */
+  useUrlLoadPreview: boolean;
+  /** Host's render pipeline is routing through the lazy transport shell. */
+  useLazySrcDocTransport: boolean;
+  /** The shell document has loaded AND posted `od:srcdoc-transport-ready`. */
+  shellReady: boolean;
+  /** Which artifact HTML has already been pushed into this shell (dedupe). */
+  activatedHtml: string | null;
+}
+
+/**
+ * Pure decision for whether the host should now post
+ * `od:srcdoc-transport-activate` to the shell iframe.
+ *
+ * Gating on `shellReady` is the fix for #2253: without it, an activation
+ * triggered by `useUrlLoadPreview` flipping to false (e.g. opening the
+ * Tweaks palette) can fire while the iframe's shell script has not yet
+ * registered its message listener. The message is dropped, the shell stays
+ * on its empty 536-byte body, and the dedupe check then suppresses the
+ * follow-up activation from the iframe's onLoad path.
+ */
+export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boolean {
+  if (!state.srcDoc) return false;
+  if (state.useUrlLoadPreview) return false;
+  if (!state.useLazySrcDocTransport) return false;
+  if (!state.shellReady) return false;
+  if (state.activatedHtml === state.srcDoc) return false;
+  return true;
+}
+
+function injectSrcdocTransportActivationBridge(doc: string, generation: string): string {
+  const encodedGeneration = JSON.stringify(generation);
+  const markerGeneration = generation
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const script = `<script data-od-srcdoc-transport-activation>(function(){
+  var generation = ${encodedGeneration};
+  var bodyComplete = false;
+  function containsCompletionMarker(node){
+    if (!node || node.nodeType !== 1) return false;
+    if (node.tagName === 'TEMPLATE' && node.getAttribute('data-od-srcdoc-transport-body-complete') === generation) return true;
+    var candidates = node.querySelectorAll ? node.querySelectorAll('template[data-od-srcdoc-transport-body-complete]') : [];
+    for (var i = 0; i < candidates.length; i += 1) {
+      if (candidates[i].getAttribute('data-od-srcdoc-transport-body-complete') === generation) return true;
+    }
+    return false;
+  }
+  var completionObserver = typeof MutationObserver === 'function' ? new MutationObserver(function(records){
+    if (bodyComplete) return;
+    for (var i = 0; i < records.length; i += 1) {
+      var added = records[i].addedNodes || [];
+      for (var j = 0; j < added.length; j += 1) {
+        if (!containsCompletionMarker(added[j])) continue;
+        bodyComplete = true;
+        completionObserver.disconnect();
+        return;
+      }
+    }
+  }) : null;
+  if (completionObserver && document.documentElement) {
+    completionObserver.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  function announceReady(probeId){
+    if (!generation) return;
+    try {
+      if (window.parent && window.parent !== window) {
+        var message = { type: 'od:srcdoc-transport-activated', generation: generation };
+        if (typeof probeId === 'string' && probeId) message.probeId = probeId;
+        message.bodyComplete = bodyComplete;
+        message.documentReadyState = document.readyState;
+        message.bodyPresent = !!document.body;
+        message.bodyChildCount = document.body ? document.body.children.length : 0;
+        message.documentElementChildCount = document.documentElement ? document.documentElement.children.length : 0;
+        window.parent.postMessage(message, '*');
+      }
+    } catch (_) { /* sandboxed parent */ }
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && data.type === 'od:srcdoc-transport-ready-probe') {
+      if (data.generation === generation) announceReady(data.probeId);
+      return;
+    }
+    if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
+    // document.open/write keeps the current Window realm. Re-running an
+    // authored classic script there can fail before execution when it declares
+    // a top-level let/const that the previous document already declared. Ask
+    // the host to remount the shared bootstrap so this generation gets a fresh
+    // realm, then let the one-shot shell perform the initial write.
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'od:srcdoc-transport-reset-required',
+          generation: data.generation
+        }, '*');
+      }
+    } catch (_) { /* sandboxed parent — host recovery will remount on timeout */ }
+  });
+  announceReady();
+})();</script>`;
+  // Install the activation witness before authored styles/scripts. A srcDoc
+  // navigation can otherwise be healthy but spend seconds in a blocking
+  // external script before reaching a body-end bridge, which makes the host's
+  // missing-ACK recovery indistinguishable from a genuinely aborted
+  // `about:srcdoc` navigation. Placing the bridge first also runs it before an
+  // authored meta CSP can disable later inline scripts.
+  // The generation-specific inert tail marker distinguishes a fully parsed artifact from the
+  // half-document Chromium can leave behind after aborting about:srcdoc. The
+  // head bridge latches its insertion permanently, so later authored DOM
+  // replacement cannot erase the parser witness. A template is inert and
+  // remains compatible with authored CSPs.
+  const bodyCompleteMarker = `<template data-od-srcdoc-transport-body-complete="${markerGeneration}"></template>`;
+  return injectBeforeBodyEnd(injectAfterHeadOpen(doc, script), bodyCompleteMarker);
+}
+
+function injectSnapshotBridge(doc: string): string {
+  const script = `<script data-od-snapshot-bridge>(function(){
+  var SNAPSHOT_STYLE_PROPS = [
+    'display','position','box-sizing','width','height','min-width','max-width','min-height','max-height',
+    'margin','margin-top','margin-right','margin-bottom','margin-left',
+    'padding','padding-top','padding-right','padding-bottom','padding-left',
+    'border','border-top','border-right','border-bottom','border-left','border-radius',
+    'font','font-family','font-size','font-weight','font-style','line-height','letter-spacing',
+    'color','background-color','opacity','transform','transform-origin','overflow','overflow-x','overflow-y',
+    'white-space','text-align','vertical-align','object-fit','object-position',
+    'flex','flex-direction','flex-wrap','flex-grow','flex-shrink','flex-basis',
+    'grid','grid-template-columns','grid-template-rows','grid-column','grid-row',
+    'gap','row-gap','column-gap','align-items','align-content','align-self',
+    'justify-items','justify-content','justify-self','inset','top','right','bottom','left',
+    'z-index','box-shadow','text-shadow'
+  ];
+  function copyComputedStyle(source, target){
+    if (!source || !target || source.nodeType !== 1 || target.nodeType !== 1) return;
+    var computed = window.getComputedStyle(source);
+    var style = target.getAttribute('style') || '';
+    for (var i = 0; i < SNAPSHOT_STYLE_PROPS.length; i++){
+      var prop = SNAPSHOT_STYLE_PROPS[i];
+      var value = computed.getPropertyValue(prop);
+      if (value) style += prop + ':' + value + ';';
+    }
+    target.setAttribute('style', style);
+  }
+  function syncElementState(source, target){
+    var tag = source.tagName ? source.tagName.toLowerCase() : '';
+    if (tag === 'img' && source.currentSrc) target.setAttribute('src', source.currentSrc);
+    if (tag === 'input' || tag === 'textarea') target.setAttribute('value', source.value || '');
+    if (tag === 'canvas') {
+      try {
+        var img = document.createElement('img');
+        img.setAttribute('src', source.toDataURL('image/png'));
+        img.setAttribute('style', target.getAttribute('style') || '');
+        target.parentNode && target.parentNode.replaceChild(img, target);
+      } catch (_) {}
+    }
+  }
+  function inlineSnapshotStyles(originalRoot, cloneRoot){
+    copyComputedStyle(originalRoot, cloneRoot);
+    syncElementState(originalRoot, cloneRoot);
+    var originals = originalRoot.querySelectorAll('*');
+    var clones = cloneRoot.querySelectorAll('*');
+    var count = Math.min(originals.length, clones.length, 3500);
+    for (var i = 0; i < count; i++){
+      copyComputedStyle(originals[i], clones[i]);
+      syncElementState(originals[i], clones[i]);
+    }
+    var scripts = cloneRoot.querySelectorAll('script');
+    for (var s = scripts.length - 1; s >= 0; s--) scripts[s].remove();
+    var links = cloneRoot.querySelectorAll('link[rel~="stylesheet"], link[rel~="preload"], link[rel~="preconnect"]');
+    for (var l = links.length - 1; l >= 0; l--) links[l].remove();
+    var styles = cloneRoot.querySelectorAll('style');
+    for (var st = 0; st < styles.length; st++) {
+      styles[st].textContent = (styles[st].textContent || '')
+        .replace(/@import[^;]+;/gi, '')
+        .replace(/@font-face\\s*\\{[^}]*\\}/gi, '');
+    }
+  }
+  function pruneHiddenSnapshotNodes(originalRoot, cloneRoot){
+    var originals = originalRoot.querySelectorAll('*');
+    var clones = cloneRoot.querySelectorAll('*');
+    var count = Math.min(originals.length, clones.length);
+    var removals = [];
+    for (var i = 0; i < count; i++){
+      var original = originals[i];
+      var clone = clones[i];
+      if (!original || !clone || !clone.parentNode) continue;
+      var computed = window.getComputedStyle(original);
+      if (computed && (computed.display === 'none' || computed.visibility === 'hidden')) {
+        removals.push(clone);
+      }
+    }
+    for (var r = removals.length - 1; r >= 0; r--){
+      if (removals[r].parentNode) removals[r].parentNode.removeChild(removals[r]);
+    }
+  }
+  function waitForImages(){
+    var imgs = Array.prototype.slice.call(document.images || []);
+    return Promise.all(imgs.map(function(img){
+      if (img.complete) return Promise.resolve();
+      return new Promise(function(resolve){
+        img.addEventListener('load', resolve, { once: true });
+        img.addEventListener('error', resolve, { once: true });
+      });
+    }));
+  }
+  function scrollOffset(){
+    var doc = document.documentElement;
+    var body = document.body;
+    return {
+      x: Math.max(window.scrollX || 0, doc ? doc.scrollLeft || 0 : 0, body ? body.scrollLeft || 0 : 0),
+      y: Math.max(window.scrollY || 0, doc ? doc.scrollTop || 0 : 0, body ? body.scrollTop || 0 : 0)
+    };
+  }
+  function escapeAttribute(value){
+    return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  }
+  function snapshotBackgroundColor(){
+    try {
+      var probe = window.getComputedStyle(document.body || document.documentElement);
+      var bg = probe && probe.backgroundColor || '';
+      if (!bg || bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') return '#ffffff';
+      return bg;
+    } catch (_) { return '#ffffff'; }
+  }
+  // After painting, sample the canvas: a uniform (single-color) bitmap means
+  // the foreignObject rasterizer painted nothing — Chromium frequently refuses
+  // to paint <foreignObject> HTML loaded via <img>. Treating that as an honest
+  // 'empty-render' error (instead of shipping the background-only frame) lets
+  // the host fall back / surface a real failure rather than a silent black PNG.
+  function canvasLooksBlank(ctx, cw, ch){
+    try {
+      var data = ctx.getImageData(0, 0, cw, ch).data;
+      var step = Math.max(4, Math.floor((cw * ch) / 4096)) * 4;
+      var first = null, samples = 0;
+      for (var i = 0; i + 3 < data.length; i += step){
+        samples++;
+        if (!first){ first = [data[i], data[i+1], data[i+2], data[i+3]]; continue; }
+        if (Math.abs(data[i]-first[0]) > 6 || Math.abs(data[i+1]-first[1]) > 6 ||
+            Math.abs(data[i+2]-first[2]) > 6 || Math.abs(data[i+3]-first[3]) > 6) return false;
+      }
+      return samples > 8;
+    } catch (_) { return false; }
+  }
+  // Rasterize the current view (or the whole document, when opts.full) via an
+  // SVG <foreignObject>. Returns a Promise so it can be reused by both the
+  // od:snapshot message handler AND the export-capture bridge (image export /
+  // PDF) — the foreignObject path is fast and never blocks on external
+  // image network loads the way a DOM-cloning rasterizer does.
+  function captureSnapshot(opts){
+    opts = opts || {};
+    return new Promise(function(resolve, reject){
+      var w = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 1);
+      var h = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 1);
+      var dpr = window.devicePixelRatio || 1;
+      var bgColor = snapshotBackgroundColor();
+      var docW = Math.max(w, document.documentElement.scrollWidth || 0, document.body ? document.body.scrollWidth : 0);
+      var docH = Math.max(h, document.documentElement.scrollHeight || 0, document.body ? document.body.scrollHeight : 0);
+      var full = !!opts.full;
+      var capW = full ? docW : w;
+      var capH = full ? docH : h;
+      var clone = document.documentElement.cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+      inlineSnapshotStyles(document.documentElement, clone);
+      pruneHiddenSnapshotNodes(document.documentElement, clone);
+      var scroll = full ? { x: 0, y: 0 } : scrollOffset();
+      var cloneBody = clone.querySelector('body');
+      var rootStyle = clone.getAttribute('style') || '';
+      var bodyStyle = cloneBody ? cloneBody.getAttribute('style') || '' : '';
+      var bodyContent = cloneBody ? cloneBody.innerHTML : clone.innerHTML;
+      var wrapperStyle = rootStyle + bodyStyle +
+        'margin:0;position:relative;left:' + (-scroll.x) + 'px;top:' + (-scroll.y) + 'px;' +
+        'width:' + docW + 'px;height:' + docH + 'px;overflow:visible;';
+      var html = '<div xmlns="http://www.w3.org/1999/xhtml" style="' + escapeAttribute(wrapperStyle) + '">' + bodyContent + '</div>';
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + capW + '" height="' + capH + '" viewBox="0 0 ' + capW + ' ' + capH + '">' +
+        '<foreignObject x="0" y="0" width="' + docW + '" height="' + docH + '">' +
+        html +
+        '</foreignObject></svg>';
+      var img = new Image();
+      img.onload = function(){
+        try {
+          var canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.floor(capW * dpr));
+          canvas.height = Math.max(1, Math.floor(capH * dpr));
+          var ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('no 2d context');
+          ctx.scale(dpr, dpr);
+          // Opaque base so a transparent (un-painted) raster never flattens to
+          // pure black in clipboards / PNG viewers.
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(0, 0, capW, capH);
+          ctx.drawImage(img, 0, 0, capW, capH);
+          if (canvasLooksBlank(ctx, canvas.width, canvas.height)) {
+            reject(new Error('empty-render'));
+            return;
+          }
+          resolve({ dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height });
+        } catch (err) {
+          reject(err instanceof Error ? err : new Error(String(err && err.message || err)));
+        }
+      };
+      img.onerror = function(){ reject(new Error('snapshot image failed')); };
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    });
+  }
+  // Exposed so the export-capture bridge (same document) can reuse this renderer.
+  window.__odCaptureSnapshot = function(opts){
+    return waitForImages().then(function(){ return captureSnapshot(opts || {}); });
+  };
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:snapshot' || !data.id) return;
+    window.__odCaptureSnapshot({ full: !!data.full }).then(function(res){
+      window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), dataUrl: res.dataUrl, w: res.w, h: res.h }, '*');
+    }, function(err){
+      window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), error: String(err && err.message || err) }, '*');
+    });
+  });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+function injectPreviewContentSizeBridge(doc: string, documentEpoch: string): string {
+  const serializedDocumentEpoch = JSON.stringify(documentEpoch).replace(/</g, '\\u003c');
+  const script = `<script data-od-preview-content-size-bridge>(function(){
+  if (window.__odPreviewContentSizeBridge) return;
+  window.__odPreviewContentSizeBridge = true;
+  var pending = false;
+  var lastRequest = null;
+  var documentEpoch = ${serializedDocumentEpoch};
+  function measure(){
+    var root = document.documentElement;
+    var body = document.body || root;
+    if (!root) return null;
+    var scrollValues = [
+      root.scrollWidth,
+      body && body.scrollWidth,
+    ];
+    var clientValues = [
+      root.clientWidth,
+      body && body.clientWidth
+    ];
+    var scrollWidth = 0;
+    var clientWidth = 0;
+    for (var i = 0; i < scrollValues.length; i += 1) {
+      var nextScroll = Number(scrollValues[i] || 0);
+      if (Number.isFinite(nextScroll) && nextScroll > scrollWidth) scrollWidth = nextScroll;
+    }
+    for (var j = 0; j < clientValues.length; j += 1) {
+      var nextClient = Number(clientValues[j] || 0);
+      if (Number.isFinite(nextClient) && nextClient > clientWidth) clientWidth = nextClient;
+    }
+    return {
+      scrollWidth: scrollWidth > 0 ? Math.ceil(scrollWidth) : null,
+      clientWidth: clientWidth > 0 ? Math.ceil(clientWidth) : null
+    };
+  }
+  function post(){
+    if (!lastRequest) return;
+    var size = measure();
+    try {
+      window.parent.postMessage({
+        type: 'od:preview-content-size',
+        measurementId: lastRequest.measurementId,
+        generation: lastRequest.generation,
+        documentEpoch: documentEpoch,
+        scrollWidth: size && size.scrollWidth,
+        clientWidth: size && size.clientWidth
+      }, '*');
+    } catch (_) {}
+  }
+  function schedule(){
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(function(){
+      pending = false;
+      post();
+    });
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:preview-content-size-request') return;
+    if (typeof data.measurementId !== 'string' || typeof data.generation !== 'string') return;
+    lastRequest = {
+      measurementId: data.measurementId,
+      generation: data.generation
+    };
+    schedule();
+  });
+  window.addEventListener('resize', schedule);
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      var observer = new ResizeObserver(schedule);
+      observer.observe(document.documentElement);
+      if (document.body) observer.observe(document.body);
+    } catch (_) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', schedule);
+  } else {
+    setTimeout(schedule, 0);
+  }
+  setTimeout(schedule, 80);
+  setTimeout(schedule, 260);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(schedule).catch(function(){});
+  }
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+// Export-capture bridge: the in-iframe half of the programmatic PDF /
+// image exporters (apps/web/src/runtime/exports.ts). The preview iframe is
+// sandbox="allow-scripts" WITHOUT allow-same-origin, so the host cannot read
+// iframe.contentDocument — capture must run inside the frame, exactly like the
+// snapshot bridge above. The orchestrator (host) creates a hidden, full-
+// resolution export iframe, posts `od:export-capture`, and assembles the
+// returned per-slide images with jsPDF.
+//
+// Protocol:
+//   in:  { type:'od:export-capture', id, mode:'image', deck:boolean,
+//          single?:boolean, delay:number }
+//   out: { type:'od:export-capture:slide', id, index, total,
+//          dataUrl, w, h, notes }   (one per slide)
+//   out: { type:'od:export-capture:done',  id, total }
+//   out: { type:'od:export-capture:error', id, error }
+//
+// Slides are enumerated/navigated through the existing deck bridge
+// (window.__odDeckSlideState + an `od:slide` self-postMessage), so any deck the
+// on-screen preview can drive, the exporter can too. Image capture reuses the
+// shared SVG-foreignObject renderer (window.__odCaptureSnapshot from the
+// snapshot bridge) — fast and free of any external script load or network wait.
+function injectExportCaptureBridge(doc: string): string {
+  const script = `<script data-od-export-capture-bridge>(function(){
+  function raf(){ return new Promise(function(r){ requestAnimationFrame(function(){ r(); }); }); }
+  function settle(){
+    var fonts = (document.fonts && document.fonts.ready) ? document.fonts.ready.catch(function(){}) : Promise.resolve();
+    var imgs = Promise.all(Array.prototype.slice.call(document.images||[]).map(function(img){
+      if (img.complete) return Promise.resolve();
+      return new Promise(function(r){ img.addEventListener('load', r, {once:true}); img.addEventListener('error', r, {once:true}); });
+    }));
+    return Promise.all([fonts, imgs]).then(raf).then(raf);
+  }
+  function deckState(){
+    try { if (typeof window.__odDeckSlideState === 'function') return window.__odDeckSlideState(); } catch(_){}
+    return { active: 0, count: 1 };
+  }
+  function navTo(index, delay){
+    return new Promise(function(resolve){
+      try { window.postMessage({ type:'od:slide', action:'go', index: index }, '*'); } catch(_){}
+      var tries = 0;
+      function check(){
+        tries++;
+        if (deckState().active === index || tries > 14) { resolve(); return; }
+        setTimeout(check, 80);
+      }
+      setTimeout(check, Math.max(60, delay||0));
+    });
+  }
+  function captureImage(deck){
+    // Reuse the shared SVG-foreignObject renderer (injectSnapshotBridge). For a
+    // deck the active slide fills the viewport, so a viewport capture IS the
+    // slide; a non-deck page captures the full document.
+    if (typeof window.__odCaptureSnapshot !== 'function') {
+      return Promise.reject(new Error('snapshot renderer unavailable'));
+    }
+    return window.__odCaptureSnapshot({ full: !deck });
+  }
+  function notes(){
+    var el = document.getElementById('speaker-notes');
+    if (el) {
+      var t = el.textContent || '';
+      try { var j = JSON.parse(t); if (Array.isArray(j)) return j; } catch(_){}
+      var plain = t.replace(/\\s+/g,' ').trim();
+      if (plain) return plain;
+    }
+    var list = [];
+    // Match every .slide in document order — per-slide notes must line up
+    // 1:1 with the slide list regardless of the deck's container nesting.
+    var slideNodes = document.querySelectorAll('.slide');
+    for (var i = 0; i < slideNodes.length; i++) {
+      var noteEl = slideNodes[i].querySelector('.notes');
+      list.push(noteEl ? (noteEl.textContent || '').replace(/\\s+/g, ' ').trim() : '');
+    }
+    return list.length ? list : '';
+  }
+  function send(msg){ try { window.parent.postMessage(msg, '*'); } catch(_){} }
+  function run(req){
+    var id = req.id;
+    var deck = !!req.deck;
+    var single = !!req.single;
+    var delay = req.delay || 350;
+    Promise.resolve().then(function(){
+      var st = deckState();
+      var total = (!single && deck && st.count > 1) ? st.count : 1;
+      var notesAll = notes();
+      function noteFor(i){ return Array.isArray(notesAll) ? (notesAll[i]||'') : (i===0 ? notesAll : ''); }
+      var idx = 0;
+      function step(){
+        if (idx >= total){ send({ type:'od:export-capture:done', id:id, total: total }); return; }
+        var i = idx;
+        var navP = (!single && deck && total > 1) ? navTo(i, delay) : Promise.resolve();
+        navP.then(settle).then(function(){
+          try {
+            captureImage(deck).then(function(img){
+              send({ type:'od:export-capture:slide', id:id, index:i, total:total, dataUrl: img.dataUrl, w: img.w, h: img.h, notes: noteFor(i) });
+              idx++; setTimeout(step, 0);
+            }).catch(function(err){ send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) }); });
+          } catch(err){ send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) }); }
+        });
+      }
+      step();
+    }).catch(function(err){
+      send({ type:'od:export-capture:error', id:id, error: String(err && err.message || err) });
+    });
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:export-capture' || !data.id) return;
+    run(data);
+  });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+// Palette bridge: re-skin the page on host postMessage. Generated pages
+// hard-code multiple shades of one accent and a CSS-variable swap will
+// not catch them. We walk the DOM and shift any chromatic paint to the
+// target palette's hue while keeping each color's saturation and
+// lightness — pale tints stay pale, bold CTAs stay bold, just in the
+// new color family. Mono-noir desaturates instead of shifting.
+function injectPaletteBridge(
+  doc: string,
+  options: { initialPalette: string | null } = { initialPalette: null },
+): string {
+  const initial = options.initialPalette
+    ? JSON.stringify(String(options.initialPalette))
+    : 'null';
+  const script = `<script data-od-palette-bridge>(function(){
+  var PALETTES = {
+    'coral':       { hue: 10,  satFloor: 0.55, mono: false },
+    'electric':    { hue: 262, satFloor: 0.55, mono: false },
+    'acid-forest': { hue: 142, satFloor: 0.55, mono: false },
+    'risograph':   { hue: 349, satFloor: 0.60, mono: false },
+    'mono-noir':   { hue: 0,   satFloor: 0,    mono: true  }
+  };
+  var current = ${initial};
+  var ATTR = 'data-od-palette-fix';
+  var SAVED = '__odPaletteSaved__';
+  var MIN_SAT = 0.08;
+  var WALK_LIMIT = 12000;
+  var STYLE_RULE_LIMIT = 5000;
+  var ROOT_SELECTOR = /(^|,)\\s*(:root|html|body|:host)\\s*($|,)/;
+  var varApplied = Object.create(null);
+  var probeEl = null;
+  function parseRgb(s){
+    var str = String(s||'').trim();
+    if (!str || str === 'transparent' || str === 'none') return null;
+    var m = str.match(/rgba?\\(([^)]+)\\)/);
+    if (!m) return null;
+    var p = m[1].split(/[\\s,/]+/).filter(Boolean).map(function(x){ return parseFloat(x); });
+    if (p.length < 3) return null;
+    return { r: p[0]||0, g: p[1]||0, b: p[2]||0, a: p[3] == null ? 1 : p[3] };
+  }
+  function rgbToHsl(r,g,b){
+    r/=255; g/=255; b/=255;
+    var max=Math.max(r,g,b), min=Math.min(r,g,b);
+    var h=0, s=0, l=(max+min)/2;
+    if (max!==min){
+      var d=max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      if (max===r) h=(g-b)/d + (g<b?6:0);
+      else if (max===g) h=(b-r)/d + 2;
+      else h=(r-g)/d + 4;
+      h *= 60;
+    }
+    return {h:h, s:s, l:l};
+  }
+  function h2rgb(p,q,t){
+    if (t<0) t+=1;
+    if (t>1) t-=1;
+    if (t<1/6) return p+(q-p)*6*t;
+    if (t<1/2) return q;
+    if (t<2/3) return p+(q-p)*(2/3-t)*6;
+    return p;
+  }
+  function hslStr(h,s,l){
+    h = ((h%360)+360)%360/360;
+    var r,g,b;
+    if (s===0){ r=g=b=l; }
+    else {
+      var q = l<0.5 ? l*(1+s) : l+s-l*s;
+      var p = 2*l-q;
+      r=h2rgb(p,q,h+1/3); g=h2rgb(p,q,h); b=h2rgb(p,q,h-1/3);
+    }
+    return 'rgb('+Math.round(r*255)+','+Math.round(g*255)+','+Math.round(b*255)+')';
+  }
+  function chromatic(c){
+    if (!c || c.a < 0.3) return null;
+    var hsl = rgbToHsl(c.r,c.g,c.b);
+    if (hsl.s < MIN_SAT) return null;
+    if (hsl.l < 0.04 || hsl.l > 0.98) return null;
+    return hsl;
+  }
+  function shift(hsl, palette){
+    if (palette.mono) return hslStr(0, 0, hsl.l);
+    var sat = Math.max(hsl.s, palette.satFloor * 0.7);
+    return hslStr(palette.hue, sat, hsl.l);
+  }
+  function normalizeColor(value){
+    var raw = String(value||'').trim();
+    if (!raw) return null;
+    var direct = parseRgb(raw);
+    if (direct) return direct;
+    if (raw.indexOf('var(') === 0 || raw.indexOf('--') === 0) return null;
+    if (!probeEl){
+      probeEl = document.createElement('div');
+      probeEl.style.display = 'none';
+      (document.body || document.documentElement).appendChild(probeEl);
+    }
+    probeEl.style.color = '';
+    try { probeEl.style.color = raw; } catch (_){ return null; }
+    if (!probeEl.style.color) return null;
+    return parseRgb(probeEl.style.color);
+  }
+  function isRootSelector(selector){
+    return !!selector && ROOT_SELECTOR.test(String(selector));
+  }
+  function forEachStyleRule(rules, visit, budget){
+    if (!rules || !budget.left) return;
+    for (var i=0; i<rules.length && budget.left>0; i++){
+      var rule = rules[i];
+      budget.left--;
+      if (rule.selectorText && rule.style && isRootSelector(rule.selectorText)) visit(rule);
+      if (rule.cssRules && rule.cssRules.length) forEachStyleRule(rule.cssRules, visit, budget);
+    }
+  }
+  function applyVarTint(palette){
+    var sheets = document.styleSheets;
+    if (!sheets || !sheets.length) return;
+    var budget = { left: STYLE_RULE_LIMIT };
+    for (var i=0; i<sheets.length; i++){
+      var sheet = sheets[i];
+      var rules = null;
+      try { rules = sheet.cssRules; } catch (_){ continue; }
+      forEachStyleRule(rules, function(rule){
+        var decl = rule.style;
+        for (var j=0; j<decl.length; j++){
+          var name = decl[j];
+          if (name.indexOf('--') !== 0) continue;
+          var raw = decl.getPropertyValue(name);
+          var color = normalizeColor(raw);
+          var hsl = chromatic(color);
+          if (!hsl) continue;
+          document.documentElement.style.setProperty(name, shift(hsl, palette));
+          varApplied[name] = true;
+        }
+      }, budget);
+    }
+  }
+  function restoreVars(){
+    for (var name in varApplied){
+      document.documentElement.style.setProperty(name, '');
+    }
+    varApplied = Object.create(null);
+  }
+  function restoreAll(){
+    restoreVars();
+    var nodes = document.querySelectorAll('['+ATTR+']');
+    for (var i=0;i<nodes.length;i++){
+      var el = nodes[i], saved = el[SAVED];
+      if (saved){
+        if ('bg' in saved) el.style.backgroundColor = saved.bg;
+        if ('color' in saved) el.style.color = saved.color;
+        if ('border' in saved) el.style.borderColor = saved.border;
+        if ('fill' in saved){ if (saved.fill) el.setAttribute('fill', saved.fill); else el.removeAttribute('fill'); }
+        if ('stroke' in saved){ if (saved.stroke) el.setAttribute('stroke', saved.stroke); else el.removeAttribute('stroke'); }
+      }
+      el.removeAttribute(ATTR);
+      delete el[SAVED];
+    }
+  }
+  function applyTint(id){
+    var palette = PALETTES[id];
+    if (!palette) return;
+    applyVarTint(palette);
+    var all = document.body ? document.body.querySelectorAll('*') : [];
+    for (var i=0; i<all.length && i<WALK_LIMIT; i++){
+      var el = all[i], cs = getComputedStyle(el), saved = {}, changed = false;
+      var bg = chromatic(parseRgb(cs.backgroundColor));
+      if (bg){ saved.bg = el.style.backgroundColor; el.style.setProperty('background-color', shift(bg, palette), 'important'); changed = true; }
+      var fg = chromatic(parseRgb(cs.color));
+      if (fg){ saved.color = el.style.color; el.style.setProperty('color', shift(fg, palette), 'important'); changed = true; }
+      var bd = chromatic(parseRgb(cs.borderTopColor));
+      if (bd){ saved.border = el.style.borderColor; el.style.setProperty('border-color', shift(bd, palette), 'important'); changed = true; }
+      var fillAttr = el.getAttribute && el.getAttribute('fill');
+      if (fillAttr){
+        var f = chromatic(parseRgb(cs.fill));
+        if (f){ saved.fill = fillAttr; el.setAttribute('fill', shift(f, palette)); changed = true; }
+      }
+      var strokeAttr = el.getAttribute && el.getAttribute('stroke');
+      if (strokeAttr){
+        var sk = chromatic(parseRgb(cs.stroke));
+        if (sk){ saved.stroke = strokeAttr; el.setAttribute('stroke', shift(sk, palette)); changed = true; }
+      }
+      if (changed){ el[SAVED] = saved; el.setAttribute(ATTR, '1'); }
+    }
+  }
+  function apply(id){
+    restoreAll();
+    if (!id || !PALETTES[id]){ current = null; return; }
+    current = id;
+    applyTint(id);
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:palette') return;
+    apply(data.palette ? String(data.palette) : null);
+  });
+  function boot(){ if (current) apply(current); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+function annotateManualEditSourcePaths(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  try {
+    const parsed = new DOMParser().parseFromString(doc, 'text/html');
+    parsed.body.querySelectorAll(MANUAL_EDIT_DISCOVERY_SELECTOR).forEach((el) => {
+      if (el.hasAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR)) return;
+      const path = sourcePathForElement(el);
+      if (path) el.setAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR, path);
+    });
+    return serializeHtmlDocument(parsed);
+  } catch {
+    return doc;
+  }
+}
+
+function sourcePathForElement(el: Element): string {
+  const parts: number[] = [];
+  let node: Element | null = el;
+  while (node && node !== node.ownerDocument.body) {
+    const parent: Element | null = node.parentElement;
+    if (!parent) break;
+    parts.unshift(Array.prototype.indexOf.call(parent.children, node));
+    node = parent;
+  }
+  return parts.length ? `path-${parts.join('-')}` : '';
+}
+
+function serializeHtmlDocument(doc: Document): string {
+  const doctype = doc.doctype ? '<!doctype html>\n' : '';
+  return `${doctype}${doc.documentElement.outerHTML}`;
+}
+
+/**
+ * Auto-annotate structural HTML elements that lack `data-od-id` or
+ * `data-screen-label` so that the selection bridge (Picker / Pods /
+ * Tweaks) can target them. This fixes imported designs whose HTML was
+ * generated outside of OpenDesign and therefore carries no OD-specific
+ * annotations.
+ */
+function annotateMissingOdIds(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  try {
+    const parsed = new DOMParser().parseFromString(doc, 'text/html');
+    // Only target divs that are direct children of semantic containers or body;
+    // deeply nested layout divs (e.g. flex/grid wrappers) create noise in the
+    // selection bridge without adding meaningful pickable targets.
+    const selector = [
+      'section', 'article', 'header', 'footer', 'nav', 'main', 'aside',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'button', 'a', '[id]',
+      'body > div[class]', 'body > div[id]',
+      'section > div[class]', 'section > div[id]',
+      'article > div[class]', 'article > div[id]',
+      'main > div[class]', 'main > div[id]',
+      'header > div[class]', 'header > div[id]',
+      'footer > div[class]', 'footer > div[id]',
+      'nav > div[class]', 'nav > div[id]',
+      'aside > div[class]', 'aside > div[id]',
+      '[id] > div[class]', '[id] > div[id]',
+    ].join(', ');
+    const skipTags = new Set(['script', 'style', 'template', 'noscript', 'iframe', 'object', 'embed']);
+    let fallbackIndex = 0;
+    parsed.body.querySelectorAll(selector).forEach((el) => {
+      if (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label')) return;
+      const tag = el.tagName.toLowerCase();
+      if (skipTags.has(tag)) return;
+      const path = sourcePathForElement(el);
+      el.setAttribute('data-od-id', path || `od-${tag}-${fallbackIndex++}`);
+    });
+    return serializeHtmlDocument(parsed);
+  } catch {
+    return doc;
+  }
+}
+
+function injectManualEditBridge(doc: string): string {
+  const withGuard = injectAfterHeadOpen(doc, buildManualEditKeyboardGuard());
+  const withStyle = injectBeforeHeadEnd(withGuard, buildManualEditBridgeStyle());
+  return injectBeforeBodyEnd(withStyle, buildManualEditBridge(false));
+}
+
+const DEFERRED_FONT_STYLESHEET_ATTR = 'data-od-deferred-font-stylesheet';
+
+function deferTrustedFontStylesheets(doc: string): string {
+  if (typeof DOMParser === 'undefined') return doc;
+  let parsed: Document;
+  try {
+    parsed = new DOMParser().parseFromString(doc, 'text/html');
+  } catch {
+    return doc;
+  }
+
+  let deferred = false;
+  parsed.querySelectorAll<HTMLLinkElement>('link[rel~="stylesheet"][href]').forEach((link) => {
+    const href = link.getAttribute('href') ?? '';
+    if (!isApprovedFontStylesheetHref(href)) return;
+    const authoredMedia = link.getAttribute('media')?.trim() ?? '';
+    if (authoredMedia.toLowerCase() === 'print') return;
+    link.setAttribute(DEFERRED_FONT_STYLESHEET_ATTR, authoredMedia);
+    link.setAttribute('media', 'print');
+    deferred = true;
+  });
+  if (!deferred) return doc;
+
+  const script = `<script data-od-font-stylesheet-loader>(function(){
+  var attr = '${DEFERRED_FONT_STYLESHEET_ATTR}';
+  var selector = 'link[' + attr + ']';
+  function activate(link){
+    if (!link || !link.hasAttribute(attr)) return;
+    var media = link.getAttribute(attr) || 'all';
+    link.setAttribute('media', media);
+    link.removeAttribute(attr);
+  }
+  function watch(link){
+    if (!link || link.__odFontStylesheetWatched) return;
+    link.__odFontStylesheetWatched = true;
+    link.addEventListener('load', function(){ activate(link); }, { once: true });
+    try { if (link.sheet) activate(link); } catch (_) {}
+  }
+  function scan(root){
+    if (!root) return;
+    if (root.matches && root.matches(selector)) watch(root);
+    var links = root.querySelectorAll ? root.querySelectorAll(selector) : [];
+    for (var i = 0; i < links.length; i += 1) watch(links[i]);
+  }
+  var observer = typeof MutationObserver === 'function' ? new MutationObserver(function(records){
+    for (var i = 0; i < records.length; i += 1) {
+      var added = records[i].addedNodes || [];
+      for (var j = 0; j < added.length; j += 1) scan(added[j]);
+    }
+  }) : null;
+  if (observer && document.documentElement) observer.observe(document.documentElement, { childList: true, subtree: true });
+  scan(document);
+})();</script>`;
+  return injectAfterHeadOpen(serializeHtmlDocument(parsed), script);
+}
+
+/** Install a bridge before any authored script at the earliest real document boundary. */
+function injectAtDocumentStart(doc: string, payload: string): string {
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
+  const bodyEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.bodyOpen);
+  if (bodyEnd >= 0) return doc.slice(0, bodyEnd) + payload + doc.slice(bodyEnd);
+  return payload + doc;
+}
+
+function injectAfterHeadOpen(doc: string, payload: string): string {
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
+  return payload + doc;
+}
+
+function injectBeforeHeadEnd(doc: string, payload: string): string {
+  // String-first: a plain splice before the real </head> (or after <head…>) is
+  // correct for well-formed documents and avoids a full DOMParser parse +
+  // re-serialize. Every bridge calls this, so the parse path was the dominant
+  // srcdoc-build cost; DOMParser is now only the fallback for head-less
+  // fragments where we can't locate an insertion point textually. Find the real
+  // </head> (last one before <body>) to skip </head> literals in <script>/<style>.
+  const idx = findRealTagOffset(doc, HTML_TAG_PATTERNS.headClose);
+  if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + payload + doc.slice(headEnd);
+  // No recognizable <head>: let DOMParser normalize (it synthesizes a head).
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.head) parsed.head.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* fall through to prepend */ }
+  }
+  return payload + doc;
+}
+
+function injectBeforeBodyEnd(doc: string, payload: string): string {
+  // String-first (see injectBeforeHeadEnd). Find the real </body> (last one
+  // before </html>) to skip </body> literals inside <script>/<style>.
+  const idx = findRealTagOffset(doc, HTML_TAG_PATTERNS.bodyClose);
+  if (idx >= 0) return doc.slice(0, idx) + payload + doc.slice(idx);
+  // No recognizable </body>: let DOMParser normalize (it synthesizes a body).
+  if (typeof DOMParser !== 'undefined') {
+    try {
+      const parsed = new DOMParser().parseFromString(doc, 'text/html');
+      if (parsed.body) parsed.body.insertAdjacentHTML('beforeend', payload);
+      return serializeHtmlDocument(parsed);
+    } catch { /* fall through to append */ }
+  }
+  return doc + payload;
+}
+
+export function htmlHasAuthoredBase(doc: string): boolean {
+  return findRealTagOffset(doc, HTML_TAG_PATTERNS.baseOpen) >= 0;
+}
+
+function injectBaseHref(doc: string, baseHref: string): string {
+  if (htmlHasAuthoredBase(doc)) return doc;
+  const safeHref = escapeAttr(baseHref);
+  const tag = `<base href="${safeHref}" data-od-project-preview-base>`;
+  const headEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.headOpen);
+  if (headEnd >= 0) return doc.slice(0, headEnd) + tag + doc.slice(headEnd);
+  const htmlEnd = findRealTagEnd(doc, HTML_TAG_PATTERNS.htmlOpen);
+  if (htmlEnd >= 0) return `${doc.slice(0, htmlEnd)}<head>${tag}</head>${doc.slice(htmlEnd)}`;
+  return tag + doc;
+}
+
+function injectPreviewBaseHrefBridge(doc: string): string {
+  return injectAfterHeadOpen(doc, buildPreviewBaseHrefBridge());
+}
+
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Sandboxed iframes (we use `sandbox="allow-scripts"`) without
+// `allow-same-origin` raise a SecurityError on first `localStorage` /
+// `sessionStorage` access. Many freeform-generated decks call
+// `localStorage.getItem(...)` at the top of their IIFE without a
+// try/catch — when it throws, the whole script aborts and the deck
+// becomes a static, unnavigable preview. We install a same-origin
+// in-memory shim BEFORE any user script runs so those decks degrade
+// gracefully (position just doesn't persist across reloads).
+// allow-popups and allow-popups-to-escape-sandbox are needed for
+// links with target="_blank" to work in the sandboxed preview.
+// Empty hrefs and hash only hrefs will be intercepted and ignored.
+// hrefs leading to an id on the page will be scrolled into view.
+function injectSandboxShim(doc: string): string {
+  const shim = `<script data-od-sandbox-shim>(function(){
+  function makeStore(){
+    var data = {};
+    var api = {
+      getItem: function(k){ return Object.prototype.hasOwnProperty.call(data, k) ? data[k] : null; },
+      setItem: function(k, v){ data[k] = String(v); },
+      removeItem: function(k){ delete data[k]; },
+      clear: function(){ data = {}; },
+      key: function(i){ return Object.keys(data)[i] || null; }
+    };
+    Object.defineProperty(api, 'length', { get: function(){ return Object.keys(data).length; } });
+    return api;
+  }
+  function tryShim(name){
+    var works = false;
+    try { works = !!window[name] && typeof window[name].getItem === 'function'; void window[name].length; }
+    catch (_) { works = false; }
+    if (works) return;
+    try { Object.defineProperty(window, name, { configurable: true, value: makeStore() }); }
+    catch (_) { try { window[name] = makeStore(); } catch (__) {} }
+  }
+  tryShim('localStorage');
+  tryShim('sessionStorage');
+  // A <base href> pointing at the artifact's real /raw/ URL (injectBaseHref,
+  // below) is what lets relative asset paths resolve inside this opaque
+  // srcDoc document. That same base is what breaks history.pushState /
+  // replaceState: a bare-hash call like replaceState(null, '', '#/3') — the
+  // exact pattern generated decks use for their own slide routing — resolves
+  // against the <base> into a real http(s) URL, and the browser throws
+  // SecurityError because the DOCUMENT's own origin is the opaque "null" of
+  // about:srcdoc, which can never match a concrete origin. A deck whose own
+  // navigation function calls replaceState before it finishes updating the
+  // slide DOM (ordering varies by generated template) aborts mid-navigation
+  // on that throw, leaving the main canvas blank until a manual reload —
+  // the thumbnail rail is unaffected because it does not run the deck's
+  // script per-thumbnail. Wrap both methods so that failure degrades to a
+  // no-op instead of interrupting the caller: the iframe's address bar was
+  // never visible to the user anyway, so losing the hash update here is
+  // invisible.
+  function shimHistoryMethod(name){
+    try {
+      var h = window.history;
+      var original = h && h[name];
+      if (typeof original !== 'function') return;
+      h[name] = function(state, title, url){
+        try {
+          return original.call(h, state, title, url);
+        } catch (_) {
+          return undefined;
+        }
+      };
+    } catch (_) {}
+  }
+  shimHistoryMethod('pushState');
+  shimHistoryMethod('replaceState');
+  document.addEventListener('click', (e) => {
+    if (!e.target || !(e.target instanceof Element)) return;
+    var link = e.target.closest('a[href]');
+    if (!link) return;
+    var href = link.getAttribute('href');
+    if (href === null) return;
+    var isAnchor = href.startsWith('#') || href === '';
+    if (isAnchor) {
+      e.preventDefault();
+      if (href === '' || href === '#') {
+        window.scrollTo({ top: 0 });
+        history.replaceState(null, '', ' ');
+      } else {
+        var targetId = href.slice(1);
+        var target = targetId ? document.getElementById(targetId) : null;
+        if (target) {
+          target.scrollIntoView();
+          location.hash === href && history.replaceState(null, '', ' ');
+          location.hash = href;
+        }
+      }
+    } else if (link.getAttribute('target') === '_blank') {
+      e.preventDefault();
+      let safe = false;
+      try {
+        var url = new URL(href, location.href);
+        safe =
+          url.protocol === 'http:' ||
+          url.protocol === 'https:' ||
+          url.protocol === 'mailto:';
+      } catch (_) {}
+      safe && window.open(href, '_blank', 'noopener,noreferrer');
+    }
+  });
+})();</script>`;
+  return injectAtDocumentStart(doc, shim);
+}
+
+function injectPreviewFocusGuard(doc: string): string {
+  const script = `<script data-od-preview-focus-guard>(function(){
+  var lastTrustedInputAt = 0;
+  function userActivated(){
+    return Date.now() - lastTrustedInputAt < 1000;
+  }
+  function markTrustedInput(event){
+    if (event && event.isTrusted) lastTrustedInputAt = Date.now();
+  }
+  document.addEventListener('pointerdown', function(event){
+    markTrustedInput(event);
+  }, true);
+  document.addEventListener('keydown', function(event){
+    markTrustedInput(event);
+  }, true);
+  try {
+    var nativeWindowFocus = window.focus && window.focus.bind(window);
+    Object.defineProperty(window, 'focus', {
+      configurable: true,
+      writable: true,
+      value: function(){
+        if (userActivated() && nativeWindowFocus) return nativeWindowFocus();
+      }
+    });
+  } catch (_) {}
+  try {
+    var nativeElementFocus = HTMLElement.prototype.focus;
+    Object.defineProperty(HTMLElement.prototype, 'focus', {
+      configurable: true,
+      writable: true,
+      value: function(options){
+        if (userActivated()) return nativeElementFocus.call(this, options);
+      }
+    });
+  } catch (_) {}
+})();</script>`;
+  return injectAtDocumentStart(doc, script);
+}
+
+// In-iframe redirect-loop circuit breaker. See the "Redirect-loop guard"
+// section near the top of this file for the full rationale. The script mirrors
+// `nextRedirectGuardState` for the hop accounting; both must stay in sync (the
+// constants are interpolated so they never drift). It reads/writes `window.name`
+// because that is the only per-context store that survives the iframe navigating
+// itself, and it runs its check on DOMContentLoaded so the author's `<meta>`
+// tags (parsed after this head script) are already in the DOM.
+function htmlHasLoadTimeLocationNavigation(source: string): boolean {
+  if (/\blocation\s*\.\s*(?:reload|replace|assign)\s*\(/i.test(source)) return true;
+  if (/\blocation\s*\.\s*href\s*=[^=]/i.test(source)) return true;
+  if (/\b(?:window|document|self|top|parent)\s*\.\s*location\s*=[^=]/i.test(source)) return true;
+  return false;
+}
+
+function injectPreviewRedirectGuard(
+  doc: string,
+  opts: { blockLoadTimeScriptRedirect?: boolean } = {},
+): string {
+  const script = `<script data-od-preview-redirect-guard>(function(){
+  var NAME_PREFIX = '__odRedirectGuard=';
+  var MAX_HOPS = ${PREVIEW_REDIRECT_GUARD_MAX_HOPS};
+  var WINDOW_MS = ${PREVIEW_REDIRECT_GUARD_WINDOW_MS};
+  var SELF_MIN_DELAY_MS = ${PREVIEW_REDIRECT_GUARD_SELF_REFRESH_MIN_DELAY_MS};
+  var MESSAGE_TYPE = ${JSON.stringify(PREVIEW_REDIRECT_LOOP_MESSAGE)};
+  var BLOCK_LOAD_TIME_SCRIPT_REDIRECT = ${opts.blockLoadTimeScriptRedirect ? 'true' : 'false'};
+  function nowMs(){ try { return Date.now(); } catch (_) { return 0; } }
+  function readState(){
+    try {
+      var raw = window.name;
+      if (typeof raw === 'string' && raw.indexOf(NAME_PREFIX) === 0) {
+        var parsed = JSON.parse(raw.slice(NAME_PREFIX.length));
+        if (parsed && typeof parsed.hops === 'number' && typeof parsed.windowStart === 'number') return parsed;
+      }
+    } catch (_) {}
+    return null;
+  }
+  function writeState(state){
+    try { window.name = NAME_PREFIX + JSON.stringify({ hops: state.hops, windowStart: state.windowStart }); } catch (_) {}
+  }
+  function clearState(){
+    try { if (typeof window.name === 'string' && window.name.indexOf(NAME_PREFIX) === 0) window.name = ''; } catch (_) {}
+  }
+  function nextState(){
+    var t = nowMs();
+    var prev = readState();
+    var withinWindow = prev && (t - prev.windowStart) <= WINDOW_MS;
+    return { hops: (withinWindow ? prev.hops : 0) + 1, windowStart: withinWindow ? prev.windowStart : t };
+  }
+  function scheduleCandidateReset(state){
+    try {
+      if (typeof setTimeout !== 'function') return;
+      setTimeout(function(){
+        try {
+          var current = readState();
+          if (current && current.hops === state.hops && current.windowStart === state.windowStart) clearState();
+        } catch (_) {}
+      }, WINDOW_MS + 1);
+    } catch (_) {}
+  }
+  function recordScriptRedirectCandidate(){
+    if (!BLOCK_LOAD_TIME_SCRIPT_REDIRECT) return;
+    var state = nextState();
+    if (state.hops > MAX_HOPS) {
+      clearState();
+      report(state.hops);
+      return;
+    }
+    writeState(state);
+    scheduleCandidateReset(state);
+  }
+  function metaRefreshes(){
+    var out = [];
+    try {
+      var metas = document.getElementsByTagName('meta');
+      for (var i = 0; i < metas.length; i++) {
+        var equiv = metas[i].getAttribute ? metas[i].getAttribute('http-equiv') : null;
+        if (equiv && String(equiv).toLowerCase() === 'refresh') out.push(metas[i]);
+      }
+    } catch (_) {}
+    return out;
+  }
+  function parseContent(meta){
+    var content = '';
+    try { content = String(meta.getAttribute('content') || ''); } catch (_) {}
+    var delayMatch = content.match(/^\\s*([0-9]+(?:\\.[0-9]+)?)/);
+    var delayMs = delayMatch ? Math.round(parseFloat(delayMatch[1]) * 1000) : 0;
+    var urlMatch = content.match(/[;,]\\s*url\\s*=\\s*['"]?\\s*([^'"\\s]+)/i);
+    return { delayMs: delayMs, url: urlMatch ? urlMatch[1] : '' };
+  }
+  function currentArtifactHref(){
+    try {
+      var href = String(location.href || '');
+      if (href === 'about:srcdoc') {
+        return String(document.baseURI || href);
+      }
+      return href;
+    } catch (_) {
+      return '';
+    }
+  }
+  function isSelfTarget(url){
+    if (!url) return true; // no url => refresh the current document
+    try {
+      var base = (document.baseURI) || location.href;
+      return new URL(url, base).href === currentArtifactHref();
+    } catch (_) { return false; }
+  }
+  function isFastSrcdocUrlHop(parsed){
+    if (!parsed.url || parsed.delayMs > SELF_MIN_DELAY_MS) return false;
+    try { return String(location.href || '') === 'about:srcdoc'; } catch (_) { return false; }
+  }
+  function neutralize(metas){
+    for (var i = 0; i < metas.length; i++) {
+      try { metas[i].parentNode && metas[i].parentNode.removeChild(metas[i]); } catch (_) {}
+    }
+    try { if (window.stop) window.stop(); } catch (_) {}
+  }
+  function report(hops){
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: MESSAGE_TYPE, hops: hops }, '*');
+      }
+    } catch (_) {}
+  }
+  function evaluate(){
+    var metas = metaRefreshes();
+    if (!metas.length) {
+      // No refresh directive: this document breaks any accumulating chain.
+      if (!BLOCK_LOAD_TIME_SCRIPT_REDIRECT) clearState();
+      return;
+    }
+    var selfLoop = false;
+    for (var i = 0; i < metas.length; i++) {
+      var parsed = parseContent(metas[i]);
+      if (parsed.delayMs <= SELF_MIN_DELAY_MS && isSelfTarget(parsed.url)) { selfLoop = true; break; }
+      if (isFastSrcdocUrlHop(parsed)) { selfLoop = true; break; }
+    }
+    var state = nextState();
+    if (selfLoop || state.hops > MAX_HOPS) {
+      neutralize(metas);
+      clearState();
+      report(state.hops);
+      return;
+    }
+    writeState(state);
+  }
+  recordScriptRedirectCandidate();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', evaluate);
+  } else {
+    evaluate();
+  }
+})();</script>`;
+  return injectAtDocumentStart(doc, script);
+}
+
+// Selection bridge: shared substrate for Comment mode and Inspect mode.
+// Both modes pick a [data-od-id] / [data-screen-label] element on click;
+// the difference is what the host does with the selection — annotate
+// (Comment) or live-tune basic styles (Inspect).
+//
+// Inspect adds four messages on top of the comment protocol:
+//   in:  { type: 'od:inspect-set', elementId, selector, prop, value }
+//        Apply (or unset, when value === '') a per-element CSS override.
+//   in:  { type: 'od:inspect-reset', elementId? } Clear overrides for one
+//        element, or all if elementId is omitted.
+//   in:  { type: 'od:inspect-extract' } Reply with the cumulative
+//        override map so the host can persist to source.
+//   in:  { type: 'od:inspect-replay', overrides } Replace the in-memory
+//        override map with the host's authoritative set so the iframe
+//        preview matches host state after every srcdoc rebuild. Without
+//        this the bridge re-hydrates only the persisted <style> block on
+//        load, so any unsaved edit the host still holds disappears from
+//        the preview while saveInspectToSource() can later commit CSS the
+//        user is no longer seeing. Re-validates every entry under the
+//        same allow-list / value sanitizer applied to od:inspect-set.
+//   out: { type: 'od:inspect-overrides', overrides } The current snapshot,
+//        sent in reply to extract and after every set/reset/replay. The
+//        host re-derives the persisted CSS body from the structured map
+//        under its own allow-list — the bridge's own stylesheet text is
+//        NOT included in this message because artifact JS can forge a
+//        same-source od:inspect-overrides containing a hostile `css`.
+//
+// Overrides are written into a single <style data-od-inspect-overrides>
+// block in <head>, with `!important` on every property so the bridge
+// can defeat author inline styles (common in agent-generated HTML).
+//
+// Security: this bridge runs inside a sandboxed iframe but still shares the
+// host page context for the override <style> element. The message listener
+// does NOT validate ev.origin — the web app runs on configurable ports and
+// preview domains, so the host origin is not stable. The bridge therefore
+// trusts any parent that can postMessage to it and relies on iframe
+// sandboxing + the prop allow-list / value sanitization below to contain
+// damage. Any parent able to postMessage here can already mount the iframe.
+function injectSelectionBridge(
+  doc: string,
+  options: {
+    initialCommentMode?: boolean;
+    initialInspectMode?: boolean;
+    runtimeStateGeneration?: string;
+  } = {},
+): string {
+  const initialComment = options.initialCommentMode ? 'true' : 'false';
+  const initialInspect = options.initialInspectMode ? 'true' : 'false';
+  const runtimeStateGeneration = JSON.stringify(options.runtimeStateGeneration ?? '');
+  const script = `<script data-od-selection-bridge>(function(){
+  var commentEnabled = ${initialComment};
+  var inspectEnabled = ${initialInspect};
+  var runtimeStateGeneration = ${runtimeStateGeneration};
+  // Comment mode has two sub-tools (kept on the host side as boardTool):
+  //   'picker' — click-to-select an element for annotation.
+  //   'pod'    — pointer-drag a freeform stroke that the host turns into a
+  //              pod selection covering whatever the stroke encloses.
+  // Inspect mode always uses 'picker'-style click selection regardless of
+  // this value.
+  var mode = 'picker';
+  var hoveredId = null;
+  var drawing = false;
+  var stroke = [];
+  var strokeFrame = null;
+  var postTargetsTimer = null;
+  // overrides[elementId] = { selector: '[data-od-id="x"]', props: { color: '#fff', ... } }
+  var overrides = Object.create(null);
+  var styleEl = null;
+  // Allow-list of CSS properties the host may override. A malicious parent
+  // could otherwise smuggle arbitrary CSS (or, with </style>, raw HTML)
+  // through od:inspect-set. Keep this in sync with the InspectPanel UI.
+  var ALLOWED_PROPS = {
+    'color': true,
+    'background-color': true,
+    'font-size': true,
+    'font-weight': true,
+    'font-family': true,
+    'line-height': true,
+    'text-align': true,
+    'padding': true,
+    'padding-top': true,
+    'padding-right': true,
+    'padding-bottom': true,
+    'padding-left': true,
+    'border-radius': true
+  };
+  // Reject any value that could break out of a 'prop: value' declaration:
+  // semicolons (extra declarations), braces (close the rule), angle
+  // brackets (close the <style> tag), and newlines (defense in depth).
+  var UNSAFE_VALUE = /[;{}<>\\n\\r]/;
+  function active(){ return commentEnabled || inspectEnabled; }
+  function deckSlideIndexForPayload(){
+    try {
+      var state = window.__odDeckSlideState && window.__odDeckSlideState();
+      if (state && typeof state.active === 'number' && state.count > 1) return state.active;
+    } catch (_) {}
+    return null;
+  }
+  function elementVisibleForComment(el, rect){
+    if (!el || !rect || rect.width <= 0 || rect.height <= 0) return false;
+    try {
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+    } catch (_) {}
+    return true;
+  }
+  function esc(value){ try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); } catch (_) { return String(value); } }
+  // Recompute the selector from elementId rather than trusting the one in
+  // the inbound message — a forged selector like
+  // '} </style><script>...' would otherwise be concatenated into the
+  // override <style> sheet verbatim. The hint string is only inspected to
+  // decide which attribute kind (data-od-id vs data-screen-label) was the
+  // user's pick at click time, so we tune the same node the host
+  // serializer keys off; the hint itself is never written into CSS.
+  function safeSelectorFor(elementId, hint){
+    var id = String(elementId);
+    var kind = null;
+    if (typeof hint === 'string') {
+      if (hint.indexOf('[data-od-id=') === 0) kind = 'data-od-id';
+      else if (hint.indexOf('[data-screen-label=') === 0) kind = 'data-screen-label';
+    }
+    if (kind === 'data-screen-label' && document.querySelector('[data-screen-label="' + esc(id) + '"]')) {
+      return '[data-screen-label="' + esc(id) + '"]';
+    }
+    if (kind === 'data-od-id' && document.querySelector('[data-od-id="' + esc(id) + '"]')) {
+      return '[data-od-id="' + esc(id) + '"]';
+    }
+    if (document.querySelector('[data-od-id="' + esc(id) + '"]')) {
+      return '[data-od-id="' + esc(id) + '"]';
+    }
+    if (document.querySelector('[data-screen-label="' + esc(id) + '"]')) {
+      return '[data-screen-label="' + esc(id) + '"]';
+    }
+    return null;
+  }
+  function ensureStyleEl(){
+    if (styleEl && styleEl.isConnected) return styleEl;
+    styleEl = document.querySelector('style[data-od-inspect-overrides]');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.setAttribute('data-od-inspect-overrides', '');
+      (document.head || document.documentElement).appendChild(styleEl);
+    }
+    return styleEl;
+  }
+  // Hydrate the in-memory override map from any persisted
+  // <style data-od-inspect-overrides> block already in the document.
+  // Without this, the first od:inspect-set rebuilds the sheet from an
+  // empty map and silently drops every previously saved rule for other
+  // elements — a subsequent Save-to-source would then erase them from
+  // the artifact too.
+  function hydrateOverridesFromDom(){
+    var existing = document.querySelector('style[data-od-inspect-overrides]');
+    if (!existing) return;
+    var text = existing.textContent || '';
+    var ruleRe = /(\\[data-(?:od-id|screen-label)="[^"]*"\\])\\s*\\{\\s*([^}]*)\\}/g;
+    var match;
+    while ((match = ruleRe.exec(text)) !== null) {
+      var selector = match[1];
+      var declBody = match[2];
+      var idMatch = selector.match(/="([^"]*)"/);
+      if (!idMatch) continue;
+      var elementId = idMatch[1];
+      var props = Object.create(null);
+      var decls = declBody.split(';');
+      for (var d = 0; d < decls.length; d++) {
+        var raw = decls[d];
+        if (!raw) continue;
+        var colon = raw.indexOf(':');
+        if (colon <= 0) continue;
+        var name = raw.slice(0, colon).trim().toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)) continue;
+        var value = raw.slice(colon + 1).replace(/!important/i, '').trim();
+        if (!value || UNSAFE_VALUE.test(value)) continue;
+        props[name] = value;
+      }
+      if (Object.keys(props).length) {
+        overrides[elementId] = { selector: selector, props: props };
+      }
+    }
+    styleEl = existing;
+  }
+  function rebuildStyleSheet(){
+    var el = ensureStyleEl();
+    var lines = [];
+    Object.keys(overrides).forEach(function(id){
+      var entry = overrides[id];
+      if (!entry) return;
+      var props = entry.props || {};
+      var keys = Object.keys(props);
+      if (!keys.length) return;
+      var body = keys.map(function(k){ return k + ': ' + props[k] + ' !important'; }).join('; ');
+      lines.push(entry.selector + ' { ' + body + ' }');
+    });
+    el.textContent = lines.join('\\n');
+  }
+  function postOverrides(){
+    var clean = {};
+    Object.keys(overrides).forEach(function(id){
+      var entry = overrides[id];
+      if (entry && entry.props && Object.keys(entry.props).length) {
+        clean[id] = { selector: entry.selector, props: Object.assign({}, entry.props) };
+      }
+    });
+    // Intentionally do NOT include a css string here. Artifact code
+    // running inside this iframe shares window.parent and could forge
+    // od:inspect-overrides with a hostile css (e.g. </style><script>...).
+    // The host re-derives CSS from the structured overrides map under
+    // its own allow-list, so any stray css field on the wire would only
+    // be a false-trust trap.
+    try { window.parent.postMessage({ type: 'od:inspect-overrides', overrides: clean }, '*'); } catch (_) {}
+  }
+  function styleSnapshot(el){
+    try {
+      var cs = window.getComputedStyle(el);
+      return {
+        color: cs.color,
+        backgroundColor: cs.backgroundColor,
+        fontSize: cs.fontSize,
+        fontWeight: cs.fontWeight,
+        lineHeight: cs.lineHeight,
+        paddingTop: cs.paddingTop,
+        paddingRight: cs.paddingRight,
+        paddingBottom: cs.paddingBottom,
+        paddingLeft: cs.paddingLeft,
+        borderRadius: cs.borderTopLeftRadius,
+        textAlign: cs.textAlign,
+        fontFamily: cs.fontFamily
+      };
+    } catch (_) { return null; }
+  }
+  function annotatedSelectorFor(el){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (!id) return null;
+    return el.hasAttribute('data-od-id') ? '[data-od-id="' + esc(id) + '"]' : '[data-screen-label="' + esc(id) + '"]';
+  }
+  function domSelectorFor(el){
+    if (!el || !el.tagName || el === document.documentElement || el === document.body) return null;
+    var parts = [];
+    var node = el;
+    while (node && node !== document.documentElement && node !== document.body) {
+      var tag = node.tagName ? node.tagName.toLowerCase() : '';
+      if (!tag || /^(script|style|template|meta|link|title|noscript)$/.test(tag)) return null;
+      var parent = node.parentElement;
+      if (!parent) return null;
+      var index = 1;
+      var sibling = node.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName && sibling.tagName.toLowerCase() === tag) index++;
+        sibling = sibling.previousElementSibling;
+      }
+      parts.unshift(tag + ':nth-of-type(' + index + ')');
+      node = parent;
+    }
+    if (!parts.length) return null;
+    return 'body > ' + parts.join(' > ');
+  }
+  function visibleTarget(el){
+    if (!el || !el.getBoundingClientRect) return false;
+    if (el === document.documentElement || el === document.body) return false;
+    if (/^(script|style|template|meta|link|title|noscript)$/.test(el.tagName ? el.tagName.toLowerCase() : '')) return false;
+    try {
+      var rect = el.getBoundingClientRect();
+      if (rect.width < 1 || rect.height < 1) return false;
+      var cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || cs.pointerEvents === 'none') return false;
+    } catch (_) {
+      return false;
+    }
+    return true;
+  }
+function meaningfulDomFallbackTarget(el) {
+  if (!visibleTarget(el)) return false;
+
+  var tag = el.tagName ? el.tagName.toLowerCase() : '';
+
+  if (/^(a|button|input|textarea|select|label|img|video|canvas|h1|h2|h3|h4|h5|h6|p|li|td|th)$/.test(tag)) {
+    return true;
+  }
+
+  if (
+    el.getAttribute &&
+    (
+      el.getAttribute('role') ||
+      el.getAttribute('aria-label') ||
+      el.getAttribute('title')
+    )
+  ) {
+    return true;
+  }
+
+  if (tag === 'svg') {
+    return !!(
+      el.getAttribute &&
+      (
+        el.getAttribute('role') ||
+        el.getAttribute('aria-label') ||
+        el.getAttribute('title')
+      )
+    );
+  }
+
+  var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+
+  if (/^(span|strong|em|b|i|small|code|mark)$/.test(tag)) return true;
+
+  var meaningfulChildren = 0;
+  for (var child = el.firstElementChild;child;child = child.nextElementSibling) {
+    var childTag = child.tagName ? child.tagName.toLowerCase() : '';
+    if (/^(script|style|template|meta|link|title|noscript)$/.test(childTag)) continue;
+    if ((child.textContent || '').replace(/\s+/g, ' ').trim() || /^(img|video|canvas|svg|input|textarea|select)$/.test(childTag)) {
+      meaningfulChildren++;
+      if (meaningfulChildren > 1) return false;
+    }
+  }
+
+  return true;
+}
+  function generatedRootAnnotation(el, id){
+    return id === 'path-0' && el && el.parentElement === document.body && el.id === 'root';
+  }
+  function targetFrom(el, allowDomFallback, clickedEl, clickPoint){
+    var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+    if (allowDomFallback && id && generatedRootAnnotation(el, id)) return null;
+    var selector = annotatedSelectorFor(el);
+    if (!id && allowDomFallback && meaningfulDomFallbackTarget(el)) {
+      selector = domSelectorFor(el);
+      if (selector) id = 'dom:' + selector;
+    }
+    if (!id || !selector) return null;
+    var rect = el.getBoundingClientRect();
+    var tag = el.tagName ? el.tagName.toLowerCase() : 'element';
+    var cls = typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
+    var html = '';
+    try { html = (el.outerHTML || '').replace(/\\s+/g, ' ').match(/^<[^>]+>/)?.[0] || ''; } catch (_) {}
+    var position = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+    if (!elementVisibleForComment(el, position)) return null;
+    var payload = {
+      type: 'od:comment-target',
+      elementId: id,
+      selector: selector,
+      label: tag + cls,
+      text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 160),
+      position: position,
+      htmlHint: html.slice(0, 180),
+      style: styleSnapshot(el)
+    };
+    var slideIndex = deckSlideIndexForPayload();
+    if (typeof slideIndex === 'number') payload.slideIndex = slideIndex;
+    if (clickPoint) {
+      payload.hoverPoint = { x: Math.round(clickPoint.x), y: Math.round(clickPoint.y) };
+    }
+    if (clickedEl && clickedEl !== el) {
+      var clickedTag = clickedEl.tagName ? clickedEl.tagName.toLowerCase() : 'element';
+      var clickedCls = typeof clickedEl.className === 'string' && clickedEl.className.trim() ? '.' + clickedEl.className.trim().split(/\\s+/).slice(0,2).join('.') : '';
+      payload.clickedDescendant = {
+        label: clickedTag + clickedCls,
+        text: (clickedEl.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80)
+      };
+    }
+    return payload;
+  }
+  function allTargets(){
+    var annotatedNodes = document.querySelectorAll('[data-od-id], [data-screen-label]');
+    var includeDomFallback = canUseDomFallback();
+    var nodes = includeDomFallback
+      ? document.querySelectorAll('body *')
+      : annotatedNodes;
+    var items = [];
+    var seen = Object.create(null);
+    for (var i = 0; i < nodes.length; i++) {
+      var item = targetFrom(nodes[i], includeDomFallback);
+      if (item && !seen[item.elementId]) {
+        seen[item.elementId] = true;
+        items.push(item);
+      }
+    }
+    return items;
+  }
+  var postTargetsPending = false;
+  var postPreviewScrollPending = false;
+  var postActiveTargetPending = false;
+  var activeCommentElementId = null;
+  var activeCommentSelector = null;
+  function previewScrollElement(){
+    return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
+  }
+  function previewScrollBy(left, top){
+    var dx = Number(left || 0);
+    var dy = Number(top || 0);
+    if (!Number.isFinite(dx)) dx = 0;
+    if (!Number.isFinite(dy)) dy = 0;
+    if (!dx && !dy) return;
+    var el = previewScrollElement();
+    if (!el) return;
+    try {
+      if (typeof el.scrollBy === 'function') el.scrollBy({ left: dx, top: dy, behavior: 'auto' });
+      else {
+        el.scrollLeft = (el.scrollLeft || 0) + dx;
+        el.scrollTop = (el.scrollTop || 0) + dy;
+      }
+    } catch (_) {
+      try {
+        el.scrollLeft = (el.scrollLeft || 0) + dx;
+        el.scrollTop = (el.scrollTop || 0) + dy;
+      } catch (__) {}
+    }
+    schedulePostTargets();
+    schedulePostPreviewScroll();
+  }
+  function postPreviewScroll(requestId){
+    var el = previewScrollElement();
+    if (!el) return;
+    var frame = document.scrollingElement || document.documentElement;
+    var payload = {
+      type: 'od:preview-scroll',
+      canvasLeft: Math.round(el.scrollLeft || 0),
+      canvasTop: Math.round(el.scrollTop || 0),
+      frameLeft: Math.round(frame.scrollLeft || 0),
+      frameTop: Math.round(frame.scrollTop || 0)
+    };
+    if (typeof requestId === 'string' && requestId) payload.requestId = requestId;
+    window.parent.postMessage(payload, '*');
+  }
+  function schedulePostPreviewScroll(){
+    if (postPreviewScrollPending) return;
+    postPreviewScrollPending = true;
+    window.requestAnimationFrame(function(){
+      postPreviewScrollPending = false;
+      postPreviewScroll();
+    });
+  }
+  function requestPreviewScrollRestore(){
+    window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
+  }
+  function findCommentTargetByIdentity(elementId, selector){
+    var el = null;
+    if (selector) {
+      try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
+    }
+    if (!el && elementId) {
+      try {
+        var id = String(elementId).replace(/"/g, '\\"');
+        el = document.querySelector('[data-od-id="' + id + '"], [data-screen-label="' + id + '"]');
+      } catch (_) { el = null; }
+    }
+    return el;
+  }
+  function postActiveCommentTarget(){
+    if (!active() || !activeCommentElementId) return;
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    if (!el) return;
+    var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
+    if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
+  }
+  function schedulePostActiveCommentTarget(){
+    if (!active() || !activeCommentElementId || postActiveTargetPending) return;
+    postActiveTargetPending = true;
+    window.requestAnimationFrame(function(){
+      postActiveTargetPending = false;
+      postActiveCommentTarget();
+    });
+  }
+  function postTargets(){
+    if (!active()) return;
+    window.parent.postMessage({ type: 'od:comment-targets', targets: allTargets() }, '*');
+  }
+  function schedulePostTargets(){
+    if (!active() || postTargetsPending) return;
+    postTargetsPending = true;
+    if (postTargetsTimer) window.clearTimeout(postTargetsTimer);
+    postTargetsTimer = window.setTimeout(function(){
+      window.requestAnimationFrame(function(){
+        postTargetsPending = false;
+        postTargetsTimer = null;
+        postTargets();
+      });
+    }, 120);
+  }
+  function relativePoint(ev){
+    return { x: Math.round(ev.clientX), y: Math.round(ev.clientY) };
+  }
+  function postStroke(type){
+    window.parent.postMessage({ type: type, points: stroke.slice() }, '*');
+  }
+  // Coalesce live stroke updates to one post per frame. The stroke array still
+  // grows synchronously on every pointermove, but the host (which re-renders
+  // the comment overlay on each od:pod-stroke) only sees ~60 updates/sec
+  // instead of one per raw pointer event.
+  function schedulePostStroke(){
+    if (strokeFrame !== null) return;
+    strokeFrame = requestAnimationFrame(function(){
+      strokeFrame = null;
+      postStroke('od:pod-stroke');
+    });
+  }
+  function canUseDomFallback(){
+    return commentEnabled && !inspectEnabled;
+  }
+  function eventCandidateElements(event){
+    var items = [];
+    function push(node){
+      if (!node || node.nodeType !== 1) return;
+      if (items.indexOf(node) >= 0) return;
+      items.push(node);
+    }
+    try {
+      if (event && typeof event.composedPath === 'function') {
+        var path = event.composedPath();
+        for (var i = 0; i < path.length; i++) push(path[i]);
+      }
+    } catch (_) {}
+    push(event && event.target);
+    try {
+      if (
+        event &&
+        typeof event.clientX === 'number' &&
+        typeof event.clientY === 'number' &&
+        document.elementsFromPoint
+      ) {
+        var stack = document.elementsFromPoint(event.clientX, event.clientY);
+        for (var s = 0; s < stack.length; s++) push(stack[s]);
+      } else if (
+        event &&
+        typeof event.clientX === 'number' &&
+        typeof event.clientY === 'number' &&
+        document.elementFromPoint
+      ) {
+        push(document.elementFromPoint(event.clientX, event.clientY));
+      }
+    } catch (_) {}
+    return items;
+  }
+  function closestTarget(event){
+    var candidates = eventCandidateElements(event);
+    var allowDomFallback = mode === 'picker' && canUseDomFallback();
+    var annotatedFallback = null;
+    for (var i = 0; i < candidates.length; i++) {
+      var clicked = candidates[i];
+      var el = clicked;
+      while (el && el !== document.documentElement) {
+        if (allowDomFallback && meaningfulDomFallbackTarget(el)) {
+          return { target: el, clicked: clicked };
+        }
+        if (el.getAttribute && (el.hasAttribute('data-od-id') || el.hasAttribute('data-screen-label'))) {
+          var id = el.getAttribute('data-od-id') || el.getAttribute('data-screen-label');
+          if (allowDomFallback && generatedRootAnnotation(el, id)) {
+            el = el.parentElement;
+            continue;
+          }
+          if (allowDomFallback && !annotatedFallback) annotatedFallback = { target: el, clicked: clicked };
+          if (allowDomFallback) break;
+          return { target: el, clicked: clicked };
+        }
+        el = el.parentElement;
+      }
+    }
+    return annotatedFallback;
+  }
+  function applyOverride(elementId, selector, prop, value){
+    if (!elementId || !prop) return;
+    if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, prop)) return;
+    var safeSelector = safeSelectorFor(elementId, selector);
+    if (!safeSelector) return;
+    var v = (value == null) ? '' : String(value).trim();
+    if (v && UNSAFE_VALUE.test(v)) return;
+    var entry = overrides[elementId];
+    if (!entry) {
+      entry = { selector: safeSelector, props: Object.create(null) };
+      overrides[elementId] = entry;
+    } else {
+      entry.selector = safeSelector;
+    }
+    if (!v) delete entry.props[prop];
+    else entry.props[prop] = v;
+    if (Object.keys(entry.props).length === 0) delete overrides[elementId];
+    rebuildStyleSheet();
+    postOverrides();
+  }
+  function resetOverrides(elementId){
+    if (elementId) delete overrides[elementId];
+    else overrides = Object.create(null);
+    rebuildStyleSheet();
+    postOverrides();
+  }
+  // Reapply the frozen DOM captured from the URL-loaded twin before Manual
+  // Edit became active. srcDoc-only source annotations are retained locally.
+  function runtimeStateAttributeAllowed(name){
+    return name === 'class' ||
+      name === 'style' ||
+      name === 'hidden' ||
+      name === 'open' ||
+      name.indexOf('aria-') === 0 ||
+      (name.indexOf('data-') === 0 && name.indexOf('data-od-') !== 0);
+  }
+  function applyRuntimeStateAttributes(el, attrs){
+    if (!el || !attrs || typeof attrs !== 'object') return;
+    var current = Array.prototype.slice.call(el.attributes || []);
+    for (var i = 0; i < current.length; i++) {
+      var currentName = current[i] && current[i].name;
+      if (
+        currentName &&
+        runtimeStateAttributeAllowed(currentName) &&
+        !Object.prototype.hasOwnProperty.call(attrs, currentName)
+      ) {
+        try { el.removeAttribute(currentName); } catch (_) {}
+      }
+    }
+    var names = Object.keys(attrs).slice(0, ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributes});
+    for (var a = 0; a < names.length; a++) {
+      var name = names[a];
+      var value = attrs[name];
+      if (!runtimeStateAttributeAllowed(name) || name.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributeNameLength} || typeof value !== 'string' || value.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxAttributeValueLength}) continue;
+      try { el.setAttribute(name, value); } catch (_) {}
+    }
+  }
+  function runtimeStatePath(el){
+    var path = [];
+    var node = el;
+    while (node && node !== document.body) {
+      var parent = node.parentElement;
+      if (!parent || path.length >= ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathLength}) return null;
+      var index = Array.prototype.indexOf.call(parent.children, node);
+      if (index < 0 || index > ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathIndex}) return null;
+      path.unshift(index);
+      node = parent;
+    }
+    return node === document.body ? path : null;
+  }
+  function runtimeStateElementAtPath(path){
+    if (!Array.isArray(path) || path.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathLength}) return null;
+    var node = document.body;
+    for (var i = 0; node && i < path.length; i++) {
+      var index = Number(path[i]);
+      if (!Number.isInteger(index) || index < 0 || index > ${PREVIEW_RUNTIME_STATE_LIMITS.maxPathIndex}) return null;
+      node = node.children && node.children[index];
+    }
+    return node || null;
+  }
+  function runtimeStateElement(entry){
+    var el = null;
+    if (entry && typeof entry.id === 'string' && entry.id.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) {
+      try { el = document.getElementById(entry.id); } catch (_) { el = null; }
+    }
+    if (!el && entry && typeof entry.odId === 'string' && entry.odId.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) {
+      try { el = document.querySelector('[data-od-id="' + esc(entry.odId) + '"]'); } catch (_) { el = null; }
+    }
+    if (!el) el = runtimeStateElementAtPath(entry && entry.path);
+    if (!el || String(el.tagName || '').toLowerCase() !== String(entry && entry.tag || '').toLowerCase()) return null;
+    return el;
+  }
+  function runtimeStateAnnotationElement(annotation){
+    var el = null;
+    var hasStableIdentity = false;
+    if (annotation && typeof annotation.id === 'string' && annotation.id.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) {
+      hasStableIdentity = true;
+      try { el = document.getElementById(annotation.id); } catch (_) { el = null; }
+      if (!el) return null;
+    }
+    if (annotation && typeof annotation.odId === 'string' && annotation.odId.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxIdentityLength}) {
+      var sourcePath = annotation.attrs && annotation.attrs['data-od-source-path'];
+      var generatedOdId = annotation.odId === sourcePath && /^path(?:-[0-9]+)+$/.test(annotation.odId);
+      if (!generatedOdId) hasStableIdentity = true;
+      if (el) {
+        var currentOdId = el.getAttribute && el.getAttribute('data-od-id');
+        if (currentOdId && currentOdId !== annotation.odId) return null;
+      } else {
+        try { el = document.querySelector('[data-od-id="' + esc(annotation.odId) + '"]'); } catch (_) { el = null; }
+        if (!el && !generatedOdId) return null;
+      }
+    }
+    if (!el && !hasStableIdentity) el = runtimeStateElementAtPath(annotation && annotation.path);
+    if (!el || String(el.tagName || '').toLowerCase() !== String(annotation && annotation.tag || '').toLowerCase()) return null;
+    return el;
+  }
+  function captureRuntimeStateAnnotations(){
+    if (!document.body) return [];
+    var nodes = document.body.querySelectorAll(
+      '[data-od-source-path], [data-od-id], [data-od-edit], [data-od-label]'
+    );
+    var annotations = [];
+    var count = Math.min(nodes.length, ${PREVIEW_RUNTIME_STATE_LIMITS.maxElements});
+    for (var i = 0; i < count; i++) {
+      var el = nodes[i];
+      var path = runtimeStatePath(el);
+      if (!path) continue;
+      var annotation = {
+        path: path,
+        tag: String(el.tagName || '').toLowerCase(),
+        attrs: Object.create(null)
+      };
+      if (el.id) annotation.id = String(el.id);
+      var odId = el.getAttribute('data-od-id');
+      if (odId) annotation.odId = String(odId);
+      var names = ['data-od-source-path', 'data-od-id', 'data-od-edit', 'data-od-label'];
+      for (var n = 0; n < names.length; n++) {
+        if (el.hasAttribute(names[n])) annotation.attrs[names[n]] = String(el.getAttribute(names[n]) || '');
+      }
+      annotations.push(annotation);
+    }
+    return annotations;
+  }
+  function restoreRuntimeStateAnnotations(annotations){
+    if (!Array.isArray(annotations)) return;
+    for (var i = 0; i < annotations.length; i++) {
+      var annotation = annotations[i];
+      var el = runtimeStateAnnotationElement(annotation);
+      if (!el || !annotation.attrs) continue;
+      var names = Object.keys(annotation.attrs);
+      for (var n = 0; n < names.length; n++) {
+        var name = names[n];
+        if (
+          name !== 'data-od-source-path' &&
+          name !== 'data-od-id' &&
+          name !== 'data-od-edit' &&
+          name !== 'data-od-label'
+        ) continue;
+        if (el.hasAttribute(name)) continue;
+        try { el.setAttribute(name, annotation.attrs[name]); } catch (_) {}
+      }
+    }
+  }
+  function restoreRuntimeState(state){
+    if (
+      !state ||
+      state.version !== ${PREVIEW_RUNTIME_STATE_VERSION} ||
+      !Array.isArray(state.entries) ||
+      state.entries.length > ${PREVIEW_RUNTIME_STATE_LIMITS.maxElements}
+    ) return;
+    if (
+      document.body &&
+      typeof state.bodyHtml === 'string' &&
+      state.bodyHtml.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxBodyHtmlLength}
+    ) {
+      var sourceAnnotations = captureRuntimeStateAnnotations();
+      document.body.innerHTML = state.bodyHtml;
+      restoreRuntimeStateAnnotations(sourceAnnotations);
+    } else if (Array.isArray(state.roots) && state.roots.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxRoots}) {
+      var rootHtmlLength = 0;
+      for (var r = 0; r < state.roots.length; r++) {
+        var root = state.roots[r];
+        if (!root || typeof root !== 'object' || typeof root.html !== 'string') continue;
+        rootHtmlLength += root.html.length;
+        if (rootHtmlLength > ${PREVIEW_RUNTIME_STATE_LIMITS.maxRootHtmlLength}) break;
+        var currentRoot = runtimeStateElement(root);
+        if (!currentRoot) continue;
+        // Preserve the root node itself: application closures and delegated
+        // listeners frequently retain #app/#root by identity.
+        currentRoot.innerHTML = root.html;
+      }
+    }
+    applyRuntimeStateAttributes(document.documentElement, state.htmlAttrs);
+    applyRuntimeStateAttributes(document.body, state.bodyAttrs);
+    for (var i = 0; i < state.entries.length; i++) {
+      var entry = state.entries[i];
+      if (!entry || typeof entry !== 'object') continue;
+      var el = runtimeStateElement(entry);
+      if (!el) continue;
+      applyRuntimeStateAttributes(el, entry.attrs);
+      var tag = String(el.tagName || '').toLowerCase();
+      if (
+        (tag === 'input' || tag === 'textarea' || tag === 'select') &&
+        typeof entry.value === 'string' &&
+        entry.value.length <= ${PREVIEW_RUNTIME_STATE_LIMITS.maxValueLength}
+      ) {
+        try { el.value = entry.value; } catch (_) {}
+      }
+      if (tag === 'input' && typeof entry.checked === 'boolean') {
+        try { el.checked = entry.checked; } catch (_) {}
+      }
+      if (tag === 'select' && Number.isInteger(entry.selectedIndex)) {
+        try { el.selectedIndex = entry.selectedIndex; } catch (_) {}
+      }
+      if (Number.isFinite(entry.scrollLeft)) {
+        try { el.scrollLeft = entry.scrollLeft; } catch (_) {}
+      }
+      if (Number.isFinite(entry.scrollTop)) {
+        try { el.scrollTop = entry.scrollTop; } catch (_) {}
+      }
+    }
+    if (typeof state.hash === 'string' && state.hash.length <= 4096 && state.hash !== window.location.hash) {
+      try { window.history.replaceState(null, '', state.hash || 'about:srcdoc'); } catch (_) {}
+    }
+    if (active()) setTimeout(postTargets, 0);
+  }
+  var runtimeStateRestoreSequence = 0;
+  function cancelScheduledRuntimeStateRestore(ev){
+    if (!ev || ev.isTrusted !== true) return;
+    runtimeStateRestoreSequence += 1;
+  }
+  // Retried restores help state survive an asynchronous artifact boot, but
+  // after the user interacts the live document is authoritative. Invalidate
+  // the pending handoff before its rAF/timeout callbacks can replay stale state.
+  document.addEventListener('pointerdown', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('click', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('keydown', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('input', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('change', cancelScheduledRuntimeStateRestore, true);
+  function scheduleRuntimeStateRestore(state, onComplete){
+    runtimeStateRestoreSequence += 1;
+    var sequence = runtimeStateRestoreSequence;
+    function restoreIfCurrent(){
+      if (sequence !== runtimeStateRestoreSequence) return false;
+      restoreRuntimeState(state);
+      return true;
+    }
+    restoreIfCurrent();
+    window.requestAnimationFrame(function(){
+      restoreIfCurrent();
+      window.setTimeout(function(){
+        var restored = restoreIfCurrent();
+        if (typeof onComplete === 'function') onComplete(restored);
+      }, 80);
+    });
+  }
+  function runtimeStateRestoreGeneration(){
+    if (runtimeStateGeneration) return runtimeStateGeneration;
+    var completionMarker = document.querySelector('template[data-od-srcdoc-transport-body-complete]');
+    return completionMarker
+      ? String(completionMarker.getAttribute('data-od-srcdoc-transport-body-complete') || '')
+      : '';
+  }
+  function postRuntimeStateRestoreReady(){
+    var generation = runtimeStateRestoreGeneration();
+    if (!generation) return;
+    try {
+      window.parent.postMessage({
+        type: 'od:preview-runtime-state-restore-ready',
+        generation: generation
+      }, '*');
+    } catch (_) {}
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || !data.type) return;
+    if (data.type === 'od:preview-runtime-state-restore') {
+      var currentGeneration = runtimeStateRestoreGeneration();
+      if (
+        typeof data.generation !== 'string' ||
+        !data.generation ||
+        data.generation !== currentGeneration
+      ) return;
+      scheduleRuntimeStateRestore(data.state, function(restored){
+        if (typeof data.id !== 'string' || !data.id) return;
+        try {
+          window.parent.postMessage({
+            type: 'od:preview-runtime-state-restored',
+            id: data.id,
+            generation: currentGeneration,
+            outcome: restored ? 'restored' : 'canceled'
+          }, '*');
+        } catch (_) {}
+      });
+      return;
+    }
+    if (data.type === 'od:preview-scroll-capture') {
+      postPreviewScroll(data.requestId);
+      return;
+    }
+    if (data.type === 'od:comment-mode') {
+      commentEnabled = !!data.enabled;
+      mode = data.mode === 'pod' ? 'pod' : 'picker';
+      document.documentElement.toggleAttribute('data-od-comment-mode', commentEnabled);
+      document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+      if (active()) setTimeout(postTargets, 0);
+      else {
+        hoveredId = null;
+        activeCommentElementId = null;
+        activeCommentSelector = null;
+      }
+      if (!commentEnabled || mode !== 'pod') {
+        drawing = false;
+        stroke = [];
+        try { window.parent.postMessage({ type: 'od:pod-clear' }, '*'); } catch (_) {}
+      }
+      return;
+    }
+    if (data.type === 'od:preview-scroll-restore') {
+      var frame = document.scrollingElement || document.documentElement;
+      var el = previewScrollElement();
+      if (frame) frame.scrollTo(Number(data.frameLeft || 0), Number(data.frameTop || 0));
+      if (el) el.scrollTo(Number(data.canvasLeft || 0), Number(data.canvasTop || 0));
+      setTimeout(postPreviewScroll, 0);
+      return;
+    }
+    if (data.type === 'od:comment-active-target') {
+      activeCommentElementId = data.elementId ? String(data.elementId) : null;
+      activeCommentSelector = data.selector ? String(data.selector) : null;
+      schedulePostActiveCommentTarget();
+      return;
+    }
+    if (data.type === 'od:preview-scroll-by') {
+      previewScrollBy(data.left, data.top);
+      return;
+    }
+
+    if (data.type === 'od:inspect-mode') {
+      inspectEnabled = !!data.enabled;
+      document.documentElement.toggleAttribute('data-od-inspect-mode', inspectEnabled);
+      if (active()) setTimeout(postTargets, 0);
+      else hoveredId = null;
+      return;
+    }
+    if (data.type === 'od:inspect-set') {
+      applyOverride(data.elementId, data.selector, data.prop, data.value);
+      return;
+    }
+    if (data.type === 'od:inspect-reset') {
+      resetOverrides(data.elementId);
+      return;
+    }
+    if (data.type === 'od:inspect-extract') {
+      postOverrides();
+      return;
+    }
+    if (data.type === 'od:inspect-replay') {
+      // Replace the in-memory map with the host's authoritative set so
+      // unsaved edits survive a srcdoc rebuild (toggling inspect off/on,
+      // switching to comment, any other reload reloads the iframe from
+      // previewSource without the unsaved style block). Re-validate every
+      // entry: a parent able to postMessage to this bridge is otherwise
+      // trusted, but applying its payload through the same allow-list /
+      // value sanitizer keeps the override sheet under the bridge's own
+      // contract instead of whatever the parent sent.
+      var raw = (data && typeof data.overrides === 'object' && data.overrides) ? data.overrides : {};
+      overrides = Object.create(null);
+      var ids = Object.keys(raw);
+      for (var i = 0; i < ids.length; i++) {
+        var id = ids[i];
+        var entry = raw[id];
+        if (!entry || typeof entry.props !== 'object' || !entry.props) continue;
+        var safeSelector = safeSelectorFor(id, entry.selector);
+        if (!safeSelector) continue;
+        var clean = Object.create(null);
+        var pkeys = Object.keys(entry.props);
+        for (var p = 0; p < pkeys.length; p++) {
+          var name = String(pkeys[p]).toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(ALLOWED_PROPS, name)) continue;
+          var rawValue = entry.props[pkeys[p]];
+          if (rawValue == null) continue;
+          var v = String(rawValue).trim();
+          if (!v || UNSAFE_VALUE.test(v)) continue;
+          clean[name] = v;
+        }
+        if (Object.keys(clean).length) overrides[id] = { selector: safeSelector, props: clean };
+      }
+      rebuildStyleSheet();
+      postOverrides();
+      return;
+    }
+  });
+  postRuntimeStateRestoreReady();
+  function pickerActive(){ return inspectEnabled || (commentEnabled && mode === 'picker'); }
+  document.addEventListener('mouseover', function(ev){
+    if (!pickerActive()) return;
+    var result = closestTarget(ev);
+    if (!result) return;
+    var payload = targetFrom(result.target, commentEnabled && mode === 'picker' && !inspectEnabled);
+    if (!payload || payload.elementId === hoveredId) return;
+    hoveredId = payload.elementId;
+    window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-hover' }), '*');
+  }, true);
+  document.addEventListener('mouseout', function(ev){
+    if (!pickerActive()) return;
+    var result = closestTarget(ev);
+    if (!result) return;
+    var next = ev.relatedTarget;
+    while (next && next !== document.documentElement) {
+      if (next === result.target) return;
+      next = next.parentElement;
+    }
+    hoveredId = null;
+    window.parent.postMessage({ type: 'od:comment-leave' }, '*');
+  }, true);
+  document.addEventListener('click', function(ev){
+    if (!pickerActive()) return;
+    var result = closestTarget(ev);
+    if (result) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      var commentPickerClick = commentEnabled && mode === 'picker' && !inspectEnabled;
+      var clickPoint = commentPickerClick ? { x: ev.clientX, y: ev.clientY } : null;
+      var payload = targetFrom(result.target, commentPickerClick, result.clicked, clickPoint);
+      if (payload) {
+        activeCommentElementId = payload.elementId || activeCommentElementId;
+        activeCommentSelector = payload.selector || activeCommentSelector;
+        window.parent.postMessage(payload, '*');
+      }
+      return;
+    }
+    // Free-pin fallback (comment mode only). Lets users drop a comment
+    // at a click location even when the artifact has no data-od-id
+    // annotations. Skipped for pod mode (drawing) and inspect mode
+    // (needs a real selector for live overrides).
+    if (!canUseDomFallback() || mode === 'pod') return;
+    // Skip clicks on interactive elements so links / buttons / inputs
+    // keep their native behavior; pin only on inert surfaces.
+    var t = ev.target;
+    var walk = t && t.nodeType === 1 ? t : null;
+    while (walk && walk !== document.documentElement) {
+      var tag = walk.tagName;
+      if (tag === 'A' || tag === 'BUTTON' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'LABEL') return;
+      if (walk.isContentEditable) return;
+      walk = walk.parentElement;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    // Store viewport coordinates to match regular getBoundingClientRect()
+    // element targets; the host overlay renders this position directly.
+    var pinX = Math.round(ev.clientX);
+    var pinY = Math.round(ev.clientY);
+    var pinId = 'pin-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e6).toString(36);
+    var pinSlideIndex = deckSlideIndexForPayload();
+    var pinPayload = {
+      type: 'od:comment-target',
+      // Synthetic selector / label so daemon upsert validation (which
+      // requires both to be non-empty) accepts the saved free-pin.
+      selector: '[data-od-pin="' + pinId + '"]',
+      label: 'pin',
+      text: '',
+      position: { x: pinX - 12, y: pinY - 12, width: 24, height: 24 },
+      hoverPoint: { x: pinX, y: pinY },
+      htmlHint: '',
+      style: null,
+      freePin: true
+    };
+    pinPayload.elementId = pinId;
+    if (typeof pinSlideIndex === 'number') pinPayload.slideIndex = pinSlideIndex;
+    window.parent.postMessage(pinPayload, '*');
+  }, true);
+  // Pod drawing — only active in comment mode with the 'pod' tool.
+  document.addEventListener('pointerdown', function(ev){
+    if (!commentEnabled || mode !== 'pod' || ev.button !== 0) return;
+    drawing = true;
+    stroke = [relativePoint(ev)];
+    ev.preventDefault();
+    ev.stopPropagation();
+    postStroke('od:pod-stroke');
+  }, true);
+  document.addEventListener('pointermove', function(ev){
+    if (!drawing || mode !== 'pod') return;
+    var point = relativePoint(ev);
+    var last = stroke[stroke.length - 1];
+    if (last && Math.hypot(last.x - point.x, last.y - point.y) < 4) return;
+    stroke.push(point);
+    ev.preventDefault();
+    ev.stopPropagation();
+    schedulePostStroke();
+  }, true);
+  function finishStroke(ev){
+    if (!drawing || mode !== 'pod') return;
+    drawing = false;
+    if (strokeFrame !== null) { cancelAnimationFrame(strokeFrame); strokeFrame = null; }
+    if (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    postStroke('od:pod-select');
+  }
+  document.addEventListener('pointerup', finishStroke, true);
+  document.addEventListener('pointercancel', finishStroke, true);
+  window.addEventListener('resize', schedulePostTargets);
+  document.addEventListener('scroll', function(){
+    schedulePostActiveCommentTarget();
+    schedulePostTargets();
+    schedulePostPreviewScroll();
+  }, true);
+  var mo = new MutationObserver(schedulePostTargets);
+  // childList only — NOT attributes/characterData. Re-walking every annotated
+  // target on every attribute/text mutation made an animated artifact (inline
+  // style/text changes per frame) churn schedulePostTargets continuously while
+  // in comment/inspect mode. Structural changes (childList) still re-walk, and
+  // scroll/resize already re-post geometry for layout shifts.
+  mo.observe(document.documentElement, { subtree: true, childList: true });
+  // The active comment marker still has to follow its own element's text and
+  // attribute edits, but schedulePostActiveCommentTarget re-posts exactly ONE
+  // element (the active comment), so it stays cheap even on animated artifacts —
+  // unlike the full allTargets() re-walk above. This is why attributes/
+  // characterData live on this targeted observer instead of the main observer.
+  var textMo = new MutationObserver(schedulePostActiveCommentTarget);
+  textMo.observe(document.documentElement, { subtree: true, characterData: true, attributes: true });
+  // Reflect the host-requested initial modes on the documentElement so
+  // the cursor/hover styles match what the bridge picks up on click.
+  if (commentEnabled) document.documentElement.toggleAttribute('data-od-comment-mode', true);
+  if (inspectEnabled) document.documentElement.toggleAttribute('data-od-inspect-mode', true);
+  document.documentElement.setAttribute('data-od-comment-mode-kind', mode);
+  hydrateOverridesFromDom();
+  // Acknowledge the hydrated overrides to the host as a preview signal so
+  // diagnostic listeners (and tests) can observe that the bridge is in sync
+  // with the persisted style sheet. The host no longer treats this message
+  // as save input — it parses the artifact source itself — but emitting it
+  // keeps the iframe → host channel symmetric across set/reset/extract.
+  if (Object.keys(overrides).length) setTimeout(postOverrides, 0);
+  setTimeout(requestPreviewScrollRestore, 0);
+  setTimeout(requestPreviewScrollRestore, 80);
+  setTimeout(requestPreviewScrollRestore, 240);
+  window.__odScheduleCommentTargets = schedulePostTargets;
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postTargets);
+  else setTimeout(postTargets, 0);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', postPreviewScroll);
+  else setTimeout(postPreviewScroll, 0);
+})();</script>`;
+  const style = `<style data-od-selection-bridge-style>
+html[data-od-comment-mode] body * { cursor: crosshair !important; }
+html[data-od-inspect-mode] body * { cursor: crosshair !important; }
+html[data-od-comment-mode][data-od-comment-mode-kind="pod"] body * { cursor: cell !important; }
+/* Nested iframes (e.g. shared device frames) consume clicks in their own browsing context.
+   While picker modes are on, disable pointer events on outer-document iframes so the
+   hit target resolves to an annotated ancestor (card, shell) in this document. */
+html[data-od-comment-mode] body iframe,
+html[data-od-inspect-mode] body iframe { pointer-events: none !important; }
+</style>`;
+  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, style), script);
+}
+
+// The deck bridge supports three deck conventions found across our skills
+// and freeform-generated artifacts:
+//   1. Horizontal scroll decks (simple-deck, guizang-ppt) — slides laid out
+//      side-by-side, navigation = scrollTo({ left }).
+//   2. Class-toggle decks (deck-framework, freeform pitches) — one slide
+//      carries `.active` or `.is-active`; siblings are display:none. Their
+//      own JS listens for ArrowRight/Left, so we drive them by dispatching
+//      synthetic KeyboardEvents.
+//   3. Visibility-only decks — no class toggle, slides hidden via inline
+//      style. We fall back to keyboard dispatch + visibility detection.
+//
+// All three report `{ active, count }` back to the host so the toolbar can
+// render a unified counter. A MutationObserver on each `.slide` lets us
+// catch class changes from the deck's own keyboard handler.
+//
+// We also inject a small CSS override that fixes a common authoring
+// mistake in fixed-canvas decks: a `.stage { display: grid; place-items:
+// center }` only centers items within their grid cells, but the track
+// itself stays `start`-aligned, so the 1920x1080 canvas top-lefts at
+// (0,0) of the stage. Combined with `transform-origin: center center`,
+// the scaled canvas ends up offset toward the bottom-right of any
+// preview that's smaller than 1920x1080 — exactly what users see in the
+// sandbox iframe. `place-content: center` centers the track itself.
+//
+// Framework decks (apps/daemon/src/prompts/deck-framework.ts) opt out:
+// their `fit()` already centers a `transform-origin: top left` stage with
+// an explicit `translate(tx, ty)` that assumes the stage's natural layout
+// position is (0, 0). If we force `place-content: center` on their
+// `.deck-shell` grid, the implicit track gets re-centered to
+// ((sw-1920)/2, (sh-1080)/2) and `fit()`'s translate stacks on top, so
+// the scaled stage lands ~1000px off-screen and the user sees a mostly-
+// black preview with a sliver of slide content in the top-left. Skip the
+// override whenever the framework's marker id is present.
+// Near-zero durations (not `animation-play-state: paused`) are deliberate:
+// pausing an entry animation at t=0 leaves `fill-mode: both` content stuck
+// invisible, while collapsing the duration lets every animation run to its
+// final keyframe immediately — the thumbnail shows the slide's settled state
+// and the compositor never re-rasterizes the frame again.
+// Bare CSS bodies (no `<style>` wrapper) so the shadow-root thumbnail renderer
+// (`DeckSlideThumbnail`) can adopt the exact same rules the iframe path injects,
+// keeping a single source of truth for freeze + chrome-hiding behavior.
+export const DECK_MOTION_FREEZE_CSS = `*, *::before, *::after {
+  animation-duration: 0.001s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001s !important;
+  transition-delay: 0s !important;
+  scroll-behavior: auto !important;
+}`;
+
+/**
+ * Re-exported from `@open-design/contracts/runtime/deck-presentation`, which is
+ * the single source shared with the runtime presentation bridge. Existing
+ * consumers (deck thumbnails, `apps/web/src/runtime/srcdoc`) keep importing it
+ * from here.
+ */
+export { DECK_CHROME_HIDE_CSS };
+
+function injectMotionFreeze(doc: string): string {
+  return injectBeforeHeadEnd(doc, `<style data-od-motion-freeze>
+${DECK_MOTION_FREEZE_CSS}
+</style>`);
+}
+
+function injectDeckChromeHiding(doc: string): string {
+  return injectBeforeHeadEnd(doc, `<style ${DECK_CHROME_HIDE_STYLE_MARKER}>
+${DECK_CHROME_HIDE_CSS}
+</style>`);
+}
+
+function injectDeckStageShadowChromeHiding(doc: string): string {
+  return injectBeforeBodyEnd(doc, `<script data-od-deck-stage-shadow-chrome-hidden>(function(){
+  var HIDE_ID = ${JSON.stringify(DECK_STAGE_SHADOW_CHROME_HIDE_STYLE_ID)};
+  var CSS = ${JSON.stringify(DECK_STAGE_SHADOW_CHROME_HIDE_CSS)};
+  function hideStage(stage){
+    try {
+      if (!stage || !stage.shadowRoot) return false;
+      if (stage.shadowRoot.getElementById(HIDE_ID)) return true;
+      var style = document.createElement('style');
+      style.id = HIDE_ID;
+      style.textContent = CSS;
+      stage.shadowRoot.appendChild(style);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  function hideAll(){
+    var pending = false;
+    var stages = document.querySelectorAll('deck-stage');
+    for (var i = 0; i < stages.length; i += 1) {
+      if (!hideStage(stages[i])) pending = true;
+    }
+    return pending;
+  }
+  function schedule(){
+    if (!hideAll()) return;
+    setTimeout(schedule, 50);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', schedule, { once: true });
+  } else {
+    schedule();
+  }
+  if (typeof MutationObserver !== 'undefined') {
+    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
+  }
+})();</script>`);
+}
+
+// Screens keydown listeners for keyboard slide navigation by their source
+// text, the same way odMaybeHandlesSlideMessages screens message listeners:
+// od bridges and artifact shortcut helpers register keydown listeners of
+// their own, and counting those would put every deck on the key-probe path.
+// Shared between the head-start registry hook and the deck bridge's own
+// addEventListener patches.
+const NAV_KEYDOWN_LISTENER_PROBE = `function odLooksLikeNavKeydownListener(listener) {
+    try {
+      var source = '';
+      if (typeof listener === 'function') source = String(listener);
+      else if (listener && typeof listener.handleEvent === 'function') source = String(listener.handleEvent);
+      return /\\bArrow(?:Right|Left)\\b|\\bPage(?:Up|Down)\\b|\\bkeyCode\\b/.test(source);
+    } catch (_) {
+      return false;
+    }
+  }`;
+
+// Records artifact keydown registrations that happen BEFORE the deck bridge
+// executes at the end of <body>. Decks that load their keyboard runtime from
+// an external script (design-templates/html-ppt wires ../assets/runtime.js
+// via <script src>) register listeners too early for the bridge's own
+// addEventListener patches to see, and external script bytes are invisible
+// to the build-time source scan — so this hook must run before any artifact
+// script, at the start of <head>. The deck bridge marks its own top-of-file
+// keydown listeners via __odDeckBridgeOwnListenerInstall so they are not
+// mistaken for artifact navigation.
+export function buildDeckKeydownRegistryHook(): string {
+  return `<script data-od-deck-keydown-registry>(function(){
+  ${NAV_KEYDOWN_LISTENER_PROBE}
+  function wrap(target){
+    try {
+      var original = target.addEventListener;
+      target.addEventListener = function(type, listener, options){
+        if (
+          type === 'keydown' &&
+          window.__odDeckBridgeOwnListenerInstall !== true &&
+          odLooksLikeNavKeydownListener(listener)
+        ) {
+          window.__odArtifactKeydownNavigation = true;
+        }
+        return original.call(this, type, listener, options);
+      };
+    } catch (_) {}
+  }
+  wrap(window);
+  wrap(document);
+})();</script>`;
+}
+
+function injectDeckKeydownRegistryHook(doc: string): string {
+  const hook = buildDeckKeydownRegistryHook();
+  return injectAtDocumentStart(doc, hook);
+}
+
+// Whether the artifact ships its own keyboard slide navigation, judged from
+// the artifact source. Must be evaluated BEFORE any od bridge is injected:
+// injected bridges (preview focus guard, edit bridge) register keydown
+// listeners of their own, and matching those would put every deck on the
+// key-probe path. Requiring a navigation-key token alongside the keydown
+// registration keeps unrelated keyboard handling (shortcuts, form helpers)
+// from triggering probes, mirroring how odMaybeHandlesSlideMessages screens
+// message listeners. This scan only sees inline bytes; keyboard runtimes in
+// external scripts are caught at runtime by injectDeckKeydownRegistryHook.
+export interface DeckSourceSignalFlags {
+  registersSlideMessageListener: boolean;
+  mentionsSlideMessage: boolean;
+  registersKeydownListener: boolean;
+  mentionsNavigationKey: boolean;
+  listensForHashChange: boolean;
+  readsLocationHash: boolean;
+  usesSlashHashIndexPrefix: boolean;
+}
+
+/**
+ * Return independent source facts rather than a single Deck verdict. The
+ * daemon's streaming scanner can OR these flags across bounded chunks, which
+ * preserves signals split at a read boundary without retaining the document.
+ */
+export function scanDeckSourceSignalFlags(source: string): DeckSourceSignalFlags {
+  return {
+    registersSlideMessageListener: /addEventListener\s*\(\s*['"]message['"]/i.test(source),
+    mentionsSlideMessage: /\bod:slide\b/.test(source),
+    registersKeydownListener:
+      /addEventListener\s*\(\s*['"]keydown['"]/i.test(source) || /\bonkeydown\b/i.test(source),
+    mentionsNavigationKey:
+      /\bArrow(?:Right|Left)\b|\bPage(?:Up|Down)\b|\bkeyCode\b/.test(source),
+    listensForHashChange: /(?:hashchange|onhashchange)/i.test(source),
+    readsLocationHash: /location\.hash/i.test(source),
+    usesSlashHashIndexPrefix: /['"`]#\/['"`]/.test(source),
+  };
+}
+
+export function detectArtifactKeyboardNavigation(artifactHtml: string): boolean {
+  const signals = scanDeckSourceSignalFlags(artifactHtml);
+  return signals.registersKeydownListener && signals.mentionsNavigationKey;
+}
+
+export interface DeckBridgeOptions {
+  initialSlideIndex?: number | undefined;
+  clickNavigation?: boolean;
+  artifactHasKeydownNavigation?: boolean;
+  hasInlineSlideMessageListener?: boolean;
+  hasInlineHashNavigation?: boolean;
+  inlineHashIndexPrefix?: '#' | '#/';
+  isFrameworkDeck?: boolean;
+  artifactDeckProtocolVersion?: number;
+}
+
+export interface DeckBridgeAssets {
+  styleTag: string;
+  scriptTag: string;
+}
+
+export function buildDeckBridgeAssets(
+  doc: string,
+  options: DeckBridgeOptions = {},
+): DeckBridgeAssets {
+  const initialSlideIndex = options.initialSlideIndex ?? 0;
+  const safeInitialSlideIndex = Number.isFinite(initialSlideIndex)
+    ? Math.max(0, Math.floor(initialSlideIndex))
+    : 0;
+  const sourceSignals = scanDeckSourceSignalFlags(doc);
+  const hasInlineSlideMessageListener = options.hasInlineSlideMessageListener ?? (
+    sourceSignals.registersSlideMessageListener && sourceSignals.mentionsSlideMessage
+  );
+  const artifactDeckProtocolVersion = options.artifactDeckProtocolVersion ?? (
+    new RegExp(
+      `\\bdata-od-deck-protocol\\s*=\\s*['"]${DECK_PROTOCOL_VERSION}['"]`,
+      'i',
+    ).test(doc)
+      ? DECK_PROTOCOL_VERSION
+      : 0
+  );
+  const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
+  const hasInlineHashNavigation = options.hasInlineHashNavigation ?? (
+    sourceSignals.listensForHashChange && sourceSignals.readsLocationHash
+  );
+  const inlineHashIndexPrefix = options.inlineHashIndexPrefix
+    ?? (sourceSignals.usesSlashHashIndexPrefix ? '#/' : '#');
+  const isFrameworkDeck = options.isFrameworkDeck
+    ?? /\bid\s*=\s*["']deck-stage["']/i.test(doc);
+  const clickNavigation = !!options.clickNavigation && !isFrameworkDeck;
+  // Framework decks (`id="deck-stage"`) get the inverse fix. Their skeleton
+  // documents `.deck-shell` as plain block flow precisely so the 1920x1080
+  // stage's natural top-left is (0, 0) — `fit()` then does ALL the centering
+  // through `translate(tx, ty) scale(s)` with `transform-origin: top left`.
+  // Generated decks routinely violate that contract and re-declare the shell
+  // as a centering flex container. Two things break at once: the stage becomes
+  // a flex item, so its default `flex-shrink: 1` collapses `width: 1920px`
+  // down to the pane width (a ~770px preview yields a 770x1080 stage — the
+  // 16:9 canvas silently turns portrait, issue #47), and the flex centering
+  // offsets the stage away from (0, 0) so `fit()`'s translate stacks on top of
+  // a non-zero layout position. Restoring block flow + no shrink puts the
+  // stage back where `fit()` already assumes it is. Both declarations are
+  // no-ops on a deck that copied the skeleton verbatim.
+  const styleFix = isFrameworkDeck
+    ? `<style data-od-deck-fix>
+.deck-shell { display: block !important; }
+.deck-stage { flex-shrink: 0 !important; }
+</style>`
+    : `<style data-od-deck-fix>
+.stage:not(:has(> .slide)),
+.deck-stage:not(:has(> .slide)),
+.deck-shell:not(:has(> .slide)) { place-content: center !important; }
+</style>`;
+  const script = `<script data-od-deck-bridge>(function(){
+  var initialSlideIndex = ${safeInitialSlideIndex};
+  var didRestoreInitialSlide = initialSlideIndex <= 0;
+  // The framework branch's own listener source mentions navigation keys, so
+  // without this marker the head-start registry hook would classify every
+  // framework deck as artifact-keyboard-navigable.
+  window.__odDeckBridgeOwnListenerInstall = true;
+  if (${JSON.stringify(isFrameworkDeck)}) {
+    window.addEventListener('keydown', function(ev){
+      var key = ev && ev.key;
+      if (key === 'Escape') {
+        try { window.parent.postMessage({ type: 'od:present-escape' }, '*'); } catch (_) {}
+        return;
+      }
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;
+      if (
+        key !== 'ArrowRight' &&
+        key !== 'PageDown' &&
+        key !== ' ' &&
+        key !== 'ArrowLeft' &&
+        key !== 'PageUp' &&
+        key !== 'Home' &&
+        key !== 'End' &&
+        String(key).toLowerCase() !== 'r'
+      ) return;
+      var t = ev.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      ev.stopPropagation();
+    }, true);
+  } else {
+    window.addEventListener('keydown', function(ev){
+      if (ev && ev.key === 'Escape') {
+        try { window.parent.postMessage({ type: 'od:present-escape' }, '*'); } catch (_) {}
+      }
+    }, true);
+  }
+  window.__odDeckBridgeOwnListenerInstall = false;
+  function deckStageSlides(stage){
+    if (!stage) return [];
+    var nested = stage.querySelectorAll(${JSON.stringify(DECK_SLIDE_SELECTOR)});
+    var direct = [];
+    for (var i = 0; i < nested.length; i++) {
+      if (nested[i].parentElement === stage) direct.push(nested[i]);
+    }
+    return direct.length ? direct : nested;
+  }
+  function legacyScreenSlides(){
+    var candidates = document.querySelectorAll(${JSON.stringify(DECK_LEGACY_SCREEN_SLIDE_SELECTOR)});
+    var labelRe = new RegExp(${JSON.stringify(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE)}, 'i');
+    var groups = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var match = labelRe.exec(candidates[i].getAttribute('data-screen-label') || '');
+      if (!match || !candidates[i].parentNode) continue;
+      var group = null;
+      for (var j = 0; j < groups.length; j++) {
+        if (groups[j].parent === candidates[i].parentNode) { group = groups[j]; break; }
+      }
+      if (!group) {
+        group = { parent: candidates[i].parentNode, slides: [], numbers: {} };
+        groups.push(group);
+      }
+      group.slides.push(candidates[i]);
+      group.numbers[String(Number(match[1]))] = true;
+    }
+    var best = [];
+    for (var k = 0; k < groups.length; k++) {
+      if (Object.keys(groups[k].numbers).length > 1 && groups[k].slides.length > best.length) {
+        best = groups[k].slides;
+      }
+    }
+    return best;
+  }
+  function slides(){
+    // An explicit deck-stage owns its descendants, so unrelated annotated
+    // screens elsewhere in the document cannot leak into its count. Otherwise
+    // prefer direct children of recognized legacy containers before falling
+    // back to every supported persisted slide marker.
+    var stageSlides = deckStageSlides(document.querySelector('deck-stage'));
+    if (stageSlides.length) return stageSlides;
+    var structured = document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)});
+    if (structured.length) return structured;
+    var explicit = document.querySelectorAll(${JSON.stringify(DECK_EXPLICIT_SLIDE_SELECTOR)});
+    if (explicit.length) return explicit;
+    return legacyScreenSlides();
+  }
+  function deckStageForSlides(list){
+    var stage = document.querySelector('deck-stage');
+    if (!stage) return null;
+    if (list && list.length && !stage.contains(list[0])) return null;
+    return stage;
+  }
+  function activeIndexFromDeckStage(list){
+    var stage = deckStageForSlides(list);
+    if (!stage) return -1;
+    var index = Number(stage.index);
+    if (!Number.isFinite(index)) return -1;
+    index = Math.floor(index);
+    return index >= 0 && index < list.length ? index : -1;
+  }
+  function navigateViaDeckStage(list, action, index){
+    if (!list.length) return false;
+    var stage = deckStageForSlides(list);
+    if (!stage) return false;
+    try {
+      if (action === 'go' && typeof index === 'number' && typeof stage.goTo === 'function') {
+        stage.goTo(index);
+      } else if (action === 'next' && typeof stage.next === 'function') {
+        stage.next();
+      } else if (action === 'prev' && typeof stage.prev === 'function') {
+        stage.prev();
+      } else if (action === 'first' && typeof stage.reset === 'function') {
+        stage.reset();
+      } else if (action === 'first' && typeof stage.goTo === 'function') {
+        stage.goTo(0);
+      } else if (action === 'last' && typeof stage.goTo === 'function') {
+        stage.goTo(list.length - 1);
+      } else {
+        return false;
+      }
+      // Public deck-stage methods are synchronous in the authored runtime.
+      // Report here for older implementations that do not emit slidechange;
+      // modern implementations also emit the event and are harmlessly
+      // coalesced by React state equality in the host.
+      report();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  function scrollOverflow(el, axis){
+    if (!el) return 0;
+    return axis === 'y'
+      ? Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0))
+      : Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+  }
+  function overflowMode(el, axis){
+    if (!el || !window.getComputedStyle) return '';
+    try {
+      var style = window.getComputedStyle(el);
+      return String(axis === 'y' ? style.overflowY : style.overflowX || '').toLowerCase();
+    } catch (_) {
+      return '';
+    }
+  }
+  function isScrollableOverflowMode(mode){
+    return mode === 'auto' || mode === 'scroll' || mode === 'overlay';
+  }
+  function isClippedOverflowMode(mode){
+    return mode === 'hidden' || mode === 'clip';
+  }
+  function isRootScrollContainer(el){
+    return !!el && (
+      el === document.scrollingElement ||
+      el === document.documentElement ||
+      el === document.body
+    );
+  }
+  function rootScrollerClipped(axis){
+    return isClippedOverflowMode(overflowMode(document.documentElement, axis)) ||
+      isClippedOverflowMode(overflowMode(document.body, axis));
+  }
+  function scrollOffsetOf(el, axis){
+    if (!el) return 0;
+    try {
+      return Number(axis === 'y' ? el.scrollTop : el.scrollLeft) || 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+  function scrollTargets(){
+    var targets = [];
+    function add(node){
+      if (!node) return;
+      for (var i=0; i<targets.length; i++) if (targets[i] === node) return;
+      targets.push(node);
+    }
+    add(document.scrollingElement);
+    add(document.documentElement);
+    add(document.body);
+    return targets;
+  }
+  function nestedScrollTargets(list){
+    var targets = [];
+    if (!list || !list.length) return targets;
+    var node = list[0] && list[0].parentElement;
+    while (node && !isRootScrollContainer(node)) {
+      var containsAll = true;
+      for (var i=1; i<list.length; i++) {
+        if (!node.contains(list[i])) { containsAll = false; break; }
+      }
+      if (containsAll) targets.push(node);
+      node = node.parentElement;
+    }
+    return targets;
+  }
+  function maxRootScrollOffset(axis){
+    var targets = scrollTargets();
+    var value = axis === 'y'
+      ? Number(window.scrollY || window.pageYOffset || 0)
+      : Number(window.scrollX || window.pageXOffset || 0);
+    for (var i=0; i<targets.length; i++) {
+      value = Math.max(value, scrollOffsetOf(targets[i], axis));
+    }
+    return value;
+  }
+  function deckAxisOrder(list){
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var minY = Infinity;
+    var maxY = -Infinity;
+    for (var i=0; list && i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        var x = Number(rect.left);
+        var y = Number(rect.top);
+        if (Number.isFinite(x)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+        if (Number.isFinite(y)) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+      } catch (_) {}
+    }
+    var xSpan = Number.isFinite(minX) && Number.isFinite(maxX) ? maxX - minX : 0;
+    var ySpan = Number.isFinite(minY) && Number.isFinite(maxY) ? maxY - minY : 0;
+    if (ySpan > 1 && ySpan > xSpan) return ['y', 'x'];
+    return ['x', 'y'];
+  }
+  function scrollDeckTarget(list){
+    var axes = deckAxisOrder(list);
+    var nested = nestedScrollTargets(list);
+    for (var n=0; n<nested.length; n++) {
+      for (var a=0; a<axes.length; a++) {
+        var nestedAxis = axes[a];
+        if (scrollOverflow(nested[n], nestedAxis) <= 1) continue;
+        if (isScrollableOverflowMode(overflowMode(nested[n], nestedAxis))) {
+          return { axis: nestedAxis, element: nested[n], root: false };
+        }
+      }
+    }
+    var targets = scrollTargets();
+    for (var a=0; a<axes.length; a++) {
+      var axis = axes[a];
+      for (var i=0; i<targets.length; i++) {
+        var candidate = targets[i];
+        if (scrollOverflow(candidate, axis) <= 1) continue;
+        var mode = overflowMode(candidate, axis);
+        if (isScrollableOverflowMode(mode)) return { axis: axis, element: candidate, root: true };
+        if (!isClippedOverflowMode(mode) && !rootScrollerClipped(axis)) {
+          return { axis: axis, element: candidate, root: true };
+        }
+      }
+    }
+    return null;
+  }
+  function isScrollDeck(list){
+    return !!scrollDeckTarget(list || slides());
+  }
+  function findActiveByClass(list){
+    for (var i=0; i<list.length; i++) {
+      var cl = list[i].classList;
+      if (cl && (cl.contains('is-active') || cl.contains('active') || cl.contains('current'))) return i;
+    }
+    return -1;
+  }
+  function findActiveByVisibility(list){
+    for (var i=0; i<list.length; i++) {
+      try {
+        var cs = window.getComputedStyle(list[i]);
+        if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') return i;
+      } catch (_) {}
+    }
+    return -1;
+  }
+  function activeIndexFromScrollRects(list, scrollTarget){
+    var axis = scrollTarget.axis;
+    var origin = 0;
+    if (!scrollTarget.root) {
+      try {
+        var containerRect = scrollTarget.element.getBoundingClientRect();
+        origin = Number(axis === 'y' ? containerRect.top : containerRect.left) || 0;
+      } catch (_) {}
+    }
+    var best = -1;
+    var distance = Infinity;
+    var firstPosition = null;
+    var hasDistinctPosition = false;
+    for (var i=0; i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        var position = (Number(axis === 'y' ? rect.top : rect.left) || 0) - origin;
+        if (firstPosition === null) firstPosition = position;
+        else if (Math.abs(position - firstPosition) > 1) hasDistinctPosition = true;
+        var value = Math.abs(position);
+        if (value < distance) { distance = value; best = i; }
+      } catch (_) {}
+    }
+    return hasDistinctPosition ? best : -1;
+  }
+  var forcedScrollPageIndex = -1;
+  function activeIndex(list){
+    if (!list || !list.length) return 0;
+    if (forcedScrollPageIndex >= 0) {
+      return Math.max(0, Math.min(list.length - 1, forcedScrollPageIndex));
+    }
+    var scrollTarget = scrollDeckTarget(list);
+    if (scrollTarget) {
+      var byRect = activeIndexFromScrollRects(list, scrollTarget);
+      if (byRect >= 0) return byRect;
+      var axis = scrollTarget.axis;
+      var span = Math.max(1, scrollTarget.root
+        ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+        : (axis === 'y' ? scrollTarget.element.clientHeight : scrollTarget.element.clientWidth));
+      var offset = scrollTarget.root
+        ? maxRootScrollOffset(axis)
+        : scrollOffsetOf(scrollTarget.element, axis);
+      return Math.max(0, Math.min(list.length - 1, Math.round(offset / span)));
+    }
+    var byDeckStage = activeIndexFromDeckStage(list);
+    if (byDeckStage >= 0) return byDeckStage;
+    var byTransform = activeIndexFromTransform(list);
+    if (byTransform >= 0) return byTransform;
+    var byClass = findActiveByClass(list);
+    if (byClass >= 0) return byClass;
+    var byVis = findActiveByVisibility(list);
+    if (byVis >= 0) return byVis;
+    return 0;
+  }
+  function dispatchKey(key){
+    // Try window first: many deck frameworks listen on both window and
+    // document in capture phase for iframe focus resilience. Dispatching a
+    // bubbling event at document hits the document listener and then the
+    // window listener, turning one host "next" request into two slide moves.
+    var init = { key: key, code: key, bubbles: true, cancelable: true, composed: true };
+    var before = activeIndex(slides());
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', init));
+      window.dispatchEvent(new KeyboardEvent('keyup', init));
+    } catch (_) {}
+    if (activeIndex(slides()) !== before) return;
+    try {
+      document.dispatchEvent(new KeyboardEvent('keydown', init));
+      document.dispatchEvent(new KeyboardEvent('keyup', init));
+    } catch (_) {}
+  }
+  function pad2(n){ return (n < 10 ? '0' : '') + n; }
+  function activeClassName(list){
+    var names = ['active', 'is-active', 'current'];
+    for (var n=0; n<names.length; n++) {
+      for (var i=0; i<list.length; i++) {
+        if (list[i].classList && list[i].classList.contains(names[n])) return names[n];
+      }
+    }
+    return 'active';
+  }
+  function hasComputedHiddenSibling(list, active){
+    if (active < 0) return false;
+    for (var i=0; i<list.length; i++) {
+      if (i === active) continue;
+      try {
+        var cs = window.getComputedStyle(list[i]);
+        if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return true;
+      } catch (_) {}
+    }
+    return false;
+  }
+  function canSetActive(list){
+    // A bare active-class marker is not enough to prove the host can drive the
+    // deck by class mutation alone. Many generated decks keep that marker in
+    // sync for counters / dots but move the visible slide via a translated
+    // stage or track, so flipping classes in the host bridge updates the
+    // reported slide index while leaving the canvas on the old page. Only
+    // treat class-driven decks as directly mutable when inactive siblings are
+    // actually hidden by computed visibility rules.
+    var active = findActiveByClass(list);
+    if (active >= 0 && hasComputedHiddenSibling(list, active)) return true;
+    for (var i=0; i<list.length; i++) {
+      if (list[i].style.display === 'none') return true;
+      if (list[i].style.visibility === 'hidden') return true;
+      if (list[i].hasAttribute('hidden')) return true;
+    }
+    return false;
+  }
+  function transformTrack(list){
+    if (!list || !list.length) return null;
+    var first = list[0];
+    var node = first && first.parentElement;
+    while (node && node !== document.body && node !== document.documentElement) {
+      try {
+        var directSlides = 0;
+        for (var i=0; i<node.children.length; i++) {
+          if (node.children[i].classList && node.children[i].classList.contains('slide')) directSlides += 1;
+        }
+        var style = window.getComputedStyle(node);
+        if (
+          directSlides >= list.length &&
+          (
+            node.style.transform ||
+            style.transform !== 'none' ||
+            /\\b(?:flex|grid)\\b/i.test(style.display)
+          )
+        ) {
+          return node;
+        }
+      } catch (_) {}
+      node = node.parentElement;
+    }
+    return null;
+  }
+  function activeIndexFromTransform(list){
+    var track = transformTrack(list);
+    if (!track) return -1;
+    var raw = track.style.transform || '';
+    var match = raw.match(/translateX\\(\\s*(-?[0-9.]+)\\s*(vw|%)\\s*\\)/i);
+    if (!match) return -1;
+    var value = parseFloat(match[1]);
+    if (!Number.isFinite(value)) return -1;
+    return Math.max(0, Math.min(list.length - 1, Math.round(Math.abs(value) / 100)));
+  }
+  function transformGo(i){
+    var list = slides();
+    var track = transformTrack(list);
+    if (!track) return false;
+    var target = Math.max(0, Math.min(list.length - 1, i));
+    var unit = /translateX\\(\\s*-?[0-9.]+\\s*%\\s*\\)/i.test(track.style.transform || '') ? '%' : 'vw';
+    track.style.transform = 'translateX(' + (-target * 100) + unit + ')';
+    updateDeckChrome(target, list.length);
+    report();
+    return true;
+  }
+  function updateDeckChrome(i, count){
+    var cur = document.getElementById('deck-cur');
+    var total = document.getElementById('deck-total');
+    var simpleCounter = document.getElementById('counter');
+    var simpleCounterParts = simpleCounter ? String(simpleCounter.textContent || '').split('/') : [];
+    var prev = document.getElementById('deck-prev');
+    var next = document.getElementById('deck-next');
+    if (cur) cur.textContent = pad2(i + 1);
+    if (total) total.textContent = pad2(count);
+    if (
+      simpleCounter &&
+      simpleCounterParts.length === 2 &&
+      simpleCounterParts[0].trim() !== '' &&
+      simpleCounterParts[1].trim() !== '' &&
+      Number.isFinite(Number(simpleCounterParts[0])) &&
+      Number.isFinite(Number(simpleCounterParts[1]))
+    ) {
+      simpleCounter.textContent = (i + 1) + ' / ' + count;
+    }
+    if (prev) prev.toggleAttribute('disabled', i <= 0);
+    if (next) next.toggleAttribute('disabled', i >= count - 1);
+  }
+  function setActive(i){
+    var list = slides();
+    if (!list.length) return false;
+    var target = Math.max(0, Math.min(list.length - 1, i));
+    if (forcedScrollPageIndex >= 0) forcedScrollPageIndex = target;
+    var activeClass = activeClassName(list);
+    var usesInlineDisplay = false;
+    var usesInlineVisibility = false;
+    var usesHidden = false;
+    // Many reveal-animation decks (the frontend-slides family) gate their
+    // staggered entrances on a SEPARATE \`.visible\` class — \`.slide.visible
+    // .reveal { opacity: 1 }\` — that the deck's own show() adds alongside
+    // \`.active\`. Driving navigation by flipping only the active class shows
+    // the slide chrome but leaves every .reveal child stuck at opacity:0, so
+    // the body renders blank. Mirror \`.visible\` in lock-step with the active
+    // slide (only for decks that actually use it, so it is a no-op elsewhere).
+    var usesVisibleClass = false;
+    for (var j=0; j<list.length; j++) {
+      usesInlineDisplay = usesInlineDisplay || list[j].style.display === 'none';
+      usesInlineVisibility = usesInlineVisibility || list[j].style.visibility === 'hidden';
+      usesHidden = usesHidden || list[j].hasAttribute('hidden');
+      usesVisibleClass = usesVisibleClass || (list[j].classList && list[j].classList.contains('visible'));
+    }
+    for (var k=0; k<list.length; k++) {
+      if (list[k].classList) {
+        list[k].classList.remove('active', 'is-active', 'current');
+        if (k === target) list[k].classList.add(activeClass);
+        if (usesVisibleClass) list[k].classList.toggle('visible', k === target);
+      }
+      if (usesHidden) {
+        if (k === target) list[k].removeAttribute('hidden');
+        else list[k].setAttribute('hidden', '');
+      }
+      if (usesInlineDisplay && list[k].style) {
+        list[k].style.display = k === target ? '' : 'none';
+      }
+      if (usesInlineVisibility && list[k].style) {
+        list[k].style.visibility = k === target ? '' : 'hidden';
+      }
+    }
+    updateDeckChrome(target, list.length);
+    report();
+    return true;
+  }
+  function forceScrollDeckPage(list, target, scrollTarget){
+    forcedScrollPageIndex = target;
+    var activeClass = activeClassName(list);
+    for (var i=0; i<list.length; i++) {
+      if (!list[i].hasAttribute('data-od-scroll-original-display')) {
+        list[i].setAttribute('data-od-scroll-original-display', list[i].style.display || '');
+      }
+      list[i].style.display = i === target
+        ? (list[i].getAttribute('data-od-scroll-original-display') || '')
+        : 'none';
+      if (list[i].classList) {
+        list[i].classList.remove('active', 'is-active', 'current');
+        if (i === target) list[i].classList.add(activeClass);
+      }
+    }
+    if (!scrollTarget || scrollTarget.root) {
+      try { window.scrollTo(0, 0); } catch (_) {}
+      var roots = scrollTargets();
+      for (var r=0; r<roots.length; r++) {
+        try { roots[r].scrollLeft = 0; roots[r].scrollTop = 0; } catch (_) {}
+      }
+    } else {
+      try { scrollTarget.element.scrollLeft = 0; scrollTarget.element.scrollTop = 0; } catch (_) {}
+    }
+    updateDeckChrome(target, list.length);
+    report(target);
+  }
+  function scrollGo(i){
+    var list = slides();
+    var next = Math.max(0, Math.min(list.length - 1, i));
+    var scrollTarget = scrollDeckTarget(list);
+    if (!scrollTarget) return;
+    var axis = scrollTarget.axis;
+    var span = Math.max(1, scrollTarget.root
+      ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+      : (axis === 'y' ? scrollTarget.element.clientHeight : scrollTarget.element.clientWidth));
+    var offset = next * span;
+    try {
+      var firstRect = list[0].getBoundingClientRect();
+      var targetRect = list[next].getBoundingClientRect();
+      var firstPosition = Number(axis === 'y' ? firstRect.top : firstRect.left) || 0;
+      var targetPosition = Number(axis === 'y' ? targetRect.top : targetRect.left) || 0;
+      if (Math.abs(targetPosition - firstPosition) > 1) {
+        var current = scrollTarget.root
+          ? maxRootScrollOffset(axis)
+          : scrollOffsetOf(scrollTarget.element, axis);
+        var containerOrigin = 0;
+        if (!scrollTarget.root) {
+          var containerRect = scrollTarget.element.getBoundingClientRect();
+          containerOrigin = Number(axis === 'y' ? containerRect.top : containerRect.left) || 0;
+        }
+        offset = current + targetPosition - containerOrigin;
+      }
+    } catch (_) {}
+    var position = axis === 'y'
+      ? { top: offset, behavior: 'smooth' }
+      : { left: offset, behavior: 'smooth' };
+    if (scrollTarget.root) {
+      // Root scrolling is browser-special: setting scrollLeft/scrollTop on
+      // body or documentElement is not reliable when body owns overflow.
+      try {
+        window.scrollTo(position);
+      } catch (_) {
+        try { window.scrollTo(axis === 'y' ? 0 : offset, axis === 'y' ? offset : 0); } catch (__) {}
+      }
+      var targets = scrollTargets();
+      for (var t=0; t<targets.length; t++) {
+        try {
+          targets[t].scrollTo(position);
+        } catch (_) {
+          try {
+            if (axis === 'y') targets[t].scrollTop = offset;
+            else targets[t].scrollLeft = offset;
+          } catch (__) {}
+        }
+      }
+    } else {
+      try {
+        scrollTarget.element.scrollTo(position);
+      } catch (_) {
+        try {
+          if (axis === 'y') scrollTarget.element.scrollTop = offset;
+          else scrollTarget.element.scrollLeft = offset;
+        } catch (__) {}
+      }
+    }
+    // A body-owned scroller can visually move while its offset remains absent
+    // from document.scrollingElement (notably in sandboxed iframes). Preserve
+    // the requested index for the host state instead of immediately snapping
+    // the rail back to page one; ordinary scroll events still call report()
+    // without an override and track subsequent manual movement.
+    report(next);
+    setTimeout(function(){
+      if (activeIndex(list) === next) { report(); return; }
+      // Some sandboxed Chromium documents expose a wide/tall root scrollWidth
+      // but ignore every root scrolling API. Fall back to a single-visible-page
+      // presentation so Remix never leaves the main canvas on page one while
+      // the host rail claims another page is active.
+      forceScrollDeckPage(list, next, scrollTarget);
+    }, 420);
+  }
+  function targetFor(action, list){
+    var i = activeIndex(list);
+    if (action === 'next') return i + 1;
+    if (action === 'prev') return i - 1;
+    if (action === 'first') return 0;
+    if (action === 'last') return list.length - 1;
+    return i;
+  }
+  function keyForAction(action){
+    if (action === 'next') return 'ArrowRight';
+    if (action === 'prev') return 'ArrowLeft';
+    if (action === 'first') return 'Home';
+    if (action === 'last') return 'End';
+    return null;
+  }
+  // Deck navigation must prefer the artifact's own keyboard handler over
+  // direct DOM mutation: generated decks track their slide index inside that
+  // handler and render their own page counter / dots / progress from it, so
+  // flipping classes or transforms from the bridge moves the canvas while the
+  // artifact's chrome (and its internal position) stays frozen on the first
+  // slide. Handlers may defer their state update (requestAnimationFrame or
+  // setTimeout), so the probe is asynchronous: after dispatching the key it
+  // waits one bounded mutation window for the deck to move before concluding
+  // the artifact did not handle it. Falling back synchronously would
+  // double-drive the deck — the bridge mutates the DOM immediately and the
+  // deferred artifact handler still runs afterwards, advancing a second time
+  // and desyncing the artifact's internal index from the visible slide.
+  var KEY_PROBE_WINDOW_MS = 48;
+  var KEYBOARD_UNLOCK_TIMEOUT_MS = 600;
+  var KEYBOARD_UNLOCK_RETRY_MS = 40;
+  var DIRECT_INDEX_UNLOCK_TIMEOUT_MS = 1500;
+  var preferredKeyTarget = null;
+  var odNavigationSequence = 0;
+  // Seeded from a source scan (inline artifact scripts run before this
+  // bridge); the addEventListener patches below catch later registrations.
+  // Decks with no keyboard handling at all skip the probe entirely, so their
+  // direct-DOM fallback stays synchronous.
+  var odHasArtifactKeydownListener = ${JSON.stringify(hasInlineKeydownListener)};
+  function artifactHasKeydownNavigation(){
+    if (odHasArtifactKeydownListener) return true;
+    // Set by the head-start registry hook, which sees registrations made
+    // before this bridge executes (external-script keyboard runtimes).
+    try { return window.__odArtifactKeydownNavigation === true; } catch (_) { return false; }
+  }
+  function trackTransformSnapshot(){
+    var track = transformTrack(slides());
+    return track ? (track.style.transform || '') : '';
+  }
+  function deckMovedSince(beforeIndex, beforeTrack){
+    return activeIndex(slides()) !== beforeIndex || trackTransformSnapshot() !== beforeTrack;
+  }
+  function waitForDeckMove(beforeIndex, beforeTrack, onDone){
+    if (deckMovedSince(beforeIndex, beforeTrack)) { onDone(true); return; }
+    var settled = false;
+    var observer = null;
+    var timer = null;
+    function finish(moved){
+      if (settled) return;
+      settled = true;
+      if (observer) { try { observer.disconnect(); } catch (_) {} }
+      if (timer) clearTimeout(timer);
+      onDone(moved);
+    }
+    try {
+      observer = new MutationObserver(function(){
+        if (deckMovedSince(beforeIndex, beforeTrack)) finish(true);
+      });
+      observer.observe(document.body, {
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'hidden'],
+      });
+    } catch (_) {}
+    timer = setTimeout(function(){ finish(deckMovedSince(beforeIndex, beforeTrack)); }, KEY_PROBE_WINDOW_MS);
+  }
+  function dispatchKeysTo(target, key){
+    var init = { key: key, code: key, bubbles: true, cancelable: true, composed: true };
+    try {
+      target.dispatchEvent(new KeyboardEvent('keydown', init));
+      target.dispatchEvent(new KeyboardEvent('keyup', init));
+    } catch (_) {}
+  }
+  function goViaArtifactKeys(key, onDone, isCurrent){
+    if (isCurrent && !isCurrent()) { onDone(false); return; }
+    if (!key || !artifactHasKeydownNavigation()) { onDone(false); return; }
+    var beforeIndex = activeIndex(slides());
+    var beforeTrack = trackTransformSnapshot();
+    // Once a dispatch target has proven responsive, keep using it: probing
+    // window first on every keypress would tax document-listening decks one
+    // probe window per navigation.
+    if (preferredKeyTarget) {
+      if (isCurrent && !isCurrent()) { onDone(false); return; }
+      dispatchKeysTo(preferredKeyTarget, key);
+      waitForDeckMove(beforeIndex, beforeTrack, onDone);
+      return;
+    }
+    // Window first, then document, waiting out each stage before the next:
+    // events dispatched at document also propagate to window listeners, so
+    // dispatching the second stage while the first stage's possibly deferred
+    // handler is still pending turns one host "next" request into two moves.
+    dispatchKeysTo(window, key);
+    waitForDeckMove(beforeIndex, beforeTrack, function(moved){
+      if (moved) { preferredKeyTarget = window; onDone(true); return; }
+      if (isCurrent && !isCurrent()) { onDone(false); return; }
+      dispatchKeysTo(document, key);
+      waitForDeckMove(beforeIndex, beforeTrack, function(movedViaDocument){
+        if (movedViaDocument) preferredKeyTarget = document;
+        onDone(movedViaDocument);
+      });
+    });
+  }
+  function stepToIndexViaKeys(target, navigationSequence, onDone){
+    var guard = slides().length + 4;
+    var unlockDeadline = 0;
+    function isCurrent(){ return navigationSequence === odNavigationSequence; }
+    function step(){
+      if (!isCurrent()) return;
+      var current = activeIndex(slides());
+      if (current === target) { onDone(true); return; }
+      if (guard <= 0) { onDone(false); return; }
+      goViaArtifactKeys(target > current ? 'ArrowRight' : 'ArrowLeft', function(moved){
+        if (!isCurrent()) return;
+        if (!moved) {
+          // A target that moved the deck on an earlier step may temporarily
+          // reject keys during an authored transition. Retry the same step
+          // briefly before using an index/DOM fallback that could desync state.
+          if (preferredKeyTarget) {
+            if (!unlockDeadline) unlockDeadline = Date.now() + KEYBOARD_UNLOCK_TIMEOUT_MS;
+            if (Date.now() < unlockDeadline) {
+              setTimeout(function(){ if (isCurrent()) step(); }, KEYBOARD_UNLOCK_RETRY_MS);
+              return;
+            }
+          }
+          onDone(false);
+          return;
+        }
+        unlockDeadline = 0;
+        guard -= 1;
+        step();
+      }, isCurrent);
+    }
+    step();
+  }
+  function artifactIndexInvoker(target, count){
+    var selectors = ['.nav-dot', '[data-slide-index]', '[data-page-index]'];
+    for (var s=0; s<selectors.length; s++) {
+      var controls = document.querySelectorAll(selectors[s]);
+      if (controls.length < count || !controls[target]) continue;
+      return function(){
+        try { controls[target].click(); } catch (_) {}
+      };
+    }
+    if (${JSON.stringify(hasInlineHashNavigation)}) {
+      return function(){
+        try {
+          // Preserve the artifact's own numeric hash route. Decks commonly
+          // use either #3 or #/3; changing the route shape makes their
+          // hashchange handler ignore the request, after which the bridge
+          // waits the full navigation-lock timeout and desynchronizes the
+          // artifact's private index with a DOM-only fallback.
+          var currentHashMatch = String(window.location.hash || '').match(/^(#.*?)(\d+)$/);
+          var hashPrefix = currentHashMatch
+            ? currentHashMatch[1]
+            : ${JSON.stringify(inlineHashIndexPrefix)};
+          var nextHash = hashPrefix + (target + 1);
+          if (window.location.hash === nextHash) return;
+          var oldUrl = String(window.location.href || '');
+          try {
+            // A fragment assignment on a Blob-backed Electron preview can be
+            // promoted to a slow navigation and briefly clear the compositor.
+            // Match artifact-owned routers: update the same-document route
+            // synchronously, then deliver the event they already listen for.
+            window.history.replaceState(null, '', nextHash);
+            var hashChangeEvent;
+            try {
+              hashChangeEvent = new HashChangeEvent('hashchange', {
+                oldURL: oldUrl,
+                newURL: String(window.location.href || ''),
+              });
+            } catch (_) {
+              hashChangeEvent = new Event('hashchange');
+            }
+            window.dispatchEvent(hashChangeEvent);
+          } catch (_) {
+            window.location.hash = nextHash;
+          }
+        } catch (_) {}
+      };
+    }
+    return null;
+  }
+  function goViaArtifactIndex(target, navigationSequence, onDone){
+    var list = slides();
+    var invoke = artifactIndexInvoker(target, list.length);
+    if (!invoke) { onDone(false); return; }
+    var deadline = Date.now() + DIRECT_INDEX_UNLOCK_TIMEOUT_MS;
+    function attempt(){
+      if (navigationSequence !== odNavigationSequence) return;
+      var beforeIndex = activeIndex(slides());
+      var beforeTrack = trackTransformSnapshot();
+      invoke();
+      waitForDeckMove(beforeIndex, beforeTrack, function(moved){
+        if (navigationSequence !== odNavigationSequence) return;
+        if (moved || activeIndex(slides()) === target) { onDone(true); return; }
+        // Some authored decks lock navigation during their entrance/slide
+        // transition. Keep the current page visible and retry the SAME target;
+        // never translate one thumbnail click into visible intermediate pages.
+        if (Date.now() < deadline) { setTimeout(attempt, 80); return; }
+        onDone(false);
+      });
+    }
+    attempt();
+  }
+  function go(action){
+    var navigationSequence = ++odNavigationSequence;
+    var list = slides();
+    if (!list.length) return;
+    if (navigateViaDeckStage(list, action)) return;
+    if (isScrollDeck(list)) {
+      scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
+      return;
+    }
+    goViaArtifactKeys(keyForAction(action), function(moved){
+      if (navigationSequence !== odNavigationSequence) return;
+      if (moved) { report(); return; }
+      // Recompute the target at fallback time: rapid host requests can have
+      // several probes in flight, and each fallback must step from the deck's
+      // position as it is now, not as it was when its probe started.
+      var now = slides();
+      var target = Math.max(0, Math.min(now.length - 1, targetFor(action, now)));
+      if (canSetActive(now) && setActive(target)) return;
+      if (transformGo(target)) return;
+      setTimeout(report, 280);
+    }, function(){ return navigationSequence === odNavigationSequence; });
+  }
+  function gotoIndex(i){
+    var navigationSequence = ++odNavigationSequence;
+    var list = slides();
+    if (!list.length) return;
+    var target = Math.max(0, Math.min(list.length - 1, i));
+    if (navigateViaDeckStage(list, 'go', target)) return;
+    if (isScrollDeck(list)) { scrollGo(target); return; }
+    if (activeIndex(list) === target) { report(); return; }
+    // Thumbnail navigation should use the same already-proven keyboard path
+    // as footer navigation. Index controls remain the fallback for dot/hash
+    // decks, avoiding their full retry timeout on keyboard-responsive decks.
+    stepToIndexViaKeys(target, navigationSequence, function(stepped){
+      if (navigationSequence !== odNavigationSequence) return;
+      if (stepped) { report(); return; }
+      goViaArtifactIndex(target, navigationSequence, function(moved){
+        if (navigationSequence !== odNavigationSequence) return;
+        if (moved) { report(); return; }
+        var now = slides();
+        if (canSetActive(now) && setActive(target)) return;
+        if (transformGo(target)) return;
+        setTimeout(report, 320);
+      });
+    });
+  }
+  function isInteractiveClickTarget(target){
+    while (target && target !== document.body && target !== document.documentElement) {
+      if (!target.tagName) break;
+      var tag = String(target.tagName || '').toUpperCase();
+      if (
+        tag === 'A' ||
+        tag === 'BUTTON' ||
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        tag === 'SUMMARY' ||
+        tag === 'LABEL' ||
+        tag === 'IFRAME' ||
+        target.isContentEditable ||
+        target.getAttribute('role') === 'button' ||
+        target.getAttribute('role') === 'link'
+      ) {
+        return true;
+      }
+      target = target.parentElement;
+    }
+    return false;
+  }
+  if (${JSON.stringify(clickNavigation)}) {
+    document.addEventListener('click', function(ev){
+      if (ev.defaultPrevented) return;
+      if (ev.button !== undefined && ev.button !== 0) return;
+      if (ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) return;
+      if (isInteractiveClickTarget(ev.target)) return;
+      var list = slides();
+      if (!list.length) return;
+      ev.preventDefault();
+      if (ev.clientX < window.innerWidth / 2) go('prev');
+      else go('next');
+    }, true);
+  }
+  var lastCommentTargetSlideIndex = -1;
+  function report(forcedIndex){
+    try {
+      var list = slides();
+      var measured = activeIndex(list);
+      var i = Number.isFinite(forcedIndex)
+        ? Math.max(0, Math.min(list.length - 1, Math.floor(forcedIndex)))
+        : measured;
+      var count = list.length;
+      var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
+      updateDeckChrome(i, count);
+      window.parent.postMessage({
+        type: 'od:slide-state',
+        active: i,
+        count: count,
+      }, '*');
+      document.querySelectorAll('.slide-number').forEach(function(el){
+        el.setAttribute('data-current',i+1); el.setAttribute('data-total',count);
+      });
+      document.querySelectorAll('.progress-bar>span,.deck-progress>span,.deck-progress .bar').forEach(function(el){
+        el.style.width=progressWidth;
+      });
+      document.querySelectorAll('.deck-progress').forEach(function(el){
+        if (el.querySelector('span,.bar')) return;
+        el.style.width=progressWidth;
+      });
+      if (i !== lastCommentTargetSlideIndex) {
+        lastCommentTargetSlideIndex = i;
+        try {
+          if (typeof window.__odScheduleCommentTargets === 'function') window.__odScheduleCommentTargets();
+        } catch (_) {}
+      }
+    } catch (e) {}
+  }
+  // Runtime-managed decks can also move themselves through their own tap
+  // zones, keyboard handler, or public API. Normalize both generations of
+  // deck-stage state notification back into the host-owned slide protocol.
+  document.addEventListener('slidechange', function(ev){
+    var stage = document.querySelector('deck-stage');
+    if (stage && ev.target === stage) report();
+  });
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && typeof data.slideIndexChanged === 'number') report();
+  });
+  window.__odDeckSlideState = function(){
+    var list = slides();
+    return { active: activeIndex(list), count: list.length };
+  };
+  function restoreInitialSlide(){
+    if (didRestoreInitialSlide) { report(); return; }
+    var list = slides();
+    if (!list.length) return;
+    didRestoreInitialSlide = true;
+    gotoIndex(initialSlideIndex);
+  }
+  var odSlideMessageBeforeIndex = -1;
+  var odDeckBridgeInstallingMessageListener = false;
+  var odDeckProtocolVersion = ${artifactDeckProtocolVersion};
+  var odHasExternalSlideMessageListener = ${JSON.stringify(hasInlineSlideMessageListener)} || odDeckProtocolVersion === ${DECK_PROTOCOL_VERSION};
+  function odMaybeHandlesSlideMessages(listener) {
+    try {
+      var source = '';
+      if (typeof listener === 'function') source = String(listener);
+      else if (listener && typeof listener.handleEvent === 'function') source = String(listener.handleEvent);
+      if (/\\bod:slide\\b/.test(source)) return true;
+      return /slide/i.test(source) && /message/i.test(source);
+    } catch (_) {
+      return false;
+    }
+  }
+  ${NAV_KEYDOWN_LISTENER_PROBE}
+  try {
+    var odOriginalAddEventListener = window.addEventListener;
+    window.addEventListener = function(type, listener, options) {
+      if (
+        type === 'message' &&
+        !odDeckBridgeInstallingMessageListener &&
+        odMaybeHandlesSlideMessages(listener)
+      ) {
+        odHasExternalSlideMessageListener = true;
+      }
+      if (type === 'keydown' && odLooksLikeNavKeydownListener(listener)) {
+        odHasArtifactKeydownListener = true;
+      }
+      return odOriginalAddEventListener.call(this, type, listener, options);
+    };
+  } catch (_) {}
+  try {
+    var odOriginalDocumentAddEventListener = document.addEventListener;
+    document.addEventListener = function(type, listener, options) {
+      if (type === 'keydown' && odLooksLikeNavKeydownListener(listener)) {
+        odHasArtifactKeydownListener = true;
+      }
+      return odOriginalDocumentAddEventListener.call(this, type, listener, options);
+    };
+  } catch (_) {}
+  function addOdSlideMessageListener(listener, options) {
+    odDeckBridgeInstallingMessageListener = true;
+    try { window.addEventListener('message', listener, options); }
+    finally { odDeckBridgeInstallingMessageListener = false; }
+  }
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== ${JSON.stringify(DECK_READY_MESSAGE_TYPE)}) return;
+    if (data.protocolVersion !== ${DECK_PROTOCOL_VERSION}) return;
+    odDeckProtocolVersion = ${DECK_PROTOCOL_VERSION};
+    odHasExternalSlideMessageListener = true;
+  });
+  function odIsSupportedSlideMessage(data) {
+    return !!data &&
+      data.type === 'od:slide' &&
+      (data.protocolVersion == null || data.protocolVersion === ${DECK_PROTOCOL_VERSION});
+  }
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!odIsSupportedSlideMessage(data)) return;
+    var before = activeIndex(slides());
+    odSlideMessageBeforeIndex = before;
+    setTimeout(function(){
+      if (activeIndex(slides()) !== before) report();
+    }, 0);
+  }, true);
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!odIsSupportedSlideMessage(data)) return;
+    // Every newer host intent cancels an older multi-step jump, including a
+    // request for the slide that is CURRENTLY visible. The older jump may not
+    // have dispatched its first accepted key yet (the artifact can register on
+    // document after the window probe), so returning early without cancelling
+    // lets that stale request move the deck after the user's newer click.
+    odNavigationSequence += 1;
+    var before = odSlideMessageBeforeIndex;
+    odSlideMessageBeforeIndex = -1;
+    function applyBridgeFallback() {
+      var current = activeIndex(slides());
+      if (data.action === 'go' && typeof data.index === 'number') {
+        if (current === data.index) {
+          report();
+          return;
+        }
+        gotoIndex(data.index);
+        return;
+      }
+      // Some generated decks ship their own od:slide listener. Let every
+      // listener for this message event settle first; then, if the artifact
+      // already moved from the captured index, report instead of applying the
+      // same command again.
+      if (before >= 0 && current !== before) {
+        report();
+        return;
+      }
+      go(data.action);
+    }
+    if (before >= 0 && activeIndex(slides()) !== before) {
+      report();
+      return;
+    }
+    if (odHasExternalSlideMessageListener) {
+      setTimeout(applyBridgeFallback, 0);
+      return;
+    }
+    applyBridgeFallback();
+  });
+  addOdSlideMessageListener(function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:slide-state-probe') return;
+    report();
+  });
+  function ownDeckButton(id, action){
+    var btn = document.getElementById(id);
+    if (!btn || btn.__odDeckOwned) return;
+    btn.__odDeckOwned = true;
+    btn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      go(action);
+    }, true);
+  }
+  ownDeckButton('deck-prev', 'prev');
+  ownDeckButton('deck-next', 'next');
+  // Report once on load and on every scroll-end so the host stays in sync.
+  window.addEventListener('load', function(){ setTimeout(restoreInitialSlide, 200); });
+  document.addEventListener('scroll', function(){
+    clearTimeout(window.__odReportT);
+    window.__odReportT = setTimeout(report, 120);
+  }, { passive: true, capture: true });
+  // Nudge the deck's own fit/resize listener after layout settles. Fixed-canvas
+  // decks (e.g. ".canvas { width: 1920px }" + "transform: scale(...)") compute
+  // their scale on first run, which fires when the iframe is still 0x0 in
+  // sandboxed previews — the deck's fit() then resolves to scale(0) / scale(1)
+  // and never recovers. Re-firing 'resize' lets the deck recompute, and a
+  // ResizeObserver picks up later layout settles (zoom toggle, sidebar drag).
+  function nudgeResize(){
+    try { window.dispatchEvent(new Event('resize')); }
+    catch (_) {}
+  }
+  // Aggressively nudge during the first second so the deck catches the
+  // iframe's first non-zero size; bail out early once the iframe reports a
+  // real width. Without this loop, fixed-canvas decks render at scale(0).
+  function chaseFirstLayout(){
+    var attempts = 0;
+    function tick(){
+      attempts += 1;
+      var w = window.innerWidth;
+      nudgeResize();
+      if (w > 0 && attempts >= 2) return; // one extra nudge after first non-zero
+      if (attempts < 30) setTimeout(tick, 50);
+    }
+    tick();
+  }
+  if (document.readyState === 'complete') chaseFirstLayout();
+  else window.addEventListener('load', chaseFirstLayout);
+  // Re-nudge whenever the iframe itself is resized by the host (e.g.
+  // user toggles zoom, resizes the chat sidebar, exits Present).
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      var ro = new ResizeObserver(function(){ nudgeResize(); });
+      ro.observe(document.documentElement);
+    } catch (_) {}
+  }
+  // For class-toggle decks the deck's own keyboard handler updates classes
+  // on the slide elements; an attribute observer translates that into the
+  // host counter without depending on scroll events.
+  function observeSlides(){
+    var list = slides();
+    if (!list.length) { setTimeout(observeSlides, 150); return; }
+    try {
+      var mo = new MutationObserver(function(){
+        clearTimeout(window.__odReportT2);
+        window.__odReportT2 = setTimeout(report, 60);
+      });
+      for (var i = 0; i < list.length; i++) {
+        mo.observe(list[i], { attributes: true, attributeFilter: ['class', 'style', 'hidden', 'aria-hidden'] });
+      }
+      // Transform-track decks translate a shared parent instead of mutating
+      // slide attributes, so the artifact's own keyboard handler would never
+      // trip the observer above and the host counter would drift. Watch the
+      // track's style too.
+      var track = transformTrack(list);
+      if (track) mo.observe(track, { attributes: true, attributeFilter: ['style'] });
+    } catch (e) {}
+    setTimeout(restoreInitialSlide, 100);
+  }
+  observeSlides();
+})();</script>`;
+  return { styleTag: styleFix, scriptTag: script };
+}
+
+function injectDeckBridge(
+  doc: string,
+  options: DeckBridgeOptions = {},
+): string {
+  const { styleTag, scriptTag } = buildDeckBridgeAssets(doc, options);
+  return injectBeforeBodyEnd(injectBeforeHeadEnd(doc, styleTag), scriptTag);
+}
+
+// The tweaks bridge lets the host toolbar toggle the visibility of the artifact's
+// native tweaks panel. Bidirectional: host posts `od:tweaks-panel-visible` to
+// drive panel visibility; bridge posts `od:tweaks-panel-state` back whenever the
+// artifact's own `× close` button or `T` shortcut flips the `.tw-hidden` class,
+// so the toolbar toggle stays in sync. Also reports `od:tweaks-available` so the
+// host can disable the toggle on artifacts without a `.tw-panel`.
+function injectTweaksBridge(doc: string): string {
+  // Hide-state styling mirrors the artifact's own `.tw-hidden` (transform +
+  // opacity) so the CSS transition plays in both directions.
+  //
+  // Scope this to `.tw-panel` only. The artifact also ships its own
+  // `.tw-restore` affordance, and it owns that element's visibility: hidden
+  // until its close handler adds `tw-show`. This bridge used to force
+  // `.tw-restore { display: none !important }` back when a host toolbar
+  // provided a competing entry point, but no host surface drives the panel
+  // any more, so overriding it just left a closed panel with no
+  // pointer-reachable way back — the artifact's keyboard shortcut became the
+  // only entry point, and the hint for it is printed on the hidden button.
+  const style = `<style data-od-tweaks-bridge-style>
+[data-od-tweaks-hidden] .tw-panel {
+  transform: translateX(calc(100% + 32px)) !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+</style>`;
+  const script = `<script data-od-tweaks-bridge>(function(){
+  // Synchronously hide BEFORE the artifact body parses so the panel never
+  // flashes on initial paint. The host removes the attribute via postMessage
+  // once it knows the desired state.
+  document.documentElement.setAttribute('data-od-tweaks-hidden', '');
+
+  var suppressEcho = false;
+  var observer = null;
+
+  function panelEl(){ return document.querySelector('.tw-panel'); }
+
+  function applyClassesToPanel(visible){
+    var panel = panelEl();
+    if (panel) panel.classList.toggle('tw-hidden', !visible);
+  }
+
+  function setPanelVisible(visible){
+    suppressEcho = true;
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !visible);
+    applyClassesToPanel(visible);
+    // Clear flag after the MutationObserver has had a chance to fire for this
+    // change so we don't echo our own host-driven toggles back to the host.
+    Promise.resolve().then(function(){ suppressEcho = false; });
+  }
+
+  function postState(){
+    var panel = panelEl();
+    if (!panel) return;
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-panel-state',
+        visible: !panel.classList.contains('tw-hidden'),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function postAvailability(){
+    try {
+      parent.postMessage({
+        type: 'od:tweaks-available',
+        available: !!panelEl(),
+      }, '*');
+    } catch (e) {}
+  }
+
+  function attachObserver(){
+    var panel = panelEl();
+    if (!panel || observer) return;
+    observer = new MutationObserver(function(){
+      if (suppressEcho) return;
+      postState();
+    });
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  function onReady(){
+    // Capture the panel authored visibility BEFORE we apply the host hidden
+    // attribute. The bridge sets data-od-tweaks-hidden synchronously in head
+    // (before the body parses), so on entry to onReady the attribute is
+    // always present even though the artifact may have authored the panel
+    // as default-visible. Reading the panel class first is the only place
+    // we can still observe the author intent. Then drive the attribute,
+    // classes, and posted state from that captured value so a default
+    // visible tw-panel reports visible:true and the toolbar toggle starts
+    // ON. Issue surfaced in PR #1643 review.
+    var panel = panelEl();
+    var initialVisible = !!panel && !panel.classList.contains('tw-hidden');
+    document.documentElement.toggleAttribute('data-od-tweaks-hidden', !initialVisible);
+    applyClassesToPanel(initialVisible);
+    attachObserver();
+    postAvailability();
+    // Post the captured initial visibility so the toolbar toggle reflects
+    // the default state on mount. Without this the toggle reads OFF while
+    // a default-visible tw-panel artifact clearly shows its panel and the
+    // user would have to click toggle-on then toggle-off to actually hide.
+    postState();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', onReady);
+  } else {
+    onReady();
+  }
+
+  window.addEventListener('message', function(ev){
+    if (!ev.data || ev.data.type !== 'od:tweaks-panel-visible') return;
+    setPanelVisible(!!ev.data.visible);
+  });
+})();</script>`;
+  const withStyle = injectBeforeHeadEnd(doc, style);
+  // Inject the bridge as early as possible (inside <head>) so the synchronous
+  // attribute set runs before the artifact body parses.
+  return injectBeforeHeadEnd(withStyle, script);
+}

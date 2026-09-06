@@ -523,7 +523,6 @@ export function deriveConfigureGlobals(
     amr_runnable: amrAuthorized,
   };
 }
-
 // Normalize the "other" custom-reason free text for transport. Trims
 // whitespace and returns empty string when the field is blank or the user
 // didn't select the "other" option. Callers should pass the raw text only
@@ -556,4 +555,3 @@ export function harnessAnalyticsFromRolloutDecision(
       : {}),
   };
 }
-

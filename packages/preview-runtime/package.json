@@ -1,0 +1,51 @@
+{
+  "name": "@open-design/preview-runtime",
+  "version": "0.20.3",
+  "private": true,
+  "type": "module",
+  "description": "Shared injected preview-runtime builders and browser-side helpers for Open Design HTML artifacts.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./font-stylesheet": {
+      "types": "./dist/font-stylesheet.d.ts",
+      "default": "./dist/font-stylesheet.mjs"
+    },
+    "./manual-edit": {
+      "types": "./dist/manual-edit.d.ts",
+      "default": "./dist/manual-edit.mjs"
+    },
+    "./manual-edit-source": {
+      "types": "./dist/manual-edit-source.d.ts",
+      "default": "./dist/manual-edit-source.mjs"
+    },
+    "./srcdoc": {
+      "types": "./dist/srcdoc.d.ts",
+      "default": "./dist/srcdoc.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.0",
+    "tsx": "4.22.3",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

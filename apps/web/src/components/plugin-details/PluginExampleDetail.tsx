@@ -16,6 +16,8 @@ import { localizePluginDescription, localizePluginTitle } from '../plugins-home/
 import {
   fetchPluginExampleHtml,
   fetchPluginPreviewHtml,
+  pluginExampleDocumentUrl,
+  pluginPreviewDocumentUrl,
   type SkillExampleResult,
 } from '../../providers/registry';
 import { PreviewModal, type PreviewSharePopoverItem } from '../PreviewModal';
@@ -112,6 +114,13 @@ export function PluginExampleDetail({
           id: 'preview',
           label: t('examples.previewLabel'),
           html,
+          // Same route the HTML was fetched from, so the stage navigates to
+          // the real document instead of rebuilding it and the example's
+          // relative assets keep resolving. The workspace scope rides as
+          // navigation query because a frame navigation cannot send headers.
+          url: exampleStem
+            ? pluginExampleDocumentUrl(record.id, exampleStem, workspaceContext)
+            : pluginPreviewDocumentUrl(record.id, workspaceContext),
           error,
           // Pass the surface-appropriate noun so the unavailable placeholder
           // reads "this plugin" / "this template" instead of falling back to

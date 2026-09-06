@@ -24,6 +24,7 @@ import {
   DECK_SLIDE_SELECTOR,
   DECK_STRUCTURED_SLIDE_SELECTOR,
 } from '@open-design/contracts/runtime/deck-stage-fallback';
+import { isApprovedFontStylesheetHref } from '@open-design/preview-runtime/font-stylesheet';
 import { collectLegacyDeckScreenSlides } from './deck-slide-structure';
 
 export type DeckThumbnailFallbackReason =
@@ -64,30 +65,6 @@ export interface ParsedDeckThumbnails {
 const DEFAULT_DESIGN_WIDTH = 1920;
 const DEFAULT_DESIGN_HEIGHT = 1080;
 const MAX_SLIDES = 200;
-
-const FONT_HOSTS = new Set([
-  'fonts.googleapis.com',
-  'fonts.gstatic.com',
-  'use.typekit.net',
-  'fonts.bunny.net',
-  'fonts.cdnfonts.com',
-]);
-
-// A font stylesheet link is re-loaded document-wide by DeckSlideThumbnail, so it
-// must be an https URL whose HOST is exactly an approved font CDN — a substring
-// match would accept `https://evil.example/fonts.googleapis.com.css` and inject
-// arbitrary CSS into the app document.
-export function isApprovedFontStylesheetHref(href: string): boolean {
-  // Font-CDN links are always absolute https URLs; a relative href cannot be an
-  // approved CDN and is correctly treated as an untrusted external stylesheet.
-  let url: URL;
-  try {
-    url = new URL(href);
-  } catch {
-    return false;
-  }
-  return url.protocol === 'https:' && FONT_HOSTS.has(url.hostname.toLowerCase());
-}
 
 function unrenderable(reason: DeckThumbnailFallbackReason): ParsedDeckThumbnails {
   return {

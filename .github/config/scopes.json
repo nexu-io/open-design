@@ -111,14 +111,14 @@
     {
       "id": "daemon-sources",
       "match": {
-        "prefixes": ["apps/daemon/", "packages/release/", "packages/contracts/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/"],
+        "prefixes": ["apps/daemon/", "packages/release/", "packages/contracts/", "packages/platform/", "packages/preview-runtime/", "packages/sidecar/", "packages/sidecar-proto/"],
         "exclude": ["match://daemon-core"]
       },
       "effects": ["daemon_tests_required"], "confidence": "medium"
     },
     {
       "id": "web-sources",
-      "match": { "prefixes": ["apps/web/", "packages/release/", "packages/components/", "packages/contracts/", "packages/host/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/"] },
+      "match": { "prefixes": ["apps/web/", "packages/release/", "packages/components/", "packages/contracts/", "packages/host/", "packages/platform/", "packages/preview-runtime/", "packages/sidecar/", "packages/sidecar-proto/"] },
       "effects": ["web_tests_required"], "confidence": "medium"
     },
     {
@@ -182,7 +182,7 @@
     {
       "id": "ui-p0-surface",
       "match": {
-        "prefixes": ["apps/web/", "apps/daemon/", "packages/release/", "packages/components/", "packages/contracts/", "packages/host/", "packages/platform/", "packages/sidecar/", "packages/sidecar-proto/", "e2e/ui/", "e2e/lib/", "e2e/resources/", "e2e/scripts/", ".github/actions/setup-playwright/", ".github/actions/setup-workspace/"],
+        "prefixes": ["apps/web/", "apps/daemon/", "packages/release/", "packages/components/", "packages/contracts/", "packages/host/", "packages/platform/", "packages/preview-runtime/", "packages/sidecar/", "packages/sidecar-proto/", "e2e/ui/", "e2e/lib/", "e2e/resources/", "e2e/scripts/", ".github/actions/setup-playwright/", ".github/actions/setup-workspace/"],
         "exact": ["e2e/package.json", "e2e/playwright.config.ts", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".github/workflows/ci.yml", ".github/workflows/ui-extended-main.yml"],
         "exclude": ["match://daemon-core"]
       },

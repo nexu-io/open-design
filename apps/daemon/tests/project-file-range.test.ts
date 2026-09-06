@@ -1,6 +1,6 @@
-import type http from 'node:http';
+import http from 'node:http';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, stat, symlink, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -195,9 +195,72 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
       Buffer.from(`<!doctype html><html><body><main>Large Preview</main>${'x'.repeat((2 * 1024 * 1024) + 256)}</body></html>`),
     );
     await writeFile(
+      path.join(dir, 'large-version-race.html'),
+      Buffer.from(`<!doctype html><html><body><main>Version One</main>${'x'.repeat((2 * 1024 * 1024) + 256)}</body></html>`),
+    );
+    await writeFile(
       path.join(dir, 'large-powered.html'),
       Buffer.from(`<!doctype html><html><body>${'x'.repeat((2 * 1024 * 1024) + 256)}<script>new Worker("worker.js")</script></body></html>`),
     );
+    await writeFile(
+      path.join(dir, 'large-external.html'),
+      Buffer.from([
+        '<!doctype html><html><head>',
+        '<link rel="stylesheet" href="./styles.css">',
+        '<script src="./support.js"></script>',
+        ...Array.from({ length: 43 }, (_, index) => (
+          `<script type="text/babel" src="./screen-${index + 1}.jsx"></script>`
+        )),
+        '</head><body><main id="root">External Preview</main>',
+        '<!-- ',
+        'x'.repeat((2 * 1024 * 1024) + 256),
+        ' --></body></html>',
+      ].join('')),
+    );
+    await writeFile(
+      path.join(dir, 'large-body-redirect.html'),
+      Buffer.from([
+        '<!doctype html><html><head><title>Body redirect</title></head>',
+        '<body><main>Redirect Preview</main>',
+        '<!-- ',
+        'x'.repeat((2 * 1024 * 1024) + 256),
+        ' -->',
+        '<script>location.replace("./next.html")</script>',
+        '</body></html>',
+      ].join('')),
+    );
+    await writeFile(
+      path.join(dir, 'large-late-guards.html'),
+      Buffer.from([
+        '<!doctype html><html><head><title>Late guards</title></head><body>',
+        'x'.repeat((96 * 1024) + 1),
+        '<input autofocus>',
+        '<script type="text/babel" src="./screen-1.jsx"></script>',
+        '<script>location.replace("./next.html")</script>',
+        'x'.repeat((2 * 1024 * 1024) + 256),
+        '</body></html>',
+      ].join('')),
+    );
+    const deckSource = [
+      '<!doctype html><html><head><style>.slide{display:none}.slide.active{display:block}</style></head>',
+      '<body><main id="deck-stage"><deck-stage>',
+      '<section class="slide active">One</section><section class="slide">Two</section>',
+      '</deck-stage></main>',
+      '<script>window.addEventListener("message",function(event){if(event.data.type==="od:slide"){};});',
+      'window.addEventListener("keydown",function(event){if(event.key==="ArrowRight"){};});',
+      'window.addEventListener("hashchange",function(){return location.hash||"#/";});</script>',
+      '</body></html>',
+    ].join('');
+    await writeFile(path.join(dir, 'deck.html'), deckSource);
+    await writeFile(
+      path.join(dir, 'large-deck.html'),
+      deckSource.replace('</body>', `<!-- ${'x'.repeat((2 * 1024 * 1024) + 256)} --></body>`),
+    );
+    await writeFile(path.join(dir, 'styles.css'), 'body { color: rgb(1, 2, 3); }');
+    await writeFile(path.join(dir, 'support.js'), 'window.__supportLoaded = true;');
+    for (let index = 1; index <= 43; index += 1) {
+      await writeFile(path.join(dir, `screen-${index}.jsx`), `window.__screen${index} = true;`);
+    }
     await writeFile(path.join(dir, 'body.html'), Buffer.from('<html><body><main>Preview</main></body></html>'));
     // `<head>` is optional markup, so a document can legally have none while a
     // script string contains one — the head-open half of
@@ -723,6 +786,8 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     await writeFile(path.join(complexPreviewDir, 'data.json'), '{"ready":true}');
     await writeFile(path.join(complexPreviewDir, 'assets', 'card.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
     await writeFile(path.join(complexPreviewDir, 'assets', 'card@2x.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="2"/>');
+    await mkdir(path.join(dir, 'assets'), { recursive: true });
+    await writeFile(path.join(dir, 'assets', 'root.css'), ':root { --scope-root: true; }');
     await writeFile(
       path.join(dir, 'bridged.html'),
       Buffer.from('<html><body><script data-od-url-scroll-bridge></script><main>Preview</main></body></html>'),
@@ -745,6 +810,13 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
       Buffer.from('<!doctype html><html><head><script type="module" src="/src/main.tsx"></script></head><body><div id="root"></div></body></html>'),
     );
     await writeFile(
+      path.join(dir, 'large-vite-entry.html'),
+      Buffer.from(
+        '<!doctype html><html><head><script type="module" src="/src/main.tsx"></script></head>'
+          + `<body><div id="root"></div><!-- ${'x'.repeat((2 * 1024 * 1024) + 256)} --></body></html>`,
+      ),
+    );
+    await writeFile(
       path.join(dir, 'dist', 'index.html'),
       Buffer.from(
         '<!doctype html><html><head>' +
@@ -763,6 +835,71 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     const url = new URL(baseUrl);
     url.hostname = url.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1';
     return url.origin;
+  };
+  const scopedRequest = (
+    requestPath: string,
+    hostHeader: string,
+  ): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> => {
+    const target = new URL(baseUrl);
+    return new Promise((resolve, reject) => {
+      const request = http.request({
+        hostname: target.hostname,
+        port: target.port,
+        path: requestPath,
+        method: 'GET',
+        headers: { Host: hostHeader },
+      }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on('end', () => resolve({
+          status: response.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString('utf8'),
+          headers: response.headers,
+        }));
+      });
+      request.on('error', reject);
+      request.end();
+    });
+  };
+
+  const abortScopedRequestAfterFirstChunk = (
+    requestPath: string,
+    hostHeader: string,
+  ): Promise<void> => {
+    const target = new URL(baseUrl);
+    return new Promise((resolve, reject) => {
+      const request = http.request({
+        hostname: target.hostname,
+        port: target.port,
+        path: requestPath,
+        method: 'GET',
+        headers: { Host: hostHeader },
+      }, (response) => {
+        let aborted = false;
+        response.once('data', () => {
+          aborted = true;
+          response.destroy();
+        });
+        response.once('close', () => {
+          if (aborted) {
+            resolve();
+            return;
+          }
+          reject(new Error('scoped response closed before its first body chunk'));
+        });
+        response.once('error', (error) => {
+          if (aborted && (error as NodeJS.ErrnoException).code === 'ECONNRESET') {
+            resolve();
+            return;
+          }
+          reject(error);
+        });
+      });
+      request.once('error', (error) => {
+        reject(error);
+      });
+      request.end();
+    });
   };
 
   it('advertises Accept-Ranges: bytes for a video file with no Range header', async () => {
@@ -862,19 +999,132 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(body.poweredPreview.scannedBytes).toBeGreaterThan(2 * 1024 * 1024);
   });
 
-  it('skips URL preview bridge injection for large HTML so first paint can stream', async () => {
-    const res = await fetch(`${rawUrl('large.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability`, {
-      headers: { Range: 'bytes=0-127' },
+  it('returns passive-guard hints when every signal is after the text-preview prefix', async () => {
+    const res = await fetch(`${baseUrl}/api/projects/${projectId}/text-preview/large-late-guards.html?limit=${96 * 1024}`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      text: string;
+      passiveGuards: {
+        sandbox: boolean;
+        focus: boolean;
+        redirect: boolean;
+        scannedBytes: number;
+        complete: boolean;
+      };
+    };
+    expect(body.text).not.toContain('autofocus');
+    expect(body.text).not.toContain('text/babel');
+    expect(body.text).not.toContain('location.replace');
+    expect(body.passiveGuards).toMatchObject({
+      sandbox: true,
+      focus: true,
+      redirect: true,
     });
-    expect(res.status).toBe(206);
-    expect(res.headers.get('accept-ranges')).toBe('bytes');
-    expect(res.headers.get('content-range')).toMatch(/^bytes 0-127\//);
-    const html = await res.text();
+    expect(body.passiveGuards.scannedBytes).toBeGreaterThan(96 * 1024);
+  });
+
+  it('streams URL preview bridges into large HTML while preserving range semantics', async () => {
+    const url = `${rawUrl('large.html')}?odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability`;
+    const full = await fetch(url);
+    expect(full.status).toBe(200);
+    expect(full.headers.get('accept-ranges')).toBe('bytes');
+    const body = Buffer.from(await full.arrayBuffer());
+    const html = body.toString('utf8');
+    expect(Number(full.headers.get('content-length'))).toBe(body.byteLength);
     expect(html).toContain('Large Preview');
-    expect(html).not.toContain('data-od-url-scroll-bridge');
-    expect(html).not.toContain('data-od-url-selection-bridge');
-    expect(html).not.toContain('data-od-url-snapshot-bridge');
-    expect(html).not.toContain('data-od-preview-observability');
+    expect(html).toContain('data-od-url-scroll-bridge');
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain('data-od-preview-observability');
+    expect(html).toContain('data-od-project-preview-base');
+
+    const rangeStart = html.indexOf('data-od-url-selection-bridge') - 32;
+    const rangeEnd = rangeStart + 255;
+    const partial = await fetch(url, {
+      headers: { Range: `bytes=${rangeStart}-${rangeEnd}` },
+    });
+    expect(partial.status).toBe(206);
+    expect(partial.headers.get('content-range')).toBe(
+      `bytes ${rangeStart}-${rangeEnd}/${body.byteLength}`,
+    );
+    expect(Buffer.from(await partial.arrayBuffer())).toEqual(body.subarray(rangeStart, rangeEnd + 1));
+
+    const head = await fetch(url, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('accept-ranges')).toBe('bytes');
+    expect(Number(head.headers.get('content-length'))).toBeGreaterThan(2 * 1024 * 1024);
+    expect((await head.arrayBuffer()).byteLength).toBe(0);
+  });
+
+  it('keeps large support.js, CSS, and Babel-script previews on a scoped real URL', async () => {
+    const source = await fetch(rawUrl('large-external.html'));
+    const sourceBody = Buffer.from(await source.arrayBuffer());
+    expect(sourceBody.toString()).not.toContain('data-od-project-preview-base');
+
+    const preview = await fetch(
+      `${rawUrl('large-external.html')}?odPreviewBridge=sandbox&odPreviewBridge=focus&odPreviewBridge=selection`,
+    );
+    expect(preview.status).toBe(200);
+    const html = await preview.text();
+    expect(html).toContain('data-od-project-preview-base');
+    expect(html).toContain('data-od-sandbox-shim');
+    expect(html).toContain('data-od-preview-focus-guard');
+    expect(html).toContain('data-od-url-selection-bridge');
+    expect(html.indexOf('data-od-project-preview-base')).toBeLessThan(html.indexOf('src="./support.js"'));
+    expect(html).toContain('src="./screen-43.jsx"');
+    expect(html).toContain('href="./styles.css"');
+
+    const baseHref = html.match(/<base href="([^"]+)" data-od-project-preview-base>/)?.[1];
+    expect(baseHref).toBeTruthy();
+    const previewBase = new URL(baseHref!, baseUrl);
+    const [script, css, jsx] = await Promise.all([
+      fetch(new URL('support.js', previewBase)),
+      fetch(new URL('styles.css', previewBase)),
+      fetch(new URL('screen-43.jsx', previewBase)),
+    ]);
+    expect(script.status).toBe(200);
+    expect(await script.text()).toContain('__supportLoaded');
+    expect(css.status).toBe(200);
+    expect(await css.text()).toContain('rgb(1, 2, 3)');
+    expect(jsx.status).toBe(200);
+    expect(await jsx.text()).toContain('__screen43');
+  });
+
+  it('enables load-time redirect blocking for a large body script', async () => {
+    const preview = await fetch(
+      `${rawUrl('large-body-redirect.html')}?odPreviewBridge=redirect`,
+      { headers: { Connection: 'close' } },
+    );
+    expect(preview.status).toBe(200);
+    const html = await preview.text();
+    expect(html).toContain('data-od-preview-redirect-guard');
+    expect(html).toContain('var BLOCK_LOAD_TIME_SCRIPT_REDIRECT = true;');
+    expect(html).toContain('location.replace("./next.html")');
+  });
+
+  it('streams every requested passive guard for signals after the routing prefix', async () => {
+    const preview = await fetch(
+      `${rawUrl('large-late-guards.html')}?odPreviewBridge=sandbox&odPreviewBridge=focus&odPreviewBridge=redirect`,
+      { headers: { Connection: 'close' } },
+    );
+    expect(preview.status).toBe(200);
+    const html = await preview.text();
+    expect(html).toContain('data-od-sandbox-shim');
+    expect(html).toContain('data-od-preview-focus-guard');
+    expect(html).toContain('data-od-preview-redirect-guard');
+    expect(html).toContain('var BLOCK_LOAD_TIME_SCRIPT_REDIRECT = true;');
+  });
+
+  it('streams requested bridges into large powered HTML previews', async () => {
+    const preview = await fetch(
+      `${poweredUrl('large-powered.html')}?odPreviewBridge=observability&odPreviewBridge=snapshot`,
+    );
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get('document-isolation-policy')).toBe('isolate-and-credentialless');
+    const html = await preview.text();
+    expect(html).toContain('data-od-preview-observability');
+    expect(html).toContain('data-od-url-snapshot-bridge');
+    expect(html).toContain('new Worker("worker.js")');
   });
 
   it('injects the URL preview scroll bridge only when requested', async () => {
@@ -1464,6 +1714,269 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     }
   });
 
+  it('changes the navigation identity when same-length bytes replace a file with restored mtime', async () => {
+    const filePath = path.join(projectsRoot, projectId, 'exact-version.html');
+    const firstSource = '<!doctype html><main>AAAA</main>';
+    const secondSource = '<!doctype html><main>BBBB</main>';
+    expect(Buffer.byteLength(secondSource)).toBe(Buffer.byteLength(firstSource));
+    await writeFile(filePath, firstSource);
+    const fixedTime = new Date('2026-08-31T10:00:00.000Z');
+    await utimes(filePath, fixedTime, fixedTime);
+    const originalStat = await stat(filePath);
+
+    const mintVersion = async (): Promise<string> => {
+      const response = await fetch(
+        `${baseUrl}/api/projects/${projectId}/preview-url?file=exact-version.html`,
+      );
+      expect(response.status).toBe(200);
+      const body = await response.json() as {
+        scopedOrigin?: { documentVersion?: string };
+      };
+      return String(body.scopedOrigin?.documentVersion ?? '');
+    };
+
+    const firstVersion = await mintVersion();
+    await writeFile(filePath, secondSource);
+    await utimes(filePath, originalStat.atime, originalStat.mtime);
+    const restoredStat = await stat(filePath);
+    expect(restoredStat.size).toBe(originalStat.size);
+    expect(restoredStat.mtimeMs).toBe(originalStat.mtimeMs);
+
+    const secondVersion = await mintVersion();
+    expect(firstVersion).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(secondVersion).toMatch(/^sha256:[a-f0-9]{64}$/u);
+    expect(secondVersion).not.toBe(firstVersion);
+  });
+
+  it('rejects a scoped document request when its minted exact version changed before streaming', async () => {
+    const filePath = path.join(projectsRoot, projectId, 'large-version-race.html');
+    const minted = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=large-version-race.html`,
+    );
+    expect(minted.status).toBe(200);
+    const firstPreview = await minted.json() as {
+      url: string;
+      scopedOrigin: { documentVersion: string };
+    };
+    const scope = firstPreview.url.match(/\/preview\/([^/]+)\//u)?.[1];
+    expect(scope).toBeTruthy();
+
+    await writeFile(
+      filePath,
+      Buffer.from(`<!doctype html><html><body><main>Version Two</main><script>new Worker("worker.js")</script>${'y'.repeat((2 * 1024 * 1024) + 256)}</body></html>`),
+    );
+    const port = new URL(baseUrl).port;
+    const stale = await scopedRequest(
+      `/large-version-race.html?odPreviewAttempt=${scope}.0`,
+      `n-${scope}.localhost:${port}`,
+    );
+    expect(stale.status).toBe(409);
+    expect(stale.headers['content-type']).toContain('text/html');
+    expect(stale.headers['cache-control']).toBe('no-store');
+    expect(stale.body).toContain('od:preview:navigation-failed');
+    expect(stale.body).toContain(JSON.stringify(firstPreview.scopedOrigin.documentVersion));
+    expect(stale.body).toContain('"navigationAttempt":0');
+    expect(stale.body).toContain('"reason":"version_changed"');
+
+    // Non-runtime callers and older clients do not send an attempt marker;
+    // preserve their existing structured API error instead of serving an
+    // executable document they do not understand.
+    const staleWithoutAttempt = await scopedRequest(
+      '/large-version-race.html',
+      `n-${scope}.localhost:${port}`,
+    );
+    expect(staleWithoutAttempt.status).toBe(409);
+    expect(JSON.parse(staleWithoutAttempt.body).error.code).toBe('VERSION_CHANGED');
+
+    const reminted = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=large-version-race.html`,
+    );
+    expect(reminted.status).toBe(200);
+    const secondPreview = await reminted.json() as {
+      url: string;
+      scopedOrigin: {
+        documentVersion: string;
+        previewPolicy: { sandboxProfile: 'normal' | 'powered' };
+      };
+    };
+    expect(secondPreview.scopedOrigin.documentVersion).not.toBe(
+      firstPreview.scopedOrigin.documentVersion,
+    );
+    expect(secondPreview.scopedOrigin.previewPolicy.sandboxProfile).toBe('powered');
+    const secondScope = secondPreview.url.match(/\/preview\/([^/]+)\//u)?.[1];
+    const current = await scopedRequest(
+      '/large-version-race.html',
+      `p-${secondScope}.localhost:${port}`,
+    );
+    expect(current.status).toBe(200);
+    expect(current.body).toContain('Version Two');
+    expect(current.body).not.toContain('Version One');
+    expect(current.body).toContain(JSON.stringify(secondPreview.scopedOrigin.documentVersion));
+  });
+
+  it('releases the immutable response snapshot when a scoped navigation closes early', async () => {
+    const minted = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=large.html`,
+    );
+    expect(minted.status).toBe(200);
+    const preview = await minted.json() as { url: string };
+    const scope = preview.url.match(/\/preview\/([^/]+)\//u)?.[1];
+    expect(scope).toBeTruthy();
+    const port = new URL(baseUrl).port;
+    const snapshotsDir = path.join(process.env.OD_DATA_DIR!, 'preview-document-snapshots');
+
+    await abortScopedRequestAfterFirstChunk(
+      '/large.html',
+      `n-${scope}.localhost:${port}`,
+    );
+
+    await expect.poll(
+      async () => (await readdir(snapshotsDir)).length,
+      { timeout: 1_000, interval: 10 },
+    ).toBe(0);
+  });
+
+  it('binds a scoped preview origin to one project root and blocks daemon APIs', async () => {
+    const minted = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=prototypes%2Fbooking%2Findex.html`,
+    );
+    expect(minted.status).toBe(200);
+    const preview = await minted.json() as {
+      url: string;
+      scopedOrigin?: {
+        normalUrl: string;
+        poweredUrl: string;
+        documentVersion: string;
+        previewPolicy: {
+          sandboxProfile: 'normal' | 'powered';
+          guards: { storage: boolean; focus: boolean; redirect: boolean };
+          deck: boolean;
+        };
+      };
+    };
+    const scope = preview.url.match(/\/preview\/([^/]+)\//u)?.[1];
+    expect(scope).toBeTruthy();
+
+    const port = new URL(baseUrl).port;
+    expect(preview.scopedOrigin).toEqual({
+      normalUrl: `http://n-${scope}.localhost:${port}/prototypes/booking/index.html`,
+      poweredUrl: `http://p-${scope}.localhost:${port}/prototypes/booking/index.html`,
+      documentVersion: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+      previewPolicy: {
+        sandboxProfile: 'powered',
+        guards: { storage: true, focus: true, redirect: false },
+        deck: false,
+      },
+    });
+    const normalHost = `n-${scope}.localhost:${port}`;
+    const html = await scopedRequest(
+      '/prototypes/booking/index.html?odPreviewBridge=scroll',
+      normalHost,
+    );
+    expect(html.status).toBe(200);
+    expect(html.body).toContain('<script src="./scripts/support.js">');
+    expect(html.body).toContain('data-od-preview-runtime');
+    expect(html.body).toContain("register('scroll'");
+    expect(html.body).toContain('data-od-url-selection-bridge');
+    expect(html.body).toContain("register(\"selection\"");
+    expect(html.body).toContain("register(\"comment\"");
+    expect(html.body).toContain("register(\"inspect\"");
+    expect(html.body).toContain("register(\"draw\"");
+    expect(html.body).toContain('data-od-url-snapshot-bridge');
+    expect(html.body).toContain("register(\"snapshot\"");
+    expect(html.body).toContain('data-od-preview-observability');
+    expect(html.body).toContain("register(\"observability\"");
+    expect(html.body).toContain('data-od-preview-runtime');
+    expect(html.body).toContain('"content_measurement","scroll","snapshot","observability","selection","comment","inspect","draw","tweaks","palette","deck","edit"');
+    expect(html.body).toContain("register('tweaks'");
+    expect(html.body).toContain("register('palette'");
+    expect(html.body).toContain("register('edit'");
+    expect(html.body).toContain('data-od-generated-source-path');
+    expect(html.body.indexOf('data-od-preview-runtime')).toBeLessThan(
+      html.body.indexOf('<script src="./scripts/support.js">'),
+    );
+
+    const nestedScript = await scopedRequest(
+      '/prototypes/booking/scripts/support.js',
+      normalHost,
+    );
+    expect(nestedScript.status).toBe(200);
+    expect(nestedScript.body).toContain('window.__supportLoaded = true');
+
+    const rootAsset = await scopedRequest('/assets/root.css', normalHost);
+    expect(rootAsset.status).toBe(200);
+    expect(rootAsset.body).toBe(':root { --scope-root: true; }');
+
+    const large = await scopedRequest(
+      '/large-external.html?odPreviewBridge=scroll&odPreviewBridge=selection',
+      normalHost,
+    );
+    expect(large.status).toBe(200);
+    expect(large.body).toContain('data-od-preview-runtime');
+    expect(large.body).toContain('data-od-preview-runtime');
+    expect(large.body).toContain("register('scroll'");
+    expect(large.body).toContain('data-od-url-selection-bridge');
+    expect(large.body).toContain("register('edit'");
+    expect(large.body).toContain('data-od-generated-source-path');
+    expect(large.body.match(/type="text\/babel"/gu)).toHaveLength(43);
+    expect(large.body.indexOf('data-od-preview-runtime')).toBeLessThan(
+      large.body.indexOf('<script src="./support.js">'),
+    );
+
+    const viteEntry = await scopedRequest('/vite-entry.html', normalHost);
+    expect(viteEntry.status).toBe(200);
+    expect(viteEntry.body).not.toContain('/src/main.tsx');
+    expect(viteEntry.body).toContain('src="dist/assets/app.js"');
+    expect(viteEntry.body).toContain('href="dist/assets/app.css"');
+    expect(viteEntry.body).toContain('data-od-preview-runtime');
+
+    const smallDeck = await scopedRequest('/deck.html', normalHost);
+    expect(smallDeck.status).toBe(200);
+    expect(smallDeck.body).toContain('"palette","deck"');
+    expect(smallDeck.body).toContain("register('deck'");
+    expect(smallDeck.body).toContain('__odDeckStageFallbackInstalled');
+    expect(smallDeck.body).toContain('var odHasArtifactKeydownListener = true;');
+    expect(smallDeck.body).toContain(
+      'var odHasExternalSlideMessageListener = true || odDeckProtocolVersion === 1;',
+    );
+    const smallDeckStage = /<main\b[^>]*\bid="deck-stage"[^>]*>/u.exec(smallDeck.body);
+    expect(smallDeckStage).not.toBeNull();
+    expect(smallDeck.body.indexOf('__odDeckStageFallbackInstalled')).toBeLessThan(smallDeckStage!.index);
+
+    const largeDeck = await scopedRequest('/large-deck.html', normalHost);
+    expect(largeDeck.status).toBe(200);
+    expect(largeDeck.body).toContain('"palette","deck"');
+    expect(largeDeck.body).toContain("register('deck'");
+    expect(largeDeck.body).toContain('__odDeckStageFallbackInstalled');
+    expect(largeDeck.body).toContain('var odHasArtifactKeydownListener = true;');
+    expect(largeDeck.body).toContain(
+      'var odHasExternalSlideMessageListener = true || odDeckProtocolVersion === 1;',
+    );
+    const largeDeckStage = /<main\b[^>]*\bid="deck-stage"[^>]*>/u.exec(largeDeck.body);
+    expect(largeDeckStage).not.toBeNull();
+    expect(largeDeck.body.indexOf('__odDeckStageFallbackInstalled')).toBeLessThan(largeDeckStage!.index);
+
+    const api = await scopedRequest('/api/projects', normalHost);
+    expect(api.status).toBe(403);
+    expect(JSON.parse(api.body)).toEqual({
+      error: 'Project preview origin cannot access daemon API routes',
+    });
+
+    const powered = await scopedRequest(
+      '/prototypes/booking/index.html',
+      `p-${scope}.localhost:${port}`,
+    );
+    expect(powered.status).toBe(200);
+    expect(powered.headers['document-isolation-policy']).toBe('isolate-and-credentialless');
+
+    const unknownScope = await scopedRequest(
+      '/prototypes/booking/index.html',
+      `n-00000000-0000-0000-0000-000000000000.localhost:${port}`,
+    );
+    expect(unknownScope.status).toBe(404);
+    expect(JSON.parse(unknownScope.body).error.code).toBe('PREVIEW_SCOPE_NOT_FOUND');
+  });
+
   it('serves built dist HTML for Vite dev entries so previews do not load /src from daemon root', async () => {
     const res = await fetch(rawUrl('vite-entry.html'));
     expect(res.status).toBe(200);
@@ -1474,6 +1987,27 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html).not.toContain('href="/assets/app.css"');
     expect(html).toContain('src="dist/assets/app.js"');
     expect(html).toContain('href="dist/assets/app.css"');
+  });
+
+  it('serves built dist HTML for large Vite entries through scoped preview snapshots', async () => {
+    const minted = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=large-vite-entry.html`,
+    );
+    expect(minted.status).toBe(200);
+    const preview = await minted.json() as { url: string };
+    const scope = preview.url.match(/\/preview\/([^/]+)\//u)?.[1];
+    expect(scope).toBeTruthy();
+
+    const port = new URL(baseUrl).port;
+    const response = await scopedRequest(
+      '/large-vite-entry.html',
+      `n-${scope}.localhost:${port}`,
+    );
+    expect(response.status).toBe(200);
+    expect(response.body).not.toContain('/src/main.tsx');
+    expect(response.body).toContain('src="dist/assets/app.js"');
+    expect(response.body).toContain('href="dist/assets/app.css"');
+    expect(response.body).toContain('data-od-preview-runtime');
   });
 
   it('does not expose powered preview project files to foreign browser origins through CORS', async () => {

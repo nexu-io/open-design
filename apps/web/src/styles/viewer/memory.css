@@ -1165,6 +1165,19 @@
   background: var(--bg-panel);
 }
 
+/* The terminal runtime keeps the Deck rail mounted in Edit. Make the edit
+   canvas participate in the same two-column layout as Preview so enabling a
+   capability never widens or reloads the document. */
+.manual-edit-workspace.comment-preview-layer-with-deck-rail > .manual-edit-canvas {
+  position: relative;
+  inset: auto;
+  grid-column: 2;
+}
+
+.manual-edit-workspace.comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed > .manual-edit-canvas {
+  grid-column: 1;
+}
+
 .manual-edit-canvas iframe {
   width: 100%;
   height: 100%;

@@ -1,10 +1,12 @@
 import { expect } from '@playwright/test';
 import type { Locator, Page, Route } from '@playwright/test';
-import type { Project } from '@open-design/contracts';
+import type { Project, ProjectPreviewUrlResponse } from '@open-design/contracts';
+import { PREVIEW_RUNTIME_PROTOCOL_VERSION } from '@open-design/contracts/runtime/preview-runtime';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fulfillAgentsRoute } from './mock-factory.js';
 import { openSettingsDialog } from './amr.js';
+import { activeArtifactPreviewFrame } from './artifact-preview.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -149,6 +151,40 @@ const VISUAL_CONVERSATION = {
 
 const VISUAL_PROJECT_FILE_HTML =
   '<!doctype html><html><body><main><h1>Visual CSS Smoke</h1><p>Workspace preview remains framed.</p></main></body></html>';
+const VISUAL_PREVIEW_SCOPE = 'visualscope1';
+const VISUAL_PREVIEW_PORT = '17456';
+const VISUAL_PREVIEW_DOCUMENT_VERSION = `${VISUAL_PROJECT_FILE_HTML.length}:1700000200000`;
+
+function visualPreviewRuntimeHtml(): string {
+  const identity = JSON.stringify({
+    protocolVersion: PREVIEW_RUNTIME_PROTOCOL_VERSION,
+    sessionId: VISUAL_PREVIEW_SCOPE,
+    documentVersion: VISUAL_PREVIEW_DOCUMENT_VERSION,
+  });
+  return VISUAL_PROJECT_FILE_HTML.replace('<body>', `<head><script data-od-preview-runtime>(function(){
+    var identity=${identity};
+    var ready=false;
+    function send(type,extra){parent.postMessage(Object.assign({type:type},identity,extra||{}),'*');}
+    function hello(){send('od:preview:hello',{availableCapabilities:[]});}
+    window.addEventListener('message',function(event){
+      if(event.source!==parent)return;
+      var data=event.data;
+      if(!data||data.protocolVersion!==identity.protocolVersion||data.sessionId!==identity.sessionId||data.documentVersion!==identity.documentVersion)return;
+      if(data.type==='od:preview:probe'){
+        hello();
+        if(ready)send('od:preview:ready');
+      }else if(data.type==='od:preview:set-capabilities'){
+        send('od:preview:capabilities-applied',{enabledCapabilities:[]});
+      }else if(data.type==='od:preview:presentation-state-barrier'&&Number.isSafeInteger(data.revision)&&data.revision>0){
+        send('od:preview:presentation-state-applied',{revision:data.revision});
+      }
+    });
+    hello();
+    window.addEventListener('DOMContentLoaded',function(){
+      ready=true;send('od:preview:ready');
+    },{once:true});
+  })();</script></head><body>`);
+}
 
 const VISUAL_PROJECT_FILES = [
   {
@@ -473,6 +509,49 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { files: VISUAL_PROJECT_FILES });
   });
 
+  await page.route('**/api/projects/*/preview-url?*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    const requestUrl = new URL(route.request().url());
+    const projectId = decodeURIComponent(requestUrl.pathname.split('/').at(-2) ?? '');
+    const fileName = requestUrl.searchParams.get('file');
+    if (projectId !== 'visual-project-launchpad' || fileName !== 'index.html') {
+      await route.fulfill({ status: 404, json: { error: 'unknown visual preview' } });
+      return;
+    }
+    const body: ProjectPreviewUrlResponse = {
+      url: `/api/projects/${encodeURIComponent(projectId)}/preview/${VISUAL_PREVIEW_SCOPE}/index.html`,
+      file: 'index.html',
+      csp: "default-src 'self' data: blob:; script-src 'self' 'unsafe-inline'",
+      iframeSandbox: 'allow-scripts allow-forms allow-modals allow-popups',
+      opaqueOrigin: true,
+      expiresAt: Date.now() + 60 * 60 * 1000,
+      scopedOrigin: {
+        normalUrl: `http://n-${VISUAL_PREVIEW_SCOPE}.localhost:${VISUAL_PREVIEW_PORT}/index.html`,
+        poweredUrl: `http://p-${VISUAL_PREVIEW_SCOPE}.localhost:${VISUAL_PREVIEW_PORT}/index.html`,
+        documentVersion: VISUAL_PREVIEW_DOCUMENT_VERSION,
+        previewPolicy: {
+          sandboxProfile: 'normal',
+          guards: { storage: false, focus: false, redirect: false },
+          deck: false,
+        },
+      },
+    };
+    await route.fulfill({ json: body });
+  });
+
+  await page.route(
+    `http://n-${VISUAL_PREVIEW_SCOPE}.localhost:${VISUAL_PREVIEW_PORT}/index.html*`,
+    async (route) => {
+      await route.fulfill({
+        contentType: 'text/html; charset=utf-8',
+        body: visualPreviewRuntimeHtml(),
+      });
+    },
+  );
+
   await page.route('**/api/projects/*/raw/*', async (route) => {
     if (route.request().method() !== 'GET') {
       await route.fallback();
@@ -781,7 +860,7 @@ export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
   const fileRow = page.getByTestId('design-file-row-index.html');
   await fileRow.getByRole('button').first().click();
   await expect(
-    page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+    activeArtifactPreviewFrame(page).getByRole('heading', {
       name: 'Visual CSS Smoke',
     }),
   ).toBeVisible();

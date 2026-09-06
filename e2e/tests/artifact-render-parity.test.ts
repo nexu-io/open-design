@@ -13,6 +13,15 @@ import {
 } from '../lib/playwright/artifact-render-parity.ts';
 
 describe('artifact render parity', () => {
+  it('prefers the active retained runtime while preserving legacy fixture selectors', () => {
+    expect(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).toContain(
+      '[data-testid="preview-runtime-frame-current"][data-od-active="true"]:visible',
+    );
+    expect(ACTIVE_ARTIFACT_PREVIEW_SELECTOR).toContain(
+      '[data-testid="artifact-preview-frame"]:not([data-od-handoff-pending]):visible',
+    );
+  });
+
   it('reports byte-identical pixels as exact', () => {
     const png = solidPng(3, 2, [20, 40, 60, 255]);
     const comparison = comparePngBuffers(png, png);
@@ -57,12 +66,55 @@ describe('artifact render parity', () => {
 
   it('does not call two dynamic captures a transport regression', () => {
     expect(classifyPixelParity({
-      comparison: { exactDiffPixels: 100, perceptualDiffRatio: 0.25 },
+      comparison: {
+        actualWidth: 2,
+        actualHeight: 2,
+        expectedWidth: 2,
+        expectedHeight: 2,
+        exactDiffPixels: 100,
+        perceptualDiffRatio: 0.25,
+      },
       actualSelfDriftRatio: 0.02,
       expectedSelfDriftRatio: 0,
       maxPerceptualDiffRatio: 0.001,
       maxSelfDriftRatio: 0.001,
     })).toBe('unstable');
+  });
+
+  it('reports a same-size moving canvas as unstable instead of different', () => {
+    expect(classifyPixelParity({
+      comparison: {
+        actualWidth: 800,
+        actualHeight: 600,
+        expectedWidth: 800,
+        expectedHeight: 600,
+        exactDiffPixels: 100,
+        perceptualDiffRatio: 0.01,
+      },
+      actualSelfDriftRatio: 0,
+      expectedSelfDriftRatio: 0,
+      maxPerceptualDiffRatio: 0.001,
+      maxSelfDriftRatio: 0.001,
+      dynamicSurface: true,
+    })).toBe('unstable');
+  });
+
+  it('keeps a dynamic-surface viewport resize as a hard difference', () => {
+    expect(classifyPixelParity({
+      comparison: {
+        actualWidth: 800,
+        actualHeight: 600,
+        expectedWidth: 960,
+        expectedHeight: 600,
+        exactDiffPixels: 100,
+        perceptualDiffRatio: 0.01,
+      },
+      actualSelfDriftRatio: 0,
+      expectedSelfDriftRatio: 0,
+      maxPerceptualDiffRatio: 0.001,
+      maxSelfDriftRatio: 0.001,
+      dynamicSurface: true,
+    })).toBe('different');
   });
 
   it('reports a differing Edit-to-URL round trip when srcDoc entry is exact', () => {

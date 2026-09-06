@@ -268,6 +268,7 @@ describe('App preview keep-alive invalidation', () => {
       attach: vi.fn(),
       release: vi.fn(),
       evict: vi.fn(),
+      evictFrame: vi.fn(),
       evictProject: evictProjectMock,
       evictMatching: evictMatchingMock,
       subscribe: vi.fn(() => () => {}),
@@ -317,24 +318,21 @@ describe('App preview keep-alive invalidation', () => {
     });
   });
 
-  it('does not evict the active preview while guarded Back is pending or after it is denied', async () => {
+  it('does not hard-evict the active preview when Back requests guarded Home navigation', async () => {
     render(<App />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Back to projects' }));
 
-    expect(mockedNavigate).toHaveBeenCalledWith(
-      { kind: 'home', view: 'home' },
-      { onCommit: expect.any(Function) },
-    );
-    // Cross the browser task boundary used by the old unconditional eviction.
-    // A denied guard has no commit signal, so the active iframe must survive.
+    expect(mockedNavigate).toHaveBeenCalledWith({ kind: 'home', view: 'home' });
+    // Cross a browser task boundary so any deferred navigation side effect has
+    // a chance to run. Home navigation must not own preview invalidation.
     await act(async () => {
       await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
     });
     expect(evictProjectMock).not.toHaveBeenCalled();
   });
 
-  it('evicts the active preview after guarded Back commits', async () => {
+  it('does not attach a commit-time hard eviction to Back navigation', async () => {
     mockedNavigate.mockImplementationOnce((_route, options) => {
       options?.onCommit?.();
     });
@@ -342,7 +340,7 @@ describe('App preview keep-alive invalidation', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Back to projects' }));
 
-    expect(evictProjectMock).toHaveBeenCalledWith('project-1', { includeActive: true });
+    expect(evictProjectMock).not.toHaveBeenCalled();
   });
 
   // Regression for the mrcfps follow-up on PR #2190: ProjectView's

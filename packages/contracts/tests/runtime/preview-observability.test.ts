@@ -21,6 +21,9 @@ describe('preview observability contract', () => {
     expect(bridge).toContain('stack: text(value.stack, 2000)');
     expect(bridge).toContain('detail.source_url = text(event && event.filename, 1000)');
     expect(bridge).toContain('var MAX_EVENTS = 12');
+    expect(bridge).not.toContain("event: 'visible_paint'");
+    expect(bridge).not.toContain('MutationObserver');
+    expect(bridge).not.toContain("dispatchEvent(new Event('resize'))");
     expect(bridge).not.toContain('JSON.stringify(arguments)');
   });
 
@@ -55,6 +58,14 @@ describe('preview observability contract', () => {
       event: 'runtime_error',
       message: 'boom',
     })).toMatchObject({ event: 'runtime_error', message: 'boom' });
+    expect(parsePreviewObservabilityMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: 1,
+      event: 'visible_paint',
+      source_url: 'od://app/api/projects/project-1/raw/index.html?odPreviewEpoch=1',
+      document_epoch: 'preview-document-1',
+      visible_element_count: 1,
+    })).toBeNull();
 
     expect(parsePreviewObservabilityMessage({
       type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,

@@ -195,6 +195,14 @@ const residualAllowedPathPrefixes = [
   "figma-plugin/",
   "test-results/",
   "vendor/",
+  // React UMD builds staged out of node_modules by
+  // apps/web/scripts/copy-react-runtime.ts. The component preview renders in a
+  // sandboxed iframe with no allow-same-origin, so it cannot borrow the
+  // application's React and has to load a copy over the network; serving it
+  // from here rather than a CDN is what lets that surface work in the packaged
+  // client offline. These are generated and gitignored, never authored, and
+  // upstream ships them as JavaScript.
+  "apps/web/public/vendor/react-runtime/",
 ];
 
 const residualAllowedPathPatterns: RegExp[] = [

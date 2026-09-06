@@ -473,6 +473,64 @@ export async function readProjectFileVersion(
   };
 }
 
+export interface ProjectFileVersionDocument {
+  version: ProjectFileVersion;
+  /**
+   * Absolute path of the bytes stored for this version.
+   *
+   * A version's content file is written exactly once and never rewritten (a
+   * restore appends a NEW version), so this path is an immutable
+   * representation: safe to stream, to hash for a document identity, and to
+   * use as a head-scan cache key.
+   */
+  filePath: string;
+  size: number;
+  mtime: number;
+  mime: string;
+}
+
+/**
+ * Resolve ONE stored version of an HTML file to the immutable bytes on disk.
+ *
+ * `readProjectFileVersion` materializes the content as a string, which is the
+ * right shape for a JSON API and the wrong shape for serving a document: it
+ * cannot be streamed, range-served, or head-scanned. This resolver hands back
+ * the stored file itself so a transport can treat a historical version exactly
+ * like any other project document.
+ *
+ * Throws `ENOENT` when the file has no version store, when `versionId` is not
+ * in it, or when the manifest entry outlived its content file.
+ */
+export async function resolveProjectFileVersionDocument(
+  projectsRoot: string,
+  projectId: string,
+  fileName: string,
+  versionId: string,
+  metadata?: unknown,
+): Promise<ProjectFileVersionDocument> {
+  const safeName = validateUserFileName(fileName);
+  const safeVersionId = String(versionId || '').trim();
+  if (!safeVersionId || !VERSION_ID_RE.test(safeVersionId)) {
+    throw codedError('version not found', 'ENOENT');
+  }
+  assertProjectAvailable(projectsRoot, projectId, metadata);
+  const state = await readVersionManifestState(projectsRoot, projectId, safeName);
+  const entry = state.entries.find((item) => item.id === safeVersionId);
+  if (!entry) throw codedError('version not found', 'ENOENT');
+  const filePath = path.join(
+    versionRootFor(projectsRoot, projectId, safeName),
+    entry.contentPath,
+  );
+  const stats = await stat(filePath);
+  return {
+    version: publicVersion(entry, state.currentVersionId),
+    filePath,
+    size: stats.size,
+    mtime: stats.mtimeMs,
+    mime: entry.mime,
+  };
+}
+
 export async function createProjectFileVersion(
   projectsRoot: string,
   projectId: string,

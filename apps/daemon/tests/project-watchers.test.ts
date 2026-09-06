@@ -11,6 +11,7 @@ import {
   makeIgnored,
   subscribe,
   type ProjectWatchEvent,
+  type ProjectWatchFileIdentity,
   type ProjectWatcherOptions,
 } from '../src/project-watchers.js';
 
@@ -245,6 +246,49 @@ describe('project-watchers (real chokidar)', () => {
     }
   }, REAL_WATCHER_TEST_TIMEOUT_MS);
 
+  it('reports an exact settled file identity with add and change events', async () => {
+    const { root, projectId } = await makeProjectsRoot();
+    const projectRoot = path.join(root, projectId);
+    const observed: Array<{
+      event: ProjectWatchEvent;
+      file: ProjectWatchFileIdentity | undefined;
+    }> = [];
+    const sub = subscribe(root, projectId, (event, file) => {
+      observed.push({ event, file });
+    });
+    await sub.ready;
+
+    try {
+      const filePath = path.join(projectRoot, 'preview.html');
+      await writeFile(filePath, '<!doctype html><p>first</p>');
+      await waitFor(() => observed.some(({ event }) => (
+        event.kind === 'add' && event.path === 'preview.html'
+      )));
+
+      const added = observed.find(({ event }) => event.kind === 'add');
+      expect(added?.file).toMatchObject({
+        filePath,
+        size: Buffer.byteLength('<!doctype html><p>first</p>'),
+      });
+      expect(added?.file?.mtime).toBeGreaterThan(0);
+
+      await writeFile(filePath, '<!doctype html><p>second revision</p>');
+      await waitFor(() => observed.some(({ event }) => (
+        event.kind === 'change' && event.path === 'preview.html'
+      )));
+
+      const changed = observed.find(({ event }) => event.kind === 'change');
+      expect(changed?.file).toMatchObject({
+        filePath,
+        size: Buffer.byteLength('<!doctype html><p>second revision</p>'),
+      });
+      expect(changed?.file?.mtime).toBeGreaterThanOrEqual(added?.file?.mtime ?? 0);
+    } finally {
+      await sub.unsubscribe();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, REAL_WATCHER_TEST_TIMEOUT_MS);
+
   it('still emits events when the watch root is itself nested under .od/ (production layout)', async () => {
     // Reproduces the layout the daemon actually uses:
     //   <RUNTIME_DATA_DIR>/.od/projects/<id>/...
@@ -323,6 +367,48 @@ describe('project-watchers (real chokidar)', () => {
         ignoredDirs.some((dir) => e.path.startsWith(`${dir}/`)),
       );
       expect(ignored).toEqual([]);
+    } finally {
+      await sub.unsubscribe();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, REAL_WATCHER_TEST_TIMEOUT_MS);
+
+  // Saving one HTML file writes THREE things: the file, a version snapshot, and
+  // the snapshot manifest. Only the first is user content. Surfacing the other
+  // two as project file changes made every save look like a project-wide
+  // mutation, which the web app answers by re-navigating every open preview —
+  // measured live as `saving reloaded 2 other preview(s): lru-5.html,
+  // lru-6.html`, each of which lost its JS heap, timers, canvas and scroll.
+  //
+  // These directories are reserved: the daemon refuses user writes into them
+  // and excludes them from member mirrors, so nothing outside the daemon has
+  // any business hearing about them.
+  it('ignores the daemon\'s own reserved bookkeeping directories', async () => {
+    const { root, projectId } = await makeProjectsRoot();
+    const events: ProjectWatchEvent[] = [];
+    const sub = subscribe(root, projectId, recordEvent(events), FAST_WATCH_OPTIONS);
+    await sub.ready;
+
+    const reserved = ['.file-versions', '.live-artifacts'];
+    try {
+      for (const dir of reserved) {
+        await mkdir(path.join(root, projectId, dir, 'abc123'), { recursive: true });
+        await writeFile(path.join(root, projectId, dir, 'abc123', 'manifest.json'), '{}');
+        await writeFile(path.join(root, projectId, dir, 'abc123', '0001-snapshot.html'), '<p>v1</p>');
+      }
+
+      // The user's own save must still be heard; without this control the case
+      // could pass by silencing the watcher entirely.
+      await writeFile(path.join(root, projectId, 'index.html'), '<p>real</p>');
+      await waitFor(() => events.some((e) => e.path === 'index.html'), {
+        timeout: REAL_WATCHER_WAIT_TIMEOUT_MS,
+        debug: () => debugEvents(events),
+      });
+
+      const leaked = events.filter((e) =>
+        reserved.some((dir) => e.path.startsWith(`${dir}/`)),
+      );
+      expect(leaked).toEqual([]);
     } finally {
       await sub.unsubscribe();
       await rm(root, { recursive: true, force: true });

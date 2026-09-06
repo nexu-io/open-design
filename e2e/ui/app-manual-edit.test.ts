@@ -114,14 +114,20 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
 
   const preview = artifactPreviewFrame(page);
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
+  await preview.locator('body').evaluate(() => {
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker = 'home-retained';
+  });
 
   await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Code', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.getByRole('tab', { name: 'Preview', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
-  const prewarmedSrcDoc = page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]');
-  await expect(prewarmedSrcDoc.getByTestId('mobile-page-home')).toBeAttached();
-  await waitForUrlPreviewRefreshToSettle(page);
+  await expect(preview.getByTestId('mobile-page-home')).toBeAttached();
+  expect(await preview.locator('body').evaluate(() =>
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker,
+  )).toBe('home-retained');
 
   await preview.getByRole('button', { name: 'Profile' }).click();
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -164,8 +170,9 @@ test('[P0] manual edit mode preserves the current page in a multi-page mobile ap
   await selectedHtml.fill(editedHtml);
   await inspectSaveButton(page).click();
 
-  // Saving rebuilds the srcDoc transport. The consumed Profile snapshot must
-  // not replay over the newer Home navigation when that later load completes.
+  // Saving stages the refreshed document behind the retained preview. The
+  // consumed Profile snapshot must not replay over the newer Home navigation
+  // when the candidate is promoted.
   await expectFileSource(page, projectId, 'mobile-app.html', ['data-edit-revision="fresh"']);
   await expect(preview.locator('[data-edit-revision="fresh"]')).toBeVisible();
   await expect(preview.getByTestId('mobile-page-home')).toBeVisible();
@@ -181,11 +188,17 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
 
   const preview = artifactPreviewFrame(page);
   await expect(preview.getByTestId('mobile-page-today')).toBeVisible();
+  await preview.locator('body').evaluate(() => {
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker = 'today-retained';
+  });
   await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await page.getByRole('tab', { name: 'Preview', exact: true }).click();
-  await expect(page.frameLocator('iframe[data-testid="artifact-preview-frame-srcdoc"]')
-    .getByTestId('mobile-page-today')).toBeAttached();
-  await waitForUrlPreviewRefreshToSettle(page);
+  await expect(preview.getByTestId('mobile-page-today')).toBeAttached();
+  expect(await preview.locator('body').evaluate(() =>
+    (window as Window & typeof globalThis & { __odCodeToggleMarker?: string })
+      .__odCodeToggleMarker,
+  )).toBe('today-retained');
 
   await preview.getByRole('button', { name: 'Profile' }).click();
   await expect(preview.getByTestId('mobile-page-profile')).toBeVisible();
@@ -224,7 +237,7 @@ test('[P0] manual edit mode preserves a runtime-rendered mobile app page', async
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 });
 
-test('[P0] srcDoc page navigation keeps manual edit hover guides across files and re-entry', async ({ page }) => {
+test('[P0] preview page navigation keeps manual edit hover guides across files and re-entry', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Cross-file mobile edit');
   await seedHtmlArtifact(
@@ -269,26 +282,6 @@ test('[P0] srcDoc page navigation keeps manual edit hover guides across files an
   await expect(preview.locator('[data-od-edit-guides-layer] > *')).not.toHaveCount(0);
 });
 
-async function waitForUrlPreviewRefreshToSettle(page: Page) {
-  const frame = page.locator(
-    'iframe[data-od-render-mode="url-load"][data-od-active="true"]',
-  );
-  let observedSrc: string | null = null;
-  let unchangedSince = Date.now();
-  await expect.poll(async () => {
-    const currentSrc = await frame.getAttribute('data-od-loaded-src');
-    if (!currentSrc || currentSrc === 'about:blank') return 0;
-    if (currentSrc !== observedSrc) {
-      observedSrc = currentSrc;
-      unchangedSince = Date.now();
-    }
-    return Date.now() - unchangedSince;
-  }, {
-    message: 'URL preview should stop reloading before the runtime-state interaction',
-    timeout: 5_000,
-  }).toBeGreaterThanOrEqual(400);
-}
-
 async function selectPreviewElementThroughBridge(
   page: Page,
   frame: ReturnType<Page['frameLocator']>,
@@ -298,7 +291,7 @@ async function selectPreviewElementThroughBridge(
   await expect(frame.locator('html[data-od-edit-mode]')).toHaveCount(1);
   // Entering manual-edit mode re-injects the edit bridge and re-emits its targets
   // for a beat (`setTimeout(postTargets, 0)` in edit-mode/bridge.ts), and the
-  // preview iframe can still settle (srcDoc swap / target re-emit) at the moment we
+  // preview iframe can still settle (candidate promotion / target re-emit) at the moment we
   // click. That occasionally swallows the first click, which then hangs on
   // Playwright's post-click stability check until the 30s test timeout. Retry the
   // click until the element is actually marked selected, with a short per-attempt
@@ -320,6 +313,7 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
     .replace(
       '</body>',
       '<img id="offline-image" src="assets/offline.svg">' +
+        '<script src="scripts/support.js"></script>' +
         '<script type="module" src="scripts/main.js"></script></body>',
     );
   await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', entryHtml);
@@ -328,6 +322,12 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
     projectId,
     'styles/offline.css',
     'body{--offline-export-proof:ready;background-image:url("../assets/offline.svg")}',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'scripts/support.js',
+    'document.body.dataset.offlineSupport = "ready";',
   );
   await seedProjectFile(
     page,
@@ -350,7 +350,13 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await page.goto(`/projects/${projectId}/files/toolbar-preview.html`);
   await openDesignFile(page, 'toolbar-preview.html');
 
-  await expect(page.getByTestId('artifact-preview-frame')).toBeVisible();
+  await expect(artifactPreview(page)).toBeVisible();
+  const previewFrame = artifactPreviewFrame(page);
+  await expect(previewFrame.locator('body')).toHaveAttribute('data-offline-support', 'ready');
+  await expect(previewFrame.locator('body')).toHaveAttribute('data-offline-motion', 'ready');
+  await expect.poll(() => previewFrame.locator('body').evaluate((body) => (
+    getComputedStyle(body).getPropertyValue('--offline-export-proof').trim()
+  ))).toBe('ready');
   const viewMode = page.getByRole('tablist', { name: 'View mode' });
   await expect(viewMode).toBeVisible();
   await expect(viewMode.getByRole('tab', { name: 'Preview', exact: true })).toHaveAttribute('aria-selected', 'true');
@@ -513,7 +519,7 @@ test('[P1] powered WebGL HTML artifacts open through the isolated preview route'
   const preview = artifactPreview(page);
   await expect(preview).toBeVisible();
   await expect(preview).toHaveAttribute('data-od-powered', 'true');
-  await expect(preview).toHaveAttribute('data-od-render-mode', 'url-load');
+  await expect(preview).toHaveAttribute('data-od-render-mode', 'runtime-url');
   await expect(preview).toHaveAttribute('src', new RegExp(`/api/projects/${projectId}/powered/powered-webgl\\.html`));
 
   const frame = artifactPreviewFrame(page);

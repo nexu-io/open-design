@@ -122,6 +122,27 @@ function distDelegatingBinTargets(directory: string, manifest: unknown): string[
   });
 }
 
+function containsDistTarget(value: unknown): boolean {
+  if (typeof value === "string") {
+    return value.startsWith("./dist/") || value.startsWith("dist/");
+  }
+  if (Array.isArray(value)) return value.some(containsDistTarget);
+  if (value == null || typeof value !== "object") return false;
+  return Object.values(value).some(containsDistTarget);
+}
+
+function publishesDistBackedRuntime(manifest: unknown): boolean {
+  if (manifest == null || typeof manifest !== "object" || Array.isArray(manifest)) {
+    return false;
+  }
+  const pkg = manifest as JsonObject;
+  return containsDistTarget({
+    exports: pkg.exports,
+    main: pkg.main,
+    types: pkg.types,
+  });
+}
+
 function createSandbox(): string {
   const sandbox = mkdtempSync(join(tmpdir(), "od-postinstall-"));
   mkdirSync(join(sandbox, "scripts"), { recursive: true });
@@ -221,7 +242,7 @@ describe("postinstall script contract", () => {
     expect(unlinkableBins).toEqual([]);
   });
 
-  it("[P2] keeps postinstall build targets aligned with dist-backed workspace bins", () => {
+  it("[P2] keeps postinstall build targets aligned with dist-backed workspace packages", () => {
     const rootManifest = readJsonObject("package.json");
     const manifests = new Map(workspacePackageDirectories().map((directory) => [directory, readJson(`${directory}/package.json`)]));
     const consumedWorkspacePackages = new Set<string>();
@@ -236,7 +257,11 @@ describe("postinstall script contract", () => {
 
     const missingBuildTargets = [...manifests.entries()]
       .filter(([, manifest]) => consumedWorkspacePackages.has(packageName(manifest)))
-      .filter(([directory, manifest]) => distDelegatingBinTargets(directory, manifest).length > 0)
+      .filter(
+        ([directory, manifest]) =>
+          distDelegatingBinTargets(directory, manifest).length > 0 ||
+          (directory.startsWith("packages/") && publishesDistBackedRuntime(manifest)),
+      )
       .map(([directory]) => directory)
       .filter((directory) => !postinstallBuildTargets().has(directory));
 

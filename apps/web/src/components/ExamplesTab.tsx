@@ -6,7 +6,7 @@ import {
   localizeSkillPrompt,
 } from '../i18n/content';
 import type { Dict } from '../i18n/types';
-import { fetchSkillExample } from '../providers/registry';
+import { fetchSkillExample, skillExampleDocumentUrl } from '../providers/registry';
 import { exportAsHtml, exportAsPdf, exportAsZip } from '../runtime/exports';
 import { buildSrcdoc } from '../runtime/srcdoc';
 import type { SkillSummary, Surface } from '../types';
@@ -478,6 +478,11 @@ export function ExamplesTab({ skills: rawSkills, onUsePrompt }: Props) {
                 id: 'preview',
                 label: t('examples.previewLabel'),
                 html: previews[previewSkill.id],
+                // Same route the HTML was fetched from: the modal navigates
+                // the stage to the real document instead of rebuilding it,
+                // so the example's relative assets resolve against its own
+                // folder. See runtime/preview-modal-transport.
+                url: skillExampleDocumentUrl(previewSkill.id),
                 error: previewErrors[previewSkill.id] ?? null,
                 // Skills declared with a non-html `od.preview.type` ship
                 // no fetchable example; route the kind into the modal so

@@ -1,12 +1,17 @@
 /**
  * Cross-runtime protocol used by generated artifact previews to report
- * failures to the OpenDesign host. The bridge runs inside both srcDoc and
- * URL-loaded preview iframes; the host validates this narrow payload before it
- * reaches analytics.
+ * failures and bounded visual diagnostics to the OpenDesign host. The bridge
+ * runs inside both srcDoc and URL-loaded preview iframes; the host validates
+ * this narrow payload before any failure reaches analytics.
  *
  * Keep this module browser-API free. The browser code is serialized as a
  * string so both the web and daemon runtimes inject exactly the same script.
  */
+
+import type {
+  PreviewPhaseFirstVisiblePaintDetail,
+  PreviewPhasePaintDetector,
+} from './preview-phase-events.js';
 
 export const PREVIEW_OBSERVABILITY_MESSAGE_TYPE = 'od:preview-observability';
 export const PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE =
@@ -232,9 +237,178 @@ export function parsePreviewObservabilityMessage(
   return normalized as unknown as PreviewObservabilityMessage;
 }
 
+// ---------------------------------------------------------------------------
+// First visible paint — observation only
+// ---------------------------------------------------------------------------
+
+/**
+ * The paint report travels on its own message type rather than as another
+ * `PreviewObservabilityEvent`, and that separation is load-bearing twice over.
+ *
+ * The first reason is mechanical. `reportPreviewIframeMessage` ends in a
+ * catch-all that turns any parsed observability message into
+ * `client_preview_runtime_error`. A paint report riding that channel would
+ * publish one fabricated runtime error per *healthy* preview — the loudest
+ * possible way to be wrong.
+ *
+ * The second is semantic. That channel is the failure channel: every message
+ * on it says something went wrong. This one says how long a document took to
+ * show something, and — when nothing could be measured — says exactly that.
+ * Keeping the two apart is what lets a consumer treat "no failure" and "no
+ * measurement" as different facts.
+ */
+export const PREVIEW_FIRST_PAINT_MESSAGE_TYPE = 'od:preview-first-paint';
+export const PREVIEW_FIRST_PAINT_PROTOCOL_VERSION = 1;
+
+/**
+ * How long the probe waits before it declares the measurement absent.
+ *
+ * Deliberately shorter than `PREVIEW_WHITE_SCREEN_TIMEOUT_MS`: the two probes
+ * examine the same moment from opposite sides, and paint has to reach a verdict
+ * before "this document is blank" is on the wire, or the two panels disagree
+ * about which document was measured first.
+ */
+export const PREVIEW_FIRST_PAINT_TIMEOUT_MS = 4_000;
+
+/**
+ * Ceiling on paint reports one document may post across its whole life.
+ *
+ * A document normally reports once. A warm reattach — same document, no
+ * navigation, no fresh bridge — can earn another when the host stamps it with
+ * a new attach token. The cap is what keeps an untrusted page from turning
+ * that allowance into a stream.
+ */
+export const PREVIEW_FIRST_PAINT_MAX_REPORTS = 8;
+
+export const PREVIEW_FIRST_PAINT_ATTACH_TOKEN_LIMIT = 64;
+
+/**
+ * The detectors a document is allowed to claim.
+ *
+ * `host_observer` is absent on purpose and must stay absent: it names the
+ * host's own observation, and a page inside the frame is not in a position to
+ * assert that. `satisfies` keeps the three that remain inside the phase
+ * contract's closed set, so the wire and the dashboard cannot drift apart
+ * silently.
+ */
+export const PREVIEW_BRIDGE_PAINT_DETECTORS = [
+  // The browser's own paint-timing record, relayed. Free to read: it exists
+  // whether or not anyone asks for it.
+  'bridge_report',
+  // One DOM sample taken inside an animation frame, for frames where the
+  // browser records no paint entry. Weaker evidence, so it says so.
+  'raf_probe',
+  // The probe gave up. An absent measurement, not a measured zero.
+  'timeout',
+] as const satisfies readonly PreviewPhasePaintDetector[];
+
+export type PreviewBridgePaintDetector = typeof PREVIEW_BRIDGE_PAINT_DETECTORS[number];
+
+export interface PreviewFirstPaintMessage {
+  type: typeof PREVIEW_FIRST_PAINT_MESSAGE_TYPE;
+  version: typeof PREVIEW_FIRST_PAINT_PROTOCOL_VERSION;
+  detector: PreviewBridgePaintDetector;
+  paint_observed: boolean;
+  visible_element_count: number;
+  /** Since the bridge started running in this document. */
+  elapsed_ms: number;
+  ready_state?: string;
+  visibility_state?: string;
+  /**
+   * Opaque echo of whatever the host stamped on its last activation. It exists
+   * so the host can bind a report to one attach of one frame; it is a transport
+   * detail and must never be forwarded to analytics.
+   */
+  attach_token?: string;
+}
+
+function boundedPaintNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(Math.round(value), MAX_PREVIEW_OBSERVABILITY_NUMBER));
+}
+
+const PAINT_STRING_FIELD_LIMITS: ReadonlyArray<
+  readonly ['ready_state' | 'visibility_state' | 'attach_token', number]
+> = [
+  ['ready_state', 32],
+  ['visibility_state', 32],
+  ['attach_token', PREVIEW_FIRST_PAINT_ATTACH_TOKEN_LIMIT],
+];
+
+/**
+ * Validate one paint report from an untrusted document.
+ *
+ * Like the failure-channel parser, this constructs a fresh bounded object
+ * rather than trusting the shape it was handed. The one rule worth calling out
+ * is the contradiction check: `timeout` means the probe never got an answer, so
+ * a report cannot say it both gave up and saw paint. Admitting that pair would
+ * let a page mint paint coverage it never earned, and would let a genuine
+ * missing measurement be counted as a measured zero — the exact confusion the
+ * detector vocabulary exists to prevent.
+ */
+export function parsePreviewFirstPaintMessage(
+  value: unknown,
+): PreviewFirstPaintMessage | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.type !== PREVIEW_FIRST_PAINT_MESSAGE_TYPE) return null;
+  if (candidate.version !== PREVIEW_FIRST_PAINT_PROTOCOL_VERSION) return null;
+
+  const detector = candidate.detector;
+  if (typeof detector !== 'string') return null;
+  if (!(PREVIEW_BRIDGE_PAINT_DETECTORS as readonly string[]).includes(detector)) return null;
+  if (typeof candidate.paint_observed !== 'boolean') return null;
+  if ((detector === 'timeout') === candidate.paint_observed) return null;
+
+  const visibleElementCount = boundedPaintNumber(candidate.visible_element_count);
+  if (visibleElementCount === null) return null;
+  const elapsedMs = boundedPaintNumber(candidate.elapsed_ms);
+  if (elapsedMs === null) return null;
+
+  const normalized: PreviewFirstPaintMessage = {
+    type: PREVIEW_FIRST_PAINT_MESSAGE_TYPE,
+    version: PREVIEW_FIRST_PAINT_PROTOCOL_VERSION,
+    detector: detector as PreviewBridgePaintDetector,
+    paint_observed: candidate.paint_observed,
+    visible_element_count: visibleElementCount,
+    elapsed_ms: elapsedMs,
+  };
+  for (const [field, limit] of PAINT_STRING_FIELD_LIMITS) {
+    const raw = candidate[field];
+    if (raw === undefined) continue;
+    if (typeof raw !== 'string') return null;
+    const text = raw.replace(/\s+/g, ' ').trim().slice(0, limit);
+    if (text) normalized[field] = text;
+  }
+  return normalized;
+}
+
+/**
+ * Project a validated paint report onto the `first_visible_paint` phase detail.
+ *
+ * Measurement only. `attach_token` stays on the transport, and nothing here is
+ * a decision: the phase never gates promotion, retention, discard, or reload.
+ * That is a product ruling, not an oversight — judging a document by its
+ * picture means an agent that corrupts a file gets hidden behind the previous
+ * frame, the user sees nothing wrong, and the break surfaces at publish time.
+ * `observation_only: true` is stamped on the wire by
+ * `buildPreviewPhaseEventPayload` so the rule is legible inside PostHog too.
+ */
+export function previewFirstPaintPhaseDetail(
+  message: PreviewFirstPaintMessage,
+): PreviewPhaseFirstVisiblePaintDetail {
+  return {
+    detector: message.detector,
+    paint_observed: message.paint_observed,
+    visible_element_count: message.visible_element_count,
+  };
+}
+
 /**
  * Runs before author scripts and emits a bounded, deduplicated diagnostic
- * stream. It deliberately does not serialize arbitrary objects or DOM text.
+ * stream plus bounded visual diagnostics. It deliberately does not serialize
+ * arbitrary objects or DOM text, and visual evidence never controls which
+ * document version the host presents.
  */
 export function buildPreviewObservabilityBridge(): string {
   return `<script ${PREVIEW_OBSERVABILITY_BRIDGE_MARKER}>
@@ -249,6 +423,11 @@ export function buildPreviewObservabilityBridge(): string {
   var bridgeStartedAt = Date.now();
   var WHITE_SCREEN_CONFIRMATION_DELAY = ${PREVIEW_WHITE_SCREEN_CONFIRMATION_MS};
   var HOST_STATE_TYPE = ${JSON.stringify(PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE)};
+  var FIRST_PAINT_TYPE = ${JSON.stringify(PREVIEW_FIRST_PAINT_MESSAGE_TYPE)};
+  var FIRST_PAINT_VERSION = ${PREVIEW_FIRST_PAINT_PROTOCOL_VERSION};
+  var FIRST_PAINT_TIMEOUT = ${PREVIEW_FIRST_PAINT_TIMEOUT_MS};
+  var FIRST_PAINT_MAX_REPORTS = ${PREVIEW_FIRST_PAINT_MAX_REPORTS};
+  var FIRST_PAINT_TOKEN_LIMIT = ${PREVIEW_FIRST_PAINT_ATTACH_TOKEN_LIMIT};
   var MAX_EVENTS = 12;
   var sentCount = 0;
   var sent = Object.create(null);
@@ -370,6 +549,197 @@ export function buildPreviewObservabilityBridge(): string {
   var whiteScreenCheckTimer = null;
   var whiteScreenConfirmationTimer = null;
   var hostActive = false;
+  // -- First visible paint ------------------------------------------------
+  // Pure observation. Nothing here decides which document version the host
+  // shows, keeps, discards or reloads. That is a product ruling: judging a
+  // preview by its picture means an agent that breaks a file leaves the old
+  // picture on screen, the user believes the file is fine, and the break only
+  // surfaces once it is published.
+  //
+  // The whole cost, stated so it can be checked: one synchronous read of paint
+  // entries the browser recorded anyway; at most one PerformanceObserver,
+  // disconnected the moment it yields an entry; at most one animation-frame
+  // callback after load and one more at the deadline; one cancellable timer.
+  // No polling loop, no DOM observer, no resampling, no writes.
+  var paintReported = false;
+  var paintArmed = false;
+  var paintReportCount = 0;
+  var paintAttachToken = '';
+  var paintDeadlineTimer = null;
+  var paintObserver = null;
+  // Deliberately weaker than whiteScreenCheckEligible(): readyState is NOT
+  // required to be 'complete'. A document that never finishes loading is
+  // precisely the one whose paint is missing, and a probe that refused to arm
+  // there would drop the slowest previews out of a coverage panel entirely --
+  // which reads, from the dashboard, as previews having gotten faster.
+  function paintProbeEligible(){
+    return hostActive &&
+      document.visibilityState === 'visible' &&
+      (window.innerWidth || 0) > 1 &&
+      (window.innerHeight || 0) > 1;
+  }
+  function releasePaintProbe(){
+    if (paintDeadlineTimer !== null) {
+      clearTimeout(paintDeadlineTimer);
+      paintDeadlineTimer = null;
+    }
+    if (paintObserver) {
+      try { paintObserver.disconnect(); } catch (_) {}
+      paintObserver = null;
+    }
+    paintArmed = false;
+  }
+  function reportFirstPaint(detector, observed, count, elapsed){
+    if (paintReported || paintReportCount >= FIRST_PAINT_MAX_REPORTS) return;
+    paintReported = true;
+    paintReportCount += 1;
+    releasePaintProbe();
+    var payload = {
+      type: FIRST_PAINT_TYPE,
+      version: FIRST_PAINT_VERSION,
+      detector: detector,
+      paint_observed: !!observed,
+      visible_element_count: Math.max(0, Math.round(count || 0)),
+      elapsed_ms: Math.max(0, Math.round(elapsed || 0)),
+      ready_state: text(document.readyState, 32),
+      visibility_state: text(document.visibilityState, 32)
+    };
+    if (paintAttachToken) payload.attach_token = paintAttachToken;
+    try { window.parent.postMessage(payload, '*'); } catch (_) {}
+  }
+  function earliestPaintEntry(entries){
+    var best = -1;
+    for (var i = 0; entries && i < entries.length; i += 1) {
+      var entry = entries[i];
+      if (!entry) continue;
+      var name = String(entry.name || '');
+      if (name !== 'first-contentful-paint' && name !== 'first-paint') continue;
+      var startTime = Number(entry.startTime);
+      if (!isFinite(startTime) || startTime < 0) continue;
+      if (best < 0 || startTime < best) best = startTime;
+    }
+    return best;
+  }
+  function recordedPaintTime(){
+    try {
+      var perf = window.performance;
+      if (!perf || typeof perf.getEntriesByType !== 'function') return -1;
+      return earliestPaintEntry(perf.getEntriesByType('paint'));
+    } catch (_) { return -1; }
+  }
+  // A paint entry's startTime is measured from the document's time origin, so
+  // the probe's own samples have to be too. Timing them from the bridge's
+  // start instead would make bridge_report and raf_probe two different
+  // quantities wearing one field name, differing by however long the browser
+  // took to reach this script.
+  function paintElapsedNow(){
+    try {
+      var perf = window.performance;
+      if (perf && typeof perf.now === 'function') return perf.now();
+    } catch (_) {}
+    return Date.now() - bridgeStartedAt;
+  }
+  function onNextFrame(callback){
+    try {
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(callback);
+        return;
+      }
+    } catch (_) {}
+    callback();
+  }
+  // One sample, taken inside a frame. Reuses visiblePaintCount() rather than
+  // growing a second definition of "painted" that could disagree with the
+  // white-screen verdict about the same document.
+  function samplePaintOnce(){
+    if (paintReported || !paintProbeEligible()) return;
+    var recorded = recordedPaintTime();
+    if (recorded >= 0) {
+      reportFirstPaint('bridge_report', true, visiblePaintCount(), recorded);
+      return;
+    }
+    var count = visiblePaintCount();
+    if (count > 0) reportFirstPaint('raf_probe', true, count, paintElapsedNow());
+  }
+  function schedulePaintSample(){
+    if (paintReported) return;
+    onNextFrame(samplePaintOnce);
+  }
+  function settlePaintVerdict(){
+    paintDeadlineTimer = null;
+    if (paintReported) return;
+    // Not measurable right now (the host took the frame off screen, or the tab
+    // went to the background). Say nothing and re-arm: a timeout row invented
+    // here would be a false negative about a frame nobody was looking at.
+    if (!paintProbeEligible()) { releasePaintProbe(); return; }
+    onNextFrame(function(){
+      if (paintReported) return;
+      if (!paintProbeEligible()) { releasePaintProbe(); return; }
+      var recorded = recordedPaintTime();
+      if (recorded >= 0) {
+        reportFirstPaint('bridge_report', true, visiblePaintCount(), recorded);
+        return;
+      }
+      var count = visiblePaintCount();
+      if (count > 0) {
+        reportFirstPaint('raf_probe', true, count, paintElapsedNow());
+        return;
+      }
+      // The probe gave up, and that row must ship. A panel that only records
+      // successes turns its slowest previews into absent rows and reads as
+      // though they got faster.
+      reportFirstPaint('timeout', false, 0, paintElapsedNow());
+    });
+  }
+  function armFirstPaintProbe(){
+    if (paintReported || paintArmed || paintReportCount >= FIRST_PAINT_MAX_REPORTS) return;
+    if (!paintProbeEligible()) return;
+    paintArmed = true;
+    // Free evidence first: the browser keeps paint timing whether or not
+    // anyone reads it, so reading it costs one synchronous call and no probe.
+    var recorded = recordedPaintTime();
+    if (recorded >= 0) {
+      reportFirstPaint('bridge_report', true, visiblePaintCount(), recorded);
+      return;
+    }
+    try {
+      if (typeof window.PerformanceObserver === 'function') {
+        paintObserver = new window.PerformanceObserver(function(list){
+          if (paintReported) return;
+          var recordedAt = earliestPaintEntry(
+            list && typeof list.getEntries === 'function' ? list.getEntries() : null,
+          );
+          if (recordedAt < 0) return;
+          reportFirstPaint('bridge_report', true, visiblePaintCount(), recordedAt);
+        });
+        // buffered replays an entry that landed between the read above and
+        // this registration, so the gap between them cannot lose a paint.
+        paintObserver.observe({ type: 'paint', buffered: true });
+      }
+    } catch (_) { paintObserver = null; }
+    if (paintReported) return;
+    // Frames where the browser records no paint entry still have to be
+    // measured. One sample, one frame after load -- named so the listener is
+    // deduplicated by identity if the probe re-arms.
+    if (document.readyState === 'complete') schedulePaintSample();
+    else window.addEventListener('load', schedulePaintSample, { once: true });
+    if (paintReported) return;
+    paintDeadlineTimer = setTimeout(settlePaintVerdict, FIRST_PAINT_TIMEOUT);
+  }
+  // A warm reattach reuses the same document: nothing navigates, no second
+  // bridge is injected, and the latch above would swallow the new attach. The
+  // host's token is the only thing that can separate the two, so a new one --
+  // and only a new one -- opens the next report.
+  function applyPaintAttachToken(data){
+    var token = typeof data.token === 'string'
+      ? data.token.replace(/\\s+/g, ' ').trim().slice(0, FIRST_PAINT_TOKEN_LIMIT)
+      : '';
+    if (!token || token === paintAttachToken) return;
+    paintAttachToken = token;
+    if (paintReportCount >= FIRST_PAINT_MAX_REPORTS) return;
+    paintReported = false;
+    releasePaintProbe();
+  }
   function clearWhiteScreenTimers(){
     if (whiteScreenCheckTimer !== null) clearTimeout(whiteScreenCheckTimer);
     if (whiteScreenConfirmationTimer !== null) clearTimeout(whiteScreenConfirmationTimer);
@@ -391,10 +761,6 @@ export function buildPreviewObservabilityBridge(): string {
       whiteScreenCheckTimer = null;
       checkWhiteScreen();
     }, delay);
-  }
-  function nudgePreviewLayout(){
-    try { document.documentElement && document.documentElement.getBoundingClientRect(); } catch (_) {}
-    try { window.dispatchEvent(new Event('resize')); } catch (_) {}
   }
   function confirmWhiteScreen(){
     whiteScreenConfirmationTimer = null;
@@ -418,7 +784,6 @@ export function buildPreviewObservabilityBridge(): string {
     var visible = visiblePaintCount();
     if (visible > 0) return;
     whiteScreenConfirmationTimer = setTimeout(confirmWhiteScreen, WHITE_SCREEN_CONFIRMATION_DELAY);
-    nudgePreviewLayout();
   }
   function scheduleWhiteScreenCheckWhenEligible(){
     if (whiteScreenCheckEligible()) scheduleWhiteScreenCheck(WHITE_SCREEN_TIMEOUT);
@@ -540,20 +905,34 @@ export function buildPreviewObservabilityBridge(): string {
       checkDeckStage();
     }, DECK_STAGE_TIMEOUT);
   }
-  // One lifecycle for both settled checks: they answer different questions
-  // about the same moment -- "did anything paint" and "did the deck fit" -- and
-  // must not drift apart on when they are allowed to run.
+  // One lifecycle for all three probes: they answer different questions about
+  // the same moment -- "how long until something showed", "did anything paint"
+  // and "did the deck fit" -- and must not drift apart on when they are allowed
+  // to run. Each guards its own eligibility, so calling this repeatedly is
+  // idempotent and cheap.
   function scheduleSettledChecksWhenEligible(){
+    armFirstPaintProbe();
     scheduleWhiteScreenCheckWhenEligible();
     scheduleDeckStageCheckWhenEligible();
   }
   window.addEventListener('message', function(event){
     var data = event && event.data;
     if (!data || data.type !== HOST_STATE_TYPE || typeof data.active !== 'boolean') return;
-    if (hostActive === data.active) return;
+    // Before the no-op check below: a host that re-stamps an already-active
+    // frame with a new attach token is telling us about a new attach, not
+    // repeating itself.
+    applyPaintAttachToken(data);
+    if (hostActive === data.active) {
+      if (hostActive) armFirstPaintProbe();
+      return;
+    }
     hostActive = data.active;
     if (!hostActive) {
       clearWhiteScreenTimers();
+      // The frame is off screen. Drop the paint deadline with it, or it would
+      // fire against a frame nobody is looking at and record a timeout that
+      // says more about the host than about the document.
+      releasePaintProbe();
       if (deckStageCheckTimer !== null) {
         clearTimeout(deckStageCheckTimer);
         deckStageCheckTimer = null;
@@ -565,7 +944,9 @@ export function buildPreviewObservabilityBridge(): string {
   if (document.readyState === 'complete') scheduleSettledChecksWhenEligible();
   else window.addEventListener('load', scheduleSettledChecksWhenEligible, { once: true });
   document.addEventListener('visibilitychange', scheduleSettledChecksWhenEligible);
-  window.addEventListener('resize', scheduleSettledChecksWhenEligible);
+  window.addEventListener('resize', function(){
+    scheduleSettledChecksWhenEligible();
+  });
   setTimeout(scheduleSettledChecksWhenEligible, WHITE_SCREEN_TIMEOUT * 2);
 })();
 </script>`;

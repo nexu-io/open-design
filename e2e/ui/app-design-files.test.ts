@@ -1,4 +1,8 @@
 import { expect, test } from '@/playwright/suite';
+import {
+  activeArtifactPreview,
+  activeArtifactPreviewFrame,
+} from '@/playwright/artifact-preview';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { applyStandardMocks, routeAgents } from '@/playwright/mock-factory';
 import { expectAllProjectFilesActive, openAllProjectFiles } from '@/playwright/workspace';
@@ -324,7 +328,7 @@ async function expectScenarioFiles(
 
 async function expectScenarioPreviewText(page: Page, entry: UiScenario) {
   if (!entry.expectedPreviewText) return;
-  const frame = page.frameLocator('[data-testid="artifact-preview-frame"]');
+  const frame = activeArtifactPreviewFrame(page);
   await expect(frame.getByText(entry.expectedPreviewText, { exact: false })).toBeVisible();
 }
 
@@ -502,7 +506,7 @@ async function runUploadedImageRendersInPreviewFlow(page: Page, entry: UiScenari
   await expectWorkspaceReady(page);
   await openDesignFile(page, 'image-preview.html');
 
-  const image = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('img', { name: 'Brand logo' });
+  const image = activeArtifactPreviewFrame(page).getByRole('img', { name: 'Brand logo' });
   await expect(image).toBeVisible();
   await expect
     .poll(async () => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0))
@@ -976,7 +980,7 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
 
   await openDesignFile(page, 'dashboard.html');
   await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+  await expect(activeArtifactPreviewFrame(page).getByRole('heading', {
     name: 'Risk Dashboard',
   })).toBeVisible();
 
@@ -989,13 +993,13 @@ test('[P0] @critical file workspace restores HTML preview after switching throug
 
   await page.getByRole('tab', { name: /dashboard\.html/i }).click();
   await expect(page.getByRole('tab', { name: /dashboard\.html/i })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+  await expect(activeArtifactPreviewFrame(page).getByRole('heading', {
     name: 'Risk Dashboard',
   })).toBeVisible();
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 });
 
-test('[P0] @critical white-screen monitoring recovers layout stalls and confirms persistent blanks', async ({ page }) => {
+test('[P0] @critical white-screen monitoring reports persistent blanks without mutating the page', async ({ page }) => {
   const safetyEvents = await captureSafetyTelemetry(page);
   await routeMockAgents(page);
 
@@ -1003,58 +1007,33 @@ test('[P0] @critical white-screen monitoring recovers layout stalls and confirms
   await seedHtmlArtifact(
     page,
     projectId,
-    'recoverable-blank.html',
+    'persistent-blank.html',
     `<!doctype html>
       <html>
         <head><style>main { display: none; }</style></head>
-        <body data-monitor-fixture="recoverable" data-monitor-recovered="false">
-          <main><h1>Recovered preview paint</h1></main>
+        <body data-monitor-fixture="persistent" data-monitor-late-resize-count="0">
+          <main><h1>Authored hidden content</h1></main>
           <script>
             window.__monitorFixtureStartedAt = performance.now();
             window.addEventListener('resize', function () {
               if (performance.now() - window.__monitorFixtureStartedAt < 4500) return;
+              document.body.dataset.monitorLateResizeCount = String(
+                Number(document.body.dataset.monitorLateResizeCount || 0) + 1
+              );
               document.querySelector('main').style.display = 'block';
-              document.body.dataset.monitorRecovered = 'true';
             });
           </script>
-        </body>
-      </html>`,
-  );
-  await seedHtmlArtifact(
-    page,
-    projectId,
-    'persistent-blank.html',
-    `<!doctype html>
-      <html>
-        <body data-monitor-fixture="persistent">
-          <script>window.__monitorFixtureReady = true;</script>
         </body>
       </html>`,
   );
 
   await page.goto(`/projects/${projectId}?forceInline=1`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await openDesignFile(page, 'recoverable-blank.html');
+  await openDesignFile(page, 'persistent-blank.html');
 
-  const activePreview = page.frameLocator('[data-testid="artifact-preview-frame"]');
-  const recoverableBody = activePreview.locator('body[data-monitor-fixture="recoverable"]');
-  const recoverableMain = recoverableBody.locator('main');
-  await expect(recoverableBody).toBeVisible();
-  await expect(recoverableBody).toHaveAttribute('data-monitor-recovered', 'true', {
-    timeout: PREVIEW_WHITE_SCREEN_TIMEOUT_MS + T.short,
-  });
-  await expect(recoverableMain).toHaveCSS('display', 'block', {
-    timeout: PREVIEW_WHITE_SCREEN_TIMEOUT_MS + T.short,
-  });
-  await page.waitForTimeout(PREVIEW_WHITE_SCREEN_CONFIRMATION_MS + 100);
-  expect(capturedWhiteScreenEvents(safetyEvents)).toEqual([]);
-
-  await openAllProjectFiles(page);
-  const persistentRow = await revealDesignFileRow(page, 'persistent-blank.html');
-  await persistentRow.getByRole('button').first().click();
-  await expect(page.getByRole('tab', { name: /persistent-blank\.html/i }))
-    .toHaveAttribute('aria-selected', 'true');
+  const activePreview = activeArtifactPreviewFrame(page);
   const persistentBody = activePreview.locator('body[data-monitor-fixture="persistent"]');
+  const authoredMain = persistentBody.locator('main');
   await expect(persistentBody).toBeAttached();
 
   await page.waitForTimeout(PREVIEW_WHITE_SCREEN_TIMEOUT_MS - 500);
@@ -1064,6 +1043,8 @@ test('[P0] @critical white-screen monitoring recovers layout stalls and confirms
     () => capturedWhiteScreenEvents(safetyEvents).length,
     { timeout: PREVIEW_WHITE_SCREEN_CONFIRMATION_MS + T.short },
   ).toBe(1);
+  await expect(persistentBody).toHaveAttribute('data-monitor-late-resize-count', '0');
+  await expect(authoredMain).toHaveCSS('display', 'none');
   const [whiteScreen] = capturedWhiteScreenEvents(safetyEvents);
   expect(whiteScreen?.properties).toMatchObject({
     blank_observation_count: 2,
@@ -1078,45 +1059,32 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
 
   const projectId = await createProjectViaApi(page, 'Uploaded file switching stability');
   const seededHtml = new Map([
-    ['stable-alpha.html', '<!doctype html><html><body><main><h1>Stable Alpha</h1></main></body></html>'],
+    ['stable-alpha.html', `<!doctype html><html><body data-hidden-keydown-count="0">
+      <main><h1>Stable Alpha</h1><input data-testid="retained-focus-input"></main>
+      <script>
+        window.addEventListener('keydown', function () {
+          document.body.dataset.hiddenKeydownCount = String(
+            Number(document.body.dataset.hiddenKeydownCount || 0) + 1
+          );
+        });
+      </script>
+    </body></html>`],
     ['stable-beta.html', '<!doctype html><html><body><main><h1>Stable Beta</h1></main></body></html>'],
   ]);
-  const seededFiles = [...seededHtml.keys()].map((name, index) => ({
-    name,
-    size: Buffer.byteLength(seededHtml.get(name) ?? ''),
-    mtime: 1_785_570_000_000 + index,
-    kind: 'html',
-    mime: 'text/html',
-  }));
-  await page.route(`**/api/projects/${projectId}/files`, async (route) => {
-    await route.fulfill({ json: { files: seededFiles } });
-  });
-  await page.route(`**/api/projects/${projectId}/text-preview/*`, async (route) => {
-    const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1) ?? '');
-    const text = seededHtml.get(name) ?? '';
-    await route.fulfill({
-      json: {
-        text,
-        truncated: false,
-        size: Buffer.byteLength(text),
-        limit: 131_072,
-        mime: 'text/html',
-        kind: 'html',
-        poweredPreview: { required: false, scannedBytes: Buffer.byteLength(text), complete: true },
-      },
-    });
-  });
-  await page.route(`**/api/projects/${projectId}/raw/*`, async (route) => {
-    const name = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1) ?? '');
-    await route.fulfill({ contentType: 'text/html', body: seededHtml.get(name) ?? '' });
-  });
+  for (const [name, html] of seededHtml) {
+    await seedHtmlArtifact(page, projectId, name, html);
+  }
+  const isPreviewDocumentRead = (request: Request) => {
+    const url = new URL(request.url());
+    return request.resourceType() === 'document' && /^n-[^.]+\.localhost$/i.test(url.hostname);
+  };
   let warmReadEpoch = 0;
   const warmReadUrls: string[] = [];
   const recordWarmProjectRead = (request: Request) => {
     if (request.method() !== 'GET') return;
     const pathname = new URL(request.url()).pathname;
     const projectPrefix = `/api/projects/${encodeURIComponent(projectId)}/`;
-    if (pathname === `${projectPrefix}files` || pathname.startsWith(`${projectPrefix}raw/`)) {
+    if (pathname === `${projectPrefix}files` || isPreviewDocumentRead(request)) {
       warmReadEpoch += 1;
       warmReadUrls.push(request.url());
     }
@@ -1131,7 +1099,7 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   // assertion race startup instead of testing file stability. Let the restore
   // own its initial selection, then enter Design Files as the user would.
   await expect(page.getByRole('tab', { name: /stable-(?:alpha|beta)\.html/i })).toBeVisible();
-  await expect(page.locator('iframe[data-od-active="true"]')).toBeVisible();
+  await expect(activeArtifactPreview(page)).toBeVisible();
 
   await openAllProjectFiles(page);
   const alphaRow = await revealDesignFileRow(page, 'stable-alpha.html');
@@ -1141,7 +1109,7 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   await alphaRow.getByRole('button').first().click();
 
   const alphaTab = page.getByRole('tab', { name: /stable-alpha\.html/i });
-  const alphaHeading = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+  const alphaHeading = activeArtifactPreviewFrame(page).getByRole('heading', {
     name: 'Stable Alpha',
   });
   type WarmFrame = HTMLIFrameElement & { __odWarmLoadCount?: number };
@@ -1196,7 +1164,7 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   })).toBeVisible();
   await betaRow.getByRole('button').first().click();
   const betaTab = page.getByRole('tab', { name: /stable-beta\.html/i });
-  const betaHeading = page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
+  const betaHeading = activeArtifactPreviewFrame(page).getByRole('heading', {
     name: 'Stable Beta',
   });
   await expect(betaTab).toHaveAttribute('aria-selected', 'true');
@@ -1211,8 +1179,28 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   await expect(alphaHeading).toBeVisible();
   await expectWarmFrameUnchanged('stable-alpha.html', alphaFrameHandle, true);
   await expectWarmFrameUnchanged('stable-beta.html', betaFrameHandle, false);
-  await betaTab.click();
+  const alphaPreview = page.frameLocator(
+    'iframe[title="stable-alpha.html"][data-od-render-mode="runtime-url"]',
+  );
+  await alphaPreview.getByTestId('retained-focus-input').focus();
+  await expect(alphaPreview.getByTestId('retained-focus-input')).toBeFocused();
+  await page.evaluate(() => {
+    const host = window as typeof window & { __odHiddenFrameParentKeydowns?: number };
+    host.__odHiddenFrameParentKeydowns = 0;
+    window.addEventListener('keydown', () => {
+      host.__odHiddenFrameParentKeydowns = (host.__odHiddenFrameParentKeydowns ?? 0) + 1;
+    }, { capture: true });
+  });
+  // Programmatic tab activation intentionally does not move focus first. The
+  // pool must blur the live iframe before parking it, otherwise Chromium keeps
+  // routing keyboard input to the now-hidden authored document.
+  await betaTab.evaluate((node) => (node as HTMLElement).click());
   await expect(betaHeading).toBeVisible();
+  await page.keyboard.press('q');
+  await expect(alphaPreview.locator('body')).toHaveAttribute('data-hidden-keydown-count', '0');
+  expect(await page.evaluate(() => (
+    window as typeof window & { __odHiddenFrameParentKeydowns?: number }
+  ).__odHiddenFrameParentKeydowns ?? 0)).toBe(1);
   await expectWarmFrameUnchanged('stable-alpha.html', alphaFrameHandle, false);
   await expectWarmFrameUnchanged('stable-beta.html', betaFrameHandle, true);
   await waitForObservedActivityQuiescence(
@@ -1223,8 +1211,8 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   );
   page.off('request', recordWarmProjectRead);
 
-  let rawFileReads = 0;
-  const rawFileReadUrls: string[] = [];
+  let previewDocumentReads = 0;
+  const previewDocumentReadUrls: string[] = [];
   let fileListReads = 0;
   const fileListReadUrls: string[] = [];
   let measurementStep = 'idle';
@@ -1232,9 +1220,9 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
     if (request.method() !== 'GET') return;
     const pathname = new URL(request.url()).pathname;
     const projectPrefix = `/api/projects/${encodeURIComponent(projectId)}/`;
-    if (pathname.startsWith(`${projectPrefix}raw/`)) {
-      rawFileReads += 1;
-      rawFileReadUrls.push(`${measurementStep}: ${request.url()}`);
+    if (isPreviewDocumentRead(request)) {
+      previewDocumentReads += 1;
+      previewDocumentReadUrls.push(`${measurementStep}: ${request.url()}`);
     }
     if (pathname === `${projectPrefix}files`) {
       fileListReads += 1;
@@ -1283,7 +1271,7 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
     await alphaRow.getByRole('button').first().click();
     await expect(alphaTab).toHaveAttribute('aria-selected', 'true');
     await expect(alphaHeading).toBeVisible();
-    await expectVisibleAcrossAnimationFrames(page.getByTestId('artifact-preview-frame'));
+    await expectVisibleAcrossAnimationFrames(activeArtifactPreview(page));
     await expectVisibleAcrossAnimationFrames(betaTab);
     await expectWarmFrameUnchanged('stable-alpha.html', alphaFrameHandle, true);
     await expectWarmFrameUnchanged('stable-beta.html', betaFrameHandle, false);
@@ -1292,7 +1280,7 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
     await betaTab.click();
     await expect(betaTab).toHaveAttribute('aria-selected', 'true');
     await expect(betaHeading).toBeVisible();
-    await expectVisibleAcrossAnimationFrames(page.getByTestId('artifact-preview-frame'));
+    await expectVisibleAcrossAnimationFrames(activeArtifactPreview(page));
     await expectVisibleAcrossAnimationFrames(alphaTab);
     await expectWarmFrameUnchanged('stable-alpha.html', alphaFrameHandle, false);
     await expectWarmFrameUnchanged('stable-beta.html', betaFrameHandle, true);
@@ -1303,8 +1291,12 @@ test('[P0] @critical HTML file list and previews stay stable across repeated swi
   ).__odFileSwitchStability?.loadingSeen ?? false);
   expect(loadingSeen, 'a warm file list or preview returned to a loading state').toBe(false);
   // Both previews are warm before measurement. Switching among already-open
-  // tabs must keep their iframe documents connected and never reload raw HTML.
-  expect(rawFileReads, `warm preview switching reloaded raw HTML: ${rawFileReadUrls.join(', ')}`).toBe(0);
+  // tabs must keep their iframe documents connected and never navigate the
+  // project-scoped real URL again.
+  expect(
+    previewDocumentReads,
+    `warm preview switching navigated HTML again: ${previewDocumentReadUrls.join(', ')}`,
+  ).toBe(0);
   // The warmed Design Files snapshot also stays resident; reopening the tab
   // must not refetch the file list on every switch.
   expect(fileListReads, `warm switching refetched the project file list: ${fileListReadUrls.join(', ')}`).toBe(0);

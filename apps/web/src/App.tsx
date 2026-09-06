@@ -4021,14 +4021,8 @@ function AppInner() {
   // depending on browser history here: tab restores and template-create flows
   // can leave an in-app history entry that points back to the same project.
   const handleBack = useCallback(() => {
-    const currentProjectId = route.kind === 'project' ? route.projectId : null;
-    navigate({ kind: 'home', view: 'home' }, {
-      onCommit: () => {
-        if (!currentProjectId) return;
-        iframeKeepAlivePool.evictProject(currentProjectId, { includeActive: true });
-      },
-    });
-  }, [iframeKeepAlivePool, route]);
+    navigate({ kind: 'home', view: 'home' });
+  }, []);
 
   const handleClearPendingPrompt = useCallback(() => {
     const projectId = route.kind === 'project' ? route.projectId : null;

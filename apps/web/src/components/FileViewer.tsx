@@ -24,9 +24,33 @@ import {
   type SocialShareRequest,
   type SocialShareResponse,
   type WorkspaceCollabContext,
+  buildProjectFileVersionDocumentUrl,
 } from '@open-design/contracts';
-import { PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE } from '@open-design/contracts/runtime/preview-observability';
-import { PREVIEW_URL_GUARD_MAX_HTML_BYTES } from '@open-design/contracts/runtime/preview-guards';
+import {
+  DECK_PRESENTATION_NAVIGATE_MESSAGE_TYPE,
+  createDeckPresentationSetMessage,
+  deckPresentationMessageMatchesDocument,
+  parseDeckPresentationMessage,
+} from '@open-design/contracts/runtime/deck-presentation';
+import {
+  PREVIEW_OBSERVABILITY_HOST_STATE_MESSAGE_TYPE,
+  parsePreviewFirstPaintMessage,
+  previewFirstPaintPhaseDetail,
+} from '@open-design/contracts/runtime/preview-observability';
+import {
+  replayPreviewBridgeModes as replayPreviewBridgeModeState,
+  type PreviewBridgeModeState,
+} from '../runtime/replay-preview-bridge-modes';
+import {
+  useProjectScopedPreviewNavigation,
+  usePreviewSessionNavigationFromScope,
+} from '../runtime/use-project-preview-session-navigation';
+import { PreviewVersionRemintBudget } from '../runtime/preview-version-remint';
+import {
+  NORMAL_PREVIEW_FRAME_SANDBOX,
+  POWERED_PREVIEW_FRAME_ALLOW,
+  POWERED_PREVIEW_FRAME_SANDBOX,
+} from '../runtime/preview-session-navigation';
 import {
   isPreviewRuntimeState,
   type PreviewRuntimeState,
@@ -35,6 +59,7 @@ import {
   appendResourceQuery,
   workspaceIdentityCacheKey,
   workspaceProjectHeaders,
+  workspaceResourceUrl,
 } from '../collab/workspace-identity';
 import {
   anonymizeArtifactId,
@@ -212,8 +237,6 @@ import {
   htmlNeedsRedirectGuard,
   htmlNeedsSandboxShim,
   parseForceInline,
-  shouldUrlLoadHtmlPreview,
-  type UrlLoadDecision,
 } from './file-viewer-render-mode';
 import {
   collectPreviewAssetPaths,
@@ -277,6 +300,8 @@ import {
   previewIframeKeepAliveKey,
   useIframeKeepAlivePool,
 } from './IframeKeepAlivePool';
+import { PreviewRuntimeTransport } from './PreviewRuntimeTransport';
+import { beginPreviewAttach, previewPhaseDescriptor, recordPreviewPhase } from '../runtime/preview-phase-reporter';
 
 import type {
   ChatCommentAttachment,
@@ -297,6 +322,15 @@ import {
 } from '../edit-mode/source-patches';
 import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditHistoryEntry, type ManualEditPatch, type ManualEditStyles, type ManualEditTarget } from '../edit-mode/types';
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
+import { shouldAdoptPersistedManualEditDocument } from '../runtime/manual-edit-document-latch';
+import {
+  PRESENTATION_BACKDROP_DELAY_MS,
+  presentationBackdropPhase,
+} from '../runtime/presentation-backdrop';
+import {
+  decideDeckSlideReport,
+  type DeckSlideIntent,
+} from '../runtime/deck-slide-intent';
 import {
   getHtmlSourceSnapshot,
   htmlSourceSnapshotRefreshKey,
@@ -383,25 +417,35 @@ const MAX_BRIDGE_COORDINATE = 1_000_000;
 // `allow` list delegates the permissions a GPU/compute artifact typically
 // wants, including `cross-origin-isolated` so the isolated document keeps
 // SharedArrayBuffer.
-const POWERED_PREVIEW_SANDBOX =
-  'allow-scripts allow-same-origin allow-downloads allow-popups allow-forms allow-modals allow-pointer-lock';
-const POWERED_PREVIEW_ALLOW =
-  'accelerometer; autoplay; camera; cross-origin-isolated; fullscreen; gamepad; gyroscope; microphone; xr-spatial-tracking';
-const BASE_PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability';
+// `presentation` is requested on every settled document rather than only when
+// the user presents. The bridge is inert until the host tells it to present, and
+// asking for it later would change the URL — which is a navigation, exactly what
+// entering presentation must not cause.
+// A historical version is read-only and never edited, commented, presented or
+// measured, so it asks for the passive guards only — not the interactive set
+// the live preview negotiates.
+const VERSION_PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=sandbox&odPreviewBridge=redirect&odPreviewBridge=focus';
+const BASE_PREVIEW_BRIDGE_QUERY = 'odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewBridge=presentation';
 const HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT = 2 * 1024 * 1024;
 const HTML_ROUTING_TEXT_PREVIEW_LIMIT = 96 * 1024;
 const HTML_PREVIEW_ASSET_PREFLIGHT_LIMIT = 32;
 type HtmlSourceLoadMode = 'full' | 'routing-preview';
+type PassivePreviewGuards = {
+  sandbox: boolean;
+  focus: boolean;
+  redirect: boolean;
+};
 type PreviewAssetWarning = { filePath: string };
 
 function previewTextNeedsFullSourceForSafeInline(source: string | null): boolean {
   if (!source) return false;
-  return (
-    htmlNeedsSandboxShim(source) ||
-    htmlNeedsFocusGuard(source) ||
-    htmlNeedsRedirectGuard(source) ||
-    hasTweaksTemplate(source)
-  );
+  // Passive guards can be streamed into the real URL response by the daemon,
+  // regardless of document size. Keep buffering only for srcDoc-only
+  // interactive features and root-relative project assets: URL resolution
+  // ignores <base> for `/asset` references, while the existing full-source
+  // path confirms and rewrites those refs against the project file list.
+  return hasTweaksTemplate(source)
+    || htmlHasRootRelativeProjectAssetRefs(source, null);
 }
 
 function isBlockedPreviewAssetResponse(body: unknown): boolean {
@@ -1704,6 +1748,7 @@ interface Props {
   file: ProjectFile;
   liveHtml?: string;
   filesRefreshKey?: number;
+  fileContentRefreshKey?: number;
   isDeck?: boolean;
   streaming?: boolean;
   commentQueueOnSend?: boolean;
@@ -1748,6 +1793,10 @@ interface Props {
   installationId?: string | null;
   /** False while this viewer is retained offscreen for an instant tab revisit. */
   workspaceActive?: boolean;
+  /** False while another last-good viewer remains painted during a cold handoff. */
+  workspacePresented?: boolean;
+  /** Reports whether this retained viewer owns a promoted real-URL document. */
+  onPreviewReadyChange?: (fileName: string, ready: boolean) => void;
   /** Pin viewers that still own an in-progress edit so LRU eviction cannot drop work. */
   onRetainActivityChange?: (fileName: string, retain: boolean) => void;
   /** Register the safe manual-edit exit used to guard workspace navigation. */
@@ -1805,6 +1854,7 @@ export const FileViewer = memo(function FileViewer({
   file,
   liveHtml,
   filesRefreshKey = 0,
+  fileContentRefreshKey = 0,
   isDeck,
   streaming,
   commentQueueOnSend = false,
@@ -1831,6 +1881,8 @@ export const FileViewer = memo(function FileViewer({
   metricsConsent,
   installationId,
   workspaceActive = true,
+  workspacePresented = workspaceActive,
+  onPreviewReadyChange,
   onRetainActivityChange,
   onManualEditExitHandlerChange,
   manualEditEntryAllowed = true,
@@ -1894,6 +1946,7 @@ export const FileViewer = memo(function FileViewer({
         file={file}
         liveHtml={liveHtml}
         filesRefreshKey={filesRefreshKey}
+        fileContentRefreshKey={fileContentRefreshKey}
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         streaming={Boolean(streaming)}
         commentQueueOnSend={commentQueueOnSend}
@@ -1920,6 +1973,8 @@ export const FileViewer = memo(function FileViewer({
         metricsConsent={metricsConsent}
         installationId={installationId}
         workspaceActive={workspaceActive}
+        workspacePresented={workspacePresented}
+        onPreviewReadyChange={onPreviewReadyChange}
         onRetainActivityChange={onRetainActivityChange}
         onManualEditExitHandlerChange={onManualEditExitHandlerChange}
         manualEditEntryAllowed={manualEditEntryAllowed}
@@ -3301,18 +3356,6 @@ export function fileVersionPreviewOptions(
   };
 }
 
-function fileVersionPreviewSrcDoc(
-  projectId: string,
-  fileName: string,
-  source: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-) {
-  return buildSrcdoc(source, {
-    ...fileVersionPreviewOptions(projectId, fileName, source, workspaceContext),
-    previewFocusGuard: true,
-  });
-}
-
 function fileVersionExportTitle(fileName: string, version: ProjectFileVersion): string {
   const base = fileName.replace(/\.html?$/i, '') || fileName;
   return `${base}-v${version.version}`;
@@ -3413,11 +3456,12 @@ function FileVersionManagerModal({
   const [versionImageExportInFlight, setVersionImageExportInFlight] = useState(false);
   const versionImageExportTitleId = useId();
   const versionPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
-  // Track which srcDoc the iframe has finished rendering. Deriving readiness by
-  // comparing to the current srcDoc during render (rather than toggling a bool
+  // Track which version document the iframe has finished rendering. Deriving
+  // readiness by comparing to the current URL during render (rather than
+  // toggling a bool
   // in a post-paint effect) keeps the overlay up across a switch with no
   // one-frame flicker while the new document reparses.
-  const [loadedSrcDoc, setLoadedSrcDoc] = useState<string | null>(null);
+  const [loadedVersionUrl, setLoadedVersionUrl] = useState<string | null>(null);
   // Client-side cache of fetched version HTML keyed by version id. Revisiting a
   // version is then zero-fetch (and, because the srcDoc string value is stable,
   // zero-reparse). `inFlightRef` dedupes concurrent hover-prefetch + click.
@@ -3523,11 +3567,23 @@ function FileVersionManagerModal({
   const selectedContentMatchesVersion = Boolean(selectedId && selectedContentVersionId === selectedId && selectedContent);
   const restoreDisabled =
     viewerOnly || !selectedVersion || selectedVersion.current || restoring || loadingContent || !selectedContentMatchesVersion;
-  const srcDoc = useMemo(() => {
-    if (!selectedContent) return '';
-    return fileVersionPreviewSrcDoc(projectId, file.name, selectedContent);
-  }, [file.name, projectId, selectedContent]);
-  const frameReady = loadedSrcDoc === srcDoc;
+  // A historical version is served as a real document, not rebuilt from the
+  // fetched string. The project-relative path stays last in the URL, so the
+  // browser resolves that version's own `./app.js`, stylesheets, images and
+  // fonts natively as siblings under the same `/version-preview/<id>/` prefix.
+  // Under srcdoc they resolved against nothing and silently never loaded, which
+  // is why an old version could look broken in the panel while having rendered
+  // correctly when it was captured.
+  const versionDocumentUrl = useMemo(() => {
+    if (!selectedId) return '';
+    const url = buildProjectFileVersionDocumentUrl('', projectId, selectedId, file.name);
+    if (!url) return '';
+    return workspaceResourceUrl(
+      appendResourceQuery(url, VERSION_PREVIEW_BRIDGE_QUERY),
+      workspaceContext,
+    );
+  }, [file.name, projectId, selectedId, workspaceContext]);
+  const frameReady = loadedVersionUrl === versionDocumentUrl;
 
   useEffect(() => {
     tRef.current = t;
@@ -3668,10 +3724,10 @@ function FileVersionManagerModal({
   // Safety net: if the iframe's load event is ever missed, clear the overlay
   // after a grace period so it can't get stuck over a rendered document.
   useEffect(() => {
-    if (!srcDoc || loadedSrcDoc === srcDoc) return;
-    const fallback = window.setTimeout(() => setLoadedSrcDoc(srcDoc), 6000);
+    if (!versionDocumentUrl || loadedVersionUrl === versionDocumentUrl) return;
+    const fallback = window.setTimeout(() => setLoadedVersionUrl(versionDocumentUrl), 6000);
     return () => window.clearTimeout(fallback);
-  }, [srcDoc, loadedSrcDoc]);
+  }, [versionDocumentUrl, loadedVersionUrl]);
 
   useEffect(() => {
     if (!isDeckPreview || !selectedContentMatchesVersion || loadingContent) return;
@@ -3982,13 +4038,14 @@ function FileVersionManagerModal({
           </div>
         </header>
         <div className="artifact-version-panel__preview">
-          {srcDoc ? (
+          {versionDocumentUrl ? (
             <iframe
               ref={versionPreviewIframeRef}
               title={selectedVersion ? `${file.name} v${selectedVersion.version}` : file.name}
               sandbox="allow-scripts allow-downloads"
-              srcDoc={srcDoc}
-              onLoad={() => setLoadedSrcDoc(srcDoc)}
+              data-od-render-mode="url-load"
+              src={versionDocumentUrl}
+              onLoad={() => setLoadedVersionUrl(versionDocumentUrl)}
             />
           ) : null}
           {selectedVersion ? (
@@ -3997,7 +4054,7 @@ function FileVersionManagerModal({
               <strong>{selectedDate}</strong>
             </div>
           ) : null}
-          {loading || loadingContent || (srcDoc && !frameReady) ? (
+          {loading || loadingContent || (versionDocumentUrl && !frameReady) ? (
             <div
               className="file-version-preview-overlay"
               role="status"
@@ -7305,6 +7362,7 @@ function HtmlViewer({
   file,
   liveHtml,
   filesRefreshKey = 0,
+  fileContentRefreshKey = 0,
   isDeck,
   streaming,
   commentQueueOnSend = false,
@@ -7331,6 +7389,8 @@ function HtmlViewer({
   metricsConsent = false,
   installationId,
   workspaceActive = true,
+  workspacePresented = workspaceActive,
+  onPreviewReadyChange,
   onRetainActivityChange,
   onManualEditExitHandlerChange,
   manualEditEntryAllowed = true,
@@ -7340,6 +7400,7 @@ function HtmlViewer({
   file: ProjectFile;
   liveHtml?: string;
   filesRefreshKey?: number;
+  fileContentRefreshKey?: number;
   isDeck: boolean;
   streaming: boolean;
   commentQueueOnSend?: boolean;
@@ -7367,6 +7428,8 @@ function HtmlViewer({
   metricsConsent?: boolean;
   installationId?: string | null;
   workspaceActive?: boolean;
+  workspacePresented?: boolean;
+  onPreviewReadyChange?: (fileName: string, ready: boolean) => void;
   onRetainActivityChange?: (fileName: string, retain: boolean) => void;
   onManualEditExitHandlerChange?: (
     fileName: string,
@@ -7376,6 +7439,9 @@ function HtmlViewer({
 }) {
   const { locale, t } = useI18n();
   const iframeKeepAlivePool = useIframeKeepAlivePool();
+  useEffect(() => () => {
+    onPreviewReadyChange?.(file.name, false);
+  }, [file.name, onPreviewReadyChange]);
   // Retained viewers prewarm new file revisions behind the active tab. Keeping
   // the live metadata here is what lets an agent edit finish loading before
   // the user switches back; activation itself must not promote a stale
@@ -7816,6 +7882,10 @@ function HtmlViewer({
     scope: ProjectPreviewBaseScope;
   } | null>(null);
   const [serverPoweredPreviewRequired, setServerPoweredPreviewRequired] = useState(false);
+  const [serverPassivePreviewGuards, setServerPassivePreviewGuards] = useState<{
+    identity: string;
+    guards: PassivePreviewGuards;
+  } | null>(null);
   const [previewAssetWarning, setPreviewAssetWarning] = useState<PreviewAssetWarning | null>(null);
   const [inlinedSource, setInlinedSource] = useState<string | null>(null);
   const fileViewportKey = previewViewportStateKey(projectId, file);
@@ -8235,6 +8305,7 @@ function HtmlViewer({
   // iframes still streaming in) — leaving a bare white pane with no feedback.
   // Until that first load event lands, keep a loader over the transport stack.
   const urlPreviewLoadedKeysRef = useRef<Set<string>>(new Set());
+  const urlPreviewKeepAliveKeyRef = useRef<string | null>(null);
   const [urlPreviewFirstLoadPending, setUrlPreviewFirstLoadPending] = useState(false);
   const [boardMode, setBoardMode] = useState(false);
   const [commentPanelOpen, setCommentPanelOpen] = useState(false);
@@ -8347,6 +8418,7 @@ function HtmlViewer({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const urlPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
   const srcDocPreviewIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const previewRuntimeStandbyIframeRef = useRef<HTMLIFrameElement | null>(null);
   const viewerRootRef = useRef<HTMLDivElement | null>(null);
   const srcDocNavigationCommittedRef = useRef<{
     frame: HTMLIFrameElement;
@@ -8356,6 +8428,23 @@ function HtmlViewer({
     eventId: number;
     generation: string;
   } | null>(null);
+  const handledHostUrlPreviewNavigationFailureRef = useRef<{
+    eventId: number;
+    keepAliveKey: string;
+  } | null>(null);
+  const handledPreviewRuntimeNavigationFailureRef = useRef<string | null>(null);
+  const previewVersionRemintBudgetRef = useRef<PreviewVersionRemintBudget | null>(null);
+  if (previewVersionRemintBudgetRef.current === null) {
+    previewVersionRemintBudgetRef.current = new PreviewVersionRemintBudget();
+  }
+  const [previewRuntimeNavigationRetryToken, setPreviewRuntimeNavigationRetryToken] = useState(0);
+  const [previewRuntimeScopeRetryToken, setPreviewRuntimeScopeRetryToken] = useState(0);
+  const [previewRuntimeCurrentFrame, setPreviewRuntimeCurrentFrame] =
+    useState<HTMLIFrameElement | null>(null);
+  const [previewRuntimeTimedOutGeneration, setPreviewRuntimeTimedOutGeneration] =
+    useState<string | null>(null);
+  const [previewRuntimeScopeRemintRequiredGeneration, setPreviewRuntimeScopeRemintRequiredGeneration]
+    = useState<string | null>(null);
   const srcDocContentReadyRef = useRef<{
     frame: HTMLIFrameElement;
     generation: string;
@@ -8433,6 +8522,8 @@ function HtmlViewer({
   // document.open/write/close inside the shell). See onLoad below for
   // the infinite-loop story (issue #2361).
   const srcDocFrameDedupeResetForRef = useRef<HTMLIFrameElement | null>(null);
+  // The slide the host last asked the deck for, until the deck confirms it.
+  const pendingDeckSlideIntentRef = useRef<DeckSlideIntent | null>(null);
   const isActivePreviewIframeSource = useCallback((source: MessageEventSource | null) => {
     return workspaceActive && !!source && source === iframeRef.current?.contentWindow;
   }, [workspaceActive]);
@@ -8946,6 +9037,7 @@ function HtmlViewer({
     promise: Promise<{
       text: string | null;
       poweredPreviewRequired: boolean;
+      passiveGuards: PassivePreviewGuards;
       sourceLoadMode: HtmlSourceLoadMode;
     }>;
   } | null>(null);
@@ -8959,6 +9051,7 @@ function HtmlViewer({
     setRoutingSource(null);
     setRoutingSourceIdentity(null);
     setServerPoweredPreviewRequired(false);
+    setServerPassivePreviewGuards(null);
     sourceRef.current = null;
     sourceFileKeyRef.current = null;
     sourceEverLoadedRef.current = false;
@@ -9453,7 +9546,99 @@ function HtmlViewer({
     liveCommentTargetsRef.current = liveCommentTargets;
   }, [liveCommentTargets]);
 
+  const previewRuntimeNavigationEnabled =
+    sourceAuthorizationScopeKey !== null
+    && liveHtml === undefined;
+  // Saving from Manual Edit produces watcher echoes after the bridge has
+  // already applied the exact persisted bytes to this document. Keep that
+  // document identity stable during Edit and while the persisted-source latch
+  // proves the current DOM is still exact. A genuinely different source then
+  // releases the latch and consumes the latest metadata generation once.
+  const previewRuntimeCanAdoptPersistedManualEditDocument =
+    shouldAdoptPersistedManualEditDocument({
+      manualEditMode,
+      manualEditSrcDocActive,
+      latch: manualEditPersistedDocumentRef.current,
+      reloadKey,
+      sourceFingerprint: source === null ? null : previewSourceFingerprint(source),
+    });
+  const previewRuntimeOwnerKey =
+    `${sourceAuthorizationScopeKey ?? 'pending'}\0${projectId}\0${file.name}`;
+  const previewRuntimeRevisionIdentityRef = useRef({
+    ownerKey: previewRuntimeOwnerKey,
+    size: file.size,
+    mtime: file.mtime,
+    fileContentRefreshKey,
+  });
+  if (
+    previewRuntimeRevisionIdentityRef.current.ownerKey !== previewRuntimeOwnerKey
+    || (
+      !manualEditMode
+      && !manualEditSrcDocActive
+      && !previewRuntimeCanAdoptPersistedManualEditDocument
+    )
+  ) {
+    previewRuntimeRevisionIdentityRef.current = {
+      ownerKey: previewRuntimeOwnerKey,
+      size: file.size,
+      mtime: file.mtime,
+      fileContentRefreshKey,
+    };
+  }
+  const previewRuntimeRevisionIdentity = previewRuntimeRevisionIdentityRef.current;
+  // Match the daemon's exact HTML document identity. UI reloads replace the
+  // browsing context behind last-good via navigationRetryToken; they do not
+  // mint another credential for the same document. The committed refresh key
+  // is the settled witness for watcher-visible byte changes that can preserve
+  // both size and mtime, so it must participate in scope minting as well.
+  const previewRuntimeRevisionKey =
+    `${previewRuntimeRevisionIdentity.size}:${previewRuntimeRevisionIdentity.mtime}:content-refresh:${previewRuntimeRevisionIdentity.fileContentRefreshKey}:scope-retry:${previewRuntimeScopeRetryToken}`;
+  const previewRuntimeContentGeneration = [
+    sourceAuthorizationScopeKey ?? 'pending',
+    projectId,
+    file.name,
+    String(previewRuntimeRevisionIdentity.size),
+    String(previewRuntimeRevisionIdentity.mtime),
+    String(previewRuntimeRevisionIdentity.fileContentRefreshKey),
+  ].join('\0');
+  const previewRuntimeScopedNavigation = useProjectScopedPreviewNavigation({
+    projectId,
+    fileName: file.name,
+    revisionKey: previewRuntimeRevisionKey,
+    authorizationKey: sourceAuthorizationScopeKey ?? 'pending',
+    enabled: previewRuntimeNavigationEnabled,
+    retainLastGoodWhenDisabled: true,
+  });
+  const previewRuntimeConvergenceActive = true;
+  const daemonPreviewPolicy = previewRuntimeScopedNavigation.scoped?.previewPolicy;
+  const daemonDeckPolicy = daemonPreviewPolicy?.deck;
+  // When the daemon owns the exact document policy, its real URL is the only
+  // first-paint dependency. Delay the Web source read until that frame paints
+  // so a redundant raw/text-preview request cannot contend with navigation.
+  // An old daemon has no previewPolicy; in that case this gate opens as soon
+  // as scope minting settles and local classification remains fail-closed.
+  const deferConvergedSourceUntilFirstPaint =
+    previewRuntimeNavigationEnabled
+    && mode === 'preview'
+    && !manualEditMode
+    && !manualEditSrcDocActive
+    && !boardMode
+    && !inspectMode
+    && !drawOverlayOpen
+    && previewRuntimeCurrentFrame === null
+    && (
+      previewRuntimeScopedNavigation.loading
+      || daemonPreviewPolicy !== undefined
+    );
+
   const shouldDeferPassivePreviewSource =
+    // The converged runtime receives an exact whole-document policy from the
+    // daemon before navigation. Once its iframe paints, hydrate host-owned
+    // tools from the full source exactly once; a 96 KiB routing sample would
+    // add a second source mode without contributing any terminal decision.
+    // Retain the bounded sample only for the legacy transport and old-daemon
+    // rolling fallback, where the Web client still owns classification.
+    !(previewRuntimeNavigationEnabled && daemonPreviewPolicy !== undefined) &&
     liveHtml === undefined &&
     file.size > HTML_PASSIVE_PREVIEW_FULL_TEXT_LIMIT &&
     mode === 'preview' &&
@@ -9462,7 +9647,8 @@ function HtmlViewer({
     !boardMode &&
     !inspectMode &&
     !drawOverlayOpen &&
-    !isDeck;
+    !isDeck &&
+    daemonDeckPolicy !== true;
 
   useEffect(() => {
     // Open HTML tabs stay mounted at the real viewport size. Keep refreshing
@@ -9472,7 +9658,7 @@ function HtmlViewer({
     // local/headerless read. The authorization key changes when an exact
     // Workspace witness resolves, which reruns this effect with scoped URL and
     // headers. Only an explicit daemon `unbound` result receives the local key.
-    if (projectResourceReadBlocked) return;
+    if (projectResourceReadBlocked || deferConvergedSourceUntilFirstPaint) return;
     const sourceFileKey = currentSourceIdentity;
     if (liveHtml !== undefined) {
       sourceFileKeyRef.current = sourceFileKey;
@@ -9482,6 +9668,7 @@ function HtmlViewer({
       setRoutingSource(liveHtml);
       setRoutingSourceIdentity(sourceFileKey);
       setServerPoweredPreviewRequired(false);
+      setServerPassivePreviewGuards(null);
       sourceRef.current = liveHtml;
       return;
     }
@@ -9501,6 +9688,7 @@ function HtmlViewer({
       setRoutingSource(cachedSource);
       setRoutingSourceIdentity(cachedSource === null ? null : sourceFileKey);
       setServerPoweredPreviewRequired(false);
+      setServerPassivePreviewGuards(null);
       sourceRef.current = cachedSource;
       if (cachedSource !== null) {
         sourceEverLoadedRef.current = true;
@@ -9571,6 +9759,7 @@ function HtmlViewer({
               return {
                 text: fullText,
                 poweredPreviewRequired: preview?.poweredPreview.required === true,
+                passiveGuards: { sandbox: false, focus: false, redirect: false },
                 sourceLoadMode: 'full' as HtmlSourceLoadMode,
               };
             }
@@ -9578,6 +9767,11 @@ function HtmlViewer({
           return {
             text: previewText,
             poweredPreviewRequired: preview?.poweredPreview.required === true,
+            passiveGuards: {
+              sandbox: preview?.passiveGuards?.sandbox === true,
+              focus: preview?.passiveGuards?.focus === true,
+              redirect: preview?.passiveGuards?.redirect === true,
+            },
             sourceLoadMode: 'routing-preview' as HtmlSourceLoadMode,
           };
         })
@@ -9588,6 +9782,7 @@ function HtmlViewer({
         }).then((text) => ({
         text,
         poweredPreviewRequired: false,
+        passiveGuards: { sandbox: false, focus: false, redirect: false },
         sourceLoadMode: 'full' as HtmlSourceLoadMode,
       }));
       sourceLoad = { key: sourceLoadKey, promise };
@@ -9598,9 +9793,10 @@ function HtmlViewer({
         }
       });
     }
-    void sourceLoad.promise.then(({ text, poweredPreviewRequired, sourceLoadMode }) => {
+    void sourceLoad.promise.then(({ text, poweredPreviewRequired, passiveGuards, sourceLoadMode }) => {
       if (cancelled) return;
       setServerPoweredPreviewRequired(poweredPreviewRequired);
+      setServerPassivePreviewGuards({ identity: sourceFileKey, guards: passiveGuards });
       // Chokidar emits agent rewrites as unlink+add+change bursts; a
       // transient null mid-burst would blank source → srcDoc empty →
       // shell stays on prior frame. Keep the last good text instead.
@@ -9611,6 +9807,7 @@ function HtmlViewer({
           setRoutingSource('');
           setRoutingSourceIdentity(sourceFileKey);
           setServerPoweredPreviewRequired(false);
+          setServerPassivePreviewGuards(null);
           return;
         }
         // A srcDoc Reload may have cleared source to null just before this
@@ -9680,6 +9877,7 @@ function HtmlViewer({
     sourceAuthorizationScopeKey,
     currentSourceIdentity,
     shouldDeferPassivePreviewSource,
+    deferConvergedSourceUntilFirstPaint,
     projectResourceReadBlocked,
   ]);
 
@@ -9736,7 +9934,131 @@ function HtmlViewer({
     const s = routingHtmlSource;
     return sourceLooksLikeDeckPreview(s);
   }, [routingHtmlSource]);
-  const effectiveDeck = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
+  const sourceDeckHint = isDeck || (!passiveLargeHtmlPreview && looksLikeDeck);
+  // Settled URL documents receive daemon guards and powered-profile selection
+  // before authored scripts run. Host heuristics remain only as an old-daemon
+  // fallback and for the legacy transport.
+  const activeServerPassiveGuards = serverPassivePreviewGuards?.identity === currentSourceIdentity
+    ? serverPassivePreviewGuards.guards
+    : null;
+  const needsSandboxShim = useMemo(() => {
+    const s = routingHtmlSource;
+    return activeServerPassiveGuards?.sandbox === true || (s != null && htmlNeedsSandboxShim(s));
+  }, [activeServerPassiveGuards?.sandbox, routingHtmlSource]);
+  const needsFocusGuard = useMemo(() => {
+    const s = routingHtmlSource;
+    return activeServerPassiveGuards?.focus === true || (s != null && htmlNeedsFocusGuard(s));
+  }, [activeServerPassiveGuards?.focus, routingHtmlSource]);
+  const needsRedirectGuard = useMemo(() => {
+    const s = routingHtmlSource;
+    return activeServerPassiveGuards?.redirect === true || (s != null && htmlNeedsRedirectGuard(s));
+  }, [activeServerPassiveGuards?.redirect, routingHtmlSource]);
+  const needsPowered = useMemo(() => {
+    if (serverPoweredPreviewRequired) return true;
+    const s = routingHtmlSource;
+    return s != null && htmlNeedsPoweredPreview(s);
+  }, [routingHtmlSource, serverPoweredPreviewRequired]);
+  const previewRuntimePolicy = {
+    sandboxProfile: needsPowered ? 'powered' as const : 'normal' as const,
+    guards: {
+      storage: needsSandboxShim && !needsPowered,
+      focus: needsFocusGuard,
+      redirect: needsRedirectGuard,
+    },
+    deck: sourceDeckHint,
+  };
+  // The exact daemon-owned file version is the classification authority for
+  // the converged transport. Source text is still fetched for Code, export,
+  // thumbnails, and legacy fallback, but it must not sit on the first-paint
+  // critical path of a real URL document.
+  const previewRuntimeFallbackPolicyReady =
+    routingSourceIdentity === currentSourceIdentity
+    && routingHtmlSource !== null;
+  const previewRuntimeNavigation = usePreviewSessionNavigationFromScope({
+    scopedState: previewRuntimeScopedNavigation,
+    policy: daemonPreviewPolicy !== undefined || previewRuntimeFallbackPolicyReady
+      ? previewRuntimePolicy
+      : null,
+  });
+  const effectiveDeck = isDeck || (daemonDeckPolicy ?? sourceDeckHint);
+  const previewRuntimeNavigationGeneration = previewRuntimeNavigation.navigation
+    ? [
+        projectId,
+        file.name,
+        previewRuntimeRevisionKey,
+        previewRuntimeNavigation.navigation.sessionId,
+        previewRuntimeNavigation.navigation.documentVersion,
+      ].join('\u0000')
+    : null;
+  // Phase-timing anchor. Every other preview phase is measured against this, and
+  // `recordPhase` fails closed without it — a half-wired host reads as zero
+  // volume on the dashboard rather than as a suspiciously fast preview, which
+  // is why this has to open on EVERY attach including warm ones. Reusing a cold
+  // anchor for a warm re-attach would inherit the cold open's elapsed time and
+  // collapse the "restored within 100 ms" ratio, which reads as a product
+  // regression rather than an instrumentation bug.
+  const previewAttachHistoryRef = useRef(new Map<string, string>());
+  const previewAttachSeenRef = useRef(new Set<string>());
+  useEffect(() => {
+    const navigation = previewRuntimeNavigation.navigation;
+    if (!navigation || !previewRuntimeNavigationGeneration) return;
+    const documentKey = `${projectId}\u0000${file.name}`;
+    const previousVersion = previewAttachHistoryRef.current.get(documentKey) ?? null;
+    // Warm means this exact document was already attached during this session,
+    // which is what the restore metric is about. The pool exposes no membership
+    // query, so this is tracked here rather than guessed from it.
+    const warm = previewAttachSeenRef.current.has(previewRuntimeNavigationGeneration);
+
+    // Ordered by specificity: the first condition that explains this attach wins.
+    // `unknown` is deliberately absent — it counts as an unsanctioned navigation
+    // by design, so reaching for it to avoid deciding would show up as a red
+    // target-zero metric instead of being quietly absorbed.
+    const trigger = previousVersion === null
+      ? 'initial_open'
+      : previousVersion !== navigation.documentVersion
+        ? 'content_version_change'
+        : previewRuntimeNavigationRetryToken > 0
+          ? 'recovery'
+          : warm
+            ? 'file_tab_change'
+            : 'scope_reminted';
+
+    beginPreviewAttach(
+      previewPhaseDescriptor(navigation, {
+        surface: effectiveDeck ? 'deck_viewer' : 'file_viewer',
+        openKind: warm ? 'warm' : 'cold',
+      }),
+      {
+        trigger,
+        // A settled document only ever reaches a new browsing context through a
+        // version change, a recovery attempt or a re-minted scope. Returning to
+        // a retained document must not navigate; if it ever does, metric 3
+        // catches it here rather than in a bug report.
+        did_navigate: trigger !== 'file_tab_change',
+        had_previous_version: previousVersion !== null,
+      },
+    );
+    previewAttachHistoryRef.current.set(documentKey, navigation.documentVersion);
+    previewAttachSeenRef.current.add(previewRuntimeNavigationGeneration);
+  }, [
+    previewRuntimeNavigationGeneration,
+    previewRuntimeNavigation.navigation,
+    previewRuntimeNavigationRetryToken,
+    effectiveDeck,
+    projectId,
+    file.name,
+  ]);
+
+  useEffect(() => {
+    setPreviewRuntimeTimedOutGeneration((failedGeneration) => (
+      failedGeneration === previewRuntimeNavigationGeneration ? failedGeneration : null
+    ));
+  }, [previewRuntimeNavigationGeneration]);
+  useEffect(() => {
+    setPreviewRuntimeScopeRemintRequiredGeneration((failedGeneration) => (
+      failedGeneration === previewRuntimeNavigationGeneration ? failedGeneration : null
+    ));
+  }, [previewRuntimeNavigationGeneration]);
   const previewZoomPercent = resolveDesktopPreviewZoomPercent({
     zoomMode,
     viewport: previewViewport,
@@ -9951,32 +10273,7 @@ function HtmlViewer({
   const manualEditPageStylesEnabled = typeof source === 'string' && isManualEditFullHtmlDocument(source);
   const urlModeBridge = hasUrlModeBridge(routingHtmlSource);
   const manualEditRequiresSrcDoc = manualEditMode || manualEditSrcDocActive;
-  // When we URL-load the iframe directly, skip every in-host inlining /
-  // srcDoc-rebuilding step. The browser does the asset resolution itself,
-  // while the daemon injects passive document guards before authored scripts.
-  // Fall back to srcDoc whenever the URL response cannot carry those guards
-  // (streaming/in-memory HTML or an intentionally unbuffered large document).
-  // Memoized on `source` so HtmlViewer's frequent re-renders (board/inspect/
-  // edit mode toggles, slide nav) don't re-scan the HTML each time.
-  const needsSandboxShim = useMemo(() => {
-    if (passiveLargeHtmlPreview) return false;
-    const s = routingHtmlSource;
-    return s != null && htmlNeedsSandboxShim(s);
-  }, [passiveLargeHtmlPreview, routingHtmlSource]);
-  const needsFocusGuard = useMemo(() => {
-    if (passiveLargeHtmlPreview) return false;
-    const s = routingHtmlSource;
-    return s != null && htmlNeedsFocusGuard(s);
-  }, [passiveLargeHtmlPreview, routingHtmlSource]);
-  // A self-redirecting artifact needs the redirect-loop guard on whichever
-  // transport owns the document (nexu-io/open-design#710).
-  const needsRedirectGuard = useMemo(() => {
-    if (passiveLargeHtmlPreview) return false;
-    const s = routingHtmlSource;
-    return s != null && htmlNeedsRedirectGuard(s);
-  }, [passiveLargeHtmlPreview, routingHtmlSource]);
-  const urlDocumentGuardsAvailable =
-    liveHtml === undefined && file.size <= PREVIEW_URL_GUARD_MAX_HTML_BYTES;
+  const urlDocumentGuardsAvailable = liveHtml === undefined;
   // Set by the injected guard's `od:redirect-loop-blocked` postMessage. The
   // browser makes `window.location` unforgeable, so a runaway reload can only be
   // stopped host-side — parking the srcDoc iframe on static content below. File-
@@ -10091,21 +10388,37 @@ function HtmlViewer({
     workspaceActive,
     workspaceContext,
   ]);
-  // A real WebGL/Worker/WASM/SharedArrayBuffer artifact needs the "powered
-  // preview" path — a cross-origin-isolated iframe with allow-same-origin —
-  // which the opaque preview sandbox cannot provide (issue #724). Powered mode
-  // supersedes the shim/focus-guard srcDoc fallbacks below: those exist only to
-  // work around the opaque origin (localStorage SecurityError, focus theft),
-  // and powered mode fixes the root cause with a REAL same-origin document, so
-  // routing such an artifact to srcDoc would strip exactly the capabilities it
-  // needs. The interactive-bridge srcDoc modes (deck/inspect/edit/palette/
-  // tweaks/comment) still win — they require host-injected bridges powered mode
-  // can't carry.
-  const needsPowered = useMemo(() => {
-    if (serverPoweredPreviewRequired) return true;
-    const s = routingHtmlSource;
-    return s != null && htmlNeedsPoweredPreview(s);
-  }, [routingHtmlSource, serverPoweredPreviewRequired]);
+  const previewRuntimeViewerState = {
+    deck: effectiveDeck,
+    comment: boardMode,
+    inspect: inspectMode,
+    draw: drawOverlayOpen,
+    edit: manualEditMode,
+  };
+  const previewRuntimeBridgeModeState: PreviewBridgeModeState = {
+    active: workspaceActive && mode === 'preview',
+    workspaceActive,
+    commentEnabled: boardMode,
+    commentMode: boardTool,
+    editEnabled: manualEditMode,
+    selectedEditTargetId: selectedManualEditTarget?.id ?? null,
+    editLiveStyles: Array.from(manualEditLiveStylesRef.current, ([id, preview]) => ({
+      id,
+      styles: preview.styles,
+      version: preview.version,
+    })),
+    inspectEnabled: inspectMode,
+    commentActiveTarget: boardMode
+      && activeCommentTarget
+      && activeCommentTarget.selectionKind !== 'pod'
+      ? {
+          elementId: activeCommentTarget.elementId,
+          selector: activeCommentTarget.selector,
+        }
+      : null,
+    inspectOverrides,
+    deckSlideIndex: effectiveDeck ? activeDeckSlideIndex : null,
+  };
   const previewBridgeQuery = useMemo(() => {
     const query = [BASE_PREVIEW_BRIDGE_QUERY];
     // Preserve the old URL-load behavior for ordinary passive documents. Only
@@ -10117,45 +10430,20 @@ function HtmlViewer({
     return query.join('&');
   }, [needsFocusGuard, needsPowered, needsRedirectGuard, needsSandboxShim]);
   const [urlSelectionBridgeReady, setUrlSelectionBridgeReady] = useState(false);
-  const urlLoadDecision: UrlLoadDecision = {
-    mode,
-    isDeck: effectiveDeck,
-    commentMode: boardMode,
-    urlCommentBridge: urlSelectionBridgeReady,
-    urlSnapshotBridge: urlSelectionBridgeReady,
-    editMode: manualEditMode,
-    urlModeBridge,
-    inspectMode,
-    drawMode: drawOverlayOpen,
-    forceInline: forceInline && !needsPowered,
-    needsSandboxShim: needsSandboxShim && !needsPowered,
-    // Daemon guards wrap the settled on-disk response. Streaming/in-memory
-    // HTML has no matching URL representation, so keep it on srcDoc until it
-    // lands on disk instead of showing stale bytes from the raw route.
-    urlSandboxGuard: urlDocumentGuardsAvailable,
-    needsFocusGuard: needsFocusGuard && !needsPowered,
-    urlFocusGuard: urlDocumentGuardsAvailable,
-    needsRedirectGuard: needsRedirectGuard && !needsPowered,
-    urlRedirectGuard: urlDocumentGuardsAvailable,
-    projectRootAssetRefs: projectRootAssetRefs || scopedRelativeAssetRefs,
-  };
-  const urlLoadPreviewSupported = shouldUrlLoadHtmlPreview({
-    ...urlLoadDecision,
-    mode: 'preview',
-  }) && !manualEditRequiresSrcDoc;
-  const urlLoadPreviewSupportedWithoutManualEdit = shouldUrlLoadHtmlPreview({
-    ...urlLoadDecision,
-    mode: 'preview',
-    editMode: false,
-  });
-  const useUrlLoadPreview = mode === 'preview' && urlLoadPreviewSupported;
+  // Phase 4 terminal invariant: every settled file stays on its one real URL.
+  // Editing, comments, inspection, drawing and Deck navigation are runtime
+  // capabilities; they do not select a second document transport.
+  const urlLoadPreviewSupported = true;
+  const urlLoadPreviewSupportedWithoutManualEdit = true;
+  const useUrlLoadPreview = mode === 'preview';
   // The edit bridge still requires srcDoc, but the URL document is the
   // canonical passive preview. Keep an otherwise eligible ordinary URL warm
   // behind Edit so closing the tool can be a visibility swap. Powered
   // previews retain their existing single-runtime ownership for now because
   // their URL carries a separately resolved origin and sandbox contract.
   const keepUrlTransportWarmForManualEdit =
-    mode === 'preview'
+    !previewRuntimeConvergenceActive
+    && mode === 'preview'
     && manualEditRequiresSrcDoc
     && urlLoadPreviewSupportedWithoutManualEdit
     && !needsPowered;
@@ -10369,11 +10657,26 @@ function HtmlViewer({
   );
   const frozenSrcDocSourceSnapshotRefreshKeyRef = useRef(sourceSnapshotRefreshKey);
   const persistedManualEditDocument = manualEditPersistedDocumentRef.current;
+  // Both Manual Edit retention latches fingerprint the exact bytes the save
+  // wrote to disk, so the only source that can answer "is that revision still
+  // the one on screen?" is the persisted source itself. Anything derived from
+  // it for rendering is a different string by construction: deck visual
+  // normalization strips the whitespace before `</body>`, speaker-note removal
+  // deletes authored nodes, asset inlining rewrites every relative reference.
+  // Comparing a latch against one of those can never match, which retires it on
+  // the first render after Edit closes.
+  //
+  // Measured on a deck: latch `2666:3b3bcc7` against a deck-normalized
+  // `2665:92140dc1`. The identity unfroze and the runtime minted two preview
+  // scopes for one save — first for the post-save size/mtime, then ~130ms later
+  // for the watcher content-refresh carrying those same bytes.
+  const persistedManualEditSourceFingerprint =
+    source === null ? null : previewSourceFingerprint(source);
   const canAdoptPersistedManualEditDocument =
     !interactivePreviewModeActive
     && persistedManualEditDocument?.reloadKey === reloadKey
-    && livePreviewSource != null
-    && persistedManualEditDocument.sourceFingerprint === previewSourceFingerprint(livePreviewSource);
+    && persistedManualEditSourceFingerprint !== null
+    && persistedManualEditDocument.sourceFingerprint === persistedManualEditSourceFingerprint;
   // Adoption is a one-revision latch, not a permanent fingerprint cache. Wait
   // until Edit has closed (the save can render once before its source state is
   // committed), then retire the latch as soon as a genuinely different live
@@ -10382,7 +10685,7 @@ function HtmlViewer({
   if (
     !interactivePreviewModeActive
     && persistedManualEditDocument
-    && livePreviewSource != null
+    && persistedManualEditSourceFingerprint !== null
     && !canAdoptPersistedManualEditDocument
   ) {
     manualEditPersistedDocumentRef.current = null;
@@ -10410,16 +10713,17 @@ function HtmlViewer({
   const frozenPreviewSrcUrlRef = useRef<string | null>(null);
   const manualEditUrlStandbySourceFingerprint =
     manualEditUrlStandbySourceFingerprintRef.current;
+  // Same rule as the document latch above: this fingerprint was taken from the
+  // persisted bytes, so only the persisted source can witness it.
   const canAdoptManualEditUrlStandby =
     !interactivePreviewModeActive
     && manualEditUrlStandbySourceFingerprint !== null
-    && livePreviewSource !== null
-    && manualEditUrlStandbySourceFingerprint
-      === previewSourceFingerprint(livePreviewSource);
+    && persistedManualEditSourceFingerprint !== null
+    && manualEditUrlStandbySourceFingerprint === persistedManualEditSourceFingerprint;
   if (
     !interactivePreviewModeActive
     && manualEditUrlStandbySourceFingerprint !== null
-    && livePreviewSource !== null
+    && persistedManualEditSourceFingerprint !== null
     && !canAdoptManualEditUrlStandby
   ) {
     // A genuinely different source revision supersedes the prewarmed edit
@@ -10495,20 +10799,31 @@ function HtmlViewer({
     if (mode !== 'preview') return undefined;
     return subscribePreviewIframeMessages(({ source: messageSource, data }) => {
       if (!workspaceActiveRef.current) return;
-      const activeFrame = useUrlLoadPreview
-        ? urlPreviewIframeRef.current
-        : srcDocPreviewIframeRef.current;
+      const activeFrame = previewRuntimeConvergenceActive
+        ? iframeRef.current
+        : useUrlLoadPreview
+          ? urlPreviewIframeRef.current
+          : srcDocPreviewIframeRef.current;
       if (!activeFrame || messageSource !== activeFrame.contentWindow) return;
       reportPreviewIframeMessage(data, {
         surface: 'artifact_preview',
-        renderMode: useUrlLoadPreview ? 'url_load' : 'srcdoc',
+        renderMode: previewRuntimeConvergenceActive || useUrlLoadPreview ? 'url_load' : 'srcdoc',
         artifactId: anonymizeArtifactId({ projectId, fileName: file.name }),
         artifactKind: handoffArtifactKind ?? artifactKindToTracking({ fileKind: file.kind ?? null }),
         projectId,
       }, previewObservabilitySeenRef.current);
     });
-  }, [file.kind, file.name, handoffArtifactKind, mode, projectId, useUrlLoadPreview]);
+  }, [
+    file.kind,
+    file.name,
+    handoffArtifactKind,
+    mode,
+    previewRuntimeConvergenceActive,
+    projectId,
+    useUrlLoadPreview,
+  ]);
   useEffect(() => {
+    if (previewRuntimeConvergenceActive) return;
     const activeFrame = useUrlLoadPreview
       ? urlPreviewIframeRef.current
       : srcDocPreviewIframeRef.current;
@@ -10521,6 +10836,7 @@ function HtmlViewer({
     }
   }, [
     beginDesktopPreviewContentMeasurementGeneration,
+    previewRuntimeConvergenceActive,
     transportPreviewMeasurementDocumentEpoch,
     scheduleDesktopPreviewContentMeasure,
     useUrlLoadPreview,
@@ -10532,22 +10848,27 @@ function HtmlViewer({
     setRedirectLoopBlocked(false);
   }, [projectId, file.name, reloadKey]);
   // The injected redirect guard posts `od:redirect-loop-blocked` when a preview
-  // reloads itself past its hop budget. Only trust our own two preview frames,
-  // then park the srcDoc iframe on static content so the loop cannot continue.
+  // reloads itself past its hop budget. Only trust the active transport. The
+  // converged real-URL path destroys that exact pooled browsing context before
+  // replacing it with the static host placeholder; parking it would let the
+  // redirect loop keep running invisibly in the keep-alive pool.
   useEffect(() => {
     if (!workspaceActive) return;
     function onMessage(ev: MessageEvent) {
-      const fromPreview =
-        ev.source === srcDocPreviewIframeRef.current?.contentWindow ||
-        ev.source === urlPreviewIframeRef.current?.contentWindow;
+      const runtimeFrame = previewRuntimeConvergenceActive ? iframeRef.current : null;
+      const fromPreview = previewRuntimeConvergenceActive
+        ? ev.source === runtimeFrame?.contentWindow
+        : ev.source === srcDocPreviewIframeRef.current?.contentWindow
+          || ev.source === urlPreviewIframeRef.current?.contentWindow;
       if (!fromPreview) return;
       const data = ev.data as { type?: string } | null;
       if (data?.type !== PREVIEW_REDIRECT_LOOP_MESSAGE) return;
+      if (runtimeFrame) iframeKeepAlivePool.evictFrame(runtimeFrame);
       setRedirectLoopBlocked(true);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [workspaceActive]);
+  }, [iframeKeepAlivePool, previewRuntimeConvergenceActive, workspaceActive]);
 
   // Resolve the cross-origin powered-preview URL for artifacts that need it.
   // `resolved:false` means the (cached) daemon isolation probe is still in
@@ -10907,8 +11228,6 @@ function HtmlViewer({
     }, '*');
   }, [mode, workspaceActive]);
   const replayPreviewBridgeModes = useCallback((target: HTMLIFrameElement | null) => {
-    postPreviewObservabilityHostState(target);
-    if (!workspaceActive) return;
     const win = target?.contentWindow;
     if (!win) return;
     const verified = verifiedSrcDocTransportRef.current;
@@ -10919,43 +11238,37 @@ function HtmlViewer({
     ) {
       postAndConsumePreviewRuntimeState(target);
     }
-    win.postMessage({
-      type: 'od:comment-mode',
-      enabled: boardMode,
-      mode: boardTool,
-    }, '*');
-    win.postMessage({ type: 'od-edit-mode', enabled: manualEditMode }, '*');
-    win.postMessage({
-      type: 'od-edit-selected-target',
-      id: manualEditMode ? selectedManualEditTarget?.id ?? null : null,
-    }, '*');
-    if (manualEditMode) {
-      for (const [id, preview] of manualEditLiveStylesRef.current) {
-        win.postMessage({
-          type: 'od-edit-preview-style',
-          id,
-          styles: preview.styles,
-          version: preview.version,
-        }, '*');
-      }
-    }
-    win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
+    replayPreviewBridgeModeState(win, {
+      active: workspaceActive && mode === 'preview',
+      workspaceActive,
+      commentEnabled: boardMode,
+      commentMode: boardTool,
+      editEnabled: manualEditMode,
+      selectedEditTargetId: selectedManualEditTarget?.id ?? null,
+      editLiveStyles: Array.from(manualEditLiveStylesRef.current, ([id, preview]) => ({
+        id,
+        styles: preview.styles,
+        version: preview.version,
+      })),
+      inspectEnabled: inspectMode,
+    });
   }, [
     boardMode,
     boardTool,
     inspectMode,
     manualEditMode,
+    mode,
     postAndConsumePreviewRuntimeState,
-    postPreviewObservabilityHostState,
     selectedManualEditTarget?.id,
     workspaceActive,
   ]);
   useEffect(() => {
+    if (previewRuntimeConvergenceActive) return;
     const urlFrame = urlPreviewIframeRef.current;
     const srcDocFrame = srcDocPreviewIframeRef.current;
     postPreviewObservabilityHostState(urlFrame);
     if (srcDocFrame !== urlFrame) postPreviewObservabilityHostState(srcDocFrame);
-  }, [postPreviewObservabilityHostState]);
+  }, [postPreviewObservabilityHostState, previewRuntimeConvergenceActive]);
   // Only materialized while the in-tab presentation overlay is up — building
   // it eagerly would re-run buildSrcdoc on every source edit for a document
   // nobody is presenting.
@@ -11185,6 +11498,14 @@ function HtmlViewer({
     recoverUnacknowledgedSrcDocTransport,
     scheduleSrcDocTransportTimeout,
   ]);
+  // Segregate the pooled-iframe cache by powered-ness: a powered frame carries
+  // a different origin + sandbox, so reusing a plain frame's DOM node for it
+  // (or vice-versa) would leave a stale sandbox attribute on a live iframe.
+  const urlPreviewKeepAliveKey =
+    `${previewIframeKeepAliveKey(projectId, file.name)}`
+    + `:scope:${encodeURIComponent(sourceAuthorizationScopeKey ?? 'pending')}`
+    + (usePoweredPreview ? ':powered' : '');
+  urlPreviewKeepAliveKeyRef.current = urlPreviewKeepAliveKey;
   const handleHostPreviewNavigationFailure = useCallback((
     failure: OpenDesignHostPreviewNavigationFailure,
   ) => {
@@ -11192,11 +11513,85 @@ function HtmlViewer({
     const localBlobFailure = failure.validatedUrl.startsWith('blob:od://app/');
     if (
       failure.errorCode !== -3
-      || (!aboutSrcDocFailure && !localBlobFailure)
       || !Number.isSafeInteger(failure.eventId)
       || !Number.isFinite(failure.occurredAtMs)
-      || Date.now() - failure.occurredAtMs > SRC_DOC_PREVIEW_FAILURE_FRESHNESS_MS
     ) return;
+    if (previewRuntimeConvergenceActive) {
+      const frame = previewRuntimeStandbyIframeRef.current;
+      const navigation = previewRuntimeNavigation.navigation;
+      if (
+        !workspaceActiveRef.current
+        || mode !== 'preview'
+        || !frame?.isConnected
+        || !navigation
+        || Date.now() - failure.occurredAtMs > SRC_DOC_PREVIEW_FAILURE_FRESHNESS_MS
+      ) return;
+      let matches = false;
+      try {
+        matches = new URL(failure.validatedUrl).href
+          === new URL(frame.getAttribute('src') ?? '', window.location.href).href;
+      } catch {
+        return;
+      }
+      if (!matches) return;
+      if (
+        previewRuntimeNavigationGeneration === null
+        || handledPreviewRuntimeNavigationFailureRef.current
+          === previewRuntimeNavigationGeneration
+      ) return;
+      handledPreviewRuntimeNavigationFailureRef.current = previewRuntimeNavigationGeneration;
+      // The current frame has already painted and is never replaced here.
+      // Only the hidden, unpromoted frame that owns this exact URL gets one
+      // clean browsing-context retry for this document identity.
+      setPreviewRuntimeNavigationRetryToken((current) => current + 1);
+      return;
+    }
+    if (!aboutSrcDocFailure && !localBlobFailure) {
+      const frame = urlPreviewIframeRef.current;
+      if (
+        !workspaceActiveRef.current
+        || mode !== 'preview'
+        || !useUrlLoadPreview
+        || !frame?.isConnected
+        || frame.dataset.odActive !== 'true'
+      ) return;
+      let matches: boolean;
+      try {
+        matches = new URL(failure.validatedUrl).href
+          === new URL(frame.getAttribute('src') ?? '', window.location.href).href;
+      } catch {
+        return;
+      }
+      if (!matches) return;
+      const loadedAtMs = Number(frame.dataset.odLoadedAtMs ?? 0);
+      const failureIsFresh = Date.now() - failure.occurredAtMs
+        <= SRC_DOC_PREVIEW_FAILURE_FRESHNESS_MS;
+      // A pooled frame keeps this timestamp across route/project parking. An
+      // abort newer than its last successful load proves the cached browsing
+      // context is poisoned even if the user returns much later. A brand-new
+      // frame has no timestamp, so only a fresh host signal may replace it.
+      if (
+        (loadedAtMs > 0 && loadedAtMs > failure.occurredAtMs)
+        || (loadedAtMs === 0 && !failureIsFresh)
+      ) return;
+      const handled = handledHostUrlPreviewNavigationFailureRef.current;
+      if (
+        handled?.keepAliveKey === urlPreviewKeepAliveKey
+        && failure.eventId <= handled.eventId
+      ) return;
+      handledHostUrlPreviewNavigationFailureRef.current = {
+        eventId: failure.eventId,
+        keepAliveKey: urlPreviewKeepAliveKey,
+      };
+      urlPreviewLoadedKeysRef.current.delete(urlPreviewKeepAliveKey);
+      setUrlPreviewFirstLoadPending(true);
+      // Replacing only the poisoned pooled DOM node starts one clean navigation
+      // at the same real artifact URL. Source state, scroll/deck state, bridge
+      // mode, and every other retained file tab remain untouched.
+      iframeKeepAlivePool.evict(urlPreviewKeepAliveKey);
+      return;
+    }
+    if (Date.now() - failure.occurredAtMs > SRC_DOC_PREVIEW_FAILURE_FRESHNESS_MS) return;
     const frame = srcDocPreviewIframeRef.current;
     const generation = expectedSrcDocTransportGenerationRef.current;
     if (
@@ -11240,7 +11635,17 @@ function HtmlViewer({
     // replace at most one shell per visible activation, so an unscoped host
     // signal cannot create a reload loop or disturb a verified preview.
     probeSrcDocTransport(generation, true);
-  }, [mode, probeSrcDocTransport, recoverUnacknowledgedSrcDocTransport, useUrlLoadPreview]);
+  }, [
+    iframeKeepAlivePool,
+    mode,
+    previewRuntimeConvergenceActive,
+    previewRuntimeNavigation.navigation,
+    previewRuntimeNavigationGeneration,
+    probeSrcDocTransport,
+    recoverUnacknowledgedSrcDocTransport,
+    urlPreviewKeepAliveKey,
+    useUrlLoadPreview,
+  ]);
   useEffect(() => {
     const unsubscribe = subscribeHostPreviewNavigationFailure(
       handleHostPreviewNavigationFailure,
@@ -11259,13 +11664,6 @@ function HtmlViewer({
   // visibility swap with no re-load. Reset on file/project change.
   const [srcDocMaterialized, setSrcDocMaterialized] = useState(false);
   const wasUrlLoadPreviewRef = useRef(useUrlLoadPreview);
-  // Segregate the pooled-iframe cache by powered-ness: a powered frame carries
-  // a different origin + sandbox, so reusing a plain frame's DOM node for it
-  // (or vice-versa) would leave a stale sandbox attribute on a live iframe.
-  const urlPreviewKeepAliveKey =
-    `${previewIframeKeepAliveKey(projectId, file.name)}`
-    + `:scope:${encodeURIComponent(sourceAuthorizationScopeKey ?? 'pending')}`
-    + (usePoweredPreview ? ':powered' : '');
   const previousUrlPreviewKeepAliveKeyRef = useRef(urlPreviewKeepAliveKey);
   useEffect(() => {
     const previousKey = previousUrlPreviewKeepAliveKeyRef.current;
@@ -11554,6 +11952,18 @@ function HtmlViewer({
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [workspaceActive]);
+  useEffect(() => {
+    if (!workspaceActive || mode !== 'preview' || !useUrlLoadPreview) return;
+    const frame = urlPreviewIframeRef.current;
+    const frameSrc = frame?.getAttribute('src') ?? '';
+    if (!frame || !frameSrc || frameSrc === 'about:blank') return;
+    // A retained iframe can finish loading while its file tab is inactive.
+    // The bridge's ready message then has no active listener, and returning to
+    // the already-loaded frame does not fire onLoad again. Probe on every tab
+    // activation so Comment/Draw keep using the stable URL transport instead
+    // of unnecessarily falling back to srcDoc/Blob.
+    frame.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
+  }, [activePreviewSrcUrl, mode, useUrlLoadPreview, workspaceActive]);
   // Non-Electron runtimes retain the historical lazy-shell/direct-srcDoc
   // split. Electron always keeps the stable bootstrap shell and activates the
   // enhanced document in place through the handshake above.
@@ -11602,10 +12012,7 @@ function HtmlViewer({
   // below; other sticky srcDoc modes (inspect / palette / tweaks / comment /
   // deck / focus-guard / sandbox-shim) keep parking, so two live copies never
   // linger beyond an intentional transition.
-  const srcDocForcedOnlyByDraw =
-    drawOverlayOpen &&
-    !manualEditRequiresSrcDoc &&
-    shouldUrlLoadHtmlPreview({ ...urlLoadDecision, drawMode: false });
+  const srcDocForcedOnlyByDraw = drawOverlayOpen && !manualEditRequiresSrcDoc;
   // Source mode visually hides the artifact, but it must not destroy a URL
   // document that is otherwise eligible for passive preview. Replacing the
   // URL with about:blank on every Preview -> Code transition creates a fresh
@@ -11663,9 +12070,9 @@ function HtmlViewer({
     : activePoweredPreviewSrcOverride ?? computedUrlFrameSrc;
   lastRenderedUrlFrameSrcRef.current = urlFrameSrc;
   const urlFrameSandbox = usePoweredPreview
-    ? POWERED_PREVIEW_SANDBOX
-    : 'allow-scripts allow-downloads';
-  const urlFrameAllow = usePoweredPreview ? POWERED_PREVIEW_ALLOW : undefined;
+    ? POWERED_PREVIEW_FRAME_SANDBOX
+    : NORMAL_PREVIEW_FRAME_SANDBOX;
+  const urlFrameAllow = usePoweredPreview ? POWERED_PREVIEW_FRAME_ALLOW : undefined;
   // Arm the first-load overlay only for URL-load previews this pane has never
   // painted (per keep-alive key, so tab revisits and pooled re-attaches skip
   // it). about:blank parks (powered probe, srcDoc-active) never arm.
@@ -12068,6 +12475,13 @@ function HtmlViewer({
         const generation = expectedSrcDocTransportGenerationRef.current;
         srcDocContentReadyRef.current = { frame: srcDocFrame, generation };
       }
+      const decision = decideDeckSlideReport(
+        pendingDeckSlideIntentRef.current,
+        data.active,
+        Date.now(),
+      );
+      if (decision === 'ignore') return;
+      if (decision === 'adopt-and-settle') pendingDeckSlideIntentRef.current = null;
       const next = { active: data.active, count: data.count };
       setSlideStateCached(previewStateKey, next);
       setSlideState(next);
@@ -12083,7 +12497,7 @@ function HtmlViewer({
   ]);
 
   useEffect(() => {
-    if (!workspaceActive) return;
+    if (!workspaceActive || previewRuntimeConvergenceActive) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({
@@ -12091,10 +12505,10 @@ function HtmlViewer({
       enabled: boardMode,
       mode: boardTool,
     }, '*');
-  }, [boardMode, boardTool, srcDoc, useUrlLoadPreview, workspaceActive]);
+  }, [boardMode, boardTool, previewRuntimeConvergenceActive, srcDoc, useUrlLoadPreview, workspaceActive]);
 
   useEffect(() => {
-    if (!workspaceActive) return;
+    if (!workspaceActive || previewRuntimeConvergenceActive) return;
     const target = iframeRef.current;
     const win = target?.contentWindow;
     if (!win) return;
@@ -12110,6 +12524,7 @@ function HtmlViewer({
     postSelectedManualEditTargetToIframe(manualEditMode ? selectedManualEditTarget?.id ?? null : null);
   }, [
     manualEditMode,
+    previewRuntimeConvergenceActive,
     selectedManualEditTarget?.id,
     srcDoc,
     useUrlLoadPreview,
@@ -12131,6 +12546,13 @@ function HtmlViewer({
     win.postMessage({ type: 'od-edit-preview-text', id, value }, '*');
     return true;
   }, [workspaceActive]);
+  const previewOuterHtmlToIframe = useCallback((id: string, html: string): boolean => {
+    if (!workspaceActive) return false;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return false;
+    win.postMessage({ type: 'od-edit-preview-outer-html', id, html }, '*');
+    return true;
+  }, [workspaceActive]);
 
   function postSelectedManualEditTargetToIframe(id: string | null, target: HTMLIFrameElement | null = iframeRef.current) {
     if (!workspaceActive) return;
@@ -12144,11 +12566,11 @@ function HtmlViewer({
   }
 
   useEffect(() => {
-    if (!workspaceActive) return;
+    if (!workspaceActive || previewRuntimeConvergenceActive) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
     win.postMessage({ type: 'od:inspect-mode', enabled: inspectMode }, '*');
-  }, [inspectMode, srcDoc, useUrlLoadPreview, workspaceActive]);
+  }, [inspectMode, previewRuntimeConvergenceActive, srcDoc, useUrlLoadPreview, workspaceActive]);
 
   // Mirror the bridge's `od:comment-targets` broadcast into
   // `liveCommentTargets` whenever EITHER Inspect or Comments mode is
@@ -12464,13 +12886,26 @@ function HtmlViewer({
   }, [activeCommentTarget, boardMode, boardTool, cancelHoverCardDismiss, commentPortalHost, file.name, isOurPreviewIframeSource, previewComments, scheduleHoverCardDismiss, workspaceActive]);
 
   useEffect(() => {
-    if (!workspaceActive || !boardMode || !activeCommentTarget || activeCommentTarget.selectionKind === 'pod') return;
+    if (
+      !workspaceActive
+      || previewRuntimeConvergenceActive
+      || !boardMode
+      || !activeCommentTarget
+      || activeCommentTarget.selectionKind === 'pod'
+    ) return;
     iframeRef.current?.contentWindow?.postMessage({
       type: 'od:comment-active-target',
       elementId: activeCommentTarget.elementId,
       selector: activeCommentTarget.selector,
     }, '*');
-  }, [activeCommentTarget?.elementId, activeCommentTarget?.selector, activeCommentTarget?.selectionKind, boardMode, workspaceActive]);
+  }, [
+    activeCommentTarget?.elementId,
+    activeCommentTarget?.selector,
+    activeCommentTarget?.selectionKind,
+    boardMode,
+    previewRuntimeConvergenceActive,
+    workspaceActive,
+  ]);
 
   useEffect(() => {
     if (!manualEditMode) {
@@ -12919,7 +13354,12 @@ function HtmlViewer({
         < manualEditUrlStandbyRequestedRef.current,
     );
     setManualEditSrcDocActive(false);
-    manualEditPersistedDocumentRef.current = null;
+    // The latch is NOT cleared here. It is the proof that the bridge already
+    // applied the exact persisted bytes to the live document, and the render
+    // that consumes it happens after edit mode closes — clearing it in the
+    // same block guaranteed it was always null when read, so every saved edit
+    // replaced the browsing context and discarded the page's live state. It
+    // releases itself as soon as the source genuinely differs.
     setManualEditMode(false);
     return true;
   }
@@ -13104,6 +13544,10 @@ function HtmlViewer({
       const savedText = readManualEditFields(savedSource, patch.id).text;
       liveDocumentMatchesSavedSource = savedText !== undefined
         && previewTextToIframe(patch.id, savedText);
+    } else if (patch.kind === 'set-outer-html') {
+      const savedOuterHtml = readManualEditOuterHtml(savedSource, patch.id);
+      liveDocumentMatchesSavedSource = savedOuterHtml.length > 0
+        && previewOuterHtmlToIframe(patch.id, savedOuterHtml);
     } else if (patch.kind === 'set-style') {
       const targetStillExists = patch.id === '__body__'
         || Boolean(readManualEditOuterHtml(savedSource, patch.id));
@@ -13549,9 +13993,17 @@ function HtmlViewer({
   function goToSlide(index: number) {
     if (!Number.isFinite(index) || index < 0) return;
     const target = Math.floor(index);
+    // Until the deck confirms this, a report that says otherwise is a stale
+    // voice from the document's other reporter, not news.
+    pendingDeckSlideIntentRef.current = { index: target, atMs: Date.now() };
     const count = Math.max(deckSlideCount, target + 1);
     setSlideStateCached(previewStateKey, { active: target, count });
     setSlideState({ active: target, count });
+    // The converged transport owns replaying host state after the exact deck
+    // capability acknowledgement. Posting here as well would deliver the
+    // same direct `go` twice: once imperatively and once from the transport's
+    // deckSlideIndex update. Legacy frames still need the direct message.
+    if (previewRuntimeConvergenceActive) return;
     postSlide('go', target);
   }
 
@@ -13563,7 +14015,13 @@ function HtmlViewer({
   }
 
   useEffect(() => {
-    if (!workspaceActive || mode !== 'preview' || useUrlLoadPreview || !effectiveDeck) return;
+    if (
+      previewRuntimeConvergenceActive
+      || !workspaceActive
+      || mode !== 'preview'
+      || useUrlLoadPreview
+      || !effectiveDeck
+    ) return;
     // Retained project/file viewers keep their iframe browsing context while
     // hidden. Chromium can repaint that context before the deck bridge has
     // restored which authored slide is visible, leaving the rail and counter
@@ -13571,7 +14029,14 @@ function HtmlViewer({
     // Replay the already-cached index when the viewer becomes active; this is
     // an idempotent bridge message and does not navigate or replace the frame.
     syncCachedSlideStateToIframe(srcDocPreviewIframeRef.current);
-  }, [effectiveDeck, mode, previewStateKey, useUrlLoadPreview, workspaceActive]);
+  }, [
+    effectiveDeck,
+    mode,
+    previewRuntimeConvergenceActive,
+    previewStateKey,
+    useUrlLoadPreview,
+    workspaceActive,
+  ]);
 
   function fireSpeakerNotesSaveResult(
     editSurface: 'preview' | 'presenter',
@@ -13868,45 +14333,130 @@ function HtmlViewer({
     }, '*');
   }, [activeDeckSlideIndex, deckSlideCount, speakerNotes, projectId, file.name, workspaceActive]);
 
-  // Keep the fullscreen present overlay in lockstep with the active slide. The
-  // overlay is a SEPARATE iframe from the background preview, so host-side
-  // navigation (arrow keys, thumbnail clicks, or a move driven from the
-  // presenter popup) has to be forwarded to it explicitly — otherwise the big
-  // presented slide stays frozen while the counter and popup move on. The
-  // overlay opens on the right slide via buildSrcdoc's initialSlideIndex, so
-  // this only drives subsequent moves.
+  // Presenting a deck used to mean a second srcdoc document with
+  // `hideDeckChrome` and `deckClickNavigation` baked in, which is why the two
+  // effects that used to live here existed: one forwarded every host-side slide
+  // move into that separate document, the other adopted moves it made on its
+  // own. Neither is needed now. The presented document IS the active preview
+  // frame, so the ordinary slide driving and the main `od:slide-state` listener
+  // already cover both directions.
+  //
+  // What the document cannot infer by itself is that it is being presented.
+  // Chrome hiding and click-to-advance are authored-page concerns behind a
+  // sandbox with no allow-same-origin, so the host cannot reach in; it asks the
+  // injected presentation bridge instead. The bridge is requested on every
+  // settled document (see BASE_PREVIEW_BRIDGE_QUERY) and stays inert until this
+  // message arrives, so entering presentation changes no URL and navigates
+  // nothing.
+  // The exact document the bridge must agree it is acting on. Both the set
+  // message and every receipt carry it, so a reply that arrives after the
+  // document was replaced can be discarded instead of being applied to the
+  // wrong version.
+  const previewRuntimeDocumentIdentity = useMemo(() => {
+    const navigation = previewRuntimeNavigation.navigation;
+    return navigation
+      ? { sessionId: navigation.sessionId, documentVersion: navigation.documentVersion }
+      : null;
+  }, [previewRuntimeNavigation.navigation]);
+  const deckPresentationRevisionRef = useRef(0);
   useEffect(() => {
-    if (!workspaceActive || !inTabPresent || !effectiveDeck) return;
-    const frame = presentOverlayRef.current?.querySelector('iframe');
-    frame?.contentWindow?.postMessage(
-      { type: 'od:slide', action: 'go', index: activeDeckSlideIndex },
+    if (!workspaceActive || !effectiveDeck) return;
+    const frame = iframeRef.current;
+    const target = frame?.contentWindow;
+    if (!target) return;
+    const identity = previewRuntimeDocumentIdentity;
+    if (!identity) return;
+    deckPresentationRevisionRef.current += 1;
+    target.postMessage(
+      createDeckPresentationSetMessage({
+        sessionId: identity.sessionId,
+        documentVersion: identity.documentVersion,
+        presenting: inTabPresent,
+        revision: deckPresentationRevisionRef.current,
+      }),
       '*',
     );
-  }, [inTabPresent, effectiveDeck, activeDeckSlideIndex, workspaceActive]);
+  }, [inTabPresent, effectiveDeck, previewRuntimeDocumentIdentity, workspaceActive]);
 
-  // The reverse direction: the fullscreen overlay is its own iframe and drives
-  // its own slide when clicked (deckClickNavigation), so adopt the moves it
-  // reports as the host's active slide. That makes the counter, thumbnail rail
-  // and presenter popup all follow a slide advanced from the big stage. The
-  // main slide-state listener only trusts the ACTIVE preview iframe (the
-  // background one), so the overlay needs its own source-matched listener; the
-  // lockstep effect above re-posts the adopted index back as a no-op, so there
-  // is no feedback loop.
+  // The document measures its own first visible paint and posts it; nothing
+  // records it unless the host listens. An empty metric is indistinguishable
+  // from a fast one, so a missing listener would read as "previews are
+  // instant" rather than "nobody is measuring".
+  //
+  // It arrives on its own message type, not as an observability event: that
+  // channel ends in a catch-all that turns any parsed observability message
+  // into a runtime error, so routing paint through it would publish one
+  // fabricated error for every healthy preview.
+  useEffect(() => {
+    if (!workspaceActive) return;
+    function onFirstPaint(ev: MessageEvent) {
+      // `contentWindow` has to be non-null before comparing. A detached frame
+      // has none and a message with no source has none either, so `!==` alone
+      // would let anything through at exactly the moment there is no document
+      // to attribute it to.
+      const target = iframeRef.current?.contentWindow;
+      if (!target || ev.source !== target) return;
+      const message = parsePreviewFirstPaintMessage(ev.data);
+      if (!message) return;
+      const navigation = previewRuntimeNavigation.navigation;
+      if (!navigation) return;
+      recordPreviewPhase(
+        { sessionId: navigation.sessionId, documentVersion: navigation.documentVersion },
+        'first_visible_paint',
+        previewFirstPaintPhaseDetail(message),
+      );
+    }
+    window.addEventListener('message', onFirstPaint);
+    return () => window.removeEventListener('message', onFirstPaint);
+  }, [previewRuntimeNavigation.navigation, workspaceActive]);
+
+  // The bridge reports the user's intent rather than moving the deck itself:
+  // which slide comes next depends on the authored deck's own navigation
+  // protocol, and that knowledge lives here, not in the injected script.
   useEffect(() => {
     if (!workspaceActive || !inTabPresent || !effectiveDeck) return;
-    function onOverlaySlideState(ev: MessageEvent) {
-      const frame = presentOverlayRef.current?.querySelector('iframe');
+    function onPresentationNavigate(ev: MessageEvent) {
+      const frame = iframeRef.current;
       if (!frame || ev.source !== frame.contentWindow) return;
-      const data = ev.data as { type?: string; active?: number; count?: number } | null;
-      if (!data || data.type !== 'od:slide-state') return;
-      if (typeof data.active !== 'number' || typeof data.count !== 'number') return;
-      const next = { active: data.active, count: data.count };
-      setSlideStateCached(previewStateKey, next);
-      setSlideState(next);
+      const message = parseDeckPresentationMessage(ev.data);
+      if (!message || message.type !== DECK_PRESENTATION_NAVIGATE_MESSAGE_TYPE) return;
+      const identity = previewRuntimeDocumentIdentity;
+      if (identity && !deckPresentationMessageMatchesDocument(message, identity)) return;
+      goToSlide(activeDeckSlideIndex + (message.direction === 'prev' ? -1 : 1));
     }
-    window.addEventListener('message', onOverlaySlideState);
-    return () => window.removeEventListener('message', onOverlaySlideState);
-  }, [inTabPresent, effectiveDeck, previewStateKey, workspaceActive]);
+    window.addEventListener('message', onPresentationNavigate);
+    return () => window.removeEventListener('message', onPresentationNavigate);
+  }, [
+    inTabPresent,
+    effectiveDeck,
+    activeDeckSlideIndex,
+    previewRuntimeDocumentIdentity,
+    workspaceActive,
+  ]);
+
+  // Hold the letterbox ground back until the promoted document has had a frame
+  // to paint into its new box; otherwise the ground composites first and the
+  // audience sees black.
+  const [presentPromotedAt, setPresentPromotedAt] = useState<number | null>(null);
+  const [presentBackdropSettled, setPresentBackdropSettled] = useState(false);
+  useEffect(() => {
+    if (!inTabPresent) {
+      setPresentPromotedAt(null);
+      setPresentBackdropSettled(false);
+      return;
+    }
+    const promotedAt = Date.now();
+    setPresentPromotedAt(promotedAt);
+    setPresentBackdropSettled(false);
+    const id = window.setTimeout(() => {
+      setPresentBackdropSettled(presentationBackdropPhase({
+        presenting: true,
+        promotedAtMs: promotedAt,
+        nowMs: Date.now(),
+      }) === 'settled');
+    }, PRESENTATION_BACKDROP_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [inTabPresent]);
 
   // The Esc hint is a momentary confirmation, not a persistent chrome: fade it
   // out a few seconds after the presentation starts. (closeInTabPresentation
@@ -14009,7 +14559,9 @@ function HtmlViewer({
     const onMessage = (ev: MessageEvent) => {
       const data = ev.data as { type?: string } | null;
       if (!data || data.type !== 'od:present-escape') return;
-      const frame = presentOverlayRef.current?.querySelector('iframe');
+      // The presented document is the active preview frame now, not a frame of
+      // the overlay's own, so Esc from inside the artifact arrives from there.
+      const frame = iframeRef.current;
       if (frame?.contentWindow && ev.source !== frame.contentWindow) return;
       closeInTabPresentation();
     };
@@ -14042,13 +14594,18 @@ function HtmlViewer({
 
   useEffect(() => {
     if (!workspaceActive || !inTabPresent || !presentFullscreenPending) return;
-    const overlay = presentOverlayRef.current;
-    if (!overlay || typeof overlay.requestFullscreen !== 'function') {
+    // The root element, not the overlay. The overlay no longer owns a document —
+    // the preview stays where it is and is promoted by CSS — and the two live in
+    // different trees (the overlay is portaled to <body>, the preview sits in
+    // `.viewer`), so their only common ancestor is the root. Fullscreening the
+    // overlay alone would render a black layer with the presentation missing.
+    const stage = typeof document === 'undefined' ? null : document.documentElement;
+    if (!stage || typeof stage.requestFullscreen !== 'function') {
       setPresentFullscreenPending(false);
       return;
     }
     let cancelled = false;
-    overlay.requestFullscreen()
+    stage.requestFullscreen()
       .catch(() => undefined)
       .finally(() => {
         if (!cancelled) setPresentFullscreenPending(false);
@@ -14059,6 +14616,14 @@ function HtmlViewer({
   }, [inTabPresent, presentFullscreenPending, workspaceActive]);
 
   function closeInTabPresentation() {
+    // Leaving is the mirror of entering: if the ground is still opaque when the
+    // layout returns to normal, the frame between the two is black. Dropping
+    // the ground and the layout in the same handler does NOT order them —
+    // React batches both into one commit, which is why the first attempt at
+    // this still measured a ~340 ms flash on exit. The ground has to be
+    // committed and painted before the layout changes, so the layout change
+    // waits two frames.
+    setPresentBackdropSettled(false);
     setInTabPresent(false);
     setPresentFullscreenPending(false);
     presentFullscreenRequestedRef.current = false;
@@ -14479,8 +15044,18 @@ function HtmlViewer({
       ? requestManualEditUrlStandbyRefresh()
       : 0;
     const reloadUsesManualEditUrlStandby = manualEditUrlStandbyRevision > 0;
-    if (manualEditMode && !(await requestManualEditSafeExitRef.current())) return;
-    if (reloadLeavesManualEdit) {
+    if (manualEditMode && previewRuntimeConvergenceActive) {
+      // The converged runtime keeps Edit in the same real-URL document. A
+      // user-requested reload must first persist pending work, but it must not
+      // turn the tool off: the replacement document re-enables the exact same
+      // capability set before promotion.
+      if (!(await settlePendingManualEditCommit())) return;
+      if (manualEditTextFailedSessionIdsRef.current.size > 0) return;
+      if (!(await flushManualEditStyleSave())) return;
+    } else if (manualEditMode && !(await requestManualEditSafeExitRef.current())) {
+      return;
+    }
+    if (reloadLeavesManualEdit && !previewRuntimeConvergenceActive) {
       setManualEditSrcDocActive(false);
       manualEditPersistedDocumentRef.current = null;
     }
@@ -14494,6 +15069,13 @@ function HtmlViewer({
     void capturePreviewScrollPosition();
     imageExportSnapshotDataUrlRef.current = null;
     setInlinedSource(null);
+    if (previewRuntimeConvergenceActive) {
+      // Reload the real URL in a fresh standby browsing context even when the
+      // daemon's exact documentVersion is unchanged (for example, when only a
+      // relative support.js or stylesheet changed). The same-file current
+      // frame remains visible until the replacement protocol settles.
+      setPreviewRuntimeNavigationRetryToken((current) => current + 1);
+    }
     // The Edit path already navigated the hidden URL through its standby
     // revision. Bumping reloadKey after the visual handoff would immediately
     // navigate the now-visible frame a second time and reintroduce the flash.
@@ -14741,7 +15323,12 @@ function HtmlViewer({
         setInspectMode(false);
         setDrawOverlayOpen(false);
         setMode('preview');
-        setManualEditViewportWidth(previewBodyRef.current?.clientWidth ?? null);
+        // The retained runtime already owns the correct visible width. Freezing
+        // the whole viewer-body width here would make a Deck jump across the
+        // thumbnail rail when Edit changes the surrounding host chrome.
+        setManualEditViewportWidth(
+          previewRuntimeConvergenceActive ? null : (previewBodyRef.current?.clientWidth ?? null),
+        );
         setManualEditExitHandoffPending(false);
         setManualEditEntryHandoffPending(
           urlLoadPreviewSupportedWithoutManualEdit
@@ -14752,7 +15339,7 @@ function HtmlViewer({
         setManualEditMode(true);
         closeArtifactToolMenus();
       };
-      if (!useUrlLoadPreview) {
+      if (!previewRuntimeConvergenceActive && !useUrlLoadPreview) {
         // A snapshot is only valid for the URL-load -> srcDoc handoff that
         // captured it. Once srcDoc is already the active transport it owns the
         // newest in-frame navigation state; retaining a missed/late snapshot
@@ -14763,8 +15350,11 @@ function HtmlViewer({
         return;
       }
       const activationFileIdentity = previewFileIdentityRef.current;
+      const activationFrame = previewRuntimeConvergenceActive
+        ? iframeRef.current
+        : urlPreviewIframeRef.current;
       manualEditActivationPendingRef.current = true;
-      void capturePreviewRuntimeState(urlPreviewIframeRef.current)
+      void capturePreviewRuntimeState(activationFrame)
         .then((state) => {
           if (previewFileIdentityRef.current !== activationFileIdentity) return;
           if (state) {
@@ -15121,8 +15711,15 @@ function HtmlViewer({
     const count = slideState?.count ?? cachedCount ?? target + 1;
     setSlideStateCached(previewStateKey, { active: target, count });
     setSlideState({ active: target, count });
-    syncCachedSlideStateToIframe();
-  }, [slideNavRequest?.nonce, slideNavRequest?.slideIndex, effectiveDeck, previewStateKey, slideState?.count]);
+    if (!previewRuntimeConvergenceActive) syncCachedSlideStateToIframe();
+  }, [
+    slideNavRequest?.nonce,
+    slideNavRequest?.slideIndex,
+    effectiveDeck,
+    previewRuntimeConvergenceActive,
+    previewStateKey,
+    slideState?.count,
+  ]);
 
   // Share and Download are separate toolbar intents, but they share the same
   // popover shell so switching between them keeps the menu anchored in place.
@@ -15222,6 +15819,17 @@ function HtmlViewer({
     const visibleIframe = iframeRef.current ?? srcDocPreviewIframeRef.current;
     const hostSnapshot = await captureHostIframeSnapshot(visibleIframe);
     if (hostSnapshot) return hostSnapshot;
+
+    if (previewRuntimeConvergenceActive) {
+      const activeIframe = iframeRef.current;
+      if (!activeIframe) {
+        captureFailureStageRef.current = 'NO_URL_IFRAME';
+        return null;
+      }
+      await waitForIframeLoadOrTimeout(activeIframe, 250);
+      await waitForAnimationFrame();
+      return requestPreviewSnapshotWithRetry(activeIframe);
+    }
 
     if (!useUrlLoadPreview) {
       const activeIframe = srcDocPreviewIframeRef.current ?? iframeRef.current;
@@ -15756,7 +16364,9 @@ function HtmlViewer({
     if (state === 'failed') return t('fileViewer.deployLinkFailed');
     return t('fileViewer.deployLinkPreparingLabel');
   };
-  const initialPreviewLoading = source === null && !sourceEverLoadedRef.current;
+  const initialPreviewLoading = !previewRuntimeConvergenceActive
+    && source === null
+    && !sourceEverLoadedRef.current;
   const sourceModeLoading = mode === 'source' && source === null;
   const manualEditUrlHandoffEligible =
     urlLoadPreviewSupportedWithoutManualEdit && !needsPowered;
@@ -15773,7 +16383,11 @@ function HtmlViewer({
   const showPreviewToolbarControls = mode === 'preview';
   // Independent of the rail's lazy per-slide documents so a collapsed rail
   // (which unmounts DeckThumbnailRail entirely) still renders its toggle.
-  const showDeckThumbnailRail = effectiveDeck && source !== null && deckSlideTotal > 0 && !manualEditMode;
+  const showDeckThumbnailRail =
+    effectiveDeck
+    && source !== null
+    && deckSlideTotal > 0
+    && (!manualEditMode || previewRuntimeConvergenceActive);
   const showDeckFloatingNav = effectiveDeck && deckSlideTotal > 0 && !manualEditMode && !inTabPresent;
   const deckNavTotal = Math.max(deckSlideTotal, activeDeckSlideIndex + 1, 1);
   const versioningAvailable = isHtmlVersionableFile(file);
@@ -15782,6 +16396,11 @@ function HtmlViewer({
     localCommentSideDockActive ? 'comment-preview-layer-with-side-dock' : '',
     localCommentSideDockActive && commentSidePanelCollapsed ? 'comment-preview-layer-dock-collapsed' : '',
     boardSideDockStacked ? 'comment-preview-layer-side-dock-stacked' : '',
+    showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
+    showDeckThumbnailRail && deckThumbnailsCollapsed ? 'comment-preview-layer-deck-rail-collapsed' : '',
+  ].filter(Boolean).join(' ');
+  const manualEditWorkspaceClass = [
+    'manual-edit-workspace',
     showDeckThumbnailRail ? 'comment-preview-layer-with-deck-rail' : '',
     showDeckThumbnailRail && deckThumbnailsCollapsed ? 'comment-preview-layer-deck-rail-collapsed' : '',
   ].filter(Boolean).join(' ');
@@ -16245,10 +16864,27 @@ function HtmlViewer({
       )}
     </section>
   ) : null;
+  const previewRuntimeVersionChangeBlocked =
+    previewRuntimeScopeRemintRequiredGeneration !== null
+    && previewRuntimeScopeRemintRequiredGeneration === previewRuntimeNavigationGeneration;
+  const previewRuntimeNavigationBlocked = previewRuntimeVersionChangeBlocked || (
+    previewRuntimeTimedOutGeneration !== null
+    && previewRuntimeTimedOutGeneration === previewRuntimeNavigationGeneration
+  );
+  const retryPreviewRuntimeNavigation = () => {
+    setPreviewRuntimeTimedOutGeneration(null);
+    if (previewRuntimeVersionChangeBlocked) {
+      previewVersionRemintBudgetRef.current!.reset(previewRuntimeContentGeneration);
+      setPreviewRuntimeScopeRemintRequiredGeneration(null);
+      setPreviewRuntimeScopeRetryToken((currentToken) => currentToken + 1);
+      return;
+    }
+    setPreviewRuntimeNavigationRetryToken((currentToken) => currentToken + 1);
+  };
 
   return (
     <div ref={viewerRootRef} className={`viewer html-viewer${inTabPresent ? ' is-tab-present' : ''}${viewerOnly ? ' html-viewer--viewer-only' : ''}`}>
-      <div className="viewer-toolbar" style={workspaceActive ? undefined : { visibility: 'hidden' }}>
+      <div className="viewer-toolbar" style={workspacePresented ? undefined : { visibility: 'hidden' }}>
         <div className="viewer-toolbar-left">
           {showDeckThumbnailRail ? (
             <button
@@ -16653,13 +17289,13 @@ function HtmlViewer({
           ? createPortal(
               <div
                 data-od-file-actions-owner={file.name}
-                style={{ display: workspaceActive ? 'contents' : 'none' }}
+                style={{ display: workspacePresented ? 'contents' : 'none' }}
               >
                 {filePrimaryActions}
               </div>,
               chromeActionsHost,
             )
-          : workspaceActive
+          : workspacePresented
             ? filePrimaryActions
             : null
       ))(<>
@@ -17245,7 +17881,7 @@ function HtmlViewer({
             <div
             hidden={mode !== 'preview'}
             aria-hidden={mode !== 'preview' ? true : undefined}
-            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
+            className={`${manualEditMode ? manualEditWorkspaceClass : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={{
@@ -17304,244 +17940,160 @@ function HtmlViewer({
                     toolbarHost={manualEditMode ? null : commentComposerHost}
                   >
                     <div className="artifact-preview-transport-stack">
-                      {OD_PREVIEW_KEEP_ALIVE ? (
-                        <PooledIframe
-                          ref={urlPreviewIframeRef}
-                          cacheKey={urlPreviewKeepAliveKey}
-                          data-testid={workspaceActive
-                            ? (useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load')
-                            : `artifact-preview-frame-retained-${file.name}`}
-                          data-od-render-mode="url-load"
-                          data-od-active={mode === 'preview' && useUrlLoadPreview ? 'true' : 'false'}
-                          data-od-handoff-visible={keepUrlPaintedDuringManualEditEntry ? 'true' : undefined}
-                          data-od-handoff-pending={keepSrcDocPaintedDuringManualEditExit ? 'true' : undefined}
-                          aria-hidden={workspaceActive && mode === 'preview' && useUrlLoadPreview ? undefined : true}
-                          tabIndex={workspaceActive && mode === 'preview' && useUrlLoadPreview ? 0 : -1}
-                          title={file.name}
-                          data-od-powered={usePoweredPreview ? 'true' : undefined}
-                          sandbox={urlFrameSandbox}
-                          allow={urlFrameAllow}
-                          src={urlFrameSrc}
-                          onLoad={() => {
-                            const frame = urlPreviewIframeRef.current;
-                            markManualEditUrlStandbyReady(frame);
-                            if (useUrlLoadPreview) iframeRef.current = frame;
-                            if (frame) frame.dataset.odLoadedSrc = frame.getAttribute('src') ?? '';
-                            if (frame) {
-                              frame.dataset.odLoadedPreviewEpoch =
-                                new URL(frame.getAttribute('src') ?? '', window.location.href)
-                                  .searchParams.get('odPreviewEpoch') ?? '';
-                            }
-                            if (useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
-                            // First real paint of this artifact URL — drop the
-                            // first-load overlay. about:blank parks don't count.
-                            if ((frame?.getAttribute('src') ?? 'about:blank') !== 'about:blank') {
-                              urlPreviewLoadedKeysRef.current.add(urlPreviewKeepAliveKey);
-                              setUrlPreviewFirstLoadPending(false);
-                            }
-                            setUrlSelectionBridgeReady(false);
-                            dcViewportRestoreAtRef.current = Date.now();
-                            frame?.contentWindow?.postMessage({
-                              type: '__dc_set_viewport',
-                              ...dcViewportRef.current,
-                            }, '*');
-                            frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
-                            syncBridgeModes(frame);
-                            if (useUrlLoadPreview) restorePreviewScrollPosition();
-                            if (useUrlLoadPreview) scheduleDesktopPreviewContentMeasure(frame);
-                          }}
-                        />
-                      ) : (
-                        <iframe
-                          ref={urlPreviewIframeRef}
-                          data-testid={workspaceActive
-                            ? (useUrlLoadPreview ? 'artifact-preview-frame' : 'artifact-preview-frame-url-load')
-                            : `artifact-preview-frame-retained-${file.name}`}
-                          data-od-render-mode="url-load"
-                          data-od-active={mode === 'preview' && useUrlLoadPreview ? 'true' : 'false'}
-                          data-od-handoff-visible={keepUrlPaintedDuringManualEditEntry ? 'true' : undefined}
-                          data-od-handoff-pending={keepSrcDocPaintedDuringManualEditExit ? 'true' : undefined}
-                          aria-hidden={workspaceActive && mode === 'preview' && useUrlLoadPreview ? undefined : true}
-                          tabIndex={workspaceActive && mode === 'preview' && useUrlLoadPreview ? 0 : -1}
-                          title={file.name}
-                          data-od-powered={usePoweredPreview ? 'true' : undefined}
-                          sandbox={urlFrameSandbox}
-                          allow={urlFrameAllow}
-                          src={urlFrameSrc}
-                          onLoad={() => {
-                            const frame = urlPreviewIframeRef.current;
-                            markManualEditUrlStandbyReady(frame);
-                            if (useUrlLoadPreview) iframeRef.current = frame;
-                            if (frame) frame.dataset.odLoadedSrc = frame.getAttribute('src') ?? '';
-                            if (frame) {
-                              frame.dataset.odLoadedPreviewEpoch =
-                                new URL(frame.getAttribute('src') ?? '', window.location.href)
-                                  .searchParams.get('odPreviewEpoch') ?? '';
-                            }
-                            if (useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
-                            // First real paint of this artifact URL — drop the
-                            // first-load overlay. about:blank parks don't count.
-                            if ((frame?.getAttribute('src') ?? 'about:blank') !== 'about:blank') {
-                              urlPreviewLoadedKeysRef.current.add(urlPreviewKeepAliveKey);
-                              setUrlPreviewFirstLoadPending(false);
-                            }
-                            setUrlSelectionBridgeReady(false);
-                            dcViewportRestoreAtRef.current = Date.now();
-                            frame?.contentWindow?.postMessage({
-                              type: '__dc_set_viewport',
-                              ...dcViewportRef.current,
-                            }, '*');
-                            frame?.contentWindow?.postMessage({ type: 'od:url-selection-bridge-probe' }, '*');
-                            syncBridgeModes(frame);
-                            if (useUrlLoadPreview) restorePreviewScrollPosition();
-                            if (useUrlLoadPreview) scheduleDesktopPreviewContentMeasure(frame);
-                          }}
-                        />
-                      )}
-                      <iframe
-                        key={usesPersistentSrcDocTransport
-                          ? `${srcDocPreviewFrameName}:persistent:${srcDocTransportResetKey}`
-                          : srcDocTransportResetKey}
-                        ref={setSrcDocPreviewIframe}
-                        name={srcDocPreviewFrameName}
-                        data-testid={workspaceActive
-                          ? (useUrlLoadPreview ? 'artifact-preview-frame-srcdoc' : 'artifact-preview-frame')
-                          : `artifact-preview-frame-srcdoc-retained-${file.name}`}
-                        data-od-render-mode="srcdoc"
-                        data-od-active={mode === 'preview' && !useUrlLoadPreview ? 'true' : 'false'}
-                        data-od-handoff-visible={keepSrcDocPaintedDuringManualEditExit ? 'true' : undefined}
-                        data-od-handoff-pending={keepUrlPaintedDuringManualEditEntry ? 'true' : undefined}
-                        aria-hidden={workspaceActive && mode === 'preview' && !useUrlLoadPreview ? undefined : true}
-                        tabIndex={workspaceActive && mode === 'preview' && !useUrlLoadPreview ? 0 : -1}
-                        title={file.name}
-                        sandbox="allow-scripts allow-downloads"
-                        src={srcDocTransportUrl ?? 'about:blank'}
-                        srcDoc={srcDocTransportUrl ? undefined : srcDocTransportContent}
-                        onLoad={() => {
-                          const frame = srcDocPreviewIframeRef.current;
-                          // Record whether this load ever saw a real layout
-                          // pass — a load completing in a hidden browser tab
-                          // did not, and decks then need a fresh parse on
-                          // return to visible (#6583). See
-                          // srcDocLoadRequiresFreshParseOnReturnToVisible.
-                          srcDocLoadedWhileDocumentHiddenRef.current =
-                            document.visibilityState === 'hidden';
-                          if (!useUrlLoadPreview) iframeRef.current = frame;
-                          if (frame) {
-                            frame.dataset.odLoadedPreviewEpoch =
-                              transportPreviewMeasurementDocumentEpoch;
-                          }
-                          if (!useUrlLoadPreview) beginDesktopPreviewContentMeasurementGeneration(frame);
-                          // Reset the activation dedupe exactly ONCE per
-                          // freshly mounted iframe DOM node, never on the
-                          // subsequent load events that the same node
-                          // emits during normal srcDoc rendering.
-                          //
-                          // The iframe's load event fires twice for one
-                          // successful activation: once when the lazy
-                          // transport shell HTML loads, and again when
-                          // our own document.open/write/close inside the
-                          // shell finishes. PR #2699 reset the dedupe on
-                          // every load so that switching
-                          // preview -> source -> preview (which remounts
-                          // this iframe as a fresh DOM node) would
-                          // re-activate the new shell. But resetting on
-                          // every load also re-activated on the SECOND
-                          // load of a non-remounted frame, which
-                          // re-triggered document.open/write/close, which
-                          // re-fired the load event, ad infinitum. The
-                          // dedupe ref oscillated between null and the
-                          // current srcDoc thousands of times per render
-                          // and each iteration restarted every CSS
-                          // animation from its `from` keyframe. Designs
-                          // using `animation-fill-mode: both` with
-                          // `from { opacity: 0 }` stayed at opacity 0
-                          // forever and the preview read as blank.
-                          // That is issue #2361.
-                          //
-                          // Tracking the last frame we reset for lets us
-                          // keep PR #2699's "remount after Source toggle"
-                          // fix while breaking the loop on plain renders.
-                          if (frame && srcDocFrameDedupeResetForRef.current !== frame) {
-                            srcDocFrameDedupeResetForRef.current = frame;
-                            activatedSrcDocTransportHtmlRef.current = null;
-                          }
-                          if (useLazySrcDocTransport) setSrcDocShellReady(true);
-                          const activatedTransport = activateLoadedSrcDocTransport(frame);
-                          if (frame && activatedTransport) {
-                            // The shell is about to replace its document. Any
-                            // readiness witnessed for this DOM node belongs to
-                            // the previous navigation and must not allow an
-                            // abort to consume recovery before the replacement
-                            // document's final load.
-                            srcDocNavigationCommittedRef.current = null;
-                            srcDocContentReadyRef.current = null;
-                          }
-                          verifyLoadedSrcDocTransport(frame);
-                          dcViewportRestoreAtRef.current = Date.now();
-                          frame?.contentWindow?.postMessage({
-                            type: '__dc_set_viewport',
-                            ...dcViewportRef.current,
-                          }, '*');
-                          replayInspectOverridesToIframe(frame);
-                          syncBridgeModes(frame);
-                          syncCachedSlideStateToIframe(frame);
-                          if (!useUrlLoadPreview) restorePreviewScrollPosition();
-                          if (!useUrlLoadPreview) scheduleDesktopPreviewContentMeasure(frame);
-                          if (frame && !activatedTransport) {
-                            // The lazy shell's first load immediately starts a
-                            // second document.write navigation. Recovering in
-                            // that first callback is too early: the following
-                            // navigation can discard the newly-created surface
-                            // again. Consume a cached host failure synchronously
-                            // from the final load callback, before Chromium can
-                            // present the document and turn the compositor
-                            // refresh into a visible second flash.
-                            srcDocNavigationCommittedRef.current = {
-                              frame,
-                              generation: srcDocTransportGeneration,
-                            };
-                          }
-                        }}
-                      />
-                      {useUrlLoadPreview && urlPreviewFirstLoadPending ? (
-                        // First-ever URL-load of this artifact: the iframe's own
-                        // navigation may still be queued behind heavy same-origin
-                        // traffic (drafts/all-projects cover iframes) — without
-                        // this cover the pane reads as a dead white screen.
-                        <div
-                          className="artifact-preview-first-load"
-                          role="status"
-                          aria-busy="true"
-                          aria-label={t('fileViewer.loading')}
-                          data-testid="artifact-preview-first-load"
-                        >
-                          <CenteredLoader label={t('fileViewer.loading')} />
-                        </div>
-                      ) : null}
-                      {!useUrlLoadPreview && previewSource === null ? (
-                        // srcDoc-path twin of the cover above: while the
-                        // preview content is still PENDING — the scoped-asset
-                        // rewrite waiting on the project file list (deck on a
-                        // workspace-scoped project), or a Reload's synchronous
-                        // clear before its re-fetch lands — the active iframe
-                        // is a blank document and the pane reads as a dead
-                        // white screen without this cover. Both hold states
-                        // are exactly `previewSource === null`; a loaded
-                        // zero-byte file is `previewSource === ''` (empty
-                        // srcDoc with nothing in flight), so keying on srcDoc
-                        // emptiness alone would pin this loader forever over
-                        // a legitimately empty document.
-                        <div
-                          className="artifact-preview-first-load"
-                          role="status"
-                          aria-busy="true"
-                          aria-label={t('fileViewer.loading')}
-                          data-testid="artifact-preview-first-load"
-                        >
-                          <CenteredLoader label={t('fileViewer.loading')} />
-                        </div>
-                      ) : null}
+                      {
+                        redirectLoopBlocked ? (
+                          <iframe
+                            data-testid="preview-runtime-redirect-loop-blocked"
+                            data-od-render-mode="runtime-blocked"
+                            title={file.name}
+                            sandbox=""
+                            srcDoc={redirectLoopBlockedDoc}
+                          />
+                        ) : previewRuntimeNavigation.navigation ? (
+                          previewRuntimeNavigationBlocked ? (
+                            <div
+                              className="artifact-preview-first-load preview-runtime-navigation-error"
+                              role="alert"
+                              data-testid="preview-runtime-navigation-error"
+                            >
+                              <p>{t('fileViewer.previewUnavailable')}</p>
+                              <Button
+                                variant="ghost"
+                                data-testid="preview-runtime-navigation-retry"
+                                onClick={retryPreviewRuntimeNavigation}
+                              >
+                                {`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+                              </Button>
+                            </div>
+                          ) : (
+                            <>
+                            <PreviewRuntimeTransport
+                              projectId={projectId}
+                              fileName={file.name}
+                              navigation={previewRuntimeNavigation.navigation}
+                              viewerState={previewRuntimeViewerState}
+                              bridgeModeState={previewRuntimeBridgeModeState}
+                              active={workspaceActive && mode === 'preview'}
+                              presented={workspacePresented && mode === 'preview'}
+                              navigationRetryToken={previewRuntimeNavigationRetryToken}
+                              title={file.name}
+                              onCurrentFrameChange={(frame) => {
+                                iframeRef.current = frame;
+                                setPreviewRuntimeCurrentFrame(frame);
+                                if (!frame) return;
+                                setPreviewRuntimeTimedOutGeneration(null);
+                                beginDesktopPreviewContentMeasurementGeneration(frame);
+                                dcViewportRestoreAtRef.current = Date.now();
+                                frame.contentWindow?.postMessage({
+                                  type: '__dc_set_viewport',
+                                  ...dcViewportRef.current,
+                                }, '*');
+                                restorePreviewScrollPosition();
+                                scheduleDesktopPreviewContentMeasure(frame);
+                              }}
+                              onStandbyFrameChange={(frame) => {
+                                previewRuntimeStandbyIframeRef.current = frame;
+                              }}
+                              onStandbyTimedOut={(failed) => {
+                                if (
+                                  previewRuntimeNavigationGeneration === null
+                                  || failed.sessionId
+                                    !== previewRuntimeNavigation.navigation?.sessionId
+                                  || failed.documentVersion
+                                    !== previewRuntimeNavigation.navigation?.documentVersion
+                                ) return;
+                                // PreviewSession has discarded the failed
+                                // candidate. Do not keep exposing an older
+                                // document as if it were the requested version;
+                                // retry can reuse the retained session state.
+                                setPreviewRuntimeTimedOutGeneration(
+                                  previewRuntimeNavigationGeneration,
+                                );
+                              }}
+                              onStandbyVersionChanged={(failed, _current, navigationAttempt) => {
+                                const expected = previewRuntimeNavigation.navigation;
+                                if (
+                                  previewRuntimeNavigationGeneration === null
+                                  || !expected
+                                  || failed.sessionId !== expected.sessionId
+                                  || failed.documentVersion !== expected.documentVersion
+                                ) return;
+                                const decision = previewVersionRemintBudgetRef.current!.consume(
+                                  previewRuntimeContentGeneration,
+                                  {
+                                    sessionId: failed.sessionId,
+                                    documentVersion: failed.documentVersion,
+                                    navigationAttempt,
+                                  },
+                                );
+                                if (decision === 'duplicate') return;
+                                if (decision === 'remint') {
+                                  setPreviewRuntimeTimedOutGeneration(null);
+                                  setPreviewRuntimeScopeRemintRequiredGeneration(null);
+                                  setPreviewRuntimeScopeRetryToken((currentToken) => currentToken + 1);
+                                  return;
+                                }
+                                // Continuous writes can invalidate multiple
+                                // freshly minted scopes. Stop automatic work
+                                // at the bounded budget and let one explicit
+                                // user action start a fresh bounded cycle.
+                                setPreviewRuntimeScopeRemintRequiredGeneration(
+                                  previewRuntimeNavigationGeneration,
+                                );
+                                setPreviewRuntimeTimedOutGeneration(
+                                  previewRuntimeNavigationGeneration,
+                                );
+                              }}
+                              onPromoted={() => {
+                                onPreviewReadyChange?.(file.name, true);
+                              }}
+                            />
+                            {workspaceActive
+                              && mode === 'preview'
+                              && previewRuntimeCurrentFrame === null ? (
+                                <div
+                                  className="artifact-preview-first-load"
+                                  role="status"
+                                  aria-busy="true"
+                                  aria-label={t('fileViewer.loading')}
+                                  data-testid="artifact-preview-first-load"
+                                >
+                                  <CenteredLoader label={t('fileViewer.loading')} />
+                                </div>
+                              ) : null}
+                            </>
+                          )
+                        ) : previewRuntimeNavigation.unavailable ? (
+                          <div
+                            className="artifact-preview-first-load preview-runtime-navigation-error"
+                            role="alert"
+                            data-testid="preview-runtime-navigation-error"
+                          >
+                            <p>{t('fileViewer.previewUnavailable')}</p>
+                            <Button
+                              variant="ghost"
+                              data-testid="preview-runtime-navigation-retry"
+                              onClick={() => {
+                                // No URL exists yet, so an iframe retry cannot
+                                // recover. Invalidate only the scoped-URL mint;
+                                // normal Reload keeps reusing a valid scope.
+                                setPreviewRuntimeScopeRetryToken((current) => current + 1);
+                              }}
+                            >
+                              {`${t('fileViewer.reload')} ${t('fileViewer.preview')}`}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div
+                            className="artifact-preview-first-load"
+                            role="status"
+                            aria-busy="true"
+                            aria-label={t('fileViewer.loading')}
+                            data-testid="artifact-preview-first-load"
+                          >
+                            <CenteredLoader label={t('fileViewer.loading')} />
+                          </div>
+                        )}
                     </div>
                   </PreviewDrawOverlay>
                   {previewAssetWarning ? (
@@ -17800,26 +18352,27 @@ function HtmlViewer({
       {speakerNotesPanel}
       {workspaceActive && inTabPresent && source && typeof document !== 'undefined' ? createPortal(
         <div
+          className={`present-backdrop${presentBackdropSettled ? ' is-present-settled' : ''}`}
+          aria-hidden
+        />,
+        document.body,
+      ) : null}
+      {workspaceActive && inTabPresent && source && typeof document !== 'undefined' ? createPortal(
+        <div
           ref={presentOverlayRef}
           className="present-overlay"
           role="dialog"
           aria-label={t('fileViewer.present')}
         >
-          {effectiveDeck || !useUrlLoadPreview ? (
-            <iframe
-              title="present"
-              sandbox="allow-scripts allow-downloads"
-              data-od-render-mode="srcdoc"
-              srcDoc={effectiveDeck ? presentationSrcDoc : srcDoc}
-            />
-          ) : (
-            <iframe
-              title="present"
-              sandbox="allow-scripts allow-downloads"
-              data-od-render-mode="url-load"
-              src={activePreviewSrcUrl}
-            />
-          )}
+          {/* No iframe of its own. Presenting is a view change, so it must not
+              navigate: the document the user was already looking at is promoted
+              to fill the window by `.viewer.is-tab-present`, and this layer only
+              carries host-document chrome (exit control, Esc hint) above it. A
+              second <iframe> here — even pointed at the same real URL — would be
+              a second browsing context, dropping the JS heap, Canvas/WebGL
+              contexts, timers and closures the page is holding. Deck
+              presentation chrome arrives as a runtime message instead; see
+              `deckPresentationRevision` below. */}
           {/* The overlay covers the whole window, so this is the only exit the
               user can still reach. Esc is not a substitute: the moment they
               click a slide to advance, focus moves into the sandboxed preview

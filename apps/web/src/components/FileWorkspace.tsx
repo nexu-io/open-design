@@ -3,6 +3,7 @@ import {
   useCallback,
   useDeferredValue,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -35,7 +36,6 @@ import {
   fetchPluginExampleHtml,
   fetchPluginPreviewHtml,
   projectFileUrl,
-  projectRawUrl,
   applyLibraryAsset,
   createProjectFolder,
   deleteDesignSystemDraft,
@@ -65,7 +65,6 @@ import {
 } from '../runtime/kit-edit';
 import { latestTodosFromEvents, type TodoItem } from '../runtime/todos';
 import { deliverableSlideNavForActiveFile, isSlideNavDeliverableNow } from '../runtime/slide-nav';
-import { buildSrcdoc } from '../runtime/srcdoc';
 import { removeSpeakerNotesFromHtml } from '../runtime/speaker-notes';
 import { useDesignKit, hostnameOf, type KitColor } from '../runtime/design-kit';
 import { useKitModuleUpload } from '../runtime/kit-upload';
@@ -219,6 +218,7 @@ interface Props {
   files: ProjectFile[];
   liveArtifacts: LiveArtifactSummary[];
   filesRefreshKey?: number;
+  fileContentRefreshKeys?: ReadonlyMap<string, number>;
   filesGeneration?: number;
   onRefreshFiles: (
     options?: { fresh?: boolean },
@@ -1298,6 +1298,7 @@ export function FileWorkspace({
   files,
   liveArtifacts,
   filesRefreshKey = 0,
+  fileContentRefreshKeys,
   filesGeneration,
   onRefreshFiles,
   isDeck,
@@ -3254,13 +3255,48 @@ export function FileWorkspace({
       .filter((file): file is ProjectFile => file != null);
   }, [activeHtmlViewerFile, liveHtmlViewerFileNames, persistedTabs, protectedHtmlViewerFileNames, visibleFiles]);
   const mountedHtmlViewerNames = mountedHtmlViewerFiles.map((file) => file.name);
+  const htmlViewerReadyNamesRef = useRef({ projectId, names: new Set<string>() });
+  if (htmlViewerReadyNamesRef.current.projectId !== projectId) {
+    htmlViewerReadyNamesRef.current = { projectId, names: new Set() };
+  }
+  const activeHtmlViewerNameRef = useRef<string | null>(activeHtmlViewerFile?.name ?? null);
+  activeHtmlViewerNameRef.current = activeHtmlViewerFile?.name ?? null;
+  const [presentedHtmlViewerName, setPresentedHtmlViewerName] = useState<string | null>(null);
+  const handleHtmlViewerPreviewReadyChange = useCallback((fileName: string, ready: boolean) => {
+    const readyState = htmlViewerReadyNamesRef.current;
+    if (readyState.projectId !== projectId) return;
+    if (ready) {
+      readyState.names.add(fileName);
+      if (activeHtmlViewerNameRef.current === fileName) {
+        setPresentedHtmlViewerName(fileName);
+      }
+    } else {
+      readyState.names.delete(fileName);
+    }
+  }, [projectId]);
+  useLayoutEffect(() => {
+    const activeName = activeHtmlViewerFile?.name ?? null;
+    if (!activeName) {
+      setPresentedHtmlViewerName(null);
+      return;
+    }
+    setPresentedHtmlViewerName((current) => {
+      if (htmlViewerReadyNamesRef.current.names.has(activeName)) return activeName;
+      // last-good is file-scoped, never cross-file. A cold LRU revisit must
+      // show the target's loading state instead of silently presenting a
+      // different file's DOM while the requested document starts.
+      return activeName;
+    });
+  }, [activeHtmlViewerFile?.name, mountedHtmlViewerNames.join('\0'), projectId]);
+  const effectivePresentedHtmlViewerName = presentedHtmlViewerName
+    && mountedHtmlViewerNames.includes(presentedHtmlViewerName)
+    ? presentedHtmlViewerName
+    : activeHtmlViewerFile?.name ?? null;
   const previousMountedHtmlViewersRef = useRef({ projectId, names: new Set<string>() });
   useEffect(() => {
     const next = new Set(mountedHtmlViewerNames);
     const previous = previousMountedHtmlViewersRef.current;
-    if (previous.projectId !== projectId) {
-      iframeKeepAlivePool.evictProject(previous.projectId);
-    } else {
+    if (previous.projectId === projectId) {
       for (const name of previous.names) {
         if (next.has(name)) continue;
         iframeKeepAlivePool.evictMatching(
@@ -3270,6 +3306,11 @@ export function FileWorkspace({
         );
       }
     }
+    // Project switches are suspension, not deletion. Keep the previous
+    // project's browsing contexts parked under the global bounded LRU so a
+    // roundtrip can reattach the exact DOM/JS state without another
+    // navigation. Explicit project invalidation, deletion, authorization
+    // changes, and the LRU budget remain the owners of cross-project eviction.
     previousMountedHtmlViewersRef.current = { projectId, names: next };
   }, [iframeKeepAlivePool, mountedHtmlViewerNames.join('\0'), projectId]);
   const retainedNonHtmlViewerFileRef = useRef<{ projectId: string; fileName: string } | null>(null);
@@ -3342,12 +3383,22 @@ export function FileWorkspace({
     [slideNavRequest, activeViewerFile?.name, slideNavDeliverableNonce],
   );
   const stableOpenFileReplacing = useStableHandler(openFileReplacing);
-  const renderFileViewer = (file: ProjectFile, workspaceActive: boolean) => (
+  const renderFileViewer = (
+    file: ProjectFile,
+    workspaceActive: boolean,
+    workspacePresented = workspaceActive,
+  ) => (
     <FileViewer
       projectId={projectId}
       projectKind={projectKind}
       file={file}
       filesRefreshKey={filesRefreshKey}
+      fileContentRefreshKey={Math.max(
+        fileContentRefreshKeys?.get(
+          normalizeProjectFilePath(file.path ?? file.name),
+        ) ?? 0,
+        fileContentRefreshKeys?.get('') ?? 0,
+      )}
       isDeck={isDeck}
       streaming={streaming}
       commentQueueOnSend={commentQueueOnSend}
@@ -3388,6 +3439,8 @@ export function FileWorkspace({
       metricsConsent={metricsConsent}
       installationId={installationId}
       workspaceActive={workspaceActive}
+      workspacePresented={workspacePresented}
+      onPreviewReadyChange={handleHtmlViewerPreviewReadyChange}
       onRetainActivityChange={handleHtmlViewerRetainActivityChange}
       onManualEditExitHandlerChange={handleManualEditExitHandlerChange}
       manualEditEntryAllowed={
@@ -4502,26 +4555,27 @@ export function FileWorkspace({
         )}
         {!initialMaterializationPending ? mountedHtmlViewerFiles.map((file) => {
           const workspaceActive = activeHtmlViewerFile?.name === file.name;
+          const workspacePresented = effectivePresentedHtmlViewerName === file.name;
           return (
             <div
               key={`${projectId}:${file.name}`}
               ref={(element) => {
-                syncInertAttribute(element, !workspaceActive);
+                syncInertAttribute(element, !workspaceActive || !workspacePresented);
               }}
               data-testid="retained-file-viewer"
               data-file-name={file.name}
-              aria-hidden={workspaceActive ? undefined : true}
+              aria-hidden={workspacePresented ? undefined : true}
               style={{
                 display: 'flex',
-                flex: workspaceActive ? '1 1 auto' : undefined,
+                flex: workspacePresented ? '1 1 auto' : undefined,
                 flexDirection: 'column',
                 minHeight: 0,
-                ...(workspaceActive
+                ...(workspacePresented
                   ? {}
                   : RETAINED_VIEWER_INACTIVE_STYLE),
               }}
             >
-              {renderFileViewer(file, workspaceActive)}
+              {renderFileViewer(file, workspaceActive, workspacePresented)}
             </div>
           );
         }) : null}
@@ -7459,7 +7513,20 @@ function designSystemSectionChangedAfterReview(
   });
 }
 
-function DesignSystemInlinePreview({
+/**
+ * A design-system section preview is a document the user is reading, so it
+ * holds the terminal preview invariant: one file, one real URL. The daemon
+ * serves that URL and the browser resolves the page's relative scripts,
+ * styles, images and fonts against it natively.
+ *
+ * That is why nothing here reads the document first. The host used to fetch
+ * the HTML, fetch every relative stylesheet and script, splice them back in,
+ * rewrite the remaining asset references, and hand the iframe one large
+ * srcdoc string. srcdoc is only ever right for off-screen work — thumbnails
+ * and exports — because it is a second copy of the document that the browser
+ * cannot resolve relative URLs from. A visible document must never be one.
+ */
+export function DesignSystemInlinePreview({
   projectId,
   file,
 }: {
@@ -7467,337 +7534,26 @@ function DesignSystemInlinePreview({
   file: ProjectFile;
 }) {
   const { workspaceContext } = useProjectCollabContext();
-  const url = projectFileUrl(projectId, file.name, workspaceContext);
-  const [srcDoc, setSrcDoc] = useState<string | null>(null);
-  const [srcDocReady, setSrcDocReady] = useState(false);
-
-  useEffect(() => {
-    setSrcDoc(null);
-    setSrcDocReady(false);
-    if (file.kind !== 'html') return undefined;
-    let cancelled = false;
-    void fetchProjectFileText(projectId, file.name, {
-      cache: 'no-store',
-      cacheBustKey: Math.round(file.mtime),
-      workspaceContext,
-    }).then(async (html) => {
-      if (cancelled) return;
-      if (!html) {
-        setSrcDocReady(true);
-        return;
-      }
-      const inlinedHtml = await inlineDesignSystemPreviewRelativeAssets(
-        html,
-        projectId,
-        file.name,
-        workspaceContext,
-      );
-      if (cancelled) return;
-      setSrcDoc(buildSrcdoc(inlinedHtml, {
-        baseHref: projectRawUrl(
-          projectId,
-          baseDirForDesignSystemPreviewFile(file.name),
-          workspaceContext,
-        ),
-      }));
-      setSrcDocReady(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [file.kind, file.mtime, file.name, projectId, workspaceContext]);
+  // The version key is the document identity, not a bridge parameter: a
+  // regenerated section must land on a new URL so the iframe reloads. It is a
+  // query, so the browser still resolves the page's relative references
+  // against the file's own directory.
+  const url = appendResourceQuery(
+    projectFileUrl(projectId, file.name, workspaceContext),
+    `v=${Math.round(file.mtime)}`,
+  );
 
   if (file.kind === 'html') {
     return (
       <iframe
         title={file.name}
-        src={srcDocReady && srcDoc ? undefined : url}
-        srcDoc={srcDoc ?? undefined}
+        data-od-render-mode="url-load"
+        src={url}
         sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox"
       />
     );
   }
-  return <img src={appendResourceQuery(url, `v=${Math.round(file.mtime)}`)} alt={file.name} />;
-}
-
-async function inlineDesignSystemPreviewRelativeAssets(
-  html: string,
-  projectId: string,
-  ownerFileName: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): Promise<string> {
-  const replacements: Array<Promise<{ from: string; to: string } | null>> = [];
-  const links = html.match(/<link\b[^>]*>/gi) ?? [];
-  for (const tag of links) {
-    const rel = readDesignSystemPreviewHtmlAttr(tag, 'rel');
-    const href = readDesignSystemPreviewHtmlAttr(tag, 'href');
-    if (!rel || !/\bstylesheet\b/i.test(rel) || !href) continue;
-    const stylesheetPath = resolveDesignSystemPreviewRelativePath(ownerFileName, href);
-    if (!stylesheetPath) continue;
-    replacements.push(fetchProjectFileText(projectId, stylesheetPath, {
-      cache: 'no-store',
-      workspaceContext,
-    }).then((css) => {
-      if (css == null) return null;
-      const safeCss = rewriteDesignSystemPreviewCssUrls(
-        css,
-        projectId,
-        stylesheetPath,
-        workspaceContext,
-      )
-        .replace(/<\/style/gi, '<\\/style');
-      return {
-        from: tag,
-        to: [
-          `<style data-od-inline-asset="${escapeDesignSystemPreviewAttr(href)}">`,
-          safeCss,
-          '</style>',
-        ].join('\n'),
-      };
-    }));
-  }
-
-  const scripts = html.match(/<script\b[^>]*\bsrc\s*=\s*["'][^"']+["'][^>]*>\s*<\/script>/gi) ?? [];
-  for (const tag of scripts) {
-    const src = readDesignSystemPreviewHtmlAttr(tag, 'src');
-    if (!src) continue;
-    replacements.push(fetchDesignSystemPreviewRelativeText(
-      projectId,
-      ownerFileName,
-      src,
-      workspaceContext,
-    ).then((js) => {
-      if (js == null) return null;
-      const open = tag.match(/^<script\b[^>]*>/i)?.[0] ?? '<script>';
-      const attrs = open
-        .replace(/^<script/i, '')
-        .replace(/>$/i, '')
-        .replace(/\ssrc\s*=\s*(['"])[\s\S]*?\1/i, '');
-      return {
-        from: tag,
-        to: [
-          `<script${attrs} data-od-inline-asset="${escapeDesignSystemPreviewAttr(src)}">`,
-          js.replace(/<\/script/gi, '<\\/script'),
-          '</script>',
-        ].join('\n'),
-      };
-    }));
-  }
-
-  const resolved = (await Promise.all(replacements)).filter(
-    (replacement): replacement is { from: string; to: string } => replacement !== null,
-  );
-  const withInlineAssets = resolved.reduce(
-    (next, replacement) => next.replace(replacement.from, () => replacement.to),
-    html,
-  );
-  const withInlineCssAssets = rewriteDesignSystemPreviewInlineCssAssetUrls(
-    withInlineAssets,
-    projectId,
-    ownerFileName,
-    workspaceContext,
-  );
-  return rewriteDesignSystemPreviewHtmlAssetUrls(
-    withInlineCssAssets,
-    projectId,
-    ownerFileName,
-    workspaceContext,
-  );
-}
-
-async function fetchDesignSystemPreviewRelativeText(
-  projectId: string,
-  ownerFileName: string,
-  assetRef: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): Promise<string | null> {
-  const filePath = resolveDesignSystemPreviewRelativePath(ownerFileName, assetRef);
-  if (!filePath) return null;
-  return fetchProjectFileText(projectId, filePath, { cache: 'no-store', workspaceContext });
-}
-
-type DesignSystemPreviewAssetPath = {
-  filePath: string;
-  suffix: string;
-};
-
-function resolveDesignSystemPreviewRelativePath(ownerFileName: string, assetRef: string): string | null {
-  return resolveDesignSystemPreviewAssetPath(ownerFileName, assetRef)?.filePath ?? null;
-}
-
-function resolveDesignSystemPreviewAssetPath(ownerFileName: string, assetRef: string): DesignSystemPreviewAssetPath | null {
-  const ref = assetRef.trim();
-  if (/^(?:https?:|data:|blob:|mailto:|tel:|#)/i.test(ref)) return null;
-  if (isDesignSystemPreviewAppRootRef(ref)) return null;
-  try {
-    const url = new URL(ref, `https://od.local/${baseDirForDesignSystemPreviewFile(ownerFileName)}`);
-    if (url.origin !== 'https://od.local') return null;
-    return {
-      filePath: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
-      suffix: `${url.search}${url.hash}`,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function isDesignSystemPreviewAppRootRef(ref: string): boolean {
-  if (!ref.startsWith('/') || ref.startsWith('//')) return false;
-  const pathOnly = ref.split(/[?#]/, 1)[0]?.toLowerCase() ?? '';
-  return pathOnly === '/api'
-    || pathOnly.startsWith('/api/')
-    || pathOnly === '/artifacts'
-    || pathOnly.startsWith('/artifacts/')
-    || pathOnly === '/frames'
-    || pathOnly.startsWith('/frames/');
-}
-
-function designSystemPreviewAssetUrl(
-  projectId: string,
-  assetPath: DesignSystemPreviewAssetPath,
-  workspaceContext?: WorkspaceCollabContext | null,
-): string {
-  const baseUrl = projectRawUrl(projectId, assetPath.filePath, workspaceContext);
-  const hashIndex = assetPath.suffix.indexOf('#');
-  const query = (hashIndex >= 0 ? assetPath.suffix.slice(0, hashIndex) : assetPath.suffix)
-    .replace(/^\?/, '');
-  const hash = hashIndex >= 0 ? assetPath.suffix.slice(hashIndex) : '';
-  return `${query ? appendResourceQuery(baseUrl, query) : baseUrl}${hash}`;
-}
-
-function rewriteDesignSystemPreviewCssUrls(
-  css: string,
-  projectId: string,
-  stylesheetFileName: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): string {
-  return css.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/gi, (match, _quote: string, rawRef: string) => {
-    const ref = rawRef.trim();
-    const assetPath = resolveDesignSystemPreviewAssetPath(stylesheetFileName, ref);
-    if (!assetPath) return match;
-    return `url("${escapeDesignSystemPreviewCssUrl(
-      designSystemPreviewAssetUrl(projectId, assetPath, workspaceContext),
-    )}")`;
-  });
-}
-
-function rewriteDesignSystemPreviewHtmlAssetUrls(
-  html: string,
-  projectId: string,
-  ownerFileName: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): string {
-  const directAssetTags = new RegExp(
-    '(<(?:img|source|video|audio|track|embed|object|image|use)\\b[^>]*?\\s' +
-      '(?:src|poster|data|href|xlink:href)\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
-    'gi',
-  );
-  const withDirectAssets = html.replace(directAssetTags, (match, prefix: string, quote: string, rawRef: string) => {
-    const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(
-      rawRef,
-      projectId,
-      ownerFileName,
-      workspaceContext,
-    );
-    if (rewritten === rawRef) return match;
-    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
-  });
-  const srcsetAssetTags = new RegExp(
-    '(<(?:img|source)\\b[^>]*?\\ssrcset\\s*=\\s*)([\'"])([\\s\\S]*?)\\2',
-    'gi',
-  );
-  return withDirectAssets.replace(srcsetAssetTags, (match, prefix: string, quote: string, rawSrcset: string) => {
-    const rewritten = rewriteDesignSystemPreviewSrcset(
-      rawSrcset,
-      projectId,
-      ownerFileName,
-      workspaceContext,
-    );
-    if (rewritten === rawSrcset) return match;
-    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
-  });
-}
-
-function rewriteDesignSystemPreviewInlineCssAssetUrls(
-  html: string,
-  projectId: string,
-  ownerFileName: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): string {
-  const withStyleBlocks = html.replace(/<style\b([^>]*)>([\s\S]*?)<\/style>/gi, (
-    match,
-    attrs: string,
-    css: string,
-  ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, workspaceContext);
-    if (rewritten === css) return match;
-    return `<style${attrs}>${rewritten}</style>`;
-  });
-  return withStyleBlocks.replace(/(\sstyle\s*=\s*)(['"])([\s\S]*?)\2/gi, (
-    match,
-    prefix: string,
-    quote: string,
-    css: string,
-  ) => {
-    const rewritten = rewriteDesignSystemPreviewCssUrls(css, projectId, ownerFileName, workspaceContext);
-    if (rewritten === css) return match;
-    return `${prefix}${quote}${escapeDesignSystemPreviewAttr(rewritten)}${quote}`;
-  });
-}
-
-function rewriteDesignSystemPreviewHtmlAssetRef(
-  ref: string,
-  projectId: string,
-  ownerFileName: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): string {
-  const assetPath = resolveDesignSystemPreviewAssetPath(ownerFileName, ref.trim());
-  return assetPath ? designSystemPreviewAssetUrl(projectId, assetPath, workspaceContext) : ref;
-}
-
-function rewriteDesignSystemPreviewSrcset(
-  srcset: string,
-  projectId: string,
-  ownerFileName: string,
-  workspaceContext?: WorkspaceCollabContext | null,
-): string {
-  if (/\bdata:/i.test(srcset)) return srcset;
-  return srcset
-    .split(',')
-    .map((candidate) => {
-      const match = candidate.trim().match(/^(\S+)(\s+.+)?$/);
-      if (!match) return candidate;
-      const rewritten = rewriteDesignSystemPreviewHtmlAssetRef(
-        match[1] ?? '',
-        projectId,
-        ownerFileName,
-        workspaceContext,
-      );
-      return `${rewritten}${match[2] ?? ''}`;
-    })
-    .join(', ');
-}
-
-function baseDirForDesignSystemPreviewFile(name: string): string {
-  const index = name.lastIndexOf('/');
-  return index >= 0 ? name.slice(0, index + 1) : '';
-}
-
-function readDesignSystemPreviewHtmlAttr(tag: string, name: string): string | null {
-  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(['"])([\\s\\S]*?)\\1`, 'i'));
-  return match?.[2] ?? null;
-}
-
-function escapeDesignSystemPreviewAttr(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeDesignSystemPreviewCssUrl(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\a ');
+  return <img src={url} alt={file.name} />;
 }
 
 function PageCreatorPresetFrame({

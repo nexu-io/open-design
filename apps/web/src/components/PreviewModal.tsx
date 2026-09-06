@@ -10,7 +10,7 @@ import {
   openSandboxedPreviewInNewTab,
   requestPreviewSnapshot,
 } from '../runtime/exports';
-import { buildSrcdoc } from '../runtime/srcdoc';
+import { resolvePreviewModalTransport } from '../runtime/preview-modal-transport';
 import { Icon } from './Icon';
 
 export interface PreviewView {
@@ -42,6 +42,15 @@ export interface PreviewView {
   // Deck previews need deck-aware srcdoc/PDF handling so slide navigation and
   // print-all-slides behavior survive the sandboxed export path.
   deck?: boolean;
+  // The one real URL the daemon serves this document from — the same route
+  // `html` was fetched through, carrying its workspace navigation scope (an
+  // iframe navigation cannot send the `x-od-workspace-*` headers the fetch
+  // path uses). When present the stage navigates to it instead of rebuilding
+  // a second document out of `html`, so the document keeps its own directory
+  // semantics and relative assets resolve. `html` is still required — the
+  // modal keeps using it for the export/PDF/new-tab actions and for the
+  // loading, error and unavailable states. See runtime/preview-modal-transport.
+  url?: string | null;
   // Render an arbitrary ReactNode in the stage instead of building a
   // sandboxed iframe — used by the plugin media detail variant so
   // image / video / audio previews share the same modal chrome
@@ -450,9 +459,14 @@ export function PreviewModal({
   const activeUnavailable = activeView?.unavailable ?? null;
   const activeDeck = activeView?.deck ?? false;
   const isCustomView = activeCustom !== null && activeCustom !== undefined;
-  const srcDoc = useMemo(
-    () => (activeHtml ? buildSrcdoc(activeHtml, { deck: activeDeck }) : ''),
-    [activeHtml, activeDeck],
+  const activeUrl = activeView?.url ?? null;
+  const previewTransport = useMemo(
+    () => resolvePreviewModalTransport({
+      html: activeHtml,
+      url: activeUrl,
+      deck: activeDeck,
+    }),
+    [activeHtml, activeUrl, activeDeck],
   );
   const exportTitle = exportTitleFor(activeView?.id ?? '');
   const canExportFiles = Boolean(activeHtml);
@@ -1048,11 +1062,17 @@ export function PreviewModal({
             ) : (
               <div className="ds-modal-stage-iframe-scaler" style={scalerStyle}>
                 <iframe
-                  key={activeView?.id ?? 'view'}
+                  // The transport is part of the frame's identity: swapping
+                  // between a navigated document and a rebuilt one must give
+                  // the browser a fresh frame, never repoint a loaded one.
+                  key={`${activeView?.id ?? 'view'}:${previewTransport.mode}`}
                   ref={previewIframeRef}
                   title={`${title} ${activeView?.label ?? ''}`}
                   sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-                  srcDoc={srcDoc}
+                  data-od-render-mode={previewTransport.mode}
+                  {...(previewTransport.mode === 'url-load'
+                    ? { src: previewTransport.src }
+                    : { srcDoc: previewTransport.srcDoc })}
                 />
               </div>
             )}

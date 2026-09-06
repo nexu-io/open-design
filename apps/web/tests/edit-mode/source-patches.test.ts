@@ -256,6 +256,41 @@ describe('manual edit source patches', () => {
     expect(result.source).toContain('Path target');
   });
 
+  it('persists text edits addressed by streamed source ordinals without leaking runtime attributes', () => {
+    const result = applyManualEditPatch(baseSource, { kind: 'set-text', id: 'source-10', value: 'Ordinal target' });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toContain('<p>Ordinal target</p>');
+    expect(result.source).not.toContain('data-od-generated-source-path');
+    expect(result.source).not.toContain('data-od-source-path="source-');
+  });
+
+  it('persists style edits addressed by streamed source ordinals', () => {
+    const result = applyManualEditPatch(baseSource, {
+      kind: 'set-style',
+      id: 'source-10',
+      styles: { color: 'rgb(1, 2, 3)' },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toContain('<p style="color: rgb(1, 2, 3);">Generated path text</p>');
+    expect(result.source).not.toContain('data-od-generated-source-path');
+  });
+
+  it('preserves authored source identities that resemble generated ordinals', () => {
+    const source = '<main><p data-od-source-path="source-99">Authored identity</p></main>';
+    const result = applyManualEditPatch(source, { kind: 'set-text', id: 'source-99', value: 'Still authored' });
+
+    expect(result.ok).toBe(true);
+    expect(result.source).toContain('data-od-source-path="source-99"');
+    expect(result.source).toContain('Still authored');
+  });
+
+  it('hides generated source identities from the HTML and attributes editors', () => {
+    expect(readManualEditOuterHtml(baseSource, 'source-10')).toBe('<p>Generated path text</p>');
+    expect(readManualEditAttributes(baseSource, 'source-10')).toEqual({});
+  });
+
   it('rejects text patches for nested markup', () => {
     const result = applyManualEditPatch(baseSource, { kind: 'set-text', id: 'nested', value: 'Flat text' });
 

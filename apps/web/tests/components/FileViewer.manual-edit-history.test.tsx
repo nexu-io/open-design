@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { emptyManualEditStyles, type ManualEditTarget } from '../../src/edit-mode/types';
 import type { ProjectFile } from '../../src/types';
@@ -21,7 +21,52 @@ vi.mock('../../src/components/ManualEditPanel', async (importOriginal) => {
   };
 });
 
-import { FileViewer } from '../../src/components/FileViewer';
+import { FileViewer as ProductFileViewer } from '../../src/components/FileViewer';
+import {
+  installFileViewerPreviewRuntimeHarness,
+  prepareSettledFileViewerFixture,
+  setSyntheticPreviewFileSource,
+  syntheticPreviewFileSource,
+  uninstallFileViewerPreviewRuntimeHarness,
+  useSyntheticProjectScopedPreviewNavigation,
+} from '../helpers/file-viewer-preview-runtime';
+
+vi.mock('../../src/providers/registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/providers/registry')>();
+  return {
+    ...actual,
+    fetchProjectFileText(
+      projectId: string,
+      name: string,
+      options?: Parameters<typeof actual.fetchProjectFileText>[2],
+    ) {
+      const source = syntheticPreviewFileSource(projectId, name);
+      return source === undefined
+        ? actual.fetchProjectFileText(projectId, name, options)
+        : Promise.resolve(source);
+    },
+  };
+});
+
+vi.mock('../../src/runtime/use-project-preview-session-navigation', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../src/runtime/use-project-preview-session-navigation')
+  >();
+  return {
+    ...actual,
+    useProjectScopedPreviewNavigation: (
+      options: Parameters<typeof actual.useProjectScopedPreviewNavigation>[0],
+    ) => useSyntheticProjectScopedPreviewNavigation(options),
+  };
+});
+
+function FileViewer(props: ComponentProps<typeof ProductFileViewer>) {
+  return <ProductFileViewer {...prepareSettledFileViewerFixture(props)} />;
+}
+
+beforeEach(() => {
+  installFileViewerPreviewRuntimeHarness();
+});
 
 function openManualTools() {
   // Manual tools now live directly in the primary toolbar.
@@ -76,7 +121,7 @@ async function enterManualEditMode() {
     expect(screen.getByTestId('manual-edit-mode-toggle').getAttribute('aria-pressed')).toBe('true');
     const activeFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
     expect(activeFrame.getAttribute('data-od-active')).toBe('true');
-    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+    expect(activeFrame.getAttribute('data-od-render-mode')).toBe('runtime-url');
   });
 }
 
@@ -99,6 +144,7 @@ async function selectManualEditTarget(target = heroTarget()) {
 }
 
 afterEach(() => {
+  uninstallFileViewerPreviewRuntimeHarness();
   cleanup();
   panelState.props = null;
   vi.restoreAllMocks();
@@ -168,7 +214,7 @@ describe('FileViewer manual edit history regressions', () => {
     expect(screen.getByTestId('draw-overlay-toggle').getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('keeps the srcDoc iframe mounted when closing manual edit on a srcDoc-only preview', async () => {
+  it('keeps the real-URL iframe mounted when closing manual edit', async () => {
     const source = '<!doctype html><html><body><script>localStorage.getItem("od");</script><main data-od-id="hero">Hero</main></body></html>';
 
     render(
@@ -181,8 +227,8 @@ describe('FileViewer manual edit history regressions', () => {
     await selectManualEditTarget();
 
     const editFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    expect(editFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-    expect(editFrame.srcdoc).toContain('data-od-edit-bridge');
+    expect(editFrame.getAttribute('data-od-render-mode')).toBe('runtime-url');
+    const runtimeUrl = editFrame.src;
 
     // Exiting edit mode is the toolbar toggle's job — the panel's own close
     // button only collapses the inspector and stays in edit.
@@ -191,9 +237,8 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => {
       const previewFrame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
       expect(previewFrame).toBe(editFrame);
-      expect(previewFrame.getAttribute('data-od-render-mode')).toBe('srcdoc');
-      expect(previewFrame.srcdoc).toContain('Hero');
-      expect(previewFrame.srcdoc).toContain('data-od-edit-bridge');
+      expect(previewFrame.getAttribute('data-od-render-mode')).toBe('runtime-url');
+      expect(previewFrame.src).toBe(runtimeUrl);
     });
   });
 
@@ -213,6 +258,7 @@ describe('FileViewer manual edit history regressions', () => {
         const payload = JSON.parse(String(init.body)) as { content: string };
         persistedSource = payload.content;
         savedSources.push(payload.content);
+        setSyntheticPreviewFileSource('project-1', 'preview.html', payload.content);
         return new Response(JSON.stringify({ file: htmlPreviewFile() }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
@@ -300,11 +346,11 @@ describe('FileViewer manual edit history regressions', () => {
     await waitFor(() => {
       const frame = getActivePreviewFrame();
       expect(frame.getAttribute('data-od-active')).toBe('true');
-      expect(frame.getAttribute('data-od-render-mode')).toBe('srcdoc');
+      expect(frame.getAttribute('data-od-render-mode')).toBe('runtime-url');
       expect(panelState.props?.draft.fullSource).toContain('Hero');
     });
     const frame = getActivePreviewFrame();
-    const transportBeforeSave = frame.srcdoc;
+    const transportBeforeSave = frame.src;
     const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage');
     act(() => {
       panelState.props?.onApplyPatch(
@@ -323,7 +369,7 @@ describe('FileViewer manual edit history regressions', () => {
       }, '*');
     });
     expect(getActivePreviewFrame()).toBe(frame);
-    expect(frame.srcdoc).toBe(transportBeforeSave);
+    expect(frame.src).toBe(transportBeforeSave);
   });
 
   it('only exposes reset after the selected element draft changes', async () => {
@@ -428,10 +474,7 @@ describe('FileViewer manual edit history regressions', () => {
       expect.objectContaining({ type: 'od-edit-selected-target', id: null }),
       '*',
     );
-    await waitFor(() => {
-      expect((screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement).srcdoc)
-        .not.toContain('data-od-id="hero"');
-    });
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(frame);
   });
 });
 

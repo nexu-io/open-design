@@ -25,6 +25,7 @@ import type {
   ProjectFileTextPreviewResponse,
   ProjectFileResponse,
   ProjectPreviewScopeRenewResponse,
+  ProjectPreviewPolicy,
   ProjectPreviewUrlResponse,
   ProjectFileVersion,
   ProjectFileVersionSource,
@@ -1712,6 +1713,23 @@ export type SkillExampleResult =
   | { unavailable: true; kind: string }
   | { error: string };
 
+/**
+ * The one real URL a skill's shipped example document is served from.
+ *
+ * Preview surfaces navigate a frame straight at this URL instead of
+ * rebuilding the fetched HTML into a srcdoc copy, so the document keeps its
+ * own directory semantics and its relative assets resolve. A frame navigation
+ * cannot carry the `x-od-workspace-*` headers the fetch path uses, so the
+ * workspace identity has to ride along as navigation query — every one of
+ * these routes accepts it (`allowNavigationQuery`).
+ */
+export function skillExampleDocumentUrl(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(`/api/skills/${encodeURIComponent(id)}/example`, workspaceContext);
+}
+
 // Returns a discriminated result so callers can distinguish a real
 // failure (network error, daemon unreachable, server error) from a
 // normal load or a missing shipped preview. Previously this collapsed
@@ -1731,7 +1749,9 @@ export async function fetchSkillExample(
     return { unavailable: true, kind: previewType };
   }
   try {
-    const url = `/api/skills/${encodeURIComponent(id)}/example`;
+    // Header-scoped fetch: pass no context so the path stays bare and the
+    // workspace identity travels in `workspaceProjectHeaders` as before.
+    const url = skillExampleDocumentUrl(id, null);
     const resp = workspaceContext
       ? await fetch(url, { headers: workspaceProjectHeaders(workspaceContext) })
       : await fetch(url);
@@ -2499,6 +2519,27 @@ export interface ProjectPreviewBaseScope {
   expiresAt: number;
 }
 
+export interface ProjectScopedPreviewNavigation {
+  sessionId: string;
+  normalUrl: string;
+  poweredUrl: string;
+  documentVersion: string;
+  /**
+   * `universal` is the versioned Preview Runtime served by current daemons.
+   * `legacy-url` is the rolling-upgrade compatibility document: it remains a
+   * single real URL and deliberately does not pretend to expose interactive
+   * runtime capabilities.
+   */
+  runtimeProtocol: 'universal' | 'legacy-url';
+  /** Absent only when paired with an older daemon during rolling upgrades. */
+  previewPolicy?: ProjectPreviewPolicy;
+  renewalScope: ProjectPreviewBaseScope;
+}
+
+export type ProjectScopedPreviewNavigationResult =
+  | ProjectScopedPreviewNavigation
+  | null;
+
 // Newer daemons return the authoritative scope expiry. During a rolling
 // desktop/web update the web bundle can briefly run against an older daemon,
 // so retain a conservative refresh horizon instead of rejecting an otherwise
@@ -2542,6 +2583,105 @@ export async function fetchProjectPreviewBaseHref(
       // capability against the host document while it still has a real origin.
       href: previewCapabilityHref(parsed.pathname.slice(0, directoryEnd)),
       expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve one real-URL preview capability. Current daemons advertise the
+ * versioned scoped-origin runtime. During a rolling upgrade, an older daemon's
+ * legacy preview URL remains usable as a single non-interactive document; the
+ * Web client must never answer that protocol gap by mounting srcdoc/Blob as a
+ * second browsing context.
+ */
+export async function fetchProjectScopedPreviewNavigation(
+  projectId: string,
+  name: string,
+): Promise<ProjectScopedPreviewNavigationResult> {
+  const params = new URLSearchParams({ file: name });
+  try {
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`,
+      { cache: 'no-store' },
+    );
+    if (!response.ok) return null;
+    const body = (await response.json()) as ProjectPreviewUrlResponse;
+    if (typeof body.url !== 'string') return null;
+
+    const legacy = new URL(body.url, 'http://open-design.local');
+    const expectedPrefix = `/api/projects/${encodeURIComponent(projectId)}/preview/`;
+    if (!legacy.pathname.startsWith(expectedPrefix)) return null;
+    const directoryEnd = legacy.pathname.lastIndexOf('/') + 1;
+    if (directoryEnd <= expectedPrefix.length) return null;
+    if (!body.scopedOrigin) {
+      const scope = legacy.pathname.slice(expectedPrefix.length).split('/')[0];
+      if (!scope) return null;
+      const href = previewCapabilityHref(`${legacy.pathname}${legacy.search}${legacy.hash}`);
+      const expiresAt = typeof body.expiresAt === 'number' && Number.isFinite(body.expiresAt)
+        ? body.expiresAt
+        : Date.now() + LEGACY_PREVIEW_SCOPE_REFRESH_MS;
+      return {
+        sessionId: `legacy-${scope}`,
+        normalUrl: href,
+        poweredUrl: href,
+        documentVersion: `legacy:${name}`,
+        runtimeProtocol: 'legacy-url',
+        renewalScope: {
+          href: previewCapabilityHref(legacy.pathname.slice(0, directoryEnd)),
+          expiresAt,
+        },
+      };
+    }
+
+    const normal = new URL(body.scopedOrigin.normalUrl);
+    const powered = new URL(body.scopedOrigin.poweredUrl);
+    const previewPolicy = body.scopedOrigin.previewPolicy;
+    const validPreviewPolicy = previewPolicy === undefined || (
+      (previewPolicy.sandboxProfile === 'normal' || previewPolicy.sandboxProfile === 'powered')
+      && typeof previewPolicy.guards?.storage === 'boolean'
+      && typeof previewPolicy.guards?.focus === 'boolean'
+      && typeof previewPolicy.guards?.redirect === 'boolean'
+      && (previewPolicy.deck === undefined || typeof previewPolicy.deck === 'boolean')
+    );
+    const normalMatch = /^n-([A-Za-z0-9_-]{8,128})\.localhost$/u.exec(normal.hostname);
+    const poweredMatch = /^p-([A-Za-z0-9_-]{8,128})\.localhost$/u.exec(powered.hostname);
+    const sessionId = normalMatch?.[1];
+    const expectedPath = `/${name.split('/').map(encodeURIComponent).join('/')}`;
+    if (
+      normal.protocol !== 'http:'
+      || powered.protocol !== 'http:'
+      || !normalMatch
+      || !poweredMatch
+      || !sessionId
+      || sessionId !== poweredMatch[1]
+      || normal.port !== powered.port
+      || normal.pathname !== expectedPath
+      || powered.pathname !== expectedPath
+      || normal.search
+      || powered.search
+      || typeof body.scopedOrigin.documentVersion !== 'string'
+      || body.scopedOrigin.documentVersion.length === 0
+      || body.scopedOrigin.documentVersion.length > 200
+      || !validPreviewPolicy
+    ) return null;
+
+    const expiresAt = typeof body.expiresAt === 'number' && Number.isFinite(body.expiresAt)
+      ? body.expiresAt
+      : Date.now() + LEGACY_PREVIEW_SCOPE_REFRESH_MS;
+
+    return {
+      sessionId,
+      normalUrl: normal.href,
+      poweredUrl: powered.href,
+      documentVersion: body.scopedOrigin.documentVersion,
+      runtimeProtocol: 'universal',
+      ...(previewPolicy ? { previewPolicy } : {}),
+      renewalScope: {
+        href: previewCapabilityHref(legacy.pathname.slice(0, directoryEnd)),
+        expiresAt,
+      },
     };
   } catch {
     return null;
@@ -3426,16 +3566,35 @@ export async function openProjectInEditor(
   return (await resp.json()) as import('@open-design/contracts').OpenProjectInEditorResponse;
 }
 
+/** Real document URL for a design system's token preview. See skillExampleDocumentUrl. */
+export function designSystemPreviewDocumentUrl(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/design-systems/${encodeURIComponent(id)}/preview`,
+    workspaceContext,
+  );
+}
+
+/** Real document URL for a design system's showcase. See skillExampleDocumentUrl. */
+export function designSystemShowcaseDocumentUrl(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/design-systems/${encodeURIComponent(id)}/showcase`,
+    workspaceContext,
+  );
+}
+
 export async function fetchDesignSystemPreview(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   try {
     const resp = await fetch(
-      workspaceResourceUrl(
-        `/api/design-systems/${encodeURIComponent(id)}/preview`,
-        workspaceContext,
-      ),
+      designSystemPreviewDocumentUrl(id, workspaceContext),
       workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
     );
     if (!resp.ok) return null;
@@ -3451,10 +3610,7 @@ export async function fetchDesignSystemShowcase(
 ): Promise<string | null> {
   try {
     const resp = await fetch(
-      workspaceResourceUrl(
-        `/api/design-systems/${encodeURIComponent(id)}/showcase`,
-        workspaceContext,
-      ),
+      designSystemShowcaseDocumentUrl(id, workspaceContext),
       workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
     );
     if (!resp.ok) return null;
@@ -3475,12 +3631,32 @@ export async function fetchDesignSystemShowcase(
 // asset for an otherwise valid plugin is not an error the user can
 // retry their way out of. Surfacing the calm "no shipped preview"
 // placeholder is the truthful UX.
+/** Real document URL for a plugin's shipped preview. See skillExampleDocumentUrl. */
+export function pluginPreviewDocumentUrl(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(`/api/plugins/${encodeURIComponent(id)}/preview`, workspaceContext);
+}
+
+/** Real document URL for one named plugin example. See skillExampleDocumentUrl. */
+export function pluginExampleDocumentUrl(
+  pluginId: string,
+  stem: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return workspaceResourceUrl(
+    `/api/plugins/${encodeURIComponent(pluginId)}/example/${encodeURIComponent(stem)}`,
+    workspaceContext,
+  );
+}
+
 export async function fetchPluginPreviewHtml(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<SkillExampleResult> {
   try {
-    const url = `/api/plugins/${encodeURIComponent(id)}/preview`;
+    const url = pluginPreviewDocumentUrl(id, null);
     const resp = workspaceContext
       ? await fetch(url, { headers: workspaceProjectHeaders(workspaceContext) })
       : await fetch(url);
@@ -3504,8 +3680,7 @@ export async function fetchPluginExampleHtml(
   workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<SkillExampleResult> {
   try {
-    const url =
-      `/api/plugins/${encodeURIComponent(pluginId)}/example/${encodeURIComponent(stem)}`;
+    const url = pluginExampleDocumentUrl(pluginId, stem, null);
     const resp = workspaceContext
       ? await fetch(url, { headers: workspaceProjectHeaders(workspaceContext) })
       : await fetch(url);

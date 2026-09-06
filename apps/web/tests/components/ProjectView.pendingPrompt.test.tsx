@@ -203,6 +203,7 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     onBrandExtractionStopRequest?: () => void;
     designSystemEditable?: boolean;
     filesRefreshKey?: number;
+    fileContentRefreshKeys?: ReadonlyMap<string, number>;
     filesGeneration?: number;
     files?: ProjectFile[];
     onRefreshFiles?: (options?: { fresh?: boolean }) => Promise<{
@@ -395,6 +396,200 @@ describe('ProjectView pending prompt seeding', () => {
       const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
       expect(props?.filesRefreshKey).toBe(1);
       expect(props?.files).toEqual([newFile]);
+      expect(props?.fileContentRefreshKeys?.get('index.html')).toBe(1);
+    });
+  });
+
+  it('does not treat a newly added file as a second content revision', async () => {
+    const newFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([newFile]);
+
+    renderProjectView(project('new-file-generation'));
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([]);
+      expect(props?.filesGeneration).toBe(1);
+    });
+
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'add' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'index.html', kind: 'add' });
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([newFile]);
+      expect(props?.fileContentRefreshKeys?.get('index.html')).toBeUndefined();
+      expect(props?.fileContentRefreshKeys?.get('')).toBeUndefined();
+    });
+  });
+
+  it('invalidates every HTML preview when a project resource changes', async () => {
+    const htmlFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const cssFile: ProjectFile = {
+      name: 'style.css',
+      path: 'style.css',
+      size: 50,
+      mtime: 1_000,
+      kind: 'text',
+      mime: 'text/css',
+    };
+    mockedFetchProjectFiles.mockResolvedValue([htmlFile, cssFile]);
+
+    renderProjectView(project('resource-generation'));
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.files).toEqual([htmlFile, cssFile]);
+    });
+
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'change' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'style.css', kind: 'change' });
+    });
+
+    await waitFor(() => {
+      const keys = fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.fileContentRefreshKeys;
+      expect(keys?.get('style.css')).toBe(1);
+      expect(keys?.get('')).toBe(1);
+    });
+  });
+
+  it('invalidates an existing HTML preview when a referenced script is added', async () => {
+    const htmlFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const scriptFile: ProjectFile = {
+      name: 'support.js',
+      path: 'support.js',
+      size: 50,
+      mtime: 2_000,
+      kind: 'text',
+      mime: 'text/javascript',
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([htmlFile])
+      .mockResolvedValueOnce([htmlFile, scriptFile]);
+
+    renderProjectView(project('added-resource-generation'));
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.files).toEqual([htmlFile]);
+    });
+
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'add' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'support.js', kind: 'add' });
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([htmlFile, scriptFile]);
+      expect(props?.fileContentRefreshKeys?.get('')).toBe(1);
+    });
+  });
+
+  it('invalidates an existing HTML preview when a nested HTML dependency is added', async () => {
+    const htmlFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const nestedHtmlFile: ProjectFile = {
+      name: 'child.html',
+      path: 'child.html',
+      size: 80,
+      mtime: 2_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([htmlFile])
+      .mockResolvedValueOnce([htmlFile, nestedHtmlFile]);
+
+    renderProjectView(project('added-html-resource-generation'));
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.files).toEqual([htmlFile]);
+    });
+
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'add' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'child.html', kind: 'add' });
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([htmlFile, nestedHtmlFile]);
+      expect(props?.fileContentRefreshKeys?.get('')).toBe(1);
+    });
+  });
+
+  it('invalidates an existing HTML preview when a referenced stylesheet is removed', async () => {
+    const htmlFile: ProjectFile = {
+      name: 'index.html',
+      path: 'index.html',
+      size: 100,
+      mtime: 1_000,
+      kind: 'html',
+      mime: 'text/html',
+    };
+    const cssFile: ProjectFile = {
+      name: 'style.css',
+      path: 'style.css',
+      size: 50,
+      mtime: 1_000,
+      kind: 'text',
+      mime: 'text/css',
+    };
+    mockedFetchProjectFiles
+      .mockResolvedValueOnce([htmlFile, cssFile])
+      .mockResolvedValueOnce([htmlFile]);
+
+    renderProjectView(project('removed-resource-generation'));
+    await waitFor(() => {
+      expect(fileWorkspaceSpy.mock.calls.at(-1)?.[0]?.files).toEqual([htmlFile, cssFile]);
+    });
+
+    const handleProjectEvent = mockedUseProjectFileEvents.mock.calls.at(-1)?.[2] as
+      | ((event: { type: 'file-changed'; path: string; kind: 'unlink' }) => void)
+      | undefined;
+    act(() => {
+      handleProjectEvent?.({ type: 'file-changed', path: 'style.css', kind: 'unlink' });
+    });
+
+    await waitFor(() => {
+      const props = fileWorkspaceSpy.mock.calls.at(-1)?.[0];
+      expect(props?.files).toEqual([htmlFile]);
+      expect(props?.fileContentRefreshKeys?.get('')).toBe(1);
     });
   });
 

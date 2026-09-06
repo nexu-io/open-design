@@ -1,3 +1,5 @@
+import { MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR, MANUAL_EDIT_SOURCE_PATH_ATTR } from '@open-design/preview-runtime/manual-edit';
+import { annotateManualEditSourceOrdinals } from '@open-design/preview-runtime/manual-edit-source';
 import { emptyManualEditStyles, MANUAL_EDIT_STYLE_PROPS, type ManualEditFields, type ManualEditPatch, type ManualEditStyles } from './types';
 
 const MANUAL_EDIT_RUNTIME_OVERRIDES_ID = 'od-manual-edit-runtime-overrides';
@@ -220,8 +222,11 @@ export function readManualEditAttributes(source: string, id: string): Record<str
   const el = doc ? findEditableElement(doc, id) : null;
   if (!el) return {};
   const attrs: Record<string, string> = {};
+  const generatedSourcePath = el.hasAttribute(MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR);
   Array.from(el.attributes).forEach((attr) => {
     if (attr.name === 'data-od-runtime-id') return;
+    if (attr.name === MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR) return;
+    if (generatedSourcePath && attr.name === MANUAL_EDIT_SOURCE_PATH_ATTR) return;
     attrs[attr.name] = attr.value;
   });
   return attrs;
@@ -229,24 +234,39 @@ export function readManualEditAttributes(source: string, id: string): Record<str
 
 export function readManualEditOuterHtml(source: string, id: string): string {
   const doc = parseSource(source);
-  return (doc ? findEditableElement(doc, id)?.outerHTML : '') ?? '';
+  const el = doc ? findEditableElement(doc, id) : null;
+  if (!el) return '';
+  const clone = el.cloneNode(true) as Element;
+  stripGeneratedManualEditSourcePaths(clone);
+  return clone.outerHTML;
 }
 
 function parseSource(source: string): Document | null {
+  const annotatedSource = annotateManualEditSourceOrdinals(source);
   if (typeof DOMParser !== 'undefined') {
-    return new DOMParser().parseFromString(source, 'text/html');
+    return new DOMParser().parseFromString(annotatedSource, 'text/html');
   }
   if (typeof document !== 'undefined') {
     const doc = document.implementation.createHTMLDocument('');
-    doc.documentElement.innerHTML = source;
+    doc.documentElement.innerHTML = annotatedSource;
     return doc;
   }
   return null;
 }
 
 function serializeSource(doc: Document, originalSource: string): string {
+  stripGeneratedManualEditSourcePaths(doc.documentElement);
   if (!isManualEditFullHtmlDocument(originalSource)) return doc.body.innerHTML;
   return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
+function stripGeneratedManualEditSourcePaths(root: Element): void {
+  const generated = [root, ...Array.from(root.querySelectorAll(`[${MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR}]`))];
+  generated.forEach((el) => {
+    if (!el.hasAttribute(MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR)) return;
+    el.removeAttribute(MANUAL_EDIT_SOURCE_PATH_ATTR);
+    el.removeAttribute(MANUAL_EDIT_GENERATED_SOURCE_PATH_ATTR);
+  });
 }
 
 export function isManualEditFullHtmlDocument(source: string): boolean {
