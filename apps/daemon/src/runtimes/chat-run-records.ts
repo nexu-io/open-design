@@ -219,6 +219,7 @@ export interface ChatRun {
     diff?: RunArtifactDiff;
   };
   artifactPaths?: string[];
+  removedPaths?: string[];
   designSystemId?: string | null;
   designSystemRequestedId?: string | null;
   designSystemSelectionSource?: string | null;

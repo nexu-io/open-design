@@ -1,7 +1,11 @@
 import type { ChatSessionMode } from '@open-design/contracts';
 import { containsQuestionFormAsk } from '../artifacts/question-form';
 import type { AgentEvent, ChatMessage } from '../types';
-import { hasFileMutationToolUse } from './file-ops';
+import {
+  declaredDeletionTargets,
+  hasFileMutationToolUse,
+  hasPossibleFileMutationFailure,
+} from './file-ops';
 import { unfinishedTodosFromEvents } from './todos';
 
 export type DesignDeliveryOutcome =
@@ -19,6 +23,24 @@ export interface DesignDeliveryInput {
   events: AgentEvent[] | undefined;
   producedFileCount: number;
   traceObjectFileCount: number;
+  /**
+   * Project-relative files the daemon observed this run remove, from its own
+   * before/after snapshots of the project tree (`RunStatus.removedPaths`).
+   *
+   * This is the only sound source for the signal. A browser-side listing diff
+   * proves a file is gone but not who removed it, and the run's shell commands
+   * cannot supply the difference: `cd x && rm y`, `find … -delete` and
+   * `xargs rm` are not parseable from the command text, and the text never
+   * says whether the command executed. The daemon watches the tree either side
+   * of the run, so it answers both questions at once.
+   */
+  removedPaths?: readonly string[];
+  /**
+   * Resolved project directory, used to place an absolute path a `Delete`
+   * tool supplied. Without it such a path cannot be shown to be in-project
+   * and is ignored.
+   */
+  projectRoot?: string | null;
   /** Authoritative artifact count reported by the daemon at run finalization. */
   artifactCount?: number;
   persistenceSucceeded?: boolean;
@@ -67,6 +89,43 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
 }
 
 /**
+ * Removals this run can be held responsible for: files the daemon observed
+ * leave the project, intersected with the paths the run declared it was
+ * deleting through a structured `Delete`-family tool call.
+ *
+ * Each half answers what the other cannot. The daemon's record is a
+ * before/after diff of the project tree, so it proves a file left but spans
+ * the run's window rather than its actions — a user or sync client deleting
+ * something mid-turn lands in it. The tool call names a target with no command
+ * text to parse, but proves only intent. Requiring both means a turn is
+ * credited for a removal only when it asked for that exact path and that exact
+ * path is gone.
+ *
+ * A shell deletion contributes nothing, because a command string can supply
+ * neither half: it cannot be parsed for what it removed, and running a shell
+ * is not evidence of having removed anything. That leaves the `cd … && rm …`
+ * form of issue #7744 uncredited, pending run-scoped provenance at the
+ * mutation boundary.
+ */
+function attributedRemovalCount(input: DesignDeliveryInput): number {
+  const removed = input.removedPaths;
+  if (!removed || removed.length === 0) return 0;
+  const declared = declaredDeletionTargets(input.events, input.projectRoot);
+  if (declared.size === 0) return 0;
+  return removed.filter((path) => declared.has(path)).length;
+}
+
+/**
+ * A daemon-observed deletion is delivery evidence unless something in the turn
+ * errored in a way that could have left the project half-mutated. A successful
+ * cleanup next to a failed write is still a turn that did not land its work,
+ * and must keep the "attempted but failed -> no_result -> Retry" path.
+ */
+function hasAttributedDeletionDelivery(input: DesignDeliveryInput): boolean {
+  return attributedRemovalCount(input) > 0 && !hasPossibleFileMutationFailure(input.events);
+}
+
+/**
  * A successful agent process is not necessarily a delivered design.
  *
  * Design mode is artifact-first, but clarification and explicitly unfinished
@@ -80,6 +139,13 @@ function hasLiveArtifactDelivery(events: AgentEvent[] | undefined): boolean {
  * be downgraded to ARTIFACT_NOT_FOUND. The known cost: an agent that merely
  * claims completion without ever calling a write tool now passes as text; the
  * text itself makes that visible to the user.
+ *
+ * Deletions are the one mutation that never leaves a produced file behind. A
+ * turn whose only file work was removing project files has no artifact to
+ * count, yet it is not report-only either, because the `rm` was a mutation
+ * attempt. The daemon settles it: it snapshots the project tree either side of
+ * the run and reports what left. Absent any errored mutation, that counts as
+ * delivery.
  */
 export function resolveDesignDeliveryOutcome(
   input: DesignDeliveryInput,
@@ -95,11 +161,21 @@ export function resolveDesignDeliveryOutcome(
     input.traceObjectFileCount > 0 ||
     (input.artifactCount ?? 0) > 0 ||
     input.persistenceSucceeded ||
-    hasLiveArtifactDelivery(input.events)
+    hasLiveArtifactDelivery(input.events) ||
+    hasAttributedDeletionDelivery(input)
   ) {
     return 'delivered';
   }
   if (input.persistenceFailed) return 'delivery_failed';
+  // A removal that arrived alongside a failed mutation is a partial failure,
+  // and it must reach the user as one. The report-only fallback below cannot
+  // be trusted to do that: it asks whether the turn *looks* like it tried to
+  // mutate, which a deletion the command text cannot be parsed for does not,
+  // so the turn would settle on `report_only` — no failure card, no Retry —
+  // while the daemon saw files leave the project and a mutation error.
+  if (attributedRemovalCount(input) > 0 && hasPossibleFileMutationFailure(input.events)) {
+    return 'no_result';
+  }
   if (!hasFileMutationToolUse(input.events) && input.content.trim().length > 0) {
     return 'report_only';
   }

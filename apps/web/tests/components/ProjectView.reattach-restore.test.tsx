@@ -783,6 +783,186 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('marks a reattached Design turn delivered when its only mutation is a confirmed in-project deletion', async () => {
+    // Delete-only Design turn: the agent removed a stale project file with a
+    // Bash `rm`, wrote nothing, and summarised what it did. The post-turn
+    // file refresh confirms the file is gone. That is a completed turn, not
+    // ARTIFACT_NOT_FOUND.
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-delete-only',
+        role: 'assistant',
+        agentId: 'claude',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-1',
+        runStatus: 'running',
+        sessionMode: 'design',
+        preTurnFileNames: ['index.html', 'stale.txt'],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    const indexHtml = { name: 'index.html', path: '/p/index.html', size: 1, updatedAt: 0 };
+    const staleTxt = { name: 'stale.txt', path: '/p/stale.txt', size: 1, updatedAt: 0 };
+    fetchProjectFiles
+      .mockResolvedValueOnce([indexHtml, staleTxt])
+      .mockResolvedValue([indexHtml]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-1',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+      removedPaths: ['stale.txt'],
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedHandlers: {
+      onDelta: (text: string) => void;
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(
+      async (options: { handlers: { onDelta: any; onAgentEvent: any; onDone: any } }) => {
+        capturedHandlers = options.handlers;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(capturedHandlers).not.toBeNull();
+
+    capturedHandlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'del-1',
+      name: 'delete_file',
+      input: { path: 'stale.txt' },
+    });
+    capturedHandlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'del-1',
+      content: '',
+      isError: false,
+    });
+    capturedHandlers!.onDelta('Removed stale.txt; nothing in the project referenced it.');
+    capturedHandlers!.onDone();
+
+    const finalized = await waitFor(() => {
+      const row = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-delete-only' && m.resultDeliveryState !== undefined)
+        .at(-1);
+      expect(row).toBeDefined();
+      return row!;
+    });
+    expect(finalized.runStatus).toBe('succeeded');
+    expect(finalized.resultDeliveryState).toBe('delivered');
+    expect(finalized.producedFiles).toEqual([]);
+    expect(
+      finalized.events?.some((event) => event.kind === 'status' && event.label === 'error'),
+    ).toBe(false);
+  });
+
+  it('keeps a reattached Design turn failed when its deletion never left the project listing', async () => {
+    // Same shape, but the `rm` target is still listed after the refresh (for
+    // example the agent deleted a file outside the project). Nothing was
+    // confirmed, so the missing-deliverable failure stands.
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-external-delete',
+        role: 'assistant',
+        agentId: 'claude',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-1',
+        runStatus: 'running',
+        sessionMode: 'design',
+        preTurnFileNames: ['index.html', 'stale.txt'],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    const indexHtml = { name: 'index.html', path: '/p/index.html', size: 1, updatedAt: 0 };
+    const staleTxt = { name: 'stale.txt', path: '/p/stale.txt', size: 1, updatedAt: 0 };
+    fetchProjectFiles.mockResolvedValue([indexHtml, staleTxt]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-1',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let capturedHandlers: {
+      onDelta: (text: string) => void;
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(
+      async (options: { handlers: { onDelta: any; onAgentEvent: any; onDone: any } }) => {
+        capturedHandlers = options.handlers;
+        return new Promise<void>(() => {});
+      },
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(capturedHandlers).not.toBeNull();
+
+    capturedHandlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'bash-1',
+      name: 'Bash',
+      input: { command: 'rm -f /tmp/scratch/stale.txt' },
+    });
+    capturedHandlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'bash-1',
+      content: '',
+      isError: false,
+    });
+    capturedHandlers!.onDelta('Removed the scratch copy.');
+    capturedHandlers!.onDone();
+
+    const finalized = await waitFor(() => {
+      const row = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter((m) => m?.id === 'msg-external-delete' && m.resultDeliveryState !== undefined)
+        .at(-1);
+      expect(row).toBeDefined();
+      return row!;
+    });
+    expect(finalized.runStatus).toBe('succeeded');
+    expect(finalized.resultDeliveryState).toBe('no_result');
+    expect(
+      finalized.events?.some(
+        (event) =>
+          event.kind === 'status' && event.label === 'error' && event.code === 'ARTIFACT_NOT_FOUND',
+      ),
+    ).toBe(true);
+  });
+
   it('claims the projected active task Run once and drops the predecessor cursor', async () => {
     const startedAt = Date.now();
     const visiblePrefix = 'Decision summary.\n';

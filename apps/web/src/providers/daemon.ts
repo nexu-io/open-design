@@ -360,6 +360,8 @@ export interface DaemonStreamOptions {
   onRunStatus?: (status: ChatRunStatus) => void;
   /** Authoritative project-relative artifacts created or modified by the run. */
   onArtifactPaths?: (paths: string[]) => void;
+  /** Project-relative files the daemon observed this run remove. */
+  onRemovedPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   // v2 analytics context propagated to run_created / run_finished.
   // Optional; the daemon only consumes these to shape PostHog props
@@ -388,6 +390,8 @@ export interface DaemonReattachOptions {
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
   onArtifactPaths?: (paths: string[]) => void;
+  /** Project-relative files the daemon observed this run remove. */
+  onRemovedPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   /** Publish a current-run success outcome to the app-level upgrade gate. */
   publishRunFinishedEvent?: boolean;
@@ -745,6 +749,7 @@ export async function streamViaDaemon({
   onRunCreated,
   onRunStatus,
   onArtifactPaths,
+  onRemovedPaths,
   onRunEventId,
   analyticsHints,
   taskExecutionId,
@@ -857,6 +862,7 @@ export async function streamViaDaemon({
       initialLastEventId,
       onRunStatus: emitRunStatus,
       onArtifactPaths,
+      onRemovedPaths,
       onRunEventId,
       projectId,
       conversationId,
@@ -1330,6 +1336,7 @@ async function consumeDaemonPhysicalRun({
   initialLastEventId,
   onRunStatus,
   onArtifactPaths,
+  onRemovedPaths,
   onRunEventId,
   projectId,
   conversationId,
@@ -1370,12 +1377,23 @@ async function consumeDaemonPhysicalRun({
     resolvedArtifactCount = value;
     handlers.onArtifactCount?.(value);
   };
+  const normalizePathList = (value: unknown): string[] | null => {
+    if (!Array.isArray(value)) return null;
+    return [
+      ...new Set(
+        value.filter(
+          (item): item is string => typeof item === 'string' && item.trim().length > 0,
+        ),
+      ),
+    ];
+  };
   const reportArtifactPaths = (value: unknown) => {
-    if (!Array.isArray(value)) return;
-    const paths = value.filter(
-      (item): item is string => typeof item === 'string' && item.trim().length > 0,
-    );
-    onArtifactPaths?.([...new Set(paths)]);
+    const paths = normalizePathList(value);
+    if (paths) onArtifactPaths?.(paths);
+  };
+  const reportRemovedPaths = (value: unknown) => {
+    const paths = normalizePathList(value);
+    if (paths) onRemovedPaths?.(paths);
   };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
@@ -1529,6 +1547,7 @@ async function consumeDaemonPhysicalRun({
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             reportArtifactCount(event.data.artifactCount);
             reportArtifactPaths(event.data.artifactPaths);
+            reportRemovedPaths(event.data.removedPaths);
             if (event.data.strategyTask) endStrategyTask = event.data.strategyTask;
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
@@ -1557,6 +1576,7 @@ async function consumeDaemonPhysicalRun({
           if (status.failureDetail) endFailureDetail = status.failureDetail;
           reportArtifactCount(status.artifactCount);
           reportArtifactPaths(status.artifactPaths);
+          reportRemovedPaths(status.removedPaths);
           if (status.strategyTask) endStrategyTask = status.strategyTask;
           break;
         }
@@ -1590,6 +1610,7 @@ async function consumeDaemonPhysicalRun({
         if (status.failureDetail) endFailureDetail = status.failureDetail;
         reportArtifactCount(status.artifactCount);
         reportArtifactPaths(status.artifactPaths);
+        reportRemovedPaths(status.removedPaths);
         if (status.strategyTask) endStrategyTask = status.strategyTask;
       } else {
         onRunStatus?.('failed');

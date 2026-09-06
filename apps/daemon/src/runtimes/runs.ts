@@ -554,6 +554,7 @@ function durableRunState(run) {
     resumable: run.resumable ?? false,
     artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
+    ...(Array.isArray(run.removedPaths) ? { removedPaths: run.removedPaths } : {}),
     endedWithUnfinishedWork: Boolean(run.endedWithUnfinishedWork),
     ...(typeof run.userPrompt === 'string' ? { userPrompt: run.userPrompt } : {}),
     ...(typeof run.model === 'string' ? { model: run.model } : {}),
@@ -964,6 +965,7 @@ export function createChatRunService({
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
       artifactPaths: undefined as string[] | undefined,
+      removedPaths: undefined as string[] | undefined,
       artifactOutcome: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       statePath: runsLogDir ? path.join(runsLogDir, id, 'state.json') : null,
@@ -1220,6 +1222,7 @@ export function createChatRunService({
     run.retryOriginErrorCode = null;
     run.artifactCount = undefined;
     run.artifactPaths = undefined;
+    run.removedPaths = undefined;
     run.artifactOutcome = undefined;
     run.deliverableValid = undefined;
     run.deliverableValidation = undefined;
@@ -1369,6 +1372,7 @@ export function createChatRunService({
     endedWithUnfinishedWork: !!run.endedWithUnfinishedWork,
     ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
     ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
+    ...(Array.isArray(run.removedPaths) ? { removedPaths: run.removedPaths } : {}),
     eventsLogPath: run.eventsLogPath ?? null,
     workspace: projectWorkspaceProvenance(run.projectMetadata),
     mediaExecution: run.mediaExecution ?? normalizeMediaExecutionPolicyForRun(null),
@@ -1469,6 +1473,7 @@ export function createChatRunService({
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
       ...(Array.isArray(run.artifactPaths) ? { artifactPaths: run.artifactPaths } : {}),
+      ...(Array.isArray(run.removedPaths) ? { removedPaths: run.removedPaths } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
       ...(run.strategyTask ? { strategyTask: run.strategyTask } : {}),

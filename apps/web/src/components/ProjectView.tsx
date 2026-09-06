@@ -5683,6 +5683,8 @@ export function ProjectView({
               events: message.events,
               producedFileCount: produced.length,
               traceObjectFileCount: traceObjectFiles.length,
+              removedPaths: status.removedPaths,
+              projectRoot: projectDetail.resolvedDir,
               artifactCount: status.artifactCount,
               persistenceSucceeded: artifactPersistenceSucceeded,
               persistenceFailed: artifactPersistenceError !== undefined,
@@ -5845,6 +5847,7 @@ export function ProjectView({
         let daemonArtifactCount = status.artifactCount;
         let latestReattachRunStatus: ChatMessage['runStatus'] = status.status;
         let authoritativeReattachArtifactPaths = status.artifactPaths;
+        let authoritativeReattachRemovedPaths = status.removedPaths;
         const applyContentDelta = (delta: string) => {
           for (const ev of parser.feed(delta)) {
             if (ev.type === 'artifact:start') {
@@ -5918,6 +5921,9 @@ export function ProjectView({
           publishRunFinishedEvent: shouldPublishRunFinishedEvent,
           onArtifactPaths: (paths) => {
             authoritativeReattachArtifactPaths = paths;
+          },
+          onRemovedPaths: (paths) => {
+            authoritativeReattachRemovedPaths = paths;
           },
           onStrategyTaskSettled: (strategyTask) => {
             const settledFields = strategySettledMessageFields(strategyTask);
@@ -6133,6 +6139,8 @@ export function ProjectView({
                   events: deliveryEvents,
                   producedFileCount: produced.length,
                   traceObjectFileCount: traceObjectFiles.length,
+                  removedPaths: authoritativeReattachRemovedPaths,
+                  projectRoot: projectDetail.resolvedDir,
                   artifactCount: daemonArtifactCount,
                   persistenceSucceeded: artifactPersistenceSucceeded,
                   persistenceFailed: artifactPersistenceError !== undefined,
@@ -7666,6 +7674,7 @@ export function ProjectView({
       const controller = new AbortController();
       const cancelController = new AbortController();
       let authoritativeArtifactPaths: string[] | undefined;
+      let authoritativeRemovedPaths: string[] | undefined;
       abortRef.current = controller;
       cancelRef.current = cancelController;
       const handlers = {
@@ -7938,6 +7947,8 @@ export function ProjectView({
                 events: deliveryCandidate.events,
                 producedFileCount: produced.length,
                 traceObjectFileCount: traceObjectFiles.length,
+                removedPaths: authoritativeRemovedPaths,
+                projectRoot: projectDetail.resolvedDir,
                 artifactCount: daemonArtifactCount,
                 persistenceSucceeded: artifactPersistenceSucceeded,
                 persistenceFailed: artifactPersistenceError !== undefined,
@@ -8072,6 +8083,9 @@ export function ProjectView({
                 ).catch(() => null);
                 if (latestRunStatus?.artifactPaths) {
                   authoritativeArtifactPaths = latestRunStatus.artifactPaths;
+                }
+                if (latestRunStatus?.removedPaths) {
+                  authoritativeRemovedPaths = latestRunStatus.removedPaths;
                 }
                 if (!latestRunStatus || isActiveRunStatus(latestRunStatus.status)) {
                 } else if (latestRunStatus.status === 'succeeded') {
@@ -8410,6 +8424,9 @@ export function ProjectView({
           },
           onArtifactPaths: (paths) => {
             authoritativeArtifactPaths = paths;
+          },
+          onRemovedPaths: (paths) => {
+            authoritativeRemovedPaths = paths;
           },
           onRunStatus: (runStatus) => {
             const endedAt = isTerminalRunStatus(runStatus) ? Date.now() : undefined;

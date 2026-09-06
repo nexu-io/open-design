@@ -91,6 +91,10 @@ export interface ChatSseEndPayload {
   artifactCount?: number;
   /** Project-relative artifact paths created or modified by this run. */
   artifactPaths?: string[];
+  /** Project-relative files the daemon observed this run remove, from its
+   *  own before/after snapshots of the project tree. Mirrors
+   *  ChatRunStatusResponse.removedPaths. */
+  removedPaths?: string[];
   /** True when a `failed` run can be recovered by resuming the agent's CLI
    *  session (transient upstream drop / inactivity on a session-resuming
    *  runtime). Lets the chat offer a Continue affordance without a separate
