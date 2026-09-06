@@ -88,6 +88,37 @@ async function createDshRuntimeFixture(workspaceRoot: string): Promise<void> {
 }
 
 describe("prepareResourceTree", () => {
+  it("adds a waiting Electron-as-Node launcher to the Windows resource tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-node-launcher-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "materialized", "open-design");
+    const cache = new ToolPackCache(join(root, "cache"));
+
+    try {
+      await createWorkspaceFixture(workspaceRoot);
+      await prepareResourceTree(
+        { workspaceRoot } as ToolPackConfig,
+        { resourceRoot } as WinPaths,
+        cache,
+        { materialize: true },
+      );
+
+      await expect(readFile(join(resourceRoot, "bin", "node.cmd"), "utf8")).resolves.toBe(
+        [
+          "@echo off",
+          "setlocal",
+          'set "ELECTRON_RUN_AS_NODE=1"',
+          'set "OD_NODE_BIN=%~dp0..\\..\\..\\Open Design.exe"',
+          '"%OD_NODE_BIN%" %*',
+          "exit /b %ERRORLEVEL%",
+          "",
+        ].join("\r\n"),
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("bundles the DeepSeek Harness runtime into the Windows resource tree", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-dsh-runtime-"));
     const workspaceRoot = join(root, "workspace");

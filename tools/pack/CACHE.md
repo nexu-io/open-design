@@ -74,7 +74,8 @@ drops them.
 
 Existing links: `win.workspace-tarballs` carries `workspaceBuildKey`;
 `win.packaged-app` carries `tarballsKey`; `win.electron-builder-dir` carries
-`packagedAppKey` and `resourceTreeKey`; `win.nsis-installer` carries
+`packagedAppKey` and `resourceTreeKey`; `win.portable-zip` carries
+`electronBuilderDirKey`; `win.nsis-installer` carries
 `basePayloadKey` and `overlayPayloadKey`; `win.launcher-payload` carries
 `sourceKey`.
 

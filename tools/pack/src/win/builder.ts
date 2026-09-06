@@ -69,9 +69,30 @@ import type {
 } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-const WIN_ARCHIVE_CACHE_VERSION = 3;
+const WIN_ARCHIVE_CACHE_VERSION = 4;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
+
+export function createWinPortableZipCacheKey({
+  electronBuilderDirKey,
+  namespace,
+  packagedVersion,
+  signing,
+}: {
+  electronBuilderDirKey: string;
+  namespace: string;
+  packagedVersion: string;
+  signing: ReturnType<typeof resolveWinSigningCacheKey>;
+}): string {
+  return hashJson({
+    archiveCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
+    electronBuilderDirKey,
+    namespace,
+    packagedVersion,
+    signing,
+    target: "portable-zip",
+  });
+}
 
 async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
   const sourceModulePath = join(config.workspaceRoot, "tools", "pack", "src", "win", "custom-installer.ts");
@@ -869,13 +890,11 @@ export async function runElectronBuilder(
           },
           id: "win.portable-zip",
           invalidate: async () => null,
-          key: hashJson({
-            archiveCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
+          key: createWinPortableZipCacheKey({
+            electronBuilderDirKey: key,
             namespace: config.namespace,
-            packagedAppKey,
             packagedVersion,
             signing: signingCacheKey,
-            target: "portable-zip",
           }),
           outputs: ["portable.zip"],
         };

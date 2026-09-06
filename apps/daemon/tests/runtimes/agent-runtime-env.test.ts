@@ -8,6 +8,7 @@ import {
   createAgentRuntimeToolPrompt,
   createDaemonDataDirConfiguredAgentEnv,
   createOpenDesignToolEnv,
+  resolveOpenDesignAgentNodeBin,
   resolveOpenDesignNodeBin,
 } from '../../src/server.js';
 import { applyAgentLaunchEnv } from '../../src/runtimes/launch.js';
@@ -32,6 +33,22 @@ describe('agent runtime tool environment', () => {
       resourceRoot: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design',
       exists: (candidate) => candidate.endsWith('\\resources\\open-design\\bin\\node.exe'),
     })).toBe('C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.exe');
+  });
+
+  it('gives Windows Electron agents the waiting launcher without changing the daemon runtime', () => {
+    const options = {
+      env: {},
+      execPath: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\Open Design.exe',
+      platform: 'win32' as const,
+      resourceRoot: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design',
+      electronVersion: '39.0.0',
+      exists: (candidate: string) => candidate.endsWith('\\bin\\node.cmd'),
+    };
+
+    expect(resolveOpenDesignNodeBin(options)).toBe(options.execPath);
+    expect(resolveOpenDesignAgentNodeBin(options)).toBe(
+      'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.cmd',
+    );
   });
 
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {

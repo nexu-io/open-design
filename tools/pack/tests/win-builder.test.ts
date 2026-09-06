@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import winBuildSource from "@/win/build.ts?raw";
 import winBuilderSource from "@/win/builder.ts?raw";
-import { materializeCachedUnpackedForInstaller } from "@/win/builder.js";
+import { createWinPortableZipCacheKey, materializeCachedUnpackedForInstaller } from "@/win/builder.js";
 import winCustomInstallerSource from "@/win/custom-installer.ts?raw";
 import { createLauncherRuntimeSyncPowerShellScript } from "@/win/custom-installer.js";
 import winPayloadSource from "@/win/payload.ts?raw";
@@ -17,6 +17,25 @@ import type { WinPaths } from "@/win/types.js";
 import { readWinExecutableVersionSnapshot } from "@/win/version-resource.js";
 
 const execFileAsync = promisify(execFile);
+
+describe("createWinPortableZipCacheKey", () => {
+  it("invalidates cache hits when the upstream electron-builder identity changes", () => {
+    const input = {
+      electronBuilderDirKey: "electron-builder-a",
+      namespace: "test",
+      packagedVersion: "0.5.0-beta.1",
+      signing: { enabled: false },
+    };
+    const baseline = createWinPortableZipCacheKey(input);
+    const knownNonInput = { ...input, packagedAppKey: "not-a-direct-input" };
+
+    expect(createWinPortableZipCacheKey({ ...input, electronBuilderDirKey: "electron-builder-b" })).not.toBe(baseline);
+    expect(createWinPortableZipCacheKey({ ...input, namespace: "other" })).not.toBe(baseline);
+    expect(createWinPortableZipCacheKey({ ...input, packagedVersion: "0.5.0-beta.2" })).not.toBe(baseline);
+    expect(createWinPortableZipCacheKey({ ...input, signing: { enabled: true } })).not.toBe(baseline);
+    expect(createWinPortableZipCacheKey(knownNonInput)).toBe(baseline);
+  });
+});
 
 function createPaths(root: string): WinPaths {
   const namespaceRoot = join(root, "namespaces", "second");
@@ -176,6 +195,7 @@ describe("Windows pack artifact boundaries", () => {
   });
 
   it("invalidates Windows payload caches when the archive method changes", () => {
+    expect(winBuilderSource).toContain("const WIN_ARCHIVE_CACHE_VERSION = 4");
     expect(winBuilderSource).toContain("const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2");
     expect(winPayloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_BASE_CACHE_VERSION = 2");
     expect(winPayloadSource).toContain("const WIN_LAUNCHER_PAYLOAD_ARCHIVE_CACHE_VERSION = 2");
