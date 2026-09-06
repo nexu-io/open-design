@@ -14616,6 +14616,24 @@ function HtmlViewer({
   }, [inTabPresent, presentFullscreenPending, workspaceActive]);
 
   function closeInTabPresentation() {
+    // ============================================================
+    // INJECTED DEFECT. Probe branch only — never to be merged.
+    //
+    // Reintroduces, deliberately, the white flash on exit that the
+    // `presentBackdropSettled` dance below exists to prevent: the preview
+    // surface is emptied of anything paintable for 300 ms while presentation
+    // tears down. It exists so the L2 lane can be run against a presentation
+    // exit that really IS broken, and shown to say so.
+    // ============================================================
+    if (typeof document !== 'undefined') {
+      const flashed = Array.from(
+        document.querySelectorAll<HTMLElement>('.viewer .viewer-body iframe'),
+      );
+      for (const frame of flashed) frame.style.visibility = 'hidden';
+      setTimeout(() => {
+        for (const frame of flashed) frame.style.visibility = '';
+      }, 300);
+    }
     // Leaving is the mirror of entering: if the ground is still opaque when the
     // layout returns to normal, the frame between the two is black. Dropping
     // the ground and the layout in the same handler does NOT order them —
