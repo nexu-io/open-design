@@ -14638,6 +14638,13 @@ function HtmlViewer({
       // uncovered ground is correctly not a blank. This is the observable the
       // lane exists to catch: leaving presentation shows the user a white
       // screen for 600 ms.
+      // Unambiguous liveness marker for the probe itself: if this handler runs
+      // at all, presentation can never close, and the lane must say so. Four
+      // earlier probes changed what was on screen and the lane stayed green;
+      // this separates "the probe is not running" from "the probe ran and
+      // nothing it did reached the screen".
+      throw new Error('INJECTED DEFECT: presentation exit refuses to close');
+      // eslint-disable-next-line no-unreachable
       const flash = document.createElement('div');
       flash.setAttribute('data-injected-defect', 'presentation-exit-flash');
       flash.style.cssText = 'position:fixed;inset:0;background:#ffffff;z-index:2147483647;pointer-events:none';
