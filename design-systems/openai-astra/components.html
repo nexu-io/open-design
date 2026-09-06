@@ -194,6 +194,16 @@
       .segmented button:hover { background: var(--border-soft); }
       .segmented button[aria-selected="true"] { background: #ffffff1f; }
       .segmented button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      /* ── Segmented control: autoplay countdown (page: AUTOPLAY_DURATION_MS 6000; keyframes hold 0–33.3% then linear scaleX 0→1) ── */
+      .segmented button { position: relative; isolation: isolate; overflow: hidden; }
+      .segmented .countdown { position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--border); transform-origin: 0 50%; transform: scaleX(0); animation: tab-countdown 6000ms linear both; }
+      @keyframes tab-countdown { 0%, 33.3333% { transform: scaleX(0); } to { transform: scaleX(1); } }
+      .segmented[data-paused="true"] .countdown { animation-play-state: paused; }
+      @media (prefers-reduced-motion: reduce) { .segmented .countdown { animation: none; transform: scaleX(0); } }
+      .chart-panels > .chart-card[hidden] { display: none; }
+      .bars .bar-rect { rx: 2; }
+      .bars .value { fill: var(--fg); font: 400 var(--text-base) / 1 var(--font-body); text-anchor: middle; }
+      .bars .name { fill: var(--fg); font: 400 var(--text-sm) / 1 var(--font-body); text-anchor: middle; }
 
       /* ── Chart card ── */
       .chart-card { padding: var(--space-8); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg); }
@@ -435,18 +445,19 @@
       </section>
 
       <section id="segmented">
-        <h2 class="kicker">Segmented control</h2>
-        <div class="segmented" role="tablist" aria-label="Benchmark">
-          <button type="button" role="tab" aria-selected="true">Agents’ Last Exam</button>
-          <button type="button" role="tab" aria-selected="false">ScreenSpot-Pro</button>
-          <button type="button" role="tab" aria-selected="false">OSWorld</button>
+        <h2 class="kicker">Segmented control (autoplay)</h2>
+        <div class="segmented" role="tablist" aria-label="Benchmark" data-autoplay="6000">
+          <button type="button" role="tab" aria-selected="true" aria-controls="chart-ale" id="tab-ale">Agents’ Last Exam</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="chart-ssp" id="tab-ssp">ScreenSpot-Pro</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="chart-osw" id="tab-osw">OSWorld</button>
         </div>
-        <p class="note">Hairline pill container with 4px inner padding; items are 40px pills at 14px / 500, the selected one filled #ffffff1f. Used to switch the chart below.</p>
+        <p class="note">Hairline pill container with 4px inner padding; items are 40px pills at 14px / 500, the selected one filled #ffffff1f. Autoplay: every 6s the next tab is selected; inside the selected pill a #ffffff33 fill holds for 2s, then grows left-to-right (scaleX, linear) over 4s. Hover, leaving the viewport or hiding the page pauses it; a click switches immediately and restarts. Reduced motion: no fill, no autoplay. The chart card below is the linked panel.</p>
       </section>
 
       <section id="chart">
-        <h2 class="kicker">Chart card</h2>
-        <figure class="chart-card" style="margin: 0">
+        <h2 class="kicker">Chart card (linked panels)</h2>
+        <div class="chart-panels">
+        <figure class="chart-card" id="chart-ale" role="tabpanel" aria-labelledby="tab-ale" style="margin: 0">
           <div class="chart-head">
             <div>
               <h3>Agents’ Last Exam</h3>
@@ -480,6 +491,37 @@
           </svg>
           <figcaption>Agents’ Last Exam tests agents on complex professional tasks in real software. The featured model reaches a new high in the comparison shown, scoring 59.3%, compared with 55.5% and 53.6% for the two closest models.</figcaption>
         </figure>
+        <figure class="chart-card" id="chart-ssp" role="tabpanel" aria-labelledby="tab-ssp" style="margin: 0" hidden>
+          <div class="chart-head">
+            <div><h3>ScreenSpot-Pro</h3></div>
+            <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+          </div>
+          <svg class="plot bars" viewBox="0 0 640 360" role="img" aria-label="ScreenSpot-Pro scores">
+            <line class="axis" x1="70" y1="20" x2="70" y2="300"/><line class="axis" x1="70" y1="300" x2="600" y2="300"/>
+            <g class="tick" text-anchor="end"><text x="60" y="24">100%</text><text x="60" y="80">80%</text><text x="60" y="136">60%</text><text x="60" y="192">40%</text><text x="60" y="248">20%</text><text x="60" y="304">0%</text></g>
+            <text class="label" x="22" y="160" text-anchor="middle" transform="rotate(-90 22 160)">Score</text>
+            <rect class="bar-rect astra" x="110" y="47" width="130" height="253"/><text class="value" x="175" y="37">90.4%</text><text class="name" x="175" y="326">Featured model</text>
+            <rect class="bar-rect fable" x="255" y="181" width="130" height="119"/><text class="value" x="320" y="171">42.6%</text><text class="name" x="320" y="326">Comparison A</text>
+            <rect class="bar-rect sol" x="400" y="243" width="130" height="57"/><text class="value" x="465" y="233">20.3%</text><text class="name" x="465" y="326">Comparison B</text>
+          </svg>
+          <figcaption>ScreenSpot-Pro measures grounding on high-resolution professional screens. Fixture values; bars use the chart palette, labels sit above each bar.</figcaption>
+        </figure>
+        <figure class="chart-card" id="chart-osw" role="tabpanel" aria-labelledby="tab-osw" style="margin: 0" hidden>
+          <div class="chart-head">
+            <div><h3>OSWorld</h3></div>
+            <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
+          </div>
+          <svg class="plot bars" viewBox="0 0 640 360" role="img" aria-label="OSWorld scores">
+            <line class="axis" x1="70" y1="20" x2="70" y2="300"/><line class="axis" x1="70" y1="300" x2="600" y2="300"/>
+            <g class="tick" text-anchor="end"><text x="60" y="24">100%</text><text x="60" y="80">80%</text><text x="60" y="136">60%</text><text x="60" y="192">40%</text><text x="60" y="248">20%</text><text x="60" y="304">0%</text></g>
+            <text class="label" x="22" y="160" text-anchor="middle" transform="rotate(-90 22 160)">Score</text>
+            <rect class="bar-rect astra" x="110" y="86" width="130" height="214"/><text class="value" x="175" y="76">76.5%</text><text class="name" x="175" y="326">Featured model</text>
+            <rect class="bar-rect fable" x="255" y="141" width="130" height="159"/><text class="value" x="320" y="131">56.8%</text><text class="name" x="320" y="326">Comparison A</text>
+            <rect class="bar-rect sol" x="400" y="184" width="130" height="116"/><text class="value" x="465" y="174">41.4%</text><text class="name" x="465" y="326">Comparison B</text>
+          </svg>
+          <figcaption>OSWorld runs real desktop tasks end to end. Fixture values; the panel switches when the tab’s countdown completes.</figcaption>
+        </figure>
+        </div>
         <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a glass select pill, a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
       </section>
 
@@ -581,5 +623,63 @@
         <p class="note">Opaque #000000 and full width: the canvas and its glow run behind every section above and stop at the footer's top edge (a hard edge that scrolls with the content). 120px of black above the columns, 13px / 500 throughout. Five columns; group headings in #ffffff99 with 16px below, links 20px apart, groups 44px apart, outward arrows on external links. Bottom bar: 16px social glyphs, copyright, underlined “Manage Cookies”, glass language pill.</p>
       </section>
     </main>
+    <script>
+      // Autoplay tabs: 6s per tab (2s hold, then a 4s linear fill inside the selected pill), then the linked panel switches.
+      // Pauses on hover, when the tab list leaves the viewport, or when the page is hidden; a click switches at once and restarts the cycle.
+      function autoplayTabs(list, onChange) {
+        const tabs = Array.from(list.querySelectorAll('[role="tab"]'))
+        const duration = Number(list.dataset.autoplay) || 6000
+        const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches
+        let index = Math.max(0, tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true'))
+        let elapsed = 0, startedAt = 0, timer = 0, hover = false, visible = true, seen = true
+        const paused = () => hover || !visible || !seen || reduced
+        function select(i) {
+          index = (i + tabs.length) % tabs.length
+          tabs.forEach((t, k) => {
+            const on = k === index
+            t.setAttribute('aria-selected', String(on))
+            t.tabIndex = on ? 0 : -1
+            const panel = t.getAttribute('aria-controls') && document.getElementById(t.getAttribute('aria-controls'))
+            if (panel) panel.hidden = !on
+            t.querySelector('.countdown')?.remove()
+          })
+          onChange?.(tabs[index], index)
+          elapsed = 0
+          restart()
+        }
+        function restart() {
+          clearTimeout(timer)
+          const tab = tabs[index]
+          tab.querySelector('.countdown')?.remove()
+          if (reduced) return
+          const fill = document.createElement('span')
+          fill.className = 'countdown'
+          fill.setAttribute('aria-hidden', 'true')
+          fill.style.animationDuration = `${duration}ms`
+          fill.style.animationDelay = `${-elapsed}ms`
+          tab.prepend(fill)
+          list.dataset.paused = String(paused())
+          if (paused()) return
+          startedAt = performance.now()
+          timer = setTimeout(() => select(index + 1), Math.max(duration - elapsed, 0))
+        }
+        function pause() {
+          if (!timer) return
+          clearTimeout(timer); timer = 0
+          elapsed = Math.min(duration, elapsed + performance.now() - startedAt)
+          list.dataset.paused = 'true'
+        }
+        function resume() { if (!timer && !paused()) restart() }
+        const update = () => (paused() ? pause() : resume())
+        list.addEventListener('mouseenter', () => { hover = true; update() })
+        list.addEventListener('mouseleave', () => { hover = false; update() })
+        document.addEventListener('visibilitychange', () => { visible = document.visibilityState === 'visible'; update() })
+        new IntersectionObserver(([e]) => { seen = e.isIntersecting; update() }, { threshold: 0.2 }).observe(list)
+        tabs.forEach((t, k) => t.addEventListener('click', () => select(k)))
+        select(index)
+        return { select, pause, resume }
+      }
+      for (const list of document.querySelectorAll('.segmented[data-autoplay]')) autoplayTabs(list)
+    </script>
   </body>
 </html>

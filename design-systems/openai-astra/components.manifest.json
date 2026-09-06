@@ -9,9 +9,9 @@
     "title": "openai-astra — reference components",
     "description": "Reference fixture for design-systems/openai-astra. Every visible value comes from tokens.css. The Astra launch page's signature moves: pure black canvas under a particle galaxy, white text with white-at-alpha secondaries, OpenAI Sans at 500/400, monochrome pill chrome, a single #23435f ambient glow, no shadows, no gradients.",
     "styleBlockCount": 1,
-    "selectorCount": 168,
-    "classCount": 77,
-    "elementCount": 45
+    "selectorCount": 174,
+    "classCount": 82,
+    "elementCount": 46
   },
   "tokens": {
     "declared": [
@@ -141,6 +141,9 @@
     ".badge-success",
     ".band",
     ".bar",
+    ".bars .bar-rect",
+    ".bars .name",
+    ".bars .value",
     ".btn",
     ".btn-ghost",
     ".btn-ghost:hover",
@@ -170,6 +173,7 @@
     ".chart-card .sol",
     ".chart-card figcaption",
     ".chart-card h3",
+    ".chart-panels > .chart-card[hidden]",
     ".compare",
     ".compare :is(th, td):last-child",
     ".compare .dash",
@@ -251,10 +255,12 @@
     ".search input",
     ".search input:focus-visible",
     ".segmented",
+    ".segmented .countdown",
     ".segmented button",
     ".segmented button:focus-visible",
     ".segmented button:hover",
     ".segmented button[aria-selected=\"true\"]",
+    ".segmented[data-paused=\"true\"] .countdown",
     ".site-footer",
     ".site-header",
     ".site-header .actions",
@@ -314,6 +320,8 @@
     "badge-success",
     "band",
     "bar",
+    "bar-rect",
+    "bars",
     "btn",
     "btn-ghost",
     "btn-glass",
@@ -326,6 +334,7 @@
     "cards",
     "chart-card",
     "chart-head",
+    "chart-panels",
     "compare",
     "copy",
     "cue",
@@ -358,6 +367,7 @@
     "logo",
     "media-frame",
     "meta",
+    "name",
     "nav",
     "note",
     "opus",
@@ -381,6 +391,7 @@
     "status",
     "tick",
     "two-up",
+    "value",
     "wordmark"
   ],
   "elements": [
@@ -416,6 +427,7 @@
     "path",
     "polyline",
     "rect",
+    "script",
     "section",
     "span",
     "style",
@@ -470,8 +482,10 @@
         "--border",
         "--border-soft",
         "--ease-standard",
+        "--fg",
         "--focus-ring",
         "--font-body",
+        "--meta",
         "--motion-base",
         "--radius-pill",
         "--space-1",
@@ -625,7 +639,6 @@
         "--font-body",
         "--meta",
         "--motion-fast",
-        "--muted",
         "--space-4",
         "--text-sm",
         "--text-xs"
@@ -667,7 +680,6 @@
       ],
       "tokenReferences": [
         "--fg",
-        "--muted",
         "--radius-pill"
       ]
     },

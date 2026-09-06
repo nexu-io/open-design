@@ -126,6 +126,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Segmented Control
 - Hairline pill container (`1px #ffffff33`, `4px` inner padding, `4px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.
+- Autoplay: every `6s` the next tab is selected and its linked panel switches. Inside the selected pill a `#ffffff33` countdown fill (`absolute inset-0`, radius inherited, behind the label) holds at `scaleX(0)` for the first third of the cycle, then grows left-to-right linearly to `scaleX(1)`. Hover over the tabs, leaving the viewport, or hiding the page pauses the fill (`animation-play-state: paused`, resumed with a negative `animation-delay`); a click switches at once and restarts the cycle. Under reduced motion there is no fill and no autoplay.
 
 ### Chart Card
 - `16px` radius, `1px #ffffff33` border, `32px` padding, black fill. Header row: title at h4 size, a glass select pill (`API Cost ▾`) beneath it, a download icon button on the right.
@@ -179,7 +180,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 
 ### Timing
 - Named curves: `curve-d cubic-bezier(0.6, 0, 0.4, 1)` for colour and layout transitions (300ms), `curve-a` linear for icon buttons (200ms), `curve-e cubic-bezier(0.5, 1.25, 0, 1)` for the rare overshoot, `cubic-bezier(0.22, 1, 0.36, 1)` for reveals.
-- Durations: 150ms fast, 200ms short, 300ms medium, 400ms long, 1s reveals, 5.5s ambient fade.
+- Durations: 150ms fast, 200ms short, 300ms medium, 400ms long, 1s reveals, 5.5s ambient fade, 6s tab autoplay (2s hold, 4s linear fill).
 - Reduced motion: the canvas is replaced by posters, drag is disabled, and every animation is set to `none`.
 
 ### Hero Entrance
