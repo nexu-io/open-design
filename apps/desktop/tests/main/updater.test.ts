@@ -30,6 +30,7 @@ import {
   resolveInstalledOuterVersion,
 } from "../../src/main/updater.js";
 import { installerObservationSummaryPath } from "../../src/main/installer-observations.js";
+import { isVanishedPathError, resolveDesktopUpdaterStoreLayout } from "../../src/main/updater/store.js";
 
 type FixtureServer = {
   artifactRequests: () => number;
@@ -377,6 +378,430 @@ describe("desktop updater", () => {
         sessionId: "2026-06-09T07:50:51.000Z-12345",
         source: SIDECAR_SOURCES.PACKAGED,
       }));
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("treats only a vanished path as recoverable, keeping unreadable stores fatal", () => {
+    expect(isVanishedPathError(Object.assign(new Error("gone"), { code: "ENOENT" }))).toBe(true);
+    expect(isVanishedPathError(Object.assign(new Error("not a directory"), { code: "ENOTDIR" }))).toBe(true);
+
+    // A release we merely cannot read right now must not be discarded.
+    expect(isVanishedPathError(Object.assign(new Error("denied"), { code: "EACCES" }))).toBe(false);
+    expect(isVanishedPathError(Object.assign(new Error("busy"), { code: "EBUSY" }))).toBe(false);
+    expect(isVanishedPathError(Object.assign(new Error("io"), { code: "EIO" }))).toBe(false);
+    expect(isVanishedPathError(new Error("no code"))).toBe(false);
+    expect(isVanishedPathError(null)).toBe(false);
+  });
+
+  // cleanup.json is only shape-checked when it is read, so entry.metadataPath
+  // is not evidence about this release. Pointed at a sibling release's valid
+  // record, it must not be able to vouch for an entry whose own metadata is
+  // gone.
+  it("ignores a retained entry's stored metadata path and derives the canonical one", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const seeded = await updater.checkForUpdates();
+      expect(seeded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const realKey = seeded.active?.key ?? "";
+      expect(existsSync(join(layout.releasesRoot, realKey, "metadata.json"))).toBe(true);
+
+      // Stale release: directory present, its own metadata.json never written.
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const staleDir = join(layout.releasesRoot, staleKey);
+      await mkdir(staleDir, { recursive: true });
+      await writeFile(join(staleDir, "artifact.bin"), "0.9.0", "utf8");
+
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        // Borrowed from the real release — in root, so a containment check alone
+        // would accept it.
+        metadataPath: `releases/${realKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe("unknown");
+      expect(stale?.reason).toBe("metadata-missing");
+
+      // The borrowed record's own release is untouched.
+      const real = descriptor.releases.find((entry) => entry.key === realKey);
+      expect(real?.state).toBe("retained");
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // lstat() only proves a directory entry exists. A retained release whose
+  // metadata is a dangling symlink, unparseable JSON, or a record that carries
+  // no version for the configured channel is just as unusable as one with no
+  // metadata at all, and the full rescan already says so; the per-check pass
+  // must not disagree with it.
+  it.each([
+    { expectedReason: "metadata-missing", expectedState: "unknown", label: "dangling symlink" },
+    { expectedReason: "metadata-invalid", expectedState: "unknown", label: "malformed json" },
+    { expectedReason: "metadata-invalid", expectedState: "unknown", label: "record without a channel version" },
+  ])("drops a retained cleanup entry whose metadata is a $label", async ({ expectedReason, expectedState, label }) => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      expect((await updater.checkForUpdates()).state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const staleDir = join(layout.releasesRoot, staleKey);
+      await mkdir(staleDir, { recursive: true });
+      const metadataPath = join(staleDir, "metadata.json");
+      if (label === "dangling symlink") {
+        symlinkSync(join(staleDir, "gone.json"), metadataPath);
+      } else if (label === "malformed json") {
+        await writeFile(metadataPath, "{ not json", "utf8");
+      } else {
+        // Parses as an object, but exposes no version for the configured
+        // channel. scanReleaseCleanupEntries() faults exactly this shape with
+        // release-version-missing, so the per-check pass has to agree or the
+        // entry stays retained until the next full rescan.
+        await writeFile(metadataPath, `${JSON.stringify({ notes: "no version for this channel" })}\n`, "utf8");
+      }
+
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe(expectedState);
+      expect(stale?.reason).toBe(expectedReason);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // A retained path that is no longer a plain directory was not "removed", so
+  // it is flagged rather than claimed as cleaned — the same call a full rescan
+  // would make.
+  it("flags a retained cleanup entry whose path is no longer a plain directory", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      expect((await updater.checkForUpdates()).state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      // Outside the update root: an extra directory inside it would trip the
+      // store's own ownership check before the revalidation ever runs.
+      const decoy = makeRoot();
+      symlinkSync(decoy, join(layout.releasesRoot, staleKey));
+
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; removedAt?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe("unknown");
+      expect(stale?.removedAt).toBeUndefined();
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // #7258 describes the backing directory *or* its metadata.json going
+  // missing. A directory that survives with its metadata removed is still a
+  // release the app can no longer identify, so it must not stay retained.
+  it("drops a retained cleanup entry whose release metadata is missing", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      expect((await updater.checkForUpdates()).state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const staleDir = join(layout.releasesRoot, staleKey);
+      await mkdir(staleDir, { recursive: true });
+      await writeFile(join(staleDir, "artifact.bin"), "0.9.0", "utf8");
+      expect(existsSync(staleDir)).toBe(true);
+      expect(existsSync(join(staleDir, "metadata.json"))).toBe(false);
+
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      expect((await updater.checkForUpdates()).state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; removedAt?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe("unknown");
+      expect(stale?.reason).toBe("metadata-missing");
+      // Nothing was cleaned up, so the payload must still be there and the
+      // entry must not claim a removal that never happened.
+      expect(stale?.removedAt).toBeUndefined();
+      expect(existsSync(staleDir)).toBe(true);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // #7258 deletes the release while the app is running, so the recovery has to
+  // hold on the retry path too: restoreStoreState() runs at most once per
+  // process, and checkForCandidate() only reaches it while the updater is
+  // still IDLE. A second "Check again" on the same instance therefore never
+  // revisits the store, and the in-memory active release is trusted as-is.
+  it("recovers on a retry with the same updater instance after the release is deleted", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const first = await updater.checkForUpdates();
+      expect(first.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      expect(existsSync(first.downloadPath ?? "")).toBe(true);
+
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+
+      // The app keeps running; the release is removed underneath it.
+      await rm(layout.releasesRoot, { force: true, recursive: true });
+
+      const retried = await updater.checkForUpdates();
+      expect(retried.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(retried.error).toBeUndefined();
+      // Must not keep advertising a ready install whose file is gone.
+      if (retried.state === DESKTOP_UPDATE_STATES.DOWNLOADED) {
+        expect(existsSync(retried.downloadPath ?? "")).toBe(true);
+      }
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; state: string }[];
+      };
+      expect(descriptor.releases.find((entry) => entry.key === staleKey)?.state).toBe("cleanup-removed");
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // The reported shape of #7258: a release the app itself decided to keep
+  // (state "retained") whose backing directory was removed from outside. The
+  // cold-start lifecycle carries the descriptor forward without rescanning, so
+  // without revalidation the store keeps advertising a local release that is
+  // not there.
+  it("drops a retained cleanup entry whose backing release directory is gone", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      // Let the updater build and own the store the normal way first.
+      const seeded = await createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }).checkForUpdates();
+      expect(seeded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      // Record a retained release whose directory is not on disk, the way an
+      // outside cleanup leaves the descriptor behind.
+      const layout = resolveDesktopUpdaterStoreLayout(root);
+      const staleKey = "0.9.0-mac-arm64-deadbeef";
+      const seededDescriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: Record<string, unknown>[];
+      };
+      seededDescriptor.releases.push({
+        currentVersion: "1.0.0",
+        key: staleKey,
+        metadataPath: `releases/${staleKey}/metadata.json`,
+        path: `releases/${staleKey}`,
+        reason: "current-version-or-newer",
+        state: "retained",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+        version: "0.9.0",
+      });
+      await writeFile(layout.cleanupPath, `${JSON.stringify(seededDescriptor)}\n`, "utf8");
+      expect(existsSync(join(layout.releasesRoot, staleKey))).toBe(false);
+
+      // Cold start: this is the path that currently carries the descriptor
+      // forward without ever revalidating it.
+      const checked = await createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }).checkForUpdates();
+      expect(checked.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+
+      const descriptor = JSON.parse(await readFile(layout.cleanupPath, "utf8")) as {
+        releases: { key: string; reason?: string; removedAt?: string; state: string }[];
+      };
+      const stale = descriptor.releases.find((entry) => entry.key === staleKey);
+      expect(stale?.state).toBe("cleanup-removed");
+      expect(stale?.reason).toBe("metadata-missing");
+      expect(stale?.removedAt).toEqual(expect.any(String));
+
+      // The real downloaded release is still retained and untouched.
+      expect(existsSync(join(layout.releasesRoot, seeded.active?.key ?? ""))).toBe(true);
+      expect(checked.cache?.lifecycle?.releases.retained).toBe(1);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  // A downloaded release can vanish from disk without the updater's own cleanup
+  // having run: manual pruning of the data directory, disk-space tooling, AV
+  // quarantine, or a partial write after a crash. The stored active pointer
+  // then names files that will never come back, so trusting it must not be
+  // able to wedge the version check.
+  it("recovers the version check when a downloaded release disappears from disk", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture();
+    try {
+      const downloaded = await createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      }).checkForUpdates();
+      expect(downloaded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
+
+      // Remove the release payload the way an outside cleanup would, leaving
+      // the store's active pointer behind.
+      await rm(join(root, "releases"), { force: true, recursive: true });
+
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+
+      const checked = await updater.checkForUpdates();
+      expect(checked.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(checked.error).toBeUndefined();
+      expect(checked.availableVersion).toBe("1.0.1");
+
+      // Retrying must not replay the same terminal failure forever.
+      const rechecked = await updater.checkForUpdates();
+      expect(rechecked.state).not.toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(rechecked.error).toBeUndefined();
+
+      // The stale pointer does not survive: whatever the store points at after
+      // recovery must be a release that actually exists on disk.
+      const persisted = JSON.parse(await readFile(join(root, "metadata.json"), "utf8")) as {
+        active?: { artifactPath?: string };
+      };
+      const persistedArtifact = persisted.active?.artifactPath;
+      if (persistedArtifact != null) {
+        expect(existsSync(join(root, persistedArtifact))).toBe(true);
+      }
     } finally {
       await fixture.close();
       rmSync(root, { force: true, recursive: true });
