@@ -39,6 +39,7 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import { postCreateArtifactRequest } from './artifacts/create.js';
+import { extractRelativeRefs } from './artifacts/relative-refs.js';
 import { resolveMcpWorkspaceContext } from './mcp-workspace-context.js';
 import {
   createLocalMcpBriefStore as createBriefStore,
@@ -3323,111 +3324,6 @@ async function fetchProjectFile(
     );
   }
   return { name: relPath, mime, size: size ?? contentBytes, content, binary: false };
-}
-
-// Patterns common to HTML and CSS (also fine to run on plain markdown).
-const HTML_REF_PATTERNS = [
-  /<script\b[^>]*\bsrc=["']([^"']+)["']/gi,
-  /<link\b[^>]*\bhref=["']([^"']+)["']/gi,
-  /<img\b[^>]*\bsrc=["']([^"']+)["']/gi,
-  /<source\b[^>]*\bsrc=["']([^"']+)["']/gi,
-  /<video\b[^>]*\bsrc=["']([^"']+)["']/gi,
-  /<audio\b[^>]*\bsrc=["']([^"']+)["']/gi,
-  /<iframe\b[^>]*\bsrc=["']([^"']+)["']/gi,
-];
-
-const CSS_REF_PATTERNS = [
-  /\burl\(\s*["']?([^"')]+)["']?\s*\)/gi,
-  /@import\s+(?:url\()?\s*["']([^"')]+)["']/gi,
-];
-
-// JS/TS only - running these on prose creates false positives on words
-// like "imported from 'X'".
-const JS_REF_PATTERNS = [
-  /\bimport\s+[^'"]*?['"]([^'"]+)['"]/g,
-  /\bfrom\s+['"]([^'"]+)['"]/g,
-  /\bimport\(\s*['"]([^'"]+)['"]\s*\)/g,
-  /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g,
-];
-
-// `srcset` can list multiple comma-separated candidates.
-const SRCSET_PATTERN = /\bsrcset=["']([^"']+)["']/gi;
-
-function isJsLike(mime: string | undefined, fromPath: string): boolean {
-  if (mime && /javascript|typescript/i.test(mime)) return true;
-  return /\.(?:m?jsx?|tsx?|cjs)$/i.test(fromPath);
-}
-
-function isCssLike(mime: string | undefined, fromPath: string): boolean {
-  if (mime && /^text\/css\b/i.test(mime)) return true;
-  return /\.css$/i.test(fromPath);
-}
-
-function isHtmlLike(mime: string | undefined, fromPath: string): boolean {
-  if (mime && /^text\/html\b/i.test(mime)) return true;
-  return /\.html?$/i.test(fromPath);
-}
-
-function extractRelativeRefs(text: string, fromPath: string, fromMime: string): string[] {
-  if (!text) return [];
-  const refs = new Set<string>();
-  const runPatterns: RegExp[] = [];
-  if (isHtmlLike(fromMime, fromPath)) {
-    runPatterns.push(...HTML_REF_PATTERNS, ...CSS_REF_PATTERNS);
-  }
-  if (isCssLike(fromMime, fromPath)) {
-    runPatterns.push(...CSS_REF_PATTERNS);
-  }
-  if (isJsLike(fromMime, fromPath)) {
-    runPatterns.push(...JS_REF_PATTERNS);
-  }
-  // Fallback for unknown textual files: only the safest pattern,
-  // url() in case it's a CSS-in-something we don't recognize.
-  if (runPatterns.length === 0) {
-    runPatterns.push(...CSS_REF_PATTERNS);
-  }
-
-  const candidates: string[] = [];
-  for (const re of runPatterns) {
-    for (const m of text.matchAll(re)) {
-      const ref = (m[1] || '').trim();
-      if (ref) candidates.push(ref);
-    }
-  }
-  // Pull every candidate URL out of any srcset attributes in HTML.
-  if (isHtmlLike(fromMime, fromPath)) {
-    for (const m of text.matchAll(SRCSET_PATTERN)) {
-      const list = m[1] || '';
-      for (const part of list.split(',')) {
-        const url = part.trim().split(/\s+/)[0];
-        if (url) candidates.push(url);
-      }
-    }
-  }
-
-  for (const raw of candidates) {
-    if (/^(?:https?:|\/\/|data:|mailto:|tel:|#)/i.test(raw)) continue;
-    const dir = fromPath.includes('/')
-      ? fromPath.slice(0, fromPath.lastIndexOf('/') + 1)
-      : '';
-    const resolved = raw.startsWith('/') ? raw.slice(1) : dir + raw;
-    const stripped = resolved.replace(/[?#].*$/, '');
-    const segs = stripped.split('/').filter(Boolean);
-    const out: string[] = [];
-    let escaped = false;
-    for (const s of segs) {
-      if (s === '.') continue;
-      if (s === '..') {
-        if (out.length === 0) { escaped = true; break; }
-        out.pop();
-        continue;
-      }
-      out.push(s);
-    }
-    if (escaped || out.length === 0) continue;
-    refs.add(out.join('/'));
-  }
-  return [...refs];
 }
 
 function okBundle(bundle: BundleInput) {
