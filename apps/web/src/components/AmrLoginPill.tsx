@@ -23,6 +23,7 @@ import {
   resolveAmrAuthTracking,
 } from '../analytics/amr-auth';
 import { useI18n } from '../i18n';
+import { resetAnalyticsOnLogout } from '../analytics/client';
 import {
   AMR_LOGIN_STATUS_EVENT,
   AMR_LOGIN_POLL_INTERVAL_MS,
@@ -731,6 +732,7 @@ export function AmrLoginPill({
   const performLogout = useCallback(async () => {
     setErrorMessage(null);
     setPending('logout');
+    resetAnalyticsOnLogout(); // clear PostHog identity before server-side logout
     const result = await velaLogout();
     loginStartedAtRef.current = null;
     loginPendingRef.current = false;
