@@ -25,6 +25,10 @@
   "files": [
     "dist/*.js",
     "dist/types/**/*.d.ts",
+    "src/**/*",
+    "clean.ts",
+    "esbuild.config.ts",
+    "tsconfig.json",
     "cordis.patch.yml",
     "README.md"
   ],
