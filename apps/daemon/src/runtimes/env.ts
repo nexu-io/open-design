@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -147,6 +148,14 @@ export function spawnEnvForAgent(
     if (!env.CODEX_HOME?.trim()) {
       const home = os.homedir();
       if (home) env.CODEX_HOME = path.join(home, '.codex');
+    }
+    return finalizeRuntimeEnv(env, sandboxRuntime);
+  }
+  if (agentId === 'hermes') {
+    if (!envValue(env, 'HERMES_HOME') && !sandboxRuntime) {
+      const home = envValue(env, 'HOME') ?? envValue(env, 'USERPROFILE');
+      const hermesHome = discoverHermesHome(home ?? os.homedir());
+      if (hermesHome) env.HERMES_HOME = hermesHome;
     }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
@@ -352,6 +361,18 @@ function envValue(env: NodeJS.ProcessEnv, key: string): string | null {
   const value = existingKey ? env[existingKey] : undefined;
   const trimmed = typeof value === 'string' ? value.trim() : '';
   return trimmed ? (value as string) : null;
+}
+
+function discoverHermesHome(home: string): string | null {
+  const candidates = [
+    path.join(home, '.hermes', 'data'),
+    path.join(home, '.hermes'),
+  ];
+  return (
+    candidates.find((candidate) =>
+      existsSync(path.join(candidate, 'config.yaml')),
+    ) ?? null
+  );
 }
 
 function setEnvIfMissing(

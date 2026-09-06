@@ -436,6 +436,10 @@ describe('app-config', () => {
             OPENAI_BASE_URL: '  https://proxy.example/openai  ',
             OPENAI_API_KEY: '  sk-proxy-openai  ',
           },
+          hermes: {
+            HERMES_BIN: '  ~/bin/hermes  ',
+            HERMES_HOME: '  ~/.hermes/data  ',
+          },
           amr: {
             VELA_BIN: '~/bin/vela',
             VELA_API_URL: '  https://custom-amr.example  ',
@@ -463,6 +467,7 @@ describe('app-config', () => {
       expect(cfg.agentCliEnv).toEqual({
         claude: { CLAUDE_CONFIG_DIR: '~/.claude-2', ANTHROPIC_BASE_URL: 'https://proxy.example/anthropic', ANTHROPIC_API_KEY: 'sk-proxy-anthropic', ANTHROPIC_AUTH_TOKEN: 'sk-proxy-token', MMD_MODEL_ROUTES_FILE: '~/.config/mms/model-routes.json' },
         codex: { CODEX_HOME: '~/.codex-alt', CODEX_BIN: '~/bin/codex-next', OPENAI_BASE_URL: 'https://proxy.example/openai', OPENAI_API_KEY: 'sk-proxy-openai' },
+        hermes: { HERMES_BIN: '~/bin/hermes', HERMES_HOME: '~/.hermes/data' },
         amr: {
           VELA_BIN: '~/bin/vela',
           VELA_API_URL: 'https://custom-amr.example',
