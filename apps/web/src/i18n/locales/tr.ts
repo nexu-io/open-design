@@ -1,6 +1,8 @@
 import type { Dict } from '../types';
 
 export const tr: Dict = {
+  'settings.mcpLocalRuntimeOnly': 'Yalnızca yerel ortam: bu kurulum, OpenDesign çalıştıran makineyi veya konteyneri gerektirir. Başka bir makinedeki kodlama ajanı için SSH/Docker köprüsü kullanın.',
+  'settings.mcpRemoteSetup': 'Uzak Docker kurulumu',
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",
