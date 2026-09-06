@@ -1,0 +1,19 @@
+{
+  "candidateId": "ec3cda2f-c31f-4906-80b8-ef0c2fe7b95f",
+  "projectId": "brand-ensidex-a-wyoming-technology-company-building-ai-487114",
+  "runId": "6ffaf44a-c028-4aea-9da5-3d8332cd4483",
+  "conversationId": "f0c9a142-829b-4655-b191-9bb8c02a165e",
+  "provenance": {
+    "summary": "Detected from context/source-context.md after a successful run.",
+    "detectedAt": 1784779251968
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 8925,
+      "copied": true
+    }
+  ]
+}
