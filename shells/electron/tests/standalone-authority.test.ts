@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getSidecarStatus, stopSidecar } from "@open-design/sidecar/authority";
+import { findSidecarProcesses, getSidecarStatus, stopSidecar } from "@open-design/sidecar/authority";
 import {
   canonicalJson,
   signStandaloneChannelHead,
@@ -621,7 +621,18 @@ describe("Electron production Standalone authority", () => {
         capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } },
       });
       expect(await replacementHandle.readStatus()).toMatchObject({ state: "running", generationId: replacement.generation.id, bindingDigest: replacement.binding.digest });
+      const sibling = await replacementAuthority.prepare({ correlationId: "close-sibling", scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace }, shell: replacementManifest.shell });
+      const siblingHandle = await sibling.start({
+        attachment: { id: "electron-sibling", shell: replacementManifest.shell },
+        capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } },
+      });
       await replacementHandle.close();
+      expect(await siblingHandle.readStatus()).toMatchObject({ state: "running", references: 1 });
+      expect(await findSidecarProcesses(stamp)).not.toEqual([]);
+      const closed = await Promise.all([siblingHandle.close(), siblingHandle.close()]);
+      expect(closed[0]).toEqual(closed[1]);
+      expect(await findSidecarProcesses(stamp)).toEqual([]);
+      expect(await lifecycleLedger.read()).toMatchObject({ state: "stopped", attachments: [] });
     } finally {
       if (stamp != null) {
         const stopped = await stopSidecar(stamp, { termGraceMs: 1_000, killGraceMs: 1_000 });

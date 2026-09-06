@@ -12,6 +12,7 @@ describe("Electron runtime adapter contract", () => {
       appPath: resolve(".tmp/open-design.app"),
       argv: ["--remote-debugging-port=0"],
       channel: "dev",
+      controlRuntimeRoot: resolve(".tmp/control"),
       executablePath: resolve(".tmp/open-design.app/Contents/MacOS/open-design"),
       logPath: resolve(".tmp/logs/electron.log"),
       namespace: "electron-runtime-test",
@@ -28,8 +29,9 @@ describe("Electron runtime adapter contract", () => {
         schemaVersion: 1,
         operation,
         channel: "betahyx",
+        controlRuntimeRoot: resolve(".tmp/control"),
         namespace: "release-betahyx-mac",
-      })).toEqual({ schemaVersion: 1, operation, channel: "betahyx", namespace: "release-betahyx-mac" });
+      })).toEqual({ schemaVersion: 1, operation, channel: "betahyx", namespace: "release-betahyx-mac", controlRuntimeRoot: resolve(".tmp/control") });
     }
   });
 

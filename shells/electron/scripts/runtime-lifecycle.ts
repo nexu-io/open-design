@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   convergeSidecarLaunch,
+  findSidecarProcesses,
   getSidecarStatus,
   stopSidecar,
   type SidecarStamp,
@@ -11,9 +12,13 @@ import {
 import { APP_KEYS, SIDECAR_MODES, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { inspectElectronCdpStatus } from "./cdp-inspection.ts";
 import { waitForElectronProductReady } from "./product-readiness.ts";
+import { observeElectronDiagnostics } from "./runtime-diagnostics.ts";
+import resourceDeclaration from "../config/standalone.json" with { type: "json" };
+import { validateElectronPhysicalResourceSet } from "../src/adapters/standalone/physical-resources.ts";
 
 type RequestScope = Readonly<{
   channel: string;
+  controlRuntimeRoot: string;
   namespace: string;
   schemaVersion: 1;
 }>;
@@ -51,7 +56,7 @@ function absolutePath(value: unknown, label: string): string {
 export function parseElectronRuntimeLifecycleRequest(input: unknown): ElectronRuntimeLifecycleRequest {
   const value = object(input, "Electron runtime lifecycle request");
   const operation = value.operation;
-  const base = ["channel", "namespace", "operation", "schemaVersion"];
+  const base = ["channel", "controlRuntimeRoot", "namespace", "operation", "schemaVersion"];
   const expected = operation === "electron.runtime.start"
     ? [...base, "appPath", "argv", "executablePath", "logPath", "runtimeRoot"]
     : base;
@@ -63,6 +68,7 @@ export function parseElectronRuntimeLifecycleRequest(input: unknown): ElectronRu
     schemaVersion: 1 as const,
     operation: operation as "electron.runtime.inspect" | "electron.runtime.status" | "electron.runtime.stop",
     channel: token(value.channel, "Electron runtime channel"),
+    controlRuntimeRoot: absolutePath(value.controlRuntimeRoot, "Electron control runtime root"),
     namespace: token(value.namespace, "Electron runtime namespace"),
   };
   if (operation !== "electron.runtime.start") return Object.freeze(scope);
@@ -82,13 +88,13 @@ function electronStamp(request: ElectronRuntimeLifecycleRequest): SidecarStamp {
   return Object.freeze({ app: APP_KEYS.ELECTRON, channel: request.channel, mode: SIDECAR_MODES.RUNTIME, namespace: request.namespace, source: SIDECAR_SOURCES.TOOLS_PACK });
 }
 
-function standaloneStamp(request: ElectronRuntimeLifecycleRequest): SidecarStamp {
-  return Object.freeze({ app: "standalone", channel: request.channel, mode: SIDECAR_MODES.RUNTIME, namespace: request.namespace, source: SIDECAR_SOURCES.STANDALONE });
-}
-
-async function waitForStatus(stamp: SidecarStamp, pid: number): Promise<unknown> {
+async function waitForStatus(stamp: SidecarStamp, pid: number, controlRuntimeRoot: string): Promise<unknown> {
   return await waitForElectronProductReady({
-    readStatus: () => getSidecarStatus(stamp, { generationPid: pid, timeoutMs: 800 }).catch(() => null),
+    async readStatus() {
+      const status = await getSidecarStatus(stamp, { generationPid: pid, timeoutMs: 800 }).catch(() => null);
+      if (status != null) await observeElectronDiagnostics(controlRuntimeRoot, status);
+      return status;
+    },
     assertAlive() {
       try { process.kill(pid, 0); }
       catch { throw new Error("Electron runtime generation exited before product readiness"); }
@@ -100,26 +106,24 @@ export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLi
   const stamp = electronStamp(request);
   if (request.operation === "electron.runtime.inspect") {
     const current = await getSidecarStatus(stamp, { timeoutMs: 1_000 }).catch(() => null);
-    const status = current ?? Object.freeze({ state: "idle" as const });
+    const status = await observeElectronDiagnostics(request.controlRuntimeRoot, current);
     return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, status, cdp: await inspectElectronCdpStatus(status) });
   }
   if (request.operation === "electron.runtime.status") {
     const status = await getSidecarStatus(stamp, { timeoutMs: 1_000 }).catch(() => null);
-    return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, status: status ?? Object.freeze({ state: "idle" as const }) });
+    return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, status: await observeElectronDiagnostics(request.controlRuntimeRoot, status) });
   }
   if (request.operation === "electron.runtime.stop") {
     const electron = await stopSidecar(stamp);
-    const hostStatus = await getSidecarStatus<unknown>(standaloneStamp(request), { timeoutMs: 800 }).catch(() => null);
-    const lifecycle = hostStatus != null && typeof hostStatus === "object" ? (hostStatus as { lifecycle?: unknown }).lifecycle : null;
-    const references = lifecycle != null && typeof lifecycle === "object" ? (lifecycle as { references?: unknown }).references : null;
-    const standalone = references === 0 ? await stopSidecar(standaloneStamp(request)) : null;
-    const remainingPids = [...electron.remainingPids, ...(standalone?.remainingPids ?? [])];
+    // Shell shutdown owns guarded retirement. The tool observes physical
+    // survivors only; attachment counts never authorize an extra stop sequence.
+    const remainingResources = await Promise.all(validateElectronPhysicalResourceSet(resourceDeclaration).resources.map((resource) =>
+      findSidecarProcesses({ ...resource.stamp, channel: request.channel, namespace: request.namespace })));
+    const remainingPids = [...electron.remainingPids, ...remainingResources.flatMap((processes) => processes.map(({ pid }) => pid))];
     return Object.freeze({
       schemaVersion: 1 as const,
       operation: request.operation,
       electron,
-      standalone,
-      retainedStandaloneReferences: typeof references === "number" && references > 0 ? references : 0,
       remainingPids: Object.freeze([...new Set(remainingPids)]),
     });
   }
@@ -145,7 +149,7 @@ export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLi
   }
   convergence.launcherProcess.unref();
   const pid = convergence.description.resources.pid;
-  return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, pid, status: await waitForStatus(stamp, pid) });
+  return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, pid, status: await waitForStatus(stamp, pid, request.controlRuntimeRoot) });
 }
 
 function argument(name: string): string {

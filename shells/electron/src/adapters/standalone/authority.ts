@@ -871,6 +871,7 @@ export function createElectronStandaloneAuthorityFactory(
           activeAttachment = attachment;
           sealedRuntimeStatus = null;
           let closed: StandaloneRuntimeStatus | null = null;
+          let closeTask: Promise<StandaloneRuntimeStatus> | null = null;
           let heartbeatTask = Promise.resolve();
           const heartbeat = setInterval(() => {
             heartbeatTask = heartbeatTask.then(async () => { await activeHost.lifecycle.heartbeat(request.scope, attachment); }).catch(() => undefined);
@@ -884,16 +885,30 @@ export function createElectronStandaloneAuthorityFactory(
             },
             async close() {
               if (closed != null) return closed;
-              clearInterval(heartbeat);
-              await heartbeatTask;
-              if (sealedRuntimeStatus != null) {
-                closed = sealedRuntimeStatus;
-                return closed;
-              }
-              const status = await activeHost.lifecycle.release(request.scope, attachment.id);
-              closed = Object.freeze({ ...projectRuntimeStatus(status, activeHost.binding.digest, activeGeneration.id), state: "stopped" as const });
-              activeAttachment = null;
-              return closed;
+              closeTask ??= (async () => {
+                clearInterval(heartbeat);
+                await heartbeatTask;
+                if (sealedRuntimeStatus != null) {
+                  closed = sealedRuntimeStatus;
+                  return closed;
+                }
+                return await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async (guard) => {
+                  const released = await activeHost.lifecycle.release(request.scope, attachment.id);
+                  // Occupancy selects whether this caller may retire the set;
+                  // only Sidecar's guarded retirement proves physical closure.
+                  // Never kill a runtime retained by a sibling attachment.
+                  if (released.occupants.length === 0) {
+                    await guard.retire();
+                    const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+                    const stopped = await continuation.status();
+                    if (stopped.state !== "stopped") await continuation.stop(stopped.fence);
+                  }
+                  closed = Object.freeze({ ...projectRuntimeStatus(released, activeHost.binding.digest, activeGeneration.id), state: "stopped" as const });
+                  activeAttachment = null;
+                  return closed;
+                });
+              })();
+              return await closeTask;
             },
             async waitForTerminal() {
               if (closed != null) return closed;

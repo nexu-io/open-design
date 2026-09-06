@@ -11,7 +11,7 @@ import { resolveElectronStandaloneTarget } from "../src/adapters/standalone/inst
 import { loadElectronStandaloneAuthorityResources } from "./build-authority.ts";
 import { materializeElectronDevInstallation } from "./dev-installation.ts";
 import { inspectElectronCdpStatus } from "./cdp-inspection.ts";
-import { observeElectronDevDiagnostics } from "./dev-diagnostics.ts";
+import { observeElectronDiagnostics } from "./runtime-diagnostics.ts";
 import { waitForElectronProductReady } from "./product-readiness.ts";
 
 export const ELECTRON_DEV_LIFECYCLE_SCHEMA_VERSION = 1 as const;
@@ -121,7 +121,7 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
   const runtimeStatus = await waitForElectronProductReady({
     async readStatus() {
       const status = await getSidecarStatus(stamp(request), { generationPid: launched.pid, timeoutMs: 800 }).catch(() => null);
-      if (status != null) await observeElectronDevDiagnostics(request.controlRuntimeRoot, status);
+      if (status != null) await observeElectronDiagnostics(request.controlRuntimeRoot, status);
       return status;
     },
     assertAlive() {
@@ -141,12 +141,12 @@ export async function executeElectronDevLifecycle(request: ElectronDevLifecycleR
   if (request.operation === "electron.dev.start") return await start(request);
   if (request.operation === "electron.dev.inspect") {
     const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
-    const status = await observeElectronDevDiagnostics(request.controlRuntimeRoot, current);
+    const status = await observeElectronDiagnostics(request.controlRuntimeRoot, current);
     return Object.freeze({ operation: request.operation, schemaVersion: 1 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status, cdp: await inspectElectronCdpStatus(status) });
   }
   if (request.operation === "electron.dev.status") {
     const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
-    return Object.freeze({ operation: request.operation, schemaVersion: 1 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status: await observeElectronDevDiagnostics(request.controlRuntimeRoot, current) });
+    return Object.freeze({ operation: request.operation, schemaVersion: 1 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status: await observeElectronDiagnostics(request.controlRuntimeRoot, current) });
   }
   const stopped = await stopSidecar(stamp(request));
   return Object.freeze({ operation: request.operation, schemaVersion: 1 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), stopped });

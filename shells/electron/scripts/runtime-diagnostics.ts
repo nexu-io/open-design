@@ -11,7 +11,7 @@ function logRoots(value: unknown): readonly LogRoot[] {
 }
 
 /** Diagnostic locations survive exit; process state and CDP never do. */
-export async function observeElectronDevDiagnostics(controlRuntimeRoot: string, status: unknown): Promise<unknown> {
+export async function observeElectronDiagnostics(controlRuntimeRoot: string, status: unknown): Promise<unknown> {
   const path = join(controlRuntimeRoot, "diagnostic-log-roots.json");
   if (status != null) {
     const roots = logRoots(typeof status === "object" && "logRoots" in status ? status.logRoots : null);

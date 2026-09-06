@@ -41,12 +41,7 @@ type RuntimeLifecycleReceipt = Readonly<{
     remainingPids: readonly number[];
     stoppedPids: readonly number[];
   }>;
-  standalone?: Readonly<{
-    remainingPids: readonly number[];
-    stoppedPids: readonly number[];
-  }> | null;
   remainingPids?: readonly number[];
-  retainedStandaloneReferences?: number;
   schemaVersion: 1;
 }>;
 
@@ -62,6 +57,7 @@ async function invokeElectronRuntimeLifecycle(
   await writeFile(requestPath, `${JSON.stringify({
     schemaVersion: 1,
     channel: runtimeChannel(config),
+    controlRuntimeRoot: root,
     namespace: config.namespace,
     ...request,
   }, null, 2)}\n`, "utf8");
@@ -417,7 +413,7 @@ export async function startPackedMacApp(config: ToolPackConfig): Promise<MacStar
 export async function stopPackedMacApp(config: ToolPackConfig): Promise<MacStopResult> {
   const stopped = await invokeElectronRuntimeLifecycle(config, { operation: "electron.runtime.stop" });
   const electron = stopped.electron;
-  const stoppedPids = [...new Set([...(electron?.stoppedPids ?? []), ...(stopped.standalone?.stoppedPids ?? [])])];
+  const stoppedPids = [...new Set(electron?.stoppedPids ?? [])];
   const matchedPids = electron?.matchedPids ?? [];
   const remainingPids = [...(stopped.remainingPids ?? [])];
   return {
@@ -436,8 +432,7 @@ export async function readPackedMacLogs(config: ToolPackConfig) {
   const entries: Array<readonly [string, { lines: string[]; logPath: string }]> = [
     [APP_KEYS.ELECTRON, { lines: await readLogTail(adapterLogPath, 200), logPath: adapterLogPath }],
   ];
-  const active = await resolveReachableDesktop(config, 1_000);
-  const status = active?.status as unknown as Record<string, unknown> | undefined;
+  const status = (await invokeElectronRuntimeLifecycle(config, { operation: "electron.runtime.status" })).status as unknown as Record<string, unknown> | undefined;
   const roots = Array.isArray(status?.logRoots) ? status.logRoots : [];
   const files: Array<{ id: string; logPath: string }> = [];
   const visit = async (scope: string, root: string, current = root): Promise<void> => {
