@@ -2633,6 +2633,11 @@ export function SettingsDialog({
       byokLastUnsuccessfulTestKeyRef.current = currentConfigKey;
       return;
     }
+    // A manual test of this exact config satisfies the auto-probe's job: the
+    // deferred auto-test timer must not re-issue a duplicate request for a
+    // config key the user just exercised. Any config edit clears this ref
+    // (see the reset effect above), so genuinely new drafts still auto-probe.
+    providerAutoTestKeyRef.current = currentConfigKey;
     const controller = new AbortController();
     const revision = providerTestRevisionRef.current;
     providerTestAbortRef.current = controller;

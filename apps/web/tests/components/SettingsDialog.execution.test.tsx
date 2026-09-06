@@ -2549,6 +2549,106 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(testConnectionCalls).toHaveLength(2);
   });
 
+  // The deferred auto-probe timer used to be the flake behind the retry spec
+  // above: a manual test did not record the auto-probe's dedupe key, so on a
+  // slow runner the timer fired mid-flow and issued a third /api/test/connection
+  // for the exact config the user had just tested. Virtual clock pins the
+  // invariant deterministically: after a manual test of config K, the
+  // auto-probe for K must stay silent no matter when its timer fires.
+  it('never re-probes a manually tested config when the deferred auto-test timer fires', async () => {
+    vi.useFakeTimers();
+    try {
+      let attempt = 0;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(null);
+        }
+        if (url === '/api/workspace/context') {
+          return new Response(JSON.stringify({ context: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === '/api/memory') {
+          return new Response(
+            JSON.stringify({ enabled: true, memories: [], extraction: null }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        if (url.startsWith('/api/workspace/billing?')) {
+          return new Response(JSON.stringify({ summary: null }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        if (url === '/api/test/connection') {
+          attempt += 1;
+          return new Response(
+            JSON.stringify(
+              attempt === 1
+                ? {
+                    ok: false,
+                    kind: 'timeout',
+                    latencyMs: 30000,
+                    model: 'claude-sonnet-4-5',
+                  }
+                : {
+                    ok: true,
+                    kind: 'ok',
+                    latencyMs: 18,
+                    model: 'claude-sonnet-4-5',
+                    sample: 'pong',
+                  },
+            ),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      // Azure disables provider model discovery, so the deferred auto-probe
+      // arms through the plain 500ms branch with no model-state gates — the
+      // deterministic stand-in for every protocol's deferred probe.
+      renderSettingsDialog({
+        apiProtocol: 'azure',
+        baseUrl: 'https://byok-test.openai.azure.com',
+        apiKey: 'azure-byok-key',
+        apiVersion: '2024-02-01',
+        model: 'gpt-4o',
+      });
+
+      const connectionCalls = () => fetchMock.mock.calls.filter(
+        ([input]) => input.toString() === '/api/test/connection',
+      ).length;
+
+      fireEvent.click(screen.getByRole('button', { name: 'Test' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Retry test' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(screen.getByText(/Connected\. Replied in 18 ms/)).toBeTruthy();
+      expect(connectionCalls()).toBe(2);
+
+      // Both deferred auto-probe arms (0ms with model discovery, 500ms
+      // without) are comfortably inside this window. The manual tests above
+      // already exercised this exact config key, so the probe must not fire.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_000);
+      });
+      expect(connectionCalls()).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('marks a successful BYOK test after a config edit as success after action', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();

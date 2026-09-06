@@ -5141,7 +5141,12 @@ describe('FileViewer SVG artifacts', () => {
     expect(nextFrame?.getAttribute('src')).toContain('/api/projects/project-1/raw/second.html?v=1710000000&r=0&odPreviewBridge=scroll&odPreviewBridge=selection&odPreviewBridge=snapshot&odPreviewBridge=observability&odPreviewEpoch=');
   });
 
-  it('allows downloads in the in-tab HTML presentation iframe', { timeout: 10_000 }, async () => {
+  // Failure budget, not expected duration: this is the file's heaviest case —
+  // it renders under the full expanded index.css cascade (a multi-second jsdom
+  // stylesheet parse on a loaded CI runner) and then resolves computed styles.
+  // There are no timed waits to virtualize; 10s was calibrated on an idle
+  // machine and kept timing out under merge-queue worker contention.
+  it('allows downloads in the in-tab HTML presentation iframe', { timeout: 30_000 }, async () => {
     const file = baseFile({
       name: 'page.html',
       path: 'page.html',
