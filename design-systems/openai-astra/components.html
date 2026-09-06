@@ -195,6 +195,50 @@
       .media-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--fg); cursor: pointer; transition: background-color 200ms linear; }
       .media-btn.dim { color: var(--muted); }
       .media-btn:hover { background: var(--border-soft); }
+      /* ── Motion (page classes): fast 100ms · short 200ms linear · medium 300ms curve-d · long 400ms; curve-out-cubic = cubic-bezier(.33,1,.68,1) ── */
+      .select-trigger svg { transition: rotate 100ms linear; }
+      .site-header .btn { transition: background-color 200ms linear, color 200ms linear; }
+      .media-frame { transition: background-color 300ms cubic-bezier(0.6, 0, 0.4, 1); }
+      /* menus: opacity + 6px slide, enter 160ms / exit 120ms curve-out-cubic (page keyframes; durations inferred) */
+      .select-menu:not([hidden]), .action-menu:not([hidden]) { animation: menu-enter 160ms cubic-bezier(0.33, 1, 0.68, 1) both; }
+      @keyframes menu-enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+      /* action-menu trigger: icon at 64% opacity, 200ms ease-in-out to 100% on hover / focus / open (page CSS) */
+      .icon-btn.plain svg { opacity: 0.64; transition: opacity 200ms ease-in-out; }
+      .icon-btn.plain:hover svg, .icon-btn.plain:focus-visible svg, .icon-btn.plain[aria-expanded="true"] svg { opacity: 1; }
+      .icon-btn.plain:hover { color: var(--fg); }
+      /* chart motion (page: cues 'draw' | 'fade', trigger visibility 0.75, ease-out): lines draw, marks fade with a stagger, bars rise */
+      .plot.is-playing .line { animation: chart-draw 900ms ease-out forwards; }
+      .plot .mark { opacity: 0; }
+      .plot.is-playing .mark { animation: chart-fade 400ms ease-out forwards; }
+      .plot .bar-rect { transform-box: fill-box; transform-origin: 50% 100%; }
+      .plot.is-playing .bar-rect { animation: chart-rise 700ms ease-out both; }
+      .plot.is-static .line { animation: none; stroke-dashoffset: 0; }
+      .plot.is-static .mark { animation: none; opacity: 1; }
+      @keyframes chart-draw { to { stroke-dashoffset: 0; } }
+      @keyframes chart-fade { to { opacity: 1; } }
+      @keyframes chart-rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+      .legend span { transition: opacity 200ms ease; }
+      /* carousel (page: figures stacked, opacity 250ms cubic-bezier(.23,1,.32,1); nav 32px round buttons; ring fills linearly over the auto-advance delay, fades in 1250ms / out 250ms) */
+      .carousel-stage { display: grid; }
+      .carousel-stage > * { grid-area: 1 / 1; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1); }
+      .carousel-stage > [aria-hidden="true"] { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1), visibility 0s 250ms; }
+      .carousel-nav { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin-top: var(--space-5); }
+      .carousel-nav button { position: relative; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); cursor: pointer; transition: color 200ms linear; }
+      .carousel-nav button:hover { color: var(--muted); }
+      .carousel-nav button svg.icon { width: 16px; height: 16px; }
+      .carousel-nav .count { min-width: 56px; text-align: center; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+      .carousel-nav .ring { position: absolute; inset: 0; width: 32px; height: 32px; pointer-events: none; }
+      .carousel-nav .ring circle { fill: none; stroke: var(--fg); stroke-width: 1.5; transform: rotate(-90deg); transform-origin: 50% 50%; stroke-dasharray: 94.25; stroke-dashoffset: 94.25; opacity: 0; transition: opacity 250ms cubic-bezier(0.33, 1, 0.68, 1); }
+      .carousel-nav .ring.active circle { animation: ring-fill 5000ms linear forwards; opacity: 1; transition: opacity 1250ms cubic-bezier(0.33, 1, 0.68, 1); }
+      .carousel-nav .ring.paused circle { animation-play-state: paused; }
+      @keyframes ring-fill { to { stroke-dashoffset: 0; } }
+      @media (prefers-reduced-motion: reduce) {
+        .select-menu:not([hidden]), .action-menu:not([hidden]) { animation: none; }
+        .plot .line { stroke-dashoffset: 0 !important; animation: none !important; }
+        .plot .mark { opacity: 1 !important; animation: none !important; }
+        .plot .bar-rect { animation: none !important; }
+        .carousel-nav .ring circle { animation: none; opacity: 0; }
+      }
       kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
 
       /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
@@ -535,11 +579,11 @@
             <text class="label" x="22" y="170" text-anchor="middle" transform="rotate(-90 22 170)">Accuracy</text>
             <line class="ref" x1="70" y1="132" x2="600" y2="132"/>
             <polyline class="line sol" points="90,258 130,164 160,146 200,158"/>
-            <circle class="sol" cx="90" cy="258" r="5"/><circle class="sol" cx="130" cy="164" r="5"/><circle class="sol" cx="160" cy="146" r="5"/><circle class="sol" cx="200" cy="158" r="5"/>
+            <circle class="sol mark" cx="90" cy="258" r="5"/><circle class="sol mark" cx="130" cy="164" r="5"/><circle class="sol mark" cx="160" cy="146" r="5"/><circle class="sol mark" cx="200" cy="158" r="5"/>
             <polyline class="line astra" points="130,150 158,96 176,92 196,84 226,66"/>
-            <g class="astra"><path d="m130 141 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path d="m158 87 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path d="m196 75 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path d="m226 57 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/></g>
-            <path class="fable" d="M574 180l7 7-7 7-7-7z"/>
-            <path class="opus" d="M612 124l7 12h-14z"/>
+            <g class="astra"><path class="mark" d="m130 141 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path class="mark" d="m158 87 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path class="mark" d="m196 75 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/><path class="mark" d="m226 57 2.6 6h6.4l-5.2 3.8 2 6.2-5.8-3.8-5.8 3.8 2-6.2-5.2-3.8h6.4z"/></g>
+            <path class="fable mark" d="M574 180l7 7-7 7-7-7z"/>
+            <path class="opus mark" d="M612 124l7 12h-14z"/>
           </svg>
           <figcaption>Agents’ Last Exam tests agents on complex professional tasks in real software. The featured model reaches a new high in the comparison shown, scoring 59.3%, compared with 55.5% and 53.6% for the two closest models.</figcaption>
         </figure>
@@ -592,13 +636,32 @@
       </section>
 
       <section id="quote">
-        <h2 class="kicker">Quote card</h2>
-        <figure class="quote">
-          <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Higgsfield</div>
-          <blockquote>“Astra gives us a significant advantage in both capability and efficiency. It successfully executes our most complex creative workflows while using up to 20% fewer tokens than other models we’ve tested.”</blockquote>
-          <figcaption>Alex Mashrabov, CEO and Co-founder, Higgsfield AI</figcaption>
-        </figure>
-        <p class="note">Solid #1f1f1f card with a #ffffff1f border, 10px radius, 32px vertical and 24px horizontal padding. Logo row 32px, quote at h5 size / 500 with -0.01em tracking, attribution 14px / 500 in #ffffff99.</p>
+        <h2 class="kicker">Quote carousel</h2>
+        <div class="carousel" data-carousel="5000">
+          <div class="carousel-stage">
+            <figure class="quote" aria-hidden="false">
+              <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Higgsfield</div>
+              <blockquote>“Astra gives us a significant advantage in both capability and efficiency. It successfully executes our most complex creative workflows while using up to 20% fewer tokens than other models we’ve tested.”</blockquote>
+              <figcaption>Alex Mashrabov, CEO and Co-founder, Higgsfield AI</figcaption>
+            </figure>
+            <figure class="quote" aria-hidden="true">
+              <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>ARC Prize</div>
+              <blockquote>“On ARC-AGI-3, Astra surpassed our human baseline on the first attempt. We had not expected that this year.”</blockquote>
+              <figcaption>Greg Kamradt, ARC Prize Foundation</figcaption>
+            </figure>
+            <figure class="quote" aria-hidden="true">
+              <div class="logo"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 18c4-9 8-9 12 0s8 9 12 0"/></svg>Lovable</div>
+              <blockquote>“We tested Astra across low, medium and high reasoning settings. At every level it finished the task with fewer tool calls than anything we had run before.”</blockquote>
+              <figcaption>Fixture attribution</figcaption>
+            </figure>
+          </div>
+            <div class="carousel-nav">
+              <button type="button" data-prev aria-label="Previous"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m10 3-5 5 5 5"/></svg></button>
+              <span class="count" aria-live="polite">1 / 3</span>
+              <button type="button" data-next aria-label="Next"><svg class="icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m6 3 5 5-5 5"/></svg><svg class="ring" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="15"/></svg></button>
+            </div>
+        </div>
+        <p class="note">899px solid #1f1f1f card with a #ffffff1f border, 6px radius, 32px vertical and 24px horizontal padding. Logo row 32px, quote at h5 size / 500 with -0.025em tracking, attribution 14px / 500 in #ffffff99. Slides stack and crossfade over 250ms cubic-bezier(.23,1,.32,1); the nav is two 32px round buttons and a tabular “n / total” counter; a 1.5px ring around “next” fills linearly over the 5s auto-advance (fades in over 1250ms, out over 250ms) and pauses on hover, focus or a hidden page. Quotes are fixture text.</p>
       </section>
 
       <section id="media">
@@ -764,7 +827,7 @@
         select(index)
         return { select, pause, resume }
       }
-      for (const list of document.querySelectorAll('.segmented[data-autoplay]')) autoplayTabs(list)
+      for (const list of document.querySelectorAll('.segmented[data-autoplay]')) autoplayTabs(list, (tab) => { const panel = document.getElementById(tab.getAttribute('aria-controls')); if (panel && typeof playChartMotion === 'function') playChartMotion(panel.querySelector('svg.plot')) })
       // Action menu (chart download): 20px icon button with no hover fill; the menu drops right-aligned, 8px below.
       function actionMenu(root, actions) {
         const trigger = root.querySelector('[aria-haspopup="menu"]')
@@ -806,6 +869,55 @@
       }
       function saveBlob(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000) }
       for (const root of document.querySelectorAll('.menu-root')) actionMenu(root, chartActions)
+      // Chart motion: lines draw, marks fade in with a stagger, bars rise. Plays when 75% of the chart is visible and again on every re-render.
+      var reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches
+      function playChartMotion(svg) {
+        if (!svg) return
+        if (reducedMotion) { svg.classList.add('is-static'); return }
+        svg.classList.remove('is-playing')
+        svg.querySelectorAll('.line').forEach((l) => { const len = l.getTotalLength ? l.getTotalLength() : 1000; l.style.strokeDasharray = len.toFixed(1); l.style.strokeDashoffset = len.toFixed(1) })
+        svg.querySelectorAll('.mark').forEach((m, i) => { m.style.animationDelay = `${450 + i * 70}ms` })
+        void svg.getBoundingClientRect()
+        svg.classList.add('is-playing')
+      }
+      const chartObserver = new IntersectionObserver((entries) => {
+        for (const e of entries) if (e.isIntersecting) { playChartMotion(e.target); chartObserver.unobserve(e.target) }
+      }, { threshold: 0.75 })
+      document.querySelectorAll('svg.plot').forEach((svg) => chartObserver.observe(svg))
+
+      // Carousel: stacked slides crossfade (250ms), 32px round prev / next, "n / total" counter, auto-advance with a progress ring.
+      // Pauses on hover, focus, hidden page or reduced motion; manual navigation restarts the delay (page: createAutoAdvance).
+      function carousel(root, { delayMs = 5000 } = {}) {
+        const slides = Array.from(root.querySelector('.carousel-stage').children)
+        const count = root.querySelector('.count'), ring = root.querySelector('.ring'), prev = root.querySelector('[data-prev]'), next = root.querySelector('[data-next]')
+        let index = 0, timer = 0, hover = false, focus = false
+        const paused = () => hover || focus || document.visibilityState !== 'visible' || reducedMotion
+        function show(i) {
+          index = (i + slides.length) % slides.length
+          slides.forEach((s, k) => s.setAttribute('aria-hidden', String(k !== index)))
+          if (count) count.textContent = `${index + 1} / ${slides.length}`
+          schedule()
+        }
+        function schedule() {
+          clearTimeout(timer)
+          if (ring) { ring.classList.remove('active', 'paused'); void ring.getBoundingClientRect(); ring.querySelector('circle').style.animationDuration = `${delayMs}ms` }
+          if (paused()) { ring?.classList.remove('active'); return }
+          ring?.classList.add('active')
+          timer = setTimeout(() => show(index + 1), delayMs)
+        }
+        function update() { if (paused()) { clearTimeout(timer); timer = 0; ring?.classList.add('paused') } else if (!timer) schedule() }
+        root.addEventListener('mouseenter', () => { hover = true; update() })
+        root.addEventListener('mouseleave', () => { hover = false; update() })
+        root.addEventListener('focusin', () => { focus = true; update() })
+        root.addEventListener('focusout', () => { focus = false; update() })
+        document.addEventListener('visibilitychange', update)
+        prev?.addEventListener('click', () => show(index - 1))
+        next?.addEventListener('click', () => show(index + 1))
+        show(0)
+        return { show }
+      }
+      for (const root of document.querySelectorAll('[data-carousel]')) carousel(root, { delayMs: Number(root.dataset.carousel) || 5000 })
+      for (const list of document.querySelectorAll('.segmented[data-autoplay]')) list.addEventListener('click', () => {})
       // Dropdown select: click opens the listbox under the pill, chevron flips, Escape / outside click closes,
       // arrows move, Enter or click selects and reports the value.
       function dropdown(root, onChange) {

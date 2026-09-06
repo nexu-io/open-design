@@ -208,6 +208,13 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 4. **Knot**: the last cue holds; six arcs each own one sixth of the flow, so the ring keeps moving while it stays.
 - Scrolling back reverses every stage deterministically; the same seeds put every star back in the same place.
 
+### Component Motion (page transition classes)
+- Colour changes on pills, tabs and CTAs: `300ms cubic-bezier(0.6, 0, 0.4, 1)`. Links and footer links: `250ms` linear. Icon buttons, logo strip, header pills: `200ms` linear. Chevrons and other transforms: `100ms`. Header surface: `400ms cubic-bezier(0.33, 1, 0.68, 1)`.
+- Menus (select listbox, chart action menu): fade in with a `6px` slide from their edge, `160ms` in / `120ms` out on `cubic-bezier(0.33, 1, 0.68, 1)` (durations inferred; the keyframes are the page's). The action-menu icon rests at `64%` opacity and reaches `100%` over `200ms ease-in-out` on hover, focus or open.
+- Charts play a motion cue once `75%` visible and again on every re-render: line marks *draw* (stroke), point marks and labels *fade* with a short stagger, bars rise; easing `ease-out`. Legend entries fade over `200ms`.
+- Carousels: slides stack and crossfade over `250ms cubic-bezier(0.23, 1, 0.32, 1)`; auto-advance delay `5s` (slow `10s`, fast `3s`), paused on hover, focus, hidden page or reduced motion, restarted by manual navigation. The progress ring around “next” fills linearly over the delay, fades in over `1250ms` and out over `250ms` on `cubic-bezier(0.33, 1, 0.68, 1)`.
+- Media play overlay: `500ms ease-in-out` opacity. Media frame background: `300ms cubic-bezier(0.6, 0, 0.4, 1)`.
+
 ### Rules
 - Only the stars respond to scroll. Copy, buttons and images never parallax, pin, or fade on scroll.
 - No scroll-jacking. Native scroll, passive listeners, one `requestAnimationFrame` per scroll event.
