@@ -128,6 +128,10 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - Hairline pill container (`1px #ffffff33`, `4px` inner padding, `4px` gap). Items are `40px` pills, `12px 16px` padding, `14px / 500`; the selected item fills `#ffffff1f`, hover `#ffffff14`. Used to switch charts and benchmark views.
 - Autoplay: every `6s` the next tab is selected and its linked panel switches. Inside the selected pill a `#ffffff33` countdown fill (`absolute inset-0`, radius inherited, behind the label) holds at `scaleX(0)` for the first third of the cycle, then grows left-to-right linearly to `scaleX(1)`. Hover over the tabs, leaving the viewport, or hiding the page pauses the fill (`animation-play-state: paused`, resumed with a negative `animation-delay`); a click switches at once and restarts the cycle. Under reduced motion there is no fill and no autoplay.
 
+### Select (dropdown)
+- Trigger is the glass pill (`#ffffff1f`, `36–40px`, `14px / 500`, `12px` chevron with `0.3em` gap). Open state adds the `1px #ffffff33` ring and flips the chevron `180°` over `150ms`.
+- Menu drops `8px` below, left-aligned: `#1f1f1f` panel, `1px #ffffff14` border, `12px` radius, `8px` padding, at least as wide as the trigger (`190px` minimum, `max-content`). Options are `40px` rows with `16px` side padding, `10px` radius, `14px / 500`; hover `#ffffff14`, the selected option filled `#ffffff1f`. Escape, arrow keys, Enter and outside click behave as a native listbox. Used to switch a chart's axis (API cost vs output tokens).
+
 ### Chart Card
 - `16px` radius, `1px #ffffff33` border, `32px` padding, black fill. Header row: title at h4 size, a glass select pill (`API Cost ▾`) beneath it, a download icon button on the right.
 - Legend: `17px` labels with shape markers per series (star, circle, diamond, triangle) and a dashed swatch for "reported score only". Plot: white `1px` axes, mono `13px` ticks, `17px` axis titles, dashed reference line, `2px` series lines with `5px` markers.

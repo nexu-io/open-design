@@ -210,8 +210,19 @@
       .chart-card .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
       .chart-card h3 { margin: 0 0 var(--space-3); font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
       .chart-card .chart-head .icon-btn { color: var(--muted); }
-      .chart-card .select { height: 40px; min-height: 32px; gap: 0.3em; }
-      .chart-card .select svg { width: 14px; height: 14px; }
+      .chart-card .select-trigger { height: 40px; min-height: 32px; gap: 0.3em; }
+      .chart-card .select-trigger svg { width: 14px; height: 14px; }
+      /* ── Select (dropdown): glass trigger pill; menu on #1f1f1f, 12px radius, 8px padding, 40px options, selected #ffffff1f, chevron flips ── */
+      .select { position: relative; display: inline-block; }
+      .select-trigger[aria-expanded="true"] { box-shadow: var(--elev-ring); }
+      .select-trigger svg { transition: rotate var(--motion-fast); }
+      .select-trigger[aria-expanded="true"] svg { rotate: 180deg; }
+      .select-menu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; min-width: max(100%, 190px); width: max-content; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
+      .select-menu[hidden] { display: none; }
+      .select-menu li { display: flex; align-items: center; min-height: 40px; padding: 0 var(--space-4); border-radius: var(--radius-md); font: 500 var(--text-sm) / 1 var(--font-body); letter-spacing: 0; color: var(--fg); cursor: pointer; }
+      .select-menu li + li { margin-top: var(--space-1); }
+      .select-menu li:hover, .select-menu li:focus-visible { background: var(--border-soft); outline: none; }
+      .select-menu li[aria-selected="true"] { background: #ffffff1f; }
       .legend { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); margin: var(--space-5) 0 var(--space-4); font-size: var(--text-base); letter-spacing: -0.01em; }
       .legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
       .legend svg { width: 22px; height: 22px; }
@@ -461,7 +472,13 @@
           <div class="chart-head">
             <div>
               <h3>Agents’ Last Exam</h3>
-              <button class="btn btn-glass select" type="button" aria-haspopup="listbox">API Cost <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+              <div class="select" data-select="ale-axis">
+                <button class="btn btn-glass select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false"><span data-select-label>API Cost</span> <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m4 6 4 4 4-4"/></svg></button>
+                <ul class="select-menu" role="listbox" aria-label="X axis" hidden>
+                  <li role="option" aria-selected="true" data-value="cost">API Cost</li>
+                  <li role="option" aria-selected="false" data-value="tokens">Output tokens</li>
+                </ul>
+              </div>
             </div>
             <button class="icon-btn" type="button" aria-label="Download data"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8m-3-3 3 3 3-3M3 13h10"/></svg></button>
           </div>
@@ -478,8 +495,8 @@
             <g class="tick" text-anchor="end">
               <text x="60" y="24">65%</text><text x="60" y="80">60%</text><text x="60" y="136">55%</text><text x="60" y="192">50%</text><text x="60" y="248">45%</text><text x="60" y="304">35%</text>
             </g>
-            <g class="tick" text-anchor="middle"><text x="70" y="326">$0</text><text x="247" y="326">$10</text><text x="424" y="326">$20</text><text x="600" y="326">$30</text></g>
-            <text class="label" x="335" y="352" text-anchor="middle">API Cost</text>
+            <g class="tick" text-anchor="middle" data-x-ticks><text x="70" y="326">$0</text><text x="247" y="326">$10</text><text x="424" y="326">$20</text><text x="600" y="326">$30</text></g>
+            <text class="label" x="335" y="352" text-anchor="middle" data-x-label>API Cost</text>
             <text class="label" x="22" y="170" text-anchor="middle" transform="rotate(-90 22 170)">Accuracy</text>
             <line class="ref" x1="70" y1="132" x2="600" y2="132"/>
             <polyline class="line sol" points="90,258 130,164 160,146 200,158"/>
@@ -522,7 +539,7 @@
           <figcaption>OSWorld runs real desktop tasks end to end. Fixture values; the panel switches when the tab’s countdown completes.</figcaption>
         </figure>
         </div>
-        <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a glass select pill, a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
+        <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a glass select pill that opens a dropdown (menu on #1f1f1f, 12px radius, 8px padding, 40px options with the selected one filled #ffffff1f, chevron flips; Escape, arrows and outside click all work), a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
       </section>
 
       <section id="quote">
@@ -680,6 +697,36 @@
         return { select, pause, resume }
       }
       for (const list of document.querySelectorAll('.segmented[data-autoplay]')) autoplayTabs(list)
+      // Dropdown select: click opens the listbox under the pill, chevron flips, Escape / outside click closes,
+      // arrows move, Enter or click selects and reports the value.
+      function dropdown(root, onChange) {
+        const trigger = root.querySelector('.select-trigger')
+        const label = root.querySelector('[data-select-label]') || trigger
+        const menu = root.querySelector('.select-menu')
+        const options = Array.from(menu.querySelectorAll('[role="option"]'))
+        options.forEach((o) => { o.tabIndex = -1 })
+        const open = () => { menu.hidden = false; trigger.setAttribute('aria-expanded', 'true'); (options.find((o) => o.getAttribute('aria-selected') === 'true') || options[0]).focus() }
+        const close = (focusBack = true) => { if (menu.hidden) return; menu.hidden = true; trigger.setAttribute('aria-expanded', 'false'); if (focusBack) trigger.focus() }
+        const select = (o) => { options.forEach((x) => x.setAttribute('aria-selected', String(x === o))); label.textContent = o.textContent.trim(); close(); onChange?.(o.dataset.value, o) }
+        trigger.addEventListener('click', () => (menu.hidden ? open() : close()))
+        options.forEach((o, i) => {
+          o.addEventListener('click', () => select(o))
+          o.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') { e.preventDefault(); options[(i + 1) % options.length].focus() }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); options[(i - 1 + options.length) % options.length].focus() }
+            else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(o) }
+            else if (e.key === 'Escape') { e.preventDefault(); close() }
+          })
+        })
+        trigger.addEventListener('keydown', (e) => { if (e.key === 'ArrowDown') { e.preventDefault(); open() } })
+        document.addEventListener('pointerdown', (e) => { if (!root.contains(e.target)) close(false) })
+        return { open, close, select }
+      }
+      const AXES = { cost: { ticks: ['$0', '$10', '$20', '$30'], label: 'API Cost' }, tokens: { ticks: ['0', '10k', '20k', '30k'], label: 'Output tokens' } }
+      dropdown(document.querySelector('[data-select="ale-axis"]'), (value) => {
+        const axis = AXES[value]; const ticks = document.querySelectorAll('[data-x-ticks] text')
+        ticks.forEach((t, i) => { t.textContent = axis.ticks[i] }); document.querySelector('[data-x-label]').textContent = axis.label
+      })
     </script>
   </body>
 </html>
