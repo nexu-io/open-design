@@ -14632,12 +14632,18 @@ function HtmlViewer({
     // That was the first two versions of this probe, and the lane was right to
     // stay green on them. Two animation frames put the white on screen first.
     if (typeof document !== 'undefined') {
-      const flashed = Array.from(document.querySelectorAll<HTMLElement>('iframe'));
-      for (const frame of flashed) frame.style.visibility = 'hidden';
+      // A white sheet over everything, not a hidden iframe. Hiding the frame
+      // uncovers the presentation backdrop, which is opaque and dark — the
+      // lab's blank detector asks whether the surface is WHITE, so a dark
+      // uncovered ground is correctly not a blank. This is the observable the
+      // lane exists to catch: leaving presentation shows the user a white
+      // screen for 600 ms.
+      const flash = document.createElement('div');
+      flash.setAttribute('data-injected-defect', 'presentation-exit-flash');
+      flash.style.cssText = 'position:fixed;inset:0;background:#ffffff;z-index:2147483647;pointer-events:none';
+      document.body.appendChild(flash);
       requestAnimationFrame(() => requestAnimationFrame(() => {
-        setTimeout(() => {
-          for (const frame of flashed) frame.style.visibility = '';
-        }, 600);
+        setTimeout(() => { flash.remove(); }, 600);
         finishClosingInTabPresentation();
       }));
       return;
