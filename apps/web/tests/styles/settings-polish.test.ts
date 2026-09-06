@@ -7,6 +7,7 @@ const indexCss = readFileSync(new URL('../../src/index.css', import.meta.url), '
 const expandedIndexCss = readExpandedIndexCss();
 const mentionHomeCss = readFileSync(new URL('../../src/styles/workspace/mention-home.css', import.meta.url), 'utf8');
 const artifactsCss = readFileSync(new URL('../../src/styles/workspace/artifacts.css', import.meta.url), 'utf8');
+const memoryCss = readFileSync(new URL('../../src/styles/viewer/memory.css', import.meta.url), 'utf8');
 
 function cssBlock(css: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -88,5 +89,17 @@ describe('settings polish CSS', () => {
     expect(ruleValue(label, 'white-space')).toBe('normal');
     expect(ruleValue(actions, 'display')).toBe('grid');
     expect(ruleValue(actions, 'grid-template-columns')).toBe('1fr 1fr');
+  });
+
+  it('keeps the disabled design-system import submit button label readable (issue #2685)', () => {
+    const disabled = cssBlock(memoryCss, '.library-install-submit:disabled');
+
+    // Prior treatment used var(--text-muted) on var(--bg-subtle), which kept
+    // the label below WCAG AA 4.5:1 in both light and dark themes when the
+    // local-path field was empty and the import button fell back to its
+    // disabled state. var(--text) keeps the disabled affordance visually quiet
+    // while preserving readable label contrast.
+    expect(ruleValue(disabled, 'color')).toBe('var(--text)');
+    expect(ruleValue(disabled, 'background')).toBe('var(--bg-subtle)');
   });
 });
