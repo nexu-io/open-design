@@ -250,7 +250,9 @@ describe("postinstall script contract", () => {
     expect(dependencySpecifier(rootManifest, "@open-design/daemon")).toBe("workspace:*");
     expect(targets.indexOf("packages/release")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/contracts")).toBeGreaterThanOrEqual(0);
+    expect(targets.indexOf("packages/metatool")).toBeGreaterThanOrEqual(0);
     expect(targets.indexOf("packages/release")).toBeLessThan(targets.indexOf("packages/contracts"));
+    expect(dependencySpecifier(readJson("tools/release/package.json"), "@open-design/metatool")).toBe("workspace:*");
 
   });
 
@@ -298,6 +300,11 @@ describe("postinstall script contract", () => {
         name: "@open-design/components",
       });
       writeTarget(sandbox, "packages/download", { name: "@open-design/download" });
+      writeTarget(sandbox, "packages/metatool", { name: "@open-design/metatool" });
+      writeTarget(sandbox, "tools/release", {
+        dependencies: { "@open-design/metatool": "workspace:*" },
+        name: "@open-design/tools-release",
+      });
       const invocationLog = writePnpmStub(sandbox);
 
       const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "2" });
@@ -307,6 +314,7 @@ describe("postinstall script contract", () => {
       const events = readStubEvents(invocationLog);
       expect(eventIndex(events, "done", "packages/release")).toBeLessThan(eventIndex(events, "start", "packages/contracts"));
       expect(eventIndex(events, "done", "packages/contracts")).toBeLessThan(eventIndex(events, "start", "packages/components"));
+      expect(eventIndex(events, "done", "packages/metatool")).toBeLessThan(eventIndex(events, "start", "tools/release"));
       expect(events.filter((event) => event.event === "start").map((event) => event.target)).toContain("packages/download");
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
