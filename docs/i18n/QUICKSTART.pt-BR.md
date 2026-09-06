@@ -263,7 +263,7 @@ location /api/ {
 | Modo | Valor no picker | Como uma requisição flui |
 |---|---|---|
 | **Local CLI** (default quando o daemon detecta um agente) | "Local CLI" | Frontend → daemon `/api/chat` → `spawn(<agent>, ...)` → eventos estruturados de ferramenta/arquivo via SSE → arquivos do projeto → preview. CLIs plain-stream usam o caminho text-artifact. |
-| **API mode** (fallback / sem CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → SSE do provider normalizado para `delta/end/error` → parser de `<artifact>` → preview |
+| **API mode** (fallback / sem CLI) | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Ofox" / "Azure OpenAI" / "Google Gemini" | Frontend → daemon `/api/proxy/{provider}/stream` → SSE do provider normalizado para `delta/end/error` → parser de `<artifact>` → preview |
 
 Os dois modos terminam no mesmo workspace de arquivos e preview sandboxed, mas usam contratos de entrega diferentes. Runtimes com filesystem escrevem os arquivos canônicos e não repetem seu código-fonte em `<artifact>`. Execuções plain/somente texto e BYOK não têm ferramentas de arquivo; o resultado canônico é o HTML completo em `<artifact>`. O perfil de execução é selecionado pelo transporte do runtime.
 
