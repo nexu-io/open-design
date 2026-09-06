@@ -1104,6 +1104,31 @@ describe('FileWorkspace upload input', () => {
     expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
   });
 
+  // The workspace's `streaming` prop is the composer's "actions disabled"
+  // state: it is also true for a read-only viewer of a shared project with
+  // nothing running. The building preview must key off a real run, or that
+  // viewer sees their page under a cursor captioned "thinking".
+  it('keys the building preview off a run in flight, not the disabled-actions state', () => {
+    const baseProps: React.ComponentProps<typeof FileWorkspace> = {
+      projectId: 'project-a',
+      projectKind: 'prototype',
+      files: [workspaceFile('index.html')],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: null },
+      onTabsStateChange: vi.fn(),
+    };
+
+    const { rerender } = render(<FileWorkspace {...baseProps} streaming />);
+    expect(screen.queryByTestId('design-files-building')).toBeNull();
+    expect(screen.getByTestId('design-file-row-index.html')).toBeTruthy();
+
+    rerender(<FileWorkspace {...baseProps} streaming runInFlight />);
+    expect(screen.getByTestId('design-files-building')).toBeTruthy();
+    expect(screen.queryByTestId('design-file-row-index.html')).toBeNull();
+  });
+
   it('drops the previous project folders when switching, before the new fetch resolves', async () => {
     const folder = (path: string): ProjectFolder => ({
       name: path.split('/').pop() ?? path,

@@ -2777,6 +2777,7 @@ export const ko: Dict = {
   'designFiles.newDocument': '새 문서',
   'designFiles.newDocumentTitle': '새 Markdown 문서 만들기',
   'designFiles.empty': '여기에 작업물이 표시됩니다',
+  'designFiles.buildingPreview': '전체 화면 미리보기',
   'designFiles.syncing': '팀에서 공유한 파일을 동기화하는 중…',
   'designFiles.refresh': '새로고침',
   'designFiles.delete': '삭제',

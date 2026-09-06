@@ -2993,6 +2993,7 @@ export const zhTW: Dict = {
   "designFiles.newDocument": "新增文件",
   "designFiles.newDocumentTitle": "新增一份 Markdown 文件",
   "designFiles.empty": "生成的設計會出現在這裡",
+  "designFiles.buildingPreview": "全螢幕預覽",
   "designFiles.syncing": "正在同步團隊共享的檔案…",
   "designFiles.refresh": "重新整理",
   "designFiles.delete": "刪除",

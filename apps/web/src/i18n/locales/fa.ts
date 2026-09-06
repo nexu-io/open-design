@@ -2777,6 +2777,7 @@ export const fa: Dict = {
   'designFiles.newDocument': 'سند جدید',
   'designFiles.newDocumentTitle': 'ایجاد یک سند Markdown جدید',
   'designFiles.empty': 'آفرینش‌ها اینجا نمایش داده می‌شوند',
+  'designFiles.buildingPreview': 'پیش‌نمایش تمام‌صفحه',
   'designFiles.syncing': 'در حال همگام‌سازی فایل‌های مشترک تیم…',
   'designFiles.refresh': 'بازنشانی',
   'designFiles.delete': 'حذف',

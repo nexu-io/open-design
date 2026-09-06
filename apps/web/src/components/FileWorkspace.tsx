@@ -169,6 +169,7 @@ import {
 } from './sketch-model';
 import { AnimatePresence } from 'motion/react';
 import type { ChatMessage } from '../types';
+import { runProgressSteps } from '../runtime/run-progress';
 import type { CommentSendResult } from './comment-send-result';
 
 type TranslateFn = (key: keyof Dict, vars?: Record<string, string | number>) => string;
@@ -225,6 +226,18 @@ interface Props {
   ) => Promise<FileRefreshResult | void> | FileRefreshResult | void;
   isDeck: boolean;
   streaming?: boolean;
+  /**
+   * True while a run of the current conversation is actually in flight: its
+   * events are streaming, or an active run is attached and waiting to.
+   *
+   * Deliberately separate from `streaming`, which is the composer's
+   * "actions disabled" state and is also true for a read-only viewer of a
+   * shared project, a conversation still loading, or a run with no billable
+   * principal. The Design Files building preview keys off THIS flag: a page
+   * only "takes shape" while something is writing it, and a viewer with no run
+   * in flight must see the file grid, not a live preview captioned "thinking".
+   */
+  runInFlight?: boolean;
   commentQueueOnSend?: boolean;
   commentSendDisabled?: boolean;
   openRequest?: { name: string; nonce: number } | null;
@@ -1302,6 +1315,7 @@ export function FileWorkspace({
   onRefreshFiles,
   isDeck,
   streaming,
+  runInFlight = false,
   commentQueueOnSend = false,
   commentSendDisabled = false,
   openRequest,
@@ -1643,6 +1657,12 @@ export function FileWorkspace({
     () => files.filter((file) => !isLiveArtifactImplementationPath(file.name)),
     [files],
   );
+
+  // What the Design Files building preview shows while a run is in flight:
+  // what the run is doing right now, and the steps behind it. Recomputed per
+  // streamed event by design — a tool call landing IS the update the pane is
+  // there to show.
+  const runSteps = useMemo(() => runProgressSteps(messages), [messages]);
 
   // Known-file set for the side chat's file-link routing — same shape
   // ProjectView feeds its primary ChatPane.
@@ -4284,7 +4304,8 @@ export function FileWorkspace({
             downloadPending={fileSyncBadge === 'downloading'}
             rootDirName={rootDirName}
             reloading={reloading}
-            running={Boolean(streaming)}
+            running={runInFlight}
+            runSteps={runSteps}
             files={visibleFiles}
             folders={projectFolders}
             liveArtifacts={liveArtifactEntries}

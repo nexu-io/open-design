@@ -2777,6 +2777,7 @@ export const ja: Dict = {
   'designFiles.newDocument': '新規ドキュメント',
   'designFiles.newDocumentTitle': '新しい Markdown ドキュメントを作成',
   'designFiles.empty': 'ここに作品が表示されます',
+  'designFiles.buildingPreview': '全画面プレビュー',
   'designFiles.syncing': 'チームで共有されたファイルを同期中…',
   'designFiles.refresh': '更新',
   'designFiles.delete': '削除',

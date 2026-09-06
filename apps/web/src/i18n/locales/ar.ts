@@ -2777,6 +2777,7 @@ export const ar: Dict = {
   'designFiles.newDocument': 'مستند جديد',
   'designFiles.newDocumentTitle': 'إنشاء مستند Markdown جديد',
   'designFiles.empty': 'ستظهر الإبداعات هنا',
+  'designFiles.buildingPreview': 'معاينة بملء الشاشة',
   'designFiles.syncing': 'جارٍ مزامنة الملفات المشتركة مع الفريق…',
   'designFiles.refresh': 'تحديث',
   'designFiles.delete': 'حذف',

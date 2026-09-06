@@ -2777,6 +2777,7 @@ export const uk: Dict = {
   'designFiles.newDocument': 'Новий документ',
   'designFiles.newDocumentTitle': 'Створити новий документ Markdown',
   'designFiles.empty': 'Тут з\'являться ваші роботи',
+  'designFiles.buildingPreview': 'Повний перегляд',
   'designFiles.syncing': 'Синхронізація файлів, якими поділилася команда…',
   'designFiles.refresh': 'Оновити',
   'designFiles.delete': 'Видалити',

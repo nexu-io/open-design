@@ -11834,6 +11834,11 @@ export function ProjectView({
           onRefreshFiles={refreshFileWorkspace}
           isDeck={isDeck}
           streaming={currentConversationActionDisabled}
+          // The building preview needs a real run, not the disabled-actions
+          // state above (which a read-only viewer also has, with nothing
+          // running). An attached-but-not-yet-streaming run counts: it is
+          // already writing.
+          runInFlight={currentConversationStreaming || currentConversationHasActiveRun}
           commentQueueOnSend={commentQueueOnSend}
           commentSendDisabled={currentConversationQueueDisabled}
           openRequest={openRequest}

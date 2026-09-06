@@ -2777,6 +2777,7 @@ export const ptBR: Dict = {
   'designFiles.newDocument': 'Novo documento',
   'designFiles.newDocumentTitle': 'Criar um novo documento Markdown',
   'designFiles.empty': 'As criações aparecerão aqui',
+  'designFiles.buildingPreview': 'Visualização completa',
   'designFiles.syncing': 'Sincronizando os arquivos compartilhados da equipe…',
   'designFiles.refresh': 'Atualizar',
   'designFiles.delete': 'Excluir',

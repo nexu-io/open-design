@@ -2777,6 +2777,7 @@ export const hu: Dict = {
   'designFiles.newDocument': 'Új dokumentum',
   'designFiles.newDocumentTitle': 'Új Markdown-dokumentum létrehozása',
   'designFiles.empty': 'A kreációk itt jelennek meg',
+  'designFiles.buildingPreview': 'Teljes képernyős előnézet',
   'designFiles.syncing': 'A csapat megosztott fájljainak szinkronizálása…',
   'designFiles.refresh': 'Frissítés',
   'designFiles.delete': 'Törlés',

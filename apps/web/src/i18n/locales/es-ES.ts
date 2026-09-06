@@ -2777,6 +2777,7 @@ export const esES: Dict = {
   'designFiles.newDocument': 'Nuevo documento',
   'designFiles.newDocumentTitle': 'Crear un documento Markdown nuevo',
   'designFiles.empty': 'Las creaciones aparecerán aquí',
+  'designFiles.buildingPreview': 'Vista previa completa',
   'designFiles.syncing': 'Sincronizando los archivos compartidos del equipo…',
   'designFiles.refresh': 'Actualizar',
   'designFiles.delete': 'Eliminar',

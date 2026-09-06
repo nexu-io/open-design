@@ -138,6 +138,40 @@ function siteEntryDepth(file: CandidateFile): number | null {
   return path.split('/').length;
 }
 
+/**
+ * The page to watch while the agent is still building: the shallowest
+ * `index.html`, else the most recently written HTML file. Null when the project
+ * has produced no page yet.
+ *
+ * Deliberately narrower than `selectAutoOpenProducedArtifact`, which also ranks
+ * markdown and media — a build preview has nothing to render for those, and
+ * falling back to one would swap a page for a picture mid-run.
+ */
+export function selectBuildPreviewHtmlEntry(
+  files: ReadonlyArray<CandidateFile>,
+): string | null {
+  let entry: CandidateFile | null = null;
+  let entryDepth = Number.POSITIVE_INFINITY;
+  let newest: CandidateFile | null = null;
+  for (const file of files) {
+    if (file.type === 'dir') continue;
+    if (!isHtmlPreviewFile(file)) continue;
+    const depth = siteEntryDepth(file);
+    if (depth !== null && depth < entryDepth) {
+      entry = file;
+      entryDepth = depth;
+    } else if (depth !== null && depth === entryDepth && entry) {
+      if (mtimeOf(file) >= mtimeOf(entry)) entry = file;
+    }
+    if (!newest || mtimeOf(file) >= mtimeOf(newest)) newest = file;
+  }
+  return (entry ?? newest)?.name ?? null;
+}
+
+function mtimeOf(file: CandidateFile): number {
+  return typeof file.mtime === 'number' && Number.isFinite(file.mtime) ? file.mtime : 0;
+}
+
 export interface SelectAutoOpenOptions {
   // Prefer the site entry (`index.html`) among the turn's produced HTML
   // files. Website-clone turns reproduce a whole multi-page site in one run —

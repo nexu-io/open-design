@@ -2985,6 +2985,7 @@ export const zhCN: Dict = {
   "designFiles.newDocument": "新建文档",
   "designFiles.newDocumentTitle": "新建一份 Markdown 文档",
   "designFiles.empty": "生成的设计会出现在这里",
+  "designFiles.buildingPreview": "全屏预览",
   "designFiles.syncing": "正在同步团队共享的文件…",
   "designFiles.refresh": "刷新",
   "designFiles.delete": "删除",

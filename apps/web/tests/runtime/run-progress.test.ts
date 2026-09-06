@@ -76,7 +76,7 @@ describe('runProgressSteps', () => {
   it('keeps an unclassified tool, with its name for the caller to render', () => {
     const steps = runProgressSteps([assistant([toolUse('1', 'mcp__figma__export', {})])]);
     expect(steps).toEqual([
-      { id: '1', category: 'other', toolName: 'mcp__figma__export', target: null },
+      { id: '1', category: 'other', toolName: 'mcp__figma__export', target: null, anchor: null },
     ]);
   });
 
@@ -95,5 +95,74 @@ describe('runProgressSteps', () => {
     expect(steps).toHaveLength(12);
     // Newest first: the cap drops the oldest calls, not the current one.
     expect(steps[0]?.target).toBe('file-39.html');
+  });
+});
+
+// The anchor is what lets a live preview scroll to the part being written: a
+// literal run of visible text taken from the tool's own input. It exists only
+// where it can point at something — an HTML page the step actually wrote.
+describe('runProgressSteps anchors', () => {
+  it('takes the replacement text of an html edit', () => {
+    const [step] = runProgressSteps([
+      assistant([
+        toolUse('1', 'Edit', {
+          file_path: '/tmp/project/index.html',
+          old_string: '<h1>Old</h1>',
+          new_string: '<h1 class="hero">Studio Nine, a design practice</h1>',
+        }),
+      ]),
+    ]);
+    expect(step?.anchor).toBe('Studio Nine, a design practice');
+  });
+
+  it('takes the LAST edit of a multi-edit, which is where the step ended up', () => {
+    const [step] = runProgressSteps([
+      assistant([
+        toolUse('1', 'MultiEdit', {
+          file_path: 'index.html',
+          edits: [
+            { old_string: 'a', new_string: '<p>The first paragraph of copy</p>' },
+            { old_string: 'b', new_string: '<p>The closing paragraph of copy</p>' },
+          ],
+        }),
+      ]),
+    ]);
+    expect(step?.anchor).toBe('The closing paragraph of copy');
+  });
+
+  it('takes the tail of a whole-file write — the part just finished', () => {
+    const [step] = runProgressSteps([
+      assistant([
+        toolUse('1', 'Write', {
+          file_path: 'index.html',
+          content: '<html><body><h1>A portfolio index</h1><footer>Contact the studio</footer></body></html>',
+        }),
+      ]),
+    ]);
+    expect(step?.anchor).toBe('Contact the studio');
+  });
+
+  it('has no anchor when the step wrote no visible html text', () => {
+    const steps = runProgressSteps([
+      assistant([
+        toolUse('1', 'Read', { file_path: 'index.html' }),
+        toolUse('2', 'Edit', { file_path: 'site.css', new_string: '.hero { color: red; }' }),
+        toolUse('3', 'Edit', {
+          file_path: 'index.html',
+          new_string: '<style>.hero{color:red}</style>',
+        }),
+        toolUse('4', 'Bash', { command: 'pnpm build' }),
+      ]),
+    ]);
+    expect(steps.map((step) => step.anchor)).toEqual([null, null, null, null]);
+  });
+
+  it('ignores a run of text too short to point at anything in particular', () => {
+    const [step] = runProgressSteps([
+      assistant([
+        toolUse('1', 'Edit', { file_path: 'index.html', new_string: '<button>OK</button>' }),
+      ]),
+    ]);
+    expect(step?.anchor).toBeNull();
   });
 });

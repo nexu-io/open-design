@@ -10,6 +10,10 @@ import {
   buildPreviewObservabilityBridge,
 } from '@open-design/contracts/runtime/preview-observability';
 import {
+  PREVIEW_BUILD_FOCUS_BRIDGE_MARKER,
+  buildPreviewBuildFocusBridge,
+} from '@open-design/contracts/runtime/preview-build-focus';
+import {
   buildPreviewFocusGuard,
   buildPreviewRedirectGuard,
   buildPreviewSandboxShim,
@@ -1584,6 +1588,12 @@ function wantsUrlPreviewObservabilityBridge(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'observability' || token === 'errors' || token === 'diagnostics');
 }
 
+/** The build-focus bridge: lets the host park a cursor on the part of the page
+ *  the agent is writing right now (see the contracts module for the protocol). */
+function wantsUrlPreviewBuildFocusBridge(value: unknown): boolean {
+  return previewBridgeTokens(value).some((token) => token === 'buildfocus' || token === 'build-focus');
+}
+
 function wantsUrlPreviewSandboxGuard(value: unknown): boolean {
   return previewBridgeTokens(value).some((token) => token === 'sandbox' || token === 'storage');
 }
@@ -1638,7 +1648,15 @@ function injectAfterHeadOpen(html: string, marker: string, injection: string): s
 
 function injectUrlPreviewBridge(
   html: string,
-  bridge: 'scroll' | 'selection' | 'snapshot' | 'observability' | 'sandbox' | 'focus' | 'redirect',
+  bridge:
+    | 'scroll'
+    | 'selection'
+    | 'snapshot'
+    | 'observability'
+    | 'buildfocus'
+    | 'sandbox'
+    | 'focus'
+    | 'redirect',
 ): string {
   if (bridge === 'sandbox') {
     return injectAfterHeadOpen(html, 'data-od-sandbox-shim', buildPreviewSandboxShim());
@@ -1662,6 +1680,15 @@ function injectUrlPreviewBridge(
       buildPreviewObservabilityBridge(),
     );
   }
+  if (bridge === 'buildfocus') {
+    // Before </body>, like the scroll bridge: it walks the rendered DOM, so it
+    // must not run before the document it measures exists.
+    return injectBeforeBodyClose(
+      html,
+      PREVIEW_BUILD_FOCUS_BRIDGE_MARKER,
+      buildPreviewBuildFocusBridge(),
+    );
+  }
   if (bridge === 'scroll') {
     return injectBeforeBodyClose(html, 'data-od-url-scroll-bridge', URL_PREVIEW_SCROLL_BRIDGE);
   }
@@ -1682,6 +1709,7 @@ function applyUrlPreviewBridgesToHtml(
       wantsUrlPreviewSelectionBridge(requestedBridge) ||
       wantsUrlPreviewSnapshotBridge(requestedBridge) ||
       wantsUrlPreviewObservabilityBridge(requestedBridge) ||
+      wantsUrlPreviewBuildFocusBridge(requestedBridge) ||
       wantsUrlPreviewSandboxGuard(requestedBridge) ||
       wantsUrlPreviewFocusGuard(requestedBridge) ||
       wantsUrlPreviewRedirectGuard(requestedBridge)
@@ -1710,6 +1738,9 @@ function applyUrlPreviewBridgesToHtml(
   }
   if (wantsUrlPreviewSandboxGuard(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'sandbox');
+  }
+  if (wantsUrlPreviewBuildFocusBridge(requestedBridge)) {
+    html = injectUrlPreviewBridge(html, 'buildfocus');
   }
   if (wantsUrlPreviewScrollBridge(requestedBridge)) {
     html = injectUrlPreviewBridge(html, 'scroll');
