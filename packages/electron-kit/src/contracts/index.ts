@@ -26,6 +26,7 @@ export type ElectronShellManifest = Readonly<{
   schemaVersion: typeof ELECTRON_KIT_CONTRACT_VERSION;
   appId: string;
   productName: string;
+  iconDataUrl?: string;
   publisher: string;
   executableName: string;
   version: string;
@@ -190,6 +191,10 @@ export function validateElectronShellManifest(value: ElectronShellManifest): Ele
   if (value.productName.trim().length === 0 || value.publisher.trim().length === 0 || value.publisher.length > 128
     || value.window.title.trim().length === 0) throw new Error("Electron Shell display identity is required");
   if (!version.test(value.version)) throw new Error("invalid Electron Shell version");
+  if (value.iconDataUrl != null && (typeof value.iconDataUrl !== "string" || value.iconDataUrl.length > 2_000_000
+    || !/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u.test(value.iconDataUrl))) {
+    throw new Error("invalid Electron Shell icon: expected an embedded PNG");
+  }
   if (!Number.isSafeInteger(value.window.width) || !Number.isSafeInteger(value.window.height) || value.window.width < 320 || value.window.height < 240) {
     throw new Error("invalid Electron Shell window dimensions");
   }

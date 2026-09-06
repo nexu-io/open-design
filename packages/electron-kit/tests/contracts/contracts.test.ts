@@ -10,7 +10,7 @@ const hash = "a".repeat(64);
 
 describe("Electron integration boundary", () => {
   it("keeps channel release identity independent from Shell compatibility", () => {
-    expect(validateElectronShellManifest({
+    const manifest = validateElectronShellManifest({
       schemaVersion: 1,
       appId: "io.nexu.electron-foundation",
       productName: "Electron Foundation",
@@ -23,7 +23,11 @@ describe("Electron integration boundary", () => {
       window: { width: 960, height: 640, title: "Electron Foundation" },
       splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
       shell: { type: "electron", version: "0.1.0", buildHash: hash, digest: hash },
-    })).toMatchObject({ namespace: "electron-foundation", version: "0.1.0-dev.7", shell: { version: "0.1.0" } });
+    });
+    expect(manifest).toMatchObject({ namespace: "electron-foundation", version: "0.1.0-dev.7", shell: { version: "0.1.0" } });
+    for (const iconDataUrl of ["https://example.test/icon.png", "file:///icon.png", "data:image/svg+xml,<svg/>", "data:image/png;base64,bad"]) {
+      expect(() => validateElectronShellManifest({ ...manifest, iconDataUrl })).toThrow("expected an embedded PNG");
+    }
   });
 
   it("does not publish or implement the upstream Sidecar transport", async () => {

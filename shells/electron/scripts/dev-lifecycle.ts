@@ -12,6 +12,7 @@ import { loadElectronStandaloneAuthorityResources } from "./build-authority.ts";
 import { materializeElectronDevInstallation } from "./dev-installation.ts";
 import { inspectElectronCdpStatus } from "./cdp-inspection.ts";
 import { observeElectronDevDiagnostics } from "./dev-diagnostics.ts";
+import { waitForElectronProductReady } from "./product-readiness.ts";
 
 export const ELECTRON_DEV_LIFECYCLE_SCHEMA_VERSION = 1 as const;
 
@@ -104,9 +105,6 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     runtimeConfigPath: fileURLToPath(new URL("../config/runtime.json", import.meta.url)),
   });
   const resources = Object.freeze({ dataRoot: null, ownerPid: request.ownerPid, port: 0, runtimeRoot: request.controlRuntimeRoot });
-  // Scene assembly has validated this topology. Keep the caller's readiness
-  // budget aligned with the Shell, with a small allowance for process startup.
-  const runtimeConfig = JSON.parse(await readFile(join(prepared.scene.sceneRoot, "runtime.json"), "utf8")) as { warmup: { totalTimeoutMs: number } };
   const environment: NodeJS.ProcessEnv = { ...process.env, OD_ELECTRON_CONTROL_RESOURCES: JSON.stringify(resources) };
   for (const key of Object.keys(environment)) if (key.toUpperCase() === "ELECTRON_RUN_AS_NODE") delete environment[key];
   const launched = await launchSidecar({
@@ -120,22 +118,17 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     stamp: stamp(request),
     supervisor: { command: process.execPath, entrypoint: join(prepared.scene.sceneRoot, "supervisor.mjs") },
   });
-  const startedAt = Date.now();
-  let runtimeStatus: unknown = null;
-  while (Date.now() - startedAt < runtimeConfig.warmup.totalTimeoutMs + 5_000) {
-    runtimeStatus = await getSidecarStatus(stamp(request), { generationPid: launched.pid, timeoutMs: 800 }).catch(() => null);
-    if (runtimeStatus != null) await observeElectronDevDiagnostics(request.controlRuntimeRoot, runtimeStatus);
-    if (runtimeStatus != null && typeof runtimeStatus === "object" && "state" in runtimeStatus) {
-      if (runtimeStatus.state === "running") break;
-      if (runtimeStatus.state === "failed" || runtimeStatus.state === "stopping") throw new Error(`Electron dev startup ${runtimeStatus.state}`);
-    }
-    try { process.kill(launched.pid, 0); }
-    catch { throw new Error("Electron dev generation exited before product readiness; use tools-dev logs desktop to diagnose startup"); }
-    await new Promise((resolveWait) => setTimeout(resolveWait, 150));
-  }
-  if (runtimeStatus == null || typeof runtimeStatus !== "object" || !("state" in runtimeStatus) || runtimeStatus.state !== "running") {
-    throw new Error("Electron dev generation did not become product-ready in time; use tools-dev inspect desktop and tools-dev logs desktop to diagnose startup");
-  }
+  const runtimeStatus = await waitForElectronProductReady({
+    async readStatus() {
+      const status = await getSidecarStatus(stamp(request), { generationPid: launched.pid, timeoutMs: 800 }).catch(() => null);
+      if (status != null) await observeElectronDevDiagnostics(request.controlRuntimeRoot, status);
+      return status;
+    },
+    assertAlive() {
+      try { process.kill(launched.pid, 0); }
+      catch { throw new Error("Electron dev generation exited before product readiness; use tools-dev logs desktop to diagnose startup"); }
+    },
+  });
   return Object.freeze({
     operation: request.operation,
     schemaVersion: 1 as const,

@@ -10,6 +10,7 @@ import {
 } from "@open-design/sidecar";
 import { APP_KEYS, SIDECAR_MODES, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { inspectElectronCdpStatus } from "./cdp-inspection.ts";
+import { waitForElectronProductReady } from "./product-readiness.ts";
 
 type RequestScope = Readonly<{
   channel: string;
@@ -85,16 +86,14 @@ function standaloneStamp(request: ElectronRuntimeLifecycleRequest): SidecarStamp
   return Object.freeze({ app: "standalone", channel: request.channel, mode: SIDECAR_MODES.RUNTIME, namespace: request.namespace, source: SIDECAR_SOURCES.STANDALONE });
 }
 
-async function waitForStatus(stamp: SidecarStamp, pid: number, timeoutMs = 120_000): Promise<unknown> {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const status = await getSidecarStatus(stamp, { generationPid: pid, timeoutMs: 800 }).catch(() => null);
-    if (status != null) return status;
-    try { process.kill(pid, 0); }
-    catch { throw new Error("Electron runtime generation exited before publishing status"); }
-    await new Promise((wait) => setTimeout(wait, 150));
-  }
-  throw new Error("Electron runtime did not publish status in time");
+async function waitForStatus(stamp: SidecarStamp, pid: number): Promise<unknown> {
+  return await waitForElectronProductReady({
+    readStatus: () => getSidecarStatus(stamp, { generationPid: pid, timeoutMs: 800 }).catch(() => null),
+    assertAlive() {
+      try { process.kill(pid, 0); }
+      catch { throw new Error("Electron runtime generation exited before product readiness"); }
+    },
+  });
 }
 
 export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLifecycleRequest): Promise<unknown> {

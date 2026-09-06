@@ -1,5 +1,6 @@
 import { dirname, join } from "node:path";
 import { BrowserWindow, app } from "electron";
+import runtimeConfig from "../../../config/runtime.json" with { type: "json" };
 import { inspectElectronCdp } from "@open-design/electron-kit/runtime";
 
 import { APP_KEYS } from "@open-design/sidecar-proto";
@@ -44,6 +45,7 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
   registerSidecarProcess(stamp, controlResources);
   const cdpBootstrapUserDataRoot = app.getPath("userData");
   let state: "starting" | "running" | "failed" | "stopping" = "starting";
+  const startupDeadline = new Date(Date.now() + runtimeConfig.warmup.totalTimeoutMs).toISOString();
   // Start preflight synchronously, but do not gate observability on product
   // readiness: slow carrier acquisition must remain inspectable/stoppable.
   const running = run().then(() => {
@@ -63,6 +65,7 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
           pid: process.pid,
           startedAt: runtime.startedAt,
           state,
+          startupDeadline,
           title: window?.getTitle() ?? null,
           url: window?.webContents.getURL() ?? null,
           windowVisible: window?.isVisible() ?? false,

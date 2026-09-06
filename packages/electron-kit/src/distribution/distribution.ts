@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 
 import { Arch, build as electronBuild, Platform } from "electron-builder";
 
-import type { ElectronShellManifest } from "../contracts/index.js";
+import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
 import {
   resolveElectronWindowsInstallIdentity,
   validateElectronWindowsLifecyclePolicy,
@@ -30,6 +30,7 @@ export type BuildElectronDistributionInput = Readonly<{
 }>;
 
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
+  const manifest = validateElectronShellManifest(input.manifest);
   const policy = validateElectronDistributionPolicy(input.policy);
   const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
   const platform: ElectronDistributionReceipt["platform"] = resolveElectronDistributionPlatform(process.platform);
@@ -53,6 +54,8 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   }
   try {
     await mkdir(projectRoot, { recursive: true });
+    const iconPath = manifest.iconDataUrl == null ? undefined : join(scratchRoot, "icon.png");
+    if (iconPath != null) await writeFile(iconPath, Buffer.from(manifest.iconDataUrl!.slice("data:image/png;base64,".length), "base64"));
     await Promise.all([
       copyFile(input.scene.mainPath, join(projectRoot, "main.cjs")),
       copyFile(input.scene.rendererPreloadPath, join(projectRoot, "renderer-mount-preload.cjs")),
@@ -86,6 +89,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
           windowsLifecycle,
           windowsNsisIncludePath,
         }),
+        ...(iconPath == null ? {} : { icon: iconPath }),
         extraResources: [...input.scene.authorityResources, ...additionalResources].map((resource) => ({
           from: resource.path,
           to: resource.name,

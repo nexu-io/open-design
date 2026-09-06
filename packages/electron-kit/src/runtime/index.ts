@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 
-import { BrowserWindow, app, dialog, ipcMain, protocol } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, nativeImage, protocol } from "electron";
 import {
   type GenerationRecord,
   type StandaloneGenerationBinding,
@@ -250,6 +250,11 @@ async function runElectronShellSession(definition: ElectronShellDefinition, cont
   context.startup = new ElectronStartupAttemptFence(context.activation.attemptId);
 
   await context.startupQuit.guard(app.whenReady());
+  if (process.platform === "darwin" && presentation === "interactive" && manifest.iconDataUrl != null) {
+    const icon = nativeImage.createFromDataURL(manifest.iconDataUrl);
+    if (icon.isEmpty()) throw new Error("Electron Shell icon could not be decoded");
+    app.dock?.setIcon(icon);
+  }
   await context.startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
   const splashStartedAt = Date.now();
   if (presentation === "interactive") {

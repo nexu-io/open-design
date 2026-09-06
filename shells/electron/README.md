@@ -34,6 +34,11 @@ presentation and stage feedback; the old progress bridge and boot authority are
 not retained. `tools-dev` waits for explicit business readiness; inspect exposes
 native CDP while starting, and logs retain diagnostic locations after exit
 without preserving stale process/CDP state.
+The manifest embeds the original product PNG icon (SHA-256
+`3141cc3b348ac538c68d615cde8cf642abc0b1fb60f44a520853b499982a74cb`).
+The same bytes drive process-local macOS Dock presentation and native bundle
+icon generation; neither path depends on a Web resource server or changes Dock
+pinning preferences.
 The renderer adapter fixes its main-frame identity at mount time, opens foreign
 HTTP(S) navigation in the system browser, limits child windows to the Shell's
 own protocol host plus Blob/about:blank, and admits embedded browsers only in a
