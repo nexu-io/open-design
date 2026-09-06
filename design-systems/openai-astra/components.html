@@ -239,6 +239,36 @@
         .plot .bar-rect { animation: none !important; }
         .carousel-nav .ring circle { animation: none; opacity: 0; }
       }
+      /* ── Slide deck (measured): 669px column, aspect 959/540, #1f1f1f, 4px radius; stage 24px side padding; 56px bar with 1px #ffffff33 top rule, 12px side padding; 32px round buttons; 14px tabular counter ── */
+      .deck { display: flex; flex-direction: column; width: 100%; max-width: 669px; margin: 0 auto; aspect-ratio: 959 / 540; min-height: 240px; overflow: hidden; border-radius: 4px; background: var(--surface); color: var(--fg); pointer-events: auto; }
+      .deck:fullscreen { max-width: none; border-radius: 0; aspect-ratio: auto; }
+      .deck-body { display: flex; flex: 1; min-height: 0; }
+      .deck-thumbs { flex: 0 0 auto; width: 0; overflow: hidden; transition: width 200ms cubic-bezier(0.33, 1, 0.68, 1); }
+      .deck[data-thumbs="true"] .deck-thumbs { width: 132px; }
+      .deck-thumbs ol { box-sizing: border-box; width: 132px; height: 100%; margin: 0; padding: var(--space-2); list-style: none; display: grid; align-content: start; gap: 10px; overflow-y: auto; background: #404040; scrollbar-width: thin; scrollbar-color: #6a6a6a transparent; }
+      .deck-thumbs button { position: relative; display: block; width: 100px; aspect-ratio: 16 / 9; margin: 2px; padding: 0; border: 1px solid #ffffff33; outline: 2px solid transparent; outline-offset: 2px; border-radius: 4px; background: #ffffff; color: #000; cursor: pointer; text-align: left; overflow: hidden; font: 500 6px / 1.2 var(--font-body); transition: outline-color 200ms linear; }
+      .deck-thumbs button[aria-current="true"] { outline-color: var(--fg); }
+      .deck-thumbs button .mini { position: absolute; inset: 0; padding: 6px 30px 6px 6px; overflow: hidden; }
+      .deck-thumbs button .mini b { display: block; font-size: 8px; margin-bottom: 2px; }
+      .deck-thumbs button .badge { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #2b2b2bcc; color: var(--fg); font: 500 12px / 1 var(--font-body); }
+      .deck-stage { position: relative; flex: 1; min-width: 0; display: grid; place-items: center; padding: 18px var(--space-6); }
+      .deck-stage > .slide { grid-area: 1 / 1; width: 100%; max-width: calc(100cqh * 16 / 9); aspect-ratio: 16 / 9; overflow: hidden; box-sizing: border-box; padding: 5% 5.5%; background: #ffffff; color: #000; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: minmax(0, 1fr); gap: 6%; align-items: center; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1); }
+      .deck-stage > .slide > * { min-width: 0; min-height: 0; }
+      .deck-stage { container-type: size; }
+      .deck-stage > .slide[aria-hidden="true"] { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity 250ms cubic-bezier(0.23, 1, 0.32, 1), visibility 0s 250ms; }
+      .slide .brand { font: 500 clamp(9px, 2.2cqw, 16px) / 1 var(--font-display); letter-spacing: -0.02em; margin-bottom: clamp(8px, 4cqw, 28px); }
+      .slide h4 { margin: 0 0 clamp(6px, 3cqw, 20px); font: 500 clamp(14px, 4.6cqw, 44px) / 1.08 var(--font-display); letter-spacing: -0.03em; }
+      .slide p { margin: 0; color: #000; font: 400 clamp(7px, 2cqw, 17px) / 1.4 var(--font-body); }
+      .slide .art { justify-self: end; height: 100%; width: auto; max-width: 100%; aspect-ratio: 4 / 5; border-radius: 2px; background: radial-gradient(circle at 30% 30%, #7ab1fe, transparent 50%), radial-gradient(circle at 70% 60%, #6dcbf4, transparent 45%), radial-gradient(circle at 50% 90%, #0fd9ae, transparent 40%), #0b1a2b; }
+      .deck-bar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex-shrink: 0; height: 56px; padding: 0 var(--space-3); border-top: 1px solid var(--border); }
+      .deck-bar .center { display: flex; align-items: center; gap: var(--space-2); justify-self: center; }
+      .deck-bar .end { justify-self: end; }
+      .deck-btn { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--fg); cursor: pointer; transition: color 200ms linear; }
+      .deck-btn:hover { color: var(--muted); }
+      .deck-btn:disabled { color: #5d5d5d; cursor: default; }
+      .deck-btn svg { width: 16px; height: 16px; }
+      .deck-bar .count { min-width: 56px; text-align: center; font: 400 var(--text-sm) / 1.64 var(--font-body); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+      @media (prefers-reduced-motion: reduce) { .deck-thumbs { transition: none; } .deck-stage > .slide { transition: none; } }
       kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: var(--radius-sm); box-shadow: var(--elev-ring); font: 500 var(--text-xs) / 1.4 var(--font-mono); letter-spacing: 0; color: var(--muted); text-align: center; }
 
       /* ── Site header (page: fixed, 54px, transparent over the canvas; masked brightness backdrop, no blur) ── */
@@ -722,6 +752,22 @@
         <p class="note">Chip: 32px radius, #ffffff1f, 8px 12px, 14px / 500. Footnotes: 14px list on a two-column inline grid (12px number, 8px gap, 12px between entries), heading 14px / 400 in #ffffff99, back-links unstyled. Logo strip: 44px buttons, 8px padding, 14px in #ffffff99, 4px radius, the active one white. Media bar: 14px / 500 tabular timestamps (white | 40% white), 32px square 4px-radius buttons, 2px track.</p>
       </section>
 
+      <section id="deck">
+        <h2 class="kicker">Slide deck</h2>
+        <div class="deck" data-thumbs="false" aria-label="Slide deck">
+          <div class="deck-body">
+            <div class="deck-thumbs"><ol><li><button type="button" aria-current="true" aria-label="Slide 1"><span class="mini"><b>Meet Nova 2.</b>Nova 2 is a foundation model for the cli</span><span class="badge">1</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 2"><span class="mini"><b>Forecasts weather up to 15 days ahead.</b>Trained on decades of observations, ocea</span><span class="badge">2</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 3"><span class="mini"><b>Turns observations into forecasts of the Earth system.</b>Available through the API today.</span><span class="badge">3</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 4"><span class="mini"><b>Runs on the API.</b>One call, global coverage.</span><span class="badge">4</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 5"><span class="mini"><b>Open evaluation.</b>Benchmarks published with the model.</span><span class="badge">5</span></button></li><li><button type="button" aria-current="false" aria-label="Slide 6"><span class="mini"><b>Thanks.</b>Questions to the research team.</span><span class="badge">6</span></button></li></ol></div>
+            <div class="deck-stage"><div class="slide" aria-hidden="false"><div><div class="brand">Nova</div><h4>Meet Nova 2.</h4><p>Nova 2 is a foundation model for the climate.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Forecasts weather up to 15 days ahead.</h4><p>Trained on decades of observations, ocean and land reanalysis.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Turns observations into forecasts of the Earth system.</h4><p>Available through the API today.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Runs on the API.</h4><p>One call, global coverage.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Open evaluation.</h4><p>Benchmarks published with the model.</p></div><div class="art"></div></div><div class="slide" aria-hidden="true"><div><div class="brand">Nova</div><h4>Thanks.</h4><p>Questions to the research team.</p></div><div class="art"></div></div></div>
+          </div>
+          <div class="deck-bar">
+            <button class="deck-btn" type="button" data-thumbs-toggle aria-expanded="false" aria-label="Show slide thumbnails"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></svg></button>
+            <div class="center"><button class="deck-btn" type="button" data-prev aria-label="Previous slide"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 8H3m4-4L3 8l4 4"/></svg></button><span class="count" aria-live="polite">1 / 6</span><button class="deck-btn" type="button" data-next aria-label="Next slide"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 8h10M9 4l4 4-4 4"/></svg></button></div>
+            <button class="deck-btn end" type="button" data-fullscreen aria-label="Enter fullscreen"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 2h5v5M7 14H2V9M14 2 9 7M2 14l5-5"/></svg></button>
+          </div>
+        </div>
+        <p class="note">669px wide with a 959/540 aspect ratio, #1f1f1f, 4px radius. The stage keeps 24px side and 18px vertical padding around a white 16:9 slide that crossfades over 250ms. The 56px bar has a 1px #ffffff33 top rule, 12px side padding and a 1fr-auto-1fr grid: thumbnails toggle left, previous / “n / total” (56px, 14px tabular) / next in the centre, fullscreen right; buttons are 32px round with 16px icons, hover #ffffff99, disabled #5d5d5d. The thumbnails sidebar (132px, #404040, 100×56 white thumbs with a 1px #ffffff33 border and a 20px numbered badge, the current one ringed by a 2px white outline offset 2px) slides open over 200ms cubic-bezier(.33,1,.68,1). Arrow keys move; fullscreen uses the Fullscreen API.</p>
+      </section>
+
       <section id="panels">
         <h2 class="kicker">Panels and bands</h2>
         <div class="row" style="align-items: stretch">
@@ -917,6 +963,31 @@
         return { show }
       }
       for (const root of document.querySelectorAll('[data-carousel]')) carousel(root, { delayMs: Number(root.dataset.carousel) || 5000 })
+      // Slide deck: prev / next with a tabular counter, thumbnails sidebar (200ms width), click a thumbnail to jump, arrow keys, fullscreen.
+      function slideDeck(root) {
+        const slides = Array.from(root.querySelectorAll('.deck-stage > .slide'))
+        const thumbs = Array.from(root.querySelectorAll('.deck-thumbs button'))
+        const count = root.querySelector('.count'), prev = root.querySelector('[data-prev]'), next = root.querySelector('[data-next]')
+        let index = 0
+        function go(i) {
+          index = Math.max(0, Math.min(slides.length - 1, i))
+          slides.forEach((s, k) => s.setAttribute('aria-hidden', String(k !== index)))
+          thumbs.forEach((t, k) => t.setAttribute('aria-current', String(k === index)))
+          count.textContent = `${index + 1} / ${slides.length}`
+          prev.disabled = index === 0; next.disabled = index === slides.length - 1
+          thumbs[index]?.scrollIntoView({ block: 'nearest' })
+        }
+        prev.addEventListener('click', () => go(index - 1)); next.addEventListener('click', () => go(index + 1))
+        thumbs.forEach((t, k) => t.addEventListener('click', () => go(k)))
+        const toggle = root.querySelector('[data-thumbs-toggle]')
+        toggle.addEventListener('click', () => { const on = root.dataset.thumbs !== 'true'; root.dataset.thumbs = String(on); toggle.setAttribute('aria-expanded', String(on)) })
+        root.querySelector('[data-fullscreen]').addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen?.(); else root.requestFullscreen?.() })
+        root.tabIndex = 0
+        root.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') { e.preventDefault(); go(index + 1) } else if (e.key === 'ArrowLeft') { e.preventDefault(); go(index - 1) } })
+        go(0)
+        return { go }
+      }
+      for (const root of document.querySelectorAll('.deck')) slideDeck(root)
       for (const list of document.querySelectorAll('.segmented[data-autoplay]')) list.addEventListener('click', () => {})
       // Dropdown select: click opens the listbox under the pill, chevron flips, Escape / outside click closes,
       // arrows move, Enter or click selects and reports the value.

@@ -150,6 +150,11 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 ### Comparison Table
 - `28px` above and below, `1px #ffffff33` rule above every row and below the last, `12px` padding on every cell, cells `14px / 23px` with `-0.01em` tracking, header row `600`, missing values as a muted `-`. Wide tables keep their natural width and scroll horizontally inside the column. No zebra stripes, no highlighted winner column; emphasis comes from the copy.
 
+### Slide Deck
+- Fills the `669px` column at a `959 / 540` aspect ratio: `#1f1f1f`, `4px` radius, `overflow: hidden`. The stage keeps `24px` side and `18px` vertical padding around a white `16:9` slide that crossfades over `250ms cubic-bezier(0.23, 1, 0.32, 1)`.
+- Bar: `56px`, `1px #ffffff33` top rule, `12px` side padding, a `1fr auto 1fr` grid: thumbnails toggle on the left, previous / `n / total` (`56px` wide, `14px` tabular) / next in the centre, fullscreen on the right. Buttons are `32px` round with `16px` icons, hover `#ffffff99`, disabled `#5d5d5d`, no fill.
+- The thumbnails sidebar (`132px`, `#404040`, `100×56` white thumbs with a `1px #ffffff33` border and a `20px` numbered badge, the current one ringed by a `2px` white outline offset `2px`) slides open over `200ms cubic-bezier(0.33, 1, 0.68, 1)`; arrow keys move between slides; fullscreen uses the Fullscreen API.
+
 ### Chips, Footnotes, Logo Strip, Media Bar
 - Chip: `32px` radius, `#ffffff1f`, `8px 12px`, `14px / 500`.
 - Footnotes: heading `FOOTNOTES` at `14px / 400` in `#ffffff99` with `12px` below; entries `14px / 23px` on a two-column inline grid (`12px` number, `8px` gap, `12px` between entries) in the `669px` column; references in copy are `<sup>` links at `12px`.
@@ -213,7 +218,7 @@ The site scale is fluid between 375px and 1440px; the values below are the deskt
 - Menus (select listbox, chart action menu): fade in with a `6px` slide from their edge, `160ms` in / `120ms` out on `cubic-bezier(0.33, 1, 0.68, 1)` (durations inferred; the keyframes are the page's). The action-menu icon rests at `64%` opacity and reaches `100%` over `200ms ease-in-out` on hover, focus or open.
 - Charts play a motion cue once `75%` visible and again on every re-render: line marks *draw* (stroke), point marks and labels *fade* with a short stagger, bars rise; easing `ease-out`. Legend entries fade over `200ms`.
 - Carousels: slides stack and crossfade over `250ms cubic-bezier(0.23, 1, 0.32, 1)`; auto-advance delay `5s` (slow `10s`, fast `3s`), paused on hover, focus, hidden page or reduced motion, restarted by manual navigation. The progress ring around “next” fills linearly over the delay, fades in over `1250ms` and out over `250ms` on `cubic-bezier(0.33, 1, 0.68, 1)`.
-- Media play overlay: `500ms ease-in-out` opacity. Media frame background: `300ms cubic-bezier(0.6, 0, 0.4, 1)`.
+- Media play overlay: `500ms ease-in-out` opacity. Media frame background: `300ms cubic-bezier(0.6, 0, 0.4, 1)`. Slide deck: slides crossfade `250ms`, thumbnails sidebar width `200ms cubic-bezier(0.33, 1, 0.68, 1)`.
 
 ### Rules
 - Only the stars respond to scroll. Copy, buttons and images never parallax, pin, or fade on scroll.
