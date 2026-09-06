@@ -14,6 +14,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListResourcesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
@@ -962,6 +963,20 @@ export function localMcpResourceDefinitions() {
 
 export function createLocalMcpBriefStore() {
   return createBriefStore();
+}
+
+/** Handler body for MCP `resources/templates/list`. Returns an empty
+ * template list for now; in future this would enumerate project-level
+ * resource templates. Exported so tests can call it directly without a
+ * real server, which is the pattern used throughout this module. */
+export async function _listMcpResourceTemplates(): Promise<{
+  resourceTemplates: Array<{
+    uriPattern: string;
+    name: string;
+    description?: string;
+  }>;
+}> {
+  return { resourceTemplates: [] };
 }
 
 /** Handler body for MCP `resources/list`. Exported so tests can call it
@@ -1929,6 +1944,11 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
     const uri = String(req.params?.uri ?? '');
     return await _readMcpResource(daemonTarget, uri);
   }));
+
+  server.setRequestHandler(
+    ListResourceTemplatesRequestSchema,
+    withMcpActivity(_listMcpResourceTemplates),
+  );
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
     const name = req.params?.name;
