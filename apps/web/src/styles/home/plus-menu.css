@@ -11,6 +11,19 @@
   position: relative;
   display: inline-flex;
 }
+/* Typography ladder stand-in for the popup — same reason as the block at the
+   top of home/home-hero.css: the app-wide `body` / `button { font-weight: 600 }`
+   default ships with the rest of the entry refresh, and until then each entry
+   surface inherits it locally. The popup is portaled to document.body, so the
+   hero's and the composer's scoped ladders never reach it and its rows fell
+   back to the 400/500 the app still defaults to. `:where()` keeps the button
+   rule at element specificity, exactly where primitives.css's own sits, so a
+   control that names its weight still wins. Drop this block when the global
+   ladder lands. */
+.plus-menu__popup,
+:where(.plus-menu__popup) button {
+  font-weight: 600;
+}
 .plus-menu__trigger {
   position: relative;
   /* The base `button.icon-btn` only sets padding/font-size, so the inline SVG

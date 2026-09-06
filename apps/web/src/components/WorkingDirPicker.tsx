@@ -195,34 +195,36 @@ export function WorkingDirPicker({
             <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
           </button>
 
-          <div
-            className={styles.submenuRow}
-            onMouseEnter={() => setRecentOpen(true)}
-            onMouseLeave={() => setRecentOpen(false)}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className={styles.item}
-              aria-haspopup="menu"
-              aria-expanded={recentOpen}
-              data-testid="working-dir-recent"
-              onClick={() => setRecentOpen((v) => !v)}
+          {/* The submenu only exists when there is something to list: with no
+              recent folders it opened onto a faint empty-state line, which
+              read as a broken row rather than a menu (per product: 没有最近
+              使用的目录时不显示该项). */}
+          {recentDirs.length > 0 ? (
+            <div
+              className={styles.submenuRow}
+              onMouseEnter={() => setRecentOpen(true)}
+              onMouseLeave={() => setRecentOpen(false)}
             >
-              <Icon name="history" size={14} className={styles.itemIcon} />
-              <span>{t('homeWorkingDir.recent')}</span>
-              <Icon name="chevron-right" size={14} className={styles.itemChevron} />
-            </button>
-            {recentOpen ? (
-              <div
-                className={`${styles.flyout}${placement === 'up' ? ` ${styles.flyoutUp}` : ''}`}
-                role="menu"
-                data-testid="working-dir-recent-list"
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.item}
+                aria-haspopup="menu"
+                aria-expanded={recentOpen}
+                data-testid="working-dir-recent"
+                onClick={() => setRecentOpen((v) => !v)}
               >
-                {recentDirs.length === 0 ? (
-                  <div className={styles.empty}>{t('homeWorkingDir.recentEmpty')}</div>
-                ) : (
-                  recentDirs.map((dir) => (
+                <Icon name="history" size={14} className={styles.itemIcon} />
+                <span>{t('homeWorkingDir.recent')}</span>
+                <Icon name="chevron-right" size={14} className={styles.itemChevron} />
+              </button>
+              {recentOpen ? (
+                <div
+                  className={`${styles.flyout}${placement === 'up' ? ` ${styles.flyoutUp}` : ''}`}
+                  role="menu"
+                  data-testid="working-dir-recent-list"
+                >
+                  {recentDirs.map((dir) => (
                     <button
                       key={dir}
                       type="button"
@@ -238,11 +240,11 @@ export function WorkingDirPicker({
                       <span className={styles.recentName}>{basename(dir)}</span>
                       <span className={styles.recentPath}>{dir}</span>
                     </button>
-                  ))
-                )}
-              </div>
-            ) : null}
-          </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {onReferenceProject || onLinkLocalCode ? (
             <div className={styles.divider} role="separator" />

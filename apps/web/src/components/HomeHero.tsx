@@ -35,6 +35,12 @@ import type {
 import { DesignSystemPicker } from './DesignSystemPicker';
 import type { SkillSummary } from '../types';
 import { Icon, type IconName } from './Icon';
+import {
+  FileTypeIcon,
+  fileTypePreviewKind,
+  previewFallbackIcon,
+  resolveFileTypeIcon,
+} from './FileTypeIcon';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackContextLinkResult,
@@ -979,7 +985,12 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     const urls = new Map<string, string>();
     if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
       stagedFiles.forEach((file, index) => {
-        if (isImageFile(file)) urls.set(homeFileKey(file, index), URL.createObjectURL(file));
+        // Rasters, vectors AND videos all lead with a thumbnail now (per
+        // product: 视频类、图像类位图、矢量图 默认展示可打开预览), so each of
+        // them needs an object URL to draw from.
+        if (fileTypePreviewKind(file.name, file.type)) {
+          urls.set(homeFileKey(file, index), URL.createObjectURL(file));
+        }
       });
     }
     setStagedFilePreviewUrls(urls);
@@ -1672,9 +1683,23 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 {stagedFiles.map((file, index) => {
                   const key = homeFileKey(file, index);
                   const previewUrl = stagedFilePreviewUrls.get(key) ?? null;
+                  const previewKind = fileTypePreviewKind(file.name, file.type);
                   const fileBody = (
                     <>
-                      {previewUrl ? (
+                      {previewUrl && previewKind === 'video' ? (
+                        // Its own first frame is the thumbnail: `preload
+                        // metadata` is enough to paint one, and the element
+                        // stays inert (no controls, muted) — the chip is a
+                        // label, the click opens the real player.
+                        <video
+                          className="home-hero__active-thumb"
+                          src={previewUrl}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          aria-hidden
+                        />
+                      ) : previewUrl && previewKind ? (
                         <img
                           className="home-hero__active-thumb"
                           src={previewUrl}
@@ -1684,7 +1709,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                         />
                       ) : (
                         <span className="home-hero__active-icon" aria-hidden>
-                          <Icon name={isImageFile(file) ? 'image' : 'file'} size={12} />
+                          {/* The type's own mark (per product). A previewable
+                              file only lands here when its thumbnail could not
+                              be made at all. */}
+                          <FileTypeIcon
+                            name={
+                              previewKind
+                                ? previewFallbackIcon(previewKind, file.name)
+                                : resolveFileTypeIcon(file.name, file.type)
+                            }
+                            size={20}
+                          />
                         </span>
                       )}
                       {/* Name over type · size (per product): two lines inside the
@@ -2550,7 +2585,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 <Icon name="close" size={14} />
               </button>
             </div>
-            <img src={previewHomeFileUrl} alt={previewHomeFile.name} />
+            {/* A video opens as a player, everything else as a still — the
+                same card either way, so the chip's click always lands on the
+                file itself rather than on a download. */}
+            {fileTypePreviewKind(previewHomeFile.name, previewHomeFile.type) === 'video' ? (
+              <video src={previewHomeFileUrl} controls autoPlay={false} playsInline />
+            ) : (
+              <img src={previewHomeFileUrl} alt={previewHomeFile.name} />
+            )}
           </div>
         </div>,
         document.body,

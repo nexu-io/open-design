@@ -359,10 +359,3 @@
   white-space: nowrap;
 }
 
-.empty {
-  padding: 8px 10px;
-  font-size: 12px;
-  color: var(--text-muted, var(--text));
-  opacity: 0.7;
-  white-space: nowrap;
-}

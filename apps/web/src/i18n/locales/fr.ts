@@ -1000,7 +1000,6 @@ export const fr: Dict = {
   'homeWorkingDir.pick': 'Choisir un dossier',
   'homeWorkingDir.replace': 'Changer de dossier de travail',
   'homeWorkingDir.recent': 'Dossiers récents',
-  'homeWorkingDir.recentEmpty': 'Aucun dossier récent',
   'homeWorkingDir.clear': 'Retirer le dossier de travail',
   'homeWorkingDir.hint': 'Autoriser l’agent à lire ce dossier local (sans l’importer dans les fichiers de design)',
   'homeWorkingDir.missing': 'Ce dossier de travail n’existe plus — choisissez-en un autre',

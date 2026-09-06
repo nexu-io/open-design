@@ -633,15 +633,16 @@
    so the SECOND line would still be pushed right — so `.is-chip-inline` takes
    the row out of flow and indents just the first line past it, using the two
    custom props HomeHero measures (`--home-hero-chip-w`, and
-   `--home-hero-chip-text-left`, the chip's border+padding). Also owns the
-   prompt's scroll (moved off `.composer-input-editor`) so the out-of-flow chip
-   scrolls together with the text it leads. */
+   `--home-hero-chip-text-left`, the chip's border+padding).
+   It does NOT scroll: the attachment band above the prompt is its child, and a
+   scroller here carried that band away with the text — an attachment the user
+   staged has to stay in sight while they write about it. The scroll sits on
+   `.home-hero__prompt-surface` below, which holds the prompt and the lead chip
+   and nothing else. */
 .home-hero__prompt-flow {
   position: relative;
   display: block;
   min-width: 0;
-  max-height: var(--home-hero-prompt-max-height, 180px);
-  overflow-y: auto;
 }
 .home-hero__active {
   display: flex;
@@ -666,7 +667,9 @@
   display: none;
 }
 /* Staged files + the remaining context chips keep their own band above the
-   prompt; only the template chip below leads the text. */
+   prompt; only the template chip below leads the text. The band sits OUTSIDE
+   the prompt's scroller (see `.home-hero__prompt-surface`), so a long prompt
+   scrolls underneath it and what the user attached stays on screen. */
 .home-hero__prompt-flow > .home-hero__active-band {
   margin-bottom: var(--spacing-8);
 }
@@ -740,8 +743,14 @@
 /* The template chip's own line, anchored to the prompt surface (NOT the flow —
    the attachment row above must be able to push it down). Stays in flow when
    the inline treatment is off, so it simply sits above the text. */
+/* The prompt's own scroller. `position: relative` is load-bearing twice: it is
+   the containing block for the out-of-flow lead chip, and because that
+   containing block IS this scroller, the chip scrolls with the text it leads
+   instead of pinning itself to the top of the box. */
 .home-hero__prompt-surface {
   position: relative;
+  max-height: var(--home-hero-prompt-max-height, 180px);
+  overflow-y: auto;
 }
 .home-hero__lead-chip {
   display: flex;
@@ -809,8 +818,8 @@
   display: block;
   min-width: 0;
 }
-/* Scroll moved to .home-hero__prompt-flow (above) — keeping it here would fence
-   the text off from the float in its own formatting context. */
+/* Scroll moved up to `.home-hero__prompt-surface` — keeping it here would fence
+   the text off from the out-of-flow chip in its own formatting context. */
 .home-hero__prompt-flow .composer-input-editor {
   max-height: none;
   overflow: visible;

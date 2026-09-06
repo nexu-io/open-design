@@ -172,6 +172,31 @@ describe('DesignSystemPicker', () => {
     expect(screen.queryByTestId('project-ds-picker-popover')).toBeNull();
   });
 
+  // The palette trigger and the "+" trigger share one row on Home. The "+"
+  // shows the app's own `od-tooltip` bubble; the palette used to show the
+  // browser's native `title`, so the two controls hovered in two styles.
+  it('names the unselected home trigger through the app tooltip, not a native title', () => {
+    renderPicker({ variant: 'home', selectedId: null }, 'en');
+
+    const trigger = screen.getByTestId('home-hero-design-system-trigger');
+    expect(trigger.className).toContain('is-icon-only');
+    expect(trigger.className).toContain('od-tooltip');
+    expect(trigger.getAttribute('data-tooltip')).toBe('Design system');
+    expect(trigger.getAttribute('aria-label')).toBe('Design system');
+    expect(trigger.hasAttribute('title')).toBe(false);
+  });
+
+  it('drops the tooltip once the picked system is named on the pill', () => {
+    renderPicker({ variant: 'home' }, 'en');
+
+    const trigger = screen.getByTestId('home-hero-design-system-trigger');
+    expect(trigger.className).toContain('is-selected');
+    expect(trigger.className).not.toContain('od-tooltip');
+    expect(trigger.hasAttribute('data-tooltip')).toBe(false);
+    expect(trigger.hasAttribute('title')).toBe(false);
+    expect(trigger.textContent).toContain('Editorial Noir');
+  });
+
   it('uses localized picker copy', async () => {
     renderPicker({}, 'fr');
 

@@ -1000,7 +1000,6 @@ export const ru: Dict = {
   'homeWorkingDir.pick': 'Выбрать папку',
   'homeWorkingDir.replace': 'Сменить рабочую папку',
   'homeWorkingDir.recent': 'Недавние папки',
-  'homeWorkingDir.recentEmpty': 'Недавних папок нет',
   'homeWorkingDir.clear': 'Убрать рабочую папку',
   'homeWorkingDir.hint': 'Разрешите агенту читать эту локальную папку (она не импортируется в Design Files)',
   'homeWorkingDir.missing': 'Эта рабочая папка больше не существует — выберите другую',

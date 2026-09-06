@@ -2735,11 +2735,15 @@
   background: transparent;
   border-color: transparent;
 }
-.staged-preview-trigger img {
+/* Videos ride the same thumbnail box as stills — a staged .mp4 shows its own
+   first frame here (per product: 视频类默认展示可打开预览). */
+.staged-preview-trigger img,
+.staged-preview-trigger video {
   flex: 0 0 12px;
   width: 12px;
   height: 12px;
   border-radius: 3px;
+  object-fit: cover;
 }
 /* Image attachments mirror the home composer's chips: a 36px thumbnail with
    no filename text (the name lives in the tooltip / preview modal). */
@@ -2753,7 +2757,8 @@
 .staged-chip--image-file .staged-preview-trigger {
   flex: 0 0 auto;
 }
-.staged-chip--image-file .staged-preview-trigger img {
+.staged-chip--image-file .staged-preview-trigger img,
+.staged-chip--image-file .staged-preview-trigger video {
   flex: 0 0 var(--spacing-36, 36px);
   width: var(--spacing-36, 36px);
   height: var(--spacing-36, 36px);
@@ -2807,7 +2812,24 @@
   font-size: 13px;
   font-weight: 600;
 }
-.staged-preview-card > img {
+/* The close control is a circle (per product: 换成纯圆角). Left to the button
+   primitive it was a wide rounded rectangle — 36px tall, `0 16px` of padding
+   around a 14px glyph, and the small square radius. Pinning the width to the
+   height and dropping the padding is what turns the pill into a true circle;
+   `flex: 0 0 auto` keeps the long filename beside it from squashing it back
+   into an oval. */
+.staged-preview-head .icon-only {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-pill, 999px);
+}
+/* One box for both: a staged video opens in this same card as a player (the
+   home composer previews video now, not only stills), and it has to be bound
+   by the card exactly the way an image is. */
+.staged-preview-card > img,
+.staged-preview-card > video {
   display: block;
   max-width: 100%;
   max-height: min(70vh, 640px);

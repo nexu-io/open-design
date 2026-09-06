@@ -1011,7 +1011,6 @@ export const zhCN: Dict = {
   "homeWorkingDir.pick": "选择目录",
   "homeWorkingDir.replace": "修改工作目录",
   "homeWorkingDir.recent": "最近使用的目录",
-  "homeWorkingDir.recentEmpty": "暂无最近使用的目录",
   "homeWorkingDir.clear": "移除工作目录",
   "homeWorkingDir.hint": "让 Agent 可读取该本地目录（不会导入到 Design Files）",
   "homeWorkingDir.missing": "该工作目录已不存在，请重新选择",
