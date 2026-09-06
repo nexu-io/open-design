@@ -66,6 +66,14 @@
 //     bounded by the user's own gesture, and the browser is laying out for
 //     the scroll anyway — because the freeze verdict needs notch
 //     resolution.
+//     The throttle DROPS the samples it skips rather than deferring them, so
+//     the detector's `lastScrollTop` can be up to 250ms behind the scroller —
+//     long enough for the browser's own scroll anchoring to have moved the
+//     log by a four-figure number of pixels in between. That is not a bug in
+//     the throttle; it is the reason the one-notch `wheel_snap_back` verdict
+//     refuses to convict unless the layout under the scroller held still
+//     between the two samples. See `layoutHeldStill` in the detector before
+//     touching this constant.
 //   - The compositing-layer census walks the subtree with
 //     `getComputedStyle`, so it runs at most twice per chat log: once at
 //     attach (only if `requestIdleCallback` exists — see
@@ -126,6 +134,7 @@ import {
   SNAP_BACK_MIN_PX,
   type ScrollFreezeEvidence,
   type ScrollFreezeState,
+  type ScrollFreezeTrigger,
   type ScrollGeometry,
   type ScrollLayerTrigger,
   type ScrollShapeMemo,
@@ -148,6 +157,7 @@ import {
   serialiseContentSteps,
   sliceActivityBefore,
   sliceActivityWindow,
+  wheelDeltaToPx,
 } from './chat-scroll-freeze-detector';
 import {
   type ReportBlocker,
@@ -188,8 +198,6 @@ const SCROLL_SAMPLE_MIN_INTERVAL_MS = 250;
 const MAX_REPORTS_PER_SESSION = 3;
 /** Element budget for the compositing-layer census. */
 const MAX_LAYER_SCAN = 600;
-/** `deltaMode: 1` is lines. Chromium's own line height for wheel input. */
-const LINE_HEIGHT_PX = 16;
 
 /**
  * The two moving parts beside the scroller, by the markers they already
@@ -370,6 +378,89 @@ export function installChatScrollFreezeObserver(): () => void {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Subscription — the only thing this module hands to the outside world
+// ---------------------------------------------------------------------------
+//
+// The probe still observes and nothing else. It writes no DOM, it repairs
+// nothing, and the spec that pins that ("never writes to the DOM — observation
+// only, no self-heal") is unchanged. What it can do without touching that
+// promise is SAY what it decided and name the element it decided about.
+//
+// That split is the whole point. Anything that wants to act on a freeze — the
+// wheel takeover in `runtime/chat-scroll-takeover.ts` is the first, and it is
+// off by default — subscribes here and owns its own behaviour entirely. So a
+// product decision can never migrate into this file by accident, and the
+// report can never be shaped by what somebody wanted to do about it.
+//
+// Two edges, one channel:
+//
+//   * `frozen` is the verdict, emitted after the analytics event has already
+//     gone out, so a consumer cannot cost or corrupt the report.
+//   * `surface_released` is the moment the probe lets go of an element —
+//     remount, conversation switch, teardown. It is the only reliable signal a
+//     consumer has that whatever it attached to that element must come off,
+//     and it fires whether or not that surface ever froze.
+
+export type ChatScrollFreezeSignal =
+  | {
+      kind: 'frozen';
+      element: HTMLElement;
+      probeId: string;
+      trigger: ScrollFreezeTrigger;
+      /** The geometry the verdict was taken on — already read, this frame. */
+      geometry: ScrollGeometry;
+    }
+  | { kind: 'surface_released'; element: HTMLElement; probeId: string };
+
+export type ChatScrollFreezeListener = (signal: ChatScrollFreezeSignal) => void;
+
+const freezeListeners = new Set<ChatScrollFreezeListener>();
+
+/**
+ * Listen for freeze verdicts. Returns the unsubscribe.
+ *
+ * A session with no subscriber pays for one empty `Set` and one `size === 0`
+ * check on the paths below — which is the point: the consumer that exists
+ * today is behind an operator switch, and while that switch is off nothing
+ * subscribes at all.
+ */
+export function subscribeChatScrollFreeze(
+  listener: ChatScrollFreezeListener,
+): () => void {
+  freezeListeners.add(listener);
+  return () => {
+    freezeListeners.delete(listener);
+  };
+}
+
+/**
+ * How many consumers are listening.
+ *
+ * Exists so "nothing subscribed" is an assertable fact rather than an
+ * inference. A subscription costs no listener, no timer and no frame, so it is
+ * invisible to every spy a spec would otherwise reach for — which would leave
+ * the takeover's off switch pinned only by its outcome and not by its cost.
+ */
+export function chatScrollFreezeListenerCount(): number {
+  return freezeListeners.size;
+}
+
+function notifyFreezeListeners(signal: ChatScrollFreezeSignal): void {
+  if (freezeListeners.size === 0) return;
+  // A copy, so a listener that unsubscribes itself mid-notify cannot skip its
+  // neighbour.
+  for (const listener of [...freezeListeners]) {
+    try {
+      listener(signal);
+    } catch {
+      // A consumer that throws must not take the probe down with it. This
+      // module's contract is that it never becomes the reason something else
+      // broke.
+    }
+  }
+}
+
 function armWheelDiscovery(): void {
   if (!installed || wheelDiscoveryArmed) return;
   window.addEventListener('wheel', onWheelDiscover, { capture: true, passive: true });
@@ -481,9 +572,7 @@ function ingestWheel(active: Surface, event: WheelEvent): void {
  * a layout read on the input path.
  */
 function normaliseDeltaPx(deltaY: number, deltaMode: number, active: Surface): number {
-  if (deltaMode === 1) return deltaY * LINE_HEIGHT_PX;
-  if (deltaMode === 2) return deltaY * (active.geometry?.clientHeight ?? 800);
-  return deltaY;
+  return wheelDeltaToPx(deltaY, deltaMode, active.geometry?.clientHeight ?? 800);
 }
 
 function matchesChatLog(el: Element): boolean {
@@ -594,6 +683,13 @@ function detach(): void {
   }
   active.resizeObserver = null;
   armWheelDiscovery();
+  // Last, with this module's own state already settled, so a consumer is free
+  // to call back in without observing a half-torn-down surface.
+  notifyFreezeListeners({
+    kind: 'surface_released',
+    element: active.element,
+    probeId: active.probeId,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1349,15 +1445,34 @@ const WHEEL_SCROLLABLE_OVERFLOW_Y: ReadonlySet<string> = new Set([
   'overlay',
 ]);
 
-function absorbsDownwardWheel(el: HTMLElement): boolean {
+/**
+ * The same test, asked in either direction.
+ *
+ * Exported because the takeover needs it: once that thing is engaged it calls
+ * `preventDefault()` at the chat log, which cancels scrolling for every box in
+ * the chain, not just the log. So it has to ask exactly the question the
+ * suppression gate asks — "could this box legitimately have eaten the wheel" —
+ * and it has to ask it for upward wheels too. A second copy of this predicate
+ * living in the takeover is the failure mode to avoid: the gate would stay
+ * silent about a freeze the takeover then took over, or vice versa, and the
+ * two would be describing different sets while looking identical.
+ *
+ * `deltaY` is a direction, not a distance: only its sign is read.
+ */
+export function absorbsWheelInDirection(el: HTMLElement, deltaY: number): boolean {
   const travel = el.scrollHeight - el.clientHeight;
   if (travel <= EDGE_TOLERANCE_PX) return false;
-  if (travel - el.scrollTop <= EDGE_TOLERANCE_PX) return false;
+  const remaining = deltaY > 0 ? travel - el.scrollTop : el.scrollTop;
+  if (remaining <= EDGE_TOLERANCE_PX) return false;
   try {
     return WHEEL_SCROLLABLE_OVERFLOW_Y.has(getComputedStyle(el).overflowY);
   } catch {
     return false;
   }
+}
+
+function absorbsDownwardWheel(el: HTMLElement): boolean {
+  return absorbsWheelInDirection(el, 1);
 }
 
 /**
@@ -1568,6 +1683,17 @@ function report(
   };
 
   reportSafetyEvent('client_chat_scroll_frozen', { ...props });
+
+  // After the report, deliberately. Whatever a consumer does about this — and
+  // the only consumer today is an off-by-default wheel takeover — must not be
+  // able to change what was reported or whether it was sent.
+  notifyFreezeListeners({
+    kind: 'frozen',
+    element: active.element,
+    probeId: active.probeId,
+    trigger: evidence.trigger,
+    geometry,
+  });
 }
 
 /**
@@ -2124,7 +2250,10 @@ export function __resetChatScrollFreezeForTest(): void {
   }
   installed = false;
   disarmWheelDiscovery();
+  // Before the listener set is emptied, so a subscribed consumer still gets
+  // its `surface_released` and tears its own state down.
   detach();
+  freezeListeners.clear();
   uninstallHandle();
   disarmScrollWriteTrace();
   clearScrollWrites();

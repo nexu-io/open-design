@@ -26,6 +26,10 @@ import {
 } from '@open-design/sidecar';
 
 import { readCurrentAppVersionInfo } from './app-version.js';
+import {
+  CHAT_SCROLL_FORENSICS_SUMMARY_FILE,
+  buildChatScrollForensicsSummary,
+} from './diagnostics-client-evidence.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { spawnEnvForAgent } from './agents.js';
 import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
@@ -284,6 +288,19 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         },
         sources,
         summaries: {
+          // Renderer-side scene for the chat scroll freeze. Always written,
+          // even when nothing was posted, so an empty slot reads as a stated
+          // fact instead of a missing file. See diagnostics-client-evidence.ts.
+          [CHAT_SCROLL_FORENSICS_SUMMARY_FILE]: {
+            ...buildChatScrollForensicsSummary(),
+            app: {
+              version: versionInfo?.version ?? null,
+              channel: versionInfo?.channel ?? null,
+              packaged: versionInfo?.packaged ?? null,
+              platform: versionInfo?.platform ?? null,
+              arch: versionInfo?.arch ?? null,
+            },
+          },
           'recent-api-failures.json': {
             retainedLimit: 100,
             privacy:

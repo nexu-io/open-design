@@ -715,6 +715,11 @@ import {
 } from './routines.js';
 import { buildMcpInstallPayload } from './mcp-install-info.js';
 import { createDiagnosticsExportHandler } from './diagnostics-export.js';
+import {
+  CHAT_SCROLL_FORENSICS_PATH,
+  chatScrollForensicsBodyParser,
+  chatScrollForensicsHandler,
+} from './diagnostics-client-evidence.js';
 import { DIAGNOSTICS_EXPORT_PATH } from '@open-design/diagnostics';
 import {
   createProjectArchiveStream,
@@ -8045,6 +8050,18 @@ export async function startServer({
   // 0.0.0.0, etc.). The bundle contains daemon/web/desktop logs, host
   // metadata, and crash reports — same threat tier as connector / live-
   // artifact endpoints, which all use the same guard.
+  // Renderer-side chat-scroll evidence, pushed just before an export is
+  // requested. Same guard and same threat tier as the export itself: the body
+  // carries the chat log's DOM. Not a user-facing capability — it is the
+  // renderer half of `od diagnostics export`, which already exists on both
+  // surfaces — so it gets no CLI subcommand of its own.
+  app.post(
+    CHAT_SCROLL_FORENSICS_PATH,
+    requireLocalDaemonRequest,
+    chatScrollForensicsBodyParser,
+    chatScrollForensicsHandler,
+  );
+
   app.get(
     DIAGNOSTICS_EXPORT_PATH,
     requireLocalDaemonRequest,

@@ -19,6 +19,7 @@ import { installWhiteScreenDetector } from './white-screen';
 import { installPreviewIframeMessageObserver } from './iframe-error';
 import { installChatInteractionObserver } from './chat-interaction';
 import { installChatScrollFreezeObserver } from './chat-scroll-freeze';
+import { installChatScrollForensicsRetention } from './chat-scroll-forensics';
 
 let installed = false;
 
@@ -45,6 +46,11 @@ export function installWebObservability(): () => void {
     // log from the first scroll event that comes out of it and stays inert
     // until then.
     installChatScrollFreezeObserver(),
+    // Banks a full forensic scene the moment the probe calls a freeze, because
+    // the export button lives behind a route change that unmounts the chat log
+    // and takes the frozen surface with it. Costs one empty subscription until
+    // a freeze actually happens. See chat-scroll-forensics.ts.
+    installChatScrollForensicsRetention(),
   ];
 
   return () => {

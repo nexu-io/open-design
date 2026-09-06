@@ -361,12 +361,43 @@ describe('chat-scroll-freeze-blockers — why a report has not happened', () => 
     // The snap-back path reports on ONE notch, so an audit that only
     // described the four-notch streak would say "not close" about a surface
     // that is one gesture away from a report.
+    //
+    // The baseline is written as a whole — position AND the layout it was
+    // read in — because that is the only shape the detector ever produces:
+    // all three fields are set from the same geometry, in the same frame.
     const route = describeSnapBackRoute(
-      { ...createScrollFreezeState(), lastScrollTop: 800 },
+      {
+        ...createScrollFreezeState(),
+        lastScrollTop: 800,
+        lastScrollHeight: 2347,
+        lastClientHeight: 583,
+      },
       { scrollTop: 800, scrollHeight: 2347, clientHeight: 583 },
     );
     expect(route.armed).toBe(true);
+    expect(route.layoutStable).toBe(true);
     expect(route.reportsAtOrBelowPx).toBe(792);
+  });
+
+  it('says the snap-back route is shut while the layout is still moving', () => {
+    // An operator reading this after a chat refused to scroll needs the
+    // REASON, not just `armed: false`. A one-notch verdict off a baseline
+    // taken in a different layout is the browser's own scroll anchoring as
+    // often as it is a stale ceiling, so the route stays shut until one frame
+    // is sampled against a settled layout — and it says so.
+    const route = describeSnapBackRoute(
+      {
+        ...createScrollFreezeState(),
+        lastScrollTop: 1700,
+        lastScrollHeight: 3400,
+        lastClientHeight: 600,
+      },
+      // 1036px of content has left above the viewport since that reading.
+      { scrollTop: 664, scrollHeight: 2364, clientHeight: 600 },
+    );
+    expect(route.layoutStable).toBe(false);
+    expect(route.armed).toBe(false);
+    expect(route.note).toContain('scroll anchoring');
   });
 });
 

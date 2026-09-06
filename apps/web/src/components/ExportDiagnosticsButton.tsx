@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
 import { Icon } from './Icon';
+import { captureAndUploadChatScrollForensics } from '../observability/chat-scroll-forensics';
 
 // Mirrors what apps/desktop preload exposes via contextBridge. Kept inline
 // so the web bundle does not import the desktop package.
@@ -101,6 +102,15 @@ export function useDiagnosticsExport() {
   const handleClick = async () => {
     if (status.kind === 'busy') return;
     setStatus({ kind: 'busy' });
+    // Hand the daemon the renderer-side chat-scroll scene BEFORE asking it to
+    // build the bundle. The zip is assembled in the daemon, which cannot read
+    // the renderer's DOM, computed styles, running animations or the freeze
+    // probe's state — so the only way any of that reaches the file the user
+    // sends us is to push it across first and let the export drain it.
+    //
+    // Awaited on purpose: the export request must not overtake the evidence it
+    // is supposed to carry. It never throws and never fails the export.
+    await captureAndUploadChatScrollForensics();
     try {
       if (window.openDesignDesktop != null) {
         const result = await window.openDesignDesktop.exportDiagnostics();
