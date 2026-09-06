@@ -1,0 +1,33 @@
+{
+  "candidateId": "3df14a78-08a2-4a61-9b3f-b4002419d935",
+  "projectId": "cd95a210-2f9d-4213-a8ec-d75bfbcb23e9",
+  "runId": "350df5c3-f6db-46fe-a6b3-156fe2397882",
+  "conversationId": "9f4eb561-f196-429e-92a3-c845b8512366",
+  "provenance": {
+    "summary": "Detected from context/source-context.md, README.md, SKILL.md after a successful run.",
+    "detectedAt": 1788324727589
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 6685,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 8157,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 6337,
+      "copied": true
+    }
+  ]
+}
