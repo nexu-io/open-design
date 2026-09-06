@@ -1575,9 +1575,130 @@ export function createChatRunService({
     finish(run, 'failed', 1, null);
   };
 
+  /**
+   * Deterministic timeline replay of a previously recorded run.
+   *
+   * Development/diagnostics only, armed exclusively by `OD_REPLAY_EVENTS`.
+   * The invariant it exists to hold: **everything downstream of the agent
+   * child process must be the real product path.** So the replay substitutes
+   * only the *source* of the events — the agent subprocess — and then hands
+   * each recorded record to the very same `emit()` / `finish()` the live
+   * spawn path uses. Persistence, the SSE fan-out to `run.clients`, run
+   * analytics, terminal reconciliation and the web's consumption of
+   * `GET /api/runs/:id/events` are untouched and unaware.
+   *
+   * Timing is reproduced from the recording's own `timestamp` field, which is
+   * the daemon's wall clock at the original `emit()`. Records are scheduled
+   * against a single monotonic origin rather than sleeping per gap, so the
+   * replay does not accumulate the timer's own overshoot across thousands of
+   * records; records whose target instant has already passed are flushed in
+   * the same tick, which is also how the original sub-millisecond bursts
+   * (41% of gaps are 0 ms) reached the wire.
+   *
+   * Env:
+   *   OD_REPLAY_EVENTS      absolute path to a recorded events.jsonl
+   *   OD_REPLAY_DIR         directory of `<runId>/events.jsonl` recordings. The
+   *                         recording for the next turn is named in the sibling
+   *                         pointer file `<dir>/.selected`, so one daemon can
+   *                         play any recording without a restart. The pointer is
+   *                         read per run, not cached.
+   *   OD_REPLAY_SPEED       wall-clock multiplier, default 1 (2 = twice as fast)
+   *   OD_REPLAY_MAX_GAP_MS  clamp for idle gaps, default 0 = no clamp
+   */
+  const resolveReplaySource = () => {
+    const dir = process.env.OD_REPLAY_DIR;
+    const fallback = process.env.OD_REPLAY_EVENTS || null;
+    if (!dir) return fallback;
+    let selected = '';
+    try {
+      selected = fs.readFileSync(path.join(dir, '.selected'), 'utf8').trim().toLowerCase();
+    } catch {
+      return fallback;
+    }
+    if (!selected) return fallback;
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.toLowerCase().startsWith(selected))
+      .map((e) => e.name);
+    if (entries.length !== 1) {
+      throw new Error(
+        `OD_REPLAY_DIR: .selected="${selected}" matched ${entries.length} recordings in ${dir}`,
+      );
+    }
+    return path.join(dir, entries[0], 'events.jsonl');
+  };
+
+  const replayRecordedEvents = async (run, sourcePath) => {
+    const records = readDurableRunEvents(sourcePath);
+    if (records.length === 0) {
+      throw new Error(`OD_REPLAY_EVENTS: no usable records in ${sourcePath}`);
+    }
+    records.sort((a, b) => a.id - b.id);
+    const speed = Math.max(Number(process.env.OD_REPLAY_SPEED) || 1, 0.01);
+    const maxGapRaw = Number(process.env.OD_REPLAY_MAX_GAP_MS);
+    const maxGapMs = Number.isFinite(maxGapRaw) && maxGapRaw > 0 ? maxGapRaw : 0;
+
+    // Offsets are built by walking the recording so a clamped idle gap
+    // shortens the timeline from that point on instead of shifting one record.
+    const offsets = new Array(records.length);
+    let offset = 0;
+    offsets[0] = 0;
+    for (let i = 1; i < records.length; i += 1) {
+      let gap = records[i].timestamp - records[i - 1].timestamp;
+      if (!Number.isFinite(gap) || gap < 0) gap = 0;
+      if (maxGapMs > 0 && gap > maxGapMs) gap = maxGapMs;
+      offset += gap / speed;
+      offsets[i] = offset;
+    }
+
+    const originMs = Date.now();
+    const sleepUntil = (targetMs) => new Promise((resolve) => {
+      const delay = targetMs - Date.now();
+      if (delay <= 0) { resolve(); return; }
+      const timer = setTimeout(resolve, delay);
+      timer.unref?.();
+    });
+
+    for (let i = 0; i < records.length; i += 1) {
+      if (run.cancelRequested || TERMINAL_RUN_STATUSES.has(run.status)) return;
+      await sleepUntil(originMs + offsets[i]);
+      const record = records[i];
+      // Recorded payloads carry the ORIGINAL run's identity. Rewriting it is
+      // required, not cosmetic: the web keys streamed frames to the run it
+      // subscribed to, and a stale id would make every frame look foreign.
+      const data = (record.data && typeof record.data === 'object' && !Array.isArray(record.data))
+        ? { ...record.data, ...(typeof record.data.runId === 'string' ? { runId: run.id } : {}) }
+        : record.data;
+      if (record.event === 'end') {
+        finish(
+          run,
+          typeof data?.status === 'string' ? data.status : 'succeeded',
+          typeof data?.code === 'number' ? data.code : 0,
+          typeof data?.signal === 'string' ? data.signal : null,
+        );
+        return;
+      }
+      emit(run, record.event, data);
+    }
+    // A recording truncated before its `end` still has to settle the run.
+    if (!TERMINAL_RUN_STATUSES.has(run.status)) finish(run, 'succeeded', 0, null);
+  };
+
   const start = (run, starter) => {
     createRunLifecycleTracer(run).mark('start_requested');
-    void starter(run).catch((err) => {
+    const replayArmed = Boolean(process.env.OD_REPLAY_EVENTS || process.env.OD_REPLAY_DIR);
+    const effectiveStarter = replayArmed
+      ? async (r) => {
+        const source = resolveReplaySource();
+        if (!source) {
+          throw new Error(
+            'OD_REPLAY_DIR armed but no recording selected '
+            + '(write a run-id prefix into <OD_REPLAY_DIR>/.selected)',
+          );
+        }
+        return replayRecordedEvents(r, source);
+      }
+      : starter;
+    void effectiveStarter(run).catch((err) => {
       fail(run, 'AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err));
     });
     return run;
