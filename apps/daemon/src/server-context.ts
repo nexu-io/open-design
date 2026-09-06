@@ -54,6 +54,16 @@ export interface ResourceDeps {
   listAllDesignSystems: (options?: {
     workspaceId?: string | null;
     workspaceMemberId?: string | null;
+    // The caller's explicit `x-od-workspace-type` assertion CONFIRMED by
+    // membership verification (null when not asserted or not confirmed) —
+    // see `verifiedWorkspaceTypeAssertion` — or a resolver the catalog
+    // invokes only when an unattributed personal binding needs it. Never
+    // pass the raw claim or the normalized `workspaceType`.
+    workspaceTypeVerified?:
+      | 'personal'
+      | 'team'
+      | null
+      | (() => Promise<'personal' | 'team' | null>);
   }) => Promise<Array<DesignSystemSummary & { source?: string }>>;
   // The workspace a catalog read should be scoped to (#145). Data-plane reads
   // resolve it from this exact request's explicit Workspace/member identity,

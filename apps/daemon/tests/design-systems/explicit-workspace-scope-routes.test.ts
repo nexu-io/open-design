@@ -524,6 +524,11 @@ describe('design-system explicit Workspace request scope', () => {
     expect(listAllDesignSystems).toHaveBeenCalledWith({
       workspaceId: 'workspace-a',
       workspaceMemberId: null,
+      // The route hands the catalog a resolver for the caller's EXPLICIT
+      // type assertion, which the catalog settles only when an unattributed
+      // personal binding is in the list — never a normalized fallback, and
+      // never a value read off the raw header.
+      workspaceTypeVerified: expect.any(Function),
     });
   });
 

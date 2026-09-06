@@ -150,9 +150,20 @@ export function requestWithWorkspaceNavigationScope(
     ? req.query.workspaceMemberId.trim()
     : '';
   if (!workspaceId && !workspaceMemberId) return req;
+  // The asserted workspace type travels with the identity pair so gates that
+  // key on the caller's EXPLICIT type assertion (confirmed through
+  // `verifiedWorkspaceTypeAssertion`) treat a navigation read exactly like
+  // the header-carrying fetch that produced the URL. Values outside the enum
+  // are ignored, not normalized: an unasserted or garbled type must stay
+  // unasserted (fail-closed).
+  const queryWorkspaceType = typeof req.query?.workspaceType === 'string'
+    && (req.query.workspaceType === 'personal' || req.query.workspaceType === 'team')
+    ? req.query.workspaceType
+    : '';
   const headerWorkspaceId = req.get('x-od-workspace-id')?.trim() ?? '';
   const headerWorkspaceMemberId =
     req.get('x-od-workspace-member-id')?.trim() ?? '';
+  const headerWorkspaceType = req.get('x-od-workspace-type')?.trim() ?? '';
   if (
     (headerWorkspaceId || headerWorkspaceMemberId)
     && (
@@ -162,12 +173,18 @@ export function requestWithWorkspaceNavigationScope(
   ) {
     return 'conflict';
   }
+  if (queryWorkspaceType && headerWorkspaceType && headerWorkspaceType !== queryWorkspaceType) {
+    return 'conflict';
+  }
   return {
     get(name: string) {
       const normalized = name.toLowerCase();
       if (normalized === 'x-od-workspace-id') return workspaceId || undefined;
       if (normalized === 'x-od-workspace-member-id') {
         return workspaceMemberId || undefined;
+      }
+      if (normalized === 'x-od-workspace-type') {
+        return headerWorkspaceType || queryWorkspaceType || undefined;
       }
       return req.get(name);
     },
@@ -177,6 +194,86 @@ export function requestWithWorkspaceNavigationScope(
 export type OptionalWorkspaceRequestAuthorityResult =
   | { ok: true; context: WorkspaceCollabContext | null }
   | Exclude<WorkspaceRequestAuthorityResult, { ok: true }>;
+
+/**
+ * Is `binding` a legacy local personal claim with NO recorded creator member?
+ *
+ * Legacy `workspace_projects` rows written by lazy orphan adoption carry no
+ * creator member on purpose (`ensureWorkspaceProjection`,
+ * routes/project/index.ts), and the design-system startup backfill
+ * (`backfillDesignSystemWorkspaceResources`) propagates that absence into the
+ * `workspace_resources` envelope it infers from them — the normal state of an
+ * install that has never signed into a Workspace. Such a binding cannot
+ * belong to "another member": it carries no member attribution at all. The
+ * projects layer already rules that this state means "the local user's own
+ * resource" outside team views (`workspaceProjectCreatedByCurrentMember`,
+ * routes/project/index.ts); this predicate is the design-system half of the
+ * same ruling. Team-visibility and tombstoned rows are never legacy-local.
+ *
+ * Invariant this predicate protects: no lane of the daemon may manufacture a
+ * binding that every read gate categorically rejects. The backfill writes
+ * unattributed personal rows when the member is unknown, so the read gates
+ * MUST accept exactly that shape for local (non-team) callers — otherwise a
+ * claimed system becomes invisible in the scoped lane (member mismatch) AND
+ * in the headerless lane (the row reads as foreign-ownership evidence), with
+ * no lane left that can ever show it.
+ */
+export function isUnattributedLocalPersonalDesignSystemBinding(
+  binding:
+    | {
+        visibility?: string | null;
+        resourceState?: string | null;
+        createdByWorkspaceMemberId?: string | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  return Boolean(
+    binding
+    && binding.visibility === 'personal'
+    && binding.resourceState !== 'deleted'
+    && !(typeof binding.createdByWorkspaceMemberId === 'string'
+      && binding.createdByWorkspaceMemberId.trim()),
+  );
+}
+
+/**
+ * The legacy local personal design-system allowance, decided once for every
+ * gate: does THIS caller reach THIS row through the ruling above?
+ *
+ * Two facts must both hold — the row is an unattributed personal design-system
+ * binding, and the caller acts in a workspace that membership verification
+ * ESTABLISHED to be personal and that the caller also explicitly asserts to be
+ * personal (`workspaceTypeVerified`, produced only by
+ * {@link verifiedWorkspaceTypeAssertion}). A personal workspace has exactly
+ * one member — the local user — so the verified type is the ownership witness
+ * the row itself cannot carry.
+ *
+ * A raw `x-od-workspace-type` claim is never enough. The Vela verifier
+ * identifies a member by Workspace/member id and returns the directory's own
+ * type without rejecting a mismatched header, and lazy orphan adoption writes
+ * memberless rows into whatever workspace a request names — Team workspaces
+ * included — so a Team member claiming `personal` would otherwise reach every
+ * unattributed row in their Team workspace. The normalized `workspaceType`
+ * is equally unusable: it collapses a missing header to `'personal'`.
+ *
+ * Read AND mutation gates share this predicate so the UI's capability
+ * projection (`canMutate`), the mutation routes, project validation, and
+ * run-time prompt loading cannot drift apart again. No other resource type
+ * has a memberless legacy lane; plugins and skills stay strictly
+ * creator-bound.
+ */
+export function unattributedLocalPersonalDesignSystemAllowance(
+  resourceType: string,
+  row: Parameters<typeof isUnattributedLocalPersonalDesignSystemBinding>[0],
+  workspaceTypeVerified: 'personal' | 'team' | null | undefined,
+): boolean {
+  return (
+    resourceType === 'design_system'
+    && workspaceTypeVerified === 'personal'
+    && isUnattributedLocalPersonalDesignSystemBinding(row)
+  );
+}
 
 /**
  * Resolve Workspace identity for daemon-local data-plane work.
@@ -374,6 +471,123 @@ export type WorkspaceMutationAuthorityLease = {
   ) => boolean;
 };
 
+/**
+ * The caller's EXPLICIT `x-od-workspace-type` assertion, or null when the
+ * header is absent or out of enum. This is deliberately NOT the normalized
+ * `workspaceType` (`workspaceResourceContext` collapses a missing header to
+ * `'personal'`), so a Team caller cannot pass as personal by simply omitting
+ * the optional header. Mirrors `WorkspaceResourceContext.workspaceTypeAsserted`
+ * for call sites that hold only the request. It is a CLAIM: a gate that
+ * grants something on it must first confirm it through
+ * {@link verifiedWorkspaceTypeAssertion}.
+ */
+export function assertedWorkspaceScopeType(req: any): 'personal' | 'team' | null {
+  const value = headerValue(req, 'x-od-workspace-type');
+  return value === 'personal' || value === 'team' ? value : null;
+}
+
+/**
+ * Where a gate learns what a workspace's type really is.
+ *
+ * `verifiedTypeOf` is the daemon's memo of directory-established types
+ * (`WorkspaceTypeRegistry.verifiedTypeOf`, fed only by successful membership
+ * directory reads — never by request claims). `verify` is the daemon's
+ * request verifier for the lane: the membership directory in the packaged
+ * runtime (`OD_WORKSPACE_CONTEXT_SOURCE=vela`), the explicit request headers
+ * in local/dev, where they are the complete static authority by design.
+ */
+export type WorkspaceTypeWitness = {
+  verifiedTypeOf?: ((workspaceId: string) => 'personal' | 'team' | null) | undefined;
+  verify?: VerifyWorkspaceRequestAuthority | undefined;
+};
+
+/**
+ * The caller's EXPLICIT `x-od-workspace-type` assertion, CONFIRMED by
+ * membership verification — or null.
+ *
+ * Null when the caller asserted nothing (a missing header is not an
+ * assertion), when the daemon knows the workspace to be of another type, or
+ * when nothing can establish the type at all (no witness, verification
+ * failed). Only a confirmed assertion may feed a gate that grants something on
+ * "this workspace is personal" (`unattributedLocalPersonalDesignSystemAllowance`).
+ *
+ * The memo is consulted first so a hot catalog read never re-fetches the
+ * directory for a workspace the daemon has already learned, and so a workspace
+ * the directory has established stays established across an authority outage
+ * (a workspace's type never changes); only a workspace the daemon has no
+ * verified opinion about goes to the verifier, whose result — in the packaged
+ * runtime, the directory item itself — says what the workspace really is.
+ */
+export async function verifiedWorkspaceTypeAssertion(
+  req: any,
+  witness: WorkspaceTypeWitness,
+): Promise<'personal' | 'team' | null> {
+  const asserted = assertedWorkspaceScopeType(req);
+  if (!asserted) return null;
+  const claimed = workspaceResourceContextFromRequest(req);
+  if (claimed === null || claimed === 'missing') return null;
+  const established = witness.verifiedTypeOf?.(claimed.workspaceId) ?? null;
+  if (established) return established === asserted ? asserted : null;
+  if (!witness.verify) return null;
+  const verified = await verifyWorkspaceRequestAuthorityForRequest(req, witness.verify);
+  return verified.ok
+    && verified.context.workspaceId === claimed.workspaceId
+    && verified.context.workspaceType === asserted
+    ? asserted
+    : null;
+}
+
+/**
+ * A witness resolver that settles once. Lanes that hand the decision to the
+ * catalog (`listAllDesignSystems`) pass `resolve`, which the catalog invokes
+ * only when an unattributed personal row is actually in play — a local
+ * catalog read stays off the authority plane otherwise — and read back what
+ * was established through `settled` afterwards (undefined when nothing ever
+ * needed it).
+ */
+export function settledWorkspaceTypeAssertion(
+  resolve: () => Promise<'personal' | 'team' | null>,
+): {
+  resolve: () => Promise<'personal' | 'team' | null>;
+  settled: () => 'personal' | 'team' | null | undefined;
+} {
+  let settled: { value: 'personal' | 'team' | null } | null = null;
+  let pending: Promise<'personal' | 'team' | null> | null = null;
+  return {
+    resolve: () => {
+      if (settled) return Promise.resolve(settled.value);
+      pending ??= resolve().then((value) => {
+        settled = { value };
+        return value;
+      });
+      return pending;
+    },
+    settled: () => settled?.value,
+  };
+}
+
+/**
+ * Present a selected/persisted workspace scope to the verifier as if it were
+ * the request that produced it, so a lane whose identity comes from a stored
+ * partition (project creation's catalog selection) confirms the partition's
+ * type through the same witness a header-carrying request does.
+ */
+export function workspaceScopeRequest(scope: {
+  workspaceId: string;
+  workspaceMemberId: string;
+  workspaceType?: 'personal' | 'team' | null | undefined;
+}): { get(name: string): string | undefined } {
+  return {
+    get(name: string) {
+      const normalized = name.toLowerCase();
+      if (normalized === 'x-od-workspace-id') return scope.workspaceId;
+      if (normalized === 'x-od-workspace-member-id') return scope.workspaceMemberId;
+      if (normalized === 'x-od-workspace-type') return scope.workspaceType ?? undefined;
+      return undefined;
+    },
+  };
+}
+
 export function headerValue(req: any, name: string): string | null {
   const value = req.get(name);
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -502,9 +716,32 @@ function workspaceResourceMutationAllowed(
   row: WorkspaceResourceAccessInput | null | undefined,
   ctx: WorkspaceResourceContext,
   capability: WorkspaceResourceMutationCapability,
+  options: {
+    /**
+     * The caller's explicit type assertion CONFIRMED by membership
+     * verification (`verifiedWorkspaceTypeAssertion`), threaded by the route
+     * that holds the witness. Only the legacy local personal design-system
+     * allowance reads it; absent means no allowance (fail-closed).
+     */
+    workspaceTypeVerified?: 'personal' | 'team' | null;
+  } = {},
 ): boolean {
   if (!row) return false;
   const access = workspaceResourceAccess(row, ctx);
+  // An unattributed personal design-system row reached from a VERIFIED
+  // personal workspace is the local user's own resource
+  // (`unattributedLocalPersonalDesignSystemAllowance`). `selfCreated` cannot
+  // witness that — the row records no creator — so the verified type stands
+  // in for it, and every capability then follows the same
+  // frozen/lifecycle/permission checks a self-created row would. The gate's
+  // own verified context must agree too: whatever verifier produced `ctx`,
+  // a Team context never takes this branch.
+  if (
+    ctx.workspaceType === 'personal'
+    && unattributedLocalPersonalDesignSystemAllowance(resourceType, row, options.workspaceTypeVerified)
+  ) {
+    return !access.frozen && ctx.canWriteSyncedFiles && ctx.memberStatus === 'active';
+  }
   const strictPersonalCreator =
     row.visibility === 'personal'
     && (
@@ -704,7 +941,17 @@ export async function enforceVerifiedWorkspaceResourceMutation(
   resourceId: string,
   capability: WorkspaceResourceMutationCapability,
   verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
-  options: { authorityLease?: WorkspaceMutationAuthorityLease } = {},
+  options: {
+    authorityLease?: WorkspaceMutationAuthorityLease;
+    /**
+     * The caller's explicit type assertion confirmed by membership
+     * verification (`verifiedWorkspaceTypeAssertion`). The gate cannot derive
+     * it: for a local data-plane route the verifier it runs is the
+     * header-trusting local resolver, whose context would merely echo the
+     * claim. Only the legacy local personal design-system allowance reads it.
+     */
+    workspaceTypeVerified?: 'personal' | 'team' | null;
+  } = {},
 ): Promise<boolean> {
   // No persisted Workspace binding means this is a genuine legacy/local
   // resource. Preserve that path without inventing a Workspace from ambient
@@ -759,6 +1006,7 @@ export async function enforceVerifiedWorkspaceResourceMutation(
     row,
     context,
     capability,
+    { workspaceTypeVerified: options.workspaceTypeVerified ?? null },
   )) {
     const code = row && isWorkspaceResourceLocked(context)
       ? 'WORKSPACE_LOCKED'
@@ -807,6 +1055,12 @@ export async function enforceVerifiedWorkspaceResourceRead(
   options: {
     allowNavigationQuery?: boolean;
     resolveAuthority?: ResolveWorkspaceResourceReadAuthority;
+    /**
+     * The caller's explicit type assertion confirmed by membership
+     * verification (`verifiedWorkspaceTypeAssertion`), threaded by the route
+     * that holds the witness — see `enforceVerifiedWorkspaceResourceMutation`.
+     */
+    workspaceTypeVerified?: 'personal' | 'team' | null;
   } = {},
 ): Promise<boolean> {
   if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
@@ -845,12 +1099,28 @@ export async function enforceVerifiedWorkspaceResourceRead(
   }
   const context = workspaceResourceContextFromVerified(verified.context);
   const row = getWorkspaceResource(db, context.workspaceId, resourceId);
+  // Design system mirrors project's memberless-legacy allowance: an
+  // unattributed personal row in a VERIFIED personal workspace is the local
+  // user's own resource (see `unattributedLocalPersonalDesignSystemAllowance`),
+  // so only attributed rows keep the strict exact-creator requirement. The
+  // allowance keys on the route-confirmed assertion, and the gate's own
+  // verified context must agree — never on the raw claim, and never on the
+  // normalized `workspaceType`, which collapses a missing header to
+  // `'personal'`.
   const strictPersonalCreator =
     row?.visibility === 'personal'
     && (
       resourceType === 'plugin'
       || resourceType === 'skill'
-      || resourceType === 'design_system'
+      || (resourceType === 'design_system'
+        && !(
+          context.workspaceType === 'personal'
+          && unattributedLocalPersonalDesignSystemAllowance(
+            resourceType,
+            row,
+            options.workspaceTypeVerified ?? null,
+          )
+        ))
       || (resourceType === 'project' && row.createdByWorkspaceMemberId != null)
     );
   if (

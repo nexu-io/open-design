@@ -94,7 +94,7 @@ describe('SettingsDialog Orbit artifact scope', () => {
 
   it('adds navigation scope for a bound Workspace artifact', () => {
     expect(orbitLiveArtifactHref('project-1', 'artifact-1', context)).toBe(
-      '/api/live-artifacts/artifact-1/preview?projectId=project-1&workspaceId=workspace-team&workspaceMemberId=member-1',
+      '/api/live-artifacts/artifact-1/preview?projectId=project-1&workspaceId=workspace-team&workspaceMemberId=member-1&workspaceType=team',
     );
   });
 

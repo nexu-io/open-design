@@ -29,7 +29,7 @@ it('pins iframe and popout navigation to the project Workspace after the shell s
 
   const expected =
     '/api/plugins/deck-plugin/example/overview'
-    + '?workspaceId=workspace-a&workspaceMemberId=member-a';
+    + '?workspaceId=workspace-a&workspaceMemberId=member-a&workspaceType=team';
   const iframe = screen.getByTestId('plugin-details-hero-iframe');
   const popout = screen.getByTestId('plugin-details-hero-popout');
   expect(iframe.getAttribute('src')).toBe(expected);

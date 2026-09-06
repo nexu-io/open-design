@@ -49,12 +49,26 @@ export interface WorkspaceTypeFact {
  * fetches on every load, the workspace context the invalidation poller reads
  * every 15s). Nothing here fetches. An id it has never seen answers `null`, and
  * every consumer treats `null` as "no opinion".
+ *
+ * Facts come in two tiers. `learn` records what a CALLER claimed about a
+ * workspace (an `x-od-workspace-type` header on a project route); those claims
+ * feed `typeOf`/`isKnownPersonal`, whose consumers only ever use them in the
+ * refusing direction (a claimed-personal workspace cannot host a team share).
+ * `learnVerified` records what the membership directory ESTABLISHED, and only
+ * those facts answer `verifiedTypeOf`. A gate that GRANTS something on
+ * "this workspace is personal" must read the verified tier: a caller's own
+ * claim can never stand in for the directory's word, or a Team member could
+ * teach the daemon that their Team workspace is personal.
  */
 export interface WorkspaceTypeRegistry {
   learn(facts: readonly WorkspaceTypeFact[] | WorkspaceTypeFact | null | undefined): void;
+  /** Record facts established by the membership directory (or its authoritative context). */
+  learnVerified(facts: readonly WorkspaceTypeFact[] | WorkspaceTypeFact | null | undefined): void;
   typeOf(workspaceId: string | null | undefined): WorkspaceType | null;
   /** True ONLY on positive evidence that this workspace is personal. */
   isKnownPersonal(workspaceId: string | null | undefined): boolean;
+  /** The type the membership directory established for the workspace — never a caller's claim. */
+  verifiedTypeOf(workspaceId: string | null | undefined): WorkspaceType | null;
 }
 
 function normalizeId(workspaceId: string | null | undefined): string {
@@ -67,23 +81,35 @@ function normalizeType(workspaceType: string | null | undefined): WorkspaceType 
 
 export function createWorkspaceTypeRegistry(): WorkspaceTypeRegistry {
   const types = new Map<string, WorkspaceType>();
-  const typeOf = (workspaceId: string | null | undefined): WorkspaceType | null => {
+  const verifiedTypes = new Map<string, WorkspaceType>();
+  const lookup = (
+    map: Map<string, WorkspaceType>,
+    workspaceId: string | null | undefined,
+  ): WorkspaceType | null => {
     const id = normalizeId(workspaceId);
-    return id ? types.get(id) ?? null : null;
+    return id ? map.get(id) ?? null : null;
   };
+  const record = (
+    facts: readonly WorkspaceTypeFact[] | WorkspaceTypeFact | null | undefined,
+    verified: boolean,
+  ) => {
+    if (!facts) return;
+    for (const fact of Array.isArray(facts) ? facts : [facts as WorkspaceTypeFact]) {
+      const id = normalizeId(fact?.workspaceId);
+      const type = normalizeType(fact?.workspaceType);
+      if (!id || !type) continue;
+      types.set(id, type);
+      if (verified) verifiedTypes.set(id, type);
+    }
+  };
+  const typeOf = (workspaceId: string | null | undefined) => lookup(types, workspaceId);
   return {
-    learn(facts) {
-      if (!facts) return;
-      for (const fact of Array.isArray(facts) ? facts : [facts as WorkspaceTypeFact]) {
-        const id = normalizeId(fact?.workspaceId);
-        const type = normalizeType(fact?.workspaceType);
-        if (!id || !type) continue;
-        types.set(id, type);
-      }
-    },
+    learn: (facts) => record(facts, false),
+    learnVerified: (facts) => record(facts, true),
     typeOf,
     // Bound, not a method: consumers routinely pass this around on its own.
     isKnownPersonal: (workspaceId) => typeOf(workspaceId) === 'personal',
+    verifiedTypeOf: (workspaceId) => lookup(verifiedTypes, workspaceId),
   };
 }
 

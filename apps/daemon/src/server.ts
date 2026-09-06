@@ -374,7 +374,10 @@ import {
   deleteWorkspaceOwnedDesignSystem as removeWorkspaceOwnedDesignSystem,
 } from './design-systems/workspace-owned-create.js';
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
-import { createDesignSystemServerServices } from './design-systems/server-services.js';
+import {
+  createDesignSystemServerServices,
+  designSystemPersonalBindingReadable,
+} from './design-systems/server-services.js';
 import {
   designSystemIdFromWorkspaceTeamBinding,
   designSystemLogicalResourceId,
@@ -916,7 +919,10 @@ import {
   velaWorkspaceDirectoryIdentity,
   workspaceContextFromDirectoryItem,
 } from './collab/vela-workspace-context.js';
-import { verifyWorkspaceRequestContext } from './collab/request-workspace-context.js';
+import {
+  verifyLocalWorkspaceRequestContext,
+  verifyWorkspaceRequestContext,
+} from './collab/request-workspace-context.js';
 import {
   createWorkspaceBillingRuntimeCoordinator,
   shouldEmitWorkspaceBillingRuntimeNudge,
@@ -3482,7 +3488,9 @@ export async function startServer({
       const result = await fetchVelaWorkspaceDirectory({
         configuredEnv: configuredAmrEnv(),
       });
-      if (result.ok) workspaceTypes.learn(result.items);
+      // The directory is the one source that ESTABLISHES a workspace's type;
+      // request claims learned elsewhere never reach the verified tier.
+      if (result.ok) workspaceTypes.learnVerified(result.items);
       return result;
     },
     identityKey: () => velaWorkspaceDirectoryIdentity(
@@ -3530,47 +3538,10 @@ export async function startServer({
     // Local/dev has no signed membership directory. Its explicit request
     // headers are the complete, static authority; still never consult the
     // daemon's mutable active-workspace context.
-    const claimed = workspaceResourceContextFromRequest(input.req);
-    if (claimed === null) {
-      return {
-        ok: false as const,
-        status: 400 as const,
-        code: 'WORKSPACE_CONTEXT_REQUIRED' as const,
-        message: 'an explicit workspace context is required',
-      };
-    }
-    if (claimed === 'missing') {
-      return {
-        ok: false as const,
-        status: 400 as const,
-        code: 'WORKSPACE_CONTEXT_INCOMPLETE' as const,
-        message: 'both workspace and member identity are required',
-      };
-    }
-    if (
-      claimed.memberStatus !== 'active'
-      || claimed.lifecycleState === 'deleted'
-      || (input.requireTeam && claimed.workspaceType !== 'team')
-    ) {
-      return {
-        ok: false as const,
-        status: 403 as const,
-        code: 'WORKSPACE_ACCESS_DENIED' as const,
-        message: 'the requested workspace is not available to this member',
-      };
-    }
-    return {
-      ok: true as const,
-      context: workspaceContextFromDirectoryItem({
-        workspaceId: claimed.workspaceId,
-        workspaceName: claimed.workspaceId,
-        workspaceType: claimed.workspaceType,
-        workspaceMemberId: claimed.workspaceMemberId,
-        role: claimed.role,
-        memberStatus: claimed.memberStatus,
-        lifecycleState: claimed.lifecycleState,
-      }, configuredAmrEnv()),
-    };
+    return verifyLocalWorkspaceRequestContext(input.req, {
+      configuredEnv: configuredAmrEnv(),
+      ...(input.requireTeam !== undefined ? { requireTeam: input.requireTeam } : {}),
+    });
   };
   const verifyWorkspaceReadAuthority = (req: unknown) =>
     verifyExplicitWorkspaceRequestContext({ req }, { fresh: false });
@@ -5533,7 +5504,7 @@ export async function startServer({
         getWorkspaceContext: async () => {
           const context =
             await resolveAuthoritativeTeamWorkspaceContext(workspaceId);
-          workspaceTypes.learn(context);
+          workspaceTypes.learnVerified(context);
           return context;
         },
         listTeamProjects: (context) => teamProjectsForDisplay(context),
@@ -8524,6 +8495,7 @@ export async function startServer({
     paths: pathDeps,
     verifyWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
+    workspaceTypes,
     teamResources: collab.teamResources,
     resources: {
       listAllSkills,
@@ -8556,6 +8528,8 @@ export async function startServer({
     projectStore: projectStoreDeps,
     projectFiles: projectFileDeps,
     verifyWorkspaceRequestAuthority,
+    verifyWorkspaceReadAuthority,
+    workspaceTypes,
     workspaceResources: { getWorkspaceResource, getWorkspaceResourceByResourceId },
     designSystems: {
       buildUserDesignSystemArchive,
@@ -9358,8 +9332,16 @@ export async function startServer({
       const workspaceMemberId = typeof value?.workspaceMemberId === 'string'
         ? value.workspaceMemberId.trim()
         : '';
+      // The type membership verification confirmed for that partition at
+      // selection time, persisted with it (`LocalCatalogScope.workspaceType`;
+      // the daemon drops a claim it could not confirm before persisting).
+      // Anything else stays unasserted rather than normalized.
+      const workspaceType =
+        value?.workspaceType === 'personal' || value?.workspaceType === 'team'
+          ? value.workspaceType
+          : null;
       return workspaceId && workspaceMemberId
-        ? { workspaceId, workspaceMemberId }
+        ? { workspaceId, workspaceMemberId, workspaceType }
         : null;
     };
     // Resource provenance is intentionally independent from project
@@ -9374,6 +9356,21 @@ export async function startServer({
       designSystemCatalogScope?.workspaceId ?? projectWorkspaceId;
     const designSystemMemberId =
       designSystemCatalogScope?.workspaceMemberId ?? projectCreatorMemberId;
+    // The verified personal workspace behind the legacy unattributed-binding
+    // allowance (`designSystemPersonalBindingReadable`), for a lane that has
+    // no request headers of its own. Two witnesses, either sufficient, both
+    // silent by default (fail-closed), and neither a caller's claim: the type
+    // membership verification confirmed for the persisted catalog partition
+    // when the selection was validated, else what the membership directory
+    // has established about the project's workspace
+    // (`WorkspaceTypeRegistry.verifiedTypeOf` — never the claim tier, which a
+    // project route learns from raw headers). Shell/current Workspace state
+    // still never participates — the workspace itself comes only from the
+    // persisted scope.
+    const designSystemWorkspaceTypeVerified =
+      designSystemCatalogScope?.workspaceType
+      ?? workspaceTypes.verifiedTypeOf(designSystemWorkspaceId)
+      ?? null;
     const projectDesignSystemBinding = (summary) => {
       if (!designSystemWorkspaceId || summary?.source === 'built-in') return null;
       const logicalResourceId =
@@ -9414,9 +9411,14 @@ export async function startServer({
         return false;
       }
       if (binding.visibility === 'team') return true;
-      return binding.visibility === 'personal'
-        && Boolean(designSystemMemberId)
-        && binding.createdByWorkspaceMemberId?.trim() === designSystemMemberId;
+      // The same personal-binding decision the catalog, the detail read, and
+      // project validation make, so a system a project could select is a
+      // system its run can load.
+      return designSystemPersonalBindingReadable(binding, {
+        workspaceId: designSystemWorkspaceId,
+        workspaceMemberId: designSystemMemberId,
+        workspaceTypeVerified: designSystemWorkspaceTypeVerified,
+      });
     };
     let appConfigForPrompt = null;
     try {
@@ -9741,6 +9743,7 @@ export async function startServer({
         ? {
             workspaceId: designSystemWorkspaceId,
             workspaceMemberId: designSystemMemberId || null,
+            workspaceTypeVerified: designSystemWorkspaceTypeVerified,
           }
         : {};
       let systems = await listAllDesignSystems(designSystemListOptions);
