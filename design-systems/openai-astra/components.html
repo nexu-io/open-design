@@ -210,11 +210,11 @@
       .chart-card .chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
       .chart-card h3 { margin: 0 0 var(--space-3); font: 500 var(--text-xl) / 1.26 var(--font-display); letter-spacing: -0.01em; }
       .chart-card .chart-head .icon-btn { color: var(--muted); }
-      .chart-card .select-trigger { height: 40px; min-height: 32px; gap: 0.3em; }
-      .chart-card .select-trigger svg { width: 14px; height: 14px; }
+      .chart-card .select-trigger { height: 32px; min-height: 32px; padding: 0 var(--space-4); gap: var(--space-2); box-shadow: var(--elev-ring); }
+      .chart-card .select-trigger svg { width: 12px; height: 12px; }
       /* ── Select (dropdown): glass trigger pill; menu on #1f1f1f, 12px radius, 8px padding, 40px options, selected #ffffff1f, chevron flips ── */
       .select { position: relative; display: inline-block; }
-      .select-trigger[aria-expanded="true"] { box-shadow: var(--elev-ring); }
+      .select-trigger[aria-expanded="true"] { box-shadow: var(--elev-ring), 0 0 0 1px var(--border); }
       .select-trigger svg { transition: rotate var(--motion-fast); }
       .select-trigger[aria-expanded="true"] svg { rotate: 180deg; }
       .select-menu { position: absolute; top: calc(100% + 8px); left: 0; z-index: 5; min-width: max(100%, 190px); width: max-content; margin: 0; padding: var(--space-2); list-style: none; border: 1px solid var(--border-soft); border-radius: 12px; background: var(--surface); box-shadow: 0 10px 15px -3px #0000001a, 0 4px 6px -4px #0000001a; }
@@ -539,7 +539,7 @@
           <figcaption>OSWorld runs real desktop tasks end to end. Fixture values; the panel switches when the tab’s countdown completes.</figcaption>
         </figure>
         </div>
-        <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a glass select pill that opens a dropdown (menu on #1f1f1f, 12px radius, 8px padding, 40px options with the selected one filled #ffffff1f, chevron flips; Escape, arrows and outside click all work), a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
+        <p class="note">16px radius, hairline border, 32px padding. Title h4-size, a 32px glass select pill with a permanent 1px #ffffff33 ring that opens a dropdown (menu on #1f1f1f, 12px radius, 8px padding, 40px options with the selected one filled #ffffff1f, chevron flips; Escape, arrows and outside click all work), a legend with shape markers, a dashed reference line, mono tick labels, and an italic centred caption. Series colours come from the chart palette (blue-3 #539af8, blue-2 #2c67c5, orange-2 #ac4f23, orange-1 #653218), never from UI tokens.</p>
       </section>
 
       <section id="quote">

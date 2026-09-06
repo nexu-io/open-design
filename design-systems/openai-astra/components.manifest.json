@@ -561,6 +561,7 @@
         "--container-gutter-desktop",
         "--danger",
         "--ease-standard",
+        "--elev-ring",
         "--fg",
         "--fg-2",
         "--focus-ring",
@@ -788,7 +789,7 @@
   ],
   "literals": {
     "colorExpressions": 34,
-    "pixelValues": 86,
+    "pixelValues": 87,
     "hardcodedFontFamilies": 0
   }
 }
