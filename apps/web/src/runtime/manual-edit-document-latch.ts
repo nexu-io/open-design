@@ -105,3 +105,58 @@ export function shouldFreezeManualEditDocumentIdentity(input: {
     || input.manualEditSrcDocActive
     || input.canAdoptPersistedDocument;
 }
+
+/**
+ * Whether a patch reaches the document already on screen without a rebuild.
+ *
+ * Only `set-style` does. Styles stream in through `od-edit-preview-style` as
+ * the user drags a slider, so by the time the save is written the document is
+ * already showing the result and the write's watcher echo has nothing to add.
+ * Every other kind changes the source and depends on the document coming back
+ * — mirrored if the bridge can carry it, re-rendered if it cannot.
+ *
+ * This is deliberately NOT "does the patch have a mirror message". Several
+ * kinds have one and still take the rebuild path, and the mirror can be refused
+ * at any time. What is being named here is the narrower property the scroll
+ * decision below actually rests on.
+ */
+export function manualEditPatchStreamsIntoLiveDocument(kind: string): boolean {
+  return kind === 'set-style';
+}
+
+/**
+ * Whether the preview document on screen will survive this save.
+ *
+ * This is the question the pre-write scroll snapshot depends on, and for a long
+ * time the code asked a different one. It skipped the snapshot for `set-style`,
+ * reasoning that "style patches stream live through postMessage and never
+ * reload" — which was true while Manual Edit pinned one document for the length
+ * of a session.
+ *
+ * It is no longer true. The identity freeze lifts for the rest of the session
+ * as soon as one save cannot be mirrored into the live document, and from then
+ * on every revision replaces the document, style saves included. A premise that
+ * used to hold was retired by a different change, and the code resting on it
+ * kept the old answer: the user scrolls down, nudges a style, and the preview
+ * comes back at the top with nothing to restore from.
+ *
+ * So the condition is stated as what it always was about — replacement — and
+ * the patch kind enters only through the one property that bears on it. Outside
+ * a Manual Edit session nothing pins the document at all; inside one, the
+ * freeze is what retains it, and a session that has already diverged no longer
+ * has a freeze to offer.
+ *
+ * Retention is claimed only where it is certain, because the two errors are not
+ * symmetric: a capture that was not needed costs one round trip of up to 120ms
+ * in front of the write, while a capture that was needed and skipped loses the
+ * user's place with no way to recover it afterwards.
+ */
+export function manualEditSaveRetainsPreviewDocument(input: {
+  liveDocumentDiverged: boolean;
+  manualEditSessionActive: boolean;
+  patchStreamsIntoLiveDocument: boolean;
+}): boolean {
+  if (!input.manualEditSessionActive) return false;
+  if (input.liveDocumentDiverged) return false;
+  return input.patchStreamsIntoLiveDocument;
+}

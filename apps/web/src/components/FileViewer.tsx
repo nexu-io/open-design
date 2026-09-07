@@ -324,6 +324,8 @@ import { MANUAL_EDIT_STYLE_PROPS, type ManualEditBridgeMessage, type ManualEditH
 import { isRenderableSketchJson, SketchPreview } from './SketchPreview';
 import {
   canArmPersistedManualEditDocument,
+  manualEditPatchStreamsIntoLiveDocument,
+  manualEditSaveRetainsPreviewDocument,
   shouldAdoptPersistedManualEditDocument,
   shouldFreezeManualEditDocumentIdentity,
 } from '../runtime/manual-edit-document-latch';
@@ -13794,12 +13796,20 @@ function HtmlViewer({
         return false;
       }
       const parentVersionId = await resolveManualEditParentVersionId(baseSource);
-      // A committed content patch can notify the file watcher as soon as the
-      // write lands. Capture the opaque iframe's exact scroll position before
-      // that write so neither the watcher nor our local source update can
-      // rebuild the preview from an initial 0/0 position. Style patches stream
-      // live through postMessage and never reload.
-      if (patch.kind !== 'set-style') {
+      // A save that replaces the preview document can notify the file watcher
+      // as soon as the write lands. Capture the opaque iframe's exact scroll
+      // position before that write, so neither the watcher nor our local source
+      // update can rebuild the preview from an initial 0/0 position.
+      //
+      // The condition is whether the document survives this save, NOT which
+      // kind of patch it is. Those used to coincide and no longer do: once the
+      // identity freeze has lifted, a style save replaces the document like any
+      // other, and skipping the snapshot loses the user's place.
+      if (!manualEditSaveRetainsPreviewDocument({
+        liveDocumentDiverged: manualEditLiveDocumentDivergedRef.current,
+        manualEditSessionActive,
+        patchStreamsIntoLiveDocument: manualEditPatchStreamsIntoLiveDocument(patch.kind),
+      })) {
         await capturePreviewScrollPosition();
       }
       const saved = await writeProjectTextFileDetailed(projectId, file.name, result.source, {
@@ -13949,6 +13959,18 @@ function HtmlViewer({
         return;
       }
       const parentVersionId = await resolveManualEditParentVersionId(latest.afterSource);
+      // Same replacement risk as a committed patch, so the same ordering rule:
+      // the snapshot has to precede the write. The watcher can publish the new
+      // source the moment the write lands, and a snapshot taken after that
+      // measures the replacement document at 0/0 and records the top of the
+      // page as the place to restore to.
+      if (!manualEditSaveRetainsPreviewDocument({
+        liveDocumentDiverged: manualEditLiveDocumentDivergedRef.current,
+        manualEditSessionActive,
+        patchStreamsIntoLiveDocument: manualEditPatchStreamsIntoLiveDocument(latest.patch.kind),
+      })) {
+        await capturePreviewScrollPosition();
+      }
       const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.beforeSource, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
@@ -13960,9 +13982,6 @@ function HtmlViewer({
         finish('failed', 'save_failed');
         return;
       }
-      // Same srcDoc rebuild as a committed patch — keep the scroll position
-      // across the reload (#92).
-      await capturePreviewScrollPosition();
       setSource(latest.beforeSource);
       sourceRef.current = latest.beforeSource;
       setInlinedSource(null);
@@ -14013,6 +14032,18 @@ function HtmlViewer({
         return;
       }
       const parentVersionId = await resolveManualEditParentVersionId(latest.beforeSource);
+      // Same replacement risk as a committed patch, so the same ordering rule:
+      // the snapshot has to precede the write. The watcher can publish the new
+      // source the moment the write lands, and a snapshot taken after that
+      // measures the replacement document at 0/0 and records the top of the
+      // page as the place to restore to.
+      if (!manualEditSaveRetainsPreviewDocument({
+        liveDocumentDiverged: manualEditLiveDocumentDivergedRef.current,
+        manualEditSessionActive,
+        patchStreamsIntoLiveDocument: manualEditPatchStreamsIntoLiveDocument(latest.patch.kind),
+      })) {
+        await capturePreviewScrollPosition();
+      }
       const saved = await writeProjectTextFileDetailed(projectId, file.name, latest.afterSource, {
         artifactManifest: file.artifactManifest,
         versionSource: 'manual',
@@ -14024,9 +14055,6 @@ function HtmlViewer({
         finish('failed', 'save_failed');
         return;
       }
-      // Same srcDoc rebuild as a committed patch — keep the scroll position
-      // across the reload (#92).
-      await capturePreviewScrollPosition();
       setSource(latest.afterSource);
       sourceRef.current = latest.afterSource;
       setInlinedSource(null);
