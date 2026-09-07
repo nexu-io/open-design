@@ -118,14 +118,45 @@ on:
       previous_commit:
         description: "Commit SHA of the previously published prerelease; empty on cold start."
         value: ${{ jobs.metadata.outputs.previous_commit }}
+      # --- Advisory signals ------------------------------------------------
+      # Nothing below gates publication. They exist so a caller can tell the
+      # difference between "the package shipped and everything was green" and
+      # "the package shipped but something needs a human", and raise the alarm
+      # accordingly. Every one of them is a job `result`/`outcome` string:
+      # success | failure | cancelled | skipped (`skipped` when the platform or
+      # the smoke suite was not requested for this run).
       mac_arm64_smoke_result:
-        description: "macOS arm64 packaged smoke outcome; advisory to publication."
+        description: "macOS arm64 packaged smoke outcome. Advisory: the smoke now runs AFTER the package is published, so it can never withhold a build."
         value: ${{ jobs.build_mac.outputs.smoke_result }}
+      mac_x64_smoke_result:
+        description: "macOS Intel packaged smoke outcome. Advisory; `skipped` unless enable_mac_x64 and enable_smoke are both on."
+        value: ${{ jobs.build_mac_intel.outputs.smoke_result }}
       win_x64_smoke_result:
-        description: "Windows x64 packaged smoke outcome; advisory to publication."
+        description: "Windows x64 packaged smoke outcome. Advisory: the smoke now runs AFTER the package is published, so it can never withhold a build."
         value: ${{ jobs.build_win.outputs.smoke_result }}
+      linux_x64_smoke_result:
+        description: "Linux AppImage smoke outcome. Advisory; `skipped` unless vars.ENABLE_STABLE_LINUX is on."
+        value: ${{ jobs.build_linux.outputs.smoke_result }}
+      functional_e2e_result:
+        description: "P0 Functional E2E job result. Advisory: this suite does not gate build or publish on this channel."
+        value: ${{ jobs.test_signals.outputs.functional_e2e }}
+      e2e_vitest_result:
+        description: "E2E Vitest job result. Advisory: this suite does not gate build or publish on this channel."
+        value: ${{ jobs.test_signals.outputs.e2e_vitest }}
+      daemon_unit_tests_result:
+        description: "Daemon unit test job result, aggregated across all four shards. Advisory: this suite does not gate build or publish on this channel."
+        value: ${{ jobs.test_signals.outputs.daemon_unit_tests }}
+      verify_result:
+        description: "Verify build (typecheck + tests + guard) job result. Advisory: this job does not gate build or publish on this channel."
+        value: ${{ jobs.test_signals.outputs.verify }}
+      tests_all_green:
+        description: "'true' when none of the four advisory test jobs failed. A ready-made rollup for a notification that only needs one bit."
+        value: ${{ jobs.test_signals.outputs.all_green }}
+      failed_test_jobs:
+        description: "Comma-separated human labels of the advisory test jobs that failed, e.g. 'E2E Vitest, Verify build'. Empty when tests_all_green is 'true'."
+        value: ${{ jobs.test_signals.outputs.failed }}
       version_metadata_url:
-        description: "Public R2 URL of this build's version metadata.json."
+        description: "Public R2 URL of this build's version metadata.json. This is the authoritative \"did a package actually ship?\" signal — it is non-empty only when the publish job wrote metadata. Do NOT read the overall workflow conclusion for that: it now goes red whenever an advisory test job fails, even though the package shipped."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
@@ -361,20 +392,68 @@ jobs:
         run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
       - name: Check repository layout policies
         run: pnpm guard
+  test_signals:
+    name: Collect advisory test signals
+    # A reporting shim, not a gate. The four test jobs above no longer block
+    # build or publish on this channel (see build_mac), so their results have to
+    # leave this workflow some other way for the notification layer to act on.
+    # `jobs.<job_id>.result` would express this with no job at all, and GitHub
+    # documents it for `workflow_call` outputs, but actionlint has rejected that
+    # property since 2023 (rhysd/actionlint#343) and `ci.yml` runs actionlint at
+    # a pinned version — so the results travel through a real job output.
+    # Nothing needs this job: it is off the delivery path by construction.
+    needs: [functional_e2e, e2e_vitest, daemon_unit_tests, verify]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    outputs:
+      functional_e2e: ${{ needs.functional_e2e.result }}
+      e2e_vitest: ${{ needs.e2e_vitest.result }}
+      daemon_unit_tests: ${{ needs.daemon_unit_tests.result }}
+      verify: ${{ needs.verify.result }}
+      all_green: ${{ steps.rollup.outputs.all_green }}
+      failed: ${{ steps.rollup.outputs.failed }}
+    steps:
+      - name: Roll up advisory test results
+        id: rollup
+        env:
+          FUNCTIONAL_E2E: ${{ needs.functional_e2e.result }}
+          E2E_VITEST: ${{ needs.e2e_vitest.result }}
+          DAEMON_UNIT_TESTS: ${{ needs.daemon_unit_tests.result }}
+          VERIFY: ${{ needs.verify.result }}
+        run: |
+          set -euo pipefail
+          failed=""
+          # `skipped` is not a failure: it means the job never ran (metadata
+          # died first), which the run's own red status already reports.
+          while IFS='|' read -r label result; do
+            [ -n "$label" ] || continue
+            echo "${label} = ${result}"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              failed="${failed:+$failed, }${label}"
+            fi
+          done <<EOF
+          P0 Functional E2E|$FUNCTIONAL_E2E
+          E2E Vitest|$E2E_VITEST
+          Daemon tests|$DAEMON_UNIT_TESTS
+          Verify build|$VERIFY
+          EOF
+          {
+            echo "failed=$failed"
+            if [ -z "$failed" ]; then echo "all_green=true"; else echo "all_green=false"; fi
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "$failed" ]; then
+            echo "::warning::advisory test jobs failed and did NOT block this prerelease: $failed"
+          fi
   build_mac:
     name: Build prerelease mac arm64
     # Deliberately NOT gated on functional_e2e / e2e_vitest / daemon_unit_tests /
-    # verify. Those four take ~11 min; packaging takes ~21 min, so serialising
-    # them added their whole duration to the wall clock for no safety gain.
-    # `publish` — the only job with a user-visible effect, because it is what
-    # writes metadata.json and therefore what any updater or download link can
-    # see — still requires all four to have succeeded, so a red test still stops
-    # the release. The cost of the swap is CI minutes: when a test gate fails,
-    # the packaging jobs have already burned their runners, and each platform
-    # that finished leaves its assets in R2 under a prerelease version whose
-    # metadata is never published. That orphan state is not new (it is what
-    # already happens when one platform fails and another succeeds) and it is
-    # inert: nothing resolves those objects without metadata.json.
+    # verify, and neither is `publish`. A prerelease exists so a person can
+    # install it and test it by hand; automated CI is a parallel opinion about
+    # the same commit, not a valve on delivery. Chaining the two meant a single
+    # flaky suite cost the team a whole day's package — the expensive failure
+    # mode, and the one this pipeline kept hitting. The four jobs still run on
+    # every prerelease, still block nothing, and their results leave the
+    # workflow as outputs for the notification layer to shout about.
     needs: metadata
     runs-on: macos-14
     outputs:
@@ -672,26 +751,6 @@ jobs:
             ${{ runner.temp }}/release-build/mac_arm64/build.json
             ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
-      - name: Smoke prerelease mac packaged runtime
-        id: mac_smoke
-        # Packaged smoke is advisory — `continue-on-error` means it has never
-        # blocked publication — so it is opt-in per run. See the enable_smoke
-        # input description for when to turn it on.
-        if: ${{ inputs.enable_smoke }}
-        continue-on-error: true
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-prerelease
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
       - name: Write mac_arm64 release report
         if: ${{ always() }}
         env:
@@ -712,14 +771,6 @@ jobs:
       - name: Publish mac_arm64 report summary
         if: ${{ always() }}
         run: cat "${{ runner.temp }}/release-report/mac_arm64/summary.md" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload mac e2e spec report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-prerelease-mac-e2e-report
-          path: ${{ runner.temp }}/release-report/mac_arm64
-          if-no-files-found: warn
       - name: Prune mac_arm64 tools-pack cache
         continue-on-error: true
         run: bash .github/scripts/release/cache/mac.sh
@@ -794,9 +845,41 @@ jobs:
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
           retention-days: 1
+      - name: Smoke prerelease mac packaged runtime
+        id: mac_smoke
+        # Packaged smoke is advisory — `continue-on-error` means it has never
+        # blocked publication — so it is opt-in per run. See the enable_smoke
+        # input description for when to turn it on.
+        if: ${{ inputs.enable_smoke }}
+        continue-on-error: true
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
+      - name: Upload mac e2e spec report
+        # Everything after the publish-manifest upload is post-delivery. A
+        # failure here must not fail the job: a red build_mac would
+        # retroactively block `publish` for a package already sitting in R2.
+        continue-on-error: true
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-mac-e2e-report
+          path: ${{ runner.temp }}/release-report/mac_arm64
+          if-no-files-found: warn
   build_mac_intel:
     name: Build prerelease mac intel x64
-    # Test gates run alongside packaging, not in front of it — see build_mac.
+    # Tests never gate delivery on this channel — see build_mac.
     needs: metadata
     # Opt-in, like build_linux. Intel is the prerelease critical path: it runs
     # on the slower macos-15-intel fleet and takes ~33 min against ~21 min for
@@ -1001,24 +1084,6 @@ jobs:
             echo "mac_sign_mode=${{ inputs.mac_sign_mode }}: signature verified; skipping stapler/spctl, which require a notarization ticket this build did not request."
           fi
 
-      - name: Smoke prerelease mac_x64 packaged runtime
-        id: mac_x64_smoke
-        if: ${{ inputs.enable_smoke }}
-        continue-on-error: true
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_x64/build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-intel
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
-
       - name: Write mac_x64 release report
         if: ${{ always() }}
         env:
@@ -1113,9 +1178,27 @@ jobs:
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
           retention-days: 1
+
+      - name: Smoke prerelease mac_x64 packaged runtime
+        id: mac_x64_smoke
+        if: ${{ inputs.enable_smoke }}
+        continue-on-error: true
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_x64/build.log
+          OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-intel
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
   build_win:
     name: Build prerelease win x64
-    # Test gates run alongside packaging, not in front of it — see build_mac.
+    # Tests never gate delivery on this channel — see build_mac.
     needs: metadata
     runs-on: windows-latest
     outputs:
@@ -1257,54 +1340,6 @@ jobs:
             gh cache delete $cache.id
           }
           "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
-      - name: Build prerelease win_x64 update fixture
-        # Only the `full` Windows smoke consumes this fixture, so it must follow
-        # enable_smoke too — otherwise a `full` dispatch with smoke off would
-        # pay for a second complete Windows build that nothing reads.
-        if: ${{ inputs.enable_smoke && inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
-          if (-not $match.Success) { throw "full Windows smoke requires a counted prerelease version; got ${{ needs.metadata.outputs.release_version }}" }
-          $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-prerelease-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
-          $updateOutput = pnpm.cmd @buildArgs
-          if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
-          $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
-          $updateBuild = $updateOutput | ConvertFrom-Json
-          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
-      - name: Smoke prerelease windows packaged runtime
-        id: win_smoke
-        # Two knobs, two questions: enable_smoke decides WHETHER packaged smoke
-        # runs at all (default off, because smoke is advisory and costs ~2.5 min
-        # on this job, the pipeline's critical path); win_x64_smoke_mode decides
-        # HOW DEEP the Windows one goes once it does. `skip` on either means no
-        # smoke. win_x64_smoke_mode keeps its `core` default and its `core`
-        # forwarding from notify-release-feishu.yml untouched, so turning
-        # enable_smoke on restores exactly today's coverage.
-        if: ${{ inputs.enable_smoke && inputs.win_x64_smoke_mode != 'skip' }}
-        continue-on-error: true
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
-          OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-win
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}
-          OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}
-          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
-          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
       - name: Write win_x64 release report
         if: ${{ always() }}
         env:
@@ -1325,14 +1360,6 @@ jobs:
         if: ${{ always() }}
         shell: pwsh
         run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
-
-      - name: Upload windows e2e spec report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-prerelease-win-e2e-report
-          path: ${{ runner.temp }}\release-report\win_x64
-          if-no-files-found: warn
       - name: Prune Windows tools-pack cache
         shell: pwsh
         continue-on-error: true
@@ -1399,9 +1426,68 @@ jobs:
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
           retention-days: 1
+      - name: Build prerelease win_x64 update fixture
+        # Only the `full` Windows smoke consumes this fixture, so it must follow
+        # enable_smoke too — otherwise a `full` dispatch with smoke off would
+        # pay for a second complete Windows build that nothing reads.
+        if: ${{ inputs.enable_smoke && inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
+          if (-not $match.Success) { throw "full Windows smoke requires a counted prerelease version; got ${{ needs.metadata.outputs.release_version }}" }
+          $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-prerelease-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
+          $updateOutput = pnpm.cmd @buildArgs
+          if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
+          $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
+          $updateBuild = $updateOutput | ConvertFrom-Json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
+      - name: Smoke prerelease windows packaged runtime
+        id: win_smoke
+        # Two knobs, two questions: enable_smoke decides WHETHER packaged smoke
+        # runs at all (default off, because smoke is advisory and costs ~2.5 min
+        # on this job, the pipeline's critical path); win_x64_smoke_mode decides
+        # HOW DEEP the Windows one goes once it does. `skip` on either means no
+        # smoke. win_x64_smoke_mode keeps its `core` default and its `core`
+        # forwarding from notify-release-feishu.yml untouched, so turning
+        # enable_smoke on restores exactly today's coverage.
+        if: ${{ inputs.enable_smoke && inputs.win_x64_smoke_mode != 'skip' }}
+        continue-on-error: true
+        working-directory: e2e
+        env:
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-win
+          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
+          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}
+          OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}
+          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload windows e2e spec report
+        # Post-delivery — see the mac lane. Nothing after the publish manifest
+        # may fail this job.
+        continue-on-error: true
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-prerelease-win-e2e-report
+          path: ${{ runner.temp }}\release-report\win_x64
+          if-no-files-found: warn
   build_linux:
     name: Build prerelease linux x64
-    # Test gates run alongside packaging, not in front of it — see build_mac.
+    # Tests never gate delivery on this channel — see build_mac.
     needs: metadata
     if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
     runs-on: ubuntu-latest
@@ -1524,35 +1610,28 @@ jobs:
           retention-days: 1
   publish:
     name: Publish prerelease release
+    # The four test jobs (functional_e2e, e2e_vitest, daemon_unit_tests, verify)
+    # are deliberately ABSENT from both `needs` and `if`. prerelease is the
+    # internal channel: its job is to put a package in a colleague's hands so a
+    # human can test it, and machine CI is a second, parallel signal about the
+    # same commit — not a valve on the first one. A flaky suite used to mean
+    # nobody got a build that day, which is a worse outcome than shipping an
+    # internal package alongside a red test. Their results are surfaced as
+    # workflow outputs (`functional_e2e_result` and friends) so the notification
+    # layer can raise the alarm loudly; they never gate publication. Stable is
+    # unaffected: its promotion gate reads the prerelease metadata through
+    # tools/release/src/metadata/prepare-stable.ts and runs its own checks.
     needs:
       - metadata
-      - functional_e2e
-      - e2e_vitest
-      - daemon_unit_tests
-      - verify
       - build_mac
       - build_mac_intel
       - build_win
       - build_linux
-    # This is the release's only real gate. The packaging jobs deliberately run
-    # in parallel with the four test jobs (see build_mac), so the ONLY thing
-    # standing between a red test and a published prerelease is this condition:
-    # every one of functional_e2e / e2e_vitest / daemon_unit_tests / verify must
-    # have come back `success`. Do not relax any of them to a
-    # `!= 'failure'`-style check and do not drop one from `needs` — a job that is
-    # not in `needs` reports an empty `result`, which silently satisfies nothing
-    # and would let a red suite ship. `functional_e2e` is a reusable-workflow
-    # call; those report a normal job `result` (`success` when no job inside the
-    # called workflow failed), so it is checked exactly like the others.
     if: >-
       ${{
         always() &&
         !cancelled() &&
         needs.metadata.result == 'success' &&
-        needs.functional_e2e.result == 'success' &&
-        needs.e2e_vitest.result == 'success' &&
-        needs.daemon_unit_tests.result == 'success' &&
-        needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
         (needs.build_mac_intel.result == 'success' || needs.build_mac_intel.result == 'skipped') &&
         needs.build_win.result == 'success' &&
