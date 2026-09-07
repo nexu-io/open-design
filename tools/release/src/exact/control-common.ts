@@ -46,10 +46,3 @@ export async function checkedFile(value: JsonObject, label: string, override?: u
   if (actual.sha256 !== value.sha256 || actual.size !== value.size) throw new Error(`${label} binding verification failed: ${path}`);
   return path;
 }
-
-export function exactArgument(name: string): string {
-  const index = process.argv.indexOf(name);
-  const value = index < 0 ? undefined : process.argv[index + 1];
-  if (value == null || value.startsWith("--")) throw new Error(`${name} is required`);
-  return resolve(value);
-}

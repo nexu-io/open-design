@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -208,14 +208,15 @@ describe("exact Electron release topology", () => {
     const platformTrust = { designatedRequirement: 'identifier "io.open-design.betahyx"', mode: "verify-only", platform: "macos", teamIdentifier: "adhoc" };
     const artifact = { mediaType: "application/x-apple-diskimage", sha256: "c".repeat(64), size: 73, url: "https://release.invalid/app.dmg" };
     const shellMetadata = { sha256: "d".repeat(64), size: 41, url: "https://release.invalid/electron-metadata.json" };
-    const installIdentity = { appBundleId: "io.open-design.betahyx", executableName: "open-design-betahyx" };
+    const installIdentity = { appBundleId: "io.open-design.betahyx", executableName: "open-design-betahyx", namespace: "acceptance" };
     const updater = { channel: "betahyx", mechanism: "standalone" };
     const required = { artifact, installIdentity, platformTrust, shell, shellMetadata, target: "darwin-arm64", updater };
     const target = { endpointUrl: "https://storage.invalid", bucket: "release", publicBaseUrl: "https://release.invalid", latestChannelHeadUrl: "https://storage.invalid/release/betahyx/latest/channel-head.json" };
     const publishReceipt = join(publishedRoot, "publish-receipt.json"), policyReceipt = join(root, "policy.json");
-    const policyRequest = join(root, "policy-request.json");
-    await writeFile(policyRequest, JSON.stringify({ schemaVersion: 1, operation: "release.policy.resolve", profile: "exact-validation", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit, sourceRef: "refs/heads/feat/electron", switches: { endUserDistribution: false, stableAuthorized: false }, target }));
-    await run(process.execPath, [resolve(workspaceRoot, "tools/release/bin/tools-release.mjs"), "release-policy", "--request", policyRequest, "--receipt", policyReceipt]);
+    await run(process.execPath, [resolve(workspaceRoot, "tools/release/bin/tools-release.mjs"), "policy", "resolve", "--profile", "exact-validation",
+      "--channel", "betahyx", "--release-version", "1.2.3-betahyx.4", "--source-commit", sourceCommit, "--source-ref", "refs/heads/feat/electron",
+      "--endpoint-url", target.endpointUrl, "--bucket", target.bucket, "--public-base-url", target.publicBaseUrl,
+      "--end-user-distribution", "false", "--stable-authorized", "false", "--receipt", policyReceipt]);
     await writeFile(publishReceipt, JSON.stringify({ schemaVersion: 1, operation: "exact.publish", profile: "exact-validation", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit, target, requiredAcceptances: [required] }));
 
     const installedFiles = await Promise.all(["host.mjs", "supervisor.mjs", "content.json", "trust.json", "seed.bin", "updater-provider.mjs"].map(async (file) => {
@@ -235,19 +236,22 @@ describe("exact Electron release topology", () => {
       trust: installedFiles[3],
       seeds: [installedFiles[4]],
     }));
-    const runtimeLog = join(root, "electron-runtime.jsonl");
+    const baseUserDataRoot = join(root, "user-data");
+    const runtimeRoot = join(baseUserDataRoot, "exact/channels/betahyx/namespaces/acceptance-headless/runtime/electron");
+    const runtimeLog = join(runtimeRoot, "logs/electron-runtime.jsonl");
+    await mkdir(dirname(runtimeLog), { recursive: true });
     await writeFile(runtimeLog, [
       { attemptId: "acceptance-attempt", event: "startup.committed" },
       { attemptId: "acceptance-attempt", event: "shutdown.complete" },
     ].map((event) => JSON.stringify(event)).join("\n"));
 
-    const acceptanceRequest = join(root, "acceptance-request.json");
-    const input = { schemaVersion: 1, operation: "exact.acceptance", publishReceipt, policyReceipt, installedRoot, shellType: "electron", target: "darwin-arm64", runtimeLog };
-    const collect = async (value: unknown) => {
-      await writeFile(acceptanceRequest, JSON.stringify(value));
-      await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/exact-control.mjs"), "--request", acceptanceRequest, "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
+    const collect = async (hotReceipt?: string) => {
+      await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/exact-control.mjs"), "acceptance", "collect",
+        "--publication", publishReceipt, "--policy", policyReceipt, "--installed-root", installedRoot, "--runtime-proof-root", root,
+        "--shell", "electron", "--target", "darwin-arm64", "--base-user-data-root", baseUserDataRoot,
+        ...(hotReceipt == null ? [] : ["--hot-receipt", hotReceipt]), "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
     };
-    await collect(input);
+    await collect();
     const credential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
     expect(credential).toMatchObject({ artifact, installIdentity, platformTrust, shell, shellMetadata, target: "darwin-arm64", updater });
 
@@ -264,8 +268,9 @@ describe("exact Electron release topology", () => {
       results: [line("idle"), line("ready", "1.2.3-betahyx.4"), { outcome: "context-destroyed" }, line("idle")],
     }));
     const generationId = "e".repeat(64);
-    const standaloneState = join(root, "standalone-state.json"), standaloneGenerations = join(root, "standalone-generations");
-    await mkdir(standaloneGenerations);
+    const store = join(runtimeRoot, "standalone-store/channels/betahyx");
+    const standaloneState = join(store, "namespaces/acceptance-headless/state.json"), standaloneGenerations = join(store, "generations");
+    await mkdir(standaloneGenerations, { recursive: true }); await mkdir(dirname(standaloneState), { recursive: true });
     await writeFile(standaloneState, JSON.stringify({
       schemaVersion: 4, active: generationId, lastHealthy: generationId, prepared: null,
       activationIntent: null, activationAttempt: null, revision: 7,
@@ -273,8 +278,7 @@ describe("exact Electron release topology", () => {
     await writeFile(join(standaloneGenerations, `${generationId}.json`), JSON.stringify({
       schemaVersion: 4, id: generationId, channel: "betahyx", releaseVersion: "1.2.3-betahyx.4",
     }));
-    const hotInput = { ...input, hotAcceptanceReceipt: hotReceipt, standaloneState, standaloneGenerationsRoot: standaloneGenerations };
-    await expect(collect(hotInput)).rejects.toThrow("mounted candidate renderer");
+    await expect(collect(hotReceipt)).rejects.toThrow("mounted candidate renderer");
     await writeFile(runtimeLog, [
       { attemptId: "hot-attempt", event: "startup.committed" },
       { attemptId: "hot-attempt", event: "renderer.generation.committed", details: { generationId, bindingDigest: "f".repeat(64) } },
@@ -282,7 +286,7 @@ describe("exact Electron release topology", () => {
       { attemptId: "cold-attempt", event: "startup.committed", details: { generationId } },
       { attemptId: "cold-attempt", event: "shutdown.complete" },
     ].map((event) => JSON.stringify(event)).join("\n"));
-    await collect({ ...input, hotAcceptanceReceipt: hotReceipt, standaloneState, standaloneGenerationsRoot: standaloneGenerations });
+    await collect(hotReceipt);
     const hotCredential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
     expect(hotCredential.installed.proof).toMatchObject({
       baselineReleaseVersion: "1.2.3-betahyx.3",

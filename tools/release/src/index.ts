@@ -5,32 +5,6 @@ const cli = cac("tools-release");
 registerExactCommands(cli);
 
 
-cli
-  .command("release-policy", "Resolve and validate a typed release workflow profile")
-  .option("--request <path>", "Release policy request")
-  .option("--receipt <path>", "Release policy receipt")
-  .action(async (options: { request?: string; receipt?: string }) => {
-    if (options.request == null || options.receipt == null) throw new Error("--request and --receipt are required");
-    const { writeReleasePolicy } = await import("./policy/release-profile.ts");
-    await writeReleasePolicy(options.request, options.receipt);
-  });
-
-cli
-  .command("exact-control", "Execute a finite exact publish or activate request")
-  .option("--request <path>", "Exact control request")
-  .option("--receipt <path>", "Exact control receipt")
-  .action(async (options: { request?: string; receipt?: string }) => {
-    if (options.request == null || options.receipt == null) throw new Error("--request and --receipt are required");
-    const { readObject } = await import("./exact/control-common.ts");
-    const request = await readObject(options.request);
-    const { executeExactReleaseControl } = await import("./exact/control-release.ts");
-    await executeExactReleaseControl(request, options.receipt);
-  });
-
-cli.command("exact-self-check", "Verify exact channel transition algebra").action(async () => {
-  const { selfCheckExactReleaseControl } = await import("./exact/control-release.ts");
-  selfCheckExactReleaseControl();
-});
 
 cli
   .command("exact-release-plan", "Resolve accepted baseline, exact identities, and release actions")

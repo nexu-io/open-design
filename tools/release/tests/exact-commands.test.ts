@@ -45,6 +45,9 @@ it("resolves and reauthorizes the same policy with explicit identity binding", a
 it("rejects unknown commands, missing arguments and non-boolean switches", async () => {
   const f = await fixture();
   expect((await f.invoke(["--help"])).stdout).toContain("baseline");
+  await f.invoke(["self-check"]);
+  await expect(f.invoke(["--request", "/removed-request.json"])).rejects.toThrow("Unknown option");
+  await expect(f.invoke(["removed-command"])).rejects.toThrow("Unknown command");
   await expect(f.invoke(["publish"])).rejects.toThrow("--pack-receipt is required");
   await expect(f.invoke(["scene", "pack"])).rejects.toThrow("--output is required");
   await expect(f.invoke(["scene", "erase", "--output", f.root])).rejects.toThrow("must be pack or unpack");

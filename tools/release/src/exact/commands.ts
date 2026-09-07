@@ -5,7 +5,7 @@ import { exactStorageObject } from "@open-design/release";
 import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/release-profile.ts";
 import { writeObject } from "./control-common.ts";
 import { packSceneArtifact, unpackSceneArtifact } from "./scene-artifact.ts";
-import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, stageAcceptedElectronContribution } from "./control-release.ts";
+import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, stageAcceptedElectronContribution, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
@@ -33,6 +33,11 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("[command]", "Show help when no command is given").action((command?: string) => {
+    if (command != null) throw new Error(`Unknown command: ${command}`);
+    cli.outputHelp();
+  });
+  cli.command("self-check", "Verify exact channel transition algebra").action(() => selfCheckExactReleaseControl());
   cli.command("acceptance <operation>", "Acquire the exact published installer selected for acceptance")
     .option("--publication <file>", "Publication receipt")
     .option("--policy <file>", "Release policy")

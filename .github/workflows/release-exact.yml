@@ -111,7 +111,7 @@ jobs:
           pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/tools-pack build
           pnpm --filter @open-design/tools-release build
-          node tools/release/dist/exact-control.mjs --self-check
+          node tools/release/dist/exact-control.mjs self-check
           mkdir -p "$RUNNER_TEMP/exact-plan"
           cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-release-control.mjs"
 
