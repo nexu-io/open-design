@@ -2011,6 +2011,7 @@ export const hu: Dict = {
   'avatar.noAgentSelected': 'nincs kiválasztott ügynök',
   'avatar.modelSection': 'Modell',
   'avatar.modelLabel': 'Modell',
+  'avatar.strategyTaskModelNotice': 'A jelenlegi feladat a(z) {model} modellt használja. A modellváltás az új feladatokra érvényes.',
   'avatar.reasoningLabel': 'Gondolkodás',
   'avatar.serviceTierLabel': 'Szolgáltatási szint',
   'avatar.customSuffix': '(egyedi)',

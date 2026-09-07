@@ -2011,6 +2011,7 @@ export const ru: Dict = {
   'avatar.noAgentSelected': 'агент не выбран',
   'avatar.modelSection': 'Модель',
   'avatar.modelLabel': 'Модель',
+  'avatar.strategyTaskModelNotice': 'Текущая задача использует {model}. Изменения модели применяются к новым задачам.',
   'avatar.reasoningLabel': 'Рассуждения',
   'avatar.serviceTierLabel': 'Уровень сервиса',
   'avatar.customSuffix': '(пользовательская)',

@@ -2011,6 +2011,7 @@ export const ko: Dict = {
   'avatar.noAgentSelected': '선택된 에이전트 없음',
   'avatar.modelSection': '모델',
   'avatar.modelLabel': '모델',
+  'avatar.strategyTaskModelNotice': '현재 작업은 {model}을 사용합니다. 모델 변경은 새 작업에 적용됩니다.',
   'avatar.reasoningLabel': '추론 (Reasoning)',
   'avatar.serviceTierLabel': '서비스 티어',
   'avatar.customSuffix': '(직접 입력)',

@@ -2011,6 +2011,7 @@ export const ar: Dict = {
   'avatar.noAgentSelected': 'لم يتم اختيار وكيل',
   'avatar.modelSection': 'النموذج',
   'avatar.modelLabel': 'النموذج',
+  'avatar.strategyTaskModelNotice': 'تستخدم المهمة الحالية {model}. تُطبّق تغييرات النموذج على المهام الجديدة.',
   'avatar.reasoningLabel': 'التفكير',
   'avatar.serviceTierLabel': 'طبقة الخدمة',
   'avatar.customSuffix': '(مخصص)',

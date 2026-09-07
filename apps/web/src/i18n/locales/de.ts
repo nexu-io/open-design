@@ -2011,6 +2011,7 @@ export const de: Dict = {
   'avatar.noAgentSelected': 'kein Agent ausgewählt',
   'avatar.modelSection': 'Modell',
   'avatar.modelLabel': 'Modell',
+  'avatar.strategyTaskModelNotice': 'Die aktuelle Aufgabe verwendet {model}. Modelländerungen gelten für neue Aufgaben.',
   'avatar.reasoningLabel': 'Reasoning',
   'avatar.serviceTierLabel': 'Dienststufe',
   'avatar.customSuffix': '(benutzerdefiniert)',

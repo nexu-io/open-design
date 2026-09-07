@@ -2111,6 +2111,7 @@ export const zhTW: Dict = {
   "avatar.noAgentSelected": "尚未選擇代理",
   "avatar.modelSection": "模型",
   "avatar.modelLabel": "模型",
+  "avatar.strategyTaskModelNotice": "目前任務繼續使用 {model}，切換模型僅對新任務生效。",
   "avatar.reasoningLabel": "推理",
   "avatar.serviceTierLabel": "服務層級",
   "avatar.customSuffix": "（自訂）",

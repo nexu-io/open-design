@@ -32,7 +32,11 @@ vi.mock('node:crypto', async (importOriginal) => {
   };
 });
 
-import { closeDatabase, openDatabase } from '../src/db.js';
+import {
+  closeDatabase,
+  getAgentSessionRecord,
+  openDatabase,
+} from '../src/db.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
 import {
   getInstalledPlugin,
@@ -152,6 +156,8 @@ describe('OD Next automatic production through the real server', () => {
   let binDir: string | null = null;
   let sequence = 0;
 
+  // This real-server fixture can need longer than Vitest's default 10 seconds
+  // to settle Windows process and server teardown; keep it bounded explicitly.
   afterEach(async () => {
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
@@ -163,7 +169,7 @@ describe('OD Next automatic production through the real server', () => {
     closeDatabase();
     if (binDir) await rm(binDir, { recursive: true, force: true });
     binDir = null;
-  });
+  }, 30_000);
 
   it('keeps off/observe public POST behavior ordinary and idempotent with zero strategy tasks', async () => {
     const fixture = await createPublicRolloutFixture('inert');
@@ -2016,6 +2022,57 @@ describe('OD Next automatic production through the real server', () => {
     });
   });
 
+  it('keeps the task-locked model when the UI model changes before a clarification answer', async () => {
+    const fixture = await createFixture('clarification');
+    const firstRequest = {
+      ...createRunRequest(fixture, 'Build a desktop operator prototype.'),
+      model: 'gpt-5.4',
+    };
+
+    queueFixtureIds(fixture);
+    const created = await postRun(started!.url, firstRequest);
+    const firstTerminal = await waitForRunTerminal(started!.url, created.runId as string);
+    expect(firstTerminal.status, JSON.stringify(firstTerminal)).toBe('succeeded');
+    expect(await waitForTask(fixture.taskExecutionId, 'clarification_required')).toMatchObject({
+      inputStage: 'request',
+      latestRunId: created.runId,
+    });
+    expect(getAgentSessionRecord(database(), fixture.conversationId, 'codex')).toMatchObject({
+      sessionId: THREAD_ID,
+      model: 'gpt-5.4',
+    });
+
+    const answered = await postRun(started!.url, {
+      ...createRunRequest(fixture, 'Desktop workspace'),
+      taskExecutionId: fixture.taskExecutionId,
+      userMessageId: `user-clarification-${fixture.projectId}`,
+      assistantMessageId: `assistant-clarification-${fixture.projectId}`,
+      clientRequestId: `request-clarification-${fixture.projectId}`,
+      model: 'gpt-5.5',
+    });
+    const answerTerminal = await waitForRunTerminal(started!.url, answered.runId as string);
+    expect(answerTerminal.status, JSON.stringify(answerTerminal)).toBe('succeeded');
+    const terminal = await waitForTask(fixture.taskExecutionId, 'completed');
+    expect(terminal.runs.map((run) => run.inputStage)).toEqual([
+      'request',
+      'clarification',
+      'production',
+    ]);
+    const productionTerminal = await waitForRunTerminal(
+      started!.url,
+      terminal.terminalRunId!,
+    );
+    expect(productionTerminal.status, JSON.stringify(productionTerminal)).toBe('succeeded');
+
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(3);
+    expect(invocations.map(({ argv }) => {
+      const modelFlag = argv.indexOf('--model');
+      return modelFlag >= 0 ? argv[modelFlag + 1] : null;
+    })).toEqual(['gpt-5.4', 'gpt-5.4', 'gpt-5.4']);
+    expect(invocations.slice(1).map(({ argv }) => argv.includes(THREAD_ID))).toEqual([true, true]);
+  });
+
   it('keeps a completed task exactly-once across an exact retry and daemon restart', async () => {
     const fixture = await createFixture('repair');
     const body = createRunRequest(fixture, 'Update the existing operator header.');
@@ -2380,7 +2437,7 @@ describe('OD Next automatic production through the real server', () => {
   });
 
   async function createFixture(
-    mode: 'repair' | 'direct' | 'complex',
+    mode: 'repair' | 'direct' | 'complex' | 'clarification',
     {
       selectedAgentId = 'codex',
       capability,
@@ -2405,7 +2462,12 @@ describe('OD Next automatic production through the real server', () => {
         .toString(16)
         .padStart(12, '0')}`;
       const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
-      const plan = planContract(template.snapshotId, template.strategy, mode, capability);
+      const plan = planContract(
+        template.snapshotId,
+        template.strategy,
+        mode === 'clarification' ? 'repair' : mode,
+        capability,
+      );
       const { bin, logPath } = selectedAgentId === 'claude'
         ? await writeStrategyClaude(binDir, plan)
         : await writeStrategyCodex(binDir, mode, plan);
@@ -2500,7 +2562,12 @@ describe('OD Next automatic production through the real server', () => {
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     }
 
-    const plan = planContract(snapshot.snapshotId, snapshot.strategy!, mode, capability);
+    const plan = planContract(
+      snapshot.snapshotId,
+      snapshot.strategy!,
+      mode,
+      capability,
+    );
     const { bin, logPath } = selectedAgentId === 'claude'
       ? await writeStrategyClaude(binDir, plan)
       : await writeStrategyCodex(binDir, mode, plan);
@@ -2680,9 +2747,11 @@ async function writePublicRolloutCodex(
   label: string,
   agentCliVersion = 'codex-cli 0.147.0',
 ): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, `codex-public-${label}`);
+  const binBase = path.join(dir, `codex-public-${label}`);
+  const bin = process.platform === 'win32' ? `${binBase}.cmd` : binBase;
+  const runner = process.platform === 'win32' ? `${binBase}.cjs` : binBase;
   const logPath = path.join(dir, `codex-public-${label}.jsonl`);
-  await writeFile(bin, `#!/usr/bin/env node
+  await writeFile(runner, `#!/usr/bin/env node
 const fs = require('node:fs');
 const argv = process.argv.slice(2);
 const logPath = ${JSON.stringify(logPath)};
@@ -2707,7 +2776,14 @@ process.stdin.on('end', () => {
   setTimeout(() => process.exit(0), 5);
 });
 `, 'utf8');
-  await chmod(bin, 0o755);
+  await chmod(runner, 0o755);
+  if (process.platform === 'win32') {
+    await writeFile(
+      bin,
+      `@echo off\r\n"${process.execPath}" "${runner}" %*\r\nexit /b %ERRORLEVEL%\r\n`,
+      'utf8',
+    );
+  }
   return { bin, logPath };
 }
 
@@ -2753,6 +2829,9 @@ async function startDaemon(
 async function stopServer(server: StartedServer | null): Promise<void> {
   if (!server) return;
   await Promise.resolve(server.shutdown?.());
+  // This fixture owns its clients; do not wait for HTTP keep-alive connections
+  // to expire after the terminal run assertions have completed.
+  server.server.closeAllConnections();
   if (server.server.listening) {
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
   }
@@ -2905,7 +2984,7 @@ function planContract(
 
 function runtimeState(input: {
   route?: 'direct_edit' | 'full_plan';
-  inputStage?: 'request' | 'contract_repair' | 'production';
+  inputStage?: 'request' | 'clarification' | 'contract_repair' | 'production';
   outcome: 'plan_ready' | 'completed';
   executionMode?: 'simple' | 'complex';
 }) {
@@ -2926,10 +3005,12 @@ function machineBlock(tag: string, value: unknown, fenced = false): string {
 
 async function writeStrategyCodex(
   dir: string,
-  mode: 'repair' | 'direct' | 'complex',
+  mode: 'repair' | 'direct' | 'complex' | 'clarification',
   plan: OpenDesignPlanContractV2,
 ): Promise<{ bin: string; logPath: string }> {
-  const bin = path.join(dir, `codex-${mode}`);
+  const binBase = path.join(dir, `codex-${mode}`);
+  const bin = process.platform === 'win32' ? `${binBase}.cmd` : binBase;
+  const runner = process.platform === 'win32' ? `${binBase}.cjs` : binBase;
   const logPath = path.join(dir, `codex-${mode}.jsonl`);
   const initialRepair = [
     'Prepared a simple plan.',
@@ -2940,6 +3021,22 @@ async function writeStrategyCodex(
     machineBlock('open-design-plan-contract', plan),
     machineBlock('open-design-runtime-state', runtimeState({
       inputStage: 'contract_repair',
+      outcome: 'plan_ready',
+    })),
+  ].join('\n');
+  const clarificationRequested = [
+    '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>',
+    machineBlock('open-design-runtime-state', {
+      ...runtimeState({ outcome: 'plan_ready' }),
+      outcome: 'clarification_required',
+      executionMode: null,
+    }),
+  ].join('\n');
+  const clarified = [
+    'Prepared a simple plan from the clarification.',
+    machineBlock('open-design-plan-contract', plan),
+    machineBlock('open-design-runtime-state', runtimeState({
+      inputStage: 'clarification',
       outcome: 'plan_ready',
     })),
   ].join('\n');
@@ -2962,7 +3059,7 @@ async function writeStrategyCodex(
     inputStage: 'production', outcome: 'completed', executionMode: 'complex',
   }));
 
-  await writeFile(bin, `#!/usr/bin/env node
+  await writeFile(runner, `#!/usr/bin/env node
 const fs = require('node:fs');
 const path = require('node:path');
 const argv = process.argv.slice(2);
@@ -3002,6 +3099,13 @@ function finish() {
     text = ${JSON.stringify(complexProduction)};
   } else if (mode === 'complex') {
     text = ${JSON.stringify(complexPlan)};
+  } else if (mode === 'clarification' && stdin.includes('native continuation — production')) {
+    fs.writeFileSync(path.join(process.cwd(), 'index.html'), '<!doctype html><title>Production</title>');
+    text = ${JSON.stringify(production)};
+  } else if (mode === 'clarification' && stdin.includes('native continuation — clarification')) {
+    text = ${JSON.stringify(clarified)};
+  } else if (mode === 'clarification') {
+    text = ${JSON.stringify(clarificationRequested)};
   } else if (stdin.includes('native continuation — contract_repair')) {
     text = ${JSON.stringify(repaired)};
   } else if (stdin.includes('native continuation — production')) {
@@ -3045,7 +3149,14 @@ process.stdin.on('end', finish);
 process.stdin.on('error', finish);
 setTimeout(finish, 1500);
 `, 'utf8');
-  await chmod(bin, 0o755);
+  await chmod(runner, 0o755);
+  if (process.platform === 'win32') {
+    await writeFile(
+      bin,
+      `@echo off\r\n"${process.execPath}" "${runner}" %*\r\nexit /b %ERRORLEVEL%\r\n`,
+      'utf8',
+    );
+  }
   return { bin, logPath };
 }
 

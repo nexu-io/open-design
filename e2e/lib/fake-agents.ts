@@ -212,7 +212,7 @@ if (args.includes('--version')) {
   process.stdout.write('--add-dir --include-partial-messages\\n');
   process.exitCode = 0;
 } else if ((agentId === 'opencode' || agentId === 'cursor-agent') && args[0] === 'models') {
-  process.stdout.write('fake/default\\n');
+  process.stdout.write('fake/default\\nfake/alternate\\n');
   process.exitCode = 0;
 } else {
 

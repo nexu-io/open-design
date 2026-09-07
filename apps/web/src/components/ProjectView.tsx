@@ -19,6 +19,8 @@ import { validateHtmlArtifact } from '../artifacts/validate';
 import { recoverHtmlDocumentFromMarkdownFence, recoverStandaloneHtmlDocument, resolvePersistedArtifactHtml } from '../artifacts/recover';
 import { createArtifactParser } from '../artifacts/parser';
 import { useI18n } from '../i18n';
+import { activeStrategyModel } from '../runtime/execution-model';
+import executionControlsStyles from './ProjectExecutionControls.module.css';
 import {
   fetchChatRunStatus,
   GENERIC_DAEMON_DISCONNECT_CODE,
@@ -11386,8 +11388,11 @@ export function ProjectView({
 
   // CLI / agent selector lives below the chat conversation (composer footer),
   // not in the top-right header.
+  const taskExecutionModel = messagesConversationId === activeConversationId
+    ? activeStrategyModel(messages)
+    : null;
   const executionControls = (
-    <>
+    <div className={executionControlsStyles.controls}>
       <AvatarMenu
         config={config}
         agents={agents}
@@ -11437,7 +11442,12 @@ export function ProjectView({
         placement="up"
         projectWorkspaceScope={projectWorkspaceScopeState}
       />
-    </>
+      {taskExecutionModel ? (
+        <span className={executionControlsStyles.notice} role="status" data-testid="strategy-task-model-notice">
+          {t('avatar.strategyTaskModelNotice').replace('{model}', taskExecutionModel)}
+        </span>
+      ) : null}
+    </div>
   );
 
   // The `.app` shell belongs to the caller, not to this component. App.tsx

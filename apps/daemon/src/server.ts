@@ -797,6 +797,7 @@ import {
   updateRoutine,
   updateRoutineRun,
   clearAgentSession,
+  getAgentSessionRecord,
   upsertAgentSession,
   upsertDeployment,
   upsertMessage,
@@ -11264,11 +11265,12 @@ export async function startServer({
     const agentCapturesSessionId = def.capturesSessionIdFromStream === true;
     let capturedSessionId: string | null = null;
     // --- Model resolution hoisted above the resume-identity guard ---
-    // The guard (and the persisted `agent_sessions.model`) must key off the
-    // model identity actually requested for this turn. Explicit `default` is
-    // kept as a real identity because ACP runtimes can leave model selection to
-    // the upstream session's own configured default; omitted models may still
-    // resolve to an available fallback below.
+    // The guard (and the persisted `agent_sessions.model`) normally key off
+    // the model identity requested for this turn. OD Next continuations below
+    // instead reuse the model already bound to their native session. Explicit
+    // `default` remains a real identity because ACP runtimes can leave model
+    // selection to the upstream session's own configured default; omitted
+    // models may still resolve to an available fallback below.
     let configuredAgentEnv = {};
     let appConfigForRun = null;
     try {
@@ -11289,12 +11291,31 @@ export async function startServer({
       typeof appConfigForRun?.agentModels?.[def.id]?.model === 'string'
         ? appConfigForRun.agentModels[def.id].model
         : null;
+    // An OD Next task is bound to one native agent session across its request,
+    // clarification, repair, and production Runs. The public clarification
+    // request carries the UI's *current* model, which may have changed since
+    // the request Run created that session. Resolve the continuation from the
+    // persisted session identity before validating/building argv so UI drift
+    // cannot invalidate an otherwise resumable task or switch models mid-task.
+    // Agent identity is already locked by strategyTaskAtStart.selectedAgentId;
+    // cwd and cursor remain enforced by resolveAgentResumeContext below.
+    const lockedStrategySessionModel =
+      strategyTaskAtStart
+      && strategyTaskAtStart.inputStage !== 'request'
+      && agentSupportsSessionResume
+      && run.conversationId
+        ? getAgentSessionRecord(db, run.conversationId, def.id)?.model ?? null
+        : null;
+    const modelSelectionLockedToSession = lockedStrategySessionModel !== null;
+    const requestedModelIdentity = modelSelectionLockedToSession
+      ? lockedStrategySessionModel
+      : requestedRuntimeModel;
     let safeModel = resolveModelForAgent(
       def,
-      typeof requestedRuntimeModel === 'string'
-        ? isKnownModel(def, requestedRuntimeModel, requestedLiveModelScope)
-          ? requestedRuntimeModel
-          : sanitizeCustomModel(requestedRuntimeModel)
+      typeof requestedModelIdentity === 'string'
+        ? isKnownModel(def, requestedModelIdentity, requestedLiveModelScope)
+          ? requestedModelIdentity
+          : sanitizeCustomModel(requestedModelIdentity)
         : configuredModel,
       process.env,
       requestedLiveModelScope,
@@ -11344,7 +11365,8 @@ export async function startServer({
         );
         const resumeModelIds = new Set(resumeLiveModels.map((c) => c?.id).filter(Boolean));
         const askedForDefault =
-          typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default';
+          !modelSelectionLockedToSession
+          && (typeof model !== 'string' || !model.trim() || model.trim().toLowerCase() === 'default');
         const defaultRunModel = resolveDefaultModelFromOptions(resumeLiveModels);
         if (
           !safeModel ||
@@ -11363,6 +11385,12 @@ export async function startServer({
         // Degrade silently: keep the requested value. The preflight below records
         // the probe failure and applies the identical fallback.
       }
+    }
+    if (modelSelectionLockedToSession && safeModel) {
+      // Preserve the request's raw selection on run.model for diagnostics,
+      // while attributing execution and billing telemetry to the model that
+      // will actually receive this continuation.
+      run.resolvedModelId = safeModel;
     }
     const resolvedAgentResumeCtx =
       agentSupportsSessionResume && run.conversationId
@@ -12590,9 +12618,12 @@ export async function startServer({
       // adopt the catalog's enabled default so the spawn layer always has a
       // usable real id.
       const userAskedForDefault =
-        typeof model !== 'string' ||
-        !model.trim() ||
-        model.trim().toLowerCase() === 'default';
+        !modelSelectionLockedToSession
+        && (
+          typeof model !== 'string'
+          || !model.trim()
+          || model.trim().toLowerCase() === 'default'
+        );
       const defaultRunModel = resolveDefaultModelFromOptions(liveModels);
       if (
         !safeModel ||

@@ -2011,6 +2011,7 @@ export const ja: Dict = {
   'avatar.noAgentSelected': 'エージェント未選択',
   'avatar.modelSection': 'モデル',
   'avatar.modelLabel': 'モデル',
+  'avatar.strategyTaskModelNotice': '現在のタスクは {model} を使用します。モデルの変更は新しいタスクに適用されます。',
   'avatar.reasoningLabel': '推論',
   'avatar.serviceTierLabel': 'サービス階層',
   'avatar.customSuffix': '（カスタム）',

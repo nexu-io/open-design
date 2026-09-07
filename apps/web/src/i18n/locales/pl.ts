@@ -2011,6 +2011,7 @@ export const pl: Dict = {
   'avatar.noAgentSelected': 'nie wybrano agenta',
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
+  'avatar.strategyTaskModelNotice': 'Bieżące zadanie używa {model}. Zmiany modelu dotyczą nowych zadań.',
   'avatar.reasoningLabel': 'Rozumowanie',
   'avatar.serviceTierLabel': 'Poziom usługi',
   'avatar.customSuffix': '(własny)',

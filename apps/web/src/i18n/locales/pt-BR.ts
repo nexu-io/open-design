@@ -2011,6 +2011,7 @@ export const ptBR: Dict = {
   'avatar.noAgentSelected': 'nenhum agente selecionado',
   'avatar.modelSection': 'Modelo',
   'avatar.modelLabel': 'Modelo',
+  'avatar.strategyTaskModelNotice': 'A tarefa atual usa {model}. As mudanças de modelo se aplicam a novas tarefas.',
   'avatar.reasoningLabel': 'Raciocínio',
   'avatar.serviceTierLabel': 'Camada de serviço',
   'avatar.customSuffix': '(personalizado)',

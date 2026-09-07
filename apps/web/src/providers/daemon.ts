@@ -1503,6 +1503,7 @@ async function consumeDaemonPhysicalRun({
               kind: 'status',
               label: 'starting',
               detail: typeof data.bin === 'string' ? data.bin : undefined,
+              ...(typeof data.model === 'string' ? { model: data.model } : {}),
             });
             continue;
           }
