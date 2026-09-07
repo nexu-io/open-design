@@ -4,6 +4,7 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "rootDir": "."
   },
   "include": ["scripts/**/*.ts"]

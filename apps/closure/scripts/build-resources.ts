@@ -8,6 +8,7 @@ import { standaloneTreeSha256 } from "@open-design/standalone";
 import { build } from "esbuild";
 import JSZip from "jszip";
 import { buildClosureDataResources } from "@open-design/closure/build-resources";
+import { closureNodeExternals } from "../src/build/node-externals.ts";
 
 type TreeEntry = Readonly<{ path: string; sha256: string; size: number }>;
 
@@ -119,6 +120,7 @@ export async function buildClosureProductResources(input: Readonly<{ outputDirec
     platform: "node",
     target: "node24",
     banner: { js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);' },
+    plugins: [closureNodeExternals()],
     external: [...Object.keys(runtimeDependencies), "fsevents"],
   });
   await Promise.all([
