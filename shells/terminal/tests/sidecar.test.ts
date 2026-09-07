@@ -12,6 +12,7 @@ import {
 } from "@open-design/sidecar";
 import {
   createStandaloneGenerationBinding,
+  resolveStandaloneRuntimeLayout,
   sha256Hex,
   type GenerationRecord,
 } from "@open-design/standalone";
@@ -106,6 +107,10 @@ describe("Terminal Sidecar refinement", () => {
       runtimeRoot,
       standaloneEntrypoint,
       sidecarHost,
+      layout: resolveStandaloneRuntimeLayout({
+        namespaceRoot: join(root, "namespace"), resourceStoreRoot: storeRoot,
+        sidecarSupervisorPath: resolve(repoRoot, "packages/sidecar/dist/supervisor.mjs"),
+      }),
     };
     const launchRequest = {
       args: [resolve(terminalRoot, "runtime/sidecar-bootstrap.mjs")],
@@ -154,7 +159,7 @@ describe("Terminal Sidecar refinement", () => {
       expect.objectContaining({ attachmentId: "terminal-concurrent" }),
     ]) });
     const originalHost = await getSidecarStatus<any>(stamp, { generationPid });
-    expect(originalHost).toMatchObject({ control: "ready", generationPid, hostPid: expect.any(Number) });
+    expect(originalHost).toMatchObject({ control: "ready", generationPid, hostPid: expect.any(Number), layout: config.layout });
     await invokeSidecar(stamp, "standalone.request.v1", {
       schemaVersion: 1,
       domain: "lifecycle",

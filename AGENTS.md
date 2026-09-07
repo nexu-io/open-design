@@ -104,10 +104,14 @@ Development propagation:
 
 Packaged propagation:
 
-- The Electron Shell owns packaged channel and namespace layout; `tools-pack`
-  supplies explicit local lifecycle inputs through its typed Shell adapter.
-- Shell runtime code resolves the final namespace-scoped daemon data root before
-  spawning the daemon.
+- Packaged business data, logs, and runtime directories belong to the shared
+  channel and namespace scope, not to the first Shell that starts it. Shell
+  adapters explicitly select the same scope and Store roots and consume the
+  Standalone layout contract; Electron retains its private Chromium/UI paths.
+- `tools-pack` supplies explicit local lifecycle inputs through its typed Shell
+  adapter. Shell runtime code resolves the final namespace-scoped daemon data
+  root before spawning the daemon. Layout resolution never migrates or merges
+  existing data implicitly; conflicting roots must fail closed.
 - The packaged daemon receives that final data root as `OD_DATA_DIR`; daemon
   code must not infer packaged data paths from app names, Electron `userData`,
   ports, channel names, or namespace names.

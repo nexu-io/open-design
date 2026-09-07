@@ -7,6 +7,7 @@ import {
 import {
   canonicalJson,
   createStandaloneGenerationBinding,
+  resolveStandaloneRuntimeLayout,
   sha256Hex,
   StandaloneFeedbackEmitter,
   StandaloneHostControlClient,
@@ -210,11 +211,9 @@ export function createElectronStandaloneAuthorityFactory(
       const channelHeadUrl = options.channelHeadUrl ?? installation.declaration.update.channelHeadUrl;
       const storeRoot = join(runtimeRoot, "standalone-store");
       const sidecarRuntimeRoot = join(runtimeRoot, "standalone-sidecar");
-      const layout = Object.freeze({
-        dataRoot: join(namespaceRoot, "data", "product"),
-        logsRoot: join(namespaceRoot, "logs", "product"),
+      const layout = resolveStandaloneRuntimeLayout({
+        namespaceRoot,
         resourceStoreRoot: storeRoot,
-        runtimeRoot: join(namespaceRoot, "runtime", "product"),
         sidecarSupervisorPath: installation.supervisorPath,
       });
       const store = new StandaloneStore(storeRoot, request.scope);

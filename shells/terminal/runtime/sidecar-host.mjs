@@ -33,6 +33,7 @@ function readConfig() {
     sidecarHost: resolve(value.sidecarHost),
     channel: value.channel,
     namespace: value.namespace,
+    layout: value.layout,
   });
 }
 
@@ -41,6 +42,8 @@ class TerminalSidecarRuntime {
     this.config = config;
     this.standalone = standalone;
     this.scope = Object.freeze({ channel: config.channel, namespace: config.namespace });
+    this.layout = standalone.validateStandaloneRuntimeLayout(config.layout);
+    if (this.layout.resourceStoreRoot !== config.storeRoot) throw new Error("Terminal layout escaped its Store root");
     this.lifecycle = new FileFixtureLifecyclePort(config.storeRoot, {
       algebra: standalone.SHARED_LIFECYCLE_ALGEBRA,
       transitionLeaseDurationMs: Number.parseInt(process.env.OD_FIXTURE_TRANSITION_LEASE_MS ?? "30000", 10),
@@ -185,15 +188,7 @@ class TerminalSidecarRuntime {
     const handle = await this.handoff.handoff({
       binding: message.binding,
       attachment: message.attachment,
-      capabilities: {
-        invoke: async (request) => ({
-          requestId: request.requestId,
-          attachmentId: request.attachmentId,
-          bindingDigest: request.bindingDigest,
-          outcome: "unsupported",
-          error: { code: "terminal-capability-unavailable" },
-        }),
-      },
+      capabilities: this.standalone.createStandaloneRuntimeLayoutCapabilityHandler({ layout: this.layout, scope: this.scope }),
     });
     try {
       const status = await start();
@@ -329,6 +324,7 @@ const client = SidecarFactory.create({
         hostPid: process.pid,
         previousHostPid: Number.parseInt(process.env.OD_TERMINAL_PREVIOUS_HOST_PID ?? "0", 10) || null,
         runtimeRoot: client.resources.runtimeRoot,
+        layout: active.layout,
         lifecycle: await active.lifecycle.status(active.scope),
       };
     },

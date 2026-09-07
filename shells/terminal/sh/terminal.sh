@@ -45,6 +45,7 @@ operation=start
 attachment_id=
 attachment_capability=
 store_root=
+namespace_root=
 channel_head_url=
 activation_policy=
 result_file=
@@ -57,6 +58,7 @@ while [ "$#" -gt 0 ]; do
     --attachment-id) [ "$#" -ge 2 ] || fail "--attachment-id requires a value"; attachment_id=$2; shift 2;;
     --attachment-capability) [ "$#" -ge 2 ] || fail "--attachment-capability requires a value"; attachment_capability=$2; shift 2;;
     --store-root) [ "$#" -ge 2 ] || fail "--store-root requires a value"; store_root=$2; shift 2;;
+    --namespace-root) [ "$#" -ge 2 ] || fail "--namespace-root requires a value"; namespace_root=$2; shift 2;;
     --channel-head-url) [ "$#" -ge 2 ] || fail "--channel-head-url requires a value"; channel_head_url=$2; shift 2;;
     --activation-policy) [ "$#" -ge 2 ] || fail "--activation-policy requires a value"; activation_policy=$2; shift 2;;
     --result) [ "$#" -ge 2 ] || fail "--result requires a value"; result_file=$2; shift 2;;
@@ -126,6 +128,8 @@ attachment_capability_json=
 [ -z "$attachment_capability" ] || attachment_capability_json=",\"attachmentCapability\":\"$attachment_capability\""
 store_json=
 [ -z "$store_root" ] || store_json=",\"storeRoot\":\"$(json_escape "$store_root")\""
+namespace_json=
+[ -z "$namespace_root" ] || namespace_json=",\"namespaceRoot\":\"$(json_escape "$namespace_root")\""
 head_json=
 [ -z "$channel_head_url" ] || head_json=",\"channelHeadUrl\":\"$(json_escape "$channel_head_url")\""
 activation_json=
@@ -134,8 +138,8 @@ update_protocol_json=
 case "$operation" in prepare-update|apply-update|apply-update-force) update_protocol_json=',"updateProtocolVersion":3';; esac
 feedback_json=
 [ -z "$feedback_file" ] || feedback_json=",\"feedbackFile\":\"$(json_escape "$feedback_file")\""
-printf '{"carrierResolutionFile":"%s","channel":"%s","namespace":"%s","operation":"%s","schemaVersion":1%s%s%s%s%s%s%s}\n' \
-  "$(json_escape "$resolution_file")" "$channel" "$namespace" "$operation" "$attachment_json" "$attachment_capability_json" "$store_json" "$head_json" "$activation_json" "$update_protocol_json" "$feedback_json" > "$request_file"
+printf '{"carrierResolutionFile":"%s","channel":"%s","namespace":"%s","operation":"%s","schemaVersion":1%s%s%s%s%s%s%s%s}\n' \
+  "$(json_escape "$resolution_file")" "$channel" "$namespace" "$operation" "$attachment_json" "$attachment_capability_json" "$store_json" "$head_json" "$activation_json" "$update_protocol_json" "$feedback_json" "$namespace_json" > "$request_file"
 
 set +e
 OD_TERMINAL_FOSSIL_REQUEST_V1=$request_file OD_TERMINAL_FOSSIL_RESULT_V1=$result_file \

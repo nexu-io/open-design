@@ -30,6 +30,7 @@ function validateRequest(value) {
   if (typeof value.carrierResolutionFile !== "string" || !isAbsolute(value.carrierResolutionFile)) throw new Error("invalid carrier resolution path");
   if (value.feedbackFile != null && (typeof value.feedbackFile !== "string" || !isAbsolute(value.feedbackFile))) throw new Error("invalid feedback path");
   if (value.operation !== "probe" && (typeof value.storeRoot !== "string" || !isAbsolute(value.storeRoot))) throw new Error("lifecycle operation requires an absolute Store root");
+  if (value.namespaceRoot != null && (typeof value.namespaceRoot !== "string" || !isAbsolute(value.namespaceRoot) || resolve(value.namespaceRoot) !== value.namespaceRoot)) throw new Error("namespace root must be absolute and normalized");
   if (new Set(["start", "heartbeat", "release"]).has(value.operation) && !/^[A-Za-z0-9._-]{1,128}$/.test(value.attachmentId)) throw new Error(`${value.operation} requires an attachment id`);
   if (value.attachmentCapability != null && !/^[a-f0-9]{64}$/.test(value.attachmentCapability)) throw new Error("invalid attachment capability");
   if (value.operation === "prepare-update" && (typeof value.channelHeadUrl !== "string" || !/^(https?:|file:)\/\//.test(value.channelHeadUrl))) throw new Error("prepare-update requires a channel head URL");
@@ -116,6 +117,11 @@ async function convergeTerminalSidecar(request, installation) {
   const runtimeRoot = resolve(request.storeRoot, "sidecar-runtime");
   const sidecarHost = resolve(installation.root, installation.manifest.sidecarHost.entrypoint);
   const sidecarBootstrap = resolve(installation.root, installation.manifest.sidecarBootstrap.entrypoint);
+  const layout = installation.standalone.resolveStandaloneRuntimeLayout({
+    namespaceRoot: request.namespaceRoot ?? resolve(request.storeRoot, "channels", request.channel, "namespaces", request.namespace),
+    resourceStoreRoot: resolve(request.storeRoot),
+    sidecarSupervisorPath: resolve(installation.root, "runtime/node_modules/@open-design/sidecar/dist/supervisor.mjs"),
+  });
   const config = {
     schemaVersion: 1,
     channel: request.channel,
@@ -124,6 +130,7 @@ async function convergeTerminalSidecar(request, installation) {
     runtimeRoot,
     standaloneEntrypoint: resolve(installation.root, installation.manifest.standalone.entrypoint),
     sidecarHost,
+    layout,
   };
   try {
     const existing = await getSidecarStatus(stamp, { timeoutMs: 500 });
@@ -131,6 +138,7 @@ async function convergeTerminalSidecar(request, installation) {
       existing?.control !== "ready"
       || existing.dataRoot !== config.storeRoot
       || existing.runtimeRoot !== runtimeRoot
+      || installation.standalone.canonicalJson(existing.layout) !== installation.standalone.canonicalJson(layout)
       || !Number.isSafeInteger(existing.generationPid)
       || !Number.isSafeInteger(existing.hostPid)
       || !Number.isSafeInteger(existing.bootstrapPid)
@@ -168,6 +176,7 @@ async function convergeTerminalSidecar(request, installation) {
   const status = await getSidecarStatus(stamp, { generationPid: converged.description.resources.pid });
   if (
     status?.control !== "ready"
+    || installation.standalone.canonicalJson(status.layout) !== installation.standalone.canonicalJson(layout)
     || status.generationPid !== converged.description.resources.pid
     || !Number.isSafeInteger(status.hostPid)
     || !Number.isSafeInteger(status.bootstrapPid)

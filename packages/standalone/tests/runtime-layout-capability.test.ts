@@ -7,6 +7,7 @@ import {
   createStandaloneRuntimeLayoutCapabilityHandler,
   createStandaloneShellCapabilityRouter,
   readStandaloneRuntimeLayoutCapability,
+  resolveStandaloneRuntimeLayout,
   type StandaloneShellCapabilityPort,
 } from "../src/index.js";
 
@@ -21,6 +22,27 @@ const layout = Object.freeze({
 });
 
 describe("Standalone runtime layout capability", () => {
+  it("derives the same product layout for every Shell without changing existing product paths", () => {
+    const namespaceRoot = join(tmpdir(), "shared-scope");
+    const input = { namespaceRoot, resourceStoreRoot: layout.resourceStoreRoot, sidecarSupervisorPath: layout.sidecarSupervisorPath };
+    const first = resolveStandaloneRuntimeLayout(input);
+    expect(resolveStandaloneRuntimeLayout({ ...input })).toEqual(first);
+    expect(first).toEqual({
+      dataRoot: join(namespaceRoot, "data", "product"),
+      logsRoot: join(namespaceRoot, "logs", "product"),
+      runtimeRoot: join(namespaceRoot, "runtime", "product"),
+      resourceStoreRoot: layout.resourceStoreRoot,
+      sidecarSupervisorPath: layout.sidecarSupervisorPath,
+    });
+    expect(Object.isFrozen(first)).toBe(true);
+    const second = resolveStandaloneRuntimeLayout({ ...input, namespaceRoot: join(tmpdir(), "other-scope") });
+    expect(second.dataRoot).not.toBe(first.dataRoot);
+    expect(second.logsRoot).not.toBe(first.logsRoot);
+    expect(second.runtimeRoot).not.toBe(first.runtimeRoot);
+    expect(() => resolveStandaloneRuntimeLayout({ ...input, namespaceRoot: "relative" })).toThrow("absolute and normalized");
+    expect(() => resolveStandaloneRuntimeLayout({ ...input, resourceStoreRoot: "relative" })).toThrow("absolute and normalized");
+  });
+
   it("round-trips only the exact Shell-owned scope and paths", async () => {
     const capabilities = createStandaloneRuntimeLayoutCapabilityHandler({ layout, scope });
     await expect(readStandaloneRuntimeLayoutCapability({

@@ -60,6 +60,15 @@ process discovery and generation fencing stay private to `@open-design/sidecar`.
 and apply are all executable without Web or daemon.
 
 Every runtime request carries an explicit `channel` and `namespace`. The Sidecar
+layout may additionally select an explicit scope root through `--namespace-root`
+(`-NamespaceRoot` in PowerShell). Shells attaching to the same scope must select
+the same namespace and Store roots; the shared Standalone resolver supplies the
+product layout and a conflicting live layout is rejected. Omitting the option
+uses the namespace's existing Store scope root. No directory migration or merge
+is performed. Daemon data ownership follows the root
+[`AGENTS.md`](../../AGENTS.md#daemon-data-directory-contract) contract.
+
+The Sidecar
 shared instance is keyed only by that pair and follows
 `contract/instance-lifecycle.schema.json`: reference attachment, heartbeat lease,
 occupant projection, fenced transitions and an explicit traditional stop signal.

@@ -12,6 +12,7 @@
     "namespace": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
     "carrierResolutionFile": {"type": "string", "minLength": 1},
     "storeRoot": {"type": "string", "minLength": 1},
+    "namespaceRoot": {"type": "string", "minLength": 1},
     "channelHeadUrl": {"type": "string", "pattern": "^(https?|file)://"},
     "attachmentId": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
     "attachmentCapability": {"type": "string", "pattern": "^[a-f0-9]{64}$"},

@@ -6,6 +6,7 @@ param(
   [string]$AttachmentId,
   [string]$AttachmentCapability,
   [string]$StoreRoot,
+  [string]$NamespaceRoot,
   [string]$ChannelHeadUrl,
   [ValidateSet("observe", "authorize-silent", "authorize-user", "revoke-silent")][string]$ActivationPolicy,
   [string]$Result,
@@ -98,6 +99,7 @@ try {
   if ($AttachmentId) { $request.attachmentId = $AttachmentId }
   if ($AttachmentCapability) { $request.attachmentCapability = $AttachmentCapability }
   if ($StoreRoot) { $request.storeRoot = [IO.Path]::GetFullPath($StoreRoot) }
+  if ($NamespaceRoot) { $request.namespaceRoot = [IO.Path]::GetFullPath($NamespaceRoot) }
   if ($ChannelHeadUrl) { $request.channelHeadUrl = $ChannelHeadUrl }
   if ($ActivationPolicy) { $request.activationPolicy = $ActivationPolicy }
   if ($Operation -in @("prepare-update", "apply-update", "apply-update-force")) { $request.updateProtocolVersion = 3 }

@@ -35,7 +35,8 @@ describe("Terminal macOS carrier", () => {
       run("tar", ["-xzf", distribution, "-C", directories.unpacked]);
       const root = join(directories.unpacked, "nexu-terminal");
       const terminal = (installRoot: string, storeRoot: string, channel: string, namespace: string, operation: string, options: TerminalOptions = {}) => {
-        const result = run("sh", [join(installRoot, "sh/terminal.sh"), "--root", installRoot, "--store-root", storeRoot, "--channel", channel, "--namespace", namespace, "--operation", operation,
+        const result = run("sh", [join(installRoot, "sh/terminal.sh"), "--root", installRoot, "--store-root", storeRoot,
+          "--namespace-root", join(storeRoot, "explicit-scopes", channel, namespace), "--channel", channel, "--namespace", namespace, "--operation", operation,
           ...(options.attachmentId == null ? [] : ["--attachment-id", options.attachmentId]),
           ...(options.attachmentCapability == null ? [] : ["--attachment-capability", options.attachmentCapability]),
           ...(options.channelHeadUrl == null ? [] : ["--channel-head-url", options.channelHeadUrl]),
@@ -43,9 +44,16 @@ describe("Terminal macOS carrier", () => {
           ...(options.feedbackFile == null ? [] : ["--feedback", options.feedbackFile])]);
         return JSON.parse(result.stdout) as Record<string, any>;
       };
-      const rejected = run("sh", [join(root, "sh/terminal.sh"), "--root", root, "--store-root", directories.store, "--channel", "somechan", "--namespace", "shared", "--operation", "heartbeat", "--attachment-id", "missing"], { allowFailure: true });
+      const rejected = run("sh", [join(root, "sh/terminal.sh"), "--root", root, "--store-root", directories.store,
+        "--namespace-root", join(directories.store, "explicit-scopes", "somechan", "shared"),
+        "--channel", "somechan", "--namespace", "shared", "--operation", "heartbeat", "--attachment-id", "missing"], { allowFailure: true });
       expect(rejected.status).not.toBe(0);
       expect(JSON.parse(rejected.stdout)).toMatchObject({ outcome: "rejected", operation: "heartbeat", error: { code: "operation-failed" } });
+      const conflicting = run("sh", [join(root, "sh/terminal.sh"), "--root", root, "--store-root", directories.store,
+        "--namespace-root", join(directories.store, "conflicting-scope"),
+        "--channel", "somechan", "--namespace", "shared", "--operation", "status"], { allowFailure: true });
+      expect(conflicting.status).not.toBe(0);
+      expect(JSON.parse(conflicting.stdout)).toMatchObject({ outcome: "rejected", error: { message: expect.stringContaining("differs from its launch contract") } });
       verifyExactLifecycle(root, directories.store, terminal, releases);
 
       const installed = join(work, "installed");

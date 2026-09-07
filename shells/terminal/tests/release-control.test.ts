@@ -52,9 +52,24 @@ describe("exact phased release control", () => {
     const artifact = { url: "https://releases.invalid/terminal.tar.gz", sha256: "a".repeat(64), size: 1 };
     const shellMetadata = { url: "https://releases.invalid/terminal.json", sha256: "c".repeat(64), size: 1 };
     await mkdir(join(root, "published"));
-    await writeFile(join(root, "published/publish-receipt.json"), JSON.stringify({ channel: "somechan", releaseVersion: "0.1.0-somechan.1", sourceCommit: "d".repeat(40) }));
     const updater = { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" };
-    await writeFile(join(root, "required-acceptance.json"), JSON.stringify({ shell, target: "darwin-arm64", artifact, shellMetadata, updater }));
+    const policyRequest = join(root, "policy-request.json");
+    const policyReceipt = join(root, "policy.json");
+    await writeFile(policyRequest, JSON.stringify({
+      schemaVersion: 1, operation: "release.policy.resolve", profile: "exact-validation",
+      channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", sourceCommit: "d".repeat(40),
+      sourceRef: "refs/heads/feat/electron-shell-exact-delivery",
+      switches: { endUserDistribution: false, stableAuthorized: false },
+      target: { endpointUrl: "https://storage.invalid", bucket: "release", publicBaseUrl: "https://releases.invalid", latestChannelHeadUrl: "https://storage.invalid/release/betahyx/latest/channel-head.json" },
+    }));
+    await writeExactValidationPolicy(policyRequest, policyReceipt);
+    const policy = JSON.parse(await readFile(policyReceipt, "utf8"));
+    const publishReceipt = join(root, "published/publish-receipt.json");
+    await writeFile(publishReceipt, JSON.stringify({
+      schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel: policy.channel,
+      releaseVersion: policy.releaseVersion, sourceCommit: policy.sourceCommit, target: policy.target,
+      requiredAcceptances: [{ shell, target: "darwin-arm64", artifact, shellMetadata, updater }],
+    }));
     await writeFile(join(root, "installed-proof.json"), JSON.stringify({ outcome: "ready", operation: "probe", shell: { type: "terminal", version: "0.1.0", digest: "e".repeat(64) }, result: {} }));
     const manifest = JSON.stringify({ schemaVersion: 1, shell, target: "darwin-arm64" });
     await writeFile(join(installedRoot, "install-manifest.json"), manifest);
@@ -64,20 +79,23 @@ describe("exact phased release control", () => {
     await writeFile(join(root, "runtime-status.json"), JSON.stringify({ outcome: "ready", result: generation }));
     await writeFile(join(root, "runtime-stop.json"), JSON.stringify({ outcome: "ready", result: { state: "stopped", sidecar: { remainingPids: [] } } }));
 
-    const result = await execFileAsync("python3", [
-      ".github/scripts/release/installed_acceptance.py", "--root", root, "--installed-root", installedRoot,
-      "--shell-type", "terminal", "--target", "darwin-arm64",
-    ], { cwd: resolve(import.meta.dirname, "../../.."), encoding: "utf8" });
+    const request = join(root, "acceptance-request.json");
+    const receipt = join(root, "acceptance/terminal-darwin-arm64.json");
+    await writeFile(request, JSON.stringify({
+      schemaVersion: 1, operation: "exact.acceptance", policyReceipt, publishReceipt,
+      installedRoot, shellType: "terminal", target: "darwin-arm64", runtimeProofRoot: root,
+    }));
+    const result = await runRelease(request, receipt);
+    expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(JSON.parse(await readFile(join(root, "acceptance/terminal-darwin-arm64.json"), "utf8"))).toMatchObject({
       installed: { shell, target: "darwin-arm64", proof: { outcome: "ready", operation: "probe" } },
     });
 
     await writeFile(join(installedRoot, "install-manifest.sha256"), `${"0".repeat(64)}  install-manifest.json\n`);
-    await expect(execFileAsync("python3", [
-      ".github/scripts/release/installed_acceptance.py", "--root", root, "--installed-root", installedRoot,
-      "--shell-type", "terminal", "--target", "darwin-arm64",
-    ], { cwd: resolve(import.meta.dirname, "../../.."), encoding: "utf8" })).rejects.toMatchObject({ stderr: expect.stringContaining("manifest digest mismatch") });
+    const rejected = await runRelease(request, join(root, "rejected.json"));
+    expect(rejected.status).not.toBe(0);
+    expect(rejected.stderr).toContain("manifest digest mismatch");
   });
 
   it("replays deterministic prepare documents and rejects incomplete Shell contributions", async () => {

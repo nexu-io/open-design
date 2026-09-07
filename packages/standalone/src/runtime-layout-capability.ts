@@ -1,4 +1,4 @@
-import { isAbsolute, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { canonicalJson, validateStandaloneScope, type StandaloneScope } from "./protocol.js";
 import type {
@@ -17,6 +17,28 @@ export type StandaloneRuntimeLayout = Readonly<{
   runtimeRoot: string;
   sidecarSupervisorPath: string;
 }>;
+
+/**
+ * Derive shared product paths from an explicitly selected scope root. Shells
+ * select that root; neither Shell identity nor launch order affects its layout.
+ * This is pure path construction: no discovery, migration, or directory writes.
+ */
+export function resolveStandaloneRuntimeLayout(input: Readonly<{
+  namespaceRoot: string;
+  resourceStoreRoot: string;
+  sidecarSupervisorPath: string;
+}>): StandaloneRuntimeLayout {
+  if (!isAbsolute(input.namespaceRoot) || resolve(input.namespaceRoot) !== input.namespaceRoot) {
+    throw new Error("Standalone namespace root must be absolute and normalized");
+  }
+  return validateStandaloneRuntimeLayout({
+    dataRoot: join(input.namespaceRoot, "data", "product"),
+    logsRoot: join(input.namespaceRoot, "logs", "product"),
+    resourceStoreRoot: input.resourceStoreRoot,
+    runtimeRoot: join(input.namespaceRoot, "runtime", "product"),
+    sidecarSupervisorPath: input.sidecarSupervisorPath,
+  });
+}
 
 type LayoutInput = Readonly<{
   operation: "read";
