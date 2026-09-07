@@ -11,6 +11,7 @@ import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
+import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -31,6 +32,21 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("acceptance <operation>", "Acquire the exact published installer selected for acceptance")
+    .option("--publication <file>", "Publication receipt")
+    .option("--policy <file>", "Release policy")
+    .option("--shell <name>", "electron or terminal")
+    .option("--target <target>", "Published platform architecture")
+    .option("--output <directory>", "Directory for public-shell-artifact with native suffix")
+    .option("--receipt <file>", "Selected required acceptance, unchanged")
+    .option("--github-env <file>", "Optional installed identity projection for GitHub")
+    .action(async (operation: string, options: Options) => {
+      if (operation !== "fetch") throw new Error("acceptance operation must be fetch");
+      await fetchAcceptanceArtifact({ publication: required(options, "publication"), policy: required(options, "policy"),
+        shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt"),
+        ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
+    });
+
   cli.command("build <operation>", "Compose native scene or distribution inputs through public Shell builders")
     .option("--root <directory>", "Checked-out workspace with built inputs")
     .option("--shell <name>", "electron or terminal")

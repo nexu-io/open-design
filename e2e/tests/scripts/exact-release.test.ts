@@ -109,6 +109,11 @@ describe("exact Electron release topology", () => {
     expect(scene).not.toContain('operation:"exact.scene.');
     expect(workflow).not.toContain('operation:"release.authorize"');
     expect(workflow).not.toContain('operation:"release.policy.resolve"');
+    expect(workflow).toContain('exact-release-control.mjs" acceptance fetch');
+    expect(workflow).not.toContain('urllib.request.urlretrieve(required["artifact"]["url"], archive)');
+    expect(workflow).not.toContain("Resolve installed Electron identity");
+    const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
+    expect(acceptance.indexOf("node-version: 24.18.0")).toBeLessThan(acceptance.indexOf("- name: Authorize installed acceptance capability"));
     const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
     expect(config.suites["convergence-control"]).toContain("tools/release/src/exact/scene-artifact.ts");
   });

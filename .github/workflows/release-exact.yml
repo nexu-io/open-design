@@ -599,6 +599,10 @@ jobs:
           name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/exact-plan
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
       - name: Authorize installed acceptance capability
         env:
           CHANNEL: ${{ inputs.channel }}
@@ -616,28 +620,11 @@ jobs:
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, os, urllib.request
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          published = json.loads((root / "published" / "publish-receipt.json").read_text())
-          required = next(item for item in published["requiredAcceptances"] if item["shell"]["type"] == os.environ["SHELL_TYPE"] and item["target"] == os.environ["TARGET"])
-          suffix = ".tar.gz" if os.environ["SHELL_TYPE"] == "terminal" else (".dmg" if os.environ["TARGET"].startswith("darwin-") else ".exe")
-          archive = root / f"public-shell-artifact{suffix}"
-          urllib.request.urlretrieve(required["artifact"]["url"], archive)
-          body = archive.read_bytes()
-          if hashlib.sha256(body).hexdigest() != required["artifact"]["sha256"] or len(body) != required["artifact"]["size"]:
-              raise SystemExit("public Shell artifact binding mismatch")
-          (root / "required-acceptance.json").write_text(json.dumps(required, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-
-      - name: Resolve installed Electron identity
-        if: ${{ matrix.shell == 'electron' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e 'const fs=require("node:fs"); const required=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const identity=required.installIdentity; if (!identity?.executableName || !identity?.namespace) throw new Error("published Electron acceptance lacks installed identity"); fs.appendFileSync(process.env.GITHUB_ENV, "ELECTRON_EXECUTABLE="+identity.executableName+"\nELECTRON_NAMESPACE="+identity.namespace+"\n")' "$RUNNER_TEMP/required-acceptance.json"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" acceptance fetch \
+            --publication "$RUNNER_TEMP/published/publish-receipt.json" \
+            --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --shell "$SHELL_TYPE" --target "$TARGET" --output "$RUNNER_TEMP" \
+            --receipt "$RUNNER_TEMP/required-acceptance.json" --github-env "$GITHUB_ENV"
 
       - name: Install and exercise Darwin Shell lifecycle
         if: ${{ matrix.shell == 'terminal' && startsWith(matrix.target, 'darwin-') }}

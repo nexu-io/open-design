@@ -135,8 +135,8 @@ async function terminalProof(input: JsonObject, required: JsonObject): Promise<J
 }
 
 /** Collect installed evidence against the published topology, never caller-selected metadata. */
-export async function collectInstalledAcceptance(input: JsonObject): Promise<{ credential: JsonObject; policy: ReleasePolicyReceipt }> {
-  if (!nonempty(input.installedRoot) || !["electron", "terminal"].includes(input.shellType) || !nonempty(input.target)) throw new Error("installed acceptance target is invalid");
+export async function readPublishedAcceptance(input: JsonObject): Promise<{ published: JsonObject; required: JsonObject; policy: ReleasePolicyReceipt }> {
+  if (!["electron", "terminal"].includes(input.shellType) || !nonempty(input.target)) throw new Error("installed acceptance target is invalid");
   const published = await readObject(String(input.publishReceipt ?? ""));
   if (published.schemaVersion !== 1 || published.operation !== "exact.publish" || !Array.isArray(published.requiredAcceptances)) throw new Error("invalid exact.publish receipt");
   const policy = await readReleasePolicyReceipt(input.policyReceipt, {
@@ -146,6 +146,12 @@ export async function collectInstalledAcceptance(input: JsonObject): Promise<{ c
   const candidates = published.requiredAcceptances.filter((value: JsonObject) => value.shell?.type === input.shellType && value.target === input.target);
   if (candidates.length !== 1) throw new Error("installed acceptance requires one matching published target");
   const required = candidates[0];
+  return { published, required, policy };
+}
+
+export async function collectInstalledAcceptance(input: JsonObject): Promise<{ credential: JsonObject; policy: ReleasePolicyReceipt }> {
+  if (!nonempty(input.installedRoot)) throw new Error("installed acceptance target is invalid");
+  const { published, required, policy } = await readPublishedAcceptance(input);
   const installed = input.shellType === "electron" ? await electronProof(input, published, required) : await terminalProof(input, required);
   return { policy, credential: {
     schemaVersion: 1, operation: "exact.acceptance", status: "accepted",
