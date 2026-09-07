@@ -12958,10 +12958,19 @@ function HtmlViewer({
       type: 'od:comment-active-target',
       elementId: activeCommentTarget.elementId,
       selector: activeCommentTarget.selector,
+      // What this comment recorded about the element it was left on. A
+      // structural anchor names a position rather than an element, so the
+      // document has to corroborate the match before the overlay is placed —
+      // otherwise an edit that inserts a sibling hands the comment to its
+      // neighbour without anyone being told.
+      text: activeCommentTarget.text,
+      label: activeCommentTarget.label,
     }, '*');
   }, [
     activeCommentTarget?.elementId,
+    activeCommentTarget?.label,
     activeCommentTarget?.selector,
+    activeCommentTarget?.text,
     activeCommentTarget?.selectionKind,
     boardMode,
     previewRuntimeConvergenceActive,

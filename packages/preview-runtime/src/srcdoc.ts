@@ -2163,6 +2163,9 @@ function meaningfulDomFallbackTarget(el) {
   var postActiveTargetPending = false;
   var activeCommentElementId = null;
   var activeCommentSelector = null;
+  // What the stored comment says about the element it was left on. Without it a
+  // positional anchor is believed on sight; see commentTargetMatchesWitness.
+  var activeCommentWitness = null;
   function previewScrollElement(){
     return document.querySelector('.design-canvas') || document.scrollingElement || document.documentElement;
   }
@@ -2214,10 +2217,32 @@ function meaningfulDomFallbackTarget(el) {
   function requestPreviewScrollRestore(){
     window.parent.postMessage({ type: 'od:preview-scroll-request' }, '*');
   }
-  function findCommentTargetByIdentity(elementId, selector){
+  // A comment stores where it was left, and for an element the author gave no
+  // id to that is a bare structural path -- 'body > p:nth-of-type(4)'. That
+  // path names a POSITION, not an element, so anything added ahead of the
+  // commented one hands the comment to its neighbour: an agent turn that
+  // inserts a paragraph is enough. The anchor lives on the server, so the move
+  // outlives the session that caused it, and on a shared project the person who
+  // wrote the comment is not there to see it happen.
+  //
+  // So a positional match has to be corroborated before it is believed. The
+  // witness is what the comment already carries about the element it was left
+  // on; when it disagrees, the honest answer is that the anchor is lost, not
+  // that some other element will do. An attribute match needs no witness --
+  // 'data-od-id' names an element rather than a place.
+  function commentTargetMatchesWitness(el, witness){
+    if (!el || !witness) return true;
+    var expectedLabel = witness.label ? String(witness.label).split('.')[0].toLowerCase() : '';
+    if (expectedLabel && el.tagName && el.tagName.toLowerCase() !== expectedLabel) return false;
+    if (typeof witness.text !== 'string' || !witness.text) return true;
+    var actual = (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    return actual === witness.text;
+  }
+  function findCommentTargetByIdentity(elementId, selector, witness){
     var el = null;
     if (selector) {
       try { el = document.querySelector(String(selector)); } catch (_) { el = null; }
+      if (el && !commentTargetMatchesWitness(el, witness)) el = null;
     }
     if (!el && elementId) {
       try {
@@ -2229,7 +2254,7 @@ function meaningfulDomFallbackTarget(el) {
   }
   function postActiveCommentTarget(){
     if (!active() || !activeCommentElementId) return;
-    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector);
+    var el = findCommentTargetByIdentity(activeCommentElementId, activeCommentSelector, activeCommentWitness);
     if (!el) return;
     var payload = targetFrom(el, commentEnabled && mode === 'picker' && !inspectEnabled);
     if (payload) window.parent.postMessage(Object.assign({}, payload, { type: 'od:comment-active-target-update' }), '*');
@@ -2648,6 +2673,7 @@ function meaningfulDomFallbackTarget(el) {
         hoveredId = null;
         activeCommentElementId = null;
         activeCommentSelector = null;
+        activeCommentWitness = null;
       }
       if (!commentEnabled || mode !== 'pod') {
         drawing = false;
@@ -2667,6 +2693,9 @@ function meaningfulDomFallbackTarget(el) {
     if (data.type === 'od:comment-active-target') {
       activeCommentElementId = data.elementId ? String(data.elementId) : null;
       activeCommentSelector = data.selector ? String(data.selector) : null;
+      activeCommentWitness = (data.text || data.label)
+        ? { text: data.text ? String(data.text) : '', label: data.label ? String(data.label) : '' }
+        : null;
       schedulePostActiveCommentTarget();
       return;
     }
