@@ -14,6 +14,15 @@ const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("cold-restarts after CDP hot update and delegates acceptance checks to tools-release", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    const hot = workflow.split("- name: Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: Install and exercise Windows Electron Shell")[0];
+    expect(hot).toBeDefined();
+    expect(hot).toMatch(/wait "\$electron_pid"\s+trap - EXIT\s+OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "\$executable" --user-data-dir="\$RUNNER_TEMP\/electron-user-data"/u);
+    expect(hot).not.toContain("python3");
+    expect(hot).not.toContain("candidateVersion");
+  });
+
   it("delegates source branch eligibility to tools-release without weakening exact checkout binding", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     expect(workflow).not.toContain('[[ "$SOURCE_REF" =~');

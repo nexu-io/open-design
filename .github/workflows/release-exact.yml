@@ -913,8 +913,6 @@ jobs:
 
       - name: Exercise accepted macOS Shell through CDP hot update
         if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' && startsWith(matrix.target, 'darwin-') }}
-        env:
-          RELEASE_VERSION: ${{ inputs.release_version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -941,18 +939,7 @@ jobs:
           node "$RUNNER_TEMP/exact-plan/electron-cdp-control.mjs" --request "$RUNNER_TEMP/electron-cdp-request.json" --receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
           wait "$electron_pid"
           trap - EXIT
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          results = json.loads(Path(os.environ["RUNNER_TEMP"], "electron-cdp-receipt.json").read_text())["results"]
-          before, checked, applied, after = results
-          if checked["lines"]["closure"].get("state") != "ready" or checked["lines"]["closure"].get("candidateVersion") != os.environ["RELEASE_VERSION"]:
-              raise SystemExit("CDP did not observe the candidate Closure generation")
-          if applied.get("outcome") != "context-destroyed" and applied.get("lines", {}).get("closure", {}).get("state") != "current":
-              raise SystemExit("CDP did not observe the applied Closure generation")
-          if before["lines"]["shell"].get("currentVersion") != after["lines"]["shell"].get("currentVersion") or after["lines"]["shell"].get("state") == "applying":
-              raise SystemExit("Closure hot acceptance crossed into the Shell installer path")
-          PY
+          OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/electron-user-data"
 
       - name: Install and exercise Windows Electron Shell
         if: ${{ matrix.shell == 'electron' && startsWith(matrix.target, 'win32-') }}
