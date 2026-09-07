@@ -5,6 +5,24 @@ import type { RuntimeAgentDef } from './types.js';
 
 export type AgentLaunchKind = 'selected' | 'codex-native';
 
+export type AgentStdinMode = 'pipe' | 'ignore';
+
+/**
+ * Resolves whether an agent subprocess needs a writable stdin channel.
+ * Interactive stream protocols exchange commands over stdin even when the
+ * runtime does not use the simpler promptViaStdin transport.
+ */
+export function resolveAgentStdinMode(
+  def: Partial<Pick<RuntimeAgentDef, 'promptViaStdin' | 'streamFormat'>>,
+): AgentStdinMode {
+  return def.promptViaStdin ||
+    def.streamFormat === 'acp-json-rpc' ||
+    def.streamFormat === 'pi-rpc' ||
+    def.streamFormat === 'dsh-profile-jsonl'
+    ? 'pipe'
+    : 'ignore';
+}
+
 export type AgentLaunchResolution = ReturnType<typeof inspectAgentExecutableResolution> & {
   launchPath: string | null;
   launchKind: AgentLaunchKind;
