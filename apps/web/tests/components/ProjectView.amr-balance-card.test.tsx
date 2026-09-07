@@ -3,13 +3,17 @@
 // 红测:余额判定的**呈现**改了口径 —— 产品 2026-08-26 裁决
 // 「告警可继续的不弹窗,只有卡片;余额不足再弹窗」。
 //
-//   告警档(余额 > 0 但撑不住下一轮) → **弹窗撤掉**,改成流水里的 `UpgradeCard`,
-//                                     而且**不再挡住这一次发送**(D4 不阻塞)。
-//   拦截档(余额耗尽)               → 弹窗**保留**,**同时**也出卡片。
+//   拦截档(余额耗尽)     → 弹窗**保留**,**同时**也出卡片。
+//   空钱包但硬拦让了位     → 只出卡片,不弹窗、不挡发送(T55 的兜底档)。
 //
-// 这一层管的是「判定结果怎么呈现」。判定本身(`runtime/amr-balance-gate.ts`)
-// 一个字都没动 —— 「付费档余额 0 = 不限量,不拦」是另一条已定口径(#7190),
-// 那属于判定,不属于这次改动;这里只保证新加的卡**不会把付费用户重新拦回去**。
+// ⚠️ **原来还有第三档「告警档」(余额 > 0 但撑不住下一轮),已经整档撤掉。**
+// 产品 2026-09-07 原话「这个要不先不要了,跟产品说了一下,不要这个了」——
+// 余额 `> 0` 现在一律 `allow`,什么都不出。见规格 **T66**,红测在
+// `tests/components/t66-low-balance-tier-retired.test.tsx`。
+//
+// 这一层管的是「判定结果怎么呈现」,判定本身在 `runtime/amr-balance-gate.ts`;
+// 「付费档余额 0 = 不限量,不拦」是另一条已定口径(#7190),属于判定不属于呈现,
+// 这里只保证这张卡**不会把判定放行的人重新拦回去**。
 //
 // `ChatPane` 在这一层是 mock 的(它自带半个应用),所以这里断言的是
 // **ProjectView 把哪份数据交给了 ChatPane** + 弹窗的去留。
@@ -434,7 +438,7 @@ const snapshot = (balanceUsd: string): AmrWalletSnapshot => ({
   source: 'vela_api',
 });
 
-describe('余额判定的呈现:告警只出卡,拦截才弹窗', () => {
+describe('余额判定的呈现:拦截出卡加弹窗,让位只出卡', () => {
   beforeEach(() => {
     resourceContextObservations.length = 0;
     window.sessionStorage.clear();
@@ -484,15 +488,20 @@ describe('余额判定的呈现:告警只出卡,拦截才弹窗', () => {
     fireEvent.click(screen.getByTestId('normal-send'));
   }
 
-  // 产品裁决:「告警可继续的不弹窗,只有卡片」。
-  it('告警档:不弹窗,出卡片,而且这一次发送照常跑完', async () => {
-    await sendOnce({ kind: 'soft', snapshot: snapshot('1.2') });
+  // 空钱包但硬拦让了位(T55:档次读不出来,由 Vela 入场兜底)。让位只说「不拦」,
+  // 余额确实是 $0,卡照出;弹窗不出,因为这一次发送并没有被挡住。
+  //
+  // ⚠️ 这一条**不是**原来那条「告警档」。告警档(余额 > 0 但低于某条线)已由产品
+  // 2026-09-07 整档撤掉(T66),判定层不再产生它 —— 那一档的呈现红测在
+  // `tests/components/t66-low-balance-tier-retired.test.tsx`。
+  it('空钱包让位:不弹窗,出卡片,而且这一次发送照常跑完', async () => {
+    await sendOnce({ kind: 'empty_not_blocked', snapshot: snapshot('0') });
 
     await waitFor(() =>
-      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('1.2'),
+      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0'),
     );
-    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
-    // D4 不阻塞:告警不再把这次发送吊在半空。
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    // D4 不阻塞:让位那一档不该把这次发送吊在半空。
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
   });
 
@@ -538,11 +547,11 @@ describe('余额判定的呈现:告警只出卡,拦截才弹窗', () => {
    * 断言的是「有主的读数怎么画」。这一页断言的是它的上游:`ProjectView` 要把
    * **主是谁**一起交出去,否则卡就退回流水末尾,T61 ②「不随新一轮移动」失效。
    */
-  it('告警档:读数锚在这一次要跑的那一轮上', async () => {
-    await sendOnce({ kind: 'soft', snapshot: snapshot('1.2') });
+  it('空钱包让位:读数锚在这一次要跑的那一轮上', async () => {
+    await sendOnce({ kind: 'empty_not_blocked', snapshot: snapshot('0') });
 
     await waitFor(() =>
-      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('1.2'),
+      expect(screen.getByTestId('amr-balance-card-prop').textContent).toBe('0'),
     );
     const anchor = screen.getByTestId('amr-balance-anchor-prop').textContent;
     expect(anchor).not.toBe('none');

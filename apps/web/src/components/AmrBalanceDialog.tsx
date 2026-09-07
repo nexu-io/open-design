@@ -93,11 +93,12 @@ interface Props {
 // not-yet-committed cohort). The caller preserves the payload (home keeps
 // the composer draft; chat parks the full send in the queue).
 //
-// This is now the ONLY balance dialog. The softer low-balance reminder used to
-// have its own centered dialog (AmrLowBalanceDialog); product deleted it on
-// 2026-09-06 — "软提醒弹窗就是产品告诉我不要这个的,只用弹那个插画的就行" (T53).
-// The soft tier survives only as the project page's in-conversation UpgradeCard,
-// and Home shows nothing at all for it.
+// This is now the ONLY balance dialog, and the only balance it opens for is $0.
+// The softer low-balance reminder used to have its own centered dialog
+// (AmrLowBalanceDialog); product deleted it on 2026-09-06 — "软提醒弹窗就是产品
+// 告诉我不要这个的,只用弹那个插画的就行" (T53) — and then retired the whole
+// low-balance tier on 2026-09-07: "这个要不先不要了,跟产品说了一下,不要这个了"
+// (T66). A positive balance now produces no dialog and no card anywhere.
 export function AmrBalanceDialog({
   reason,
   balanceUsd,

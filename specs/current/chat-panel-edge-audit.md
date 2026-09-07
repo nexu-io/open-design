@@ -62,7 +62,7 @@
 | **流水里的升级卡** | **没有现成实现**。`ChatPane.tsx` / `ChatComposer.tsx` 里没有任何余额读数 |
 | 硬拦(余额 ≤ 0) | `apps/web/src/components/AmrBalanceDialog.tsx`(+ `.module.css`)—— **居中弹窗**,`reason: 'insufficient' \| 'signed_out'`(:31);充值后轮询钱包续跑(:125–150) |
 | 软提醒(余额 ≤ 2) | `apps/web/src/components/AmrLowBalanceDialog.tsx` —— 居中弹窗,`'proceed' \| 'recharge' \| 'dismiss'`(:18),带「不再提醒」持久化 |
-| 阈值 | `apps/web/src/runtime/amr-balance-gate.ts:27 AMR_HARD_BLOCK_BALANCE_USD = 0`、`:35 AMR_LOW_BALANCE_WARN_USD = 2`;闸门入口 `checkAmrBalanceGate():275–320` |
+| 阈值 | `apps/web/src/runtime/amr-balance-gate.ts:27 AMR_HARD_BLOCK_BALANCE_USD = 0`、`:35 AMR_LOW_BALANCE_WARN_USD = 2`;闸门入口 `checkAmrBalanceGate():275–320`<br>⚠️ **过期(2026-09-07,T66)**:低余额档整档撤掉,`AMR_LOW_BALANCE_WARN_USD` **已从代码里删除**(不是归零)。今天只剩 `AMR_HARD_BLOCK_BALANCE_USD = 0` 一条线 |
 | 挂载 | 对话侧 `ProjectView.tsx:11501–11520`(硬)/ `:11522–11530`(软);首页侧 `EntryShell.tsx:1710/1722` |
 | 余额读数所在 | 顶栏模型切换器 `InlineModelSwitcher.tsx:920–932`(挂载于 `EntryShell.tsx:1625`)、侧栏 `EntryNavRail.tsx:1165`、头像菜单 `AvatarMenu.tsx:277–302` |
 | 身份分支(Owner / 计费权限) | `EntryNavRail.tsx:433–500 workspaceUpgradeUrl()` —— **`canManageBilling !== true` 直接 `return null`(:452),即入口消失** |
@@ -452,7 +452,7 @@ cmp-ops:「用尽后**停止自动重连**,换成『重新连接』交回给人�
 | `apps/web/src/i18n/types.ts` + 19 个 locale | 见 §3.4 的 key 清单 |
 | `apps/web/src/providers/daemon.ts` | `DaemonStreamHandlers`(:273)加重连回调;新增「手动重新连接」入口(`?after=` 续流,不新建 run) |
 | `apps/web/src/runtime/amr-guidance.ts` | 把 `DAEMON_STREAM_DISCONNECTED` 从兜底分支分流出去(交给组件 22) |
-| `apps/web/src/runtime/amr-balance-gate.ts` | 阈值 `AMR_LOW_BALANCE_WARN_USD` 2 → 5(**待产品同意**);硬阻断是否改成非阻断卡 |
+| `apps/web/src/runtime/amr-balance-gate.ts` | ~~阈值 `AMR_LOW_BALANCE_WARN_USD` 2 → 5(**待产品同意**)~~ → **作废**:产品 2026-09-04 拍板维持 $2,2026-09-07 又把整个低余额档撤掉(**T66**),常量已删除,这一行没有可改的东西了;硬阻断是否改成非阻断卡 |
 | `apps/web/src/components/ChatPane.tsx` | 换掉 `QueuedSendStrip`(:4096/:3039)与报错卡(:2765–2986);挂 StopLine / ReconnectRow;`AmrGuidance`(:2988–3005)收进报错卡 |
 | `apps/web/src/components/ProjectView.tsx` | 升级卡插流水的位置;`AmrBalanceDialog`(:11501)/`AmrLowBalanceDialog`(:11522)去留;`finalizeActiveAssistantMessagesOnStop`(:12580)带上 `cancelOrigin` |
 | `apps/web/src/components/AssistantMessage.tsx` | `:899–901` 把 canceled 从 `runFailed` 里摘出来 |

@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 import {
   AMR_HARD_BLOCK_BALANCE_USD,
-  AMR_LOW_BALANCE_WARN_USD,
   HOME_AMR_BALANCE_RETRY_DELAYS_MS,
   amrBalanceGateScopeForWorkspaceContext,
   amrBalanceGateScopesMatch,
@@ -166,22 +165,24 @@ describe('checkAmrBalanceGate', () => {
     expect(mockedFetch).toHaveBeenCalledWith();
   });
 
-  it('soft-warns between the hard-block and low-balance lines', async () => {
-    expect(AMR_LOW_BALANCE_WARN_USD).toBe(2);
-    const low = snapshot({ balanceUsd: '1.20' });
-    mockedFetch.mockResolvedValueOnce(low);
-    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'soft', snapshot: low });
-    // Soft trusts the cache — no upstream refresh for a dismissible reminder.
+  // T66 (2026-09-07): there is no low-balance tier any more. $1.20 used to be a
+  // `soft` warn under a $2 line; product retired that whole tier — 「这个要不先
+  // 不要了,跟产品说了一下,不要这个了」 — so a positive balance is an ordinary
+  // allow. The line itself is gone, not zeroed: `AMR_LOW_BALANCE_WARN_USD` no
+  // longer exists, which is why this file no longer imports it.
+  it('allows a low but positive balance with no warning and no refresh', async () => {
+    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '1.20' }));
+    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
+    // The cache answers on its own — nothing above $0 is worth an upstream read.
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
-  it('soft-warns exactly at the low-balance line and allows just above it', async () => {
-    const atLine = snapshot({ balanceUsd: '2.00' });
-    mockedFetch.mockResolvedValueOnce(atLine);
-    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'soft', snapshot: atLine });
-    mockedFetch.mockReset();
-    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '2.01' }));
-    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
+  it('has no second line: every positive balance lands on the same answer', async () => {
+    for (const balanceUsd of ['0.01', '1.20', '2.00', '2.01', '50.00']) {
+      mockedFetch.mockReset();
+      mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd }));
+      await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
+    }
   });
 
   // T55 (2026-09-06) overturned the half of this that read "a plan means the run
@@ -206,7 +207,7 @@ describe('checkAmrBalanceGate', () => {
     ['plus', 'kimi-k2.7-code'],
     ['pro', 'glm-5.2'],
     ['max', 'minimax-m2.7'],
-  ])('warns without blocking a selected %s plan model at low balance', async (plan, modelId) => {
+  ])('lets a selected %s plan model through at a low positive balance', async (plan, modelId) => {
     const low = snapshot({
       balanceUsd: '1.20',
       user: { id: 'u1', email: 'user@example.com', plan },
@@ -214,8 +215,7 @@ describe('checkAmrBalanceGate', () => {
     mockedFetch.mockResolvedValueOnce(low);
 
     await expect(checkAmrBalanceGate(undefined, modelId)).resolves.toEqual({
-      kind: 'soft',
-      snapshot: low,
+      kind: 'allow',
     });
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
@@ -227,22 +227,22 @@ describe('checkAmrBalanceGate', () => {
     });
     mockedFetch.mockResolvedValueOnce(low);
 
-    // Still no metering guess — the run is not blocked. It is only flagged.
+    // Still no metering guess — a positive balance is simply allowed.
     await expect(
       checkAmrBalanceGate(undefined, 'minimax-m2.7'),
-    ).resolves.toEqual({ kind: 'soft', snapshot: low });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
-  // The soft tier used to be permanently mutable from Home's dialog; that
-  // opt-out was removed 2026-09-04 because the bit also silenced the project
-  // page's upgrade card. The stale localStorage bit real users still carry
-  // must now be inert. Full coverage of the removal lives in
+  // The low-balance reminder used to be permanently mutable from Home's dialog;
+  // that opt-out was removed 2026-09-04 because the bit also silenced the project
+  // page's upgrade card, and T66 then retired the tier the bit acted on. The
+  // stale localStorage bit real users still carry must be inert in both
+  // directions. Full coverage of the removal lives in
   // `amr-low-balance-optout-removed.test.ts`.
   it('ignores the retired low-balance opt-out bit left on disk', async () => {
     window.localStorage.setItem('open-design:amr-low-balance-warn-optout:v1', '1');
-    const low = snapshot({ balanceUsd: '1.20' });
-    mockedFetch.mockResolvedValueOnce(low);
-    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'soft', snapshot: low });
+    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '1.20' }));
+    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
     mockedFetch.mockReset();
     const empty = snapshot({ balanceUsd: '0' });
     mockedFetch.mockResolvedValueOnce(empty).mockResolvedValueOnce(empty);
@@ -356,12 +356,13 @@ describe('checkAmrBalanceGate', () => {
     await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('downgrades a stale-empty cache to soft when the refresh lands low', async () => {
-    const low = snapshot({ balanceUsd: '2.00' });
+  it('clears a stale-empty cache when the refresh lands on a positive balance', async () => {
     mockedFetch
       .mockResolvedValueOnce(snapshot({ balanceUsd: '0', source: 'daemon_cache' }))
-      .mockResolvedValueOnce(low);
-    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'soft', snapshot: low });
+      .mockResolvedValueOnce(snapshot({ balanceUsd: '2.00' }));
+    // The refresh proved there is money. How much is not a question this gate
+    // asks any more (T66), so the empty-cache candidate resolves to a plain allow.
+    await expect(checkAmrBalanceGate()).resolves.toEqual({ kind: 'allow' });
   });
 
   it('never gates when the wallet endpoint fails', async () => {
@@ -463,11 +464,10 @@ describe('checkAmrBalanceGate', () => {
     await Promise.resolve();
     expect(workspaceReadStarted).toBe(true);
     accountRead.resolve(snapshot({ balanceUsd: '247.50' }));
-    const result = await pendingResult;
-    expect(result.kind).toBe('soft');
-    if (result.kind === 'soft') {
-      expect(result.snapshot.balanceUsd).toBe('1.25');
-    }
+    // The workspace wallet ($1.25) is the one that answers, not the account's
+    // $247.50. Both are positive, so both would allow — the pin that makes this
+    // observable is the request count plus the workspace read having started.
+    await expect(pendingResult).resolves.toEqual({ kind: 'allow' });
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -530,7 +530,7 @@ describe('checkAmrBalanceGate', () => {
     });
   });
 
-  it('warns without blocking a selected model in a low-balance Personal workspace', async () => {
+  it('does not block a selected model in a low-balance Personal workspace', async () => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '1.50',
       user: { id: 'u1', email: 'user@example.com', plan: 'pro' },
@@ -553,10 +553,7 @@ describe('checkAmrBalanceGate', () => {
         workspaceId: 'ws-personal-pro',
         workspaceMemberId: 'wm-personal-pro',
       }, 'glm-5.2'),
-    ).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: '1.50' }),
-    });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('does not use a personal Go plan to bypass a team workspace zero balance', async () => {
@@ -761,9 +758,7 @@ describe('checkAmrBalanceGate', () => {
         { status: 200, headers: { 'content-type': 'application/json' } },
       ),
     );
-    const resultA = await teamA;
-    expect(resultA.kind).toBe('soft');
-    if (resultA.kind === 'soft') expect(resultA.snapshot.balanceUsd).toBe('1.50');
+    await expect(teamA).resolves.toEqual({ kind: 'allow' });
   });
 });
 
@@ -828,13 +823,12 @@ describe('checkAmrBalanceGate personal fail-open guard', () => {
     });
   });
 
-  it('soft-warns a low-balance free account even with a model selected', async () => {
-    const low = snapshot({ balanceUsd: '1.20', user: freeUser });
-    mockedFetch.mockResolvedValueOnce(low);
+  it('allows a low-balance free account even with a model selected', async () => {
+    mockedFetch.mockResolvedValueOnce(snapshot({ balanceUsd: '1.20', user: freeUser }));
 
     await expect(
       checkAmrBalanceGate(undefined, 'glm-5.2'),
-    ).resolves.toEqual({ kind: 'soft', snapshot: low });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('hard-blocks a zero-dollar free-tier Personal workspace', async () => {
@@ -864,10 +858,7 @@ describe('checkAmrBalanceGate personal fail-open guard', () => {
         workspaceId: 'ws-free-low',
         workspaceMemberId: 'wm-free-low',
       }, 'glm-5.2'),
-    ).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: '1.20' }),
-    });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('reads the free tier from the live login status when the wallet omits it', async () => {
@@ -944,7 +935,9 @@ describe('checkAmrBalanceGate personal fail-open guard', () => {
   it('fails open at zero balance when the plan cannot be resolved at all', async () => {
     // An unreadable tier is not free, and it is not paid either — "free" and
     // "paid" are not complements, so this tier needs its own pin. Failing open
-    // means "not blocked"; it still earns the reminder.
+    // means "not blocked"; the wallet is still empty and the card still says so,
+    // which is exactly what `empty_not_blocked` names (it is NOT the retired
+    // low-balance tier — a positive balance can never reach it).
     const unknownPlan = snapshot({ balanceUsd: '0' });
     mockedFetch
       .mockResolvedValueOnce({ ...unknownPlan, source: 'daemon_cache' })
@@ -952,7 +945,7 @@ describe('checkAmrBalanceGate personal fail-open guard', () => {
 
     const result = await checkAmrBalanceGate(undefined, 'glm-5.2');
     expect(result.kind).not.toBe('hard');
-    expect(result).toEqual({ kind: 'soft', snapshot: unknownPlan });
+    expect(result).toEqual({ kind: 'empty_not_blocked', snapshot: unknownPlan });
   });
 
   it('leaves a healthy free-tier balance completely alone', async () => {

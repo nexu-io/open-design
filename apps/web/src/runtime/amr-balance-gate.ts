@@ -1,17 +1,31 @@
-// Pre-run balance gate for the OpenDesign Cloud agent. Two tiers:
+// Pre-run balance gate for the OpenDesign Cloud agent. There is exactly ONE
+// balance that changes anything: $0.
 //
 //   HARD  — the run cannot possibly succeed: the account is signed out, or the
 //           wallet balance is definitively <= $0. The send is blocked and the
-//           subscription dialog is the only way forward (plus dismiss).
-//   SOFT  — the run can start but may die mid-flight: balance is at or below
-//           the low-balance warning line. The user is warned once per send and
-//           may proceed anyway or top up first.
+//           subscription dialog is the only way forward (plus dismiss), and the
+//           project page also lights the in-conversation upgrade card.
+//   EMPTY_NOT_BLOCKED — the wallet is definitively <= $0 but the hard block
+//           stood down (see `hardBlockMustStandDown`). The run starts and Vela
+//           decides at admission; the $0 card still shows, because the wallet
+//           really is empty.
 //
-// The soft tier has no permanent mute. It used to: a "don't ask again"
-// checkbox on Home's low-balance dialog wrote a localStorage bit that this
-// gate also read, so opting out on Home silently disabled the project page's
-// upgrade card forever — a surface the user never agreed to silence. Removed
-// 2026-09-04; the warning is a function of the balance alone.
+// **There is no low-balance tier.** A positive balance — $1.20 included — is an
+// `allow` and produces nothing: no card, no dialog, no delay. Product ruled the
+// soft tier away on 2026-09-07 looking at its own screenshot: 「这个要不先不要
+// 了,跟产品说了一下,不要这个了」, and scoped it on the follow-up: 「余额为零
+// 的那个卡片要显示的,并且也要弹窗的」. Recorded as T66 in
+// `specs/current/chat-panel-decisions-sheet.md`, which overturns the low-balance
+// halves of T51 / T52 / T53.
+//
+// ⚠️ Do NOT bring the tier back by lowering a threshold constant to 0 — that
+// leaves the concept alive in a shape nobody can see. There is no warning line
+// here on purpose; `AMR_LOW_BALANCE_WARN_USD` was deleted, not zeroed.
+//
+// ⚠️ This is about the SEND GATE only. The card a run that DIED on money leaves
+// behind is a different producer (`amrInsufficientBalanceFailure` in
+// `ProjectView`) and is deliberately kept — T61 calls it 「那一轮为什么停下来的
+// 凭据」, and its archived reading may well be positive.
 //
 // Legacy account-scoped reads fail open when unavailable. Every explicitly
 // workspace-scoped run fails closed when its exact member epoch cannot be proven:
@@ -33,27 +47,34 @@ import { resolveAmrPlan } from './amr-low-balance-plan';
  */
 export const AMR_HARD_BLOCK_BALANCE_USD = 0;
 
-/**
- * Soft-warning line (USD): at or below this a run may start but is likely to
- * exhaust the wallet before finishing. Tune from data: the starting-balance
- * distribution of AMR_INSUFFICIENT_BALANCE failures tells you where this
- * line should actually sit.
+/*
+ * There is deliberately NO low-balance warning line here.
  *
- * DELIBERATE DEVIATION from the delivered design — do not "fix" it. The draft
- * (`docs/design/chat-panel-next.html` @ 729fa43ce7, component 18 · 升级) writes
- * this tier as 「额度不足 · < 5 美金」. Product ruled 2026-09-06 to keep $2 and
- * ignore the draft's $5. Recorded as T52 in
- * `specs/current/chat-panel-decisions-sheet.md`; the hard line below is NOT a
- * deviation (the draft's second tier is 「额度耗尽 · = 0 美金」).
+ * `AMR_LOW_BALANCE_WARN_USD = 2` used to sit at this spot and split a positive
+ * balance into 「够用」 and 「快没了」. Product retired that whole tier on
+ * 2026-09-07 (T66), so the constant is gone rather than set to 0: a zeroed
+ * threshold would keep the branch, the tier name and the reader's belief that
+ * a second line still exists somewhere. It does not. The draft's 「额度不足 ·
+ * < 5 美金」 state and T52's $2 deviation from it are both moot — that state
+ * no longer ships. Do not reintroduce either one without a new ruling.
  */
-export const AMR_LOW_BALANCE_WARN_USD = 2;
 
 export type AmrBalanceGateResult =
   | { kind: 'allow' }
   | { kind: 'unavailable' }
   | { kind: 'hard'; reason: 'insufficient'; snapshot: AmrWalletSnapshot }
   | { kind: 'hard'; reason: 'signed_out'; snapshot: AmrWalletSnapshot }
-  | { kind: 'soft'; snapshot: AmrWalletSnapshot };
+  /**
+   * The wallet is definitively empty, but the hard block stood down — see
+   * {@link hardBlockMustStandDown}. The run is NOT blocked (Vela decides at
+   * admission) and no dialog opens, yet the $0 card still shows: the wallet
+   * really is empty, and that is the one thing this surface exists to say.
+   *
+   * ⚠️ This is not the retired soft tier wearing a new name. It is reachable
+   * only at `balance <= AMR_HARD_BLOCK_BALANCE_USD`; a positive balance can
+   * never produce it.
+   */
+  | { kind: 'empty_not_blocked'; snapshot: AmrWalletSnapshot };
 
 export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
 
@@ -61,7 +82,7 @@ export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
  * Home has no project queue to hold a send while a cold Workspace billing
  * projection catches up. Give that transient state a small, bounded recovery
  * window before returning control to the composer. Only `unavailable` is
- * retried; definitive allow/soft/hard decisions are never delayed.
+ * retried; every definitive decision is delivered immediately.
  */
 export async function retryUnavailableAmrBalanceGate(
   check: () => Promise<AmrBalanceGateResult>,
@@ -188,24 +209,27 @@ async function amrPlanTierUnreadable(
  * Whether the HARD tier — and ONLY the hard tier — must stand down for this
  * run, because something other than the wallet may fund it.
  *
- * Scope note (OPEND-2600). This question used to be asked ahead of BOTH tiers
- * and answered with a whole-gate `allow`, which deleted the soft reminder for
- * every subscriber between $0 and the warning line: the reported Pro account at
- * $1.79 got no card at all. Standing down is only ever about NOT BLOCKING; a
- * plan says nothing about whether a nearly-empty wallet is worth mentioning.
- * Product ruling 2026-09-03: warn at every tier, block at none that a plan may
- * still fund. So this now guards the hard branch alone and the soft branch is
- * reached either way.
+ * Scope note (OPEND-2600, then T66). This question used to be asked ahead of the
+ * whole gate and answered with a whole-gate `allow`, which also deleted the
+ * low-balance reminder for every subscriber between $0 and the warning line:
+ * the reported Pro account at $1.79 got no card at all. Standing down is only
+ * ever about NOT BLOCKING. Since T66 retired the low-balance tier outright there
+ * is no second branch left for it to swallow, but the placement still matters
+ * for the reason below.
  *
- * Latency note (red line, same ruling). The plan read is a network roundtrip,
- * and the soft tier must not add one to the send path. Call this ONLY once the
- * balance is already at or below the hard-block line — the one case that was
- * always going to block, and is therefore already allowed to wait.
+ * Latency note (red line). The plan read is a network roundtrip, and it must not
+ * land on a send path that was going to succeed. Call this ONLY once the balance
+ * is already at or below the hard-block line — the one case that was always
+ * going to block, and is therefore already allowed to wait. A positive balance
+ * must reach `allow` without ever asking for a plan.
  *
  * Scope note 2 (T55, product 2026-09-06). The only surviving reason to stand
  * down is that the tier could not be read at all — see
  * {@link amrPlanTierUnreadable}. A readable paid tier no longer stands down,
  * because the out-of-credits matrix governs Personal workspaces too.
+ *
+ * Standing down produces `empty_not_blocked`, not `allow`: the run proceeds, but
+ * the wallet is still empty and the card still says so.
  */
 async function hardBlockMustStandDown(
   snapshot: AmrWalletSnapshot,
@@ -220,9 +244,9 @@ async function hardBlockMustStandDown(
  * daemon-cached snapshot answers without an upstream roundtrip, so healthy
  * balances start with no added latency. Only a hard-block answer is confirmed
  * against the live wallet (refresh=1) — the cache may predate a recharge or
- * subscription, and a just-topped-up user must never be hard-blocked. The
- * soft tier trusts the cache (its cost is one dismissible reminder, and the
- * daemon cache is at most a few seconds old).
+ * subscription, and a just-topped-up user must never be hard-blocked. A
+ * positive cached balance is taken at face value: since T66 nothing above $0
+ * changes the outcome, so there is nothing a refresh could tell us.
  */
 async function fetchWorkspaceWalletSnapshot(
   scope: AmrBalanceGateScope,
@@ -378,11 +402,11 @@ async function checkWorkspaceBalanceGate(
         snapshot: workspaceSnapshot!,
       };
     }
-    // Fall through: not blocked, but an empty wallet is still worth saying.
+    // Not blocked, but an empty wallet is still worth saying.
+    return { kind: 'empty_not_blocked', snapshot: workspaceSnapshot! };
   }
-  if (balance <= AMR_LOW_BALANCE_WARN_USD) {
-    return { kind: 'soft', snapshot: workspaceSnapshot! };
-  }
+  // Anything above $0 is simply allowed. T66 retired the low-balance tier, so
+  // there is no second comparison here and no plan read on this path.
   return { kind: 'allow' };
 }
 
@@ -399,15 +423,10 @@ export async function checkAmrBalanceGate(
     const cachedHardCandidate =
       cached?.status === 'signed_out' ||
       (cachedBalance != null && cachedBalance <= AMR_HARD_BLOCK_BALANCE_USD);
-    if (!cachedHardCandidate) {
-      if (cachedBalance == null) return { kind: 'allow' };
-      if (cachedBalance > AMR_LOW_BALANCE_WARN_USD) return { kind: 'allow' };
-      // Above the hard line, so nothing here can block — and a plan never
-      // silences the reminder (OPEND-2600). Skipping the plan read also keeps
-      // the soft tier off the network, which is the latency red line.
-      // cached is non-null here: a definitive balance implies a snapshot.
-      return { kind: 'soft', snapshot: cached! };
-    }
+    // Above the hard line (or indefinite): nothing here can block and, since
+    // T66, nothing here has anything to say either. No plan read, no refresh —
+    // this is the latency-red-line path and it must stay a pure cache hit.
+    if (!cachedHardCandidate) return { kind: 'allow' };
     // Hard-block candidate (signed out or empty): confirm against the live
     // wallet before blocking — the cache may predate a sign-in or recharge.
     const fresh = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
@@ -425,15 +444,14 @@ export async function checkAmrBalanceGate(
     if (fresh.stale || fresh.error != null) return { kind: 'allow' };
     const freshBalance = amrWalletBalanceUsd(fresh);
     if (freshBalance == null) return { kind: 'allow' };
-    if (
-      freshBalance <= AMR_HARD_BLOCK_BALANCE_USD
-      && !(await hardBlockMustStandDown(fresh, modelId))
-    ) {
-      return { kind: 'hard', reason: 'insufficient', snapshot: fresh };
+    if (freshBalance <= AMR_HARD_BLOCK_BALANCE_USD) {
+      return (await hardBlockMustStandDown(fresh, modelId))
+        ? { kind: 'empty_not_blocked', snapshot: fresh }
+        : { kind: 'hard', reason: 'insufficient', snapshot: fresh };
     }
-    if (freshBalance <= AMR_LOW_BALANCE_WARN_USD) {
-      return { kind: 'soft', snapshot: fresh };
-    }
+    // A cache that read empty but refreshes to a positive balance is just an
+    // allow now — the refresh proved there is money, and how much is not a
+    // question this gate asks any more (T66).
     return { kind: 'allow' };
   } catch {
     // Unscoped legacy checks retain fail-open behavior. Every explicit

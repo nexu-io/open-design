@@ -25,6 +25,17 @@
 //
 // 补记(2026-09-04):「不再提醒」那颗 opt-out 已整颗拆除,原来那三条 opt-out
 // 对照改成钉住「遗留的静音位不再改变任何判定」。
+//
+// ⚠️ **补记(2026-09-07,T66):这个文件要防的那条缺陷已经不再是缺陷了。**
+// 产品看到软档那张卡之后原话「这个要不先不要了,跟产品说了一下,不要这个了」,
+// 追问范围后「余额为零的那个卡片要显示的,并且也要弹窗的」—— 于是 `$0 < 余额`
+// 这一整段**本来就该什么都不出**,QA 当初报的「$1.79 没有提示」现在是**正确行为**。
+// 上面第 1 条(提醒对所有档位可见)随之作废。
+//
+// 这个文件仍然留着,判据翻了个面:`$1.79` 那几组从「必须是 soft」改成
+// 「必须是 allow,而且这条路上一次套餐读数都不发」。**$0 那几组一个字没动** ——
+// T55 的四格矩阵不在 T66 的范围里,它是这一页现在最要紧的反向对照:少了它,
+// 把整段闸门删掉也会让 `$1.79` 那几组变绿。
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
@@ -143,8 +154,8 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-describe('OPEND-2600 · 个人工作区低余额提醒', () => {
-  it('专业版 + $1.79 发新任务 → 判定为告警档(报的就是这一条)', async () => {
+describe('T66 · 个人工作区余额低但不为零:一律放行,什么都不出', () => {
+  it('专业版 + $1.79 发新任务 → 判定放行(当年报的就是这一条,现在它是对的)', async () => {
     mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, 'pro'));
     stubWorkspaceBilling('ws-personal-pro', 'wm-personal-pro', REPORTED_BALANCE);
 
@@ -157,14 +168,11 @@ describe('OPEND-2600 · 个人工作区低余额提醒', () => {
       MODEL_ID,
     );
 
-    expect(result).toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
-    });
+    expect(result).toEqual({ kind: 'allow' });
   });
 
   it.each(['plus', 'pro', 'max', 'go'])(
-    '%s 档 + $1.79 一样出告警(提醒对所有档位可见)',
+    '%s 档 + $1.79 一样放行(档位改变不了这一段)',
     async (plan) => {
       mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, plan));
       stubWorkspaceBilling(`ws-${plan}`, `wm-${plan}`, REPORTED_BALANCE);
@@ -178,14 +186,11 @@ describe('OPEND-2600 · 个人工作区低余额提醒', () => {
         MODEL_ID,
       );
 
-      expect(result).toEqual({
-        kind: 'soft',
-        snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
-      });
+      expect(result).toEqual({ kind: 'allow' });
     },
   );
 
-  it('免费档 + $1.79 照旧告警(反向对照:这一档本来就是活的)', async () => {
+  it('免费档 + $1.79 同样放行', async () => {
     mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, 'free'));
     stubWorkspaceBilling('ws-free', 'wm-free', REPORTED_BALANCE);
 
@@ -196,13 +201,10 @@ describe('OPEND-2600 · 个人工作区低余额提醒', () => {
         workspaceMemberId: 'wm-free',
       },
       MODEL_ID,
-    )).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
-    });
+    )).resolves.toEqual({ kind: 'allow' });
   });
 
-  it('套餐读不出来(null 档)+ $1.79 也要提醒 —— 这一档不能掉进缝里', async () => {
+  it('套餐读不出来(null 档)+ $1.79 同样放行 —— 这一档不能掉进缝里', async () => {
     // 读不出来的档位既不是「免费」也不是「付费」——两个判据不互补,这一档要自己钉。
     mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, null));
     stubWorkspaceBilling('ws-unknown', 'wm-unknown', REPORTED_BALANCE);
@@ -214,10 +216,7 @@ describe('OPEND-2600 · 个人工作区低余额提醒', () => {
         workspaceMemberId: 'wm-unknown',
       },
       MODEL_ID,
-    )).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
-    });
+    )).resolves.toEqual({ kind: 'allow' });
   });
 });
 
@@ -255,7 +254,7 @@ describe('T55 · 余额 $0 的套餐用户:读得出档次就拦', () => {
     },
   );
 
-  it('套餐读不出来(null 档)+ 零余额 → 仍然失败开放(不拦),但要提醒', async () => {
+  it('套餐读不出来(null 档)+ 零余额 → 仍然失败开放(不拦),但卡照出', async () => {
     mockedFetch.mockResolvedValue(walletWithPlan('0', null));
     stubWorkspaceBilling('ws-zero-unknown', 'wm-zero-unknown', '0');
 
@@ -269,8 +268,10 @@ describe('T55 · 余额 $0 的套餐用户:读得出档次就拦', () => {
     );
 
     expect(result.kind).not.toBe('hard');
+    // 让位之后是 `empty_not_blocked`:钱包确实空了,卡要出,只是不拦、不弹窗。
+    // ⚠️ 这**不是**撤掉的那个告警档换了名字 —— 正数余额永远到不了这个分支。
     expect(result).toEqual({
-      kind: 'soft',
+      kind: 'empty_not_blocked',
       snapshot: expect.objectContaining({ balanceUsd: '0' }),
     });
   });
@@ -314,7 +315,7 @@ describe('T55 · 余额 $0 的套餐用户:读得出档次就拦', () => {
   });
 });
 
-describe('OPEND-2600 · 红线:软提醒不许多打一次网络往返', () => {
+describe('红线:余额 > 0 这条路不许多打一次网络往返', () => {
   it('$1.79 这条路上一次套餐读数都不发 —— 套餐只有硬拦那一档才需要', async () => {
     mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, 'pro'));
     stubWorkspaceBilling('ws-latency', 'wm-latency', REPORTED_BALANCE);
@@ -328,8 +329,8 @@ describe('OPEND-2600 · 红线:软提醒不许多打一次网络往返', () => {
       MODEL_ID,
     );
 
-    expect(result.kind).toBe('soft');
-    // `resolveAmrPlan` 唯一的网络动作。软提醒这一档不该碰它。
+    expect(result.kind).toBe('allow');
+    // `resolveAmrPlan` 唯一的网络动作。余额 > 0 这一段不该碰它。
     expect(mockedFetchStatus).not.toHaveBeenCalled();
   });
 
@@ -350,8 +351,8 @@ describe('OPEND-2600 · 红线:软提醒不许多打一次网络往返', () => {
   });
 });
 
-describe('OPEND-2600 · 反向对照:团队工作区行为不变', () => {
-  it('团队 + 专业版 + $1.79 仍是告警档', async () => {
+describe('反向对照:团队工作区同一口径', () => {
+  it('团队 + 专业版 + $1.79 同样放行', async () => {
     mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, 'pro'));
     stubWorkspaceBilling('ws-team-low', 'wm-team-low', REPORTED_BALANCE);
 
@@ -362,10 +363,7 @@ describe('OPEND-2600 · 反向对照:团队工作区行为不变', () => {
         workspaceMemberId: 'wm-team-low',
       },
       MODEL_ID,
-    )).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
-    });
+    )).resolves.toEqual({ kind: 'allow' });
   });
 
   it('团队 + 专业版 + 零余额 仍是拦截档', async () => {
@@ -387,8 +385,8 @@ describe('OPEND-2600 · 反向对照:团队工作区行为不变', () => {
   });
 });
 
-describe('OPEND-2600 · 反向对照:遗留的静音位和健康余额', () => {
-  it('留着遗留静音位的人 + $1.79 → 照样提醒', async () => {
+describe('反向对照:遗留的静音位和健康余额', () => {
+  it('留着遗留静音位的人 + $1.79 → 照样放行(位是死数据)', async () => {
     seedRetiredOptOut();
     mockedFetch.mockResolvedValue(walletWithPlan(REPORTED_BALANCE, 'pro'));
     stubWorkspaceBilling('ws-optout', 'wm-optout', REPORTED_BALANCE);
@@ -400,13 +398,10 @@ describe('OPEND-2600 · 反向对照:遗留的静音位和健康余额', () => {
         workspaceMemberId: 'wm-optout',
       },
       MODEL_ID,
-    )).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
-    });
+    )).resolves.toEqual({ kind: 'allow' });
   });
 
-  // 这条对照钉的是「遗留静音位不改变任何判定」,判定本身按 T55 从 soft 变 hard。
+  // 这条对照钉的是「遗留静音位不改变任何判定」,判定本身按 T55 是 hard。
   it('留着遗留静音位的套餐用户 + 零余额:静音位改不了拦截(T55)', async () => {
     seedRetiredOptOut();
     mockedFetch.mockResolvedValue(walletWithPlan('0', 'pro'));
@@ -474,13 +469,12 @@ describe('OPEND-2600 · 反向对照:遗留的静音位和健康余额', () => {
   });
 });
 
-describe('OPEND-2600 · 无 scope 的旧账号路径同样口径', () => {
-  it('专业版 + $1.79(缓存命中)→ 告警档', async () => {
+describe('无 scope 的旧账号路径同样口径', () => {
+  it('专业版 + $1.79(缓存命中)→ 放行', async () => {
     mockedFetch.mockResolvedValueOnce(walletWithPlan(REPORTED_BALANCE, 'pro'));
 
     await expect(checkAmrBalanceGate(undefined, MODEL_ID)).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: REPORTED_BALANCE }),
+      kind: 'allow',
     });
   });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// 红测 · 首页在**软那一档**($0 < 余额 < $2)什么都不显示,并且**直接放行**。
+// 红测 · 首页除了硬拦档以外**什么都不显示,并且直接放行**。
 //
 // 这个文件原本测的是 OPEND-2600 的首页那一半:低余额提醒走居中弹窗
 // `AmrLowBalanceDialog`,各档位都要出、且不许多打一次套餐读数。
@@ -9,13 +9,16 @@
 // 这个的,只用弹那个插画的就行」;首页那一档的替代物也一并拍了 —— 原话
 // 「什么都不显示,有余额就允许运行」(规格 T53)。
 //
-// 所以这一档的**覆盖没有丢,只是判据翻了个面**:从「必须出提醒」变成
-// 「一个提醒都不许出,而且这次发送必须照常建项目跑起来」。
+// 2026-09-07 产品再把**整个低余额档**撤掉(规格 T66,原话「这个要不先不要了,
+// 跟产品说了一下,不要这个了」),连项目页那张卡也没了 —— 于是判定层根本不再
+// 产生「低余额」这个结果,余额 `> 0` 一律是 `allow`。原来那组按档位扫的用例
+// 随之作废(没有档位能改变一个 `allow`),换成下面两条**首页仍要静默放行**的
+// 判据:普通放行,以及「空钱包但硬拦让了位」那一档(T55)。
 //
 // ⚠️ 命门在「放行」这半边。只断言「没有弹窗」的话,把整段余额闸门删掉、
 // 或者留一个不显示却仍然挡住发送的空壳,两种都会假绿 —— 前者由下面
 // 「反向对照 · 闸门本身还活着」那一组挡住(硬拦档照旧弹带插画的那张),
-// 后者由每一条 soft 用例里的 `onCreateProject` 断言挡住。
+// 后者由每一条放行用例里的 `onCreateProject` 断言挡住。
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
@@ -182,7 +185,7 @@ async function submitHome(prompt: string) {
   fireEvent.click(await screen.findByTestId('home-hero-submit'));
 }
 
-describe('T53 · 首页软余额档静默放行', () => {
+describe('T53 / T66 · 首页非硬拦档一律静默放行', () => {
   beforeEach(() => {
     globalThis.ResizeObserver = ResizeObserverMock as typeof ResizeObserver;
     window.sessionStorage.clear();
@@ -226,37 +229,34 @@ describe('T53 · 首页软余额档静默放行', () => {
     resetTeamProjectsCache();
   });
 
-  it.each(['free', 'pro', 'go', 'max'])(
-    '%s 档拿到告警判定时,首页什么都不显示,并且照常把这次发送跑起来',
-    async (plan) => {
-      mockedResolveAmrPlan.mockResolvedValue(plan);
-      mockedCheckAmrBalanceGate.mockResolvedValue({
-        kind: 'soft',
-        snapshot: lowBalanceSnapshot(),
-      });
-      const onCreateProject = vi.fn(async () => true);
-      renderHome(onCreateProject);
+  // T66 之后余额低于原来那条线的人拿到的就是一个 `allow` —— 首页对它必须
+  // 一个字都不说,而且照常把这次发送跑起来。
+  it('余额低但不为零(判定放行):首页什么都不显示,并且照常把这次发送跑起来', async () => {
+    mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
+    const onCreateProject = vi.fn(async () => true);
+    renderHome(onCreateProject);
 
-      await submitHome('Make me a poster.');
+    await submitHome('Make me a poster.');
 
-      // 放行:没有任何东西挡在中间,项目直接建出来。这半边是命门 ——
-      // 一个「不显示但仍然挡住」的空壳会在这里变红。
-      await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
-      // 静默:那张撤掉的弹窗不许以任何形式回来。
-      expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
-      // 硬拦那张也不许被拿来顶替 —— 软档不是拦截档。
-      expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
-      // 屏幕上一个对话框都没有:这一档是「什么都不显示」,不是「换一张显示」。
-      expect(document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length)
-        .toBe(0);
-    },
-  );
+    // 放行:没有任何东西挡在中间,项目直接建出来。这半边是命门 ——
+    // 一个「不显示但仍然挡住」的空壳会在这里变红。
+    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
+    // 那张撤掉的弹窗不许以任何形式回来。
+    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
+    // 硬拦那张也不许被拿来顶替。
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    // 屏幕上一个对话框都没有:这一档是「什么都不显示」,不是「换一张显示」。
+    expect(document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length)
+      .toBe(0);
+  });
 
-  it('套餐读不出来(null 档)同样静默放行 —— 这一档不能掉进缝里', async () => {
-    mockedResolveAmrPlan.mockResolvedValue(null);
+  // 空钱包但硬拦让了位(T55)。项目页会给它一张 $0 的卡,首页没有流水可挂,
+  // 所以这一档在首页同样是「什么都不显示、直接放行」——**不许**顺手拿硬拦
+  // 那张弹窗去顶替,让位的意思就是不拦。
+  it('空钱包但硬拦让位:首页同样静默放行', async () => {
     mockedCheckAmrBalanceGate.mockResolvedValue({
-      kind: 'soft',
-      snapshot: lowBalanceSnapshot(),
+      kind: 'empty_not_blocked',
+      snapshot: { ...lowBalanceSnapshot(), balanceUsd: '0' },
     });
     const onCreateProject = vi.fn(async () => true);
     renderHome(onCreateProject);
@@ -264,27 +264,15 @@ describe('T53 · 首页软余额档静默放行', () => {
     await submitHome('Make me a poster.');
 
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
-    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
+    expect(screen.queryByTestId('amr-balance-dialog')).toBeNull();
+    expect(document.querySelectorAll('[role="dialog"], [role="alertdialog"]').length)
+      .toBe(0);
   });
 
-  it('红线:软档一次套餐读数都不发(T40),而且不因为它多等一步', async () => {
-    // 一个永远不 resolve 的套餐读数 = 一次挂住的网络往返。软档要是还读它,
+  it('红线:放行这一路一次套餐读数都不发(T40),而且不因为它多等一步', async () => {
+    // 一个永远不 resolve 的套餐读数 = 一次挂住的网络往返。首页要是还读它,
     // 这次发送就永远建不出项目,下面的 waitFor 会超时变红。
     mockedResolveAmrPlan.mockReturnValue(new Promise<string | null>(() => {}));
-    mockedCheckAmrBalanceGate.mockResolvedValue({
-      kind: 'soft',
-      snapshot: lowBalanceSnapshot(),
-    });
-    const onCreateProject = vi.fn(async () => true);
-    renderHome(onCreateProject);
-
-    await submitHome('Make me a poster.');
-
-    await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
-    expect(mockedResolveAmrPlan).not.toHaveBeenCalled();
-  });
-
-  it('反向对照:判定放行时行为一致 —— 同样不出弹窗、同样跑起来', async () => {
     mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
     const onCreateProject = vi.fn(async () => true);
     renderHome(onCreateProject);
@@ -292,7 +280,6 @@ describe('T53 · 首页软余额档静默放行', () => {
     await submitHome('Make me a poster.');
 
     await waitFor(() => expect(onCreateProject).toHaveBeenCalledTimes(1));
-    expect(screen.queryByTestId('amr-low-balance-dialog')).toBeNull();
     expect(mockedResolveAmrPlan).not.toHaveBeenCalled();
   });
 
@@ -315,11 +302,8 @@ describe('T53 · 首页软余额档静默放行', () => {
       expect(onCreateProject).not.toHaveBeenCalled();
     });
 
-    it('首页确实问过闸门 —— 软档的静默不是因为根本没查', async () => {
-      mockedCheckAmrBalanceGate.mockResolvedValue({
-        kind: 'soft',
-        snapshot: lowBalanceSnapshot(),
-      });
+    it('首页确实问过闸门 —— 这份静默不是因为根本没查', async () => {
+      mockedCheckAmrBalanceGate.mockResolvedValue({ kind: 'allow' });
       renderHome(vi.fn(async () => true));
 
       await submitHome('Make me a poster.');

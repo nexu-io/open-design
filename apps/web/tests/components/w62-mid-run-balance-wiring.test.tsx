@@ -8,7 +8,8 @@
 // 要去把钱包读数取回来,交给 `amrBalanceCardUsd`。
 //
 // 在此之前 `setAmrBalanceCardUsd` 全项目只有两处调用,都在**发送前**那道余额闸门里
-// (`gate.kind === 'hard' | 'soft'`)。跑到一半那条路一次都没点亮过这张卡。
+// (`gate.kind === 'hard' | 'empty_not_blocked'`,后者当时还叫 `soft`)。
+// 跑到一半那条路一次都没点亮过这张卡。
 //
 // `ChatPane` 在这一层是 mock 的(它自带半个应用),所以这里断言的是
 // **ProjectView 把哪份数据交给了 ChatPane**;两段靠同一个 prop 名接在一起。

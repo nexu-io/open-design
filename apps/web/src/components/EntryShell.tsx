@@ -1123,13 +1123,12 @@ export function EntryShell({
       resolve: (decision: 'retry' | 'dismiss') => void;
     } | null
   >(null);
-  // Home has NO soft-tier surface. Product ruling 2026-09-06 (T53): between $0
-  // and the warning line Home shows nothing at all and the run just starts —
-  // "什么都不显示,有余额就允许运行". The soft reminder lives only where the
-  // delivered design put it, as the in-conversation UpgradeCard on the project
-  // page; Home has no conversation to hang it on, so it stays silent rather
-  // than growing a Home-only invention. That is why `handlePluginLoopSubmit`
-  // has no `soft` branch: falling through IS the behavior.
+  // Home has NO low-balance surface, and since T66 (product 2026-09-07) neither
+  // does anywhere else: a positive balance produces nothing at all and the run
+  // just starts. Home reached that end state first — ruling 2026-09-06 (T53),
+  // "什么都不显示,有余额就允许运行" — and the project page has now been pulled
+  // level with it, so `handlePluginLoopSubmit` having no low-balance branch is
+  // simply the shape of the gate: there is no such result kind to handle.
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
@@ -1460,14 +1459,15 @@ export function EntryShell({
           );
         }
         if (gate.kind === 'unavailable') return false;
-        // `soft` is deliberately unhandled: it falls through and the run starts.
-        // Home used to hold the submit open behind a centered reminder dialog
-        // ("额度不多了" + 仍要发起任务 / 去充值). Product ruled it away on
-        // 2026-09-06 — "软提醒弹窗就是产品告诉我不要这个的" — and ruled Home's
-        // replacement to be nothing at all: "什么都不显示,有余额就允许运行"
-        // (T53). Do not re-add a branch here; anything short of falling through
-        // reintroduces a block the user does not want. The only survivor of the
-        // soft tier is the project page's in-conversation UpgradeCard.
+        // Everything else falls through and the run starts. Home used to hold
+        // the submit open behind a centered reminder dialog ("额度不多了" + 仍要
+        // 发起任务 / 去充值). Product ruled it away on 2026-09-06 — "软提醒弹窗
+        // 就是产品告诉我不要这个的" — and ruled Home's replacement to be nothing
+        // at all: "什么都不显示,有余额就允许运行" (T53). T66 (2026-09-07) then
+        // retired the low-balance tier everywhere, so there is no longer even a
+        // result kind here to consider handling. `empty_not_blocked` also falls
+        // through on purpose: it is a stood-down hard block, and Home has no
+        // conversation to hang its card on. Do not re-add a branch here.
         if (
           currentWorkspaceAccountGeneration() !== gateAccountGeneration
           || workspaceIdentityCacheKey(

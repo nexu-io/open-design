@@ -176,15 +176,19 @@ describe('个人工作区 · 余额 $0 · 按档位', () => {
 
     const result = await checkAmrBalanceGate(personalScope('unknown'), 'glm-5.2');
     expect(result.kind).not.toBe('hard');
+    // 让位之后是 `empty_not_blocked`:不拦、不弹窗,但钱包确实是空的,卡照出。
     expect(result).toEqual({
-      kind: 'soft',
+      kind: 'empty_not_blocked',
       snapshot: expect.objectContaining({ balanceUsd: '0' }),
     });
   });
 });
 
-describe('个人工作区 · 余额不为 0 · 不受这次改动影响', () => {
-  it.each(['free', 'basic', 'max'])('%s 档低余额仍然只是软提醒', async (plan) => {
+describe('个人工作区 · 余额不为 0 · 一律放行', () => {
+  // T66(产品 2026-09-07)撤掉了整个低余额档,所以 `$1.20` 现在和 `$50` 同一个
+  // 答案。这一组留着是为了钉住「让位判据只作用在 $0 那一档」——
+  // 余额不为 0 时它连问都不该问。
+  it.each(['free', 'basic', 'max'])('%s 档低余额同样放行', async (plan) => {
     mockedFetch.mockResolvedValue(snapshot({
       balanceUsd: '1.20',
       user: { id: 'u1', email: 'user@example.com', plan },
@@ -193,10 +197,7 @@ describe('个人工作区 · 余额不为 0 · 不受这次改动影响', () => 
 
     await expect(
       checkAmrBalanceGate(personalScope(`low-${plan}`), 'glm-5.2'),
-    ).resolves.toEqual({
-      kind: 'soft',
-      snapshot: expect.objectContaining({ balanceUsd: '1.20' }),
-    });
+    ).resolves.toEqual({ kind: 'allow' });
   });
 
   it('余额健康时什么都不做', async () => {
