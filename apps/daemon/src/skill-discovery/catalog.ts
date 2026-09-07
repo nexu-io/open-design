@@ -1612,7 +1612,9 @@ function digestResourceRoster(
       relativePath: resource.relativePath,
       digest: resource.digest,
       size: resource.size,
-      mode: resource.mode,
+      // Catalog identity follows Git's regular/executable distinction, not the
+      // checkout umask. Keep the actual mode on the materialization descriptor.
+      mode: (resource.mode & 0o111) !== 0 ? 0o755 : 0o644,
     })),
   });
 }

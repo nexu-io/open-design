@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  chmod,
   cp,
   mkdir,
   mkdtemp,
@@ -150,6 +151,50 @@ async function readOfficialRootIdentity(root: string): Promise<{
 }
 
 describe('official Skill Discovery catalog v1', () => {
+  it.skipIf(process.platform === 'win32')('ignores checkout read/write permissions but preserves executable and content identity', async () => {
+    const strategyFolder = path.join(tmpDir, 'strategy');
+    const builtInFunctionalSkillsRoot = path.join(tmpDir, 'built-ins');
+    await cp(STRATEGY_SOURCE, strategyFolder, { recursive: true });
+    await createFunctionalSkill({
+      root: builtInFunctionalSkillsRoot,
+      sourceFolder: 'official-helper',
+      resources: { 'helper.sh': '#!/bin/sh\necho official\n' },
+    });
+    await writeFunctionalCatalog(strategyFolder, [functionalDeclaration({
+      sourceFolder: 'official-helper', resources: ['helper.sh'],
+    })]);
+    const sources = {
+      bundledStrategyPlugin: await resolveStrategyRecord(strategyFolder),
+      builtInFunctionalSkillsRoot,
+    };
+    const resourcePath = path.join(builtInFunctionalSkillsRoot, 'official-helper/helper.sh');
+    const readCatalog = () => readOfficialSkillDiscoveryCatalogV1(sources);
+    await chmod(resourcePath, 0o644);
+    const ordinary = readCatalog();
+    for (const mode of [0o600, 0o640, 0o664]) {
+      await chmod(resourcePath, mode);
+      expect(readCatalog()).toEqual(ordinary);
+    }
+    await chmod(resourcePath, 0o755);
+    const executable = readCatalog();
+    expect(executable.revision).not.toBe(ordinary.revision);
+    await chmod(resourcePath, 0o700);
+    expect(readCatalog()).toEqual(executable);
+    const candidate = executable.candidates.find((item) => item.id === 'official-helper')!;
+    const bundle = resolveOfficialSkillDiscoveryResourceBundleV1({
+      ...sources,
+      request: { id: candidate.id, revision: executable.revision, candidateDigest: candidate.candidateDigest, role: 'auxiliary' },
+    });
+    // Hash normalization must not loosen the actual materialization permissions.
+    expect(bundle.files[0]!.mode).toBe(0o700);
+    await writeFile(resourcePath, '#!/bin/sh\necho modified\n');
+    expect(readCatalog().revision).not.toBe(executable.revision);
+    expect(() => resolveOfficialSkillDiscoveryResourceBundleV1({
+      ...sources,
+      request: { id: candidate.id, revision: executable.revision, candidateDigest: candidate.candidateDigest, role: 'auxiliary' },
+    })).toThrow(/revision|digest|changed/i);
+  });
+
   it('keeps discovery bootstrap independent from the frozen OD Next v2 package identity', async () => {
     const [manifest, discoverySkill] = await Promise.all([
       readFile(path.join(STRATEGY_SOURCE, 'open-design.json'), 'utf8'),
