@@ -3,6 +3,7 @@ import { createStandaloneGenerationBinding, type StandaloneGenerationBinding, ty
 import type { GenerationRecord } from "./store.js";
 import type { LifecycleAttachment, LifecycleReadiness, LifecycleScope, LifecycleStatus } from "./launcher.js";
 import type { StandaloneShellUpdaterAction } from "./shell-update.js";
+import type { StandaloneHostTransitionDescriptor, StandaloneHostTransitionResult } from "./host-lifecycle.js";
 
 export const STANDALONE_HOST_CONTROL_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_HOST_CONTROL_ACTION = "standalone.host.control.v1";
@@ -90,6 +91,46 @@ function integer(value: unknown, label: string, minimum = 0): number {
 function capability(value: unknown, nullable = false): string | null {
   if (nullable && value === null) return null;
   return token(value, "Standalone host attachment capability");
+}
+
+function transitionOccupants(input: unknown): LifecycleStatus["occupants"] {
+  if (!Array.isArray(input)) throw new Error("Standalone host transition occupants are invalid");
+  const seen = new Set<string>();
+  return Object.freeze(input.map((entry) => {
+    const value = object(entry, "Standalone host transition occupant");
+    exactKeys(value, ["attachmentId", "generationId", "shell"], "Standalone host transition occupant");
+    const identity = attachment({ id: value.attachmentId, shell: value.shell });
+    if (seen.has(identity.id) || typeof value.generationId !== "string" || !digestPattern.test(value.generationId)) throw new Error("Standalone host transition occupant is invalid");
+    seen.add(identity.id);
+    return Object.freeze({ attachmentId: identity.id, shell: identity.shell, generationId: value.generationId });
+  }));
+}
+
+export function validateStandaloneHostTransitionDescriptor(input: unknown): StandaloneHostTransitionDescriptor {
+  const value = object(input, "Standalone host transition descriptor");
+  exactKeys(value, ["token", "attemptId", "fence", "expiresAt", "heartbeatIntervalMs", "occupants", "phase"], "Standalone host transition descriptor");
+  if (typeof value.expiresAt !== "string" || !Number.isFinite(Date.parse(value.expiresAt))) throw new Error("Standalone host transition expiry is invalid");
+  if (value.phase !== "reserved" && value.phase !== "stopped-sealed") throw new Error("Standalone host transition phase is invalid");
+  return Object.freeze({
+    token: token(value.token, "Standalone host transition token"),
+    attemptId: token(value.attemptId, "Standalone host transition attempt id"),
+    fence: integer(value.fence, "Standalone host transition fence"),
+    expiresAt: value.expiresAt,
+    heartbeatIntervalMs: integer(value.heartbeatIntervalMs, "Standalone host transition heartbeat", 1),
+    occupants: transitionOccupants(value.occupants),
+    phase: value.phase,
+  });
+}
+
+export function validateStandaloneHostTransitionResult(input: unknown): StandaloneHostTransitionResult {
+  const value = object(input, "Standalone host transition result");
+  if (value.state === "acquired") {
+    exactKeys(value, ["state", "transition"], "Standalone host acquired transition");
+    return Object.freeze({ state: "acquired", transition: validateStandaloneHostTransitionDescriptor(value.transition) });
+  }
+  exactKeys(value, ["state", "reason", "occupants"], "Standalone host blocked transition");
+  if (value.state !== "blocked" || (value.reason !== "occupied" && value.reason !== "transition-active")) throw new Error("Standalone host blocked transition is invalid");
+  return Object.freeze({ state: "blocked", reason: value.reason, occupants: transitionOccupants(value.occupants) });
 }
 
 export function validateStandaloneHostLifecycleStatus(input: unknown, expectedScope: LifecycleScope): LifecycleStatus {

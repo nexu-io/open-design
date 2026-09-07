@@ -52,6 +52,35 @@ function stoppedStatus(): LifecycleStatus {
 }
 
 describe("Standalone host control client", () => {
+  it.each(["token", "attemptId", "fence", "phase"])("rejects a renewal that retargets transition %s", async (field) => {
+    const descriptor = { token: "token-1", attemptId: "attempt-1", fence: 7, phase: "reserved", expiresAt: "2026-09-07T06:00:00Z", heartbeatIntervalMs: 1000, occupants: [] };
+    const changed = { ...descriptor, [field]: field === "fence" ? 8 : field === "phase" ? "stopped-sealed" : "foreign" };
+    const requests: StandaloneHostControlRequest[] = [];
+    const client = new StandaloneHostControlClient(scope, async request => {
+      requests.push(request);
+      if (request.operation === "transition.begin") return { state: "acquired", transition: descriptor };
+      if (request.operation === "transition.renew") return changed;
+      return { released: true };
+    });
+    const result = await client.beginTransition(scope, "content-restart");
+    if (result.state !== "acquired") throw new Error("expected acquired");
+    await expect(result.transition.renew()).rejects.toThrow("escaped its identity or phase");
+    expect(result.transition.fence).toBe(7);
+    expect(result.transition.phase).toBe("reserved");
+    await result.transition.release();
+    expect(requests.at(-1)).toMatchObject({ operation: "transition.release", token: "token-1", fence: 7 });
+  });
+
+  it("rejects malformed transition descriptors and a different requested attempt", async () => {
+    const descriptor = { token: "token-1", attemptId: "attempt-1", fence: 7, phase: "reserved", expiresAt: "2026-09-07T06:00:00Z", heartbeatIntervalMs: 1000, occupants: [] };
+    for (const transition of [{ ...descriptor, fence: -1 }, { ...descriptor, expiresAt: "invalid" }, { ...descriptor, extra: true }, { ...descriptor, occupants: [{}] }]) {
+      const client = new StandaloneHostControlClient(scope, async () => ({ state: "acquired", transition }));
+      await expect(client.beginTransition(scope, "content-restart")).rejects.toThrow();
+    }
+    const client = new StandaloneHostControlClient(scope, async () => ({ state: "acquired", transition: descriptor }));
+    await expect(client.beginTransition(scope, "content-restart", { attemptId: "requested-attempt" })).rejects.toThrow("another attempt");
+  });
+
   it("hands one scoped bearer credential to a later native command without granting new authority", async () => {
     const calls: StandaloneHostControlRequest[] = [];
     const transport: StandaloneHostControlTransport = async (request) => {

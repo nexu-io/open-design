@@ -2,7 +2,8 @@ import { canonicalJson, validateStandaloneScope } from "./protocol.js";
 import type { GenerationRecord } from "./store.js";
 import type { LifecycleAttachment, LifecyclePort, LifecycleReadiness, LifecycleScope, LifecycleStatus } from "./launcher.js";
 import type { StandaloneGenerationBinding, StandaloneRuntimeCommand, StandaloneRuntimeCommandResult } from "./bootloader-handoff.js";
-import { STANDALONE_HOST_CONTROL_SCHEMA_VERSION, validateStandaloneHostControlRequest, validateStandaloneHostLifecycleStatus, validateStandaloneHostReadiness, type StandaloneHostControlRequest } from "./host-control.js";
+import type { StandaloneLifecycleTransitionPort, StandaloneLifecycleTransitionResult } from "./shell-update.js";
+import { STANDALONE_HOST_CONTROL_SCHEMA_VERSION, validateStandaloneHostControlRequest, validateStandaloneHostLifecycleStatus, validateStandaloneHostReadiness, validateStandaloneHostTransitionDescriptor, validateStandaloneHostTransitionResult, type StandaloneHostControlRequest } from "./host-control.js";
 
 export type StandaloneHostControlTransport = (request: StandaloneHostControlRequest) => Promise<unknown>;
 
@@ -183,6 +184,68 @@ export class StandaloneHostControlClient implements LifecyclePort {
     }
     this.#capabilities.set(attachment.id, capability);
     return status;
+  }
+
+  async occupants(scope: LifecycleScope): Promise<LifecycleStatus["occupants"]> {
+    return (await this.status(scope)).occupants;
+  }
+
+  /** Logical transition only; Shell adapters must separately prove physical retirement. */
+  async beginTransition(
+    scope: LifecycleScope,
+    kind: "content-restart" | "shell-install",
+    options: Parameters<StandaloneLifecycleTransitionPort["beginTransition"]>[2] = {},
+  ): Promise<StandaloneLifecycleTransitionResult> {
+    const acquired = validateStandaloneHostTransitionResult(await this.#request({
+      schemaVersion: 1, operation: "transition.begin", scope, kind, options,
+    }));
+    if (acquired.state === "blocked") return acquired;
+    let descriptor = acquired.transition;
+    if (options.attemptId != null && descriptor.attemptId !== options.attemptId) throw new Error("Standalone host transition returned another attempt");
+    let ended = false;
+    let tail: Promise<unknown> = Promise.resolve();
+    const serialize = <T>(operation: () => Promise<T>): Promise<T> => {
+      const next = tail.then(operation, operation);
+      tail = next.catch(() => undefined);
+      return next;
+    };
+    const requireActive = () => { if (ended) throw new Error("Standalone host transition handle is closed"); };
+    const update = async (operation: "transition.renew" | "transition.force-stop") => {
+      requireActive();
+      const next = validateStandaloneHostTransitionDescriptor(await this.#request({
+        schemaVersion: 1, operation, scope, token: descriptor.token, fence: descriptor.fence,
+      }));
+      const expectedFence = descriptor.fence + (operation === "transition.force-stop" && descriptor.phase === "reserved" ? 1 : 0);
+      if (next.token !== descriptor.token || next.attemptId !== descriptor.attemptId || next.fence !== expectedFence
+        || next.phase !== (operation === "transition.force-stop" ? "stopped-sealed" : descriptor.phase)) {
+        throw new Error("Standalone host transition response escaped its identity or phase");
+      }
+      descriptor = next;
+      if (operation === "transition.force-stop") this.#capabilities.clear();
+    };
+    return Object.freeze({ state: "acquired", transition: Object.freeze({
+      get attemptId() { return descriptor.attemptId; },
+      get fence() { return descriptor.fence; },
+      get expiresAt() { return descriptor.expiresAt; },
+      get heartbeatIntervalMs() { return descriptor.heartbeatIntervalMs; },
+      get occupants() { return descriptor.occupants; },
+      get phase() { return descriptor.phase; },
+      renew: () => serialize(() => update("transition.renew")),
+      forceStop: () => serialize(() => update("transition.force-stop")),
+      release: () => serialize(async () => {
+        requireActive();
+        const response = object(await this.#request({ schemaVersion: 1, operation: "transition.release", scope, token: descriptor.token, fence: descriptor.fence }), "Standalone host transition release");
+        exactKeys(response, ["released"], "Standalone host transition release");
+        if (response.released !== true) throw new Error("Standalone host did not release its transition");
+        ended = true;
+      }),
+      completeBoundStart: (generation: GenerationRecord, attachment: LifecycleAttachment, binding: StandaloneGenerationBinding) => serialize(async () => {
+        requireActive();
+        const status = await this.completeTransitionStart(descriptor.token, descriptor.fence, generation, attachment, binding);
+        ended = true;
+        return status;
+      }),
+    }) });
   }
 
   async invoke(command: StandaloneRuntimeCommand): Promise<StandaloneRuntimeCommandResult> {

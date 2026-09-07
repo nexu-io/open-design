@@ -10,6 +10,11 @@ import { FixtureShellUpdaterPort } from "./fixture-shell-updater.mjs";
 
 const ACTION = "standalone.request.v1";
 const CONFIG_ENV = "OD_TERMINAL_SIDECAR_CONFIG_V1";
+const REQUEST_FIELDS = new Set([
+  "schemaVersion", "scope", "domain", "operation", "generation", "binding", "attachment",
+  "attachmentCapability", "readiness", "attachmentId", "fence", "kind", "options", "token",
+  "action", "bindingDigest", "generationId", "afterRevision", "timeoutMs", "proof",
+]);
 const capabilityDigest = (token) => createHash("sha256").update(token).digest("hex");
 
 function readConfig() {
@@ -73,10 +78,7 @@ class TerminalSidecarRuntime {
   async request(message) {
     if (message?.schemaVersion !== 1) throw new Error("unsupported Terminal Sidecar request schema");
     this.assertScope(message.scope);
-    if (message.fault === "crash") {
-      setImmediate(() => process.exit(73));
-      return { accepted: true };
-    }
+    if (Object.keys(message).some(key => !REQUEST_FIELDS.has(key))) throw new Error("Terminal Sidecar request contains unsupported fields");
     if (message.domain === "generation") return await this.generationRequest(message);
     if (message.domain === "lifecycle") return await this.lifecycleRequest(message);
     if (message.domain === "shell-updater") return await this.updaterRequest(message);

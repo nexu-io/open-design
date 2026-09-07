@@ -218,7 +218,11 @@ describe("Terminal Sidecar refinement", () => {
       operation: "status",
       scope,
       fault: "crash",
-    })).resolves.toMatchObject({ accepted: true });
+    })).rejects.toThrow("unsupported fields");
+    const beforeCrash = await getSidecarStatus<any>(stamp, { generationPid });
+    expect(beforeCrash.hostPid).toBe(successor.hostPid);
+    // Fault injection belongs to the test process, not the production protocol.
+    process.kill(successor.hostPid, "SIGKILL");
     await waitForSidecarExit(stamp, generationPid);
     const recovered = await convergeSidecarLaunch(launchRequest, { stabilityMs: 100, timeoutMs: 15_000 });
     expect(recovered.description.resources.pid).not.toBe(generationPid);

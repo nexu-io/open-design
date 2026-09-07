@@ -66,6 +66,48 @@ function startRequest() {
 }
 
 describe("Standalone host finite control contract", () => {
+  it("drives blocked, deferred and sealed transitions through the public client", async () => {
+    const lifecycle = new StandaloneHostLifecycle(scope);
+    const host = new StandaloneHostRuntime({
+      scope, lifecycle,
+      capabilities: () => ({ invoke: async (request) => ({ ...request, outcome: "unsupported" }) }),
+      resolveGeneration: async () => async (request) => {
+        const status = { state: "running" as const, instanceId: "body", references: 1, generationId: request.binding.generationId, bindingDigest: request.binding.digest };
+        return {
+          readStatus: async () => status,
+          invoke: async (command) => ({ requestId: command.requestId, attachmentId: command.attachmentId, bindingDigest: command.bindingDigest, outcome: "unsupported" }),
+          close: async () => ({ ...status, state: "stopped" }),
+          waitForTerminal: async () => ({ ...status, state: "stopped" }),
+        };
+      },
+    });
+    const client = new StandaloneHostControlClient(scope, request => host.request(request));
+    const attachment = startRequest().attachment;
+    await client.start(scope, generation, attachment, binding);
+    expect(await client.occupants(scope)).toHaveLength(1);
+    expect(await client.beginTransition(scope, "content-restart", { ownerAttachmentId: "foreign" })).toMatchObject({ state: "blocked", reason: "occupied" });
+    const deferred = await client.beginTransition(scope, "content-restart", { ownerAttachmentId: attachment.id });
+    if (deferred.state !== "acquired") throw new Error("expected reservation");
+    await deferred.transition.renew();
+    await deferred.transition.release();
+    await expect(deferred.transition.renew()).rejects.toThrow("closed");
+    const acquired = await client.beginTransition(scope, "content-restart", { force: true });
+    if (acquired.state !== "acquired") throw new Error("expected forced reservation");
+    const previousFence = acquired.transition.fence;
+    await Promise.all([acquired.transition.forceStop(), acquired.transition.renew()]);
+    expect(acquired.transition.fence).toBe(previousFence + 1);
+    expect(acquired.transition.phase).toBe("stopped-sealed");
+    expect(() => client.exportAttachmentCredential(attachment.id)).toThrow("unavailable");
+    await acquired.transition.forceStop();
+    expect(acquired.transition.fence).toBe(previousFence + 1);
+    await expect(acquired.transition.release()).rejects.toThrow();
+    expect(await acquired.transition.completeBoundStart(generation, attachment, binding)).toMatchObject({ state: "running", references: 1 });
+    expect((await client.heartbeat(scope, attachment)).references).toBe(1);
+    await expect(acquired.transition.forceStop()).rejects.toThrow("closed");
+    await client.release(scope, attachment.id);
+    await host.stop();
+  });
+
   it("releases a newly reserved attachment if the generation cannot be loaded", async () => {
     const lifecycle = new StandaloneHostLifecycle(scope);
     const host = new StandaloneHostRuntime({
