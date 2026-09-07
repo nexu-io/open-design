@@ -526,6 +526,78 @@ export function canReachWorkspaceBillingEntrance(
   return context.permissions?.canManageBilling === true;
 }
 
+/**
+ * The one context a billing entrance may be resolved from, for a run that a
+ * specific project's workspace pays for.
+ *
+ * Two questions get confused here, and they have different authorities.
+ *
+ * WHICH WORKSPACE PAYS is the project's resolved scope, and only the project's
+ * resolved scope. A settled unavailable/forbidden scope produces no context at
+ * all, and that absence must stay an absence: substituting whichever workspace
+ * the navigation rail happens to be in is how a Team project's empty wallet
+ * ends up asking about the viewer's Personal one. So `scoped` is passed through
+ * untouched in its identity — there is no input to this function that can make
+ * the result name a different `workspaceId`, `workspaceType`, or
+ * `workspaceMemberId` than `scoped` did, and a null `scoped` stays null.
+ *
+ * WHO IS ASKING the project scope cannot answer. `resolveLocalProjectWorkspaceScope`
+ * (apps/daemon) resolves a project's scope *without consulting the membership
+ * directory* — that is its stated contract and the reason it is fast and
+ * local — so it fills `role` with a least-privilege `member` placeholder. That
+ * placeholder is load-bearing for writes: the daemon's resource gate derives
+ * `privileged` from the role the project request asserts, and a placeholder
+ * that said `owner` would let a workspace owner write every project in the
+ * workspace, including ones they did not create. It must not be "fixed".
+ *
+ * What it must not do is answer a MONEY question. Asked whether the viewer may
+ * reach a billing entrance, the placeholder demotes a workspace owner to a
+ * member and deletes their own way to pay — the dialog becomes "ask your team
+ * owner" for the team owner themselves (§6.V / OPEND-2720, reproduced on a
+ * real runtime 2026-09-07).
+ *
+ * So this adopts exactly one thing — the membership role — and only from an
+ * authoritative context (`GET /api/workspace/context`) that names the very same
+ * workspace AND the very same member. Permissions are re-derived through
+ * {@link buildWorkspacePermissions} using the SCOPE's own lifecycle and member
+ * status, because those describe this project's state (a frozen project reads
+ * back `locked`) rather than the directory's view of the workspace. A frozen
+ * project therefore stays unwritable no matter whose role is adopted.
+ *
+ * Everything else — a mismatch of any identity field, an absent authority, a
+ * member the directory reports as removed — keeps the fail-closed scope exactly
+ * as it is.
+ *
+ * The result is for billing entrances only (which dialog, whether an upgrade
+ * link exists, where it lands). It must never be used as a project request's
+ * workspace identity, nor reach a write/read-only decision.
+ */
+export function workspaceBillingAuthorityContext(
+  scoped: WorkspaceCollabContext | null | undefined,
+  authoritative: WorkspaceCollabContext | null | undefined,
+): WorkspaceCollabContext | null {
+  if (!scoped) return null;
+  if (!authoritative) return scoped;
+  if (
+    authoritative.workspaceId !== scoped.workspaceId
+    || authoritative.workspaceType !== scoped.workspaceType
+    || authoritative.workspaceMemberId !== scoped.workspaceMemberId
+    || authoritative.memberStatus !== 'active'
+    || authoritative.role === scoped.role
+  ) {
+    return scoped;
+  }
+  return {
+    ...scoped,
+    role: authoritative.role,
+    permissions: buildWorkspacePermissions({
+      role: authoritative.role,
+      lifecycleState: scoped.lifecycleState,
+      memberStatus: scoped.memberStatus,
+    }),
+  };
+}
+
 export function buildWorkspaceSeatSummary(input: {
   seatLimit: number;
   usedSeats: number;

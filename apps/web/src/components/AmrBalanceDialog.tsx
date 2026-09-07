@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Dialog } from '@open-design/components';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { useT } from '../i18n';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
@@ -51,6 +52,25 @@ interface Props {
    * behavior every caller had before T58.
    */
   upgradeIntent?: 'pricing' | 'auto_recharge';
+  /**
+   * The workspace whose wallet this block is about, when the caller already
+   * knows it. Omit (the default) to resolve the ambient navigation selection,
+   * which is correct for Home — there the ambient workspace IS the one that
+   * would have paid.
+   *
+   * The project view is not in that position: its run is paid for by the
+   * PROJECT's workspace, which is not necessarily the one the rail is showing.
+   * Leaving this dialog on the ambient selection there let the dialog's primary
+   * CTA and the in-conversation UpgradeCard resolve their destination from two
+   * different contexts, which is precisely the defect
+   * `amrBalanceDialogUpgradeIntent` warns about — 「卡和弹窗…两者跳去不同的
+   * 地方是缺陷而不是特性」. Passing the caller's one billing context makes them
+   * agree by construction rather than by coincidence.
+   *
+   * `null` is a deliberate value (no billing identity resolved), distinct from
+   * `undefined` (use the ambient one).
+   */
+  workspaceContext?: WorkspaceCollabContext | null;
   metricsConsent: boolean;
   installationId: string | null | undefined;
   /** Dismissal only ("not now" / Esc); the blocked payload stays parked. */
@@ -105,6 +125,7 @@ export function AmrBalanceDialog({
   profile,
   entrySource,
   upgradeIntent = 'pricing',
+  workspaceContext: workspaceContextOverride,
   metricsConsent,
   installationId,
   onClose,
@@ -124,9 +145,17 @@ export function AmrBalanceDialog({
   // doesn't poll forever; guarded against double-fires.
   const [watchingWallet, setWatchingWallet] = useState(false);
   const {
-    context: workspaceContext,
-    loading: workspaceContextLoading,
+    context: ambientWorkspaceContext,
+    loading: ambientWorkspaceContextLoading,
   } = useWorkspaceContext();
+  // An explicitly supplied context is already resolved, so there is nothing to
+  // wait for; only the ambient lane can still be in flight.
+  const workspaceContext =
+    workspaceContextOverride !== undefined
+      ? workspaceContextOverride
+      : ambientWorkspaceContext;
+  const workspaceContextLoading =
+    workspaceContextOverride !== undefined ? false : ambientWorkspaceContextLoading;
   const workspaceBilling = useWorkspaceBilling();
   // Both destinations come from the two shared decision points in
   // `EntryNavRail`, so this dialog cannot grow a link the account menu, the

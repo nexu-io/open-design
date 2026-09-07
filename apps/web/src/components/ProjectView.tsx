@@ -76,6 +76,7 @@ import {
 } from '../runtime/strategy-question-continuation';
 import {
   isTodoWriteToolName,
+  workspaceBillingAuthorityContext,
   type AmrWalletSnapshot,
   type ByokChatProviderConfig,
   type ByokMediaDefaults,
@@ -2295,6 +2296,33 @@ export function ProjectView({
   // preflight context; they must never fall through to the Personal wallet.
   const projectRunPreflightContext =
     projectRunBillingContext ?? projectRunWorkspaceContext;
+  /**
+   * 同一个工作区,但**「谁在问」这一位取权威的那一份**(OPEND-2720)。
+   *
+   * `projectRunPreflightContext` 回答的是「这一笔钱从哪个钱包出」,那必须是
+   * 项目自己的 scope —— 上面那段注释在防的就是它掉回环境里那个个人钱包。
+   * 但它回答不了「问的人是谁」:那份上下文由
+   * `resolveLocalProjectWorkspaceScope` 拼出来,而那个函数的文档注释第一句就是
+   * 「without consulting the membership directory」,`role` 填的是一个最小权限
+   * 占位。占位是**承重结构**(daemon 写闸门按 role 算 `privileged`,它就是
+   * 「创建者可写 / 非创建者只读」的实现方式),所以不能去改它;能改的是别拿它
+   * 回答钱的问题 —— 拿它问,团队所有者会被判成「去找你的所有者充值」,而他
+   * 自己就是所有者。
+   *
+   * `workspaceBillingAuthorityContext` 只合并 role 这一位,而且要求权威上下文
+   * 指的是**同一个工作区的同一个成员**;身份三位一个都不从权威那边取,scope
+   * 为空时结果也为空。所以它不可能把这笔钱换到另一个钱包上。
+   *
+   * ⚠️ 这个值**只服务付款入口**(出哪张弹窗 / 给不给升级链接 / 链接落哪)。
+   * 项目资源请求、写权限、只读态一律继续用 `projectRunWorkspaceContext` ——
+   * 它才是 `workspaceProjectHeaders` 的取数处。守卫见
+   * `tests/components/ProjectView.opend2720-billing-authority.test.tsx`
+   * 的「账单上下文不许流进项目资源/写权限那条链」。
+   */
+  const projectRunBillingAuthorityContext = useMemo(
+    () => workspaceBillingAuthorityContext(projectRunPreflightContext, workspaceContext),
+    [projectRunPreflightContext, workspaceContext],
+  );
   const cloudModelSelected = config.mode === 'daemon' && config.agentId === 'amr';
   const projectRunRequiresWorkspaceScope = cloudModelSelected;
   // An OpenDesign Cloud run needs a wallet, and the ONLY client-side veto is
@@ -3027,10 +3055,13 @@ export function ProjectView({
   const amrBalanceBranch = useMemo(
     () =>
       resolveAmrBalanceBranch({
-        context: projectRunPreflightContext,
+        // 钱包是 `projectRunPreflightContext` 那一个工作区的;**身份**取
+        // 权威的那一份(同工作区同成员才合并),否则团队所有者会被那份拼出来
+        // 的 `role: 'member'` 判进「去找所有者」那一格 —— 而他自己就是所有者。
+        context: projectRunBillingAuthorityContext,
         billing: projectRunPreflightBilling,
       }),
-    [projectRunPreflightBilling, projectRunPreflightContext],
+    [projectRunPreflightBilling, projectRunBillingAuthorityContext],
   );
   const amrBalanceBranchRef = useRef(amrBalanceBranch);
   amrBalanceBranchRef.current = amrBalanceBranch;
@@ -3061,11 +3092,15 @@ export function ProjectView({
     const fallbackProfile = amrBalanceCardProfile;
     // 自动充值链接对「可读但不可写」的工作区会返回 null(权限位不同,见
     // `workspaceAutoRechargeUrl`)。那时退回 Pricing —— 少一个功能好过一颗死按钮。
+    // 落点和上面那个 `intent` 必须问同一份上下文。分支已经按权威身份算过了,
+    // 链接这一半要是回头去问那个拼出来的 `role: 'member'`,
+    // `workspaceAutoRechargeUrl` 就会因为 `canManageAutoRecharge` 为假而返回
+    // null,把一个 Max 所有者退回套餐页 —— 而同一格的弹窗跳的是自动充值。
     const url =
       (intent === 'auto_recharge'
-        ? workspaceAutoRechargeUrl(projectRunPreflightContext, { fallbackProfile })
+        ? workspaceAutoRechargeUrl(projectRunBillingAuthorityContext, { fallbackProfile })
         : null)
-      ?? workspaceUpgradeUrl(projectRunPreflightContext, null, { fallbackProfile });
+      ?? workspaceUpgradeUrl(projectRunBillingAuthorityContext, null, { fallbackProfile });
     if (!url) return;
     const entrySource =
       intent === 'auto_recharge'
@@ -3090,7 +3125,7 @@ export function ProjectView({
     analytics.track,
     config.installationId,
     config.telemetry?.metrics,
-    projectRunPreflightContext,
+    projectRunBillingAuthorityContext,
   ]);
   // Conversations with a balance-gate check currently in flight. Sends that
   // arrive during the check queue instead of racing a duplicate run through
@@ -13516,6 +13551,11 @@ export function ProjectView({
           profile={amrBalanceGateBlock.snapshot.profile}
           entrySource="chat_balance_gate_upgrade"
           upgradeIntent={amrBalanceGateBlock.upgradeIntent}
+          // 弹窗和卡上那颗必须从**同一份**上下文算落点。默认那条(环境里选中
+          // 的工作区)对首页是对的,对项目页不是:这一笔钱是项目那个工作区出的,
+          // 环境里未必就是它。两处不同源正是产品文档说的「卡和弹窗跳去不同的
+          // 地方是缺陷而不是特性」。
+          workspaceContext={projectRunBillingAuthorityContext}
           metricsConsent={config.telemetry?.metrics === true}
           installationId={config.installationId}
           onClose={() => setAmrBalanceGateBlock(null)}
