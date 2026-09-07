@@ -3,7 +3,6 @@ import path from 'node:path';
 import {
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   OdNextRuntimeCapabilitySnapshotV1Schema,
-  detectOdNextDevicePlatformFromText,
   executionProfileFromStreamFormat,
   type OdNextPromptBundleHeadV2,
   type OdNextPromptBundleRecipeIdentityV2,
@@ -314,10 +313,7 @@ export function createOdNextInitialPromptBundleService(
         extractUserAuthoredSignalText(stringValue(message)),
         extractUserAuthoredSignalText(stringValue(currentPrompt)),
       ),
-      devicePlatform: detectOdNextDevicePlatformFromText(
-        extractUserAuthoredSignalText(stringValue(message)),
-        extractUserAuthoredSignalText(stringValue(currentPrompt)),
-      ),
+      devicePlatform: null,
     };
     const intentSignals = conversationId
       ? latchConversationIntentSignals(deps.db, conversationId, freshIntentSignals)
@@ -342,7 +338,6 @@ export function createOdNextInitialPromptBundleService(
       freeformDeckSignal: intentSignals.deck,
       mediaHintSignal: intentSignals.media,
       platformHintSignal: intentSignals.platform,
-      devicePlatformSignal: intentSignals.devicePlatform,
       workspaceScope: meta.workspaceScope,
       frozenSkillPackage,
       odNextSyntheticCanary:

@@ -35,13 +35,14 @@ import type {
 } from '@open-design/contracts';
 import {
   detectOdNextDevicePlatformFromText,
-  resolveOdNextDevicePlatform,
-  selectOdNextDeviceFrameContextV2,
+  readPrototypePresentationFromPlan,
+  selectOdNextDeviceFrameCatalogV2,
   selectOdNextLayoutPrimitivesCss,
 } from '@open-design/contracts';
 import {
   loadOdNextTaskResourcesForSnapshot,
   materializeOdNextDeviceFrames,
+  verifyOdNextSelectedDeviceFrame,
   observeOdNextDeviceShell,
   observeOdNextLayoutPrimitives,
 } from './strategies/od-next/device-frames.js';
@@ -750,7 +751,6 @@ import {
   insertScheduledRoutineRun,
   insertTemplate,
   latchConversationIntentSignals,
-  readConversationIntentSignals,
   findTemplateByNameAndProject,
   updateTemplate,
   listProjectsAwaitingInput,
@@ -9309,7 +9309,6 @@ export async function startServer({
     freeformDeckSignal,
     mediaHintSignal,
     platformHintSignal,
-    devicePlatformSignal = null,
     frozenSkillPackage,
     odNextSyntheticCanary = false,
     odNextAutomaticAdmission = false,
@@ -10069,18 +10068,25 @@ export async function startServer({
         }
       }
     }
-    // Handheld shell for phone-app prototypes: resolved from project metadata
-    // and the user's own words (never the model's guess), then the selected
-    // shell is quoted as a fact so the Build holds real handset markup.
-    const odNextDeviceFrame = odNextStrategyRecipe?.taskType === 'prototype'
-      ? selectOdNextDeviceFrameContextV2({
-          resolution: resolveOdNextDevicePlatform({
-            metadata,
-            textPlatform: devicePlatformSignal,
-          }),
-          taskResources: odNextStrategyRecipe.taskResources,
-        })
-      : null;
+    // Publish only reusable templates verified in this project's workspace.
+    // The current Plan chooses a frame; platform words and old intent latches
+    // do not choose one while the request is being composed.
+    let odNextDeviceFrameCatalog = [];
+    if (odNextStrategyRecipe?.taskType === 'prototype' && projectId) {
+      try {
+        const staging = await materializeOdNextDeviceFrames({
+          cwd: resolveProjectDir(PROJECTS_DIR, projectId, metadata),
+          resources: odNextStrategyRecipe.taskResources,
+        });
+        odNextDeviceFrameCatalog = selectOdNextDeviceFrameCatalogV2(
+          odNextStrategyRecipe.taskResources,
+        ).filter((resource) => staging.staged.includes(resource.shell));
+      } catch (err) {
+        console.warn(
+          `[od-next-device-frames] request catalog unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
     // Structure-only layout primitives travel with every prototype run as a
     // fact, so stacked text, truncation, rails, and screen chrome are composed
     // from classes that already behave instead of re-derived per component.
@@ -10095,7 +10101,9 @@ export async function startServer({
           metadata,
           template,
           exampleReference: odNextExampleReference,
-          ...(odNextDeviceFrame ? { deviceFrame: odNextDeviceFrame } : {}),
+          ...(odNextStrategyRecipe.taskType === 'prototype'
+            ? { deviceFrameCatalog: odNextDeviceFrameCatalog }
+            : {}),
           ...(odNextLayoutPrimitivesCss ? { layoutPrimitivesCss: odNextLayoutPrimitivesCss } : {}),
           designSystemBody,
           designSystemTitle,
@@ -10129,7 +10137,9 @@ export async function startServer({
           metadata,
           template,
           exampleReference: odNextExampleReference,
-          deviceFrame: odNextDeviceFrame,
+          ...(odNextStrategyRecipe.taskType === 'prototype'
+            ? { deviceFrameCatalog: odNextDeviceFrameCatalog }
+            : {}),
           layoutPrimitivesCss: odNextLayoutPrimitivesCss,
           designSystemBody,
           designSystemTitle,
@@ -10858,7 +10868,7 @@ export async function startServer({
       deck: detectDeckIntentSignal(...intentSignalTexts),
       media: detectMediaIntentSignal(...intentSignalTexts),
       platform: detectPlatformIntentSignal(...intentSignalTexts),
-      devicePlatform: detectOdNextDevicePlatformFromText(...intentSignalTexts),
+      devicePlatform: strategyTaskAtStart ? null : detectOdNextDevicePlatformFromText(...intentSignalTexts),
     };
     const intentSignals =
       !legacyIntentSignalScan && typeof run.conversationId === 'string' && run.conversationId
@@ -10956,20 +10966,20 @@ export async function startServer({
         cwd,
       });
     }
-    // OD Next task-profile resources (the handheld shells for prototype
-    // tasks) are staged beside the frozen Skills on every strategy run, so the
-    // rule card's `.od-frames/<shell>.html` paths resolve even when no platform
-    // was resolved up front. Fail-soft: a staging error costs the shells, not
-    // the run.
+    // Refresh task resources without overwriting user-owned files. Production
+    // requires the selected template's exact package bytes; unrelated shell
+    // conflicts cannot block a website or a Direct Edit without a Plan.
     if (cwd && strategyTaskAtStart && typeof run.appliedPluginSnapshotId === 'string') {
+      const presentation = strategyTaskAtStart.inputStage === 'production'
+        ? readPrototypePresentationFromPlan(strategyTaskAtStart.planContract)
+        : null;
       try {
-        const staging = await materializeOdNextDeviceFrames({
-          cwd,
-          resources: await loadOdNextTaskResourcesForSnapshot({
-            bundledPluginsDir: BUNDLED_PLUGINS_DIR,
-            snapshot: getSnapshot(db, run.appliedPluginSnapshotId),
-          }),
+        const resources = await loadOdNextTaskResourcesForSnapshot({
+          bundledPluginsDir: BUNDLED_PLUGINS_DIR,
+          snapshot: getSnapshot(db, run.appliedPluginSnapshotId),
         });
+        const staging = await materializeOdNextDeviceFrames({ cwd, resources });
+        await verifyOdNextSelectedDeviceFrame({ cwd, resources, staging, presentation });
         if (staging.staged.length > 0) run.odNextStagedDeviceFrames = staging.staged;
         if (staging.skipped.length > 0) {
           console.warn(
@@ -10977,6 +10987,7 @@ export async function startServer({
           );
         }
       } catch (err) {
+        if (presentation && presentation.deviceFrame !== 'none' && presentation.frameSource !== 'existing-artifact') throw err;
         console.warn(
           `[od-next-device-frames] staging skipped: ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -15590,15 +15601,15 @@ export async function startServer({
             && typeof run.projectId === 'string'
           ) {
             try {
+              const presentation = readPrototypePresentationFromPlan(
+                strategyProtocolResult?.planContract ?? strategyTaskAtStart?.planContract,
+              );
               const observation = await observeOdNextDeviceShell({
                 projectRoot: resolveProjectDir(PROJECTS_DIR, run.projectId, projectRecord.metadata),
                 entryFile: deliverable.entryFile,
-                resolution: resolveOdNextDevicePlatform({
-                  metadata: projectRecord.metadata,
-                  textPlatform: typeof run.conversationId === 'string' && run.conversationId
-                    ? readConversationIntentSignals(db, run.conversationId).devicePlatform
-                    : null,
-                }),
+                resolution: presentation && presentation.deviceFrame !== 'none'
+                  ? { platform: presentation.deviceFrame, resolvedFrom: 'plan-contract' }
+                  : null,
               });
               if (observation) {
                 run.odNextDeviceShell = observation;

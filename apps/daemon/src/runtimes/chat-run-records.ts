@@ -176,7 +176,7 @@ export interface ChatRun {
   /** Run-finish observation: did the delivered entry carry the staged handset shell? */
   odNextDeviceShell?: {
     platform: 'ios' | 'android' | 'mobile-neutral';
-    resolvedFrom: 'request-text' | 'project-metadata';
+    resolvedFrom: 'request-text' | 'project-metadata' | 'plan-contract';
     entryFile: string;
     shellPresent: boolean;
   };

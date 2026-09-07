@@ -9,7 +9,8 @@ This bundled scenario packages the stable content used by the internal OD Next
 planning and Build recipe. It is not a portable strategy selector and does not
 activate itself.
 
-When Open Design supplies a validated V2 binding, load the assets in this order:
+When Open Design supplies a validated V2 binding, use the strategy bodies
+already included in the session. Read only missing bound content in this order:
 
 1. `assets/core-system-prompt.md`
 2. `assets/general-orchestration.md`

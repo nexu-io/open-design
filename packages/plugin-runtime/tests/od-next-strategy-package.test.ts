@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { BundledStrategyDeclarationV2Schema } from '@open-design/contracts';
+import {
+  BundledStrategyDeclarationV2Schema,
+  odNextTaskSkillOptionalV2,
+} from '@open-design/contracts';
 import { parseManifest } from '../src/index.js';
 
 const pluginRoot = fileURLToPath(
@@ -31,14 +34,14 @@ const forbiddenContent = [
   /revalidation/i,
   /critique(?:-theater)?/i,
   /post[- ]build[\s\S]{0,80}(?:verify|inspect|check|review)/i,
-  /(?:screenshot|browser|dom)[\s\S]{0,80}(?:verify|inspect|check|review)/i,
+  /\b(?:screenshot|browser|dom)\b[\s\S]{0,80}\b(?:verify|inspect|check|review)\b/i,
 ];
 
 describe('bundled OD Next Strategy V2 package', () => {
   it('declares the inactive versioned asset set and exact planning recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.3',
+      version: '2.1.0',
       od: {
         kind: 'scenario',
         hidden: true,
@@ -58,6 +61,7 @@ describe('bundled OD Next Strategy V2 package', () => {
       ['ppt', 'active', ['deck']],
       ['marketing', 'active', ['image']],
       ['hyperframes', 'active', ['video']],
+      ['image', 'reserved', ['image']],
     ]);
   });
 
@@ -79,9 +83,13 @@ describe('bundled OD Next Strategy V2 package', () => {
       declaration.assets.taskProfileMapping.path,
     ];
     expect(new Set(assetPaths).size).toBe(assetPaths.length);
+    const optionalProfilePaths = new Set(declaration.assets.taskProfiles
+      .filter((profile) => odNextTaskSkillOptionalV2(profile.taskType))
+      .map((profile) => profile.path));
 
     for (const assetPath of assetPaths) {
       const content = readFileSync(`${pluginRoot}/${assetPath.slice(2)}`, 'utf8');
+      if (optionalProfilePaths.has(assetPath) && content.trim().length === 0) continue;
       expect(content.length, assetPath).toBeGreaterThan(100);
       // Resources (shells, stylesheets) are quoted as facts, never as
       // instructions, so the pre-Build vocabulary rule applies to prose only.
@@ -116,11 +124,11 @@ describe('bundled OD Next Strategy V2 package', () => {
       expect(shell).toContain('@media (max-width: 480px)');
     }
     const ruleCard = readFileSync(`${pluginRoot}/${prototype!.path.slice(2)}`, 'utf8');
-    expect(ruleCard).toContain('### Handheld device shell');
+    expect(ruleCard).toContain('## Handheld device shell');
     for (const shell of ['.od-frames/iphone.html', '.od-frames/android.html', '.od-frames/neutral.html']) {
       expect(ruleCard).toContain(shell);
     }
-    expect(ruleCard).toContain('### Variable-length text and stacked information');
+    expect(ruleCard).toContain('## Layout primitives and content');
     expect(ruleCard).toContain('.od-frames/layout.css');
     expect(ruleCard).toContain('OD-LAYOUT-PRIMITIVES v1');
   });

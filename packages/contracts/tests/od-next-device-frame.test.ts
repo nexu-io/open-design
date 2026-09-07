@@ -10,13 +10,27 @@ import {
   odNextDeviceFramePath,
   resolveOdNextDevicePlatform,
   selectOdNextDeviceFrameContextV2,
+  selectOdNextDeviceFrameCatalogV2,
 } from '../src/prompts/od-next-device-frame.js';
 
-// The handheld shell is resolved from the user's own words and the project's
-// platform metadata only. These specs pin the vocabulary boundary that the
-// rule card's "no shell" row depends on: an explicit platform always wins, a
-// platform-less phone app maps to the neutral shell, and a responsive site or
-// a company name never counts as a phone.
+// These text/metadata cases preserve the legacy intent-signal vocabulary.
+// OD Next shell selection uses the accepted Plan, not these legacy signals.
+
+describe('selectOdNextDeviceFrameCatalogV2', () => {
+  it('lists only available non-empty shells without HTML or a preferred platform', () => {
+    expect(selectOdNextDeviceFrameCatalogV2([
+      { path: 'assets/device-frames/iphone.html', text: '<div>ios hardware</div>' },
+      { path: 'assets/device-frames/iphone.html', text: '<div>ios hardware</div>' },
+      { path: 'assets/device-frames/android.html', text: ' \n' },
+      { path: 'assets/device-frames/neutral.html', text: '<div>neutral hardware</div>' },
+      { path: 'assets/layout.css', text: '.od-stack {}' },
+    ])).toEqual([
+      { platform: 'ios', shell: '.od-frames/iphone.html' },
+      { platform: 'mobile-neutral', shell: '.od-frames/neutral.html' },
+    ]);
+    expect(selectOdNextDeviceFrameCatalogV2(undefined)).toEqual([]);
+  });
+});
 
 describe('detectOdNextDevicePlatformFromText', () => {
   it.each([

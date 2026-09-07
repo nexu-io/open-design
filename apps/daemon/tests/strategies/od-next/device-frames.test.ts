@@ -14,6 +14,7 @@ import {
   materializeOdNextDeviceFrames,
   observeOdNextDeviceShell,
   observeOdNextLayoutPrimitives,
+  verifyOdNextSelectedDeviceFrame,
 } from '../../../src/strategies/od-next/device-frames.js';
 
 const BUNDLED_PLUGINS_DIR = path.resolve(import.meta.dirname, '../../../../../plugins/_official');
@@ -213,6 +214,41 @@ describe('materializeOdNextDeviceFrames', () => {
     await expect(materializeOdNextDeviceFrames({ cwd, resources: SHELLS }))
       .rejects.toThrow(InvalidOdNextDeviceFrameRootError);
     expect(await readdir(outside)).toEqual([]);
+  });
+});
+
+describe('verifyOdNextSelectedDeviceFrame', () => {
+  const presentation = {
+    productSurface: 'mobile-app', viewport: 'phone', deviceFrame: 'android', frameSource: 'user-request',
+  } as const;
+
+  it('accepts exact staged bytes and detects an edit after staging', async () => {
+    const cwd = await projectDir();
+    const staging = await materializeOdNextDeviceFrames({ cwd, resources: SHELLS });
+    await expect(verifyOdNextSelectedDeviceFrame({ cwd, resources: SHELLS, staging, presentation }))
+      .resolves.toBeUndefined();
+    await writeFile(path.join(cwd, '.od-frames/android.html'), 'edited after staging');
+    await expect(verifyOdNextSelectedDeviceFrame({ cwd, resources: SHELLS, staging, presentation }))
+      .rejects.toThrow('Selected prototype frame is unavailable or modified: .od-frames/android.html');
+  });
+
+  it('rejects a selected foreign file while leaving no-frame and no-plan work available', async () => {
+    const cwd = await projectDir();
+    await mkdir(path.join(cwd, '.od-frames'));
+    const target = path.join(cwd, '.od-frames/android.html');
+    await writeFile(target, 'user-owned Android frame');
+    const staging = await materializeOdNextDeviceFrames({ cwd, resources: SHELLS });
+    await expect(verifyOdNextSelectedDeviceFrame({ cwd, resources: SHELLS, staging, presentation }))
+      .rejects.toThrow('Selected prototype frame is unavailable or modified');
+    for (const noFrame of [
+      null,
+      { ...presentation, deviceFrame: 'none', frameSource: 'none' } as const,
+      { ...presentation, frameSource: 'existing-artifact' } as const,
+    ]) {
+      await expect(verifyOdNextSelectedDeviceFrame({ cwd, resources: SHELLS, staging, presentation: noFrame }))
+        .resolves.toBeUndefined();
+    }
+    expect(await readFile(target, 'utf8')).toBe('user-owned Android frame');
   });
 });
 

@@ -311,6 +311,74 @@ describe('OD Next V2 planning contracts', () => {
   });
 });
 
+describe('OD Next versioned prototype presentation contract', () => {
+  it.each(['2.3.0', '2.3.1', '2.4.0', '3.0.0'])(
+    'requires an explicit presentation for prototype profile %s',
+    (taskProfileVersion) => {
+      const result = OpenDesignPlanContractV2Schema.safeParse({
+        ...planContract(),
+        taskProfile: taskProfile({ taskProfileVersion }),
+      });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            path: ['taskProfile', 'taskSpecific', 'presentation'],
+          }),
+        ]));
+      }
+    },
+  );
+
+  it('rejects a mobile default frame on a responsive website', () => {
+    expect(ResolvedTaskProfileV2Schema.safeParse(taskProfile({
+      taskProfileVersion: '2.3.0',
+      taskSpecific: {
+        primaryFlow: 'read-news',
+        presentation: {
+          productSurface: 'website',
+          viewport: 'responsive',
+          deviceFrame: 'ios',
+          frameSource: 'mobile-app-default',
+        },
+      },
+    })).success).toBe(false);
+  });
+
+  it('keeps the website frameless and preserves other task-specific fields', () => {
+    const taskSpecific = {
+      primaryFlow: 'read-news',
+      presentation: {
+        productSurface: 'website',
+        viewport: 'responsive',
+        deviceFrame: 'none',
+        frameSource: 'none',
+      },
+    };
+    const result = ResolvedTaskProfileV2Schema.parse(taskProfile({
+      taskProfileVersion: '2.3.0',
+      taskSpecific,
+    }));
+    expect(result.taskSpecific).toEqual(taskSpecific);
+  });
+
+  it.each(['2.0.0', '2.1.0', '2.2.0', '2.2.9'])(
+    'preserves historical prototype profile %s without a presentation',
+    (taskProfileVersion) => {
+      expect(ResolvedTaskProfileV2Schema.safeParse(taskProfile({
+        taskProfileVersion,
+      })).success).toBe(true);
+    },
+  );
+
+  it('does not impose a prototype presentation on another task type', () => {
+    expect(ResolvedTaskProfileV2Schema.safeParse(taskProfile({
+      taskType: 'ppt',
+      taskProfileVersion: '2.3.0',
+    })).success).toBe(true);
+  });
+});
+
 describe('OD Next V2 runtime state and transitions', () => {
   it.each([
     { route: 'direct_edit', inputStage: 'request', outcome: 'completed', executionMode: 'simple' },

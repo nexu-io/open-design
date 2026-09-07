@@ -617,6 +617,21 @@ describe('OD Next V2 prompt recipe', () => {
 });
 
 describe('handheld device shell in the stable request context', () => {
+  it('offers a neutral resource catalog without selecting or quoting a shell', () => {
+    const prompt = composeOdNextStrategyStableRequestContextV2({
+      deviceFrameCatalog: [
+        { platform: 'ios', shell: '.od-frames/iphone.html' },
+        { platform: 'android', shell: '.od-frames/android.html' },
+      ],
+    } as Parameters<typeof composeOdNextStrategyStableRequestContextV2>[0]);
+    expect(prompt).toContain('name="device-frame-catalog"');
+    expect(prompt).toContain('.od-frames/iphone.html');
+    expect(prompt).toContain('"selectedFrame": null');
+    expect(prompt).not.toContain('name="device-frame"');
+    expect(prompt).not.toContain('device-frame-shell');
+    expect(prompt).not.toContain('data-phone-shell');
+  });
+
   const deviceFrame = {
     platform: 'ios' as const,
     resolvedFrom: 'request-text' as const,
@@ -653,6 +668,63 @@ describe('handheld device shell in the stable request context', () => {
     expect(composeOdNextStrategyStableRequestContextV2({ memoryBody: 'Remember the operator audience.' }))
       .not.toContain('device-frame');
     expect(composeOdNextStrategyStableRequestContextV2({})).toBe('');
+  });
+});
+
+describe('prototype presentation in the accepted Plan', () => {
+  it('includes a schema-valid presentation example for the new prototype profile', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2({ ...recipe, taskProfileVersion: '2.3.0' });
+    const plan = OpenDesignPlanContractV2Schema.parse(parseWireBlock(prompt, OD_NEXT_PLAN_CONTRACT_BLOCK));
+    expect(plan.taskProfile.taskSpecific['presentation']).toEqual({
+      productSurface: 'website', viewport: 'responsive', deviceFrame: 'none', frameSource: 'none',
+    });
+  });
+
+  it.each([
+    ['ios', '.od-frames/iphone.html'],
+    ['android', '.od-frames/android.html'],
+    ['mobile-neutral', '.od-frames/neutral.html'],
+  ])('selects only the accepted %s template path without replaying HTML', (deviceFrame, shell) => {
+    const prompt = composeOdNextStrategyContinuationV2({
+      stage: 'production', nativeSessionResume: true, taskExecutionId: 'task-1', taskRunIndex: 2,
+      planContractHash: A,
+      prototypePresentation: {
+        productSurface: 'mobile-app', viewport: 'phone', deviceFrame, frameSource: 'mobile-app-default',
+      },
+    } as Parameters<typeof composeOdNextStrategyContinuationV2>[0]);
+    expect(prompt).toContain('## Prototype presentation');
+    expect(prompt).toContain(shell);
+    expect(prompt).not.toContain('data-phone-shell');
+    expect(prompt).not.toContain('device-frame-shell');
+    for (const other of ['iphone.html', 'android.html', 'neutral.html']) {
+      if (!shell.endsWith(other)) expect(prompt).not.toContain(`.od-frames/${other}`);
+    }
+  });
+
+  it('carries an explicit no-frame decision without a selected template', () => {
+    const prompt = composeOdNextStrategyContinuationV2({
+      stage: 'production', nativeSessionResume: true, taskExecutionId: 'task-1', taskRunIndex: 2,
+      planContractHash: A,
+      prototypePresentation: {
+        productSurface: 'website', viewport: 'responsive', deviceFrame: 'none', frameSource: 'none',
+      },
+    } as Parameters<typeof composeOdNextStrategyContinuationV2>[0]);
+    expect(prompt).toContain('"deviceFrame": "none"');
+    expect(prompt).not.toContain('.od-frames/');
+    expect(prompt).not.toContain('data-phone-shell');
+  });
+
+  it('preserves an existing frame without reinstalling a bundled template', () => {
+    const prompt = composeOdNextStrategyContinuationV2({
+      stage: 'production', nativeSessionResume: true, taskExecutionId: 'task-1', taskRunIndex: 2,
+      planContractHash: A,
+      prototypePresentation: {
+        productSurface: 'mobile-app', viewport: 'phone', deviceFrame: 'ios', frameSource: 'existing-artifact',
+      },
+    });
+    expect(prompt).toContain('Preserve the existing artifact frame and its styling');
+    expect(prompt).not.toContain('Selected template:');
+    expect(prompt).not.toContain('.od-frames/');
   });
 });
 

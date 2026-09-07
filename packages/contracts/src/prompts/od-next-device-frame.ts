@@ -2,12 +2,10 @@
  * OD Next handheld device shell ("phone frame") resolution.
  *
  * The prototype task profile ships three presentation shells as package
- * resources (iPhone, Android, platform-neutral). Open Design resolves which
- * one a task wants from two sources only — the project's platform metadata and
- * the user's own words — and never from the model's judgement: a missed
- * resolution still leaves every shell staged on disk for the rule card to point
- * at, while a resolved one additionally quotes the selected shell into the
- * stable request context so the Build cannot "forget to read" it.
+ * resources. New OD Next requests receive an unselected resource catalog;
+ * the accepted Plan's presentation decision selects a staged path for Build.
+ * The text/metadata resolver remains for legacy intent-signal consumers and
+ * must not be used to choose a shell for OD Next.
  *
  * Pure: no filesystem, no daemon state. The daemon owns staging and the
  * run-finish observation.
@@ -15,7 +13,7 @@
 
 export type OdNextDevicePlatformV1 = 'ios' | 'android' | 'mobile-neutral';
 
-export type OdNextDevicePlatformSourceV1 = 'request-text' | 'project-metadata';
+export type OdNextDevicePlatformSourceV1 = 'request-text' | 'project-metadata' | 'plan-contract';
 
 export interface OdNextDevicePlatformResolutionV1 {
   platform: OdNextDevicePlatformV1;
@@ -115,9 +113,8 @@ const IOS_SIGNAL =
   /\b(?:ios|swiftui|uikit|app store)\b|iphone|苹果\s*(?:手机|app|应用)/i;
 const ANDROID_SIGNAL =
   /\b(?:android|jetpack compose|apk|harmonyos|harmony os|material (?:design|you|3)|google pixel|pixel\s?\d+|samsung galaxy|galaxy s\d+)\b|安卓|鸿蒙/i;
-// A phone app named without a platform. "移动端" and "手机端" count on their
-// own: losing the shell on a real mobile brief costs more than quoting one
-// shell into a brief that turns out to be a responsive site.
+// Legacy broad mobile intent signal, including viewport-only mentions. This
+// vocabulary is not a product-surface or presentation-frame classifier.
 const MOBILE_APP_SIGNAL =
   /\b(?:mobile|phone|smartphone|handheld)[- ]?(?:app|application)s?\b|\bmobile[- ]first app\b|\bnative app\b|手机\s*(?:app|应用|端|软件)|移动(?:端|应用|\s*app)/i;
 // Explicit non-phone surfaces veto the platform-less class only; a brief that
@@ -212,6 +209,25 @@ export function odNextDevicePlatformForResource(resourcePath: string): OdNextDev
     if (OD_NEXT_DEVICE_FRAME_FILES[platform] === basename) return platform;
   }
   return null;
+}
+
+export interface OdNextDeviceFrameResourceV2 {
+  platform: OdNextDevicePlatformV1;
+  shell: string;
+}
+
+/** Available, non-empty package resources; listing a shell does not select it. */
+export function selectOdNextDeviceFrameCatalogV2(
+  taskResources: ReadonlyArray<{ path: string; text: string }> | null | undefined,
+): OdNextDeviceFrameResourceV2[] {
+  const available = new Set<OdNextDevicePlatformV1>();
+  for (const resource of taskResources ?? []) {
+    const platform = odNextDevicePlatformForResource(resource.path);
+    if (platform && resource.text.trim()) available.add(platform);
+  }
+  return OD_NEXT_DEVICE_PLATFORMS
+    .filter((platform) => available.has(platform))
+    .map((platform) => ({ platform, shell: odNextDeviceFramePath(platform) }));
 }
 
 export interface OdNextDeviceFrameContextV2 {
