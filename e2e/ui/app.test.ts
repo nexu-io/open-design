@@ -291,6 +291,105 @@ test('[P0] @critical comment attachment flow attaches preview comments to the ne
   await runCommentAttachmentFlow(page, entry);
 });
 
+test('[P0] @critical comment-save failure toast stays above the wide chat composer', async ({ page }) => {
+  test.setTimeout(T.xlong);
+  const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
+  if (!entry?.mockArtifact) {
+    throw new Error('comment-attachment-flow scenario fixture is missing');
+  }
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript(() => {
+    window.localStorage.setItem('open-design.project.chatPanelWidth', '720');
+  });
+  await routeMockAgents(page);
+  await routeSuccessfulRuns(page, {
+    runIdPrefix: 'comment-save-failure-run',
+    eventBody: successfulRunEventBody([
+      'event: start',
+      'data: {"bin":"mock-agent"}',
+      '',
+    ]),
+  });
+
+  const projectId = await createEmptyProject(page, 'Comment save failure toast');
+  const { conversationId } = await getCurrentProjectContext(page);
+  const commentApiPath = `/api/projects/${projectId}/conversations/${conversationId}/comments`;
+  await page.route(
+    `**${commentApiPath}`,
+    async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.fallback();
+        return;
+      }
+      await route.fulfill({
+        status: 500,
+        json: { error: 'forced comment save failure' },
+      });
+    },
+  );
+  await expectWorkspaceReady(page);
+  await seedHtmlArtifact(page, projectId, entry.mockArtifact.fileName, entry.mockArtifact.html);
+  await page.reload();
+  await expectWorkspaceReady(page);
+  await page.goto(`/projects/${projectId}/files/${entry.mockArtifact.fileName}`, { waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(artifactPreview(page)).toBeVisible();
+
+  await expect
+    .poll(() => page.locator('.split').evaluate((element) => (
+      (element as HTMLElement).style.getPropertyValue('--project-chat-panel-width')
+    )))
+    .toBe('720px');
+
+  await enableCommentCreateModeViaViewerToolbar(page, {
+    viaOverflowMenu: true,
+  });
+  await clickCommentTargetInPreview(page, '[data-od-id="hero-title"]');
+  await expect(page.getByTestId('comment-popover')).toBeVisible();
+  // Hide after the popover opens so activeCommentTarget is set; dismissing the
+  // floating panel earlier would exit comment-create mode (see FileViewer
+  // dismissFloatingCommentPanel).
+  await hideCommentSidePanelFromHeader(page);
+  await page.getByTestId('comment-popover-input').fill('This comment cannot be saved.');
+
+  const failedSave = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return response.request().method() === 'POST'
+      && url.pathname === commentApiPath;
+  });
+  await page.getByTestId('comment-popover-save').click();
+  expect((await failedSave).status()).toBe(500);
+
+  const toast = page.locator('.od-toast').filter({
+    hasText: 'Comment could not be saved. Please try again.',
+  });
+  await expect(toast).toBeVisible();
+  await expect(toast).toHaveCount(1);
+  expect(await toast.evaluate((element) => element.parentElement === document.body)).toBe(true);
+
+  const hitTarget = await toast.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const composer = document.querySelector<HTMLElement>('.chat-composer-fixed-layer');
+    const composerRect = composer?.getBoundingClientRect();
+    const hit = document.elementFromPoint(x, y);
+    return {
+      centerOverComposer: Boolean(
+        composerRect
+        && x >= composerRect.left
+        && x <= composerRect.right
+        && y >= composerRect.top
+        && y <= composerRect.bottom
+      ),
+      toast: hit?.closest('.od-toast') === element,
+      composer: Boolean(hit?.closest('[data-testid="chat-composer"], .chat-composer-fixed-layer')),
+    };
+  });
+  expect(hitTarget).toEqual({ centerOverComposer: true, toast: true, composer: false });
+});
+
 test('[P0] sending preview comments opens the refreshed follow-up artifact', async ({ page }) => {
   test.setTimeout(75_000);
   const entry = automatedUiScenarios().find((scenario) => scenario.id === 'comment-attachment-flow');
@@ -1048,13 +1147,119 @@ async function runGenerationDoesNotCreateExtraFileFlow(
   await expectScenarioProjectState(page, entry, projectId);
 }
 
+async function enableCommentCreateModeViaViewerToolbar(
+  page: Page,
+  options?: { viaOverflowMenu?: boolean; openSidePanel?: boolean },
+) {
+  const openSidePanel = options?.openSidePanel ?? true;
+  const boardModeToggle = page.getByTestId('board-mode-toggle');
+  const commentPanelToggle = page.getByTestId('comment-panel-toggle');
+  const inlineActions = page.locator('.viewer-toolbar-inline-actions');
+  const useOverflowMenu = options?.viaOverflowMenu ?? !(await inlineActions.isVisible());
+
+  if (!useOverflowMenu) {
+    await expect(boardModeToggle).toBeEnabled();
+    await boardModeToggle.click();
+    if (openSidePanel) {
+      await expect(commentPanelToggle).toBeEnabled();
+      await commentPanelToggle.click();
+    }
+  } else {
+    const viewerToolbarMore = page.locator('.viewer-toolbar-more');
+    const moreButton = viewerToolbarMore.getByRole('button', { name: 'More', exact: true });
+    await expect(moreButton).toBeVisible();
+    await expect(moreButton).toBeEnabled();
+    await moreButton.click();
+    const commentMenuItem = viewerToolbarMore.getByRole('menuitem', { name: 'Comment', exact: true });
+    await expect(commentMenuItem).toBeVisible();
+    await expect(commentMenuItem).toBeEnabled();
+    await commentMenuItem.click();
+    await expect(boardModeToggle).toHaveAttribute('aria-pressed', 'true');
+
+    if (openSidePanel) {
+      await moreButton.click();
+      const commentsMenuItem = viewerToolbarMore.getByRole('menuitem', { name: /^Comments \(\d+\)$/ });
+      await expect(commentsMenuItem).toBeVisible();
+      await expect(commentsMenuItem).toBeEnabled();
+      await commentsMenuItem.click();
+      await expect(commentPanelToggle).toHaveAttribute('aria-pressed', 'true');
+    }
+  }
+
+  await expect(page.locator('.chat-composer-fixed-layer')).toBeVisible();
+  const expectedPanelPressed = openSidePanel ? 'true' : 'false';
+  await expect.poll(async () => commentPanelToggle.getAttribute('aria-pressed')).toBe(expectedPanelPressed);
+}
+
+async function hideCommentSidePanelFromHeader(page: Page) {
+  const sidePanel = page.getByTestId('comment-side-panel');
+  await expect(sidePanel).toBeVisible();
+  const hideButton = sidePanel.getByRole('button', { name: /hide comments/i });
+  await expect(hideButton).toBeVisible();
+  await expect(hideButton).toBeEnabled();
+  await hideButton.click();
+  await expect(sidePanel).toBeHidden();
+}
+
+async function waitForSettledBoundingBox(locator: Locator) {
+  let previous = '';
+  await expect.poll(async () => {
+    const box = await locator.boundingBox();
+    if (!box || box.width <= 0 || box.height <= 0) {
+      previous = '';
+      return false;
+    }
+    const key = `${Math.round(box.x)}:${Math.round(box.y)}:${Math.round(box.width)}:${Math.round(box.height)}`;
+    const settled = key === previous;
+    previous = key;
+    return settled;
+  }, { timeout: 30_000 }).toBe(true);
+}
+
 async function clickCommentTargetInPreview(page: Page, selector: string) {
-  const target = artifactPreviewFrame(page).locator(selector);
+  const previewFrame = artifactPreviewFrame(page);
+  const previewRoot = previewFrame.locator('html');
+  await expect(previewRoot).toHaveAttribute('data-od-comment-mode', '');
+  await expect(previewRoot).toHaveAttribute('data-od-comment-mode-kind', 'picker');
+  const target = previewFrame.locator(selector);
   await expect(target).toBeVisible();
-  // Auto-fit zoom + comment-bridge injection can keep the iframe target
-  // moving for long enough that Playwright's stability check never settles
-  // (CI: "element is not stable" until test timeout). Force once visible.
-  await target.click({ force: true });
+  await target.scrollIntoViewIfNeeded();
+  // Auto-fit zoom + comment-bridge injection can keep the iframe target moving.
+  // Wait for geometry to settle, verify browser hit-testing reaches the preview
+  // frame (not an overlay), then click with a real pointer event.
+  await waitForSettledBoundingBox(target);
+  await expect(async () => {
+    const box = await target.boundingBox();
+    expect(box).toBeTruthy();
+    const candidates = [
+      { x: box!.x + box!.width / 2, y: box!.y + box!.height / 2 },
+      { x: box!.x + Math.min(16, box!.width * 0.2), y: box!.y + box!.height / 2 },
+      { x: box!.x + box!.width / 2, y: box!.y + Math.min(16, box!.height * 0.2) },
+      { x: box!.x + Math.min(16, box!.width * 0.2), y: box!.y + Math.min(16, box!.height * 0.2) },
+    ];
+    let clickPoint: { x: number; y: number } | null = null;
+    for (const point of candidates) {
+      const hit = await page.evaluate(({ x, y }) => {
+        const el = document.elementFromPoint(x, y);
+        if (!el) return null;
+        return {
+          inSidePanel: Boolean(el.closest('[data-testid="comment-side-panel"]')),
+          inPreview: Boolean(
+            el.closest('iframe[data-testid^="artifact-preview-frame"]')
+            || el.closest('iframe[data-testid="live-artifact-preview-frame"]')
+            || el.closest('[data-testid="artifact-preview"]'),
+          ),
+        };
+      }, point);
+      if (hit?.inPreview && !hit.inSidePanel) {
+        clickPoint = point;
+        break;
+      }
+    }
+    expect(clickPoint).toBeTruthy();
+    await page.mouse.click(clickPoint!.x, clickPoint!.y);
+    await expect(page.getByTestId('comment-popover')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 async function runCommentAttachmentFlow(

@@ -12,6 +12,7 @@ import {
   fetchProjectFileText,
   fetchProjectFiles,
   patchPreviewCommentStatus,
+  upsertPreviewComment,
   writeProjectTextFile,
 } from '../../src/providers/registry';
 import { listMessages, saveMessage } from '../../src/state/projects';
@@ -127,10 +128,23 @@ vi.mock('../../src/components/FileWorkspace', () => ({
     openRequest,
     focusMode = false,
     onFocusModeChange,
+    onCommentModeChange,
+    onSavePreviewComment,
   }: {
     openRequest?: { name: string; nonce: number } | null;
     focusMode?: boolean;
     onFocusModeChange?: (focused: boolean) => void;
+    onCommentModeChange?: (active: boolean) => void;
+    onSavePreviewComment?: (
+      target: {
+        filePath: string;
+        elementId?: string;
+        selector?: string;
+        label?: string;
+      },
+      note: string,
+      attachAfterSave: boolean,
+    ) => Promise<unknown>;
   }) => {
     useLayoutEffect(() => {
       if (!focusMode || !chatPaneMockState.fireResizeObserverOnFocusedLayout) return;
@@ -141,6 +155,24 @@ vi.mock('../../src/components/FileWorkspace', () => ({
 
     return (
       <div data-testid="file-workspace" data-open-request-name={openRequest?.name ?? ''}>
+        <button
+          type="button"
+          onClick={() => {
+            onCommentModeChange?.(true);
+            void onSavePreviewComment?.(
+              {
+                filePath: 'index.html',
+                elementId: 'hero-title',
+                selector: '#hero-title',
+                label: 'Hero title',
+              },
+              'Make this clearer',
+              false,
+            );
+          }}
+        >
+          save comment
+        </button>
         {focusMode ? (
           <button
             type="button"
@@ -239,6 +271,7 @@ const mockedListMessages = vi.mocked(listMessages);
 const mockedSaveMessage = vi.mocked(saveMessage);
 const mockedWriteProjectTextFile = vi.mocked(writeProjectTextFile);
 const mockedPatchPreviewCommentStatus = vi.mocked(patchPreviewCommentStatus);
+const mockedUpsertPreviewComment = vi.mocked(upsertPreviewComment);
 const mockedPlaySound = vi.mocked(playSound);
 
 const config: AppConfig = {
@@ -324,6 +357,8 @@ describe('ProjectView API empty response handling', () => {
       size: 1,
       mtime: 1,
     });
+    mockedUpsertPreviewComment.mockReset();
+    mockedUpsertPreviewComment.mockResolvedValue(null);
     mockedListMessages.mockClear();
     mockedSaveMessage.mockClear();
     mockedPatchPreviewCommentStatus.mockClear();
@@ -404,6 +439,23 @@ describe('ProjectView API empty response handling', () => {
     expect(screen.queryByRole('toolbar', { name: 'Project actions' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Finalize design package' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Continue in CLI' })).toBeNull();
+  });
+
+  it('ports comment-save failure toast to the document body', async () => {
+    renderProjectView();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'save comment' }));
+
+    const toast = await waitFor(() => {
+      const node = document.body.querySelector<HTMLElement>('.od-toast');
+      if (!node) {
+        throw new Error('Expected project actions toast to be visible');
+      }
+      return node;
+    });
+    expect(toast).toHaveTextContent('Comment could not be saved. Please try again.');
+    expect(toast.parentElement).toBe(document.body);
+    expect(mockedUpsertPreviewComment).toHaveBeenCalled();
   });
 
   it('keeps an empty project workspace visible across repeated chat collapse cycles', async () => {
