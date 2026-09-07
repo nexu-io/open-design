@@ -1,572 +1,264 @@
-# OD Next General Orchestration v2.0.1
+# OD Next General Orchestration v2.1.0
+
+## Responsibility and authority
+
+This Skill owns route selection, contract resolution, Preflight, and Build
+orchestration. Follow the Core Strategy for execution boundaries, instruction
+priority, general quality, assets, tool efficiency, and communication. The
+user's latest explicit requirements outrank Skill defaults; they do not unlock
+machine, security, or current-stage restrictions.
+
+Open Design owns V2 schemas, durable task-chain state, applied content identity,
+the selected Agent, and native sessions. The Agent prepares complete,
+validatable contract content and performs the actual Preflight checks. Here,
+"form", "freeze", and "update" mean preparing that content: only Open Design
+creates, validates, persists, and re-injects the formal records. Never substitute
+a prose claim for a runtime result, capability fact, or persisted version.
 
 ## Contract ownership
 
-Open Design owns the V2 schemas, durable task-chain state, applied content
-identity, selected Agent, and native session. The Agent prepares contract
-content and executes Build work; it does not invent runtime records or treat
-natural-language claims as structured capability facts. The Agent supplies
-complete, validatable content and performs the actual Preflight checks; the
-formal protocol objects are still created, validated, persisted, and
-re-injected by Open Design. Below, "form, freeze, or update" describes content
-preparation only — never substitute prose claims for the actual results of the
-schema, the RunManifest, or Preflight.
+Use the supplied schema and current TaskProfileVersion. These are semantic
+responsibilities, not permission to add fields to the V2 machine contract.
 
-The Resolved Task Profile owns the goal, audience and context, input
-references, constraints, canonical deliverable, required deliverables, Design
-Spec, Build Requirements, assumptions, risks, and task-specific fields. The
-Full Plan owns ordered steps, readiness artifacts, execution mode, and Build
-Packages. The RunManifest binds the selected Agent, capability snapshot,
-inputs, production routes, and the two Preflight results.
+| Object | Owns |
+| --- | --- |
+| `TaskProfileSchema` | Shared field groups and slot rules. |
+| `TaskProfileVersion` | Current task-type field semantics, dependencies, Artifact Contract, Quality Contract, defaults, and validation rules. The task-type profile is its execution guide. |
+| Resolved Task Profile | Goal, audience and context, inputs and references, constraints, canonical and required deliverables, Design Spec, Build Requirements, assumptions, risks, and task-specific fields. It is the requirements authority. |
+| `Design Spec` | The frozen visual decisions for this task. Continue an existing artifact or brand system when supplied; otherwise resolve a direction from the task, audience, and content. Agree with configured style, density, and motion. Build Packages and derived outputs share the same version. |
+| `Resolved Requirement Set` | Stable requirement ids from the Resolved Profile, or the baseline Profile / versioned minimal change contract for Direct Edit. Completion standards reference only these ids; they never add, remove, or rewrite requirements. |
+| Full Plan | Ordered steps and outputs, dependencies, shared constraints, deliverable derivations, readiness artifacts, execution mode, and Build Packages. |
+| `RunManifest` and recorded run state | Bind the actual inputs and baseline versions, selected Agent, capability snapshot, production decisions, and Preflight results through the supplied protocol. Record execution history; never rewrite requirements in reverse. |
 
-This Skill does not define the main Agent's identity, permissions, or security
-boundaries (those follow the Core Strategy). It does not define task-specific
-field enums, the Artifact Contract, the Quality Contract, default
-deliverables, complex-split boundaries, or quality priorities (those follow
-the current TaskProfileVersion and the current task-type profile). It does not
-choose or replace the user-selected Agent and does not dictate a Child's
-internal context, skill-loading location, or implementation.
+The canonical deliverable is this task's source of truth. Keep its identity in
+the Resolved Profile or minimal change contract, bind its version through the
+runtime protocol, and declare every derived or variant deliverable's upstream
+dependency. Task-type rules own allowed formats, defaults, quality priorities,
+and complex-readiness requirements.
 
-## Protocol objects and semantic boundaries
+Resolve each field in the Core's instruction order and its declared authority
+and scope. Retain all hard and triggered conditional fields; do not collapse
+multiple inputs, scenarios, or deliverables into one value. Preserve the
+meaning of slot metadata when supplied: `required`, `source`, `mutability`,
+`missing_policy`, and `stage_visibility`. Distinguish confirmed, inferred,
+defaulted, missing, and conflicted values. Use extract, infer, default, ask, or
+block according to `missing_policy`; an unstated guess is not a resolved value.
 
-- `TaskProfileSchema` defines the field groups and slot rules shared across
-  task types.
-- `TaskProfileVersion` is the single versioned authority for the current task
-  type's field semantics, dependency rules, Artifact Contract, and Quality
-  Contract. Its Artifact Contract defines only allowed values, defaults, and
-  validation rules; its Quality Contract defines how the baseline quality
-  rules that generation must satisfy are instantiated.
-- The resolved Task Profile is this task's requirements contract: what to
-  build, what to protect, what to deliver, and what completion is measured
-  against. A user-authorized contract update revises it (or the Direct Edit
-  versioned minimal change contract) without overwriting historical versions.
-- The canonical deliverable is the single source of truth for the current
-  Run; derived and variant deliverables must declare their dependency on it
-  or on other upstream deliverables. The Resolved Profile or the Direct Edit
-  minimal change contract stores this Run's canonical deliverable id, and the
-  RunManifest binds its id and version.
-- The `RunManifest` is the version-binding and decision snapshot: the current
-  request, the user-selected Agent, actual input references, baseline
-  artifact versions, the capability snapshot, execution decisions, production
-  routes, Build Packages, and the two Preflight results.
-- The run state Open Design records captures this Run's execution state and
-  actual history; it never rewrites the Task Profile in reverse.
-- The `Design Spec` is the set of visual decisions frozen for this Run —
-  palette, type family and size scale, spacing rhythm, corner radii and
-  shadows, icon family, motion durations — written into the Task Profile's
-  design-direction field. When the task configuration specifies visual style,
-  information density, or motion intensity, the Design Spec must agree with
-  it. It is held by the Resolved Profile, version-bound by the RunManifest,
-  and is the shared constraint for Build and derived deliverables. When a
-  Design Spec already exists, read and continue it; update it only through a
-  user-authorized contract update on an explicit user change — never reinvent
-  it just because a new generation round started.
-- The `Resolved Requirement Set` is this Run's stable set of requirement ids:
-  for Full Plan it comes from the Resolved Profile; for Direct Edit it comes
-  from the baseline Profile, or from a versioned minimal change contract
-  validated by the TaskProfileVersion.
-- The completion standards reference only requirement IDs from the Resolved
-  Requirement Set, and serve as the standards Build must satisfy in one pass
-  while writing source. They are not a post-delivery inspection tool, and
-  they must not add, remove, or rewrite requirement standards.
+Reuse an existing resolved Profile and Design Spec. An explicit user change
+updates only affected fields through a user-authorized contract update;
+unaffected locked requirements and historical versions remain intact. A
+fallback may change execution approach while preserving the requirements
+contract. Changing scope, canonical identity or format, required deliverables,
+editability, or quality requires an already authorized alternative; otherwise
+report blocked.
 
-Task Profile slots may carry internal metadata: `required` (hard, conditional,
-optional), `source` (user, asset, project, artifact, inferred, default),
-`mutability` (locked, editable), `missing_policy` (extract, infer, default,
-ask, block), and `stage_visibility`.
+## Stage boundary
 
-The Resolver must distinguish confirmed, inferred, defaulted, missing, and
-conflicted. Internal metadata need not be shown to the user item by item, but
-inferences, defaults, conflicts, risks, and locked requirements must stay
-recognizable in the resolved Task Profile.
+Use the stage supplied by Open Design. One task chain consists of `request`
+and its subsequent continuations; only `request` selects the route. Direct
+Edit / Full Plan are planning routes; `simple` / `complex` describe Build
+orchestration, not the task's inherent difficulty.
 
-## The ship-on-write boundary (non-negotiable)
+| Stage | Allowed work and exit |
+| --- | --- |
+| `request` | Select and lock `direct_edit` or `full_plan` from the conditions below. Direct Edit completes in this turn with `simple`; Full Plan prepares the contract and may request its one clarification round. |
+| `clarification` | Full Plan only. Merge the user's answer, rerun affected resolution and Preflight work, and freeze. No second question round. |
+| `contract_repair` | Only when Open Design reports a frozen semantic plan with malformed V2 serialization. Make one serialization-only attempt; use no tools, change no goal, route, mode, Design Spec, step, or Build Package, and ask no questions. Report blocked if it cannot be represented validly. |
+| `production` | Execute the accepted Full Plan in the existing native session. Preserve its route, mode, requirements, and versions; do not re-plan or ask another question. |
 
-Writing the primary HTML deliverable to disk IS the delivery. Never perform
-any post-generation action on a generated artifact for the purpose of quality
-checking:
+Full Plan request and clarification may inspect bounded inputs needed for the
+contract, but never create, edit, render, or dispatch deliverables. Build starts
+only when Open Design sends the production continuation; the user does not
+resubmit the request. After Build starts, never switch the locked route or mode.
 
-- Screen captures, rendering, render review, or frame extraction.
-- Opening or previewing the artifact: web viewers, headless runtimes
-  (Playwright, Puppeteer, etc.), simulators, or players.
-- Running validation scripts, tests, or format checks against a generated
-  artifact.
-- Validating export results after exporting.
-- Spawning acceptance Children or performing formal acceptance of any kind.
-- Any fix round initiated on the basis of the checks above.
+## Direct Edit or Full Plan
 
-Allowed actions, for boundary clarity: reading an existing artifact's source
-to continue editing it, and probing its technical form and design language,
-are Build inputs and outside this section's scope; routine code reading and
-modification during Build writing are Build itself. What is forbidden is any
-action taken after the artifact hits disk whose purpose is checking quality,
-confirming the result, or collecting evidence.
+Choose Direct Edit only when every condition holds:
 
-Quality is not guaranteed by post-generation checks but by generation-time
-discipline: every quality requirement in the Task Profile, Design Spec,
-completion standards, and task-type profile must be satisfied in one pass,
-while writing the source.
+- An editable baseline artifact exists and the user requests an explicit,
+  local adjustment.
+- The change preserves task scope, core narrative, information architecture,
+  design direction, canonical identity / format / source of truth, production
+  route, and main deliverable contract. An ordinary content version update is
+  not a canonical-identity change.
+- Affected regions and dependencies are reliably bounded, and the change does
+  not require redoing the overall solution or splitting Build across Children.
+- The target and authorized scope are clear without asking the user. Resolve
+  local, reversible ambiguity by conservative assumption and disclose it.
 
-## Identify the input stage
+Use Full Plan for new artifacts, full redesigns or large refactors, changes to
+those protected boundaries, multi-package work, or any case where Direct Edit
+eligibility cannot be safely established.
 
-Use the stage supplied by Open Design:
+For Direct Edit, before Build:
 
-- `request`: the user raises a new design or change requirement; choose and
-  lock the route for the new logical task.
-- `clarification`: questions were asked last turn; merge the user's one
-  allowed answer round into the Full Plan.
-- `contract_repair`: serialize the frozen plan once into the required shape.
-- `production`: execute the frozen Full Plan in the continued native session.
+1. Bind the baseline artifact, usable baseline Profile, and TaskProfileVersion.
+   Read the relevant artifact source for its technical form, production route,
+   and existing design language; continue them rather than silently assuming a
+   new default.
+2. Prepare a versioned minimal change contract, using the baseline Profile
+   where available. Include baseline version, authorized scope, protected
+   content, expected result, canonical and affected deliverables, editability,
+   production route, affected regions and dependencies, risk flags, and
+   completion standards with stable requirement ids.
+3. Complete Intake Preflight and the change-relevant Execution Preflight;
+   prepare the RunManifest facts. Lock `direct_edit` and `simple` only when
+   this bounded change is safe to execute.
 
-Only `request` chooses a route. Later stages preserve the route and any locked
-execution mode:
+If eligibility or the minimal contract cannot be established before Build,
+choose Full Plan in the current request before locking the route. This is not
+a mid-execution switch. If scope escapes the locked Direct Edit after Build
+starts, stop the risky modification, preserve the contract and completed work,
+and report blocked with the reason; the user may start a Full Plan next turn.
 
-- `clarification` stays on the Full Plan route — process the answer, rerun the
-  affected Preflight work, and freeze.
-- `production` reuses the existing resolved Task Profile, Full Plan, and
-  RunManifest decision snapshot; it does not re-plan or ask again.
-
-A task chain means one `request` plus its subsequent `clarification`,
-`contract_repair`, and `production` turns.
-
-## Direct Edit
-
-Direct Edit and Full Plan describe planning routes, not artifact lifecycle
-operations. Create, continue, edit, repair, and replicate tasks are each
-routed on their own change scope and risk. Decide exactly once per `request`;
-the decision holds for the whole task chain.
-
-Direct Edit is eligible only when ALL of the following hold:
-
-- An editable baseline artifact already exists.
-- The user is asking for an explicit, local adjustment.
-- The change does not alter the task scope, the core narrative, the core
-  design direction, the canonical deliverable's identity / format / source of
-  truth, or the main deliverable contract. An ordinary content version update
-  does not count as a canonical-identity change.
-- The affected scope and dependencies can be reliably bounded.
-- The change can be completed without redoing the overall solution.
-
-Enter Full Plan when any of the following holds:
-
-- Creating an artifact from scratch.
-- A full redesign or large-scale refactor.
-- Changing the core narrative, information architecture, design direction,
-  the canonical deliverable's identity / format / source of truth, the
-  production route, or the main deliverable contract.
-- The work needs to split into multiple Build Packages to complete reliably.
-- The affected scope cannot be reliably bounded, or editing in place carries
-  obvious whole-artifact rework risk.
-- User clarification is needed before the change target or authorized scope
-  can be safely bounded.
-- Direct Edit eligibility cannot be safely confirmed.
-
-Direct Edit completes within the current request turn: no resolved Task
-Profile, no Full Plan, and no clarification round. Ambiguities that are local
-and reversible are resolved by conservative assumption and disclosed at
-delivery. Before Build:
-
-1. Bind the baseline profile reference, the TaskProfileVersion, and the
-   baseline artifact reference. When no usable resolved Profile exists,
-   resolve at minimum a versioned minimal change contract covering the
-   authorized scope, the canonical and affected deliverables, editability,
-   the production route, and completion standards, and form a Resolved
-   Requirement Set with stable ids. If that cannot be resolved safely, lock
-   Full Plan instead — this is a route correction before Build, not a
-   mid-execution switch: continue this turn on the Full Plan route and report
-   the routing truthfully.
-2. Record in the versioned minimal change contract: the baseline version, the
-   authorized change scope, content that must be protected, the expected
-   result, affected regions and dependencies, and risk flags. Probe the
-   baseline artifact's technical form and existing design language first and
-   continue them; never assume an unconfirmed default.
-3. Complete Intake Preflight and the Execution Preflight relevant to this
-   change, and form the RunManifest.
-4. Lock route `direct_edit` and execution mode `simple`.
-
-The main Agent then modifies only the user-authorized scope and completes the
-Build, keeping affected regions and dependent regions consistent as part of
-the writing itself. The change is delivered the moment it is written; no
-post-generation check, acceptance, or fix action follows. Direct Edit always
-uses simple mode and never starts Build Children.
-
-Route lock: never switch between Direct Edit and Full Plan mid-execution. If
-eligibility fails before Build begins, lock Full Plan instead. If scope
-escapes the locked Direct Edit after Build begins:
-
-- Do not widen the change scope on your own.
-- Stop the risky modification.
-- Preserve the minimal change contract, the completed portion, and the
-  blocking reason.
-- Report blocked with the preserved work facts and suggest the user relaunch
-  next turn as a Full Plan.
+Otherwise, modify only the authorized scope, including dependent regions that
+must stay consistent. Finish in this request without a resolved Task Profile,
+Full Plan, clarification round, or Build Children. Apply the Core's ship-on-write
+boundary: the written change is the delivery.
 
 ## Full Plan
 
-For a Full Plan request, proceed in this order:
+Follow this single planning sequence:
 
-1. Resolve the task type from explicit project metadata and mapping. Use
-   `generic` or report blocked when the task type cannot be identified.
-2. Draft the Task Profile from the request, project, baseline artifact,
-   attachments, and brand references, per the drafting rules below. Mark
-   assumptions and conflicts.
-3. Run Intake Preflight for input access, route support, selected Agent
-   native continuation, task-profile availability, and resolvable
-   dependencies.
-4. Ask one clarification round only when the answer changes task scope,
-   direction, canonical deliverable, main outputs, editability, or
-   substantial rework. Use one to three questions with recommended defaults,
-   per the aggregation rules below.
-5. Merge the answer, rerun only affected resolution and Preflight work, and
-   do not ask again.
-6. Freeze the Task Profile, Design Spec, and stable Build Requirement ids,
-   and form the Resolved Requirement Set.
-7. Produce ordered Full Plan steps and versioned readiness artifacts.
-8. Choose simple by default. Choose complex only when at least two
-   independent Build Packages have frozen shared constraints, native Child
-   support has structured verified evidence, parallelism materially helps,
-   and integration risk is bounded.
-9. Run Execution Preflight for every declared production route, dependency,
-   input, renderer, exporter, template, and required output owned by the
-   Agent.
-10. Emit a strict Plan Contract and Runtime State for Open Design to parse.
+1. **Resolve the inputs.** Use the bound task type and its supplied mapping;
+   use `generic` only where allowed, otherwise report blocked if no type can
+   be resolved. Draft the Task Profile from the request, project, artifact,
+   attachments, and references using the field rules above. For an existing
+   artifact, inspect its technical form and design language first. Treat
+   unavailable dimensions as missing and resolve them explicitly. When no
+   style, brand, or artifact supplies a direction, resolve it from the task
+   before Build and record it in the Design Spec.
+2. **Run Intake Preflight.** Collect accessible inputs, viable routes, and
+   actual capability evidence before freezing or asking the user.
+3. **Resolve material gaps.** Use the clarification rule below when necessary.
+   Merge the answer and rerun only affected resolution and Preflight work.
+   Do not produce an executable Full Plan while a hard field is missing, a
+   substantive conflict remains, or a critical assumption is unhandled.
+4. **Freeze requirements.** Freeze the Resolved Profile, canonical and required
+   deliverables, Design Spec, and stable Build Requirement ids that form the
+   Resolved Requirement Set. When no clarification is needed, freeze directly;
+   do not output duplicate draft and frozen versions.
+5. **Plan Build.** Produce ordered steps and outputs, dependency and derivation
+   relationships, shared constraints, and candidate production routes.
+   Complete and freeze any task-type readiness planning artifacts in sequence before
+   choosing `complex`; preserve their versions or digests in the supplied
+   protocol. Select the execution mode using the gate below.
+6. **Check execution and hand off.** Run Execution Preflight against the actual
+   routes, deliverables, dependencies, adapters, and readiness artifacts. Only
+   after it passes, freeze the Full Plan and RunManifest decision snapshot and
+   emit the required Plan Contract and Runtime State. Stop this planning turn.
 
-The request and clarification turns stop after this planning output. They may
-inspect bounded references needed by the contract, but must not mutate or
-dispatch deliverables. Open Design starts Build by continuing the same native
-session into `production`; the user does not resubmit the request.
+### Preflight
 
-### Drafting the Task Profile
+Perform real checks within the Agent's ownership; never claim a host capability
+or a passed gate without the corresponding evidence.
 
-When an artifact already exists, first probe the artifact itself for its
-technical form, production route, and existing design language (palette,
-type, spacing, component and icon style), and use that as the Design Spec
-baseline. Treat unprobeable dimensions as missing — ask, mark as an
-assumption, or fall back to the baseline default. Never continue on an
-unconfirmed assumed default; a silent assumption skews every decision after
-it.
+| Phase | Timing | Required checks |
+| --- | --- | --- |
+| Intake | Before clarification where possible, and before freezing | Access to inputs, baseline artifacts, and required references; the selected Agent's task-required capabilities, including native continuation; a viable production route for the canonical and required deliverables; external operations requiring user authorization. |
+| Execution | After requirements / minimal change contract freeze, before Build | Availability of every declared Agent-owned route, adapter, and dependency; contract-compatible fonts, templates, assets, and required outputs. Product-side downstream renderers and exporters are outside this gate. |
 
-When the user has not specified a visual style and there is no brand guideline
-or existing artifact to continue, never skip the direction decision and start
-writing: first infer a reasonable, self-consistently explainable style
-direction from the task scenario, target audience, and content temperament
-(color mood, type personality, information density, decorative weight), write
-it into the Design Spec, and vocalize the chosen direction in one sentence of
-prose so the user can redirect cheaply. Direction selection serves one goal —
-the artifact meets scenario expectations at first glance. The Design baseline
-owns the quality floor; the direction decision owns the first impression.
+Preflight checks inputs and capability availability, never the quality of a
+generated artifact. A changed baseline input, production route, adapter,
+canonical identity or format, required deliverable, or delivery contract
+invalidates the affected Preflight; rerun only that affected work. Handle any
+fallback under the contract-preservation rule above.
 
-The draft makes the scope and authority of assets and references explicit,
-and includes at least:
+### Clarification
 
-- The task goal.
-- Usage context and target audience.
-- Inputs, assets, and references.
-- Constraints that must be honored and preserved.
-- The canonical artifact and expected deliverables.
-- The Design Spec: continued from the existing artifact, from brand
-  guidelines, or newly built on the baseline.
-- Confirmed information.
-- Reasonable assumptions.
-- Missing items, conflicts, and uncertainties.
+Full Plan allows at most one round of one to three questions. Ask only when an
+answer materially changes scope, core direction, canonical identity or
+contract, main deliverables, editability, or substantial rework. Aggregate all
+user-resolvable issues from resolution and Intake Preflight into that round,
+including any task-type-switch proposal, with a recommended answer and its
+impact for each question.
 
-The draft must retain every hard field and every triggered conditional field
-of the current TaskProfileVersion. Never silently collapse multiple inputs,
-scenarios, or deliverables into one value.
+Do not ask for information reliably available in assets, artifacts, or the
+conversation, or about local reversible details. Make remaining non-blocking
+assumptions explicit. After the answer, ask no further questions in this task
+chain. A newly discovered external blocker or required decision without an
+already authorized alternative is blocked, not permission to guess or silently
+degrade. Do not ask for confirmation when no open decision remains.
 
-If a resolved Task Profile already exists, build a user-authorized contract
-update and an updated draft on top of it; do not re-derive from scratch.
-Locked fields change only after the user explicitly changes them through a
-contract update.
+## Build execution
 
-### Resolver
+Default to `simple`. Select `complex` before freezing only when all four hold:
 
-1. Merge the shared schema with the current TaskProfileVersion.
-2. Collect candidate values in the Core Strategy's instruction order.
-3. Keep locked values; form a user-authorized contract update when the user
-   explicitly changes one.
-4. Resolve multi-source information by each field's declared authority,
-   scope, and conflict rules.
-5. Execute extract, infer, default, ask, or block per `missing_policy`.
-6. Output the Resolved Profile, preserving inferences, defaults, conflicts,
-   and risks.
+- At least two independent Build Packages have clear, non-overlapping outputs.
+- Shared constraints, including the Design Spec and any declared readiness
+  artifacts, are frozen before Child work starts.
+- Native Child lifecycle support has structured verified evidence from the
+  selected Coding Agent.
+- Parallel Build materially shortens completion time while integration cost
+  and consistency risk remain bounded.
 
-When a hard field is missing, a substantive conflict exists, or a critical
-assumption is unhandled, an executable Full Plan must not be produced.
+If these conditions are unmet before mode lock, use simple. In simple mode the
+main Agent executes the frozen steps and produces every required deliverable.
 
-### Two-phase Preflight
+In complex mode, each Build Package declares its objective, inputs, outputs,
+shared constraints, dependencies, and allowed resources. Give each Child only
+that package and its necessary inputs, frozen shared decisions, expected
+outputs, and permitted asset/artifact locations. Do not assume unverified
+context isolation or Skill loading. Never assign overlapping responsibilities
+or start unrequested variants.
 
-Intake Preflight completes as much as possible before the single
-clarification round and before freezing:
+Start independent, dependency-ready packages in parallel where supported;
+dependent packages wait for their declared inputs. The main Agent owns
+scheduling, progress, conflict resolution, integration, and final delivery; it
+does not redo assigned Build work. Integrate the packages into the complete
+artifact. If native Child start or structured terminal lifecycle fails after
+complex is locked, report the capability blocker; do not fabricate completion
+or fall back to simple within that chain.
 
-- Are the inputs, current artifacts, and required references accessible?
-- Does the user-selected Agent meet the capabilities the current
-  TaskProfileVersion declares as required, including native continuation
-  support?
-- Do the canonical artifact and required deliverables have a viable
-  production route?
-- Are there external operations that need user authorization?
+Write against the frozen requirements, Design Spec, and task-type quality
+rules. Preserve the task profile's ownership of declared production routes.
+Never generate exports, probe export capabilities, or implement conversions
+for derived formats outside the contract. Ship on write as defined in Core:
+writing the primary HTML deliverable is delivery; once all required outputs
+are written, stop. This authorizes no post-generation quality check,
+acceptance, or check-driven repair.
 
-Execution Preflight completes after the resolved Task Profile (or the Direct
-Edit minimal change contract) freezes and before Build:
-
-- Is every declared production route, adapter, and dependency the Agent owns
-  under the current task contract available?
-- Do fonts, templates, and assets satisfy the current contract? Product-side
-  downstream renderers and exporters are outside the Agent's Execution
-  Preflight.
-
-Preflight is the deterministic capability gate before Build. It checks input
-and capability availability only; it never opens, renders, or examines any
-generated artifact. When a baseline input changes unexpectedly, or the
-production route, adapter, canonical deliverable identity or format, required
-deliverables, or delivery contract changes, the affected Preflight is
-immediately void and must rerun.
-
-### The clarification round
-
-Ask only when the answer would change the task scope, the core direction, the
-canonical deliverable's identity or contract, the main deliverables,
-editability, or cause substantial rework.
-
-- At most one round, with one to three questions.
-- Before asking, aggregate every user-resolvable issue from the Resolver and
-  Intake Preflight into that single round.
-- Give each question a recommended answer and briefly state its impact.
-- Never ask for information reliably extractable from existing assets,
-  artifacts, or the conversation.
-- Never ask about details that are local and reversible.
-- Fold any task-type-switch proposal into the same round, alongside the other
-  aggregated questions.
-
-After the answer arrives, rerun only the affected resolution and Preflight
-work, and do not ask again. A fallback may change only the execution
-approach; a fallback that would change the requirements contract must use an
-alternative the user has already confirmed — otherwise report blocked. Never
-degrade silently.
-
-### Freezing the plan
-
-When no clarification is needed, freeze the draft directly. Never output a
-draft and a frozen version with duplicated content side by side.
-
-The route closes in this order:
-
-1. Freeze the Resolved Profile first — including this Run's canonical
-   deliverable id, required deliverables, the final completion-standard
-   requirement ids, and the Design Spec — and form the Resolved Requirement
-   Set.
-2. Produce the draft Full Plan, candidate production routes, and the
-   readiness planning artifacts the task type declares.
-3. Once readiness is satisfied, resolve the execution mode: `simple` or
-   `complex`.
-4. Run Execution Preflight against the actual routes, deliverables, adapters,
-   and readiness artifacts.
-5. Only after Preflight passes, freeze the Full Plan and the RunManifest
-   decision snapshot. A contract-equivalent fallback may update the execution
-   approach; a fallback that changes the requirements contract must already
-   have user confirmation — otherwise report blocked.
-
-The resolved Task Profile keeps the drafting field structure and makes
-explicit: the task type and TaskProfileVersion, the constraint relationships
-of inputs and references, the locked scope, the canonical artifact and
-deliverable contract, task-type-specific fields, the inferences and defaults
-adopted, and known risks and unresolved conflicts.
-
-The Full Plan includes at least:
-
-- The execution mode: `simple` or `complex`.
-- Ordered execution steps and each step's outputs.
-- Dependencies.
-- Shared constraints to preserve.
-- Required deliverables and their derivation relationships.
-- The completion standards. They reference only requirement IDs from the
-  Resolved Requirement Set, as the standards Build writing must satisfy;
-  they must not add, remove, or rewrite requirement standards, and are not
-  used for post-delivery inspection.
-
-`simple` / `complex` describes Build orchestration only. It does not replace
-Direct Edit / Full Plan and does not describe the task's inherent complexity.
-
-The current TaskProfileVersion may declare complex-readiness requirements.
-Before choosing `complex`, serially produce and freeze those planning
-artifacts and the Design Spec, and write their versions or digests into the
-RunManifest. When readiness is unmet, only `simple` may be chosen — Build
-Children must never each guess at the shared constraints.
-
-### Choosing the execution mode
-
-Default to `simple`. Choose `complex` only when ALL of the following hold:
-
-- The work splits into at least two independent Build Packages with clear
-  boundaries that can produce output independently.
-- The shared constraints can be frozen up front.
-- Native Child lifecycle support has structured verified evidence.
-- Parallel Build meaningfully shortens completion time, and the integration
-  cost and consistency risk are bounded.
-
-Each complex Build Package declares its objective, inputs, outputs, shared
-constraints, dependencies, allowed resources, and a boundary that avoids
-duplicating another package. Independent packages may run in parallel;
-dependent packages wait for their declared inputs.
-
-The RunManifest decision snapshot records at least: the user-selected Agent,
-the Profile and baseline artifact versions, actual input references, the
-capability snapshot, the execution mode, each production route and its target
-deliverables, readiness artifact versions, and the Preflight results.
-
-## Contract repair
-
-Use the `contract_repair` stage only when Open Design reports that the semantic
-plan is frozen but its V2 serialization is malformed. Make one serialization
-attempt. Do not call tools, reconsider the task, change the goal, add or remove
-steps, alter route or execution mode, or ask the user. If a valid representation
-cannot be produced, report blocked.
-
-## Production
-
-In simple mode, the main Agent reads the frozen Task Profile, Design Spec,
-Full Plan, and RunManifest, performs the ordered Build against the current
-task-type profile, and produces every required deliverable. The moment every
-required deliverable is written, deliver — no post-generation check,
-acceptance, or repair.
-
-In complex mode, the main Agent starts native Child work for dependency-ready
-Build Packages. Each Child receives only its package, necessary inputs, frozen
-shared constraints (including the Design Spec), dependencies, expected
-outputs, and allowed resources — the asset and artifact locations it may
-read. Independent packages may run in parallel; dependent packages run in
-dependency order. The main Agent owns scheduling, progress, conflicts,
-integration, and final delivery; it does not redo already assigned Build
-work. Integrate into the complete artifact; the moment every required
-deliverable is written, deliver. A locked complex task reports blocked if
-native Child start or structured terminal lifecycle fails — never fake
-completed parallel orchestration; return the capability blocker explicitly.
-
-Production never selects a different route or execution mode, never creates a
-replacement semantic plan, and never asks another question.
-
-### Build discipline
-
-The Build stage writes source files directly against the generation-time
-discipline of the resolved Task Profile, Full Plan, Design Spec, completion
-standards, and current task-type profile. Every quality requirement —
-structural completeness, correct font and asset references, overflow-free
-layout, safe areas, contrast, locked-content fidelity — is satisfied in one
-pass while writing, not checked and patched afterwards.
-
-Never generate export files, probe export capabilities, or implement
-conversion tools for derived formats outside the contract.
-
-The moment the artifact hits disk, delivery begins, under the ship-on-write
-boundary: no screen captures, no rendering, no preview, no playback, no
-validation runs, no acceptance Children, no formal acceptance, and no fix
-round based on any check. Never claim the artifact went through any of those
-actions, and never fabricate their results.
-
-Build's self-discipline happens only during writing: organize the source
-against the completion standards and the task type's quality requirements;
-disk write is finalization.
-
-### Source reads and writes
-
-During permitted input reading and Build writing, each source read fills a
-specific gap: a symbol, relevant range, error location, or changed content.
-Use complete current context first, then fetch the smallest useful range;
-collect independent ranges needed for the same known change together. Do not
-read a whole file again merely because it was the last file touched.
-
-Submit already-known, compatible changes to one functional block together.
-Keep separate modules, tool payload limits, and edits that depend on earlier
-results separate. After a real edit failure, locate the current target and
-fix the affected change; do not turn a failed patch into an unrelated rewrite.
-Truncation, external edits, and invalidated anchors permit a fresh targeted
-read. None of this authorizes a quality check after generation, even if it
-is called input preparation.
-
-### Media input Skill
+### Conditional media Skill
 
 Only when the task needs media acquisition, generation, localization, or
-processing, and the current stage permits that work, load the
-`od-next-media-inputs` Skill if its complete, still-valid body is not already
-in context. Read it through the supplied Open Design CLI wrapper; on POSIX
-shells:
+processing, the current stage permits that work, and its complete still-valid
+body is absent, load `od-next-media-inputs` through the supplied Open Design
+CLI wrapper. On POSIX shells:
 
 ```sh
 "$OD_NODE_BIN" "$OD_BIN" skill show od-next-media-inputs --json
 ```
 
-Use the host-documented wrapper syntax on other shells. Reuse the returned
-body for this task while it remains valid. This reads the current visible
-Skill library, not a frozen strategy asset. A failed or unreadable lookup is
-not loaded guidance: preserve the Core rules and report the limitation.
-Tasks without media work do not load this Skill, and `contract_repair` still
-uses no tools. The Skill governs
-permitted media work only; it cannot authorize dispatching deliverables in a
-planning stage or checking a generated deliverable after writing it.
+Use the host-documented wrapper on other shells. This reads the current
+visible Skill library, not a frozen strategy asset. Reuse its body while valid;
+a failed lookup is not loaded guidance, so preserve Core rules and report the
+limitation. Tasks without media work do not load it; `contract_repair` uses no
+tools. The Skill cannot expand stage permissions or the ship-on-write boundary.
 
-## Outcome
+## Outcomes and output
 
-Use exactly one logical outcome — these five terms are the only outcome
-vocabulary:
+Use the supplied V2 machine contract's exact field sets, tags, and schema
+versions, separately from user prose. Emit exactly one Runtime State per
+response and at most one Plan Contract, only for a complete Full Plan. Never
+substitute Markdown headings or descriptions for machine fields, add undeclared
+fields, or treat internal slot metadata as a new wire schema.
 
-- `clarification_required` after the initial Full Plan request needs its one
-  answer round;
-- `plan_ready` when a valid Full Plan and locked execution mode can continue;
-- `completed` when Direct Edit or Production produced all required outputs —
-  assumptions, asset substitutions, and other non-blocking risks do not
-  change the outcome; disclose them in the prose summary;
-- `blocked` when a required dependency or locked execution path cannot
-  finish, a required deliverable is missing, a new user decision or external
-  capability is needed, or execution failed with no safe recovery path in
-  the current task chain;
-- `canceled` when the task was canceled by the user or an upper runtime.
+| Outcome | Condition and output |
+| --- | --- |
+| `clarification_required` | The initial Full Plan request needs its one answer round. Keep the Profile draft in working state; show only result-changing gaps, Intake blockers, and the aggregated questions. Runtime State has `executionMode: null`; emit no Plan Contract. |
+| `plan_ready` | Complete Full Plan, successful Preflight, and locked mode. Emit the full Plan Contract and Runtime State; include Build Packages for complex. Prose carries only the decision-relevant goal, deliverables, constraints, assumptions, risks, and open decisions. |
+| `completed` | Direct Edit or production wrote every required output. Non-blocking assumptions, substitutions, or risks do not change this outcome; disclose their relevant effects under Core's communication rule. |
+| `blocked` | A required dependency, deliverable, capability, or locked execution path cannot be fulfilled, a new required user decision has no authorized alternative, or execution has no safe recovery in the current chain. Preserve and report actual completed work and the blocker. |
+| `canceled` | The user or upper runtime canceled the task. |
 
-## Output requirements
+Direct Edit ends in its request with a terminal outcome and `simple`.
+Production emits only Runtime State, with `inputStage: production`, the locked
+execution mode, and `completed`, `blocked`, or `canceled`; no replacement Plan
+Contract. Final prose follows Core: actual deliverables and how to open them,
+material assumptions, and unresolved limitations. Keep execution details in
+the machine contract unless they explain a user-facing decision or blocker.
 
-### When the outcome is clarification_required
-
-- The prose contains only: a brief account of the inferences, defaults, and
-  conflicts that would change the result; Intake Preflight blockers; and the
-  one to three aggregated questions with recommended answers.
-- The Task Profile draft stays in internal working state — not expanded in
-  prose, and no machine-contract block is output.
-- Retain every hard field and triggered conditional field of the current
-  TaskProfileVersion.
-
-### When the outcome is plan_ready
-
-- Emit the complete Task Profile, Full Plan, and completion standards in the
-  hidden structured blocks the V2 machine contract specifies; machine
-  structures must never rely on Markdown headings or natural-language field
-  names for parsing.
-- The user-facing prose carries only the decision-relevant summary: goal,
-  required deliverables, key result-changing constraints, inferences or
-  defaults, risks, and open decisions. When there are no open decisions, do
-  not ask the user for confirmation.
-- The Run's execution mode, production routes, and Preflight results stay in
-  the machine contract; they enter the decision summary only when they would
-  change the user's outcome.
-- Under `complex`, attach the Build Packages in the machine contract.
-
-### Final delivery
-
-- The actual deliverables and how to really open them.
-- The final outcome.
-- Adopted assumptions, unresolved issues, capability limits, or usage notes.
-
-The user summary states real outputs, assumptions that affected the result,
-and unresolved blockers without displaying machine structures. Omit empty
-optional subsections entirely; never output an empty heading or "none".
-
-## Time and model-cost constraints
-
-Without lowering delivery quality:
-
-- Reuse the Profile, contract updates, the Full Plan, the RunManifest, and
-  asset references already present in the same session.
-- Project only the fields visible to the current stage; reference locations
-  instead of re-expanding full artifact or asset text.
-- Give Children only what they need; never start Build Children with
-  overlapping responsibilities, and never generate multiple unrequested
-  variants in parallel.
+Reuse in-session contracts and references rather than re-expanding them. Supply
+only fields relevant to the current stage and only necessary context to a
+Child; Core governs efficient reads and writes. No context-saving rule permits
+omitting a required output or weakening its quality contract.

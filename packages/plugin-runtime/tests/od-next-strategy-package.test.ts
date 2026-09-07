@@ -34,14 +34,14 @@ const forbiddenContent = [
   /revalidation/i,
   /critique(?:-theater)?/i,
   /post[- ]build[\s\S]{0,80}(?:verify|inspect|check|review)/i,
-  /(?:screenshot|browser|dom)[\s\S]{0,80}(?:verify|inspect|check|review)/i,
+  /\b(?:screenshot|browser|dom)\b[\s\S]{0,80}\b(?:verify|inspect|check|review)\b/i,
 ];
 
 describe('bundled OD Next Strategy V2 package', () => {
   it('declares the inactive versioned asset set and exact planning recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.4',
+      version: '2.1.0',
       od: {
         kind: 'scenario',
         hidden: true,
@@ -124,11 +124,11 @@ describe('bundled OD Next Strategy V2 package', () => {
       expect(shell).toContain('@media (max-width: 480px)');
     }
     const ruleCard = readFileSync(`${pluginRoot}/${prototype!.path.slice(2)}`, 'utf8');
-    expect(ruleCard).toContain('### Handheld device shell');
+    expect(ruleCard).toContain('## Handheld device shell');
     for (const shell of ['.od-frames/iphone.html', '.od-frames/android.html', '.od-frames/neutral.html']) {
       expect(ruleCard).toContain(shell);
     }
-    expect(ruleCard).toContain('### Variable-length text and stacked information');
+    expect(ruleCard).toContain('## Layout primitives and content');
     expect(ruleCard).toContain('.od-frames/layout.css');
     expect(ruleCard).toContain('OD-LAYOUT-PRIMITIVES v1');
   });

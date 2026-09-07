@@ -174,7 +174,7 @@ describe('OD Next V2 request recipe wiring', () => {
       /\bcritique\b/i,
       /revalidation/i,
       /post[- ]build[\s\S]{0,80}(?:verify|inspect|check|review)/i,
-      /(?:screenshot|browser|dom)[\s\S]{0,80}(?:verify|inspect|check|review)/i,
+      /\b(?:screenshot|browser|dom)\b[\s\S]{0,80}\b(?:verify|inspect|check|review)\b/i,
     ];
     for (const pattern of forbidden) expect(prompt).not.toMatch(pattern);
   });
