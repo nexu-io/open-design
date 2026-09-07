@@ -25,7 +25,11 @@
  *
  * 「Max」= **个人 Max 和团队 Max 都算**(用户修正),见 `isMaxPlanTier`。
  */
-import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  canReachWorkspaceBillingEntrance,
+  type WorkspaceBillingSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import { isMaxPlanTier, resolvePlanTier } from '../collab/team-plan';
 
@@ -67,25 +71,26 @@ export type AmrBalanceUpgradeIntent = 'pricing' | 'auto_recharge' | 'ask_owner';
 /**
  * 这个人能不能自己解决余额问题。
  *
- * 判据是 `permissions.canManageBilling`(契约 `buildWorkspacePermissions`:
- * `readable && role === 'owner'`),也就是 `workspaceUpgradeUrl` 用来决定
- * 「升级入口给不给」的同一个位。两处共用一个位,分支和链接就不会各说各话。
+ * 判据是契约里的 `canReachWorkspaceBillingEntrance` —— **和 `workspaceUpgradeUrl`
+ * 决定「升级入口给不给」用的是同一个判据**,所以被判成 owner(会看到会员转化
+ * 弹窗)的人,一定拿得到那颗按钮的落点。
  *
- * 两个刻意的兜底:
+ * ⚠️ 这里原来写的是「两处共用 `permissions.canManageBilling` 这一个位」。那句话
+ * 曾经是错的:这一支比链接那一支多了「非团队工作区 → owner」这条兜底,链接那一支
+ * 一条都没有。于是「个人工作区 + 没有账单权限」那一格上,这一支说「他自己付得了
+ * 钱,给他会员转化弹窗」,链接那一支说「他没权限,不给链接」—— 弹窗如期弹出,主
+ * 按钮如期落空,用户拿到一张只有「暂不需要」的弹窗(§6.Y 死胡同的第二扇门,
+ * 2026-09-07 真机复现)。两处现在真的共用一个判据了,这句话才成立。
  *
- * - **完全没有工作区上下文**(账号级 / 旧客户端)→ 按 owner。没有工作区身份可
- *   授权时,`workspaceUpgradeUrl` 本来就走 profile 兜底给出 plans 链接;这里
- *   跟着它,免得一个正常的个人账号突然被告知「去找你的所有者」。
- * - **个人工作区** → 一律按 owner。个人工作区没有第二个人可以找,把人推去
- *   「联系所有者」只是把一个死胡同换成另一个。
+ * 一个刻意的兜底:**完全没有工作区上下文**(账号级 / 旧客户端)→ 按 owner。
+ * 没有工作区身份可授权时,`workspaceUpgradeUrl` 本来就走 profile 兜底给出 plans
+ * 链接;这里跟着它,免得一个正常的个人账号突然被告知「去找你的所有者」。
  */
 export function resolveAmrBalanceAudience(
   context: WorkspaceCollabContext | null | undefined,
 ): AmrBalanceAudience {
   if (!context) return 'owner';
-  if (context.permissions?.canManageBilling === true) return 'owner';
-  if (context.workspaceType !== 'team') return 'owner';
-  return 'member';
+  return canReachWorkspaceBillingEntrance(context) ? 'owner' : 'member';
 }
 
 export interface AmrBalanceBranchSources {

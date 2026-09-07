@@ -38,6 +38,7 @@ import {
 import { createPortal } from 'react-dom';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import {
+  canReachWorkspaceBillingEntrance,
   workspaceSeatCapacityState,
   type WorkspaceActiveResponse,
   type WorkspaceBillingSummary,
@@ -624,7 +625,16 @@ export function teamConsoleUrl(
 /**
  * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
  * owns comparison; selecting a concrete card there is what hands checkout to
- * Cloud. A resolved workspace without billing permission still returns null.
+ * Cloud.
+ *
+ * Who may be shown the entrance is `canReachWorkspaceBillingEntrance`'s call,
+ * not this function's: a team member without `canManageBilling` still gets
+ * null (B refuses the action, so the link could only ever be a dead button),
+ * while a personal workspace is never gated on a team-membership permission —
+ * its wallet is the signer's own. Both the audience split in
+ * `runtime/amr-balance-branch.ts` and this resolver read that one predicate, so
+ * the dialog a user is routed to and the link that dialog can offer are always
+ * decided for the same user (§6.Y).
  */
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
@@ -640,9 +650,9 @@ export function workspaceUpgradeUrl(
   _billing: WorkspaceBillingSummary | null | undefined,
   options?: { fallbackProfile: string | null | undefined },
 ): string | null {
-  // Billing is owner-only. Missing context can use the caller's fallback
-  // profile because there is no workspace identity to authorize yet.
-  if (context && context.permissions?.canManageBilling !== true) return null;
+  // Missing context can use the caller's fallback profile because there is no
+  // workspace identity to authorize yet.
+  if (context && !canReachWorkspaceBillingEntrance(context)) return null;
   if (!context && !options) return null;
   return amrPlansUrlForProfile(options?.fallbackProfile);
 }

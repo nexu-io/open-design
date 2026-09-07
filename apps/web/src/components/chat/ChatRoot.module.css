@@ -59,8 +59,25 @@
   --chat-brand-weak: #00ff04;
   --chat-brand-soft: var(--brand-soft);
   --chat-brand-text: var(--brand-text);
+  /*
+   * 全局 `--accent`(亮色 #353535 / 暗色 #ededed)的接缝映射。
+   *
+   * 上游 token 一直有这一枚,接缝里之前只是没人要过。「邀请卡」那一族的 CTA
+   * 悬浮阴影按它调色:兄弟弹窗 `AmrBalanceDialog.module.css` 的
+   * `.cta` 写的是 `color-mix(in srgb, var(--accent) 20%, transparent)`,
+   * 产品稿(真 Chrome 实测)那颗按钮的阴影是 `rgba(53,53,53,.2)` ——
+   * 逐字节就是这个式子在亮色下的结果。
+   */
+  --chat-accent: var(--accent);
 
   /* ── 设计稿单独指定的色号(全局 token 里没有) ── */
+  /*
+   * 满幅插画横幅底下垫的那块底色。产品稿 `.media-panel { background: #082f69 }`
+   * —— 取自 `cloud-signin-aurora.jpg` 左上角那片深蓝,作用是 JPEG 解码完成前
+   * 别先闪一下白底。稿子没给暗色覆盖(整份文件只声明一次),按接缝约定同值,
+   * 不自己发明:这块底色被图片盖住,跟不跟主题翻都看不见。
+   */
+  --chat-banner-ground: #082f69;
   /* 选项控件选中色、记忆图标 */
   --chat-pick: #00ff04;
   /* 所有动效统一墨色:上传流光、呼吸点、文字流光、步骤转圈、光标 */
@@ -132,6 +149,22 @@
   --chat-t-lead: var(--font-size-14);  /* 组件名、卡片标题 */
   --chat-t-head: var(--font-size-16);  /* 阶段标题 */
   --chat-t-disp: var(--font-size-20);  /* 页面标题 */
+  /*
+   * ── 「邀请卡」那一族弹窗自己的两档 ──────────────────────────────────
+   *
+   * `AmrBalanceDialog` / `AmrArtifactUpgradeDialog` / `AmrOwnerTopUpDialog`
+   * 是同一族:满幅插画 + 居中标题 + 居中正文 + 胶囊 CTA。产品稿(2026-09-07
+   * `topup-reminder2.html`)在真 Chrome 里量出来是 **18 / 13.5**,和上面那条
+   * 聊天面板的阶梯(12 / 13 / 14 / 16 / 20)不是同一把尺 —— 前两个兄弟弹窗
+   * 早就各自写死了这两个数(`AmrArtifactUpgradeDialog.module.css` 还有
+   * 12.5 / 11.5 / 9.5)。
+   *
+   * 立成接缝变量而不是在组件里写字面值,是因为 §2 要求组件只认 `--chat-*`;
+   * 半像素那一档全局 token 里没有对应项(只有 12/13/14/16/18/20),所以按
+   * `--chat-confirm-surface` 的先例写字面量,并在亮暗两个作用域各写一遍。
+   */
+  --chat-t-dialog-title: var(--font-size-18);
+  --chat-t-dialog-body: 13.5px;
   --chat-lh-tight: 1.35;
   --chat-lh-body: 1.7;
   --chat-lh-row: 1.5;
@@ -245,6 +278,10 @@
   --chat-brand-weak: #2f781d;
   --chat-brand-soft: var(--brand-soft);
   --chat-brand-text: var(--brand-text);
+  /* 映射到全局 token,暗色里 `--accent` 自己会翻成 #ededed —— 写法不变。 */
+  --chat-accent: var(--accent);
+  /* 插画横幅的垫底色,和亮色作用域同值(被图片盖住,稿子也没给暗色覆盖)。 */
+  --chat-banner-ground: #082f69;
 
   --chat-pick: #00ff04;
   /* 设计稿按明度镜像补的值,不是产品给的 */
@@ -285,6 +322,9 @@
   --chat-t-lead: var(--font-size-14);
   --chat-t-head: var(--font-size-16);
   --chat-t-disp: var(--font-size-20);
+  /* 邀请卡那一族的两档,和亮色作用域同值 —— 原委见上面那段长注释。 */
+  --chat-t-dialog-title: var(--font-size-18);
+  --chat-t-dialog-body: 13.5px;
   --chat-lh-tight: 1.35;
   --chat-lh-body: 1.7;
   --chat-lh-row: 1.5;

@@ -32,6 +32,7 @@ import {
   resolveAmrBalanceBranch,
 } from '../../src/runtime/amr-balance-branch';
 import { isMaxPlanTier, isTopPlanTier } from '../../src/collab/team-plan';
+import { workspaceUpgradeUrl } from '../../src/components/EntryNavRail';
 
 function context({
   role,
@@ -218,5 +219,48 @@ describe('档次读数的来源优先级', () => {
     expect(amrBalanceBlockedDialog(branch)).toBe('upgrade');
     // 读数失败不该把人送进一个他可能根本没有的自动充值面板。
     expect(amrBalanceDialogUpgradeIntent(branch)).toBe('pricing');
+  });
+});
+
+// 红测 · **两处不许各说各话**。
+//
+// `resolveAmrBalanceAudience` 的注释逐字声称:判据是 `permissions.canManageBilling`,
+// 「也就是 `workspaceUpgradeUrl` 用来决定『升级入口给不给』的同一个位。两处共用一个
+// 位,分支和链接就不会各说各话。」
+//
+// 那句话是**错的**。这一支比链接那一支多两条兜底(没有上下文 → owner、非团队工作区
+// → owner),链接那一支一条都没有。于是「个人工作区 + 没有账单权限」这一格上,分支说
+// 「这个人自己付得了钱,给他会员转化弹窗」,链接说「这个人没权限,不给链接」——
+// 弹窗如期弹出,主按钮如期落空,用户拿到一张只有「暂不需要」的弹窗。
+//
+// 真正的不变量是**存在性**,不是「共用某个字段」:凡是被判成 owner(会看到
+// `AmrBalanceDialog`)的上下文,`workspaceUpgradeUrl` 就必须给得出落点。反过来,
+// 被判成 member 的上下文走 `AmrOwnerTopUpDialog`,链接为 `null` 是对的。
+describe('分支判定与升级链接必须对同一个人给出同一个答案', () => {
+  const cases: Array<{ name: string; context: WorkspaceCollabContext }> = [
+    { name: '团队 owner', context: context({ role: 'owner' }) },
+    { name: '团队 admin', context: context({ role: 'admin' }) },
+    { name: '团队 member', context: context({ role: 'member' }) },
+    {
+      name: '个人工作区 · 有账单权限',
+      context: context({ role: 'owner', workspaceType: 'personal' }),
+    },
+    {
+      // 真机上 daemon 就是这么回的一格,也正是死胡同发生的那一格。
+      name: '个人工作区 · 没有账单权限',
+      context: context({ role: 'member', workspaceType: 'personal' }),
+    },
+  ];
+
+  it.each(cases)('$name', ({ context: ctx }) => {
+    const audience = resolveAmrBalanceAudience(ctx);
+    const url = workspaceUpgradeUrl(ctx, null, { fallbackProfile: 'prod' });
+    if (audience === 'owner') {
+      // 会看到会员转化弹窗的人,必须有一条走得通的路。
+      expect(url).not.toBeNull();
+    } else {
+      // 看不到这张弹窗的人(走「找所有者充值」),不外跳才是对的。
+      expect(url).toBeNull();
+    }
   });
 });

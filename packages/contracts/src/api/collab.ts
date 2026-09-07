@@ -487,6 +487,45 @@ export function buildWorkspacePermissions(input: {
   };
 }
 
+/**
+ * Whether this context may be shown a billing entrance — an upgrade link, a
+ * plan surface, a top-up destination.
+ *
+ * `canManageBilling` answers a TEAM question: which member of a shared
+ * workspace may spend money that is not only theirs. B enforces the same bit
+ * server-side (`services/api/src/billing/http/routes.ts` refuses a caller
+ * without it), so surfacing an external billing action to a team member
+ * without it can only produce a button that fails on arrival. That gate is
+ * correct and this predicate keeps it exactly as strict.
+ *
+ * A PERSONAL workspace has no second member. The wallet is the signed-in
+ * user's own, there is nobody to ask, and there is no one to protect the money
+ * from. Asking a team-membership permission whether someone may pay for
+ * themselves does not gate anything — it only deletes the person's own way to
+ * pay. That is how an empty personal wallet ended up looking at a dialog that
+ * said "upgrade to keep creating" under a single 「暂不需要」 button
+ * (`run-error-catalog.md` §6.Y, reproduced on a real runtime 2026-09-07).
+ *
+ * This is the ONE predicate every billing entrance must agree on. The audience
+ * split that decides WHICH dialog appears (`runtime/amr-balance-branch.ts`) and
+ * the resolver that decides whether that dialog HAS a destination
+ * (`workspaceUpgradeUrl`) both read it here, because a user who is routed to
+ * the upgrade dialog and a user who is handed an upgrade link have to be the
+ * same user. Deriving it twice is how a dialog grows a body with no way out.
+ *
+ * Note this is about the ENTRANCE, not the action. Whether the entrance leads
+ * to a plan surface or to auto-recharge is a separate question owned by
+ * `canManageAutoRecharge` (`writable && isOwner`, a strictly narrower bit).
+ */
+export function canReachWorkspaceBillingEntrance(
+  context: Pick<WorkspaceCollabContext, 'workspaceType'> & {
+    permissions?: Pick<WorkspacePermissions, 'canManageBilling'>;
+  },
+): boolean {
+  if (context.workspaceType !== 'team') return true;
+  return context.permissions?.canManageBilling === true;
+}
+
 export function buildWorkspaceSeatSummary(input: {
   seatLimit: number;
   usedSeats: number;

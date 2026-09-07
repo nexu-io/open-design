@@ -27,6 +27,25 @@ function renderDialog(props: { ownerName?: string | null } = {}) {
   );
 }
 
+/**
+ * 按**整段可读文本**找那句话,而不是 `getByText(字符串)`。
+ *
+ * ⚠️ 断言的字符**一个都没动** —— 变的只有量法。原因:2026-09-07 产品稿把
+ * Owner 名字单独加粗一档(`.owner-name { font-weight: 700 }`),那一段于是成了
+ * 自己的 `<strong>`,整句被拆成三个节点。而 `getByText` 默认的 `getNodeText`
+ * **只拼元素的直接文本子节点**,`<strong>` 里的名字会被漏掉 —— 同一句话原样
+ * 渲染在屏幕上,断言却报「找不到」。
+ *
+ * 换成读 `textContent` 之后这条守卫反而更紧:它现在同时挡住「文案被改」和
+ * 「文案被拆坏(多出空格 / 少一段 / 顺序反了)」两类退化。
+ */
+function textOf(text: string) {
+  return screen.getByText(
+    (_content, element) =>
+      element?.tagName === 'P' && element.textContent === text,
+  );
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   // 产品稿是中文原件,判据就钉在中文上;其余 18 个 locale 是它的忠实翻译。
@@ -48,9 +67,7 @@ describe('AmrOwnerTopUpDialog 的正式文案', () => {
   it('拿得到 Owner 名字时把名字插进去', () => {
     renderDialog({ ownerName: '张三' });
     expect(
-      screen.getByText(
-        '当前仅团队所有者可以为团队充值，请联系「张三」完成充值后再继续使用。',
-      ),
+      textOf('当前仅团队所有者可以为团队充值，请联系「张三」完成充值后再继续使用。'),
     ).toBeTruthy();
   });
 
@@ -64,9 +81,7 @@ describe('AmrOwnerTopUpDialog 的正式文案', () => {
     (ownerName) => {
       renderDialog({ ownerName: ownerName as string | null | undefined });
       expect(
-        screen.getByText(
-          '当前仅团队所有者可以为团队充值，请联系团队所有者完成充值后再继续使用。',
-        ),
+        textOf('当前仅团队所有者可以为团队充值，请联系团队所有者完成充值后再继续使用。'),
       ).toBeTruthy();
     },
   );
