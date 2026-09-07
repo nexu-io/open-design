@@ -10,14 +10,32 @@
  * expanding tool-group disclosures.
  */
 import type { AgentEvent } from '../types';
-import { dedupeToolUsesById } from './tool-events';
+import { resolveChatFileLink } from './in-project-link';
+import { dedupeToolUsesById, isInFlightToolUse } from './tool-events';
 
 export type FileOpKind = 'read' | 'write' | 'edit' | 'delete';
 export type FileOpStatus = 'running' | 'done' | 'error';
 
 export interface FileOpEntry {
-  /** Basename — used as both display label and the lookup key passed to
-   *  `onRequestOpenFile`, since the project-file API keys on basenames. */
+  /**
+   * 这一条记录**在项目里的身份** —— 显示用它,右侧工作区也用它开档。
+   *
+   * 不变式:**这里必须是项目相对路径**(`context/provenance.md` 这种形状),
+   * 因为下游每一个消费者都拿它当项目文件的钥匙 ——
+   *   · 点开   `onRequestOpenFile` → `FileWorkspace` 按 `ProjectFile.name` 配 tab;
+   *   · 卡面   `projectFileUrl(projectId, name)` → daemon `/raw/<项目相对路径>`;
+   *   · 导出 / 分享,以及产物卡按名字去重、`artifactRefs` 按 `label` 配对
+   *     (daemon 那边的 `label_at_capture` 存的就是 `projectRelativePath`)。
+   * 而 daemon 的 `GET /files` 给的 `name` 就是项目相对路径。
+   *
+   * 曾经这里是**基名**,注释还写着「项目文件 API 按基名索引」—— 那句是错的:
+   * `/raw/provenance.md` 回 404、`/raw/context/provenance.md` 才回 200。于是住在
+   * 子目录里的产物点开建不起 tab(活动 tab 静默回落到「设计文件」)、卡面探 404
+   * 永远画不出来,同名的 `README.md` / `assets/README.md` 还会被并成一张卡。
+   *
+   * 绝对路径靠 `resolvedDir` **正面取证**换算(见 `workspaceFileKey`);取不到
+   * 证据时才退回基名。
+   */
   path: string;
   /** Original full path the agent passed; kept for tooltips. */
   fullPath: string;
@@ -74,9 +92,54 @@ function mergeStatus(a: FileOpStatus, b: FileOpStatus): FileOpStatus {
   return 'done';
 }
 
-export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
+/**
+ * 把 agent 给的绝对路径换算成项目相对路径需要的两样,都来自 `ChatPane` 已有的
+ * props(`GET /api/projects/:id` 的 `resolvedDir`)。
+ *
+ * 不传就是这条修复之前的行为:一律退回基名。调用方拿不到项目上下文时
+ * (`DesignSystemFlow` 的只读回放、`FileWorkspace` 的活动面板)本来就只把这个
+ * 名字当文字用。
+ */
+export interface FileOpProjectScope {
+  projectId?: string | null;
+  /** daemon 算出来的项目工作目录(`GET /api/projects/:id` 的 `resolvedDir`) */
+  resolvedDir?: string | null;
+}
+
+/**
+ * 这一条记录在**项目里**叫什么 —— 见 `FileOpEntry.path` 上的不变式。
+ *
+ * 判据沿用正文 markdown 链接和执行记录行**同一个判官** `resolveChatFileLink`:
+ * 绝对路径只认 `resolvedDir` 前缀这一条正面证据,拿不到就退回基名。
+ *
+ * **故意不按同名去猜**(不把项目文件清单递进去):一个项目里可以有两个
+ * `README.md`(根一个、`assets/` 一个),按名字猜会把卡片指向另一个文件 ——
+ * 那比开不出来更糟,`runtime/chat/record-file-open.ts` 里产品点名过这一种错法。
+ * 猜不出来的那一档保持今天的行为:仍是基名,仍然开不出来,但不会开错。
+ */
+function workspaceFileKey(fullPath: string, scope: FileOpProjectScope | undefined): string {
+  const fallback = basename(fullPath);
+  if (!scope?.resolvedDir) return fallback;
+  const target = resolveChatFileLink(fullPath, undefined, scope.projectId, scope.resolvedDir);
+  // 别的项目的文件(`project-file`)不归右侧工作区管,交给它只会开出一个空 tab。
+  return target?.kind === 'workspace-file' ? target.filePath : fallback;
+}
+
+export function deriveFileOps(
+  events: AgentEvent[] | undefined,
+  scope?: FileOpProjectScope,
+): FileOpEntry[] {
   if (!events || events.length === 0) return [];
-  const dedupedEvents = dedupeToolUsesById(events);
+  /*
+   * 「入参还在传」的那一档不算一次文件操作。
+   *
+   * 它只说明模型**打算**写哪个文件,写还没发生 —— 拿它去开文件卡片 / 工作区 tab
+   * 是谎报一次落盘。真的 `tool_use` 一到,同一个 id 就会以完整入参再进来一次,
+   * 那时候才算数。判据见 `runtime/tool-events.ts` 的 `isInFlightToolUse`。
+   */
+  const settledEvents = events.filter((ev) => !isInFlightToolUse(ev));
+  if (settledEvents.length === 0) return [];
+  const dedupedEvents = dedupeToolUsesById(settledEvents);
   const resultByToolId = new Map<
     string,
     Extract<AgentEvent, { kind: 'tool_result' }>
@@ -99,7 +162,7 @@ export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
     const opCounts: Record<FileOpKind, number> = { read: 0, write: 0, edit: 0, delete: 0 };
     opCounts[kind] = 1;
     byPath.set(fullPath, {
-      path: basename(fullPath),
+      path: workspaceFileKey(fullPath, scope),
       fullPath,
       ops: [kind],
       opCounts,

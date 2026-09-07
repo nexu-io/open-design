@@ -20,6 +20,16 @@
  *                                          `data.retryable = true`, modelling a
  *                                          CLI that claims its own handshake
  *                                          rejection is transient
+ *   FAKE_ACP_PROMPT_ERROR_MESSAGE        – when set, the handshake SUCCEEDS and
+ *                                          `session/prompt` is rejected with
+ *                                          this JSON-RPC error message instead.
+ *                                          Models the post-session failure the
+ *                                          ACP path reports as
+ *                                          `json-rpc id 4: …` — a live upstream
+ *                                          that broke mid-turn, not a CLI that
+ *                                          cannot open a session at all.
+ *   FAKE_ACP_PROMPT_ERROR_RETRYABLE      – when '1', that prompt error carries
+ *                                          `data.retryable = true`
  *   FAKE_ACP_INVOCATION_LOG              – append one JSON line per handshake
  *                                          request, tagged with the caller's
  *                                          `clientInfo.name`. `attachAcpSession`
@@ -38,6 +48,8 @@ const CLI_VERSION = env.FAKE_ACP_CLI_VERSION || '0.38.0';
 const SESSION_NEW_ERROR_MESSAGE =
   env.FAKE_ACP_SESSION_NEW_ERROR_MESSAGE || 'Internal error';
 const SESSION_NEW_ERROR_RETRYABLE = env.FAKE_ACP_SESSION_NEW_ERROR_RETRYABLE === '1';
+const PROMPT_ERROR_MESSAGE = env.FAKE_ACP_PROMPT_ERROR_MESSAGE || '';
+const PROMPT_ERROR_RETRYABLE = env.FAKE_ACP_PROMPT_ERROR_RETRYABLE === '1';
 const INVOCATION_LOG = env.FAKE_ACP_INVOCATION_LOG || '';
 
 function logInvocation(entry) {
@@ -107,6 +119,19 @@ function handleLine(line) {
 
   if (message.method === 'session/new' || message.method === 'session/load') {
     logInvocation({ method: message.method, client: clientName, at: Date.now() });
+    if (PROMPT_ERROR_MESSAGE) {
+      // Post-session mode: this build opens a session fine. Whatever goes wrong
+      // goes wrong afterwards, on the prompt.
+      write({
+        jsonrpc: '2.0',
+        id: message.id,
+        result: {
+          sessionId: 'fake-acp-session-1',
+          models: { currentModelId: null, availableModels: [] },
+        },
+      });
+      return;
+    }
     // The broken build: it accepted the connection and then refuses to open a
     // session. `rpcErrorMessage` renders this as `json-rpc id <id>: <message>`.
     write({
@@ -116,6 +141,20 @@ function handleLine(line) {
         code: -32603,
         message: SESSION_NEW_ERROR_MESSAGE,
         ...(SESSION_NEW_ERROR_RETRYABLE ? { data: { retryable: true } } : {}),
+      },
+    });
+    return;
+  }
+
+  if (message.method === 'session/prompt' && PROMPT_ERROR_MESSAGE) {
+    logInvocation({ method: message.method, client: clientName, at: Date.now() });
+    write({
+      jsonrpc: '2.0',
+      id: message.id,
+      error: {
+        code: -32603,
+        message: PROMPT_ERROR_MESSAGE,
+        ...(PROMPT_ERROR_RETRYABLE ? { data: { retryable: true } } : {}),
       },
     });
     return;

@@ -367,11 +367,57 @@ export type DesktopExportArtifactFormat = "pdf" | "image";
 // is unaffected by this list.)
 export type DesktopExportArtifactImageFormat = "png" | "jpeg";
 
+/**
+ * What the caller wants out of the renderer — stated, not inferred.
+ *
+ * `full_page_export` is the historical `od export` product: measure the
+ * document, grow the surface to its full scroll height, and hand back one tall
+ * image (or a paginated PDF). Its cost scales with page length, by design.
+ *
+ * `first_viewport_thumbnail` is the chat card's static cover: a fixed logical
+ * viewport, scrolled to the origin, motion frozen, captured once. It never
+ * measures `scrollHeight`, never grows the window, and never stitches — so its
+ * cost is independent of how long the page is.
+ *
+ * Before this enum the only way to ask for "fixed viewport, do not grow" was to
+ * claim the document was a deck, which also switched on deck-only DOM surgery.
+ */
+export const DESKTOP_ARTIFACT_CAPTURE_MODES = Object.freeze({
+  FIRST_VIEWPORT_THUMBNAIL: "first_viewport_thumbnail",
+  FULL_PAGE_EXPORT: "full_page_export",
+} as const);
+
+export type DesktopArtifactCaptureMode =
+  (typeof DESKTOP_ARTIFACT_CAPTURE_MODES)[keyof typeof DESKTOP_ARTIFACT_CAPTURE_MODES];
+
+/**
+ * Why a capture produced nothing usable.
+ *
+ * The chat card falls back to a live iframe whenever there is no snapshot, and
+ * it must never invent one. These codes let the daemon record *which* kind of
+ * miss happened (retryable render failure vs. a request that can never be
+ * served) instead of parsing free-text `error` strings.
+ */
+export const DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES = Object.freeze({
+  BLANK_CAPTURE: "capture_blank",
+  RENDER_TIMEOUT: "render_timeout",
+  UNSUPPORTED_CAPTURE_MODE: "unsupported_capture_mode",
+} as const);
+
+export type DesktopArtifactCaptureErrorCode =
+  (typeof DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES)[keyof typeof DESKTOP_ARTIFACT_CAPTURE_ERROR_CODES];
+
 // Generic programmatic export (PDF / image). The desktop renderer writes
 // the result to a temporary file and returns its path; the daemon streams those
 // bytes to the HTTP caller (the `od export` CLI), then removes the temp file.
 export type DesktopExportArtifactInput = {
   baseHref?: string;
+  /**
+   * Omitted means `full_page_export`. Left optional and undefaulted on the wire
+   * so an older daemon that has never heard of capture modes keeps producing
+   * byte-identical exports.
+   */
+  captureMode?: DesktopArtifactCaptureMode;
   deck: boolean;
   format: DesktopExportArtifactFormat;
   html: string;
@@ -383,6 +429,8 @@ export type DesktopExportArtifactInput = {
 
 export type DesktopExportArtifactResult = {
   bytes?: number;
+  /** Set on failure when the reason is one the caller can act on. */
+  code?: DesktopArtifactCaptureErrorCode;
   error?: string;
   mime?: string;
   ok: boolean;
@@ -957,20 +1005,38 @@ function normalizeOptionalPositiveNumber(value: unknown, label: string): number 
   return value;
 }
 
+const DESKTOP_ARTIFACT_CAPTURE_MODE_VALUES: readonly DesktopArtifactCaptureMode[] =
+  Object.values(DESKTOP_ARTIFACT_CAPTURE_MODES);
 const DESKTOP_EXPORT_ARTIFACT_FORMATS: readonly DesktopExportArtifactFormat[] = ["pdf", "image"];
 const DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS: readonly DesktopExportArtifactImageFormat[] = ["png", "jpeg"];
 
 function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtifactInput {
   const value = assertObject(input, "desktop artifact export input");
-  assertKnownKeys(value, ["baseHref", "deck", "format", "html", "imageFormat", "title", "width", "height"], "desktop artifact export input");
+  assertKnownKeys(value, ["baseHref", "captureMode", "deck", "format", "html", "imageFormat", "title", "width", "height"], "desktop artifact export input");
   if (!DESKTOP_EXPORT_ARTIFACT_FORMATS.includes(value.format as DesktopExportArtifactFormat)) {
     throw new Error(`unsupported artifact export format: ${String(value.format)}`);
+  }
+  if (value.captureMode != null && !DESKTOP_ARTIFACT_CAPTURE_MODE_VALUES.includes(value.captureMode as DesktopArtifactCaptureMode)) {
+    throw new Error(`unsupported artifact capture mode: ${String(value.captureMode)}`);
+  }
+  // A thumbnail is a raster cover for one screen. `printToPDF` paginates the
+  // whole document and has no first-viewport meaning, so the pair is rejected
+  // here rather than silently handing back a multi-page PDF the caller's card
+  // cannot draw.
+  if (
+    value.captureMode === DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL
+    && value.format !== "image"
+  ) {
+    throw new Error(
+      `${DESKTOP_ARTIFACT_CAPTURE_MODES.FIRST_VIEWPORT_THUMBNAIL} requires format "image", not "${String(value.format)}"`,
+    );
   }
   if (value.imageFormat != null && !DESKTOP_EXPORT_ARTIFACT_IMAGE_FORMATS.includes(value.imageFormat as DesktopExportArtifactImageFormat)) {
     throw new Error(`unsupported artifact export image format: ${String(value.imageFormat)}`);
   }
   return {
     ...(value.baseHref == null ? {} : { baseHref: normalizeNonEmptyString(value.baseHref, "desktop artifact export baseHref") }),
+    ...(value.captureMode == null ? {} : { captureMode: value.captureMode as DesktopArtifactCaptureMode }),
     deck: normalizeBoolean(value.deck, "desktop artifact export deck"),
     format: value.format as DesktopExportArtifactFormat,
     html: normalizeNonEmptyString(value.html, "desktop artifact export html"),

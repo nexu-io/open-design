@@ -10,6 +10,7 @@ import { startFakeCollabHub } from '@/playwright/fake-collab-hub';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { ensureRailOpen } from '@/playwright/rail';
 import { clusterTest as test, expect } from '@/playwright/suite';
+import { clickPreviewToolbarAction } from '@/playwright/workspace';
 import { T } from '@/timeouts';
 
 const WORKSPACE_ID = 'ws-multi-client';
@@ -510,8 +511,12 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       await expect(ownerPage.getByTestId('file-workspace')).toBeVisible({
         timeout: T.long,
       });
-      await ownerPage.getByTestId('board-mode-toggle').click();
-      await ownerPage.getByTestId('comment-panel-toggle').click();
+      await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
+      await clickPreviewToolbarAction(
+        ownerPage,
+        'comment-panel-toggle',
+        /^Comments \(\d+\)$/,
+      );
       await expect(
         ownerPage
           .getByTestId('comment-side-panel')

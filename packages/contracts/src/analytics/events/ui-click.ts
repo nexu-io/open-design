@@ -873,7 +873,16 @@ export interface NextStepActionClickProps {
     | 'chip'
     | 'toolbox_action'
     | 'toolbox_more'
-    | 'share_to_open_design';
+    | 'share_to_open_design'
+    /**
+     * One of the agent-written follow-up suggestions under a delivered turn.
+     * Unlike every element above it, clicking this SENDS the row's sentence as
+     * the user's next message, so its click-through is literally the
+     * second-turn rate. `chip_id` carries the row's 0-based position, never the
+     * text — the text is model-written prose about the user's own project and
+     * has no business in an analytics payload.
+     */
+    | 'suggestion';
   chip_id?: string;
 }
 
@@ -900,8 +909,6 @@ export interface QuestionsFormClickProps {
     | 'submit'
     | 'visual_style_card'
     | 'visual_style_refresh'
-    | 'visual_style_gallery_open'
-    | 'visual_style_category_tab'
     | 'step_back'
     | 'step_next'
     | 'step_skip';
@@ -917,8 +924,11 @@ export interface QuestionsFormClickProps {
   question_id?: string;
   style_id?: string;
   style_context?: 'deck' | 'prototype' | 'document' | 'image' | 'video';
-  interaction_source?: 'inline' | 'gallery';
-  category_id?: 'all' | 'business' | 'editorial' | 'creative' | 'minimal';
+  // visual_style_card only: where the card was picked. The `'gallery'` arm and
+  // the `category_id` it carried retired with the visual-style gallery dialog
+  // (B53) — that dialog was the paging-era overflow surface, and the whole
+  // catalog now lives in the inline stack/grid.
+  interaction_source?: 'inline';
   step_index?: number;
   step_count?: number;
   project_id: string;
@@ -1034,13 +1044,17 @@ export interface ChatPanelResourcesPopoverClickProps {
 
 // Actions on the queued-send strip ("N queued · to send") that sits above
 // the chat composer while a run is in flight: re-open a queued prompt in the
-// composer (`edit`), promote it to send immediately (`send_now`), or drop it
-// from the queue (`delete`). `queue_length` is the queue size at click time,
-// before the action applies.
+// composer (`edit`), promote it to send immediately (`send_now`), drop it
+// from the queue (`delete`), or push it into the turn that is STILL RUNNING
+// without stopping it (`steer`, B11 「引导对话」). `send_now` and `steer` are
+// deliberately separate elements: the first stops the running turn and
+// resends, the second keeps that turn's work and writes the message onto the
+// agent's still-open stdin — collapsing them would make the funnel unreadable.
+// `queue_length` is the queue size at click time, before the action applies.
 export interface ChatPanelMessageQueueClickProps {
   page_name: 'chat_panel';
   area: 'message_queue';
-  element: 'edit' | 'send_now' | 'delete';
+  element: 'edit' | 'send_now' | 'delete' | 'steer';
   project_id: string;
   queue_length: number;
 }

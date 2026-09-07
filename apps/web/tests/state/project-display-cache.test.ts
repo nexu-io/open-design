@@ -1,4 +1,8 @@
-import { buildWorkspacePermissions, type WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  buildWorkspacePermissions,
+  type CollabMemberRole,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import {
@@ -14,12 +18,15 @@ import {
 } from '../../src/state/project-display-cache';
 import type { Project } from '../../src/types';
 
-function context(memberId: string): WorkspaceCollabContext {
+function context(
+  memberId: string,
+  role: CollabMemberRole = 'member',
+): WorkspaceCollabContext {
   return {
     workspaceId: 'workspace-a',
     workspaceType: 'team',
     workspaceMemberId: memberId,
-    role: 'member',
+    role,
     memberStatus: 'active',
     lifecycleState: 'active',
     billingState: 'active',
@@ -32,7 +39,7 @@ function context(memberId: string): WorkspaceCollabContext {
       isSeatFull: false,
     },
     permissions: buildWorkspacePermissions({
-      role: 'member',
+      role,
       lifecycleState: 'active',
     }),
     displayName: 'Workspace A',
@@ -84,6 +91,61 @@ describe('project display snapshots', () => {
       projects: [{ id: 'project-b' }],
       dirty: false,
     });
+  });
+
+  /*
+   * The snapshot is WRITTEN from the shell's context (App owns the home grid and
+   * reads `/api/workspace/context`, so its `role` is real). It is MARKED DIRTY
+   * from the project page, whose context comes from the daemon's project scope
+   * fast path and therefore always says `role: 'member'`.
+   *
+   * Same account, same workspace, same member — one person. Comparing them on a
+   * key that folds in `role` meant a team owner's share/unshare never invalidated
+   * their own home grid, so going Back showed the pre-share state. This is the
+   * one defect in the family that shows the user stale DATA rather than a dead
+   * control, which is why the comparison here has to be principal identity.
+   */
+  it('marks an owner-written snapshot dirty from the project scope placeholder role', () => {
+    const shellOwner = context('member-a', 'owner');
+    const scopePlaceholder = context('member-a');
+    const scope = { accountGeneration: 1, context: shellOwner, view: 'recent' as const };
+    writeProjectDisplaySnapshot(scope, [project('project-a')]);
+
+    markProjectDisplaySnapshotsDirty({ context: scopePlaceholder, accountGeneration: 1 });
+
+    expect(readProjectDisplaySnapshot(projectDisplaySnapshotKey(scope))).toMatchObject({
+      projects: [{ id: 'project-a' }],
+      dirty: true,
+    });
+  });
+
+  it('patches an owner-written snapshot from the project scope placeholder role', () => {
+    const shellOwner = context('member-a', 'owner');
+    const scopePlaceholder = context('member-a');
+    const scope = { accountGeneration: 1, context: shellOwner, view: 'all' as const };
+    writeProjectDisplaySnapshot(scope, [project('project-a')]);
+
+    removeProjectFromDisplaySnapshots({
+      context: scopePlaceholder,
+      projectId: 'project-a',
+      accountGeneration: 1,
+    });
+
+    expect(readProjectDisplaySnapshot(projectDisplaySnapshotKey(scope))?.projects).toEqual([]);
+  });
+
+  // Relaxing role must not relax the account/workspace/member partition.
+  it('never crosses a member boundary just because the roles differ', () => {
+    const shellOwner = context('member-a', 'owner');
+    const otherMember = context('member-b');
+    const scope = { accountGeneration: 1, context: shellOwner, view: 'recent' as const };
+    writeProjectDisplaySnapshot(scope, [project('project-a')]);
+
+    markProjectDisplaySnapshotsDirty({ context: otherMember, accountGeneration: 1 });
+    expect(readProjectDisplaySnapshot(projectDisplaySnapshotKey(scope))?.dirty).toBe(false);
+
+    markProjectDisplaySnapshotsDirty({ context: context('member-a'), accountGeneration: 2 });
+    expect(readProjectDisplaySnapshot(projectDisplaySnapshotKey(scope))?.dirty).toBe(false);
   });
 
   it('patches and removes a project across exact-principal views only', () => {

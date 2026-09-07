@@ -540,9 +540,14 @@
    The lift must stay BELOW `.entry-main__topbar` (z-index 10): the sticky
    topbar is opaque chrome and the card scrolling under it must never cover
    the chip cluster. It must also stay below the fixed modal family
-   (`.home-hero-confirm__backdrop` 80, `.plus-menu__popup` 90,
-   `.plugins-import-modal__backdrop` 100, `.use-everywhere-modal-backdrop`
-   920). Popover z-indexes inside the card (1503/1701/…) are local to the
+   (`.plus-menu__popup` 90, `.use-everywhere-modal-backdrop` 920, and the
+   app-modal tier at 1000 — `.home-hero-confirm__backdrop`,
+   `.plugins-import-modal__backdrop`, `.plugin-marketplace__modal-backdrop`,
+   `.automation-modal-backdrop`, plus the five `.backdrop` CSS modules that
+   define that tier). Those scrims used to sit at 60–100, i.e. UNDER the
+   shell chrome itself (`.workspace-tabs-chrome` 120, the top-right cluster
+   measured at 150) — see `tests/styles/app-scrim-layer.test.ts`.
+   Popover z-indexes inside the card (1503/1701/…) are local to the
    card's stacking context and only order its own children. */
 .home-hero__input-card:has(.inline-switcher__popover),
 .home-hero__input-card:has(.home-hero__plugin-picker) {
@@ -2320,7 +2325,12 @@
 .home-hero-confirm__backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* 应用模态档(1000,和既有的五张 `.backdrop` 同档)。80 压不住 shell chrome
+     —— `.workspace-tabs-chrome` 是 120、右上角那簇真机量到 150,遮罩上会漏出
+     顶栏和右上角照常亮着。这张确认框走 `<Dialog includeChromeClassName={false}>`,
+     所以共享原语的遮罩样式不参与,只有这一条规则说了算。
+     守护:`tests/styles/app-scrim-layer.test.ts`。 */
+  z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
