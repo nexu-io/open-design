@@ -54,6 +54,22 @@ function canonicalize(events: Ev[]): Ev[] {
   const out: Ev[] = [];
   for (const ev of events) {
     if (ev.type === 'raw') continue;
+    /*
+     * The early form of a command row is the third app-server superset,
+     * alongside token usage and file-change line counts. Only this wire sends
+     * `item/commandExecution/outputDelta`, so only this transport can fill a
+     * command row in while the command runs; `exec --json` is silent until the
+     * command exits and has no shape that could carry it.
+     *
+     * Dropping it here compares what BOTH transports can know. It is safe to
+     * drop precisely because the client does the same thing — an early row is
+     * retired into the settled `tool_use` that shares its id
+     * (`dropSupersededInFlightToolUses`), which IS compared below, pairing and
+     * all. The early rows themselves are asserted separately, in
+     * `codex-app-server-command-output-stream.test.ts`, so a regression that
+     * stopped emitting them cannot hide inside this drop.
+     */
+    if (ev.type === 'tool_in_flight') continue;
     if (ev.type === 'text_delta' || ev.type === 'thinking_delta') {
       const prev = out.at(-1);
       if (prev && prev.type === ev.type) {
