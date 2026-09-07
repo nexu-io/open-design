@@ -81,22 +81,22 @@ and versioned control client. Terminal supplies only the Sidecar transport and
 generation-loading adapter; lifecycle commands no longer use the old
 `domain/operation` protocol or a Terminal-specific lock file. Short-lived native
 commands restore one scoped attachment credential through the public client.
-The historical lifecycle model is test-only and is not distributed.
+The historical lifecycle model has been removed; tests use the shared implementation.
 Instance health is keyed to the
 exact generation launcher binding, while Shell identities and capability hashes
 remain attachment facts. A transition advances from `reserved` to `stopped-sealed`;
 this logical result does not prove physical retirement, which remains owned by
 Sidecar's resource-set guard. A sealed fence cannot be released into normal startup.
 Shell auto-update is independently declared by `contract/shell-updater.schema.json`.
-Updater commands consume `StandaloneHostControlUpdater`. The native Terminal
-installer provider is not yet registered, so the installed manifest declares
+Updater commands consume `StandaloneHostControlUpdater`. Terminal self-update
+is outside this delivery; use explicit manual installation. The manifest declares
 `shellUpdater: unavailable` and those commands fail closed. An incompatible
 content update still returns its explicit Shell version requirement, with no
 fabricated candidate or snapshot. Installation confirmation cannot copy the
 candidate's identity: it requires a real replacement bound to a durable claim.
-The former fixture updater is test-only and is not included in scene or
-distribution artifacts. Real provider registration, guarded installation and
-replacement confirmation remain required before claiming Shell update delivery.
+The former fixture updater and its simulated success tests have been removed.
+This does not reduce Electron Shell or Closure update requirements: concurrent
+Terminal consumers and both shared-host startup orders remain in the acceptance matrix.
 
 Standalone generation state is a revisioned pure state machine. Update authority
 forms `none < silent < user`; background policy cannot revoke or downgrade an
@@ -110,8 +110,8 @@ launch token. The readiness envelope also carries the digest of
 `channel + namespace + generation + standalone.launcher`; accepting a start
 request is not a health proof, and a delayed
 acknowledgement from the failed launch cannot confirm its recovery launch.
-Terminal tests exhaust the finite control-state graph and then refine the critical
-transition trace through the file Sidecar fixture.
+Standalone tests cover the shared finite control-state graph; Terminal's native
+Sidecar tests exercise its public runtime and persisted lifecycle ledger.
 
 Every signed content graph contains exactly one required `standalone.launcher`
 sync component. The installed archive carries the same bytes only as an offline
@@ -181,8 +181,8 @@ OD_TERMINAL_NODE_ARCHIVE=/path/to/node-v24.18.0-darwin-arm64.tar.gz \
 ```
 
 Without the environment variable the suite uses the matching archive from
-`.tmp/terminal-e2e/node/` when present. It always checks contracts and shared
-fixture semantics; on a matching native host it additionally covers scene,
+`.tmp/terminal-e2e/node/` when present. It always checks contracts and the shared
+handoff boundary; on a matching native host it additionally covers scene,
 offline distribution, cold lifecycle, update, channel isolation, atomic install
 and tamper failure. The full local E2E starts the existing
 `tools-serve start release-storage` fixture and fetches channel heads, signed
@@ -192,8 +192,7 @@ also replaces an unrelated prepared generation and receives the first health
 proof under its exact signed identity. The same mutable
 `somechan/latest/channel-head.json` object is promoted across three beta rounds;
 `somepreview/latest` proves that another non-stable channel remains isolated.
-Legacy model tests cover updater transition scenarios but are not evidence of
-real installation. Native acceptance now verifies that unavailable updater
+Native acceptance verifies that unavailable updater
 commands and unproved confirmation are rejected without stopping live consumers
 or producing an installed record. It launches the Sidecar with Node and scripts
 from the installed archive; separate native Sidecar coverage checks attachment

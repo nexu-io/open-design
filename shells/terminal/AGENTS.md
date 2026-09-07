@@ -19,9 +19,11 @@ dependencies and Vitest/TypeScript tests; it is not the distributed runtime.
   one immutable archive URL and digest and may not resolve mutable latest metadata.
 - Keep lifecycle execution behind the Standalone `LifecyclePort` seam and adapt
   that port only through the public `@open-design/sidecar` boundary. Updater commands
-  consume the public Standalone host client; a missing native installer provider
-  must fail closed and must not advertise installation capability. Legacy updater
-  models are test-only, never runtime dependencies or distributed artifacts.
+  consume the public Standalone host client. Terminal self-update is outside this
+  delivery: keep explicit manual installation and fail closed on unavailable
+  automatic installation. Do not add a native self-update provider or restore
+  legacy updater models. Electron Shell and Closure update coordination, including
+  concurrent Terminal consumers and both host startup orders, remains in scope.
   Installed confirmation requires a real replacement identity and durable claim;
   copying candidate metadata into a confirmation is not proof of installation.
 - Do not depend on `.github/scripts`, `tools/pack`, or `tools/release`.

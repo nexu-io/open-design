@@ -137,9 +137,6 @@ const residualAllowedExactPaths = new Set([
   // Copied as a content-addressed launcher and imported by the native Terminal
   // carrier, outside the test runner's TypeScript loader (same contract above).
   "shells/terminal/tests/fixtures/standalone-launcher.mjs",
-  // Existing updater model fixture retained during native host cutover; never shipped.
-  "shells/terminal/tests/fixtures/legacy-lifecycle.mjs",
-  "shells/terminal/tests/fixtures/legacy-shell-updater.mjs",
   // Terminal distributions execute these native runtime entrypoints with the
   // verified embedded Node after leaving the pnpm/TypeScript workspace.
   "shells/terminal/runtime/fossil.mjs",
