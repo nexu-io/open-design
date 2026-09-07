@@ -2006,6 +2006,7 @@ export const fa: Dict = {
   'avatar.noAgentSelected': 'هیچ عاملی انتخاب نشده',
   'avatar.modelSection': 'مدل',
   'avatar.modelLabel': 'مدل',
+  'avatar.strategyTaskModelNotice': 'کار فعلی از {model} استفاده می‌کند. تغییر مدل برای کارهای جدید اعمال می‌شود.',
   'avatar.reasoningLabel': 'استدلال',
   'avatar.serviceTierLabel': 'رده سرویس',
   'avatar.customSuffix': '(سفارشی)',

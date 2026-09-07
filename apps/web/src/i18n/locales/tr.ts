@@ -2006,6 +2006,7 @@ export const tr: Dict = {
   'avatar.noAgentSelected': 'ajan seçilmedi',
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
+  'avatar.strategyTaskModelNotice': 'Geçerli görev {model} kullanıyor. Model değişiklikleri yeni görevler için geçerlidir.',
   'avatar.reasoningLabel': 'Akıl yürütme',
   'avatar.serviceTierLabel': 'Hizmet katmanı',
   'avatar.customSuffix': '(özel)',

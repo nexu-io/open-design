@@ -2006,6 +2006,7 @@ export const th: Dict = {
   'avatar.noAgentSelected': 'ไม่ได้เลือกเอเจนต์',
   'avatar.modelSection': 'โมเดล',
   'avatar.modelLabel': 'โมเดล',
+  'avatar.strategyTaskModelNotice': 'งานปัจจุบันใช้ {model} การเปลี่ยนโมเดลจะมีผลกับงานใหม่',
   'avatar.reasoningLabel': 'การใช้เหตุผล',
   'avatar.serviceTierLabel': 'ระดับบริการ',
   'avatar.customSuffix': '(กำหนดเอง)',

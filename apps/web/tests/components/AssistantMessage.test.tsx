@@ -1592,6 +1592,19 @@ describe('AssistantMessage recovered produced files', () => {
     expect(screen.queryByTestId('file-ops-summary')).toBeNull();
   });
 
+  it('renders the actual strategy model despite a different composer selection', () => {
+    render(<AssistantMessage
+      message={baseMessage({
+        agentId: 'amr', agentName: 'OpenDesign · claude-opus-4.7',
+        strategyTaskExecutionId: 'task-model',
+        events: [{ kind: 'status', label: 'starting', model: 'deepseek-v4-flash' }],
+      })}
+      streaming={false}
+    />);
+    expect(screen.getByTestId('assistant-execution-model').textContent).toBe('deepseek-v4-flash');
+    expect(screen.queryByText('claude-opus-4.7')).toBeNull();
+  });
+
   it('shows files modified during a sparse completed assistant turn', () => {
     render(
       <AssistantMessage

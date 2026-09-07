@@ -95,7 +95,7 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
     // First connection: send a start event + a delta, then reader.read()
     // rejects (simulating a network drop / tab backgrounding).
     const firstReader = makeRejectingReader([
-      enc(sseEvent(1, 'start', { bin: 'hermes' })),
+      enc(sseEvent(1, 'start', { bin: 'hermes', model: 'deepseek-v4-flash' })),
       enc(sseEvent(2, 'stdout', { chunk: 'hello ' })),
     ]);
 
@@ -122,6 +122,7 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
     globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
 
     const deltas: string[] = [];
+    const onAgentEvent = vi.fn();
     const statuses: string[] = [];
     let doneText: string | null = null;
     let error: Error | null = null;
@@ -135,13 +136,16 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
         onDelta: (text) => deltas.push(text),
         onDone: (text) => { doneText = text; },
         onError: (err) => { error = err; },
-        onAgentEvent: () => {},
+        onAgentEvent,
       },
       onRunStatus: (s) => statuses.push(s),
     });
 
     // Should have received both deltas (from first + reconnected stream).
     expect(deltas).toEqual(['hello ', 'world']);
+    expect(onAgentEvent).toHaveBeenCalledWith({
+      kind: 'status', label: 'starting', detail: 'hermes', model: 'deepseek-v4-flash',
+    });
     // Should have completed successfully — no error.
     expect(error).toBeNull();
     expect(doneText).toBe('hello world');

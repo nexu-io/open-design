@@ -158,7 +158,9 @@ vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
     locale: 'zh-CN',
     setLocale: () => undefined,
-    t: (key: string) => key,
+    t: (key: string) => key === 'avatar.strategyTaskModelNotice'
+      ? 'Current task uses {model}. Model changes apply to new tasks.'
+      : key,
   }),
   useT: () => (key: string) => key,
 }));
@@ -415,8 +417,10 @@ vi.mock('../../src/components/ChatPane', () => ({
     error,
     onRetry,
     onSubmitQuestionForm,
+    composerFooterAccessory,
   }: {
     activeConversationId: string | null;
+    composerFooterAccessory?: ReactNode;
     conversations: Conversation[];
     streaming: boolean;
     sendDisabled?: boolean;
@@ -464,6 +468,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     return (
       <section>
         <output data-testid="active-conversation">{activeConversationId}</output>
+        {composerFooterAccessory}
         <output data-testid="streaming-state">{streaming ? 'streaming' : 'idle'}</output>
         <output data-testid="chat-error">{error}</output>
         <output data-testid="conversation-latest-runs">
@@ -1664,6 +1669,23 @@ describe('ProjectView conversation run isolation', () => {
       ]);
     });
     expect(streamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it('explains the current task model after changing the composer model and clears it on conversation switch', async () => {
+    conversationAMessages = [{
+      id: 'assistant-brief', role: 'assistant', agentId: 'agent-1',
+      content: '<question-form>{"questions":[]}</question-form>',
+      runStatus: 'succeeded', strategyTaskExecutionId: 'task-model',
+      events: [{ kind: 'status', label: 'starting', model: 'deepseek-v4-flash' }],
+    }];
+    renderProjectView({ ...config, agentModels: {
+      'agent-1': { model: 'claude-opus-4.7' },
+    } });
+    await waitFor(() => expect(screen.getByTestId('strategy-task-model-notice').textContent)
+      .toContain('deepseek-v4-flash'));
+    expect(screen.getByTestId('strategy-task-model-notice').textContent).toContain('new tasks');
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.queryByTestId('strategy-task-model-notice')).toBeNull());
   });
 
   it('identifies a question-form answer by its occurrence, not by a fresh id', async () => {

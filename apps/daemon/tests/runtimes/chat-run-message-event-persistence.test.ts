@@ -76,6 +76,22 @@ describe('run message event persistence', () => {
     expect(updates.count).toBeLessThanOrEqual(2);
   });
 
+  it('persists the executed model from start for transcript reloads', () => {
+    db = createDb();
+    db.prepare(`INSERT INTO messages (id, content, events_json) VALUES (?, '', '[]')`)
+      .run('assistant-model');
+    const run = { id: 'run-model', assistantMessageId: 'assistant-model' };
+    persistRunEventToAssistantMessage(db, run, 'start', {
+      bin: 'AMR', model: 'deepseek-v4-flash',
+    });
+    finalizeRunMessageEvents(db, run);
+    const row = db.prepare('SELECT events_json FROM messages WHERE id = ?')
+      .get('assistant-model') as { events_json: string };
+    expect(JSON.parse(row.events_json)).toContainEqual({
+      kind: 'status', label: 'starting', detail: 'AMR', model: 'deepseek-v4-flash',
+    });
+  });
+
   it('keeps 100,000 tiny deltas linear in persisted size and database writes', () => {
     db = createDb();
     db.prepare(`INSERT INTO messages (id, content, events_json) VALUES (?, '', '[]')`)

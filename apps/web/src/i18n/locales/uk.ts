@@ -2006,6 +2006,7 @@ export const uk: Dict = {
   'avatar.noAgentSelected': 'агент не вибран',
   'avatar.modelSection': 'Модель',
   'avatar.modelLabel': 'Модель',
+  'avatar.strategyTaskModelNotice': 'Поточне завдання використовує {model}. Зміни моделі застосовуються до нових завдань.',
   'avatar.reasoningLabel': 'Міркування',
   'avatar.serviceTierLabel': 'Рівень сервісу',
   'avatar.customSuffix': '(власна)',

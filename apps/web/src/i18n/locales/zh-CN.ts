@@ -2098,6 +2098,7 @@ export const zhCN: Dict = {
   "avatar.noAgentSelected": "尚未选择代理",
   "avatar.modelSection": "模型",
   "avatar.modelLabel": "模型",
+  "avatar.strategyTaskModelNotice": "当前任务继续使用 {model}，切换模型仅对新任务生效。",
   "avatar.reasoningLabel": "推理",
   "avatar.serviceTierLabel": "服务层级",
   "avatar.customSuffix": "（自定义）",

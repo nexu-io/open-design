@@ -341,6 +341,7 @@ export function runSseEventToPersistedAgentEvent(
       kind: 'status',
       label: 'starting',
       ...(typeof record.bin === 'string' ? { detail: record.bin } : {}),
+      ...(typeof record.model === 'string' ? { model: record.model } : {}),
     };
   }
   if (event === 'stdout') {

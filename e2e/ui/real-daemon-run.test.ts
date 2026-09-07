@@ -266,13 +266,15 @@ for (const strategyMode of ['active', 'off'] as const) {
   });
 }
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }, testInfo) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
     'requires the explicit local synthetic rollout canary flags',
   );
   await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
+  await page.locator('.avatar-agent-trigger').click();
+  await page.getByTestId('avatar-model-option-fake/default').click();
 
   const createResponsePromise = page.waitForResponse(isCreateRunResponse);
   await sendPrompt(page, 'Create an OD Next clarification canary artifact');
@@ -287,6 +289,20 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
 
   const form = page.locator('.question-form').first();
   await expect(form).toBeVisible();
+  const modelNotice = page.getByTestId('strategy-task-model-notice');
+  await expect(modelNotice).toContainText('fake/default');
+  // Reload witnesses the daemon-persisted start model, rather than only React state.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(form).toBeVisible();
+  await expect(modelNotice).toContainText('fake/default');
+  await page.locator('.avatar-agent-trigger').click();
+  await page.getByTestId('avatar-model-option-fake/alternate').click();
+  await expect(modelNotice).toContainText('Model changes apply to new tasks');
+  await expect(modelNotice).toContainText('fake/default');
+  await expect(page.getByTestId('assistant-execution-model').first()).toHaveText('fake/default');
+  const modelScreenshot = testInfo.outputPath('task-model-selection.png');
+  await page.screenshot({ path: modelScreenshot, fullPage: true });
+  await testInfo.attach('task model selection', { path: modelScreenshot, contentType: 'image/png' });
   await form.getByText('Desktop web', { exact: true }).click();
   const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
   await form.getByRole('button', { name: 'Send answers' }).click();
@@ -315,6 +331,18 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
     outcome: 'completed',
     terminal: true,
   });
+  await expect(modelNotice).toHaveCount(0);
+  await expect(page.getByTestId('assistant-execution-model').first()).toHaveText('fake/default');
+  const nextTaskResponse = page.waitForResponse(isCreateRunResponse);
+  await sendPrompt(page, 'Create an OD Next clarification canary artifact');
+  const nextTask = await (await nextTaskResponse).json() as { runId: string; taskExecutionId: string };
+  expect(nextTask.taskExecutionId).not.toBe(created.taskExecutionId);
+  await expect(page.getByTestId('assistant-execution-model').last()).toHaveText('fake/alternate');
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/runs/${nextTask.runId}`);
+    return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
+  }, { timeout: T.long }).toBe('clarification_required');
+  await expect(modelNotice).toContainText('fake/alternate');
 });
 
 test('[P0] local OD Next public canaries project blocked and canceled terminal mappings', async ({ page }) => {

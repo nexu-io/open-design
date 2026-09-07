@@ -5,6 +5,18 @@ import type { ChatMessage } from '../../src/types';
 const t = () => 'Assistant';
 
 describe('assistantRoleLabel', () => {
+  it('shows the daemon execution model instead of the model selected for a new task', () => {
+    const message = {
+      id: 'clarification', role: 'assistant', content: '', agentId: 'amr',
+      agentName: 'OpenDesign · claude-opus-4.7',
+      events: [
+        { kind: 'status', label: 'starting', detail: 'AMR', model: 'deepseek-v4-flash' },
+        { kind: 'status', label: 'initializing', detail: 'default' },
+      ],
+    } satisfies ChatMessage;
+    expect(assistantRoleLabel(message, t)).toBe('OpenDesign · deepseek-v4-flash');
+  });
+
   it('prefers the persisted assistant display name over the protocol id', () => {
     const message: ChatMessage = {
       id: 'message-1',

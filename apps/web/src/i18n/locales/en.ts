@@ -2006,6 +2006,7 @@ export const en: Dict = {
   'avatar.noAgentSelected': 'no agent selected',
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
+  'avatar.strategyTaskModelNotice': 'Current task uses {model}. Model changes apply to new tasks.',
   'avatar.reasoningLabel': 'Reasoning',
   'avatar.serviceTierLabel': 'Service tier',
   'avatar.customSuffix': '(custom)',

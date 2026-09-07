@@ -823,6 +823,8 @@ export type PersistedAgentEvent =
       kind: 'status';
       label: string;
       detail?: string;
+      /** Effective execution model from the daemon's start event, retained on reload. */
+      model?: string;
       code?: string;
       failureCategory?: RunFailureCategory;
       failureDetail?: RunFailureDetail;

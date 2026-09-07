@@ -2829,6 +2829,9 @@ async function startDaemon(
 async function stopServer(server: StartedServer | null): Promise<void> {
   if (!server) return;
   await Promise.resolve(server.shutdown?.());
+  // This fixture owns its clients; do not wait for HTTP keep-alive connections
+  // to expire after the terminal run assertions have completed.
+  server.server.closeAllConnections();
   if (server.server.listening) {
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
   }

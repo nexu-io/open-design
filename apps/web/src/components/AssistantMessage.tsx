@@ -1,5 +1,7 @@
 import { Fragment, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TodoCard, ToolCard } from "./ToolCard";
+import { executionModel } from "../runtime/execution-model";
+import executionModelStyles from "./AssistantExecutionModel.module.css";
 import { FileOpsSummary } from "./FileOpsSummary";
 import {
   renderMarkdown,
@@ -740,6 +742,7 @@ function AssistantMessageImpl({
     | Extract<AgentEvent, { kind: "usage" }>
     | undefined;
   const roleName = assistantRoleName(message, t);
+  const strategyExecutionModel = message.strategyTaskExecutionId ? executionModel(message) : null;
   const roleIconId = agentIconId(message.agentId, message.agentName);
   const hasEmptyResponse = events.some(
     (e) => e.kind === "status" && e.label === "empty_response"
@@ -899,6 +902,11 @@ function AssistantMessageImpl({
         <div className="role">
           <AgentIcon id={roleIconId} size={20} className="role-agent-icon" />
           <span className="role-name">{roleName}</span>
+          {strategyExecutionModel ? (
+            <span className={executionModelStyles.model} data-testid="assistant-execution-model">
+              {strategyExecutionModel}
+            </span>
+          ) : null}
         </div>
       ) : null}
       <div className="assistant-flow">
@@ -1576,8 +1584,10 @@ export function assistantRoleLabel(
 ): string {
   const model = assistantModelDetail(message);
   const fromName = message.agentName?.trim();
-  if (fromName)
-    return appendRoleModel(exactAgentDisplayName(fromName) ?? fromName, model);
+  if (fromName) {
+    const label = model ? fromName.split(" · ")[0]!.trim() : fromName;
+    return appendRoleModel(exactAgentDisplayName(label) ?? label, model);
+  }
   const fromId = agentDisplayName(message.agentId);
   if (fromId) return appendRoleModel(fromId, model);
   const starting = message.events?.find(
@@ -1590,12 +1600,7 @@ export function assistantRoleLabel(
 }
 
 function assistantModelDetail(message: ChatMessage): string | null {
-  const initializing = message.events?.find(
-    (e) => e.kind === "status" && e.label === "initializing" && e.detail
-  ) as Extract<AgentEvent, { kind: "status" }> | undefined;
-  const detail = initializing?.detail?.trim();
-  if (!detail || detail === "default") return null;
-  return detail;
+  return executionModel(message);
 }
 
 function assistantFeedbackModelId(message: ChatMessage): string | null {

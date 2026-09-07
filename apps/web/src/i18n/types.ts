@@ -2729,6 +2729,7 @@ export interface Dict {
   'avatar.noAgentSelected': string;
   'avatar.modelSection': string;
   'avatar.modelLabel': string;
+  'avatar.strategyTaskModelNotice': string;
   'avatar.reasoningLabel': string;
   'avatar.serviceTierLabel': string;
   'avatar.customSuffix': string;

@@ -2006,6 +2006,7 @@ export const id: Dict = {
   'avatar.noAgentSelected': 'Belum ada agent dipilih',
   'avatar.modelSection': 'Model',
   'avatar.modelLabel': 'Model',
+  'avatar.strategyTaskModelNotice': 'Tugas saat ini menggunakan {model}. Perubahan model berlaku untuk tugas baru.',
   'avatar.reasoningLabel': 'Penalaran',
   'avatar.serviceTierLabel': 'Tingkat layanan',
   'avatar.customSuffix': '(kustom)',
