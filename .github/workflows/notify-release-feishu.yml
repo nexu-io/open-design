@@ -47,15 +47,20 @@ on:
         type: string
         default: ""
       enable_mac_x64:
-        description: "Also build the macOS Intel (x64) package. Off by default because Intel is the critical path and roughly doubles the wall clock. TURN THIS ON for the last prerelease before promoting a stable release — stable ships Intel and is gated on validated prerelease artifacts."
+        description: "Also build the macOS Intel (x64) package. ON by default — stable ships Intel and is gated on validated prerelease artifacts, so an Intel-less prerelease cannot be promoted. Uncheck only when this run is explicitly not about Intel and you want the ~12 min back."
         required: false
         type: boolean
-        default: false
+        default: true
       enable_smoke:
-        description: "Also run the packaged smoke suites (mac arm64, mac Intel, Windows) inside the build jobs. Off by default: smoke never blocks publication but costs ~2.5 min on the Windows critical path. TURN THIS ON for the last prerelease before promoting a stable release."
+        description: "Also run the packaged smoke suites (mac arm64, mac Intel, Windows). ON by default. They no longer run inside the build jobs: release-prerelease-smoke.yml re-downloads the published packages from R2 after they ship, so smoke costs this pipeline nothing."
         required: false
         type: boolean
-        default: false
+        default: true
+      enable_tests:
+        description: "Also dispatch the code test suites (P0 Functional E2E, E2E Vitest, daemon shards, verify) into release-prerelease-tests.yml. ON by default; they gate nothing and run in a workflow of their own."
+        required: false
+        type: boolean
+        default: true
       mac_sign_mode:
         description: "macOS signing depth: no / sign-only / notarize. Empty uses sign-only — codesigned (which the stable promotion gate requires) but not sent to Apple's notary service. Use notarize for the last prerelease before a stable promotion."
         required: false
@@ -111,18 +116,23 @@ jobs:
       # job dies before the smoke starts. That is how release/v0.18.1's first
       # prerelease failed on its branch-cut commit.
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || 'core' }}
-      # macOS Intel is opt-in. Push events never build it: `inputs` is unset
-      # there, so the `|| false` arm supplies a real boolean rather than the
-      # empty string (a bare `${{ inputs.enable_mac_x64 }}` would forward '' to
-      # a `type: boolean` callee input). A manual dispatch can check the box —
-      # which is what a pre-stable prerelease must do, since stable ships Intel.
-      enable_mac_x64: ${{ inputs.enable_mac_x64 || false }}
-      # Packaged smoke is opt-in for the same reason and with the same `|| false`
-      # boolean coercion: `inputs` is unset on push, and a bare
-      # `${{ inputs.enable_smoke }}` would forward '' to a `type: boolean`
-      # callee input. Smoke is advisory (continue-on-error), so a release-branch
-      # push spends nothing on it; a pre-stable dispatch checks the box.
-      enable_smoke: ${{ inputs.enable_smoke || false }}
+      # macOS Intel builds on every prerelease, because stable ships Intel and
+      # stable's gate is a validated prerelease artifact.
+      #
+      # `|| true` would NOT express that. `inputs` is unset on push, so the
+      # obvious `${{ inputs.enable_mac_x64 || true }}` reads correctly there —
+      # but on a dispatch where the operator UNCHECKED the box, `false || true`
+      # is also true, and the switch would be unturnoffable. Test the event
+      # instead: push short-circuits to a real `true`, and a dispatch forwards
+      # the operator's own boolean.
+      enable_mac_x64: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_mac_x64 }}
+      # Same shape, same reason. Packaged smoke now runs in
+      # release-prerelease-smoke.yml against the artifacts re-downloaded from
+      # R2, so it costs the build nothing and defaults on.
+      enable_smoke: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_smoke }}
+      # Same shape. The code suites run in release-prerelease-tests.yml and gate
+      # nothing; the switch exists only to skip them outright.
+      enable_tests: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_tests }}
       # Same failure mode as win_x64_smoke_mode above: a `workflow_call`
       # `default:` only applies to an OMITTED input, so the final arm must name
       # a real mode, never ''. sign-only keeps platforms.mac.signed == true,
@@ -132,6 +142,14 @@ jobs:
 
   notify:
     name: Notify Feishu (release)
+    # TRANSITIONAL. The progressive card (release-prerelease-card.yml, posted by
+    # the Feishu application bot) supersedes this one-shot custom-bot webhook
+    # card: it appears as soon as the first platform publishes and is edited in
+    # place as the rest of the platforms, the code tests, and the packaged smoke
+    # report in. This job stays until the new card has carried a couple of real
+    # releases, because a gap in release notification is worse than a duplicate.
+    # Retiring it means deleting this job and the FEISHU_RELEASE_WEBHOOK /
+    # FEISHU_RELEASE_SIGN_SECRET secrets it reads.
     needs: build
     if: ${{ !cancelled() && needs.build.outputs.release_version != '' }}
     runs-on: ubuntu-latest
@@ -233,8 +251,17 @@ jobs:
           PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
           CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
           BUILD_STATE: ${{ needs.build.result }}
-          MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}
-          WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}
+          # The authoritative "did a package actually ship?" bit. `BUILD_STATE`
+          # is the reusable workflow's overall conclusion, which goes red for
+          # anything in the pipeline — a failed validation dispatch, an opt-in
+          # platform, a post-publish cleanup — even when the packages are
+          # already sitting in R2 and downloadable from the buttons on this very
+          # card. A non-empty version_metadata_url means publish wrote metadata.
+          VERSION_METADATA_URL: ${{ needs.build.outputs.version_metadata_url }}
+          # Packaged mac/Windows smoke moved to release-prerelease-smoke.yml and
+          # is no longer an output of the build, so this card carries no smoke
+          # annotation. The progressive card (release-prerelease-card.yml) is
+          # where smoke results land now.
           MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
           MAC_INTEL_URL: ${{ needs.build.outputs.mac_intel_url }}
           WIN_URL: ${{ needs.build.outputs.win_url }}
