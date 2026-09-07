@@ -206,12 +206,38 @@ describe('回合状态行的记号 · 「过了」画勾,「停了」画点', ()
    *    ⚠️ 尤其别把那五处兜底改成 `--text-faint` —— 它是 **#bdbdbd**,比目标还淡,
    *    而且在产线上根本轮不到兜底生效,改了等于只把陈列页越描越黑。
    *
-   *  · 分界脚注同理:`mirror-gallery.test.tsx` 的 `pick()` 没给 `.fork-sep` /
+   *  · 分界脚注同理:当时 `mirror-gallery.test.tsx` 的 `pick()` 没给 `.fork-sep` /
    *    `.fork-note` 配选择器,那两条规则**压根没被内联进去**,量到的是裸 div 的
    *    浏览器默认值(block / 无 gap / padding 0 / 继承来的 13px 与 #494949)。
-   *    下面这条把稿子要的五个值钉在 `chat.css` 上,免得有人照着那份读数去「修」。
+   *    下面这条把该有的值钉在 `chat.css` 上,免得有人照着那份读数去「修」。
+   *    (那道缺口后来补上了 —— `mirror-gallery.test.tsx` 现在有
+   *     `pick(read('src/styles/chat.css'), /(^|[\s,>+~])\.fork-/)`;这段留作来历。)
    */
-  it('反向对照:分界脚注这五条在 chat.css 里本来就是对的(陈列页量到的是没内联)', () => {
+  /*
+   * ⚠️ 这五条里有一条**换了**,原因是工单覆盖了稿子,不是为了让这条变绿。
+   *
+   * 稿子(PR #7170 `components.css:2830` 一带)画的分界是**两块**:一条写着源会话
+   * 标题的线,底下脚注自己占一行。OPEND-2714 的裁决把它并成**一行** —— 分支图标
+   * 配一行文案,一起摆进线中间那一格。稿子从没画过一行式,所以一行式的排版没有
+   * 稿子原文可依:这里照 OPEND-2714 已经立下的先例办(陈列页第 38 格的注记里
+   * 也记了同一句「和稿子分岔」)。
+   *
+   * 逐条交代:
+   *   · `display: flex`   —— **照旧**。它是 `.fork-sep` 这个 flex 容器的项目,
+   *                          外层 display 会被块化,`flex` / `inline-flex` 在产线上
+   *                          算出来一样;既然一样,就没有理由和稿子分岔。
+   *   · `align-items: center` / `gap: 6px` / `font-size` / `color` —— **照旧**。
+   *   · `padding-bottom: 2px` —— **去掉**。它是「脚注在线**下面**自己占一行」时
+   *                          给那一行留的下边距。现在脚注是线里的一格,而
+   *                          `.fork-sep` 是 `align-items: center` —— 居中算的是
+   *                          边框盒,底下多 2px 会把字整体顶高 1px:两侧发丝线还在
+   *                          正中,字却不在了。留着它才是缺陷。
+   *
+   * 换掉的那一条不是删掉:下面补了一条**反向**断言,把两块式的两个遗留
+   * (`padding-bottom` / `justify-content`)钉成「不许再出现」。这条对照因此
+   * 两个方向都还会红 —— 少了该有的会红,回填了不该有的也会红。
+   */
+  it('反向对照:分界脚注这几条在 chat.css 里本来就是对的(陈列页量到的是没内联)', () => {
     const chatCss = readFileSync(resolve(HERE, '../../../src/styles/chat.css'), 'utf-8')
       .replace(/\/\*[\s\S]*?\*\//g, '');
     // 两条同名规则:一条只声明 token,一条才是真正的排版。挑**声明了 display 的**那条。
@@ -220,10 +246,24 @@ describe('回合状态行的记号 · 「过了」画勾,「停了」画点', ()
     const layout = rules.find((b) => /display\s*:/.test(b));
     expect(layout, '没有哪条 `.fork-note` 规则在排版 —— 断言会空过').toBeDefined();
     expect(layout!).toMatch(/display:\s*flex/);
+    expect(layout!).toMatch(/align-items:\s*center/);
     expect(layout!).toMatch(/gap:\s*6px/);
-    expect(layout!).toMatch(/padding-bottom:\s*2px/);
     expect(layout!).toMatch(/font-size:\s*var\(--font-size-12\)/);
     expect(layout!).toMatch(/color:\s*var\(--chat-message-muted-ink\)/);
+  });
+
+  it('反向对照:两块式的遗留不许回填 —— 脚注现在是线里的一格', () => {
+    const chatCss = readFileSync(resolve(HERE, '../../../src/styles/chat.css'), 'utf-8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = [...chatCss.matchAll(/(^|[};])\s*\.fork-note\s*\{([^{}]*)\}/g)].map((m) => m[2] ?? '');
+    const layout = rules.find((b) => /display\s*:/.test(b));
+    expect(layout, '没有哪条 `.fork-note` 规则在排版 —— 断言会空过').toBeDefined();
+    // 下边距:两块式给「线下面那一行」留的,现在会把字顶离发丝线的正中。
+    expect(layout!, 'padding-bottom 回来了 —— 字会被顶高 1px').not.toMatch(/padding-bottom\s*:/);
+    // 水平居中:两块式里脚注自己占满一行才需要它;现在它是被 `.fork-sep` 摆好的一格。
+    expect(layout!, 'justify-content 回来了 —— 它是占满一行时才有的事').not.toMatch(
+      /justify-content\s*:/,
+    );
   });
 
   it('反向对照:中断档单独有一条规则把点染灰、把字压到中性档', () => {
