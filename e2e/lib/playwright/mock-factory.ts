@@ -62,13 +62,11 @@ export async function applyStandardMocks(page: Page): Promise<void> {
   await applyStorageConfig(page);
   await routeMockAgents(page);
   await routeAppConfig(page);
-  // Keep this explicit even though the shared suite fixture also installs the
-  // route: callers use applyStandardMocks for extra pages/contexts that are
-  // created outside the built-in Playwright `page` fixture.
+  // Keep both explicit even though the shared suite fixture also installs them:
+  // callers use applyStandardMocks for extra pages/contexts that are created
+  // outside the built-in Playwright `page` fixture, and the fixture's routes are
+  // bound to that one page.
   await routeUnavailableVelaStatus(page);
-  // NOT installed by the suite fixture — unlike the vela route above, this one
-  // exists only here and in the specs that call it directly. A spec that drives
-  // the entry home without either is genuinely exposed to a live release card.
   await suppressWhatsNew(page);
 }
 

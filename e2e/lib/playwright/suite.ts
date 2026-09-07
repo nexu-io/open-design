@@ -9,7 +9,7 @@ import {
   warmPlaywrightDaemonRuntime,
   warmPlaywrightWebRuntime,
 } from './runtime-lifecycle.ts';
-import { routeUnavailableVelaStatus } from './mock-factory.ts';
+import { routeUnavailableVelaStatus, suppressWhatsNew } from './mock-factory.ts';
 import { resolvePlaywrightSlotNamespace } from './runtime-identity.ts';
 import { createToolsDevSuite, e2eWorkspaceRoot } from '../tools-dev/runtime.ts';
 import type { ToolsDevSuite } from '../tools-dev/types.ts';
@@ -20,6 +20,7 @@ type PlaywrightToolsDevSuite = ToolsDevSuite & {
 
 type TestFixtures = {
   _defaultCloudStatus: void;
+  _suppressedWhatsNew: void;
   _toolsDevFailureTracker: void;
 };
 
@@ -110,6 +111,23 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   _defaultCloudStatus: [
     async ({ page }, use) => {
       await routeUnavailableVelaStatus(page);
+      await use();
+    },
+    { auto: true },
+  ],
+
+  // A release announcement belongs to no spec's subject. The card renders in a
+  // shared dialog whose overlay sits above the app chrome, so whenever one
+  // fetch succeeds it swallows clicks somewhere unrelated and the spec dies on
+  // an actionability timeout attributed to the wrong step. Suppressing it per
+  // spec meant every new UI spec had to remember; suppress it for the whole
+  // suite instead, alongside the Cloud-status default above.
+  //
+  // Auto fixtures are set up before a spec's own hooks, so a spec that wants to
+  // see the card registers its route later and Playwright prefers it.
+  _suppressedWhatsNew: [
+    async ({ page }, use) => {
+      await suppressWhatsNew(page);
       await use();
     },
     { auto: true },
