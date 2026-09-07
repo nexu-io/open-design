@@ -2261,10 +2261,20 @@ export function ChatPane({
       : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
         ? 'warning'
         : 'danger';
-  // The failed run whose error this top-level card represents. AssistantMessage
-  // suppresses only THIS message's per-message error pill (to avoid the
-  // duplicate); other failed turns — older history, or once a follow-up makes
-  // this no longer the last assistant — keep their pill so the error survives.
+  /*
+   * 这张顶层报错卡代表**哪一轮**。
+   *
+   * 今天它唯一的活消费者是 `AssistantMessage` 的 `hideRunStatus`:报错卡在场的
+   * 那一轮,回合状态行让位给卡去说原因和下一步(`chat-panel-feedback.md` B36)。
+   *
+   * ⚠️ 它**不再**和「每条消息自己那枚灰色 error pill」有关系。那枚 pill 在
+   * 2026-08-27(`812e550ebe`)被无条件下线了 —— 裁决在 `chat-panel-feedback.md`
+   * F-8 表 U5,红测 `AssistantMessage.no-error-pill.test.tsx`。
+   *
+   * ⚠️ 归属只覆盖**转录末尾**那一帧:`retryableAssistantMessage` 要求这条失败助手
+   * 消息正好是最后一条,用户再发任何一条消息(哪怕只是自己那句)就变 null。所以
+   * 任何「失败轮该怎么显示」的判据都不能挂在这里 —— 那种判据要按终态本身写。
+   */
   const errorCardOwnerId =
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
   /**
