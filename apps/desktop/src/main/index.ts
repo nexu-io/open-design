@@ -158,6 +158,23 @@ export function applyOsLocaleSwitch(electronApp: Electron.App): string {
 export function applyLoopbackConnectionLimitSwitch(electronApp: Electron.App): void {
   if (!electronApp.isReady()) {
     electronApp.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+    // ⚠️ 实验用,**不要合进主线**。滚动冻结 A/B 的处理组。
+    //
+    // Electron 40 → 41 把 Chromium 从 144 跳到 **146,整个跳过了 145**,而
+    // `kOverscrollEffectOnNonRootScrollers` 的默认值正好在 145 从 DISABLED 翻成
+    // ENABLED(已拉 branch-heads/7559 与 7680 的 cc/base/features.cc 逐字核实)。
+    // 它管的是「非根滚动容器撞到滚动边界时怎么表现」,位置、平台(macOS 弹性
+    // overscroll)、版本窗口三样都对得上我们那个「滚动范围被永久冻住」的缺陷。
+    //
+    // 合成页面 89 个用例没能复现,所以只能靠真机 A/B 定性:
+    //   对照组 = 0.21.4-beta.1(不带这一行,即 Chromium 默认)
+    //   处理组 = 本构建(关掉这两个 feature)
+    // 处理组不再冻 → 根因定性;照样冻 → 这条线彻底排除。
+    // 必须在 whenReady 之前,和上面那条同理。
+    electronApp.commandLine.appendSwitch(
+      "disable-features",
+      "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
+    );
   }
 }
 
