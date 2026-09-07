@@ -114,15 +114,19 @@ import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
 import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { AmrOwnerTopUpDialog } from './chat/AmrOwnerTopUpDialog';
+import {
+  amrBalanceBlockedDialog,
+  amrBalanceDialogUpgradeIntent,
+  resolveAmrBalanceBranch,
+} from '../runtime/amr-balance-branch';
 import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
-import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   amrBalanceGateScopeForWorkspaceContext,
   checkAmrBalanceGate,
   retryUnavailableAmrBalanceGate,
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
-import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { entryStrategyRoutingFields } from './entry-strategy-routing';
 import { EntryBlankState } from './EntryBlankState';
@@ -1104,19 +1108,27 @@ export function EntryShell({
   const [amrBalanceGateBlock, setAmrBalanceGateBlock] = useState<
     {
       reason: 'insufficient' | 'signed_out';
+      /**
+       * 哪一张弹窗 —— 身份的分支(规格 §6.V)。
+       *
+       * 这里曾经还挂着一条 `?? 'upgrade'` 的兜底,理由是「首页没有那张升级卡,
+       * 『Max · owner 不弹窗』那一支落到首页会变成一片空白」。T58 之后那一支
+       * 不存在了(owner 两格共用同一张会员转化弹窗),兜底随之删除 —— 它当时把
+       * Max 所有者兜成了**转化弹窗 + 套餐页链接**,等于让他买一个已经在用的套餐。
+       */
+      dialog: 'upgrade' | 'ask_owner';
+      /** 那张弹窗的主按钮去哪(T58);和 `dialog` 同一个 branch 快照算出来。 */
+      upgradeIntent: 'pricing' | 'auto_recharge';
       snapshot: AmrWalletSnapshot;
       resolve: (decision: 'retry' | 'dismiss') => void;
     } | null
   >(null);
-  // Soft low-balance warning holding a pending home submit: the dialog
-  // resolves the promise the submit handler is awaiting ('proceed' continues
-  // the very same create-and-run).
-  const [amrLowBalanceWarn, setAmrLowBalanceWarn] = useState<
-    {
-      snapshot: AmrWalletSnapshot;
-      resolve: (decision: AmrLowBalanceDecision) => void;
-    } | null
-  >(null);
+  // Home has NO low-balance surface, and since T66 (product 2026-09-07) neither
+  // does anywhere else: a positive balance produces nothing at all and the run
+  // just starts. Home reached that end state first — ruling 2026-09-06 (T53),
+  // "什么都不显示,有余额就允许运行" — and the project page has now been pulled
+  // level with it, so `handlePluginLoopSubmit` having no low-balance branch is
+  // simply the shape of the gate: there is no such result kind to handle.
   // The entry nav rail is collapsed by default (Manus-style) so the entry
   // view opens clean and full-width; the panel toggle in the topbar opens it
   // as an overlay that dismisses on selection / backdrop click / Escape.
@@ -1417,9 +1429,25 @@ export function EntryShell({
         // wallet is empty) → the dialog re-shows with the fresh snapshot.
         while (gate.kind === 'hard') {
           const blocked = gate;
+          // 「哪张弹窗」和「它的主按钮去哪」问的是同一个 branch 快照,免得两次
+          // 分别求值之间的一次工作区切换让两者各说各话(规格 §6.V / T58)。
+          const blockedBranch = resolveAmrBalanceBranch({
+            context: gateWorkspaceContext,
+            billing: workspaceBilling,
+          });
           const decision = await new Promise<'retry' | 'dismiss'>((resolve) => {
             setAmrBalanceGateBlock({
               reason: blocked.reason,
+              // 被登出说的是登录不是钱,无条件走原来那张(主按钮是应用内登录,
+              // 落点那一位那时用不上)。余额耗尽才按身份 × 订阅分支。
+              dialog:
+                blocked.reason === 'signed_out'
+                  ? 'upgrade'
+                  : amrBalanceBlockedDialog(blockedBranch),
+              upgradeIntent:
+                blocked.reason === 'signed_out'
+                  ? 'pricing'
+                  : amrBalanceDialogUpgradeIntent(blockedBranch),
               snapshot: blocked.snapshot,
               resolve,
             });
@@ -1431,19 +1459,15 @@ export function EntryShell({
           );
         }
         if (gate.kind === 'unavailable') return false;
-        if (gate.kind === 'soft') {
-          // Hold THIS submit while the reminder waits for a decision; 'proceed'
-          // resumes the same create-and-run below, so HomeView's normal accept
-          // path (draft clearing, context consumption) still applies.
-          const plan = await resolveAmrPlan(gate.snapshot);
-          if (isPaidAmrPlan(plan)) {
-            const decision = await new Promise<AmrLowBalanceDecision>((resolve) => {
-              setAmrLowBalanceWarn({ snapshot: gate.snapshot, resolve });
-            });
-            setAmrLowBalanceWarn(null);
-            if (decision !== 'proceed') return 'blocked' as const;
-          }
-        }
+        // Everything else falls through and the run starts. Home used to hold
+        // the submit open behind a centered reminder dialog ("额度不多了" + 仍要
+        // 发起任务 / 去充值). Product ruled it away on 2026-09-06 — "软提醒弹窗
+        // 就是产品告诉我不要这个的" — and ruled Home's replacement to be nothing
+        // at all: "什么都不显示,有余额就允许运行" (T53). T66 (2026-09-07) then
+        // retired the low-balance tier everywhere, so there is no longer even a
+        // result kind here to consider handling. `empty_not_blocked` also falls
+        // through on purpose: it is a stood-down hard block, and Home has no
+        // conversation to hang its card on. Do not re-add a branch here.
         if (
           currentWorkspaceAccountGeneration() !== gateAccountGeneration
           || workspaceIdentityCacheKey(
@@ -1699,7 +1723,6 @@ export function EntryShell({
             view === 'home'
             && goPlanSunsetMessagePending
             && amrBalanceGateBlock == null
-            && amrLowBalanceWarn == null
           }
           onPriorityAnnouncementPendingChange={setGoPlanSunsetMessagePending}
           priorityAnnouncementCurrentPlanId={deepSeekCampaignPlan}
@@ -1723,26 +1746,26 @@ export function EntryShell({
           <WhatsNewPopup active={view === 'home' && !goPlanSunsetMessagePending} />
           {/* The campaign badge lives in EntryNavRail's top-right cluster so it
               stays beside the account module across every entry tab. */}
-          {amrBalanceGateBlock ? (
+          {amrBalanceGateBlock?.dialog === 'ask_owner' ? (
+            /*
+             * 没有账单权限的成员。原来这一档给的是 `AmrBalanceDialog`,而它的
+             * 主按钮取自 `workspaceUpgradeUrl` —— 对这类成员返回 `null`,于是
+             * 弹窗上只剩一颗「暂不需要」(§6.Y)。这张弹窗至少给得出一条路。
+             */
+            <AmrOwnerTopUpDialog
+              onClose={() => amrBalanceGateBlock.resolve('dismiss')}
+            />
+          ) : amrBalanceGateBlock ? (
             <AmrBalanceDialog
               reason={amrBalanceGateBlock.reason}
               balanceUsd={amrBalanceGateBlock.snapshot.balanceUsd}
               profile={amrBalanceGateBlock.snapshot.profile}
               entrySource="home_balance_gate_upgrade"
+              upgradeIntent={amrBalanceGateBlock.upgradeIntent}
               metricsConsent={config.telemetry?.metrics === true}
               installationId={config.installationId}
               onClose={() => amrBalanceGateBlock.resolve('dismiss')}
               onResolved={() => amrBalanceGateBlock.resolve('retry')}
-            />
-          ) : null}
-          {amrLowBalanceWarn ? (
-            <AmrLowBalanceDialog
-              balanceUsd={amrLowBalanceWarn.snapshot.balanceUsd}
-              profile={amrLowBalanceWarn.snapshot.profile}
-              entrySource="home_low_balance_warn_recharge"
-              metricsConsent={config.telemetry?.metrics === true}
-              installationId={config.installationId}
-              onDecision={amrLowBalanceWarn.resolve}
             />
           ) : null}
           <div

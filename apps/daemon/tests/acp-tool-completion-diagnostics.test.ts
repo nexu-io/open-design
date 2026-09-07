@@ -67,8 +67,25 @@ function expectOutstanding(events: RunEventForDiagnostics[]) {
   expect(failureStage(events)).toBe('tool_outstanding');
 }
 
+/**
+ * The SETTLED tool transcript — the `tool_use`/`tool_result` pairs that reach
+ * Langfuse, PostHog and the persisted conversation.
+ *
+ * This used to be `type.startsWith('tool_')`, which was the same set back when
+ * a settled pair was the only thing the bridge emitted with that prefix. It no
+ * longer is: `tool_in_flight` puts a row on screen while a call runs (W123).
+ * That event is live-only and deliberately carries no completion evidence, so
+ * counting it here would mean these tests were asserting on the wrong thing —
+ * see `in-flight rows are not completion evidence` below, which holds the
+ * coverage the prefix match was incidentally providing.
+ */
 function toolEvents(events: RunEventForDiagnostics[]) {
-  return events.filter(({ data }) => (data as { type?: string })?.type?.startsWith('tool_'));
+  const type = ({ data }: RunEventForDiagnostics) => (data as { type?: string })?.type;
+  return events.filter((event) => type(event) === 'tool_use' || type(event) === 'tool_result');
+}
+
+function inFlightToolEvents(events: RunEventForDiagnostics[]) {
+  return events.filter(({ data }) => (data as { type?: string })?.type === 'tool_in_flight');
 }
 
 describe('ACP tool completion diagnostics', () => {
@@ -185,6 +202,22 @@ describe('ACP tool completion diagnostics', () => {
     // Persistence has no completion provenance contract. Existing records keep
     // their legacy behavior; this change must not guess their origin from text.
     expect(summarizeRunToolProgress(JSON.parse(serialized)).toolResultSent).toBe(true);
+    expectOutstanding(attempt.events);
+  });
+
+  it('in-flight rows are not completion evidence', async () => {
+    // A row on screen says "this started", never "this produced something".
+    // Arming completion here would let a turn that finished with an open tool
+    // be classified as having output — the exact misread `hasOutstandingTool`
+    // exists to prevent.
+    const attempt = startAttempt();
+    attempt.tool('open-tool', 'in_progress');
+    expect(inFlightToolEvents(attempt.events).length).toBeGreaterThan(0);
+    expect(toolEvents(attempt.events)).toHaveLength(0);
+    expect(summarizeRunToolProgress(attempt.events)).toEqual({
+      toolCallSeen: false, toolResultSent: false, hasOutstandingTool: false,
+    });
+    await vi.advanceTimersByTimeAsync(100);
     expectOutstanding(attempt.events);
   });
 

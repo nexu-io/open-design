@@ -505,17 +505,15 @@ function truncateUtf8(value: string, maxBytes: number): {
   return { value: value.slice(0, end), truncated: true };
 }
 
-function collectStreamTailSummary(
-  events: RunEventForDiagnostics[] = [],
-  eventName: string,
-  readChunk: (data: unknown) => string | null,
-): StreamTailSummary | undefined {
-  let streamText = '';
-  for (const event of events) {
-    if (event.event !== eventName) continue;
-    const chunk = readChunk(event.data);
-    if (chunk) streamText += chunk;
-  }
+/**
+ * The one bound this repository puts on captured process output before it
+ * leaves the daemon: the last {@link STDERR_TAIL_MAX_LINES} lines, capped at
+ * {@link STDERR_TAIL_MAX_BYTES} UTF-8 bytes, with `redactSecrets` applied.
+ *
+ * Returns `undefined` for an empty stream so every caller renders nothing
+ * rather than an empty section.
+ */
+export function summarizeStreamTailText(streamText: string): StreamTailSummary | undefined {
   const lineCount = countLines(streamText);
   if (lineCount <= 0) return undefined;
 
@@ -530,6 +528,66 @@ function collectStreamTailSummary(
     lineCount,
     truncated: lineTruncated || byteCapped.truncated,
   };
+}
+
+/** Prefixed onto a tail whose earlier lines were dropped, so a reader knows the
+ *  card is showing an excerpt and that 「Export logs」 holds the whole thing. */
+export const STDERR_TAIL_TRUNCATION_MARKER = '[earlier stderr omitted]';
+
+/**
+ * The stderr a run-failure card is allowed to show: the same bounded, redacted
+ * tail the telemetry exporter uses, plus an explicit marker when earlier output
+ * was dropped.
+ *
+ * The card's copy promises the reader "the original error"; a failure whose
+ * `message` is the daemon's own generic sentence has that original only here.
+ * Bounding and redaction happen daemon-side so the text is already safe by the
+ * time it reaches the SSE stream, the persisted message, or any other consumer.
+ */
+export function failureCardStderrTail(streamText: string): string | undefined {
+  const summary = summarizeStreamTailText(streamText);
+  if (!summary || !summary.tail.trim()) return undefined;
+  return summary.truncated
+    ? `${STDERR_TAIL_TRUNCATION_MARKER}\n${summary.tail}`
+    : summary.tail;
+}
+
+/**
+ * Decorate a run's terminal `error` frame with the stderr that same run already
+ * emitted, so the single payload reaching both the live client and the
+ * persisted assistant message carries the original cause.
+ *
+ * Additive only: `message` / `error.code` are left exactly as the emitter wrote
+ * them, because those are what the failure classifiers and the card mapping
+ * read. Returns `data` untouched for any other event, for a run that wrote no
+ * stderr, and for a payload that already carries a tail.
+ */
+export function withFailureStderrTail(
+  event: string,
+  data: unknown,
+  stderrText: string,
+): unknown {
+  if (event !== 'error') return data;
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const payload = data as Record<string, unknown>;
+  if (typeof payload.stderrTail === 'string') return data;
+  const tail = failureCardStderrTail(stderrText);
+  if (!tail) return data;
+  return { ...payload, stderrTail: tail };
+}
+
+function collectStreamTailSummary(
+  events: RunEventForDiagnostics[] = [],
+  eventName: string,
+  readChunk: (data: unknown) => string | null,
+): StreamTailSummary | undefined {
+  let streamText = '';
+  for (const event of events) {
+    if (event.event !== eventName) continue;
+    const chunk = readChunk(event.data);
+    if (chunk) streamText += chunk;
+  }
+  return summarizeStreamTailText(streamText);
 }
 
 export function collectStderrTailSummary(

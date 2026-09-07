@@ -39,5 +39,22 @@ export const ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT = 8;
 export const AMR_STDERR_RETRY_TAIL_LIMIT = 16_000;
 /** Maximum number of redacted stderr characters attached to an ACP child-exit diagnostic. */
 export const ACP_STDERR_DIAGNOSTIC_TAIL_LIMIT = 4_000;
+/**
+ * Floor between two `tool_in_flight` publications for the SAME tool call.
+ *
+ * The first publication of a call is never throttled — that is the entire
+ * point, since a row must appear the moment the agent says it started. This
+ * only bounds the UPDATES that follow.
+ *
+ * 250ms is read off the real AMR corpus (202 calls / 911 frames): a shell call
+ * lands its `in_progress` frames in bursts of three within ~14ms while its
+ * payload is unchanged, and no burst of *changed* payloads was ever tighter
+ * than a second. A quarter second collapses those bursts, keeps at most four
+ * updates per second for an agent that streams output, and is far below the
+ * threshold at which a growing number reads as stalled.
+ */
+export const ACP_IN_FLIGHT_TOOL_MIN_INTERVAL_MS = 250;
+/** Maximum characters of in-progress tool output carried on a `tool_in_flight` event. */
+export const ACP_IN_FLIGHT_TOOL_OUTPUT_LIMIT = 2_000;
 /** Normalised token IDs that identify a model-selection config option in an ACP `session/new` response's `configOptions` array. */
 export const MODEL_CONFIG_OPTION_IDS = new Set(['model', 'models', 'modelid', 'modelids']);

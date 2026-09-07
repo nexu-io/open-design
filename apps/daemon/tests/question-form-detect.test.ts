@@ -11,6 +11,15 @@ import {
 // requires a closed, renderable block, not a bare tag.
 const RENDERABLE_BODY = '{"questions":[{"id":"surface","label":"Which surface?"}]}';
 const RENDERABLE_FORM = `<question-form id="q">${RENDERABLE_BODY}</question-form>`;
+const LEGACY_RENDERABLE_FORM = [
+  '<question-form id="audio-brief" title="Audio brief">',
+  '<question-select id="format" label="Which format?" required="true">',
+  '<option value="mp3">MP3</option>',
+  '<option value="wav">WAV</option>',
+  '</question-select>',
+  '<question-text id="mood" label="Describe the mood" />',
+  '</question-form>',
+].join('');
 
 // The exact production regression (OD Next strategy turn, PR #7016): the agent
 // declared it had nothing to ask AND still emitted the literal marker, with
@@ -32,6 +41,22 @@ describe('scanQuestionForms', () => {
       unrenderable: 0,
       unterminated: false,
     });
+  });
+
+  it('counts the legacy child-tag form stored by older conversations', () => {
+    expect(scanQuestionForms(LEGACY_RENDERABLE_FORM)).toEqual({
+      renderable: 1,
+      unrenderable: 0,
+      unterminated: false,
+    });
+  });
+
+  it('does not accept malformed legacy child markup as a renderable form', () => {
+    expect(
+      scanQuestionForms(
+        '<question-form><question-select id="format"><option>MP3</question-select></question-form>',
+      ),
+    ).toEqual({ renderable: 0, unrenderable: 1, unterminated: false });
   });
 
   // The defect: an open tag whose body is prose and which never closes used to

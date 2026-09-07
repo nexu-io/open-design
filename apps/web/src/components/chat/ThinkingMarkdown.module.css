@@ -1,0 +1,128 @@
+.think {
+  min-width: 0;
+  margin: 0;
+  color: var(--chat-text-strong);
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  overflow-wrap: anywhere;
+}
+
+.think > :global(.md-p),
+.think > :global(.md-h),
+.think > :global(.md-ul),
+.think > :global(.md-ol),
+.think > :global(.md-quote),
+.think > :global(.md-code-block),
+.think > :global(.md-table-wrap),
+.think > :global(.md-hr) {
+  margin-block: 0;
+}
+
+.think > :global(*) + :global(*) {
+  margin-top: 0.75em;
+}
+
+.think :global(.md-h) {
+  color: var(--chat-text-strong);
+  font-size: inherit;
+  line-height: var(--chat-lh-row);
+  font-weight: 600;
+}
+
+.think :global(.md-ul),
+.think :global(.md-ol) {
+  padding-inline-start: 1.5em;
+}
+
+.think :global(.md-ul) li,
+.think :global(.md-ol) li {
+  margin-block: 0.25em;
+}
+
+.think :global(.md-quote) {
+  padding-inline-start: 0.75em;
+  border-inline-start: var(--chat-stroke) solid var(--chat-border-strong);
+  color: var(--chat-text-muted);
+}
+
+.think :global(.md-inline-code),
+.think :global(.md-code) {
+  font-family: var(--chat-font-mono);
+  font-size: var(--chat-t-cap);
+}
+
+.think :global(.md-code-block) {
+  overflow: hidden;
+  border: var(--chat-stroke) solid var(--chat-border);
+  border-radius: var(--chat-radius-sm);
+}
+
+.think :global(.md-code-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-bottom: var(--chat-stroke) solid var(--chat-border);
+  color: var(--chat-text-muted);
+}
+
+.think :global(.md-code-actions) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.think :global(.md-code-action) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: transparent;
+  color: var(--chat-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.think :global(.md-code-action:hover) {
+  background: var(--chat-bg-fill-tertiary);
+  color: var(--chat-text-strong);
+}
+
+.think :global(.md-code) {
+  margin: 0;
+  padding: 8px;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.think :global(.md-link) {
+  color: var(--chat-blue);
+  text-decoration: none;
+}
+
+.think :global(.md-link:hover) {
+  text-decoration: underline;
+}
+
+.think :global(.md-table-wrap) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.think :global(.md-table) {
+  border-collapse: collapse;
+}
+
+.think :global(.md-table) th,
+.think :global(.md-table) td {
+  padding: 4px 6px;
+  border: var(--chat-stroke) solid var(--chat-border);
+}
+
+.think :global(.md-hr) {
+  border: 0;
+  border-top: var(--chat-stroke) solid var(--chat-border);
+}

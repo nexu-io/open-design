@@ -3582,7 +3582,7 @@
       "capabilitiesSummary": [
         "prompt:inject"
       ],
-      "description": "Optional 3-5 direction picker for users who explicitly ask to compare visual directions.",
+      "description": "Resolves the visual direction at the plan stage from the brief and design system, without asking the user.",
       "tags": [
         "atom",
         "first-party",

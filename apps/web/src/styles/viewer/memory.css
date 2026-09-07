@@ -645,6 +645,15 @@
   min-height: 0;
   background: var(--bg);
 }
+/* Manual editing is an active workspace interaction, so its controls must
+   remain clickable above body-portaled non-modal prompts such as
+   ExperienceSurvey (z-index 1400). Raise the shell that is the prompt's
+   direct stacking sibling; nested workspace layers cannot reliably escape
+   the shell's grid painting order. */
+.workspace-shell:has(.manual-edit-workspace) {
+  position: relative;
+  z-index: 1500;
+}
 .manual-edit-workspace > .manual-edit-right {
   position: absolute;
   top: 8px;
