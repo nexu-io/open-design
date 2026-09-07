@@ -102,6 +102,27 @@ async function fingerprintFileAsync(
 // path -> fingerprint for every artifact-extension file under the project root.
 export type ArtifactSnapshot = Map<string, ArtifactFingerprint>;
 
+// Whether a snapshot saw the whole project. The walk is best-effort by design:
+// an unreadable directory, a failed stat, and the per-kind file caps are all
+// swallowed so a large or partly locked project still yields useful counters.
+// That is safe for "what was created or modified" — an unseen file simply is
+// not counted — but not for "what was removed", where an unseen file is
+// indistinguishable from a deleted one. Consumers of `removedPaths` must know
+// the difference, so completeness travels with the snapshot.
+//
+// Absent means incomplete: a snapshot built by any other route cannot claim
+// coverage it never established.
+const completeSnapshots = new WeakSet<ArtifactSnapshot>();
+
+function markSnapshotComplete(snapshot: ArtifactSnapshot): ArtifactSnapshot {
+  completeSnapshots.add(snapshot);
+  return snapshot;
+}
+
+export function isCompleteSnapshot(snapshot: ArtifactSnapshot): boolean {
+  return completeSnapshots.has(snapshot);
+}
+
 // Directories that never hold user-facing artifacts; skipped so the walk stays
 // cheap and never wanders into dependencies, VCS, or daemon scratch.
 const IGNORED_DIR_NAMES: ReadonlySet<string> = new Set([
@@ -147,22 +168,33 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   const snapshot: ArtifactSnapshot = new Map();
   let trackedCount = 0;
   let otherCount = 0;
+  let missedAnything = false;
   const walk = (dir: string): void => {
-    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) {
+      missedAnything = true;
+      return;
+    }
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      missedAnything = true;
       return;
     }
     for (const entry of entries) {
-      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) {
+        missedAnything = true;
+        return;
+      }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
         const tracked = isTrackedRunFile(entry.name);
-        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) {
+          missedAnything = true;
+          continue;
+        }
         const full = path.join(dir, entry.name);
         try {
           const stat = fs.statSync(full);
@@ -176,12 +208,13 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
           else otherCount += 1;
         } catch {
           // Race (file removed mid-walk) or permission error — skip.
+          missedAnything = true;
         }
       }
     }
   };
   walk(rootDir);
-  return snapshot;
+  return missedAnything ? snapshot : markSnapshotComplete(snapshot);
 }
 
 // Async counterpart used by the normal run start/finish path. It deliberately
@@ -194,22 +227,33 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
   const files: Array<{ full: string; tracked: boolean }> = [];
   let trackedCount = 0;
   let otherCount = 0;
+  let missedAnything = false;
   const walk = async (dir: string): Promise<void> => {
-    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+    if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) {
+      missedAnything = true;
+      return;
+    }
     let entries: fs.Dirent[];
     try {
       entries = await fs.promises.readdir(dir, { withFileTypes: true });
     } catch {
+      missedAnything = true;
       return;
     }
     for (const entry of entries) {
-      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) return;
+      if (trackedCount >= MAX_FILES && otherCount >= MAX_OTHER_FILES) {
+        missedAnything = true;
+        return;
+      }
       if (entry.isDirectory()) {
         if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
         await walk(path.join(dir, entry.name));
       } else if (entry.isFile()) {
         const tracked = isTrackedRunFile(entry.name);
-        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) continue;
+        if (tracked ? trackedCount >= MAX_FILES : otherCount >= MAX_OTHER_FILES) {
+          missedAnything = true;
+          continue;
+        }
         files.push({ full: path.join(dir, entry.name), tracked });
         if (tracked) trackedCount += 1;
         else otherCount += 1;
@@ -241,6 +285,7 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
         ];
       } catch {
         fingerprints[index] = null;
+        missedAnything = true;
       }
     }
   };
@@ -253,7 +298,7 @@ export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<Ar
   for (const fingerprint of fingerprints) {
     if (fingerprint) snapshot.set(fingerprint[0], fingerprint[1]);
   }
-  return snapshot;
+  return missedAnything ? snapshot : markSnapshotComplete(snapshot);
 }
 
 export interface RunArtifactDiff {
@@ -299,12 +344,23 @@ export interface RunArtifactDiff {
   // (`run_finished.files_written_count`). Same mtime-inclusive touched
   // semantics as `touched`; deletions are ignored.
   filesWritten: number;
+  // Absolute paths present in the before snapshot and absent from the after
+  // snapshot: files this run removed from the project.
+  //
+  // The counters above deliberately ignore deletions, because removing a file
+  // is not artifact production. Delivery is a different question: a turn whose
+  // only work was deleting stale files produced nothing yet did what was asked
+  // (#7744). This is the only place that can answer it, because it observes
+  // the project tree either side of the run rather than reading intent out of
+  // a shell command — `cd x && rm y`, `find … -delete`, and `xargs rm` are all
+  // equally visible here and none of them is parseable from the command text.
+  removedPaths: string[];
 }
 
 // Classify created vs modified tracked files between two snapshots into the
 // artifact / design-system / preview-module signals the run_finished event
-// needs. Deletions are intentionally ignored: removing a file is not artifact
-// production.
+// needs. Deletions are excluded from every counter here — removing a file is
+// not artifact production — and reported separately as `removedPaths`.
 export function diffRunArtifacts(
   before: ArtifactSnapshot,
   after: ArtifactSnapshot,
@@ -321,6 +377,16 @@ export function diffRunArtifacts(
   let filesWritten = 0;
   const contentTouchedPaths: string[] = [];
   const renderDependencyTouchedPaths: string[] = [];
+  // Only a complete pair can distinguish a removal from a file the walk never
+  // saw. An unreadable directory or a truncated scan makes every path it
+  // missed look deleted, which would upgrade an ordinary turn to delivered.
+  const removalsObservable = isCompleteSnapshot(before) && isCompleteSnapshot(after);
+  const removedPaths: string[] = [];
+  if (removalsObservable) {
+    for (const filePath of before.keys()) {
+      if (!after.has(filePath)) removedPaths.push(filePath);
+    }
+  }
   for (const [filePath, fingerprint] of after) {
     const prior = before.get(filePath);
     const isNew = !prior;
@@ -366,6 +432,7 @@ export function diffRunArtifacts(
     designSystemCreated,
     previewModuleCount,
     touchedPaths,
+    removedPaths,
     contentCreated,
     contentModified,
     contentTouched: contentCreated + contentModified,

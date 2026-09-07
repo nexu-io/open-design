@@ -113,7 +113,7 @@ export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
     const result = resultByToolId.get(ev.id);
     const status: FileOpStatus =
       result == null ? 'running' : result.isError ? 'error' : 'done';
-    if (ev.name === 'Bash') {
+    if (isCommandCapableToolUse(ev)) {
       for (const fullPath of extractSimpleBashDeletes(ev.input)) {
         add(fullPath, 'delete', status);
       }
@@ -129,23 +129,158 @@ export function deriveFileOps(events: AgentEvent[] | undefined): FileOpEntry[] {
   return Array.from(byPath.values());
 }
 
+type ToolUseEvent = Extract<AgentEvent, { kind: 'tool_use' }>;
+
+/**
+ * Tools that run an arbitrary shell command. Matched case-insensitively on the
+ * name: the daemon normalises codex `command_execution` to `Bash`, but
+ * OpenCode and the pi RPC runtime forward `part.tool` unchanged, so the same
+ * shell arrives as lowercase `bash`. Every site that reads a shell command —
+ * the files-this-turn summary, the mutation-attempt predicate, the failure
+ * guard, and deletion attribution — recognises tools through this one set, so
+ * a runtime cannot be supported by one and missed by another.
+ */
+const SHELL_TOOL_NAMES = new Set([
+  'bash',
+  'shell',
+  'exec',
+  'terminal',
+  'run_command',
+  'run_terminal_cmd',
+  'execute_command',
+  'local_shell',
+]);
+
+function isCommandCapableToolUse(ev: ToolUseEvent): boolean {
+  return SHELL_TOOL_NAMES.has(ev.name.toLowerCase());
+}
+
+/**
+ * A tool whose name declares that it writes, edits, or deletes a file. Names
+ * must stay aligned with the daemon's cross-runtime `WRITE_OR_EDIT_TOOL_NAMES`
+ * set in `apps/daemon/src/runtimes/run-artifacts.ts`.
+ */
+function isRecognisedFileMutationTool(name: string): boolean {
+  const kind = classify(name);
+  return kind === 'write' || kind === 'edit' || kind === 'delete';
+}
+
+/**
+ * A write/edit/delete tool call, or a simple Bash rm/unlink.
+ */
+function isFileMutationToolUse(ev: ToolUseEvent): boolean {
+  if (isCommandCapableToolUse(ev)) return extractSimpleBashDeletes(ev.input).length > 0;
+  return isRecognisedFileMutationTool(ev.name);
+}
+
 /**
  * True when the run attempted any file mutation (write/edit/delete tool call,
  * or a simple Bash rm/unlink), regardless of whether the attempt succeeded.
- * Tool names must stay aligned with the daemon's cross-runtime
- * `WRITE_OR_EDIT_TOOL_NAMES` set in `apps/daemon/src/runtimes/run-artifacts.ts`.
  */
 export function hasFileMutationToolUse(events: AgentEvent[] | undefined): boolean {
-  for (const ev of events ?? []) {
-    if (ev.kind !== 'tool_use') continue;
-    if (ev.name === 'Bash') {
-      if (extractSimpleBashDeletes(ev.input).length > 0) return true;
+  return (events ?? []).some((ev) => ev.kind === 'tool_use' && isFileMutationToolUse(ev));
+}
+
+/**
+ * Lexically resolve a tool-supplied path to its project-relative form, or null
+ * when it provably lies outside the project. Absolute paths are placed against
+ * `projectRoot`; `..` is resolved first, and a climb above its own anchor is
+ * rejected.
+ */
+function toProjectRelativePath(raw: string, projectRoot?: string | null): string | null {
+  const slashed = raw.replace(/\\/g, '/');
+  const isAbsolute = slashed.startsWith('/') || /^[A-Za-z]:\//.test(slashed);
+  const segments: string[] = [];
+  for (const segment of slashed.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (segments.length === 0) return null;
+      segments.pop();
       continue;
     }
-    const kind = classify(ev.name);
-    if (kind === 'write' || kind === 'edit' || kind === 'delete') return true;
+    segments.push(segment);
   }
-  return false;
+  if (segments.length === 0) return null;
+  if (!isAbsolute) return segments.join('/');
+  const rootSegments = projectRoot
+    ? projectRoot.replace(/\\/g, '/').split('/').filter((part) => part && part !== '.')
+    : null;
+  if (!rootSegments || rootSegments.length === 0) return null;
+  if (segments.length <= rootSegments.length) return null;
+  for (let i = 0; i < rootSegments.length; i += 1) {
+    if (segments[i] !== rootSegments[i]) return null;
+  }
+  return segments.slice(rootSegments.length).join('/');
+}
+
+/**
+ * Project-relative paths this run declared it was deleting, taken only from
+ * tools whose name says so and whose path arrives as a structured argument.
+ *
+ * A shell command is excluded on purpose, and that is the whole point of this
+ * predicate. Running a shell says the run *could* have deleted something, not
+ * that it did: `Bash { command: 'ls' }` is a shell call, and a user or sync
+ * client removing a file during that turn would otherwise be credited to it.
+ * A `delete_file({ path })` call carries the target itself, with no command
+ * text to parse and no question of whether a branch executed.
+ *
+ * The cost is that a deletion performed through the shell contributes nothing
+ * here, which includes the `cd … && rm …` form in the original report. Closing
+ * that needs run-scoped provenance at the mutation boundary; a before/after
+ * tree diff cannot supply it, because it spans the run's window rather than
+ * its actions.
+ */
+export function declaredDeletionTargets(
+  events: AgentEvent[] | undefined,
+  projectRoot?: string | null,
+): Set<string> {
+  const targets = new Set<string>();
+  for (const ev of dedupeToolUsesById(events)) {
+    if (ev.kind !== 'tool_use') continue;
+    if (classify(ev.name) !== 'delete') continue;
+    const raw = extractPath(ev.input);
+    if (!raw) continue;
+    const relative = toProjectRelativePath(raw, projectRoot);
+    if (relative) targets.add(relative);
+  }
+  return targets;
+}
+
+/**
+ * True when the run contains an errored tool call that could have left the
+ * project half-mutated.
+ *
+ * Deliberately wider than `hasFileMutationToolUse`. That predicate reads intent
+ * out of the event — a Bash `rm`, a `Write` call — which is enough to decide
+ * whether the turn *tried* to write. It is not enough to clear a turn whose
+ * delivery evidence came from the file system rather than from the event,
+ * because a shell deletes files without ever naming `rm`: `find … -delete`,
+ * `xargs rm`, or a cleanup script all qualify, and runtimes spell the shell
+ * tool `Bash`, `shell`, `exec`, or `terminal`. Parsing cannot keep up with
+ * that, so the rule inverts: an errored call blocks unless it is a recognised
+ * read.
+ *
+ * The widening stops at tools that could plausibly have done it: a shell call,
+ * or a tool whose name declares a write/edit/delete. A tool that only reads or
+ * reports — `Read`, `Grep`, `Glob`, `WebFetch`, `WebSearch`, `TodoWrite` —
+ * never blocks, because treating every errored call as suspect would undo the
+ * fix this guard protects: Design-mode discovery uses `WebFetch`, and a failed
+ * lookup next to a successful `rm` would restore the very ARTIFACT_NOT_FOUND
+ * card this change exists to remove.
+ */
+export function hasPossibleFileMutationFailure(events: AgentEvent[] | undefined): boolean {
+  if (!events || events.length === 0) return false;
+  const erroredToolUseIds = new Set<string>();
+  for (const ev of events) {
+    if (ev.kind === 'tool_result' && ev.isError) erroredToolUseIds.add(ev.toolUseId);
+  }
+  if (erroredToolUseIds.size === 0) return false;
+  return events.some(
+    (ev) =>
+      ev.kind === 'tool_use' &&
+      erroredToolUseIds.has(ev.id) &&
+      (isCommandCapableToolUse(ev) || isRecognisedFileMutationTool(ev.name)),
+  );
 }
 
 export type FileOpCounts = Record<FileOpKind, number>;
@@ -184,6 +319,35 @@ export function countArtifactFileOps(entries: FileOpEntry[]): ArtifactFileOpCoun
   return { write, edit };
 }
 
+/**
+ * `rm` and `unlink` only delete when they are the command being run. As an
+ * argument, printed text, or a redirection target — `grep rm stale.txt`,
+ * `echo rm stale.txt`, `echo > rm stale.txt` — the word deletes nothing, so a
+ * token scan would invent a deletion target the command never had.
+ *
+ * A command position is the start of the command line or the token right after
+ * an UNCONDITIONAL separator (`;`, `|`, `&`, or a newline). Redirection
+ * operators are not separators here — `>` starts a target belonging to the
+ * command already running — and neither are `&&` and `||`, because whether the
+ * command after them ran depends on an exit status the text does not carry.
+ */
+function isUnconditionalSeparator(token: string): boolean {
+  // `&&` and `||` are deliberately absent. Whether the command after them ran
+  // depends on the exit status of the one before, which the command text does
+  // not carry, so a deletion in a conditional branch cannot be shown to have
+  // executed: `true || rm stale.txt` succeeds without deleting anything.
+  return token === ';' || token === '|' || token === '&';
+}
+
+function isCommandPosition(tokens: string[], index: number): boolean {
+  if (index === 0) return true;
+  const previous = tokens[index - 1]!;
+  if (isUnconditionalSeparator(previous)) return true;
+  // `cmd > target rm x` — the token after a redirection operator is that
+  // operator's target, and anything past it still belongs to `cmd`.
+  return false;
+}
+
 function extractSimpleBashDeletes(input: unknown): string[] {
   if (!input || typeof input !== 'object') return [];
   const command = (input as { command?: unknown }).command;
@@ -193,6 +357,7 @@ function extractSimpleBashDeletes(input: unknown): string[] {
   for (let i = 0; i < tokens.length; i += 1) {
     const token = tokens[i];
     if (token !== 'rm' && token !== 'unlink') continue;
+    if (!isCommandPosition(tokens, i)) continue;
     const commandPaths: string[] = [];
     for (let j = i + 1; j < tokens.length; j += 1) {
       const next = tokens[j]!;
@@ -226,6 +391,27 @@ function shellWords(command: string): string[] {
       } else {
         current += char;
       }
+      continue;
+    }
+    // An unquoted `#` at the start of a word begins a comment that runs to the
+    // end of the line; nothing after it is an operand. A `#` inside a word is
+    // an ordinary filename character (`notes#1.txt`), so only a word-initial
+    // one counts.
+    if (char === '#' && current === '') {
+      const lineEnd = command.indexOf('\n', i);
+      if (lineEnd === -1) break;
+      // Stop one short of the newline so the branch below still emits the
+      // command boundary it carries; skipping past it would splice the next
+      // command onto this one's operands.
+      i = lineEnd - 1;
+      continue;
+    }
+    // A newline ends the command, exactly like `;`. Without this the operand
+    // scan runs past it and reads the next command and its arguments as more
+    // operands of this one.
+    if (char === '\n') {
+      flushCurrent();
+      words.push(';');
       continue;
     }
     if (char === '"' || char === "'") {

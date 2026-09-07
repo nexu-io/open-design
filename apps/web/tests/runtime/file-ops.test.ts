@@ -4,6 +4,8 @@ import {
   countArtifactFileOps,
   countFileOps,
   deriveFileOps,
+  hasFileMutationToolUse,
+  hasPossibleFileMutationFailure,
 } from '../../src/runtime/file-ops';
 import type { AgentEvent } from '../../src/types';
 
@@ -133,7 +135,7 @@ describe('deriveFileOps', () => {
     const events: AgentEvent[] = [
       use(
         'Bash',
-        { command: 'rm -f ./stale.txt "old file.md" *.log && unlink loose.tmp; echo done' },
+        { command: 'rm -f ./stale.txt "old file.md" *.log; unlink loose.tmp; echo done' },
         't1',
       ),
       ok('t1'),
@@ -146,6 +148,15 @@ describe('deriveFileOps', () => {
       'old file.md',
     ]);
     expect(rows.map((row) => row.ops)).toEqual([['delete'], ['delete'], ['delete']]);
+  });
+
+  it('does not infer a deletion from a conditional branch', () => {
+    // `&&` / `||` make execution depend on an exit status the command text
+    // does not carry, so a deletion behind one cannot be shown to have run.
+    // This case previously used `&& unlink loose.tmp` and expected the row.
+    for (const command of ['true || rm stale.txt', 'npm run build && rm stale.txt', 'ls && unlink loose.tmp']) {
+      expect(deriveFileOps([use('Bash', { command }, 't1'), ok('t1')])).toEqual([]);
+    }
   });
 
   it('stops Bash rm target inference at pipes and redirections', () => {
@@ -246,5 +257,170 @@ describe('countArtifactFileOps', () => {
     // The op-level counter is unchanged: a.ts (3) + b.ts (1) writes.
     expect(countFileOps(rows).write).toBe(4);
     expect(countFileOps(rows).edit).toBe(4);
+  });
+});
+
+describe('hasFileMutationToolUse', () => {
+  it('is true for write/edit/delete tools and simple Bash rm/unlink, whatever the result', () => {
+    expect(hasFileMutationToolUse([use('Write', { file_path: 'index.html' }, 't1')])).toBe(true);
+    expect(hasFileMutationToolUse([use('Edit', { file_path: 'index.html' }, 't1'), fail('t1')])).toBe(true);
+    expect(hasFileMutationToolUse([use('delete_file', { path: 'old.txt' }, 't1')])).toBe(true);
+    expect(hasFileMutationToolUse([use('Bash', { command: 'rm -f old.txt' }, 't1'), ok('t1')])).toBe(true);
+    expect(hasFileMutationToolUse([use('Bash', { command: 'unlink old.txt' }, 't1')])).toBe(true);
+  });
+
+  it('is false for reads, non-deleting Bash, and empty streams', () => {
+    expect(hasFileMutationToolUse(undefined)).toBe(false);
+    expect(hasFileMutationToolUse([])).toBe(false);
+    expect(hasFileMutationToolUse([use('Read', { file_path: 'index.html' }, 't1'), ok('t1')])).toBe(false);
+    expect(hasFileMutationToolUse([use('Bash', { command: 'ls -la' }, 't1'), ok('t1')])).toBe(false);
+  });
+});
+
+describe('hasPossibleFileMutationFailure', () => {
+  it('is false without events or when nothing errored', () => {
+    expect(hasPossibleFileMutationFailure(undefined)).toBe(false);
+    expect(hasPossibleFileMutationFailure([])).toBe(false);
+    expect(
+      hasPossibleFileMutationFailure([
+        use('Write', { file_path: 'index.html' }, 't1'),
+        ok('t1'),
+        use('Bash', { command: 'rm stale.txt' }, 't2'),
+        ok('t2'),
+      ]),
+    ).toBe(false);
+  });
+
+  it('flags an errored write/edit/delete tool call or Bash rm/unlink', () => {
+    expect(hasPossibleFileMutationFailure([use('Write', { file_path: 'a.html' }, 't1'), fail('t1')])).toBe(true);
+    expect(hasPossibleFileMutationFailure([use('Edit', { file_path: 'a.html' }, 't1'), fail('t1')])).toBe(true);
+    expect(hasPossibleFileMutationFailure([use('delete_file', { path: 'old.txt' }, 't1'), fail('t1')])).toBe(true);
+    expect(hasPossibleFileMutationFailure([use('Bash', { command: 'rm old.txt' }, 't1'), fail('t1')])).toBe(true);
+    // One failure among otherwise successful mutations is still a failure.
+    expect(
+      hasPossibleFileMutationFailure([
+        use('Bash', { command: 'rm stale.txt' }, 't1'),
+        ok('t1'),
+        use('Edit', { file_path: 'index.html' }, 't2'),
+        fail('t2'),
+      ]),
+    ).toBe(true);
+  });
+
+  it('flags an errored shell command that deletes without naming rm', () => {
+    // The whole point of the wider guard: a shell removes files through forms
+    // `extractSimpleBashDeletes` cannot read, and runtimes spell the shell
+    // tool several ways. An error from any of them may be a partial deletion.
+    for (const command of [
+      "find . -name '*.bak' -delete",
+      'git clean -fd',
+      "find . -name '*.tmp' | xargs rm",
+      './scripts/cleanup.sh',
+    ]) {
+      expect(hasPossibleFileMutationFailure([use('Bash', { command }, 't1'), fail('t1')])).toBe(true);
+    }
+    for (const shellTool of ['shell', 'exec', 'terminal', 'run_command']) {
+      expect(
+        hasPossibleFileMutationFailure([use(shellTool, { command: 'rm -rf build' }, 't1'), fail('t1')]),
+      ).toBe(true);
+    }
+  });
+
+  it('does not flag an errored read-only or reporting tool', () => {
+    // Second review finding. A catch-all on "anything that is not a read"
+    // swept up the discovery tools Design mode actually uses, so a failed
+    // WebFetch next to a successful `rm` restored the ARTIFACT_NOT_FOUND card
+    // this change exists to remove. Only shell calls and tools that name a
+    // write/edit/delete can plausibly have mutated files.
+    for (const toolName of [
+      'Read',
+      'read_file',
+      'Grep',
+      'Glob',
+      'WebFetch',
+      'WebSearch',
+      'TodoWrite',
+      'mcp__notion__search',
+    ]) {
+      expect(hasPossibleFileMutationFailure([use(toolName, {}, 't1'), fail('t1')])).toBe(false);
+    }
+  });
+
+  it('matches shell tool names case-insensitively', () => {
+    // The daemon normalises codex `command_execution` to `Bash`; other
+    // runtimes forward their own spelling.
+    for (const toolName of ['bash', 'BASH', 'Shell', 'SHELL', 'Terminal', 'local_shell']) {
+      expect(
+        hasPossibleFileMutationFailure([use(toolName, { command: 'cleanup' }, 't1'), fail('t1')]),
+      ).toBe(true);
+    }
+  });
+
+  it('treats a call without a tool_result as not failed', () => {
+    expect(hasPossibleFileMutationFailure([use('Write', { file_path: 'a.html' }, 't1')])).toBe(false);
+    expect(hasPossibleFileMutationFailure([use('Bash', { command: 'rm a.txt' }, 't1'), fail('t2')])).toBe(false);
+  });
+});
+
+describe('extractSimpleBashDeletes command position (via deriveFileOps)', () => {
+  it('ignores rm/unlink used as an argument or printed text', () => {
+    for (const command of ['grep rm stale.txt', 'echo rm stale.txt', 'echo unlink loose.tmp']) {
+      expect(deriveFileOps([use('Bash', { command }, 't1'), ok('t1')])).toEqual([]);
+    }
+  });
+
+  it('ends the operand scan at a newline', () => {
+    expect(
+      deriveFileOps([use('Bash', { command: 'rm -f missing.txt\nprintf stale.txt' }, 't1'), ok('t1')])
+        .map((e) => e.fullPath),
+    ).toEqual(['missing.txt']);
+    expect(
+      deriveFileOps([use('Bash', { command: 'rm -f missing.txt # c\nprintf stale.txt' }, 't1'), ok('t1')])
+        .map((e) => e.fullPath),
+    ).toEqual(['missing.txt']);
+    expect(
+      deriveFileOps([use('Bash', { command: 'rm a.txt\nrm b.txt' }, 't1'), ok('t1')])
+        .map((e) => e.fullPath),
+    ).toEqual(['a.txt', 'b.txt']);
+  });
+
+  it('does not treat a redirection target as a command position', () => {
+    // `echo > rm stale.txt` writes into a file named `rm`. The `>` belongs to
+    // `echo`, so nothing after it starts a new command.
+    for (const command of ['echo > rm stale.txt', 'cat in.txt > rm stale.txt', 'echo 2> unlink loose.tmp']) {
+      expect(deriveFileOps([use('Bash', { command }, 't1'), ok('t1')])).toEqual([]);
+    }
+  });
+
+  it('still reads rm/unlink in command position, after an unconditional separator', () => {
+    expect(
+      deriveFileOps([use('Bash', { command: 'npm run build; rm stale.txt' }, 't1'), ok('t1')])
+        .map((e) => e.fullPath),
+    ).toEqual(['stale.txt']);
+    expect(
+      deriveFileOps([use('Bash', { command: 'rm a.txt; unlink b.tmp' }, 't1'), ok('t1')])
+        .map((e) => e.fullPath),
+    ).toEqual(['a.txt', 'b.tmp']);
+  });
+});
+
+describe('shell tool recognition across runtimes', () => {
+  it('reads a deletion from every runtime spelling in deriveFileOps', () => {
+    // OpenCode and the pi RPC runtime forward `part.tool` unchanged, so the
+    // shell arrives as lowercase `bash`; an exact-name check dropped the
+    // files-this-turn delete row for those runtimes.
+    for (const toolName of ['Bash', 'bash', 'BASH', 'shell', 'exec', 'terminal', 'local_shell']) {
+      const ops = deriveFileOps([use(toolName, { command: 'rm stale.txt' }, 't1'), ok('t1')]);
+      expect(ops.map((e) => e.fullPath)).toEqual(['stale.txt']);
+      expect(ops[0]!.ops).toEqual(['delete']);
+      expect(ops[0]!.status).toBe('done');
+    }
+  });
+
+  it('recognises them in the mutation-attempt and attribution predicates too', () => {
+    for (const toolName of ['bash', 'shell', 'terminal']) {
+      const events = [use(toolName, { command: 'rm stale.txt' }, 't1'), ok('t1')];
+      expect(hasFileMutationToolUse(events)).toBe(true);
+    }
   });
 });

@@ -754,6 +754,14 @@ export interface ChatRunStatusResponse {
    *  this run. Unlike a before/after browser snapshot, this includes edits to
    *  existing files and excludes untouched reference inputs. */
   artifactPaths?: string[];
+  /** Authoritative project-relative files this run removed from the project,
+   *  observed by the daemon as the difference between its own before/after
+   *  snapshots of the project tree. A deletion produces no artifact, so it is
+   *  absent from every count above, yet a turn whose only work was removing
+   *  stale files did deliver (#7744). Clients must not infer this from tool
+   *  events: a shell removes files through forms the command text cannot be
+   *  parsed for, and the text never says whether the command ran. */
+  removedPaths?: string[];
   /** Filesystem-backed validation of the one canonical artifact entry this
    *  run can deliver. Present for terminal runs when the daemon can inspect
    *  the project; callers must not infer validity from artifactCount alone. */
