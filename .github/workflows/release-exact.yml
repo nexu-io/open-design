@@ -130,12 +130,16 @@ jobs:
           STABLE_AUTHORIZED: ${{ inputs.stable_authorized || false }}
         run: |
           set -euo pipefail
-          node -e 'const fs=require("node:fs"); const [file,profile,channel,releaseVersion,sourceCommit,sourceRef,endUserDistribution,stableAuthorized,endpointUrl,bucket,publicBaseUrl]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.policy.resolve",profile,channel,releaseVersion,sourceCommit,sourceRef,switches:{endUserDistribution:endUserDistribution==="true",stableAuthorized:stableAuthorized==="true"},target:{endpointUrl,bucket,publicBaseUrl,latestChannelHeadUrl:endpointUrl+"/"+bucket+"/"+channel+"/latest/channel-head.json"}})+"\n")' "$RUNNER_TEMP/exact-plan/release-policy-request.json" "$PROFILE" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA" "$SOURCE_REF" "$END_USER_DISTRIBUTION" "$STABLE_AUTHORIZED" "$STORAGE_ENDPOINT" "$STORAGE_BUCKET" "$PUBLIC_ORIGIN"
-          node tools/release/bin/tools-release.mjs release-policy \
-            --request "$RUNNER_TEMP/exact-plan/release-policy-request.json" \
+          node tools/release/dist/exact-control.mjs policy resolve \
+            --profile "$PROFILE" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_SHA" --source-ref "$SOURCE_REF" \
+            --endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN" \
+            --end-user-distribution "$END_USER_DISTRIBUTION" --stable-authorized "$STABLE_AUTHORIZED" \
             --receipt "$RUNNER_TEMP/exact-plan/release-policy.json"
-          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"plan",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/exact-plan/plan-authorization-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/exact-plan/plan-authorization-request.json" --receipt "$RUNNER_TEMP/exact-plan/plan-authorization.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --capability plan \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/plan-authorization.json"
 
       - name: Resolve canonical Electron release plans
         env:
@@ -225,6 +229,15 @@ jobs:
           ref: ${{ inputs.source_sha }}
           persist-credentials: false
 
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
       - name: Restore converged scene
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
@@ -245,7 +258,7 @@ jobs:
           urllib.request.urlretrieve(product["source"], archive)
           if hashlib.sha256(archive.read_bytes()).hexdigest() != product["data"]["sha256"]:
               raise SystemExit("converged scene product digest mismatch")
-          destination = root / "exact-scene"
+          destination = root / "exact-scene-artifact"
           destination.mkdir(parents=True)
           with zipfile.ZipFile(archive) as source:
               for entry in source.infolist():
@@ -254,6 +267,8 @@ jobs:
                       raise SystemExit(f"unsafe converged scene entry: {entry.filename!r}")
               source.extractall(destination)
           PY
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene unpack \
+            --archive "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
 
       - uses: pnpm/action-setup@v5
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -378,10 +393,17 @@ jobs:
               (destination / "product-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
           PY
 
+      - name: Pack scene transport
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene pack \
+            --scene "$RUNNER_TEMP/exact-scene" --output "$RUNNER_TEMP/exact-scene-artifact/scene.tar"
+
       - uses: actions/upload-artifact@v4
         with:
           name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-scene
+          path: ${{ runner.temp }}/exact-scene-artifact/scene.tar
           if-no-files-found: error
           retention-days: 1
 
@@ -425,8 +447,10 @@ jobs:
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"prepare",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/prepare-authorization-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/prepare-authorization-request.json" --receipt "$RUNNER_TEMP/prepare-authorization.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --capability prepare \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/prepare-authorization.json"
 
       - name: Read previous content floor when available
         env:
@@ -470,6 +494,8 @@ jobs:
           for item in topology:
               shell_type, target = item["shell"], item["target"]
               directory = root / "scenes" / f"exact-{shell_type}-scene-{target}-{os.environ['SOURCE_SHA']}"
+              subprocess.run(["node", str(root / "exact-plan" / "exact-release-control.mjs"), "scene", "unpack", "--archive", str(directory / "scene.tar"), "--output", str(directory / "scene")], check=True)
+              directory = directory / "scene"
               manifest = directory / "scene.json"
               scene = json.loads(manifest.read_text())
               record = shell_records.setdefault(shell_type, {"type": shell_type, "version": scene["shellVersion"], "scenes": []})
@@ -527,7 +553,7 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/scene
+          path: ${{ runner.temp }}/scene-artifact
 
       - uses: actions/download-artifact@v8
         with:
@@ -545,10 +571,14 @@ jobs:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
-        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
         with:
           node-version: 24.18.0
-          cache: pnpm
+
+      - name: Restore distribution scene
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene unpack \
+            --archive "$RUNNER_TEMP/scene-artifact/scene.tar" --output "$RUNNER_TEMP/scene"
 
       - name: Prepare Electron distribution toolchain
         if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
@@ -617,8 +647,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node -e 'const fs=require("node:fs"); const [file,policyReceipt,releasePlan,root,channel,releaseVersion,sourceCommit,target]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"exact.baseline.stage",policyReceipt,releasePlan,registry:root+"/tools/release/resources/exact-plan-identities.json",root,channel,releaseVersion,sourceCommit,target,outputDirectory:process.env.RUNNER_TEMP+"/distribution"})+"\n")' "$RUNNER_TEMP/baseline-stage-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" "$GITHUB_WORKSPACE" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA" "$TARGET"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/baseline-stage-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" baseline stage \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --root "$GITHUB_WORKSPACE" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_SHA" --target "$TARGET" --output "$RUNNER_TEMP/distribution" \
+            --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -664,8 +697,10 @@ jobs:
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"finalize",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/finalize-authorization-request.json" "$RUNNER_TEMP/exact-plan/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/finalize-authorization-request.json" --receipt "$RUNNER_TEMP/finalize-authorization.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --capability finalize \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/finalize-authorization.json"
 
       - name: Finalize signed Shell sidecar and channel head
         env:
@@ -712,14 +747,10 @@ jobs:
           STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          request = {"schemaVersion": 1, "operation": "exact.publish", "packReceipt": str(root / "exact-final" / "pack-receipt.json"), "policyReceipt": str(root / "exact-plan" / "release-policy.json"), "endpointUrl": os.environ["STORAGE_ENDPOINT"], "bucket": os.environ["STORAGE_BUCKET"], "publicBaseUrl": os.environ["PUBLIC_ORIGIN"]}
-          (root / "exact-publish-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" --request "$RUNNER_TEMP/exact-publish-request.json" --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" publish \
+            --pack-receipt "$RUNNER_TEMP/exact-final/pack-receipt.json" --policy "$RUNNER_TEMP/exact-plan/release-policy.json" \
+            --endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN" \
+            --receipt "$RUNNER_TEMP/exact-final/publish-receipt.json"
           cp "$RUNNER_TEMP/exact-plan/release-policy.json" "$RUNNER_TEMP/exact-final/release-policy.json"
           cp "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" "$RUNNER_TEMP/exact-final/exact-release-control.mjs"
 
@@ -768,7 +799,6 @@ jobs:
             ${{ runner.temp }}/exact-final/*.json
             ${{ runner.temp }}/exact-final/documents/*.json
             ${{ runner.temp }}/exact-finalize-request.json
-            ${{ runner.temp }}/exact-publish-request.json
           if-no-files-found: error
           retention-days: 30
 
@@ -802,8 +832,10 @@ jobs:
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
-          node -e 'const fs=require("node:fs"); const [file,policyReceipt,channel,releaseVersion,sourceCommit]=process.argv.slice(1); fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"release.authorize",policyReceipt,capability:"acceptance",channel,releaseVersion,sourceCommit})+"\n")' "$RUNNER_TEMP/acceptance-authorization-request.json" "$RUNNER_TEMP/published/release-policy.json" "$CHANNEL" "$RELEASE_VERSION" "$SOURCE_SHA"
-          node "$RUNNER_TEMP/published/exact-release-control.mjs" --request "$RUNNER_TEMP/acceptance-authorization-request.json" --receipt "$RUNNER_TEMP/acceptance-authorization.json"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" policy authorize \
+            --policy "$RUNNER_TEMP/published/release-policy.json" --capability acceptance \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --receipt "$RUNNER_TEMP/acceptance-authorization.json"
 
       - name: Download accepted public artifact
         env:
@@ -1008,43 +1040,21 @@ jobs:
           OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          receipt = json.loads((root / "published" / "publish-receipt.json").read_text())
-          receipt["channelHead"]["file"] = str(root / "published" / "documents" / "channel-head.json")
-          relocated = root / "published" / "relocated-publish-receipt.json"
-          relocated.write_text(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
-          credentials = sorted(str(path) for path in (root / "acceptances").glob("*.json"))
-          request = {"schemaVersion": 1, "operation": "exact.activate", "publishReceipt": str(relocated), "policyReceipt": str(root / "published" / "release-policy.json"), "acceptanceCredentials": credentials}
-          (root / "activate-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-          node "$RUNNER_TEMP/published/exact-release-control.mjs" --request "$RUNNER_TEMP/activate-request.json" --receipt "$RUNNER_TEMP/activate-receipt.json"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" activate \
+            --publish-receipt "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --channel-head "$RUNNER_TEMP/published/documents/channel-head.json" --acceptances "$RUNNER_TEMP/acceptances" \
+            --receipt "$RUNNER_TEMP/activate-receipt.json"
 
       - name: Promote accepted Electron baseline snapshot
         env:
           OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          electron = root / "acceptances" / "electron-darwin-arm64.json"
-          request = {
-              "schemaVersion": 1,
-              "operation": "exact.baseline.promote",
-              "publishReceipt": str(root / "published" / "relocated-publish-receipt.json"),
-              "activationReceipt": str(root / "activate-receipt.json"),
-              "policyReceipt": str(root / "published" / "release-policy.json"),
-              "acceptanceCredential": str(electron),
-              "registry": str(Path(os.environ["GITHUB_WORKSPACE"]) / "tools/release/resources/exact-plan-identities.json"),
-              "root": os.environ["GITHUB_WORKSPACE"],
-          }
-          (root / "baseline-promote-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-          node "$RUNNER_TEMP/published/exact-release-control.mjs" --request "$RUNNER_TEMP/baseline-promote-request.json" --receipt "$RUNNER_TEMP/baseline-promote-receipt.json"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" baseline promote \
+            --publish-receipt "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --channel-head "$RUNNER_TEMP/published/documents/channel-head.json" --activation-receipt "$RUNNER_TEMP/activate-receipt.json" \
+            --acceptance "$RUNNER_TEMP/acceptances/electron-darwin-arm64.json" --root "$GITHUB_WORKSPACE" \
+            --receipt "$RUNNER_TEMP/baseline-promote-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:

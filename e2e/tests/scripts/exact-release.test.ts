@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +14,30 @@ const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("preserves native scene inputs through the actual convergence ZIP normalizer", async () => {
+    const root = await mkdtemp(join(tmpdir(), "exact-scene-transport-")); roots.push(root);
+    const scene = join(root, "source"); await mkdir(join(scene, "platform"), { recursive: true });
+    await writeFile(join(scene, "scene.json"), "{}");
+    await writeFile(join(scene, "platform", ".lock"), "locked");
+    await writeFile(join(scene, "platform", "node"), "native");
+    await chmod(join(scene, "platform", "node"), 0o755);
+    const cli = resolve(workspaceRoot, "tools/release/dist/exact-control.mjs");
+    await run(process.execPath, [cli, "scene", "pack", "--scene", scene, "--output", join(root, "scene.tar")]);
+    await run("python3", ["-c", [
+      "import sys, zipfile",
+      "from pathlib import Path",
+      "sys.path.insert(0, sys.argv[1])",
+      "from convergence import normalize_product_archive",
+      "root = Path(sys.argv[2])",
+      "with zipfile.ZipFile(root / 'github.zip', 'w') as archive: archive.write(root / 'scene.tar', 'scene.tar')",
+      "normalize_product_archive(root / 'github.zip', root / 'r2.zip')",
+      "with zipfile.ZipFile(root / 'r2.zip') as archive: archive.extractall(root / 'download')",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), root]);
+    expect(await readFile(join(root, "download", "scene.tar"))).toEqual(await readFile(join(root, "scene.tar")));
+    await run(process.execPath, [cli, "scene", "unpack", "--archive", join(root, "download", "scene.tar"), "--output", join(root, "restored")]);
+    expect(await readFile(join(root, "restored/platform/.lock"), "utf8")).toBe("locked");
+    if (process.platform !== "win32") expect((await stat(join(root, "restored/platform/node"))).mode & 0o777).toBe(0o755);
+  });
   it("cold-restarts after CDP hot update and delegates acceptance checks to tools-release", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const hot = workflow.split("- name: Exercise accepted macOS Shell through CDP hot update")[1]?.split("- name: Install and exercise Windows Electron Shell")[0];
@@ -31,7 +55,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain('[[ "$SOURCE_REF" =~');
     expect(workflow).toContain('test "$(git rev-parse HEAD)" = "$SOURCE_SHA"');
     expect(workflow).toContain('git ls-remote --refs origin "$SOURCE_REF"');
-    expect(workflow).toContain("tools-release.mjs release-policy");
+    expect(workflow).toContain("exact-control.mjs policy resolve");
   });
 
   it("runs the current release matrix on macOS while retaining the deferred Windows declaration", async () => {
@@ -60,20 +84,34 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-pack-control.mjs');
     expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-release-control.mjs');
     expect(workflow).toContain("PROFILE: ${{ inputs.profile || 'exact-validation' }}");
-    expect(workflow).toContain('target:{endpointUrl,bucket,publicBaseUrl,latestChannelHeadUrl:endpointUrl+"/"+bucket+"/"+channel+"/latest/channel-head.json"}');
+    expect(workflow).toContain('--endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN"');
     for (const capability of ["plan", "prepare", "finalize", "acceptance"]) {
-      expect(workflow).toContain(`capability:"${capability}"`);
+      expect(workflow).toContain(`--capability ${capability}`);
     }
     expect(workflow).toContain("Install and exercise macOS Electron Shell");
     expect(workflow).toContain("Install and exercise Windows Electron Shell");
     expect(convergence.workflows["release-exact"]).toMatchObject({
-      policy: "shell-scenes-v2",
+      policy: "shell-scenes-v3",
       workloads: {
         terminal_scene_darwin_arm64: { reusable: true },
         electron_scene_darwin_arm64: { runnerClass: "electron_darwin_arm64", reusable: true },
         electron_scene_win32_x64: { runnerClass: "electron_win32_x64", reusable: false },
       },
     });
+  });
+
+  it("transports scenes opaquely and restores the plan before reading a cache hit", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
+    expect(scene.indexOf("path: ${{ runner.temp }}/exact-plan")).toBeLessThan(scene.indexOf("- name: Restore converged scene"));
+    expect(scene).toContain("path: ${{ runner.temp }}/exact-scene-artifact/scene.tar");
+    expect(scene).toContain("exact-release-control.mjs\" scene pack");
+    expect(scene).toContain("exact-release-control.mjs\" scene unpack");
+    expect(scene).not.toContain('operation:"exact.scene.');
+    expect(workflow).not.toContain('operation:"release.authorize"');
+    expect(workflow).not.toContain('operation:"release.policy.resolve"');
+    const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
+    expect(config.suites["convergence-control"]).toContain("tools/release/src/exact/scene-artifact.ts");
   });
 
   it("checks release-neutral scenes by owned fields rather than coincidental version values", async () => {
@@ -106,9 +144,13 @@ describe("exact Electron release topology", () => {
 
     expect(workflow).toContain('"operation": "exact.prepare"');
     expect(workflow).toContain('"operation": "exact.finalize"');
-    expect(workflow).toContain('"operation": "exact.publish"');
-    expect(workflow).toContain('"operation": "exact.activate"');
-    expect(workflow).toContain('"operation": "exact.baseline.promote"');
+    for (const command of ["publish", "activate", "baseline promote", "baseline stage"]) {
+      expect(workflow).toContain(`exact-release-control.mjs" ${command}`);
+    }
+    expect(workflow).not.toContain("relocated-publish-receipt.json");
+    expect(workflow).not.toContain('"operation": "exact.publish"');
+    expect(workflow).not.toContain('"operation": "exact.activate"');
+    expect(workflow).not.toContain('"operation": "exact.baseline.promote"');
     expect(workflow).not.toContain(".github/scripts/pack.py");
     expect(workflow).not.toContain(".github/scripts/release.py");
     expect(workflow).not.toContain("installed_acceptance.py");

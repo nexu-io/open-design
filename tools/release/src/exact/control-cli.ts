@@ -1,4 +1,6 @@
 import { resolve } from "node:path";
+import { cac } from "cac";
+import { registerExactCommands } from "./commands.ts";
 
 import { readObject } from "./control-common.ts";
 import { executeExactReleaseControl, selfCheckExactReleaseControl } from "./control-release.ts";
@@ -10,7 +12,12 @@ function argument(name: string): string {
   return resolve(value);
 }
 
-if (process.argv.includes("--self-check")) selfCheckExactReleaseControl();
+if (!process.argv.includes("--request") && !process.argv.includes("--self-check")) {
+  const cli = cac("tools-release");
+  registerExactCommands(cli);
+  cli.help();
+  cli.parse();
+} else if (process.argv.includes("--self-check")) selfCheckExactReleaseControl();
 else {
   const request = await readObject(argument("--request"));
   const receipt = argument("--receipt");

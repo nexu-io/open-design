@@ -42,6 +42,25 @@ use `resources/channel-versions.json` as the channel-owned base-version
 registry. They do not build or validate Electron artifacts and cannot serve as
 an acceptance path.
 
+The workspace CLI and the relocatable `dist/exact-control.mjs` share the
+`scene pack|unpack`, `policy resolve|authorize`, `publish`, `activate`, and
+`baseline stage|promote` commands. Use explicit flags and consume their receipts;
+workflows must not construct transient JSON requests for these operations.
+The relocatable build runs with Node 24 without a workspace install. Credentials
+remain environment inputs, never command-line arguments or receipt fields.
+
+Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
+artifact / convergence ZIP. It preserves native executable permissions,
+read-only files and hidden inputs, while convergence retains ownership of
+immutable R2 cache publication. Unpack only creates a new scene directory and
+rejects links and unsafe paths; it does not repair installed applications or
+replace the consumer's full scene verification. The cache policy is versioned
+to miss older, lossy directory artifacts without deleting them.
+
+`activate` and `baseline promote` accept `--channel-head` for a relocated local
+file. Its bytes must match the original publication receipt: relocation never
+rewrites that receipt or changes its authority.
+
 ```sh
 pnpm --filter @open-design/tools-release typecheck
 pnpm --filter @open-design/tools-release build

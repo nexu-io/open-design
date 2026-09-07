@@ -896,6 +896,9 @@ importers:
       sharp:
         specifier: 0.35.3
         version: 0.35.3(@types/node@24.12.2)
+      tar:
+        specifier: 7.5.22
+        version: 7.5.22
       yaml:
         specifier: 2.9.0
         version: 2.9.0

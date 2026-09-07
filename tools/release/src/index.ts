@@ -1,6 +1,8 @@
 import { cac } from "cac";
+import { registerExactCommands } from "./exact/commands.ts";
 
 const cli = cac("tools-release");
+registerExactCommands(cli);
 
 cli
   .command("electron-scene", "Build a release-neutral Electron scene")

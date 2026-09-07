@@ -18,6 +18,7 @@
     "@open-design/shell-electron": "workspace:*",
     "cac": "6.7.14",
     "sharp": "0.35.3",
+    "tar": "7.5.22",
     "yaml": "2.9.0"
   },
   "devDependencies": {

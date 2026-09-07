@@ -99,7 +99,7 @@ export function validateReleaseArtifactTrust(policy: ReleasePolicyReceipt, accep
   }
 }
 
-async function publish(input: JsonObject, receiptPath: string): Promise<void> {
+export async function publishExactRelease(input: JsonObject, receiptPath: string): Promise<void> {
   const pack = await readObject(String(input.packReceipt ?? ""));
   if (pack.schemaVersion !== 2 || pack.operation !== "exact.pack") throw new Error("invalid exact pack receipt");
   const channel = String(pack.channel ?? ""), version = String(pack.releaseVersion ?? "");
@@ -180,7 +180,7 @@ async function validatedElectronAcceptance(published: JsonObject, path: unknown)
   return credential;
 }
 
-async function stageAcceptedElectronContribution(input: JsonObject, receiptPath: string): Promise<void> {
+export async function stageAcceptedElectronContribution(input: JsonObject, receiptPath: string): Promise<void> {
   const channel = String(input.channel ?? ""), releaseVersion = String(input.releaseVersion ?? ""), sourceCommit = String(input.sourceCommit ?? "");
   const policy = await readReleasePolicyReceipt(input.policyReceipt, { capability: "reuse", channel, releaseVersion, sourceCommit });
   const releasePlan = await readObject(String(input.releasePlan ?? ""));
@@ -233,7 +233,7 @@ async function stageAcceptedElectronContribution(input: JsonObject, receiptPath:
   });
 }
 
-async function activate(input: JsonObject, receiptPath: string): Promise<void> {
+export async function activateExactRelease(input: JsonObject, receiptPath: string): Promise<void> {
   const published = await readObject(String(input.publishReceipt ?? ""));
   if (published.schemaVersion !== 1 || published.operation !== "exact.publish") throw new Error("invalid exact.publish receipt");
   const policy = await readReleasePolicyReceipt(input.policyReceipt, {
@@ -248,7 +248,7 @@ async function activate(input: JsonObject, receiptPath: string): Promise<void> {
     throw new Error("published release target binding mismatch");
   }
   await validateAcceptances(published, input.acceptanceCredentials);
-  const headPath = await checkedFile(published.channelHead, "published channel head"), headBody = await readFile(headPath);
+  const headPath = await checkedFile(published.channelHead, "published channel head", input.channelHeadFile), headBody = await readFile(headPath);
   const incomingHead = JSON.parse(headBody.toString()).head as JsonObject, channel = String(published.channel);
   const latestUrl = policy.target.latestChannelHeadUrl;
   const current = await request(latestUrl);
@@ -273,7 +273,7 @@ async function activate(input: JsonObject, receiptPath: string): Promise<void> {
   await writeObject(receiptPath, { schemaVersion: 1, operation: "exact.activate", profile: policy.profile, channel, releaseVersion: published.releaseVersion, sourceCommit: published.sourceCommit, latestChannelHeadUrl: latestUrl, latestChannelHeadEtag: latestEtag, replayed });
 }
 
-async function promoteAcceptedElectronBaseline(input: JsonObject, receiptPath: string): Promise<void> {
+export async function promoteAcceptedElectronBaseline(input: JsonObject, receiptPath: string): Promise<void> {
   const published = await readObject(String(input.publishReceipt ?? ""));
   const activation = await readObject(String(input.activationReceipt ?? ""));
   if (published.schemaVersion !== 1 || published.operation !== "exact.publish"
@@ -286,7 +286,7 @@ async function promoteAcceptedElectronBaseline(input: JsonObject, receiptPath: s
     if (activation[field] !== published[field]) throw new Error(`accepted baseline activation ${field} binding mismatch`);
   }
   if (activation.latestChannelHeadUrl !== policy.target.latestChannelHeadUrl) throw new Error("accepted baseline activation target binding mismatch");
-  const channelHeadPath = await checkedFile(published.channelHead, "accepted baseline channel head"), channelHeadBody = await readFile(channelHeadPath);
+  const channelHeadPath = await checkedFile(published.channelHead, "accepted baseline channel head", input.channelHeadFile), channelHeadBody = await readFile(channelHeadPath);
   const activeHead = await request(policy.target.latestChannelHeadUrl);
   if (!activeHead.ok || !Buffer.from(await activeHead.arrayBuffer()).equals(channelHeadBody)) throw new Error("accepted baseline requires the exact active channel head");
 
@@ -377,8 +377,8 @@ export async function executeExactReleaseControl(requestValue: JsonObject, recei
     validateReleaseArtifactTrust(policy, [credential]);
     return await writeObject(receiptPath, credential);
   }
-  if (requestValue.operation === "exact.publish") return await publish(requestValue, receiptPath);
-  if (requestValue.operation === "exact.activate") return await activate(requestValue, receiptPath);
+  if (requestValue.operation === "exact.publish") return await publishExactRelease(requestValue, receiptPath);
+  if (requestValue.operation === "exact.activate") return await activateExactRelease(requestValue, receiptPath);
   if (requestValue.operation === "exact.baseline.promote") return await promoteAcceptedElectronBaseline(requestValue, receiptPath);
   if (requestValue.operation === "exact.baseline.stage") return await stageAcceptedElectronContribution(requestValue, receiptPath);
   throw new Error("unsupported exact release operation");

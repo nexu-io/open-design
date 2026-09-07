@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { cac } from "cac";
+import { registerExactCommands } from "../src/exact/commands.ts";
 
 import { executeExactReleaseControl } from "../src/exact/control-release.js";
 import { createExactPlanFromRegistryFile } from "../src/exact/plan.js";
@@ -124,7 +126,17 @@ describe("accepted Electron baseline promotion", () => {
       registry: input.registry, root: input.repository,
     };
     const receiptPath = join(input.root, "promotion.json");
-    await executeExactReleaseControl(request, receiptPath);
+    const originalPublication = await readFile(input.publishReceipt);
+    const relocatedHead = join(input.root, "relocated-head.json");
+    await writeFile(relocatedHead, "tampered");
+    await expect(executeExactReleaseControl({ ...request, channelHeadFile: relocatedHead }, receiptPath)).rejects.toThrow("binding verification failed");
+    await writeFile(relocatedHead, input.channelHeadBody);
+    const cli = cac("tools-release"); registerExactCommands(cli);
+    cli.parse(["node", "tools-release", "baseline", "promote", "--publish-receipt", input.publishReceipt,
+      "--activation-receipt", input.activationReceipt, "--policy", input.policyReceipt, "--acceptance", input.acceptanceCredential,
+      "--channel-head", relocatedHead, "--root", input.repository, "--registry", input.registry, "--receipt", receiptPath], { run: false });
+    await cli.runMatchedCommand();
+    expect(await readFile(input.publishReceipt)).toEqual(originalPublication);
     const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
     expect(receipt).toMatchObject({ operation: "exact.baseline.promote", target: "darwin-arm64", snapshot: { replayed: false }, pointer: { replayed: false } });
     expect(receipt.acceptedIdentities).toHaveLength(8);
