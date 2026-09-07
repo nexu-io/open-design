@@ -111,6 +111,14 @@ const CORPUS: Record<string, string> = {
   'an upper-cased tag': `<QUESTION-FORM>${BODY}</QUESTION-FORM>`,
   'a fenced JSON body': `<question-form>\n\`\`\`json\n${BODY}\n\`\`\`\n</question-form>`,
   'a bare top-level questions array': '<question-form>[{"id":"surface","label":"Which?"}]</question-form>',
+  'a legacy child-tag form from persisted history': [
+    '<question-form id="audio" title="Audio brief">',
+    '<question-select id="format" label="Format"><option value="mp3">MP3</option></question-select>',
+    '<question-text id="mood" label="Mood" />',
+    '</question-form>',
+  ].join(''),
+  'malformed legacy child markup':
+    '<question-form><question-select id="format"><option>MP3</question-select></question-form>',
   'an empty questions array': '<question-form>{"questions":[]}</question-form>',
   'questions holding no objects': '<question-form>{"questions":["surface"]}</question-form>',
   'prose where the body should be': '<question-form>无需提出</question-form>',

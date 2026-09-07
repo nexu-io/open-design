@@ -31,7 +31,28 @@ export async function ensureRailOpen(page: Page): Promise<void> {
       }
     }
     await expect(toggle).toBeVisible();
-    await toggle.click();
+    // Bounded on purpose. This config sets no `actionTimeout`, so a bare
+    // `click()` inherits Playwright's default of 0 — no limit — and an
+    // unclickable toggle does not reject, it hangs until the whole test's
+    // budget runs out. Callers that wrap this helper in `.catch(() => {})`
+    // (`openNewProjectModal` below: "never allowed to fail the flow") can only
+    // swallow a rejection, so without a bound their opt-out silently becomes
+    // the opposite — the flow dies rather than skipping the rail. That is not
+    // hypothetical: 8d0b542d0a raised `.backdrop` to `z-index: 1500` over the
+    // `z-index: 120` tabs bar, the hit-target check stopped passing, and a UI
+    // P0 burned ~120s before failing on the NEXT action (`page.goto`), naming
+    // the wrong culprit.
+    //
+    // `T.short` (3s local / 6s CI) rather than a longer tier: visibility was
+    // just asserted above, so all that remains is Playwright's stability /
+    // hit-target / enabled polling, and this repo's UI transitions budget
+    // ~200ms (root AGENTS.md) — 3s is an order of magnitude of headroom, and
+    // `T` already doubles it on CI for slower machines. Longer would not fit:
+    // `test:ui:extended` runs rail consumers under `OD_PLAYWRIGHT_TIMEOUT=10000`,
+    // where a 10s+ bound is no bound at all. A bound can only turn an
+    // unbounded hang into a fast, attributable failure; it cannot fail a click
+    // that would have landed inside it.
+    await toggle.click({ timeout: T.short });
   }
   await expect(page.locator('.entry')).toHaveClass(/entry--rail-open/);
   await expect(page.locator('.entry-nav-rail')).not.toHaveAttribute('aria-hidden', 'true');

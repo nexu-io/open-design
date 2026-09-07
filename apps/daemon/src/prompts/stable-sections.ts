@@ -85,6 +85,11 @@ const SECTION_INPUTS = {
   mcp: ['connectedExternalMcp'],
   runtime: [
     'agentId',
+    // Derived from `agentId` + `streamFormat`, so it can never move on its own
+    // — but it IS a composer argument name, and this table is keyed on those.
+    // Listing it keeps a future caller that passes a note without changing the
+    // agent from landing in `unattributed`.
+    'planToolNote',
     'promptCoreVariant',
     'runtimeToolPrompt',
   ],

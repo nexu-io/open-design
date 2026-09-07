@@ -1,6 +1,10 @@
 {
   "name": "@open-design/packaged",
+<<<<<<< HEAD
   "version": "0.22.0",
+=======
+  "version": "0.21.6",
+>>>>>>> ad09d3883 (feat(chat): rebuild the chat panel against the design spec, and fix what real runs exposed (#7518))
   "private": true,
   "type": "module",
   "main": "./dist/index.mjs",

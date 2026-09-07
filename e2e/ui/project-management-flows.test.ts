@@ -4,7 +4,7 @@ import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { openAllProjectFiles } from '@/playwright/workspace';
 import { T } from '@/timeouts';
 import type { Locator, Page, Request } from '@playwright/test';
-import { routeAgents, routeSuccessfulRuns } from '../lib/playwright/mock-factory.js';
+import { routeAgents, routeSuccessfulRuns, suppressWhatsNew } from '../lib/playwright/mock-factory.js';
 import {
   AMR_PERSONAL_WORKSPACE_CONTEXT,
   AMR_PERSONAL_WORKSPACE_HEADERS,
@@ -176,6 +176,11 @@ const COMPOSER_PLUS_PLUGIN = {
 };
 
 test.beforeEach(async ({ page }) => {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx), and its backdrop
+  // sits at z-index 1500 — above the z-index 120 workspace chrome that owns
+  // the rail toggle. A live release card therefore swallows every rail/settings
+  // click in this file. Pin it closed.
+  await suppressWhatsNew(page);
   let appConfig = {
     onboardingCompleted: true,
     privacyDecisionAt: 1,
@@ -423,10 +428,34 @@ test('[P0] UI-created Personal project recovers preview and write authority afte
     await expect(artifactPreviewFrame(page).getByRole('heading', {
       name: 'Reloaded Personal preview',
     })).toBeVisible({ timeout: T.long });
-    await expect(page.getByTestId('chat-composer-input')).toHaveAttribute('aria-readonly', 'true');
+    // A daemon-confirmed `personal` scope IS the write authority — the gate must
+    // NOT stay closed waiting on `/collab/status`.
+    //
+    // This assertion used to read `toHaveAttribute('aria-readonly', 'true')`,
+    // written 2026-08-25 when a personal project really did stay read-only until
+    // status answered. OPEND-2624 (commit `a17a22e32a`, 2026-09-04) deliberately
+    // changed that: `projectIsDaemonConfirmedPersonal` in
+    // `apps/web/src/collab/useProjectCollab.ts` now grants write authority from
+    // the scope alone, because the old behavior showed the creator of a private
+    // local-only draft 「这是共享项目」 with chat, upload, edit and export all
+    // disabled while the daemon would have accepted every one of those writes.
+    // The ruling is pinned by
+    // `apps/web/tests/collab/opend-2624-personal-project-readonly.test.tsx:211`
+    // ("does not present a daemon-confirmed personal project as shared read-only
+    // when /collab/status refuses").
+    //
+    // So DO NOT flip this back to expecting read-only: after that ruling the
+    // read-only window here is only as wide as one React commit, and the old
+    // assertion passed purely by racing it. `/collab/status` is still unresolved
+    // on purpose — write authority has to come back from the persisted Personal
+    // binding by itself. Share shares the same `viewerOnly` gate as the composer
+    // (`FileViewer.tsx`), so it re-enables on the same tick.
+    await expect(page.getByTestId('chat-composer-input')).not.toHaveAttribute('aria-readonly', 'true');
+    await expect(page.getByRole('button', { name: /^Share$/i })).toBeEnabled();
 
     releaseStatus();
     releaseStatus = () => {};
+    // A settled status must not demote the writer the scope just confirmed.
     await expect(page.getByTestId('chat-composer-input')).not.toHaveAttribute('aria-readonly', 'true');
     await expect(page.getByRole('button', { name: /^Share$/i })).toBeEnabled();
   } finally {
@@ -796,6 +825,8 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  // Both context actions sit inside the "+" menu's working-dir group.
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog).toBeVisible();
@@ -805,6 +836,7 @@ test('[P1] project detail composer plus menu opens project, local code, Figma he
   await expect(input).toContainText('Reference Project Context');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-project');
 
@@ -987,6 +1019,8 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  // Both context actions sit inside the "+" menu's working-dir group.
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-reference-project').click();
   const referenceDialog = page.getByRole('dialog', { name: 'Reference another project' });
   await expect(referenceDialog.getByRole('option', { name: /Reference Project Payload/i })).toHaveAttribute('aria-selected', 'true');
@@ -994,6 +1028,7 @@ test('[P1] project detail composer sends referenced workspace contexts into the 
   await expect(input).toContainText('Reference Project Payload');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-project-payload');
 
@@ -1061,6 +1096,7 @@ test('[P1] project detail composer removing local-code context updates metadata 
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   await expect(input).toContainText('local-code-remove');
 
@@ -1130,6 +1166,8 @@ test('[P1] project detail keeps local-code context when linkedDirs PATCH removal
   const input = page.getByTestId('chat-composer-input');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  // Link-local-code sits inside the + menu's working-dir group.
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByRole('menuitem', { name: /Link local code/i }).click();
   await expect(input).toContainText('local-code-persist');
 
@@ -1230,6 +1268,7 @@ test('[P1] project detail composer context actions emit analytics event fields',
   const composer = page.getByTestId('chat-composer');
 
   await composer.getByTestId('chat-plus-trigger').click();
+  await page.getByTestId('composer-plus-working-dir').click();
   await page.getByTestId('composer-plus-local-code').click();
   const chip = composer.locator('.staged-context--workspace', { hasText: 'local-code-analytics' });
   await expect(chip).toBeVisible();
@@ -1704,8 +1743,7 @@ test('[P0] @critical project detail composer agent menu lets the user switch the
   ).toContainText(/GPT 5\.5/i);
 });
 
-test('[P0] project detail composer model and Plan mode switches carry into the next daemon run request', async ({ page }) => {
-  test.setTimeout(60_000);
+test('[P0] project detail composer model switch carries into the next daemon run request', async ({ page }) => {  test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runId: 'agent-model-run' });
   await mockWritablePersonalProjectScope(page);
@@ -1718,10 +1756,11 @@ test('[P0] project detail composer model and Plan mode switches carry into the n
 
   await pickComposerModel(page, /^GPT 5\.5$/i);
 
-  await selectComposerSessionMode(page, 'Plan mode');
-
+  // The composer no longer carries a session-mode picker (#7635): every turn
+  // runs in the conversation's stored mode, which is design for a new project.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
   const input = page.getByTestId('chat-composer-input');
-  await input.fill('Plan the selected local agent run.');
+  await input.fill('Use the selected local agent for this design run.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
     page.getByTestId('chat-send').click(),
@@ -1730,7 +1769,7 @@ test('[P0] project detail composer model and Plan mode switches carry into the n
   expect(runRequestBodies.length).toBeGreaterThan(0);
   expect(runRequestBodies[0]?.agentId).toBe('codex');
   expect(runRequestBodies[0]?.model).toBe('gpt-5.5');
-  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+  expect(runRequestBodies[0]?.sessionMode).toBe('design');
 });
 
 test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run request', async ({ page }) => {
@@ -1768,14 +1807,12 @@ test('[P1] GPT 5.5 Fast service tier carries into the next Codex daemon run requ
     serviceTier: 'priority',
   });
 });
-test('[P1] project detail composer can alternate Design, Ask, and Plan modes across turns', async ({ page }) => {
-  test.setTimeout(60_000);
+test('[P1] project detail composer keeps design mode across consecutive turns without a mode picker', async ({ page }) => {  test.setTimeout(60_000);
   const runRequestBodies: Array<Record<string, unknown>> = [];
-  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'mode-run' });
+  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'fixed-design-mode-run' });
 
   await page.goto('/');
-  await createProject(page, 'Composer session mode alternation');
-  await expectWorkspaceReady(page);
+  await createProject(page, 'Composer session mode contract');  await expectWorkspaceReady(page);
 
   async function sendTurn(prompt: string) {
     const input = page.getByTestId('chat-composer-input');
@@ -1788,50 +1825,15 @@ test('[P1] project detail composer can alternate Design, Ask, and Plan modes acr
     await expect(input).toHaveText('');
   }
 
-  await selectComposerSessionMode(page, 'Design mode');
+  // The 规划/设计/提问 picker left the composer row (#7635): there is nothing
+  // to alternate from here, and consecutive turns keep the conversation's
+  // stored mode — design for a new project — on every run request.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await expect(page.getByTestId('composer-mode-menu')).toHaveCount(0);
+
   await sendTurn('Design the first iteration.');
-
-  await selectComposerSessionMode(page, 'Ask mode');
-  await sendTurn('Ask a clarifying question about the direction.');
-
-  await selectComposerSessionMode(page, 'Plan mode');
-  await sendTurn('Plan the implementation steps.');
-
-  await selectComposerSessionMode(page, 'Design mode');
-  await sendTurn('Design the final iteration.');
-
-  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'chat', 'plan', 'design']);
-});
-
-test('[P1] project detail composer keeps the selected mode across consecutive turns', async ({ page }) => {
-  test.setTimeout(60_000);
-  const runRequestBodies: Array<Record<string, unknown>> = [];
-  await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'same-mode-run' });
-
-  await page.goto('/');
-  await createProject(page, 'Composer same session mode reuse');
-  await expectWorkspaceReady(page);
-
-  async function sendTurn(prompt: string) {
-    const input = page.getByTestId('chat-composer-input');
-    await expect(input).toBeVisible();
-    await input.fill(prompt);
-    await Promise.all([
-      page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
-      page.getByTestId('chat-send').click(),
-    ]);
-    await expect(input).toHaveText('');
-  }
-
-  await selectComposerSessionMode(page, 'Plan mode');
-  await sendTurn('Plan the first pass.');
-  await sendTurn('Plan the second pass without changing mode.');
-
-  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['plan', 'plan']);
-  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveAttribute(
-    'aria-label',
-    'Mode: Plan',
-  );
+  await sendTurn('Design the second iteration without touching any mode control.');
+  expect(runRequestBodies.map((body) => body.sessionMode)).toEqual(['design', 'design']);
 });
 
 test('[P0] @critical project detail composer opens Execution settings where BYOK model choice persists', async ({ page }) => {
@@ -2213,7 +2215,7 @@ test('[P1] project detail workspace keeps design file tabs and preview controls 
   await expect(page.locator('pre.viewer-source')).toHaveCount(0);
 });
 
-test('[P1] project detail session mode switch carries Ask and Plan semantics into daemon runs', async ({ page }) => {
+test('[P1] project detail turns carry the stored design session mode into daemon runs and message history', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'session-mode-run' });
 
@@ -2221,39 +2223,22 @@ test('[P1] project detail session mode switch carries Ask and Plan semantics int
   await createProject(page, 'Project session mode contract');
   await expectWorkspaceReady(page);
 
-  const modeTrigger = page.getByTestId('composer-mode-trigger');
-  // Design is the app default and is represented as an explicit selection.
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Design');
+  // No picker in the composer row any more (#7635); the conversation's stored
+  // mode is what every run request and message chip carry.
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
 
-  await modeTrigger.click();
-  await page.getByTestId('composer-mode-menu-plan').click();
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Plan');
-  await expect(modeTrigger).toContainText('Plan');
-
-  await page.getByTestId('chat-composer-input').fill('Draft the plan before generating files.');
+  await page.getByTestId('chat-composer-input').fill('Draft the first pass of the screens.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
     page.getByTestId('chat-send').click(),
   ]);
   await expect.poll(() => runRequestBodies.length).toBe(1);
-  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
-
-  await modeTrigger.click();
-  await page.getByTestId('composer-mode-menu-chat').click();
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Ask');
-  await expect(modeTrigger).toContainText('Ask');
-
-  await page.getByTestId('chat-composer-input').fill('Just answer this without creating files.');
-  await Promise.all([
-    page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
-    page.getByTestId('chat-send').click(),
-  ]);
-  await expect.poll(() => runRequestBodies.length).toBe(2);
-  expect(runRequestBodies[1]?.sessionMode).toBe('chat');
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Ask');
+  expect(runRequestBodies[0]?.sessionMode).toBe('design');
+  // Design is the default, so the message history carries no mode chip for it
+  // (only Ask / Plan turns are chipped).
+  await expect(page.getByTestId('msg-run-context-row').last()).toBeVisible();
+  await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
 });
-
 test('[P1] BYOK OpenCode project run sends provider config through the daemon contract', async ({ page }) => {
   const byokConfig = {
     mode: 'api',
@@ -2469,7 +2454,7 @@ test('[P1] BYOK OpenCode unavailable blocks the project run before daemon routin
   });
 });
 
-test('[P1] project detail active file context is sent with the run and shown on the user message', async ({ page }) => {
+test('[P1] project detail active file context is sent with the run but hidden on the user message', async ({ page }) => {
   const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-run' });
 
@@ -2493,13 +2478,11 @@ test('[P1] project detail active file context is sent with the run and shown on 
   await expect.poll(() => runRequestBodies.length).toBe(1);
   const context = runRequestBodies[0]?.context as { workspaceItems?: Array<{ label?: string; id?: string }> } | undefined;
   expect(context?.workspaceItems?.some((item) => item.label === uploadedName || item.id?.includes(uploadedName))).toBe(true);
-  const chip = page.getByTestId('msg-workspace-context-chip').last();
-  await expect(chip).toBeVisible();
-  await expect(chip).toContainText(uploadedName);
+  await expect(page.getByTestId('msg-run-context-row')).toHaveCount(0);
+  await expect(page.getByTestId('msg-workspace-context-chip')).toHaveCount(0);
 });
 
-test('[P1] project detail session mode and active file context survive reload in message history', async ({ page }) => {
-  const runRequestBodies: Array<Record<string, unknown>> = [];
+test('[P1] project detail active file context survives reload in message history', async ({ page }) => {  const runRequestBodies: Array<Record<string, unknown>> = [];
   await routeSuccessfulRuns(page, { bodies: runRequestBodies, runIdPrefix: 'workspace-context-reload-run' });
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -2513,11 +2496,6 @@ test('[P1] project detail session mode and active file context survive reload in
   );
   await expect(tabBySuffix(page, uploadedName)).toHaveAttribute('aria-selected', 'true');
 
-  const modeTrigger = page.getByTestId('composer-mode-trigger');
-  await modeTrigger.click();
-  await page.getByTestId('composer-mode-menu-plan').click();
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Plan');
-
   await page.getByTestId('chat-composer-input').fill('Persist this file context through reload.');
   await Promise.all([
     page.waitForRequest((request) => request.url().includes('/api/runs') && request.method() === 'POST'),
@@ -2526,16 +2504,15 @@ test('[P1] project detail session mode and active file context survive reload in
 
   await expect.poll(() => runRequestBodies.length).toBe(1);
   const context = runRequestBodies[0]?.context as { workspaceItems?: Array<{ label?: string; id?: string }> } | undefined;
-  expect(runRequestBodies[0]?.sessionMode).toBe('plan');
+  expect(runRequestBodies[0]?.sessionMode).toBe('design');
   expect(context?.workspaceItems?.some((item) => item.label === uploadedName || item.id?.includes(uploadedName))).toBe(true);
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
+  // Design turns carry no mode chip (only Ask / Plan are chipped).
+  await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
   await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
-
   await page.reload();
   await expectWorkspaceReady(page);
-  await expect(page.getByTestId('msg-session-mode-chip').last()).toContainText('Plan');
-  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);
-});
+  await expect(page.getByTestId('msg-session-mode-chip')).toHaveCount(0);
+  await expect(page.getByTestId('msg-workspace-context-chip').last()).toContainText(uploadedName);});
 
 test('[P1] active project API defaults to the selected project file from the real workspace', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
@@ -2721,6 +2698,36 @@ test('[P1] project detail assistant completion actions support copy, fork, and f
   await expect
     .poll(() => getProjectContextFromUrl(page).conversationId)
     .not.toBe(conversationId);
+});
+
+test('[P1] repeated artifact cards anchor Share to the clicked turn and keep the card menu focused', async ({ page }) => {
+  await mockWritablePersonalProjectScope(page);
+  const { projectId, conversationId } = await seedProjectWithRepeatedArtifactCards(page);
+
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`);
+  await expectWorkspaceReady(page);
+
+  const shareButtons = page.getByTestId('artifact-card-publish-index.html');
+  await expect(shareButtons).toHaveCount(2);
+  const firstShare = shareButtons.nth(0);
+  const secondShare = shareButtons.nth(1);
+  const firstAnchor = await firstShare.getAttribute('data-artifact-anchor');
+  const secondAnchor = await secondShare.getAttribute('data-artifact-anchor');
+  expect(firstAnchor).toBeTruthy();
+  expect(secondAnchor).toBeTruthy();
+  expect(secondAnchor).not.toBe(firstAnchor);
+
+  await secondShare.click();
+
+  const anchoredMenu = page.locator('[data-anchored-menu]');
+  await expect(anchoredMenu).toHaveCount(1);
+  await expect(anchoredMenu).toHaveAttribute('data-anchored-menu', secondAnchor!);
+  const menu = anchoredMenu.locator('.share-menu-popover[role="menu"]');
+  await expect(menu).toBeVisible();
+  await expect(menu).toContainText(/Quick Share/i);
+  await expect(menu).not.toContainText('Share project in workspace');
+  await expect(menu).not.toContainText('Deploy to Vercel');
+  await expect(menu).not.toContainText('Save as template');
 });
 
 test('[P1] project detail fork emits correlated click and result analytics', async ({ page }) => {
@@ -2941,7 +2948,11 @@ test('[P1] project detail conversations menu supports new chat, search, counts, 
     return request.method() === 'POST'
       && request.url().endsWith(`/api/projects/${projectId}/conversations`);
   });
-  await page.getByTestId('conversation-history-new').click();
+  // The "new conversation" control lives in the panel header, not in the open
+  // dropdown — the dropdown's duplicate was removed (product ruling
+  // 2026-09-03: one entry point only). Clicking it still dismisses the menu,
+  // which is what the count assertion below pins.
+  await page.getByTestId('chat-new-conversation').click();
   await newConversationRequestPromise;
   await expect(page.getByTestId('conversation-history-menu')).toHaveCount(0);
 
@@ -3832,6 +3843,102 @@ async function seedProjectWithAssistantCompletion(
   return { projectId, conversationId, assistantMessageId, assistantText };
 }
 
+async function seedProjectWithRepeatedArtifactCards(
+  page: Page,
+): Promise<{ projectId: string; conversationId: string }> {
+  const projectId = `repeated-artifact-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const projectResponse = await page.request.post('/api/projects', {
+    data: {
+      id: projectId,
+      name: 'Repeated Artifact Card Anchors',
+      skillId: null,
+      designSystemId: null,
+      metadata: { kind: 'prototype', nameSource: 'user' },
+    },
+  });
+  expect(projectResponse.ok(), `create project: ${await projectResponse.text()}`).toBeTruthy();
+  const { conversationId } = (await projectResponse.json()) as { conversationId: string };
+
+  const fileName = 'index.html';
+  const fileContent = '<!doctype html><html><body><main><h1>Repeated artifact anchors</h1></main></body></html>';
+  const fileResponse = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: {
+      name: fileName,
+      content: fileContent,
+      artifactManifest: {
+        version: 1,
+        kind: 'html',
+        title: fileName,
+        entry: fileName,
+        renderer: 'html',
+        exports: ['html'],
+      },
+    },
+  });
+  expect(fileResponse.ok(), `seed ${fileName}: ${await fileResponse.text()}`).toBeTruthy();
+
+  const startedAt = Date.now() - 4_000;
+  const producedFile = {
+    name: fileName,
+    path: fileName,
+    localPath: `/project/${projectId}/${fileName}`,
+    type: 'file',
+    size: fileContent.length,
+    mtime: startedAt + 1_000,
+    kind: 'html',
+    mime: 'text/html',
+  };
+
+  for (let turn = 0; turn < 2; turn += 1) {
+    const userMessageId = `repeated-artifact-user-${turn}-${projectId}`;
+    const assistantMessageId = `repeated-artifact-assistant-${turn}-${projectId}`;
+    const turnStartedAt = startedAt + turn * 2_000;
+    const userResponse = await page.request.put(
+      `/api/projects/${projectId}/conversations/${conversationId}/messages/${userMessageId}`,
+      {
+        data: {
+          id: userMessageId,
+          role: 'user',
+          content: `Generate ${fileName}, turn ${turn + 1}.`,
+          createdAt: turnStartedAt,
+        },
+      },
+    );
+    expect(userResponse.ok(), `seed user turn ${turn + 1}: ${await userResponse.text()}`).toBeTruthy();
+
+    const toolUseId = `write-index-${turn}`;
+    const assistantResponse = await page.request.put(
+      `/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        data: {
+          id: assistantMessageId,
+          role: 'assistant',
+          content: `Generated ${fileName}, turn ${turn + 1}.`,
+          runStatus: 'succeeded',
+          startedAt: turnStartedAt + 200,
+          endedAt: turnStartedAt + 1_200,
+          events: [
+            {
+              kind: 'tool_use',
+              id: toolUseId,
+              name: 'Write',
+              input: { file_path: producedFile.localPath, content: fileContent },
+            },
+            { kind: 'tool_result', toolUseId, content: 'ok', isError: false },
+            { kind: 'text', text: `Generated ${fileName}, turn ${turn + 1}.` },
+            { kind: 'artifact_focus', show: [fileName] },
+          ],
+          producedFiles: [producedFile],
+          createdAt: turnStartedAt + 1_000,
+        },
+      },
+    );
+    expect(assistantResponse.ok(), `seed assistant turn ${turn + 1}: ${await assistantResponse.text()}`).toBeTruthy();
+  }
+
+  return { projectId, conversationId };
+}
+
 async function seedProjectWithLargeAssistantHistory(
   page: Page,
 ): Promise<{
@@ -4092,23 +4199,6 @@ async function selectAvatarModelOption(
   }
   await expect(option).toBeVisible({ timeout: 10_000 });
   await option.click();
-}
-
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
-  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
-  const modeName = modeTitle.replace(' mode', '');
-  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.getByTestId('composer-mode-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
-  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
-  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
 async function routeComposerPlusFixtures(page: Page) {

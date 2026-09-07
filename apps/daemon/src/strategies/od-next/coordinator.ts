@@ -364,7 +364,10 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       const bindingCodes = plan ? validatePlanBinding(db, current, plan) : [];
       const repair = tryBeginSerializationRepair(db, current, input, parsed, protocolCodes);
       if (repair) return repair;
-      const blockedCodes = [...protocolCodes, ...bindingCodes];
+      const blockedCodes = [
+        ...reattributeUndeclaredTurn(current, parsed, protocolCodes),
+        ...bindingCodes,
+      ];
       logOdNextMachineContractGap(current, input.runId, parsed, blockedCodes);
       return blockTask(
         db,
@@ -460,6 +463,35 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
  * report, never a completion to infer.
  */
 /**
+ * Did the turn emit NO machine block at all — as opposed to emitting one badly?
+ *
+ * True only when the absent Runtime State is the sole protocol issue and the
+ * parser recovered nothing, neither strictly nor as a repair anchor. A
+ * malformed, duplicated or schema-invalid block fails this check: such a turn
+ * did declare something, its remedy is different, and it is the only shape the
+ * one allowed serialization repair can anchor on.
+ *
+ * Shared precondition for the completion inferences below and for
+ * `reattributeUndeclaredTurn`.
+ */
+function turnEmittedNoMachineBlock(
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
+): parsed is ReturnType<OdNextMachineProtocolStream['finish']> {
+  if (!parsed) return false;
+  const issueCodes = [...new Set(parsed.issues.map((issue) => issue.code))];
+  if (
+    issueCodes.length !== 1
+    || issueCodes[0] !== 'od_next_protocol_runtime_state_missing'
+  ) return false;
+  return !(
+    parsed.planContract
+    || parsed.repairPlanContract
+    || parsed.runtimeState
+    || parsed.repairRuntimeState
+  );
+}
+
+/**
  * Did the turn answer in prose only — no machine block of any kind, and nothing
  * to ask?
  *
@@ -471,20 +503,53 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
 function turnDeclaredNothing(
   parsed: ReturnType<OdNextMachineProtocolStream['finish']> | null | undefined,
 ): parsed is ReturnType<OdNextMachineProtocolStream['finish']> {
-  if (!parsed) return false;
-  const issueCodes = [...new Set(parsed.issues.map((issue) => issue.code))];
-  if (
-    issueCodes.length !== 1
-    || issueCodes[0] !== 'od_next_protocol_runtime_state_missing'
-  ) return false;
-  if (
-    parsed.planContract
-    || parsed.repairPlanContract
-    || parsed.runtimeState
-    || parsed.repairRuntimeState
-  ) return false;
+  if (!turnEmittedNoMachineBlock(parsed)) return false;
   // A question form means the agent wanted to ask, not to finish.
   return countRenderableQuestionForms(parsed.visibleText) === 0;
+}
+
+/**
+ * Name the gate a block-less turn actually hit, instead of the gate that
+ * happened to notice it first.
+ *
+ * Every turn that emits no machine block lands on
+ * `od_next_protocol_runtime_state_missing`, because the parser raises that
+ * issue before `validateAcceptedTurn` — the function that owns the precise
+ * clarification gates — is ever reached. So a clarification turn that answered
+ * the user's answers with ANOTHER question form was filed under the generic
+ * name, and `od_next_clarification_repeated` could never appear for it, even
+ * though the declared variant of the identical failure reports exactly that.
+ *
+ * That is not cosmetic. `reasonCodes[0]` is the code the web client shows the
+ * user, the key the failure card matches on, and the analytics bucket, so the
+ * generic name merges "the agent kept asking" into the same bucket as "the
+ * agent forgot the block" and leaves the user with a code that explains
+ * nothing.
+ *
+ * ATTRIBUTION ONLY — the verdict does not move and must not. The clarification
+ * stage admits `plan_ready` (which needs a Plan Contract this turn never
+ * carried), `blocked` or `canceled`, so the turn is fail-closed either way;
+ * this only renames the block.
+ *
+ * Fail-closed on ambiguity: it fires only for a turn that declared nothing at
+ * all, and only when a form actually rendered. The repeat predicate is the same
+ * one `validateAcceptedTurn` applies to a turn that rendered an unrequested
+ * form, so the declared and undeclared shapes of one failure cannot drift
+ * apart. A first request turn — where a form is the expected thing to emit, and
+ * `inferClarificationRuntimeState` already accepts the unambiguous case — keeps
+ * the parser's own code.
+ */
+function reattributeUndeclaredTurn(
+  task: StrategyTaskExecutionRecord,
+  parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
+  protocolCodes: string[],
+): string[] {
+  if (!turnEmittedNoMachineBlock(parsed)) return protocolCodes;
+  if (countRenderableQuestionForms(parsed.visibleText) === 0) return protocolCodes;
+  if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+    return protocolCodes;
+  }
+  return ['od_next_clarification_repeated'];
 }
 
 export function odNextTurnMayInferDirectEditCompletion(

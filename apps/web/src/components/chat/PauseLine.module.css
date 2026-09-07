@@ -1,0 +1,20 @@
+/*
+ * 组件 20 · 暂停任务的样式。数值逐条对设计稿 `chat-panel-next.html` 的 `.stopline`(2769)。
+ *
+ * 只有两条规则,这不是省略 —— 稿子本身就只有两条:一行 flex、一枚 14px 的图标。
+ * 「一行安静的灰字正好说明『到此为止』」。
+ */
+.line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--chat-t-mini);
+  color: var(--chat-text-muted);
+}
+
+/* 图标不另染色,跟着上面那行 currentColor 走 */
+.line svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}

@@ -258,7 +258,11 @@ describe('UpdateDialog', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByText("Couldn't check for updates. Please try again shortly.")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "Couldn't check for updates. Version information is temporarily unavailable. Check your network connection and try again.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText(/ETIMEDOUT/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Explore new features' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Check again' })).toBeTruthy();
