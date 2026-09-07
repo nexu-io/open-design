@@ -1,0 +1,9 @@
+{
+  "name": "open-design-electron-platform",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "better-sqlite3": "12.10.0",
+    "node-pty": "1.1.0"
+  }
+}
