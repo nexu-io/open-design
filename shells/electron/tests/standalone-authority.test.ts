@@ -227,7 +227,7 @@ describe("Electron production Standalone authority", () => {
     const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
       installedShellPath: join(root, "Current.app"),
       namespaceRoot: join(runtimeRoot, "namespace"),
-      officialNodeExecutablePath: process.execPath,
+      nodeRuntime: { command: process.execPath, env: {} },
       observeFeedback(event) { feedback.push(event); },
       resourceRoot: root,
       runtimeRoot,
@@ -265,7 +265,7 @@ describe("Electron production Standalone authority", () => {
       const incompatible = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "other-namespace"),
-        officialNodeExecutablePath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: {} },
         observeFeedback() {},
         resourceRoot: root,
         runtimeRoot: join(runtimeRoot, "other-runtime"),
@@ -478,7 +478,7 @@ describe("Electron production Standalone authority", () => {
       const abandonAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
-        officialNodeExecutablePath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: {} },
         resourceRoot: root,
         runtimeRoot,
       });
@@ -555,7 +555,7 @@ describe("Electron production Standalone authority", () => {
       const retryAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
-        officialNodeExecutablePath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: {} },
         resourceRoot: root,
         runtimeRoot,
       });
@@ -615,7 +615,7 @@ describe("Electron production Standalone authority", () => {
       const replacementAuthority = createElectronStandaloneAuthorityFactory(replacementManifest, physicalResources, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
-        officialNodeExecutablePath: process.execPath,
+        nodeRuntime: { command: process.execPath, env: {} },
         resourceRoot: root,
         runtimeRoot,
       });

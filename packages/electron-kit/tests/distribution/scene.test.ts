@@ -42,7 +42,6 @@ describe("Electron scene", () => {
       launcherResourcePath: join(root, "standalone-launcher.mjs"),
       rendererPreloadEntryPath: join(root, "renderer-preload.ts"),
       manifestPath: join(root, "shell.json"),
-      nodeCarrierLockPath: join(root, "node-lock.json"),
       outputRoot: join(root, "build", "scene"),
       runtimeConfigPath: join(root, "runtime.json"),
     };
@@ -66,15 +65,13 @@ describe("Electron scene", () => {
         splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
         shell: { type: "electron", version: "1.2.3", buildHash: "a".repeat(64), digest: "b".repeat(64) },
       })}\n`, "utf8"),
-      writeFile(paths.nodeCarrierLockPath, `${JSON.stringify({ schemaVersion: 1, version: "24.18.0", targets: {} })}\n`, "utf8"),
       writeFile(paths.runtimeConfigPath, `${JSON.stringify({
         schemaVersion: 1,
         preflight: { schemaVersion: 1, atoms: [{ id: "language", executor: "electron.preferred-language" }] },
         warmup: {
           schemaVersion: 1,
           nodes: [
-            { id: "carrier", executor: "electron.ensure-carrier", dependsOn: [], blocking: true },
-            { id: "resolve", executor: "standalone.resolve", dependsOn: ["carrier"], blocking: true },
+            { id: "resolve", executor: "standalone.resolve", dependsOn: [], blocking: true },
             { id: "ready", executor: "standalone.await-ready", dependsOn: ["resolve"], blocking: true },
             { id: "renderer", executor: "electron.mount-renderer", dependsOn: ["ready"], blocking: true },
           ],
@@ -158,7 +155,7 @@ describe("Electron scene", () => {
     const outputRoot = relationship === "output-inside" ? join(root, "output") : root;
     const path = relationship === "input-inside" ? join(root, "sentinel") : root;
     await expect(assembleElectronScene({ authorityResources: [{ name: "platform", path }], manifest: {} as ElectronShellManifest,
-      outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", nodeCarrierLockPath: "/unused", runtimeConfigPath: "/unused" }))
+      outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", runtimeConfigPath: "/unused" }))
       .rejects.toThrow(/cannot overlap/u);
     expect(await readFile(join(root, "sentinel"), "utf8")).toBe("untouched");
   });
@@ -170,7 +167,7 @@ describe("Electron scene", () => {
     await writeFile(join(outputRoot, "sentinel"), "untouched");
     await symlink(process.execPath, join(tree, "node"));
     await expect(assembleElectronScene({ authorityResources: [{ name: "platform", path: tree }],
-      manifest: {} as ElectronShellManifest, outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", nodeCarrierLockPath: "/unused", runtimeConfigPath: "/unused" }))
+      manifest: {} as ElectronShellManifest, outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", runtimeConfigPath: "/unused" }))
       .rejects.toThrow(/link or special file/u);
     expect(await readFile(join(outputRoot, "sentinel"), "utf8")).toBe("untouched");
   });
@@ -180,7 +177,6 @@ describe("Electron scene", () => {
       authorityResources: [] as { name: string; path: string }[],
       entryPath: "/unused/main.ts",
       manifest: {} as ElectronShellManifest,
-      nodeCarrierLockPath: "/unused/node-lock.json",
       outputRoot: "/unused/scene",
       rendererPreloadEntryPath: "/unused/preload.ts",
       runtimeConfigPath: "/unused/runtime.json",

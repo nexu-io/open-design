@@ -2,7 +2,6 @@ export * from "./contracts/index.js";
 export * from "./platform/macos/index.js";
 export * from "./runtime/index.js";
 export * from "./runtime/startup/bootstrap/index.js";
-export * from "./runtime/startup/carrier/index.js";
 export * from "./runtime/startup/config.js";
 export * from "./runtime/startup/capsule.js";
 export * from "./runtime/startup/preflight/index.js";

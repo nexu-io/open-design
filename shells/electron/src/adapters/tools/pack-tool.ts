@@ -81,7 +81,6 @@ export async function executeElectronPack(request: ElectronPackRequest) {
     distributionPath: fileURLToPath(new URL("../../../config/distribution.json", import.meta.url)),
     entryPath: electronShellSource("main.ts"),
     manifest,
-    nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
     runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
     windowsLifecyclePath: fileURLToPath(new URL("../../../config/platforms/windows.json", import.meta.url)),
     outputRoot: join(request.outputDirectory, "distribution"),

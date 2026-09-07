@@ -17,7 +17,6 @@ export type PrepareElectronDevShellInput = Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
   manifest: ElectronShellManifest;
-  nodeCarrierLockPath: string;
   projectRoot: string;
   rendererPreloadEntryPath: string;
   runtimeConfigPath: string;
@@ -38,7 +37,6 @@ export async function prepareElectronDevShell(input: PrepareElectronDevShellInpu
     entryPath: input.entryPath,
     manifest,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
-    nodeCarrierLockPath: input.nodeCarrierLockPath,
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,
   });

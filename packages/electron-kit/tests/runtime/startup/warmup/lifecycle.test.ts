@@ -11,8 +11,7 @@ import {
 const runtimeTopology: ElectronWarmupTopology = {
   schemaVersion: 1,
   nodes: [
-    { id: "carrier", executor: ELECTRON_WARMUP_ATOMS.ENSURE_CARRIER, dependsOn: [], blocking: true },
-    { id: "generation", executor: ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE, dependsOn: ["carrier"], blocking: true },
+    { id: "generation", executor: ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE, dependsOn: [], blocking: true },
     { id: "ready", executor: ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY, dependsOn: ["generation"], blocking: true },
     { id: "renderer", executor: ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER, dependsOn: ["ready"], blocking: true },
   ],
@@ -25,7 +24,7 @@ describe("Electron warmup topology", () => {
     expect(validateElectronRuntimeWarmupTopology(runtimeTopology)).toEqual(runtimeTopology);
     expect(() => validateElectronRuntimeWarmupTopology({
       ...runtimeTopology,
-      nodes: runtimeTopology.nodes.map((node) => node.id === "renderer" ? { ...node, dependsOn: ["carrier"] } : node),
+      nodes: runtimeTopology.nodes.map((node) => node.id === "renderer" ? { ...node, dependsOn: [] } : node),
     })).toThrow(/must order standalone\.await-ready before electron\.mount-renderer/u);
   });
 

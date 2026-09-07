@@ -92,7 +92,6 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     authorityResources: [...await loadElectronStandaloneAuthorityResources(installation.resourceDirectory), { name: "platform", path: platformRoot }],
     entryPath: electronShellSource("main.ts"),
     manifest: { ...baseManifest, namespace: request.namespace },
-    nodeCarrierLockPath: join(electronShellRoot, "config/carriers/node-lock.json"),
     projectRoot: electronShellRoot,
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
     runtimeConfigPath: join(electronShellRoot, "config/runtime.json"),

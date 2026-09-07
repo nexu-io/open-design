@@ -14,7 +14,6 @@ export type AssembleElectronSceneInput = Readonly<{
   manifest: ElectronShellManifest;
   outputRoot: string;
   rendererPreloadEntryPath: string;
-  nodeCarrierLockPath: string;
   runtimeConfigPath: string;
   standaloneBinding?: Readonly<{
     target: string;
@@ -26,7 +25,6 @@ export type AssembleElectronSceneInput = Readonly<{
 const sceneResourceName = /^[a-z][a-z0-9.-]{0,127}$/u;
 const reservedSceneProducts = new Set([
   "main.cjs",
-  "node-lock.json",
   "package.json",
   "renderer-mount-preload.cjs",
   "runtime.json",
@@ -91,20 +89,11 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const runtimeConfig = validateElectronRuntimeConfig(
     JSON.parse(await readFile(input.runtimeConfigPath, "utf8")) as ElectronRuntimeConfig,
   );
-  const nodeCarrierLock = JSON.parse(await readFile(input.nodeCarrierLockPath, "utf8")) as {
-    schemaVersion?: number;
-    targets?: unknown;
-    version?: unknown;
-  };
-  if (nodeCarrierLock.schemaVersion !== 1 || typeof nodeCarrierLock.version !== "string" || nodeCarrierLock.targets == null) {
-    throw new Error("invalid official Node carrier lock");
-  }
 
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
   const mainPath = join(input.outputRoot, "main.cjs");
   const rendererPreloadPath = join(input.outputRoot, "renderer-mount-preload.cjs");
-  const nodeCarrierLockPath = join(input.outputRoot, "node-lock.json");
   const runtimeConfigPath = join(input.outputRoot, "runtime.json");
   await bundle({
     bundle: true,
@@ -131,7 +120,6 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     platform: "node",
     target: "node24",
   });
-  await copyFile(input.nodeCarrierLockPath, nodeCarrierLockPath);
   await writeFile(runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, "utf8");
 
   const packagedManifestPath = join(input.outputRoot, "shell.json");
@@ -148,7 +136,6 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const sceneManifestPath = join(input.outputRoot, "scene.json");
   const productNames = [
     "main.cjs",
-    "node-lock.json",
     "renderer-mount-preload.cjs",
     "runtime.json",
     "shell.json",
@@ -197,7 +184,6 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     mainPath,
     rendererPreloadPath,
     shellManifestPath: packagedManifestPath,
-    nodeCarrierLockPath,
     runtimeConfigPath,
     authorityResources: Object.freeze(authorityResources),
   };
@@ -247,7 +233,6 @@ export async function loadElectronScene(sceneRootInput: string, expectedManifest
     mainPath: product("main.cjs"),
     rendererPreloadPath: product("renderer-mount-preload.cjs"),
     shellManifestPath: product("shell.json"),
-    nodeCarrierLockPath: product("node-lock.json"),
     runtimeConfigPath: product("runtime.json"),
     authorityResources: Object.freeze(authorityNames.map((name) => Object.freeze({ ...products.get(name)!, path: join(sceneRoot, name) }))),
   });

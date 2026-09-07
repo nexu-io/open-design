@@ -46,7 +46,7 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
   let state: "starting" | "running" | "failed" | "stopping" = "starting";
   const startupDeadline = new Date(Date.now() + runtimeConfig.warmup.totalTimeoutMs).toISOString();
   // Start preflight synchronously, but do not gate observability on product
-  // readiness: slow carrier acquisition must remain inspectable/stoppable.
+  // readiness: physical verification and content preparation remain inspectable/stoppable.
   const running = run().then(() => {
     if (state === "starting") state = "running";
     return null;

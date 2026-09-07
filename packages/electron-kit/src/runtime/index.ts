@@ -44,7 +44,7 @@ import {
 } from "./session/single-instance.js";
 import { observeElectronInstallerHandoff, resolveElectronInstallerRecovery } from "./session/update-handoff.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
-import { ensureOfficialNodeCarrier, OfficialNodeCarrierError, type OfficialNodeCarrierReceipt } from "./startup/carrier/index.js";
+import { bindElectronPlatform } from "./startup/platform.js";
 import {
   ELECTRON_WARMUP_ATOMS,
   runElectronWarmupTopology,
@@ -97,32 +97,6 @@ type ElectronRuntimeContext = {
   startup: ElectronStartupAttemptFence | null;
   startupQuit: ElectronStartupQuitBarrier | null;
 };
-
-async function resolveCarrierWithRecovery(input: Readonly<{
-  lockPath: string;
-  cacheRoot: string;
-  presentation: ReturnType<typeof resolveElectronPresentationMode>;
-  splash: BrowserWindow | null;
-}>): Promise<OfficialNodeCarrierReceipt> {
-  for (;;) {
-    try { return await ensureOfficialNodeCarrier({ lockPath: input.lockPath, cacheRoot: input.cacheRoot }); }
-    catch (error) {
-      if (input.presentation === "headless" || !(error instanceof OfficialNodeCarrierError) || error.code !== "resource-unavailable") throw error;
-      const options = {
-        buttons: ["Retry", "Quit"],
-        cancelId: 1,
-        defaultId: 0,
-        detail: error.message,
-        message: "The official Node carrier could not be downloaded or verified.",
-        noLink: true,
-        title: "Electron Shell could not finish starting",
-        type: "warning" as const,
-      };
-      const choice = input.splash == null ? await dialog.showMessageBox(options) : await dialog.showMessageBox(input.splash, options);
-      if (choice.response !== 0) throw error;
-    }
-  }
-}
 
 export type ElectronCarrierDefinition = Readonly<{
   manifest: ElectronShellManifest;
@@ -195,17 +169,21 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
     runtimeRoot,
     preflight,
   });
-  const definition = await loadElectronCarrierCapsule(app, () => input.loadCapsule(manifest));
+  const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
+  // Physical integrity precedes Capsule code and any generation/installer handoff.
+  // A damaged platform is repaired only by replacing the physical Shell.
+  const { nodeRuntime, definition } = await loadElectronCarrierCapsule(app, async () => {
+    const nodeRuntime = await bindElectronPlatform(join(resourceRoot, "platform"));
+    context.log?.write("platform.verified", { command: nodeRuntime.command });
+    return { nodeRuntime, definition: await input.loadCapsule(manifest) };
+  });
   if (canonicalJson(definition.manifest) !== canonicalJson(manifest) || canonicalJson(definition.preflight) !== canonicalJson(input.preflight)) {
     throw new Error("Capsule cannot replace the established carrier identity or preflight");
   }
   context.log.write("capsule.definition.loaded", { pid: process.pid });
   const warmupTopology = validateElectronRuntimeWarmupTopology(definition.warmup);
-  const nodeLockPath = join(app.getAppPath(), "node-lock.json");
-  const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
   const scope: StandaloneScope = { channel: manifest.channel, namespace: sessionNamespace };
   const attachment: StandaloneHandoffAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
-  let carrier: OfficialNodeCarrierReceipt | null = null;
   let authority: ElectronStandaloneAuthority | null = null;
   let preparedRuntime: ElectronStandalonePreparedRuntime | null = null;
   let generation: GenerationRecord | null = null;
@@ -387,18 +365,9 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
     topology: warmupTopology,
     executors: {
       ...definition.warmupExecutors,
-      [ELECTRON_WARMUP_ATOMS.ENSURE_CARRIER]: async () => {
-        carrier = await resolveCarrierWithRecovery({
-          lockPath: nodeLockPath,
-          cacheRoot: join(runtimeRoot, "carriers"),
-          presentation,
-          splash,
-        });
-      },
       [ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE]: async () => {
-        if (carrier == null) throw new Error("official Node carrier is unavailable");
         authority = definition.createStandaloneAuthority({
-          officialNodeExecutablePath: carrier.executablePath,
+          nodeRuntime,
           installedShellPath: process.platform === "darwin" ? resolve(dirname(process.execPath), "../..") : process.execPath,
           namespaceRoot: paths.namespaceRoot,
           resourceRoot,
@@ -439,7 +408,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
                     ...intent,
                     installer: {
                       ...installerRecovery.request,
-                      nodeExecutablePath: carrier.executablePath,
+                      nodeExecutablePath: nodeRuntime.command,
                       parentPid: process.pid,
                       runtimeRoot,
                     },
@@ -514,7 +483,6 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
     throw error;
   }
   context.log.write("warmup.ready", { nodes: startupWarmup.snapshot() });
-  const runtimeCarrier = requireWarmupState(carrier as OfficialNodeCarrierReceipt | null, "the official Node carrier");
   const runtimePrepared = requireWarmupState(preparedRuntime as ElectronStandalonePreparedRuntime | null, "a prepared Standalone runtime");
   const runtimeStandaloneHandle = requireWarmupState(runtimeHandle as StandaloneRuntimeHandle | null, "a Standalone runtime handle");
   const runtimeGeneration = requireWarmupState(generation as GenerationRecord | null, "a Standalone generation");
@@ -595,7 +563,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
       installerArming = runtimePrepared.armShellInstallation({
         request: {
           ...request,
-          nodeExecutablePath: runtimeCarrier.executablePath,
+          nodeExecutablePath: nodeRuntime.command,
           parentPid: process.pid,
           runtimeRoot,
         },

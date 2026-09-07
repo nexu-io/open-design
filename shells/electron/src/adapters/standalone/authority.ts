@@ -198,7 +198,7 @@ export function createElectronStandaloneAuthorityFactory(
   const resources = validateElectronPhysicalResourceSet(resourcesInput);
   const runtimeResource = resources.resources.find(({ id }) => id === "standalone-runtime");
   if (runtimeResource == null) throw new Error("Electron physical resource set lacks standalone-runtime");
-  return ({ installedShellPath, namespaceRoot, officialNodeExecutablePath, observeFeedback, resourceRoot, runtimeRoot }) => ({
+  return ({ installedShellPath, namespaceRoot, nodeRuntime, observeFeedback, resourceRoot, runtimeRoot }) => ({
     async prepare(request) {
       if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
       if (canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
@@ -275,8 +275,8 @@ export function createElectronStandaloneAuthorityFactory(
           runtimeRoot: join(runtimeRoot, "electron-updater"), channelHeadUrl,
         });
         const provider = await convergeSidecarLaunch({
-          args: [installation.updaterProviderPath], command: officialNodeExecutablePath, cwd: resourceRoot,
-          env: { ...process.env, [ELECTRON_UPDATER_PROVIDER_CONFIG_ENV]: JSON.stringify(providerConfig) },
+          args: [installation.updaterProviderPath], command: nodeRuntime.command, cwd: resourceRoot,
+          env: { ...process.env, ...nodeRuntime.env, [ELECTRON_UPDATER_PROVIDER_CONFIG_ENV]: JSON.stringify(providerConfig) },
           resources: { dataRoot: storeRoot, ownerPid: null, port: 0, runtimeRoot: providerConfig.runtimeRoot }, stamp: providerStamp,
         });
         const providerStatus = await getSidecarStatus(providerStamp, { generationPid: provider.description.resources.pid });
@@ -288,9 +288,9 @@ export function createElectronStandaloneAuthorityFactory(
         if (reuse == null) {
           const converged = await convergeSidecarLaunch({
             args: [installation.hostPath],
-            command: officialNodeExecutablePath,
+            command: nodeRuntime.command,
             cwd: resourceRoot,
-            env: { ...process.env, [ELECTRON_STANDALONE_HOST_CONFIG_ENV]: JSON.stringify(hostConfig) },
+            env: { ...process.env, ...nodeRuntime.env, [ELECTRON_STANDALONE_HOST_CONFIG_ENV]: JSON.stringify(hostConfig) },
             resources: { dataRoot: storeRoot, ownerPid: null, port: 0, runtimeRoot: sidecarRuntimeRoot },
             stamp,
           });
@@ -688,7 +688,7 @@ export function createElectronStandaloneAuthorityFactory(
                 claim: claim.restoration!.expected,
                 trust: restoreTrust,
                 recoveryId: claim.restoration!.recoveryId,
-                nodeExecutablePath: officialNodeExecutablePath,
+                nodeExecutablePath: nodeRuntime.command,
                 parentPid: process.pid,
                 runtimeRoot: claim.runtimeRoot,
                 relaunchArguments: serializeInstallerRecoveryIntent({ action: "abandon-and-restore", recoveryId: claim.restoration!.recoveryId, expected: claim.restoration!.expected }),

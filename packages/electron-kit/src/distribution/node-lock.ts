@@ -1,14 +1,16 @@
 import { readFile } from "node:fs/promises";
 
-import { OfficialNodeCarrierError, type OfficialNodeLock, type OfficialNodeTarget } from "./contracts.js";
+import type { OfficialNodeTarget } from "../contracts/index.js";
+
+export type OfficialNodeLock = Readonly<{
+  schemaVersion: 1;
+  version: string;
+  targets: Readonly<Partial<Record<OfficialNodeTarget, Readonly<{
+    archive: string; mediaType: "application/gzip" | "application/zip"; sha256: string; url: string;
+  }>>>>;
+}>;
 
 const digest = /^[a-f0-9]{64}$/u;
-
-export function currentOfficialNodeTarget(platform = process.platform, architecture = process.arch): OfficialNodeTarget {
-  const target = `${platform}-${architecture}`;
-  if (target === "darwin-arm64" || target === "darwin-x64" || target === "win32-x64") return target;
-  throw new OfficialNodeCarrierError("unsupported-target", `official Node carrier does not support ${target}`);
-}
 
 export function validateOfficialNodeLock(value: unknown): OfficialNodeLock {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("official Node lock must be an object");

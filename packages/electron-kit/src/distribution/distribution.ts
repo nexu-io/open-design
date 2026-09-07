@@ -68,7 +68,6 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     await Promise.all([
       copyFile(scene.mainPath, join(projectRoot, "main.cjs")),
       copyFile(scene.rendererPreloadPath, join(projectRoot, "renderer-mount-preload.cjs")),
-      copyFile(scene.nodeCarrierLockPath, join(projectRoot, "node-lock.json")),
       copyFile(scene.runtimeConfigPath, join(projectRoot, "runtime.json")),
       writeFile(join(projectRoot, "shell.json"), `${JSON.stringify(input.manifest, null, 2)}\n`, "utf8"),
       writeFile(join(projectRoot, "package.json"), `${JSON.stringify({

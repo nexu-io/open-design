@@ -4,8 +4,9 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 
 import { isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 
-import { currentOfficialNodeTarget, readOfficialNodeLock } from "../runtime/startup/carrier/lock.js";
-import type { OfficialNodeTarget } from "../runtime/startup/carrier/contracts.js";
+import { currentOfficialNodeTarget } from "../runtime/startup/platform.js";
+import { readOfficialNodeLock } from "./node-lock.js";
+import type { OfficialNodeTarget } from "../contracts/index.js";
 
 const execute = promisify(execFile);
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");

@@ -37,17 +37,9 @@
     "totalTimeoutMs": 360000,
     "nodes": [
       {
-        "id": "official-node",
-        "executor": "electron.ensure-carrier",
-        "dependsOn": [],
-        "blocking": true,
-        "label": "Verifying the official Node carrier…",
-        "timeoutMs": 300000
-      },
-      {
         "id": "standalone-generation",
         "executor": "standalone.resolve",
-        "dependsOn": ["official-node"],
+        "dependsOn": [],
         "blocking": true,
         "label": "Resolving the Standalone generation…",
         "timeoutMs": 30000

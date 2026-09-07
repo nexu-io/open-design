@@ -11,8 +11,7 @@ const config: ElectronRuntimeConfig = {
   warmup: {
     schemaVersion: 1,
     nodes: [
-      { id: "carrier", executor: "electron.ensure-carrier", dependsOn: [], blocking: true },
-      { id: "resolve", executor: "standalone.resolve", dependsOn: ["carrier"], blocking: true },
+      { id: "resolve", executor: "standalone.resolve", dependsOn: [], blocking: true },
       { id: "ready", executor: "standalone.await-ready", dependsOn: ["resolve"], blocking: true },
       { id: "renderer", executor: "electron.mount-renderer", dependsOn: ["ready"], blocking: true },
     ],

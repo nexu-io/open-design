@@ -4,7 +4,13 @@ import { readFile, realpath } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
 import type { NodeRuntimeBinding } from "@open-design/standalone";
-import { currentOfficialNodeTarget } from "./carrier/lock.js";
+import type { OfficialNodeTarget } from "../../contracts/index.js";
+
+export function currentOfficialNodeTarget(platform = process.platform, architecture = process.arch): OfficialNodeTarget {
+  const target = `${platform}-${architecture}`;
+  if (target === "darwin-arm64" || target === "darwin-x64" || target === "win32-x64") return target;
+  throw new Error(`physical Node platform does not support ${target}`);
+}
 
 const execute = promisify(execFile);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");

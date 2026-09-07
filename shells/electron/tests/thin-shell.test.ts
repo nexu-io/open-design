@@ -120,7 +120,6 @@ describe("Electron product shell", () => {
       warmup: { nodes: Array<{ executor: string }> };
     };
     expect(runtime.warmup.nodes.map((node) => node.executor)).toEqual([
-      "electron.ensure-carrier",
       "standalone.resolve",
       "standalone.await-ready",
       "shell.renderer-resource",
@@ -168,8 +167,8 @@ describe("Electron product shell", () => {
       readFile(new URL("../config/carriers/node-lock.json", import.meta.url), "utf8"),
       readFile(new URL("../../terminal/node-lock.json", import.meta.url), "utf8"),
     ]);
-    expect(dev).toContain('join(electronShellRoot, "config/carriers/node-lock.json"');
-    expect(pack).toContain('new URL("../../../config/carriers/node-lock.json"');
+    expect(dev).toContain("withElectronPhysicalPlatform");
+    expect(pack).toContain("withElectronPhysicalPlatform");
     expect(dev).toContain('join(electronShellRoot, "config/runtime.json"');
     expect(pack).toContain('new URL("../../../config/runtime.json"');
     expect(dev).not.toMatch(/node-v\d/u);

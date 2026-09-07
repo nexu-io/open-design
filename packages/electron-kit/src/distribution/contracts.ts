@@ -8,7 +8,6 @@ export type ElectronSceneReceipt = Readonly<{
   mainPath: string;
   rendererPreloadPath: string;
   shellManifestPath: string;
-  nodeCarrierLockPath: string;
   runtimeConfigPath: string;
   authorityResources: readonly Readonly<{
     name: string;

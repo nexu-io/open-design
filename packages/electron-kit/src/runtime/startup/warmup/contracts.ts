@@ -1,7 +1,6 @@
 export const ELECTRON_WARMUP_SCHEMA_VERSION = 1 as const;
 
 export const ELECTRON_WARMUP_ATOMS = Object.freeze({
-  ENSURE_CARRIER: "electron.ensure-carrier",
   RESOLVE_STANDALONE: "standalone.resolve",
   AWAIT_STANDALONE_READY: "standalone.await-ready",
   MOUNT_RENDERER: "electron.mount-renderer",
@@ -104,7 +103,6 @@ export function validateElectronRuntimeWarmupTopology(value: ElectronWarmupTopol
     });
   };
   const ordered = [
-    ELECTRON_WARMUP_ATOMS.ENSURE_CARRIER,
     ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE,
     ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY,
     ELECTRON_WARMUP_ATOMS.MOUNT_RENDERER,

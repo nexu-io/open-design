@@ -41,7 +41,6 @@ const receipt = await withElectronPhysicalPlatform({ archivePath: input.platform
   ],
   entryPath: electronShellSource("main.ts"),
   manifest,
-  nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
   outputRoot: input.sceneDirectory,
   rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
   runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),

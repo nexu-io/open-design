@@ -10,7 +10,6 @@ export async function packElectronShell(input: Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
   manifest: ElectronShellManifest;
-  nodeCarrierLockPath: string;
   distributionPath: string;
   runtimeConfigPath: string;
   windowsLifecyclePath: string;
@@ -30,7 +29,6 @@ export async function packElectronShell(input: Readonly<{
     entryPath: input.entryPath,
     manifest,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
-    nodeCarrierLockPath: input.nodeCarrierLockPath,
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     runtimeConfigPath: input.runtimeConfigPath,
   });
