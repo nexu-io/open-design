@@ -4,12 +4,14 @@
 // zero.
 //
 // On Go / Plus / Pro / Max the popular models the user actually works with are
-// unlimited, so the wallet only meters flagship calls. A subscriber therefore
-// sits at $0.00 as a normal, healthy state — and the pill rendered it as a
-// permanent alarm next to their avatar. Product ruling: hide the money for a
-// subscribed plan whose balance is exactly zero. Free plans keep it (zero is
-// the number that explains why hosted models are unavailable), and an
-// overdrawn wallet keeps it on every plan.
+// unlimited, but the wallet still meters flagship calls — so a subscriber at
+// exactly $0.00 can be in two different states the overview cannot tell apart:
+// a healthy wallet untouched by in-plan models, or a wallet exhausted by
+// flagship calls, which the pre-run balance gate hard-blocks (#7561). Because
+// the pill cannot distinguish them, it must not present the zero as a healthy
+// "unlimited" state by hiding it: the money stays on screen for every plan, and
+// "unlimited" is claimed only by the per-model badge backed by Vela's model
+// list. An overdrawn wallet keeps rendering its negative amount on every plan.
 
 import { cleanup, render, screen } from '@testing-library/react';
 import type { WorkspaceBillingSummary, WorkspaceCollabContext } from '@open-design/contracts';
@@ -84,20 +86,24 @@ function creditsPill(): HTMLElement | null {
 
 describe('top-right credits pill', () => {
   it.each(['go', 'plus', 'pro', 'max'])(
-    'hides the zero balance on the subscribed personal plan %s',
+    'keeps the exhausted $0.00 wallet visible on the subscribed personal plan %s',
     (tier) => {
+      // #7561: at $0.00 the composer hard-blocks metered models with
+      // "Insufficient credits", so the pill hiding the same wallet read as
+      // "Unlimited usage" to users who had just been blocked. The pill shows
+      // the wallet the composer enforces.
       renderRail({
         context: context({ planId: tier } as Partial<WorkspaceCollabContext>),
         billing: billing({ membershipTier: tier }),
         balanceUsd: '0',
       });
-      expect(creditsPill()).toBeNull();
+      expect(creditsPill()?.textContent).toContain('$0.00');
     },
   );
 
-  it('hides a zero balance written as 0.00', () => {
+  it('keeps a zero balance written as 0.00 visible', () => {
     renderRail({ balanceUsd: '0.00' });
-    expect(creditsPill()).toBeNull();
+    expect(creditsPill()?.textContent).toContain('$0.00');
   });
 
   it('keeps the balance when a subscriber still has money', () => {

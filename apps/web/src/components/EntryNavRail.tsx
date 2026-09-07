@@ -78,7 +78,6 @@ import {
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
-import { shouldShowCreditsBalance } from './entry-rail-account-state';
 import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
@@ -844,12 +843,6 @@ export function EntryTopRightCluster({
       ? t('entry.billingTierTeam')
       : t('entry.billingTierFree');
   const balanceLabel = formatVelaBalanceUsd(balanceUsd);
-  // A subscriber's $0.00 is a healthy state (their popular models are
-  // unlimited), so the pill stays out of the way instead of alarming them.
-  const showCreditsBalance = shouldShowCreditsBalance({
-    tier: labelTier,
-    balanceUsd,
-  });
   // #5517: wordmark badge inside the menu's billing card. It names the plan
   // FAMILY, so a TEAM workspace draws the one `team` wordmark at every tier —
   // free through max — while the personal ladder keeps its per-tier glyph
@@ -1059,7 +1052,7 @@ export function EntryTopRightCluster({
           {context ? (
             <>
               <div className="entry-top-right-account-pill">
-          {(billing || balanceLabel) && showCreditsBalance ? (
+          {(billing || balanceLabel) ? (
             <button
               type="button"
               className="entry-top-right-credits"
