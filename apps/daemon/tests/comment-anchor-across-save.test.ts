@@ -32,23 +32,51 @@
 // than reimplemented here.
 
 import http from 'node:http';
+import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
 
 /**
+ * `apps/daemon` compiles with `lib: ["ES2022"]` and no DOM, on purpose: a
+ * backend package should not get `Document`, `Element` and `DOMParser` as
+ * ambient globals. This spec still needs to parse HTML, so it reaches for jsdom
+ * explicitly the way `mcp-brief-app.test.ts` already does in this package, and
+ * names only the members it actually touches rather than widening the whole
+ * package's type surface.
+ *
+ * The `@vitest-environment jsdom` pragma above stays: the bridge functions are
+ * lifted out of the served HTML and evaluated here, so they still expect the
+ * ambient browser globals a real page would give them at runtime.
+ */
+const require = createRequire(import.meta.url);
+const { JSDOM } = require('jsdom') as {
+  JSDOM: new (html: string) => { window: { document: DomDocument } };
+};
+
+type DomElement = {
+  tagName: string;
+  textContent: string | null;
+};
+
+type DomDocument = {
+  documentElement: { outerHTML: string };
+  querySelectorAll(selector: string): ArrayLike<DomElement>;
+};
+
+/**
  * `domSelectorFor` and `findCommentTargetByIdentity`, lifted verbatim out of
  * the bridge in the HTML the daemon served. Reimplementing them here would only
  * prove that a copy agrees with itself.
  */
-function bridgeAnchoring(servedHtml: string, doc: Document): {
-  domSelectorFor: (el: Element) => string | null;
+function bridgeAnchoring(servedHtml: string, doc: DomDocument): {
+  domSelectorFor: (el: DomElement) => string | null;
   findCommentTargetByIdentity: (
     elementId: string,
     selector: string,
     witness?: { text?: string; label?: string },
-  ) => Element | null;
+  ) => DomElement | null;
 } {
   const grabOptional = (name: string): string | null => {
     try {
@@ -83,7 +111,7 @@ function bridgeAnchoring(servedHtml: string, doc: Document): {
   )(doc) as ReturnType<typeof bridgeAnchoring>;
 }
 
-function identify(el: Element | null): string | null {
+function identify(el: DomElement | null): string | null {
   if (!el) return null;
   return `${el.tagName.toLowerCase()}:${(el.textContent ?? '').replace(/\s+/gu, ' ').trim()}`;
 }
@@ -152,7 +180,7 @@ describe('preview comment anchors across an ordinary save', () => {
 
   /** What a save writes: the source parsed and re-serialized, as the patch path does. */
   function reserialize(html: string): string {
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const doc = new JSDOM(html).window.document;
     return `<!doctype html>\n${doc.documentElement.outerHTML}`;
   }
 
@@ -161,7 +189,7 @@ describe('preview comment anchors across an ordinary save', () => {
     await writeFile(name, AUTHORED);
 
     const before = await servedPreview(name);
-    const beforeDoc = new DOMParser().parseFromString(before, 'text/html');
+    const beforeDoc = new JSDOM(before).window.document;
     const anchoring = bridgeAnchoring(before, beforeDoc);
 
     const target = Array.from(beforeDoc.querySelectorAll('p')).find(
@@ -174,7 +202,7 @@ describe('preview comment anchors across an ordinary save', () => {
     await writeFile(name, reserialize(AUTHORED));
 
     const after = await servedPreview(name);
-    const afterDoc = new DOMParser().parseFromString(after, 'text/html');
+    const afterDoc = new JSDOM(after).window.document;
     const resolved = bridgeAnchoring(after, afterDoc).findCommentTargetByIdentity(
       `dom:${selector}`,
       selector!,
@@ -204,7 +232,7 @@ describe('preview comment anchors across an ordinary save', () => {
     await writeFile(name, AUTHORED);
 
     const before = await servedPreview(name);
-    const beforeDoc = new DOMParser().parseFromString(before, 'text/html');
+    const beforeDoc = new JSDOM(before).window.document;
     const anchoring = bridgeAnchoring(before, beforeDoc);
 
     // The user leaves a comment on the last paragraph.
@@ -227,7 +255,7 @@ describe('preview comment anchors across an ordinary save', () => {
     );
 
     const after = await servedPreview(name);
-    const afterDoc = new DOMParser().parseFromString(after, 'text/html');
+    const afterDoc = new JSDOM(after).window.document;
     // Resolve through the product's own resolver, handing it the witness the
     // comment already stores.
     const resolved = bridgeAnchoring(after, afterDoc).findCommentTargetByIdentity(
