@@ -947,14 +947,6 @@
   font-weight: 600;
   line-height: 1.2;
 }
-.qf-help {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: -2px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  line-height: 1.4;
-}
 /* 选项按设计稿竖排一列:每行一个选择框 + 文字。
    横排胶囊读起来像标签云,竖排才是「在几个答案里挑一个」。 */
 /* 稿子:`.cbody > .opts.mod-stack { flex-direction:column; align-items:stretch;
@@ -1277,7 +1269,6 @@
  * `.qf-custom .qf-input` 和选项里的 `.qf-own-input` 各有自己的容器内距,不该被
  * 刷成 11),也是**特异性**(少了它就和 `.qf-custom .qf-input` 打平)。
  */
-.question-form-body > .qf-help,
 .question-form-body > .qf-input,
 .question-form-body > .qf-textarea {
   /* 两侧同值,没有要在 RTL 下镜像的东西,所以写物理属性 —— 和旁边的
