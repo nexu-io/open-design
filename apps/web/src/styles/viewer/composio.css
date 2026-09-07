@@ -4395,42 +4395,7 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
      both logical edges with an explicit grid cell while the rail / jump /
      Plan controls remain positioned overlays. */
   display: grid;
-  /* Definite tracks — `100%`, not `minmax(0, 1fr)`. This is not a style
-     preference; it removes a resolution step.
-
-     `1fr` is an indefinite track: the size is a share of free space, so the
-     track is sized in a later pass than the box that owns it, and the scroll
-     box inside it then has to be stretched into whatever the track settled
-     on. `100%` resolves straight off this viewport's already-definite content
-     box (its own height is definite via `flex: 1` inside `.chat-log-wrap`,
-     which is definite down from the `.split` grid track), so the cell is the
-     right size on the first pass and nothing revises it afterwards.
-
-     HYPOTHESIS, NOT A CONFIRMED FIX. The defect being chased is the chat log
-     going unscrollable while layout stays correct: the compositor keeps a
-     maximum-scroll bound frozen at an early content height (measured live at
-     91+583=674, 824+583=1407, 25+583=608 — bound + viewport = the content
-     height at the instant it froze), programmatic `scrollTop` still works,
-     and only destroying and rebuilding the layout box clears it. The guess is
-     that the scroll node gets built before the revised track size lands and
-     the revision never marks the paint property dirty. That causal chain is
-     NOT established. Treat this as an experiment we shipped, and read the
-     verdict off `client_chat_scroll_frozen` (see
-     `apps/web/src/observability/chat-scroll-freeze.ts`): if that event keeps
-     arriving from builds carrying this rule, the hypothesis is wrong and this
-     line should go back to whatever the next candidate needs.
-
-     Equivalence to the previous writing is measured, not assumed: across both
-     writing directions and five layout states, computed geometry (including
-     the used track sizes) and the `elementFromPoint` probes that
-     `e2e/ui/split-resize-scrollbar-hitbox.test.ts` asserts are field-for-field
-     identical to `minmax(0, 1fr)`.
-
-     Precondition: a percentage track needs a definite containing block. If
-     `.chat-log-wrap` / `.pane` ever stop handing this viewport a definite
-     height, `100%` degrades to `auto` (content-sized) where `1fr` would still
-     fill — so revisit this line if that chain changes. */
-  grid-template: 100% / 100%;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
 }
 .chat-log-viewport > .chat-log {
   grid-area: 1 / 1;
