@@ -1,4 +1,7 @@
 export * from "./protocol.js";
+export * from "./host-control.js";
+export * from "./host-control-client.js";
+export * from "./host-lifecycle.js";
 export * from "./feedback.js";
 export * from "./shell-update.js";
 export * from "./shell-update-capability.js";

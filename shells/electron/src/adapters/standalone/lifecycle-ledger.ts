@@ -10,7 +10,7 @@ import {
   type SharedLifecycleState,
 } from "@open-design/standalone";
 
-import type { ElectronStandaloneLifecycleStatePort } from "./host-lifecycle.js";
+import type { StandaloneLifecycleStatePort } from "@open-design/standalone";
 
 let sequence = 0;
 
@@ -23,7 +23,7 @@ export function electronStandaloneLifecycleLedgerPath(storeRoot: string, scope: 
  * The live Sidecar host is its sole normal writer; only a Shell continuation
  * holding the complete physical resource-set guard may write after retirement.
  */
-export class ElectronStandaloneLifecycleLedger implements ElectronStandaloneLifecycleStatePort {
+export class ElectronStandaloneLifecycleLedger implements StandaloneLifecycleStatePort {
   readonly path: string;
 
   constructor(storeRoot: string, readonly scope: LifecycleScope) {

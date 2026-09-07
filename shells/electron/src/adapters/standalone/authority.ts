@@ -51,7 +51,8 @@ import {
   type ElectronMacLastKnownGoodRestoreResult,
 } from "@open-design/electron-kit/installation";
 
-import { ElectronStandaloneControlClient, createElectronStandaloneControlTransport } from "./control-client.js";
+import { StandaloneHostControlClient } from "@open-design/standalone";
+import { createStandaloneHostControlTransport } from "./control-client.js";
 import { ElectronStandaloneControlUpdater } from "./control-updater.js";
 import { ELECTRON_STANDALONE_HOST_CONFIG_ENV } from "./host.js";
 import {
@@ -64,7 +65,7 @@ import {
   type ElectronPhysicalResourceSetDeclaration,
 } from "./physical-resources.js";
 import { withElectronPhysicalResourceSetGuard } from "./guarded-lifecycle.js";
-import { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
+import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
 import {
   assertElectronInstallerClaimIdentity,
@@ -96,7 +97,7 @@ export function isElectronStandaloneScope(manifest: ElectronShellManifest, scope
     && (scope.namespace === manifest.namespace || scope.namespace === `${manifest.namespace}-headless`);
 }
 
-function projectRuntimeStatus(status: Awaited<ReturnType<ElectronStandaloneControlClient["status"]>>, bindingDigest: string, generationId: string): StandaloneRuntimeStatus {
+function projectRuntimeStatus(status: Awaited<ReturnType<StandaloneHostControlClient["status"]>>, bindingDigest: string, generationId: string): StandaloneRuntimeStatus {
   return Object.freeze({
     bindingDigest,
     generationId,
@@ -275,10 +276,10 @@ export function createElectronStandaloneAuthorityFactory(
         });
         const status = await getSidecarStatus<unknown>(stamp, { generationPid: converged.description.resources.pid });
         if (!exactHostStatus(status, hostExpected)) throw new Error("Electron Standalone Sidecar host escaped its installed launch contract");
-        const transport = createElectronStandaloneControlTransport(stamp);
+        const transport = createStandaloneHostControlTransport(stamp);
         return Object.freeze({
           binding: nextBinding,
-          lifecycle: new ElectronStandaloneControlClient(request.scope, transport),
+          lifecycle: new StandaloneHostControlClient(request.scope, transport),
           resourceSet,
           stamp,
           updater: new ElectronStandaloneControlUpdater(request.shell.type, request.scope, transport),
@@ -390,7 +391,7 @@ export function createElectronStandaloneAuthorityFactory(
 
             await guard.retire();
             if (lifecycleState.transition != null) {
-              const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+              const continuation = new StandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
               await continuation.confirmStoppedShellInstall(claim.installAttemptId, claim.lifecycleFence);
             }
 
@@ -474,7 +475,7 @@ export function createElectronStandaloneAuthorityFactory(
             const exactInstallationRequest = Object.freeze({ ...installationRequest, artifactIdentity, platformTrust });
 
             const retirement = await guard.retire();
-            const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+            const continuation = new StandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
             const transition = await continuation.beginTransition("shell-install", {
               attemptId: installationRequest.installAttemptId,
               ownerShellType: request.shell.type,
@@ -714,7 +715,7 @@ export function createElectronStandaloneAuthorityFactory(
                 || lifecycleState.transition.token !== claim.installAttemptId || lifecycleState.transition.fence !== claim.lifecycleFence) {
                 throw new Error("Electron installer recovery lifecycle fence differs from its claim");
               }
-              const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+              const continuation = new StandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
               await continuation.abandonStoppedTransition(claim.installAttemptId, claim.lifecycleFence);
             } else {
               if (lifecycleState.state !== "stopped" || lifecycleState.attachments.length !== 0) {
@@ -753,7 +754,7 @@ export function createElectronStandaloneAuthorityFactory(
             const attachment = activeAttachment;
             if (attachment == null) throw new Error("Electron content update requires an active runtime attachment");
             return await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async (guard) => {
-              const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+              const continuation = new StandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
               let nextHost = activeHost;
               let attemptedResourceSet: ReturnType<typeof bindElectronPhysicalResourceSet> | null = null;
               let retired = false;
@@ -899,7 +900,7 @@ export function createElectronStandaloneAuthorityFactory(
                   // Never kill a runtime retained by a sibling attachment.
                   if (released.occupants.length === 0) {
                     await guard.retire();
-                    const continuation = new ElectronStandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+                    const continuation = new StandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
                     const stopped = await continuation.status();
                     if (stopped.state !== "stopped") await continuation.stop(stopped.fence);
                   }

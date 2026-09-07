@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { SHELL_UPDATE_ALGEBRA } from "@open-design/standalone";
 
-import { ElectronStandaloneHostLifecycle } from "@/adapters/standalone/host-lifecycle.js";
+import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { ElectronStandaloneHostUpdater } from "@/adapters/standalone/host-updater.js";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
 
@@ -39,7 +39,7 @@ describe("Electron Standalone host updater", () => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-updater-"));
     roots.push(root);
     const ledger = await readyLedger(root);
-    const lifecycle = new ElectronStandaloneHostLifecycle(scope);
+    const lifecycle = new StandaloneHostLifecycle(scope);
     const updater = new ElectronStandaloneHostUpdater("electron", lifecycle, ledger);
     const result = await updater.invoke("install");
     expect(result).toMatchObject({ outcome: "accepted", snapshot: { state: "applying", handoff } });
@@ -53,7 +53,7 @@ describe("Electron Standalone host updater", () => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-updater-content-transition-"));
     roots.push(root);
     const ledger = await readyLedger(root);
-    const lifecycle = new ElectronStandaloneHostLifecycle(scope);
+    const lifecycle = new StandaloneHostLifecycle(scope);
     const updater = new ElectronStandaloneHostUpdater("electron", lifecycle, ledger);
     const content = await lifecycle.beginTransition("content-restart", { attemptId: "content-restart-1" });
     expect(content).toMatchObject({ state: "acquired", transition: { attemptId: "content-restart-1", phase: "reserved" } });
@@ -69,7 +69,7 @@ describe("Electron Standalone host updater", () => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-updater-confirm-"));
     roots.push(root);
     const ledger = await readyLedger(root);
-    const updater = new ElectronStandaloneHostUpdater("electron", new ElectronStandaloneHostLifecycle(scope), ledger);
+    const updater = new ElectronStandaloneHostUpdater("electron", new StandaloneHostLifecycle(scope), ledger);
     const applying = await updater.invoke("install");
     expect((await updater.confirmInstalled({ type: "electron", version: "0.2.0", buildHash: "c".repeat(64), digest: "d".repeat(64) })).outcome).toBe("blocked");
     expect(await updater.confirmInstalled({ ...handoff.shell, digest: "d".repeat(64) }))

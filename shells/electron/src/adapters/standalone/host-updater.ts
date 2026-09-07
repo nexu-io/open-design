@@ -8,7 +8,7 @@ import type {
 } from "@open-design/standalone";
 import { stageElectronInstallerArtifact } from "@open-design/electron-kit/installation";
 
-import type { ElectronStandaloneHostLifecycle } from "./host-lifecycle.js";
+import type { StandaloneHostLifecycle } from "@open-design/standalone";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 import type { ElectronReleaseExactFeed } from "./release-feed.js";
 import type { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
@@ -20,7 +20,7 @@ export class ElectronStandaloneHostUpdater {
 
   constructor(
     readonly shellType: string,
-    private readonly lifecycle: ElectronStandaloneHostLifecycle,
+    private readonly lifecycle: StandaloneHostLifecycle,
     private readonly ledger: ElectronStandaloneShellUpdaterLedger,
     private readonly release?: Readonly<{
       authorityRoot: string;

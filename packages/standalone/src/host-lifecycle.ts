@@ -1,27 +1,21 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
-import {
-  SHARED_LIFECYCLE_ALGEBRA,
-  type GenerationRecord,
-  type LifecycleAttachment,
-  type LifecycleReadiness,
-  type LifecycleScope,
-  type LifecycleStatus,
-  type SharedLifecycleState,
-  type StandaloneGenerationBinding,
-} from "@open-design/standalone";
+import { SHARED_LIFECYCLE_ALGEBRA, type SharedLifecycleState } from "./shared-lifecycle.js";
+import type { GenerationRecord } from "./store.js";
+import type { LifecycleAttachment, LifecycleReadiness, LifecycleScope, LifecycleStatus } from "./launcher.js";
+import type { StandaloneGenerationBinding } from "./bootloader-handoff.js";
 
-export type ElectronStandaloneHostStart = Readonly<{
+export type StandaloneHostStart = Readonly<{
   attachmentCapability: string;
   status: LifecycleStatus;
 }>;
 
-export type ElectronStandaloneLifecycleStatePort = Readonly<{
+export type StandaloneLifecycleStatePort = Readonly<{
   read(): Promise<SharedLifecycleState | null>;
   write(state: SharedLifecycleState): Promise<void>;
 }>;
 
-export type ElectronStandaloneHostTransitionDescriptor = Readonly<{
+export type StandaloneHostTransitionDescriptor = Readonly<{
   token: string;
   attemptId: string;
   fence: number;
@@ -31,8 +25,8 @@ export type ElectronStandaloneHostTransitionDescriptor = Readonly<{
   phase: "reserved" | "stopped-sealed";
 }>;
 
-export type ElectronStandaloneHostTransitionResult =
-  | Readonly<{ state: "acquired"; transition: ElectronStandaloneHostTransitionDescriptor }>
+export type StandaloneHostTransitionResult =
+  | Readonly<{ state: "acquired"; transition: StandaloneHostTransitionDescriptor }>
   | Readonly<{ state: "blocked"; reason: "occupied" | "transition-active"; occupants: LifecycleStatus["occupants"] }>;
 
 type Clock = () => Date;
@@ -47,14 +41,14 @@ function capabilityHash(value: string): string {
  * Generation durability remains in StandaloneStore and physical lifecycle
  * remains in Sidecar's supervised generation.
  */
-export class ElectronStandaloneHostLifecycle {
+export class StandaloneHostLifecycle {
   readonly #clock: Clock;
   readonly #heartbeatIntervalMs: number;
   readonly #leaseDurationMs: number;
   readonly #transitionHeartbeatIntervalMs: number;
   readonly #transitionLeaseDurationMs: number;
   #state: SharedLifecycleState;
-  readonly #statePort: ElectronStandaloneLifecycleStatePort | null;
+  readonly #statePort: StandaloneLifecycleStatePort | null;
   #tail: Promise<void> = Promise.resolve();
 
   constructor(
@@ -63,7 +57,7 @@ export class ElectronStandaloneHostLifecycle {
       clock?: Clock;
       heartbeatIntervalMs?: number;
       leaseDurationMs?: number;
-      statePort?: ElectronStandaloneLifecycleStatePort;
+      statePort?: StandaloneLifecycleStatePort;
       transitionHeartbeatIntervalMs?: number;
       transitionLeaseDurationMs?: number;
     }> = {},
@@ -77,10 +71,10 @@ export class ElectronStandaloneHostLifecycle {
     // reservation long enough for that guarded continuation without relying on
     // a heartbeat from the host that is about to be retired.
     this.#transitionLeaseDurationMs = options.transitionLeaseDurationMs ?? 10 * 60_000;
-    if (!Number.isSafeInteger(this.#heartbeatIntervalMs) || this.#heartbeatIntervalMs < 100) throw new Error("invalid Electron Standalone heartbeat interval");
-    if (!Number.isSafeInteger(this.#leaseDurationMs) || this.#leaseDurationMs <= this.#heartbeatIntervalMs * 2) throw new Error("invalid Electron Standalone lease duration");
-    if (!Number.isSafeInteger(this.#transitionHeartbeatIntervalMs) || this.#transitionHeartbeatIntervalMs < 100) throw new Error("invalid Electron Standalone transition heartbeat interval");
-    if (!Number.isSafeInteger(this.#transitionLeaseDurationMs) || this.#transitionLeaseDurationMs <= this.#transitionHeartbeatIntervalMs * 2) throw new Error("invalid Electron Standalone transition lease duration");
+    if (!Number.isSafeInteger(this.#heartbeatIntervalMs) || this.#heartbeatIntervalMs < 100) throw new Error("invalid Standalone host heartbeat interval");
+    if (!Number.isSafeInteger(this.#leaseDurationMs) || this.#leaseDurationMs <= this.#heartbeatIntervalMs * 2) throw new Error("invalid Standalone host lease duration");
+    if (!Number.isSafeInteger(this.#transitionHeartbeatIntervalMs) || this.#transitionHeartbeatIntervalMs < 100) throw new Error("invalid Standalone host transition heartbeat interval");
+    if (!Number.isSafeInteger(this.#transitionLeaseDurationMs) || this.#transitionLeaseDurationMs <= this.#transitionHeartbeatIntervalMs * 2) throw new Error("invalid Standalone host transition lease duration");
     this.#state = SHARED_LIFECYCLE_ALGEBRA.initial(scope);
   }
 
@@ -118,11 +112,11 @@ export class ElectronStandaloneHostLifecycle {
     attachment: LifecycleAttachment,
     binding: StandaloneGenerationBinding,
     presentedCapability: string | null,
-  ): Promise<ElectronStandaloneHostStart> {
+  ): Promise<StandaloneHostStart> {
     return await this.#transaction((state) => {
       const existing = state.attachments.find(({ id }) => id === attachment.id);
       const attachmentCapability = existing == null ? randomBytes(32).toString("hex") : presentedCapability;
-      if (attachmentCapability == null) throw Object.assign(new Error("Electron Standalone attachment capability is required"), { code: "attachment-capability-required" });
+      if (attachmentCapability == null) throw Object.assign(new Error("Standalone host attachment capability is required"), { code: "attachment-capability-required" });
       const now = this.#iso();
       const next = SHARED_LIFECYCLE_ALGEBRA.reduce(state, {
         type: "start",
@@ -181,9 +175,9 @@ export class ElectronStandaloneHostLifecycle {
     });
   }
 
-  #transitionDescriptor(state: SharedLifecycleState): ElectronStandaloneHostTransitionDescriptor {
+  #transitionDescriptor(state: SharedLifecycleState): StandaloneHostTransitionDescriptor {
     const transition = state.transition;
-    if (transition == null) throw new Error("Electron Standalone lifecycle transition is unavailable");
+    if (transition == null) throw new Error("Standalone host lifecycle transition is unavailable");
     return Object.freeze({
       token: transition.token,
       attemptId: transition.token,
@@ -198,8 +192,8 @@ export class ElectronStandaloneHostLifecycle {
   async beginTransition(
     kind: "content-restart" | "shell-install",
     options: Readonly<{ attemptId?: string; ownerAttachmentId?: string; ownerShellType?: string; force?: boolean }> = {},
-  ): Promise<ElectronStandaloneHostTransitionResult> {
-    return await this.#transaction<ElectronStandaloneHostTransitionResult>((state) => {
+  ): Promise<StandaloneHostTransitionResult> {
+    return await this.#transaction<StandaloneHostTransitionResult>((state) => {
       const occupants = SHARED_LIFECYCLE_ALGEBRA.blockers(state, kind, { attachmentId: options.ownerAttachmentId, shellType: options.ownerShellType });
       if (state.transition != null) {
         if (options.attemptId === state.transition.token && state.transition.kind === kind) return { state, result: Object.freeze({ state: "acquired" as const, transition: this.#transitionDescriptor(state) }) };
@@ -222,7 +216,7 @@ export class ElectronStandaloneHostLifecycle {
     });
   }
 
-  async renewTransition(token: string, fence: number): Promise<ElectronStandaloneHostTransitionDescriptor> {
+  async renewTransition(token: string, fence: number): Promise<StandaloneHostTransitionDescriptor> {
     return await this.#transaction((state) => {
       const next = SHARED_LIFECYCLE_ALGEBRA.reduce(state, { type: "renew-transition", token, fence, expiresAt: new Date(this.#clock().getTime() + this.#transitionLeaseDurationMs).toISOString() });
       return { state: next, result: this.#transitionDescriptor(next) };
@@ -247,7 +241,7 @@ export class ElectronStandaloneHostLifecycle {
     }));
   }
 
-  async forceStopTransition(token: string, fence: number): Promise<ElectronStandaloneHostTransitionDescriptor> {
+  async forceStopTransition(token: string, fence: number): Promise<StandaloneHostTransitionDescriptor> {
     return await this.#transaction((state) => {
       const now = this.#iso();
       const next = SHARED_LIFECYCLE_ALGEBRA.reduce(state, { type: "force-stop", token, fence, requestedAt: now, expiresAt: new Date(Date.parse(now) + this.#transitionLeaseDurationMs).toISOString() });
@@ -261,7 +255,7 @@ export class ElectronStandaloneHostLifecycle {
     generation: GenerationRecord,
     attachment: LifecycleAttachment,
     binding: StandaloneGenerationBinding,
-  ): Promise<ElectronStandaloneHostStart> {
+  ): Promise<StandaloneHostStart> {
     return await this.#transaction((state) => {
       const attachmentCapability = randomBytes(32).toString("hex");
       const now = this.#iso();
@@ -292,7 +286,7 @@ export class ElectronStandaloneHostLifecycle {
     generation: GenerationRecord,
     attachment: LifecycleAttachment,
     binding: StandaloneGenerationBinding,
-  ): Promise<ElectronStandaloneHostStart | null> {
+  ): Promise<StandaloneHostStart | null> {
     return await this.#transaction((state) => {
       const transition = state.transition;
       if (transition == null || transition.kind !== kind || transition.phase !== "stopped-sealed"

@@ -5,14 +5,14 @@ import {
   createStandaloneGenerationBinding,
   type GenerationRecord,
   type LifecycleStatus,
-} from "@open-design/standalone";
+} from "../src/index.js";
 
 import {
-  ElectronStandaloneControlClient,
-  electronStandaloneControlRequestTimeoutMs,
-  type ElectronStandaloneControlTransport,
-} from "@/adapters/standalone/control-client.js";
-import type { ElectronStandaloneControlRequest } from "@/adapters/standalone/control-contract.js";
+  StandaloneHostControlClient,
+  standaloneHostControlRequestTimeoutMs,
+  type StandaloneHostControlTransport,
+} from "../src/index.js";
+import type { StandaloneHostControlRequest } from "../src/index.js";
 
 const scope = Object.freeze({ channel: "betahyx", namespace: "electron-foundation" });
 const shell = Object.freeze({ type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) });
@@ -53,17 +53,17 @@ function stoppedStatus(): LifecycleStatus {
 
 describe("Electron Standalone control client", () => {
   it("gives physical lifecycle and updater operations bounded operation-level deadlines", () => {
-    expect(electronStandaloneControlRequestTimeoutMs({ operation: "lifecycle.status" })).toBe(5_000);
-    expect(electronStandaloneControlRequestTimeoutMs({ operation: "lifecycle.start" })).toBe(120_000);
-    expect(electronStandaloneControlRequestTimeoutMs({ operation: "lifecycle.release" })).toBe(60_000);
-    expect(electronStandaloneControlRequestTimeoutMs({ operation: "runtime.invoke" })).toBe(120_000);
-    expect(electronStandaloneControlRequestTimeoutMs({ operation: "updater.invoke" })).toBe(600_000);
-    expect(electronStandaloneControlRequestTimeoutMs({ operation: "updater.wait", timeoutMs: 30_000 })).toBe(32_000);
+    expect(standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.status" })).toBe(5_000);
+    expect(standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.start" })).toBe(120_000);
+    expect(standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.release" })).toBe(60_000);
+    expect(standaloneHostControlRequestTimeoutMs({ operation: "runtime.invoke" })).toBe(120_000);
+    expect(standaloneHostControlRequestTimeoutMs({ operation: "updater.invoke" })).toBe(600_000);
+    expect(standaloneHostControlRequestTimeoutMs({ operation: "updater.wait", timeoutMs: 30_000 })).toBe(32_000);
   });
 
   it("keeps the opaque capability inside lifecycle and runtime requests", async () => {
-    const requests: ElectronStandaloneControlRequest[] = [];
-    const transport: ElectronStandaloneControlTransport = async (request) => {
+    const requests: StandaloneHostControlRequest[] = [];
+    const transport: StandaloneHostControlTransport = async (request) => {
       requests.push(request);
       if (request.operation === "lifecycle.start") return { status: runningStatus(), attachmentCapability: "opaque-capability-1" };
       if (request.operation === "lifecycle.ready") return request.readiness;
@@ -72,7 +72,7 @@ describe("Electron Standalone control client", () => {
       if (request.operation === "lifecycle.release") return stoppedStatus();
       throw new Error(`unexpected operation: ${request.operation}`);
     };
-    const client = new ElectronStandaloneControlClient(scope, transport);
+    const client = new StandaloneHostControlClient(scope, transport);
     const started = await client.start(scope, generation, attachment, binding);
     await client.awaitReady(scope, { generationId: generation.id, bindingDigest: binding.digest, instanceId: started.instanceId!, attachmentId: attachment.id });
     await client.heartbeat(scope, attachment);
@@ -87,7 +87,7 @@ describe("Electron Standalone control client", () => {
   });
 
   it("rejects a start response for another binding before retaining capability", async () => {
-    const client = new ElectronStandaloneControlClient(scope, async () => ({
+    const client = new StandaloneHostControlClient(scope, async () => ({
       status: runningStatus("e".repeat(64)),
       attachmentCapability: "opaque-capability-1",
     }));

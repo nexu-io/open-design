@@ -16,7 +16,7 @@ describe("Electron Standalone authority build", () => {
     const [host, supervisor] = await Promise.all([readFile(result.host.path, "utf8"), readFile(result.supervisor.path, "utf8")]);
     expect(result.host.name).toBe("standalone-host.mjs");
     expect(result.supervisor.name).toBe("supervisor.mjs");
-    expect(host).toContain("electron.standalone.control.v1");
+    expect(host).toContain("standalone.host.control.v1");
     expect(supervisor).toContain("sidecar supervisor failed to spawn target");
     expect(supervisor).not.toContain('from "@open-design/platform"');
   });

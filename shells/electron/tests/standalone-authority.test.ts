@@ -20,10 +20,11 @@ import type { ElectronInstallerArtifactIdentity, ElectronInstallerHandoffRequest
 
 import { buildElectronStandaloneAuthority } from "../scripts/build-authority.ts";
 import { createElectronStandaloneAuthorityFactory, isElectronStandaloneScope } from "@/adapters/standalone/authority.js";
-import { createElectronStandaloneControlTransport, ElectronStandaloneControlClient } from "@/adapters/standalone/control-client.js";
+import { StandaloneHostControlClient } from "@open-design/standalone";
+import { createStandaloneHostControlTransport } from "@/adapters/standalone/control-client.js";
 import { bindElectronPhysicalResourceSet } from "@/adapters/standalone/physical-resources.js";
 import { ElectronStandaloneInstallerClaimLedger } from "@/adapters/standalone/installer-claim.js";
-import { ElectronStandaloneHostLifecycle } from "@/adapters/standalone/host-lifecycle.js";
+import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { ElectronStandaloneLifecycleLedger } from "@/adapters/standalone/lifecycle-ledger.js";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
 
@@ -283,9 +284,9 @@ describe("Electron production Standalone authority", () => {
       });
       await expect(prepared.contentUpdater.prepareLatest("observe"))
         .resolves.toMatchObject({ status: "prepared", generation: { releaseVersion: nextMetadata.releaseVersion }, authorized: false });
-      const competingLifecycle = new ElectronStandaloneControlClient(
+      const competingLifecycle = new StandaloneHostControlClient(
         { channel: manifest.channel, namespace: manifest.namespace },
-        createElectronStandaloneControlTransport(stamp),
+        createStandaloneHostControlTransport(stamp),
       );
       const terminalAttachment = {
         id: "terminal-competitor",
@@ -457,7 +458,7 @@ describe("Electron production Standalone authority", () => {
       const expiringLifecycle = await lifecycleLedger.readOrInitial();
       if (expiringLifecycle.transition == null) throw new Error("installer lifecycle transition is unavailable");
       await lifecycleLedger.write({ ...expiringLifecycle, transition: { ...expiringLifecycle.transition, expiresAt: "2026-09-04T00:01:00.000Z" } });
-      await new ElectronStandaloneHostLifecycle({ channel: manifest.channel, namespace: manifest.namespace }, { statePort: lifecycleLedger }).status();
+      await new StandaloneHostLifecycle({ channel: manifest.channel, namespace: manifest.namespace }, { statePort: lifecycleLedger }).status();
       expect(await lifecycleLedger.read()).toMatchObject({ transition: { token: installAttemptId, kind: "shell-install", phase: "stopped-sealed" } });
       const expiredClaim = await abandonPrepared.readShellInstallationClaim();
       expect(expiredClaim).toMatchObject({ state: "sealed", identity: { installAttemptId, revision: 1 }, artifact: { path: handoff.artifact.path }, invocation: { state: "failed" } });

@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { createStandaloneGenerationBinding, type GenerationRecord } from "@open-design/standalone";
 
-import { ElectronStandaloneHostLifecycle } from "@/adapters/standalone/host-lifecycle.js";
+import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { ElectronStandaloneLifecycleLedger } from "@/adapters/standalone/lifecycle-ledger.js";
 
 const scope = Object.freeze({ channel: "betahyx", namespace: "electron-foundation" });
@@ -29,7 +29,7 @@ const binding = createStandaloneGenerationBinding(generation, scope);
 describe("Electron Standalone Sidecar-host lifecycle", () => {
   it("serializes attachments and requires the opaque capability on mutation", async () => {
     let now = new Date("2026-09-04T00:00:00.000Z");
-    const lifecycle = new ElectronStandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000 });
+    const lifecycle = new StandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000 });
     const first = { id: "electron-1", shell };
     const second = { id: "electron-2", shell };
     const [startedFirst, startedSecond] = await Promise.all([
@@ -46,7 +46,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
   });
 
   it("does not allow attachment identity reuse without its original capability", async () => {
-    const lifecycle = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000 });
+    const lifecycle = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000 });
     const attachment = { id: "electron-1", shell };
     const started = await lifecycle.start(generation, attachment, binding, null);
     await expect(lifecycle.start(generation, attachment, binding, "wrong-capability")).rejects.toThrow("capability is invalid");
@@ -55,7 +55,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
 
   it("expires abandoned attachments and fences explicit stop", async () => {
     let now = new Date("2026-09-04T00:00:00.000Z");
-    const lifecycle = new ElectronStandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000 });
+    const lifecycle = new StandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000 });
     await lifecycle.start(generation, { id: "electron-1", shell }, binding, null);
     now = new Date("2026-09-04T00:00:02.000Z");
     const expired = await lifecycle.status();
@@ -69,9 +69,9 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
     try {
       const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
-      const firstHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
+      const firstHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
       const started = await firstHost.start(generation, attachment, binding, null);
-      const replacementHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
+      const replacementHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
       expect(await replacementHost.status()).toMatchObject({ state: "running", references: 1, bindingDigest: binding.digest });
       await expect(replacementHost.start(generation, attachment, binding, null)).rejects.toThrow("capability is required");
       expect((await replacementHost.heartbeat(attachment, started.attachmentCapability)).references).toBe(1);
@@ -88,13 +88,13 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
     try {
       const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
-      const firstHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const firstHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await firstHost.start(generation, attachment, binding, null);
       expect(await firstHost.beginTransition("shell-install", { attemptId: "install-1" })).toMatchObject({ state: "blocked", reason: "occupied" });
       const acquired = await firstHost.beginTransition("shell-install", { attemptId: "install-1", force: true });
       if (acquired.state !== "acquired") throw new Error("transition was not acquired");
 
-      const continuation = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const continuation = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       expect(await continuation.beginTransition("shell-install", { attemptId: "install-1", force: true })).toEqual(acquired);
       const sealed = await continuation.forceStopTransition(acquired.transition.token, acquired.transition.fence);
       expect(sealed).toMatchObject({ attemptId: "install-1", phase: "stopped-sealed", fence: 2 });
@@ -118,7 +118,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
       second: { kind: "shell-install" as const, attemptId: "shell-install-1" },
     },
   ])("grants only the first of concurrent $first.kind and $second.kind requests", async ({ first, second }) => {
-    const lifecycle = new ElectronStandaloneHostLifecycle(scope);
+    const lifecycle = new StandaloneHostLifecycle(scope);
     const [winner, blocked] = await Promise.all([
       lifecycle.beginTransition(first.kind, { attemptId: first.attemptId }),
       lifecycle.beginTransition(second.kind, { attemptId: second.attemptId }),
@@ -136,13 +136,13 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
     try {
       const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
-      const firstHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const firstHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await firstHost.start(generation, attachment, binding, null);
       const acquired = await firstHost.beginTransition("content-restart", { ownerAttachmentId: attachment.id });
       if (acquired.state !== "acquired") throw new Error("content transition was not acquired");
       await firstHost.forceStopTransition(acquired.transition.token, acquired.transition.fence);
 
-      const replacementHost = new ElectronStandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const replacementHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       const recovered = await replacementHost.completeStoppedTransitionStart("content-restart", null, generation, attachment, binding);
       expect(recovered?.status).toMatchObject({ state: "running", generationId: generation.id, bindingDigest: binding.digest, references: 1 });
       expect((await ledger.read())?.transition).toBeNull();
@@ -158,14 +158,14 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
       let now = new Date("2026-09-04T00:00:00.000Z");
       const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
-      const firstHost = new ElectronStandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const firstHost = new StandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await firstHost.start(generation, attachment, binding, null);
       const acquired = await firstHost.beginTransition("content-restart", { ownerAttachmentId: attachment.id });
       if (acquired.state !== "acquired") throw new Error("content transition was not acquired");
       const sealed = await firstHost.forceStopTransition(acquired.transition.token, acquired.transition.fence);
 
       now = new Date("2026-09-04T00:00:02.000Z");
-      const replacementHost = new ElectronStandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
+      const replacementHost = new StandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await expect(replacementHost.completeStoppedTransitionStart("content-restart", null, generation, attachment, binding)).resolves.toBeNull();
       const restarted = await replacementHost.start(generation, attachment, binding, null);
       expect(restarted.status).toMatchObject({ state: "running", references: 1, fence: sealed.fence + 2 });

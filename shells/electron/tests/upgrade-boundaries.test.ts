@@ -40,10 +40,12 @@ describe("Electron upgrade negative boundaries", () => {
     expect(guard).toContain("const stopped = await stopSidecars(");
     expect(guard.indexOf("withSidecarLifecycleLock(stamps")).toBeLessThan(guard.indexOf("stopSidecars(resourceSet.resources"));
 
-    for (const name of ["host-updater.ts", "host-lifecycle.ts", "lifecycle-ledger.ts", "shell-updater-ledger.ts"]) {
+    for (const name of ["host-updater.ts", "lifecycle-ledger.ts", "shell-updater-ledger.ts"]) {
       const source = sources.find((candidate) => candidate.name === name)!.source;
       expect(source, name).not.toMatch(/withSidecarLifecycleLock|SidecarLifecycleLock|proper-lockfile|flock/u);
     }
+    const sharedLifecycle = await readFile(new URL("../../../packages/standalone/src/host-lifecycle.ts", import.meta.url), "utf8");
+    expect(sharedLifecycle).not.toMatch(/withSidecarLifecycleLock|SidecarLifecycleLock|proper-lockfile|flock|@open-design\/sidecar/u);
   });
 
   it("does not recursively schedule updater handlers", async () => {
