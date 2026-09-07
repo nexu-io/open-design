@@ -39,7 +39,7 @@ import { prepareClosureShellUpdate } from "../src/index.js";
 import { standaloneGenerationHandoff } from "../src/launcher.js";
 
 describe("Closure generation runtime", () => {
-  it("starts exact daemon/Web resources and projects their attachment-fenced endpoints", async () => {
+  it.each(["electron", "terminal"])("shares exact daemon/Web resources and authenticates the invoking attachment when %s starts first", async (firstType) => {
     sidecars.spawned.length = 0;
     sidecars.invoked.length = 0;
     const runtimeRoot = join(tmpdir(), "closure-runtime-test");
@@ -50,7 +50,7 @@ describe("Closure generation runtime", () => {
       releaseVersion: "0.1.0-betahyx.1",
       standaloneVersion: "0.1.0",
       sourceCommit: "b".repeat(40),
-      minimumShellVersions: { electron: "0.1.0" },
+      minimumShellVersions: { electron: "0.1.0", terminal: "0.1.0" },
       launcher: { protocol: "standalone-launcher-v1", resourceId: "standalone-launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", path: "/fixture/launcher.mjs" },
       resources: {
         "standalone-launcher": { component: "standalone.launcher", blobSha256: "b".repeat(64), entrypoint: "/fixture/launcher.mjs", materialization: { type: "file", entrypoint: "launcher.mjs" }, mediaType: "text/javascript", path: "/fixture/launcher.mjs", size: 42, sync: true },
@@ -61,15 +61,15 @@ describe("Closure generation runtime", () => {
     const scope = { channel: "betahyx", namespace: "closure-runtime" } as const;
     const binding = createStandaloneGenerationBinding(generation, scope);
     const updater = {
-      shellType: "electron",
-      readSnapshot: async () => initialShellUpdaterSnapshot("electron"),
-      waitForChange: async () => initialShellUpdaterSnapshot("electron"),
-      invoke: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot("electron") }),
-      confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot("electron") }),
+      shellType: firstType,
+      readSnapshot: async () => initialShellUpdaterSnapshot(firstType),
+      waitForChange: async () => initialShellUpdaterSnapshot(firstType),
+      invoke: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot(firstType) }),
+      confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot(firstType) }),
     };
     const request = {
       binding,
-      attachment: { id: "electron-fixture", shell: { type: "electron", version: "0.1.0", buildHash: "d".repeat(64), digest: "e".repeat(64) } },
+      attachment: { id: `${firstType}-fixture`, shell: { type: firstType, version: "0.1.0", buildHash: "d".repeat(64), digest: "e".repeat(64) } },
       capabilities: createStandaloneShellCapabilityRouter([
         createStandaloneShellUpdaterCapabilityHandler(updater),
         createStandaloneRuntimeLayoutCapabilityHandler({
@@ -79,6 +79,11 @@ describe("Closure generation runtime", () => {
       ]),
     };
     const handle = await standaloneGenerationHandoff(request);
+    const otherType = firstType === "electron" ? "terminal" : "electron";
+    const other = await standaloneGenerationHandoff({ ...request, attachment: { id: `${otherType}-fixture`, shell: { ...request.attachment.shell, type: otherType } } });
+    const electron = firstType === "electron" ? handle : other;
+    const terminal = firstType === "terminal" ? handle : other;
+    try {
     await expect(handle.readStatus()).resolves.toMatchObject({ state: "running", bindingDigest: request.binding.digest, generationId: request.binding.generationId });
     await expect(handle.invoke({
       requestId: "renderer-read",
@@ -91,18 +96,30 @@ describe("Closure generation runtime", () => {
       output: { daemon: { url: "http://127.0.0.1:17578" }, web: { url: "http://127.0.0.1:17579" } },
     });
     const authSecret = Buffer.alloc(32, 9).toString("base64");
-    await expect(handle.invoke({
+    await expect(electron.invoke({
       requestId: "electron-auth",
-      attachmentId: request.attachment.id,
+      attachmentId: "electron-fixture",
       bindingDigest: request.binding.digest,
       command: "open-design.electron-auth.register.v1",
       input: { schemaVersion: 1, operation: "register", secret: authSecret },
     })).resolves.toMatchObject({ outcome: "accepted", output: { schemaVersion: 1, accepted: true } });
     expect(sidecars.spawned.map(({ app }) => app)).toEqual(["daemon", "web"]);
-    expect(sidecars.spawned[0]!.env).toMatchObject({ OD_REQUIRE_DESKTOP_AUTH: "1" });
+    expect(sidecars.spawned[0]!.env.OD_REQUIRE_DESKTOP_AUTH).toBe(firstType === "electron" ? "1" : undefined);
     expect(sidecars.spawned[1]!.env).toMatchObject({ OD_PORT: "17578", OD_WEB_OUTPUT_MODE: "standalone" });
     expect(sidecars.invoked).toContainEqual({ app: "daemon", type: "register-desktop-auth", input: { secret: authSecret } });
-    await expect(handle.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
+    await expect(terminal.invoke({
+      requestId: "terminal-cannot-register-electron-auth", attachmentId: "terminal-fixture", bindingDigest: binding.digest,
+      command: "open-design.electron-auth.register.v1", input: { schemaVersion: 1, operation: "register", secret: authSecret },
+    }, { attachment: { id: "terminal-fixture", shell: { ...request.attachment.shell, type: "electron" } } })).resolves.toMatchObject({ outcome: "failed" });
+    expect(sidecars.invoked.filter(({ type }) => type === "register-desktop-auth")).toHaveLength(1);
+    await expect(handle.close()).resolves.toMatchObject({ state: "stopped", references: 1 });
+    await expect(handle.invoke({ requestId: "closed", attachmentId: request.attachment.id, bindingDigest: binding.digest, command: "open-design.product-runtime.read.v1" }))
+      .rejects.toThrow("runtime attachment is closed");
+    await expect(other.close()).resolves.toMatchObject({ state: "stopped", references: 0 });
+    } finally {
+      await other.close();
+      await handle.close();
+    }
   });
 
   it("drives a Shell-owned updater through check and download when the Closure floor is not met", async () => {

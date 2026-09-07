@@ -36,6 +36,7 @@ import {
   type StandaloneRuntimeCommand,
   type StandaloneRuntimeCommandResult,
   type StandaloneRuntimeHandle,
+  type StandaloneRuntimeInvocationContext,
   type StandaloneRuntimeStatus,
 } from "@open-design/standalone";
 
@@ -265,12 +266,12 @@ async function startOpenDesignGeneration(request: StandaloneHandoffRequest): Pro
 
   return Object.freeze({
     readStatus: async () => status(),
-    async invoke(command: StandaloneRuntimeCommand): Promise<StandaloneRuntimeCommandResult> {
+    async invoke(command: StandaloneRuntimeCommand, context?: StandaloneRuntimeInvocationContext): Promise<StandaloneRuntimeCommandResult> {
       const base = resultBase(command);
       if (command.command === OPEN_DESIGN_ELECTRON_AUTH_REGISTER_COMMAND) {
         try {
           const input = validateOpenDesignElectronAuthRegisterRequest(command.input);
-          if (request.attachment.shell.type !== "electron" || state !== "running" || daemon == null) {
+          if (context?.attachment.id !== command.attachmentId || context.attachment.shell.type !== "electron" || state !== "running" || daemon == null) {
             throw new Error("Electron auth registration is unavailable");
           }
           const registered = await invokeSidecar<RegisterDesktopAuthResult>(

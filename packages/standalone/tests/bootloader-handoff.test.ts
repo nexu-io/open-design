@@ -116,6 +116,47 @@ function body(bindingDigest: string, generationId: string) {
 }
 
 describe("immutable bootloader handoff", () => {
+  it("reattaches a released identity without reusing its closed handle", async () => {
+    const starts = vi.fn(async (initial: StandaloneHandoffRequest) => body(initial.binding.digest, initial.binding.generationId).handle);
+    const imports = vi.fn(async () => createStandaloneGenerationBootloader(starts));
+    const fossil = new FossilHandoffHost(imports);
+    const owner = request("owner");
+    const first = await fossil.handoff(owner);
+    const peer = await fossil.handoff(request("peer"));
+    await first.close();
+    const replacement = await fossil.handoff(owner);
+    expect(replacement).not.toBe(first);
+    expect(await replacement.invoke({ requestId: "rejoined", attachmentId: "owner", bindingDigest: owner.binding.digest, command: "status" }))
+      .toMatchObject({ outcome: "accepted" });
+    await first.close();
+    expect(await fossil.handoff(owner)).toBe(replacement);
+    await replacement.close();
+    expect((await peer.readStatus()).state).toBe("running");
+    await peer.close();
+    expect(starts).toHaveBeenCalledTimes(1);
+    const restarted = await fossil.handoff(owner);
+    expect((await restarted.readStatus()).state).toBe("running");
+    expect(starts).toHaveBeenCalledTimes(2);
+    await restarted.close();
+    expect(imports).toHaveBeenCalledTimes(1);
+  });
+
+  it("supplies invocation identity from the bound handle and rejects calls after close", async () => {
+    const attached = request("terminal-owner");
+    const runtime = body(attached.binding.digest, attached.binding.generationId);
+    runtime.handle.invoke = async (command, context) => ({
+      requestId: command.requestId, attachmentId: command.attachmentId, bindingDigest: command.bindingDigest,
+      outcome: "accepted", output: context?.attachment.shell.type,
+    });
+    const bootloader = createStandaloneGenerationBootloader(async () => runtime.handle);
+    const handle = await bootloader(attached);
+    const command = { requestId: "identity", attachmentId: attached.attachment.id, bindingDigest: attached.binding.digest, command: "identity" };
+    expect(await handle.invoke(command, { attachment: { ...attached.attachment, shell: { ...terminal, type: "electron" } } }))
+      .toMatchObject({ outcome: "accepted", output: "terminal" });
+    await handle.close();
+    await expect(handle.invoke(command)).rejects.toThrow("runtime attachment is closed");
+  });
+
   it("binds one typed standalone.launcher to an exact generation and scope", () => {
     const first = createStandaloneGenerationBinding(generation(), { channel: "somechan", namespace: "shared" });
     const same = createStandaloneGenerationBinding(generation(), { channel: "somechan", namespace: "shared" });

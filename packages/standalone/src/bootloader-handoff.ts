@@ -99,10 +99,15 @@ export type StandaloneRuntimeCommandResult = Readonly<{
 
 export interface StandaloneRuntimeHandle {
   readStatus(): Promise<StandaloneRuntimeStatus>;
-  invoke(request: StandaloneRuntimeCommand): Promise<StandaloneRuntimeCommandResult>;
+  invoke(request: StandaloneRuntimeCommand, context?: StandaloneRuntimeInvocationContext): Promise<StandaloneRuntimeCommandResult>;
   close(): Promise<StandaloneRuntimeStatus>;
   waitForTerminal(): Promise<StandaloneRuntimeStatus>;
 }
+
+/** Supplied by the bound generation handle, never taken from command input. */
+export type StandaloneRuntimeInvocationContext = Readonly<{
+  attachment: StandaloneHandoffAttachment;
+}>;
 
 export type StandaloneGenerationHandoff = (request: StandaloneHandoffRequest) => Promise<StandaloneRuntimeHandle>;
 
@@ -280,8 +285,26 @@ export class FossilHandoffHost {
       if (existing.key !== key) throw new StandaloneHandoffError("attachment-conflict", `attachment ${request.attachment.id} changed Shell identity`);
       return existing.task;
     }
-    const task = this.launcherTask!.then((handoff) => handoff(request));
-    this.attachments.set(request.attachment.id, Object.freeze({ key, task }));
+    const attachmentId = request.attachment.id;
+    const task = this.launcherTask!.then(async (handoff): Promise<StandaloneRuntimeHandle> => {
+      const handle = await handoff(request);
+      let closeTask: Promise<StandaloneRuntimeStatus> | null = null;
+      return Object.freeze({
+        readStatus: () => handle.readStatus(),
+        invoke: (command: StandaloneRuntimeCommand) => handle.invoke(command),
+        waitForTerminal: () => handle.waitForTerminal(),
+        close: () => {
+          closeTask ??= handle.close().then((status) => {
+            // Only a completed release can evict this attachment. An old
+            // handle must never evict a later attachment with the same id.
+            if (this.attachments.get(attachmentId)?.task === task) this.attachments.delete(attachmentId);
+            return status;
+          });
+          return closeTask;
+        },
+      });
+    });
+    this.attachments.set(attachmentId, Object.freeze({ key, task }));
     return task;
   }
 }
@@ -353,6 +376,9 @@ export function createStandaloneGenerationBootloader(
       entry.attachments.set(request.attachment.id, request);
     }
     const active = entry;
+    const invocationContext: StandaloneRuntimeInvocationContext = Object.freeze({
+      attachment: Object.freeze({ id: request.attachment.id, shell: Object.freeze({ ...request.attachment.shell }) }),
+    });
     let closed: StandaloneRuntimeStatus | null = null;
     return Object.freeze({
       async readStatus() {
@@ -360,11 +386,12 @@ export function createStandaloneGenerationBootloader(
         return validateStatus(await (await active.body).readStatus(), binding);
       },
       async invoke(command: StandaloneRuntimeCommand) {
+        if (closed != null) throw new StandaloneHandoffError("runtime-invalid", "runtime attachment is closed");
         if (
-          command.attachmentId !== request.attachment.id
+          command.attachmentId !== invocationContext.attachment.id
           || command.bindingDigest !== binding.digest
         ) throw new StandaloneHandoffError("runtime-invalid", "runtime command escaped its attachment binding");
-        const result = await (await active.body).invoke(command);
+        const result = await (await active.body).invoke(command, invocationContext);
         if (
           result.requestId !== command.requestId
           || result.attachmentId !== command.attachmentId
