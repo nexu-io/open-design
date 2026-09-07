@@ -13295,6 +13295,42 @@ function HtmlViewer({
     return outcome;
   }
 
+  /**
+   * Drop every element identity this Manual Edit session is holding.
+   *
+   * `data-od-source-path` is a positional ordinal, so it identifies an element
+   * only while the document's shape holds still. A save that re-serializes
+   * through the HTML parser can add or remove an element — an implicit `</p>`
+   * before a block child, the `<tbody>` a table never wrote — and every ordinal
+   * after it shifts. The document on screen was mirrored rather than replaced,
+   * so it still answers to the old numbers while the source now answers to new
+   * ones; anything the host kept from before the save addresses the wrong
+   * element from here on.
+   *
+   * Marking the live document diverged is what makes it recoverable: the
+   * identity freeze lifts, the document is replaced, and the ids come back from
+   * the same source the next patch will be applied to. History goes too — its
+   * entries carry pre-save ids, and an undo that silently retargets is worse
+   * than an undo that is not offered.
+   */
+  function forgetManualEditElementIdentities(): void {
+    manualEditLiveDocumentDivergedRef.current = true;
+    manualEditPersistedDocumentRef.current = null;
+    selectedManualEditTargetIdRef.current = null;
+    manualEditSelectionDraftRef.current = null;
+    manualEditLiveStylesRef.current.clear();
+    manualEditPendingStyleRef.current = null;
+    clearManualEditStyleTimer();
+    manualEditTextSessionIdRef.current = null;
+    manualEditTextSessionStartSequenceRef.current = null;
+    setSelectedManualEditTarget(null);
+    setManualEditTargets([]);
+    setManualEditHoverTarget(null);
+    setManualEditPanelPosition(null);
+    setManualEditHistory([]);
+    setManualEditUndone([]);
+  }
+
   function cancelManualEditStyleDraft() {
     const pending = manualEditPendingStyleRef.current;
     if (!pending) return;
@@ -13988,6 +14024,15 @@ function HtmlViewer({
         afterSource: result.source,
         createdAt: Date.now(),
       };
+      // This save moved the ordinals it addresses elements by, so every id this
+      // session is still holding now points at a neighbour: the selection, the
+      // targets broadcast by the document, the live style map, the pending
+      // style, and the ids inside history. Reusing any of them writes to the
+      // wrong element with nothing on screen to suggest it, which is the one
+      // outcome worth losing an undo stack over.
+      if (result.identitiesRenumbered) {
+        forgetManualEditElementIdentities();
+      }
       setSource(result.source);
       sourceRef.current = result.source;
       setInlinedSource(null);

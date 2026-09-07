@@ -193,7 +193,9 @@ describe('manual edit source patches', () => {
     const source = '<!doctype html><html><body><h1 data-od-id="hero-title">Snapshot</h1></body></html>';
     const result = applyManualEditPatch(baseSource, { kind: 'set-full-source', source });
 
-    expect(result).toEqual({ ok: true, source });
+    // A whole-source replacement is not a patch against the numbering the ids
+    // were counted through, so it never claims identity stability.
+    expect(result).toEqual({ ok: true, source, identitiesRenumbered: true });
   });
 
   it('updates CSS tokens in style tags', () => {
