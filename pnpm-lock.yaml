@@ -890,6 +890,9 @@ importers:
       '@open-design/shell-electron':
         specifier: workspace:*
         version: link:../../shells/electron
+      '@open-design/tools-pack':
+        specifier: workspace:*
+        version: link:../pack
       cac:
         specifier: 6.7.14
         version: 6.7.14

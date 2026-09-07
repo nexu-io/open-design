@@ -1,6 +1,15 @@
 import { build } from "esbuild";
 
 await build({
+  bundle: true,
+  entryPoints: ["./src/exact-api.ts"],
+  format: "esm",
+  outfile: "./dist/exact-api.mjs",
+  platform: "node",
+  target: "node24",
+});
+
+await build({
   banner: {
     js: "#!/usr/bin/env node",
   },

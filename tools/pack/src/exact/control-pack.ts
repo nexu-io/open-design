@@ -90,7 +90,7 @@ async function previousRequirements(path: unknown, channel: string, keys: readon
   } catch { return new Map(); }
 }
 
-async function prepare(request: JsonObject, receiptPath: string): Promise<void> {
+export async function prepareExactContent(request: JsonObject, receiptPath: string): Promise<void> {
   requireRelease(request);
   const legacyTerminal = request.shells == null && request.shellVersion != null;
   const shells: unknown = legacyTerminal ? [{ type: "terminal", version: request.shellVersion, scenes: request.scenes }] : request.shells;
@@ -195,7 +195,7 @@ async function prepare(request: JsonObject, receiptPath: string): Promise<void> 
   await writeObject(receiptPath, receipt);
 }
 
-async function finalize(request: JsonObject, receiptPath: string): Promise<void> {
+export async function finalizeExactContent(request: JsonObject, receiptPath: string): Promise<void> {
   const prepared = await readObject(String(request.prepareReceipt ?? ""));
   if (prepared.schemaVersion !== 2 || prepared.operation !== "exact.prepare") throw new Error("invalid exact.prepare receipt");
   const contributions = request.contributions;
@@ -284,7 +284,7 @@ async function finalize(request: JsonObject, receiptPath: string): Promise<void>
 
 export async function executeExactPackControl(request: JsonObject, receiptPath: string): Promise<void> {
   if (request.schemaVersion !== 1) throw new Error("unsupported exact pack request schema");
-  if (request.operation === "exact.prepare") return await prepare(request, receiptPath);
-  if (request.operation === "exact.finalize") return await finalize(request, receiptPath);
+  if (request.operation === "exact.prepare") return await prepareExactContent(request, receiptPath);
+  if (request.operation === "exact.finalize") return await finalizeExactContent(request, receiptPath);
   throw new Error("unsupported exact pack operation");
 }

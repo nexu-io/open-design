@@ -43,7 +43,7 @@ registry. They do not build or validate Electron artifacts and cannot serve as
 an acceptance path.
 
 The workspace CLI and the relocatable `dist/exact-control.mjs` share the
-`scene pack|unpack`, `policy resolve|authorize`, `publish`, `activate`, and
+`scene pack|unpack`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
 `baseline stage|promote` commands. Use explicit flags and consume their receipts;
 workflows must not construct transient JSON requests for these operations.
 The relocatable build runs with Node 24 without a workspace install. Credentials
@@ -60,6 +60,14 @@ to miss older, lossy directory artifacts without deleting them.
 `activate` and `baseline promote` accept `--channel-head` for a relocated local
 file. Its bytes must match the original publication receipt: relocation never
 rewrites that receipt or changes its authority.
+
+`prepare` and `finalize` authorize the bound policy and call the public
+`@open-design/tools-pack/exact` content atoms in-process. They own cross-job
+input collection and relocation, not a second signing or assembly implementation.
+Previous content is acquired from the policy's channel origin when no explicit
+envelope is supplied. A missing channel head is cold start; other acquisition
+failures and content digest mismatches fail closed instead of silently resetting
+the compatibility floor.
 
 ```sh
 pnpm --filter @open-design/tools-release typecheck

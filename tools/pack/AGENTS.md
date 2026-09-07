@@ -19,6 +19,9 @@ command surface. Keep it a thin adapter over the public
 - Namespace controls local output/install/runtime paths. Ports are transient
   transport details and never path identity.
 - Tests use the test-only `@/*` alias and live under `tests/`.
+- The public `/exact` API exposes the existing content prepare/finalize atoms
+  to tools-release. It does not acquire publication policy or own channel gates;
+  callers must authorize release operations before invoking content assembly.
 
 ## Supported slice
 

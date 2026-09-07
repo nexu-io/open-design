@@ -112,7 +112,6 @@ jobs:
           pnpm --filter @open-design/tools-release build
           node tools/release/dist/exact-control.mjs --self-check
           mkdir -p "$RUNNER_TEMP/exact-plan"
-          cp tools/pack/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-pack-control.mjs"
           cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-release-control.mjs"
           cp packages/electron-kit/dist/cdp-control.mjs "$RUNNER_TEMP/exact-plan/electron-cdp-control.mjs"
 
@@ -452,24 +451,6 @@ jobs:
             --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
             --receipt "$RUNNER_TEMP/prepare-authorization.json"
 
-      - name: Read previous content floor when available
-        env:
-          CHANNEL: ${{ inputs.channel }}
-          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
-        run: |
-          python3 - <<'PY'
-          import json, os, urllib.error, urllib.request
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          try:
-              with urllib.request.urlopen(f"{os.environ['PUBLIC_ORIGIN'].rstrip('/')}/{os.environ['CHANNEL']}/latest/channel-head.json", timeout=10) as response:
-                  head = json.load(response)["head"]
-              with urllib.request.urlopen(head["lanes"]["content"]["url"], timeout=10) as response:
-                  (root / "previous-content-metadata.json").write_bytes(response.read())
-          except (KeyError, OSError, urllib.error.URLError, json.JSONDecodeError):
-              pass
-          PY
-
       - name: Compose and sign content metadata
         env:
           CHANNEL: ${{ inputs.channel }}
@@ -484,50 +465,11 @@ jobs:
           SHELL_MATRIX: ${{ needs.plan.outputs.shell_matrix }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, os, subprocess
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          topology = json.loads(os.environ["SHELL_MATRIX"])["include"]
-          shell_records = {}
-          closure_artifact = standalone_artifact = resource_receipt = None
-          for item in topology:
-              shell_type, target = item["shell"], item["target"]
-              directory = root / "scenes" / f"exact-{shell_type}-scene-{target}-{os.environ['SOURCE_SHA']}"
-              subprocess.run(["node", str(root / "exact-plan" / "exact-release-control.mjs"), "scene", "unpack", "--archive", str(directory / "scene.tar"), "--output", str(directory / "scene")], check=True)
-              directory = directory / "scene"
-              manifest = directory / "scene.json"
-              scene = json.loads(manifest.read_text())
-              record = shell_records.setdefault(shell_type, {"type": shell_type, "version": scene["shellVersion"], "scenes": []})
-              if record["version"] != scene["shellVersion"]:
-                  raise SystemExit(f"{shell_type} scenes contain different Shell versions")
-              record["scenes"].append({"target": target, "sceneDirectory": str(directory), "sceneManifestSha256": hashlib.sha256(manifest.read_bytes()).hexdigest()})
-              closure_artifact = closure_artifact or directory / scene["closure"]["file"]
-              standalone_artifact = standalone_artifact or directory / scene["standalone"]["entrypoint"]
-              if shell_type == "electron": resource_receipt = resource_receipt or directory / "closure-resources.json"
-          if closure_artifact is None or standalone_artifact is None:
-              raise SystemExit("exact topology contains no Shell scenes")
-          published_at = subprocess.check_output(['git', 'show', '--no-patch', '--format=%cI', os.environ['SOURCE_SHA']], text=True).strip()
-          request = {
-              "schemaVersion": 1,
-              "operation": "exact.prepare",
-              "channel": os.environ["CHANNEL"],
-              "releaseVersion": os.environ["RELEASE_VERSION"],
-              "sourceCommit": os.environ["SOURCE_SHA"],
-              "publishedAt": published_at,
-              "standaloneVersion": os.environ["STANDALONE_VERSION"],
-              "artifactBaseUrl": f"{os.environ['PUBLIC_ORIGIN'].rstrip('/')}/{os.environ['CHANNEL']}/{os.environ['RELEASE_VERSION']}",
-              "closureArtifactFile": str(closure_artifact),
-              "standaloneArtifactFile": str(standalone_artifact),
-              "shells": sorted(shell_records.values(), key=lambda value: value["type"]),
-              "outputDirectory": str(root / "exact-prepare"),
-          }
-          if resource_receipt is not None: request["resourceReceiptFile"] = str(resource_receipt)
-          previous = root / "previous-content-metadata.json"
-          if previous.is_file(): request["previousContentMetadataFile"] = str(previous)
-          (root / "exact-prepare-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-          node "$RUNNER_TEMP/exact-plan/exact-pack-control.mjs" --request "$RUNNER_TEMP/exact-prepare-request.json" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" prepare \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_SHA" --root "$GITHUB_WORKSPACE" --standalone-version "$STANDALONE_VERSION" \
+            --topology "$RUNNER_TEMP/exact-plan/topology.json" --scenes "$RUNNER_TEMP/scenes" \
+            --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -712,32 +654,10 @@ jobs:
           OD_EXACT_ED25519_PRIVATE_KEY_NEXT: ${{ secrets.EXACT_ED25519_PRIVATE_KEY_NEXT }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          prepared = json.loads((root / "prepared" / "prepare-receipt.json").read_text())
-          contributions = []
-          for item in json.loads(os.environ["SHELL_MATRIX"])["include"]:
-              shell_type, target = item["shell"], item["target"]
-              directory = root / "distributions" / f"exact-distribution-{shell_type}-{target}-{os.environ['RELEASE_VERSION']}"
-              contribution_file = directory / "shell-contribution.json"
-              contribution = json.loads(contribution_file.read_text())
-              archive_file = directory / Path(contribution["artifact"]["file"]).name
-              contributions.append({"receipt": str(contribution_file), "archiveFile": str(archive_file)})
-          request = {
-              "schemaVersion": 1,
-              "operation": "exact.finalize",
-              "prepareReceipt": str(root / "prepared" / "prepare-receipt.json"),
-              "contentMetadataFile": str(root / "prepared" / "documents" / "content-metadata.json"),
-              "closureArtifactFile": str(next((root / "prepared" / "artifacts").glob("closure-*.mjs"))),
-              "standaloneArtifactFile": str(next((root / "prepared" / "artifacts").glob("standalone-launcher-*.mjs"))),
-              "contributions": contributions,
-              "outputDirectory": str(root / "exact-final"),
-          }
-          (root / "exact-finalize-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-          node "$RUNNER_TEMP/exact-plan/exact-pack-control.mjs" --request "$RUNNER_TEMP/exact-finalize-request.json" --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" finalize \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --prepared "$RUNNER_TEMP/prepared" \
+            --distributions "$RUNNER_TEMP/distributions" --output "$RUNNER_TEMP/exact-final" \
+            --receipt "$RUNNER_TEMP/exact-final/pack-receipt.json"
 
       - name: Publish immutable release objects
         env:
@@ -798,7 +718,6 @@ jobs:
           path: |
             ${{ runner.temp }}/exact-final/*.json
             ${{ runner.temp }}/exact-final/documents/*.json
-            ${{ runner.temp }}/exact-finalize-request.json
           if-no-files-found: error
           retention-days: 30
 

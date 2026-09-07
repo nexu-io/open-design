@@ -16,6 +16,7 @@
     "@open-design/metatool": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/shell-electron": "workspace:*",
+    "@open-design/tools-pack": "workspace:*",
     "cac": "6.7.14",
     "sharp": "0.35.3",
     "tar": "7.5.22",

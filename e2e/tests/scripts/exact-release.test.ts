@@ -79,9 +79,9 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain("@open-design/tools-release exec tools-release electron-distribution");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
     expect(workflow).toContain("@open-design/closure build:resources");
-    expect(workflow).toContain("tools/pack/dist/exact-control.mjs");
+    expect(workflow).not.toContain("tools/pack/dist/exact-control.mjs");
     expect(workflow).toContain("tools/release/dist/exact-control.mjs");
-    expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-pack-control.mjs');
+    expect(workflow).not.toContain("exact-pack-control.mjs");
     expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-release-control.mjs');
     expect(workflow).toContain("PROFILE: ${{ inputs.profile || 'exact-validation' }}");
     expect(workflow).toContain('--endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN"');
@@ -142,9 +142,9 @@ describe("exact Electron release topology", () => {
   it("uses the TypeScript exact control plane with no temporary Python bridge", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
 
-    expect(workflow).toContain('"operation": "exact.prepare"');
-    expect(workflow).toContain('"operation": "exact.finalize"');
-    for (const command of ["publish", "activate", "baseline promote", "baseline stage"]) {
+    expect(workflow).not.toContain('"operation": "exact.prepare"');
+    expect(workflow).not.toContain('"operation": "exact.finalize"');
+    for (const command of ["prepare", "finalize", "publish", "activate", "baseline promote", "baseline stage"]) {
       expect(workflow).toContain(`exact-release-control.mjs" ${command}`);
     }
     expect(workflow).not.toContain("relocated-publish-receipt.json");
@@ -161,7 +161,8 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain('"appId": "io.open-design.betahyx"');
     expect(workflow).not.toContain('"executableName": "open-design-betahyx"');
     const finalize = workflow.split("- name: Finalize signed Shell sidecar and channel head")[1]?.split("- name: Publish immutable release objects")[0];
-    expect(finalize).toContain("contribution = json.loads(contribution_file.read_text())");
+    expect(finalize).toContain('--distributions "$RUNNER_TEMP/distributions"');
+    expect(finalize).not.toContain("python3");
     expect(finalize).not.toContain("restart-and-install");
     expect(finalize).not.toContain("shell.distribution.contribute");
   });

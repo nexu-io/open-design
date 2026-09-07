@@ -3,6 +3,9 @@
   "version": "0.21.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./exact": { "types": "./dist/exact-api.d.ts", "default": "./dist/exact-api.mjs" }
+  },
   "bin": {
     "tools-pack": "./bin/tools-pack.mjs"
   },

@@ -6,6 +6,7 @@ import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/rele
 import { writeObject } from "./control-common.ts";
 import { packSceneArtifact, unpackSceneArtifact } from "./scene-artifact.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, stageAcceptedElectronContribution } from "./control-release.ts";
+import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -26,6 +27,37 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("prepare", "Compose and sign content from the declared Shell scenes")
+    .option("--policy <file>", "Release policy receipt")
+    .option("--channel <name>", "Release channel")
+    .option("--release-version <version>", "Release version")
+    .option("--source-commit <sha>", "Exact source commit")
+    .option("--root <directory>", "Checked-out source root")
+    .option("--topology <file>", "Resolved active Shell topology")
+    .option("--scenes <directory>", "Downloaded scene artifacts")
+    .option("--standalone-version <version>", "Standalone runtime version")
+    .option("--previous-content <file>", "Optional verified previous content envelope")
+    .option("--output <directory>", "Prepared content directory")
+    .option("--receipt <file>", "Preparation receipt")
+    .action(async (options: Options) => {
+      await prepareReleaseContent({ policy: required(options, "policy"), channel: required(options, "channel"),
+        releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit"), sourceRoot: required(options, "root"),
+        topology: required(options, "topology"), scenesRoot: required(options, "scenes"), standaloneVersion: required(options, "standaloneVersion"),
+        ...(options.previousContent == null ? {} : { previousContentMetadataFile: required(options, "previousContent") }),
+        output: required(options, "output"), receipt: required(options, "receipt") });
+    });
+
+  cli.command("finalize", "Verify contributions and finalize signed release metadata")
+    .option("--policy <file>", "Release policy receipt")
+    .option("--prepared <directory>", "Downloaded prepared content")
+    .option("--distributions <directory>", "Downloaded Shell contributions")
+    .option("--output <directory>", "Finalized output")
+    .option("--receipt <file>", "Finalized pack receipt")
+    .action(async (options: Options) => {
+      await finalizeReleaseContent({ policy: required(options, "policy"), prepared: required(options, "prepared"),
+        distributions: required(options, "distributions"), output: required(options, "output"), receipt: required(options, "receipt") });
+    });
+
   cli.command("publish", "Publish and read back immutable release objects")
     .option("--pack-receipt <file>", "Finalized pack receipt")
     .option("--policy <file>", "Release policy receipt")
