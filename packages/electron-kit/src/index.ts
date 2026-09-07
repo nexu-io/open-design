@@ -7,3 +7,4 @@ export * from "./platform/windows/index.js";
 export * from "./runtime/startup/preflight/index.js";
 export * from "./runtime/startup/warmup/index.js";
 export { resolveElectronSessionNamespace } from "./runtime/session/namespace-paths.js";
+export { bindElectronPlatform } from "./runtime/startup/platform.js";

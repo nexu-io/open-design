@@ -19,4 +19,5 @@ export * from "./shared-lifecycle.js";
 export * from "./store.js";
 export * from "./bootloader-handoff.js";
 export * from "./launcher.js";
+export type { NodeRuntimeBinding } from "./node-runtime.js";
 export * from "./update.js";
