@@ -29,6 +29,89 @@ function countOccurrences(content: string, needle: string): number {
   return content.split(needle).length - 1;
 }
 
+type WorkflowJob = { needs: string[]; if: string };
+
+/**
+ * Minimal `jobs:` reader: job id -> its `needs` list and its job-level `if`.
+ *
+ * Deliberately not a YAML parser. These workflows are hand-written with a
+ * stable two-space job indentation, and the alternative is adding a YAML
+ * dependency to tools/pack purely for a topology assertion.
+ */
+function parseJobGraph(content: string): Map<string, WorkflowJob> {
+  const lines = content.split("\n");
+  const jobsIndex = lines.indexOf("jobs:");
+  expect(jobsIndex).toBeGreaterThanOrEqual(0);
+
+  const blocks = new Map<string, string[]>();
+  let current: string | null = null;
+  for (const line of lines.slice(jobsIndex + 1)) {
+    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (header?.[1] != null) {
+      current = header[1];
+      blocks.set(current, []);
+      continue;
+    }
+    if (line.trim().length > 0 && /^\S/.test(line)) break;
+    if (current != null) blocks.get(current)?.push(line);
+  }
+
+  const jobs = new Map<string, WorkflowJob>();
+  for (const [name, block] of blocks) {
+    const job: WorkflowJob = { needs: [], if: "" };
+    for (let index = 0; index < block.length; index += 1) {
+      const line = block[index] ?? "";
+      const inlineNeeds = /^ {4}needs:\s*(.+)$/.exec(line);
+      if (inlineNeeds?.[1] != null) {
+        const value = inlineNeeds[1].split("#")[0]?.trim() ?? "";
+        job.needs = value.startsWith("[")
+          ? value.replace(/[[\]]/g, "").split(",").map((entry) => entry.trim()).filter(Boolean)
+          : [value].filter(Boolean);
+        continue;
+      }
+      if (/^ {4}needs:\s*$/.test(line)) {
+        for (const candidate of block.slice(index + 1)) {
+          const item = /^ {6}- ([A-Za-z0-9_-]+)/.exec(candidate);
+          if (item?.[1] == null) break;
+          job.needs.push(item[1]);
+        }
+        continue;
+      }
+      const conditionStart = /^ {4}if:\s*(.*)$/.exec(line);
+      if (conditionStart != null) {
+        let value = conditionStart[1] ?? "";
+        for (const candidate of block.slice(index + 1)) {
+          if (/^ {4}\S/.test(candidate)) break;
+          value += ` ${candidate.trim()}`;
+        }
+        job.if = value.trim();
+      }
+    }
+    jobs.set(name, job);
+  }
+  return jobs;
+}
+
+/** Every job `name` depends on, directly or through another job. */
+function transitiveNeeds(jobs: Map<string, WorkflowJob>, name: string): string[] {
+  const seen = new Set<string>();
+  const stack = [...(jobs.get(name)?.needs ?? [])];
+  while (stack.length > 0) {
+    const next = stack.pop();
+    if (next == null || seen.has(next) || !jobs.has(next)) continue;
+    seen.add(next);
+    stack.push(...(jobs.get(next)?.needs ?? []));
+  }
+  return [...seen];
+}
+
+/**
+ * Status-check functions that make a job evaluate its own `if` instead of
+ * inheriting a skip from somewhere up the chain. `success()` does not count:
+ * it is what GitHub already applies implicitly.
+ */
+const SKIP_CHAIN_BREAKERS = ["always(", "cancelled(", "failure("];
+
 describe("release workflows", () => {
   it("retains only the newest outer tools-pack cache for each release lane", async () => {
     const workflows = await Promise.all([
@@ -343,6 +426,62 @@ describe("release workflows", () => {
     expect(modeLine).toMatch(/\|\|\s*'core'\s*\}\}/);
   });
 
+  it("keeps a job that hand-checks an upstream result reachable past a skipped ancestor", async () => {
+    // GitHub, on `jobs.<job_id>.needs`: "If a job fails or is skipped, all jobs
+    // that need it are skipped unless the jobs use a conditional expression
+    // that causes the job to continue. If a run contains a series of jobs that
+    // need each other, a failure or skip applies to all jobs in the dependency
+    // chain from the point of failure or skip onwards."
+    //
+    // The break is per job and is NOT inherited. `always()` on `publish` lets
+    // PUBLISH run past a skipped `build_linux`; it does nothing for publish's
+    // own dependents, which are still downstream of the same skip. A job whose
+    // `if` hand-checks `needs.<x>.result` is by construction making its own
+    // decision about an upstream outcome — so it has to break the chain too,
+    // or GitHub's implicit `success()` skips it before that condition is ever
+    // evaluated.
+    //
+    // release-prerelease.yml's `dispatch_smoke` was exactly that shape, and
+    // `build_linux` is skipped on every single run because the repository has
+    // no ENABLE_STABLE_LINUX variable. Run 34149795952: publish succeeded,
+    // version_metadata_url was published, enable_smoke came through as true —
+    // and the job was skipped with zero steps, so release-prerelease-smoke.yml
+    // had never once run.
+    const files = [
+      "release-prerelease.yml",
+      "release-beta.yml",
+      "release-stable.yml",
+      "notify-release-feishu.yml",
+    ];
+    const contents = await Promise.all(
+      files.map((file) => readFile(new URL(`../../../.github/workflows/${file}`, import.meta.url), "utf8")),
+    );
+
+    const unreachable: string[] = [];
+    for (const [index, content] of contents.entries()) {
+      const jobs = parseJobGraph(content);
+      for (const [name, job] of jobs) {
+        if (!/needs\.[A-Za-z0-9_-]+\.result/.test(job.if)) continue;
+        if (SKIP_CHAIN_BREAKERS.some((breaker) => job.if.includes(breaker))) continue;
+        const skippableAncestors = transitiveNeeds(jobs, name).filter(
+          (ancestor) => (jobs.get(ancestor)?.if ?? "").length > 0,
+        );
+        if (skippableAncestors.length === 0) continue;
+        unreachable.push(`${files[index]}:${name} (skippable ancestors: ${skippableAncestors.sort().join(", ")})`);
+      }
+    }
+    expect(unreachable, "these jobs are skipped before their own condition is evaluated").toEqual([]);
+
+    // And specifically: the smoke dispatcher must stay reachable while
+    // build_linux stays opt-in.
+    const prerelease = parseJobGraph(contents[0] ?? "");
+    const dispatchSmoke = prerelease.get("dispatch_smoke");
+    expect(dispatchSmoke, "release-prerelease.yml must still dispatch packaged smoke").toBeDefined();
+    expect(transitiveNeeds(prerelease, "dispatch_smoke")).toContain("build_linux");
+    expect(prerelease.get("build_linux")?.if).toContain("vars.ENABLE_STABLE_LINUX");
+    expect(SKIP_CHAIN_BREAKERS.some((breaker) => (dispatchSmoke?.if ?? "").includes(breaker))).toBe(true);
+  });
+
   it("keeps every prerelease validation lane out of the release concurrency group", async () => {
     // release-prerelease.yml holds ONE repository-wide concurrency group with
     // cancel-in-progress: false. Anything that outlives `publish` inside it
@@ -379,10 +518,15 @@ describe("release workflows", () => {
     expect(prerelease).not.toContain("- dispatch_validation");
     expect(prerelease).not.toContain("- dispatch_smoke");
     // Smoke needs a package, so it waits for publish — but only long enough to
-    // POST the dispatch.
-    expect(prerelease).toContain(
-      "if: ${{ inputs.enable_smoke && needs.publish.result == 'success' && needs.publish.outputs.version_metadata_url != '' }}",
-    );
+    // POST the dispatch. Asserted as substance rather than as one literal
+    // line: the previous form pinned the exact string of a condition that
+    // never ran, which made the topology test agree with the bug. Reachability
+    // itself is covered by "keeps a job that hand-checks an upstream result
+    // reachable past a skipped ancestor" above.
+    const smokeCondition = parseJobGraph(prerelease).get("dispatch_smoke")?.if ?? "";
+    expect(smokeCondition).toContain("inputs.enable_smoke");
+    expect(smokeCondition).toContain("needs.publish.result == 'success'");
+    expect(smokeCondition).toContain("needs.publish.outputs.version_metadata_url != ''");
 
     // Two refs, tried in order, so a release branch cut before these lanes
     // existed still gets validated from the default branch.
