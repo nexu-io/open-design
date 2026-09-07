@@ -3960,6 +3960,12 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
       all.some((slug) => slug === value || slug.includes(value) || slug.split('-').includes(value)),
     );
   };
+  const hasToken = (...values: string[]) => {
+    const all = [...slugs];
+    return values.some((value) =>
+      all.some((slug) => slug === value || slug.split('-').includes(value)),
+    );
+  };
   switch (chipId) {
     case 'prototype':
       return has('prototype') || hasPart('web-prototype');
@@ -3994,10 +4000,9 @@ export function pluginMatchesExampleChip(record: InstalledPluginRecord, chipId: 
             'meeting-notes',
             'runbook',
             'eguide',
-            'letter',
             'dossier',
             'memo',
-          )) &&
+          ) || hasToken('letter')) &&
         !hasPart('video', 'audio', 'hyperframes', 'deck', 'slides')
       );
     case 'deck':

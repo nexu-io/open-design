@@ -23,7 +23,7 @@
     "uk": "Email-маркетинг",
     "en": "Email Marketing"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publishedAt": "2026-05-12T07:18:16Z",
   "description": "A brand product-launch email — masthead with wordmark, hero image block, headline lockup with skewed-italic accent, body copy, primary CTA, and a specifications grid. Pure HTML email layout (centered single column, table fallback). Use when the brief asks for an \"email\", \"newsletter blast\", \"MJML\", \"product launch email\", or \"email template\".",
   "description_i18n": {
@@ -62,6 +62,7 @@
     "email",
     "email-template",
     "newsletter",
+    "document",
     "email-blast",
     "product-launch-email",
     "mjml",
@@ -83,17 +84,22 @@
     "surface": "web",
     "preview": {
       "type": "html",
-      "entry": "./example.html"
+      "entry": "./example.html",
+      "motion": "scroll"
     },
     "useCase": {
       "query": {
-        "en": "Design a launch email for a sporty running shoe brand — masthead, hero, big headline lockup, specs grid, CTA.",
-        "zh-CN": "使用这个插件完成以下任务：Design a launch email for a sporty running shoe brand — masthead, hero, big headline lockup, specs grid, CTA."
+        "en": "Use the Email Marketing template to turn my real campaign content into a polished, self-contained HTML email. Start from the embedded reference HTML, preserve its visual signature and responsive email contract, and do not invent product claims or specifications.",
+        "zh-CN": "用「电子邮件营销」模板把我的真实活动内容做成一封精致、可独立打开的 HTML 邮件。必须从内嵌参考 HTML 开始，保留视觉特征和响应式邮件契约，不要虚构产品卖点或规格。"
       },
       "exampleOutputs": [
         {
           "path": "./example.html",
-          "title": "Email Marketing"
+          "title": "Email Marketing",
+          "title_i18n": {
+            "en": "Email Marketing",
+            "zh-CN": "电子邮件营销"
+          }
         }
       ]
     },
@@ -103,11 +109,10 @@
           "path": "./SKILL.md"
         }
       ],
-      "designSystem": {
-        "primary": true
-      },
       "assets": [
-        "./example.html"
+        "./template.json",
+        "./example.html",
+        "./example.webp"
       ]
     },
     "pipeline": {
