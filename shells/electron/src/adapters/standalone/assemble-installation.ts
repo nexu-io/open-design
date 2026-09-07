@@ -3,7 +3,7 @@ import { copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:f
 import { basename, join, resolve } from "node:path";
 
 import { canonicalJson } from "@open-design/standalone";
-import { buildElectronStandaloneAuthority } from "./build.ts";
+import type { buildElectronStandaloneAuthority } from "./build.ts";
 import { loadElectronStandaloneInstallation, type ElectronStandaloneTarget } from "./installation.ts";
 
 export type ElectronInstallationInput = Readonly<{
@@ -51,7 +51,7 @@ export async function withElectronInstallation<T>(
     return Object.freeze({ file, sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength });
   };
   try {
-    const authority = request.authority ?? await buildElectronStandaloneAuthority(stage);
+    const authority = request.authority ?? await (await import("./build.ts")).buildElectronStandaloneAuthority(stage);
     const content = await descriptor(input.contentFile, "standalone-content.json");
     const trust = await descriptor(input.trustFile, "standalone-trust.json");
     const seeds = await Promise.all(input.seedFiles.map(async (path) => {

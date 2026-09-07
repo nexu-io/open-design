@@ -10,7 +10,8 @@ import {
 } from "@open-design/sidecar-proto";
 import { readLogTail } from "@open-design/platform";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
-import { WORKSPACE_ROOT, type ToolPackConfig } from "../config/index.js";
+import type { ToolPackConfig } from "../config/index.js";
+import type { ElectronRuntimeLifecycleRequest } from "@open-design/shell-electron/lifecycle";
 import { pathExists, scrubMacExtendedAttributes } from "./fs.js";
 import { desktopLogPath, macAppExecutablePath, resolveMacPaths } from "./paths.js";
 import type { MacCleanupResult, MacInspectResult, MacInstallResult, MacStartResult, MacStartSource, MacStopResult, MacUninstallResult } from "./lifecycle-types.js";
@@ -47,28 +48,18 @@ type RuntimeLifecycleReceipt = Readonly<{
 
 async function invokeElectronRuntimeLifecycle(
   config: ToolPackConfig,
-  request: Record<string, unknown>,
+  request: Omit<Extract<ElectronRuntimeLifecycleRequest, { operation: "electron.runtime.start" }>, "schemaVersion" | "channel" | "namespace" | "controlRuntimeRoot">
+    | Pick<Exclude<ElectronRuntimeLifecycleRequest, { operation: "electron.runtime.start" }>, "operation">,
 ): Promise<RuntimeLifecycleReceipt> {
-  const operation = String(request.operation).replaceAll(".", "-");
   const root = join(config.roots.output.namespaceRoot, "shell-runtime");
-  const requestPath = join(root, `${operation}-request.json`);
-  const receiptPath = join(root, `${operation}-receipt.json`);
-  await mkdir(root, { recursive: true });
-  await writeFile(requestPath, `${JSON.stringify({
+  const { controlElectronRuntime } = await import("@open-design/shell-electron/lifecycle");
+  const receipt = await controlElectronRuntime({
     schemaVersion: 1,
     channel: runtimeChannel(config),
     controlRuntimeRoot: root,
     namespace: config.namespace,
     ...request,
-  }, null, 2)}\n`, "utf8");
-  await execFileAsync(process.execPath, [
-    join(WORKSPACE_ROOT, "shells/electron/scripts/runtime-lifecycle.ts"),
-    "--request",
-    requestPath,
-    "--receipt",
-    receiptPath,
-  ], { cwd: WORKSPACE_ROOT, maxBuffer: 2 * 1024 * 1024 });
-  const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as RuntimeLifecycleReceipt;
+  }) as RuntimeLifecycleReceipt;
   if (receipt.schemaVersion !== 1 || receipt.operation !== request.operation) throw new Error("Electron Shell runtime adapter returned an invalid receipt");
   return receipt;
 }

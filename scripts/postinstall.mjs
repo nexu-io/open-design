@@ -26,6 +26,7 @@ const buildTargets = [
   "packages/dsh-runtime",
   "apps/daemon",
   "apps/closure",
+  "shells/electron",
   "tools/dev",
   "tools/pack",
   "tools/release",

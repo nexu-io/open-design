@@ -1,33 +1,13 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 import { withStandaloneExactFixture } from "@open-design/tools-serve/standalone-exact-client";
 
 import type { ToolPackConfig } from "../config/index.js";
-import { runPnpm } from "./commands.js";
+import type { buildElectronPackage } from "@open-design/shell-electron/build";
 
-type ShellPackReceipt = Readonly<{
-  schemaVersion: 2;
-  operation: "electron.pack.build";
-  channel: string;
-  namespace: string;
-  releaseVersion: string;
-  shellVersion: string;
-  identity: Readonly<{
-    appId: string;
-    appBundleName: string;
-    executableName: string;
-    productName: string;
-    version: string;
-  }>;
-  distribution: Readonly<{
-    schemaVersion: 1;
-    platform: "mac" | "win";
-    outputRoot: string;
-    artifacts: readonly string[];
-  }>;
-}>;
+type ShellPackReceipt = Awaited<ReturnType<typeof buildElectronPackage>>;
 
 function artifact(receipt: ShellPackReceipt, suffix: string): string | null {
   return receipt.distribution.artifacts.find((path) => path.toLowerCase().endsWith(suffix)) ?? null;
@@ -42,10 +22,11 @@ export async function packMac(config: ToolPackConfig) {
   const channel = releaseChannelFromVersion(version)
     ?? releaseChannelFromNamespace(config.namespace)
     ?? "stable";
-  const requestPath = join(config.roots.output.namespaceRoot, "shell-pack-request.json");
   const receiptPath = join(config.roots.output.namespaceRoot, "shell-pack-receipt.json");
   await mkdir(config.roots.output.namespaceRoot, { recursive: true });
-  await writeFile(requestPath, `${JSON.stringify({
+  const startedAt = Date.now();
+  const { buildElectronPackage } = await import("@open-design/shell-electron/build");
+  const receipt = await buildElectronPackage({
     schemaVersion: 2,
     operation: "electron.pack.build",
     installationInput,
@@ -54,10 +35,8 @@ export async function packMac(config: ToolPackConfig) {
     namespace: config.namespace,
     outputDirectory: config.roots.output.namespaceRoot,
     releaseVersion: version,
-  }, null, 2)}\n`, "utf8");
-  const startedAt = Date.now();
-  await runPnpm(config, ["--filter", "@open-design/shell-electron", "pack:adapter", "--", "--request", requestPath, "--receipt", receiptPath]);
-  const receipt = JSON.parse(await readFile(receiptPath, "utf8")) as ShellPackReceipt;
+  });
+  await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
   if (receipt.schemaVersion !== 2 || receipt.operation !== "electron.pack.build" || receipt.distribution.platform !== "mac") {
     throw new Error("Shell pack adapter returned an invalid mac receipt");
   }

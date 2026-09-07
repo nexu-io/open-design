@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { getSidecarStatus, launchSidecar, stopSidecar, type SidecarStamp } from "@open-design/sidecar";
-import { prepareElectronDevShell } from "@open-design/electron-kit/dev";
 import { validateElectronShellManifest, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 
 import { resolveElectronStandaloneTarget } from "../standalone/installation.ts";
@@ -12,6 +11,7 @@ import { loadElectronStandaloneAuthorityResources } from "../standalone/installa
 import { withElectronInstallation, parseElectronInstallationInput, type ElectronInstallationInput } from "../standalone/assemble-installation.ts";
 import { inspectElectronCdpStatus } from "@open-design/electron-kit/cdp";
 import { observeElectronDiagnostics, waitForElectronProductReady, electronGracefulStopOptions, findElectronRuntimeSurvivors } from "../standalone/observation.ts";
+import { electronShellSource } from "./resources.ts";
 
 export const ELECTRON_DEV_LIFECYCLE_SCHEMA_VERSION = 2 as const;
 
@@ -79,7 +79,8 @@ function stamp(request: RequestScope): SidecarStamp {
   return Object.freeze({ app: APP_KEYS.ELECTRON, channel: request.channel, mode: "dev", namespace: request.namespace, source: SIDECAR_SOURCES.TOOLS_DEV });
 }
 
-async function start(request: Extract<ElectronDevLifecycleRequest, { operation: "electron.dev.start" }>) {
+async function start(request: Extract<ElectronDevLifecycleRequest, { operation: "electron.dev.start" }>, logFd: number) {
+  const { prepareElectronDevShell } = await import("@open-design/electron-kit/dev");
   const manifestPath = fileURLToPath(new URL("../../../config/shell.json", import.meta.url));
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(manifestPath, "utf8")) as ElectronShellManifest);
   if (baseManifest.channel !== request.channel) throw new Error("Electron dev request escaped the Shell channel");
@@ -90,11 +91,11 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
   const prepared = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget() }, async (installation) => {
     return await prepareElectronDevShell({
     authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
-    entryPath: fileURLToPath(new URL("../../main.ts", import.meta.url)),
+    entryPath: electronShellSource("main.ts"),
     manifestPath: stagedManifestPath,
     nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
     projectRoot: fileURLToPath(new URL("../../..", import.meta.url)),
-    rendererPreloadEntryPath: fileURLToPath(new URL("../renderer/preload.ts", import.meta.url)),
+    rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
     runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
   });
   });
@@ -107,7 +108,7 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     cwd: prepared.scene.sceneRoot,
     detached: true,
     env: environment,
-    logFd: 2,
+    logFd,
     resources,
     stamp: stamp(request),
     supervisor: { command: process.execPath, entrypoint: join(prepared.scene.sceneRoot, "supervisor.mjs") },
@@ -131,8 +132,8 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
   });
 }
 
-export async function executeElectronDevLifecycle(request: ElectronDevLifecycleRequest) {
-  if (request.operation === "electron.dev.start") return await start(request);
+export async function executeElectronDevLifecycle(request: ElectronDevLifecycleRequest, options: Readonly<{ logFd: number }>) {
+  if (request.operation === "electron.dev.start") return await start(request, options.logFd);
   if (request.operation === "electron.dev.inspect") {
     const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
     const status = await observeElectronDiagnostics(request.controlRuntimeRoot, current);

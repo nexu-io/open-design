@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@open-design/shell-electron": "workspace:*",
     "@open-design/closure": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
     "@open-design/standalone": "workspace:*",

@@ -804,6 +804,9 @@ importers:
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
+      '@open-design/shell-electron':
+        specifier: workspace:*
+        version: link:../../shells/electron
       '@open-design/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar
@@ -844,6 +847,9 @@ importers:
       '@open-design/release':
         specifier: workspace:*
         version: link:../../packages/release
+      '@open-design/shell-electron':
+        specifier: workspace:*
+        version: link:../../shells/electron
       '@open-design/sidecar':
         specifier: workspace:*
         version: link:../../packages/sidecar

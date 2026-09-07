@@ -35,7 +35,7 @@ it("reports an orphaned Closure resource even when the host has already stopped"
 
 it("keeps dev stop partial when an orphan survives Electron shutdown", async () => {
   sidecar.find.mockImplementation(async ({ app }) => app === "electron-updater" ? [{ pid: 73 }] : []);
-  const receipt = await executeElectronDevLifecycle({ schemaVersion: 2, operation: "electron.dev.stop", channel: "dev", namespace: "stop-test", controlRuntimeRoot: "/control" });
+  const receipt = await executeElectronDevLifecycle({ schemaVersion: 2, operation: "electron.dev.stop", channel: "dev", namespace: "stop-test", controlRuntimeRoot: "/control" }, { logFd: 2 });
   expect(receipt).toMatchObject({ stopped: { remainingPids: [73] } });
   expect(sidecar.stop).toHaveBeenCalledExactlyOnceWith({ app: "electron", channel: "dev", mode: "dev", namespace: "stop-test", source: "tools-dev" }, electronGracefulStopOptions);
   expect(sidecar.find).toHaveBeenCalledTimes(4);

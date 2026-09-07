@@ -14,7 +14,7 @@ describe("Electron product shell", () => {
   it("keeps scripts as file-envelope entrypoints, never a second implementation layer", async () => {
     const root = new URL("../scripts/", import.meta.url);
     const files = (await readdir(root)).sort();
-    expect(files).toEqual(["dev-lifecycle.ts", "exact-distribution.ts", "exact-scene.ts", "pack-lifecycle.ts", "release-manifest.ts", "runtime-lifecycle.ts", "scene-manifest.ts"]);
+    expect(files).toEqual(["exact-distribution.ts", "exact-scene.ts", "release-manifest.ts", "scene-manifest.ts"]);
     for (const file of files) {
       const source = await readFile(new URL(file, root), "utf8");
       expect(source, file).toContain("await runShellFileCommand(");
@@ -24,24 +24,19 @@ describe("Electron product shell", () => {
       }
     }
   });
-  it("keeps dev and pack as thin electron-kit entrypoints", async () => {
-    const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string> };
+  it("exposes separate build and lifecycle APIs without local command wrappers", async () => {
+    const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string>; exports: Record<string, unknown> };
     expect(packageJson.scripts).not.toHaveProperty("dev");
     expect(packageJson.scripts["exact:distribution"]).toBe("node ./scripts/exact-distribution.ts");
     expect(packageJson.scripts["exact:scene"]).toBe("node ./scripts/exact-scene.ts");
     expect(packageJson.scripts).not.toHaveProperty("pack");
     expect(packageJson.scripts).not.toHaveProperty("prepack");
-    const [dev, pack] = await Promise.all([
-      readFile(new URL("../scripts/dev-lifecycle.ts", import.meta.url), "utf8"),
-      readFile(new URL("../scripts/pack-lifecycle.ts", import.meta.url), "utf8"),
-    ]);
-    expect(dev).not.toContain("distribution.json");
-    expect(dev).not.toMatch(/fixture-sidecar|createElectronFixture/u);
-    expect(pack).not.toMatch(/fixture-sidecar|createElectronFixture/u);
-    for (const entry of [dev, pack]) {
-      expect(entry).toContain("runShellFileCommand");
-      expect(entry).not.toMatch(/@open-design|process\.|fetch\(|build\(/u);
-    }
+    expect(packageJson.scripts).not.toHaveProperty("pack:adapter");
+    expect(packageJson.scripts).not.toHaveProperty("runtime:adapter");
+    expect(packageJson.exports).toHaveProperty("./build");
+    expect(packageJson.exports).toHaveProperty("./lifecycle");
+    const lifecycle = await readFile(new URL("../src/lifecycle-api.ts", import.meta.url), "utf8");
+    expect(lifecycle).not.toMatch(/distribution|pack-tool|process\.argv|runShellFileCommand/u);
   });
 
   it("owns finite macOS and Windows distribution policy", async () => {

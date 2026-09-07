@@ -2,8 +2,8 @@
 
 `tools-pack` is the thin local macOS package acceptance CLI.
 
-It serializes explicit requests to the typed adapters under
-`shells/electron/scripts`, validates their receipts, and presents build,
+It calls the public `@open-design/shell-electron/build` and `/lifecycle`
+APIs, consumes their typed results, and presents build,
 install, start, stop, logs, uninstall, cleanup, and CDP-backed inspect commands.
 It does not import `electron-kit`, assemble Electron applications, define
 product handlers, own a second process model, or publish releases.

@@ -6,11 +6,11 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 - `tools/dev` provides `@open-design/tools-dev` and the `tools-dev` bin. It is the only currently active local development lifecycle control plane.
 - `pnpm tools-dev` exposes `desktop` as the public selector for the integrated `shells/electron` stack; its internal typed identity is `electron`.
-- `tools-dev` invokes only the typed lifecycle adapter under `shells/electron/scripts`; it does not import electron-kit or launch an app-owned Electron runtime.
+- `tools-dev` invokes the public `@open-design/shell-electron/lifecycle` API with an explicit caller-owned log descriptor; it does not import electron-kit or launch an app-owned Electron runtime.
 - `pnpm tools-dev run web` runs foreground daemon + web for the Playwright webServer flow.
 - `pnpm tools-dev prepare closure --output <directory>` prepares development-only references to already-built daemon/Web outputs and emits `resource-receipt.json` for `tools-serve --resource-receipt`. These local references are not self-contained distribution artifacts and must never be published. Resource production is not an Electron Shell responsibility.
 - `pnpm tools-dev inspect desktop status` projects the Electron Shell status through its typed adapter.
-- `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. This PR delivers only the macOS build/install/start/stop/logs/uninstall/cleanup/inspect surface through typed `shells/electron/scripts` adapters.
+- `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. This PR delivers only the macOS build/install/start/stop/logs/uninstall/cleanup/inspect surface through public Shell build/lifecycle APIs.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
 - `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns exact planning/control, channel-version lifecycle, metadata, immutable publication, reports, and notification-facing contracts.
 
@@ -20,7 +20,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 
 ## Packaging scope
 
-- Keep `tools-pack` as a thin request/receipt CLI. Electron assembly, identity, product handlers, updater behavior, and native platform policy belong to `electron-kit` plus `shells/electron`.
+- Keep `tools-pack` as a thin CLI over typed public APIs. Electron assembly, identity, product handlers, updater behavior, and native platform policy belong to `electron-kit` plus `shells/electron`.
 - Tool code must not import `electron-kit`; invoke the typed Shell lifecycle adapters instead.
 - Namespace controls packaged data/log/runtime/cache paths. Ports are transient transport details and must not participate in path decisions.
 - There is no root `pnpm build` aggregate. Use package-scoped builds for source packages and `pnpm tools-pack ...` for packaged artifact build/install/release flows.

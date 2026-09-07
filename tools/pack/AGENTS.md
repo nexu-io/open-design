@@ -3,8 +3,8 @@
 Follow the root `AGENTS.md` and `tools/AGENTS.md` first.
 
 This tool owns only the repo-external macOS package build and smoke-lifecycle
-command surface. Keep it a thin request/receipt adapter over
-`shells/electron/scripts`.
+command surface. Keep it a thin adapter over the public
+`@open-design/shell-electron/build` and `/lifecycle` APIs.
 
 ## Boundaries
 

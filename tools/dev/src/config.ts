@@ -53,7 +53,6 @@ export type ToolDevConfig = {
     desktop: ToolDevAppConfig & {
       controlRuntimeRoot: string;
       installationRoot: string;
-      lifecycleScriptPath: string;
     };
     web: ToolDevAppConfig & {
       nextDistDir: string;
@@ -168,7 +167,6 @@ export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfi
         ...desktop,
         controlRuntimeRoot: electronControlRoot,
         installationRoot: path.join(electronControlRoot, "installation"),
-        lifecycleScriptPath: path.join(WORKSPACE_ROOT, "shells/electron/scripts/dev-lifecycle.ts"),
       },
       web: {
         ...web,

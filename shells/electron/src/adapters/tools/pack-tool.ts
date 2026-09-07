@@ -9,6 +9,7 @@ import { resolveElectronStandaloneTarget } from "../standalone/installation.ts";
 import { createElectronReleaseManifest, type ElectronReleaseIdentityRegistry } from "../../composition/release-identity.ts";
 import { loadElectronStandaloneAuthorityResources } from "../standalone/installation.ts";
 import { withElectronInstallation, parseElectronInstallationInput, type ElectronInstallationInput } from "../standalone/assemble-installation.ts";
+import { electronShellSource } from "./resources.ts";
 
 export type ElectronPackRequest = Readonly<{
   schemaVersion: 2;
@@ -78,14 +79,14 @@ export async function executeElectronPack(request: ElectronPackRequest) {
   return await packElectronShell({
     authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
     distributionPath: fileURLToPath(new URL("../../../config/distribution.json", import.meta.url)),
-    entryPath: fileURLToPath(new URL("../../main.ts", import.meta.url)),
+    entryPath: electronShellSource("main.ts"),
     manifestPath: stagedManifestPath,
     nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
     runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
     windowsLifecyclePath: fileURLToPath(new URL("../../../config/platforms/windows.json", import.meta.url)),
     outputRoot: join(request.outputDirectory, "distribution"),
     projectRoot: fileURLToPath(new URL("../../..", import.meta.url)),
-    rendererPreloadEntryPath: fileURLToPath(new URL("../renderer/preload.ts", import.meta.url)),
+    rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
   });
   });
   return Object.freeze({

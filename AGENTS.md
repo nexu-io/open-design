@@ -28,7 +28,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `shells/terminal` owns the official Node carrier and terminal-facing lifecycle commands. Shells consume standalone contracts and must not import Closure app source.
 - `shells/electron` owns the Electron product Shell, its policy/configuration, and the typed lifecycle adapters consumed by tools.
 - `tools/dev` is the local development lifecycle control plane.
-- `tools/pack` is the thin local macOS package build/install/start/stop/logs control plane. It delegates Electron behavior to typed adapters under `shells/electron/scripts`.
+- `tools/pack` is the thin local macOS package build/install/start/stop/logs control plane. It delegates Electron behavior to the public `@open-design/shell-electron/build` and `/lifecycle` APIs.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
 - `tools/release` owns release planning, channel-version lifecycle, metadata, immutable publication, release reports, and notification-facing data contracts.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.

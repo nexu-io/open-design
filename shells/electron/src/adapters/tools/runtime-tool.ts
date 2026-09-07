@@ -98,7 +98,7 @@ async function waitForStatus(stamp: SidecarStamp, pid: number, controlRuntimeRoo
   });
 }
 
-export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLifecycleRequest): Promise<unknown> {
+export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLifecycleRequest) {
   const stamp = electronStamp(request);
   if (request.operation === "electron.runtime.inspect") {
     const current = await getSidecarStatus(stamp, { timeoutMs: 1_000 }).catch(() => null);

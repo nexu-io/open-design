@@ -17,6 +17,6 @@ test("desktop remains the public selector while owning the integrated Electron s
   assert.deepEqual(DEFAULT_OBSERVE_APPS, [APP_KEYS.DAEMON, APP_KEYS.WEB, APP_KEYS.DESKTOP]);
   assert.deepEqual(resolveStartApps(APP_KEYS.DESKTOP), [APP_KEYS.DESKTOP]);
   const config = resolveToolDevConfig({ namespace: "electron-cutover" });
-  assert.match(config.apps.desktop.lifecycleScriptPath, /shells\/electron\/scripts\/dev-lifecycle\.ts$/u);
+  assert.equal("lifecycleScriptPath" in config.apps.desktop, false);
   assert.doesNotMatch(JSON.stringify(config.apps.desktop), /apps\/desktop|@open-design\/desktop/u);
 });

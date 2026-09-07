@@ -557,35 +557,22 @@ type ElectronLifecycleOperation = "electron.dev.inspect" | "electron.dev.start" 
 
 async function invokeElectronLifecycle(config: ToolDevConfig, operation: ElectronLifecycleOperation, options: CliOptions): Promise<Record<string, unknown>> {
   const logHandle = await openAppLog(config, APP_KEYS.DESKTOP);
-  const operationFileName = operation.replaceAll(".", "-");
-  const requestPath = path.join(config.apps.desktop.controlRuntimeRoot, `${operationFileName}-request.json`);
-  const receiptPath = path.join(config.apps.desktop.controlRuntimeRoot, `${operationFileName}-receipt.json`);
   try {
     const invoke = async (installationInput?: StandaloneFixtureFiles) => {
-    const request = {
-      schemaVersion: 2,
-      operation,
-      channel: "dev",
+    const { controlElectronDevelopment } = await import("@open-design/shell-electron/lifecycle");
+    const scope = {
+      schemaVersion: 2 as const,
+      channel: "dev" as const,
       namespace: config.namespace,
       controlRuntimeRoot: config.apps.desktop.controlRuntimeRoot,
-      ...(operation === "electron.dev.start" ? {
-        installationInput,
-        installationRoot: config.apps.desktop.installationRoot,
-        ownerPid: options.parentPid ?? null,
-      } : {}),
     };
-    await mkdir(config.apps.desktop.controlRuntimeRoot, { recursive: true });
-    await rm(receiptPath, { force: true });
-    await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
     await logHandle.write(`\n[tools-dev] ${operation} via shells/electron at ${new Date().toISOString()}\n`);
-    await runLoggedCommand({
-      args: [config.apps.desktop.lifecycleScriptPath, "--request", requestPath, "--receipt", receiptPath],
-      command: process.execPath,
-      cwd: config.workspaceRoot,
-      env: process.env,
-      logFd: logHandle.fd,
-    });
-    return JSON.parse(await readFile(receiptPath, "utf8")) as Record<string, unknown>;
+    if (operation === "electron.dev.start") {
+      if (installationInput == null) throw new Error("Electron development start requires installation input");
+      return controlElectronDevelopment({ ...scope, operation, installationInput,
+        installationRoot: config.apps.desktop.installationRoot, ownerPid: options.parentPid ?? null }, { logFd: logHandle.fd });
+    }
+    return controlElectronDevelopment({ ...scope, operation }, { logFd: logHandle.fd });
     };
     if (operation !== "electron.dev.start") return await invoke();
     const bootstrapUrl = options.standaloneBootstrapUrl ?? process.env.OD_ELECTRON_STANDALONE_BOOTSTRAP_URL;
