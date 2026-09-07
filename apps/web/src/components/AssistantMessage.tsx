@@ -1788,26 +1788,28 @@ function AssistantMessageImpl({
             「新会话开口就给了三条建议」;用户真机指认过。
 
             落在**新会话**里,不是源会话:点完分叉页面就跳到新会话,人此刻站在这里,
-            而那行脚注「上文已带过来,接着说就行」也只有对着这一截复制过来的上下文
-            才说得通。标题用**源会话**的标题 —— 这条线回答的是「上面这些是从哪来的」。
-            盖标记的地方在 daemon 的 fork 分支(`routes/project/conversations.ts`)。 */}
+            而这行字「上文已带过来」也只有对着这一截复制过来的上下文才说得通。
+            盖标记的地方在 daemon 的 fork 分支(`routes/project/conversations.ts`)。
+
+            **一行,不是两行**(OPEND-2714):原来是「线上写源会话标题 + 线下一行脚注」
+            两块。改成对齐 Codex 的那一种 —— 分支图标配一行文案,一起摆进线中间那一格。
+            源会话标题因此不再出现在界面上:一条只说「上面这些是带过来的」的线,
+            比一条报出旧标题的线更接近它真正的作用,而标题本身在会话列表里随时找得到。
+            `forkedInto.title` 仍留在契约和库里,不为这次改动动数据。 */}
         {message.forkedInto ? (
-          <>
-            {/* `.is-new` 是入场动画的开关(稿子第 38 格「落一下」)。
-                这两块只在这里渲染,陈列页那一格是手写的裸类名 —— 稿子交代的
-                「钉住展示的那一格不挂 .is-new」因此天然成立。 */}
-            <div className="fork-sep is-new" data-testid="assistant-fork-divider">
-              <i aria-hidden />
-              <span title={message.forkedInto.title}>{message.forkedInto.title}</span>
-              <i aria-hidden />
-            </div>
-            {/* 脚注跟着分界线【居中】:它是这条线的注解,不是新会话里的第一句话。
-                左对齐会让人读成「新会话已经开口说了一句」。 */}
-            <div className="fork-note is-new" data-testid="assistant-fork-note">
+          /* `.is-new` 是入场动画的开关(稿子第 38 格「落一下」)。
+             只在这里挂,陈列页那一格是手写的裸类名 —— 稿子交代的
+             「钉住展示的那一格不挂 .is-new」因此天然成立。 */
+          <div className="fork-sep is-new" data-testid="assistant-fork-divider">
+            <i aria-hidden />
+            {/* 文案住在线**中间**那一格:它是这条线的注解,不是新会话里的第一句话。
+                摆到线下面、左对齐,都会读成「新会话已经开口说了一句」。 */}
+            <span className="fork-note" data-testid="assistant-fork-note">
               <Icon name="fork" size={12} />
               {t('assistant.forkNote')}
-            </div>
-          </>
+            </span>
+            <i aria-hidden />
+          </div>
         ) : null}
       </div>
     </div>

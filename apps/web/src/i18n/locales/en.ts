@@ -3459,7 +3459,7 @@ export const en: Dict = {
   'assistant.copyMarkdown': 'Copy',
   'assistant.forkConversation': 'New conversation',
   'assistant.forkingConversation': 'Starting new conversation…',
-  'assistant.forkNote': 'Context above came along — just keep going.',
+  'assistant.forkNote': 'Continued from chat',
   'assistant.shareToOpenDesign': 'Share to OpenDesign',
   'assistant.shareToOpenDesignBusy': 'Preparing package…',
   'assistant.feedbackPrompt': 'Feedback',
