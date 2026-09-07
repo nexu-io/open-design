@@ -12,6 +12,7 @@ import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
+import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -40,11 +41,19 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Directory for public-shell-artifact with native suffix")
     .option("--receipt <file>", "Selected required acceptance, unchanged")
     .option("--github-env <file>", "Optional installed identity projection for GitHub")
+    .option("--base-user-data-root <directory>", "Explicit Electron bootstrap user-data root (collect/hot-update)")
+    .option("--installed-root <directory>", "Installed resource root (collect)")
+    .option("--runtime-proof-root <directory>", "Terminal lifecycle receipts (collect)")
+    .option("--hot-receipt <file>", "Completed CDP hot-update receipt (collect)")
     .action(async (operation: string, options: Options) => {
-      if (operation !== "fetch") throw new Error("acceptance operation must be fetch");
-      await fetchAcceptanceArtifact({ publication: required(options, "publication"), policy: required(options, "policy"),
-        shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt"),
-        ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
+      const common = { publication: required(options, "publication"), policy: required(options, "policy"),
+        shell: required(options, "shell"), target: required(options, "target"), receipt: required(options, "receipt"),
+        ...(options.baseUserDataRoot == null ? {} : { baseUserDataRoot: required(options, "baseUserDataRoot") }) };
+      if (operation === "fetch") await fetchAcceptanceArtifact({ ...common, output: required(options, "output"), ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
+      else if (operation === "hot-update") await updateAcceptanceClosure(common);
+      else if (operation === "collect") await collectReleaseAcceptance({ ...common, installedRoot: required(options, "installedRoot"), runtimeProofRoot: required(options, "runtimeProofRoot"),
+        ...(options.hotReceipt == null ? {} : { hotAcceptanceReceipt: required(options, "hotReceipt") }) });
+      else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });
 
   cli.command("build <operation>", "Compose native scene or distribution inputs through public Shell builders")

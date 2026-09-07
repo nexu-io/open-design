@@ -1,4 +1,5 @@
 import { join, resolve } from "node:path";
+import { resolveElectronStandaloneStoreRoot } from "./store-root.ts";
 import { ELECTRON_UPDATER_PROVIDER_CONFIG_ENV, parseElectronUpdaterProviderConfig } from "./updater-provider.js";
 
 import {
@@ -203,7 +204,7 @@ export function createElectronStandaloneAuthorityFactory(
       if (canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
       const channelHeadUrl = options.channelHeadUrl ?? installation.declaration.update.channelHeadUrl;
-      const storeRoot = join(runtimeRoot, "standalone-store");
+      const storeRoot = resolveElectronStandaloneStoreRoot(runtimeRoot);
       const sidecarRuntimeRoot = join(storeRoot, "sidecar-runtime");
       const layout = resolveStandaloneRuntimeLayout({
         namespaceRoot,

@@ -108,12 +108,12 @@ jobs:
           pnpm --filter @open-design/metatool build
           pnpm --filter @open-design/electron-contract build
           pnpm --filter @open-design/electron-kit build
+          pnpm --filter @open-design/shell-electron build
           pnpm --filter @open-design/tools-pack build
           pnpm --filter @open-design/tools-release build
           node tools/release/dist/exact-control.mjs --self-check
           mkdir -p "$RUNNER_TEMP/exact-plan"
           cp tools/release/dist/exact-control.mjs "$RUNNER_TEMP/exact-plan/exact-release-control.mjs"
-          cp packages/electron-kit/dist/cdp-control.mjs "$RUNNER_TEMP/exact-plan/electron-cdp-control.mjs"
 
       - name: Resolve tools-release validation profile
         env:
@@ -691,16 +691,17 @@ jobs:
           hdiutil detach "$volume"
           trap - EXIT
           executable="$app/Contents/MacOS/$ELECTRON_EXECUTABLE"
-          candidate_head=$(node -e 'const receipt=require(process.argv[1]); process.stdout.write(receipt.channelHead.url)' "$RUNNER_TEMP/published/publish-receipt.json")
           OD_PACKAGED_E2E_HEADLESS=1 "$executable" \
             --user-data-dir="$RUNNER_TEMP/electron-user-data" \
             --remote-debugging-address=127.0.0.1 \
             --remote-debugging-port=0 \
-            --od-channel-head-url="$candidate_head" &
+            --od-channel-head-url="$ELECTRON_CANDIDATE_HEAD_URL" &
           electron_pid=$!
           trap 'kill "$electron_pid" >/dev/null 2>&1 || true; wait "$electron_pid" >/dev/null 2>&1 || true' EXIT
-          node -e 'const fs=require("node:fs"); const [file,baseUserDataRoot]=process.argv.slice(1); const session={baseUserDataRoot,channel:process.env.CHANNEL,namespace:process.env.ELECTRON_NAMESPACE,presentation:"headless"}; fs.writeFileSync(file, JSON.stringify({schemaVersion:1,operation:"electron.cdp.contract.invoke",session,timeoutMs:120000,close:true,invocations:[{path:["updater","status"],args:[]},{path:["updater","check"],args:["closure"]},{path:["updater","apply"],args:["closure",{force:true}],settleOnContextDestroyed:true},{path:["updater","status"],args:[]}]})+"\n")' "$RUNNER_TEMP/electron-cdp-request.json" "$RUNNER_TEMP/electron-user-data"
-          node "$RUNNER_TEMP/exact-plan/electron-cdp-control.mjs" --request "$RUNNER_TEMP/electron-cdp-request.json" --receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" acceptance hot-update \
+            --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --shell electron --target "${{ matrix.target }}" --base-user-data-root "$RUNNER_TEMP/electron-user-data" \
+            --receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
           wait "$electron_pid"
           trap - EXIT
           OD_PACKAGED_E2E_HEADLESS=1 ELECTRON_KIT_SMOKE_EXIT_MS=3000 "$executable" --user-data-dir="$RUNNER_TEMP/electron-user-data"
@@ -737,29 +738,15 @@ jobs:
           else
             installed_root="$RUNNER_TEMP/installed-shell"
           fi
-          node --input-type=module - "$installed_root" <<'JS'
-          import { writeFileSync } from "node:fs";
-          import { join } from "node:path";
-          const { RUNNER_TEMP: root, SHELL_TYPE: shellType, TARGET: target, CHANNEL: channel, ELECTRON_NAMESPACE: namespace, ACCEPTANCE_MODE: mode } = process.env;
-          const runtimeRoot = join(root, "electron-user-data/exact/channels", channel, "namespaces", `${namespace}-headless/runtime/electron`);
-          const store = join(runtimeRoot, "standalone-store/channels", channel);
-          const request = {
-            schemaVersion: 1, operation: "exact.acceptance", shellType, target,
-            installedRoot: process.argv[2], runtimeProofRoot: root,
-            publishReceipt: join(root, "published/publish-receipt.json"),
-            policyReceipt: join(root, "published/release-policy.json"),
-            ...(shellType !== "electron" ? {} : { runtimeLog: join(runtimeRoot, "logs/electron-runtime.jsonl") }),
-            ...(mode !== "hot" ? {} : {
-              hotAcceptanceReceipt: join(root, "electron-cdp-receipt.json"),
-              standaloneState: join(store, "namespaces", `${namespace}-headless/state.json`),
-              standaloneGenerationsRoot: join(store, "generations"),
-            }),
-          };
-          writeFileSync(join(root, "acceptance-request.json"), JSON.stringify(request) + "\n");
-          JS
-          node "$RUNNER_TEMP/published/exact-release-control.mjs" \
-            --request "$RUNNER_TEMP/acceptance-request.json" \
-            --receipt "$RUNNER_TEMP/acceptance/$SHELL_TYPE-$TARGET.json"
+          hot_args=()
+          if [[ "$ACCEPTANCE_MODE" == "hot" ]]; then
+            hot_args=(--hot-receipt "$RUNNER_TEMP/electron-cdp-receipt.json")
+          fi
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" acceptance collect \
+            --publication "$RUNNER_TEMP/published/publish-receipt.json" --policy "$RUNNER_TEMP/published/release-policy.json" \
+            --shell "$SHELL_TYPE" --target "$TARGET" --installed-root "$installed_root" \
+            --runtime-proof-root "$RUNNER_TEMP" --base-user-data-root "$RUNNER_TEMP/electron-user-data" \
+            "${hot_args[@]}" --receipt "$RUNNER_TEMP/acceptance/$SHELL_TYPE-$TARGET.json"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -820,9 +807,7 @@ jobs:
         with:
           name: exact-activation-${{ inputs.channel }}-${{ inputs.release_version }}
           path: |
-            ${{ runner.temp }}/activate-request.json
             ${{ runner.temp }}/activate-receipt.json
-            ${{ runner.temp }}/baseline-promote-request.json
             ${{ runner.temp }}/baseline-promote-receipt.json
           if-no-files-found: error
           retention-days: 30

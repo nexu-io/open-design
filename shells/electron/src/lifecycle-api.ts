@@ -2,6 +2,7 @@ import type { ElectronDevLifecycleRequest } from "./adapters/tools/lifecycle/dev
 import type { ElectronRuntimeLifecycleRequest } from "./adapters/tools/lifecycle/runtime-tool.ts";
 
 export type { ElectronDevLifecycleRequest, ElectronRuntimeLifecycleRequest };
+export { describeElectronRuntimeDiagnostics, updateElectronClosureThroughCdp, type ElectronDiagnosticSession } from "./adapters/tools/lifecycle/inspection.ts";
 
 /** Caller owns the log descriptor; only start loads the build-time dependency closure. */
 export async function controlElectronDevelopment(request: ElectronDevLifecycleRequest, options: Readonly<{ logFd: number }>) {

@@ -111,7 +111,13 @@ export class StandaloneStore {
   private get namespaceRoot(): string { return join(this.root, "channels", this.channel, "namespaces", this.namespace); }
   private get statePath(): string { return join(this.namespaceRoot, "state.json"); }
   private get stateLockPath(): string { return join(this.namespaceRoot, "state.lock"); }
-  private generationPath(id: string): string { return join(this.root, "channels", this.channel, "generations", `${id}.json`); }
+  private get generationsRoot(): string { return join(this.root, "channels", this.channel, "generations"); }
+  private generationPath(id: string): string { return join(this.generationsRoot, `${id}.json`); }
+
+  /** Read-only diagnostic locations, not authorization to mutate Store state. */
+  get diagnosticPaths(): Readonly<{ stateFile: string; generationsRoot: string }> {
+    return Object.freeze({ stateFile: this.statePath, generationsRoot: this.generationsRoot });
+  }
 
   private async withStateTransaction<T>(operation: () => Promise<T>): Promise<T> {
     await mkdir(dirname(this.stateLockPath), { recursive: true });

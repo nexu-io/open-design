@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { describeElectronRuntimeDiagnostics } from "@open-design/shell-electron/lifecycle/inspection";
+import { collectReleaseAcceptance } from "../src/exact/acceptance.ts";
 
 import { afterEach, expect, it } from "vitest";
 
@@ -30,7 +32,7 @@ async function fixture() {
     shell: { type: "electron", version: "1.2.3", buildHash: "b".repeat(64) }, target: "darwin-arm64",
     artifact: { url: "https://release.invalid/app.dmg", sha256: "c".repeat(64), size: 42 },
     shellMetadata: { url: "https://release.invalid/shell.json", sha256: "d".repeat(64), size: 20 },
-    installIdentity: { appId: "io.open-design.betahyx" },
+    installIdentity: { appId: "io.open-design.betahyx", namespace: "acceptance" },
     platformTrust: { platform: "macos", mode: "verify-only" }, updater: { mechanism: "standalone" },
   };
   const published = { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel: policy.channel, releaseVersion: policy.releaseVersion, sourceCommit: policy.sourceCommit, target: policy.target, requiredAcceptances: [required] };
@@ -54,6 +56,18 @@ it("binds installed evidence to the policy and published target", async () => {
     operation: "exact.acceptance", status: "accepted", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4",
     installed: { proof: { runtime: { outcome: "ready", attemptId: "attempt-1" } } },
   });
+});
+
+it("collects through the public Shell diagnostic locations instead of caller-built private paths", async () => {
+  const f = await fixture(), baseUserDataRoot = join(f.root, "user-data");
+  const paths = describeElectronRuntimeDiagnostics({ baseUserDataRoot, channel: f.published.channel, namespace: "acceptance", presentation: "headless" });
+  await mkdir(dirname(paths.runtimeLog), { recursive: true }); await copyFile(f.input.runtimeLog, paths.runtimeLog);
+  await collectReleaseAcceptance({ publication: f.input.publishReceipt, policy: f.input.policyReceipt, shell: "electron", target: f.input.target,
+    installedRoot: f.root, runtimeProofRoot: f.root, baseUserDataRoot, receipt: f.output });
+  expect(JSON.parse(await readFile(f.output, "utf8"))).toMatchObject({ operation: "exact.acceptance", status: "accepted" });
+  await writeFile(paths.runtimeLog, JSON.stringify({ attemptId: "failed", event: "startup.failed" }));
+  await expect(collectReleaseAcceptance({ publication: f.input.publishReceipt, policy: f.input.policyReceipt, shell: "electron", target: f.input.target,
+    installedRoot: f.root, runtimeProofRoot: f.root, baseUserDataRoot, receipt: f.output })).rejects.toThrow("latest installed Electron attempt");
 });
 
 it.each(["startup.failed", "startup.started"])("does not hide a final %s behind an earlier successful attempt", async (event) => {

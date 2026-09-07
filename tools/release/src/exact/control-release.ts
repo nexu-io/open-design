@@ -366,17 +366,19 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
   });
 }
 
+export async function acceptInstalledRelease(input: JsonObject, receiptPath: string): Promise<void> {
+  const { credential, policy } = await collectInstalledAcceptance(input);
+  validateReleaseArtifactTrust(policy, [credential]);
+  await writeObject(receiptPath, credential);
+}
+
 export async function executeExactReleaseControl(requestValue: JsonObject, receiptPath: string): Promise<void> {
   if (requestValue.operation === "release.authorize") {
     await writeObject(receiptPath, await authorizeReleaseCapability(requestValue));
     return;
   }
   if (requestValue.schemaVersion !== 1) throw new Error("unsupported exact release request schema");
-  if (requestValue.operation === "exact.acceptance") {
-    const { credential, policy } = await collectInstalledAcceptance(requestValue);
-    validateReleaseArtifactTrust(policy, [credential]);
-    return await writeObject(receiptPath, credential);
-  }
+  if (requestValue.operation === "exact.acceptance") return acceptInstalledRelease(requestValue, receiptPath);
   if (requestValue.operation === "exact.publish") return await publishExactRelease(requestValue, receiptPath);
   if (requestValue.operation === "exact.activate") return await activateExactRelease(requestValue, receiptPath);
   if (requestValue.operation === "exact.baseline.promote") return await promoteAcceptedElectronBaseline(requestValue, receiptPath);

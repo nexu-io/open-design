@@ -21,6 +21,10 @@ function normalize(value: unknown): unknown {
 }
 
 /** Diagnostic observation only: an unavailable log sink never controls startup. */
+export function resolveElectronRuntimeLogPath(runtimeRoot: string): string {
+  return join(runtimeRoot, "logs", "electron-runtime.jsonl");
+}
+
 export class ElectronRuntimeLog {
   readonly path: string;
   readonly attemptId = randomUUID();
@@ -28,7 +32,7 @@ export class ElectronRuntimeLog {
   private pending = Promise.resolve();
 
   constructor(runtimeRoot: string) {
-    this.path = join(runtimeRoot, "logs", "electron-runtime.jsonl");
+    this.path = resolveElectronRuntimeLogPath(runtimeRoot);
   }
 
   write(event: string, details?: Readonly<Record<string, unknown>>): void {

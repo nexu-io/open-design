@@ -46,7 +46,8 @@ describe("exact Electron release topology", () => {
     expect(hot).not.toContain("python3");
     expect(hot).not.toContain("candidateVersion");
     expect(hot).toContain('CHANNEL: ${{ inputs.channel }}');
-    expect(hot).toContain('channel:process.env.CHANNEL,namespace:process.env.ELECTRON_NAMESPACE,presentation:"headless"');
+    expect(hot).toContain('exact-release-control.mjs" acceptance hot-update');
+    expect(hot).toContain('--od-channel-head-url="$ELECTRON_CANDIDATE_HEAD_URL"');
     expect(hot).not.toContain("DevToolsActivePort");
   });
 
@@ -112,6 +113,12 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain('exact-release-control.mjs" acceptance fetch');
     expect(workflow).not.toContain('urllib.request.urlretrieve(required["artifact"]["url"], archive)');
     expect(workflow).not.toContain("Resolve installed Electron identity");
+    expect(workflow).toContain('exact-release-control.mjs" acceptance hot-update');
+    expect(workflow).toContain('exact-release-control.mjs" acceptance collect');
+    expect(workflow).not.toContain("electron-cdp-control.mjs");
+    expect(workflow).not.toContain("electron-cdp-request.json");
+    expect(workflow).not.toContain("acceptance-request.json");
+    expect(workflow).not.toMatch(/node (?:-e |--input-type=module)/u);
     const acceptance = workflow.split("\n  acceptance:")[1]!.split("\n  activate:")[0]!;
     expect(acceptance.indexOf("node-version: 24.18.0")).toBeLessThan(acceptance.indexOf("- name: Authorize installed acceptance capability"));
     const config = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
@@ -161,7 +168,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain(".github/scripts/pack.py");
     expect(workflow).not.toContain(".github/scripts/release.py");
     expect(workflow).not.toContain("installed_acceptance.py");
-    expect(workflow).toContain('operation: "exact.acceptance"');
+    expect(workflow).toContain('exact-release-control.mjs" acceptance collect');
     expect(workflow).not.toContain("node tools/release/src/exact/control-cli.ts");
     expect(workflow).not.toContain("somechan");
     expect(workflow).not.toContain("somepreview");

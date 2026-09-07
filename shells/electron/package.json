@@ -6,6 +6,7 @@
   "exports": {
     "./package.json": "./package.json",
     "./lifecycle": { "types": "./dist/lifecycle-api.d.ts", "default": "./dist/lifecycle-api.js" },
+    "./lifecycle/inspection": { "types": "./dist/adapters/tools/lifecycle/inspection.d.ts", "default": "./dist/adapters/tools/lifecycle/inspection.js" },
     "./build": { "types": "./dist/build-api.d.ts", "default": "./dist/build-api.js" }
   },
   "files": [

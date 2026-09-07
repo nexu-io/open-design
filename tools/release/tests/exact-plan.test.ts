@@ -73,7 +73,7 @@ describe("exact release plan", () => {
     expect(shellPaths).toContain("packages/sidecar/esbuild.config.mjs");
     expect(shellPaths).toContain("packages/electron-kit/src");
     expect(shellSources.find(({ path }) => path === "packages/electron-kit/src")?.excludePaths).toEqual([
-      "cdp", "cdp-api.ts", "commands/cdp-control.ts",
+      "cdp", "cdp-api.ts",
     ]);
     expect(shellPaths.some((path) => path.startsWith("apps/web") || path.startsWith("apps/daemon") || path.startsWith("apps/closure"))).toBe(false);
 

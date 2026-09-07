@@ -186,6 +186,17 @@ async function activate(store: StandaloneStore, shell: StandaloneShellIdentity) 
 }
 
 describe("standalone exact lifecycle", () => {
+  it("reports diagnostic locations without creating or changing Store state", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-diagnostics-")); roots.push(root);
+    const store = new StandaloneStore(root, { channel: "somechan", namespace: "inspection" });
+    expect(store.diagnosticPaths).toEqual({ stateFile: join(root, "channels/somechan/namespaces/inspection/state.json"), generationsRoot: join(root, "channels/somechan/generations") });
+    expect(await readdir(root)).toEqual([]);
+    await mkdir(join(root, "channels/somechan/namespaces/inspection"), { recursive: true });
+    const initial = await store.readState();
+    await writeFile(store.diagnosticPaths.stateFile, JSON.stringify(initial));
+    expect(await store.readState()).toEqual(initial);
+  });
+
   it("shares the repository namespace character and length contract", () => {
     expect(new StandaloneStore("/unused", { channel: "somechan", namespace: "Team.Shared_01" }).namespace).toBe("Team.Shared_01");
     expect(() => new StandaloneStore("/unused", { channel: "somechan", namespace: `n${"x".repeat(128)}` })).toThrow("invalid standalone namespace");

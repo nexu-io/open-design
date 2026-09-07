@@ -4,13 +4,14 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { ElectronRuntimeLog } from "@/runtime/session/logging.js";
+import { ElectronRuntimeLog, resolveElectronRuntimeLogPath } from "@/runtime/session/logging.js";
 
 describe("Electron runtime diagnostics", () => {
   it("writes one ordered attempt without making Error details opaque", async () => {
     const root = await mkdtemp(join(tmpdir(), "electron-runtime-log-"));
     try {
       const log = new ElectronRuntimeLog(root);
+      expect(log.path).toBe(resolveElectronRuntimeLogPath(root));
       log.write("preflight.complete", { pid: 42 });
       log.write("startup.failed", { error: new Error("fixture failed") });
       await log.flush();

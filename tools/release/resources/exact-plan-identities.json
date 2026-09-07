@@ -31,7 +31,7 @@
         "packages/electron-kit/esbuild.config.mjs",
         {
           "path": "packages/electron-kit/src",
-          "excludePaths": ["cdp", "cdp-api.ts", "commands/cdp-control.ts"]
+          "excludePaths": ["cdp", "cdp-api.ts"]
         },
         "packages/electron-kit/resources",
         "packages/contracts/package.json",
@@ -167,10 +167,15 @@
     "release.acceptance.control": {
       "paths": [
         "tools/release/src/exact/installed-acceptance.ts",
+        "tools/release/src/exact/acceptance.ts",
+        "tools/release/src/exact/acceptance-artifact.ts",
+        "tools/release/src/exact/commands.ts",
         "tools/release/src/exact/control-common.ts",
         "tools/release/src/exact/control-release.ts",
         "tools/release/src/policy/release-profile.ts",
-        "tools/release/tests/installed-acceptance.test.ts"
+        "tools/release/tests/installed-acceptance.test.ts",
+        "tools/release/tests/acceptance-artifact.test.ts",
+        "tools/release/tests/exact-commands.test.ts"
       ]
     },
     "electron.lifecycle.control": {
@@ -182,8 +187,7 @@
     "electron.cdp.control": {
       "paths": [
         "packages/electron-kit/src/cdp",
-        "packages/electron-kit/src/cdp-api.ts",
-        "packages/electron-kit/src/commands/cdp-control.ts"
+        "packages/electron-kit/src/cdp-api.ts"
       ]
     }
   },

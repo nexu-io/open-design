@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import { createElectronContractInvocationExpression } from "@open-design/electron-contract/automation";
@@ -192,10 +192,4 @@ export async function executeElectronCdpContractControl(value: unknown): Promise
   for (const invocation of invocations) results.push(await invokeContract(discovery.discoveryUrl, invocation, deadline));
   if (input.close) await closeBrowser(discovery.discoveryUrl, deadline);
   return Object.freeze({ discoveryUrl: discovery.discoveryUrl, results: Object.freeze(results) });
-}
-
-export async function runElectronCdpContractControl(requestPath: string, receiptPath: string): Promise<void> {
-  const request = JSON.parse(await readFile(resolve(requestPath), "utf8"));
-  const result = await executeElectronCdpContractControl(request);
-  await writeFile(resolve(receiptPath), `${JSON.stringify({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result }, null, 2)}\n`);
 }

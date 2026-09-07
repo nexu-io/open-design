@@ -6,5 +6,6 @@ export * from "./platform/macos/index.js";
 export * from "./platform/windows/index.js";
 export * from "./runtime/startup/preflight/index.js";
 export * from "./runtime/startup/warmup/index.js";
-export { resolveElectronSessionNamespace } from "./runtime/session/namespace-paths.js";
+export { resolveElectronSessionNamespace, resolveElectronNamespacePaths } from "./runtime/session/namespace-paths.js";
+export { resolveElectronRuntimeLogPath } from "./runtime/session/logging.js";
 export { bindElectronPlatform } from "./runtime/startup/platform.js";
