@@ -2396,16 +2396,37 @@ export function LiveArtifactViewer({
           ) : null}
         </div>
       )}
-      {inTabPresent ? (
-        <button
-          type="button"
-          className="present-exit-btn"
-          onClick={() => setInTabPresent(false)}
-          title={t('common.exitFullscreen')}
-          aria-label={t('common.exitFullscreen')}
-        >
-          <Icon name="close" size={14} />
-        </button>
+      {/* Portaled to <body>, not rendered here, and that is the whole point.
+          `.app` is permanently a stacking context (it carries the entrance fade,
+          an opacity animation with `animation-fill-mode: both`), so everything
+          inside it is sorted within it — including the promoted `.viewer-body`
+          at z-index 1050. An exit control left in this subtree sits at z-index
+          50 in that same context and is painted over by the document it is
+          supposed to escape: it renders, it just is not what a click at its own
+          position lands on.
+
+          It has to work from the only state that matters. Once the user clicks
+          the artifact, focus moves into the sandboxed frame and the host's
+          Escape listener stops firing (OPEND-2156) — and unlike the file
+          viewer, a live artifact preview carries no Open Design bridge
+          (`/api/live-artifacts/:id/preview` serves the stored HTML as-is into a
+          frame sandboxed without `allow-same-origin`), so nothing can post
+          `od:present-escape` back either. Adding that listener here would be
+          dead code. The pointer path is the only escape there is, so it is the
+          one that must not be buried. */}
+      {inTabPresent && typeof document !== 'undefined' ? createPortal(
+        <div className="present-overlay" role="dialog" aria-label={t('fileViewer.present')}>
+          <button
+            type="button"
+            className="present-exit-btn"
+            onClick={() => setInTabPresent(false)}
+            title={t('common.exitFullscreen')}
+            aria-label={t('common.exitFullscreen')}
+          >
+            <Icon name="close" size={14} />
+          </button>
+        </div>,
+        document.body,
       ) : null}
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
