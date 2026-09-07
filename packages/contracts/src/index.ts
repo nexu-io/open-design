@@ -5,6 +5,7 @@ export * from './tasks.js';
 export * from './api/app-config.js';
 export * from './api/strategy-rollout.js';
 export * from './api/agent-sessions.js';
+export * from './api/amr-runtime.js';
 export * from './api/agent-setup.js';
 export * from './api/attribution.js';
 export * from './api/amrWallet.js';

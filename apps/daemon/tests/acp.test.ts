@@ -3465,6 +3465,79 @@ class FakeAcpChild extends EventEmitter {
   }
 }
 
+test('AMR Pi records the verified runtime/model and its durable session', () => {
+  const child = new FakeAcpChild();
+  const evidence: unknown[] = [];
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const session = attachAcpSession({
+    child: child as never, prompt: 'Build a page', model: 'gpt-6-astra',
+    expectedAmrRuntime: 'pi', send: () => {},
+    onAmrRuntimeEvidence: (value) => evidence.push(value),
+  });
+  const durableSessionId = `pi-${'a'.repeat(32)}`;
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, {
+    sessionId: durableSessionId, durableSessionId, runtime: 'pi', runtimeVersion: '0.85.1',
+  });
+  writeAcpResult(child, 3, { models: { currentModelId: 'amr/gpt-6-astra' } });
+  writeAcpResult(child, 4, {
+    runtime: 'pi', runtimeVersion: '0.85.1', modelId: 'amr/gpt-6-astra',
+  });
+  expect(session.getDurableSessionId()).toBe(durableSessionId);
+  expect(session.completedSuccessfully()).toBe(true);
+  expect(evidence.at(-1)).toEqual({
+    requestedRuntime: 'pi', actualRuntime: 'pi', runtimeVersion: '0.85.1', modelId: 'gpt-6-astra',
+  });
+  expect(writes.filter((line) => JSON.parse(line).method === 'session/prompt')).toHaveLength(1);
+});
+
+test('AMR Pi refuses an old OpenCode handshake before sending a prompt', () => {
+  const child = new FakeAcpChild();
+  const writes: string[] = [];
+  child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+  const session = attachAcpSession({
+    child: child as never, prompt: 'Build a page', model: 'gpt-6-astra',
+    expectedAmrRuntime: 'pi', send: () => {},
+  });
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'vela-opencode-1', openCodeSessionId: 'sess-old' });
+  expect(session.hasFatalError()).toBe(true);
+  expect(session.getDurableSessionId()).toBeNull();
+  expect(writes.some((line) => JSON.parse(line).method === 'session/prompt')).toBe(false);
+});
+
+test.each(['unconfirmed-selection', 'wrong-selection', 'wrong-final-model', 'wrong-final-runtime'])(
+  'AMR Pi rejects %s instead of counting a different configuration as success', (scenario) => {
+    const child = new FakeAcpChild();
+    const writes: string[] = [];
+    child.stdin.on('data', (chunk) => writes.push(String(chunk)));
+    const session = attachAcpSession({
+      child: child as never, prompt: 'Build a page', model: 'gpt-6-astra',
+      expectedAmrRuntime: 'pi', send: () => {},
+    });
+    const durableSessionId = `pi-${'b'.repeat(32)}`;
+    writeAcpResult(child, 1, {});
+    writeAcpResult(child, 2, {
+      sessionId: durableSessionId, durableSessionId, runtime: 'pi', runtimeVersion: '0.85.1',
+    });
+    writeAcpResult(child, 3, scenario === 'unconfirmed-selection' ? {} : {
+      models: { currentModelId: scenario === 'wrong-selection' ? 'amr/other-model' : 'amr/gpt-6-astra' },
+    });
+    if (scenario.endsWith('selection')) {
+      expect(writes.some((line) => JSON.parse(line).method === 'session/prompt')).toBe(false);
+    } else {
+      writeAcpResult(child, 4, {
+        runtime: scenario === 'wrong-final-runtime' ? 'opencode' : 'pi',
+        runtimeVersion: '0.85.1',
+        modelId: scenario === 'wrong-final-runtime' ? 'amr/gpt-6-astra' : 'amr/other-model',
+      });
+    }
+    expect(session.hasFatalError()).toBe(true);
+    expect(session.completedSuccessfully()).toBe(false);
+  },
+);
+
 test('attachAcpSession does not fail a tool-only AMR turn that emits no assistant text', () => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; payload: unknown }> = [];

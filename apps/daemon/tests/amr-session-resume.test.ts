@@ -43,6 +43,8 @@ type RunStatus = {
   error: string | null;
   errorCode: string | null;
   eventsLogPath: string;
+  amrRuntime?: string;
+  amrRuntimeEvidence?: { actualRuntime: string; runtimeVersion: string; modelId: string };
 };
 type RunEvent = { event: string; data: unknown };
 
@@ -63,6 +65,37 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     if (binDir) await removeTempDir(binDir);
     binDir = null;
     restoreEnv(originalEnv);
+  });
+
+  it('resumes consecutive Pi turns and safely reseeds when another harness advances the conversation', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-pi-resume-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-pi', { logPath });
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr', agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: false, content: false, artifactManifest: false }, privacyDecisionAt: Date.now(),
+    });
+    const conversation = await createConversation(started.url);
+    for (const runtime of ['opencode', 'pi', 'pi', 'opencode', 'opencode', 'pi', 'pi'] as const) {
+      const run = await sendRunAndWait(started.url, conversation, `request for ${runtime}`, 'deepseek-v4-flash', runtime);
+      expect(run.status, `${runtime}: ${run.error}`).toBe('succeeded');
+      expect(run.amrRuntime).toBe(runtime);
+      if (runtime === 'pi') {
+        expect(run.amrRuntimeEvidence).toMatchObject({
+          actualRuntime: 'pi', runtimeVersion: '0.85.1', modelId: 'deepseek-v4-flash',
+        });
+      }
+    }
+    const calls = (await readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    expect(calls.map(({ method, runtime }) => [method, runtime])).toEqual([
+      ['new', 'opencode'], ['new', 'pi'], ['load', 'pi'],
+      ['new', 'opencode'], ['load', 'opencode'], ['new', 'pi'], ['load', 'pi'],
+    ]);
+    expect(calls[4].sessionId).toBe('oc-fake-1');
+    expect(calls[2].sessionId).toBe('pi-0123456789abcdef0123456789abcdef');
+    expect(calls[6].sessionId).toBe(calls[2].sessionId);
   });
 
   it('captures the durable handle on turn 1 and resumes it via session/load on turn 2', async () => {
@@ -604,6 +637,7 @@ async function sendRunAndWait(
   encoded: string,
   message: string,
   model?: string,
+  amrRuntime?: 'opencode' | 'pi',
 ): Promise<RunStatus> {
   const [projectId, conversationId, workspaceId, workspaceMemberId] =
     encoded.split('::');
@@ -632,6 +666,7 @@ async function sendRunAndWait(
       message,
       currentPrompt: message,
       ...(model ? { model } : {}),
+      ...(amrRuntime ? { amrRuntime } : {}),
     }),
   });
   const body = (await runResponse.json()) as {

@@ -1,3 +1,19 @@
+.amr-runtime-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.amr-runtime-picker select {
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
 /* -------- Chat project header (single row) --------------------------
    The former standalone chrome header row was removed. This single row
    now carries: back button, design-system picker, editable project

@@ -414,9 +414,12 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation,
     error,
     onRetry,
+    onResumeRun,
     onSubmitQuestionForm,
+    composerFooterAccessory,
   }: {
     activeConversationId: string | null;
+    composerFooterAccessory?: ReactNode;
     conversations: Conversation[];
     streaming: boolean;
     sendDisabled?: boolean;
@@ -441,6 +444,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onSendQueuedNow?: (id: string) => void;
     onNewConversation: () => void;
     onRetry?: (message: ChatMessage) => void;
+    onResumeRun?: (message: ChatMessage) => void;
     onSubmitQuestionForm?: (
       text: string,
       attachments?: unknown[],
@@ -463,6 +467,7 @@ vi.mock('../../src/components/ChatPane', () => ({
       );
     return (
       <section>
+        {composerFooterAccessory}
         <output data-testid="active-conversation">{activeConversationId}</output>
         <output data-testid="streaming-state">{streaming ? 'streaming' : 'idle'}</output>
         <output data-testid="chat-error">{error}</output>
@@ -509,6 +514,11 @@ vi.mock('../../src/components/ChatPane', () => ({
         {retryTarget && onRetry ? (
           <button type="button" data-testid="chat-retry" onClick={() => onRetry(retryTarget)}>
             retry
+          </button>
+        ) : null}
+        {retryTarget && onResumeRun ? (
+          <button type="button" data-testid="chat-resume" onClick={() => onResumeRun(retryTarget)}>
+            continue
           </button>
         ) : null}
         {queuedItems?.map((item, index) => (
@@ -1154,6 +1164,44 @@ describe('ProjectView conversation run isolation', () => {
     available: true,
     models: [{ id: 'glm-5', label: 'GLM 5' }],
   }];
+
+  it('sends the selected AMR harness per submission and resets it for another conversation', async () => {
+    conversationAMessages = [];
+    const amrConfig = { ...config, agentId: 'amr' };
+    const before = JSON.stringify(amrConfig);
+    renderProjectView(amrConfig, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    const picker = screen.getByRole('combobox', { name: 'AMR Harness' });
+    expect(picker).toHaveProperty('value', 'opencode');
+    fireEvent.change(picker, { target: { value: 'pi' } });
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'amr', amrRuntime: 'pi' }));
+    expect(JSON.stringify(amrConfig)).toBe(before);
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    expect(screen.getByRole('combobox', { name: 'AMR Harness' })).toHaveProperty('value', 'opencode');
+  });
+
+  it.each(['chat-retry', 'chat-resume'])('preserves the original Pi harness and model through %s', async (action) => {
+    conversationAMessages = [
+      { id: 'pi-user', role: 'user', content: 'make a landing page', createdAt: 1 },
+      { id: 'pi-failed', role: 'assistant', content: 'partial page', createdAt: 2,
+        agentId: 'amr', runId: 'pi-source', runStatus: 'failed' },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'pi-source', status: 'failed', agentId: 'amr', amrRuntime: 'pi', model: 'gpt-6-astra',
+    });
+    streamViaDaemon.mockImplementation(async () => {});
+    renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId(action)).toBeTruthy());
+    expect(screen.getByRole('combobox', { name: 'AMR Harness' })).toHaveProperty('value', 'opencode');
+    fireEvent.click(screen.getByTestId(action));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'amr', amrRuntime: 'pi', model: 'gpt-6-astra',
+    }));
+  });
 
   it.each([
     [

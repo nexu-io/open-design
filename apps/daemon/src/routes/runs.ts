@@ -8,6 +8,7 @@ import {
   defaultScenarioPluginIdForProjectMetadata,
   InstalledPluginRecordSchema,
   RUN_RESULT_PACKAGE_SCHEMA,
+  resolveAmrRuntime,
   type AppliedPluginSnapshot,
   type ArtifactManifest,
   type ByokChatProviderConfig,
@@ -1091,6 +1092,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         message: 'strategy continuation must use the task\'s locked strategy',
       };
     }
+    const runtimeSource = design.runs.get(task.latestRunId);
+    if (task.selectedAgentId === 'amr' && runtimeSource) {
+      const lockedRuntime = runtimeSource.amrRuntime ?? 'opencode';
+      const runtimeMismatch = requestBody.amrRuntime !== undefined && requestBody.amrRuntime !== lockedRuntime;
+      const modelMismatch = lockedRuntime === 'pi'
+        && typeof requestBody.model === 'string' && requestBody.model.trim()
+        && requestBody.model.replace(/^amr\//, '') !== runtimeSource.model?.replace(/^amr\//, '');
+      if (runtimeMismatch || modelMismatch) {
+        return {
+          kind: 'error', status: 409, code: 'STRATEGY_TASK_AGENT_MISMATCH',
+          message: 'strategy continuation must keep the original AMR harness and model',
+        };
+      }
+    }
     const snapshot = getSnapshot(db, task.snapshotId);
     if (
       !snapshot
@@ -1219,6 +1234,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     });
     meta.taskExecutionId = task.taskExecutionId;
     meta.agentId = task.selectedAgentId;
+    const sourceRun = design.runs.get(sourceRunId);
+    if (task.selectedAgentId === 'amr') {
+      meta.amrRuntime = sourceRun?.amrRuntime ?? 'opencode';
+      if (sourceRun?.amrRuntime === 'pi' && sourceRun.model) meta.model = sourceRun.model;
+    }
     meta.appliedPluginSnapshotId = task.snapshotId;
     meta.pluginId = task.strategyId;
     meta.message = instruction;
@@ -1637,6 +1657,12 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     let preparedWorkspaceScope: RunWorkspaceScope | null = null;
+    let requestedAmrRuntime: ReturnType<typeof resolveAmrRuntime>;
+    try {
+      requestedAmrRuntime = resolveAmrRuntime(effectiveAgentId ?? '', requestBody.amrRuntime);
+    } catch (error) {
+      return sendApiError(res, 400, 'BAD_REQUEST', error instanceof Error ? error.message : 'Invalid AMR runtime');
+    }
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       const prepared = await prepareRunWorkspaceScope(
         req,
@@ -1879,6 +1905,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           rolloutCapability = effectiveAgentId
             ? resolveBundledOdNextRuntimeCapability({
                 agentId: effectiveAgentId,
+                ...(requestedAmrRuntime ? { amrRuntime: requestedAmrRuntime } : {}),
                 ...(rolloutVersions?.agentCliVersion
                   ? { agentCliVersion: rolloutVersions.agentCliVersion }
                   : {}),
@@ -3483,6 +3510,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    try {
+      resolveAmrRuntime(typeof requestBody.agentId === 'string' ? requestBody.agentId : '', requestBody.amrRuntime);
+    } catch (error) {
+      return sendApiError(res, 400, 'BAD_REQUEST', error instanceof Error ? error.message : 'Invalid AMR runtime');
+    }
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
       return sendApiError(res, 400, 'BAD_REQUEST', mediaExecution.message);

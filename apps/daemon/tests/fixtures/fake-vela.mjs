@@ -95,6 +95,9 @@ import { dirname, join } from 'node:path';
 import { argv, stdin, stdout, stderr, env, exit } from 'node:process';
 
 const SESSION_ID = env.FAKE_VELA_SESSION_ID || 'fake-vela-session-1';
+const PI_RUNTIME = argv.includes('--runtime') && argv[argv.indexOf('--runtime') + 1] === 'pi';
+const PI_SESSION_ID = 'pi-0123456789abcdef0123456789abcdef';
+const PI_EVIDENCE = { runtime: 'pi', runtimeVersion: '0.85.1' };
 // Durable upstream (OpenCode) session handle reported on session/new and
 // session/load — the value the daemon captures and replays to resume.
 const OPENCODE_SESSION_ID = env.FAKE_VELA_OPENCODE_SESSION_ID || 'oc-fake-1';
@@ -238,11 +241,11 @@ if (STDERR_ON_SIGTERM || IGNORE_SIGTERM) {
 // Append one line per session-bind method (`new` / `load`) to the file named by
 // FAKE_VELA_INVOCATION_LOG, so a multi-turn server test can assert the resume
 // sequence across the separate per-turn vela processes (e.g. ['new','load','new']).
-function logInvocation(method) {
+function logInvocation(method, sessionId = PI_RUNTIME ? PI_SESSION_ID : OPENCODE_SESSION_ID) {
   const file = env.FAKE_VELA_INVOCATION_LOG;
   if (!file) return;
   try {
-    appendFileSync(file, `${JSON.stringify({ method })}\n`);
+    appendFileSync(file, `${JSON.stringify({ method, runtime: PI_RUNTIME ? 'pi' : 'opencode', sessionId })}\n`);
   } catch {
     /* best-effort diagnostics only */
   }
@@ -296,7 +299,8 @@ function handleMessage(msg) {
         // that never surfaced the durable handle): the daemon captures a null
         // handle, which must CLEAR the row so the next turn opens a fresh session
         // instead of resuming a non-existent one.
-        ...(env.FAKE_VELA_OMIT_OPENCODE_SESSION_ID ? {} : { openCodeSessionId: OPENCODE_SESSION_ID }),
+        ...(PI_RUNTIME || env.FAKE_VELA_OMIT_OPENCODE_SESSION_ID ? {} : { openCodeSessionId: OPENCODE_SESSION_ID }),
+        ...(PI_RUNTIME ? { ...PI_EVIDENCE, durableSessionId: PI_SESSION_ID } : {}),
         models: {
           currentModelId,
           availableModels: AVAILABLE_MODELS,
@@ -308,9 +312,12 @@ function handleMessage(msg) {
       // handle. (vela validates existence before the first prompt, so a missing
       // session surfaces as resume_failed on session/prompt, not here.)
       const durable = typeof params?.sessionId === 'string' ? params.sessionId : OPENCODE_SESSION_ID;
-      logInvocation('load');
+      logInvocation('load', durable);
       didLoad = true;
-      writeResult(id, { sessionId: SESSION_ID, openCodeSessionId: durable });
+      writeResult(id, {
+        sessionId: SESSION_ID,
+        ...(PI_RUNTIME ? { ...PI_EVIDENCE, durableSessionId: durable } : { openCodeSessionId: durable }),
+      });
       return;
     }
     case 'session/set_model': {
@@ -325,7 +332,7 @@ function handleMessage(msg) {
         logInvocation(`set_model:${next || '<empty>'}`);
       }
       sessionsWithModel.add(sessionId);
-      writeResult(id, {});
+      writeResult(id, PI_RUNTIME ? { models: { currentModelId } } : {});
       return;
     }
     case 'session/set_config_option': {
@@ -422,6 +429,7 @@ setInterval(tick, 25);`,
       const finishPrompt = () => {
         writeResult(id, {
           stopReason: 'end_turn',
+          ...(PI_RUNTIME ? { ...PI_EVIDENCE, modelId: env.FAKE_VELA_PI_TERMINAL_MODEL || currentModelId } : {}),
           ...(OMIT_PROMPT_USAGE
             ? {}
             : { usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 } }),

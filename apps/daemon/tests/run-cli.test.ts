@@ -37,7 +37,7 @@ afterEach(async () => {
   tempDir = null;
 });
 
-async function startRunStubServer(resumable: boolean): Promise<StubServer> {
+async function startRunStubServer(resumable: boolean, statusOverrides: Record<string, unknown> = {}): Promise<StubServer> {
   const requests: CapturedRequest[] = [];
   let taskFollowEnabled = false;
   const server = http.createServer((req, res) => {
@@ -64,6 +64,7 @@ async function startRunStubServer(resumable: boolean): Promise<StubServer> {
           agentId: 'claude',
           status: 'failed',
           resumable,
+          ...statusOverrides,
         }));
         return;
       }
@@ -188,6 +189,28 @@ async function runCli(args: string[]): Promise<{ stdout: string; stderr: string;
 }
 
 describe('od run CLI', () => {
+  it('starts Pi with a prompt file and keeps its harness/model when continuing', async () => {
+    stub = await startRunStubServer(true, { agentId: 'amr', amrRuntime: 'pi', model: 'gpt-6-astra' });
+    tempDir = await mkdtemp(join(tmpdir(), 'od-pi-cli-'));
+    const promptFile = join(tempDir, 'prompt.txt');
+    await writeFile(promptFile, 'Create the page\nwith a working button.');
+    const started = await runCli([
+      'run', 'start', '--project', 'project-1', '--agent', 'amr',
+      '--amr-runtime', 'pi', '--model', 'gpt-6-astra', '--prompt-file', promptFile,
+      '--daemon-url', stub.baseUrl, '--json',
+    ]);
+    expect(started.code, started.stderr).toBe(0);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      agentId: 'amr', amrRuntime: 'pi', model: 'gpt-6-astra',
+      message: 'Create the page\nwith a working button.',
+    });
+    const continued = await runCli(['run', 'continue', 'run-1', '--daemon-url', stub.baseUrl, '--json']);
+    expect(continued.code, continued.stderr).toBe(0);
+    expect(JSON.parse(stub.requests.at(-1)!.body)).toMatchObject({
+      agentId: 'amr', amrRuntime: 'pi', model: 'gpt-6-astra',
+    });
+  });
+
   it('keeps one --skill backward compatible and sends multiple ids canonically', async () => {
     stub = await startRunStubServer(true);
     const single = await runCli([

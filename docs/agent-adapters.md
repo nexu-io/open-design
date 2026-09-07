@@ -108,6 +108,30 @@ for (const def of AGENT_DEFS) {
 
 ## 2. Detection strategy
 
+### AMR harness selection
+
+AMR remains the outer agent (`agentId: "amr"`). Each run may set
+`amrRuntime: "opencode" | "pi"`; omission preserves the existing OpenCode path.
+In the project composer, select **AMR Harness**. The equivalent CLI entry is
+`od run start --agent amr --amr-runtime pi --model <exact-model-id> --prompt-file <path>`.
+The same field is available on the shared run request; it is not a global app setting.
+Retry and Continue retain the source Pi runtime and model.
+
+Pi requires a Vela build with the Pi adapter and its pinned Pi dependency. The
+evaluation runner resolves both from the selected Open Design checkout's Vela
+package, so installing an unrelated global Pi does not satisfy that contract.
+The daemon passes `--runtime pi` and verifies the ACP-reported runtime, version
+and selected model. Run status exposes `amrRuntimeEvidence`; absent evidence is
+unknown, not a successful Pi result. OpenCode and Pi use separate native session
+handles, and the normal conversation-history cursor still invalidates stale handles.
+
+This initial Pi adapter accepts text and native file/shell tools. Image inputs
+and host MCP are rejected explicitly. Pi has no validated OD Next native-child
+capability record; it cannot reuse OpenCode's admission evidence. Explicit OD
+Next requirements therefore remain subject to the normal capability gate.
+Daemon-owned data continues to follow the root
+[`AGENTS.md` data-directory contract](../AGENTS.md#daemon-data-directory-contract).
+
 `detectAgents()` and `detectAgentsStream()` probe all registered definitions in
 parallel whenever they are invoked. The daemon warms detection at startup, and
 agent-list/run paths invoke it again when they need fresh availability or model
