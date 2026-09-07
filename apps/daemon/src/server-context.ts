@@ -99,8 +99,31 @@ export interface ProjectPreviewScopeDeps {
     workspace?: { workspaceId: string; workspaceMemberId: string } | null,
     options?: { readonly ttlMs?: number },
   ) => string;
+  /**
+   * Like `mint`, but reuses the live scope for this exact (project, workspace)
+   * when one exists — **without renewing it**. Preview reads must be
+   * byte-stable across refetches, and the scope's expiry is serialized into
+   * the bridged document, so touching it here would change the served bytes
+   * and reload the iframe just as a fresh id would.
+   *
+   * `ttlMs` therefore applies only when this call has to create a new reusable
+   * scope. Keeping an in-use scope alive is `renew`'s job, driven by the
+   * client's explicit renewal request, whose response is not a document.
+   */
+  acquire: (
+    projectId: string,
+    workspace?: { workspaceId: string; workspaceMemberId: string } | null,
+    options?: { readonly ttlMs?: number },
+  ) => string;
   revoke: (scope: string) => void;
   expiresAt: (projectId: string, scope: string) => number | undefined;
+  /**
+   * The expiry to embed in a served document — frozen for the scope's whole
+   * life, unlike `expiresAt`, which `renew` moves. Use this for any body whose
+   * bytes must stay identical across refetches; JSON responses keep using
+   * `expiresAt`.
+   */
+  documentExpiresAt: (projectId: string, scope: string) => number | undefined;
   renew: (
     projectId: string,
     scope: string,
