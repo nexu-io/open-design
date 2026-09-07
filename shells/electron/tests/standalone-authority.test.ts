@@ -25,7 +25,7 @@ import { createStandaloneHostControlTransport } from "@/adapters/standalone/cont
 import { bindElectronPhysicalResourceSet } from "@/adapters/standalone/physical-resources.js";
 import { ElectronStandaloneInstallerClaimLedger } from "@/adapters/standalone/installer-claim.js";
 import { StandaloneHostLifecycle } from "@open-design/standalone";
-import { ElectronStandaloneLifecycleLedger } from "@/adapters/standalone/lifecycle-ledger.js";
+import { StandaloneHostLifecycleLedger } from "@open-design/standalone";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
 
 const roots: string[] = [];
@@ -245,6 +245,18 @@ describe("Electron production Standalone authority", () => {
       });
       expect(await handle.readStatus()).toMatchObject({ state: "running", generationId: prepared.generation.id, bindingDigest: prepared.binding.digest });
 
+      const incompatible = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
+        installedShellPath: join(root, "Current.app"),
+        namespaceRoot: join(runtimeRoot, "other-namespace"),
+        officialNodeExecutablePath: process.execPath,
+        observeFeedback() {},
+        resourceRoot: root,
+        runtimeRoot: join(runtimeRoot, "other-runtime"),
+      });
+      await expect(incompatible.prepare({ correlationId: "incompatible-host", scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell }))
+        .rejects.toThrow("occupied incompatible Standalone host");
+      expect(await handle.readStatus()).toMatchObject({ state: "running", references: 1 });
+
       const nextClosure = Buffer.from("export const closure = 'next';\n");
       const nextClosureDigest = createHash("sha256").update(nextClosure).digest("hex");
       const nextMetadata: StandaloneMetadata = {
@@ -454,7 +466,7 @@ describe("Electron production Standalone authority", () => {
       })).rejects.toThrow("not armed");
       const persistedClaim = JSON.parse(await readFile(installerClaimLedger.path, "utf8")) as Record<string, unknown>;
       await writeFile(installerClaimLedger.path, canonicalJson({ ...persistedClaim, createdAt: "2026-09-04T00:00:00.000Z", expiresAt: "2026-09-04T00:01:00.000Z" }));
-      const lifecycleLedger = new ElectronStandaloneLifecycleLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace });
+      const lifecycleLedger = new StandaloneHostLifecycleLedger(join(runtimeRoot, "standalone-store"), { channel: manifest.channel, namespace: manifest.namespace });
       const expiringLifecycle = await lifecycleLedger.readOrInitial();
       if (expiringLifecycle.transition == null) throw new Error("installer lifecycle transition is unavailable");
       await lifecycleLedger.write({ ...expiringLifecycle, transition: { ...expiringLifecycle.transition, expiresAt: "2026-09-04T00:01:00.000Z" } });

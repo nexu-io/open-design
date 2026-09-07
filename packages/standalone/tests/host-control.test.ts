@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import {
   createStandaloneGenerationBinding,
   StandaloneHostLifecycle,
+  StandaloneHostRuntime,
+  StandaloneHostControlClient,
   type GenerationRecord,
   type StandaloneShellIdentity,
 } from "../src/index.js";
@@ -64,6 +66,45 @@ function startRequest() {
 }
 
 describe("Standalone host finite control contract", () => {
+  it("releases a newly reserved attachment if the generation cannot be loaded", async () => {
+    const lifecycle = new StandaloneHostLifecycle(scope);
+    const host = new StandaloneHostRuntime({
+      scope, lifecycle,
+      capabilities: () => ({ invoke: async (request) => ({ ...request, outcome: "unsupported" }) }),
+      resolveGeneration: async () => { throw new Error("generation unavailable"); },
+    });
+    const client = new StandaloneHostControlClient(scope, (request) => host.request(request));
+    await expect(client.start(scope, generation, startRequest().attachment, binding)).rejects.toThrow("generation unavailable");
+    expect((await lifecycle.status()).references).toBe(0);
+    await host.stop();
+    expect(await lifecycle.status()).toMatchObject({ state: "stopped", references: 0 });
+  });
+
+  it("does not close a live runtime handle when another caller guesses its attachment id", async () => {
+    let closes = 0;
+    const runtimeStatus = { state: "running" as const, instanceId: "runtime-1", references: 1, generationId: generation.id, bindingDigest: binding.digest };
+    const host = new StandaloneHostRuntime({
+      scope,
+      lifecycle: new StandaloneHostLifecycle(scope),
+      capabilities: () => ({ invoke: async (request) => ({ ...request, outcome: "unsupported" }) }),
+      resolveGeneration: async () => async () => ({
+        readStatus: async () => runtimeStatus,
+        invoke: async (request) => ({ ...request, outcome: "unsupported" }),
+        close: async () => { closes++; return { ...runtimeStatus, state: "stopped" }; },
+        waitForTerminal: async () => ({ ...runtimeStatus, state: "stopped" }),
+      }),
+    });
+    const owner = new StandaloneHostControlClient(scope, (request) => host.request(request));
+    const foreign = new StandaloneHostControlClient(scope, (request) => host.request(request));
+    const attachment = startRequest().attachment;
+    await owner.start(scope, generation, attachment, binding);
+    await expect(foreign.start(scope, generation, attachment, binding)).rejects.toThrow("capability is required");
+    expect(closes).toBe(0);
+    expect((await owner.heartbeat(scope, attachment)).references).toBe(1);
+    await owner.release(scope, attachment.id);
+    expect(closes).toBe(1);
+  });
+
   it.each(["terminal", "electron"])("shares one lifecycle when %s attaches first", async (firstType) => {
     const lifecycle = new StandaloneHostLifecycle(scope);
     const first = { id: `${firstType}-1`, shell: { ...shell, type: firstType } };

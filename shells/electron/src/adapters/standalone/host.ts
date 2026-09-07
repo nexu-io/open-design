@@ -10,23 +10,20 @@ import {
   SidecarFactory,
 } from "@open-design/sidecar/authority";
 import {
-  FossilHandoffHost,
+  StandaloneHostRuntime,
   createStandaloneRuntimeLayoutCapabilityHandler,
   createStandaloneShellCapabilityRouter,
   createStandaloneShellUpdaterCapabilityHandler,
   resolveStandaloneGenerationHandoff,
   validateShellIdentity,
   validateStandaloneRuntimeLayout,
-  type StandaloneHandoffRequest,
-  type StandaloneRuntimeHandle,
 } from "@open-design/standalone";
 
 import {
   STANDALONE_HOST_CONTROL_ACTION,
-  validateStandaloneHostControlRequest,
 } from "@open-design/standalone";
 import { StandaloneHostLifecycle } from "@open-design/standalone";
-import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
+import { StandaloneHostLifecycleLedger } from "@open-design/standalone";
 import { ElectronStandaloneHostUpdater } from "./host-updater.js";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 import { ElectronReleaseExactFeed } from "./release-feed.js";
@@ -87,161 +84,34 @@ function readConfig(): HostConfig {
   return Object.freeze({ schemaVersion: 1, scope: Object.freeze({ ...value.scope }), storeRoot, runtimeRoot, resourceRoot, hostPath, hostSha256: value.hostSha256!, layout, supervisorPath, supervisorSha256: value.supervisorSha256!, shell: Object.freeze({ ...shell }), channelHeadUrl: channelHeadUrl.href });
 }
 
-class ElectronStandaloneHostRuntime {
-  readonly lifecycle: StandaloneHostLifecycle;
-  readonly updater: ElectronStandaloneHostUpdater;
-  readonly #handoff: FossilHandoffHost;
-  readonly #handles = new Map<string, Readonly<{
-    attachment: StandaloneHandoffRequest["attachment"];
-    handle: StandaloneRuntimeHandle;
-  }>>();
-
-  constructor(readonly config: HostConfig, installation: ResolvedElectronStandaloneInstallation) {
-    this.lifecycle = new StandaloneHostLifecycle(config.scope, {
-      statePort: new ElectronStandaloneLifecycleLedger(config.storeRoot, config.scope),
-    });
-    const updaterLedger = new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron");
-    const feed = new ElectronReleaseExactFeed({
-      cacheRoot: config.storeRoot,
-      channel: config.scope.channel,
-      channelHeadUrl: config.channelHeadUrl,
-      currentReleaseVersion: installation.declaration.releaseVersion,
-      shell: config.shell,
-      target: installation.declaration.target,
-      trustedKeys: installation.trustedKeys,
-    });
-    this.updater = new ElectronStandaloneHostUpdater("electron", this.lifecycle, updaterLedger, {
-      authorityRoot: config.storeRoot,
-      feed,
-      candidates: new ElectronStandaloneShellCandidateLedger(config.storeRoot, config.scope, feed),
-    });
-    this.#handoff = new FossilHandoffHost(async (binding) => {
+function createHostRuntime(config: HostConfig, installation: ResolvedElectronStandaloneInstallation): StandaloneHostRuntime {
+  const lifecycle = new StandaloneHostLifecycle(config.scope, {
+    statePort: new StandaloneHostLifecycleLedger(config.storeRoot, config.scope),
+  });
+  const ledger = new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron");
+  const feed = new ElectronReleaseExactFeed({
+    cacheRoot: config.storeRoot, channel: config.scope.channel, channelHeadUrl: config.channelHeadUrl,
+    currentReleaseVersion: installation.declaration.releaseVersion, shell: config.shell,
+    target: installation.declaration.target, trustedKeys: installation.trustedKeys,
+  });
+  const updater = new ElectronStandaloneHostUpdater("electron", lifecycle, ledger, {
+    authorityRoot: config.storeRoot, feed, candidates: new ElectronStandaloneShellCandidateLedger(config.storeRoot, config.scope, feed),
+  });
+  return new StandaloneHostRuntime({
+    scope: config.scope, lifecycle,
+    updater: (shellType) => shellType === updater.shellType ? updater : undefined,
+    capabilities: () => createStandaloneShellCapabilityRouter([
+      createStandaloneShellUpdaterCapabilityHandler(updater),
+      createStandaloneRuntimeLayoutCapabilityHandler({ layout: config.layout, scope: config.scope }),
+    ]),
+    async resolveGeneration(binding) {
       const bytes = await readFile(binding.launcher.path);
       if (createHash("sha256").update(bytes).digest("hex") !== binding.launcher.blobSha256) {
         throw new Error("materialized Standalone host launcher failed its handoff binding");
       }
-      const generation = await import(pathToFileURL(binding.launcher.path).href) as Record<string, unknown>;
-      return resolveStandaloneGenerationHandoff(generation);
-    });
-  }
-
-  async request(input: unknown): Promise<unknown> {
-    const request = validateStandaloneHostControlRequest(input, this.config.scope);
-    if (request.operation === "lifecycle.status") return await this.lifecycle.status();
-    if (request.operation === "lifecycle.ready") return await this.lifecycle.awaitReady(request.readiness);
-    if (request.operation === "lifecycle.heartbeat") return await this.lifecycle.heartbeat(request.attachment, request.attachmentCapability);
-    if (request.operation === "lifecycle.release") {
-      const status = await this.lifecycle.release(request.attachmentId, request.attachmentCapability);
-      const active = this.#handles.get(request.attachmentId);
-      if (active != null) {
-        await active.handle.close();
-        this.#handles.delete(request.attachmentId);
-      }
-      return status;
-    }
-    if (request.operation === "lifecycle.stop") {
-      const status = await this.lifecycle.stop(request.fence);
-      await Promise.all([...this.#handles.values()].map(({ handle }) => handle.close().catch(() => undefined)));
-      this.#handles.clear();
-      return status;
-    }
-    if (request.operation === "lifecycle.start") return await this.#start(request);
-    if (request.operation === "runtime.invoke") {
-      const active = this.#handles.get(request.command.attachmentId);
-      if (active == null) throw new Error("Standalone host runtime attachment is unavailable");
-      await this.lifecycle.heartbeat(active.attachment, request.attachmentCapability);
-      return await active.handle.invoke(request.command);
-    }
-    if (request.operation === "transition.begin") return await this.lifecycle.beginTransition(request.kind, request.options);
-    if (request.operation === "transition.renew") return await this.lifecycle.renewTransition(request.token, request.fence);
-    if (request.operation === "transition.release") return await this.lifecycle.releaseTransition(request.token, request.fence);
-    if (request.operation === "transition.force-stop") {
-      const transition = await this.lifecycle.forceStopTransition(request.token, request.fence);
-      await Promise.all([...this.#handles.values()].map(({ handle }) => handle.close().catch(() => undefined)));
-      this.#handles.clear();
-      return transition;
-    }
-    if (request.operation === "transition.complete-start") {
-      return await this.#completeTransitionStart(request);
-    }
-    if (request.operation === "updater.read") {
-      if (request.shellType !== this.updater.shellType) throw new Error("Standalone host updater Shell type differs from its host");
-      return await this.updater.readSnapshot();
-    }
-    if (request.operation === "updater.wait") {
-      if (request.shellType !== this.updater.shellType) throw new Error("Standalone host updater Shell type differs from its host");
-      return await this.updater.waitForChange(request.afterRevision, request.timeoutMs);
-    }
-    if (request.operation === "updater.invoke") {
-      if (request.shellType !== this.updater.shellType) throw new Error("Standalone host updater Shell type differs from its host");
-      return await this.updater.invoke(request.action);
-    }
-    if (request.operation === "updater.confirm-installed") {
-      if (request.shellType !== this.updater.shellType) throw new Error("Standalone host updater Shell type differs from its host");
-      return await this.updater.confirmInstalled(request.proof);
-    }
-    throw new Error(`Standalone host operation is not implemented: ${request.operation}`);
-  }
-
-  async #start(request: Extract<ReturnType<typeof validateStandaloneHostControlRequest>, { operation: "lifecycle.start" }>) {
-    return await this.#boundStart(request, () => this.#startLifecycle(request));
-  }
-
-  async #completeTransitionStart(request: Extract<ReturnType<typeof validateStandaloneHostControlRequest>, { operation: "transition.complete-start" }>) {
-    return await this.#boundStart(request, () => this.lifecycle.completeTransitionStart(
-      request.token,
-      request.fence,
-      request.generation,
-      request.attachment,
-      request.binding,
-    ));
-  }
-
-  async #boundStart(
-    request: Readonly<{
-      attachment: StandaloneHandoffRequest["attachment"];
-      binding: StandaloneHandoffRequest["binding"];
-      generation: Parameters<StandaloneHostLifecycle["start"]>[0];
-    }>,
-    startLifecycle: () => Promise<Awaited<ReturnType<StandaloneHostLifecycle["start"]>>>,
-  ) {
-    const handle = await this.#handoff.handoff({
-      binding: request.binding,
-      attachment: request.attachment,
-      capabilities: createStandaloneShellCapabilityRouter([
-        createStandaloneShellUpdaterCapabilityHandler(this.updater),
-        createStandaloneRuntimeLayoutCapabilityHandler({ layout: this.config.layout, scope: this.config.scope }),
-      ]),
-    });
-    try {
-      const started = await startLifecycle();
-      const exact = await handle.readStatus();
-      if (exact.state !== "running" || exact.generationId !== request.generation.id || exact.bindingDigest !== request.binding.digest) {
-        throw new Error("Standalone host launcher did not acknowledge the exact Sidecar generation");
-      }
-      this.#handles.set(request.attachment.id, Object.freeze({ attachment: request.attachment, handle }));
-      return started;
-    } catch (error) {
-      await handle.close().catch(() => undefined);
-      throw error;
-    }
-  }
-
-  async #startLifecycle(request: Extract<ReturnType<typeof validateStandaloneHostControlRequest>, { operation: "lifecycle.start" }>) {
-    const updater = await this.updater.readSnapshot();
-    if (updater.state === "installed" && updater.installAttemptId != null) {
-      const recovered = await this.lifecycle.completeStoppedTransitionStart("shell-install", updater.installAttemptId, request.generation, request.attachment, request.binding);
-      if (recovered != null) return recovered;
-    }
-    const recoveredContent = await this.lifecycle.completeStoppedTransitionStart("content-restart", null, request.generation, request.attachment, request.binding);
-    if (recoveredContent != null) return recoveredContent;
-    return await this.lifecycle.start(request.generation, request.attachment, request.binding, request.attachmentCapability);
-  }
-
-  async stop(): Promise<void> {
-    const current = await this.lifecycle.status();
-    if (current.references === 0 && current.state === "running") await this.lifecycle.stop(current.fence);
-  }
+      return resolveStandaloneGenerationHandoff(await import(pathToFileURL(binding.launcher.path).href));
+    },
+  });
 }
 
 export async function runElectronStandaloneHost(): Promise<void> {
@@ -260,9 +130,9 @@ export async function runElectronStandaloneHost(): Promise<void> {
     env: process.env,
     supervisor: { command: process.execPath, entrypoint: config.supervisorPath },
   })) return;
-  let runtime: ElectronStandaloneHostRuntime | null = null;
-  let client!: SidecarClient<ElectronStandaloneHostRuntime>;
-  client = SidecarFactory.create<ElectronStandaloneHostRuntime>({
+  let runtime: StandaloneHostRuntime | null = null;
+  let client!: SidecarClient<StandaloneHostRuntime>;
+  client = SidecarFactory.create<StandaloneHostRuntime>({
     handlers: {
       [STANDALONE_HOST_CONTROL_ACTION]: async (input) => {
         if (runtime == null) throw new Error("Standalone host runtime is unavailable");
@@ -272,7 +142,7 @@ export async function runElectronStandaloneHost(): Promise<void> {
     lifecycle: {
       async start(sidecarResources) {
         if (resolve(sidecarResources.dataRoot ?? "") !== config.storeRoot || resolve(sidecarResources.runtimeRoot) !== config.runtimeRoot) throw new Error("Standalone host resources differ from its launch contract");
-        runtime = new ElectronStandaloneHostRuntime(config, installation);
+        runtime = createHostRuntime(config, installation);
         return runtime;
       },
       async status(active) {

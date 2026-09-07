@@ -66,7 +66,7 @@ import {
 } from "./physical-resources.js";
 import { withElectronPhysicalResourceSetGuard } from "./guarded-lifecycle.js";
 import { StandaloneHostLifecycle } from "@open-design/standalone";
-import { ElectronStandaloneLifecycleLedger } from "./lifecycle-ledger.js";
+import { StandaloneHostLifecycleLedger } from "@open-design/standalone";
 import {
   assertElectronInstallerClaimIdentity,
   electronInstallerClaimIdentity,
@@ -294,7 +294,13 @@ export function createElectronStandaloneAuthorityFactory(
         // its entire process lifetime. Once it has no logical references it
         // must be retired before a later cold start, otherwise a newly
         // installed generation can never be selected in this namespace.
-        if (existing != null && (!exactHostStatus(existing, hostExpected) || hostHasNoLogicalReferences(existing))) await guard.retire();
+        if (existing != null) {
+          const idle = hostHasNoLogicalReferences(existing);
+          if (!exactHostStatus(existing, hostExpected) && !idle) {
+            throw new Error("occupied incompatible Standalone host requires an explicit guarded transition");
+          }
+          if (idle) await guard.retire();
+        }
         activeHost = await launchHost(binding);
       });
       feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
@@ -326,7 +332,7 @@ export function createElectronStandaloneAuthorityFactory(
         observeFeedback,
       );
       const updaterLedger = new ElectronStandaloneShellUpdaterLedger(storeRoot, request.scope, request.shell.type);
-      const lifecycleLedger = new ElectronStandaloneLifecycleLedger(storeRoot, request.scope);
+      const lifecycleLedger = new StandaloneHostLifecycleLedger(storeRoot, request.scope);
       const installerClaimLedger = new ElectronStandaloneInstallerClaimLedger(storeRoot, request.scope);
       return Object.freeze({
         binding,

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { createStandaloneGenerationBinding, type GenerationRecord } from "@open-design/standalone";
 
 import { StandaloneHostLifecycle } from "@open-design/standalone";
-import { ElectronStandaloneLifecycleLedger } from "@/adapters/standalone/lifecycle-ledger.js";
+import { StandaloneHostLifecycleLedger } from "@open-design/standalone";
 
 const scope = Object.freeze({ channel: "betahyx", namespace: "electron-foundation" });
 const shell = Object.freeze({ type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) });
@@ -67,7 +67,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
   it("recovers the single durable ledger across host replacement without a second lock", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "electron-lifecycle-ledger-"));
     try {
-      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const ledger = new StandaloneHostLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
       const firstHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, statePort: ledger });
       const started = await firstHost.start(generation, attachment, binding, null);
@@ -86,7 +86,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
   it("recovers and seals one transition through the durable ledger", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "electron-transition-ledger-"));
     try {
-      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const ledger = new StandaloneHostLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
       const firstHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await firstHost.start(generation, attachment, binding, null);
@@ -134,7 +134,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
   it("atomically resumes a content restart after the sealed host crashes", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "electron-content-transition-recovery-"));
     try {
-      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const ledger = new StandaloneHostLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
       const firstHost = new StandaloneHostLifecycle(scope, { heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await firstHost.start(generation, attachment, binding, null);
@@ -156,7 +156,7 @@ describe("Electron Standalone Sidecar-host lifecycle", () => {
     const root = await mkdtemp(resolve(tmpdir(), "electron-content-transition-expiry-"));
     try {
       let now = new Date("2026-09-04T00:00:00.000Z");
-      const ledger = new ElectronStandaloneLifecycleLedger(root, scope);
+      const ledger = new StandaloneHostLifecycleLedger(root, scope);
       const attachment = { id: "electron-1", shell };
       const firstHost = new StandaloneHostLifecycle(scope, { clock: () => now, heartbeatIntervalMs: 100, leaseDurationMs: 1_000, transitionHeartbeatIntervalMs: 100, transitionLeaseDurationMs: 1_000, statePort: ledger });
       await firstHost.start(generation, attachment, binding, null);

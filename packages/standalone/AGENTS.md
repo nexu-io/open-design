@@ -4,7 +4,7 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
 
 - Keep metadata and receipt schemas versioned and deterministic.
 - Own the Shell-neutral host control contract, transport-injected client, and
-  logical host lifecycle. Shell adapters supply transport and persistence;
+  logical host lifecycle, dispatcher, and shared lifecycle ledger. Shell adapters supply transport and a state port;
   shared code must not import Electron or Sidecar transport. A logical lifecycle
   result is never proof that physical processes have retired.
 - Verify signatures before fetching or materializing components.
