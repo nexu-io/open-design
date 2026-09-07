@@ -11,24 +11,20 @@ async function shellSources(): Promise<Array<Readonly<{ name: string; source: st
 }
 
 describe("Electron product shell", () => {
-  it("keeps scripts as file-envelope entrypoints, never a second implementation layer", async () => {
-    const root = new URL("../scripts/", import.meta.url);
-    const files = (await readdir(root)).sort();
-    expect(files).toEqual(["exact-distribution.ts", "exact-scene.ts", "release-manifest.ts", "scene-manifest.ts"]);
-    for (const file of files) {
-      const source = await readFile(new URL(file, root), "utf8");
-      expect(source, file).toContain("await runShellFileCommand(");
-      expect(source, file).not.toMatch(/\bfunction\b|=>|process\.|fetch\(|@open-design|node:/u);
-      for (const line of source.split("\n").filter(line => line.startsWith("import "))) {
-        expect(line, file).toContain('from "../src/adapters/tools/');
-      }
-    }
+  it("has no script envelopes or local file RPC", async () => {
+    const files = await readdir(new URL("../scripts/", import.meta.url)).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    expect(files).toEqual([]);
+    const sources = await shellSources();
+    expect(sources.some(({ name }) => name.endsWith("file-command.ts"))).toBe(false);
+    for (const { name, source } of sources) expect(source, name).not.toContain("runShellFileCommand");
   });
   it("exposes separate build and lifecycle APIs without local command wrappers", async () => {
     const packageJson = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as { scripts: Record<string, string>; exports: Record<string, unknown> };
     expect(packageJson.scripts).not.toHaveProperty("dev");
-    expect(packageJson.scripts["exact:distribution"]).toBe("node ./scripts/exact-distribution.ts");
-    expect(packageJson.scripts["exact:scene"]).toBe("node ./scripts/exact-scene.ts");
+    expect(Object.keys(packageJson.scripts).filter((name) => name.startsWith("exact:"))).toEqual([]);
     expect(packageJson.scripts).not.toHaveProperty("pack");
     expect(packageJson.scripts).not.toHaveProperty("prepack");
     expect(packageJson.scripts).not.toHaveProperty("pack:adapter");

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 
 import { assembleElectronScene, loadElectronScene } from "@/distribution/index.js";
+import type { ElectronShellManifest } from "@/contracts/index.js";
 
 const roots: string[] = [];
 
@@ -83,6 +84,7 @@ describe("Electron scene", () => {
 
     const receipt = await assembleElectronScene({
       ...paths,
+      manifest: JSON.parse(await readFile(paths.manifestPath, "utf8")) as ElectronShellManifest,
       authorityResources: [
         { name: "standalone-host.cjs", path: paths.authorityResourcePath },
         { name: "closure.mjs", path: paths.closureResourcePath },
@@ -126,7 +128,7 @@ describe("Electron scene", () => {
     const input = {
       authorityResources: [] as { name: string; path: string }[],
       entryPath: "/unused/main.ts",
-      manifestPath: "/unused/shell.json",
+      manifest: {} as ElectronShellManifest,
       nodeCarrierLockPath: "/unused/node-lock.json",
       outputRoot: "/unused/scene",
       rendererPreloadEntryPath: "/unused/preload.ts",

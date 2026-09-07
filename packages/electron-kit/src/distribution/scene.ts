@@ -11,7 +11,7 @@ import type { ElectronSceneReceipt } from "./contracts.js";
 export type AssembleElectronSceneInput = Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
-  manifestPath: string;
+  manifest: ElectronShellManifest;
   outputRoot: string;
   rendererPreloadEntryPath: string;
   nodeCarrierLockPath: string;
@@ -56,7 +56,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     }
     authorityResourceNames.add(resource.name);
   }
-  const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
+  const manifest = validateElectronShellManifest(input.manifest);
   const runtimeConfig = validateElectronRuntimeConfig(
     JSON.parse(await readFile(input.runtimeConfigPath, "utf8")) as ElectronRuntimeConfig,
   );

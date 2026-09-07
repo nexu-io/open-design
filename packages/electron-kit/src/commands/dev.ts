@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import electronPath from "electron";
@@ -17,7 +16,7 @@ export function normalizeElectronDevArgv(argv: readonly string[]): string[] {
 export type PrepareElectronDevShellInput = Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
-  manifestPath: string;
+  manifest: ElectronShellManifest;
   nodeCarrierLockPath: string;
   projectRoot: string;
   rendererPreloadEntryPath: string;
@@ -33,11 +32,11 @@ export type ElectronDevShellPreparation = Readonly<{
 
 /** Assemble a development scene without deciding how its lifecycle is supervised. */
 export async function prepareElectronDevShell(input: PrepareElectronDevShellInput): Promise<ElectronDevShellPreparation> {
-  const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
+  const manifest = validateElectronShellManifest(input.manifest);
   const scene = await assembleElectronScene({
     authorityResources: input.authorityResources,
     entryPath: input.entryPath,
-    manifestPath: input.manifestPath,
+    manifest,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     nodeCarrierLockPath: input.nodeCarrierLockPath,
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,

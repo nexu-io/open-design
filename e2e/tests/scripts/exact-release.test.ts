@@ -51,10 +51,9 @@ describe("exact Electron release topology", () => {
     expect(activeTopology).not.toContain("windows-2025");
     expect(deferredTopology).toContain('"target": "win32-x64"');
     expect(deferredTopology).toContain('"runs_on": "windows-2025"');
-    expect(workflow).toContain("@open-design/shell-electron exact:scene");
-    expect(workflow).toContain("@open-design/shell-electron exact:scene-manifest");
-    expect(workflow).toContain("@open-design/shell-electron exact:manifest");
-    expect(workflow).toContain("@open-design/shell-electron exact:distribution");
+    expect(workflow).toContain("@open-design/tools-release exec tools-release electron-scene");
+    expect(workflow).toContain("@open-design/tools-release exec tools-release electron-distribution");
+    expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
     expect(workflow).toContain("@open-design/closure build:resources");
     expect(workflow).toContain("tools/pack/dist/exact-control.mjs");
     expect(workflow).toContain("tools/release/dist/exact-control.mjs");

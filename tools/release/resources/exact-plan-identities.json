@@ -49,8 +49,8 @@
         "packages/standalone/src",
         "shells/electron/package.json",
         "shells/electron/tsconfig.json",
+        "shells/electron/tsconfig.build.json",
         "shells/electron/config",
-        "shells/electron/scripts",
         "shells/electron/src"
       ]
     },
@@ -134,10 +134,9 @@
     "electron.distribution": {
       "paths": [
         "shells/electron/config/platforms",
-        "shells/electron/scripts/exact-distribution.ts",
+        "shells/electron/src/build-api.ts",
         "shells/electron/src/adapters/tools/distribution-tool.ts",
         "shells/electron/src/adapters/tools/exact-contract.ts",
-        "shells/electron/src/adapters/tools/file-command.ts",
         "shells/electron/src/adapters/tools/manifests.ts",
         "shells/electron/src/adapters/standalone/assemble-installation.ts"
       ]

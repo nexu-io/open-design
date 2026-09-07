@@ -312,15 +312,9 @@ jobs:
               if not shell_identity.startswith("sha256:"):
                   raise SystemExit("Electron Shell plan identity is invalid")
               build_hash = shell_identity.removeprefix("sha256:")
-              manifest_path = Path(os.environ["RUNNER_TEMP"], "electron-scene-shell.json")
-              manifest_request = {
-                  "schemaVersion": 1, "operation": "electron.scene-manifest.resolve",
-                  "buildHash": build_hash, "manifestFile": str(manifest_path),
-              }
-              Path(os.environ["RUNNER_TEMP"], "electron-scene-manifest-request.json").write_text(json.dumps(manifest_request, sort_keys=True, separators=(",", ":")) + "\n")
               request = {
                   "schemaVersion": 1, "operation": "electron.scene.build", "target": target,
-                  "shellManifestFile": str(manifest_path),
+                  "buildHash": build_hash,
                   "acceptedClosureBaselineFile": str(Path("apps/closure/dist/index.mjs").resolve()),
                   "standaloneLauncherFile": str(Path("apps/closure/dist/launcher.mjs").resolve()),
                   "resourceReceiptFile": str(Path(os.environ["RUNNER_TEMP"], "exact-closure-resources", "resource-receipt.json")),
@@ -340,8 +334,7 @@ jobs:
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && matrix.shell == 'electron' }}
         shell: bash
         run: |
-          pnpm --filter @open-design/shell-electron exact:scene-manifest -- --request "$RUNNER_TEMP/electron-scene-manifest-request.json" --receipt "$RUNNER_TEMP/electron-scene-manifest-receipt.json"
-          pnpm --filter @open-design/shell-electron exact:scene -- --request "$RUNNER_TEMP/exact-scene-request.json" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
+          pnpm --filter @open-design/tools-release exec tools-release electron-scene --request "$RUNNER_TEMP/exact-scene-request.json" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
 
       - name: Verify scene and prepare convergence product
         env:
@@ -593,18 +586,10 @@ jobs:
                   "releaseDocumentsDirectory": str(root / "prepared" / "documents"),
                   "release": {"channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"], "sourceCommit": os.environ["SOURCE_SHA"], "publishedAt": prepared["publishedAt"], "artifactBaseUrl": prepared["artifactBaseUrl"]}}
           elif os.environ["SHELL_TYPE"] == "electron":
-              scene_manifest = json.loads((scene / "scene.json").read_text())
-              release_manifest = root / "electron-release-shell.json"
-              manifest_request = {
-                  "schemaVersion": 1, "operation": "electron.release-manifest.resolve",
-                  "channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"],
-                  "buildHash": scene_manifest["shellBuildHash"], "manifestFile": str(release_manifest),
-              }
-              (root / "electron-release-manifest-request.json").write_text(json.dumps(manifest_request, sort_keys=True, separators=(",", ":")) + "\n")
               request = {**common, "operation": "electron.distribution.build",
                   "acceptedContentMetadataFile": str(root / "prepared" / "documents" / "content-metadata.json"),
                   "acceptedTrustFile": str(root / "prepared" / "trust" / "keys.json"),
-                  "releaseManifestFile": str(release_manifest),
+                  "channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"],
                   "channelHeadUrl": prepared["artifactBaseUrl"].rsplit("/", 1)[0] + "/latest/channel-head.json"}
           else:
               raise SystemExit(f"unsupported exact Shell: {os.environ['SHELL_TYPE']}")
@@ -620,8 +605,7 @@ jobs:
         if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
         shell: bash
         run: |
-          pnpm --filter @open-design/shell-electron exact:manifest -- --request "$RUNNER_TEMP/electron-release-manifest-request.json" --receipt "$RUNNER_TEMP/electron-release-manifest-receipt.json"
-          pnpm --filter @open-design/shell-electron exact:distribution -- --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
+          pnpm --filter @open-design/tools-release exec tools-release electron-distribution --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
 
       - name: Stage accepted Electron distribution
         if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}

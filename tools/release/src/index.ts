@@ -3,6 +3,30 @@ import { cac } from "cac";
 const cli = cac("tools-release");
 
 cli
+  .command("electron-scene", "Build a release-neutral Electron scene")
+  .option("--request <path>", "Scene build inputs")
+  .option("--receipt <path>", "Built scene receipt")
+  .action(async (options: { request?: string; receipt?: string }) => {
+    if (options.request == null || options.receipt == null) throw new Error("--request and --receipt are required");
+    const { readObject, writeObject } = await import("./exact/control-common.ts");
+    const { buildElectronScene } = await import("@open-design/shell-electron/build");
+    const request = await readObject(options.request);
+    await writeObject(options.receipt, await buildElectronScene(request as Parameters<typeof buildElectronScene>[0]));
+  });
+
+cli
+  .command("electron-distribution", "Build an Electron installer from a verified scene and accepted content")
+  .option("--request <path>", "Distribution build inputs")
+  .option("--receipt <path>", "Shell distribution contribution")
+  .action(async (options: { request?: string; receipt?: string }) => {
+    if (options.request == null || options.receipt == null) throw new Error("--request and --receipt are required");
+    const { readObject, writeObject } = await import("./exact/control-common.ts");
+    const { buildElectronInstaller } = await import("@open-design/shell-electron/build");
+    const request = await readObject(options.request);
+    await writeObject(options.receipt, await buildElectronInstaller(request as Parameters<typeof buildElectronInstaller>[0]));
+  });
+
+cli
   .command("release-policy", "Resolve and validate a typed release workflow profile")
   .option("--request <path>", "Release policy request")
   .option("--receipt <path>", "Release policy receipt")

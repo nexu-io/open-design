@@ -10,6 +10,7 @@ import { inspectMacElectronAppTrust } from "@open-design/electron-kit/installati
 import { withElectronInstallation } from "../standalone/assemble-installation.ts";
 import { assertElectronDistributionBinding } from "../../composition/release-identity.ts";
 import { parseElectronExactDistributionRequest } from "./exact-contract.ts";
+import { resolveElectronReleaseManifest } from "./manifests.ts";
 
 async function descriptor(path: string, file = basename(path)) {
   const bytes = await readFile(path);
@@ -29,7 +30,7 @@ if (sceneManifest.target !== input.target || typeof sceneManifest.closure?.file 
   throw new Error("Electron exact distribution differs from its scene target or seeds");
 }
 const sceneIdentity = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")) as ElectronShellManifest);
-const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.releaseManifestFile, "utf8")) as ElectronShellManifest);
+const manifest = await resolveElectronReleaseManifest({ channel: input.channel, releaseVersion: input.releaseVersion, buildHash: sceneIdentity.shell.buildHash });
 const contentEnvelope = JSON.parse(await readFile(input.acceptedContentMetadataFile, "utf8")) as {
   metadata?: { channel?: unknown; releaseVersion?: unknown; resources?: unknown };
 };

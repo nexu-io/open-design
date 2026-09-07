@@ -7,8 +7,11 @@ import { assembleElectronScene } from "@open-design/electron-kit/distribution";
 
 import { buildElectronStandaloneAuthority } from "../standalone/build.ts";
 import { parseElectronExactSceneRequest } from "./exact-contract.ts";
+import { resolveElectronSceneManifest } from "./manifests.ts";
+import { electronShellSource } from "./resources.ts";
 
 export async function executeElectronExactScene(input: ReturnType<typeof parseElectronExactSceneRequest>) {
+const manifest = await resolveElectronSceneManifest(input.buildHash);
 const rawResources = JSON.parse(await readFile(input.resourceReceiptFile, "utf8")) as { schemaVersion?: unknown; operation?: unknown; resources?: unknown };
 if (rawResources.schemaVersion !== 1 || rawResources.operation !== "closure.resources.build" || !Array.isArray(rawResources.resources)) {
   throw new Error("Electron exact scene requires a Closure resource receipt");
@@ -21,6 +24,7 @@ const resources = rawResources.resources.map((candidate) => {
   return { id: value.id, file: value.file, path: resolve(value.path), entrypoint: value.entrypoint, sha256: value.sha256, size: value.size, treeSha256: value.treeSha256 };
 });
 const normalizedReceiptPath = resolve(dirname(input.sceneDirectory), "closure-resources.json");
+await mkdir(dirname(normalizedReceiptPath), { recursive: true });
 await writeFile(normalizedReceiptPath, `${JSON.stringify({ schemaVersion: 1, operation: "closure.resources.build", resources: resources.map(({ path: _path, ...resource }) => resource) }, null, 2)}\n`, "utf8");
 const authority = await buildElectronStandaloneAuthority(resolve(dirname(input.sceneDirectory), "electron-authority-build"));
 const receipt = await assembleElectronScene({
@@ -33,11 +37,11 @@ const receipt = await assembleElectronScene({
     { name: "closure-resources.json", path: normalizedReceiptPath },
     ...resources.map((resource) => ({ name: resource.file, path: resource.path })),
   ],
-  entryPath: fileURLToPath(new URL("../../main.ts", import.meta.url)),
-  manifestPath: input.shellManifestFile,
+  entryPath: electronShellSource("main.ts"),
+  manifest,
   nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
   outputRoot: input.sceneDirectory,
-  rendererPreloadEntryPath: fileURLToPath(new URL("../renderer/preload.ts", import.meta.url)),
+  rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
   runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
   standaloneBinding: {
     target: input.target,

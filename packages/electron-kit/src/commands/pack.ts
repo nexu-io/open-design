@@ -9,7 +9,7 @@ import { validateElectronWindowsLifecyclePolicy, type ElectronWindowsLifecyclePo
 export async function packElectronShell(input: Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
   entryPath: string;
-  manifestPath: string;
+  manifest: ElectronShellManifest;
   nodeCarrierLockPath: string;
   distributionPath: string;
   runtimeConfigPath: string;
@@ -18,7 +18,7 @@ export async function packElectronShell(input: Readonly<{
   projectRoot: string;
   rendererPreloadEntryPath: string;
 }>): Promise<ElectronDistributionReceipt> {
-  const manifest = validateElectronShellManifest(JSON.parse(await readFile(input.manifestPath, "utf8")) as ElectronShellManifest);
+  const manifest = validateElectronShellManifest(input.manifest);
   const policy = validateElectronDistributionPolicy(
     JSON.parse(await readFile(input.distributionPath, "utf8")) as ElectronDistributionPolicy,
   );
@@ -28,7 +28,7 @@ export async function packElectronShell(input: Readonly<{
   const scene = await assembleElectronScene({
     authorityResources: input.authorityResources,
     entryPath: input.entryPath,
-    manifestPath: input.manifestPath,
+    manifest,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     nodeCarrierLockPath: input.nodeCarrierLockPath,
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,

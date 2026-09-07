@@ -72,6 +72,10 @@ adapter consumes signed exact content, the Standalone updater/runtime-handle
 contracts, and Sidecar guarded resource sets; the Shell does not import Closure
 implementation.
 There are no package-local `dev`, `pack`, or `prepack` lifecycle shortcuts.
+Tools call `@open-design/shell-electron/build` or `/lifecycle` directly.
+`tools-release electron-scene` and `electron-distribution` consume CI requests
+and emit artifact receipts; Shell manifest resolution is part of each build,
+not a separate command. The Shell has no script-envelope entrypoints.
 Tools acquire local fixture files through the fixture producer's client, then
 invoke typed Shell adapters with local installation inputs. The Shell does not
 understand loopback bootstrap documents or download development fixtures.

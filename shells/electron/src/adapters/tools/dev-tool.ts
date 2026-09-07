@@ -1,5 +1,5 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
@@ -84,15 +84,12 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
   const manifestPath = fileURLToPath(new URL("../../../config/shell.json", import.meta.url));
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(manifestPath, "utf8")) as ElectronShellManifest);
   if (baseManifest.channel !== request.channel) throw new Error("Electron dev request escaped the Shell channel");
-  const stagedManifestPath = join(request.controlRuntimeRoot, "inputs", "shell.json");
-  await mkdir(dirname(stagedManifestPath), { recursive: true });
-  await writeFile(stagedManifestPath, `${JSON.stringify({ ...baseManifest, namespace: request.namespace }, null, 2)}\n`, "utf8");
   if (request.installationInput.channel !== request.channel) throw new Error("Electron dev installation input escaped the Shell channel");
   const prepared = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget() }, async (installation) => {
     return await prepareElectronDevShell({
     authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
     entryPath: electronShellSource("main.ts"),
-    manifestPath: stagedManifestPath,
+    manifest: { ...baseManifest, namespace: request.namespace },
     nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
     projectRoot: fileURLToPath(new URL("../../..", import.meta.url)),
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),

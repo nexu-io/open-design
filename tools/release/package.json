@@ -15,6 +15,7 @@
   "dependencies": {
     "@open-design/metatool": "workspace:*",
     "@open-design/release": "workspace:*",
+    "@open-design/shell-electron": "workspace:*",
     "cac": "6.7.14",
     "sharp": "0.35.3",
     "yaml": "2.9.0"

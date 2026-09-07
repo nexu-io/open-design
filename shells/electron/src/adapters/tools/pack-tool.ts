@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { readFile } from "node:fs/promises";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { packElectronShell } from "@open-design/electron-kit/pack";
@@ -69,9 +69,6 @@ export async function executeElectronPack(request: ElectronPackRequest) {
   const baseManifestPath = fileURLToPath(new URL("../../../config/shell.json", import.meta.url));
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(baseManifestPath, "utf8")) as ElectronShellManifest);
   const manifest = createElectronPackManifest(baseManifest, request);
-  const stagedManifestPath = join(request.outputDirectory, "inputs", "shell.json");
-  await mkdir(dirname(stagedManifestPath), { recursive: true });
-  await writeFile(stagedManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   const distribution = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget() }, async (installation) => {
   if (installation.channel !== request.channel || installation.releaseVersion !== request.releaseVersion) {
     throw new Error("Electron pack authority differs from its explicit channel release identity");
@@ -80,7 +77,7 @@ export async function executeElectronPack(request: ElectronPackRequest) {
     authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
     distributionPath: fileURLToPath(new URL("../../../config/distribution.json", import.meta.url)),
     entryPath: electronShellSource("main.ts"),
-    manifestPath: stagedManifestPath,
+    manifest,
     nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
     runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
     windowsLifecyclePath: fileURLToPath(new URL("../../../config/platforms/windows.json", import.meta.url)),
