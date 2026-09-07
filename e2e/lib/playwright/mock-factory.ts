@@ -66,6 +66,9 @@ export async function applyStandardMocks(page: Page): Promise<void> {
   // route: callers use applyStandardMocks for extra pages/contexts that are
   // created outside the built-in Playwright `page` fixture.
   await routeUnavailableVelaStatus(page);
+  // NOT installed by the suite fixture — unlike the vela route above, this one
+  // exists only here and in the specs that call it directly. A spec that drives
+  // the entry home without either is genuinely exposed to a live release card.
   await suppressWhatsNew(page);
 }
 

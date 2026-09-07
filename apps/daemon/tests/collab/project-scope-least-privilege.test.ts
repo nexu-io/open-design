@@ -136,10 +136,18 @@ describe('项目 scope 的最小权限占位是只读模型的承重结构', () 
 
     for (const input of bindings) {
       const scope = resolveLocalProjectWorkspaceScope(input);
-      if (scope.kind === 'unbound') throw new Error('fixture should stay bound');
-      expect(scope.context.role).toBe('member');
-      expect(scope.context.permissions.canManageMembers).toBe(false);
-      expect(scope.context.permissions.canManageSharedResources).toBe(false);
+      // Every fixture above carries a workspace id, so the resolver owes us a
+      // scope that CARRIES a context. `unbound` and `unavailable` are the two
+      // context-less variants of `ProjectWorkspaceScope`; excluding only
+      // `unbound` leaves `unavailable`, whose `context` is also `null`. Assert
+      // the property the assertions actually need instead of a proxy for it.
+      const { context } = scope;
+      if (context == null) {
+        throw new Error(`fixture should stay bound with a context, got ${scope.kind}`);
+      }
+      expect(context.role).toBe('member');
+      expect(context.permissions.canManageMembers).toBe(false);
+      expect(context.permissions.canManageSharedResources).toBe(false);
     }
   });
 

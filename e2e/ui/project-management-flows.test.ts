@@ -4,7 +4,7 @@ import { ensureRailOpen, openNewProjectModal } from '@/playwright/rail';
 import { openAllProjectFiles } from '@/playwright/workspace';
 import { T } from '@/timeouts';
 import type { Locator, Page, Request } from '@playwright/test';
-import { routeAgents, routeSuccessfulRuns } from '../lib/playwright/mock-factory.js';
+import { routeAgents, routeSuccessfulRuns, suppressWhatsNew } from '../lib/playwright/mock-factory.js';
 import {
   AMR_PERSONAL_WORKSPACE_CONTEXT,
   AMR_PERSONAL_WORKSPACE_HEADERS,
@@ -176,6 +176,11 @@ const COMPOSER_PLUS_PLUGIN = {
 };
 
 test.beforeEach(async ({ page }) => {
+  // The entry home mounts `WhatsNewPopup` (EntryShell.tsx), and its backdrop
+  // sits at z-index 1500 — above the z-index 120 workspace chrome that owns
+  // the rail toggle. A live release card therefore swallows every rail/settings
+  // click in this file. Pin it closed.
+  await suppressWhatsNew(page);
   let appConfig = {
     onboardingCompleted: true,
     privacyDecisionAt: 1,
@@ -423,10 +428,34 @@ test('[P0] UI-created Personal project recovers preview and write authority afte
     await expect(artifactPreviewFrame(page).getByRole('heading', {
       name: 'Reloaded Personal preview',
     })).toBeVisible({ timeout: T.long });
-    await expect(page.getByTestId('chat-composer-input')).toHaveAttribute('aria-readonly', 'true');
+    // A daemon-confirmed `personal` scope IS the write authority — the gate must
+    // NOT stay closed waiting on `/collab/status`.
+    //
+    // This assertion used to read `toHaveAttribute('aria-readonly', 'true')`,
+    // written 2026-08-25 when a personal project really did stay read-only until
+    // status answered. OPEND-2624 (commit `a17a22e32a`, 2026-09-04) deliberately
+    // changed that: `projectIsDaemonConfirmedPersonal` in
+    // `apps/web/src/collab/useProjectCollab.ts` now grants write authority from
+    // the scope alone, because the old behavior showed the creator of a private
+    // local-only draft 「这是共享项目」 with chat, upload, edit and export all
+    // disabled while the daemon would have accepted every one of those writes.
+    // The ruling is pinned by
+    // `apps/web/tests/collab/opend-2624-personal-project-readonly.test.tsx:211`
+    // ("does not present a daemon-confirmed personal project as shared read-only
+    // when /collab/status refuses").
+    //
+    // So DO NOT flip this back to expecting read-only: after that ruling the
+    // read-only window here is only as wide as one React commit, and the old
+    // assertion passed purely by racing it. `/collab/status` is still unresolved
+    // on purpose — write authority has to come back from the persisted Personal
+    // binding by itself. Share shares the same `viewerOnly` gate as the composer
+    // (`FileViewer.tsx`), so it re-enables on the same tick.
+    await expect(page.getByTestId('chat-composer-input')).not.toHaveAttribute('aria-readonly', 'true');
+    await expect(page.getByRole('button', { name: /^Share$/i })).toBeEnabled();
 
     releaseStatus();
     releaseStatus = () => {};
+    // A settled status must not demote the writer the scope just confirmed.
     await expect(page.getByTestId('chat-composer-input')).not.toHaveAttribute('aria-readonly', 'true');
     await expect(page.getByRole('button', { name: /^Share$/i })).toBeEnabled();
   } finally {
