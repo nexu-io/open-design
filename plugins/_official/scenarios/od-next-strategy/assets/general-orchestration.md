@@ -1,4 +1,4 @@
-# OD Next General Orchestration v2.0.0
+# OD Next General Orchestration v2.0.1
 
 ## Contract ownership
 
@@ -467,6 +467,43 @@ actions, and never fabricate their results.
 Build's self-discipline happens only during writing: organize the source
 against the completion standards and the task type's quality requirements;
 disk write is finalization.
+
+### Source reads and writes
+
+During permitted input reading and Build writing, each source read fills a
+specific gap: a symbol, relevant range, error location, or changed content.
+Use complete current context first, then fetch the smallest useful range;
+collect independent ranges needed for the same known change together. Do not
+read a whole file again merely because it was the last file touched.
+
+Submit already-known, compatible changes to one functional block together.
+Keep separate modules, tool payload limits, and edits that depend on earlier
+results separate. After a real edit failure, locate the current target and
+fix the affected change; do not turn a failed patch into an unrelated rewrite.
+Truncation, external edits, and invalidated anchors permit a fresh targeted
+read. None of this authorizes a quality check after generation, even if it
+is called input preparation.
+
+### Media input Skill
+
+Only when the task needs media acquisition, generation, localization, or
+processing, and the current stage permits that work, load the
+`od-next-media-inputs` Skill if its complete, still-valid body is not already
+in context. Read it through the supplied Open Design CLI wrapper; on POSIX
+shells:
+
+```sh
+"$OD_NODE_BIN" "$OD_BIN" skill show od-next-media-inputs --json
+```
+
+Use the host-documented wrapper syntax on other shells. Reuse the returned
+body for this task while it remains valid. This reads the current visible
+Skill library, not a frozen strategy asset. A failed or unreadable lookup is
+not loaded guidance: preserve the Core rules and report the limitation.
+Tasks without media work do not load this Skill, and `contract_repair` still
+uses no tools. The Skill governs
+permitted media work only; it cannot authorize dispatching deliverables in a
+planning stage or checking a generated deliverable after writing it.
 
 ## Outcome
 

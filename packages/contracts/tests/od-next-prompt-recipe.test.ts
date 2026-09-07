@@ -609,7 +609,7 @@ describe('OD Next V2 prompt recipe', () => {
     expect(odNextPromptCacheIdentityV2({ ...recipe, taskProfileDigest: A })).not.toBe(baseline);
   });
 
-  it('emits native-session-only deltas and gives Production only a Plan Contract hash', () => {
+  it('emits native-session-only deltas and gives Production the frozen plan plus terminal state shape', () => {
     const clarification = composeOdNextStrategyContinuationV2({
       stage: 'clarification',
       nativeSessionResume: true,
@@ -638,6 +638,15 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).toMatch(/^<open_design_request_turn/);
     expect(production).toContain('task_execution_id="task-1"');
     expect(production).toContain('stage="production" task_run_index="1"');
+    expect(production).toContain('## Closing Runtime State');
+    expect(production).toContain('exactly one open-design-runtime-state block');
+    expect(production).toContain('schema open-design.strategy-state/v2');
+    expect(production).toContain('route full_plan');
+    expect(production).toContain('inputStage production');
+    expect(production).toContain('executionMode equal to the mode locked');
+    expect(production).toContain('outcome completed');
+    expect(production).toContain('reasonCodes []');
+    expect(production).toContain('no Plan Contract block');
     expect(production).not.toContain(recipe.coreStrategy);
     expect(production).not.toContain(recipe.generalOrchestration);
     expect(production).not.toContain(recipe.taskSkill);

@@ -38,7 +38,7 @@ describe('bundled OD Next Strategy V2 package', () => {
   it('declares the inactive versioned asset set and exact planning recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.0',
+      version: '2.0.3',
       od: {
         kind: 'scenario',
         hidden: true,

@@ -19,8 +19,13 @@ interface CapturedRequest {
   headers: http.IncomingHttpHeaders;
 }
 
-describe('od skill install CLI', () => {
+describe('od skill CLI', () => {
   const requests: CapturedRequest[] = [];
+  const completeSkill = {
+    id: 'complete-skill',
+    name: 'complete-skill',
+    body: '# Complete skill\n\n1. Reuse existing inputs.\n2. Fetch missing inputs.\n\n```text\nFinal section stays intact.\n```\n',
+  };
   let server: http.Server;
   let baseUrl: string;
 
@@ -38,6 +43,15 @@ describe('od skill install CLI', () => {
           headers: req.headers,
         });
         res.setHeader('content-type', 'application/json');
+        if (req.method === 'GET') {
+          if (req.url === `/api/skills/${completeSkill.id}`) {
+            res.end(JSON.stringify(completeSkill));
+          } else {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: 'skill not found' }));
+          }
+          return;
+        }
         res.end(JSON.stringify({
           skill: {
             id: 'remote-skill',
@@ -84,6 +98,49 @@ describe('od skill install CLI', () => {
       };
     }
   }
+
+  it.each(['skill', 'skills'])('%s show reads the complete body with one targeted GET', async (command) => {
+    const result = await runCli([
+      command,
+      'show',
+      completeSkill.id,
+      '--daemon-url',
+      baseUrl,
+      '--json',
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      method: 'GET',
+      url: `/api/skills/${completeSkill.id}`,
+      body: '',
+    });
+    expect(JSON.parse(result.stdout)).toEqual(completeSkill);
+  });
+
+  it('fails when show cannot find the requested skill', async () => {
+    const result = await runCli([
+      'skill',
+      'show',
+      'missing-skill',
+      '--daemon-url',
+      baseUrl,
+      '--json',
+    ]);
+
+    expect(result.code).not.toBe(0);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      method: 'GET',
+      url: '/api/skills/missing-skill',
+      body: '',
+    });
+    expect(result.stdout).toBe('');
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      error: { message: 'skill not found' },
+    });
+  });
 
   it('POSTs the plugin-compatible source and prints the response as JSON', async () => {
     const result = await runCli([
