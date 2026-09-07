@@ -9,6 +9,7 @@
  *   - 'stderr'  : incidental stderr. Shown only when the process exits
  *                 non-zero (tail appended to the error message).
  */
+import { issueStatusObservation, stampStatusObservation } from './status-observation';
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
@@ -1035,11 +1036,15 @@ export interface VelaLoginAuthStage {
 //   POST /api/integrations/vela/logout   — clear ~/.amr auth and Settings-backed AMR auth env
 // The Settings UI polls /status after kicking off /login to detect completion.
 export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}): Promise<VelaLoginStatus | null> {
+  // Taken before the request goes out — see `status-observation`. Which of two
+  // concurrent status answers is newer is a question about the requests, not
+  // about when their answers happened to be consumed.
+  const observation = issueStatusObservation();
   try {
     const query = options.refresh ? '?refresh=1' : '';
     const resp = await fetch(`/api/integrations/vela/status${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
-    const status = (await resp.json()) as VelaLoginStatus;
+    const status = stampStatusObservation((await resp.json()) as VelaLoginStatus, observation);
     // Every AMR status read refreshes the runtime console origin, so the console
     // links stay correct no matter which surface (login pill, model switcher,
     // avatar menu, low-balance dialog) triggered the fetch. Doing it here rather

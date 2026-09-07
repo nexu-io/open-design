@@ -388,18 +388,31 @@ describe('MessageCenter', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Checking for updates...');
     expect(screen.queryByText('No messages yet')).toBeNull();
 
+    // Wait for the pull to actually be on the wire before releasing it.
+    // Opening used to produce TWO pulls — the mount's superseded run issued one
+    // before bailing — so a synchronous `releaseFirstRequest?.()` happened to
+    // find the mount's already gated. Superseded runs now bail before pulling,
+    // which is the point of this branch, so there is exactly one pull and the
+    // release has to wait for it.
+    await waitFor(() => expect(releaseFirstRequest).toBeDefined());
     releaseFirstRequest?.();
     await waitFor(() => expect(screen.getByText('No messages yet')).toBeTruthy());
   });
 
   it('shows retry controls instead of the empty copy when the first empty sync fails', async () => {
     let messageRequests = 0;
+    // Keyed on "has the user retried yet", not on a pull count. The count used
+    // to be 2 because opening produced a second pull from the mount's
+    // superseded run; that run now bails before pulling, so a count-based
+    // fixture would have failed the retry as well and the empty copy would
+    // never arrive.
+    let failing = true;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes('/status')) return Response.json({ loggedIn: false });
       if (url.includes('/messages?')) {
         messageRequests += 1;
-        if (messageRequests <= 2) return new Response(null, { status: 500 });
+        if (failing) return new Response(null, { status: 500 });
         return Response.json({ messages: [], nextCursor: null, unreadCount: 0 });
       }
       if (url.includes('/read')) return Response.json({ read: true, markedCount: 1 });
@@ -413,6 +426,7 @@ describe('MessageCenter', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
     expect(screen.queryByText('No messages yet')).toBeNull();
 
+    failing = false;
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.getByText('No messages yet')).toBeTruthy());
     expect(messageRequests).toBeGreaterThanOrEqual(2);

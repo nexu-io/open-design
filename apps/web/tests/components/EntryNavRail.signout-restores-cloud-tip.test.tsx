@@ -22,6 +22,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
 import { CloudSignInTip } from '../../src/components/CloudSignInTip';
 import { I18nProvider } from '../../src/i18n';
+import { currentWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
+import { notifyWorkspaceContextRefresh } from '../../src/collab/useWorkspaceContext';
 
 const DISMISSED_KEY = 'od.entry.cloudSignInTip.dismissed';
 const originalFetch = globalThis.fetch;
@@ -90,6 +92,43 @@ describe('EntryNavRail sign-out (recvqbkcLqIFH7)', () => {
     await waitFor(() => {
       expect(window.localStorage.getItem(DISMISSED_KEY)).toBeNull();
     });
+  });
+
+  it('advances the account boundary exactly once for one sign-out', async () => {
+    // The rail used to be the only caller, so it notified after awaiting
+    // `onSignedOut`. Now the shared handler owns that boundary, and keeping
+    // both meant one sign-out advanced the generation twice — every
+    // account-scoped consumer invalidating twice, and `MessageCenter`
+    // (subscribed to it) running a full clear-and-resync per advance, which is
+    // the redundant traffic this work exists to remove.
+    const advances: number[] = [];
+    render(
+      <I18nProvider initial="zh-CN">
+        <EntryNavRail
+          view="home"
+          onViewChange={() => {}}
+          onNewProject={() => {}}
+          open
+          context={context()}
+          onSignedOut={() => {
+            // Stands in for `handleActiveCloudSignOut`, which is the owner.
+            notifyWorkspaceContextRefresh();
+            advances.push(currentWorkspaceAccountGeneration());
+          }}
+        />
+      </I18nProvider>,
+    );
+
+    const before = currentWorkspaceAccountGeneration();
+    fireEvent.click(screen.getByTestId('entry-nav-account'));
+    fireEvent.click(screen.getByText('退出登录'));
+    fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
+
+    await waitFor(() => expect(advances.length).toBe(1));
+    // Let anything the rail queues after `onSignedOut` settle.
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(currentWorkspaceAccountGeneration()).toBe(before + 1);
   });
 
   it('renders the sign-in card once the stale dismissal is gone and context is null (post sign-out shape)', () => {

@@ -157,6 +157,7 @@ import {
   workspaceResourceReadContext,
   workspaceBillingBalanceUsd,
   workspaceBillingSummaryForContext,
+  workspaceIdentityStillResolving,
 } from '../collab/useWorkspaceContext';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolvePlanLabelTier } from '../collab/team-plan';
@@ -1660,6 +1661,7 @@ export function EntryShell({
       >
         <EntryNavRail
           view={view}
+          workspaceContextResolving={workspaceIdentityStillResolving(workspaceContextState)}
           onViewChange={changeView}
           onNewProject={() => {
             trackHomeNavClick(analytics.track, {

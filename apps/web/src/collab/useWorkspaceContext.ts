@@ -128,6 +128,28 @@ export function workspaceResourceReadContext(
  * project whose own workspace scope is `unbound` or `unavailable` says
  * nothing about whether the signed-in user has a wallet.
  */
+/**
+ * Whether the workspace identity is still undecided — i.e. a consumer must not
+ * yet act as though this shell is signed out.
+ *
+ * `loading` alone is not that question. A cold `/api/workspace/context` read
+ * that fails transiently settles to `loading: false`, `failure: 'unavailable'`
+ * and a null `context` (there is no cached context to fall back to on a first
+ * launch), which reads as "signed out" to anything gating on `loading` — and it
+ * is not. `unsupported` (404: a daemon with no workspace endpoint) and
+ * `reauth-required` (401/403: the server rejecting these credentials) are
+ * authoritative answers and deliberately excluded; only the transient outage
+ * leaves the question open.
+ *
+ * Sibling of `workspaceIdentityCanBillAmr`, which already treats any `failure`
+ * as "cannot rule a workspace out".
+ */
+export function workspaceIdentityStillResolving(state: WorkspaceContextState): boolean {
+  if (state.context !== null) return false;
+  if (state.loading) return true;
+  return state.failure === 'unavailable';
+}
+
 export function workspaceIdentityCanBillAmr(state: WorkspaceContextState): boolean {
   if (state.context !== null) return true;
   if (state.loading) return true;

@@ -13,6 +13,9 @@ import { resetHtmlThumbnailSourceCache } from '../../src/components/html-thumbna
 import { resetProjectCoverSnapshots } from '../../src/lib/project-cover-cache';
 import { resetThumbnailLoadGateForTests } from '../../src/lib/thumbnail-load-gate';
 import { resetSharedCancellableGet } from '../../src/lib/shared-cancellable-get';
+import { resetMessageCenterSnapshot } from '../../src/components/message-center-snapshot';
+import { resetAnonymousWriteSeq } from '../../src/message-center-client';
+
 
 beforeEach(() => {
   resetCoalescedGet();
@@ -29,4 +32,11 @@ beforeEach(() => {
   resetProjectCoverSnapshots();
   resetThumbnailLoadGateForTests();
   resetSharedCancellableGet();
+  // MessageCenter keeps its last successful sync at module scope so a remount
+  // (project<->home swaps its host) does not refetch; clear it so one test's
+  // messages never satisfy the next test's mount.
+  resetMessageCenterSnapshot();
+  // The anonymous cache keeps its own writer sequence; a value carried over
+  // from a previous case would make an account run decline to clear.
+  resetAnonymousWriteSeq();
 });

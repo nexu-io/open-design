@@ -18,6 +18,7 @@ import { cleanup, act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App, resetExecutionConfigAfterSignOut } from '../../src/App';
+import { currentWorkspaceAccountGeneration } from '../../src/collab/workspace-identity';
 import type { AppConfig } from '../../src/types';
 import { loadConfig, fetchDaemonConfig, syncConfigToDaemon } from '../../src/state/config';
 import {
@@ -420,6 +421,29 @@ describe('App onboarding completion persistence', () => {
       { allowOnboardingReset: true },
     );
     expect(await navigatedToOnboarding()).toBe(true);
+  });
+
+  it('advances the account boundary so no cache outlives the sign-out', async () => {
+    // Sign-IN advances it (AmrLoginPill calls `notifyWorkspaceContextRefresh`)
+    // and sign-out did not, so every consumer keyed on the account generation
+    // treated the previous account's data as still current. The message
+    // center's ten-second snapshot is the sharpest case: a signed-out host
+    // mounting inside that window adopted the previous account's rows, unread
+    // count and priority announcement without rechecking `/vela/status`.
+    mockedLoadConfig.mockReturnValue(returningUserConfig());
+    mockedFetchDaemonConfig.mockResolvedValue({ onboardingCompleted: true });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(entryViewCapture.activeSignOut).toEqual(expect.any(Function));
+    });
+    const before = currentWorkspaceAccountGeneration();
+    await act(async () => {
+      await entryViewCapture.activeSignOut?.();
+    });
+
+    expect(currentWorkspaceAccountGeneration()).toBeGreaterThan(before);
   });
 
   it('keeps a completed user out of onboarding when the daemon copy still says false', async () => {

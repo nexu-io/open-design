@@ -37,6 +37,7 @@ import type {
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
+import { noteAuthoritativeAuthMode } from './components/message-center-snapshot';
 import { EntryView } from './components/EntryView';
 import type { ProjectTitleHint } from './components/EntryShell';
 import type { IntegrationTab } from './components/IntegrationsView';
@@ -108,6 +109,7 @@ import {
   listProjectRuns,
   type VelaLoginStatus,
 } from './providers/daemon';
+import { statusObservationOrder } from './providers/status-observation';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
@@ -142,7 +144,7 @@ import {
   useProjectRouteWorkspaceContext,
 } from './collab/useProjectRouteWorkspaceContext';
 import { resolvePlanTier } from './collab/team-plan';
-import { deriveTabIdentityScope, UNSET_ACCOUNT_BUCKET } from './collab/tab-scope';
+import { ANONYMOUS_ACCOUNT_BUCKET, deriveAccountBucket, deriveTabIdentityScope, UNSET_ACCOUNT_BUCKET } from './collab/tab-scope';
 import { CommunityView } from './components/CommunityView';
 import { seedHomeComposerPrompt } from './components/HomeView';
 import {
@@ -1670,6 +1672,7 @@ function AppInner() {
   // snapshot updates `agents`, which makes Settings fetch status again and
   // creates a status -> models -> agents request loop.
   const amrLoginStatusRef = useRef<VelaLoginStatus | null>(null);
+  const amrAccountBucketRef = useRef<string | null>(null);
   const applyAmrLoginStatus = useCallback((
     status: VelaLoginStatus,
     options: { forceModelRefresh?: boolean; restartOnSignIn?: boolean } = {},
@@ -1677,6 +1680,51 @@ function AppInner() {
     const previousStatus = amrLoginStatusRef.current;
     const wasLoggedIn = isAmrSessionAuthenticated(previousStatus);
     const isLoggedIn = isAmrSessionAuthenticated(status);
+    // The message centre caches rows per authority for a few seconds, and this
+    // is one of the two places that learn about a session ending REMOTELY — an
+    // expired or revoked session never goes through the sign-out handler, so
+    // nothing else would tell that cache its contents no longer belong to
+    // anyone.
+    //
+    // It also decides whether this observation is still worth anything: several
+    // surfaces read the status independently and answer out of order, and the
+    // message centre publishes its own reads too, so being newer than this
+    // reader's previous request is not enough. A refused observation says
+    // nothing about the session any more — nothing below it should run either,
+    // or a status read from before the session ended goes on to restart model
+    // polling and repaint the signed-in surfaces.
+    if (!noteAuthoritativeAuthMode(isLoggedIn, statusObservationOrder(status))) return;
+    // `loggedIn` says whether there IS an account, not which one. A credential
+    // can move from account A to account B with it true on both sides — a
+    // `vela login` in a terminal does it — and the workspace generation, which
+    // is what every account-scoped cache partitions by, moves on sign-in,
+    // sign-out and a profile switch only. So nothing retired account A's data:
+    // the message centre's settled snapshot, a joinable in-flight run, the
+    // mounted rows and any stale continuation all stayed eligible, and a
+    // remount inside the snapshot window showed A's targeted rows under B.
+    //
+    // The boundary already exists and everything already reads it; it just was
+    // not fired here.
+    const accountBucket = deriveAccountBucket(status);
+    const previousAccountBucket = amrAccountBucketRef.current;
+    amrAccountBucketRef.current = accountBucket;
+    // Only account -> account. Signing in and signing out both move the
+    // authoritative auth mode, which every account-scoped consumer here already
+    // subscribes to, and each sign-in owner (`CloudSignInTip.finishSignedIn`,
+    // `EntryShell.pollAmrLoginCompletion` and its onboarding helper,
+    // `AmrLoginPill`) already announces the boundary itself — announcing it
+    // here as well advanced the generation twice for one login and made a
+    // subscriber clear and resync twice, which is the duplicate work this
+    // change exists to remove.
+    //
+    // A switch between two accounts is the one transition neither covers: the
+    // auth mode is true on both sides, so nothing moves unless identity is
+    // compared.
+    const switchedBetweenAccounts = previousAccountBucket !== null
+      && previousAccountBucket !== accountBucket
+      && previousAccountBucket !== ANONYMOUS_ACCOUNT_BUCKET
+      && accountBucket !== ANONYMOUS_ACCOUNT_BUCKET;
+    if (switchedBetweenAccounts) notifyWorkspaceContextRefresh();
     const pendingRetry = amrAuthRetryContinuationRef.current;
     const accountChangedWhileAuthorizing = Boolean(
       pendingRetry
@@ -4938,6 +4986,15 @@ function AppInner() {
     setSettingsOpen(false);
     settingsDraftConfigRef.current = null;
     setSettingsHighlight(null);
+    // Signing out IS an account boundary, and every account-scoped cache in the
+    // app is keyed on the generation this advances. Sign-IN has called this
+    // since AmrLoginPill stopped waiting for a tab reset to happen along; the
+    // sign-out half was never wired the same way, so caches from the previous
+    // account stayed 'current' — the message center's short-lived snapshot most
+    // visibly, since a signed-out host mounting inside its window adopted the
+    // previous account's rows, unread count and priority announcement without
+    // ever rechecking the auth status.
+    notifyWorkspaceContextRefresh();
     navigate({ kind: 'home', view: 'onboarding' });
     await syncConfigToDaemon(next, { allowOnboardingReset: true });
   }, []);
