@@ -191,6 +191,13 @@ sh 2033   layoutMax 1450   wheelReached 1449.5   frozen: false
   **结论:红测断言的是「还没设计的产品行为」,不是缺陷。** 要么产品给出纯问答的显式
   structured intent 落地形态(intent 长什么样、用哪个 outcome、`strategyTaskDelivered` 怎么算),
   要么这条红测改成 pending 并挂到那个独立设计上。**待产品拍板。**
+  **2026-09-07 收口**:那条红测被 `501eb5640a` 连带提交进来(该提交自述 od-next「无需改动」),
+  在 CI 上红。按本条给的第二个选项就地 park 成 `it.skip`,docblock 里写明裁决出处、现场记录
+  与「为什么改不动」的实测:去掉 `inferDirectEditCompletionRuntimeState` 的 `deliverableValid`
+  校验后,邻居 `refuses to infer a Direct Edit completion without verified physical delivery`
+  的 reason code 立刻从 `od_next_protocol_runtime_state_missing` 变成
+  `od_next_canonical_deliverable_invalid`(守卫已破),而红测**仍然 blocked** —— 被第二道
+  fail-closed 门挡住。**产品给出 structured intent 后 unskip。**
 - [ ] **⚠️ 同一个坑里还有一条真缺陷,不在上面那条裁决的覆盖范围内:**
   **真干了活、但不产生新 artifact 的 Direct Edit** —— 删文件、改名、只读审计,或者这一轮的
   artifact 记账没算上的编辑。`validateRunDeliverable` 一律给 `no_artifact`

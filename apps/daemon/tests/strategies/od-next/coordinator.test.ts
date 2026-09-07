@@ -1327,7 +1327,38 @@ ${question}`),
   });
 
   /**
-   * RED SPEC — reproduces the field failure recorded on Open Design Beta
+   * PARKED — pending the product design this behaviour needs, NOT pending a fix.
+   *
+   * The ruling that governs it is
+   * `specs/current/chat-panel-issue-log-2026-08-28.md:58`, which closed the
+   * attribution of this exact field failure: the run and transport really did
+   * succeed and the card comes from the strategy protocol's fail-closed gate,
+   * and the remedy is explicitly deferred — "不隐藏失败卡、不做关键词猜测。未来若要
+   * 支持 Design 模式纯问答,需显式 structured intent,作为独立产品设计而非本次尾项".
+   * The 2026-09-07 re-check (`07bd6d9149`) measured that boundary and recorded
+   * the same verdict in the log: this asserts product behaviour nobody has
+   * designed yet, and the spec offers exactly this parking as the alternative
+   * to deleting it.
+   *
+   * Why it cannot simply be made to pass. Its fixture and the fixture of
+   * `refuses to infer a Direct Edit completion without verified physical
+   * delivery` below reach the coordinator IDENTICAL — same stage, same route,
+   * same `completionEvidence: { physicalStatus: 'succeeded', deliverableValid:
+   * false }` — and differ only in the agent's prose. Measured, not argued:
+   * dropping the `deliverableValid !== true` guard in
+   * `inferDirectEditCompletionRuntimeState` moves that neighbour's verdict from
+   * `od_next_protocol_runtime_state_missing` to
+   * `od_next_canonical_deliverable_invalid` — the silent-no-op guard is already
+   * broken — while THIS turn still blocks, refused by that second fail-closed
+   * gate. So no gate can separate "the user only wanted words" from "the agent
+   * said it was done and wrote nothing"; only reading the prose could, and that
+   * is the keyword guessing the ruling names and forbids.
+   *
+   * Unskip when the structured intent lands: the product owes what the intent
+   * looks like, which outcome it settles on, and how `strategyTaskDelivered`
+   * counts it. The field record it reproduces is kept below verbatim.
+   *
+   * Reproduces the field failure recorded on Open Design Beta
    * 0.21.1-beta.7, task `odnext_c4ee010be6b748dc9b92984946bc10a8`,
    * run `e5d6181b-1705-4a44-964b-cdcb3fbcb6ac`.
    *
@@ -1349,7 +1380,7 @@ ${question}`),
    * clarification budget is untouched, and the completion evidence is what
    * `validateRunDeliverable` resolves for a Run that wrote nothing.
    */
-  it('does not fail a request turn whose only output was the answer the user asked for', () => {
+  it.skip('does not fail a request turn whose only output was the answer the user asked for', () => {
     prepareStrategyIntake(db, {
       taskExecutionId: 'task-1',
       intake: intakePassed,
