@@ -15,6 +15,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import {
   CallToolRequestSchema,
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
@@ -80,6 +81,9 @@ interface RunMcpOptions {
   daemonUrl: string | URL;
   resolveDaemonUrl?: () => Promise<string | URL>;
 }
+type McpActivityWrapper = <Args extends unknown[], Result>(
+  handler: (...args: Args) => Promise<Result>,
+) => (...args: Args) => Promise<Result>;
 interface CatalogItem { id: string; name?: string; title?: string; description?: string; summary?: string }
 interface SkillsPayload { skills?: CatalogItem[] }
 interface PluginsPayload { plugins?: CatalogItem[] }
@@ -1096,6 +1100,26 @@ export async function _readMcpResource(
   };
 }
 
+export function _registerMcpResourceHandlers(
+  server: Server,
+  daemonTarget: ReturnType<typeof createMcpDaemonTarget>,
+  withMcpActivity: McpActivityWrapper,
+): void {
+  server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
+    return await _listMcpResources(daemonTarget);
+  }));
+
+  server.setRequestHandler(
+    ListResourceTemplatesRequestSchema,
+    withMcpActivity(async () => ({ resourceTemplates: [] })),
+  );
+
+  server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
+    const uri = String(req.params?.uri ?? '');
+    return await _readMcpResource(daemonTarget, uri);
+  }));
+}
+
 interface McpObservedCall {
   attribution: McpPluginAttribution | null;
   attemptNumber: number;
@@ -1921,14 +1945,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
     tools: TOOL_DEFS,
   })));
 
-  server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
-    return await _listMcpResources(daemonTarget);
-  }));
-
-  server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
-    const uri = String(req.params?.uri ?? '');
-    return await _readMcpResource(daemonTarget, uri);
-  }));
+  _registerMcpResourceHandlers(server, daemonTarget, withMcpActivity);
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {
     const name = req.params?.name;
