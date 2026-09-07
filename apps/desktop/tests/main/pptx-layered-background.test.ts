@@ -13,6 +13,7 @@ import {
   captureEditablePptxLayeredBackgrounds,
   captureUntilPainted,
   collectLayeredPptxBackgroundTargets,
+  compareBgraBitmaps,
   isolateLayeredPptxBackground,
   pngInspectionHasPaint,
   restoreLayeredPptxBackgroundIsolation,
@@ -68,6 +69,43 @@ function bgraBitmapHasPaint(bitmap) {
 }
 function pngBufferHasPaint(data) {
   return bgraBitmapHasPaint(nativeImage.createFromBuffer(data).toBitmap());
+}
+function bgraPixelDelta(a, aOffset, b, bOffset) {
+  let worst = 0;
+  for (let channel = 0; channel < 4; channel += 1) {
+    const delta = Math.abs(a[aOffset + channel] - b[bOffset + channel]);
+    if (delta > worst) worst = delta;
+  }
+  return worst;
+}
+function compareBgraBitmaps(reference, exported, width, height) {
+  let totalChannelDelta = 0;
+  for (let offset = 0; offset < reference.length; offset += 1) {
+    totalChannelDelta += Math.abs(reference[offset] - exported[offset]);
+  }
+  const meanChannelDelta = totalChannelDelta / (width * height * 4);
+  let maxChannelDelta = 0;
+  if (width < 3 || height < 3) {
+    for (let offset = 0; offset < reference.length; offset += 4) {
+      const strict = bgraPixelDelta(reference, offset, exported, offset);
+      if (strict > maxChannelDelta) maxChannelDelta = strict;
+    }
+    return { maxChannelDelta, meanChannelDelta };
+  }
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const offset = (y * width + x) * 4;
+      let best = bgraPixelDelta(reference, offset, exported, offset);
+      for (let dy = -1; dy <= 1 && best > maxChannelDelta; dy += 1) {
+        for (let dx = -1; dx <= 1 && best > maxChannelDelta; dx += 1) {
+          const candidate = bgraPixelDelta(reference, offset, exported, ((y + dy) * width + (x + dx)) * 4);
+          if (candidate < best) best = candidate;
+        }
+      }
+      if (best > maxChannelDelta) maxChannelDelta = best;
+    }
+  }
+  return { maxChannelDelta, meanChannelDelta };
 }
 `;
 
@@ -228,6 +266,82 @@ async function runExport(
   const result = await runDomToPptx('.slide', layeredBackgrounds);
   expect(result.error).toBeUndefined();
 }
+
+/** Opaque BGRA canvas with a filled rectangle, so a shape can be moved by whole pixels. */
+function bgraCanvasWithRect(
+  width: number,
+  height: number,
+  rect: { x: number; y: number; w: number; h: number },
+  color: [number, number, number],
+): Uint8Array {
+  const bitmap = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const inside = x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+      bitmap[offset] = inside ? color[0] : 0;
+      bitmap[offset + 1] = inside ? color[1] : 0;
+      bitmap[offset + 2] = inside ? color[2] : 0;
+      bitmap[offset + 3] = 255;
+    }
+  }
+  return bitmap;
+}
+
+describe('BGRA capture comparison', () => {
+  const size = { height: 24, width: 24 };
+  const rect = { h: 8, w: 8, x: 8, y: 8 };
+  const reference = bgraCanvasWithRect(size.width, size.height, rect, [200, 100, 50]);
+
+  test('reports no difference between identical bitmaps', () => {
+    const comparison = compareBgraBitmaps(reference, reference, size.width, size.height);
+
+    expect(comparison).toEqual({ maxChannelDelta: 0, meanChannelDelta: 0 });
+  });
+
+  test('absorbs a one-pixel boundary shift, the way an isolated re-render moves an edge', () => {
+    const shifted = bgraCanvasWithRect(size.width, size.height, { ...rect, x: rect.x + 1 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(reference, shifted, size.width, size.height).maxChannelDelta).toBe(0);
+  });
+
+  test('still reports a shift the neighbourhood cannot explain', () => {
+    const shifted = bgraCanvasWithRect(size.width, size.height, { ...rect, x: rect.x + 3 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(reference, shifted, size.width, size.height).maxChannelDelta).toBe(200);
+  });
+
+  test('still reports a colour change at full magnitude', () => {
+    const recoloured = bgraCanvasWithRect(size.width, size.height, rect, [200, 100, 250]);
+
+    expect(compareBgraBitmaps(reference, recoloured, size.width, size.height).maxChannelDelta).toBe(200);
+  });
+
+  test('still reports content that the export dropped entirely', () => {
+    const empty = bgraCanvasWithRect(size.width, size.height, { h: 0, w: 0, x: 0, y: 0 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(reference, empty, size.width, size.height).maxChannelDelta).toBe(200);
+  });
+
+  test('skips the outer frame for the maximum but still counts it in the mean', () => {
+    const framed = Uint8Array.from(reference);
+    framed[0] = 255;
+    framed[1] = 255;
+    framed[2] = 255;
+
+    const comparison = compareBgraBitmaps(reference, framed, size.width, size.height);
+
+    expect(comparison.maxChannelDelta).toBe(0);
+    expect(comparison.meanChannelDelta).toBeGreaterThan(0);
+  });
+
+  test('compares bitmaps too small to have an interior strictly', () => {
+    const a = bgraCanvasWithRect(2, 2, { h: 1, w: 1, x: 0, y: 0 }, [200, 100, 50]);
+    const b = bgraCanvasWithRect(2, 2, { h: 1, w: 1, x: 1, y: 0 }, [200, 100, 50]);
+
+    expect(compareBgraBitmaps(a, b, 2, 2).maxChannelDelta).toBe(200);
+  });
+});
 
 describe('chromium empty-capture retry', () => {
   test('treats fully transparent inspections as unpainted', () => {
@@ -2425,22 +2539,12 @@ function comparePng(referenceData, exportedData) {
   if (referenceSize.width !== exportedSize.width || referenceSize.height !== exportedSize.height) {
     throw new Error('Cannot compare PNGs with different dimensions: ' + JSON.stringify({ referenceSize, exportedSize }));
   }
-  const referenceBitmap = reference.toBitmap();
-  const exportedBitmap = exported.toBitmap();
-  let maxChannelDelta = 0;
-  let totalChannelDelta = 0;
-  for (let offset = 0; offset < referenceBitmap.length; offset += 4) {
-    for (let channel = 0; channel < 4; channel += 1) {
-      const delta = Math.abs(referenceBitmap[offset + channel] - exportedBitmap[offset + channel]);
-      maxChannelDelta = Math.max(maxChannelDelta, delta);
-      totalChannelDelta += delta;
-    }
-  }
-  const pixels = referenceSize.width * referenceSize.height;
-  return {
-    maxChannelDelta,
-    meanChannelDelta: totalChannelDelta / (pixels * 4),
-  };
+  return compareBgraBitmaps(
+    reference.toBitmap(),
+    exported.toBitmap(),
+    referenceSize.width,
+    referenceSize.height,
+  );
 }
 
 function inspectPseudoLayerOrder(entries, mediaName) {
