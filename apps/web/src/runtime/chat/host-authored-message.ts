@@ -75,3 +75,27 @@ export function lastAssistantTurnId(messages: readonly ChatMessage[]): string | 
   }
   return undefined;
 }
+
+/**
+ * **转录的队尾,但宿主补发的卡对它是透明的。**
+ *
+ * 「最后一条消息是什么」是另一个问题,和上面那个不一样:它连**用户消息**一起看。
+ * 失败轮的恢复入口(〔重试〕/〔续跑〕/报错卡)问的正是这个 —— 一轮失败之后,
+ * 只要用户还没往下走,那一轮就仍然是等着被推进的那一件事。
+ *
+ * ⚠️ 透明的只有**宿主补发的助手卡**这一类。用户自己发出的下一句照旧拦得住 ——
+ * 他已经走过去了,恢复入口跟着收走;那是 OPEND-2644 判过的同一条线。
+ *
+ * 整条转录里除了宿主卡什么都没有时返回 `null`。
+ */
+export function trailingMessageIgnoringHostCards(
+  messages: readonly ChatMessage[],
+): ChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message) continue;
+    if (assistantMessageNeverHadARun(message)) continue;
+    return message;
+  }
+  return null;
+}

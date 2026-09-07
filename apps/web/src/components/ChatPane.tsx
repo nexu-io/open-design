@@ -116,6 +116,7 @@ import { planPillState } from '../runtime/chat/plan-pill';
 import {
   assistantMessageNeverHadARun,
   lastAssistantTurnId,
+  trailingMessageIgnoringHostCards,
 } from '../runtime/chat/host-authored-message';
 import { Reconnect } from './chat/Reconnect';
 import { UserStatusCard } from './chat/UserStatusCard';
@@ -1898,18 +1899,18 @@ export function ChatPane({
     return undefined;
   }, [displayMessages]);
   /*
-   * 最后一条**真跑过一轮**的助手消息 —— 只喂给「下一步引导」那一块。
+   * 最后一条**真跑过一轮**的助手消息。
    *
    * ⚠️ 它**不是** `lastAssistantId` 的替代品。「最后一条助手消息」这个说法在面板上
-   * 被三种互不相同的问题共用着,谁都不能替谁:
+   * 被几种互不相同的问题共用着,谁都不能替谁:
    *  · 问卷可否作答问的是「**后面还有没有东西**」—— 用户走过去了就锁,哪怕走过去的
    *    是宿主卡后面那句话(OPEND-2644);
    *  · 品牌协助卡问的是「**我自己是不是队尾**」—— 它本身就是一张带「继续抽取」的
    *    恢复卡,整条会话可能只有它一条;
-   *  · 下一步引导问的是「**哪一轮是当前落点**」—— 宿主补发的卡对它必须是透明的。
-   * 把三者并成一个判据,前两个会当场红(实测)。所以这里是**新增**一条,不动原来那条。
+   *  · 「哪一轮是当前落点」才是这一条要回答的 —— 宿主补发的卡对它必须是透明的。
+   * 把它们并成一个判据,前两个会当场红(实测)。所以这里是**新增**一条,不动原来那条。
    *
-   * 判据与两次先例都在 `lastAssistantTurnId`。
+   * 判据与先例都在 `lastAssistantTurnId`。
    */
   const lastTurnAssistantId = useMemo(
     () => lastAssistantTurnId(displayMessages),
@@ -1963,7 +1964,12 @@ export function ChatPane({
    */
   const showJumpToLatest = scrolledFromBottom;
   const planPillVisible = planPillEligible && !scrolledFromBottom;
-  const retryAssistant = retryableAssistantMessage(displayMessages, lastAssistantId, streaming);
+  const retryAssistant = retryableAssistantMessage(
+    displayMessages,
+    lastAssistantId,
+    streaming,
+    lastTurnAssistantId,
+  );
   // The failed run's error event lives on the (persisted) assistant message, so
   // the error card + AMR card survive a reload — unlike the ephemeral global
   // `error` state. Drive both off this event.
@@ -5403,6 +5409,7 @@ function ChatRows({
       streaming,
       lastAssistantId,
       forceStreamingMessageIds,
+      lastTurnAssistantId,
     );
     if (m.role === 'user') {
       return (
@@ -6402,15 +6409,36 @@ function archiveLowBalanceTurnCard(
   archive.set(anchorMessageId, balanceUsd);
 }
 
+/**
+ * 这一轮失败之后,**还等着被推进的**那条助手消息 —— 报错卡、〔重试〕、〔续跑〕
+ * 三者共用的锚点。
+ *
+ * 锚点是**队尾**:一轮失败之后,只要用户还没往下走,那一轮就仍然是屏幕上等着被
+ * 处理的那一件事;他一旦发出下一句,恢复入口就该跟着交出去。
+ *
+ * ⚠️ 但队尾**不等于** `messages[messages.length - 1]`。宿主自己会在一轮之后往流水
+ * 里补一条 assistant 消息(记忆卡、品牌协助卡,`ProjectView` 的
+ * `appendConversationMessage`),而记忆提取跑在轮次结束**之后** —— 于是它几乎总是
+ * 落在刚失败的那一轮后面,把物理队尾顶掉一格。原来那一行直接读队尾,卡一落地
+ * `retryAssistant` 就变 null,整条恢复链跟着塌:`runFailureUi`、按钮、
+ * `errorCardOwnerId` 全部落空 —— **那一轮失败了,用户却点不到重试**。
+ *
+ * 所以锚点改成「队尾,宿主卡透明」(`trailingMessageIgnoringHostCards`)。判据是
+ * 「这条消息有没有过一次运行」,不是「它是哪一张卡」,所以两种卡、连着落几张都一样。
+ */
 export function retryableAssistantMessage(
   messages: ChatMessage[],
   lastAssistantId: string | null | undefined,
   paneStreaming: boolean,
+  lastTurnAssistantId?: string | null,
 ): ChatMessage | null {
   if (paneStreaming) return null;
-  const last = messages[messages.length - 1];
+  const last = trailingMessageIgnoringHostCards(messages);
   if (!last || last.role !== 'assistant') return null;
-  if (last.id !== lastAssistantId) return null;
+  // 锚点得和面板自己算出来的那个 id 对得上 —— 两者出自不同的 memo,对不上说明拿到的
+  // 不是同一份转录,宁可不画。宿主卡透明之后能对上的那一侧是「最后一条真跑过的助手
+  // 消息」,所以这里**新增**一条,不动原来那条。
+  if (last.id !== lastAssistantId && last.id !== lastTurnAssistantId) return null;
   return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
@@ -6456,6 +6484,7 @@ export function isAssistantMessageStreaming(
   paneStreaming: boolean,
   lastAssistantId: string | null | undefined,
   forceStreamingMessageIds?: Set<string>,
+  lastTurnAssistantId?: string | null,
 ): boolean {
   if (message.role !== 'assistant') return false;
   if (isTerminalRunStatus(message.runStatus)) return false;
@@ -6472,9 +6501,15 @@ export function isAssistantMessageStreaming(
    * 屏幕上因此同时有两个「进行中」,而它没有 runId,那一个永远不会结束(OPEND-2745)。
    *
    * 判据与理由都在 `assistantMessageNeverHadARun`。
+   *
+   * ⚠️ 同一张卡还会从**另一头**打进来:它落在正在流的那条占位**后面**时,
+   * `lastAssistantId` 指向的是卡,占位于是过不了下面那道「是不是最后一条」——
+   * 而这条兜底是 API / BYOK 模式真占位**唯一**的流式来源,一失效那一轮就整个不动了。
+   * 所以下面**新增**一条:宿主卡对「最后一条」是透明的(`lastAssistantTurnId`),
+   * 原来那条一个字不动。收走流式指示的仍然是下一轮真的跑过的助手消息。
    */
   if (assistantMessageNeverHadARun(message)) return false;
-  if (message.id !== lastAssistantId) return false;
+  if (message.id !== lastAssistantId && message.id !== lastTurnAssistantId) return false;
   if (!paneStreaming) return false;
   if (message.endedAt !== undefined) return false;
   return true;
