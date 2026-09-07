@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { waitForElectronProductReady } from "@/adapters/tools/observation.js";
+import { waitForElectronProductReady } from "@/adapters/tools/lifecycle/observation.js";
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });

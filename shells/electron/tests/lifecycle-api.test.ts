@@ -13,7 +13,7 @@ vi.mock("@/adapters/standalone/assemble-installation.ts", () => ({
   withElectronInstallation: async (_request: unknown, consume: (installation: unknown) => Promise<unknown>) => consume({ resourceDirectory: "/resources" }),
 }));
 vi.mock("@/adapters/standalone/installation.ts", () => ({ resolveElectronStandaloneTarget: () => "darwin-arm64", loadElectronStandaloneAuthorityResources: async () => [] }));
-vi.mock("@/adapters/tools/observation.ts", () => ({ waitForElectronGeneration: async () => ({ state: "running" }) }));
+vi.mock("@/adapters/tools/lifecycle/observation.ts", () => ({ waitForElectronGeneration: async () => ({ state: "running" }) }));
 
 const roots: string[] = [];
 afterEach(async () => { vi.clearAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 
 import { describe, expect, it } from "vitest";
 
-import { parseElectronDevLifecycleRequest } from "@/adapters/tools/dev-tool.js";
+import { parseElectronDevLifecycleRequest } from "@/adapters/tools/lifecycle/dev-tool.js";
 
 const controlRuntimeRoot = join(tmpdir(), "electron-dev-control");
 

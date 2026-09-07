@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { parseElectronRuntimeLifecycleRequest } from "@/adapters/tools/runtime-tool.js";
+import { parseElectronRuntimeLifecycleRequest } from "@/adapters/tools/lifecycle/runtime-tool.js";
 
 describe("Electron runtime adapter contract", () => {
   it("keeps native Electron arguments explicit", () => {

@@ -1,17 +1,16 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { launchSidecar, type SidecarStamp } from "@open-design/sidecar";
 import { validateElectronShellManifest, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 
-import { resolveElectronStandaloneTarget } from "../standalone/installation.ts";
-import { loadElectronStandaloneAuthorityResources } from "../standalone/installation.ts";
-import { withElectronInstallation, parseElectronInstallationInput, type ElectronInstallationInput } from "../standalone/assemble-installation.ts";
+import { resolveElectronStandaloneTarget } from "../../standalone/installation.ts";
+import { loadElectronStandaloneAuthorityResources } from "../../standalone/installation.ts";
+import { withElectronInstallation, parseElectronInstallationInput, type ElectronInstallationInput } from "../../standalone/assemble-installation.ts";
 import { inspectElectronCdpStatus } from "@open-design/electron-kit/cdp";
 import { observeElectronLifecycle, waitForElectronGeneration, stopElectronGeneration } from "./observation.ts";
-import { electronShellSource } from "./resources.ts";
+import { electronShellRoot, electronShellSource } from "../resources.ts";
 
 export const ELECTRON_DEV_LIFECYCLE_SCHEMA_VERSION = 2 as const;
 
@@ -81,7 +80,7 @@ function stamp(request: RequestScope): SidecarStamp {
 
 async function start(request: Extract<ElectronDevLifecycleRequest, { operation: "electron.dev.start" }>, logFd: number) {
   const { prepareElectronDevShell } = await import("@open-design/electron-kit/dev");
-  const manifestPath = fileURLToPath(new URL("../../../config/shell.json", import.meta.url));
+  const manifestPath = join(electronShellRoot, "config/shell.json");
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(manifestPath, "utf8")) as ElectronShellManifest);
   if (baseManifest.channel !== request.channel) throw new Error("Electron dev request escaped the Shell channel");
   if (request.installationInput.channel !== request.channel) throw new Error("Electron dev installation input escaped the Shell channel");
@@ -90,10 +89,10 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     authorityResources: await loadElectronStandaloneAuthorityResources(installation.resourceDirectory),
     entryPath: electronShellSource("main.ts"),
     manifest: { ...baseManifest, namespace: request.namespace },
-    nodeCarrierLockPath: fileURLToPath(new URL("../../../config/carriers/node-lock.json", import.meta.url)),
-    projectRoot: fileURLToPath(new URL("../../..", import.meta.url)),
+    nodeCarrierLockPath: join(electronShellRoot, "config/carriers/node-lock.json"),
+    projectRoot: electronShellRoot,
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
-    runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
+    runtimeConfigPath: join(electronShellRoot, "config/runtime.json"),
   });
   });
   const resources = Object.freeze({ dataRoot: null, ownerPid: request.ownerPid, port: 0, runtimeRoot: request.controlRuntimeRoot });

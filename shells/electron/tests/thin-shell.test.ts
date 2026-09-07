@@ -163,14 +163,14 @@ describe("Electron product shell", () => {
 
   it("keeps a Shell-local copy of the same official Node lock", async () => {
     const [dev, pack, electronLock, terminalLock] = await Promise.all([
-      readFile(new URL("../src/adapters/tools/dev-tool.ts", import.meta.url), "utf8"),
+      readFile(new URL("../src/adapters/tools/lifecycle/dev-tool.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/adapters/tools/pack-tool.ts", import.meta.url), "utf8"),
       readFile(new URL("../config/carriers/node-lock.json", import.meta.url), "utf8"),
       readFile(new URL("../../terminal/node-lock.json", import.meta.url), "utf8"),
     ]);
-    expect(dev).toContain('new URL("../../../config/carriers/node-lock.json"');
+    expect(dev).toContain('join(electronShellRoot, "config/carriers/node-lock.json"');
     expect(pack).toContain('new URL("../../../config/carriers/node-lock.json"');
-    expect(dev).toContain('new URL("../../../config/runtime.json"');
+    expect(dev).toContain('join(electronShellRoot, "config/runtime.json"');
     expect(pack).toContain('new URL("../../../config/runtime.json"');
     expect(dev).not.toMatch(/node-v\d/u);
     expect(pack).not.toMatch(/node-v\d/u);

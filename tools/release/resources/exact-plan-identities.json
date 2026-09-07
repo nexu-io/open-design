@@ -51,10 +51,15 @@
         "shells/electron/tsconfig.json",
         "shells/electron/tsconfig.build.json",
         "shells/electron/config",
-        "shells/electron/src"
+        "shells/electron/resources",
+        {
+          "path": "shells/electron/src",
+          "excludePaths": ["adapters/tools/lifecycle", "lifecycle-api.ts"]
+        }
       ]
     },
     "electron.shell.test": {
+      "inherits": ["electron.lifecycle.control"],
       "paths": [
         "packages/electron-kit/tests",
         "packages/electron-kit/tsconfig.tests.json",
@@ -142,7 +147,7 @@
       ]
     },
     "electron.acceptance.full": {
-      "inherits": ["electron.cdp.control", "release.acceptance.control"],
+      "inherits": ["electron.cdp.control", "electron.lifecycle.control", "release.acceptance.control"],
       "paths": [
         ".github/workflows/release-exact.yml",
         "e2e/tests/scripts/exact-release.test.ts",
@@ -150,7 +155,7 @@
       ]
     },
     "closure.acceptance.hot": {
-      "inherits": ["electron.cdp.control", "release.acceptance.control"],
+      "inherits": ["electron.cdp.control", "electron.lifecycle.control", "release.acceptance.control"],
       "paths": [
         "packages/standalone/src",
         "shells/electron/tests/standalone-authority.test.ts",
@@ -166,6 +171,12 @@
         "tools/release/src/exact/control-release.ts",
         "tools/release/src/policy/release-profile.ts",
         "tools/release/tests/installed-acceptance.test.ts"
+      ]
+    },
+    "electron.lifecycle.control": {
+      "paths": [
+        "shells/electron/src/lifecycle-api.ts",
+        "shells/electron/src/adapters/tools/lifecycle"
       ]
     },
     "electron.cdp.control": {

@@ -13,6 +13,10 @@ Shell and the typed adapter boundary consumed by repository tools.
   tools-release exposes scene/distribution commands over `/build`; manifest
   resolution is internal product composition, not a separate command or file RPC.
 - `src/adapters/tools/` owns product tool request parsing and composition; it consumes public Sidecar atoms only for the Electron process and observes shared resources without retiring them. Production shared-resource retirement remains in the Standalone runtime adapter under its guard. Never import scripts as a library or import these tool adapters into the production runtime.
+- `src/adapters/tools/lifecycle/` owns dev/installed control-plane behavior, not
+  Carrier bytes. Exact planning binds it and `/lifecycle` to Shell tests and
+  installed acceptance, not Carrier builds. Build recipes and installation
+  composition stay outside this directory and retain their build identity.
 - Tool dev/pack schema 2 consumes local installation files. Loopback fixture acquisition belongs to tools-dev/tools-pack via the tools-serve fixture client, not to Shell or electron-kit. Product installation assembly is shared with exact distribution and must preserve prebuilt scene authority bytes.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
 

@@ -2,9 +2,9 @@ import { beforeEach, expect, it, vi } from "vitest";
 
 const sidecar = vi.hoisted(() => ({ stop: vi.fn(), find: vi.fn(), status: vi.fn() }));
 vi.mock("@open-design/sidecar", () => ({ stopSidecar: sidecar.stop, findSidecarProcesses: sidecar.find, getSidecarStatus: sidecar.status }));
-import { executeElectronRuntimeLifecycle } from "@/adapters/tools/runtime-tool.js";
-import { executeElectronDevLifecycle } from "@/adapters/tools/dev-tool.js";
-import { electronGracefulStopOptions } from "@/adapters/tools/observation.js";
+import { executeElectronRuntimeLifecycle } from "@/adapters/tools/lifecycle/runtime-tool.js";
+import { executeElectronDevLifecycle } from "@/adapters/tools/lifecycle/dev-tool.js";
+import { electronGracefulStopOptions } from "@/adapters/tools/lifecycle/observation.js";
 import { standaloneHostControlRequestTimeoutMs } from "@open-design/standalone";
 
 beforeEach(() => {

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -85,6 +85,48 @@ describe("exact release plan", () => {
     expect(closurePaths).toEqual(expect.arrayContaining(["skills", "design-templates", "design-systems", "craft", "plugins/_official", "plugins/registry", "assets/frames", "assets/community-pets", "prompt-templates", "data/plugin-previews"]));
     expect(closurePaths).not.toContain("shells/electron/src");
     expect(closurePaths).not.toContain("packages/electron-kit/src");
+  });
+
+  it.each([
+    "lifecycle-api.ts",
+    "adapters/tools/lifecycle/observation.ts",
+    "adapters/tools/lifecycle/dev-tool.ts",
+    "adapters/tools/lifecycle/runtime-tool.ts",
+  ])("reuses Carrier products but reruns validation for %s using the real registry", async (lifecyclePath) => {
+    const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const registry = parseContentIdentityRegistry(JSON.parse(await readFile(join(repositoryRoot, "tools/release/resources/exact-plan-identities.json"), "utf8")) as unknown);
+    const root = await mkdtemp(join(tmpdir(), "od-exact-lifecycle-plan-"));
+    roots.push(root);
+    // Minimal bytes at every real declared boundary; no parallel copy of selector rules.
+    const paths = new Set(Object.keys(registry.identities).flatMap(id => resolveContentIdentityDeclaration(registry, id).sources.map(source => source.path)));
+    for (const path of paths) {
+      const directory = (await stat(join(repositoryRoot, path))).isDirectory();
+      const file = join(root, path, ...(directory ? ["fixture.ts"] : []));
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, path.endsWith("package.json") ? '{"name":"fixture","version":"1.0.0"}' : "baseline\n");
+    }
+    const changedPath = join(root, "shells/electron/src", lifecyclePath);
+    await mkdir(dirname(changedPath), { recursive: true });
+    await writeFile(changedPath, "baseline\n");
+    const input = { root, registry, acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
+    const before = await createExactPlan(input);
+    await writeFile(changedPath, "changed lifecycle observation\n");
+    const after = await createExactPlan(input);
+    expect(after.nodes["electron.shell.build"].identity).toBe(before.nodes["electron.shell.build"].identity);
+    expect(after.nodes["electron.distribution"].identity).toBe(before.nodes["electron.distribution"].identity);
+    expect(selectExactPlanActions(after, identities(before)).map(action => action.id)).toEqual([
+      "electron.shell.test", "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
+    ]);
+    const nativeLock = join(root, "shells/electron/resources/platform/package-lock.json");
+    await mkdir(dirname(nativeLock), { recursive: true });
+    await writeFile(nativeLock, '{"native":"changed"}');
+    const platformChange = await createExactPlan(input);
+    expect(platformChange.nodes["electron.shell.build"].identity).not.toBe(after.nodes["electron.shell.build"].identity);
+    // New or mixed production inputs must still invalidate the Carrier.
+    await writeFile(join(root, "shells/electron/src/new-production-entry.ts"), "new runtime behavior\n");
+    const mixed = await createExactPlan(input);
+    expect(mixed.nodes["electron.shell.build"].identity).not.toBe(platformChange.nodes["electron.shell.build"].identity);
+    expect(selectExactPlanActions(mixed, identities(platformChange)).map(action => action.id)).toContain("electron.distribution");
   });
 
   it("uses hot acceptance for a Closure-only change while reusing the accepted Shell", async () => {

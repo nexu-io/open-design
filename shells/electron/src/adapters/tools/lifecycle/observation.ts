@@ -4,11 +4,11 @@ import { isAbsolute, join } from "node:path";
 import { findSidecarProcesses, getSidecarStatus, stopSidecar, type SidecarStamp } from "@open-design/sidecar";
 import { standaloneHostControlRequestTimeoutMs } from "@open-design/standalone";
 import { resolveElectronSessionNamespace } from "@open-design/electron-kit";
-import runtime from "../../../config/runtime.json" with { type: "json" };
-import resourceDeclaration from "../../../config/standalone.json" with { type: "json" };
-import { validateElectronPhysicalResourceSet } from "../standalone/physical-resources.ts";
+import runtime from "../../../../config/runtime.json" with { type: "json" };
+import resourceDeclaration from "../../../../config/standalone.json" with { type: "json" };
+import { validateElectronPhysicalResourceSet } from "../../standalone/physical-resources.ts";
 
-// Product control-plane observations shared by dev and installed adapters.
+// Tool control-plane observations shared by dev and installed adapters.
 // These projections do not acquire lifecycle authority or retire shared resources.
 /** Control-plane availability is not product readiness. */
 export async function waitForElectronProductReady(input: Readonly<{
