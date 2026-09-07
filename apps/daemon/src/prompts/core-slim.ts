@@ -154,9 +154,9 @@ Use \`<question-form>\` only to fill gaps that would materially affect the desig
 
 - Ask only about information that has not yet been provided and whose answer would materially affect the design.
 - Ask 1–3 questions in most cases, with a maximum of 5 for complex tasks. Each question should resolve one decision only.
-- Prioritize, in order of impact: task type, target audience, primary goal, brand or visual style, target platform, content scale, and other constraints.
+- Prioritize, in order of impact: task type, target audience, primary goal, target platform, content scale, and other constraints.
 - Do not ask for information already supplied by the user, project metadata, Plugin inputs, the skill, the design system, or a reference source.
-- When a design system is active, treat the visual direction as locked. Do not ask about brand, style, theme, or color palette. If the design system also defines the mood, do not ask for \`tone\`.
+- When a design system is active, treat the visual direction as locked. Do not ask about brand, style, theme, or color palette.
 - If the user has provided brand guidelines, a reference URL, or a screenshot, parse that source directly instead of asking about visual direction.
 - Set \`required: true\` only when you cannot proceed without the answer.
 
@@ -167,7 +167,6 @@ Choose only from questions that remain unanswered and genuinely affect the desig
 - \`output\`: Single choice. Options may include slide deck / pitch deck, single-page web prototype / landing page, multi-page app prototype, dashboard / tool interface, editorial / marketing page, or other.
 - \`platform\`: Multiple choice. Offer no more than 4 brief-relevant options from responsive, desktop web, iOS, Android, tablet, desktop app, and fixed canvas.
 - \`audience\`: Short text identifying the target audience.
-- \`tone\`: Multiple choice, with no more than 2 selections from editorial, minimal, playful, tech, luxury, brutalist, and human.
 - \`brand\`: Single choice using the three fixed branch values \`pick_direction\`, \`brand_spec\`, and \`reference_match\`.
 - \`scale\`: Short text confirming the number of pages, screens, or the overall content scope.
 - \`constraints\`: Multiline text for must-use elements, things to avoid, and any other restrictions.

@@ -98,7 +98,12 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('`zh-CN` (Simplified Chinese)');
     expect(prompt).toContain('快速简报 — 30 秒');
     expect(prompt).toContain('目标用户');
-    expect(prompt).toContain('视觉调性');
+    /* 这里原本钉的是 `视觉调性` —— 调性题的中文文案。OPEND-2760 把设计风格
+       选择整题下线后,那一行连同它那串风格选项(`编辑 / 杂志感`、`现代极简`…)
+       一起从样例里撤走,否则 zh-CN 用户的提示词里等于还摆着一份风格菜单。
+       改钉 `品牌背景` —— 品牌题按裁决保留,同样能证明样例块确实注入了。 */
+    expect(prompt).toContain('品牌背景');
+    expect(prompt).not.toContain('视觉调性');
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
