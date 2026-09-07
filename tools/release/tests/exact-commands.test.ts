@@ -13,6 +13,7 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "release-cli-test-")); roots.push(root);
   const cli = join(root, "tools-release.mjs");
   await build({ entryPoints: [resolve("src/exact/control-cli.ts")], outfile: cli, bundle: true, format: "esm", platform: "node", target: "node24",
+    external: ["@open-design/shell-electron/build"],
     banner: { js: "import { createRequire as exactCreateRequire } from 'node:module'; const require = exactCreateRequire(import.meta.url);" } });
   return { root, invoke: (args: string[]) => run(process.execPath, [cli, ...args], { cwd: root, env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } }) };
 }

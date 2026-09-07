@@ -16,6 +16,7 @@
       "tools/release/src/exact/scene-artifact.ts",
       "tools/release/src/exact/scene-cache.ts",
       "tools/release/src/exact/scene-contribution.ts",
+      "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/topology.ts",
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/control-cli.ts",

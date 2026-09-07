@@ -10,6 +10,7 @@ import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts"
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
+import { buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -30,6 +31,32 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("build <operation>", "Compose native scene or distribution inputs through public Shell builders")
+    .option("--root <directory>", "Checked-out workspace with built inputs")
+    .option("--shell <name>", "electron or terminal")
+    .option("--target <target>", "Native platform architecture")
+    .option("--output <directory>", "Build output")
+    .option("--receipt <file>", "Build receipt")
+    .option("--plan <file>", "Electron plan (scene)")
+    .option("--resources <file>", "Closure resource receipt (Electron scene)")
+    .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene)")
+    .option("--scene <directory>", "Verified scene (distribution)")
+    .option("--prepared <directory>", "Prepared signed content (distribution)")
+    .option("--policy <file>", "Release policy (distribution)")
+    .option("--channel <name>", "Release channel (distribution)")
+    .option("--release-version <version>", "Release version (distribution)")
+    .option("--source-commit <sha>", "Exact source commit (distribution)")
+    .action(async (operation: string, options: Options) => {
+      const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
+      if (operation === "scene") await buildReleaseScene({ ...common,
+        ...(options.plan == null ? {} : { plan: required(options, "plan") }),
+        ...(options.resources == null ? {} : { resources: required(options, "resources") }),
+        ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
+      else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
+        policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
+      else throw new Error("build operation must be scene or distribution");
+    });
+
   cli.command("topology", "Project release actions over declared runner and target data")
     .option("--declaration <file>", "Active and deferred target declaration")
     .option("--plans <directory>", "Release plan receipts")

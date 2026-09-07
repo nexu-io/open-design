@@ -250,57 +250,19 @@ jobs:
           if [[ "$SHELL_TYPE" == "electron" ]]; then
             pnpm --filter @open-design/closure build:resources -- --output "$RUNNER_TEMP/exact-closure-resources" --workspace "$GITHUB_WORKSPACE"
           fi
-          python3 - <<'PY'
-          import hashlib, json, os, urllib.request
-          from pathlib import Path
-          shell_type, target = os.environ["SHELL_TYPE"], os.environ["TARGET"]
-          if shell_type == "terminal":
-              lock = json.loads(Path("shells/terminal/node-lock.json").read_text())
-              value = lock["targets"][target]
-              destination = Path(os.environ["RUNNER_TEMP"], "exact-node", value["archive"])
-              destination.parent.mkdir(parents=True, exist_ok=True)
-              urllib.request.urlretrieve(value["url"], destination)
-              if hashlib.sha256(destination.read_bytes()).hexdigest() != value["sha256"]:
-                  raise SystemExit("official Node archive digest mismatch")
-              request = {
-                  "schemaVersion": 1, "operation": "terminal.scene.build", "target": target,
-                  "shellVersion": Path("shells/terminal/version").read_text().strip(),
-                  "node": {"version": lock["version"], "archiveFile": str(destination), "archiveSha256": value["sha256"]},
-                  "closureArtifactFile": str(Path("apps/closure/dist/index.mjs").resolve()),
-                  "standaloneDirectory": str(Path("packages/standalone/dist").resolve()),
-                  "sidecarDirectory": str(Path("packages/sidecar/dist").resolve()),
-                  "platformDirectory": str(Path("packages/platform/dist").resolve()),
-                  "sceneDirectory": str(Path(os.environ["RUNNER_TEMP"], "exact-scene")),
-              }
-          elif shell_type == "electron":
-              plan = json.loads(Path(os.environ["RUNNER_TEMP"], "exact-plan", f"electron-{target}.json").read_text())
-              shell_identity = plan["plan"]["nodes"]["electron.shell.build"]["identity"]
-              if not shell_identity.startswith("sha256:"):
-                  raise SystemExit("Electron Shell plan identity is invalid")
-              build_hash = shell_identity.removeprefix("sha256:")
-              request = {
-                  "schemaVersion": 1, "operation": "electron.scene.build", "target": target,
-                  "buildHash": build_hash,
-                  "acceptedClosureBaselineFile": str(Path("apps/closure/dist/index.mjs").resolve()),
-                  "standaloneLauncherFile": str(Path("apps/closure/dist/launcher.mjs").resolve()),
-                  "resourceReceiptFile": str(Path(os.environ["RUNNER_TEMP"], "exact-closure-resources", "resource-receipt.json")),
-                  "sceneDirectory": str(Path(os.environ["RUNNER_TEMP"], "exact-scene")),
-              }
-          else:
-              raise SystemExit(f"unsupported exact Shell: {shell_type}")
-          Path(os.environ["RUNNER_TEMP"], "exact-scene-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
 
-      - name: Build Darwin Terminal scene
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && matrix.shell == 'terminal' && startsWith(matrix.target, 'darwin-') }}
-        shell: bash
-        run: sh shells/terminal/sh/scene.sh --request "$RUNNER_TEMP/exact-scene-request.json" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
-
-      - name: Build native Electron scene
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] && matrix.shell == 'electron' }}
+      - name: Build native scene
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          pnpm --filter @open-design/tools-release exec tools-release electron-scene --request "$RUNNER_TEMP/exact-scene-request.json" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
+          pnpm --filter @open-design/tools-release exec tools-release build scene \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" \
+            --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
 
       - name: Verify scene and prepare convergence product
         env:
@@ -454,7 +416,7 @@ jobs:
           pnpm --filter @open-design/standalone build
           pnpm --filter @open-design/electron-kit build
 
-      - name: Write native distribution request
+      - name: Build native distribution
         if: ${{ matrix.shell != 'electron' || matrix.mode == 'full' }}
         env:
           CHANNEL: ${{ inputs.channel }}
@@ -464,43 +426,12 @@ jobs:
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
-          python3 - <<'PY'
-          import hashlib, json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          prepared = json.loads((root / "prepared" / "prepare-receipt.json").read_text())
-          scene = root / "scene"
-          common = {
-              "schemaVersion": 1, "target": os.environ["TARGET"], "sceneDirectory": str(scene),
-              "sceneManifestSha256": hashlib.sha256((scene / "scene.json").read_bytes()).hexdigest(),
-              "outputDirectory": str(root / "distribution"),
-          }
-          if os.environ["SHELL_TYPE"] == "terminal":
-              request = {**common, "operation": "terminal.distribution.build",
-                  "trustFile": str(root / "prepared" / "trust" / "keys.json"),
-                  "releaseDocumentsDirectory": str(root / "prepared" / "documents"),
-                  "release": {"channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"], "sourceCommit": os.environ["SOURCE_SHA"], "publishedAt": prepared["publishedAt"], "artifactBaseUrl": prepared["artifactBaseUrl"]}}
-          elif os.environ["SHELL_TYPE"] == "electron":
-              request = {**common, "operation": "electron.distribution.build",
-                  "acceptedContentMetadataFile": str(root / "prepared" / "documents" / "content-metadata.json"),
-                  "acceptedTrustFile": str(root / "prepared" / "trust" / "keys.json"),
-                  "channel": os.environ["CHANNEL"], "releaseVersion": os.environ["RELEASE_VERSION"],
-                  "channelHeadUrl": prepared["artifactBaseUrl"].rsplit("/", 1)[0] + "/latest/channel-head.json"}
-          else:
-              raise SystemExit(f"unsupported exact Shell: {os.environ['SHELL_TYPE']}")
-          (root / "distribution-request.json").write_text(json.dumps(request, sort_keys=True, separators=(",", ":")) + "\n")
-          PY
-
-      - name: Build Darwin distribution
-        if: ${{ matrix.shell == 'terminal' && startsWith(matrix.target, 'darwin-') }}
-        shell: bash
-        run: sh shells/terminal/sh/distribution.sh --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
-
-      - name: Build native Electron distribution
-        if: ${{ matrix.shell == 'electron' && matrix.mode == 'full' }}
-        shell: bash
-        run: |
-          pnpm --filter @open-design/tools-release exec tools-release electron-distribution --request "$RUNNER_TEMP/distribution-request.json" --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build distribution \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --policy "$RUNNER_TEMP/exact-plan/release-policy.json" \
+            --channel "$CHANNEL" --release-version "$RELEASE_VERSION" --source-commit "$SOURCE_SHA" \
+            --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" \
+            --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
 
       - name: Stage accepted Electron distribution
         if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}

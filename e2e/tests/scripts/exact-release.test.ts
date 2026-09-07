@@ -70,8 +70,10 @@ describe("exact Electron release topology", () => {
     expect(topology.active.map((value: { shell: string; target: string }) => [value.shell, value.target])).toEqual([["terminal", "darwin-arm64"], ["electron", "darwin-arm64"]]);
     expect(topology.active.every((value: { runs_on: string }) => value.runs_on === "macos-15")).toBe(true);
     expect(topology.deferred).toEqual([{ shell: "electron", target: "win32-x64", workload: "electron_scene_win32_x64", runner_class: "electron_win32_x64", runs_on: "windows-2025" }]);
-    expect(workflow).toContain("@open-design/tools-release exec tools-release electron-scene");
-    expect(workflow).toContain("@open-design/tools-release exec tools-release electron-distribution");
+    expect(workflow).toContain("@open-design/tools-release exec tools-release build scene");
+    expect(workflow).toContain('exact-release-control.mjs" build distribution');
+    expect(workflow).not.toContain("exact-scene-request.json");
+    expect(workflow).not.toContain("distribution-request.json");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
     expect(workflow).toContain("@open-design/closure build:resources");
     expect(workflow).not.toContain("tools/pack/dist/exact-control.mjs");
