@@ -563,6 +563,14 @@
 @media (prefers-reduced-motion: reduce) {
   .msg { animation: none; }
 }
+/* 滚动冻结的 H3 假设开关。`msg-enter` 带 `fill: both`,动画收尾会把最终 transform
+   (单位矩阵)留在 `.msg` 上,而那正是内容不断增高的那个元素 —— 两次冻结现场里
+   都能看到它。这条规则让运行时能把整条动画摘掉,好在同一个包里做 A/B。
+
+   属性由 `runtime/chat-scroll-experiments.ts` 在启动时按 localStorage 开关挂到
+   `<html>` 上;不设开关就没有这个属性,这条规则一个字都不生效。
+   开关怎么开、开了会失去什么,见那个模块顶部的 docblock。 */
+:root[data-od-msg-enter-disabled] .msg { animation: none; }
 .msg.user {
   align-self: flex-end;
   display: flex;

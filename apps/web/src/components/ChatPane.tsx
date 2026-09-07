@@ -1,9 +1,11 @@
 import { QuoteBar } from './chat/QuoteBar';
+import { chatLogSelfResizeObserveDisabled } from '../runtime/chat-scroll-experiments';
 import { shouldShowJumpToLatest } from '../runtime/chat/jump-to-latest';
 import {
   distanceFromBottom,
   isAtBottom as isSampleAtBottom,
   nextFollowIntent,
+  upwardGestureCanEscapeBottom,
   type FollowIntent,
   type ScrollSample,
 } from '../runtime/chat/stick-to-bottom';
@@ -2825,7 +2827,13 @@ export function ChatPane({
       const target = logRef.current;
       if (!target) return;
       if (event.deltaY >= 0) return;
-      if (target.scrollHeight <= target.clientHeight) return;
+      /*
+       * 判据是**这一格有没有可能真的离开底部**,不是「有没有发生一次滚轮手势」。
+       * 一屏装得下的对话上,滚轮响了但屏幕纹丝不动 —— 那一刻用户在物理上就在
+       * 底部,松手是错的(用户 2026-09-07)。判定放在 `stick-to-bottom.ts` 里,
+       * 和 `nextFollowIntent` 用同一把 8px 的尺子。
+       */
+      if (!upwardGestureCanEscapeBottom(readViewportSample(target))) return;
       const { following, escaped } = followIntentRef.current;
       if (!following && escaped) return; // 已经松开了,不用每一格滚轮都重算一次
       releaseFollow();
@@ -2847,7 +2855,8 @@ export function ChatPane({
       const y = event.touches[0]?.clientY;
       if (y === undefined) return;
       // 手指往下拖 = 内容往下走 = 看更早的内容。
-      if (y - touchStartY > 8 && target.scrollHeight > target.clientHeight) {
+      // 「有没有可能离开底部」和滚轮那一侧同一条判据 —— 拖得动才算翻阅。
+      if (y - touchStartY > 8 && upwardGestureCanEscapeBottom(readViewportSample(target))) {
         releaseFollow();
         syncFollowState();
         touchStartY = null;
@@ -2983,8 +2992,14 @@ export function ChatPane({
      * 滚动容器**自己**也要观察:输入框长高、软键盘弹出、旁边的 flex 兄弟变大,
      * 都只改可视高度、不改内容高度 —— 只盯内容就会静默失准
      * (`use-stick-to-bottom` 至今没修的 issue #40 就是这个)。
+     *
+     * ⚠️ 这一条同时也是滚动冻结的 H2 嫌疑:观察的是滚动盒自己,而回调里会写
+     * 尾部占位块的高度 —— 观察自己 → 改内容高度 → 再触发观察。`origin/main`
+     * 上没有这条自观察。开关只为**在同一个包里做 A/B**,不是修复:摘掉它,
+     * 上面列的那类「只改可视高度」的变化就一个通知都收不到了(代价清单见
+     * `runtime/chat-scroll-experiments.ts` 的 docblock)。默认不摘。
      */
-    resizeObserver?.observe(el);
+    if (!chatLogSelfResizeObserveDisabled()) resizeObserver?.observe(el);
     syncObservedChildren();
     syncQueuedSendStrip();
 
