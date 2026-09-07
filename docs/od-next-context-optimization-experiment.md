@@ -225,7 +225,7 @@ D1/D2 依据 [ODEval rubric v2 源码](https://code.powerformer.net/core/odeval/
 | PPT | 前 | 99.460 | 78,588 | 50,560 | 2,711 | 1 |
 | PPT | 后 | 98.233 | 66,428 | 44,416 | 2,751 | 2 |
 
-四次均输出 `full_plan / simple / plan_ready`，没有 question-form。用真实 parser、独立临时 Task/Snapshot Store、Intake、Execution Preflight 和 coordinator 接受逻辑回放，四次均无 parser issue、无 normalization，均可冻结；capability hash、inputRefs、productionRoutes 与输入精确匹配。原型两次均为 `website / responsive / none / none`；PPT 两次均保留 6 页和给定六主题顺序。未启动 production，也没有生成 HTML 或产品侧导出。
+四次均输出 `full_plan / simple / plan_ready`，没有 question-form。用真实 parser、独立临时 Task/Snapshot Store、Intake、Execution Preflight 和 coordinator 接受逻辑回放，四次均无 parser issue、无 normalization，均可冻结；capability hash 与 inputRefs 和输入精确一致，productionRoutes 均在输入允许列表内。原型两次均为 `website / responsive / none / none`；PPT 两次均保留 6 页和给定六主题顺序。未启动 production，也没有生成 HTML 或产品侧导出。
 
 这里是两个样本的规划与协议 smoke，不是四类任务的完整效果评测。CLI 的用量是全部工具回合累计，完成时间包含外层启动、网络、缓存与工具执行。没有实际费用、首 token 时间、完整任务时延或 D1/D2 分数；不存在仅凭这些数字宣告最优版本的依据。
 
