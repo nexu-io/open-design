@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { copyFile, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { build as bundle } from "esbuild";
 
@@ -38,13 +38,34 @@ async function describeSceneProduct(root: string, name: string): Promise<Readonl
   name: string;
   sha256: string;
   size: number;
+  tree?: readonly Readonly<{ path: string; sha256: string; size: number; mode: number }>[];
 }>> {
   const path = join(root, name);
+  const metadata = await lstat(path);
+  if (metadata.isDirectory()) {
+    const tree: Array<{ path: string; sha256: string; size: number; mode: number }> = [];
+    const walk = async (directory: string, prefix: string) => {
+      for (const entry of (await readdir(directory)).sort()) {
+        if (entry.includes("\\") || entry.includes("\0")) throw new Error("Electron scene tree has an invalid path");
+        const child = join(directory, entry), details = await lstat(child);
+        const childName = prefix ? `${prefix}/${entry}` : entry;
+        if (details.isDirectory()) await walk(child, childName);
+        else if (details.isFile()) {
+          const bytes = await readFile(child);
+          tree.push({ path: childName, sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength, mode: details.mode & 0o777 });
+        } else throw new Error(`Electron scene tree contains a link or special file: ${childName}`);
+      }
+    };
+    await walk(path, "");
+    if (tree.length === 0) throw new Error("Electron scene resource tree must not be empty");
+    return { name, tree, sha256: createHash("sha256").update(JSON.stringify(tree)).digest("hex"), size: tree.reduce((total, file) => total + file.size, 0) };
+  }
+  if (!metadata.isFile()) throw new Error(`Electron scene product must be a regular file or directory: ${name}`);
   const bytes = await readFile(path);
   return {
     name,
     sha256: createHash("sha256").update(bytes).digest("hex"),
-    size: (await stat(path)).size,
+    size: bytes.byteLength,
   };
 }
 
@@ -56,6 +77,16 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     }
     authorityResourceNames.add(resource.name);
   }
+  // Capture source bytes before replacing output, and refuse self-contained input
+  // trees that output cleanup would destroy. No links are part of a scene tree.
+  const sourceResources = await Promise.all(input.authorityResources.map(async resource => {
+    const contains = (parent: string, child: string) => {
+      const path = relative(resolve(parent), resolve(child));
+      return path === "" || (!isAbsolute(path) && path !== ".." && !path.startsWith("../") && !path.startsWith("..\\"));
+    };
+    if (contains(input.outputRoot, resource.path) || contains(resource.path, input.outputRoot)) throw new Error("Electron scene input and output cannot overlap");
+    return describeSceneProduct(dirname(resource.path), basename(resource.path));
+  }));
   const manifest = validateElectronShellManifest(input.manifest);
   const runtimeConfig = validateElectronRuntimeConfig(
     JSON.parse(await readFile(input.runtimeConfigPath, "utf8")) as ElectronRuntimeConfig,
@@ -84,8 +115,12 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     platform: "node",
     target: "node24",
   });
-  await Promise.all(input.authorityResources.map(async (resource) => {
-    await copyFile(resource.path, join(input.outputRoot, resource.name));
+  await Promise.all(input.authorityResources.map(async (resource, index) => {
+    const destination = join(input.outputRoot, resource.name);
+    if (sourceResources[index]!.tree == null) await copyFile(resource.path, destination);
+    else await cp(resource.path, destination, { recursive: true, dereference: false, errorOnExist: true, force: false });
+    const copied = await describeSceneProduct(input.outputRoot, resource.name);
+    if (copied.sha256 !== sourceResources[index]!.sha256 || copied.size !== sourceResources[index]!.size) throw new Error(`Electron scene source changed while copying: ${resource.name}`);
   }));
   await bundle({
     bundle: true,
@@ -130,7 +165,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(input.standaloneBinding.target)) throw new Error("invalid Electron Standalone scene target");
     const closure = products.find(({ name }) => name === input.standaloneBinding!.closureResourceName);
     const launcher = products.find(({ name }) => name === input.standaloneBinding!.launcherResourceName);
-    if (closure == null || launcher == null || !authorityResourceNames.has(closure.name) || !authorityResourceNames.has(launcher.name)) {
+    if (closure == null || launcher == null || closure.tree != null || launcher.tree != null || !authorityResourceNames.has(closure.name) || !authorityResourceNames.has(launcher.name)) {
       throw new Error("Electron Standalone scene binding must select exact authority resources");
     }
     standaloneBinding = Object.freeze({
@@ -182,15 +217,16 @@ export async function loadElectronScene(sceneRootInput: string, expectedManifest
   if (manifest.schemaVersion !== 1 || manifest.operation !== "electron.scene.build" || !Array.isArray(manifest.products) || !Array.isArray(manifest.authorityResources)) {
     throw new Error("Electron scene manifest is invalid");
   }
-  const products = new Map<string, Readonly<{ name: string; sha256: string; size: number }>>();
+  const products = new Map<string, Awaited<ReturnType<typeof describeSceneProduct>>>();
   for (const value of manifest.products) {
     if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("Electron scene product is invalid");
     const product = value as { name?: unknown; sha256?: unknown; size?: unknown };
     if (typeof product.name !== "string" || !sceneResourceName.test(product.name) || products.has(product.name)
       || typeof product.sha256 !== "string" || !/^[a-f0-9]{64}$/u.test(product.sha256)
-      || !Number.isSafeInteger(product.size) || (product.size as number) < 1) throw new Error("Electron scene product is invalid");
+      || !Number.isSafeInteger(product.size) || (product.size as number) < 0) throw new Error("Electron scene product is invalid");
     const actual = await describeSceneProduct(sceneRoot, product.name);
     if (actual.sha256 !== product.sha256 || actual.size !== product.size) throw new Error(`Electron scene product failed binding verification: ${product.name}`);
+    if (JSON.stringify(actual.tree) !== JSON.stringify((value as { tree?: unknown }).tree)) throw new Error(`Electron scene tree manifest differs: ${product.name}`);
     products.set(product.name, actual);
   }
   const authorityNames = manifest.authorityResources;

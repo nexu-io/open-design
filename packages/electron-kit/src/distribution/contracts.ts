@@ -15,6 +15,7 @@ export type ElectronSceneReceipt = Readonly<{
     path: string;
     sha256: string;
     size: number;
+    tree?: readonly Readonly<{ path: string; sha256: string; size: number; mode: number }>[];
   }>[];
 }>;
 

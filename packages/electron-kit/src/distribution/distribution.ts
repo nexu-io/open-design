@@ -13,6 +13,7 @@ import {
 } from "../platform/windows/index.js";
 import { writeElectronWindowsNsisInclude } from "../platform/windows/installer/nsis-include.js";
 import type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
+import { loadElectronScene } from "./scene.js";
 import {
   resolveElectronDistributionConfiguration,
   resolveElectronDistributionPlatform,
@@ -29,7 +30,15 @@ export type BuildElectronDistributionInput = Readonly<{
   additionalResources?: readonly Readonly<{ name: string; path: string }>[];
 }>;
 
+/** Explicit files bypass builder directory filters, especially node_modules. */
+export function resolveElectronSceneResourceFiles(resources: ElectronSceneReceipt["authorityResources"]) {
+  return resources.flatMap(resource => resource.tree == null
+    ? [{ from: resource.path, to: resource.name }]
+    : resource.tree.map(file => ({ from: join(resource.path, file.path), to: `${resource.name}/${file.path}` })));
+}
+
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {
+  const scene = await loadElectronScene(input.scene.sceneRoot, input.scene.sceneManifestSha256);
   const manifest = validateElectronShellManifest(input.manifest);
   const policy = validateElectronDistributionPolicy(input.policy);
   const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
@@ -45,7 +54,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const projectRoot = join(scratchRoot, "project");
   const windowsNsisIncludePath = platform === "win" ? join(scratchRoot, "installer.nsh") : undefined;
   let built: string[];
-  const existingResourceNames = new Set(input.scene.authorityResources.map(({ name }) => name));
+  const existingResourceNames = new Set(scene.authorityResources.map(({ name }) => name));
   const additionalResources = input.additionalResources ?? [];
   for (const resource of additionalResources) {
     if (!/^[a-z][a-z0-9.-]{0,127}$/u.test(resource.name) || existingResourceNames.has(resource.name)) throw new Error(`invalid or duplicate Electron distribution resource: ${resource.name}`);
@@ -57,10 +66,10 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     const iconPath = manifest.iconDataUrl == null ? undefined : join(scratchRoot, "icon.png");
     if (iconPath != null) await writeFile(iconPath, Buffer.from(manifest.iconDataUrl!.slice("data:image/png;base64,".length), "base64"));
     await Promise.all([
-      copyFile(input.scene.mainPath, join(projectRoot, "main.cjs")),
-      copyFile(input.scene.rendererPreloadPath, join(projectRoot, "renderer-mount-preload.cjs")),
-      copyFile(input.scene.nodeCarrierLockPath, join(projectRoot, "node-lock.json")),
-      copyFile(input.scene.runtimeConfigPath, join(projectRoot, "runtime.json")),
+      copyFile(scene.mainPath, join(projectRoot, "main.cjs")),
+      copyFile(scene.rendererPreloadPath, join(projectRoot, "renderer-mount-preload.cjs")),
+      copyFile(scene.nodeCarrierLockPath, join(projectRoot, "node-lock.json")),
+      copyFile(scene.runtimeConfigPath, join(projectRoot, "runtime.json")),
       writeFile(join(projectRoot, "shell.json"), `${JSON.stringify(input.manifest, null, 2)}\n`, "utf8"),
       writeFile(join(projectRoot, "package.json"), `${JSON.stringify({
         name: input.manifest.executableName,
@@ -90,10 +99,12 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
           windowsNsisIncludePath,
         }),
         ...(iconPath == null ? {} : { icon: iconPath }),
-        extraResources: [...input.scene.authorityResources, ...additionalResources].map((resource) => ({
-          from: resource.path,
-          to: resource.name,
-        })),
+        // A directory glob applies builder defaults (including node_modules
+        // exclusions). Physical trees must copy the exact verified inventory.
+        extraResources: [
+          ...resolveElectronSceneResourceFiles(scene.authorityResources),
+          ...additionalResources.map(resource => ({ from: resource.path, to: resource.name })),
+        ],
       },
     });
   } finally {

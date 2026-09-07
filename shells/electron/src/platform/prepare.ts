@@ -7,6 +7,8 @@ async function prepare(): Promise<void> {
   const root = process.argv[2];
   if (root == null || !isAbsolute(root)) throw new Error("platform preparation requires an absolute output root");
   const load = createRequire(join(root, "package.json"));
+  // npm's command shims are build tooling, not runtime modules or signed carriers.
+  await rm(join(root, "node_modules", ".bin"), { recursive: true, force: true });
   const ptyRoot = dirname(load.resolve("node-pty/package.json"));
   const prebuilds = join(ptyRoot, "prebuilds");
   for (const target of await readdir(prebuilds)) {
