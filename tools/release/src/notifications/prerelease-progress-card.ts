@@ -29,6 +29,7 @@ import {
   readChangelogLines,
   renderPrereleaseCard,
   shouldPostFirstCard,
+  undiscoveredLaneStatus,
 } from "./prerelease-card.ts";
 import type {
   Changelog,
@@ -300,6 +301,16 @@ async function collect(previous: Watch): Promise<Watch> {
 }
 
 async function buildState(watch: Watch, startedAt: number, timedOut: boolean): Promise<PrereleaseCardState> {
+  // Computed once, up front, and used BOTH to decide what a lane says and to
+  // decide when the watcher may stop waiting for it. Deriving these twice is
+  // what let the card report a never-dispatched smoke lane as "排队中" while
+  // simultaneously concluding it had waited long enough to finish.
+  const testsDiscoveryExpired = watch.testsRun == null && Date.now() - startedAt > discoveryGraceMs;
+  const smokeDiscoveryExpired =
+    watch.smokeRun == null &&
+    watch.publishSucceededAt != null &&
+    Date.now() - watch.publishSucceededAt > discoveryGraceMs;
+
   const platforms: PlatformLane[] = [];
   for (const key of PLATFORM_ORDER) {
     const job = watch.originJobs.find((candidate) => jobMatches(String(candidate.name ?? ""), ORIGIN_BUILD_JOB[key]));
@@ -315,12 +326,17 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
       // no job there stays "skipped" rather than pretending to be pending.
       if (key === "linux_x64") smoke = "skipped";
       else if (smokeJob != null) smoke = statusOf(smokeJob);
-      // No job for this platform, and the run has FINISHED: it genuinely did
-      // not run. While the run is still going, a missing job just means the
-      // API has not created it yet.
-      else if (watch.smokeRun?.completed === true) smoke = "skipped";
-      else if (watch.smokeRun != null || watch.publish === "success") smoke = "pending";
-      else smoke = "skipped";
+      // No job for this platform. Only a COMPLETED run proves it genuinely did
+      // not run; while the run is still going, a missing job just means the API
+      // has not created it yet — and a run that never appeared at all before
+      // the discovery window closed was never dispatched.
+      else if (watch.smokeRun != null || watch.publish === "success") {
+        smoke = undiscoveredLaneStatus({
+          runFound: watch.smokeRun != null,
+          runCompleted: watch.smokeRun?.completed === true,
+          discoveryExpired: smokeDiscoveryExpired,
+        });
+      } else smoke = "skipped";
     }
     platforms.push({ key, label: PLATFORM_LABELS[key], build, downloadUrl, smoke });
   }
@@ -330,11 +346,16 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
     const family = watch.testsJobs.filter((job) => jobFamilyMatches(String(job.name ?? ""), entry.prefix));
     if (family.length === 0) {
       // Same rule as the smoke lanes: only a COMPLETED run proves a job is
-      // absent rather than not yet created.
+      // absent rather than not yet created, and a run that never appeared
+      // before the discovery window closed was never dispatched at all.
       return {
         key: entry.key,
         label: entry.label,
-        status: (watch.testsRun?.completed === true ? "skipped" : "pending") as LaneStatus,
+        status: undiscoveredLaneStatus({
+          runFound: watch.testsRun != null,
+          runCompleted: watch.testsRun?.completed === true,
+          discoveryExpired: testsDiscoveryExpired,
+        }),
       };
     }
     return { key: entry.key, label: entry.label, status: rollup(family.map(statusOf)) };
@@ -344,14 +365,14 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
   const testsDone = !expectTests
     ? true
     : watch.testsRun == null
-      ? Date.now() - startedAt > discoveryGraceMs
+      ? testsDiscoveryExpired
       : tests.every((test) => isTerminal(test.status));
   const smokeDone = !expectSmoke
     ? true
     : watch.publish !== "success"
       ? isTerminal(watch.publish)
       : watch.smokeRun == null
-        ? watch.publishSucceededAt != null && Date.now() - watch.publishSucceededAt > discoveryGraceMs
+        ? smokeDiscoveryExpired
         : platforms.every((platform) => isTerminal(platform.smoke));
 
   return {

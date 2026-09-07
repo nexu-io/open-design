@@ -1601,7 +1601,29 @@ jobs:
     needs:
       - metadata
       - publish
-    if: ${{ inputs.enable_smoke && needs.publish.result == 'success' && needs.publish.outputs.version_metadata_url != '' }}
+    # `always() && !cancelled()` is load-bearing, not decoration.
+    #
+    # `build_linux` is skipped on every run (the repository has no
+    # ENABLE_STABLE_LINUX variable), and GitHub applies a skip "to all jobs in
+    # the dependency chain from the point of failure or skip onwards" unless a
+    # job uses a conditional expression that causes it to continue. That break
+    # is per job and is NOT inherited: `publish` carries the same prefix and so
+    # runs, but its own dependents are still downstream of build_linux's skip.
+    # Without a break of its own this job never evaluates the conditions below
+    # at all — GitHub's implicit `success()` skips it first.
+    #
+    # That is how release-prerelease-smoke.yml went 0-for-N. In run
+    # 34149795952 publish succeeded, version_metadata_url was published, and
+    # enable_smoke arrived as true; the job was still skipped with zero steps.
+    # The explicit publish gate below is what actually decides whether smoke is
+    # dispatched, and it is unchanged.
+    if: >-
+      ${{
+        always() && !cancelled() &&
+        inputs.enable_smoke &&
+        needs.publish.result == 'success' &&
+        needs.publish.outputs.version_metadata_url != ''
+      }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
