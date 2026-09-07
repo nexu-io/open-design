@@ -1319,6 +1319,32 @@ function AssistantMessageImpl({
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
   /**
+   * 整轮失败的那一轮,**「这一轮到此为止」由壳头那句「运行失败」宣布**,页脚不再重说。
+   *
+   * 出处(逐条,不是「看起来重复」):
+   *  · `specs/current/chat-panel-next.md` B18 逐字:「整轮失败:执行记录头「运行失败」
+   *    默认收起,下面出组件 19 报错卡…**不出回合状态行**」;
+   *  · `specs/current/chat-panel-dev-design.md` 状态机「运行失败(默认收起,报错卡接手)」
+   *    与场景表「失败 | … | 壳头「运行失败」收起 + 报错卡,**无回合状态行**」;
+   *    同文件写死分工 —— 壳只有三态,「运行失败」是**壳的词**;
+   *  · `specs/current/chat-panel-next-review.md` B18 同条;
+   *  · 交付稿(`729fa43ce7:docs/design/chat-panel-next.html`):「任务挂了是 19 · 报错。
+   *    两边不重复:这一行只负责宣布『这轮到此为止』」。
+   *
+   * ⚠️ 上面第 ① 条(报错卡在场)只覆盖**转录末尾**那一帧:报错卡的归属
+   * (`ChatPane` 的 `errorCardOwnerId`)要求这条失败助手消息正好是最后一条,用户再发
+   * 任何一条消息就变 null。而页脚那条文案阶梯里只认识 `canceled` 一个终态,`failed`
+   * 一个字都没有,于是这一轮直落 `doneLabel` —— 壳头写着「运行失败」、页脚挂着
+   * 「✓ 已完成」,同屏自相矛盾。所以这条例外必须按**终态本身**判,不能靠报错卡在不在。
+   *
+   * ⚠️ **必须绕开空流那一档**:API 空回复把这一轮也写成 `runStatus: 'failed'`
+   * (`ProjectView.tsx` 的 `emptyApiResponse` 分支同时补一条 `status(empty_response)`),
+   * 但它的状态词是「没有输出」,由 `e2e/ui/api-empty-response.test.ts` 那条 P0 钉死
+   * (那格必须显示 "No output",且 "Done" 计数为 0)。它也没有壳头替它说话。
+   */
+  const failedTurnIsAnnouncedByTheShell =
+    message.runStatus === "failed" && !hasEmptyResponse;
+  /**
    * 这一行要不要报「这一轮怎么样了」。
    *
    * ⚠️ 先说反面:**跑完之后这一行是要报终态的**(稿子:绿勾 + 已完成)。原来只要壳里
@@ -1326,20 +1352,22 @@ function AssistantMessageImpl({
    * 也丢了」。运行中的去重已经由 `showCompletionRow` 整行不出来解决,不归这里管。
    * 所以这里只列**具名的例外**,一条都不能凭「看起来重复」加进来。
    *
-   * 三条例外:
+   * 四条例外:
    *  ① 报错卡那一轮 —— 原因和下一步由报错卡说,这一行让位;
    *  ② 问卷还悬着的那一轮 —— run 进程上确实终止了,但握手没完成;挂绿勾会把它变成
    *     假成功,回放老式子标签表单时尤其明显;
    *  ③ **宿主自己补发的卡从来没有过一轮**(记忆卡、品牌协助卡)。它是上一轮的附属
    *     组件,给它挂「已完成」是在陈述一件没发生过的事,读起来就是又一轮 ——
    *     工单 OPEND-2745 里那「两个进行中」正是同一条判据缺口的另一面。
+   *  ④ **整轮失败的那一轮**(判据见下面 `failedTurnIsAnnouncedByTheShell`)。
    *
    * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
    */
   const hideRunStatus =
     message.id === errorCardOwnerId
     || hasPendingQuestionForm
-    || assistantMessageNeverHadARun(message);
+    || assistantMessageNeverHadARun(message)
+    || failedTurnIsAnnouncedByTheShell;
   // "Next step" is a delivery affordance, not a generic terminal-state card.
   // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
   // only a successful turn that actually produced something may surface it.
@@ -1449,11 +1477,6 @@ function AssistantMessageImpl({
       );
     }
     if (b.kind === "status") {
-      // Suppress this message's gray error pill ONLY when ChatPane is
-      // rendering the top-level error card for it (the last failed run).
-      // Other failed turns — older history, or once a follow-up makes
-      // this no longer the last assistant message — keep their pill so
-      // the error detail still survives reload / history review.
       /*
        * `error` 这一档**一律不出**。稿子里没有这种状态行,用户 2026-08-27
        * 指认过两次:「为什么还会有这种错误样式?? 你的错误卡片呢??」
