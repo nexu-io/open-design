@@ -378,9 +378,9 @@ async function renderFeishuBuildCard(env: Record<string, string>): Promise<Recor
       env: {
         ...process.env,
         BUILD_STATE: "success",
-        CHANNEL_LABEL: "Prerelease",
+        CHANNEL_LABEL: "Beta",
         FEISHU_WEBHOOK: `http://127.0.0.1:${address.port}`,
-        VERSION: "0.19.0-prerelease.1",
+        VERSION: "0.19.0-beta.1",
         ...env,
       },
     });
@@ -1302,7 +1302,7 @@ process.stdin.on("end", () => {
     // the PR head.
     expect(feishuStep).toContain("steps.pr.outputs.head_oid == github.event.workflow_run.head_sha");
     // Sign the release webhook with the SAME secret the rest of the repo pairs with
-    // FEISHU_RELEASE_WEBHOOK (notify-release-feishu / notify-daily-feishu / backport-automerge),
+    // FEISHU_RELEASE_WEBHOOK (notify-daily-feishu / cut-release / backport-automerge),
     // not a stray secret that resolves empty and sends an unsigned, rejected request.
     expect(feishuStep).toContain("secrets.FEISHU_RELEASE_WEBHOOK");
     expect(feishuStep).toContain("secrets.FEISHU_RELEASE_SIGN_SECRET");
@@ -2383,7 +2383,7 @@ process.stdin.on("end", () => {
   it("[P2] prerelease publishes github.commit so its changelog has a baseline", async () => {
     // The Feishu release card computes its changelog as `git log <previous>..<current>`,
     // where <previous> is read from prerelease/latest/metadata.json's `.github.commit`
-    // (notify-release-feishu.yml). That field is written by githubInfo() from the
+    // (release-prerelease-card.yml). That field is written by githubInfo() from the
     // RELEASE_COMMIT env. release-beta sets RELEASE_COMMIT on every build + publish job,
     // but release-prerelease historically set it on none, so every prerelease published an
     // empty github.commit and the card could never diff against the prior prerelease
@@ -2885,12 +2885,13 @@ process.stdin.on("end", () => {
   });
 
   it("[P1] keeps one writer on the progressive prerelease card", async () => {
-    const [prerelease, card, watcher, notify, feishuCard] = await Promise.all([
+    const [prerelease, card, watcher, notify, feishuCard, notifyDaily] = await Promise.all([
       readFile(releasePrereleaseWorkflowPath, "utf8"),
       readFile(releasePrereleaseCardWorkflowPath, "utf8"),
       readFile(prereleaseCardScriptPath, "utf8"),
       readFile(notifyReleaseFeishuWorkflowPath, "utf8"),
       readFile(feishuCardScriptPath, "utf8"),
+      readFile(notifyDailyFeishuWorkflowPath, "utf8"),
     ]);
 
     // A Feishu PATCH replaces the whole card, so three build jobs updating
@@ -2909,7 +2910,7 @@ process.stdin.on("end", () => {
     expect(card).toContain("origin_run_id:");
     expect(card).toContain("expect_tests:");
     expect(card).toContain("expect_smoke:");
-    // Same compare-API changelog the webhook card uses; no local git history.
+    // Changelog comes from the compare API, so the card needs no git history.
     expect(card).toContain("gh api --paginate");
     expect(card).toContain("compare/${PREV}...${CUR}?per_page=100");
 
@@ -2920,24 +2921,27 @@ process.stdin.on("end", () => {
     // A wrong URL would ship a 404 button to the whole channel.
     expect(watcher).toContain("verifyDownloadUrl");
 
-    // The old one-shot webhook card stays until the new one has carried a
-    // couple of real releases: a gap in release notification is worse than a
-    // duplicate.
-    const notifyJob = notify.slice(notify.indexOf("  notify:"));
-    expect(notifyJob).toContain("tools/release/src/notifications/feishu.ts");
-    expect(notifyJob).toContain("MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}");
-    expect(notifyJob).toContain("WIN_URL: ${{ needs.build.outputs.win_url }}");
-    // ...but it no longer claims a smoke verdict it cannot see, and it colours
-    // itself from whether a package shipped rather than from a workflow
-    // conclusion that goes red for anything anywhere in the run.
-    expect(notifyJob).not.toContain("MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}");
-    expect(notifyJob).toContain("VERSION_METADATA_URL: ${{ needs.build.outputs.version_metadata_url }}");
+    // The transitional one-shot webhook card is retired. `notify-release-feishu`
+    // is now a build-only entry point: a second poster would reintroduce exactly
+    // the duplicate notification the transition existed to end, and the PATCH
+    // card cannot be co-owned.
+    expect(notify).not.toContain("  notify:");
+    expect(notify).not.toContain("tools/release/src/notifications/feishu.ts");
+    expect(notify).not.toContain("FEISHU_RELEASE_WEBHOOK");
+    expect(notify).not.toContain("FEISHU_RELEASE_SIGN_SECRET");
+
+    // feishu.ts itself survives the retirement — notify-daily-feishu.yml renders
+    // the beta download card with it — so its "a red pipeline does not mean no
+    // package" rule has to keep holding for that lane.
     expect(feishuCard).toContain("const packagePublished = versionMetadataUrl.length > 0 || buildState === \"success\";");
     expect(feishuCard).toContain("const smokeFailures = packagePublished");
     expect(feishuCard).toContain("return packagePublished ? \"blue\" : \"red\";");
+    expect(notifyDaily).toContain("tools/release/src/notifications/feishu.ts");
   });
 
-  it("[P1] keeps download actions on a prerelease card with a failed Windows smoke", async () => {
+  it("[P1] keeps download actions on a beta card with a failed Windows smoke", async () => {
+    // notify-daily-feishu.yml is the only lane left that renders through
+    // feishu.ts, and it is the one that forwards the two smoke results.
     const payload = await renderFeishuBuildCard({
       MAC_ARM64_SMOKE_RESULT: "success",
       MAC_ARM64_URL: "https://releases.example/mac.dmg",
@@ -2964,7 +2968,6 @@ process.stdin.on("end", () => {
 
   it("[P1] keeps download actions on a partial beta card without claiming latest promotion", async () => {
     const payload = await renderFeishuBuildCard({
-      CHANNEL_LABEL: "Beta",
       MAC_ARM64_URL: "https://releases.example/beta-mac.dmg",
       RELEASE_NOTE: "共享 beta/latest 版本高于 main，本次仅发布版本化快照。",
       RELEASE_STATE: "partial",
