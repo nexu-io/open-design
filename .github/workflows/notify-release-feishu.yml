@@ -2,7 +2,7 @@ name: notify-release-feishu
 
 # On every push to a release/** branch, build a full prerelease package by reusing
 # release-prerelease, then post a Feishu card with the download
-# links (macOS arm64 + Intel, Windows, and Linux when enabled) and the changelog
+# links (macOS arm64 and Windows always; macOS Intel and Linux when enabled) and the changelog
 # since the previously published prerelease. Consecutive pushes to the same branch
 # are throttled, not debounced: an in-flight build is allowed to finish (so a
 # busy release branch always produces a prerelease), while pushes that arrive
@@ -46,6 +46,11 @@ on:
         required: false
         type: string
         default: ""
+      enable_mac_x64:
+        description: "Also build the macOS Intel (x64) package. Off by default because Intel is the critical path and roughly doubles the wall clock. TURN THIS ON for the last prerelease before promoting a stable release — stable ships Intel and is gated on validated prerelease artifacts."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -96,6 +101,12 @@ jobs:
       # job dies before the smoke starts. That is how release/v0.18.1's first
       # prerelease failed on its branch-cut commit.
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || 'core' }}
+      # macOS Intel is opt-in. Push events never build it: `inputs` is unset
+      # there, so the `|| false` arm supplies a real boolean rather than the
+      # empty string (a bare `${{ inputs.enable_mac_x64 }}` would forward '' to
+      # a `type: boolean` callee input). A manual dispatch can check the box —
+      # which is what a pre-stable prerelease must do, since stable ships Intel.
+      enable_mac_x64: ${{ inputs.enable_mac_x64 || false }}
 
   notify:
     name: Notify Feishu (release)

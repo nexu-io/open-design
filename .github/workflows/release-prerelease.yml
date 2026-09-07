@@ -17,6 +17,11 @@ on:
         required: false
         type: string
         default: ""
+      enable_mac_x64:
+        description: "Build and publish macOS x64 (Intel) artifacts. Off by default: Intel is the critical path (~33 min vs ~21 min for every other platform). REQUIRED for the last prerelease before a stable promotion, because stable ships Intel and stable is gated on validated prerelease artifacts."
+        required: false
+        type: boolean
+        default: false
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage."
         required: true
@@ -53,6 +58,11 @@ on:
         required: false
         type: string
         default: ""
+      enable_mac_x64:
+        description: "Build and publish macOS x64 (Intel) artifacts. Off by default: Intel is the critical path (~33 min vs ~21 min for every other platform). REQUIRED for the last prerelease before a stable promotion, because stable ships Intel and stable is gated on validated prerelease artifacts."
+        required: false
+        type: boolean
+        default: false
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage: skip, core, or full."
         required: false
@@ -708,6 +718,13 @@ jobs:
   build_mac_intel:
     name: Build prerelease mac intel x64
     needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
+    # Opt-in, like build_linux. Intel is the prerelease critical path: it runs
+    # on the slower macos-15-intel fleet and takes ~33 min against ~21 min for
+    # every other platform, so leaving it on made every release-branch push
+    # wait on a platform that is not being validated on that push. The stable
+    # promotion gate still needs it — see the enable_mac_x64 input description
+    # and AGENTS.md "Release channel model".
+    if: ${{ inputs.enable_mac_x64 }}
     runs-on: macos-15-intel
     outputs:
       smoke_result: ${{ steps.mac_x64_smoke.outcome }}
@@ -1400,7 +1417,7 @@ jobs:
         needs.daemon_unit_tests.result == 'success' &&
         needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
-        needs.build_mac_intel.result == 'success' &&
+        (needs.build_mac_intel.result == 'success' || needs.build_mac_intel.result == 'skipped') &&
         needs.build_win.result == 'success' &&
         (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
       }}
@@ -1419,10 +1436,8 @@ jobs:
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
       ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
       ENABLE_MAC: "true"
-      ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
       GITHUB_RELEASE_ENABLED: "false"
-      MAC_INTEL_SIGNED: "true"
       RELEASE_CHANNEL: prerelease
       RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
       RELEASE_SIGNED: "true"
@@ -1445,6 +1460,7 @@ jobs:
           name: open-design-prerelease-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
       - name: Download mac intel prerelease publish manifest
+        if: ${{ needs.build_mac_intel.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-prerelease-mac-x64-publish-manifest
@@ -1496,7 +1512,7 @@ jobs:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
           ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
-          ENABLE_MAC_X64: "true"
+          ENABLE_MAC_X64: ${{ needs.build_mac_intel.result == 'success' }}
           ENABLE_WIN_X64: "true"
           LINUX_X64_RESULT: ${{ needs.build_linux.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
@@ -1534,7 +1550,7 @@ jobs:
         env:
           ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
-          ENABLE_MAC_X64: "true"
+          ENABLE_MAC_X64: ${{ needs.build_mac_intel.result == 'success' }}
           ENABLE_WIN_X64: "true"
           LINUX_X64_RESULT: ${{ needs.build_linux.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
