@@ -140,7 +140,10 @@ describe('Notes 浮层 · 按 ChatPanel 可用高度收口', () => {
 describe('引用芯片 · 字形照稿子', () => {
   it('是描边的对话气泡,不是实心引号', () => {
     renderChip(1);
-    const svg = screen.getByTestId('chat-quoted-refs').querySelector('svg');
+    // OPEND-2713 之后气泡和移除键叠在最前面那一格里,且**排在按钮后面**
+    // (那个次序是 `.remove:focus-visible ~ .icon` 的前提)。所以这里按相邻兄弟取:
+    // 「芯片里第一个 svg」现在是叉,不是气泡。
+    const svg = screen.getByTestId('chat-quoted-refs').querySelector('button + svg');
     expect(svg).toBeTruthy();
     expect(svg?.getAttribute('fill')).toBe('none');
     expect(svg?.getAttribute('stroke')).toBe('currentColor');
