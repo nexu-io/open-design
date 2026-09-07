@@ -35,17 +35,7 @@ import {
   finalizeRunTelemetryDelivery,
   recordRunTelemetryDeliveryAttempt,
 } from '../observability/delivery-state.js';
-<<<<<<< HEAD
-=======
-import {
-  beginPosthogTerminalDelivery,
-  finalizePosthogTerminalDelivery,
-  recordIgnoredTerminalClaim,
-  terminalLifecycleSnapshot,
-  terminalPersistenceErrorType,
-} from '../observability/run-terminal-lifecycle.js';
 import { mintRunDoneKey } from './run-done-key.js';
->>>>>>> ad09d3883 (feat(chat): rebuild the chat panel against the design spec, and fix what real runs exposed (#7518))
 import { normalizeTelemetryAppVersionInfo } from '../app-version.js';
 
 export const TERMINAL_RUN_STATUSES = new Set(['succeeded', 'failed', 'canceled']);

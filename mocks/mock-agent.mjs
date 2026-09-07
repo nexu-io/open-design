@@ -91,10 +91,6 @@ async function main() {
     const cmd = (opts.positionals[0] || '').trim();
     if (cmd === 'login')  return runVelaLogin();
     if (cmd === 'models') return runVelaModels();
-<<<<<<< HEAD
-    // Default: `agent run --runtime opencode` — fall through to the ACP
-    // server below with the vela-flavored protocol.
-=======
     // Only `vela agent run …` is the ACP path. Everything else must fail here
     // and say so: falling through would start an ACP server that blocks on
     // stdin forever, and OD calls several one-shot subcommands (`billing
@@ -110,7 +106,6 @@ async function main() {
         'Add a handler in mocks/lib/vela-subcommands.mjs if a test needs this one.\n');
       process.exit(1);
     }
->>>>>>> ad09d3883 (feat(chat): rebuild the chat panel against the design spec, and fix what real runs exposed (#7518))
   }
 
   // Modern Kimi rejects the old `kimi acp ...` launch shape; keep the

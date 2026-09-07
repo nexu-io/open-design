@@ -16,15 +16,10 @@ import {
   isModelWindowLimitFailure,
 } from '@open-design/contracts';
 
-<<<<<<< HEAD
-import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
-=======
 import {
   classifyAmrAccountFailure,
   reportsPlatformProviderCredentialFault,
 } from './integrations/vela-errors.js';
-import { runFailureEvidence } from './services/run-failure-evidence.js';
->>>>>>> ad09d3883 (feat(chat): rebuild the chat panel against the design spec, and fix what real runs exposed (#7518))
 import { summarizeRunToolProgress } from './run-diagnostics.js';
 import { isAcpHandshakeRpcErrorText } from './runtimes/acp-handshake-id.js';
 import {
