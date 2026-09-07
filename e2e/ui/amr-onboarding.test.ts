@@ -138,8 +138,7 @@ test('[P0] Cloud status loading does not block signed-out Local CLI or BYOK setu
   });
 
   await seedOnboardingConfig(page, config);
-  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await expect(connectLandingHeading(page)).toBeVisible();
+  await gotoOnboarding(page);
 
   await expect(cloudPrimaryButton(page)).toBeDisabled();
   await expect(page.getByRole('button', { name: /Local (coding )?agent/i })).toBeEnabled();
@@ -163,8 +162,7 @@ test('[P0] delayed active Cloud login stays out of Local setup and resumes after
   });
 
   await seedOnboardingConfig(page, config);
-  await page.goto('/onboarding', { waitUntil: 'domcontentloaded' });
-  await expect(connectLandingHeading(page)).toBeVisible();
+  await gotoOnboarding(page);
 
   await page.getByRole('button', { name: /Local (coding )?agent/i }).click();
   const localPanel = page.locator('.onboarding-view__setup-panel');
@@ -1274,6 +1272,24 @@ async function wireOnboardingMocks(
       await new Promise((resolve) => setTimeout(resolve, options.agentsDelayMs));
     }
     await fulfillAgentsRoute(route, agents);
+  });
+
+  // Onboarding validates a settled runtime selection on its own, before
+  // Continue is ever pressed. Without a default handler that background pass
+  // reaches the live daemon and spawns whichever agent CLI the box happens to
+  // have. Cases that care about the verdict register their own handler after
+  // this one, which Playwright matches first.
+  await page.route('**/api/test/connection', async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 12,
+        model: 'default',
+        agentName: 'Codex CLI',
+        sample: 'Connected',
+      },
+    });
   });
 
   await page.route('**/api/integrations/vela/status', async (route) => {

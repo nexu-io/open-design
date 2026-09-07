@@ -1,0 +1,40 @@
+{
+  "schema": { "version": 1 },
+  "suites": {
+    "convergence-control": [
+      ".github/config/convergence-exact.json",
+      ".github/scripts/convergence.py",
+      ".github/scripts/handoff.py",
+      ".github/scripts/lib/config.py",
+      ".github/scripts/lib/github.py",
+      ".github/scripts/lib/r2.py",
+      ".github/workflows/convergence-exact.atom.yml",
+      ".github/workflows/release-exact.yml"
+    ],
+    "terminal-scene": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "apps/closure/",
+      "packages/download/",
+      "packages/platform/",
+      "packages/sidecar/",
+      "packages/standalone/",
+      "shells/terminal/"
+    ]
+  },
+  "workflows": {
+    "release-exact": {
+      "policy": "terminal-scene-v1",
+      "workloads": {
+        "terminal_scene_darwin_arm64": {
+          "inputs": ["suite://terminal-scene"],
+          "runnerClass": "terminal_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        }
+      }
+    }
+  }
+}

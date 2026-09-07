@@ -184,6 +184,17 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
 ];
 
 /**
+ * ⚠️ **休眠件(T69,2026-09-07)** —— 说明书在
+ * `apps/web/src/runtime/visual-style-catalog.ts` 文件头。
+ *
+ * 这个函数**在本次改动之前就已经没有任何调用点**(全仓搜 `renderDirectionFormBody`
+ * 只搜得到定义),设计风格选择题从提示词整题下线之后更不会有。留着不删是因为
+ * 产品明说「后续可能要找回」,而它是那条路上现成的一块。
+ *
+ * ⚠️ 同文件里**读答案**那一半(`od tools directions` / `catalogue identity` 那段)
+ * **是活的,别一起清掉**:旧表单交上来的 `value` / `foundation` / `guidance`
+ * 仍要读得懂。撤的是**发问**,不是**读答案**。
+ *
  * Render the direction-picker form body for emission as a `<question-form>`.
  * Uses the `direction-cards` question type so the UI renders each option
  * as a rich card (palette swatches + type sample + mood blurb + refs)
@@ -275,7 +286,7 @@ export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
     '## Direction library — infer and bind by default',
     '',
-    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a direction-form, use that selection instead. Replace the seed template\'s `:root` block with the chosen direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
+    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a Host-owned direction form, its answer carries a stable Host `value`, a `foundation` id from this library, and visual `guidance`. Bind the named foundation from this library, then apply the guidance as the selected refinement; the Host value is catalogue identity and must not be passed to `od tools directions`. Replace the seed template\'s `:root` block with the chosen foundation\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {
@@ -295,7 +306,7 @@ export function renderDirectionIndexBlock(): string {
   const lines: string[] = [
     '## Direction library — index (pull the chosen one on demand)',
     '',
-    'When you must pick a visual direction yourself (no active design system, no user-provided brand source), choose the best match for the brief\'s tone from this index, then run `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` directly — do not probe CLI help or alternate paths first, and retry only after materially changing the fix or input. Bind the printed `:root` palette + font stacks **verbatim** into the seed, honour the posture cues, and never improvise palette values from the label alone.',
+    'When you must pick a visual direction yourself (no active design system, no user-provided brand source), choose the best match for the brief\'s tone from this index, then run `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` directly — do not probe CLI help or alternate paths first, and retry only after materially changing the fix or input. A Host-owned direction-form answer already carries `value`, `foundation`, and `guidance`: resolve the `foundation` id with this command, never the Host `value`, then apply `guidance` as the selected refinement. Bind the printed `:root` palette + font stacks **verbatim** into the seed, honour the posture cues, and never improvise palette values from the label alone.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {

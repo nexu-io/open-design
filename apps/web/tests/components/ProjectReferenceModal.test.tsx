@@ -52,16 +52,21 @@ function renderModal(options: {
   } else {
     vi.mocked(listProjects).mockResolvedValue(options.projects ?? [project]);
   }
-  render(
+  const tree = (workspaceContext: WorkspaceCollabContext | null | undefined) => (
     <I18nProvider initial={'en' as Locale}>
       <ProjectReferenceModal
-        workspaceContext={options.workspaceContext}
+        workspaceContext={workspaceContext}
         onClose={vi.fn()}
         onSelect={onSelect}
       />
-    </I18nProvider>,
+    </I18nProvider>
   );
-  return { onSelect };
+  const { rerender } = render(tree(options.workspaceContext));
+  return {
+    onSelect,
+    rerenderWith: (workspaceContext: WorkspaceCollabContext | null | undefined) =>
+      rerender(tree(workspaceContext)),
+  };
 }
 
 function teamContext(): WorkspaceCollabContext {
@@ -100,7 +105,85 @@ describe('ProjectReferenceModal', () => {
 
     await screen.findByText('Reference Project');
 
-    expect(listProjects).toHaveBeenCalledWith({ throwOnError: true });
+    expect(listProjects).toHaveBeenCalledWith({
+      throwOnError: true,
+      workspaceContext: null,
+      workspaceView: 'all',
+    });
+  });
+
+  // Regression for OPEND-2370 symptom 1: a signed-in team-workspace member
+  // opened "Reference another project" and saw "No other projects yet" while
+  // Home still listed their projects. The modal read the catalog WITHOUT its
+  // workspaceContext, so it hit the unscoped `GET /api/projects`, and that
+  // route serves `listUnboundProjects` (db.ts) — `LEFT JOIN workspace_projects
+  // ... WHERE wp.project_id IS NULL` — which excludes every workspace-bound
+  // project by construction.
+  it('reads the project catalog with the caller workspace identity', async () => {
+    const context = teamContext();
+    renderModal({ workspaceContext: context });
+
+    await screen.findByText('Reference Project');
+
+    expect(listProjects).toHaveBeenCalledWith(
+      expect.objectContaining({ throwOnError: true, workspaceContext: context }),
+    );
+  });
+
+  // The Workspace identity is a live prop: switching Workspace while the picker
+  // is open must re-read the catalog, or the member keeps seeing the previous
+  // Workspace's projects.
+  it('re-reads the catalog when the workspace identity changes', async () => {
+    const context = teamContext();
+    const { rerenderWith } = renderModal();
+
+    await screen.findByText('Reference Project');
+    expect(listProjects).toHaveBeenCalledTimes(1);
+
+    rerenderWith(context);
+
+    await waitFor(() => {
+      expect(listProjects).toHaveBeenCalledTimes(2);
+    });
+    expect(listProjects).toHaveBeenLastCalledWith(
+      expect.objectContaining({ workspaceContext: context }),
+    );
+  });
+
+  // A role/lifecycle transition changes the authority the request carries even
+  // though the Workspace is the same, so it must re-read too — that is why the
+  // effect keys on the full wire identity rather than the workspace id alone.
+  it('re-reads the catalog when the caller authority changes within one workspace', async () => {
+    const context = teamContext();
+    const { rerenderWith } = renderModal({ workspaceContext: context });
+
+    await screen.findByText('Reference Project');
+    expect(listProjects).toHaveBeenCalledTimes(1);
+
+    rerenderWith({
+      ...context,
+      role: 'admin',
+      permissions: buildWorkspacePermissions({ role: 'admin', lifecycleState: 'active' }),
+    });
+
+    await waitFor(() => {
+      expect(listProjects).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // …and a re-created-but-equivalent context object must NOT: the effect is
+  // keyed on a value-derived identity, so an unstable parent render cannot
+  // spin the catalog read.
+  it('does not re-read the catalog for an equivalent workspace context object', async () => {
+    const { rerenderWith } = renderModal({ workspaceContext: teamContext() });
+
+    await screen.findByText('Reference Project');
+    expect(listProjects).toHaveBeenCalledTimes(1);
+
+    rerenderWith(teamContext());
+
+    await screen.findByText('Reference Project');
+    expect(listProjects).toHaveBeenCalledTimes(1);
   });
 
   it('shows a load error instead of an empty state when project loading fails', async () => {

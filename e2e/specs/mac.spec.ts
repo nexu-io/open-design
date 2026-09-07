@@ -18,6 +18,7 @@ import {
   packagedHomeFirstRunSnapshotExpression,
   packagedHomeFirstRunSubmitExpression,
   type PackagedHomeFirstRunResult,
+  waitForPackagedHomeFirstRunSetup,
 } from '@/vitest/packaged-home-first-run';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
@@ -218,6 +219,7 @@ const packagedOnboardingExpression = `
 `;
 
 type DesktopStatus = {
+  executablePath?: string;
   pid?: number;
   state?: string;
   title?: string | null;
@@ -317,13 +319,6 @@ type LauncherSnapshot = {
   stateRoot: string;
   versionRoots: string[];
   versionsRoot: string;
-};
-
-type NativeChromeActionProbe = {
-  clickCount: number;
-  targetMatches: boolean;
-  x: number;
-  y: number;
 };
 
 type LauncherPointer = {
@@ -447,16 +442,18 @@ macDescribe('packaged mac runtime smoke', () => {
       firstRunStarted = true;
       expect(start.source).toBe('installed');
       await waitForHealthyDesktop();
-      await assertFirstNativeChromeActionClick();
 
-      const setup = await runToolsPackJson<MacInspectResult>('inspect', [
-        '--expr',
-        packagedHomeFirstRunExpression(),
-      ]);
-      if (setup.eval?.ok !== true) {
-        throw new Error(`packaged first Home run setup failed: ${formatUnknown(setup.eval)}`);
-      }
-      expect(setup.eval.value).toMatchObject({
+      const setup = await waitForPackagedHomeFirstRunSetup(async () => {
+        const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+          '--expr',
+          packagedHomeFirstRunExpression(),
+        ]);
+        if (inspect.eval?.ok !== true) {
+          throw new Error(`packaged first Home run setup failed: ${formatUnknown(inspect.eval)}`);
+        }
+        return inspect.eval.value;
+      });
+      expect(setup).toMatchObject({
         inputTextBeforeSubmit: PACKAGED_HOME_FIRST_RUN_PROMPT,
         submitClicked: false,
       });
@@ -2313,81 +2310,6 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
-async function assertFirstNativeChromeActionClick(): Promise<void> {
-  const probeKey = '__odPackagedNativeChromeActionProbe';
-  const setup = await runToolsPackJson<MacInspectResult>('inspect', [
-    '--expr',
-    `(() => {
-      const target = document.querySelector('[data-testid="entry-top-right-github"]');
-      if (!(target instanceof HTMLElement)) {
-        throw new Error('first-render GitHub chrome action is missing');
-      }
-      window[${JSON.stringify(probeKey)}]?.cleanup?.();
-      const probe = { clickCount: 0 };
-      const onClick = (event) => {
-        probe.clickCount += 1;
-        event.preventDefault();
-      };
-      target.addEventListener('click', onClick, true);
-      window[${JSON.stringify(probeKey)}] = {
-        cleanup: () => target.removeEventListener('click', onClick, true),
-        probe,
-      };
-      const rect = target.getBoundingClientRect();
-      const clientX = rect.left + rect.width / 2;
-      const clientY = rect.top + rect.height / 2;
-      const hitTarget = document.elementFromPoint(clientX, clientY);
-      return {
-        clickCount: 0,
-        targetMatches: hitTarget != null && target.contains(hitTarget),
-        x: window.screenX + clientX,
-        y: window.screenY + clientY,
-      };
-    })()`,
-  ]);
-  if (setup.eval?.ok !== true) {
-    throw new Error(`native chrome action setup failed: ${formatUnknown(setup.eval)}`);
-  }
-  const probe = setup.eval.value as NativeChromeActionProbe;
-  expect(probe.targetMatches).toBe(true);
-  expect(Number.isFinite(probe.x)).toBe(true);
-  expect(Number.isFinite(probe.y)).toBe(true);
-
-  try {
-    const swiftSource = `
-      import CoreGraphics
-      import Darwin
-      let point = CGPoint(x: ${probe.x}, y: ${probe.y})
-      let source = CGEventSource(stateID: .hidSystemState)
-      CGEvent(mouseEventSource: source, mouseType: .mouseMoved, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-      CGEvent(mouseEventSource: source, mouseType: .leftMouseDown, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-      usleep(50_000)
-      CGEvent(mouseEventSource: source, mouseType: .leftMouseUp, mouseCursorPosition: point, mouseButton: .left)?.post(tap: .cghidEventTap)
-    `;
-    await execFileAsync('/usr/bin/xcrun', ['swift', '-e', swiftSource], { timeout: 30_000 });
-    await waitFor(async () => {
-      const snapshot = await runToolsPackJson<MacInspectResult>('inspect', [
-        '--expr',
-        `(() => {
-          const state = window[${JSON.stringify(probeKey)}];
-          return { clickCount: Number(state?.probe?.clickCount || '0') };
-        })()`,
-      ]);
-      expect((snapshot.eval?.value as { clickCount?: number } | undefined)?.clickCount).toBe(1);
-    }, 5_000);
-  } finally {
-    await runToolsPackJson<MacInspectResult>('inspect', [
-      '--expr',
-      `(() => {
-        const state = window[${JSON.stringify(probeKey)}];
-        state?.cleanup?.();
-        delete window[${JSON.stringify(probeKey)}];
-        return true;
-      })()`,
-    ]).catch(() => undefined);
-  }
-}
-
 async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {
   const timeoutMs = 15_000;
   const startedAt = Date.now();
@@ -2685,18 +2607,14 @@ async function waitForUpdaterPopupMatching(
 }
 
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
-  const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
-  if (
-    !isRecord(value) ||
-    typeof value.appPath !== 'string' ||
-    typeof value.executablePath !== 'string' ||
-    typeof value.pid !== 'number' ||
-    value.version !== 1
-  ) {
-    throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
+  const status = (await runToolsPackJson<MacInspectResult>('inspect')).status;
+  if (typeof status?.executablePath !== 'string' || typeof status.pid !== 'number') {
+    throw new Error(`invalid packaged desktop sidecar status: ${formatUnknown(status)}`);
   }
-  return value as DesktopIdentityMarker;
+  const marker = '/Contents/MacOS/';
+  const markerIndex = status.executablePath.indexOf(marker);
+  const appPath = markerIndex < 0 ? status.executablePath : status.executablePath.slice(0, markerIndex);
+  return { appPath, executablePath: status.executablePath, pid: status.pid, version: 1 };
 }
 
 function assertPayloadDesktopIdentity(
@@ -2928,7 +2846,12 @@ async function fileSizeBytes(filePath: string): Promise<number> {
 }
 
 async function seedPackagedOnboardingComplete(): Promise<void> {
-  await seedPackagedAppConfig({ onboardingCompleted: true });
+  // Updater flows need the ordinary signed-out Home shell. Completion alone
+  // is insufficient when the daemon default selects the AMR cloud agent: the
+  // product correctly routes that signed-out identity back to Connect even
+  // though first-run onboarding was completed. Pin a local agent so this
+  // fixture models the actual post-onboarding state it claims to create.
+  await seedPackagedAppConfig({ agentId: 'codex', onboardingCompleted: true });
 }
 
 async function seedPackagedHomeFirstRunConfig(

@@ -1,9 +1,10 @@
 import { expect, test } from '@/playwright/suite';
+import { ACTIVE_ARTIFACT_PREVIEW_SELECTOR } from '@/playwright/artifact-preview';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
 import { runErrorCard } from '@/playwright/chat';
-import { openAllProjectFiles } from '@/playwright/workspace';
+import { clickPreviewToolbarAction, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request, Response } from '@playwright/test';
 import {
   createFakeAcpHandshakeRuntime,
@@ -17,7 +18,6 @@ import { T } from '@/timeouts';
 const STORAGE_KEY = 'open-design:config';
 const EXPERIENCE_SURVEY_RETIRED_KEY = 'open-design:experience-survey:v1:retired';
 const EXPERIENCE_SURVEY_DELIVERIES_KEY = 'open-design:experience-survey:v1:deliveries';
-const ACTIVE_ARTIFACT_PREVIEW_SELECTOR = '[data-testid="artifact-preview-frame"]:visible, [data-testid="artifact-preview-frame-url-load"]:visible, [data-testid="artifact-preview-frame-srcdoc"]:visible, [data-testid="live-artifact-preview-frame"]:visible';
 const GENERATED_FILE = 'real-daemon-smoke.html';
 const GENERATED_HEADING = 'Real Daemon Smoke';
 const EDITED_GENERATED_HEADING = 'Real Daemon Smoke Edited';
@@ -31,6 +31,7 @@ const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
 const OD_NEXT_CANARY_FILE = 'od-next-active-canary.html';
+const DECK_DIRECT_NAVIGATION_BUDGET_MS = 2_500;
 const MEDIA_ONLY_FILE = 'media-only.png';
 const SERVER_DERIVED_WORKSPACE_HEADERS = {
   'x-od-workspace-id': 'e2e-server-derived-workspace',
@@ -131,6 +132,37 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
+test('[P1] execution plan connector stops before completed status markers', async ({ page }) => {
+  await createProject(page, 'Execution plan connector geometry', 'claude');
+  await expectWorkspaceReady(page);
+
+  await sendPrompt(page, 'Emit an unfinished-todo run');
+
+  const completedSummary = page.locator('summary').filter({ hasText: 'Draft layout' });
+  await expect(completedSummary).toBeVisible({ timeout: 15_000 });
+  await expect(completedSummary.getByRole('img', { name: 'Done' })).toBeVisible();
+
+  const geometry = await completedSummary.evaluate((summary) => {
+    const row = summary.parentElement;
+    const marker = summary.querySelector<HTMLElement>('[role="img"]');
+    if (!row || !marker) throw new Error('execution-plan row or marker is missing');
+
+    const rowRect = row.getBoundingClientRect();
+    const markerRect = marker.getBoundingClientRect();
+    const connector = window.getComputedStyle(row, '::before');
+    const connectorTop = Number.parseFloat(connector.top);
+
+    return {
+      connectorContent: connector.content,
+      connectorStart: rowRect.top + connectorTop,
+      markerBottom: markerRect.bottom,
+    };
+  });
+
+  expect(geometry.connectorContent).not.toBe('none');
+  expect(geometry.connectorStart).toBeGreaterThanOrEqual(geometry.markerBottom);
+});
+
 test('[P0] local OD Next active canary follows one public task across physical runs', async ({ page }) => {
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
@@ -182,6 +214,88 @@ test('[P0] local OD Next active canary follows one public task across physical r
     run.strategyTask?.taskExecutionId === created.taskExecutionId
   ))).toHaveLength(2);
 });
+
+test('[P0] OD Next active + Blank prototype generates a directly navigable Deck Protocol v1 deck', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next prototype to PPT canary');
+
+  const response = await sendPrompt(
+    page,
+    'Create an OD Next PowerPoint protocol canary from this prototype project',
+    T.xlong,
+  );
+  const created = await response.json() as { strategyTask?: { inputStage: string } };
+  expect(created.strategyTask).toMatchObject({ inputStage: 'request' });
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+  await expect(page.getByText(
+    'Created od-next-active-canary.html through the continued native session.',
+  ).last()).toBeVisible();
+  await expectProjectFileToContain(page, projectId, OD_NEXT_CANARY_FILE, 'data-od-deck-protocol="1"');
+  await expectDeckThumbnailNavigationUnderBudget(page);
+});
+
+test('[P0] OD Next off + Blank prototype keeps explicit PPT turns on Deck Protocol v1', async ({ page }) => {
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'off',
+    'requires a daemon started with the rollout env explicitly off',
+  );
+  await prepareLocalOdNextCanary(page, 'Classic prototype to PPT canary', 'off');
+
+  const response = await sendPrompt(
+    page,
+    'Create an OD Next PowerPoint protocol canary from this prototype project',
+    T.xlong,
+  );
+  const created = await response.json() as { strategyTask?: unknown };
+  expect(created.strategyTask).toBeUndefined();
+
+  const { projectId } = await currentProjectContext(page);
+  await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+  await expect(page.getByText(
+    'Created the classic/off-rollout Deck Protocol canary.',
+  ).last()).toBeVisible();
+  await expectProjectFileToContain(page, projectId, OD_NEXT_CANARY_FILE, 'data-od-deck-protocol="1"');
+  await expectDeckThumbnailNavigationUnderBudget(page);
+});
+
+for (const strategyMode of ['active', 'off'] as const) {
+  test(`[P0] OD Next ${strategyMode} + selected legacy deck template remains directly navigable`, async ({ page }) => {
+    test.skip(
+      !isDeckMatrixStrategyModeEnabled(strategyMode),
+      `requires a daemon started with the rollout env explicitly ${strategyMode}`,
+    );
+    await prepareSelectedDeckTemplateCanary(
+      page,
+      `Selected template ${strategyMode} canary`,
+      strategyMode,
+    );
+
+    const response = await sendPrompt(
+      page,
+      'Create a selected-template deck navigation canary',
+      T.xlong,
+    );
+    const created = await response.json() as { strategyTask?: { inputStage: string } };
+    if (strategyMode === 'active') {
+      expect(created.strategyTask).toMatchObject({ inputStage: 'request' });
+    } else {
+      expect(created.strategyTask).toBeUndefined();
+    }
+
+    const { projectId } = await currentProjectContext(page);
+    await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
+    await expect(page.getByText('Created the selected-template legacy deck canary.').last()).toBeVisible();
+    const source = await readProjectFile(page, projectId, OD_NEXT_CANARY_FILE);
+    expect(source).not.toContain('data-od-deck-protocol="1"');
+    await expectDeckThumbnailNavigationUnderBudget(page);
+  });
+}
 
 test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
   test.skip(
@@ -446,8 +560,14 @@ test('[P0] real daemon run surfaces process/parser errors in chat', async ({ pag
 
   await sendPrompt(page, 'Return an intentional daemon smoke failure');
 
-  await expect(runErrorCard(page)).toContainText('intentional fake codex failure', { timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText('intentional fake codex failure');
+  const rawError = 'intentional fake codex failure';
+  const card = runErrorCard(page);
+  await expect(card).toContainText('Task failed', { timeout: 15_000 });
+  await expect(card).toContainText("This one didn't get through");
+  await expect(card).not.toContainText(rawError);
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectPersistedAssistantErrorDetail(page, projectId, conversationId, rawError);
 });
 
 test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retryable connection error', async ({ page }) => {
@@ -460,7 +580,7 @@ test('[P0] real daemon run classifies a Claude mid-stream socket drop as a retry
   // classified as AGENT_CONNECTION_DROPPED and the error card shows the
   // localized chat.connectionDropped copy (en locale here) instead of echoing
   // the raw SDK string verbatim.
-  await expect(runErrorCard(page)).toContainText('connection to the model service dropped', {
+  await expect(runErrorCard(page)).toContainText('Check that your network connection is working', {
     timeout: 15_000,
   });
 });
@@ -471,12 +591,16 @@ test('[P0] ACP handshake refusal is actionable, persists, and does not auto-retr
 
   await sendPrompt(page, 'Start a session that the ACP fixture refuses');
 
+  const rawError = 'json-rpc id 2: Internal error';
   const card = runErrorCard(page);
   await expect(card).toContainText('Agent version incompatible', { timeout: 15_000 });
   await expect(card).toContainText('Kimi CLI refused to start a session');
-  await expect(card).toContainText('json-rpc id 2: Internal error');
+  await expect(card).not.toContainText(rawError);
   await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
   await expect.poll(() => countAcpRunSessionStarts(fakeAcpHandshakeRuntime.invocationLog)).toBe(1);
+
+  const { projectId, conversationId } = await currentProjectContext(page);
+  await expectPersistedAssistantErrorDetail(page, projectId, conversationId, rawError);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
@@ -492,15 +616,18 @@ test('[P1] real daemon classifies a Claude prompt-too-long result and preserves 
   await sendPrompt(page, 'Return a Claude prompt-too-long failure');
 
   const card = runErrorCard(page);
-  await expect(card).toContainText('Input too long', { timeout: 15_000 });
-  await expect(card).toContainText("exceeded the model's context limit");
+  await expect(card).toContainText('Conversation too long', { timeout: 15_000 });
+  await expect(card).toContainText('exceed what the AI can process');
   await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(0);
+  // OPEND-2772 / 规格 T68:切换卡整块删掉,那颗〔切换到 OpenDesign Cloud 并重试〕
+  // 收进报错卡,并铺到**所有** BYOK / 本地 CLI 的失败 —— 这一轮跑的是本地 claude,
+  // 所以它在场,而〔重试〕退到次级(判据 `runsOnALocalAgent`)。
+  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await expect(runErrorCard(page)).toContainText('Input too long', { timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText("exceeded the model's context limit");
+  await expect(runErrorCard(page)).toContainText('Conversation too long', { timeout: 15_000 });
+  await expect(runErrorCard(page)).toContainText('exceed what the AI can process');
 });
 
 test('[P0] real daemon run supports a follow-up turn in the same project', async ({ page }) => {
@@ -557,7 +684,7 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
     });
   await expect(runErrorCard(page)).toHaveCount(0);
 
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/i);
   const editedHeading = artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]');
   await expect(editedHeading).toBeVisible();
   await editedHeading.click();
@@ -576,9 +703,9 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expect.poll(
     () => editedHeading.evaluate((element) => getComputedStyle(element).fontSize),
   ).toBe('52px');
-  await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
+  await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click();
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, 'font-size: 52px');
-  await page.getByTestId('manual-edit-mode-toggle').click();
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/i);
   await expect(artifactPreviewFrame(page).locator('[data-od-id="smoke-title"]')).toHaveCSS('font-size', '52px');
 
   await page.getByRole('button', { name: 'Versions' }).click();
@@ -588,15 +715,17 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expect(versionsDialog.getByRole('option')).toHaveCount(3);
 });
 
-test('[P1] Plan mode daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
-  await createProject(page, 'Plan mode markdown smoke');
+test('[P1] plan-document daemon run creates, opens, and restores an editable markdown plan', async ({ page }) => {
+  await createProject(page, 'Plan document markdown smoke');
   await expectWorkspaceReady(page);
 
-  await selectComposerSessionMode(page, 'Plan mode');
-  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
+  // The composer has no session-mode picker any more (#7635); the plan
+  // document flow is driven by the prompt (the fake runtime keys on it), and
+  // the run carries the conversation's stored design mode.
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);  const runRequestPromise = page.waitForRequest(isCreateRunRequest);
   await sendPrompt(page, 'Create a deterministic plan document');
   const runRequest = await runRequestPromise;
-  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('plan');
+  expect((runRequest.postDataJSON() as { sessionMode?: string }).sessionMode).toBe('design');
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
@@ -643,24 +772,22 @@ test('[P1] media-only turn auto-opens the generated image file', async ({ page }
   expect(rawResponse.headers()['content-type']).toContain('image/png');
 });
 
-// Red spec for "Plan 模式生成 HTML 后没有自动打开生成的文件": after the user
-// reviews the plan and asks for the final deliverable, the generation turn
+// After the user reviews the generated plan and asks for the final deliverable,
+// the next Design-mode turn
 // writes the HTML as a project file (Write tool, no inline artifact echo) and
 // then touches the plan document again. The viewer must auto-open the
 // generated HTML instead of staying on the markdown plan.
-test('[P1] Plan mode generation turn auto-opens the generated HTML file', async ({ page }) => {
+test('[P1] plan-document generation turn auto-opens the generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan mode html auto-open smoke', 'claude');
-  await expectWorkspaceReady(page);
+  await createProject(page, 'Plan document html auto-open smoke', 'claude');  await expectWorkspaceReady(page);
 
-  await selectComposerSessionMode(page, 'Plan mode');
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
   const planTab = page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i });
   await expect(planTab).toHaveAttribute('aria-selected', 'true');
 
-  // Mirror the real Plan-mode interaction: the user reviews and edits the
+  // Mirror the current fixed-Design interaction: the user reviews and edits the
   // markdown plan in the split editor (autosave on) before asking for the
   // final deliverable.
   const planEditor = page.getByRole('textbox', { name: /markdown editor/i });
@@ -678,18 +805,16 @@ test('[P1] Plan mode generation turn auto-opens the generated HTML file', async 
   await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
 });
 
-// Red spec, regeneration loop: Plan mode's core iteration is
+// Regeneration loop: the fixed Design mode can still follow the workflow
 // plan → generate → edit the plan → generate AGAIN. On the second generation
 // the HTML file already exists, so a pre/post file-name diff sees no "new"
 // file — the viewer must still re-focus the regenerated HTML. Uses the codex
 // fake runtime (no tool_use events, like most CLI protocols) so the per-write
 // auto-open path cannot mask the turn-end selection.
-test('[P1] Plan mode regeneration re-opens the existing generated HTML file', async ({ page }) => {
+test('[P1] plan-document regeneration re-opens the existing generated HTML file', async ({ page }) => {
   test.setTimeout(120_000);
-  await createProject(page, 'Plan mode html regen smoke');
-  await expectWorkspaceReady(page);
+  await createProject(page, 'Plan document html regen smoke');  await expectWorkspaceReady(page);
 
-  await selectComposerSessionMode(page, 'Plan mode');
   await sendPrompt(page, 'Create a deterministic plan document');
   const { projectId, conversationId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
@@ -729,7 +854,12 @@ test('[P0] real daemon run restores a delayed artifact turn after reload', async
   await expectWorkspaceReady(page);
 
   await expectProjectFilesToContain(page, projectId, [DELAYED_FILE]);
-  await expect(page.getByText('I recovered the delayed reasoning path and will persist the artifact now.')).toBeVisible();
+  await expectPersistedAssistantContent(
+    page,
+    projectId,
+    conversationId,
+    'I recovered the delayed reasoning path and will persist the artifact now.',
+  );
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByRole('heading', { name: DELAYED_HEADING })).toBeVisible();
 
@@ -858,7 +988,12 @@ test('[P1] real daemon run survives reload before the create response reaches th
 
   const { projectId, conversationId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [DELAYED_FILE], 20_000);
-  await expect(page.getByText('I recovered the delayed reasoning path and will persist the artifact now.')).toBeVisible();
+  await expectPersistedAssistantContent(
+    page,
+    projectId,
+    conversationId,
+    'I recovered the delayed reasoning path and will persist the artifact now.',
+  );
 
   await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
     requireRunId: true,
@@ -872,11 +1007,14 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   await sendPrompt(page, 'Return an empty daemon smoke response');
 
-  const expectedError = 'Agent completed without producing any output.';
-  await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible({ timeout: 15_000 });
-  await expect(runErrorCard(page)).toContainText(expectedError);
+  const rawError = 'Agent completed without producing any output.';
+  const card = runErrorCard(page);
+  await expect(card).toContainText('No output produced', { timeout: 15_000 });
+  await expect(card).toContainText('The agent finished without producing any output');
+  await expect(card).not.toContainText(rawError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
+  await expectPersistedAssistantErrorDetail(page, projectId, conversationId, rawError);
   await expect.poll(async () => {
     const messages = await listConversationMessages(page, projectId, conversationId);
     return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
@@ -885,8 +1023,9 @@ test('[P0] empty daemon output fails cleanly, persists after reload, and does no
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(page.getByText(expectedError, { exact: false }).first()).toBeVisible();
-  await expect(runErrorCard(page)).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText('No output produced');
+  await expect(runErrorCard(page)).toContainText('The agent finished without producing any output');
+  await expect(runErrorCard(page)).not.toContainText(rawError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -896,10 +1035,14 @@ test('[P1] plain stdout daemon runtime surfaces stderr-only failures without gho
 
   await sendPrompt(page, 'Return a stderr-only daemon smoke failure');
 
-  const expectedError = 'stderr-only daemon smoke failure from fake qwen';
-  await expect(runErrorCard(page)).toContainText(expectedError, { timeout: 15_000 });
+  const rawError = 'stderr-only daemon smoke failure from fake qwen';
+  const card = runErrorCard(page);
+  await expect(card).toContainText('Task interrupted unexpectedly', { timeout: 15_000 });
+  await expect(card).toContainText('Try generating again, or switch models and retry');
+  await expect(card).not.toContainText(rawError);
 
   const { projectId, conversationId } = await currentProjectContext(page);
+  await expectPersistedAssistantErrorDetail(page, projectId, conversationId, rawError);
   await expect.poll(async () => {
     const messages = await listConversationMessages(page, projectId, conversationId);
     return messages.find((message) => message.role === 'assistant')?.runStatus ?? 'missing';
@@ -908,7 +1051,9 @@ test('[P1] plain stdout daemon runtime surfaces stderr-only failures without gho
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(runErrorCard(page)).toContainText(expectedError);
+  await expect(runErrorCard(page)).toContainText('Task interrupted unexpectedly');
+  await expect(runErrorCard(page)).toContainText('Try generating again, or switch models and retry');
+  await expect(runErrorCard(page)).not.toContainText(rawError);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
@@ -1192,12 +1337,17 @@ async function createHandshakeRefusingKimiProject(page: Page, name: string) {
   await dismissPrivacyDialog(page);
 }
 
-async function prepareLocalOdNextCanary(page: Page, name: string): Promise<void> {
+async function prepareLocalOdNextCanary(
+  page: Page,
+  name: string,
+  strategyMode: 'active' | 'off' = 'active',
+): Promise<void> {
   // Exercise the shipped Design-mode New Project flow, rather than hand-
   // constructing the create payload. EntryShell leaves the silently selected
   // default out of explicit plugin authority; the daemon derives and stamps
   // its exact snapshot, so rollout can replace only that automatic pin.
   await configureFakeAgent(page, 'opencode');
+  await setOdNextStrategyMode(page, strategyMode);
   await installBrowserAgentConfig(page, 'opencode');
   await gotoEntryHome(page);
   await setBrowserAgentConfig(page, 'opencode');
@@ -1205,6 +1355,7 @@ async function prepareLocalOdNextCanary(page: Page, name: string): Promise<void>
   await waitForLoadingToClear(page);
   await setBrowserAgentConfig(page, 'opencode');
   await configureFakeAgent(page, 'opencode');
+  await setOdNextStrategyMode(page, strategyMode);
   await expectBrowserAgentConfig(page, 'opencode');
   await dismissPrivacyDialog(page);
   await openNewProjectModalFromProjects(page);
@@ -1213,15 +1364,89 @@ async function prepareLocalOdNextCanary(page: Page, name: string): Promise<void>
   await page.getByTestId('create-project').click();
   await expectWorkspaceReady(page);
   await configureFakeAgent(page, 'opencode');
+  await setOdNextStrategyMode(page, strategyMode);
+  await expectFakeAgentRuntime(page, 'opencode', 'opencode-e2e 0.0.0');
+}
+
+async function prepareSelectedDeckTemplateCanary(
+  page: Page,
+  name: string,
+  strategyMode: 'active' | 'off',
+): Promise<void> {
+  await configureFakeAgent(page, 'opencode');
+  await setOdNextStrategyMode(page, strategyMode);
+  await installBrowserAgentConfig(page, 'opencode');
+  await gotoEntryHome(page);
+  await setBrowserAgentConfig(page, 'opencode');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await setBrowserAgentConfig(page, 'opencode');
+  await configureFakeAgent(page, 'opencode');
+  await setOdNextStrategyMode(page, strategyMode);
+  await expectBrowserAgentConfig(page, 'opencode');
+  await dismissPrivacyDialog(page);
+  await openNewProjectModalFromProjects(page);
+  await page.getByTestId('new-project-tab-deck').click();
+  const selectedTemplate = page.getByRole('radio', { name: 'Example Helix', exact: true });
+  await expect(selectedTemplate).toBeVisible({ timeout: T.medium });
+  await selectedTemplate.click();
+  await expect(selectedTemplate).toHaveAttribute('aria-checked', 'true');
+  await page.getByTestId('new-project-name').fill(name);
+  const createRequestPromise = page.waitForRequest(isCreateProjectRequest);
+  await page.getByTestId('create-project').click();
+  const createRequest = await createRequestPromise;
+  expect(createRequest.postDataJSON()).toMatchObject({
+    skillId: 'replit-deck:example-helix',
+    metadata: { kind: 'deck' },
+  });
+  await expectWorkspaceReady(page);
+  await configureFakeAgent(page, 'opencode');
+  await setOdNextStrategyMode(page, strategyMode);
+}
+
+async function setOdNextStrategyMode(page: Page, mode: 'active' | 'off'): Promise<void> {
+  const response = await page.request.put('/api/app-config', {
+    data: { odNextStrategyMode: mode },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
+
+function isDeckMatrixStrategyModeEnabled(mode: 'active' | 'off'): boolean {
+  if (process.env.OD_NEXT_STRATEGY_ROLLOUT !== mode) return false;
+  return mode === 'off' || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY === '1';
+}
+
+async function expectFakeAgentRuntime(
+  page: Page,
+  agentId: string,
+  version: string,
+): Promise<void> {
   const response = await page.request.get('/api/agents');
   expect(response.ok(), await response.text()).toBeTruthy();
   const body = await response.json() as {
     agents?: Array<{ id: string; available: boolean; version?: string }>;
   };
-  expect(body.agents?.find((agent) => agent.id === 'opencode')).toMatchObject({
+  expect(body.agents?.find((agent) => agent.id === agentId)).toMatchObject({
     available: true,
-    version: 'opencode-e2e 0.0.0',
+    version,
   });
+}
+
+async function expectDeckThumbnailNavigationUnderBudget(page: Page): Promise<void> {
+  const thumbnails = page.locator('.deck-thumbnail-button');
+  await expect(thumbnails).toHaveCount(3, { timeout: T.medium });
+  await expect(thumbnails.nth(0)).toHaveAttribute('aria-current', 'true');
+
+  const startedAt = Date.now();
+  await thumbnails.nth(2).click();
+  await expect(thumbnails.nth(2)).toHaveAttribute('aria-current', 'true', {
+    timeout: DECK_DIRECT_NAVIGATION_BUDGET_MS,
+  });
+  expect(
+    Date.now() - startedAt,
+    'thumbnail navigation must complete before the old ~3 second fallback delay',
+  ).toBeLessThan(DECK_DIRECT_NAVIGATION_BUDGET_MS);
+  await expect(artifactPreviewFrame(page).getByText('Matrix Slide Three')).toBeVisible();
 }
 
 async function createByokOpenCodeProject(page: Page, name: string) {
@@ -1336,24 +1561,7 @@ async function expectWorkspaceReady(page: Page) {
   await expect(page.getByTestId('file-workspace')).toBeVisible();
 }
 
-async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
-  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
-  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
-  const modeName = modeTitle.replace(' mode', '');
-  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const menu = page.getByTestId('composer-mode-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
-  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
-  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
-  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
-}
-
-async function sendPrompt(page: Page, prompt: string) {
+async function sendPrompt(page: Page, prompt: string, responseTimeout = T.medium) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 5_000 });
@@ -1372,7 +1580,7 @@ async function sendPrompt(page: Page, prompt: string) {
   page.on('request', markRequest);
   try {
     const [response] = await Promise.all([
-      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
+      page.waitForResponse(isCreateRunResponse, { timeout: responseTimeout }),
       sendButton.click(),
     ]);
     expect(response.ok()).toBeTruthy();
@@ -1673,6 +1881,7 @@ async function resetDaemonAppConfig(page: Page) {
       agentCliEnv: {},
       skillId: null,
       designSystemId: null,
+      odNextStrategyMode: 'off',
     },
   });
   expect(response.ok()).toBeTruthy();
@@ -1735,6 +1944,12 @@ async function expectProjectFileToContain(
       return response.text();
     }, { timeout: 15_000 })
     .toContain(expected);
+}
+
+async function readProjectFile(page: Page, projectId: string, fileName: string): Promise<string> {
+  const response = await page.request.get(`/api/projects/${projectId}/files/${fileName}`);
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return response.text();
 }
 
 async function expectProjectFilesToContain(
@@ -1815,6 +2030,34 @@ async function expectRestoredDelayedAssistantMessage(
     });
 }
 
+async function expectPersistedAssistantContent(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+  expectedContent: string,
+) {
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    return messages.find((message) => message.role === 'assistant')?.content ?? '';
+  }, { timeout: 15_000 }).toContain(expectedContent);
+}
+
+async function expectPersistedAssistantErrorDetail(
+  page: Page,
+  projectId: string,
+  conversationId: string,
+  expectedDetail: string,
+) {
+  await expect.poll(async () => {
+    const messages = await listConversationMessages(page, projectId, conversationId);
+    const assistant = messages.find((message) => message.role === 'assistant');
+    const errorEvent = [...(assistant?.events ?? [])]
+      .reverse()
+      .find((event) => event.kind === 'status' && event.label === 'error');
+    return errorEvent?.detail ?? '';
+  }, { timeout: 15_000 }).toContain(expectedDetail);
+}
+
 async function listConversationMessages(
   page: Page,
   projectId: string,
@@ -1828,10 +2071,12 @@ async function listConversationMessages(
     messages: Array<{
       id: string;
       role: string;
+      content?: string;
       runId?: string;
       runStatus?: string;
       events?: Array<{
         kind: string;
+        label?: string;
         content?: string;
         detail?: string;
         isError?: boolean;

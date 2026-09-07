@@ -10,6 +10,7 @@ import { checkDesignSystemPackageQuality } from "./check-design-system-package-q
 import { checkDesignSystemComponentFixtureReport } from "./check-components-fixtures.ts";
 import { checkDesignSystemFlagParity } from "./check-design-system-flag-parity.ts";
 import { checkComponentsManifestExtraction } from "./check-components-manifest-extraction.ts";
+import { checkHtmlPluginPreviewContracts } from "./check-html-plugin-preview-contracts.ts";
 import { checkPluginPreviewManifest } from "./check-plugin-preview-manifest.ts";
 import {
   checkDesignSystemA1RequiredTokens,
@@ -26,6 +27,7 @@ import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
+  "e2e/scripts/artifact-render-parity.ts",
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
   "e2e/scripts/visual-report.ts",
@@ -86,11 +88,6 @@ const residualAllowedExactPaths = new Set([
   // for editable PPTX export. It is loaded into the off-screen Chromium page as
   // an upstream browser asset, not compiled as project-owned TypeScript.
   "apps/desktop/vendor/dom-to-pptx/dom-to-pptx.bundle.js",
-  // Shared nav enhancer for the landing-page static `/community/` pages,
-  // which are verbatim HTML served straight from `public/` (not Astro-
-  // compiled). It must ship as a browser-loadable `.js` asset, same as the
-  // web notifications service worker above.
-  "apps/landing-page/public/community/_site-nav.js",
   // PostCSS loads Tailwind through a web-local .mjs compatibility config entry.
   "apps/web/postcss.config.mjs",
   "scripts/bake-html-ppt-examples.mjs",
@@ -113,7 +110,7 @@ const residualAllowedExactPaths = new Set([
   // `dist/acp.js` and drives a real `vela agent run` against a live model.
   // Kept as .mjs so it can be invoked directly via Node without any transform.
   "apps/daemon/scripts/verify-amr-real-vela.mjs",
-  // Fake `vela agent run --runtime opencode` ACP stdio stub used by the AMR
+  // Fake `vela agent run` ACP stdio stub used by the AMR
   // integration tests. The Vitest test spawns it via `child_process.spawn`,
   // which needs a directly-executable file (shebang + .mjs).
   "apps/daemon/tests/fixtures/fake-vela.mjs",
@@ -136,6 +133,13 @@ const residualAllowedExactPaths = new Set([
   "tools/release/esbuild.config.mjs",
   "tools/serve/bin/tools-serve.mjs",
   "tools/serve/esbuild.config.mjs",
+  // Terminal distributions execute these native runtime entrypoints with the
+  // verified embedded Node after leaving the pnpm/TypeScript workspace.
+  "shells/terminal/runtime/fixture-lifecycle.mjs",
+  "shells/terminal/runtime/fixture-shell-updater.mjs",
+  "shells/terminal/runtime/fossil.mjs",
+  "shells/terminal/runtime/sidecar-bootstrap.mjs",
+  "shells/terminal/runtime/sidecar-host.mjs",
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
@@ -189,6 +193,20 @@ const residualAllowedPathPrefixes = [
   // browser-loadable JavaScript (`code.js` sandbox + `ui.html`); same
   // precedent as the clipper, and it must not be retypecast to TypeScript.
   "figma-plugin/",
+  // ChatPanel 评审载体:场景模拟器与它的出图脚本(`docs/design/chat-sim/`、
+  // `docs/design/chat-panel-diagrams/`)。模拟器是**双击即开的浏览器页面** ——
+  // 设计与产品要在没有构建步骤、没有服务的情况下打开单文件 HTML 评审,
+  // 所以那些脚本必须是浏览器可直接加载的 JS,不能改成 TypeScript(改了就得先编译,
+  // 评审载体也就没法直接发人了)。出图脚本(`shoot.mjs` / `topng.mjs`)是同一批
+  // 一次性工具,用 Node 直接跑、只读 mermaid 源码出 SVG/PNG。
+  // 这批是 docs 下的设计评审产物,不参与产品运行时。见
+  // `docs/design/chat-sim/README.md` 与 `docs/design/chat-panel-diagrams/README.md`。
+  // `docs/design/chat-mirror/` 是同一批里的第三个:用我们的组件渲染的镜像陈列页
+  // 与它的逐格出图脚本(`shoot.mjs`,走无头 Chrome 的 CDP)。
+  // 见 `docs/design/chat-mirror/README.md`。
+  "docs/design/chat-sim/",
+  "docs/design/chat-panel-diagrams/",
+  "docs/design/chat-mirror/",
   "test-results/",
   "vendor/",
 ];
@@ -1507,6 +1525,7 @@ const checks: GuardCheck[] = [
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "craft references", run: checkCraftReferences },
+  { name: "HTML plugin preview contracts", run: ({ repoRoot: root }) => checkHtmlPluginPreviewContracts(root) },
   { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },
   { name: "design system package quality", run: checkDesignSystemPackageQuality },

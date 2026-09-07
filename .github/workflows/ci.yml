@@ -286,7 +286,7 @@ jobs:
       - name: Typecheck workspaces
         if: ${{ fromJSON(needs.plan.outputs.scopes).run_preflight_typecheck }}
         run: |
-          pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
+          pnpm -r --filter '!open-design' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
 
       - name: Check repository layout policies
@@ -321,11 +321,6 @@ jobs:
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
           pnpm --filter @open-design/sidecar-proto test
-          if [ "${{ fromJSON(needs.plan.outputs.scopes).terminal_scene_required }}" = "true" ]; then
-            pnpm --filter @open-design/standalone test
-            pnpm --filter @open-design/closure test
-            pnpm --filter @open-design/terminal test
-          fi
           if [ "${{ fromJSON(needs.plan.outputs.scopes).tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi
@@ -662,91 +657,6 @@ jobs:
         if: ${{ steps.visual.outcome != 'success' }}
         run: exit 1
 
-  terminal_scene:
-    name: Terminal distribution scene
-    needs: [plan, runners]
-    if: ${{ fromJSON(needs.plan.outputs.run).terminal_scene }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-
-      - name: Setup workspace
-        uses: ./.github/actions/setup-workspace
-        with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit) }}
-
-      - name: Download convergence identity
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.plan.outputs.convergence_plan_artifact }}
-          path: ${{ runner.temp }}/terminal-convergence
-
-      - name: Fetch locked official Node carriers
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/terminal-node"
-          python3 - <<'PY'
-          import hashlib, json, os, urllib.request
-          from pathlib import Path
-          lock = json.loads(Path('shells/terminal/node-lock.json').read_text())
-          root = Path(os.environ['RUNNER_TEMP']) / 'terminal-node'
-          for value in lock['targets'].values():
-              destination = root / value['archive']
-              urllib.request.urlretrieve(value['url'], destination)
-              if hashlib.sha256(destination.read_bytes()).hexdigest() != value['sha256']:
-                  raise SystemExit(f"official Node digest mismatch: {destination.name}")
-          PY
-
-      - name: Build release-neutral Terminal scene
-        run: |
-          set -euo pipefail
-          pnpm --filter @open-design/closure build
-          pnpm --filter @open-design/terminal build
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          lock = json.loads(Path('shells/terminal/node-lock.json').read_text())
-          closure = json.loads(Path('apps/closure/package.json').read_text())
-          standalone = json.loads(Path('packages/standalone/package.json').read_text())
-          root = Path(os.environ['RUNNER_TEMP'])
-          targets = [{'target': target, 'nodeArchiveFile': str((root / 'terminal-node' / value['archive']).resolve()), 'nodeArchiveSha256': value['sha256']} for target, value in lock['targets'].items()]
-          request = {'schemaVersion': 1, 'operation': 'terminal.scene.build', 'standaloneVersion': standalone['version'], 'closureVersion': closure['version'], 'closureArtifactFile': str(Path('apps/closure/dist/fixture.mjs').resolve()), 'targets': targets, 'sceneDirectory': str((root / 'terminal-scene').resolve())}
-          (root / 'terminal-scene-request.json').write_text(json.dumps(request, sort_keys=True, separators=(',', ':')) + '\n')
-          PY
-          node shells/terminal/dist/exact-pack.mjs --request "$RUNNER_TEMP/terminal-scene-request.json" --receipt "$RUNNER_TEMP/terminal-scene-receipt.json"
-
-      - name: Write generic convergence product manifest
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/convergence-manifest/terminal_scene"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ['RUNNER_TEMP'])
-          pending = json.loads((root / 'terminal-convergence' / 'pending-convergence.json').read_text())
-          workload = pending['workloads']['terminal_scene']
-          manifest = {'workload': 'terminal_scene', 'digest': workload['digest'], 'executionClass': workload['executionClass'], 'products': {'scene': {'type': 'job', 'source': 'terminal_scene', 'data': {'contract': 'terminal-scene-v1', 'owner': 'shells/terminal'}}}}
-          (root / 'convergence-manifest' / 'terminal_scene' / 'product-manifest.json').write_text(json.dumps(manifest, sort_keys=True, separators=(',', ':')) + '\n')
-          PY
-
-      - name: Upload Terminal scene product
-        uses: actions/upload-artifact@v4
-        with:
-          name: terminal_scene
-          path: ${{ runner.temp }}/terminal-scene
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Upload Terminal scene convergence manifest
-        uses: actions/upload-artifact@v4
-        with:
-          name: terminal-scene-convergence-manifest
-          path: ${{ runner.temp }}/convergence-manifest
-          if-no-files-found: error
-          retention-days: 1
-
   # This policy is a sibling of the validation workloads, not their prerequisite.
   # Labeled merge groups still receive the same workload coverage before the
   # required Validate workspace check rejects the converged result.
@@ -958,7 +868,6 @@ jobs:
       - playwright_critical
       - ui_p0
       - playwright_visual
-      - terminal_scene
     if: ${{ always() }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).control }}
     timeout-minutes: 5
@@ -1000,14 +909,6 @@ jobs:
         if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
         continue-on-error: true
         uses: actions/checkout@v6.0.2
-
-      - name: Download Terminal scene convergence manifest
-        if: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && fromJSON(needs.plan.outputs.run).terminal_scene && needs.terminal_scene.result == 'success' }}
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: terminal-scene-convergence-manifest
-          path: ${{ runner.temp }}/convergence-products
 
       - name: Download pending convergence plan
         if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}

@@ -23,8 +23,15 @@ button {
     transform var(--duration-faster, 100ms) var(--curve-easy-ease, ease),
     box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
-button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
-button:active:not(:disabled) { transform: translateY(1px); }
+/*
+ * 默认值,不是判决 —— 特异性归零(`:where()`),理由和 `apps/web/src/styles/primitives.css`
+ * 里那份**一模一样**,而且必须两边一起改:这两个文件都会被加载,只改一边的话
+ * 剩下那条裸选择器(0,2,1)照样压过组件自己的单类 hover(0,2,0),
+ * 深色实心按钮 hover 时仍旧被刷成近白的 `--bg-subtle`。
+ * (2026-08-27 就是这么漏的:改完 `primitives.css` 在真机上量,发现两条规则都还在。)
+ */
+:where(button:hover:not(:disabled)) { background: var(--bg-subtle); border-color: var(--border-strong); }
+:where(button:active:not(:disabled)) { transform: translateY(1px); }
 button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
 
 button.primary {

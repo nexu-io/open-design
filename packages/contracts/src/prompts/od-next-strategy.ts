@@ -10,7 +10,13 @@ import {
   type StrategyInputStageV2,
   type StrategyTaskTypeV2,
 } from '../plugins/strategy-v2.js';
+import { renderChatTurnHostProtocolInstructions } from './chat-turn-host-protocol.js';
 import type { ChatSessionMode } from '../api/chat.js';
+import {
+  renderDeckFrameworkDirective,
+  renderLegacyDeckCompatibilityDirective,
+  type DeckFrameworkMode,
+} from './deck-framework.js';
 import type { OdNextDeviceFrameContextV2 } from './od-next-device-frame.js';
 import { serializeOdNextRequestTurnV1 } from './od-next-prompt-bundle.js';
 import type {
@@ -68,6 +74,37 @@ export interface OdNextStrategyStableRequestContextV2 {
   agentId?: string | null | undefined;
   sessionMode?: ChatSessionMode | undefined;
   locale?: string | undefined;
+  /**
+   * The name of the plan tool THIS runtime actually has, as one sentence the
+   * host resolved — or null/absent when the host has no verified name for it.
+   *
+   * A fact about the selected Coding Agent, not a new rule: the planning
+   * surface below already asks for a live Todo plan, and the charter it
+   * mirrors sanctions "otherwise, provide a numbered plan in your response".
+   * A model never told its tool's NAME reads the prose branch as the compliant
+   * one — which is what a codex run did on 2026-09-03, answering an explicit
+   * request to plan with a seven-item list in its reply body and no tool call.
+   *
+   * The host resolves the sentence (`planToolNoteForRuntime` in
+   * `apps/daemon/src/prompts/system.ts`) so the runtime→tool-name table has
+   * exactly one home. This layer only carries it: a runtime the host has no
+   * verified name for passes nothing and pays nothing, and this file must
+   * never grow its own copy of that table — a second source of truth for tool
+   * names is precisely what the Claude Code 2.1 rename punished.
+   */
+  planToolNote?: string | null | undefined;
+  /**
+   * The host detected an explicit deck request in the user-authored
+   * conversation even though the project is bound to another Task Profile.
+   * This does not reclassify the task; it only exposes the canonical deck
+   * runtime contract when the Build chooses to produce a deck.
+   */
+  deckIntent?: boolean | undefined;
+  /**
+   * Canonical is only safe for a blank/new deck. Selected legacy seeds and
+   * existing deck HTML keep their own scaffold and rely on the host bridge.
+   */
+  deckFrameworkMode?: DeckFrameworkMode | undefined;
   metadata?: object | undefined;
   template?: {
     id?: string | undefined;
@@ -147,6 +184,8 @@ export type OdNextStrategyContinuationV2 =
       taskExecutionId: string;
       taskRunIndex: number;
       planContractHash: string;
+      /** Per-run nonce; omitted for non-completing continuation stages. */
+      hostProtocolKey?: string;
       nativeBuildPackageBindings?: readonly {
         buildPackageId: string;
         nativeAgentHandle: string;
@@ -167,6 +206,33 @@ function requireText(value: string, field: string): string {
   return trimmed;
 }
 
+export function resolveOdNextDeckFrameworkMode(input: {
+  taskType: OdNextStrategyRequestRecipeV2['taskType'];
+  deckIntent?: boolean | undefined;
+  hasSelectedDeckSeed?: boolean | undefined;
+  hasExistingDeckArtifact?: boolean | undefined;
+}): DeckFrameworkMode | undefined {
+  if (input.taskType === 'ppt') {
+    return input.hasSelectedDeckSeed || input.hasExistingDeckArtifact
+      ? 'legacy_compatible'
+      : 'canonical';
+  }
+  return input.deckIntent ? 'canonical' : undefined;
+}
+
+/**
+ * OD-NEXT SIDE of the prompt fork. This list is declared TWICE: here, and as
+ * `od.pipeline.stages` in
+ * `plugins/_official/scenarios/od-next-strategy/open-design.json`. Keep them in
+ * step.
+ *
+ * This file — not the plugin's markdown task profiles — is where OD Next
+ * carries host runtime contracts: `discovery-question-form` mirrors the
+ * `<question-form>` guidance in the legacy `discovery.ts`, and
+ * `resolveOdNextDeckFrameworkMode` above reaches the shared deck scaffold. So
+ * "does OD Next say X?" has two possible homes; check both. See
+ * `docs/prompt-composition.md`.
+ */
 export const OD_NEXT_PROMPT_STAGE_CONTRACT_V2 = [
   { id: 'discovery', atoms: ['discovery-question-form'] },
   { id: 'plan', atoms: ['direction-picker', 'todo-write'] },
@@ -447,6 +513,7 @@ function planningTemplate(
 
 export function composeOdNextStrategyStableRequestContextV2(
   context: OdNextStrategyStableRequestContextV2,
+  executionProfile: OdNextStrategyRequestRecipeV2['executionProfile'] = 'filesystem',
 ): string {
   const blocks: string[] = [];
   const escaped = (value: string): string => (
@@ -489,6 +556,32 @@ export function composeOdNextStrategyStableRequestContextV2(
   };
   if (Object.keys(runtimeSelection).length > 0) {
     factualStructured('runtime-selection', runtimeSelection);
+  }
+  // Sits next to the runtime identity it is derived from, and inside this
+  // per-run block rather than the Bundle head: the head is byte-identical
+  // across every task sharing a strategy version, task type, and execution
+  // profile, and which agent is driving is not one of those dimensions. So the
+  // note costs bytes but no cache-prefix churn, and only on runs that have a
+  // plan tool to be told about.
+  //
+  // Guarded, unlike the deck directive below. That block bypasses
+  // `assertOdNextPlanningBuildOnlyV2` because it is a long protocol document
+  // whose legitimate wording brushes the forbidden vocabulary; one short
+  // sentence naming a tool has no such excuse, and a note that ever did
+  // contain post-Build semantics should stop the run rather than ship.
+  instructionText('runtime-plan-tool', context.planToolNote ?? undefined);
+  const deckFrameworkMode = context.deckFrameworkMode
+    ?? (context.deckIntent ? 'canonical' : undefined);
+  if (deckFrameworkMode) {
+    // This is static, host-owned protocol text rather than plugin or user
+    // input. Its verification steps happen inside Build before handoff, so it
+    // deliberately bypasses the guard for untrusted stable instructions.
+    const directive = deckFrameworkMode === 'legacy_compatible'
+      ? renderLegacyDeckCompatibilityDirective(executionProfile)
+      : renderDeckFrameworkDirective(executionProfile);
+    blocks.push(
+      `<od-next-context kind="instruction" name="deck-framework">\n${escaped(directive)}\n</od-next-context>`,
+    );
   }
   if (context.metadata) {
     factualStructured('project-metadata', planningMetadata(context.metadata));
@@ -751,13 +844,23 @@ export function composeOdNextStrategyRequestPromptV2(
     'generalOrchestration',
   );
   assertOdNextPlanningBuildOnlyV2(taskSkill, 'taskSkill');
+  const deckFrameworkMode = context.deckFrameworkMode
+    ?? resolveOdNextDeckFrameworkMode({
+      taskType: input.taskType,
+      deckIntent: context.deckIntent,
+    });
+  const stableContext = {
+    ...context,
+    deckIntent: false,
+    ...(deckFrameworkMode ? { deckFrameworkMode } : {}),
+  };
   const stageBlocks = renderOdNextActiveStageBlocksV2(assertOdNextActiveStagesV2(input.activeStages));
   const sections = [
     EXECUTION_AND_SECURITY_SECTION,
     executionSection,
     `## Versioned recipe identity\n\n- recipe: \`${input.recipe}\`\n- strategy: \`${input.strategyId}@${requireText(input.strategyVersion, 'strategyVersion')}\`\n- applied snapshot: \`${snapshotId}\`\n- strategy package: \`${input.packageHash}\`\n- selected Task Skill digest: \`${input.taskProfileDigest}\`\n- stable prompt identity: \`${identity}\``,
     DISCOVERY_AND_PLANNING_SECTION,
-    composeOdNextStrategyStableRequestContextV2(context),
+    composeOdNextStrategyStableRequestContextV2(stableContext, input.executionProfile),
     `## OD Next core strategy\n\n${coreStrategy}`,
     `## OD Next general orchestration\n\n${generalOrchestration}`,
     `## Task Skill — ${input.taskType}\n\nExactly this one Task Skill is active for the logical task.\n\n${taskSkill}`,
@@ -907,7 +1010,11 @@ export function composeOdNextStrategyContinuationV2(
           nativeAgentHandle: requireText(binding.nativeAgentHandle, 'nativeAgentHandle'),
           dependsOn: binding.dependsOn.map((dependency) => requireText(dependency, 'dependsOn')),
         })))}\n\`\`\``;
-    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}`;
+    const hostProtocol = renderChatTurnHostProtocolInstructions(
+      input.hostProtocolKey ?? '',
+      'od_next_production',
+    ).text;
+    payload = `# OD Next native continuation — production\n\nContinue this native session and execute the frozen Full Plan bound to \`planContractHash=${requireSha256(input.planContractHash, 'planContractHash')}\`. Use the existing in-session Task Profile, Design Spec, Todo plan, and Build Packages. Do not re-seed or restate their full text, do not choose a new route or execution mode, and do not ask another question. Open Design must be able to identify one runnable entry in the delivered files, otherwise the completed task is rejected: it looks for a root \`index.html\`, then a single root-level html file, then a single file matching the project kind. Lay the deliverable out so exactly one of those resolves.${bindingBlock}${hostProtocol ? `\n\n${hostProtocol}` : ''}`;
   }
   return serializeOdNextRequestTurnV1({
     taskExecutionId: input.taskExecutionId,

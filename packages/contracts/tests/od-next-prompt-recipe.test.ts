@@ -7,6 +7,7 @@ import {
   renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
   odNextPromptCacheIdentityV2,
+  resolveOdNextDeckFrameworkMode,
   type OdNextStrategyRequestRecipeV2,
 } from '../src/prompts/od-next-strategy.js';
 import {
@@ -48,6 +49,109 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  it('pins the canonical Deck Protocol v1 framework into PPT requests only', () => {
+    const pptRecipe: OdNextStrategyRequestRecipeV2 = {
+      ...recipe,
+      taskType: 'ppt',
+      taskSkill: '# Presentation\n\nProduce the declared editable HTML deck.',
+    };
+
+    const prompt = composeOdNextStrategyRequestPromptV2(pptRecipe);
+    const bundledTaskSkill = composeOdNextStrategyBundleHeadV2(pptRecipe)
+      .sessionSkills.taskTypeSkill.body;
+
+    expect(prompt).toContain('OD Deck Protocol v1');
+    expect(prompt).toContain('data-od-deck-protocol="1"');
+    expect(prompt).toContain("type: 'od:deck-ready'");
+    expect(prompt).toContain("type: 'od:slide-state'");
+    expect(prompt).toContain('## Final handoff — filesystem');
+    expect(bundledTaskSkill).toBe(pptRecipe.taskSkill);
+    expect(bundledTaskSkill).not.toContain('OD Deck Protocol v1');
+    expect(prompt.match(/^## Task Skill —/gm)).toHaveLength(1);
+
+    const prototypePrompt = composeOdNextStrategyRequestPromptV2(recipe);
+    expect(prototypePrompt).not.toContain('data-od-deck-protocol="1"');
+    expect(prototypePrompt).not.toContain("type: 'od:deck-ready'");
+
+    const prototypeDeckPrompt = composeOdNextStrategyRequestPromptV2(recipe, {
+      deckIntent: true,
+    });
+    expect(prototypeDeckPrompt).toContain('name="deck-framework"');
+    expect(prototypeDeckPrompt).toContain('data-od-deck-protocol="1"');
+    expect(prototypeDeckPrompt).toContain("type: 'od:deck-ready'");
+
+    const stableDeckContext = composeOdNextStrategyStableRequestContextV2({
+      deckIntent: true,
+    });
+    expect(stableDeckContext).toContain('name="deck-framework"');
+    expect(stableDeckContext).toContain('data-od-deck-protocol="1"');
+
+    const textArtifactRecipe: OdNextStrategyRequestRecipeV2 = {
+      ...pptRecipe,
+      executionProfile: 'text_artifact',
+    };
+    const textArtifactPrompt = composeOdNextStrategyRequestPromptV2(textArtifactRecipe);
+    const textArtifactBundleSkill = composeOdNextStrategyBundleHeadV2(textArtifactRecipe)
+      .sessionSkills.taskTypeSkill.body;
+    const textArtifactStableContext = composeOdNextStrategyStableRequestContextV2(
+      { deckIntent: true },
+      'text_artifact',
+    );
+    for (const text of [textArtifactPrompt, textArtifactStableContext]) {
+      expect(text).toContain('## Final handoff — text artifact');
+      expect(text).toContain('MUST contain exactly one `<artifact type="text/html">...</artifact>` block');
+      expect(text).not.toContain('## Final handoff — filesystem');
+      expect(text).not.toContain('summarize the written or changed deck file');
+      expect(text).not.toMatch(/TodoWrite[^\n]{0,80}(?:must|required)/i);
+    }
+    expect(textArtifactBundleSkill).toBe(textArtifactRecipe.taskSkill);
+    expect(textArtifactBundleSkill).not.toContain('## Final handoff');
+
+    const pptPromptWithMatchingSignal = composeOdNextStrategyRequestPromptV2(pptRecipe, {
+      deckIntent: true,
+    });
+    expect(pptPromptWithMatchingSignal.match(/data-od-deck-protocol="1"/g)).toHaveLength(1);
+  });
+
+  it('preserves selected and existing deck scaffolds instead of injecting a second runtime', () => {
+    const pptRecipe: OdNextStrategyRequestRecipeV2 = {
+      ...recipe,
+      taskType: 'ppt',
+      taskSkill: '# Presentation\n\nCopy `assets/template.html` and fill its declared slots.',
+    };
+    const prompt = composeOdNextStrategyRequestPromptV2(pptRecipe, {
+      deckFrameworkMode: 'legacy_compatible',
+    });
+    const stableContext = composeOdNextStrategyStableRequestContextV2({
+      deckFrameworkMode: 'legacy_compatible',
+    });
+
+    for (const text of [prompt, stableContext]) {
+      expect(text).toContain('selected or existing scaffold compatibility');
+      expect(text).toContain('assets/template.html');
+      expect(text).toContain("host viewer's compatibility bridge owns navigation");
+      expect(text).not.toContain('data-od-deck-protocol="1"');
+      expect(text).not.toContain("type: 'od:deck-ready'");
+      expect(text).not.toContain("type: 'od:slide-state'");
+    }
+
+    expect(resolveOdNextDeckFrameworkMode({ taskType: 'ppt' })).toBe('canonical');
+    expect(resolveOdNextDeckFrameworkMode({
+      taskType: 'ppt',
+      hasSelectedDeckSeed: true,
+    })).toBe('legacy_compatible');
+    expect(resolveOdNextDeckFrameworkMode({
+      taskType: 'ppt',
+      hasExistingDeckArtifact: true,
+    })).toBe('legacy_compatible');
+    expect(resolveOdNextDeckFrameworkMode({
+      taskType: 'prototype',
+      deckIntent: true,
+      hasExistingDeckArtifact: true,
+    })).toBe('canonical');
+    expect(resolveOdNextDeckFrameworkMode({ taskType: 'prototype' })).toBeUndefined();
+  });
+
   it('states the deliverable rules that only bite once a plan declares more than one', () => {
     // The canonical Plan Contract example carries a single deliverable whose id
     // equals `canonicalDeliverable.id`, so the membership rule reads as a
@@ -526,6 +630,7 @@ describe('OD Next V2 prompt recipe', () => {
       taskExecutionId: 'task-1',
       taskRunIndex: 1,
       planContractHash: A,
+      hostProtocolKey: '0123456789abcdef',
     });
 
     expect(clarification).toContain('Clarification answer');
@@ -538,6 +643,12 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).not.toContain(recipe.generalOrchestration);
     expect(production).not.toContain(recipe.taskSkill);
     expect(production).not.toContain(B);
+    expect(production).toContain('inputStage=production');
+    expect(production).toContain('<od-done key="0123456789abcdef"/>');
+    expect(production).toContain('<od-next key="0123456789abcdef" value="Add an orders list page"/>');
+    expect(production).toContain('<od-focus key="0123456789abcdef"');
+    expect(clarification).not.toContain('<od-done');
+    expect(contractRepair).not.toContain('<od-done');
     const complexProduction = composeOdNextStrategyContinuationV2({
       stage: 'production',
       nativeSessionResume: true,
@@ -625,5 +736,82 @@ describe('layout primitives in the stable request context', () => {
     expect(prompt).toContain(css);
     expect(prompt).not.toContain('kind="instruction" name="layout-primitives"');
     expect(composeOdNextStrategyStableRequestContextV2({ memoryBody: 'x' })).not.toContain('layout-primitives');
+  });
+});
+
+/**
+ * The runtime's own plan-tool name has to survive the OD Next prompt fork.
+ *
+ * ── The defect ────────────────────────────────────────────────────────────
+ *
+ * On 2026-09-03 a codex run answered an explicit 「先用 todo 进行一轮规划」 by
+ * writing a seven-item plan into its reply body and calling no plan tool. The
+ * charter offers "Otherwise, provide a numbered plan in your response" as a
+ * sanctioned branch, and codex had never been told the name of the tool it
+ * actually has (`update_plan`), so prose WAS the compliant reading. The daemon
+ * fix names each runtime's real tool through `planToolNoteForRuntime`
+ * (`apps/daemon/src/prompts/system.ts`) — but only on the slim-charter path.
+ *
+ * OD Next runs never reach that path: `composeSystemPrompt` forks before it,
+ * and the shipping request prompt is assembled from the Bundle head plus this
+ * stable request context. Neither carried the note, so every OD Next run was
+ * still in the pre-fix state.
+ *
+ * ── Why the note enters HERE and not in the Bundle head ───────────────────
+ *
+ * The head is the cache-stable prefix — byte-identical across every task that
+ * shares a strategy version, task type, and execution profile. Which runtime
+ * is driving is not one of those dimensions, so a per-runtime sentence in the
+ * head would split that prefix. This block is already per-run (it carries
+ * `runtime-selection`, project metadata, memory), so the note is cache-neutral
+ * here and sits beside the `selectedAgentId` it is derived from.
+ *
+ * ── What this suite proves, and what it does not ──────────────────────────
+ *
+ * It proves the sentence travels: given the note the host resolved, the OD
+ * Next request prompt contains it, and given no note it costs nothing. It does
+ * NOT re-prove which name belongs to which runtime — that table lives in the
+ * daemon and is owned by `apps/daemon/tests/prompts/plan-tool-note.test.ts`.
+ * Duplicating the table here would create the second source of truth whose
+ * drift is the exact failure the Claude Code 2.1 rename caused.
+ */
+describe('runtime plan tool in the stable request context', () => {
+  // Verbatim from CODEX_PLAN_TOOL_NOTE — quoted as INPUT, the way the daemon
+  // supplies it. This suite never asserts the wording is right for codex.
+  const CODEX_NOTE = 'Your plan tool is `update_plan` — use it for the plan step above; the host renders it as a live Todos card. Mark each item `in_progress` when started and `completed` as it lands.';
+
+  it('carries the host-resolved note into the block the shipping Bundle reads', () => {
+    const stable = composeOdNextStrategyStableRequestContextV2({
+      agentId: 'codex',
+      planToolNote: CODEX_NOTE,
+    });
+    expect(stable).toContain('<od-next-context kind="instruction" name="runtime-plan-tool">');
+    expect(stable).toContain('Your plan tool is `update_plan`');
+    // Beside the runtime identity it is derived from, not adrift in project data.
+    expect(stable.indexOf('name="runtime-selection"'))
+      .toBeLessThan(stable.indexOf('name="runtime-plan-tool"'));
+  });
+
+  it('reaches the composed OD Next request prompt through both composers', () => {
+    const context = { agentId: 'codex', planToolNote: CODEX_NOTE };
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe, context);
+    expect(prompt).toContain('Your plan tool is `update_plan`');
+    // `composeSystemPrompt` forks to the same composer; it must forward the
+    // note rather than drop it on the floor.
+    expect(composeSystemPrompt({ odNextStrategyRecipe: recipe, ...context }))
+      .toContain('Your plan tool is `update_plan`');
+  });
+
+  it('costs nothing for a runtime the host has no verified tool name for', () => {
+    // mimo and the ACP family are deliberately absent from the daemon table:
+    // no verified tool name, and guessing from family resemblance is what the
+    // Claude Code 2.1 rename punished. They resolve to no note, and no note
+    // must mean no bytes.
+    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'mimo' }))
+      .not.toContain('runtime-plan-tool');
+    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'vela', planToolNote: null }))
+      .not.toContain('runtime-plan-tool');
+    expect(composeOdNextStrategyStableRequestContextV2({ agentId: 'kimi', planToolNote: '' }))
+      .not.toContain('runtime-plan-tool');
   });
 });

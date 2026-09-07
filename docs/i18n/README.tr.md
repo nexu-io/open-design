@@ -333,7 +333,7 @@ pnpm tools-dev run web
 
 `tools-dev` tarafından yazdırılan URL'yi açın; açık port bayrakları verilmezse geliştirme portları dinamik atanır.
 
-Node `~24`, pnpm `10.33.x`. Windows kullanıcıları, bkz. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Tam hızlı başlangıç, ortam değişkenleri, Nix flake ve paketlenmiş derleme akışı → [`QUICKSTART.md`](../../QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Windows kullanıcıları, bkz. [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Tam hızlı başlangıç, ortam değişkenleri ve paketlenmiş derleme akışı → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### Eksiksiz bir iş akışı — özetten artifact'e
 

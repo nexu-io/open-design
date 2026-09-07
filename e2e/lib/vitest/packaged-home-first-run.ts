@@ -26,8 +26,107 @@ export type PackagedHomeFirstRunResult = {
   workspaceTabClicksBeforeOutput: number;
 };
 
+export type PackagedHomeFirstRunReadiness = {
+  composerContentEditable: boolean;
+  composerFound: boolean;
+  composerVisible: boolean;
+  lexicalEditorReady: boolean;
+  loadingVisible: boolean;
+  onboardingVisible: boolean;
+  pathname: string;
+};
+
+export type PackagedHomeFirstRunSetupResult = {
+  hrefBefore: string;
+  inputTextBeforeSubmit: string;
+  instrumented: true;
+  navigationEntryCountBefore: number;
+  performanceTimeOriginBefore: number;
+  readiness: PackagedHomeFirstRunReadiness;
+  submitClicked: boolean;
+};
+
+export type PackagedHomeFirstRunWaitOptions = {
+  pollIntervalMs?: number;
+  timeoutMs?: number;
+};
+
+export async function waitForPackagedHomeFirstRunSetup(
+  inspect: () => Promise<unknown>,
+  options: PackagedHomeFirstRunWaitOptions = {},
+): Promise<PackagedHomeFirstRunSetupResult> {
+  const pollIntervalMs = options.pollIntervalMs ?? 100;
+  const timeoutMs = options.timeoutMs ?? 30_000;
+  const startedAt = Date.now();
+  let lastObservation: unknown = null;
+
+  do {
+    try {
+      lastObservation = await inspect();
+      const setup = asPackagedHomeFirstRunSetupResult(lastObservation);
+      if (setup != null) return setup;
+    } catch (error) {
+      lastObservation = {
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      };
+    }
+
+    const remainingMs = timeoutMs - (Date.now() - startedAt);
+    if (remainingMs <= 0) break;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)));
+  } while (Date.now() - startedAt < timeoutMs);
+
+  throw new Error(
+    `packaged first Home run composer did not become ready: ${formatSetupObservation(lastObservation)}`,
+  );
+}
+
+function asPackagedHomeFirstRunSetupResult(
+  value: unknown,
+): PackagedHomeFirstRunSetupResult | null {
+  if (typeof value !== 'object' || value == null || Array.isArray(value)) return null;
+  const candidate = value as Partial<PackagedHomeFirstRunSetupResult>;
+  if (
+    candidate.instrumented !== true
+    || typeof candidate.hrefBefore !== 'string'
+    || candidate.inputTextBeforeSubmit !== PACKAGED_HOME_FIRST_RUN_PROMPT
+    || typeof candidate.navigationEntryCountBefore !== 'number'
+    || typeof candidate.performanceTimeOriginBefore !== 'number'
+    || !isPackagedHomeFirstRunReadiness(candidate.readiness)
+    || typeof candidate.submitClicked !== 'boolean'
+  ) {
+    return null;
+  }
+  return candidate as PackagedHomeFirstRunSetupResult;
+}
+
+function isPackagedHomeFirstRunReadiness(
+  value: unknown,
+): value is PackagedHomeFirstRunReadiness {
+  if (typeof value !== 'object' || value == null || Array.isArray(value)) return false;
+  const candidate = value as Partial<PackagedHomeFirstRunReadiness>;
+  return (
+    typeof candidate.composerContentEditable === 'boolean'
+    && typeof candidate.composerFound === 'boolean'
+    && typeof candidate.composerVisible === 'boolean'
+    && typeof candidate.lexicalEditorReady === 'boolean'
+    && typeof candidate.loadingVisible === 'boolean'
+    && typeof candidate.onboardingVisible === 'boolean'
+    && typeof candidate.pathname === 'string'
+  );
+}
+
+function formatSetupObservation(value: unknown): string {
+  try {
+    return JSON.stringify(value, null, 2) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
 /**
- * Instruments the first packaged Home send without recovering the renderer.
+ * Probes the Home composer and instruments the first packaged send atomically
+ * once it is ready, without recovering the renderer.
  * Output observation is polled through a separate expression, so this setup
  * never reloads the page or clicks a workspace tab after submission.
  */
@@ -36,12 +135,93 @@ export function packagedHomeFirstRunExpression(): string {
     (async () => {
       const prompt = ${JSON.stringify(PACKAGED_HOME_FIRST_RUN_PROMPT)};
       const stateKey = '__odPackagedHomeFirstRun';
+      const existingState = globalThis[stateKey];
+      if (
+        existingState?.instrumented === true
+        && existingState.inputTextBeforeSubmit === prompt
+      ) {
+        return {
+          hrefBefore: existingState.hrefBefore,
+          inputTextBeforeSubmit: existingState.inputTextBeforeSubmit,
+          instrumented: true,
+          navigationEntryCountBefore: existingState.navigationEntryCountBefore,
+          performanceTimeOriginBefore: existingState.performanceTimeOriginBefore,
+          readiness: existingState.readiness,
+          submitClicked: existingState.submitClicked,
+        };
+      }
+
+      const input = document.querySelector('[data-testid="home-hero-input"]');
+      const loadingSurface = document.querySelector('.od-loading-shell, .centered-loader');
+      const onboardingSurface = document.querySelector(
+        '.entry-shell--onboarding, .entry-onboarding-modal',
+      );
+      const composerVisible =
+        input instanceof HTMLElement && input.getClientRects().length > 0;
+      const composerContentEditable =
+        input instanceof HTMLElement && input.isContentEditable;
+      const editor = input?.__lexicalEditor;
+      const lexicalEditorReady =
+        typeof editor?.parseEditorState === 'function'
+        && typeof editor?.setEditorState === 'function';
+      const readiness = {
+        pathname: location.pathname,
+        loadingVisible:
+          loadingSurface instanceof HTMLElement && loadingSurface.getClientRects().length > 0,
+        onboardingVisible:
+          onboardingSurface instanceof HTMLElement && onboardingSurface.getClientRects().length > 0,
+        composerFound: input != null,
+        composerVisible,
+        composerContentEditable,
+        lexicalEditorReady,
+      };
+      if (!composerVisible || !composerContentEditable || !lexicalEditorReady) {
+        return { instrumented: false, readiness };
+      }
+
+      input.focus();
+      editor.setEditorState(editor.parseEditorState(JSON.stringify({
+        root: {
+          children: [{
+            children: [{
+              detail: 0,
+              format: 0,
+              mode: 'normal',
+              style: '',
+              text: prompt,
+              type: 'text',
+              version: 1,
+            }],
+            direction: null,
+            format: '',
+            indent: 0,
+            type: 'paragraph',
+            version: 1,
+            textFormat: 0,
+            textStyle: '',
+          }],
+          direction: null,
+          format: '',
+          indent: 0,
+          type: 'root',
+          version: 1,
+        },
+      })));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const inputTextBeforeSubmit = input.textContent?.trim() ?? '';
+      const currentInput = document.querySelector('[data-testid="home-hero-input"]');
+      if (currentInput !== input || inputTextBeforeSubmit !== prompt) {
+        throw new Error('packaged first Home run prompt was not retained on the current composer');
+      }
+
       const state = {
         hrefBefore: location.href,
-        inputTextBeforeSubmit: '',
+        inputTextBeforeSubmit,
+        instrumented: true,
         injectedAuthorityOutageCount: 0,
         navigationEntryCountBefore: performance.getEntriesByType('navigation').length,
         performanceTimeOriginBefore: performance.timeOrigin,
+        readiness,
         createRunRequestCount: 0,
         createRunResponseStatuses: [],
         runEventRequestCount: 0,
@@ -50,7 +230,6 @@ export function packagedHomeFirstRunExpression(): string {
         workspaceRequestHeaders: {},
         workspaceTabClicksBeforeOutput: 0,
       };
-      globalThis[stateKey] = state;
 
       const originalFetch = globalThis.fetch.bind(globalThis);
       state.originalFetch = originalFetch;
@@ -106,52 +285,15 @@ export function packagedHomeFirstRunExpression(): string {
           state.workspaceTabClicksBeforeOutput += 1;
         }
       }, true);
-
-      const input = document.querySelector('[data-testid="home-hero-input"]');
-      const visible = input instanceof HTMLElement && input.getClientRects().length > 0;
-      if (!visible || !(input instanceof HTMLElement) || !input.isContentEditable) {
-        throw new Error('packaged first Home run found no visible Lexical composer');
-      }
-      const editor = input.__lexicalEditor;
-      if (!editor?.parseEditorState || !editor?.setEditorState) {
-        throw new Error('packaged first Home run could not resolve the Lexical editor');
-      }
-      input.focus();
-      editor.setEditorState(editor.parseEditorState(JSON.stringify({
-        root: {
-          children: [{
-            children: [{
-              detail: 0,
-              format: 0,
-              mode: 'normal',
-              style: '',
-              text: prompt,
-              type: 'text',
-              version: 1,
-            }],
-            direction: null,
-            format: '',
-            indent: 0,
-            type: 'paragraph',
-            version: 1,
-            textFormat: 0,
-            textStyle: '',
-          }],
-          direction: null,
-          format: '',
-          indent: 0,
-          type: 'root',
-          version: 1,
-        },
-      })));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      state.inputTextBeforeSubmit = input.textContent?.trim() ?? '';
+      globalThis[stateKey] = state;
 
       return {
         hrefBefore: state.hrefBefore,
         inputTextBeforeSubmit: state.inputTextBeforeSubmit,
+        instrumented: true,
         navigationEntryCountBefore: state.navigationEntryCountBefore,
         performanceTimeOriginBefore: state.performanceTimeOriginBefore,
+        readiness,
         submitClicked: state.submitClicked,
       };
     })()

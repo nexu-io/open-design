@@ -1,5 +1,6 @@
 import { execAgentFile } from './invocation.js';
 import { readCodexProviderEnvKey } from '../codex-config-normalize.js';
+import { reportsPlatformProviderCredentialFault } from '../integrations/vela-errors.js';
 import type { RuntimeAgentDef, RuntimeEnv } from './types.js';
 
 export type AgentAuthProbeResult = {
@@ -315,6 +316,142 @@ const AGENT_UPSTREAM_FAILURE_RE = new RegExp(
   'i',
 );
 
+/**
+ * A tool invocation, as the AGENT itself frames it.
+ *
+ * `tool bash failed:` / `tool error:` / `tool_use_error:` are the agent saying
+ * "a tool I ran failed" — it is the authority on whether it was mid-tool, so
+ * this is the strongest attribution available in the text. `mcp` / `connector`
+ * / `plugin` are the daemon's own words for "a service the agent operates":
+ * `run-failure-classification.ts` `isToolErrorText` already reads exactly this
+ * vocabulary, and `mcp_auth_required` (bifrost `mcp/agent.go:333`) is vela's
+ * self-identifying code for a per-user MCP OAuth. Reusing that vocabulary
+ * rather than inventing one keeps a single answer to "what counts as a tool".
+ */
+const TOOL_INVOCATION_MARKER =
+  /\btool[_ -](?:error|use|call|result)\b|\btool\s+[\w./-]+\s+(?:failed|error)\b|\bmcp_auth_required\b|\b(?:mcp|connector|plugin)\b/i;
+
+/**
+ * A program identifying ITSELF as the speaker: the Unix `progname: message`
+ * convention, plus npm's `npm ERR!` variant of it. `gh:`, `curl:`, `docker:`,
+ * `psql:` and `npm ERR!` all carry it, and so will the next tool — that is what
+ * the convention is for, which is why this is a shape and not a roster of tool
+ * names.
+ *
+ * It reads WHO is speaking. It does not, on its own, say whether that speaker
+ * is foreign: `dsh: MISSING_CREDENTIAL: …` is DeepSeek Harness in exactly the
+ * same shape, so the caller has to check the name against
+ * `OWN_AGENT_COMMAND_NAMES`. An earlier cut of this predicate assumed the agent
+ * would never prefix itself and dropped that row —
+ * `tests/runtimes/service-failure-classification.test.ts` caught it, and the
+ * row is pinned as A18 in the landing table.
+ *
+ * Two kinds of leading token are not names at all and are rejected by the
+ * caller: severities (`Error:`, `warning:`, `fatal:`) name how bad the line is,
+ * and status reason phrases (`Unauthorized:`) name what the server answered.
+ * That rejection is load-bearing — vela's real model-service 401 arrives as
+ * `Error: list Link models: API request failed with status 401: invalid_api_key`
+ * (`acp-service-failure.test.ts` row A14).
+ */
+const PROGRAM_DIAGNOSTIC_PREFIX = /^[ \t]*([A-Za-z][\w.+-]{0,31})(?::[ \t]|[ \t]ERR!)/;
+
+const SEVERITY_LABELS = new Set([
+  'err', 'error', 'errors',
+  'warn', 'warning',
+  'fatal', 'panic', 'critical', 'crit',
+  'note', 'notice', 'info', 'debug', 'trace', 'verbose',
+]);
+
+/**
+ * Every command name Open Design's own agent CLIs answer to — each shipped
+ * adapter's `id` and its `bin`.
+ *
+ * This is the half of the attribution the text cannot supply, and the reason
+ * the program-prefix shape alone is not enough: `dsh: MISSING_CREDENTIAL:
+ * llm-deepseek: no API key for provider route …` wears exactly the same prefix
+ * as `gh: not authenticated`, and it is DeepSeek Harness reporting its OWN
+ * model key. Position does not separate them either — echoed tool output and
+ * the agent's own lines are both line-initial. Only the name does.
+ *
+ * It is an allowlist of OURS, not a blocklist of tools, and that direction is
+ * what makes it hold: everything the daemon did not spawn is foreign by
+ * default, so the next `terraform:` or `kubectl:` needs no amendment here. The
+ * only list that has to stay current is the adapter registry, which the daemon
+ * maintains anyway — and
+ * `tests/runtimes/tool-vs-agent-auth-snapshot.test.ts` reads the real
+ * `SHIPPED_AGENT_DEFS` and goes red if this falls behind it. Kept as a literal
+ * rather than derived from `registry.ts` because that module imports every
+ * adapter and every adapter imports this file.
+ *
+ * Exported for that guard only.
+ */
+export const OWN_AGENT_COMMAND_NAMES: ReadonlySet<string> = new Set([
+  'agy', 'aider', 'amp', 'amr', 'antigravity', 'atomcode', 'byok-opencode',
+  'claude', 'codebuddy', 'codex', 'copilot', 'cursor-agent', 'deepseek',
+  'deepseek-harness', 'devin', 'dsh', 'grok', 'grok-build', 'hermes', 'kilo',
+  'kimi', 'kiro', 'kiro-cli', 'mimo', 'opencode', 'opencode-cli', 'pi',
+  'qoder', 'qodercli', 'qwen', 'reasonix', 'trae-cli', 'traecli', 'vela',
+  'vibe', 'vibe-acp',
+]);
+
+/**
+ * True when the auth failure `text` reports belongs to a TOOL the agent ran,
+ * rather than to the agent's own credential.
+ *
+ * This is an attribution question, not a vocabulary question, and the
+ * distinction is the whole point. `AGENT_AUTH_REQUIRED` means "sign in" — an
+ * offer to fix a credential the daemon can reach (the agent's CLI login, or the
+ * AMR Cloud session the web resolves it to,
+ * `apps/web/src/runtime/amr-guidance.ts`). A run's failure text is not a clean
+ * channel for that claim: `collectFailureText`
+ * (`run-failure-classification.ts:177`) folds `stderr` events into the corpus
+ * (:188), and the ACP bridge folds whatever the agent wrote into its JSON-RPC
+ * error frame — so `gh`, `npm`, `curl` and MCP output are read here too, in the
+ * same auth vocabulary the agent's own failures use. Answering "sign in" to one
+ * of those sends the user to log in to Open Design for a `gh` token in their
+ * own shell: a fix guaranteed not to work.
+ *
+ * The rule is: **when the report names the credential's holder, believe it; the
+ * daemon may supply "the agent" only when the report names nobody.** A holder
+ * is named in exactly two ways, and both are the text identifying its own
+ * speaker rather than us guessing from prose — the same precedence
+ * `reportsPlatformProviderCredentialFault` established for R-053, where a
+ * self-identifying machine code outranked the sentence it travelled with.
+ *
+ * Line scope, not whole-text scope: an unrelated `npm ERR!` elsewhere in a long
+ * stderr tail must not vouch for the agent's own 401 on another line. And the
+ * program prefix must be the SPEAKER of the complaint, not the complaint — so
+ * the auth vocabulary has to appear after it. That is what keeps vela's own
+ * `auth_required: please reconnect AMR Cloud` from reading as a program named
+ * `auth_required`.
+ *
+ * Exported because the two classifiers that read the same corpus —
+ * `classifyAgentServiceFailure` here and `run-failure-classification.ts`'s
+ * `isAuthDetailText` branch — have to agree about whose credential it is.
+ */
+export function reportsToolPrincipalAuthFailure(text: string): boolean {
+  const value = String(text || '');
+  if (!value.trim()) return false;
+  for (const line of value.split(/\r?\n/)) {
+    if (!AGENT_AUTH_FAILURE_RE.test(line)) continue;
+    if (TOOL_INVOCATION_MARKER.test(line)) return true;
+    const prefix = PROGRAM_DIAGNOSTIC_PREFIX.exec(line);
+    if (!prefix) continue;
+    const speaker = (prefix[1] ?? '').toLowerCase();
+    // A severity (`Error:`) or a status reason phrase (`Unauthorized:`) is a
+    // LABEL, not a name: it says how bad the line is, or what the server
+    // answered, never who wrote it. Reading either as a speaker would drop a
+    // real model-service 401 — vela's arrives as `Error: list Link models: API
+    // request failed with status 401: invalid_api_key`.
+    if (SEVERITY_LABELS.has(speaker)) continue;
+    if (AGENT_AUTH_FAILURE_RE.test(speaker)) continue;
+    // One of our own agent CLIs speaking as itself, not a tool inside it.
+    if (OWN_AGENT_COMMAND_NAMES.has(speaker)) continue;
+    if (AGENT_AUTH_FAILURE_RE.test(line.slice(prefix[0].length))) return true;
+  }
+  return false;
+}
+
 // Returns the model-service failure class implied by an agent's combined
 // stdout/stderr/error text, or null when the text looks like an ordinary
 // process failure. Auth is checked before rate/upstream so a `401` is never
@@ -325,7 +462,24 @@ export function classifyAgentServiceFailure(
 ): AgentServiceFailureCode | null {
   const value = String(text || '');
   if (!value.trim()) return null;
-  if (AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
+  // Claimed before auth because the code says whose credentials failed and the
+  // sentence beside it does not. vela's link gateway answers an upstream
+  // 401/403 with `upstream_provider_unauthenticated` /
+  // `upstream_provider_forbidden` on an HTTP 500, worded "Upstream provider
+  // credentials are missing or invalid." — which satisfies this file's
+  // `credentials (?:are )?missing` alternative and so reported the platform's
+  // own misconfiguration to the user as "Sign-in required" (catalogue R-053).
+  // A self-identifying machine code outranks a class read off prose; the same
+  // precedence the daemon records as `evidenceLevel: 'structured_code'`.
+  if (reportsPlatformProviderCredentialFault(value)) return 'UPSTREAM_UNAVAILABLE';
+  // The auth class is a claim about THIS agent's credential — the web turns it
+  // into a sign-in offer. A report that names a different holder (a tool the
+  // agent ran) is answering a different question, so it does not reach the auth
+  // branch. It is scoped to the auth branch on purpose: rate limit and upstream
+  // outage are true of a tool's request whoever made it, so a tool that hit a
+  // 503 or a 429 still classifies below.
+  const toolPrincipal = reportsToolPrincipalAuthFailure(value);
+  if (!toolPrincipal && AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
   if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
   if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
   return null;

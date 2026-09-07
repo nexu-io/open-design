@@ -49,7 +49,7 @@ type ProjectResponse = {
 //   `vela model preset --format json`   — print the fast preset catalog.
 //   `vela model list --format json`     — print the live link model catalog.
 //   `vela login`                        — write ~/.amr/config.json and exit 0.
-//   `vela agent run --runtime opencode` — ACP stdio runtime (initialize →
+//   `vela agent run` — ACP stdio runtime (initialize →
 //                                          session/new → session/set_model →
 //                                          session/prompt → session/update*).
 //

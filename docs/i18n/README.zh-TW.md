@@ -344,7 +344,7 @@ pnpm tools-dev run web
 
 請開啟 `tools-dev` 印出的 URL；除非明確傳入連接埠參數，開發連接埠會動態配置。
 
-Node `~24`、pnpm `10.33.x`。WSL2 使用者請參見 [`docs/wsl-setup.md`](../../docs/wsl-setup.md)；原生 Windows 使用者請參見 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)。完整快速開始、環境變數、Nix flake 與打包建置流程 → [`QUICKSTART.zh-TW.md`](QUICKSTART.zh-TW.md)。
+Node `~24`、pnpm `10.33.x`。WSL2 使用者請參見 [`docs/wsl-setup.md`](../../docs/wsl-setup.md)；原生 Windows 使用者請參見 [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md)。完整快速開始、環境變數與打包建置流程 → [`QUICKSTART.zh-TW.md`](QUICKSTART.zh-TW.md)。
 
 ### 完整工作流程——從需求到 artifact
 

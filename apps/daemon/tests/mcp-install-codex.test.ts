@@ -1,6 +1,11 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  createCodexCliInvocation,
   installCodexMcp,
   probeCodexInstall,
   setCodexRunner,
@@ -34,7 +39,59 @@ function makeStubRunner(impl: (call: RecordedCall) => Promise<{ exitCode: number
 
 afterEach(() => {
   setCodexRunner(null);
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+describe('codex-cli default runner', () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: originalPlatform });
+  });
+
+  it('resolves a Windows npm .cmd shim through the shared safe invocation builder', () => {
+    Object.defineProperty(process, 'platform', { configurable: true, value: 'win32' });
+
+    const invocation = createCodexCliInvocation(
+      ['mcp', 'get', 'open-design'],
+      { ComSpec: 'C:\\Windows\\System32\\cmd.exe' },
+      {},
+      () => 'C:\\Users\\Amy\\AppData\\Roaming\\npm\\codex.cmd',
+    );
+
+    expect(invocation).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: [
+        '/d',
+        '/s',
+        '/c',
+        '"C:\\Users\\Amy\\AppData\\Roaming\\npm\\codex.cmd mcp get open-design"',
+      ],
+      windowsVerbatimArguments: true,
+    });
+  });
+
+  it.runIf(process.platform === 'win32')('executes a real npm-style codex.cmd found on PATH', async () => {
+    const shimDir = mkdtempSync(path.join(tmpdir(), 'od-codex-shim-'));
+    try {
+      writeFileSync(
+        path.join(shimDir, 'codex.cmd'),
+        '@echo off\r\nif "%~1"=="mcp" if "%~2"=="get" exit /b 0\r\nexit /b 9\r\n',
+        'utf8',
+      );
+      vi.stubEnv('PATH', shimDir);
+      vi.stubEnv('PATHEXT', '.CMD');
+      vi.stubEnv('OD_AGENT_HOME', shimDir);
+
+      await expect(probeCodexInstall('open-design')).resolves.toEqual({
+        available: true,
+        installed: true,
+      });
+    } finally {
+      rmSync(shimDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('codex-cli probe', () => {
@@ -86,7 +143,7 @@ describe('codex-cli install', () => {
       name: 'open-design',
       command: '/path/to/node',
       args: ['/path/to/cli.js', 'mcp'],
-      env: { OD_DATA_DIR: '/tmp/od', OD_SIDECAR_IPC_PATH: '/tmp/sock' },
+      env: { OD_DATA_DIR: '/tmp/od', OD_TEST_CLIENT_CAPABILITY: 'opaque' },
     });
 
     expect(runner.calls).toHaveLength(1);
@@ -97,7 +154,7 @@ describe('codex-cli install', () => {
       '--env',
       'OD_DATA_DIR=/tmp/od',
       '--env',
-      'OD_SIDECAR_IPC_PATH=/tmp/sock',
+      'OD_TEST_CLIENT_CAPABILITY=opaque',
       '--',
       '/path/to/node',
       '/path/to/cli.js',

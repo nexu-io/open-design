@@ -5,6 +5,7 @@ import { useI18n } from '../i18n';
 import { getProjectDetail, listProjects } from '../state/projects';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { dirExists } from '../providers/registry';
+import { workspaceIdentityCacheKey } from '../collab/workspace-identity';
 import { Icon } from './Icon';
 import styles from './ProjectReferenceModal.module.css';
 
@@ -50,12 +51,31 @@ export function ProjectReferenceModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The exact identity that reaches the wire — the same 8 fields
+  // `workspaceProjectHeaders` sends and `listWorkspaceProjectSummaries` caches
+  // on. Using it as the effect key means the catalog is re-read whenever the
+  // caller's authority actually changes (switch Workspace, role/lifecycle
+  // transition) and never merely because the parent re-created an equivalent
+  // context object.
+  const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
+
   useEffect(() => {
     let cancelled = false;
     setProjects(null);
     setSelectedIds([]);
     setLoadError(null);
-    void listProjects({ throwOnError: true })
+    // The catalog read MUST carry the caller's Workspace identity. Without it
+    // `listProjects` falls back to the unscoped `GET /api/projects`, which
+    // serves `listUnboundProjects` — every project some Workspace has claimed
+    // is excluded there by construction, so a signed-in member would see an
+    // empty picker while Home still lists those same projects. `'all'` is the
+    // view TasksView/RoutinesSection use for their pickers: anything the member
+    // can open is something they can reference.
+    void listProjects({
+      throwOnError: true,
+      workspaceContext,
+      workspaceView: 'all',
+    })
       .then(async (rows) => {
         if (cancelled) return;
         const candidates = rows.filter((project) => project.id !== currentProjectId);
@@ -82,7 +102,11 @@ export function ProjectReferenceModal({
     return () => {
       cancelled = true;
     };
-  }, [currentProjectId, loadFailedMessage]);
+    // `workspaceContext` is read inside but keyed through `workspaceIdentity`
+    // above: an object identity in the dep list would re-fetch on every parent
+    // render, and the derived key covers every field the request actually uses.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentProjectId, loadFailedMessage, workspaceIdentity]);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

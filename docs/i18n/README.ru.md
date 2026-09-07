@@ -342,7 +342,7 @@ pnpm tools-dev run web
 
 Откройте URL, напечатанный `tools-dev`; без явных флагов порты разработки назначаются динамически.
 
-Node `~24`, pnpm `10.33.x`. Пользователям WSL2 см. [`docs/wsl-setup.md`](../../docs/wsl-setup.md); пользователям нативной Windows — [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Полный быстрый старт, переменные окружения, Nix flake и процесс упакованной сборки → [`QUICKSTART.md`](../../QUICKSTART.md).
+Node `~24`, pnpm `10.33.x`. Пользователям WSL2 см. [`docs/wsl-setup.md`](../../docs/wsl-setup.md); пользователям нативной Windows — [`docs/windows-troubleshooting.md`](../../docs/windows-troubleshooting.md). Полный быстрый старт, переменные окружения и процесс упакованной сборки → [`QUICKSTART.md`](../../QUICKSTART.md).
 
 ### Полный рабочий процесс — от брифа до артефакта
 

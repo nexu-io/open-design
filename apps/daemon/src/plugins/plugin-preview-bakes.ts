@@ -46,9 +46,25 @@ export function resolvePluginPreviewsDir(projectRoot: string): string {
 
 let cache: { dir: string; mtimeMs: number; previews: Record<string, BakeEntry> } | null = null;
 
+// Absent-manifest notices are one-per-path: `loadManifest` runs on every plugin
+// listing, and a deployment that has no manifest has none on every call.
+const warnedMissing = new Set<string>();
+
 function loadManifest(dir: string): Record<string, BakeEntry> {
   const manifestPath = path.join(dir, 'manifest.json');
-  if (!existsSync(manifestPath)) return {};
+  if (!existsSync(manifestPath)) {
+    // Same reasoning as the malformed case below: with no manifest every baked
+    // preview is disabled and every plugin falls back to a live iframe, which
+    // looks like nothing more than a slower gallery. Say so once, so the cause
+    // is greppable instead of having to be inferred from the rendering path.
+    if (!warnedMissing.has(manifestPath)) {
+      warnedMissing.add(manifestPath);
+      console.warn(
+        `[plugin-preview-bakes] no manifest at ${manifestPath}; baked previews are disabled and every plugin will use the live preview path`,
+      );
+    }
+    return {};
+  }
   try {
     const mtimeMs = statSync(manifestPath).mtimeMs;
     if (cache && cache.dir === dir && cache.mtimeMs === mtimeMs) return cache.previews;

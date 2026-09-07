@@ -31,6 +31,7 @@ import {
   type OdNextComplexRuntimeEvidence,
 } from './complex-production.js';
 import { createOdNextNativeBuildPackageBindings } from './native-build-package.js';
+import { mintRunDoneKey } from '../../runtimes/run-done-key.js';
 
 type SqliteDb = Database.Database;
 
@@ -231,16 +232,20 @@ export function prepareAutomaticSimpleProductionRun<
       ['od_next_simple_production_not_ready'],
     );
   }
+  const hostProtocolKey = mintRunDoneKey();
   const instruction = composeOdNextStrategyContinuationV2({
     stage: 'production',
     nativeSessionResume: true,
     taskExecutionId: task.taskExecutionId,
     taskRunIndex: task.runs.length,
     planContractHash: task.planContractHash,
+    hostProtocolKey,
   });
   let claimed: StrategyTaskExecutionRecord | null = null;
+  const meta = input.createMeta(instruction, task.runs.length);
+  meta.doneKey = hostProtocolKey;
   const prepared = input.service.prepare({
-    meta: input.createMeta(instruction, task.runs.length),
+    meta,
     beforeClaimCommit: (run) => {
       claimed = beginAutomaticSimpleProduction(input.db, {
         task,
@@ -401,6 +406,7 @@ export function prepareAutomaticStrategyContinuation<
         plan: input.parsed.planContract!,
       })
     : [];
+  const hostProtocolKey = repairCandidate ? null : mintRunDoneKey();
   const instruction = repairCandidate
       ? composeOdNextStrategyContinuationV2({
           stage: 'contract_repair',
@@ -415,14 +421,17 @@ export function prepareAutomaticStrategyContinuation<
           taskExecutionId: input.task.taskExecutionId,
           taskRunIndex: input.task.runs.length,
           planContractHash: strategyPlanContractHash(input.parsed.planContract!),
+          hostProtocolKey: hostProtocolKey!,
           ...(nativeBuildPackageBindings.length > 0
             ? { nativeBuildPackageBindings }
             : {}),
         });
   let result: OdNextCoordinatorResult | null = null;
   try {
+    const meta = input.createMeta(stage, instruction, input.task.runs.length);
+    if (hostProtocolKey) meta.doneKey = hostProtocolKey;
     const prepared = input.service.prepare({
-      meta: input.createMeta(stage, instruction, input.task.runs.length),
+      meta,
       beforeClaimCommit: (nextRun) => {
         const accepted = finalize(
           repairCandidate

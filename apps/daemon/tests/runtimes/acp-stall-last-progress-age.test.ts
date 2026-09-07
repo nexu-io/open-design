@@ -196,6 +196,15 @@ describe('ACP stall progress age', () => {
     // the failure path really did synthesize its terminal pair. Without this the
     // progress-age assertion below could pass simply because no tool existed.
     expect(finished.tool_call_count).toBeGreaterThanOrEqual(1);
+    expect(finished.tool_call_seen).toBe(true);
+    expect(finished.tool_result_sent).toBe(false);
+    expect(finished.failure_stage).toBe('tool_outstanding');
+
+    // Provenance stays in memory; the display transcript still has its pair.
+    const transcript = readFileSync(run.eventsLogPath, 'utf8');
+    expect(transcript).toContain('"type":"tool_result"');
+    expect(transcript).not.toContain('hostSynthesized');
+    expect(transcript).not.toContain('host_flush');
 
     // Same terminal fingerprint as the tool-free stall: an ACP stage timeout,
     // named as such. Flushing an open tool must not reclassify the failure.

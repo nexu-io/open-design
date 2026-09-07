@@ -45,7 +45,6 @@ describe("win standalone prebundle policy", () => {
       "@open-design/daemon",
       "@open-design/desktop",
       "@open-design/packaged",
-      "@open-design/sidecar",
       "@open-design/sidecar-proto",
       "@open-design/web",
     ]) {
@@ -56,41 +55,43 @@ describe("win standalone prebundle policy", () => {
         }),
       ).toBe(false);
     }
-    expect(
-      shouldInstallInternalPackageForWinPrebundle({
-      packageName: "@open-design/contracts",
-      webOutputMode: "standalone",
-    }),
-  ).toBe(true);
-  expect(
-    shouldInstallInternalPackageForWinPrebundle({
-      packageName: "@open-design/platform",
-      webOutputMode: "standalone",
-    }),
-  ).toBe(true);
+    for (const packageName of [
+      "@open-design/contracts",
+      "@open-design/platform",
+      "@open-design/sidecar",
+    ]) {
+      expect(
+        shouldInstallInternalPackageForWinPrebundle({ packageName, webOutputMode: "standalone" }),
+      ).toBe(true);
+    }
   });
 
   it("documents the explicit code-level bundle boundaries", () => {
     expect(WIN_PREBUNDLE_ESBUILD_TARGET).toBe("node24");
-    expect(WIN_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["electron"]);
+    expect(WIN_PREBUNDLE_POLICIES.packagedMain.externals).toEqual(["@open-design/sidecar", "electron"]);
     expect(WIN_PREBUNDLE_POLICIES.daemonCli.externals).toEqual([
+      "@ffmpeg-installer/ffmpeg",
+      "@open-design/sidecar",
       "better-sqlite3",
       "blake3-wasm",
       "hyperframes",
       "node-pty",
     ]);
     expect(WIN_PREBUNDLE_POLICIES.daemonSidecar.externals).toEqual([
+      "@ffmpeg-installer/ffmpeg",
+      "@open-design/sidecar",
       "better-sqlite3",
       "blake3-wasm",
       "hyperframes",
       "node-pty",
     ]);
-    expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual([]);
+    expect(WIN_PREBUNDLE_POLICIES.webSidecar.externals).toEqual(["@open-design/sidecar"]);
     expect(WIN_DAEMON_PREBUNDLE_ESM_REQUIRE_BANNER).toContain("createRequire");
     // Must match apps/daemon/package.json / the pnpm lockfile, or
     // electron-builder's collector drops the module from the shipped app and
     // the daemon dies at boot with ERR_MODULE_NOT_FOUND (issue #4638).
     expect(WIN_PREBUNDLE_RUNTIME_DEPENDENCIES).toEqual({
+      "@ffmpeg-installer/ffmpeg": "1.1.0",
       "better-sqlite3": "12.10.0",
       "blake3-wasm": "2.1.5",
       "hyperframes": "0.8.1",

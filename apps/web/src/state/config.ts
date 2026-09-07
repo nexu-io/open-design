@@ -212,14 +212,18 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
     protocol: 'openai',
     baseUrl: 'https://openrouter.ai/api/v1',
     preferredModels: [
-      'anthropic/claude-3.7-sonnet',
-      'anthropic/claude-3.5-sonnet',
+      'anthropic/claude-sonnet-4.6',
+      'anthropic/claude-sonnet-4.5',
       'google/gemini-2.5-flash',
       'google/gemini-2.5-pro',
       'openai/gpt-4o',
       'openai/o3-mini',
       'deepseek/deepseek-chat',
       'deepseek/deepseek-r1',
+    ],
+    retiredModels: [
+      'anthropic/claude-3.7-sonnet',
+      'anthropic/claude-3.5-sonnet',
     ],
   },
   {
@@ -732,41 +736,41 @@ export function loadConfig(): AppConfig {
         merged.apiProviderBaseUrl = knownProvider?.baseUrl ?? null;
       }
 
-      // Migration v2: replace model ids that were previously shipped as
-      // provider defaults but have since been retired. Apply it to every saved
-      // BYOK slot so switching protocols/providers cannot restore a stale id.
-      if (parsedMigrationVersion < 2) {
-        const activeProtocol = merged.apiProtocol ?? inferApiProtocol(
-          merged.model,
-          merged.baseUrl,
-        );
-        migratedConfig = migrateRetiredKnownProviderModel(activeProtocol, merged)
-          || migratedConfig;
-        for (const [protocol, apiConfig] of Object.entries(
-          merged.apiProtocolConfigs ?? {},
-        )) {
-          if (!apiConfig) continue;
-          migratedConfig = migrateRetiredKnownProviderModel(
-            protocol as ApiProtocol,
-            apiConfig,
-          ) || migratedConfig;
-        }
-        for (const [draftKey, draft] of Object.entries(
-          merged.byokProviderConfigDrafts ?? {},
-        )) {
-          const separator = draftKey.indexOf(':');
-          if (separator <= 0) continue;
-          migratedConfig = migrateRetiredKnownProviderModel(
-            draftKey.slice(0, separator) as ApiProtocol,
-            draft.apiConfig,
-          ) || migratedConfig;
-        }
-      }
       const persistedAccent = normalizeAccentColor(parsed.accentColor);
       if (persistedAccent != null && LEGACY_DEFAULT_ACCENT_COLORS.includes(persistedAccent)) {
         merged.accentColor = DEFAULT_CONFIG.accentColor;
       }
       merged.configMigrationVersion = CONFIG_MIGRATION_VERSION;
+    }
+
+    // Retired provider defaults are data updates rather than config schema
+    // changes. Apply them on every read so adding one does not require bumping
+    // the migration version, and cover every saved BYOK slot so switching
+    // protocols/providers cannot restore a stale id.
+    const activeProtocol = merged.apiProtocol ?? inferApiProtocol(
+      merged.model,
+      merged.baseUrl,
+    );
+    migratedConfig = migrateRetiredKnownProviderModel(activeProtocol, merged)
+      || migratedConfig;
+    for (const [protocol, apiConfig] of Object.entries(
+      merged.apiProtocolConfigs ?? {},
+    )) {
+      if (!apiConfig) continue;
+      migratedConfig = migrateRetiredKnownProviderModel(
+        protocol as ApiProtocol,
+        apiConfig,
+      ) || migratedConfig;
+    }
+    for (const [draftKey, draft] of Object.entries(
+      merged.byokProviderConfigDrafts ?? {},
+    )) {
+      const separator = draftKey.indexOf(':');
+      if (separator <= 0) continue;
+      migratedConfig = migrateRetiredKnownProviderModel(
+        draftKey.slice(0, separator) as ApiProtocol,
+        draft.apiConfig,
+      ) || migratedConfig;
     }
 
     const downgradedUnsupportedChatProtocol =

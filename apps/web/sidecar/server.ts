@@ -11,22 +11,20 @@ import { Agent as HttpsAgent, request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { createConnection, createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
+import {
+  createConnection,
+  createServer as createTcpServer,
+  type AddressInfo,
+  type Server as TcpServer,
+  type Socket,
+} from "node:net";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   SIDECAR_ENV,
-  SIDECAR_MESSAGES,
-  normalizeWebSidecarMessage,
-  type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import {
-  createJsonIpcServer,
-  type JsonIpcServerHandle,
-  type SidecarRuntimeContext,
-} from "@open-design/sidecar";
 
 const HOST = process.env.OD_HOST || "127.0.0.1";
 if (process.env.OD_HOST != null && !/^[a-zA-Z0-9._\-:[\]@]+$/.test(process.env.OD_HOST)) {
@@ -37,7 +35,6 @@ const STANDALONE_BACKEND_HOST = "127.0.0.1";
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_DIST_DIR_ENV = SIDECAR_ENV.WEB_DIST_DIR;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
-const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
@@ -48,6 +45,7 @@ const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
 const DAEMON_PROXY_UNAVAILABLE_MESSAGE =
   `connect ECONNREFUSED (${DAEMON_PORT_ENV} is not set; the web runtime has no daemon origin)`;
 const SHUTDOWN_TIMEOUT_MS = 3000;
+const WEB_HTTP_DRAIN_MS = 250;
 const STANDALONE_READINESS_POLL_MS = 150;
 const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
 const require = createRequire(import.meta.url);
@@ -214,7 +212,9 @@ export function resolveStandaloneServerEntry(
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-function shouldUseStandaloneOutput(runtime: SidecarRuntimeContext<SidecarStamp>): boolean {
+export type WebRuntimeContext = { mode: string; [field: string]: unknown };
+
+function shouldUseStandaloneOutput(runtime: WebRuntimeContext): boolean {
   return runtime.mode !== "dev" && process.env[WEB_OUTPUT_MODE_ENV] === "standalone";
 }
 
@@ -632,6 +632,67 @@ async function closeServer(server: HttpServer | TcpServer): Promise<void> {
   });
 }
 
+/**
+ * Own every accepted web-sidecar connection so shutdown cannot be held open by
+ * a renderer keep-alive, SSE request, or upgraded socket. Short requests get a
+ * small drain window; the remaining connections are no longer useful after the
+ * sidecar has entered its stopped state and are closed deterministically.
+ */
+export function createWebHttpServerShutdown(
+  server: HttpServer,
+  drainMs = WEB_HTTP_DRAIN_MS,
+): () => Promise<void> {
+  const sockets = new Set<Socket>();
+  const trackSocket = (socket: Socket): void => {
+    sockets.add(socket);
+    socket.once("close", () => sockets.delete(socket));
+  };
+  server.on("connection", trackSocket);
+
+  let task: Promise<void> | null = null;
+  return () => {
+    task ??= (async () => {
+      try {
+        if (!server.listening) {
+          for (const socket of sockets) socket.destroy();
+          return;
+        }
+
+        const closed = new Promise<void>((resolveClose, rejectClose) => {
+          server.close((error) => (error == null ? resolveClose() : rejectClose(error)));
+        });
+        server.closeIdleConnections();
+
+        let timeout: NodeJS.Timeout | undefined;
+        let drained: boolean;
+        try {
+          drained = await Promise.race([
+            closed.then(() => true),
+            new Promise<false>((resolveTimeout) => {
+              timeout = setTimeout(() => resolveTimeout(false), drainMs);
+            }),
+          ]);
+        } finally {
+          if (timeout != null) clearTimeout(timeout);
+        }
+
+        if (!drained) server.closeAllConnections();
+
+        // server.close and closeAllConnections intentionally exclude upgraded
+        // sockets. The connection fence covers those and older Node behavior
+        // as well, including when server.close resolves before the drain timer.
+        for (const socket of sockets) socket.destroy();
+        if (!drained) {
+          await closed;
+        }
+      } finally {
+        server.off("connection", trackSocket);
+      }
+    })();
+    return task;
+  };
+}
+
 async function reserveTcpPort(host = HOST): Promise<number> {
   const server = createTcpServer();
   try {
@@ -920,50 +981,20 @@ async function settleShutdownTask(task: Promise<unknown> | undefined): Promise<v
   }
 }
 
-function stopThenExit(stop: () => Promise<void>): void {
-  const hardExit = setTimeout(() => process.exit(0), SHUTDOWN_TIMEOUT_MS + 1000);
-  hardExit.unref();
-  void stop().finally(() => {
-    clearTimeout(hardExit);
-    process.exit(0);
-  });
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function attachParentMonitor(stop: () => Promise<void>): void {
-  const parentPid = Number(process.env[TOOLS_DEV_PARENT_PID_ENV]);
-  if (!Number.isInteger(parentPid) || parentPid <= 0) return;
-
-  const timer = setInterval(() => {
-    if (isProcessAlive(parentPid)) return;
-    clearInterval(timer);
-    stopThenExit(stop);
-  }, 1000);
-  timer.unref();
-}
-
 async function createWebSidecarHandle(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
   httpServer: HttpServer,
   closeRuntime: () => Promise<void> | void,
+  portRequest: number,
   isRuntimeRunning?: () => boolean,
 ): Promise<WebSidecarHandle> {
-  const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]));
+  const closeHttpServer = createWebHttpServerShutdown(httpServer);
+  const port = await listen(httpServer, portRequest);
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
     updatedAt: new Date().toISOString(),
     url: `http://${HOST}:${port}`,
   };
-  let ipcServer: JsonIpcServerHandle | null = null;
   let stopped = false;
   let resolveStopped!: () => void;
   const stoppedPromise = new Promise<void>((resolveStop) => {
@@ -982,35 +1013,9 @@ async function createWebSidecarHandle(
     stopped = true;
     state.state = "stopped";
     state.updatedAt = new Date().toISOString();
-    await settleShutdownTask(ipcServer?.close());
-    await settleShutdownTask(closeServer(httpServer));
+    await closeHttpServer();
     await settleShutdownTask(Promise.resolve().then(closeRuntime));
     resolveStopped();
-  }
-
-  attachParentMonitor(stop);
-
-  ipcServer = await createJsonIpcServer({
-    socketPath: runtime.ipc,
-    handler: async (message: unknown) => {
-      const request = normalizeWebSidecarMessage(message);
-      switch (request.type) {
-        case SIDECAR_MESSAGES.STATUS:
-          refreshRuntimeState();
-          return { ...state };
-        case SIDECAR_MESSAGES.SHUTDOWN:
-          setImmediate(() => {
-            stopThenExit(stop);
-          });
-          return { accepted: true };
-      }
-    },
-  });
-
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.on(signal, () => {
-      stopThenExit(stop);
-    });
   }
 
   return {
@@ -1064,8 +1069,9 @@ export function createDaemonProxyHandler(
 }
 
 async function startRegularNextSidecar(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
+  runtime: WebRuntimeContext,
   webRoot: string,
+  port: number,
 ): Promise<WebSidecarHandle> {
   const dev = process.env.OD_WEB_PROD !== "1" && runtime.mode === "dev";
   const app = createNextApp({ dev, dir: webRoot, ...resolveNextBundlerOptions(dev) });
@@ -1075,14 +1081,15 @@ async function startRegularNextSidecar(
   const handleRequest = app.getRequestHandler();
   const httpServer = createHttpServer(createDaemonProxyHandler(daemonOrigin, handleRequest));
 
-  return await createWebSidecarHandle(runtime, httpServer, async () => {
+  return await createWebSidecarHandle(httpServer, async () => {
     await app.close?.();
-  });
+  }, port);
 }
 
 async function startStandaloneNextSidecar(
-  runtime: SidecarRuntimeContext<SidecarStamp>,
+  runtime: WebRuntimeContext,
   webRoot: string | null,
+  port: number,
 ): Promise<WebSidecarHandle> {
   const daemonOrigin = resolveDaemonOrigin();
   const backend = await startStandaloneBackend(webRoot);
@@ -1102,19 +1109,19 @@ async function startStandaloneNextSidecar(
   }));
 
   try {
-    return await createWebSidecarHandle(runtime, httpServer, backend.stop, backend.isRunning);
+    return await createWebSidecarHandle(httpServer, backend.stop, port, backend.isRunning);
   } catch (error) {
     await backend.stop().catch(() => undefined);
     throw error;
   }
 }
 
-export async function startWebSidecar(runtime: SidecarRuntimeContext<SidecarStamp>): Promise<WebSidecarHandle> {
+export async function startWebSidecar(runtime: WebRuntimeContext, port = parsePort(process.env[WEB_PORT_ENV])): Promise<WebSidecarHandle> {
   if (shouldUseStandaloneOutput(runtime)) {
     const webRoot = resolveConfiguredStandaloneRoot() == null ? resolveWebRoot() : null;
-    return await startStandaloneNextSidecar(runtime, webRoot);
+    return await startStandaloneNextSidecar(runtime, webRoot, port);
   }
 
   const webRoot = resolveWebRoot();
-  return await startRegularNextSidecar(runtime, webRoot);
+  return await startRegularNextSidecar(runtime, webRoot, port);
 }

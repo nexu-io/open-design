@@ -202,4 +202,36 @@ describe('applyBakedPreviews', () => {
     });
     expect(out[1]).toBe(records[1]);
   });
+
+  it('says so when there is no manifest at all, instead of disabling bakes silently', async () => {
+    // A missing manifest disables every baked preview and sends every plugin to
+    // the live-iframe path, which presents as nothing worse than a slower
+    // gallery — the same "silently disable with no trace" failure the malformed
+    // branch already warns about. An image built without `data/` lands here, so
+    // the notice is what makes the cause greppable rather than inferred.
+    tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-bakes-missing-'));
+    const emptyDir = tmpDir;
+    const records: PluginRecord[] = [
+      { id: 'html-plugin', manifest: { name: 'html-plugin', od: {} } },
+    ];
+    const warnings: string[] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+
+    try {
+      const out = applyBakedPreviews(records, emptyDir);
+      // Same directory twice: the notice is per-path, not per-call, so a
+      // deployment without a manifest does not reprint it on every listing.
+      applyBakedPreviews(records, emptyDir);
+      expect(out[0]).toBe(records[0]);
+    } finally {
+      console.warn = originalWarn;
+    }
+
+    const matching = warnings.filter((line) => line.includes('plugin-preview-bakes'));
+    expect(matching).toHaveLength(1);
+    expect(matching[0]).toContain(path.join(emptyDir, "manifest.json"));
+  });
 });

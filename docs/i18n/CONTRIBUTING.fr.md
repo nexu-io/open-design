@@ -361,10 +361,12 @@ Au-delà de ça :
   `// loop through items`. Si le code se lit déjà, le commentaire est du bruit.
   Gardez les commentaires pour l'intention non évidente ou les contraintes que
   le code ne peut pas exprimer.
-- **TypeScript** pour le code source de `apps/web/src/` et `apps/daemon/src/`.
-  Le JavaScript généré appartient aux dossiers `dist/`; les nouveaux fichiers
-  `.js`, `.mjs` ou `.cjs` doivent avoir une raison générée, vendored ou
-  compatibility explicite.
+- **TypeScript-first.** Conservez en TypeScript les points d'entrée, modules,
+  scripts, tests, reporters et configurations propres au projet, y compris le
+  code de `apps/web/src/` et `apps/daemon/src/`. Tout nouveau fichier `.js`,
+  `.mjs` ou `.cjs` n'est autorisé que s'il est généré, intègre du code tiers ou
+  répond à un besoin de compatibilité explicitement documenté, et doit passer
+  `pnpm guard`.
 - **Pas de nouvelle dépendance top-level** sans paragraphe dans la description
   de la PR expliquant ce qu'elle apporte et combien d'octets elle coûte. La liste
   des dépendances dans [`package.json`](../../package.json) est petite volontairement.

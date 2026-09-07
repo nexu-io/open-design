@@ -52,6 +52,8 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
   'followed_design_system',
   'missed_request',
   'weak_visual',
+  'could_not_run',
+  'too_slow',
   'incomplete_output',
   'hard_to_use',
   'missed_design_system',

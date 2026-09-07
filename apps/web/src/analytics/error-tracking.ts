@@ -208,10 +208,14 @@ function captureException(
 export function reportSafetyEvent(
   eventName: string,
   properties: Record<string, unknown> = {},
+  options: { currentUrlOverride?: string } = {},
 ): void {
   const merged: Record<string, unknown> = {
     ...properties,
-    $current_url: scrubUrl(typeof window !== 'undefined' ? window.location.href : ''),
+    $current_url: scrubUrl(
+      options.currentUrlOverride
+        ?? (typeof window !== 'undefined' ? window.location.href : ''),
+    ),
     $insert_id: randomId(),
     capture_source: 'web/error-tracking',
   };

@@ -120,6 +120,13 @@ describe('runtime version policy', () => {
     // the registry serves". These are the versions actually published there.
     ['0.1.1-rc.1', undefined],
     ['0.1.1-rc.2', undefined],
+    // Upstream then moved `latest` to `0.1.2-rc.1`, so this is what a user who
+    // installs `@deepseek-ai/dsh` without naming a version has on their machine.
+    // Every new patch line needs its own alternative in the pattern: semver's
+    // prerelease rule is per major.minor.patch tuple, and the peer ranges in
+    // `packages/dsh-runtime` obey the same rule, so a line we accept here but
+    // do not add there is a version we bless and then cannot equip.
+    ['0.1.2-rc.1', undefined],
     // A stable release on a line we support should not read as untested.
     ['0.1.1', undefined],
     // Still off the line, still warns. The point is to stop pinning, not to
