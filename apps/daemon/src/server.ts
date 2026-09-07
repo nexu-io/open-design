@@ -559,6 +559,7 @@ import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
 import { validateRunDeliverable } from './run-deliverable-validation.js';
+import { finalizeDeliverableSyntax } from './artifacts/deliverable-syntax-finalization.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -847,6 +848,7 @@ import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginR
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
+import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax-tool.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
@@ -1805,6 +1807,7 @@ export function createAgentRuntimeToolPrompt(
     '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
+    '- Only when this run creates or updates a final Web deliverable, invoke `"$OD_NODE_BIN" "$OD_BIN" tools deliverable-syntax check --json` exactly once immediately after the final edit. Do not perform a self-review, manual validation, extra reads, or any other checks before this invocation. If it reports `pass`, stop immediately without further tool calls or edits. Only if it reports `repairable`, fix only the reported syntax location and invoke this same wrapper once more; allow at most 3 repair attempts. Do not run `node --check`, custom validation scripts, tests, or broader correctness reviews as part of this syntax gate. Skip the gate for planning/analysis turns and non-Web deliverables; stop without retrying on `skipped`, `incomplete`, or `exhausted`.',
   ].join('\n');
 }
 
@@ -8697,6 +8700,29 @@ export async function startServer({
     projectStore: projectStoreDeps,
     authorizeProjectRequest,
     authorizeProjectToolRequest,
+  });
+  registerDeliverableSyntaxToolRoutes(app, {
+    projectsRoot: PROJECTS_DIR,
+    authorizeToolRequest,
+    authorizeProjectToolRequest,
+    getProject: (id: string) => getProject(db, id),
+    getRun: (id: string) => design.runs.get(id),
+    persistRunState: (run) => design.runs.persistState(run),
+    relatedPathsForRun: async ({ runId, projectRoot }) => {
+      const baseline = runArtifactBaselines.peek(runId);
+      if (
+        !baseline
+        || baseline.contended
+        || path.resolve(baseline.cwd) !== path.resolve(projectRoot)
+      ) {
+        return [];
+      }
+      const current = await snapshotProjectArtifactsAsync(projectRoot);
+      return diffRunArtifacts(
+        baseline.before,
+        current,
+      ).renderDependencyTouchedPaths;
+    },
   });
   registerDesignSystemToolRoutes(app, {
     auth: authDeps,
@@ -15631,29 +15657,6 @@ export async function startServer({
             strategyVisibleEmitted += tail;
           }
         }
-        try {
-          await snapshotAiHtmlVersionsBeforeSuccess();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const details = err instanceof AiHtmlVersionSnapshotError
-            ? { failures: err.failures }
-            : undefined;
-          send('error', createSseErrorPayload(
-            'HTML_VERSION_SNAPSHOT_FAILED',
-            message,
-            {
-              retryable: false,
-              ...(details ? { details } : {}),
-            },
-          ));
-          finishStrategyAwarePhysicalRun('failed', 1, signal);
-          return;
-        }
-        try {
-          persistDeliveredAgentSessionState();
-        } catch (err) {
-          console.warn('[sessions] delivered session persistence failed', err);
-        }
         let deliverableValid = false;
         // A turn that emitted no Runtime State can still have delivered. The
         // coordinator may only infer that Direct Edit completion from verified
@@ -15672,13 +15675,26 @@ export async function startServer({
             )
           ),
         );
-        if (
+        const strategyCompletionCandidate = Boolean(
           strategyTaskAtStart
           && (
             strategyProtocolResult?.runtimeState?.outcome === 'completed'
             || mayInferDirectEditCompletion
-          )
-        ) {
+          ),
+        );
+        let processTreeQuiescentForFinalization = true;
+        if (strategyCompletionCandidate) {
+          // The artifact diff, syntax gate, and HTML version snapshot must all
+          // observe the same settled filesystem. ACP adapters can report a
+          // verdict while descendants are still exiting, so wait for their
+          // generation-bound teardown before resolving the final diff.
+          if (acpAttemptTermination) {
+            const termination = await acpAttemptTermination;
+            processTreeQuiescentForFinalization = termination?.quiescent === true;
+          }
+          await resolveRunArtifactOutcomeBeforeFinishAsync();
+        }
+        if (strategyCompletionCandidate) {
           const deliverable = await validateRunDeliverable({
             projectsRoot: PROJECTS_DIR,
             projectId: run.projectId ?? null,
@@ -15689,6 +15705,64 @@ export async function startServer({
           });
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
+          // The in-turn syntax tool gives the agent a cheap repair loop while
+          // it still owns the model turn. Re-run the same read-only checker on
+          // the final filesystem state as a backstop: prompt non-compliance or
+          // a late edit must never turn a parse-broken Web artifact into a
+          // successful OD Next completion. This gate is scoped to canonical
+          // HTML delivery only; non-Web outputs and non-completion stages do
+          // not pay for it.
+          if (deliverable.valid && typeof run.projectId === 'string') {
+            const syntaxFinalization = await finalizeDeliverableSyntax({
+              artifactKind: deliverable.artifactKind,
+              projectRoot: resolveProjectDir(
+                PROJECTS_DIR,
+                run.projectId,
+                projectRecord?.metadata,
+              ),
+              entryFile: deliverable.entryFile,
+              relatedPaths:
+                run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
+              processTreeQuiescent: processTreeQuiescentForFinalization,
+              ...(run.deliverableSyntaxRepair
+                ? { repairState: run.deliverableSyntaxRepair }
+                : {}),
+              ...(run.deliverableSyntaxValidation?.metrics
+                ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
+                : {}),
+            });
+            if (syntaxFinalization.action !== 'skip') {
+              run.deliverableSyntaxValidation = syntaxFinalization.validation;
+              design.runs.persistState(run);
+              if (syntaxFinalization.validation.checker) {
+                design.runs.emit(run, 'diagnostic', {
+                  type: 'deliverable_syntax_validation',
+                  source: 'run_finalizer',
+                  status: syntaxFinalization.validation.status,
+                  checker: syntaxFinalization.validation.checker,
+                  candidateHash:
+                    syntaxFinalization.validation.candidateHash ?? null,
+                  checkedFileCount:
+                    syntaxFinalization.validation.checkedFiles?.length ?? 0,
+                  checkCount:
+                    syntaxFinalization.validation.metrics?.checkCount ?? null,
+                  checkerDurationMs:
+                    syntaxFinalization.validation.metrics?.checkerDurationMs ?? null,
+                  repairableCheckCount:
+                    syntaxFinalization.validation.metrics?.repairableCheckCount ?? null,
+                });
+              }
+              if (syntaxFinalization.action === 'fail') {
+                send('error', createSseErrorPayload(
+                  'AGENT_EXECUTION_FAILED',
+                  `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. The bounded in-turn repair loop ended without a valid candidate.`,
+                  { retryable: false },
+                ));
+                finishStrategyAwarePhysicalRun('failed', 1, signal);
+                return;
+              }
+            }
+          }
           // Observation only (this branch has no repair loop): did a phone-app
           // prototype actually ship inside the staged handset shell? Feeds
           // run_finished analytics so the rollout can measure shell adoption.
@@ -15742,6 +15816,32 @@ export async function startServer({
               );
             }
           }
+        }
+        // Snapshot only after the completion gate accepts the settled Web
+        // candidate. A parse-broken deliverable must not create a version that
+        // looks successfully delivered.
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          finishStrategyAwarePhysicalRun('failed', 1, signal);
+          return;
+        }
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] delivered session persistence failed', err);
         }
         if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;

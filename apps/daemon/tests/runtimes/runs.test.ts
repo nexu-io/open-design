@@ -1444,6 +1444,34 @@ describe('run event log persistence', () => {
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
   });
 
+  it('persists and surfaces the bounded deliverable syntax loop state', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.deliverableSyntaxRepair = {
+      schema: 'open-design.deliverable-syntax-repair/v1',
+      attempt: 1,
+      maxAttempts: 3,
+      checker: 'web-syntax@1',
+      candidateHash: 'sha256:failed',
+    };
+    run.deliverableSyntaxValidation = {
+      schema: 'open-design.deliverable-syntax-tool/v1',
+      status: 'repairable',
+      checkedAt: 1_725_000_000_000,
+    };
+    runs.persistState(run);
+
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+      deliverableSyntaxValidation: { status: 'repairable' },
+    });
+    expect(runs.statusBody(run)).toMatchObject({
+      deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+      deliverableSyntaxValidation: { status: 'repairable' },
+    });
+  });
+
   it('persists a restart-safe terminal state and telemetry checkpoints', () => {
     const runs = createRunsWithLog(tmpDir);
     const run = runs.create({

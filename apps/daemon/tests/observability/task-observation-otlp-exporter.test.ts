@@ -432,6 +432,48 @@ const OTLP_OBSERVATION_METADATA_FIELDS = [
 ] as const;
 
 describe('task observation OTLP exporter', () => {
+  it('keeps syntax timing and repaired-delivery value on the Task trace', () => {
+    const source = aggregate();
+    const run = source.observations.find((candidate) => candidate.kind === 'task_run')!;
+    run.quality!.deliverableSyntax = {
+      schemaVersion: 'deliverable-syntax-telemetry-v1',
+      applicable: true,
+      status: 'pass',
+      source: 'run_finalizer',
+      checker: 'web-syntax@1',
+      checkedFileCount: 1,
+      checkCount: 3,
+      checkerDurationMs: 16,
+      repairableCheckCount: 2,
+      initialDiagnosticCount: 1,
+      latestDiagnosticCount: 0,
+      repairTriggered: true,
+      repairAttempts: 2,
+      maxRepairAttempts: 3,
+      repairOutcome: 'repaired',
+      recoveredDeliveryCount: 1,
+      blockedBrokenDeliveryCount: 0,
+    };
+
+    const legacy = buildLegacyTaskObservationPayload(source);
+    const legacyTrace = legacyEventFor(legacy, source.root.observationId);
+    expect(legacyTrace.body.metadata).toMatchObject({
+      deliverable_syntax_checker_duration_ms: 16,
+      deliverable_syntax_repair_outcome: 'repaired',
+      deliverable_syntax_recovered_delivery_count: 1,
+    });
+    const otlp = buildOtlpTaskObservationPayload(source);
+    const root = spanFor(otlp, source.root.observationId);
+    expect(stringAttribute(
+      root,
+      'langfuse.trace.metadata.deliverable_syntax_repair_outcome',
+    )).toBe('repaired');
+    expect(root.attributes.find((attribute) => (
+      attribute.key === 'langfuse.trace.metadata.deliverable_syntax_checker_duration_ms'
+    ))?.value.intValue).toBe('16');
+    expect(JSON.stringify(legacy)).not.toContain('index.html');
+  });
+
   it('carries the structured main-Run model and agent through legacy and OTLP payloads', () => {
     const runObservation = buildStructuredMainRunObservationV1({
       taskExecutionId: TASK_ID,

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   buildSafeRunQualityProjectionFromDaemon,
+  projectDeliverableSyntaxTelemetry,
   reportRunCompletedFromDaemon,
 } from '../src/langfuse-bridge.js';
 import { buildPromptStackTelemetry } from '../src/prompt-telemetry.js';
@@ -127,6 +128,89 @@ function velaTraceBody(call: [string, RequestInit]): Record<string, any> {
   expect(event).toBeTruthy();
   return event!.data;
 }
+
+describe('langfuse-bridge deliverable syntax telemetry', () => {
+  it('derives repaired value and accumulated checker timing from durable Run state', () => {
+    expect(projectDeliverableSyntaxTelemetry(makeRun({
+      deliverableSyntaxRepair: {
+        schema: 'open-design.deliverable-syntax-repair/v1',
+        attempt: 2,
+        maxAttempts: 3,
+        checker: 'web-syntax@1',
+        candidateHash: 'content-free-not-exported',
+      },
+      deliverableSyntaxValidation: {
+        schema: 'open-design.deliverable-syntax-tool/v1',
+        status: 'pass',
+        checker: 'web-syntax@1',
+        candidateHash: 'content-free-not-exported',
+        checkedFiles: ['index.html'],
+        diagnostics: [],
+        source: 'run_finalizer',
+        checkedAt: 123,
+        metrics: {
+          schema: 'open-design.deliverable-syntax-metrics/v1',
+          checkCount: 3,
+          checkerDurationMs: 16,
+          repairableCheckCount: 2,
+          initialDiagnosticCount: 1,
+          latestDiagnosticCount: 0,
+        },
+      },
+    }))).toEqual({
+      schemaVersion: 'deliverable-syntax-telemetry-v1',
+      applicable: true,
+      status: 'pass',
+      source: 'run_finalizer',
+      checker: 'web-syntax@1',
+      checkedFileCount: 1,
+      checkCount: 3,
+      checkerDurationMs: 16,
+      repairableCheckCount: 2,
+      initialDiagnosticCount: 1,
+      latestDiagnosticCount: 0,
+      repairTriggered: true,
+      repairAttempts: 2,
+      maxRepairAttempts: 3,
+      repairOutcome: 'repaired',
+      recoveredDeliveryCount: 1,
+      blockedBrokenDeliveryCount: 0,
+    });
+  });
+
+  it('recognizes a finalizer repairable result at the attempt cap as exhausted', () => {
+    expect(projectDeliverableSyntaxTelemetry(makeRun({
+      deliverableSyntaxRepair: {
+        schema: 'open-design.deliverable-syntax-repair/v1',
+        attempt: 3,
+        maxAttempts: 3,
+        checker: 'web-syntax@1',
+        candidateHash: 'not-exported',
+      },
+      deliverableSyntaxValidation: {
+        schema: 'open-design.deliverable-syntax-tool/v1',
+        status: 'repairable',
+        checker: 'web-syntax@1',
+        candidateHash: 'not-exported',
+        checkedFiles: ['index.html'],
+        diagnostics: [{
+          code: 'JS_PARSE_ERROR',
+          file: 'index.html',
+          line: 1,
+          column: 1,
+          message: 'not exported',
+          source: 'inline_script',
+        }],
+        source: 'run_finalizer',
+        checkedAt: 123,
+      },
+    }))).toMatchObject({
+      repairOutcome: 'exhausted',
+      recoveredDeliveryCount: 0,
+      blockedBrokenDeliveryCount: 1,
+    });
+  });
+});
 
 describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
   let dataDir: string;

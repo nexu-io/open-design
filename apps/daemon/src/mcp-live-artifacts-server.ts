@@ -1,4 +1,5 @@
 import readline from 'node:readline';
+import type { DeliverableSyntaxToolResponse } from '@open-design/contracts';
 
 type JsonObject = Record<string, unknown>;
 
@@ -106,6 +107,11 @@ export function createLiveArtifactsMcpTools(): McpTool[] {
         },
       },
     },
+    {
+      name: 'deliverable_syntax_check',
+      description: 'Check the current deliverable syntax through the daemon tool endpoint. POSIX equivalent: `"$OD_NODE_BIN" "$OD_BIN" tools deliverable-syntax check --json`.',
+      inputSchema: EMPTY_OBJECT_SCHEMA,
+    },
   ];
 }
 
@@ -133,7 +139,7 @@ function endpoint(baseUrl: URL, pathname: string): string {
   return url.toString();
 }
 
-async function requestJson(pathname: string, init: RequestInit = {}): Promise<unknown> {
+async function requestJson<T = unknown>(pathname: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(endpoint(daemonUrl(), pathname), {
     ...init,
     headers: {
@@ -157,7 +163,7 @@ async function requestJson(pathname: string, init: RequestInit = {}): Promise<un
     (error as Error & { details?: unknown }).details = body;
     throw error;
   }
-  return body;
+  return body as T;
 }
 
 async function callTool(name: string, args: JsonObject): Promise<unknown> {
@@ -197,6 +203,12 @@ async function callTool(name: string, args: JsonObject): Promise<unknown> {
       method: 'POST',
       body: JSON.stringify({ connectorId: args.connectorId, toolName: args.toolName, input: args.input ?? {} }),
     });
+  }
+  if (name === 'deliverable_syntax_check') {
+    return await requestJson<DeliverableSyntaxToolResponse>(
+      '/api/tools/deliverable-syntax/check',
+      { method: 'POST' },
+    );
   }
   throw new Error(`unknown MCP tool: ${name}`);
 }

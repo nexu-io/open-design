@@ -516,6 +516,42 @@ describe('buildTracePayload', () => {
     });
   });
 
+  it('exports content-free deliverable syntax timing and value counters as flat metadata', () => {
+    const trace = (buildTracePayload(makeCtx({
+      deliverableSyntax: {
+        schemaVersion: 'deliverable-syntax-telemetry-v1',
+        applicable: true,
+        status: 'pass',
+        source: 'run_finalizer',
+        checker: 'web-syntax@1',
+        checkedFileCount: 1,
+        checkCount: 3,
+        checkerDurationMs: 16,
+        repairableCheckCount: 2,
+        initialDiagnosticCount: 1,
+        latestDiagnosticCount: 0,
+        repairTriggered: true,
+        repairAttempts: 2,
+        maxRepairAttempts: 3,
+        repairOutcome: 'repaired',
+        recoveredDeliveryCount: 1,
+        blockedBrokenDeliveryCount: 0,
+      },
+    }))[0] as any).body;
+
+    expect(trace.metadata).toMatchObject({
+      deliverable_syntax_schema_version: 'deliverable-syntax-telemetry-v1',
+      deliverable_syntax_applicable: true,
+      deliverable_syntax_status: 'pass',
+      deliverable_syntax_checker_duration_ms: 16,
+      deliverable_syntax_check_count: 3,
+      deliverable_syntax_repair_outcome: 'repaired',
+      deliverable_syntax_recovered_delivery_count: 1,
+      deliverable_syntax_blocked_broken_delivery_count: 0,
+    });
+    expect(JSON.stringify(trace.metadata)).not.toContain('index.html');
+  });
+
   it('omits prompt + output when content gate is off', () => {
     const batch = buildTracePayload(makeCtx());
     const trace = (batch[0] as any).body;
