@@ -553,8 +553,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -587,8 +585,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -646,8 +642,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Reference-project sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
     await screen.findByText('Reference A');
     fireEvent.click(screen.getByText('Reference B'));
@@ -703,8 +697,6 @@ describe('ChatComposer context pickers', () => {
     await typeAndSettle('Review this');
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Reference-project sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
     await screen.findByText('Reference A');
     fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
@@ -742,8 +734,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -795,8 +785,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -818,8 +806,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -875,8 +861,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -990,8 +974,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {

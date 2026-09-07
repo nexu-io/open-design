@@ -1861,6 +1861,14 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 .composer-row > * {
   min-width: 0;
 }
+/* Below ~500px the row can't hold the mode name + a full model chip + run
+   button on one line, so the selected mode pill collapses to icon + clear;
+   above it (wide chat / full-width composer) the name shows again. */
+@container (max-width: 500px) {
+  .composer-row .composer-mode__label {
+    display: none;
+  }
+}
 .composer-row .inline-switcher {
   min-width: 0;
   flex: 0 1 auto;
@@ -1924,8 +1932,8 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
   scrollbar-width: thin;
   animation: composer-toolbox-pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Plugins variant of the standalone popover: wide enough that the
-   `.plus-menu__plugin-pane` list + hover-preview columns both fit. */
+/* Plugins variant of the standalone popover: sized like the "+" menu's
+   `.plus-menu__flyout--plugins` so the list + hover-preview pane fits. */
 .composer .composer-plugins-standalone-popup {
   width: 466px;
   max-width: calc(100vw - 24px);
@@ -2017,6 +2025,25 @@ body:has(.manual-edit-workspace) .chat-composer-fixed-layer {
 }
 .app .composer-row .session-mode-toggle__trigger {
   box-shadow: none;
+}
+/* #5517 composer mode picker: the project chat composer keeps every footer
+   control on one 28px baseline (our "one control system" fix), so the neutral
+   circular trigger and the selected green pill both drop from their default
+   32/34px to 28px here. Radius stays as authored (circle when neutral, pill
+   when selected). The home composer footer keeps the picker's larger native
+   sizing via its own `.home-hero__input-card` scope. */
+.app .composer-row .composer-mode__trigger,
+.chat-composer-fixed-layer .composer-row .composer-mode__trigger {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  box-shadow: none;
+}
+.app .composer-row .composer-mode.is-selected .composer-mode__trigger,
+.chat-composer-fixed-layer .composer-row .composer-mode.is-selected .composer-mode__trigger {
+  width: auto;
+  height: 28px;
+  min-width: 0;
 }
 /* Chat composer model chip mirrors the home icon-only chip: just the agent
    mark, no chevron or box (see .inline-switcher__chip--icon in the home hero). */

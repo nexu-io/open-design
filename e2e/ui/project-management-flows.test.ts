@@ -707,7 +707,7 @@ test('[P1] project detail composer working directory picker opens without leavin
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] project detail composer plus menu exposes the attachment entry and no resource submenus', async ({ page }) => {
+test('[P1] project detail composer plus menu exposes attachment, connector, plugin, and MCP entries', async ({ page }) => {
   await routeComposerPlusFixtures(page);
   await page.goto('/');
   await createProject(page, 'Composer plus context menu');
@@ -716,11 +716,18 @@ test('[P1] project detail composer plus menu exposes the attachment entry and no
   const composer = page.getByTestId('chat-composer');
   await composer.getByTestId('chat-plus-trigger').click();
   await expect(page.getByTestId('composer-plus-attach')).toBeVisible();
-  // Plugins, connectors and MCP were removed from this menu; they stay
-  // reachable from their own surfaces.
-  await expect(page.getByTestId('composer-plus-plugins')).toHaveCount(0);
-  await expect(page.getByTestId('composer-plus-connectors')).toHaveCount(0);
-  await expect(page.getByTestId('composer-plus-mcp')).toHaveCount(0);
+  await expect(page.getByTestId('composer-plus-connectors')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-plugins')).toBeVisible();
+  await expect(page.getByTestId('composer-plus-mcp')).toBeVisible();
+
+  await page.getByTestId('composer-plus-connectors').click();
+  await expect(page.getByRole('menuitem', { name: /Figma Connector/i })).toBeVisible();
+
+  await page.getByTestId('composer-plus-plugins').click();
+  await expect(page.getByRole('menuitem', { name: /Composer Context Plugin/i })).toBeVisible();
+
+  await page.getByTestId('composer-plus-mcp').click();
+  await expect(page.getByRole('menuitem', { name: /Design Docs MCP/i })).toBeVisible();
 });
 
 test('[P1] project detail composer plus menu opens project, local code, Figma help, and design system context actions', async ({ page }) => {

@@ -3666,12 +3666,45 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 setComposerEngaged(true);
               }}
               onSubmenuOpen={(submenu) => {
-                // The working-dir flyout carries actions, not a resource list.
-                if (submenu === 'workingDir') return;
+                // The toolbox flyout tracks its own open (design_toolbox_open);
+                // the working-dir flyout carries actions, not a resource list.
+                if (submenu === 'toolbox' || submenu === 'workingDir') return;
                 trackComposerBar({
                   element: 'plus_submenu_open',
                   resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
                 });
+              }}
+              onSearchUsed={(submenu) => {
+                trackComposerBar({
+                  element: 'plus_search',
+                  resource_kind: PLUS_SUBMENU_RESOURCE_KIND[submenu],
+                });
+              }}
+              connectors={connectors}
+              onPickConnector={(connector) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'connector',
+                  resource_id: connector.id,
+                });
+                insertConnectorMention(connector);
+              }}
+              onAddConnector={() => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'connector' });
+                onOpenConnectors?.();
+              }}
+              plugins={pluginsForComposer}
+              onPickPlugin={(record) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'plugin',
+                  resource_id: record.id,
+                });
+                void insertPluginMention(record);
+              }}
+              onAddPlugin={() => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'plugin' });
+                onBrowsePlugins?.();
               }}
               skills={skills}
               onPickSkill={(skill) => {
@@ -3681,6 +3714,19 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                   resource_id: skill.id,
                 });
                 void insertSkillMention(skill);
+              }}
+              mcpServers={enabledMcpServers}
+              onPickMcp={(server) => {
+                trackComposerBar({
+                  element: 'plus_pick',
+                  resource_kind: 'mcp',
+                  resource_id: server.id,
+                });
+                insertMcpMention(server);
+              }}
+              onAddMcp={() => {
+                trackComposerBar({ element: 'plus_add', resource_kind: 'mcp' });
+                onOpenMcpSettings?.();
               }}
               onAttachFiles={() => {
                 trackChatPanelClick(analytics.track, {
@@ -3751,6 +3797,53 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 trackComposerBar({ element: 'design_system_open' });
                 openDesignSystemPicker();
               } : undefined}
+              // 插件 and 设计百宝箱 live inside the "+" menu (right below
+              // 工作目录) as hover-expand submenus. The toolbox flyout reuses
+              // the same DesignToolboxPanel the standalone popover renders.
+              toolboxLabel={t('chat.designToolbox.title')}
+              renderToolbox={(close) => (
+                <DesignToolboxPanel
+                  workspaceContext={workspaceContext}
+                  actions={DESIGN_TOOLBOX_ACTIONS}
+                  skills={skills}
+                  plugins={pluginsForComposer}
+                  mcpServers={enabledMcpServers}
+                  mcpTemplates={mcpTemplates}
+                  connectors={connectors}
+                  projectFiles={projectFiles}
+                  activeSkillIds={stagedSkills.map((skill) => skill.id)}
+                  activePluginId={activeAppliedPlugin?.pluginId ?? pinnedPluginId ?? null}
+                  activeMcpServerIds={stagedMcpServers.map((server) => server.id)}
+                  activeConnectorIds={stagedConnectors.map((connector) => connector.id)}
+                  activeFilePaths={staged.map((item) => item.path)}
+                  onOpened={() => trackDesignToolbox({ element: 'design_toolbox_open' })}
+                  onPickAction={(action) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_action',
+                      toolbox_action_id: action.id,
+                    });
+                    applyDesignToolboxAction(action);
+                    close();
+                  }}
+                  onPickSkill={(skill) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_resource',
+                      resource_kind: 'skill',
+                      resource_id: skill.id,
+                    });
+                    applyDesignToolboxSkill(skill);
+                    close();
+                  }}
+                  onPickResource={(resource) => {
+                    trackDesignToolbox({
+                      element: 'design_toolbox_resource',
+                      ...designToolboxResourceTracking(resource),
+                    });
+                    applyDesignToolboxResource(resource);
+                    close();
+                  }}
+                />
+              )}
             />
             {/* #5517: the design-system picker sits inline in the composer's
                 icon row (palette icon) instead of the staged-context bar. */}
@@ -3830,7 +3923,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                     `2e4c1a753b`(#7635 / OPEND-2553)在 7 小时后带着自己那份设计
                     上线,明确覆盖了项目输入区。两份设计撞在同一颗控件上,取已上线
                     的那份 —— 在合并里悄悄撤销别人已上线的工作,不该由做合并的人
-                    代劳。稿子那一格的 28/16 就此作废,判据见本次合并说明。 */}
+                    代劳。稿子那一格的 28/16 就此作废。
+
+                    2026-09-07 再次合并 main 时这里又冲突了一次:main 把 #7635 的
+                    首页改版整体 revert 掉了(#7843),等 `feat/home-entry-refresh`
+                    整期做完再回来,于是 main 侧回到了 `arrow-up` / 18。**这一格仍
+                    然保 32**——项目输入区(聊天面板)不许回退是这次合并的红线,
+                    判据是 `w134-composer-send-geometry.test.tsx`:它把两张样式表按
+                    index.css 的顺序装进 jsdom,量出这颗按钮必须是 32×32、无描边、
+                    无阴影。首页那一侧的对应改动照 revert 走,两边就此分开。 */}
                 <Icon name="arrow-up-fill" size={32} />
               </button>
             ) : null}

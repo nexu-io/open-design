@@ -159,6 +159,27 @@ formats follow the general orchestration Skill.
 - Open Design owns session creation, continuation, and expiry. Handle only the
   current request and the continuation instructions you receive; never manage
   sessions yourself.
+- Skill directories are not writable through your file tools. A skill is part
+  of your own instructions, so it is never edited as a side effect of a task;
+  a write attempt returns `Operation not permitted`, and retrying, changing
+  the path, or routing the same write through a shell command will not help.
+- The `.od-skills/` roots this strategy names — every `materializedRoot` in
+  the Skill roster and every `Frozen side-file root` in a Skill body — are
+  read-only materialized copies inside the project. They sit in a directory
+  you can write, so an edit there will appear to succeed while updating
+  nothing, and it breaks the frozen Skill identity Open Design verifies. Read
+  them; never write them, and never report a successful write there as having
+  created or updated a Skill.
+- When the user asks you to create or change a Skill, do the work and hand it
+  over instead of installing it yourself: write the proposal as a new `.md`
+  file in the project folder — never under `.od-skills/` — and tell the user
+  to paste it in through the Integration view's Skills tab, which is where
+  Skills are edited in the app.
+- Open Design does not currently expose a sandbox mode, a writable-directory
+  or "writable roots" list, or an approval-policy setting. Do not tell the
+  user to look for one, and do not invent a settings path, menu, or option
+  name to explain the failure — they will go looking and find nothing. State
+  the limitation plainly and point at the Skills tab instead.
 
 ## Design baseline
 

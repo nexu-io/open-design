@@ -261,6 +261,20 @@ const REGISTRY: readonly Entry[] = [
     verdict: 'suppression-rule',
     why: 'BYOK/API mirror.',
   },
+  {
+    file: 'apps/daemon/src/prompts/system.ts',
+    match: 'does not currently expose a sandbox mode',
+    chars: [443],
+    verdict: 'suppression-rule',
+    why: '#7720, arrived on main 2026-09-06 and first seen by this guard in the '
+      + '09-07 merge. Skill roots are read-only by design, so a write to one '
+      + 'always fails; this paragraph forbids the two narrations the model was '
+      + 'reaching for — sending the user hunting for a sandbox / writable-roots / '
+      + 'approval-policy setting that does not exist, and inventing a settings '
+      + 'path to explain the error. It names no host state of its own: the user '
+      + 'DID ask (they asked to edit their skill), and the next step it gives is '
+      + 'a real product surface, the Skills tab.',
+  },
 
   // ---- The user asked; they are owed a next step (OPEND-2577 carve-out). ----
   {
