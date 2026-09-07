@@ -322,6 +322,71 @@ describe('langfuse-bridge deliverable syntax telemetry', () => {
     })).toMatchObject({ repairOutcome: 'unresolved', recoveredDeliveryCount: 0 });
   });
 
+  it('does not downgrade a mixed Agent/Host summary missing its version into legacy recovery', () => {
+    const evidence = terminalEvidence();
+    const { summaryVersion: _missing, ...partialSummary } = evidence.finalization;
+    expect(projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        ...evidence, source: 'agent_tool', repair: { action: 'none', attempt: 1, maxAttempts: 3 },
+        metrics: { ...evidence.metrics, repairExecutor: 'agent' },
+        finalization: partialSummary,
+      },
+    })).toMatchObject({ repairOutcome: 'unresolved', recoveredDeliveryCount: 0 });
+  });
+
+  it.each([
+    { summaryVersion: undefined },
+    { initialStatus: 'pass' as const },
+    { repairEngine: 'host-safe-fixer@2' as const },
+    { stagedPatchCount: 0 },
+    { committedPatchCount: 0 },
+    { committedRepairRules: [] },
+  ].flatMap((partialSummary) => [0, 1].map((priorRepairs) => ({ partialSummary, priorRepairs }))))(
+    'keeps any new summary field without a version unknown, even with Agent history: %j',
+    ({ partialSummary, priorRepairs }) => {
+      const evidence = terminalEvidence();
+      expect(projectDeliverableSyntaxTelemetry({
+        status: 'succeeded', deliverableSyntaxValidation: {
+          ...evidence, source: 'agent_tool',
+          repair: { action: 'none', attempt: priorRepairs, maxAttempts: 3 },
+          metrics: {
+            ...evidence.metrics, repairExecutor: 'agent', repairableCheckCount: priorRepairs,
+            initialDiagnosticCount: priorRepairs,
+          },
+          // Persisted malformed JSON/objects need runtime coverage beyond the DTO's types.
+          finalization: { action: 'allow', ...partialSummary } as unknown as typeof evidence.finalization,
+        },
+      })).toMatchObject({
+        terminalRunStatus: 'succeeded', repairOutcome: 'unresolved',
+        recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+      });
+    },
+  );
+
+  it('still accepts legacy Agent recovery when no new summary fields are present', () => {
+    const evidence = terminalEvidence();
+    expect(projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        ...evidence, source: 'agent_tool', repair: { action: 'none', attempt: 1, maxAttempts: 3 },
+        metrics: { ...evidence.metrics, repairExecutor: 'agent' },
+        finalization: { action: 'allow' },
+      },
+    })).toMatchObject({ repairOutcome: 'repaired', recoveredDeliveryCount: 1 });
+  });
+
+  it.each([null, 'malformed-finalization', 7, []])(
+    'does not throw for a non-object legacy summary container: %j', (finalization) => {
+      const evidence = terminalEvidence();
+      expect(projectDeliverableSyntaxTelemetry({
+        status: 'succeeded', deliverableSyntaxValidation: {
+          ...evidence, source: 'agent_tool', repair: { action: 'none', attempt: 1, maxAttempts: 3 },
+          metrics: { ...evidence.metrics, repairExecutor: 'agent' },
+          finalization: finalization as unknown as typeof evidence.finalization,
+        },
+      })).toMatchObject({ repairOutcome: 'repaired', recoveredDeliveryCount: 1 });
+    },
+  );
+
   it('does not attribute prior Agent repairs to a Host check that initially passed', () => {
     const evidence = terminalEvidence();
     expect(projectDeliverableSyntaxTelemetry({

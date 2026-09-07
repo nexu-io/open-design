@@ -313,7 +313,14 @@ export function projectDeliverableSyntaxTelemetry(
   const repairState = run.deliverableSyntaxRepair ?? embeddedRepairState;
   const finalization = validation.finalization
     ? projectSyntaxFinalization(validation.finalization) : undefined;
-  const versionedSummary = validation.finalization?.summaryVersion !== undefined;
+  // Any new field marks versioned evidence. A missing version must not turn
+  // an incomplete Host summary into legacy Agent recovery or a clean check.
+  const rawFinalization = validation.finalization;
+  const versionedSummary = rawFinalization !== null
+    && typeof rawFinalization === 'object' && !Array.isArray(rawFinalization) && [
+    'summaryVersion', 'initialStatus', 'repairEngine', 'stagedPatchCount',
+    'committedPatchCount', 'committedRepairRules',
+  ].some((field) => field in rawFinalization);
   const hostSummary = finalization?.summaryVersion === 1;
   const stagedPatchCount = finalization?.stagedPatchCount;
   const committedPatchCount = finalization?.committedPatchCount;
