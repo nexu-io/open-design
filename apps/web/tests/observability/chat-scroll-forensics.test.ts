@@ -17,6 +17,7 @@ import {
   retainChatScrollForensics,
 } from '../../src/observability/chat-scroll-forensics';
 import { chatScrollFreezeListenerCount } from '../../src/observability/chat-scroll-freeze';
+import { CHAT_SCROLL_TAKEOVER_STORAGE_KEY } from '../../src/runtime/chat-scroll-takeover';
 
 /**
  * Why this file exists
@@ -328,6 +329,91 @@ describe('the capture carries every field a reader needs', () => {
     expect(capture.writes.count).toBe(0);
     expect(capture.writes.note).toMatch(/OFF/);
     expect(Array.isArray(capture.writes.records)).toBe(true);
+  });
+});
+
+/**
+ * The wheel takeover changes how the chat log scrolls, and its switch lives in
+ * the colleague's `localStorage` — nothing else in the diagnostics zip can see
+ * it. Without it in the capture, a reader looking at a strange scroll scene
+ * cannot rule out "this machine had the takeover switched on", which is the
+ * first thing they would want to eliminate.
+ *
+ * The value is recorded, never inferred: absent, set to something odd, and
+ * unreadable storage are three different facts and the file must keep them
+ * apart.
+ */
+describe('the wheel-takeover switch, as this machine had it', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it('reports the key as absent rather than as off', () => {
+    mountChatLog();
+
+    const capture = collectChatScrollForensics();
+
+    expect(capture.runtime.chatScrollTakeover).toMatchObject({
+      storageKey: CHAT_SCROLL_TAKEOVER_STORAGE_KEY,
+      readable: true,
+      rawValue: null,
+      engaged: false,
+    });
+  });
+
+  it('carries the stored value verbatim when the takeover is armed', () => {
+    localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, '1');
+    mountChatLog();
+
+    const capture = collectChatScrollForensics();
+
+    expect(capture.runtime.chatScrollTakeover.rawValue).toBe('1');
+    expect(capture.runtime.chatScrollTakeover.readable).toBe(true);
+  });
+
+  it('keeps a value that does NOT arm the takeover distinguishable from absence', () => {
+    // 'true' reads like "on" to a human and arms nothing — exactly the
+    // confusion a boolean field here would bake into the evidence.
+    localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, 'true');
+    mountChatLog();
+
+    const capture = collectChatScrollForensics();
+
+    expect(capture.runtime.chatScrollTakeover.rawValue).toBe('true');
+  });
+
+  it('says the switch is UNKNOWN, not off, when storage cannot be read', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError: storage is blocked on this origin');
+    });
+    mountChatLog();
+
+    const capture = collectChatScrollForensics();
+
+    expect(capture.runtime.chatScrollTakeover.readable).toBe(false);
+    expect(capture.runtime.chatScrollTakeover.rawValue).toBeNull();
+    expect(capture.runtime.chatScrollTakeover.note).toMatch(/UNKNOWN/);
+    // The note must not let a reader round an unreadable switch down to "off".
+    expect(capture.runtime.chatScrollTakeover.note).toMatch(/not "off"/);
+  });
+
+  it('rides along in the envelope the daemon receives', () => {
+    localStorage.setItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY, '1');
+    mountChatLog();
+
+    const envelope = captureChatScrollForensicsForExport();
+
+    expect(envelope.live.forensics?.runtime.chatScrollTakeover.rawValue).toBe('1');
+    // Serialization is the actual transport, so pin it there too: a field that
+    // JSON.stringify drops is a field the reader never sees.
+    const roundTripped = JSON.parse(JSON.stringify(envelope)) as {
+      live: { forensics: { runtime: { chatScrollTakeover: { rawValue: string | null } } } };
+    };
+    expect(roundTripped.live.forensics.runtime.chatScrollTakeover.rawValue).toBe('1');
   });
 });
 

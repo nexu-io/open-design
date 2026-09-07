@@ -3061,6 +3061,15 @@ export async function startServer({
   // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
   // (registered before the global parser so it claims the body first).
   app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
+  // A chat-scroll forensics capture carries the chat log's full `outerHTML`,
+  // and the envelope carries two of them (`live` + `retained`), each truncated
+  // renderer-side at 8MB. Registered here for the same reason as the two above
+  // — the route itself is declared far below, and by then the global parser has
+  // already read and refused the body. The endpoint exists to collect the
+  // longest transcripts, so leaving it on the 4mb ceiling made it blind to
+  // exactly the incidents it was built for, and silently: the uploader reports
+  // `res.ok` and the export continues without the evidence.
+  app.use(CHAT_SCROLL_FORENSICS_PATH, chatScrollForensicsBodyParser);
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
@@ -8055,10 +8064,14 @@ export async function startServer({
   // carries the chat log's DOM. Not a user-facing capability — it is the
   // renderer half of `od diagnostics export`, which already exists on both
   // surfaces — so it gets no CLI subcommand of its own.
+  //
+  // The 24mb body parser is NOT in this chain: a route-level parser cannot
+  // reach a body the app-level 4mb parser has already read, so it is mounted
+  // next to the other oversized-body routes, ahead of the global one. Naming it
+  // here as well would only make it look like this line is what sizes the route.
   app.post(
     CHAT_SCROLL_FORENSICS_PATH,
     requireLocalDaemonRequest,
-    chatScrollForensicsBodyParser,
     chatScrollForensicsHandler,
   );
 

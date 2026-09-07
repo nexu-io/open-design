@@ -52,6 +52,10 @@ import {
   isScrollWriteTraceArmed,
   type ScrollWriteRecord,
 } from './chat-scroll-write-trace';
+import {
+  CHAT_SCROLL_TAKEOVER_STORAGE_KEY,
+  chatScrollTakeoverEngaged,
+} from '../runtime/chat-scroll-takeover';
 
 /**
  * Where the daemon receives the capture.
@@ -147,6 +151,36 @@ export interface ChatScrollForensicsRuntime {
    */
   commit: null;
   commitNote: string;
+  /**
+   * The wheel-takeover switch, as this machine actually had it.
+   *
+   * Without this a reader cannot rule out the one local setting that changes
+   * how the chat log scrolls, and "was the takeover on?" is unanswerable after
+   * the fact — the switch lives in the colleague's `localStorage`, not in
+   * anything the bundle otherwise carries.
+   *
+   * Read, never inferred: `rawValue` is whatever the key held, verbatim, and
+   * `readable: false` says the storage itself could not be reached (private
+   * mode, a blocked origin, a packaged `od:` page with storage disabled) rather
+   * than pretending that means "off".
+   */
+  chatScrollTakeover: ChatScrollForensicsTakeover;
+}
+
+export interface ChatScrollForensicsTakeover {
+  storageKey: string;
+  /** Whether `localStorage` answered at all. */
+  readable: boolean;
+  /** The stored string, verbatim; `null` when the key is absent. */
+  rawValue: string | null;
+  /**
+   * Whether a scroller is being driven from JavaScript at capture time. Not
+   * derivable from `rawValue`: the switch is read once at install, so a value
+   * set after boot has not taken effect, and the takeover only engages once the
+   * freeze probe has actually called a freeze.
+   */
+  engaged: boolean;
+  note: string;
 }
 
 export interface CompositionNode {
@@ -405,6 +439,49 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+const TAKEOVER_UNREADABLE_NOTE =
+  'localStorage could not be read, so whether the wheel takeover was switched on '
+  + 'is UNKNOWN for this capture — not "off".';
+
+/**
+ * The takeover switch as read, with no interpretation layered on top.
+ *
+ * Deliberately not `chatScrollTakeoverFlagSet()`: that collapses "absent",
+ * "set to something other than 1" and "storage threw" into one `false`, and
+ * those are three different things to a reader trying to explain a scene.
+ */
+export function collectTakeoverSection(): ChatScrollForensicsTakeover {
+  let readable = false;
+  let rawValue: string | null = null;
+  try {
+    const storage = globalThis.localStorage;
+    if (storage != null) {
+      rawValue = storage.getItem(CHAT_SCROLL_TAKEOVER_STORAGE_KEY);
+      readable = true;
+    }
+  } catch {
+    readable = false;
+    rawValue = null;
+  }
+  let engaged = false;
+  try {
+    engaged = chatScrollTakeoverEngaged();
+  } catch {
+    engaged = false;
+  }
+  return {
+    storageKey: CHAT_SCROLL_TAKEOVER_STORAGE_KEY,
+    readable,
+    rawValue,
+    engaged,
+    note: readable
+      ? "Raw localStorage value of the wheel-takeover switch; only '1' arms it, and it "
+        + 'is read once at boot. `engaged` is whether a scroller was actually being '
+        + 'driven from JavaScript when this capture ran.'
+      : TAKEOVER_UNREADABLE_NOTE,
+  };
+}
+
 export function collectRuntimeSection(): ChatScrollForensicsRuntime {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : null;
   const chromium = ua != null ? /Chrome\/([\d.]+)/.exec(ua)?.[1] ?? null : null;
@@ -467,6 +544,7 @@ export function collectRuntimeSection(): ChatScrollForensicsRuntime {
     commitNote:
       'apps/web carries no build sha; app version/channel live in the daemon-written '
       + '`app` block of this file and in summary/manifest.json of the same zip.',
+    chatScrollTakeover: collectTakeoverSection(),
   };
 }
 
