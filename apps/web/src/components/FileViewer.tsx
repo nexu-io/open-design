@@ -327,6 +327,13 @@ import {
   shouldAdoptPersistedManualEditDocument,
   shouldFreezeManualEditDocumentIdentity,
 } from '../runtime/manual-edit-document-latch';
+import { manualEditTextSessionHasLiveDocument } from '../runtime/manual-edit-text-session';
+import {
+  manualEditFlushAllowsTeardown,
+  manualEditFlushIsDurableFailure,
+  manualEditFlushOwesUserNotice,
+  type ManualEditFlushOutcome,
+} from '../runtime/manual-edit-flush';
 import {
   PRESENTATION_BACKDROP_DELAY_MS,
   presentationBackdropPhase,
@@ -9030,13 +9037,17 @@ function HtmlViewer({
   // resulting commit has been applied, so exit/dismiss/cancel never tear down
   // mid-round-trip and drop the final edit (the #3647 exit-path regression).
   const manualEditTextSessionIdRef = useRef<string | null>(null);
+  // The document that opened the inline edit. The session belief is only ever
+  // valid while this is still the document the host would post into; see
+  // `manualEditTextSessionHasLiveDocument`.
+  const manualEditTextSessionWindowRef = useRef<Window | null>(null);
   const manualEditTextSessionStartSequenceRef = useRef<number | null>(null);
   const manualEditTextFinishRef = useRef<((acknowledged?: boolean, sessionId?: string) => void) | null>(null);
   const manualEditTextCommitInFlightRef = useRef<Promise<unknown> | null>(null);
   const manualEditTextCommitSequenceRef = useRef(0);
   const manualEditTextFailedSessionIdsRef = useRef<Set<string>>(new Set());
   const manualEditTextLatestCommitRef = useRef<{
-    promise: Promise<unknown>;
+    promise: Promise<ManualEditFlushOutcome>;
     result: boolean | null;
     sequence: number;
     sessionId: string;
@@ -9120,6 +9131,7 @@ function HtmlViewer({
     manualEditLiveStylesRef.current.clear();
     manualEditPendingStyleRef.current = null;
     manualEditTextSessionIdRef.current = null;
+    manualEditTextSessionWindowRef.current = null;
     manualEditTextSessionStartSequenceRef.current = null;
     manualEditTextFinishRef.current = null;
     manualEditTextCommitInFlightRef.current = null;
@@ -13000,6 +13012,7 @@ function HtmlViewer({
       selectedManualEditTargetIdRef.current = null;
       manualEditSelectionDraftRef.current = null;
       manualEditTextSessionIdRef.current = null;
+      manualEditTextSessionWindowRef.current = null;
       manualEditTextSessionStartSequenceRef.current = null;
       manualEditTextFinishRef.current = null;
       manualEditTextCommitInFlightRef.current = null;
@@ -13087,14 +13100,16 @@ function HtmlViewer({
         };
         manualEditTextLatestCommitRef.current = record;
         void (async () => {
+          let outcome: ManualEditFlushOutcome = 'reported';
           try {
-            record.result = (await commit) !== false;
+            outcome = await commit;
           } catch {
-            record.result = false;
+            outcome = 'reported';
           }
+          record.result = manualEditFlushAllowsTeardown(outcome);
           if (record.result) {
             manualEditTextFailedSessionIdsRef.current.delete(sessionId);
-          } else {
+          } else if (manualEditFlushIsDurableFailure(outcome)) {
             manualEditTextFailedSessionIdsRef.current.add(sessionId);
           }
           if (manualEditTextCommitInFlightRef.current === commit) {
@@ -13107,11 +13122,16 @@ function HtmlViewer({
         const sessionId = String(data.id || '');
         if (data.active) {
           manualEditTextSessionIdRef.current = sessionId;
+          // Scope the belief to the document that opened it. Only that document
+          // can close the session, so a later teardown must not block on it once
+          // the document is gone.
+          manualEditTextSessionWindowRef.current = (ev.source as Window | null) ?? null;
           manualEditTextSessionStartSequenceRef.current = manualEditTextCommitSequenceRef.current;
           return;
         }
         if (manualEditTextSessionIdRef.current === sessionId) {
           manualEditTextSessionIdRef.current = null;
+          manualEditTextSessionWindowRef.current = null;
           manualEditTextSessionStartSequenceRef.current = null;
         }
         const pending = manualEditTextFinishRef.current;
@@ -13223,21 +13243,54 @@ function HtmlViewer({
     previewStyleToIframe(id, styles, version);
   }
 
-  async function flushManualEditStyleSave(): Promise<boolean> {
+  /**
+   * Put a refusing flush on screen. Every site that declines to proceed on a
+   * flush outcome routes through here, so "the teardown refused" and "the user
+   * was told" can never come apart.
+   */
+  function noteManualEditFlushOutcome(outcome: ManualEditFlushOutcome): void {
+    if (!manualEditFlushOwesUserNotice(outcome)) return;
+    setManualEditError('Could not save yet — another change is still saving. Try again in a moment.');
+  }
+
+  /**
+   * Whether an earlier edit in this session never persisted, and say so if it
+   * did not.
+   *
+   * The witness in `manualEditTextFailedSessionIdsRef` outlives the message
+   * that explained it: the failure sets an error, and the next successful save
+   * clears the banner. From then on this gate refuses every exit and every
+   * reload with nothing on screen, and the only way out is to re-edit the exact
+   * element that failed — which the user cannot know without being told.
+   */
+  function noteManualEditUnpersistedSession(): boolean {
+    if (manualEditTextFailedSessionIdsRef.current.size === 0) return false;
+    // Only fill a gap. The failure's own message names the file and the status
+    // code and is strictly more useful than this one; the generic line is for
+    // the case where a later successful save has already cleared the banner and
+    // the witness is all that is left.
+    setManualEditError((current) => current
+      ?? 'An earlier edit could not be saved. Select that element and edit it again to retry.');
+    return true;
+  }
+
+  async function flushManualEditStyleSave(): Promise<ManualEditFlushOutcome> {
     const pending = manualEditPendingStyleRef.current;
-    if (!pending) return true;
-    if (manualEditSavingRef.current) return false;
-    const ok = await applyManualEdit(
+    if (!pending) return 'settled';
+    // No busy guard here on purpose: applyManualEdit owns that decision and
+    // reports it, where a guard here would refuse in silence.
+    const outcome = await applyManualEdit(
       { id: pending.id, kind: 'set-style', styles: pending.styles },
       pending.label,
     );
     // Keep the exact failed snapshot for retry. If another style change landed
     // while this save was in flight, it has already replaced/extended the ref
     // and must likewise remain pending.
-    if (ok && manualEditPendingStyleRef.current === pending) {
+    if (manualEditFlushAllowsTeardown(outcome)
+      && manualEditPendingStyleRef.current === pending) {
       manualEditPendingStyleRef.current = null;
     }
-    return ok;
+    return outcome;
   }
 
   function cancelManualEditStyleDraft() {
@@ -13279,11 +13332,14 @@ function HtmlViewer({
   // failed (applyManualEdit returned false / threw). Callers that tear down
   // edit state must honor a false result — keep edit mode open and preserve the
   // error so a failed save never looks like a successful one (#4291 review).
-  function finishManualEditTextSession(commit: boolean): Promise<boolean> {
+  function finishManualEditTextSession(commit: boolean): Promise<ManualEditFlushOutcome> {
     const win = iframeRef.current?.contentWindow;
     const sessionId = manualEditTextSessionIdRef.current;
-    if (!sessionId) return Promise.resolve(true);
-    if (!win) return Promise.resolve(false);
+    if (!sessionId) return Promise.resolve('settled');
+    // The session's document is alive (the caller checked) but the host has no
+    // browsing context to post into right now, so the bridge cannot be asked.
+    // Nothing failed and nothing committed: refuse the teardown, and say so.
+    if (!win) return Promise.resolve('blocked');
     const sessionStartSequence = manualEditTextSessionStartSequenceRef.current
       ?? manualEditTextCommitSequenceRef.current;
     const commitSequenceAtFinish = manualEditTextCommitSequenceRef.current;
@@ -13292,7 +13348,7 @@ function HtmlViewer({
       && commitAtFinish.sequence > sessionStartSequence
       ? commitAtFinish
       : null;
-    return new Promise<boolean>((resolve) => {
+    return new Promise<ManualEditFlushOutcome>((resolve) => {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
       const settle = (acknowledged = false, acknowledgedSessionId?: string) => {
@@ -13313,21 +13369,29 @@ function HtmlViewer({
         const relevantCommit = currentSessionCommit ?? sameSessionCommitAtFinish;
         void (async () => {
           let committed = acknowledged;
+          // A refusal that never ran is not a failure. Only a real failure is
+          // recorded as one, and only a real failure has already explained
+          // itself to the user.
+          let commitOutcome: ManualEditFlushOutcome | null = null;
           try {
-            // applyManualEdit resolves false when the save fails (or the source
-            // changed externally); surface that so callers can abort teardown.
+            // applyManualEdit reports a non-settled outcome when the save fails
+            // (or the source changed externally); surface that so callers can
+            // abort teardown.
             if (relevantCommit) {
-              committed = relevantCommit.result
-                ?? (await relevantCommit.promise) !== false;
+              commitOutcome = relevantCommit.result === null
+                ? await relevantCommit.promise
+                : (relevantCommit.result ? 'settled' : 'reported');
+              committed = manualEditFlushAllowsTeardown(commitOutcome);
               relevantCommit.result = committed;
               if (committed) {
                 manualEditTextFailedSessionIdsRef.current.delete(relevantCommit.sessionId);
-              } else {
+              } else if (manualEditFlushIsDurableFailure(commitOutcome)) {
                 manualEditTextFailedSessionIdsRef.current.add(relevantCommit.sessionId);
               }
             }
           } catch {
             committed = false;
+            commitOutcome = 'reported';
           }
           // A timeout by itself does not prove that the iframe ended the
           // editing session. Keep the session live so every later teardown
@@ -13337,9 +13401,14 @@ function HtmlViewer({
           if ((acknowledged || relevantCommit)
             && manualEditTextSessionIdRef.current === sessionId) {
             manualEditTextSessionIdRef.current = null;
+            manualEditTextSessionWindowRef.current = null;
             manualEditTextSessionStartSequenceRef.current = null;
           }
-          resolve(committed);
+          if (committed) { resolve('settled'); return; }
+          // A commit that failed already reported itself. Anything else — most
+          // often the backstop firing because the document never answered —
+          // stopped the teardown without saying a word, and must not.
+          resolve(commitOutcome === 'reported' ? 'reported' : 'blocked');
         })();
       };
       manualEditTextFinishRef.current = settle;
@@ -13355,24 +13424,54 @@ function HtmlViewer({
   // otherwise an in-flight commit left by an iframe-driven finish (Enter /
   // click-another-target). Returns false on a failed commit so callers keep
   // edit mode open with the error rather than tearing down through it (#4291).
-  async function settlePendingManualEditCommit(commitActiveSession = true): Promise<boolean> {
+  async function settlePendingManualEditCommit(
+    commitActiveSession = true,
+  ): Promise<ManualEditFlushOutcome> {
     if (manualEditTextSessionIdRef.current) {
-      return finishManualEditTextSession(commitActiveSession);
+      if (manualEditTextSessionHasLiveDocument({
+        liveWindows: [
+          iframeRef.current?.contentWindow,
+          urlPreviewIframeRef.current?.contentWindow,
+          srcDocPreviewIframeRef.current?.contentWindow,
+        ],
+        sessionWindow: manualEditTextSessionWindowRef.current,
+      })) {
+        return finishManualEditTextSession(commitActiveSession);
+      }
+      // The document that owned the inline edit is gone, so no bridge will ever
+      // answer for it. Release the belief and settle on whatever that document
+      // already committed; blocking here would report "the pending edit failed"
+      // for an edit that was never pending, and every fail-closed caller —
+      // Save included — would abort without a write and without an error.
+      manualEditTextSessionIdRef.current = null;
+      manualEditTextSessionWindowRef.current = null;
+      manualEditTextSessionStartSequenceRef.current = null;
+      manualEditTextFinishRef.current = null;
     }
     const latestCommit = manualEditTextLatestCommitRef.current;
+    let latestOutcome: ManualEditFlushOutcome | null = null;
     if (latestCommit && latestCommit.result == null) {
       try {
-        latestCommit.result = (await latestCommit.promise) !== false;
+        latestOutcome = await latestCommit.promise;
       } catch {
-        latestCommit.result = false;
+        latestOutcome = 'reported';
       }
+      latestCommit.result = manualEditFlushAllowsTeardown(latestOutcome);
       if (latestCommit.result) {
         manualEditTextFailedSessionIdsRef.current.delete(latestCommit.sessionId);
-      } else {
+      } else if (manualEditFlushIsDurableFailure(latestOutcome)) {
         manualEditTextFailedSessionIdsRef.current.add(latestCommit.sessionId);
       }
     }
-    return manualEditTextFailedSessionIdsRef.current.size === 0;
+    // 'reported' promises the user is already looking at an explanation, so
+    // this gate has to actually put one there — the original failure message is
+    // long gone by the time a later successful save clears the banner.
+    if (noteManualEditUnpersistedSession()) return 'reported';
+    // A commit that could not run leaves pending work behind with nothing on
+    // screen; it must stop the teardown AND owe a notice.
+    return latestOutcome !== null && !manualEditFlushAllowsTeardown(latestOutcome)
+      ? 'blocked'
+      : 'settled';
   }
 
   function requestManualEditUrlStandbyRefresh(
@@ -13415,15 +13514,20 @@ function HtmlViewer({
   async function exitManualEditModeAfterFlush(): Promise<boolean> {
     // A failed text commit must keep edit mode open with its error visible,
     // rather than tearing down (which would clear the error) and looking saved.
-    if (!(await settlePendingManualEditCommit())) {
+    const settleOutcome = await settlePendingManualEditCommit();
+    if (!manualEditFlushAllowsTeardown(settleOutcome)) {
+      noteManualEditFlushOutcome(settleOutcome);
       return false;
     }
     // Finishing the currently active session may succeed while another text
     // session still has an unpersisted Enter commit. Only a successful retry
     // for that same session consumes its failure witness.
-    if (manualEditTextFailedSessionIdsRef.current.size > 0) return false;
-    const ok = await flushManualEditStyleSave();
-    if (!ok) return false;
+    if (noteManualEditUnpersistedSession()) return false;
+    const styleOutcome = await flushManualEditStyleSave();
+    if (!manualEditFlushAllowsTeardown(styleOutcome)) {
+      noteManualEditFlushOutcome(styleOutcome);
+      return false;
+    }
     setManualEditPanelPosition(null);
     // Manual Edit temporarily forces srcDoc so the host can inject its bridge.
     // Once Edit is closed, always release that transport latch. A persisted
@@ -13526,13 +13630,16 @@ function HtmlViewer({
     // If an inline edit is still live (e.g. clearing the selection from the
     // panel mid-edit), commit it first so it is not lost. Keep the selection
     // and the error if that commit fails.
-    if (!(await settlePendingManualEditCommit())) {
+    const settleOutcome = await settlePendingManualEditCommit();
+    if (!manualEditFlushAllowsTeardown(settleOutcome)) {
+      noteManualEditFlushOutcome(settleOutcome);
       return;
     }
     cancelManualEditStyleDraft();
     selectedManualEditTargetIdRef.current = null;
     manualEditSelectionDraftRef.current = null;
     manualEditTextSessionIdRef.current = null;
+    manualEditTextSessionWindowRef.current = null;
     manualEditTextSessionStartSequenceRef.current = null;
     setSelectedManualEditTarget(null);
     setManualEditPanelPosition(null);
@@ -13548,11 +13655,16 @@ function HtmlViewer({
   async function dismissManualEditPanel() {
     // Closing the panel must not swallow a failed text commit: keep it open
     // with the error if the pending edit could not be saved.
-    if (!(await settlePendingManualEditCommit())) {
+    const settleOutcome = await settlePendingManualEditCommit();
+    if (!manualEditFlushAllowsTeardown(settleOutcome)) {
+      noteManualEditFlushOutcome(settleOutcome);
       return;
     }
-    const ok = await flushManualEditStyleSave();
-    if (!ok) return;
+    const styleOutcome = await flushManualEditStyleSave();
+    if (!manualEditFlushAllowsTeardown(styleOutcome)) {
+      noteManualEditFlushOutcome(styleOutcome);
+      return;
+    }
     if (selectedManualEditTarget) void clearManualEditTargetSelection();
     else setManualEditPageStylesOpen(false);
   }
@@ -13601,17 +13713,27 @@ function HtmlViewer({
     const panelContentChanged = contentPatchBeforeText !== null;
     const textCommitSequenceBeforeSave = manualEditTextCommitSequenceRef.current;
     const hadTextCommitInFlight = Boolean(manualEditTextCommitInFlightRef.current);
-    if (!(await settlePendingManualEditCommit(!panelContentChanged))) return;
+    const settleOutcome = await settlePendingManualEditCommit(!panelContentChanged);
+    if (!manualEditFlushAllowsTeardown(settleOutcome)) {
+      noteManualEditFlushOutcome(settleOutcome);
+      return;
+    }
     const inlineTextCommitted =
       hadTextCommitInFlight ||
       manualEditTextCommitSequenceRef.current !== textCommitSequenceBeforeSave;
     if (selectedTarget && (panelContentChanged || !inlineTextCommitted)) {
       const base = sourceRef.current ?? '';
       const contentPatch = manualEditContentPatchForDraft(selectedTarget, manualEditDraft, base);
-      if (contentPatch && !(await applyManualEdit(contentPatch.patch, contentPatch.label))) return;
+      if (contentPatch) {
+        const contentOutcome = await applyManualEdit(contentPatch.patch, contentPatch.label);
+        if (!manualEditFlushAllowsTeardown(contentOutcome)) return;
+      }
     }
-    const ok = await flushManualEditStyleSave();
-    if (!ok) return;
+    const styleOutcome = await flushManualEditStyleSave();
+    if (!manualEditFlushAllowsTeardown(styleOutcome)) {
+      noteManualEditFlushOutcome(styleOutcome);
+      return;
+    }
     if (selectedManualEditTarget) void clearManualEditTargetSelection();
     else setManualEditPageStylesOpen(false);
   }
@@ -13750,11 +13872,11 @@ function HtmlViewer({
     const base = sourceRef.current ?? '';
     const currentOuterHtml = readManualEditOuterHtml(base, selectedManualEditTarget.id);
     if (snapshot.outerHtml && currentOuterHtml && snapshot.outerHtml !== currentOuterHtml) {
-      const ok = await applyManualEdit(
+      const outcome = await applyManualEdit(
         { id: selectedManualEditTarget.id, kind: 'set-outer-html', html: snapshot.outerHtml },
         'Reset element',
       );
-      if (!ok) return;
+      if (!manualEditFlushAllowsTeardown(outcome)) return;
     }
     const refreshedBase = sourceRef.current ?? base;
     setManualEditDraft({
@@ -13777,7 +13899,10 @@ function HtmlViewer({
     }
   }
 
-  async function applyManualEdit(patch: ManualEditPatch, label: string): Promise<boolean> {
+  async function applyManualEdit(
+    patch: ManualEditPatch,
+    label: string,
+  ): Promise<ManualEditFlushOutcome> {
     const startedAt = performance.now();
     let resultTracked = false;
     const finish = (
@@ -13789,12 +13914,17 @@ function HtmlViewer({
       fireArtifactEditResult('apply', patch, startedAt, result, errorCode);
     };
     if (manualEditSavingRef.current) {
+      // Transient: another write owns the editor for this moment. Nothing was
+      // lost and the pending work is still pending, but the user has to be told
+      // why their action did nothing.
       finish('failed', 'edit_busy');
-      return false;
+      noteManualEditFlushOutcome('blocked');
+      return 'blocked';
     }
     if (sourceRef.current == null) {
       finish('failed', 'source_unavailable');
-      return false;
+      setManualEditError('Could not save: the file contents are not loaded yet.');
+      return 'reported';
     }
     manualEditSavingRef.current = true;
     setManualEditSaving(true);
@@ -13805,14 +13935,15 @@ function HtmlViewer({
       if (!result.ok) {
         setManualEditError(result.error ?? 'Could not apply edit.');
         finish('failed', 'patch_invalid');
-        return false;
+        return 'reported';
       }
       if (!(await confirmManualEditHistorySource(
         baseSource,
         'The file changed outside manual edit mode. Refreshing before applying manual edits.',
       ))) {
+        // confirmManualEditHistorySource already put its message on screen.
         finish('failed', 'source_conflict');
-        return false;
+        return 'reported';
       }
       const parentVersionId = await resolveManualEditParentVersionId(baseSource);
       // A committed content patch can notify the file watcher as soon as the
@@ -13837,7 +13968,7 @@ function HtmlViewer({
           `Could not save the edited file${status ? ` (${status}${code ? ` ${code}` : ''})` : ''}: ${message}`,
         );
         finish('failed', 'save_failed');
-        return false;
+        return 'reported';
       }
       const entry: ManualEditHistoryEntry = {
         id: `${Date.now()}-${manualEditHistory.length}`,
@@ -13905,7 +14036,7 @@ function HtmlViewer({
       setManualEditError(null);
       finish('success');
       await onFileSaved?.();
-      return true;
+      return 'settled';
     } catch (error) {
       finish('failed', 'unknown');
       throw error;
@@ -15190,9 +15321,17 @@ function HtmlViewer({
       // user-requested reload must first persist pending work, but it must not
       // turn the tool off: the replacement document re-enables the exact same
       // capability set before promotion.
-      if (!(await settlePendingManualEditCommit())) return;
-      if (manualEditTextFailedSessionIdsRef.current.size > 0) return;
-      if (!(await flushManualEditStyleSave())) return;
+      const settleOutcome = await settlePendingManualEditCommit();
+      if (!manualEditFlushAllowsTeardown(settleOutcome)) {
+        noteManualEditFlushOutcome(settleOutcome);
+        return;
+      }
+      if (noteManualEditUnpersistedSession()) return;
+      const styleOutcome = await flushManualEditStyleSave();
+      if (!manualEditFlushAllowsTeardown(styleOutcome)) {
+        noteManualEditFlushOutcome(styleOutcome);
+        return;
+      }
     } else if (manualEditMode && !(await requestManualEditSafeExitRef.current())) {
       return;
     }
