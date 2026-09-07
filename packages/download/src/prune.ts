@@ -8,7 +8,7 @@
  * types, and the platform best-effort remover.
  */
 
-import { readdir, rm, stat } from "node:fs/promises";
+import { readdir, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { removePathBestEffort } from "@open-design/platform";
@@ -61,8 +61,7 @@ export async function pruneManagedDownloads(options: PruneManagedDownloadsOption
     const result = await removeEntriesOlderThan(join(basePath, entry.name), olderThan);
     removed += result.removed;
     warnings.push(...result.warnings);
-    const remaining = await readdir(join(basePath, entry.name)).catch(() => null);
-    if (remaining != null && remaining.length === 0) await rm(join(basePath, entry.name), { force: true, recursive: true }).catch(() => undefined);
+    await rmdir(join(basePath, entry.name)).catch(() => undefined);
   }
   return { removed, warnings };
 }

@@ -11,7 +11,7 @@
  * types, and the platform best-effort remover.
  */
 
-import { readdir, rm } from "node:fs/promises";
+import { rmdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { removePathBestEffort } from "@open-design/platform";
@@ -74,7 +74,8 @@ export async function removeManagedDownload(options: RemoveManagedDownloadOption
     removePathBestEffort(target.lockPath, { recursive: false }),
   ]);
   const bucketPath = join(target.basePath, target.bucket);
-  const entries = await readdir(bucketPath).catch(() => null);
-  if (entries != null && entries.length === 0) await rm(bucketPath, { force: true, recursive: true }).catch(() => undefined);
+  // Atomic empty-directory removal: another target may publish into this bucket
+  // at any time. Never recursively remove a directory observed empty earlier.
+  await rmdir(bucketPath).catch(() => undefined);
   return { removed: true };
 }
