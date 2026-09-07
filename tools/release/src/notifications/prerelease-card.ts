@@ -18,6 +18,12 @@ export type LaneStatus =
   | "failure"
   | "cancelled"
   | "skipped"
+  /**
+   * Expected, and never dispatched. Distinct from `pending` (a result is still
+   * coming) and from `skipped` (a switch said not to run it): this lane should
+   * have run, nothing will ever report on it, and somebody has to look.
+   */
+  | "never_started"
   | "unknown";
 
 export type PlatformKey = "mac_arm64" | "mac_x64" | "win_x64" | "linux_x64";
@@ -88,6 +94,7 @@ const STATUS_GLYPH: Record<LaneStatus, string> = {
   failure: "❌",
   cancelled: "⚠️",
   skipped: "⚪️",
+  never_started: "🚨",
   unknown: "⏳",
 };
 
@@ -98,6 +105,7 @@ const BUILD_STATUS_TEXT: Record<LaneStatus, string> = {
   failure: "构建失败",
   cancelled: "已取消",
   skipped: "本次未构建",
+  never_started: "未触发",
   unknown: "状态未知",
 };
 
@@ -108,11 +116,47 @@ const CHECK_STATUS_TEXT: Record<LaneStatus, string> = {
   failure: "未通过",
   cancelled: "已取消",
   skipped: "未运行",
+  never_started: "未触发（应运行，但没有被调起）",
   unknown: "状态未知",
 };
 
 export function isTerminal(status: LaneStatus): boolean {
-  return status === "success" || status === "failure" || status === "cancelled" || status === "skipped";
+  return (
+    status === "success" ||
+    status === "failure" ||
+    status === "cancelled" ||
+    status === "skipped" ||
+    status === "never_started"
+  );
+}
+
+/**
+ * What the card has learned about a lane it expected but has found no job for.
+ *
+ * `runFound` — a workflow run carrying this origin's marker exists.
+ * `runCompleted` — that run has finished, which is the only thing that proves a
+ *   job is genuinely absent rather than not yet created by the API.
+ * `discoveryExpired` — the dispatch window closed without a run ever appearing.
+ */
+export type LaneDiscovery = {
+  runFound: boolean;
+  runCompleted: boolean;
+  discoveryExpired: boolean;
+};
+
+/**
+ * Status for an expected lane the card has found no job for.
+ *
+ * The invariant: the same discovery window that lets the watcher stop waiting
+ * on a lane must also change what that lane SAYS. A lane whose run never
+ * appeared before that window closed was never dispatched, so "排队中" promises
+ * a result that can never arrive — worse than saying nothing, because a reader
+ * waits for it.
+ */
+export function undiscoveredLaneStatus(discovery: LaneDiscovery): LaneStatus {
+  if (discovery.runCompleted) return "skipped";
+  if (discovery.runFound) return "pending";
+  return discovery.discoveryExpired ? "never_started" : "pending";
 }
 
 /** A lane that a human has to look at. `skipped` is a decision, not a problem. */
@@ -152,13 +196,33 @@ export function failureCount(state: PrereleaseCardState): number {
   return failures;
 }
 
+/**
+ * Lanes that were expected and never dispatched.
+ *
+ * Counted separately from `failureCount` because the two say different things
+ * to a reader: a failure means a check ran and disagreed, a never-started lane
+ * means the pipeline did not do what it said it would. Both need a human, so
+ * both colour the card — but the card must not report one as the other.
+ */
+export function neverStartedCount(state: PrereleaseCardState): number {
+  let count = 0;
+  for (const platform of state.platforms) {
+    if (platform.build === "never_started") count += 1;
+    if (platform.smoke === "never_started") count += 1;
+  }
+  for (const test of state.tests) {
+    if (test.status === "never_started") count += 1;
+  }
+  return count;
+}
+
 export function headerTemplate(state: PrereleaseCardState): string {
   if (!anyPackagePublished(state)) {
     // Nothing shipped. Red whether the builds failed or the watcher gave up
     // waiting — either way there is no package and someone has to look.
     return state.platforms.every((platform) => !isTerminal(platform.build)) && !state.timedOut ? "blue" : "red";
   }
-  if (failureCount(state) > 0) return "orange";
+  if (failureCount(state) > 0 || neverStartedCount(state) > 0) return "orange";
   return state.finished && !state.timedOut ? "green" : "blue";
 }
 
@@ -171,7 +235,12 @@ export function headerTitle(state: PrereleaseCardState): string {
       : `🚀 ${name} · 构建中`;
   }
   const failures = failureCount(state);
+  const neverStarted = neverStartedCount(state);
+  // "未通过" is a claim that something ran and disagreed. Never say it about a
+  // lane that was never dispatched.
+  if (failures > 0 && neverStarted > 0) return `⚠️ ${name} · ${failures} 项未通过、${neverStarted} 项未触发`;
   if (failures > 0) return `⚠️ ${name} · ${failures} 项未通过`;
+  if (neverStarted > 0) return `⚠️ ${name} · ${neverStarted} 项未触发`;
   if (!state.finished || state.timedOut) return `🚀 ${name} · 进行中`;
   return `🚀 ${name}`;
 }
