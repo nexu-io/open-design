@@ -1,0 +1,5 @@
+# Companion material library for crate.obj.
+newmtl mtl_pine
+Kd 0.55 0.40 0.22
+Ks 0.05 0.05 0.05
+Ns 12.0

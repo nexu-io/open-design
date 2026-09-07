@@ -1,0 +1,20 @@
+# Hand-authored unit crate: one cube, one group, one material reference.
+# Exists so the OBJ+MTL import path is pinned by a committed fixture rather
+# than whatever happened to sit in a developer's Downloads folder.
+mtllib crate.mtl
+o prp_crate
+v -0.5 0.0 -0.5
+v  0.5 0.0 -0.5
+v  0.5 1.0 -0.5
+v -0.5 1.0 -0.5
+v -0.5 0.0  0.5
+v  0.5 0.0  0.5
+v  0.5 1.0  0.5
+v -0.5 1.0  0.5
+usemtl mtl_pine
+f 1 2 3 4
+f 8 7 6 5
+f 5 6 2 1
+f 4 3 7 8
+f 5 1 4 8
+f 2 6 7 3

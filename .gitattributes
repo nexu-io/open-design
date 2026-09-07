@@ -1,3 +1,11 @@
+# Byte-stable line endings across machines: everything text normalizes to
+# LF in the repo and in working copies; git's binary detection leaves
+# assets (glb, png, blend, ...) untouched. Windows-only script formats
+# keep CRLF because their interpreters expect it.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 design-systems/**/design-tokens.json text eol=lf
 design-systems/**/tailwind-v4.css    text eol=lf
 design-systems/**/tokens.css         text eol=lf

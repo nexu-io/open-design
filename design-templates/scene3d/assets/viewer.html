@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scene 3D — part inspector</title>
+<!--
+  The scene3d proof viewer.
+
+  Deliberately dependency-free: it renders the turntable frames the compiler
+  already produced rather than pulling a WebGL runtime off a CDN. The proof
+  frames ARE the ground truth — they came out of the same headless Blender
+  that produced the GLB, so showing anything else would be showing a second,
+  differently-wrong picture of the scene.
+
+  The host fills SCENE3D_DATA below with the compile response; opened
+  standalone it falls back to the inline sample so the file is inspectable
+  on its own.
+-->
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --panel: #f6f7f9;
+    --line: #e3e6ea;
+    --ink: #14181d;
+    --muted: #667081;
+    --error: #c0392b;
+    --warn: #b7791f;
+    --ok: #1f8a5f;
+    --radius: 10px;
+    --ease: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1116;
+      --panel: #161b22;
+      --line: #262d36;
+      --ink: #e6edf3;
+      --muted: #8b949e;
+      --error: #ff7b72;
+      --warn: #e3b341;
+      --ok: #3fb950;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; }
+  @media (max-width: 760px) { .wrap { grid-template-columns: minmax(0, 1fr); } }
+  .stage {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+    aspect-ratio: 1 / 1;
+    display: grid;
+    place-items: center;
+  }
+  .stage img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .stage .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .scrub { display: flex; align-items: center; gap: 10px; padding: 10px 2px 0; }
+  .scrub input { flex: 1; }
+  .scrub output { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 5ch; }
+  button {
+    font: inherit;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 5px 11px;
+    cursor: pointer;
+    transition: background 200ms var(--ease), border-color 200ms var(--ease);
+  }
+  button:hover { border-color: var(--muted); }
+  aside { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  section { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+  h2 {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--line);
+  }
+  .body { padding: 10px 12px; max-height: 260px; overflow: auto; }
+  .verdict { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-weight: 600; }
+  .verdict.pass { color: var(--ok); }
+  .verdict.fail { color: var(--error); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  .part { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; }
+  .part .meta { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .issue { padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .issue:last-child { border-bottom: 0; }
+  .issue .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; font-weight: 600; }
+  .issue.error .code { color: var(--error); }
+  .issue.warning .code { color: var(--warn); }
+  .issue .msg { display: block; color: var(--ink); }
+  .issue .fix { display: block; color: var(--muted); font-size: 13px; }
+  .assets a { display: block; padding: 3px 0; color: inherit; }
+  .depth-1 { padding-left: 14px; }
+  .depth-2 { padding-left: 28px; }
+  .depth-3 { padding-left: 42px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <main>
+    <div class="stage" id="stage"><div class="empty">No proof frames — run a compile.</div></div>
+    <div class="scrub" id="scrub" hidden>
+      <button id="spin" type="button">Spin</button>
+      <input id="frame" type="range" min="0" max="0" value="0" aria-label="Turntable frame" />
+      <output id="counter">1/1</output>
+    </div>
+  </main>
+
+  <aside>
+    <section>
+      <h2>Verdict</h2>
+      <div class="verdict" id="verdict">—</div>
+    </section>
+    <section>
+      <h2>Parts</h2>
+      <div class="body"><ul id="parts"></ul></div>
+    </section>
+    <section>
+      <h2>Issues</h2>
+      <div class="body" id="issues"></div>
+    </section>
+    <section>
+      <h2>Assets</h2>
+      <div class="body assets" id="assets"></div>
+    </section>
+  </aside>
+</div>
+
+<script>
+  // Replaced by the host with the Scene3dCompileResponse for this scene.
+  const SCENE3D_DATA = window.__SCENE3D__ || {
+    ok: true,
+    summary: { errors: 0, warnings: 0, infos: 0 },
+    issues: [],
+    proofImages: [],
+    exportedAssets: [],
+    manifest: { partTree: [], materials: [] },
+  };
+
+  const el = (id) => document.getElementById(id);
+  const text = (value) => document.createTextNode(String(value));
+
+  function renderVerdict(data) {
+    const node = el('verdict');
+    const { errors = 0, warnings = 0 } = data.summary || {};
+    node.className = 'verdict ' + (data.ok ? 'pass' : 'fail');
+    node.textContent = data.ok
+      ? `Compiles clean · ${warnings} warning${warnings === 1 ? '' : 's'}`
+      : `${errors} error${errors === 1 ? '' : 's'} · ${warnings} warning${warnings === 1 ? '' : 's'}`;
+  }
+
+  function renderParts(data) {
+    const list = el('parts');
+    for (const part of (data.manifest && data.manifest.partTree) || []) {
+      const li = document.createElement('li');
+      li.className = 'part depth-' + Math.min(part.depth || 0, 3);
+      const name = document.createElement('span');
+      name.appendChild(text(part.name));
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.appendChild(
+        text(part.mesh ? `${part.mesh.verts}v / ${part.mesh.faces}f` : (part.type || '').toLowerCase()),
+      );
+      li.append(name, meta);
+      list.appendChild(li);
+    }
+  }
+
+  function renderIssues(data) {
+    const host = el('issues');
+    const issues = data.issues || [];
+    if (issues.length === 0) {
+      host.appendChild(text('No issues.'));
+      return;
+    }
+    for (const issue of issues) {
+      const row = document.createElement('div');
+      row.className = 'issue ' + issue.severity;
+      const code = document.createElement('span');
+      code.className = 'code';
+      code.appendChild(text(issue.code + (issue.target ? ` · ${issue.target}` : '')));
+      const msg = document.createElement('span');
+      msg.className = 'msg';
+      msg.appendChild(text(issue.message));
+      row.append(code, msg);
+      if (issue.hint) {
+        const fix = document.createElement('span');
+        fix.className = 'fix';
+        fix.appendChild(text('fix: ' + issue.hint));
+        row.appendChild(fix);
+      }
+      host.appendChild(row);
+    }
+  }
+
+  function renderAssets(data) {
+    const host = el('assets');
+    const assets = data.exportedAssets || [];
+    if (assets.length === 0) {
+      host.appendChild(text('No exports yet.'));
+      return;
+    }
+    for (const asset of assets) {
+      const link = document.createElement('a');
+      link.href = asset.url || asset.path;
+      link.download = '';
+      link.appendChild(text(asset.path));
+      host.appendChild(link);
+    }
+  }
+
+  function renderTurntable(data) {
+    const frames = (data.proofImages || []).map((f) => f.url || f.path || f);
+    if (frames.length === 0) return;
+
+    const stage = el('stage');
+    stage.textContent = '';
+    const img = document.createElement('img');
+    img.alt = 'Proof frame';
+    img.src = frames[0];
+    stage.appendChild(img);
+
+    const slider = el('frame');
+    const counter = el('counter');
+    slider.max = String(frames.length - 1);
+    el('scrub').hidden = false;
+
+    // Preload so scrubbing never flashes an empty frame mid-drag.
+    for (const src of frames) new Image().src = src;
+
+    const show = (index) => {
+      const i = ((index % frames.length) + frames.length) % frames.length;
+      slider.value = String(i);
+      img.src = frames[i];
+      counter.textContent = `${i + 1}/${frames.length}`;
+    };
+    show(0);
+    slider.addEventListener('input', () => show(Number(slider.value)));
+
+    let timer = null;
+    const spin = el('spin');
+    spin.addEventListener('click', () => {
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+        spin.textContent = 'Spin';
+        return;
+      }
+      spin.textContent = 'Stop';
+      timer = setInterval(() => show(Number(slider.value) + 1), 120);
+    });
+  }
+
+  renderVerdict(SCENE3D_DATA);
+  renderParts(SCENE3D_DATA);
+  renderIssues(SCENE3D_DATA);
+  renderAssets(SCENE3D_DATA);
+  renderTurntable(SCENE3D_DATA);
+</script>
+</body>
+</html>

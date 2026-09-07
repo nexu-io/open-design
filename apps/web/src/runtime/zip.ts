@@ -1,11 +1,21 @@
-// Minimal ZIP encoder, stored mode (no compression). Big enough for the
-// "Download as ZIP" button — we only ever pack a handful of UTF-8 text files
-// (HTML/CSS/JS/Markdown) totalling well under a few MB, so skipping deflate
-// keeps the implementation small and dependency-free.
+// Minimal ZIP encoder, stored mode (no compression). Skipping deflate keeps
+// the implementation small and dependency-free, and costs little on what we
+// actually pack: text is small, and the 3D containers (GLB, USDZ, FBX, PNG)
+// are already compressed internally, so deflating them would spend time to
+// save almost nothing.
 
 export interface ZipEntry {
   path: string;
-  content: string;
+  /**
+   * Text, or raw bytes.
+   *
+   * Bytes matter: the compiled 3D deliverables are binary, and running a GLB
+   * or a PNG through a TextEncoder does not encode it — it replaces every
+   * byte that is not valid UTF-8 with U+FFFD and hands back a file no
+   * importer can open. Accepting a Uint8Array here means there is still one
+   * ZIP writer rather than a second one for binaries.
+   */
+  content: string | Uint8Array;
 }
 
 const CRC_TABLE: number[] = (() => {
@@ -51,7 +61,8 @@ export function buildZip(entries: ZipEntry[]): Blob {
 
   for (const entry of entries) {
     const nameBytes = enc.encode(entry.path);
-    const dataBytes = enc.encode(entry.content);
+    const dataBytes =
+      typeof entry.content === 'string' ? enc.encode(entry.content) : entry.content;
     const crc = crc32(dataBytes);
     const size = dataBytes.length;
     // General-purpose bit 11 (0x0800) signals UTF-8 filenames so readers

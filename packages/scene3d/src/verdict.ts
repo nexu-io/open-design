@@ -1,0 +1,240 @@
+/**
+ * Verdict synthesis — the third object (issues → curation).
+ *
+ * The compiler is `solve → census`; worldlint is `census → issues`; this is
+ * `issues → verdict`: a graded, RANKED "what to fix first", plus honest
+ * headroom facts. It is pure synthesis over what already exists — no new
+ * measurement, no invented score. The grade is defensible in one sentence
+ * (fail ⟺ an error, attention ⟺ a warning, else pass) and the ranking is by
+ * MEASURED overrun where a finding carries one, else by how many parts it hits.
+ * Nothing here has a weight to argue about.
+ */
+
+import { CompileResult, Issue, Severity } from "./types.js";
+
+export type Grade = "pass" | "attention" | "fail";
+
+export type Dimension =
+  | "spec"
+  | "build"
+  | "naming"
+  | "geometry"
+  | "materials"
+  | "uv"
+  | "voxel"
+  | "intent"
+  | "claims"
+  | "staging"
+  | "conformance"
+  | "other";
+
+export interface VerdictAction {
+  code: string;
+  severity: Severity;
+  /** How many findings share this code (parts affected, roughly). */
+  count: number;
+  /** The first affected target, for a jump-to line. */
+  target?: string;
+  /** Worst measured overrun among this code's findings, when any carries one. */
+  overrun?: number;
+  /** The most-actionable single message + its origin, verbatim. */
+  message: string;
+  origin?: string;
+  hint?: string;
+}
+
+export interface Verdict {
+  grade: Grade;
+  dimensions: Array<{ dimension: Dimension; grade: Grade; codes: string[] }>;
+  /** Findings collapsed by code and ranked most-actionable first. */
+  actions: VerdictAction[];
+  headroom: {
+    totalTriangles?: number;
+    /** Decoded VRAM of the scene's distinct textures (bytes). */
+    totalTextureBytes?: number;
+  };
+}
+
+/** Map a stable code to the concern it belongs to (data, by numeric range).
+ *  Total over the catalog on purpose: a range that falls through to "other"
+ *  makes a whole family vanish from the summary line — a voxel-heavy compile
+ *  used to grade as `attention — other`, which told the agent nothing. */
+export function dimensionOf(code: string): Dimension {
+  const n = Number(/-(\d+)$/.exec(code)?.[1] ?? -1);
+  if (n >= 100 && n <= 119) return "spec"; // contract / scene.json / solver
+  if (n >= 200 && n <= 219) return "build"; // Blender runtime, import, tweaks
+  if (n >= 300 && n <= 319) return "naming";
+  if (n >= 320 && n <= 339) return "geometry";
+  if (n >= 340 && n <= 359) return "materials";
+  if (n >= 360 && n <= 379) return "geometry"; // units / transforms
+  if (n >= 380 && n <= 439) return "staging"; // proof + exported stage
+  if (n >= 440 && n <= 459) return "uv";
+  if (n >= 500 && n <= 519) return "conformance"; // glTF/USD oracles
+  if (n >= 600 && n <= 619) return "materials"; // sheets
+  if (n >= 700 && n <= 719) return "claims";
+  if (n >= 800 && n <= 819) return "materials"; // shaders
+  if (n >= 900 && n <= 919) return "conformance"; // master parity
+  if (n >= 950 && n <= 969) return "intent";
+  if (n >= 970 && n <= 979) return "voxel";
+  return "other";
+}
+
+const gradeOf = (issues: Issue[]): Grade =>
+  issues.some((i) => i.severity === "error")
+    ? "fail"
+    : issues.some((i) => i.severity === "warning")
+      ? "attention"
+      : "pass";
+
+const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, info: 2 };
+
+function originOf(issue: Issue): string | undefined {
+  // Shape-checked, not cast: `detail` crosses caches and hand-edited
+  // sidecars, and a string origin's `.length > 0` passed the old guard
+  // straight into `.map` — one malformed legacy issue could throw the
+  // whole verdict away.
+  const origin = issue.detail?.origin;
+  if (Array.isArray(origin)) {
+    const ats = origin
+      .map((o) => (o as { at?: unknown })?.at)
+      .filter((a): a is string => typeof a === "string");
+    if (ats.length > 0) return [...new Set(ats)].join(", ");
+  }
+  return issue.file;
+}
+
+/** Synthesise the verdict for one compile. Pure and deterministic. */
+export function assessVerdict(result: CompileResult): Verdict {
+  const issues = result.issues;
+
+  // ---- dimension grades ----
+  const byDimension = new Map<Dimension, Issue[]>();
+  for (const issue of issues) {
+    const d = dimensionOf(issue.code);
+    (byDimension.get(d) ?? byDimension.set(d, []).get(d)!).push(issue);
+  }
+  const dimensions = [...byDimension.entries()]
+    .map(([dimension, group]) => ({
+      dimension,
+      grade: gradeOf(group),
+      codes: [...new Set(group.map((i) => i.code))].sort(),
+    }))
+    .filter((d) => d.grade !== "pass")
+    .sort((a, b) =>
+      SEVERITY_GRADE[a.grade] - SEVERITY_GRADE[b.grade] || a.dimension.localeCompare(b.dimension),
+    );
+
+  // ---- ranked actions (collapse by code) ----
+  const byCode = new Map<string, Issue[]>();
+  for (const issue of issues) (byCode.get(issue.code) ?? byCode.set(issue.code, []).get(issue.code)!).push(issue);
+
+  const actions: VerdictAction[] = [...byCode.entries()].map(([code, group]) => {
+    /* Representative selection, two rules that must not trade against each
+       other: the action's SEVERITY is the group's worst (an error must
+       never hide behind a warning that happened to carry a bigger
+       overrun — the action sorts by severity, so a downgraded
+       representative buried the one blocking finding), and WITHIN that
+       severity tier the member whose overrun IS the magnitude tag speaks
+       (taking group[0] once printed one part's +563% beside a different
+       part's sentence). The overrun number comes from the same tier for
+       the same reason. */
+    const topRank = Math.min(...group.map((i) => SEVERITY_RANK[i.severity]));
+    const tier = group.filter((i) => SEVERITY_RANK[i.severity] === topRank);
+    const overrunOf = (i: Issue) =>
+      typeof i.detail?.overrun === "number" ? (i.detail.overrun as number) : -Infinity;
+    const worst = tier.reduce((best, i) => (overrunOf(i) > overrunOf(best) ? i : best), tier[0]!);
+    const tierOverruns = tier
+      .map((i) => i.detail?.overrun)
+      .filter((v): v is number => typeof v === "number");
+    return {
+      code,
+      severity: worst.severity,
+      count: group.length,
+      ...(worst.target ? { target: worst.target } : {}),
+      ...(tierOverruns.length > 0 ? { overrun: Math.max(...tierOverruns) } : {}),
+      message: worst.message,
+      ...(originOf(worst) ? { origin: originOf(worst) } : {}),
+      ...(worst.hint ? { hint: worst.hint } : {}),
+    };
+  });
+  actions.sort(
+    (a, b) =>
+      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || // errors first
+      (b.overrun ?? -Infinity) - (a.overrun ?? -Infinity) || // then worst measured overrun
+      b.count - a.count || // then most parts affected
+      a.code.localeCompare(b.code), // deterministic tiebreak
+  );
+
+  // ---- headroom (facts, always safe to show) ----
+  const headroom: Verdict["headroom"] = {};
+  if (result.manifest.metrics) headroom.totalTriangles = result.manifest.metrics.totalTriangles;
+  const bytes = totalTextureBytes(result);
+  if (bytes !== undefined) headroom.totalTextureBytes = bytes;
+
+  // The grade honours `ok` as well as the issue scan: `ok` is derived from
+  // the error count at the one construction site, so the two normally
+  // agree — but this function is exported API, and a result claiming
+  // failure must never be summarised as "pass" because its issue list was
+  // assembled differently. Belt to the invariant's suspender.
+  const scanned = gradeOf(issues);
+  return {
+    grade: !result.ok && scanned === "pass" ? "fail" : scanned,
+    dimensions,
+    actions,
+    headroom,
+  };
+}
+
+const SEVERITY_GRADE: Record<Grade, number> = { fail: 0, attention: 1, pass: 2 };
+
+/** A catalog-level verdict: the whole kit at a glance. */
+export interface KitVerdict {
+  /** The worst scene's grade — a kit is only as ready as its weakest asset. */
+  grade: Grade;
+  /** Codes firing in MORE THAN ONE scene — a systemic/process problem to fix
+   *  once, not per-asset ("3 of 12 scenes have E-321"). Most-widespread first. */
+  systemic: Array<{ code: string; scenes: number }>;
+}
+
+/**
+ * Roll a kit's per-scene records up to one verdict. Pure synthesis — the
+ * catalog's grade is its weakest scene, and a code that recurs across scenes is
+ * a systemic issue the pipeline TD fixes at the source, not asset by asset.
+ */
+export function summariseKit(
+  scenes: Array<{
+    errors: number;
+    warnings: number;
+    issueCodes: string[];
+    /** Codes that fired above `info`. A systemic PROBLEM is something a
+     *  pipeline TD fixes at the source; a note recurring across a corpus of
+     *  downloaded assets is a fact about the corpus, not work to do. Falls
+     *  back to issueCodes for a manifest written before the distinction. */
+    actionableCodes?: string[];
+  }>,
+): KitVerdict {
+  const grade: Grade = scenes.some((s) => s.errors > 0)
+    ? "fail"
+    : scenes.some((s) => s.warnings > 0)
+      ? "attention"
+      : "pass";
+  const sceneCountByCode = new Map<string, number>();
+  for (const s of scenes) {
+    for (const code of new Set(s.actionableCodes ?? s.issueCodes)) {
+      sceneCountByCode.set(code, (sceneCountByCode.get(code) ?? 0) + 1);
+    }
+  }
+  const systemic = [...sceneCountByCode.entries()]
+    .filter(([, n]) => n >= 2)
+    .map(([code, count]) => ({ code, scenes: count }))
+    .sort((a, b) => b.scenes - a.scenes || a.code.localeCompare(b.code));
+  return { grade, systemic };
+}
+
+function totalTextureBytes(result: CompileResult): number | undefined {
+  const textures = result.census?.textures;
+  if (!textures || textures.length === 0) return undefined;
+  let sum = 0;
+  for (const t of textures) sum += Math.max(0, t.width) * Math.max(0, t.height) * 4;
+  return sum;
+}

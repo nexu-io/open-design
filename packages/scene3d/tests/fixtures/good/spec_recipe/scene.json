@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "name": "recipe_hull",
+  "materials": {
+    "mtl_stone": { "baseColor": [0.55, 0.55, 0.58], "roughness": 0.5 }
+  },
+  "parts": [
+    { "id": "prp_hull", "size": [1, 1, 1], "recipe": "hull.py", "material": "mtl_stone", "role": "hull" }
+  ],
+  "relations": [
+    { "type": "at", "part": "prp_hull", "center": [0, 0, 0.5] }
+  ],
+  "claims": {
+    "parts": 1,
+    "watertight": true
+  }
+}

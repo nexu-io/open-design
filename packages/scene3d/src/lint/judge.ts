@@ -1,0 +1,417 @@
+/**
+ * The judgment engine — one loop over a descriptor TABLE.
+ *
+ * This is the "smart, not a series of ifs" core: every threshold lives in data
+ * (budgets.ts / the contract), every comparison is one generic evaluator, and
+ * a new check is a new ROW, never a new branch. Each descriptor is a pure
+ * quintuple — name the subject, measure a fact, look up its bound, decide if it
+ * fails, phrase it — and `judge()` iterates descriptors × subjects.
+ *
+ * The engine is generic over the SUBJECT: a part (with its resolved intent
+ * budget) or a material. The same loop judges both; only the descriptor tables
+ * and the context differ. Adding a whole new subject kind is a new table plus
+ * one `judge()` call, not a new engine.
+ *
+ * Two invariants keep it honest:
+ *   - severity is only 'warning' | 'info', enforced in the TYPE. Errors are the
+ *     province of the ten validated rule modules and the claims adjudicator; a
+ *     budget or realism heuristic is advice, never a compile-blocker.
+ *   - a descriptor with no bound stays SILENT. Existing scenes — no canonical
+ *     role, no unphysical material — produce zero new issues (byte-identical).
+ *
+ * Facts that describe a whole repeat family (tri share, VRAM, size) are judged
+ * once, on the base part (`partId === familyId`); per-instance flooding of a
+ * repeat grid is thereby impossible.
+ */
+
+import { Census, CensusMaterial, Issue } from "../types.js";
+import { NormalizedContract } from "../contract.js";
+import type { SolvedScene } from "../solve/types.js";
+import { ISSUE_CODES } from "../errors.js";
+import { resolveBudgets, type ResolvedPartBudget } from "./budgets.js";
+import { deriveFacts, type DerivedFacts } from "./facts.js";
+
+/** A descriptor is generic over its subject's context. */
+interface Descriptor<Ctx> {
+  code: string;
+  severity: "warning" | "info";
+  /** The affected subject's name — jump-to target and provenance key. */
+  target: (cx: Ctx) => string | undefined;
+  /** Undefined ⇒ not measurable for this subject ⇒ skip. */
+  fact: (cx: Ctx) => number | undefined;
+  /** Undefined ⇒ ungated for this subject ⇒ skip (silence). */
+  bound: (cx: Ctx) => number | undefined;
+  fails: (fact: number, bound: number) => boolean;
+  message: (cx: Ctx, fact: number, bound: number) => string;
+  hint: (cx: Ctx, fact: number, bound: number) => string;
+  /** Measured numbers behind the finding — reach the model via the report. */
+  detail: (cx: Ctx, fact: number, bound: number) => Record<string, unknown>;
+}
+
+function mkIssue<Ctx>(d: Descriptor<Ctx>, cx: Ctx, fact: number, bound: number): Issue {
+  // A measured overrun (how far past the budget, as a fraction) lets the
+  // verdict rank "fix this first" by real magnitude. Only meaningful for an
+  // OVERSHOOT (fact > bound); a below-a-max failure (dark metal, an under-texel
+  // floor, a size minimum) has no "overrun" and ranks by reach instead — never
+  // a nonsense negative that would render as "[+-50%]".
+  const overrun = bound > 0 && fact > bound ? Number((fact / bound - 1).toFixed(3)) : undefined;
+  const target = d.target(cx);
+  return {
+    code: d.code,
+    severity: d.severity,
+    message: d.message(cx, fact, bound),
+    hint: d.hint(cx, fact, bound),
+    ...(target !== undefined ? { target } : {}),
+    detail: { ...d.detail(cx, fact, bound), ...(overrun !== undefined ? { overrun } : {}) },
+  };
+}
+
+/** The one loop: every descriptor against every subject; skip where ungated. */
+function judge<Ctx>(descriptors: Descriptor<Ctx>[], subjects: Ctx[]): Issue[] {
+  const out: Issue[] = [];
+  for (const d of descriptors) {
+    for (const cx of subjects) {
+      const bound = d.bound(cx);
+      if (bound === undefined) continue;
+      const fact = d.fact(cx);
+      if (fact === undefined) continue;
+      if (d.fails(fact, bound)) out.push(mkIssue(d, cx, fact, bound));
+    }
+  }
+  return out;
+}
+
+/* ---- subject: a solved part with its resolved intent budget --------------- */
+
+interface PartCtx {
+  census: Census;
+  facts: DerivedFacts;
+  contract: NormalizedContract;
+  part: ResolvedPartBudget;
+}
+
+/** True only for the family's base part, so family-level facts fire once. */
+const isBase = (cx: PartCtx): boolean => cx.part.partId === cx.part.familyId;
+
+const pct = (v: number): string => `${Number((v * 100).toFixed(1))}%`;
+const mib = (bytes: number): string => `${Number((bytes / (1024 * 1024)).toFixed(1))} MiB`;
+
+
+/**
+ * Is this part in the scene's MOST important tier?
+ *
+ * The rule only speaks about the top tier — a hero with fewer triangles than a
+ * background is a misallocated budget, while a mid-tier part being lighter than
+ * a lower one is ordinary. That scoping used to be spelled `rank >= 3`, which
+ * is the built-in library's top rank hardcoded into the judge, even though
+ * `rank` is documented as a project-relative ordinal the judge only ever
+ * compares BETWEEN parts. On any other scale the constant is wrong in both
+ * directions: a project whose top tier is 2 got the check silently inert, and
+ * one using 1..10 got every part from 3 up judged as though it were a hero.
+ *
+ * The scene's own highest rank is the same answer on the default scale and the
+ * right one on every other.
+ */
+function isTopTier(cx: PartCtx): boolean {
+  if (cx.part.rank === undefined) return false;
+  let top: number | undefined;
+  for (const rank of cx.facts.rankByFamily.values()) {
+    if (top === undefined || rank > top) top = rank;
+  }
+  return top !== undefined && cx.part.rank >= top;
+}
+
+const PART_DESCRIPTORS: Descriptor<PartCtx>[] = [
+  // A prototype family spends more of the scene's triangle budget than its
+  // role should — a RELATIVE judgment no per-part ceiling could make.
+  {
+    code: ISSUE_CODES.OVER_ROLE_TRI_SHARE,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.triShareByFamily.get(cx.part.familyId) : undefined),
+    bound: (cx) => cx.part.budget.triShare?.softMax,
+    fails: (f, b) => f > b,
+    message: (cx, f, b) =>
+      `'${cx.part.familyId}' (role ${cx.part.role}) owns ${pct(f)} of the scene's triangles, over the ${pct(b)} its role budgets`,
+    hint: () => "move detail to the hero parts, or decimate this family",
+    detail: (cx, f, b) => ({ share: f, budget: b, sceneTris: cx.facts.sceneTris }),
+  },
+
+  // A rank-3 hero carries FEWER triangles than a lower-rank family — the detail
+  // budget is inverted. Pure ordinal comparison; no absolute number anywhere.
+  {
+    code: ISSUE_CODES.ROLE_RANK_INVERSION,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => {
+      if (!isBase(cx) || cx.part.rank === undefined || !isTopTier(cx)) return undefined;
+      const mine = cx.facts.trisByFamily.get(cx.part.familyId) ?? 0;
+      let worst: number | undefined;
+      for (const [fam, rank] of cx.facts.rankByFamily) {
+        if (rank >= cx.part.rank!) continue;
+        const theirs = cx.facts.trisByFamily.get(fam) ?? 0;
+        if (theirs > mine) worst = Math.max(worst ?? 0, theirs);
+      }
+      return worst;
+    },
+    bound: (cx) => (cx.part.rank !== undefined && isTopTier(cx) ? 0 : undefined),
+    fails: (f) => f > 0,
+    message: (cx, f) => {
+      const mine = cx.facts.trisByFamily.get(cx.part.familyId) ?? 0;
+      return `'${cx.part.familyId}' is a hero part (role ${cx.part.role}) with ${mine.toLocaleString()} triangles, fewer than a lower-detail part's ${f.toLocaleString()} — the detail budget is inverted`;
+    },
+    hint: () => "give the hero more geometry than the background, or correct the roles",
+    detail: (cx, f) => ({ heroTris: cx.facts.trisByFamily.get(cx.part.familyId) ?? 0, lowerRankTris: f }),
+  },
+
+  // A part's bound textures decode to more VRAM than its role should ship —
+  // "36 MiB for a 12-triangle table". Per family, not per instance.
+  {
+    code: ISSUE_CODES.PART_TEXTURE_BUDGET,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.textureBytesByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.part.budget.textureBytes?.softMax,
+    fails: (f, b) => f > b,
+    message: (cx, f, b) =>
+      `'${cx.part.familyId}' (role ${cx.part.role}) binds ${mib(f)} of texture, over the ${mib(b)} its role budgets`,
+    hint: () => "shrink or share the textures, or raise this role's budget in conventions.budgets.roles",
+    detail: (cx, f, b) => ({ textureBytes: f, budget: b }),
+  },
+
+  // A part wildly LARGER than the scene median — "avocado bigger than the fox".
+  // One-sided so it fits the table; the small side is the next row.
+  {
+    code: ISSUE_CODES.SIZE_INCOHERENT,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.sizeRatioByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.part.budget.sizeRatio?.max,
+    fails: (f, b) => f > b,
+    message: (cx, f) =>
+      `'${cx.part.familyId}' is ${Number(f.toFixed(2))}× the scene's median part size — a likely unit/scale slip`,
+    hint: () => "check this part's units (metres vs millimetres) against the rest of the scene",
+    detail: (cx, f) => ({ sizeRatio: f, medianMaxDim: cx.facts.medianMaxDim }),
+  },
+  // ...and wildly SMALLER.
+  {
+    code: ISSUE_CODES.SIZE_INCOHERENT,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.sizeRatioByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.part.budget.sizeRatio?.min,
+    fails: (f, b) => f < b,
+    message: (cx, f) =>
+      `'${cx.part.familyId}' is ${Number(f.toFixed(3))}× the scene's median part size — a likely unit/scale slip`,
+    hint: () => "check this part's units (metres vs millimetres) against the rest of the scene",
+    detail: (cx, f) => ({ sizeRatio: f, medianMaxDim: cx.facts.medianMaxDim }),
+  },
+
+  // A part that is a statistical OUTLIER in the scene's own size distribution
+  // (robust z over median + MAD, log scale) — the Fox at 154 m among 1.5 m
+  // parts, an FBX imported 100× too big. Distribution-relative, so it needs no
+  // fixed ratio and fires even when NO role is authored. Silent when the role
+  // already declares an explicit sizeRatio: the author took ownership, and the
+  // W-954 median-ratio rows judge it instead of second-guessing them.
+  {
+    code: ISSUE_CODES.SIZE_OUTLIER,
+    severity: "info",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.sizeOutlierZByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => (cx.part.budget.sizeRatio ? undefined : cx.contract.outlierZ),
+    // The fact is SIGNED (which way out); the gate is magnitude.
+    fails: (f, b) => Math.abs(f) > b,
+    message: (cx, f) =>
+      `'${cx.part.familyId}' is a size outlier — ${Number(Math.abs(f).toFixed(1))} robust deviations ${f > 0 ? "larger" : "smaller"} than the scene's size distribution; verify it is not a unit/scale slip`,
+    hint: () => "check this part's export units (metres vs centimetres, or an FBX 100× scale) against the rest of the scene",
+    detail: (cx, f) => ({ robustZ: f, medianMaxDim: cx.facts.medianMaxDim }),
+  },
+
+  // A part whose TRIANGLE DENSITY (tris/m²) is a distribution outlier — a
+  // 2208-triangle sphere among 12-triangle boxes. Info, not warning: role-
+  // legitimate density variance (hero vs filler) is real and rank-inversion
+  // already polices ordering; this only flags magnitude absurdity as an LOD hint.
+  {
+    code: ISSUE_CODES.TRI_DENSITY_OUTLIER,
+    severity: "info",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.triDensityOutlierZByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.contract.outlierZ,
+    // Signed fact, magnitude gate — and the prose reads the sign, because
+    // the low side used to get the high side's advice: the rule once told
+    // an author to decimate a 12-triangle plinth that carried ~4000× LESS
+    // geometry per m² than its neighbours.
+    fails: (f, b) => Math.abs(f) > b,
+    message: (cx, f) =>
+      f > 0
+        ? `'${cx.part.familyId}' has a triangle density ${Number(f.toFixed(1))} robust deviations DENSER than the scene's — a possible LOD / re-topology candidate`
+        : `'${cx.part.familyId}' has a triangle density ${Number(Math.abs(f).toFixed(1))} robust deviations SPARSER than the scene's — it reads as a proxy or plain fixture beside detailed neighbours`,
+    hint: (_cx, f) =>
+      f > 0
+        ? "if this part carries far more geometry per m² than its neighbours, an LOD or decimation may be worth it"
+        : "fine if it is a floor, plinth or blockout; subdivide or detail it only if it is meant to match its neighbours",
+    detail: (cx, f) => ({ robustZ: f }),
+  },
+
+  // The part's worst triangle is a sliver beyond what its role tolerates — a
+  // long thin triangle that passes every manifold check yet shades and (for a
+  // rig) skins badly. The role sets the ceiling: tight for a hero, loose for a
+  // background filler.
+  {
+    code: ISSUE_CODES.SLIVER_TRIANGLES,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.aspectRatioByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => cx.part.budget.maxAspectRatio,
+    fails: (f, b) => f > b,
+    message: (cx, f, b) =>
+      `'${cx.part.familyId}' (role ${cx.part.role}) has a triangle with aspect ratio ${Number(f.toFixed(1))}:1, over the ${b}:1 its role tolerates`,
+    hint: () => "remesh or re-topologise the slivers — they shade and (on a rig) skin poorly",
+    detail: (cx, f, b) => ({ worstAspectRatio: f, budget: b }),
+  },
+
+  // A textured part rendered below the texel density its role expects — a hero
+  // at background resolution reads soft up close. Gated to fire ONLY when the
+  // role floor is STRICTER than any scene-wide texel target (uv.ts owns that
+  // one), so the two never double-report the same shortfall.
+  {
+    code: ISSUE_CODES.UNDER_ROLE_TEXEL,
+    severity: "warning",
+    target: (cx) => cx.part.partId,
+    fact: (cx) => (isBase(cx) ? cx.facts.texelDensityByPart.get(cx.part.partId) : undefined),
+    bound: (cx) => {
+      const min = cx.part.budget.texelDensity?.min;
+      if (min === undefined) return undefined;
+      const sceneTarget = cx.contract.uv.texelDensityTarget ?? 0;
+      return min > sceneTarget ? min : undefined; // else uv.ts already covers it
+    },
+    fails: (f, b) => f < b,
+    message: (cx, f, b) =>
+      `'${cx.part.familyId}' (role ${cx.part.role}) is textured at ${Math.round(f)} px/m, under the ${b} px/m its role expects`,
+    hint: () => "raise this part's texel density (bigger maps or tighter UVs), or relax its role's floor in conventions.budgets.roles",
+    detail: (cx, f, b) => ({ texelDensity: f, budget: b }),
+  },
+];
+
+/* ---- subject: a material (the PBR-combo heatmap, one line) ---------------- */
+
+interface MaterialCtx {
+  contract: NormalizedContract;
+  material: CensusMaterial;
+}
+
+/** Rec709 luminance of a linear RGB colour. */
+const luminance = (c: [number, number, number]): number =>
+  0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+const MATERIAL_DESCRIPTORS: Descriptor<MaterialCtx>[] = [
+  // A dark base colour driven fully metallic and mirror-smooth is a black
+  // mirror, not a surface — the COMBINATION is unphysical though each value is
+  // legal alone. Scalars only: a texture-driven channel reads null (B-8) and
+  // never trips. Every number comes from conventions.pbr.realism.
+  {
+    code: ISSUE_CODES.UNREALISTIC_DARK_METAL,
+    severity: "warning",
+    target: (cx) => cx.material.name,
+    fact: (cx) => {
+      const r = cx.contract.pbrRealism;
+      const p = cx.material.principled;
+      if (!p.present || p.metallic === null || p.roughness === null || p.baseColor === null) {
+        return undefined;
+      }
+      const lum = luminance(p.baseColor);
+      const isDarkMetalMirror =
+        lum <= r.darkLuminanceMax && p.metallic >= r.metalMin && p.roughness <= r.roughMax;
+      return isDarkMetalMirror ? lum : undefined;
+    },
+    bound: (cx) => (cx.contract.pbrRealism.enabled ? cx.contract.pbrRealism.darkLuminanceMax : undefined),
+    fails: (f, b) => f <= b,
+    message: (cx, f) => {
+      const p = cx.material.principled;
+      return `material '${cx.material.name}' is near-black (luminance ${Number(f.toFixed(3))}) yet fully metallic (${p.metallic}) and mirror-smooth (roughness ${p.roughness}) — it renders as a black mirror`;
+    },
+    hint: () => "lighten the base colour, or lower metallic — a metal's base colour is its reflectance, rarely near-black",
+    detail: (cx, f) => ({
+      luminance: f,
+      metallic: cx.material.principled.metallic,
+      roughness: cx.material.principled.roughness,
+    }),
+  },
+];
+
+/* ---- subject: a mesh (print design-for-manufacture) ---------------------- */
+
+interface MeshCtx {
+  contract: NormalizedContract;
+  mesh: Census["meshes"][number];
+}
+
+const MESH_DESCRIPTORS: Descriptor<MeshCtx>[] = [
+  // A support-needing overhang covering more of the surface than a print
+  // tolerates. Inert unless the contract carries a print threshold (target
+  // "3d_print"), so a non-print asset is never judged for manufacturability.
+  {
+    code: ISSUE_CODES.OVERHANG_UNSUPPORTED,
+    severity: "warning",
+    target: (cx) => cx.mesh.object,
+    fact: (cx) =>
+      typeof cx.mesh.overhangAreaFraction === "number" ? cx.mesh.overhangAreaFraction : undefined,
+    bound: (cx) => cx.contract.print.maxOverhangAreaFraction ?? undefined,
+    fails: (f, b) => f > b,
+    message: (cx, f, b) =>
+      `'${cx.mesh.object}' is ${pct(f)} steep-downward overhang, over the ${pct(b)} the print budgets — it needs support`,
+    hint: () => "add a chamfer/fillet under the overhang, reorient for the build plate, or accept support",
+    detail: (cx, f, b) => ({ overhangAreaFraction: f, budget: b }),
+  },
+
+  // A wall thinner than the printer can lay down (nozzle diameter). Census is
+  // metres; the threshold is millimetres.
+  {
+    code: ISSUE_CODES.WALL_TOO_THIN,
+    severity: "warning",
+    target: (cx) => cx.mesh.object,
+    fact: (cx) => (typeof cx.mesh.minWallThickness === "number" ? cx.mesh.minWallThickness : undefined),
+    bound: (cx) =>
+      cx.contract.print.minThicknessMm !== null ? cx.contract.print.minThicknessMm / 1000 : undefined,
+    fails: (f, b) => f < b,
+    message: (cx, f, b) =>
+      `'${cx.mesh.object}' has a wall ${Number((f * 1000).toFixed(2))}mm thick, under the ${Number((b * 1000).toFixed(2))}mm the print needs`,
+    hint: () => "thicken the wall (add a Solidify), or print with a finer nozzle",
+    detail: (cx, f, b) => ({ minWallThicknessMm: Number((f * 1000).toFixed(3)), budgetMm: Number((b * 1000).toFixed(3)) }),
+  },
+];
+
+/** Deterministic issue order: by code, then target. */
+function sortIssues(issues: Issue[]): Issue[] {
+  return issues.sort((a, b) =>
+    a.code === b.code ? (a.target ?? "").localeCompare(b.target ?? "") : a.code.localeCompare(b.code),
+  );
+}
+
+/**
+ * Judge a scene's intent budgets and material realism. Additive: returns
+ * issues, never mutates. Material realism runs for any census (a mesh/usda
+ * import has materials but no intent); part budgets need a solved scene, the
+ * only place a `role` is authored.
+ */
+export function lintIntent(
+  census: Census | undefined,
+  contract: NormalizedContract,
+  solved: SolvedScene | undefined,
+  issues: Issue[],
+): void {
+  if (!census) return;
+  const out: Issue[] = [];
+
+  out.push(...judge(MATERIAL_DESCRIPTORS, census.materials.map((material) => ({ contract, material }))));
+  out.push(...judge(MESH_DESCRIPTORS, census.meshes.map((mesh) => ({ contract, mesh }))));
+
+  if (solved && solved.parts.length > 0) {
+    const budgets = resolveBudgets(solved, contract);
+    const facts = deriveFacts(census, budgets);
+    const parts = [...budgets.values()].map((part) => ({ census, facts, contract, part }));
+    out.push(...judge(PART_DESCRIPTORS, parts));
+  }
+
+  issues.push(...sortIssues(out));
+}

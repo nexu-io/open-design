@@ -9,7 +9,15 @@ export type ArtifactKind =
   | 'diagram'
   | 'code-snippet'
   | 'mini-app'
-  | 'design-system';
+  | 'design-system'
+  /**
+   * A deterministically compiled asset from `packages/scene3d` — a scene,
+   * prop, kit, animation, sheet, or texture. One kind covers all of them
+   * because they come out of one pipeline with one manifest; the specific
+   * flavour lives on the scene manifest's `assetKind`, where it can be
+   * derived instead of asserted.
+   */
+  | 'scene3d';
 
 export type ArtifactRendererId =
   | 'html'
@@ -20,9 +28,24 @@ export type ArtifactRendererId =
   | 'diagram'
   | 'code'
   | 'mini-app'
-  | 'design-system';
+  | 'design-system'
+  | 'scene3d';
 
-export type ArtifactExportKind = 'html' | 'pdf' | 'zip' | 'jsx' | 'md' | 'svg' | 'txt';
+export type ArtifactExportKind =
+  | 'html'
+  | 'pdf'
+  | 'zip'
+  | 'jsx'
+  | 'md'
+  | 'svg'
+  | 'txt'
+  // scene3d deliverables. `usd` covers the whole OpenUSD family (`.usda`,
+  // `.usdc`, `.usdz`) because the export menu offers a format, not a
+  // container — the compiler's contract decides which file actually ships.
+  | 'glb'
+  | 'usd'
+  | 'obj'
+  | 'png';
 
 export type ArtifactStatus = 'streaming' | 'complete' | 'error';
 

@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { createPortal } from 'react-dom';
@@ -95,6 +96,12 @@ import {
   mentionTokenPresent,
   type InlineMentionEntity,
 } from '../utils/inlineMentions';
+import {
+  getScene3dSelection,
+  getScene3dSelectionServerSnapshot,
+  orderPartsForMention,
+  subscribeScene3dSelection,
+} from '../runtime/scene3d-selection';
 import { workspaceContextLinkedDir, workspaceContextLinkedDirs } from './workspace-context';
 import { useProjectCollabContext } from '../collab/collab-context';
 import {
@@ -159,7 +166,34 @@ function trackedWorkspaceLinkedDirsForContexts(
 
 type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import';
 
-type MentionTab = 'all' | 'tabs' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
+type MentionTab =
+  | 'all'
+  | 'parts'
+  | 'tabs'
+  | 'files'
+  | 'plugins'
+  | 'skills'
+  | 'mcp'
+  | 'connectors';
+
+/*
+ * The one order every mention surface derives from.
+ *
+ * The keyboard's flat index, the pick dispatcher and the popover's render
+ * order have to agree exactly or the highlighted row and the row Enter
+ * chooses drift apart. They used to be three hand-maintained lists kept in
+ * step by a comment saying they must be; naming the order once means adding
+ * a content type is one entry rather than three edits that can disagree.
+ */
+export const MENTION_SECTION_ORDER = [
+  'parts',
+  'files',
+  'tabs',
+  'plugins',
+  'skills',
+  'mcp',
+  'connectors',
+] as const;
 
 const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'user',
@@ -642,6 +676,21 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // identity or tab changes; drives the visual highlight + Enter/Tab target.
     const [mentionIndex, setMentionIndex] = useState(0);
     const [mentionTab, setMentionTab] = useState<MentionTab>('all');
+    /*
+     * What the 3D viewer has open, and what is selected in it.
+     *
+     * Subscribed rather than passed down: the producer is a window message
+     * from an iframe that can mount anywhere, and this is the only consumer.
+     */
+    const scene3d = useSyncExternalStore(
+      subscribeScene3dSelection,
+      getScene3dSelection,
+      getScene3dSelectionServerSnapshot,
+    );
+    const scene3dParts = useMemo(
+      () => orderPartsForMention(scene3d.parts, scene3d.selected),
+      [scene3d.parts, scene3d.selected],
+    );
     // Viewport caret box the floating popover anchors against. Sampled by the
     // editor at trigger-detection time; null when no trigger is live.
     const [caretRect, setCaretRect] = useState<CaretRect | null>(null);
@@ -2480,7 +2529,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         const showSkills = mentionTab === 'all' || mentionTab === 'skills';
         const showMcp = mentionTab === 'all' || mentionTab === 'mcp';
         const showConnectors = mentionTab === 'all' || mentionTab === 'connectors';
+        const showParts = mentionTab === 'all' || mentionTab === 'parts';
         const total =
+          (showParts ? filteredParts.length : 0) +
           (showFiles ? filteredFiles.length : 0) +
           (showTabs ? filteredWorkspaceContexts.length : 0) +
           (showPlugins ? filteredPlugins.length : 0) +
@@ -2511,6 +2562,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // lockstep across "All" and individual tabs.
     function pickMentionByFlatIndex(flat: number) {
       let i = flat;
+      /* Parts lead, matching MentionPopover's render order. The two orders
+         are kept in step by MENTION_SECTION_ORDER and a test that pins
+         them; the comment above used to be the only thing holding them
+         together. */
+      if (mentionTab === 'all' || mentionTab === 'parts') {
+        if (i < filteredParts.length) {
+          insertPartMention(filteredParts[i]!);
+          return;
+        }
+        i -= filteredParts.length;
+      }
       if (mentionTab === 'all' || mentionTab === 'files') {
         if (i < filteredFiles.length) {
           insertMention(filteredFiles[i]!.path ?? filteredFiles[i]!.name);
@@ -2593,6 +2655,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       editorRef.current?.insertMention({
         token: inlineMentionToken(connector.name),
         entity: { id: connector.id, kind: 'connector', label: connector.name },
+      });
+      setMention(null);
+    }
+
+    /*
+     * A part of the open 3D asset.
+     *
+     * The token is the part NAME, because that is the identifier the
+     * compiler, the lint codes and the scene source all use — an agent
+     * receiving "@prp_crate_lid" can act on it without a lookup table. The
+     * prim path rides along in the title so the person can see which thing
+     * in the stage it is when two assets use the same part name.
+     */
+    function insertPartMention(part: { name: string; path: string; type: string }) {
+      editorRef.current?.insertMention({
+        token: inlineMentionToken(part.name),
+        entity: { id: part.path, kind: 'part', label: part.name, title: part.path },
       });
       setMention(null);
     }
@@ -2707,6 +2786,23 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               .slice(0, 12)
           : [],
       [mention, mentionQuery, workspaceContexts],
+    );
+    /* Parts of the open 3D asset. Selected ones sort first — what you just
+       clicked is overwhelmingly what you are about to talk about. */
+    const filteredParts = useMemo(
+      () =>
+        mention
+          ? scene3dParts
+              .filter((part) => {
+                if (!mentionQuery) return true;
+                return (
+                  part.name.toLowerCase().includes(mentionQuery) ||
+                  part.path.toLowerCase().includes(mentionQuery)
+                );
+              })
+              .slice(0, 12)
+          : [],
+      [mention, mentionQuery, scene3dParts],
     );
     const filteredFiles = useMemo(
       () =>
@@ -3107,6 +3203,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             boundaryRef={composerRootRef}
           >
             <MentionPopover
+              parts={filteredParts}
               files={filteredFiles}
               workspaceContexts={filteredWorkspaceContexts}
               plugins={filteredPlugins}
@@ -3120,6 +3217,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
                 setMentionIndex(0);
               }}
               activeIndex={mentionIndex}
+              currentSkillId={currentSkillId}
+              onPickPart={insertPartMention}
               stagedSkillIds={new Set(stagedSkills.map((skill) => skill.id))}
               onPickFile={insertMention}
               onPickWorkspaceContext={insertWorkspaceMention}
@@ -5619,6 +5718,7 @@ function SlashPopover({
 
 function MentionPopover({
   files,
+  parts,
   workspaceContexts,
   connectors,
   plugins,
@@ -5628,6 +5728,8 @@ function MentionPopover({
   tab,
   onTabChange,
   activeIndex,
+  currentSkillId,
+  onPickPart,
   stagedSkillIds,
   onPickFile,
   onPickWorkspaceContext,
@@ -5637,6 +5739,7 @@ function MentionPopover({
   onPickConnector,
 }: {
   files: ProjectFile[];
+  parts: Array<{ name: string; path: string; type: string }>;
   workspaceContexts: WorkspaceContextItem[];
   connectors: ConnectorDetail[];
   plugins: InstalledPluginRecord[];
@@ -5646,6 +5749,8 @@ function MentionPopover({
   tab: MentionTab;
   onTabChange: (tab: MentionTab) => void;
   activeIndex: number;
+  currentSkillId: string | null;
+  onPickPart: (part: { name: string; path: string; type: string }) => void;
   stagedSkillIds: Set<string>;
   onPickFile: (path: string) => void;
   onPickWorkspaceContext: (item: WorkspaceContextItem) => void;
@@ -5658,6 +5763,12 @@ function MentionPopover({
   const ref = useRef<HTMLDivElement | null>(null);
   const tabs: Array<{ id: MentionTab; label: string }> = [
     { id: 'all', label: t('chat.mentionTabAll') },
+    /* Only offered when a 3D asset is actually open. A permanently visible
+       tab that is empty for most of the product would cost every user width
+       to serve a few. */
+    ...(parts.length > 0
+      ? [{ id: 'parts' as MentionTab, label: t('chat.mentionTabParts') }]
+      : []),
     { id: 'files', label: t('chat.mentionTabFiles') },
     { id: 'tabs', label: t('chat.mentionTabTabs') },
     { id: 'plugins', label: t('chat.mentionTabPlugins') },
@@ -5665,6 +5776,7 @@ function MentionPopover({
     { id: 'mcp', label: t('chat.mentionTabMcp') },
     { id: 'connectors', label: t('chat.mentionTabConnectors') },
   ];
+  const showParts = tab === 'all' || tab === 'parts';
   const showTabs = tab === 'all' || tab === 'tabs';
   const showFiles = tab === 'all' || tab === 'files';
   const showPlugins = tab === 'all' || tab === 'plugins';
@@ -5672,6 +5784,7 @@ function MentionPopover({
   const showMcp = tab === 'all' || tab === 'mcp';
   const showConnectors = tab === 'all' || tab === 'connectors';
   const hasVisibleResults =
+    (showParts && parts.length > 0) ||
     (showFiles && files.length > 0) ||
     (showTabs && workspaceContexts.length > 0) ||
     (showPlugins && plugins.length > 0) ||
@@ -5680,7 +5793,7 @@ function MentionPopover({
     (showConnectors && connectors.length > 0);
   useEffect(() => {
     if (ref.current) ref.current.scrollTop = 0;
-  }, [connectors, files, plugins, skills, mcpServers, tab, workspaceContexts]);
+  }, [connectors, files, parts, plugins, skills, mcpServers, tab, workspaceContexts]);
   let optionIndex = 0;
   return (
     <div className="mention-popover" data-testid="mention-popover">
@@ -5708,6 +5821,39 @@ function MentionPopover({
               <>{t('chat.mentionSearchPrompt')}</>
             )}
           </div>
+        ) : null}
+        {showParts && parts.length > 0 ? (
+          <>
+            <div className="mention-section-label">{t('chat.mentionSectionParts')}</div>
+            {parts.map((part) => {
+              const flat = optionIndex;
+              optionIndex += 1;
+              const active = flat === activeIndex;
+              return (
+                <button
+                  key={`part-${part.path}`}
+                  id={`mention-opt-${flat}`}
+                  role="option"
+                  aria-selected={active}
+                  className={`mention-item${active ? ' is-active' : ''}`}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onPickPart(part)}
+                >
+                  <Icon name="blocks" size={12} />
+                  <span className="mention-item-body">
+                    <strong>{part.name}</strong>
+                    {/* The prim path, because it is what the exported stage
+                        addresses and what disambiguates two parts that share
+                        a name across assets. */}
+                    <span className="mention-meta mention-meta--desc mention-meta--path">
+                      {part.path}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </>
         ) : null}
         {showFiles && files.length > 0 ? (
           <>

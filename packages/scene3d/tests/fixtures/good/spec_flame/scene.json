@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "name": "flame-sheet",
+  "shaders": {
+    "shd_flame": { "kernel": "flame.glsl", "size": 128, "frames": 16 }
+  },
+  "materials": {
+    "mtl_brazier": { "baseColor": [0.25, 0.22, 0.2], "roughness": 0.6, "metallic": 1 }
+  },
+  "parts": [{ "id": "prp_brazier", "size": [0.4, 0.4, 0.25], "material": "mtl_brazier" }],
+  "relations": [{ "type": "at", "part": "prp_brazier", "center": [0, 0, 0.125] }],
+  "claims": { "parts": 1, "grounded": true }
+}

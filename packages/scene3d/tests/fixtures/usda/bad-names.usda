@@ -1,0 +1,27 @@
+#usda 1.0
+(
+    defaultPrim = "Root"
+    metersPerUnit = 0.1
+    upAxis = "Z"
+)
+
+def Xform "Root"
+{
+    def Mesh "Cube"
+    {
+        float3[] extent = [(-1, -1, -1), (1, 1, 1)]
+    }
+
+    def Mesh "Cube.001"
+    {
+        float3[] extent = [(-1, -1, -1), (1, 1, 1)]
+    }
+
+    def Scope "Collection"
+    {
+        def Mesh "x"
+        {
+            float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
+        }
+    }
+}

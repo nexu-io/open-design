@@ -5,6 +5,10 @@ export type InlineMentionKind =
   | 'file'
   | 'workspace'
   | 'connector'
+  /* A named part of the 3D asset open in the viewer. The selection in the
+     editor and the noun in the prompt are the same thing, so a part is a
+     mentionable entity exactly like a file is. */
+  | 'part'
   | 'unknown';
 
 export interface InlineMentionEntity {

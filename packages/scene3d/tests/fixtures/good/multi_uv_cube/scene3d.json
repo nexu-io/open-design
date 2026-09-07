@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "conventions": {
+    "naming": {
+      "objectPattern": "^[A-Za-z][A-Za-z0-9_]{2,63}$",
+      "forbidDefaultNames": true,
+      "partPrefixes": ["prp_", "cam_", "lgt_"],
+      "collectionPattern": "^[A-Za-z][A-Za-z0-9_]{2,63}$"
+    },
+    "units": {
+      "metersPerUnit": 1,
+      "upAxis": "Y"
+    }
+  },
+  "proof": {
+    "engine": "BLENDER_EEVEE",
+    "resolution": 256,
+    "turntable": false
+  }
+}
