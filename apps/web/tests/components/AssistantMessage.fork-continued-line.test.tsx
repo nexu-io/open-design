@@ -11,11 +11,19 @@
  */
 
 import { cleanup, render } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessage } from '../../src/components/AssistantMessage';
 import { en } from '../../src/i18n/locales/en';
 import type { ChatMessage } from '../../src/types';
+
+const CHAT_CSS = readFileSync(
+  resolve(dirname(fileURLToPath(import.meta.url)), '../../src/styles/chat.css'),
+  'utf-8',
+);
 
 beforeAll(() => {
   const store = new Map<string, string>();
@@ -103,5 +111,34 @@ describe('分叉后的来源提示', () => {
 
     expect(container.textContent).not.toContain(SOURCE_TITLE);
     expect(container.querySelector(`[title="${SOURCE_TITLE}"]`)).toBeNull();
+  });
+});
+
+/**
+ * 脚注的静音色,量在**真正渲染出来的那个节点**上。
+ *
+ * `message-muted-ink.test.tsx` 已经钉了同一件事,但它的夹具是一个**裸的**
+ * `<div class="fork-note">` —— 那种问法只答得了「`.fork-note` 自己有没有」,
+ * 答不了「它在线里还赢不赢」。脚注搬进 `.fork-sep` 之后这是两个问题:
+ * 祖先侧只要写一条 `.fork-sep span { color }`(0-1-1)就能盖过 `.fork-note`
+ * (0-1-0),裸夹具照样绿,产品里却已经不是静音色了。这一条就是补那半边。
+ *
+ * jsdom 跑层叠、继承自定义属性,但**不解析 `var()`** —— 所以问的是「最终落在
+ * 这个元素上的是哪一条声明」,不是像素颜色。真实像素另有无头 Chrome 量。
+ */
+describe('分叉脚注的静音色(层叠意义上的)', () => {
+  beforeAll(() => {
+    const style = document.createElement('style');
+    style.textContent = CHAT_CSS;
+    document.head.appendChild(style);
+  });
+
+  it('线里那一格最终引用的仍是消息静音 token,没被祖先的规则盖掉', () => {
+    const { container } = renderForked();
+    const note = container.querySelector<HTMLElement>('[data-testid="assistant-fork-note"]')!;
+
+    expect(getComputedStyle(note).color).toBe('var(--chat-message-muted-ink)');
+    expect(getComputedStyle(note).getPropertyValue('--chat-message-muted-ink').trim())
+      .toBe('#a3a3a3');
   });
 });
