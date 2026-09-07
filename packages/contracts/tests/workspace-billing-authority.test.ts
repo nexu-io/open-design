@@ -157,12 +157,39 @@ describe('workspaceBillingAuthorityContext — 谁在付钱这一位', () => {
     expect(workspaceBillingAuthorityContext(scoped, undefined)).toBe(scoped);
   });
 
-  // 已被移出工作区的成员,他在目录里的历史角色不是一份现行授权。
-  it('权威上下文说这个成员已被移出时,不采纳他的角色', () => {
+  // 产品裁决 2026-09-07:「能看到也无所谓吧,不用特殊判断? 目前还没有踢人
+  // 这个入口」。**权威上下文自己的 memberStatus 不参与判断。**
+  //
+  // 它只可能在「目录说这个人已被移出、而项目 scope 仍然为他解析出来了」这一
+  // 组合上改变结果,而产品没有移出成员的入口,这个组合无从发生 —— 那道判断是
+  // 一条走不到的分支。真正承重的那位在下一条:权限位一律由 **scope 自己的**
+  // memberStatus 重算,所以「已被移出」如果哪天真的发生,也是 scope 报出来、
+  // 由 scope 关掉权限,不靠这里补一刀。
+  it('权威上下文自己的 memberStatus 不参与判断:角色照采纳', () => {
     const scoped = synthesisedProjectScopeContext();
     const removedOwner = authoritativeContext({ memberStatus: 'removed' });
 
-    expect(workspaceBillingAuthorityContext(scoped, removedOwner)).toBe(scoped);
+    const resolved = workspaceBillingAuthorityContext(scoped, removedOwner);
+
+    expect(resolved?.role).toBe('owner');
+    expect(resolved?.memberStatus).toBe('active');
+    expect(resolved?.permissions.canManageBilling).toBe(true);
+  });
+
+  // 承重的那一位:权限位只认 **scope 自己的** memberStatus。这条和「采纳角色
+  // 不许解冻」是同一道防线的两半 —— 生命周期一半,成员状态一半;采纳角色不许
+  // 把 scope 报出来的关闭状态重新打开。
+  it('采纳角色不许复活已关闭的成员:权限位仍由 scope 自己的 memberStatus 决定', () => {
+    const closed = synthesisedProjectScopeContext({ memberStatus: 'removed' });
+
+    const resolved = workspaceBillingAuthorityContext(closed, authoritativeContext());
+
+    expect(resolved?.role).toBe('owner');
+    expect(resolved?.memberStatus).toBe('removed');
+    // `canManageBilling` 是 `readable && isOwner`,而 `readable` 要求成员在职。
+    expect(resolved?.permissions.canManageBilling).toBe(false);
+    expect(resolved?.permissions.canWriteSyncedFiles).toBe(false);
+    expect(canReachWorkspaceBillingEntrance(resolved!)).toBe(false);
   });
 
   // 冻结是**项目 scope 自己**报的状态(binding.resourceState === 'frozen' →

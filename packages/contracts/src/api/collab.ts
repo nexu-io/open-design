@@ -564,9 +564,20 @@ export function canReachWorkspaceBillingEntrance(
  * back `locked`) rather than the directory's view of the workspace. A frozen
  * project therefore stays unwritable no matter whose role is adopted.
  *
- * Everything else — a mismatch of any identity field, an absent authority, a
- * member the directory reports as removed — keeps the fail-closed scope exactly
- * as it is.
+ * Everything else — a mismatch of any identity field, an absent authority —
+ * keeps the fail-closed scope exactly as it is.
+ *
+ * The AUTHORITY's own `memberStatus` is deliberately not consulted (product
+ * ruling 2026-09-07). It could only ever change the outcome for the pairing
+ * "the directory reports this member removed, yet the project's scope still
+ * resolves for them", and the product ships no entrance that removes a member,
+ * so that pairing has no way to occur. Adding the branch anyway would only buy
+ * an unreachable one: nothing this function returns is an authorization. The
+ * permission bits are still re-derived from the SCOPE's own `memberStatus`
+ * above, so a scope that does report `removed` stays closed regardless of the
+ * role adopted, and every money action behind the entrance is enforced
+ * server-side. The residue if the pairing ever became reachable is a removed
+ * member seeing an upgrade link — which is not a harm worth a dead branch.
  *
  * The result is for billing entrances only (which dialog, whether an upgrade
  * link exists, where it lands). It must never be used as a project request's
@@ -582,7 +593,6 @@ export function workspaceBillingAuthorityContext(
     authoritative.workspaceId !== scoped.workspaceId
     || authoritative.workspaceType !== scoped.workspaceType
     || authoritative.workspaceMemberId !== scoped.workspaceMemberId
-    || authoritative.memberStatus !== 'active'
     || authoritative.role === scoped.role
   ) {
     return scoped;
