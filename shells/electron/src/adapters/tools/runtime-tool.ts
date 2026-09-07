@@ -1,16 +1,13 @@
-import { open, mkdir, readFile, writeFile } from "node:fs/promises";
+import { open, mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   convergeSidecarLaunch,
-  getSidecarStatus,
-  stopSidecar,
   type SidecarStamp,
 } from "@open-design/sidecar";
 import { APP_KEYS, SIDECAR_MODES, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
 import { inspectElectronCdpStatus } from "@open-design/electron-kit/cdp";
-import { waitForElectronProductReady, observeElectronDiagnostics, electronGracefulStopOptions, findElectronRuntimeSurvivors } from "../standalone/observation.ts";
+import { observeElectronLifecycle, waitForElectronGeneration, stopElectronGeneration } from "./observation.ts";
 
 type RequestScope = Readonly<{
   channel: string;
@@ -84,41 +81,22 @@ function electronStamp(request: ElectronRuntimeLifecycleRequest): SidecarStamp {
   return Object.freeze({ app: APP_KEYS.ELECTRON, channel: request.channel, mode: SIDECAR_MODES.RUNTIME, namespace: request.namespace, source: SIDECAR_SOURCES.TOOLS_PACK });
 }
 
-async function waitForStatus(stamp: SidecarStamp, pid: number, controlRuntimeRoot: string): Promise<unknown> {
-  return await waitForElectronProductReady({
-    async readStatus() {
-      const status = await getSidecarStatus(stamp, { generationPid: pid, timeoutMs: 800 }).catch(() => null);
-      if (status != null) await observeElectronDiagnostics(controlRuntimeRoot, status);
-      return status;
-    },
-    assertAlive() {
-      try { process.kill(pid, 0); }
-      catch { throw new Error("Electron runtime generation exited before product readiness"); }
-    },
-  });
-}
-
 export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLifecycleRequest) {
   const stamp = electronStamp(request);
   if (request.operation === "electron.runtime.inspect") {
-    const current = await getSidecarStatus(stamp, { timeoutMs: 1_000 }).catch(() => null);
-    const status = await observeElectronDiagnostics(request.controlRuntimeRoot, current);
+    const status = await observeElectronLifecycle(stamp, request.controlRuntimeRoot);
     return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, status, cdp: await inspectElectronCdpStatus(status) });
   }
   if (request.operation === "electron.runtime.status") {
-    const status = await getSidecarStatus(stamp, { timeoutMs: 1_000 }).catch(() => null);
-    return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, status: await observeElectronDiagnostics(request.controlRuntimeRoot, status) });
+    return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, status: await observeElectronLifecycle(stamp, request.controlRuntimeRoot) });
   }
   if (request.operation === "electron.runtime.stop") {
-    const electron = await stopSidecar(stamp, electronGracefulStopOptions);
-    // Shell shutdown owns guarded retirement. The tool observes physical
-    // survivors only; attachment counts never authorize an extra stop sequence.
-    const remainingPids = [...electron.remainingPids, ...await findElectronRuntimeSurvivors(request)];
+    const { electron, remainingPids } = await stopElectronGeneration(stamp);
     return Object.freeze({
       schemaVersion: 1 as const,
       operation: request.operation,
       electron,
-      remainingPids: Object.freeze([...new Set(remainingPids)]),
+      remainingPids,
     });
   }
   await mkdir(dirname(request.logPath), { recursive: true });
@@ -143,5 +121,5 @@ export async function executeElectronRuntimeLifecycle(request: ElectronRuntimeLi
   }
   convergence.launcherProcess.unref();
   const pid = convergence.description.resources.pid;
-  return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, pid, status: await waitForStatus(stamp, pid, request.controlRuntimeRoot) });
+  return Object.freeze({ schemaVersion: 1 as const, operation: request.operation, pid, status: await waitForElectronGeneration(stamp, pid, request.controlRuntimeRoot) });
 }

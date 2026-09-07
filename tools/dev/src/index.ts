@@ -578,6 +578,9 @@ async function invokeElectronLifecycle(config: ToolDevConfig, operation: Electro
     const bootstrapUrl = options.standaloneBootstrapUrl ?? process.env.OD_ELECTRON_STANDALONE_BOOTSTRAP_URL;
     if (bootstrapUrl == null) throw new Error("--standalone-bootstrap-url is required for tools-dev desktop");
     return await withStandaloneExactFixture({ bootstrapUrl, scratchRoot: path.join(config.apps.desktop.controlRuntimeRoot, "acquisition") }, invoke);
+  } catch (error) {
+    await logHandle.write(`[tools-dev] ${operation} failed: ${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+    throw error;
   } finally {
     await logHandle.close();
   }

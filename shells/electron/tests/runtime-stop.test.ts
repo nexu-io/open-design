@@ -4,7 +4,7 @@ const sidecar = vi.hoisted(() => ({ stop: vi.fn(), find: vi.fn(), status: vi.fn(
 vi.mock("@open-design/sidecar", () => ({ stopSidecar: sidecar.stop, findSidecarProcesses: sidecar.find, getSidecarStatus: sidecar.status }));
 import { executeElectronRuntimeLifecycle } from "@/adapters/tools/runtime-tool.js";
 import { executeElectronDevLifecycle } from "@/adapters/tools/dev-tool.js";
-import { electronGracefulStopOptions } from "@/adapters/standalone/observation.js";
+import { electronGracefulStopOptions } from "@/adapters/tools/observation.js";
 import { standaloneHostControlRequestTimeoutMs } from "@open-design/standalone";
 
 beforeEach(() => {
@@ -20,7 +20,7 @@ it.each([{ survivors: [] }, { survivors: [{ pid: 99 }] }])("reports physical sur
   expect(sidecar.status).not.toHaveBeenCalled();
   expect(sidecar.stop).toHaveBeenCalledExactlyOnceWith({ app: "electron", channel: "betahyx", mode: "runtime", namespace: "stop-test", source: "tools-pack" }, electronGracefulStopOptions);
   expect(electronGracefulStopOptions.termGraceMs).toBeGreaterThan(standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.release" }));
-  expect(sidecar.find).toHaveBeenCalledTimes(4);
+  expect(sidecar.find).toHaveBeenCalledTimes(8);
   for (const app of ["standalone", "daemon", "web", "electron-updater"]) {
     expect(sidecar.find).toHaveBeenCalledWith({ app, channel: "betahyx", mode: "runtime", namespace: "stop-test", source: "standalone" });
   }
@@ -38,5 +38,12 @@ it("keeps dev stop partial when an orphan survives Electron shutdown", async () 
   const receipt = await executeElectronDevLifecycle({ schemaVersion: 2, operation: "electron.dev.stop", channel: "dev", namespace: "stop-test", controlRuntimeRoot: "/control" }, { logFd: 2 });
   expect(receipt).toMatchObject({ stopped: { remainingPids: [73] } });
   expect(sidecar.stop).toHaveBeenCalledExactlyOnceWith({ app: "electron", channel: "dev", mode: "dev", namespace: "stop-test", source: "tools-dev" }, electronGracefulStopOptions);
-  expect(sidecar.find).toHaveBeenCalledTimes(4);
+  expect(sidecar.find).toHaveBeenCalledTimes(8);
+});
+
+it("observes headless shared-resource survivors even when the stopping CLI is not headless", async () => {
+  sidecar.find.mockImplementation(async ({ namespace, app }) => namespace === "stop-test-headless" && app === "web" ? [{ pid: 74 }] : []);
+  const receipt = await executeElectronDevLifecycle({ schemaVersion: 2, operation: "electron.dev.stop", channel: "dev", namespace: "stop-test", controlRuntimeRoot: "/control" }, { logFd: 2 });
+  expect(receipt).toMatchObject({ stopped: { remainingPids: [74] } });
+  expect(sidecar.stop).toHaveBeenCalledOnce();
 });

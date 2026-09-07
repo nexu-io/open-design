@@ -3,14 +3,14 @@ import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { APP_KEYS, SIDECAR_SOURCES } from "@open-design/sidecar-proto";
-import { getSidecarStatus, launchSidecar, stopSidecar, type SidecarStamp } from "@open-design/sidecar";
+import { launchSidecar, type SidecarStamp } from "@open-design/sidecar";
 import { validateElectronShellManifest, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 
 import { resolveElectronStandaloneTarget } from "../standalone/installation.ts";
 import { loadElectronStandaloneAuthorityResources } from "../standalone/installation.ts";
 import { withElectronInstallation, parseElectronInstallationInput, type ElectronInstallationInput } from "../standalone/assemble-installation.ts";
 import { inspectElectronCdpStatus } from "@open-design/electron-kit/cdp";
-import { observeElectronDiagnostics, waitForElectronProductReady, electronGracefulStopOptions, findElectronRuntimeSurvivors } from "../standalone/observation.ts";
+import { observeElectronLifecycle, waitForElectronGeneration, stopElectronGeneration } from "./observation.ts";
 import { electronShellSource } from "./resources.ts";
 
 export const ELECTRON_DEV_LIFECYCLE_SCHEMA_VERSION = 2 as const;
@@ -110,17 +110,7 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     stamp: stamp(request),
     supervisor: { command: process.execPath, entrypoint: join(prepared.scene.sceneRoot, "supervisor.mjs") },
   });
-  const runtimeStatus = await waitForElectronProductReady({
-    async readStatus() {
-      const status = await getSidecarStatus(stamp(request), { generationPid: launched.pid, timeoutMs: 800 }).catch(() => null);
-      if (status != null) await observeElectronDiagnostics(request.controlRuntimeRoot, status);
-      return status;
-    },
-    assertAlive() {
-      try { process.kill(launched.pid, 0); }
-      catch { throw new Error("Electron dev generation exited before product readiness; use tools-dev logs desktop to diagnose startup"); }
-    },
-  });
+  const runtimeStatus = await waitForElectronGeneration(stamp(request), launched.pid, request.controlRuntimeRoot);
   return Object.freeze({
     operation: request.operation,
     schemaVersion: 2 as const,
@@ -132,15 +122,13 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
 export async function executeElectronDevLifecycle(request: ElectronDevLifecycleRequest, options: Readonly<{ logFd: number }>) {
   if (request.operation === "electron.dev.start") return await start(request, options.logFd);
   if (request.operation === "electron.dev.inspect") {
-    const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
-    const status = await observeElectronDiagnostics(request.controlRuntimeRoot, current);
+    const status = await observeElectronLifecycle(stamp(request), request.controlRuntimeRoot);
     return Object.freeze({ operation: request.operation, schemaVersion: 2 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status, cdp: await inspectElectronCdpStatus(status) });
   }
   if (request.operation === "electron.dev.status") {
-    const current = await getSidecarStatus(stamp(request), { timeoutMs: 1_000 }).catch(() => null);
-    return Object.freeze({ operation: request.operation, schemaVersion: 2 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status: await observeElectronDiagnostics(request.controlRuntimeRoot, current) });
+    return Object.freeze({ operation: request.operation, schemaVersion: 2 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), status: await observeElectronLifecycle(stamp(request), request.controlRuntimeRoot) });
   }
-  const electron = await stopSidecar(stamp(request), electronGracefulStopOptions);
-  const stopped = Object.freeze({ ...electron, remainingPids: Object.freeze([...new Set([...electron.remainingPids, ...await findElectronRuntimeSurvivors(request)])]) });
+  const { electron, remainingPids } = await stopElectronGeneration(stamp(request));
+  const stopped = Object.freeze({ ...electron, remainingPids });
   return Object.freeze({ operation: request.operation, schemaVersion: 2 as const, shell: Object.freeze({ type: "electron" as const, channel: request.channel, namespace: request.namespace }), stopped });
 }

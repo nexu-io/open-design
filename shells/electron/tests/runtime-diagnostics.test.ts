@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { observeElectronDiagnostics } from "@/adapters/standalone/observation.js";
+import { observeElectronDiagnostics } from "@/adapters/tools/observation.js";
 
 it("retains only diagnostic roots after exit, without stale process or CDP state", async () => {
   const root = await mkdtemp(join(tmpdir(), "electron-dev-diagnostics-"));

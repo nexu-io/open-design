@@ -1,11 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
-import { findSidecarProcesses } from "@open-design/sidecar";
+import { findSidecarProcesses, getSidecarStatus, stopSidecar, type SidecarStamp } from "@open-design/sidecar";
 import { standaloneHostControlRequestTimeoutMs } from "@open-design/standalone";
+import { resolveElectronSessionNamespace } from "@open-design/electron-kit";
 import runtime from "../../../config/runtime.json" with { type: "json" };
 import resourceDeclaration from "../../../config/standalone.json" with { type: "json" };
-import { validateElectronPhysicalResourceSet } from "./physical-resources.ts";
+import { validateElectronPhysicalResourceSet } from "../standalone/physical-resources.ts";
 
 // Product control-plane observations shared by dev and installed adapters.
 // These projections do not acquire lifecycle authority or retire shared resources.
@@ -41,10 +42,41 @@ if (!Number.isSafeInteger(termGraceMs) || termGraceMs <= standaloneHostControlRe
 }
 export const electronGracefulStopOptions = Object.freeze({ termGraceMs });
 
+export async function observeElectronLifecycle(stamp: SidecarStamp, controlRuntimeRoot: string): Promise<unknown> {
+  const status = await getSidecarStatus(stamp, { timeoutMs: 1_000 }).catch(() => null);
+  return observeElectronDiagnostics(controlRuntimeRoot, status);
+}
+
+export async function waitForElectronGeneration(stamp: SidecarStamp, pid: number, controlRuntimeRoot: string): Promise<unknown> {
+  return waitForElectronProductReady({
+    async readStatus() {
+      const status = await getSidecarStatus(stamp, { generationPid: pid, timeoutMs: 800 }).catch(() => null);
+      if (status != null) await observeElectronDiagnostics(controlRuntimeRoot, status);
+      return status;
+    },
+    assertAlive() {
+      try { process.kill(pid, 0); }
+      catch { throw new Error("Electron generation exited before product readiness; inspect the Shell logs to diagnose startup"); }
+    },
+  });
+}
+
+export async function stopElectronGeneration(stamp: SidecarStamp) {
+  const electron = await stopSidecar(stamp, electronGracefulStopOptions);
+  // Shell shutdown owns guarded retirement. Tools only observe survivors;
+  // neither attachment counts nor an orphan authorize extra shared-resource stops.
+  const remainingPids = Object.freeze([...new Set([...electron.remainingPids, ...await findElectronRuntimeSurvivors(stamp)])]);
+  return Object.freeze({ electron, remainingPids });
+}
+
 /** Observe all declared resources; never infer physical exit from attachment counts. */
 export async function findElectronRuntimeSurvivors(scope: Readonly<{ channel: string; namespace: string }>): Promise<readonly number[]> {
-  const observations = await Promise.all(validateElectronPhysicalResourceSet(resourceDeclaration).resources.map(resource =>
-    findSidecarProcesses({ ...resource.stamp, channel: scope.channel, namespace: scope.namespace })));
+  const namespaces = [resolveElectronSessionNamespace(scope.namespace, "interactive")];
+  try { namespaces.push(resolveElectronSessionNamespace(scope.namespace, "headless")); }
+  catch { /* A valid interactive namespace can be too long for a headless suffix. */ }
+  const resources = validateElectronPhysicalResourceSet(resourceDeclaration).resources;
+  const observations = await Promise.all(namespaces.flatMap(namespace => resources.map(resource =>
+    findSidecarProcesses({ ...resource.stamp, channel: scope.channel, namespace }))));
   return Object.freeze([...new Set(observations.flatMap(processes => processes.map(({ pid }) => pid)))]);
 }
 
