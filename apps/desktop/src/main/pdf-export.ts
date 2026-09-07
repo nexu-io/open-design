@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 
-import { BrowserWindow, dialog } from "electron";
+import { BrowserWindow, dialog, type WebContents, type WebFrameMain } from "electron";
 import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
 import { findRealElementRange, findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
@@ -219,7 +219,7 @@ export function createElectronPdfTarget(): PrintReadyPdfTarget {
     },
     async waitUntilReady(nonce) {
       if (!window) throw new Error("PDF render window has not been loaded");
-      await waitForPrintReadyHandshake(window.webContents, nonce);
+      await waitForPrintReadyPdfContent(window, nonce);
     },
     async measurePageSize() {
       if (!window) throw new Error("PDF render window has not been loaded");
@@ -240,6 +240,23 @@ export function createElectronPdfTarget(): PrintReadyPdfTarget {
       window = null;
     },
   };
+}
+
+/**
+ * Gate direct desktop PDF capture on both readiness signals. The wrapper
+ * handshake says the artifact has rendered its outer document, while the
+ * printable-content wait covers resources and embedded adapter frames that
+ * can still be loading at that point. Start both waits together so a child
+ * frame cannot finish in the gap between two sequential subscriptions.
+ */
+export async function waitForPrintReadyPdfContent(
+  window: BrowserWindow,
+  nonce: string,
+): Promise<void> {
+  await Promise.all([
+    waitForPrintReadyHandshake(window.webContents, nonce),
+    waitForPrintableContent(window),
+  ]);
 }
 
 function printToPdfOptions(pageSize: PageSize): PrintToPdfOptions {
@@ -334,8 +351,311 @@ export const PRINTABLE_CONTENT_WAIT_TIMEOUT_MS = 15_000;
  *  stalled image drops out while the rest of the document still settles
  *  normally, instead of every export paying the full outer timeout. */
 const IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS = 10_000;
+const EMBEDDED_FRAME_RECONCILE_INTERVAL_MS = 50;
+const EMBEDDED_FRAME_MISSING_GRACE_MS = 150;
+
+type EmbeddedFrameWaitResult = { stalled: boolean };
+
+type EmbeddedFrameDocumentState = {
+  readyState: unknown;
+  url: unknown;
+};
+
+type PendingEmbeddedFrame = {
+  frame: WebFrameMain;
+  frameTreeNodeId: number | null;
+  key: string;
+  missingSince: number | null;
+  probedIdentities: Set<string>;
+};
+
+/**
+ * Wait for each current child-frame navigation by Electron frame identity.
+ *
+ * DOM access cannot inspect an already-loaded cross-origin frame, while
+ * Resource Timing is scoped only to a URL. WebFrameMain gives us both the
+ * current document readiness and the browser-stable frame-tree identity of
+ * the frame that finishes navigation, so neither two frames sharing one URL
+ * nor a renderer-process swap can release the wrong wait.
+ */
+export async function waitForEmbeddedFrames(
+  webContents: WebContents,
+  deadlineAt: number = Date.now() + IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS,
+): Promise<EmbeddedFrameWaitResult> {
+  const mainFrame = webContents.mainFrame;
+  if (!mainFrame || !Array.isArray(mainFrame.framesInSubtree)) return { stalled: false };
+
+  const frames = mainFrame.framesInSubtree.filter((frame) => frame !== mainFrame);
+  if (frames.length === 0) return { stalled: false };
+
+  return new Promise((resolve) => {
+    const pending = new Map<string, PendingEmbeddedFrame>(
+      frames.map((frame) => {
+        const frameTreeNodeId =
+          typeof frame.frameTreeNodeId === "number" ? frame.frameTreeNodeId : null;
+        const key = embeddedFrameKey(frame, frameTreeNodeId);
+        return [
+          key,
+          {
+            frame,
+            frameTreeNodeId,
+            key,
+            missingSince: null,
+            probedIdentities: new Set<string>(),
+          },
+        ];
+      }),
+    );
+    let reconcileTimer: ReturnType<typeof setTimeout> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let done = false;
+    const finish = (stalled: boolean) => {
+      if (done) return;
+      done = true;
+      webContents.off("did-frame-finish-load", onFrameFinished);
+      if (reconcileTimer !== undefined) clearTimeout(reconcileTimer);
+      if (timer !== undefined) clearTimeout(timer);
+      resolve({ stalled });
+    };
+    const settle = (key: string) => {
+      pending.delete(key);
+      if (pending.size === 0) finish(false);
+    };
+    const onFrameFinished = (
+      _event: Electron.Event,
+      isMainFrame: boolean,
+      frameProcessId: number,
+      frameRoutingId: number,
+    ) => {
+      if (isMainFrame) return;
+      const navigatedFrame = embeddedFramesInSubtree(webContents).find(
+        (candidate) =>
+          candidate.processId === frameProcessId && candidate.routingId === frameRoutingId,
+      );
+      const key =
+        navigatedFrame && typeof navigatedFrame.frameTreeNodeId === "number"
+          ? `tree:${navigatedFrame.frameTreeNodeId}`
+          : `route:${frameProcessId}:${frameRoutingId}`;
+      const entry = pending.get(key);
+      if (entry && navigatedFrame) {
+        // The main-process frame URL can advance independently of the document
+        // whose finish event is being handled. Re-evaluate URL and readyState
+        // together inside the frame before accepting this event.
+        probe(entry, navigatedFrame, true);
+      }
+    };
+
+    const probe = (
+      entry: PendingEmbeddedFrame,
+      candidate: WebFrameMain,
+      force = false,
+    ) => {
+      if (done || !pending.has(entry.key)) return;
+      const identity = `${candidate.processId}:${candidate.routingId}`;
+      if (!force && entry.probedIdentities.has(identity)) return;
+      entry.probedIdentities.add(identity);
+      void candidate
+        .executeJavaScript("({ readyState: document.readyState, url: location.href })")
+        .then(
+          (value) => {
+            if (done || !pending.has(entry.key)) return;
+            const state = normalizeEmbeddedFrameDocumentState(value);
+            if (state.readyState !== "complete") {
+              probeReplacementFrame(entry, candidate);
+              return;
+            }
+            if (!isInitialBlankFrameDocument(state.url)) {
+              settle(entry.key);
+              return;
+            }
+            void blankFrameTargetState(candidate).then((targetState) => {
+              if (done || !pending.has(entry.key)) return;
+              if (targetState === "intentional-blank") {
+                settle(entry.key);
+                return;
+              }
+              probeReplacementFrame(entry, candidate);
+            });
+          },
+          () => probeReplacementFrame(entry, candidate),
+        );
+    };
+
+    const probeReplacementFrame = (
+      entry: PendingEmbeddedFrame,
+      previous: WebFrameMain,
+    ) => {
+      if (done || !pending.has(entry.key)) return;
+      const current = currentEmbeddedFrame(webContents, entry);
+      if (!current) {
+        entry.missingSince ??= Date.now();
+        return;
+      }
+      entry.missingSince = null;
+      if (
+        current.processId !== previous.processId ||
+        current.routingId !== previous.routingId
+      ) {
+        probe(entry, current);
+      }
+    };
+
+    const reconcileFrames = () => {
+      if (done) return;
+      reconcileTimer = undefined;
+      const now = Date.now();
+      for (const entry of Array.from(pending.values())) {
+        const current = currentEmbeddedFrame(webContents, entry);
+        if (!current) {
+          entry.missingSince ??= now;
+          if (now - entry.missingSince >= EMBEDDED_FRAME_MISSING_GRACE_MS) {
+            settle(entry.key);
+          }
+          continue;
+        }
+        entry.missingSince = null;
+        if (
+          current.processId !== entry.frame.processId ||
+          current.routingId !== entry.frame.routingId
+        ) {
+          probe(entry, current);
+        }
+      }
+      if (!done) {
+        reconcileTimer = setTimeout(
+          reconcileFrames,
+          EMBEDDED_FRAME_RECONCILE_INTERVAL_MS,
+        );
+      }
+    };
+
+    // One shared listener avoids EventEmitter warnings and O(frames²) listener
+    // dispatch on iframe-heavy documents. It is installed before any readiness
+    // probes; a renderer swap in the small snapshot-to-listener gap is recovered
+    // by probing the current frame with the same stable frameTreeNodeId.
+    webContents.on("did-frame-finish-load", onFrameFinished);
+    timer = setTimeout(() => finish(true), Math.max(0, deadlineAt - Date.now()));
+    reconcileTimer = setTimeout(
+      reconcileFrames,
+      EMBEDDED_FRAME_RECONCILE_INTERVAL_MS,
+    );
+    for (const entry of pending.values()) probe(entry, entry.frame);
+  });
+}
+
+function embeddedFrameKey(frame: WebFrameMain, frameTreeNodeId: number | null): string {
+  return frameTreeNodeId === null
+    ? `route:${frame.processId}:${frame.routingId}`
+    : `tree:${frameTreeNodeId}`;
+}
+
+function embeddedFramesInSubtree(webContents: WebContents): WebFrameMain[] {
+  try {
+    const mainFrame = webContents.mainFrame;
+    return Array.isArray(mainFrame.framesInSubtree)
+      ? mainFrame.framesInSubtree.filter((frame) => frame !== mainFrame)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function currentEmbeddedFrame(
+  webContents: WebContents,
+  entry: PendingEmbeddedFrame,
+): WebFrameMain | undefined {
+  const frames = embeddedFramesInSubtree(webContents);
+  return entry.frameTreeNodeId === null
+    ? frames.find(
+        (candidate) =>
+          candidate.processId === entry.frame.processId &&
+          candidate.routingId === entry.frame.routingId,
+      )
+    : frames.find((candidate) => candidate.frameTreeNodeId === entry.frameTreeNodeId);
+}
+
+function normalizeEmbeddedFrameDocumentState(
+  value: unknown,
+): { readyState: unknown; url: string } {
+  if (typeof value === "object" && value !== null) {
+    const state = value as Partial<EmbeddedFrameDocumentState>;
+    return {
+      readyState: state.readyState,
+      url: typeof state.url === "string" ? state.url : "",
+    };
+  }
+  // Never pair a malformed result with the separately observed main-process
+  // frame URL: doing so would recreate the readyState/URL race this atomic
+  // renderer evaluation exists to eliminate.
+  return { readyState: undefined, url: "" };
+}
+
+function isInitialBlankFrameDocument(url: string): boolean {
+  return url === "" || url === "about:blank" || url.startsWith("about:blank#");
+}
+
+type BlankFrameTargetState = "intentional-blank" | "pending-nonblank" | "unknown";
+
+/**
+ * Distinguish the initial about:blank document of an assigned navigation from
+ * an iframe whose intended document is actually blank.
+ *
+ * A sandboxed child cannot read `window.frameElement`, but its parent owns the
+ * element and can read the authored target. Electron's `parent.frames` order
+ * follows the document's child browsing-context order; require its count to
+ * match the parent's iframe/frame elements before using the index so an
+ * unusual embedding shape fails closed instead of releasing the wrong frame.
+ */
+async function blankFrameTargetState(frame: WebFrameMain): Promise<BlankFrameTargetState> {
+  try {
+    const parent = frame.parent;
+    if (!parent) return "unknown";
+    const siblings = parent.frames;
+    const index = siblings.findIndex((candidate) =>
+      candidate.frameTreeNodeId === frame.frameTreeNodeId
+    );
+    if (index < 0) return "unknown";
+    const value = await parent.executeJavaScript(
+      `(function(){
+        var elements = Array.from(document.querySelectorAll('iframe,frame'));
+        if (elements.length !== ${siblings.length}) return null;
+        var element = elements[${index}];
+        if (!element) return null;
+        return {
+          hasSrc: element.hasAttribute('src'),
+          rawSrc: element.getAttribute('src'),
+          resolvedSrc: typeof element.src === 'string' ? element.src : ''
+        };
+      })()`,
+    );
+    if (typeof value !== "object" || value === null) return "unknown";
+    const target = value as { hasSrc?: unknown; rawSrc?: unknown; resolvedSrc?: unknown };
+    if (target.hasSrc !== true) return "intentional-blank";
+    const rawSrc = typeof target.rawSrc === "string" ? target.rawSrc : "";
+    const resolvedSrc = typeof target.resolvedSrc === "string" ? target.resolvedSrc : rawSrc;
+    if (
+      rawSrc === "" ||
+      isInitialBlankFrameDocument(resolvedSrc) ||
+      resolvedSrc.startsWith("javascript:")
+    ) {
+      return "intentional-blank";
+    }
+    return "pending-nonblank";
+  } catch {
+    return "unknown";
+  }
+}
 
 export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
+  // Both the initial snapshot and the post-page-settle rescan share one frame
+  // budget. Without a shared deadline, a late frame could start a fresh 10s
+  // timer after the initial pass and leave listeners running in the background
+  // after the outer 15s capture bound had already released the export.
+  const embeddedFrameDeadlineAt = Date.now() + IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS;
+  const initialEmbeddedFramesSettled = waitForEmbeddedFrames(
+    window.webContents,
+    embeddedFrameDeadlineAt,
+  );
   const pageSettled = window.webContents.executeJavaScript(
     `(function() {
       var RESOURCE_TIMEOUT_MS = ${IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS};
@@ -410,6 +730,13 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
     })()`,
     true,
   ) as Promise<unknown>;
+  const embeddedFramesSettled = Promise.all([
+    initialEmbeddedFramesSettled,
+    pageSettled,
+  ]).then(async ([initial]) => {
+    if (initial.stalled) return initial;
+    return waitForEmbeddedFrames(window.webContents, embeddedFrameDeadlineAt);
+  });
 
   // Outer backstop for the case the in-page bound can never fire: a renderer
   // whose event loop is wedged never runs our setTimeout either, and
@@ -420,7 +747,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
   let raced: unknown;
   try {
     raced = await Promise.race([
-      pageSettled,
+      Promise.all([pageSettled, embeddedFramesSettled]),
       new Promise<symbol>((resolve) => {
         timer = setTimeout(() => resolve(OUTER_TIMEOUT), PRINTABLE_CONTENT_WAIT_TIMEOUT_MS);
       }),
@@ -436,9 +763,18 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
   // healthy, so the page-side deadline fires first and the outer timer never
   // runs. Keying only off the outer timer would skip cancellation in exactly
   // that case and leave the requests in flight.
+  const settledResults = Array.isArray(raced) ? raced : [];
+  const inPageResult = settledResults[0];
+  const embeddedFrameResult = settledResults[1];
   const inPageStalled =
-    typeof raced === "object" && raced !== null && (raced as { stalled?: unknown }).stalled === true;
-  const gaveUp = raced === OUTER_TIMEOUT || inPageStalled;
+    typeof inPageResult === "object" &&
+    inPageResult !== null &&
+    (inPageResult as { stalled?: unknown }).stalled === true;
+  const embeddedFrameStalled =
+    typeof embeddedFrameResult === "object" &&
+    embeddedFrameResult !== null &&
+    (embeddedFrameResult as { stalled?: unknown }).stalled === true;
+  const gaveUp = raced === OUTER_TIMEOUT || inPageStalled || embeddedFrameStalled;
 
   // Giving up on the wait is not enough on its own: the requests we stopped
   // waiting for are still in flight, and every later `executeJavaScript` in
@@ -466,12 +802,13 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
   // The nonce is a per-export random UUID embedded in the artifact's
   // handshake script; we verify it here to prevent spoofed messages
   // from untrusted artifact code.
+  const serializedNonce = JSON.stringify(nonce);
   const handshake = webContents.executeJavaScript(
     `(function() {
       if (window.__odPrintReady) return Promise.resolve(true);
       return new Promise(function(resolve) {
         window.addEventListener('message', function handler(event) {
-          if (event.data && event.data.type === 'OD_PRINT_READY' && event.data.nonce === '${nonce}') {
+          if (event.data && event.data.type === 'OD_PRINT_READY' && event.data.nonce === ${serializedNonce}) {
             window.__odPrintReady = true;
             window.removeEventListener('message', handler);
             resolve(true);
@@ -484,11 +821,16 @@ export async function waitForPrintReadyHandshake(webContents: Electron.WebConten
 
   // Prevent indefinite hangs if the document is malformed or the
   // injected handshake script was blocked (e.g. by a CSP violation).
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('Print handshake timed out')), 30_000),
-  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Print handshake timed out')), 30_000);
+  });
 
-  await Promise.race([handshake, timeout]);
+  try {
+    await Promise.race([handshake, timeout]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export async function inferPageSize(window: BrowserWindow): Promise<PageSize> {
