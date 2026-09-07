@@ -142,6 +142,7 @@ import {
   resolveDesignDeliveryOutcome,
   type DesignDeliveryOutcome,
 } from '../runtime/design-delivery';
+import { deriveFileOps } from '../runtime/file-ops';
 import { notifyArtifactDelivered } from './experience-survey-trigger';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
@@ -5686,6 +5687,7 @@ export function ProjectView({
               artifactCount: status.artifactCount,
               persistenceSucceeded: artifactPersistenceSucceeded,
               persistenceFailed: artifactPersistenceError !== undefined,
+              ...summarizeMutationPaths(message.events, project.id, projectDetail.resolvedDir),
             });
             updateMessageById(
               message.id,
@@ -5703,8 +5705,8 @@ export function ProjectView({
               true,
               { telemetryFinalized: true },
             );
-            if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-              setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
+            if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed' || deliveryOutcome === 'external_only') {
+              setError(designDeliveryFailureDetail(deliveryOutcome, artifactPersistenceError));
             }
             await auditDesignSystemWorkspaceAfterRun(message.id);
             // Clear stale retry count for successfully recovered run.
@@ -6136,6 +6138,7 @@ export function ProjectView({
                   artifactCount: daemonArtifactCount,
                   persistenceSucceeded: artifactPersistenceSucceeded,
                   persistenceFailed: artifactPersistenceError !== undefined,
+                  ...summarizeMutationPaths(deliveryEvents, project.id, projectDetail.resolvedDir),
                 });
                 updateMessageById(
                   message.id,
@@ -6154,8 +6157,8 @@ export function ProjectView({
                   true,
                   { telemetryFinalized: true },
                 );
-                if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                  setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
+                if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed' || deliveryOutcome === 'external_only') {
+                  setError(designDeliveryFailureDetail(deliveryOutcome, artifactPersistenceError));
                 }
                 await auditDesignSystemWorkspaceAfterRun(message.id);
               })();
@@ -7941,6 +7944,7 @@ export function ProjectView({
                 artifactCount: daemonArtifactCount,
                 persistenceSucceeded: artifactPersistenceSucceeded,
                 persistenceFailed: artifactPersistenceError !== undefined,
+                ...summarizeMutationPaths(deliveryCandidate.events, project.id, projectDetail.resolvedDir),
               });
               const finalized = applyDesignDeliveryOutcome(
                 deliveryCandidate,
@@ -7964,8 +7968,8 @@ export function ProjectView({
                 persistMessage(finalized, { telemetryFinalized: true });
                 return updated;
               });
-              if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed') {
-                setError(artifactPersistenceError ?? DESIGN_RESULT_MISSING_DETAIL);
+              if (deliveryOutcome === 'no_result' || deliveryOutcome === 'delivery_failed' || deliveryOutcome === 'external_only') {
+                setError(designDeliveryFailureDetail(deliveryOutcome, artifactPersistenceError));
                 if (runCommentAttachments.length > 0) {
                   void patchAttachedStatuses(runCommentAttachments, 'failed');
                 }
@@ -12639,8 +12643,19 @@ const DESIGN_RESULT_MISSING_DETAIL =
   'The design run finished without producing a deliverable project file.';
 const DESIGN_RESULT_DELIVERY_FAILED_DETAIL =
   'The design result was generated, but OpenDesign could not save it to the project.';
+const DESIGN_RESULT_EXTERNAL_ONLY_DETAIL =
+  'The run changed files only outside the project folder, so nothing was delivered to the project. Design runs track results as project files - use Chat mode for tasks that are not meant to produce one.';
 
-function applyDesignDeliveryOutcome(
+export function designDeliveryFailureDetail(
+  outcome: DesignDeliveryOutcome,
+  persistenceError?: string,
+): string {
+  if (outcome === 'delivery_failed') return persistenceError || DESIGN_RESULT_DELIVERY_FAILED_DETAIL;
+  if (outcome === 'external_only') return DESIGN_RESULT_EXTERNAL_ONLY_DETAIL;
+  return DESIGN_RESULT_MISSING_DETAIL;
+}
+
+export function applyDesignDeliveryOutcome(
   message: ChatMessage,
   outcome: DesignDeliveryOutcome,
   persistenceError?: string,
@@ -12648,14 +12663,11 @@ function applyDesignDeliveryOutcome(
   if (outcome === 'delivered') {
     return { ...message, resultDeliveryState: 'delivered' };
   }
-  if (outcome !== 'no_result' && outcome !== 'delivery_failed') return message;
-  const detail =
-    outcome === 'delivery_failed'
-      ? persistenceError || DESIGN_RESULT_DELIVERY_FAILED_DETAIL
-      : DESIGN_RESULT_MISSING_DETAIL;
+  if (outcome !== 'no_result' && outcome !== 'delivery_failed' && outcome !== 'external_only') return message;
+  const detail = designDeliveryFailureDetail(outcome, persistenceError);
   const failed = {
     ...message,
-    resultDeliveryState: outcome,
+    resultDeliveryState: outcome === 'external_only' ? 'no_result' : outcome,
     resumable: false,
   };
   return appendErrorStatusEvent(
@@ -12881,6 +12893,70 @@ export function resolveAgentTouchedFileNames(
     if (file) names.add(file.name);
   }
   return names;
+}
+
+export interface MutationPathSummary {
+  /** Mutated tool paths whose every call completed successfully. */
+  mutationPathCount: number;
+  /** Subset of mutationPathCount provably outside the project root. */
+  externalMutationPathCount: number;
+}
+
+// Summarize successfully mutated tool paths and how many provably resolve
+// outside the project root. Errored or unresolved mutation entries are
+// excluded entirely — a rejected write is not evidence that files were
+// written anywhere. The containment check is conservative: relative paths,
+// managed-project aliases, `..` escapes that cannot be lexically resolved,
+// and runs without a usable root all count as in-project, so the plain
+// no_result path keeps handling them.
+export function summarizeMutationPaths(
+  events: AgentEvent[] | undefined,
+  projectId?: string,
+  projectRoot?: string | null,
+): MutationPathSummary {
+  let mutationPathCount = 0;
+  let externalMutationPathCount = 0;
+  for (const entry of deriveFileOps(events)) {
+    if (!entry.ops.some((op) => op === 'write' || op === 'edit' || op === 'delete')) continue;
+    if (entry.status !== 'done') continue;
+    mutationPathCount += 1;
+    if (isProvablyOutsideProject(entry.fullPath, projectId, projectRoot)) {
+      externalMutationPathCount += 1;
+    }
+  }
+  return { mutationPathCount, externalMutationPathCount };
+}
+
+// Windows absolute paths are case-insensitive; POSIX paths are not. Fold case
+// only when BOTH sides are drive-letter paths so `c:/work/site` matches root
+// `C:/Work/Site` while `/srv/Site` keeps POSIX case sensitivity.
+function isWindowsDrivePath(slashedPath: string): boolean {
+  return /^[A-Za-z]:\//.test(slashedPath);
+}
+
+function isProvablyOutsideProject(
+  rawPath: string,
+  projectId?: string,
+  projectRoot?: string | null,
+): boolean {
+  const slashed = rawPath.replace(/\\/g, '/');
+  if (!isAbsoluteToolPath(slashed)) return false;
+  const segments = lexicallyNormalizePathSegments(slashed);
+  if (!segments || segments.length === 0) return false;
+  if (relativePathFromManagedProjectAlias(segments.join('/'), projectId)) return false;
+  const slashedRoot = projectRoot ? projectRoot.replace(/\\/g, '/') : null;
+  const rootSegments = slashedRoot ? lexicallyNormalizePathSegments(slashedRoot) : null;
+  if (!slashedRoot || !rootSegments || rootSegments.length === 0) return false;
+  // Only strictly shorter paths are external outright; an equal-length path
+  // still runs the segment comparison so the project root itself is internal.
+  if (segments.length < rootSegments.length) return true;
+  const foldCase = isWindowsDrivePath(slashed) && isWindowsDrivePath(slashedRoot);
+  for (let i = 0; i < rootSegments.length; i += 1) {
+    const left = foldCase ? segments[i]!.toLowerCase() : segments[i];
+    const right = foldCase ? rootSegments[i]!.toLowerCase() : rootSegments[i];
+    if (left !== right) return true;
+  }
+  return false;
 }
 
 // Reattach with a recovered (on-disk) artifact must still include any

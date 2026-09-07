@@ -196,6 +196,126 @@ describe('resolveDesignDeliveryOutcome', () => {
     ).toBe('awaiting_input');
   });
 
+  it('classifies a zero-delivery mutating run with provably external writes as external-only', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'I saved the report to your desktop.',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'w-1',
+            name: 'Write',
+            input: { file_path: 'C:/Users/alice/Desktop/report.html' },
+          },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        mutationPathCount: 1,
+        externalMutationPathCount: 1,
+      }),
+    ).toBe('external_only');
+  });
+
+  it('keeps the plain no_result outcome when no external mutation was proven', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'I saved the report to your desktop.',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'w-1',
+            name: 'Write',
+            input: { file_path: 'C:/Users/alice/Desktop/report.html' },
+          },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        mutationPathCount: 1,
+        externalMutationPathCount: 0,
+      }),
+    ).toBe('no_result');
+  });
+
+  it('keeps no_result for mixed internal/external mutations', () => {
+    // One in-project delete plus one external write: neither produced nor
+    // trace-object files exist, but not EVERY mutation was external, so the
+    // "changed files only outside the project" wording would be wrong.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Cleaned up the stale page and saved the report to your desktop.',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'b-1',
+            name: 'Bash',
+            input: { command: 'rm stale.html' },
+          },
+          {
+            kind: 'tool_use',
+            id: 'w-1',
+            name: 'Write',
+            input: { file_path: 'C:/Users/alice/Desktop/report.html' },
+          },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        mutationPathCount: 2,
+        externalMutationPathCount: 1,
+      }),
+    ).toBe('no_result');
+  });
+
+  it('prefers in-project delivery evidence over external writes', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: '',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'w-1',
+            name: 'Write',
+            input: { file_path: 'C:/Users/alice/Desktop/report.html' },
+          },
+        ],
+        producedFileCount: 1,
+        traceObjectFileCount: 0,
+        mutationPathCount: 1,
+        externalMutationPathCount: 1,
+      }),
+    ).toBe('delivered');
+  });
+
+  it('keeps a failed artifact save a delivery failure even with external writes', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: '',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'w-1',
+            name: 'Write',
+            input: { file_path: 'C:/Users/alice/Desktop/report.html' },
+          },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        persistenceFailed: true,
+        mutationPathCount: 1,
+        externalMutationPathCount: 1,
+      }),
+    ).toBe('delivery_failed');
+  });
+
   it('does not latch a no-clarification turn to awaiting_input on a stray open tag', () => {
     // Production repro: an OD Next strategy turn that needed no clarification
     // narrated its decision into an open <question-form> tag. The tail is
