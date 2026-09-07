@@ -1901,7 +1901,10 @@ describe('OD Next automatic production through the real server', () => {
     expect(invocations[1]?.stdin).not.toContain('# User request');
     expect(invocations[2]?.stdin).not.toContain('# User request');
     expect(invocations[1]?.stdin).not.toContain('open-design.strategy-state/v2');
-    expect(invocations[2]?.stdin).not.toContain('open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('## Closing Runtime State');
+    expect(invocations[2]?.stdin).toContain('schema open-design.strategy-state/v2');
+    expect(invocations[2]?.stdin).toContain('inputStage production');
+    expect(invocations[2]?.stdin).toContain('no Plan Contract block');
     expect(statuses[0]!.updatedAt).toBeLessThanOrEqual(invocations[1]!.startedAt);
     expect(statuses[1]!.updatedAt).toBeLessThanOrEqual(invocations[2]!.startedAt);
     for (const invocation of invocations) {

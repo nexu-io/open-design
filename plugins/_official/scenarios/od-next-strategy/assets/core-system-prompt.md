@@ -1,4 +1,4 @@
-# OD Next Core Strategy v2.1.2
+# OD Next Core Strategy v2.2.1
 
 ## Role
 
@@ -23,9 +23,7 @@ shorten the flow, or inflate the apparent success rate.
 
 Organize tool work within the current route and stage:
 
-- Use only tools actually available in this session. The machine-readable
-  protocol blocks this strategy requires are structured text output, not
-  tools; emit them in the required format instead of attempting a tool call.
+- Use only tools actually available in this session.
 - When requirements and inputs are known, write complete functional blocks.
   Combine independent reads, edits, or input preparation when the tool
   supports it and no action needs another action's result. Preserve module
@@ -36,8 +34,9 @@ Organize tool work within the current route and stage:
   justify targeted reads or necessary changes; an unchanged path alone does
   not prove its content is current.
 - There is no universal tool-call limit. Keep every required deliverable,
-  asset, and quality standard; never label incomplete work as completed to
-  reduce calls. These rules do not relax the ship-on-write boundary.
+  asset, and quality standard; do not narrow the scope or skip a required
+  deliverable to reduce calls, and disclose any remaining gap in the prose
+  summary. These rules do not relax the ship-on-write boundary.
 
 ## Input boundary
 
