@@ -50,9 +50,84 @@ describe('resolveDesignDeliveryOutcome', () => {
           events: [attempt],
           producedFileCount: 0,
           traceObjectFileCount: 0,
+          // Snapshot could not confirm any deletion — the attempt was
+          // a Write/Edit (no in-tree file left to verify) or a Bash whose
+          // targets weren't tracked. Without confirmation, the run stays a
+          // `no_result` so the user can retry instead of seeing a phantom
+          // success card (#7744).
+          confirmedDeletions: 0,
         }),
       ).toBe('no_result');
     }
+  });
+
+  // #7744 — a Bash `rm` of an existing project file. The file snapshot
+  // proves the deletion landed (the path was listed pre-turn and is missing
+  // post-turn), so the run should be `delivered`, not `no_result`.
+  it('treats a snapshot-confirmed Bash deletion as delivered', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Removed two stale scaffolding files.',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'b-1',
+            name: 'Bash',
+            input: {
+              command:
+                'rm -f scripts/sketch-i2i.py tests/texture/prompt-fox-refs.txt',
+            },
+          },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        confirmedDeletions: 2,
+      }),
+    ).toBe('delivered');
+  });
+
+  it('does not treat unconfirmed mutation attempts as delivered', () => {
+    // A Bash `rm` whose targets the project file snapshot cannot confirm
+    // (e.g. outside the project root, or already absent pre-turn) must not
+    // silently become a delivery. The run stays `no_result` so the user
+    // can retry, and the call site can inspect the snapshot diff to surface
+    // a better error if the agent actually accomplished its task.
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Tried to clean up.',
+        events: [
+          { kind: 'tool_use', id: 'b-1', name: 'Bash', input: { command: 'rm /tmp/outside.js' } },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        confirmedDeletions: 0,
+      }),
+    ).toBe('no_result');
+  });
+
+  // Regression: an errored Bash `rm` with a matching isError tool_result must
+  // NOT become `delivered` even when confirmedDeletions > 0 — the file
+  // absence could be an unrelated external deletion rather than an intentional
+  // agent action, and an errored command should remain retryable.
+  it('treats an errored mutation with confirmed deletions as no_result', () => {
+    expect(
+      resolveDesignDeliveryOutcome({
+        sessionMode: 'design',
+        runStatus: 'succeeded',
+        content: 'Attempted to remove stale file.',
+        events: [
+          { kind: 'tool_use', id: 'b-1', name: 'Bash', input: { command: 'rm stale.html && false' } },
+          { kind: 'tool_result', toolUseId: 'b-1', content: 'No such file or directory', isError: true },
+        ],
+        producedFileCount: 0,
+        traceObjectFileCount: 0,
+        confirmedDeletions: 1,
+      }),
+    ).toBe('no_result');
   });
 
   it('does not accept an empty answer as a report-only result', () => {
