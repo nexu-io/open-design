@@ -12,6 +12,7 @@ describe("Electron dev lifecycle adapter", () => {
     expect(parseElectronDevLifecycleRequest({
       schemaVersion: 2,
       operation: "electron.dev.start",
+      platformArchivePath: join(controlRuntimeRoot, "node.tar.gz"),
       channel: "dev",
       namespace: "isolated-electron",
       controlRuntimeRoot,

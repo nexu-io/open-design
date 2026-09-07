@@ -18,7 +18,7 @@ async function fixture() {
   await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\n");
   const plan = join(root, "plan.json"), receipt = join(root, "receipt.json");
   await json(plan, { plan: { target: "darwin-arm64", nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` } } } });
-  return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json") };
+  return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
 }
 
 it("resolves only the public build export in the selected workspace and passes typed scene inputs", async () => {
@@ -26,7 +26,7 @@ it("resolves only the public build export in the selected workspace and passes t
   const result = JSON.parse(await readFile(f.receipt, "utf8"));
   expect(result.request).toEqual({ schemaVersion: 1, operation: "electron.scene.build", target: f.target, buildHash: "a".repeat(64),
     acceptedClosureBaselineFile: join(f.root, "apps/closure/dist/index.mjs"), standaloneLauncherFile: join(f.root, "apps/closure/dist/launcher.mjs"),
-    resourceReceiptFile: f.resources, sceneDirectory: f.output });
+    resourceReceiptFile: f.resources, sceneDirectory: f.output, platformArchivePath: f.nodeArchive });
   await expect(buildReleaseScene({ ...f, target: "win32-x64" })).rejects.toThrow("plan identity is invalid");
   await expect(buildReleaseScene({ ...f, shell: "linux" })).rejects.toThrow("electron or terminal");
 });

@@ -17,8 +17,19 @@ export type StageElectronNodeInput = Readonly<{
   target: OfficialNodeTarget;
 }>;
 
+type StagedNode = Readonly<{
+  root: string; executablePath: string; licensePath: string;
+  receipt: Readonly<{ schemaVersion: 1; target: OfficialNodeTarget; version: string; abi: string; archiveSha256: string;
+    executable: Readonly<{ path: string; sha256: string }>; license: Readonly<{ path: string; sha256: string }> }>;
+}>;
+
 /** Build-only, fresh output. Acquisition and persistent reuse belong to the caller. */
 export async function stageElectronNode(input: StageElectronNodeInput) {
+  return withStagedElectronNode(input, async node => node);
+}
+
+/** Borrow verified archive tooling only while the private extraction exists. */
+export async function withStagedElectronNode<T>(input: StageElectronNodeInput, consume: (node: StagedNode, archiveRoot: string) => Promise<T>): Promise<T> {
   if (![input.lockPath, input.archivePath, input.outputRoot].every(isAbsolute)) throw new Error("Node staging paths must be absolute");
   if (input.target !== currentOfficialNodeTarget()) throw new Error("Node staging requires the matching native build host");
   const lock = await readOfficialNodeLock(input.lockPath);
@@ -68,7 +79,7 @@ export async function stageElectronNode(input: StageElectronNodeInput) {
       license: Object.freeze({ path: "NODE-LICENSE", sha256: sha256(await readFile(licensePath)) }),
     });
     await writeFile(join(input.outputRoot, "node.json"), `${JSON.stringify(receipt, null, 2)}\n`, { flag: "wx" });
-    return Object.freeze({ root: input.outputRoot, executablePath, licensePath, receipt });
+    return await consume(Object.freeze({ root: input.outputRoot, executablePath, licensePath, receipt }), archiveRoot);
   } finally {
     await rm(stage, { recursive: true, force: true });
   }

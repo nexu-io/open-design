@@ -12,6 +12,7 @@
   "files": [
     "README.md",
     "config",
+    "resources",
     "dist",
     "src",
     "tests",

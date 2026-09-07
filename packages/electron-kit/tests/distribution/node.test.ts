@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { stageElectronNode } from "@/distribution/node.js";
+import { stageElectronNode, withStagedElectronNode } from "@/distribution/node.js";
 
 const probe = vi.hoisted(() => ({ abi: "137", target: `${process.platform}-${process.arch}`, electron: null as string | null }));
 vi.mock("node:child_process", async (original) => {
@@ -34,6 +34,8 @@ async function fixture(license = true) {
   const archiveRoot = `node-v24.18.0-${target}`;
   await mkdir(join(root, archiveRoot, "bin"), { recursive: true });
   await writeFile(join(root, archiveRoot, "bin/node"), "fixture node bytes");
+  await mkdir(join(root, archiveRoot, "lib/node_modules/npm/bin"), { recursive: true });
+  await writeFile(join(root, archiveRoot, "lib/node_modules/npm/bin/npm-cli.js"), "locked archive npm");
   if (license) await writeFile(join(root, archiveRoot, "LICENSE"), "fixture license");
   const archive = `${archiveRoot}.tar.gz`, archivePath = join(root, archive);
   await execute("tar", ["-czf", archivePath, "-C", root, archiveRoot]);
@@ -46,6 +48,20 @@ async function fixture(license = true) {
 }
 
 describe.skipIf(process.platform !== "darwin")("build-time official Node staging", () => {
+  it("borrows tooling from the verified archive and cleans it on success or consumer failure", async () => {
+    const input = await fixture(); let borrowed = "";
+    await withStagedElectronNode(input, async (node, archiveRoot) => {
+      borrowed = archiveRoot;
+      expect(node.executablePath).toBe(join(input.outputRoot, "bin/node"));
+      expect(await readFile(join(archiveRoot, "lib/node_modules/npm/bin/npm-cli.js"), "utf8")).toBe("locked archive npm");
+    });
+    await expect(readdir(borrowed)).rejects.toThrow(/ENOENT/u);
+    await expect(withStagedElectronNode({ ...input, outputRoot: join(input.root, "failed") }, async (_node, archiveRoot) => {
+      borrowed = archiveRoot; throw new Error("consumer failed");
+    })).rejects.toThrow("consumer failed");
+    await expect(readdir(borrowed)).rejects.toThrow(/ENOENT/u);
+  });
+
   it("stages only locked Node and license with a path-neutral byte-bound receipt, without overwriting", async () => {
     const input = await fixture();
     const built = await stageElectronNode(input);

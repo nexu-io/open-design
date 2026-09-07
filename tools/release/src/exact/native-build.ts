@@ -1,14 +1,12 @@
 import { execFile } from "node:child_process";
-import { createWriteStream } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
-import { basename, join, resolve } from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import type { ElectronExactSceneRequest } from "@open-design/shell-electron/build";
+import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 
@@ -47,25 +45,21 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
     const plan = await readObject(input.plan), identity = plan.plan?.nodes?.["electron.shell.build"]?.identity;
     if (plan.plan?.target !== buildTarget || typeof identity !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(identity)) throw new Error("Electron Shell plan identity is invalid");
     // Build dependencies load only when the native build command is executed.
-    const { buildElectronScene } = await electronBuilder(root);
+    const { buildElectronScene, resolveElectronNodeArchive } = await electronBuilder(root);
+    const platformArchivePath = input.nodeArchive ? resolve(input.nodeArchive) : await (async () => {
+      const source = await resolveElectronNodeArchive(buildTarget);
+      return (await acquireBuildArchive({ cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: source.archive, url: source.url, sha256: source.sha256 })).path;
+    })();
     const result = await buildElectronScene({ schemaVersion: 1, operation: "electron.scene.build", target: buildTarget,
-      buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher,
+      buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher, platformArchivePath,
       resourceReceiptFile: resolve(input.resources), sceneDirectory: resolve(input.output) });
     await writeObject(input.receipt, result);
     return result;
   }
   const lock = await readObject(join(root, "shells/terminal/node-lock.json")), node = lock.targets?.[buildTarget];
   if (typeof lock.version !== "string" || typeof node?.archive !== "string" || basename(node.archive) !== node.archive || !/^[a-f0-9]{64}$/u.test(node?.sha256 ?? "")) throw new Error("invalid official Node lock");
-  const scratch = await mkdtemp(join(tmpdir(), "release-node-archive-"));
-  try {
-    const archive = input.nodeArchive ? resolve(input.nodeArchive) : join(scratch, node.archive);
-    if (!input.nodeArchive) {
-      const url = new URL(node.url);
-      if (url.protocol !== "https:" || url.username || url.password) throw new Error("official Node archive must use credential-free HTTPS");
-      const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(120_000) });
-      if (!response.ok || !response.body) throw new Error(`official Node archive acquisition failed (${response.status})`);
-      await pipeline(Readable.fromWeb(response.body as import("node:stream/web").ReadableStream), createWriteStream(archive, { flags: "wx" }));
-    }
+    const archive = input.nodeArchive ? resolve(input.nodeArchive) : (await acquireBuildArchive({
+      cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: node.archive, url: node.url, sha256: node.sha256 })).path;
     if ((await describeFile(archive)).sha256 !== node.sha256) throw new Error("official Node archive digest mismatch");
     return await terminalBuild(input, "scene", { schemaVersion: 1, operation: "terminal.scene.build", target: buildTarget,
       shellVersion: (await readFile(join(root, "shells/terminal/version"), "utf8")).trim(),
@@ -73,7 +67,6 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
       closureArtifactFile: closure, standaloneLauncherFile: launcher,
       standaloneDirectory: join(root, "packages/standalone/dist"), sidecarDirectory: join(root, "packages/sidecar/dist"),
       platformDirectory: join(root, "packages/platform/dist"), sceneDirectory: resolve(input.output) });
-  } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
 export async function buildReleaseDistribution(input: BuildInput & Readonly<{ scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {

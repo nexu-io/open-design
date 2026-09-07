@@ -12,6 +12,7 @@ vi.mock("@open-design/electron-kit/distribution", () => ({ assembleElectronScene
 vi.mock("@open-design/electron-kit/installation", () => ({ inspectMacElectronAppTrust: mock.trust }));
 vi.mock("@/adapters/standalone/build.ts", () => ({ buildElectronStandaloneAuthority: async () => ({ host: {}, updaterProvider: {}, supervisor: {} }) }));
 vi.mock("@/adapters/standalone/assemble-installation.ts", () => ({ withElectronInstallation: mock.install }));
+vi.mock("@/platform/build.ts", () => ({ withElectronPhysicalPlatform: async (_input: unknown, consume: (root: string) => Promise<unknown>) => consume("/physical-platform") }));
 
 const roots: string[] = [];
 afterEach(async () => { vi.resetAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -27,10 +28,12 @@ it("composes scene identity in memory and resolves source entries through the pa
   await writeFile(sceneManifestPath, "scene-bytes");
   mock.assemble.mockResolvedValue({ sceneManifestPath, sceneRoot: join(root, "scene") });
   const result = await buildElectronScene({ schemaVersion: 1, operation: "electron.scene.build", target: "darwin-arm64",
+    platformArchivePath: join(root, "node.tar.gz"),
     buildHash: "a".repeat(64), acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") });
   expect(result.sceneManifestSha256).toBe(createHash("sha256").update("scene-bytes").digest("hex"));
   expect(mock.assemble).toHaveBeenCalledWith(expect.objectContaining({
     manifest: await resolveElectronSceneManifest("a".repeat(64)),
+    authorityResources: expect.arrayContaining([{ name: "platform", path: "/physical-platform" }]),
     entryPath: expect.stringMatching(/\/shells\/electron\/src\/main\.ts$/u),
     rendererPreloadEntryPath: expect.stringMatching(/\/shells\/electron\/src\/adapters\/renderer\/preload\.ts$/u),
   }));

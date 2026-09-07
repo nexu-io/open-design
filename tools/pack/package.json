@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./build": { "types": "./dist/build-api.d.ts", "default": "./dist/build-api.mjs" },
     "./exact": { "types": "./dist/exact-api.d.ts", "default": "./dist/exact-api.mjs" }
   },
   "bin": {
@@ -16,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/download": "workspace:*",
     "@open-design/shell-electron": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
     "@open-design/platform": "workspace:*",

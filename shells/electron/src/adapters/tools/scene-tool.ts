@@ -9,6 +9,7 @@ import { buildElectronStandaloneAuthority } from "../standalone/build.ts";
 import { parseElectronExactSceneRequest } from "./exact-contract.ts";
 import { resolveElectronSceneManifest } from "./manifests.ts";
 import { electronShellSource } from "./resources.ts";
+import { withElectronPhysicalPlatform } from "../../platform/build.ts";
 
 export async function executeElectronExactScene(input: ReturnType<typeof parseElectronExactSceneRequest>) {
 const manifest = await resolveElectronSceneManifest(input.buildHash);
@@ -27,8 +28,9 @@ const normalizedReceiptPath = resolve(dirname(input.sceneDirectory), "closure-re
 await mkdir(dirname(normalizedReceiptPath), { recursive: true });
 await writeFile(normalizedReceiptPath, `${JSON.stringify({ schemaVersion: 1, operation: "closure.resources.build", resources: resources.map(({ path: _path, ...resource }) => resource) }, null, 2)}\n`, "utf8");
 const authority = await buildElectronStandaloneAuthority(resolve(dirname(input.sceneDirectory), "electron-authority-build"));
-const receipt = await assembleElectronScene({
+const receipt = await withElectronPhysicalPlatform({ archivePath: input.platformArchivePath, target: input.target }, async platformRoot => assembleElectronScene({
   authorityResources: [
+    { name: "platform", path: platformRoot },
     authority.host,
     authority.updaterProvider,
     authority.supervisor,
@@ -48,7 +50,7 @@ const receipt = await assembleElectronScene({
     closureResourceName: "closure.mjs",
     launcherResourceName: "standalone-launcher.mjs",
   },
-});
+}));
 const sceneBytes = await readFile(receipt.sceneManifestPath);
 return Object.freeze({
   schemaVersion: 1,

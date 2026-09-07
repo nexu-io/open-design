@@ -69,7 +69,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--receipt <file>", "Build receipt")
     .option("--plan <file>", "Electron plan (scene)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
-    .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene)")
+    .option("--node-archive <file>", "Optional local locked official Node archive (scene)")
     .option("--scene <directory>", "Verified scene (distribution)")
     .option("--prepared <directory>", "Prepared signed content (distribution)")
     .option("--policy <file>", "Release policy (distribution)")

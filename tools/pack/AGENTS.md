@@ -22,6 +22,9 @@ command surface. Keep it a thin adapter over the public
 - The public `/exact` API exposes the existing content prepare/finalize atoms
   to tools-release. It does not acquire publication policy or own channel gates;
   callers must authorize release operations before invoking content assembly.
+- The public `/build` API owns generic checksum-verified build-input download
+  reuse. Shells declare locked inputs; callers choose the local cache root.
+  It does not know Electron, assemble native dependencies, or publish artifacts.
 
 ## Supported slice
 

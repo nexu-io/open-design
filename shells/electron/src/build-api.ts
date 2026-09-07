@@ -3,6 +3,12 @@ import type { ElectronExactSceneRequest, ElectronExactDistributionRequest } from
 
 export type { ElectronPackRequest, ElectronExactSceneRequest, ElectronExactDistributionRequest };
 
+/** Product declaration only; the calling tool owns archive acquisition and reuse. */
+export async function resolveElectronNodeArchive(target?: ElectronExactSceneRequest["target"]) {
+  const { readElectronNodeArchive } = await import("./platform/build.ts");
+  return readElectronNodeArchive(target);
+}
+
 /** Build-only product composition. Runtime observation never imports this entry. */
 export async function buildElectronPackage(request: ElectronPackRequest) {
   const { parseElectronPackRequest, executeElectronPack } = await import("./adapters/tools/pack-tool.ts");

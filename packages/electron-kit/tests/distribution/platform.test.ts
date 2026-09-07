@@ -18,7 +18,7 @@ describe("physical platform dependency boundary", () => {
     const outputRoot = join(root, "output");
     await expect(buildElectronPlatform({ dependenciesRoot: root, outputRoot, target: "darwin-arm64",
       archivePath: join(root, "unused.tar.gz"), lockPath: join(root, "unused.json"),
-      npmCliPath: join(root, "npm.js"), verificationEntryPath: join(root, "verify.ts"), preparationEntryPath: join(root, "prepare.ts") })).rejects.toThrow(/matching private package/u);
+      verificationEntryPath: join(root, "verify.ts"), preparationEntryPath: join(root, "prepare.ts") })).rejects.toThrow(/matching private package/u);
     await expect(readdir(outputRoot)).rejects.toThrow(/ENOENT/u);
   });
 });

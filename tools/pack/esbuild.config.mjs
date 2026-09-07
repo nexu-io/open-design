@@ -1,5 +1,7 @@
 import { build } from "esbuild";
 
+await build({ bundle: true, entryPoints: ["./src/build-api.ts"], format: "esm", outfile: "./dist/build-api.mjs", platform: "node", target: "node24" });
+
 await build({
   bundle: true,
   entryPoints: ["./src/exact-api.ts"],

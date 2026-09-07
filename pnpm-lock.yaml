@@ -816,6 +816,9 @@ importers:
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../../packages/standalone
+      '@open-design/tools-pack':
+        specifier: workspace:*
+        version: link:../pack
       '@open-design/tools-serve':
         specifier: workspace:*
         version: link:../serve
@@ -841,6 +844,9 @@ importers:
 
   tools/pack:
     dependencies:
+      '@open-design/download':
+        specifier: workspace:*
+        version: link:../../packages/download
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
