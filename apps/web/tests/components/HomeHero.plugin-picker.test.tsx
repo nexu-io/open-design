@@ -752,9 +752,7 @@ describe('HomeHero plugin picker', () => {
     fireEvent.click(screen.getByTitle('Plugin: Prototype Plugin'));
     expect(onOpenPluginDetails).toHaveBeenCalledWith(active);
     const activeChipText = screen.getByTestId('home-hero-active-plugin').textContent;
-    // The lead chip cuts the title to eight code points and ellipsises the
-    // rest, so the full name never eats the prompt's first line.
-    expect(activeChipText).toContain('Prototyp…');
+    expect(activeChipText).toContain('Prototype');
     expect(activeChipText).not.toContain('Plugin');
   });
 
