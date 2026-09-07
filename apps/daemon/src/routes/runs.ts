@@ -174,6 +174,7 @@ import { classifyRunFailure } from '../run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import type { RunStatusForAnalytics } from '../run-result.js';
 import {
+  mergeSnapshotMcpServersIntoToolBundle,
   parseRunToolBundleForRequest,
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
@@ -2127,6 +2128,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ).trim();
         if (renderedQuery.length > 0) meta.message = renderedQuery;
       }
+      // The plugin's own MCP servers are a default, not an override: fold
+      // them in under whatever the caller already put in toolBundle so an
+      // explicit run-scoped entry always wins on a name collision.
+      meta.toolBundle = mergeSnapshotMcpServersIntoToolBundle(
+        toolBundle.bundle,
+        resolvedSnapshot.snapshot.mcpServers,
+      );
     }
     if (clarificationContinuation) {
       applyClarificationContinuationMeta(meta, clarificationContinuation);

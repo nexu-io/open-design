@@ -1,3 +1,4 @@
+import type { McpServerSpec } from '@open-design/contracts';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp-config.js';
 import type { RuntimeAgentDef } from './runtimes/types.js';
 import { sanitizeMcpConfig, sanitizeMcpServer } from './mcp-config.js';
@@ -182,4 +183,48 @@ export function resolveExternalMcpServersForRun({
     enabledServers: Array.from(byId.values()).filter((server) => server.enabled),
     persistedTokenServerIds,
   };
+}
+
+/**
+ * Adapts a plugin manifest's declared MCP server (`od.context.mcp[]`, frozen
+ * onto the snapshot as `McpServerSpec` — `name`/`command`/`args`/`env`/`url`)
+ * into the run-scoped `McpServerConfig` shape (`id`/`transport`/`enabled`)
+ * the tool bundle understands. Runs through the same `sanitizeMcpServer()`
+ * guard every other run-scoped or persisted MCP entry goes through, so a
+ * malformed manifest entry is dropped rather than corrupting the bundle.
+ * Trust is not re-checked here: `resolvePluginSnapshot()` already required
+ * the scoped `mcp:<name>` capability before this snapshot could be created
+ * (see `plugins/resolve-snapshot.ts` and `plugins/trust.ts`).
+ */
+function mcpServerConfigFromPluginSpec(spec: McpServerSpec): McpServerConfig | null {
+  return sanitizeMcpServer({
+    id: spec.name,
+    transport: spec.command ? 'stdio' : 'http',
+    command: spec.command,
+    args: spec.args,
+    env: spec.env,
+    url: spec.url,
+  });
+}
+
+/**
+ * Folds an applied plugin snapshot's declared MCP servers into a run's tool
+ * bundle. The snapshot's servers are the default; a caller-supplied entry
+ * with the same id wins on collision, since it names an explicit choice for
+ * *this* run rather than the plugin's baseline. Mirrors the precedence
+ * `resolveExternalMcpServersForRun` already uses for persisted vs. run-scoped
+ * servers (run-scoped applied last into the same id-keyed map).
+ */
+export function mergeSnapshotMcpServersIntoToolBundle(
+  bundle: RunToolBundle,
+  snapshotMcpServers: McpServerSpec[],
+): RunToolBundle {
+  if (snapshotMcpServers.length === 0) return bundle;
+  const byId = new Map<string, McpServerConfig>();
+  for (const spec of snapshotMcpServers) {
+    const server = mcpServerConfigFromPluginSpec(spec);
+    if (server) byId.set(server.id, server);
+  }
+  for (const server of bundle.mcpServers) byId.set(server.id, server);
+  return { mcpServers: Array.from(byId.values()) };
 }

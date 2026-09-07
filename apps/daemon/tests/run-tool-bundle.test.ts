@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  mergeSnapshotMcpServersIntoToolBundle,
   normalizeRunToolBundleForRun,
   parseRunToolBundleForRequest,
   resolveExternalMcpServersForRun,
@@ -226,6 +227,87 @@ describe('run-scoped tool bundles', () => {
       message:
         'Claude Code (claude) receives run-scoped MCP tool bundles through project .mcp.json, ' +
         'so toolBundle requires a daemon-managed project',
+    });
+  });
+
+  describe('mergeSnapshotMcpServersIntoToolBundle', () => {
+    it('returns the bundle unchanged when the snapshot declares no MCP servers', () => {
+      const bundle = normalizeRunToolBundleForRun({
+        mcpServers: [{ id: 'caller-tools', transport: 'stdio', command: 'node' }],
+      });
+
+      expect(mergeSnapshotMcpServersIntoToolBundle(bundle, [])).toBe(bundle);
+    });
+
+    it('adopts a plugin-declared MCP server onto an empty tool bundle', () => {
+      const bundle = normalizeRunToolBundleForRun({ mcpServers: [] });
+
+      const merged = mergeSnapshotMcpServersIntoToolBundle(bundle, [
+        { name: 'bookboost-twig', command: 'node', args: ['server.js'] },
+      ]);
+
+      expect(merged.mcpServers).toEqual([
+        expect.objectContaining({
+          id: 'bookboost-twig',
+          transport: 'stdio',
+          command: 'node',
+          args: ['server.js'],
+          enabled: true,
+        }),
+      ]);
+    });
+
+    it('keeps a differently-named caller-supplied server alongside the snapshot default', () => {
+      const bundle = normalizeRunToolBundleForRun({
+        mcpServers: [{ id: 'caller-tools', transport: 'stdio', command: 'python' }],
+      });
+
+      const merged = mergeSnapshotMcpServersIntoToolBundle(bundle, [
+        { name: 'bookboost-twig', command: 'node' },
+      ]);
+
+      expect(merged.mcpServers.map((server) => server.id).sort()).toEqual([
+        'bookboost-twig',
+        'caller-tools',
+      ]);
+    });
+
+    it('lets a caller-supplied server win a name collision with the snapshot default', () => {
+      const bundle = normalizeRunToolBundleForRun({
+        mcpServers: [
+          { id: 'bookboost-twig', transport: 'stdio', command: 'node', args: ['override.js'] },
+        ],
+      });
+
+      const merged = mergeSnapshotMcpServersIntoToolBundle(bundle, [
+        { name: 'bookboost-twig', command: 'node', args: ['plugin-default.js'] },
+      ]);
+
+      expect(merged.mcpServers).toEqual([
+        expect.objectContaining({ id: 'bookboost-twig', args: ['override.js'] }),
+      ]);
+    });
+
+    it('drops a snapshot MCP server whose name is not a valid server id', () => {
+      const bundle = normalizeRunToolBundleForRun({ mcpServers: [] });
+
+      const merged = mergeSnapshotMcpServersIntoToolBundle(bundle, [
+        { name: 'not a valid id!', command: 'node' },
+      ]);
+
+      expect(merged.mcpServers).toEqual([]);
+    });
+
+    it('adapts a url-based snapshot MCP server to the http transport', () => {
+      const bundle = normalizeRunToolBundleForRun({ mcpServers: [] });
+
+      const merged = mergeSnapshotMcpServersIntoToolBundle(bundle, [
+        { name: 'remote-tools', url: 'https://example.test/mcp' },
+      ]);
+
+      expect(merged.mcpServers).toEqual([
+        expect.objectContaining({ id: 'remote-tools', transport: 'http' }),
+      ]);
     });
   });
 });
