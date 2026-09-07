@@ -402,6 +402,11 @@ interface Props {
   showRole?: boolean;
   // True only for the most recent assistant message.
   isLast?: boolean;
+  // True only for the most recent assistant message that actually ran a turn —
+  // i.e. `isLast` with host-authored cards (the memory card, the brand assist
+  // card) skipped over. Only the next-step affordance reads it; see
+  // `ownsTrailingNextStep` below for why it is additive and not a replacement.
+  isLastTurn?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
   // top-level error card; that message's per-message error pill is suppressed
   // to avoid duplication. Other messages keep their error pill.
@@ -501,6 +506,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'hiddenPluginActionPaths',
   'showRole',
   'isLast',
+  'isLastTurn',
   'errorCardOwnerId',
   'nextUserContent',
   'questionFormSubmitDisabled',
@@ -612,6 +618,7 @@ function AssistantMessageImpl({
   shareToOpenDesignBusy = false,
   showRole = true,
   isLast,
+  isLastTurn,
   errorCardOwnerId = null,
   nextUserContent,
   onSubmitQuestionForm,
@@ -1377,11 +1384,39 @@ function AssistantMessageImpl({
     (effectiveNextStepVariant === 'brand-extraction-incomplete' ||
       effectiveNextStepVariant === 'brand-programmatic-incomplete' ||
       effectiveNextStepVariant === 'brand-ai-incomplete');
+  /**
+   * 「下一步引导」归**这条**消息管吗。
+   *
+   * 引导是会话**队尾**的东西:它说的是「接下来还能做什么」,所以只有队尾那条消息
+   * 有资格出。原来这句写的就是 `isLast` —— 而 `isLast` 是「流水里最后一条 assistant
+   * 消息」,**把宿主自己补发的卡也算了进去**。
+   *
+   * 记忆卡(`useMemoryWrittenCard`)恰恰是**轮次结束之后**才回报的:提取由守护进程
+   * 在子进程关闭时排队,卡因此几乎总是落在刚交付的那一轮后面。于是产物那条消息被
+   * 顶掉一格,`isLast` 变成 false,三条建议连同 `suggestions` / `onSuggestion` 两个
+   * prop 一起被摘光 —— PPT 明明交付成功、`next_steps` 事件也已下发,面板上一条引导
+   * 都没有(OPEND-2764)。宿主卡是**上一轮的附属组件,不是新的一轮**(OPEND-2745
+   * 的裁决原话),它不该改变谁是队尾。
+   *
+   * ⚠️ 判据写成**两者取或**,而不是拿 `isLastTurn` 直接换掉 `isLast`,因为队尾有
+   * 两种长法,少哪一半都会当场红(都有红测钉着):
+   *  · `isLastTurn` —— 真跑过的那一轮,后面只跟着宿主卡。这是本单要修的那一半;
+   *  · `isLast` —— 宿主卡**自己就是队尾**的那一档。品牌协助卡不是被动的通知,它带着
+   *    〔继续抽取〕/〔继续 AI 抽取〕两颗恢复入口,而且整条会话可能只有它一条消息
+   *    (`ChatPane.connect-repo` 那条用例就是)。只认 `isLastTurn` 会把品牌抽取的
+   *    恢复路径整个关掉。
+   *
+   * 「最后一条」这个说法在这个组件里被**三个互不相同的问题**共用,别再并:问卷可否
+   * 作答问的是「后面还有没有东西」(OPEND-2644,用户走过去就得锁),运行态归属问的
+   * 是「这条消息有没有过一次运行」(OPEND-2745)。三者各有各的红测,合并任意两个都
+   * 会红。
+   */
+  const ownsTrailingNextStep = !!isLast || !!isLastTurn;
   const showNextStepActions =
     !streaming &&
     unfinishedTodos.length === 0 &&
     !hasPendingQuestionForm &&
-    ((!!isLast && hasNextStepPrimary &&
+    ((ownsTrailingNextStep && hasNextStepPrimary &&
       ((runSucceeded && nextStepDeliveryEvidence) || isBrandExtractionRecovery)) ||
       showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
@@ -1679,27 +1714,44 @@ function AssistantMessageImpl({
         ) : null}
         {showNextStepActions ? (
           <NextStepActions
-            fileName={isLast ? nextStepFileName : null}
-            planFileName={isLast ? planNextStepName : null}
-            artifactFileName={isLast ? nextStepArtifactName : null}
-            onShare={isLast && nextStepArtifactName && !isPlanNextStep ? onArtifactShare : undefined}
-            onToolboxAction={isLast ? onToolboxAction : undefined}
-            onPromptAction={isLast ? onNextStepPromptAction : undefined}
-            onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
-            aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
-            onContinueExtraction={isLast ? onNextStepContinueExtraction : undefined}
-            continueExtractionBusy={Boolean(isLast && nextStepContinueExtractionBusy)}
-            onContinueAiExtraction={isLast ? onNextStepContinueAiExtraction : undefined}
-            continueAiExtractionBusy={Boolean(isLast && nextStepContinueAiExtractionBusy)}
-            onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
-            createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
-            onCreateDesignSystem={isLast ? onNextStepCreateDesignSystem : undefined}
-            createDesignSystemBusy={Boolean(isLast && nextStepCreateDesignSystemBusy)}
-            onPickSkill={isLast ? onPickSkill : undefined}
-            suggestions={isLast ? nextStepSuggestions : undefined}
-            onSuggestion={isLast ? onNextStepSuggestion : undefined}
-            onDownload={isLast && nextStepFileName ? onArtifactDownload : undefined}
-            skills={isLast ? nextStepSkills : undefined}
+            /*
+             * ⚠️ 这一排的门必须和 `showNextStepActions` 用**同一个**判据。
+             * 它们原来各写各的 `isLast`,于是「整块出不出」和「出了之后有没有内容」
+             * 是两把锁 —— 只开其中一把,得到的是一块空壳(或者一块永远为空、
+             * 因而 `hasNextStepPrimary` 判 false 的死块)。OPEND-2764 的
+             * `suggestions` / `onSuggestion` 正是被这一排摘掉的。
+             */
+            fileName={ownsTrailingNextStep ? nextStepFileName : null}
+            planFileName={ownsTrailingNextStep ? planNextStepName : null}
+            artifactFileName={ownsTrailingNextStep ? nextStepArtifactName : null}
+            onShare={
+              ownsTrailingNextStep && nextStepArtifactName && !isPlanNextStep
+                ? onArtifactShare
+                : undefined
+            }
+            onToolboxAction={ownsTrailingNextStep ? onToolboxAction : undefined}
+            onPromptAction={ownsTrailingNextStep ? onNextStepPromptAction : undefined}
+            onAiOptimize={ownsTrailingNextStep ? onNextStepAiOptimize : undefined}
+            aiOptimizeBusy={Boolean(ownsTrailingNextStep && nextStepAiOptimizeBusy)}
+            onContinueExtraction={ownsTrailingNextStep ? onNextStepContinueExtraction : undefined}
+            continueExtractionBusy={Boolean(ownsTrailingNextStep && nextStepContinueExtractionBusy)}
+            onContinueAiExtraction={
+              ownsTrailingNextStep ? onNextStepContinueAiExtraction : undefined
+            }
+            continueAiExtractionBusy={
+              Boolean(ownsTrailingNextStep && nextStepContinueAiExtractionBusy)
+            }
+            onCreateDesign={ownsTrailingNextStep ? onNextStepCreateDesign : undefined}
+            createDesignBusy={Boolean(ownsTrailingNextStep && nextStepCreateDesignBusy)}
+            onCreateDesignSystem={ownsTrailingNextStep ? onNextStepCreateDesignSystem : undefined}
+            createDesignSystemBusy={Boolean(ownsTrailingNextStep && nextStepCreateDesignSystemBusy)}
+            onPickSkill={ownsTrailingNextStep ? onPickSkill : undefined}
+            suggestions={ownsTrailingNextStep ? nextStepSuggestions : undefined}
+            onSuggestion={ownsTrailingNextStep ? onNextStepSuggestion : undefined}
+            onDownload={
+              ownsTrailingNextStep && nextStepFileName ? onArtifactDownload : undefined
+            }
+            skills={ownsTrailingNextStep ? nextStepSkills : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
             variant={effectiveNextStepVariant}

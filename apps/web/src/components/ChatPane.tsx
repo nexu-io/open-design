@@ -113,7 +113,10 @@ import { AssistantMessage, type QuestionFormSubmitHandler } from './AssistantMes
 import { chatSeam } from './chat/ChatRoot';
 import { PlanPill } from './chat/PlanPill';
 import { planPillState } from '../runtime/chat/plan-pill';
-import { assistantMessageNeverHadARun } from '../runtime/chat/host-authored-message';
+import {
+  assistantMessageNeverHadARun,
+  lastAssistantTurnId,
+} from '../runtime/chat/host-authored-message';
 import { Reconnect } from './chat/Reconnect';
 import { UserStatusCard } from './chat/UserStatusCard';
 import type { ChatReconnectView } from '../runtime/chat/reconnect-state';
@@ -1894,6 +1897,24 @@ export function ChatPane({
     }
     return undefined;
   }, [displayMessages]);
+  /*
+   * 最后一条**真跑过一轮**的助手消息 —— 只喂给「下一步引导」那一块。
+   *
+   * ⚠️ 它**不是** `lastAssistantId` 的替代品。「最后一条助手消息」这个说法在面板上
+   * 被三种互不相同的问题共用着,谁都不能替谁:
+   *  · 问卷可否作答问的是「**后面还有没有东西**」—— 用户走过去了就锁,哪怕走过去的
+   *    是宿主卡后面那句话(OPEND-2644);
+   *  · 品牌协助卡问的是「**我自己是不是队尾**」—— 它本身就是一张带「继续抽取」的
+   *    恢复卡,整条会话可能只有它一条;
+   *  · 下一步引导问的是「**哪一轮是当前落点**」—— 宿主补发的卡对它必须是透明的。
+   * 把三者并成一个判据,前两个会当场红(实测)。所以这里是**新增**一条,不动原来那条。
+   *
+   * 判据与两次先例都在 `lastAssistantTurnId`。
+   */
+  const lastTurnAssistantId = useMemo(
+    () => lastAssistantTurnId(displayMessages),
+    [displayMessages],
+  );
   const hasActiveRunMessage = displayMessages.some(
     (m) => m.role === 'assistant' && isActiveRunStatus(m.runStatus),
   );
@@ -4132,6 +4153,7 @@ export function ChatPane({
                   shareToOpenDesignBusyMessageId={shareToOpenDesignBusyMessageId}
                   forceStreamingMessageIds={forceStreamingMessageIds}
                   lastAssistantId={lastAssistantId}
+                  lastTurnAssistantId={lastTurnAssistantId}
                   activePluginSnapshot={activePluginSnapshot}
                   activeDesignSystem={activeDesignSystem}
                   hasActiveDesignSystem={hasActiveDesignSystem}
@@ -5197,6 +5219,7 @@ function ChatRows({
   shareToOpenDesignBusyMessageId,
   forceStreamingMessageIds,
   lastAssistantId,
+  lastTurnAssistantId,
   activePluginSnapshot,
   activeDesignSystem,
   hasActiveDesignSystem,
@@ -5279,6 +5302,7 @@ function ChatRows({
   shareToOpenDesignBusyMessageId?: string | null;
   forceStreamingMessageIds?: Set<string>;
   lastAssistantId: string | undefined;
+  lastTurnAssistantId: string | undefined;
   activePluginSnapshot?: AppliedPluginSnapshot | null;
   activeDesignSystem?: DesignSystemSummary | null;
   hasActiveDesignSystem: boolean;
@@ -5414,6 +5438,7 @@ function ChatRows({
         shareToOpenDesignBusy={shareToOpenDesignBusyMessageId === m.id}
         showRole={assistantRoleByMessageId.get(m.id) ?? true}
         isLast={m.id === lastAssistantId}
+        isLastTurn={m.id === lastTurnAssistantId}
         errorCardOwnerId={errorCardOwnerId}
         nextUserContent={nextUserContentByAssistantId.get(m.id)}
         previousTodos={previousTodosByMessageId.get(m.id)}
