@@ -99,10 +99,17 @@ describe("Standalone host finite control contract", () => {
     const attachment = startRequest().attachment;
     await owner.start(scope, generation, attachment, binding);
     await expect(foreign.start(scope, generation, attachment, binding)).rejects.toThrow("capability is required");
+    const credential = owner.exportAttachmentCredential(attachment.id);
+    foreign.restoreAttachmentCredential({ ...credential, attachmentCapability: "forged-capability" });
+    await expect(foreign.heartbeat(scope, attachment)).rejects.toThrow("capability is invalid");
     expect(closes).toBe(0);
     expect((await owner.heartbeat(scope, attachment)).references).toBe(1);
-    await owner.release(scope, attachment.id);
+    const resumed = new StandaloneHostControlClient(scope, (request) => host.request(request));
+    resumed.restoreAttachmentCredential(credential);
+    expect((await resumed.heartbeat(scope, attachment)).references).toBe(1);
+    await resumed.release(scope, attachment.id);
     expect(closes).toBe(1);
+    await expect(owner.heartbeat(scope, attachment)).rejects.toThrow();
   });
 
   it.each(["terminal", "electron"])("shares one lifecycle when %s attaches first", async (firstType) => {

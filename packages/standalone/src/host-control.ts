@@ -230,6 +230,7 @@ export function validateStandaloneHostControlRequest(
     const proof = object(value.proof, "Standalone host installed Shell proof");
     exactKeys(proof, ["buildHash", "digest", "type", "version"], "Standalone host installed Shell proof");
     validateShellIdentity(proof as StandaloneShellIdentity);
+    if (proof.type !== value.shellType) throw new Error("Standalone host installed proof escaped its Shell type");
     return Object.freeze({ ...base, operation: value.operation, shellType: value.shellType, proof: Object.freeze({ ...(proof as StandaloneShellIdentity) }) });
   }
   throw new Error(`unsupported Standalone host control operation: ${value.operation}`);

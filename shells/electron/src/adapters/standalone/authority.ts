@@ -9,6 +9,8 @@ import {
   createStandaloneGenerationBinding,
   sha256Hex,
   StandaloneFeedbackEmitter,
+  StandaloneHostControlClient,
+  StandaloneHostControlUpdater,
   StandaloneStore,
   StandaloneUpdater,
   VersionedLauncher,
@@ -51,9 +53,7 @@ import {
   type ElectronMacLastKnownGoodRestoreResult,
 } from "@open-design/electron-kit/installation";
 
-import { StandaloneHostControlClient } from "@open-design/standalone";
 import { createStandaloneHostControlTransport } from "./control-client.js";
-import { ElectronStandaloneControlUpdater } from "./control-updater.js";
 import { ELECTRON_STANDALONE_HOST_CONFIG_ENV } from "./host.js";
 import {
   loadElectronStandaloneInstallation,
@@ -282,7 +282,7 @@ export function createElectronStandaloneAuthorityFactory(
           lifecycle: new StandaloneHostControlClient(request.scope, transport),
           resourceSet,
           stamp,
-          updater: new ElectronStandaloneControlUpdater(request.shell.type, request.scope, transport),
+          updater: new StandaloneHostControlUpdater(request.shell.type, request.scope, transport),
         });
       };
       const initialResourceSet = bindElectronPhysicalResourceSet(resources, binding);

@@ -51,7 +51,46 @@ function stoppedStatus(): LifecycleStatus {
   return { scope, state: "stopped", generationId: null, bindingDigest: null, instanceId: null, references: 0, occupants: [], fence: 2, lease: null };
 }
 
-describe("Electron Standalone control client", () => {
+describe("Standalone host control client", () => {
+  it("hands one scoped bearer credential to a later native command without granting new authority", async () => {
+    const calls: StandaloneHostControlRequest[] = [];
+    const transport: StandaloneHostControlTransport = async (request) => {
+      calls.push(request);
+      if (request.operation === "lifecycle.start") return { status: runningStatus(), attachmentCapability: "owned-capability" };
+      if (request.operation === "lifecycle.heartbeat" || request.operation === "lifecycle.release") {
+        if (request.attachmentCapability !== "owned-capability") throw new Error("host rejected credential");
+        return request.operation === "lifecycle.release" ? stoppedStatus() : runningStatus();
+      }
+      throw new Error("unexpected operation");
+    };
+    const first = new StandaloneHostControlClient(scope, transport);
+    await first.start(scope, generation, attachment, binding);
+    const credential = first.exportAttachmentCredential(attachment.id);
+    expect(Object.isFrozen(credential)).toBe(true);
+    expect(Object.isFrozen(credential.scope)).toBe(true);
+    const next = new StandaloneHostControlClient(scope, transport);
+    next.restoreAttachmentCredential(JSON.parse(JSON.stringify(credential)));
+    await expect(next.heartbeat(scope, attachment)).resolves.toMatchObject({ references: 1 });
+    await next.release(scope, attachment.id);
+    expect(() => next.exportAttachmentCredential(attachment.id)).toThrow("capability is unavailable");
+    const foreign = new StandaloneHostControlClient(scope, transport);
+    foreign.restoreAttachmentCredential({ ...credential, attachmentCapability: "forged-capability" });
+    await expect(foreign.heartbeat(scope, attachment)).rejects.toThrow("host rejected credential");
+    expect(calls.filter(request => request.operation === "lifecycle.start")).toHaveLength(1);
+  });
+
+  it("rejects cross-scope, malformed and conflicting credentials before dispatch", () => {
+    const client = new StandaloneHostControlClient(scope, async () => { throw new Error("must not dispatch"); });
+    const credential = { schemaVersion: 1 as const, scope, attachmentId: attachment.id, attachmentCapability: "owned-capability" };
+    expect(() => client.restoreAttachmentCredential({ ...credential, scope: { ...scope, namespace: "foreign" } })).toThrow("escaped its scope");
+    expect(() => client.restoreAttachmentCredential({ ...credential, attachmentCapability: "" })).toThrow("invalid attachment capability");
+    expect(() => client.exportAttachmentCredential(attachment.id)).toThrow("capability is unavailable");
+    client.restoreAttachmentCredential(credential);
+    client.restoreAttachmentCredential(credential);
+    expect(() => client.restoreAttachmentCredential({ ...credential, attachmentCapability: "different" })).toThrow("conflicts");
+    expect(client.exportAttachmentCredential(attachment.id)).toEqual(credential);
+  });
+
   it("gives physical lifecycle and updater operations bounded operation-level deadlines", () => {
     expect(standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.status" })).toBe(5_000);
     expect(standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.start" })).toBe(120_000);

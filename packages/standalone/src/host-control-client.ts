@@ -1,10 +1,18 @@
-import { canonicalJson } from "./protocol.js";
+import { canonicalJson, validateStandaloneScope } from "./protocol.js";
 import type { GenerationRecord } from "./store.js";
 import type { LifecycleAttachment, LifecyclePort, LifecycleReadiness, LifecycleScope, LifecycleStatus } from "./launcher.js";
 import type { StandaloneGenerationBinding, StandaloneRuntimeCommand, StandaloneRuntimeCommandResult } from "./bootloader-handoff.js";
 import { STANDALONE_HOST_CONTROL_SCHEMA_VERSION, validateStandaloneHostControlRequest, validateStandaloneHostLifecycleStatus, validateStandaloneHostReadiness, type StandaloneHostControlRequest } from "./host-control.js";
 
 export type StandaloneHostControlTransport = (request: StandaloneHostControlRequest) => Promise<unknown>;
+
+/** Bearer authority for a short-lived native Shell command; never diagnostic output. */
+export type StandaloneHostAttachmentCredential = Readonly<{
+  schemaVersion: 1;
+  scope: LifecycleScope;
+  attachmentId: string;
+  attachmentCapability: string;
+}>;
 
 export function standaloneHostControlRequestTimeoutMs(request: Readonly<{ operation: string; timeoutMs?: number }>): number {
   if (request.operation === "lifecycle.start" || request.operation === "transition.complete-start" || request.operation === "runtime.invoke") return 120_000;
@@ -37,7 +45,33 @@ export class StandaloneHostControlClient implements LifecyclePort {
   readonly #scope: LifecycleScope;
 
   constructor(scope: LifecycleScope, private readonly transport: StandaloneHostControlTransport) {
-    this.#scope = Object.freeze({ ...scope });
+    this.#scope = Object.freeze({ ...validateStandaloneScope(scope) });
+  }
+
+  /** Export only the requested attachment; callers own secure credential storage. */
+  exportAttachmentCredential(attachmentId: string): StandaloneHostAttachmentCredential {
+    return Object.freeze({
+      schemaVersion: 1,
+      scope: this.#scope,
+      attachmentId,
+      attachmentCapability: this.#requireCapability(attachmentId),
+    });
+  }
+
+  /** Restore a presented credential; the host still authenticates every request. */
+  restoreAttachmentCredential(input: StandaloneHostAttachmentCredential): void {
+    const value = object(input, "Standalone host attachment credential");
+    exactKeys(value, ["schemaVersion", "scope", "attachmentId", "attachmentCapability"], "Standalone host attachment credential");
+    if (value.schemaVersion !== 1 || typeof value.attachmentId !== "string" || !tokenPattern.test(value.attachmentId)) {
+      throw new Error("Standalone host attachment credential is invalid");
+    }
+    const scope = object(value.scope, "Standalone host attachment credential scope");
+    exactKeys(scope, ["channel", "namespace"], "Standalone host attachment credential scope");
+    if (canonicalJson(scope) !== canonicalJson(this.#scope)) throw new Error("Standalone host attachment credential escaped its scope");
+    const capability = attachmentCapability(value.attachmentCapability);
+    const existing = this.#capabilities.get(value.attachmentId);
+    if (existing != null && existing !== capability) throw new Error("Standalone host attachment credential conflicts with an existing capability");
+    this.#capabilities.set(value.attachmentId, capability);
   }
 
   async #request(request: StandaloneHostControlRequest): Promise<unknown> {
