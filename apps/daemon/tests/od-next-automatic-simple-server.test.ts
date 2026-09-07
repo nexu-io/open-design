@@ -11,6 +11,7 @@ import type {
   OdNextRuntimeCapabilitySnapshotV1,
   OpenDesignPlanContractV2,
   ProjectScenarioTaskProfile,
+  PrototypePresentationV1,
 } from '@open-design/contracts';
 import {
   normalizeAgentObservationV1,
@@ -32,7 +33,7 @@ vi.mock('node:crypto', async (importOriginal) => {
   };
 });
 
-import { closeDatabase, openDatabase } from '../src/db.js';
+import { closeDatabase, latchConversationIntentSignals, openDatabase, readConversationIntentSignals } from '../src/db.js';
 import { createSnapshot, linkSnapshotToProject } from '../src/plugins/snapshots.js';
 import {
   getInstalledPlugin,
@@ -41,6 +42,8 @@ import {
 } from '../src/plugins/registry.js';
 import { createBundledStrategyBindingV2 } from '../src/plugins/strategy-package.js';
 import { startServer, type StartServerOptions } from '../src/server.js';
+import { getAgentDef } from '../src/agents.js';
+import * as agentDetection from '../src/runtimes/detection.js';
 import {
   createStrategyTaskExecution,
   getStrategyTaskExecution,
@@ -159,6 +162,7 @@ describe('OD Next automatic production through the real server', () => {
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
     await stopServer(started);
+    vi.restoreAllMocks();
     started = null;
     closeDatabase();
     if (binDir) await rm(binDir, { recursive: true, force: true });
@@ -1753,6 +1757,152 @@ describe('OD Next automatic production through the real server', () => {
     // it captures, so three physical Runs settle well past the shared default.
   }, 90_000);
 
+  it.each([
+    {
+      label: 'a responsive iPhone product website without a frame',
+      prompt: '做一个介绍 iPhone App 的官网，兼容手机访问；取消原来的手机外壳，页面本身就是网站。',
+      presentation: {
+        productSurface: 'website', viewport: 'responsive', deviceFrame: 'none', frameSource: 'none',
+      } satisfies PrototypePresentationV1,
+      shell: null,
+      occupiedShell: false,
+      blocked: false,
+    },
+    {
+      label: 'an Android app after an earlier iPhone request',
+      prompt: '把原来的 iPhone 产品改为真正的 Android 手机 App 原型，使用 Android 外壳。',
+      presentation: {
+        productSurface: 'mobile-app', viewport: 'phone', deviceFrame: 'android', frameSource: 'user-request',
+      } satisfies PrototypePresentationV1,
+      shell: '.od-frames/android.html',
+      occupiedShell: false,
+      blocked: false,
+    },
+    {
+      label: 'a website with an unrelated user-owned Android frame',
+      prompt: '做一个兼容手机访问的官网，不要手机外壳。',
+      presentation: {
+        productSurface: 'website', viewport: 'responsive', deviceFrame: 'none', frameSource: 'none',
+      } satisfies PrototypePresentationV1,
+      shell: null,
+      occupiedShell: true,
+      blocked: false,
+    },
+    {
+      label: 'an Android app whose selected template is user-owned',
+      prompt: '做真正的 Android 手机 App 原型，使用 Android 外壳。',
+      presentation: {
+        productSurface: 'mobile-app', viewport: 'phone', deviceFrame: 'android', frameSource: 'user-request',
+      } satisfies PrototypePresentationV1,
+      shell: '.od-frames/android.html',
+      occupiedShell: true,
+      blocked: true,
+    },
+    {
+      label: 'an existing Android app frame with an unrelated template conflict',
+      prompt: '保留现有 Android App 外壳，只修改页面内容。',
+      presentation: {
+        productSurface: 'mobile-app', viewport: 'phone', deviceFrame: 'android', frameSource: 'existing-artifact',
+      } satisfies PrototypePresentationV1,
+      shell: null,
+      occupiedShell: true,
+      blocked: false,
+    },
+  ])('uses the frozen presentation for $label instead of the conversation latch', async ({ prompt, presentation, shell, occupiedShell, blocked }) => {
+    // Exercise the fixture's real CLI probe without enumerating unrelated
+    // user-installed agents, whose login/network probes are outside this test.
+    vi.spyOn(agentDetection, 'detectAgents').mockImplementation(async (environments = {}) => {
+      const codex = environments['codex'];
+      return codex ? [await agentDetection.detectAgent(getAgentDef('codex')!, codex)] : [];
+    });
+    const fixture = await createFixture('repair', { presentation });
+    const info = vi.spyOn(console, 'info');
+    const userFrame = path.join(process.env.OD_DATA_DIR!, 'projects', fixture.projectId, '.od-frames/android.html');
+    if (occupiedShell) {
+      await mkdir(path.dirname(userFrame), { recursive: true });
+      await writeFile(userFrame, 'user-owned Android shell');
+    }
+    latchConversationIntentSignals(database(), fixture.conversationId, {
+      deck: false, media: false, platform: true, devicePlatform: 'ios',
+    });
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(fixture, prompt));
+    const task = await waitForTask(fixture.taskExecutionId, blocked ? 'blocked' : 'completed');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    const request = parseOdNextPromptBundleV2(invocations[0]!.stdin);
+    const context = request.context.stableRequestContext ?? '';
+    expect(context).not.toContain('name="device-frame"');
+    expect(context).not.toContain('name="device-frame-shell"');
+    expect(context).toContain('name="device-frame-catalog"');
+    expect(context).toContain('.od-frames/iphone.html');
+    if (occupiedShell) {
+      expect(context).not.toContain('.od-frames/android.html');
+      expect(await readFile(userFrame, 'utf8')).toBe('user-owned Android shell');
+    } else {
+      expect(context).toContain('.od-frames/android.html');
+    }
+    expect(context).toContain('.od-frames/neutral.html');
+    expect(context).not.toContain('data-phone-shell');
+    const production = task.runs.find((run) => run.inputStage === 'production')!;
+    if (blocked) {
+      expect(invocations).toHaveLength(2);
+      expect(task.terminalRunId).toBe(production.runId);
+      expect(readConversationIntentSignals(database(), fixture.conversationId).devicePlatform).toBe('ios');
+      return;
+    }
+    expect(invocations.at(-1)!.stdin).toBe(production.finalText.text);
+    expect(production.finalText.text).toContain(presentation.productSurface);
+    if (shell) {
+      expect(production.finalText.text).toContain(shell);
+      expect(production.finalText.text).not.toContain('.od-frames/iphone.html');
+      expect(await readFile(path.join(invocations.at(-1)!.cwd, shell), 'utf8')).toContain('data-phone-shell');
+    } else {
+      expect(production.finalText.text).not.toContain('.od-frames/');
+    }
+    const observation = info.mock.calls.find(([message, value]) => (
+      message === '[od-next-device-shell]' && value?.runId === production.runId
+    ))?.[1];
+    if (presentation.deviceFrame !== 'none') {
+      expect(observation).toMatchObject({ platform: 'android', resolvedFrom: 'plan-contract' });
+    } else {
+      expect(observation).toBeUndefined();
+    }
+    expect(readConversationIntentSignals(database(), fixture.conversationId).devicePlatform).toBe('ios');
+  });
+
+  it('allows removing an existing frame in one Direct Edit without a Full Plan', async () => {
+    vi.spyOn(agentDetection, 'detectAgents').mockImplementation(async (environments = {}) => {
+      const codex = environments['codex'];
+      return codex ? [await agentDetection.detectAgent(getAgentDef('codex')!, codex)] : [];
+    });
+    const fixture = await createFixture('repair', { emitDirectEdit: true });
+    const entry = path.join(process.env.OD_DATA_DIR!, 'projects', fixture.projectId, 'index.html');
+    await mkdir(path.dirname(entry), { recursive: true });
+    await writeFile(entry, '<!doctype html><title>Direct</title><div data-phone-shell><main class="phone-content"></main></div>');
+    latchConversationIntentSignals(database(), fixture.conversationId, {
+      deck: false, media: false, platform: true, devicePlatform: 'ios',
+    });
+    queueFixtureIds(fixture);
+    await postRun(started!.url, createRunRequest(
+      fixture, '取消现有 iPhone 手机外壳，作为官网直接展示页面，保持其余内容。',
+    ));
+    const task = await waitForTask(fixture.taskExecutionId, 'completed');
+    const invocations = await readProjectInvocations(fixture.logPath, fixture.projectId);
+    expect(invocations).toHaveLength(1);
+    expect(task.route).toBe('direct_edit');
+    expect(task.planContract).toBeUndefined();
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request']);
+    const request = parseOdNextPromptBundleV2(invocations[0]!.stdin);
+    expect(request.context.stableRequestContext).not.toContain('name="device-frame"');
+    expect(request.context.stableRequestContext).not.toContain('name="device-frame-shell"');
+    expect(invocations[0]!.stdin).toContain('取消现有 iPhone 手机外壳');
+    // The fixture supplies the edit: this verifies routing and prompt transport,
+    // not whether a real model understands the requested presentation change.
+    const html = await readFile(entry, 'utf8');
+    expect(html).toContain('<title>Direct</title>');
+    expect(html).not.toContain('data-phone-shell');
+  });
+
   it('runs parsed plan -> serialization repair -> production after each source end and remains exactly-once across restart', async () => {
     const fixture = await createFixture('repair');
     const sourcePdfAttachment = path.join(
@@ -2430,9 +2580,13 @@ describe('OD Next automatic production through the real server', () => {
     {
       selectedAgentId = 'codex',
       capability,
+      presentation,
+      emitDirectEdit = false,
     }: {
       selectedAgentId?: string;
       capability?: OdNextRuntimeCapabilitySnapshotV1;
+      presentation?: PrototypePresentationV1;
+      emitDirectEdit?: boolean;
     } = {},
   ) {
     const suffix = `${mode}-${Date.now()}-${++sequence}`;
@@ -2452,9 +2606,10 @@ describe('OD Next automatic production through the real server', () => {
         .padStart(12, '0')}`;
       const taskExecutionId = `odnext_${taskOwnerUuid.replaceAll('-', '')}`;
       const plan = planContract(template.snapshotId, template.strategy, mode, capability);
+      if (presentation) plan.taskProfile.taskSpecific['presentation'] = presentation;
       const { bin, logPath } = selectedAgentId === 'claude'
         ? await writeStrategyClaude(binDir, plan)
-        : await writeStrategyCodex(binDir, mode, plan);
+        : await writeStrategyCodex(binDir, emitDirectEdit ? 'direct' : mode, plan);
       const configResponse = await fetch(`${started.url}/api/app-config`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
@@ -2903,7 +3058,11 @@ function planContract(
       buildRequirements: [{ id: 'build', text: 'Build the prototype.' }],
       assumptions: [],
       risks: [],
-      taskSpecific: {},
+      taskSpecific: {
+        presentation: {
+          productSurface: 'web-app', viewport: 'responsive', deviceFrame: 'none', frameSource: 'none',
+        },
+      },
     },
     fullPlan: {
       executionMode: mode === 'complex' ? 'complex' : 'simple',

@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import {
+  PrototypePresentationV1Schema,
+  prototypeProfileRequiresPresentation,
+} from './prototype-presentation.js';
 
 export const OD_NEXT_STRATEGY_ID = 'od-next-strategy' as const;
 export const OD_NEXT_PROMPT_RECIPE_ID = 'od-next-plan-build-v2' as const;
@@ -288,6 +292,18 @@ export const ResolvedTaskProfileV2Schema = z.object({
   taskSpecific: z.record(z.unknown()),
 }).strict().superRefine((value, context) => {
   rejectForbiddenStrategySemantics(value, context);
+
+  if (value.taskType === 'prototype' && prototypeProfileRequiresPresentation(value.taskProfileVersion)) {
+    const presentation = PrototypePresentationV1Schema.safeParse(value.taskSpecific['presentation']);
+    if (!presentation.success) {
+      for (const issue of presentation.error.issues) {
+        context.addIssue({
+          ...issue,
+          path: ['taskSpecific', 'presentation', ...issue.path],
+        });
+      }
+    }
+  }
 
   const deliverableIds = value.requiredDeliverables.map((deliverable) => deliverable.id);
   if (new Set(deliverableIds).size !== deliverableIds.length) {

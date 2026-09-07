@@ -9,6 +9,9 @@ import {
   detectOdNextLayoutPrimitives,
   hasOdNextDeviceShell,
   odNextManagedResourceName,
+  odNextDeviceFramePath,
+  odNextDevicePlatformForResource,
+  type PrototypePresentationV1,
   type OdNextLayoutPrimitivesPresenceV1,
   type AppliedPluginSnapshot,
   type OdNextDevicePlatformResolutionV1,
@@ -178,8 +181,8 @@ async function readOwnership(root: string): Promise<OdNextDeviceFrameOwnership> 
  * If the manifest name is itself occupied by something we did not write, the
  * whole directory is left alone. Unrelated files are never written or deleted.
  * The root is refused when it is a symlink or a non-directory, mirroring the
- * frozen Skill guard. In every skipped case the quoted `device-frame-shell`
- * fact still carries the shell source, so the run keeps working.
+ * frozen Skill guard. Skipped files must stay out of the available template
+ * catalog; production verifies the selected template before starting Build.
  */
 export async function materializeOdNextDeviceFrames(input: {
   cwd: string;
@@ -220,11 +223,12 @@ export async function materializeOdNextDeviceFrames(input: {
     const target = path.join(root, name);
     const recorded = Object.prototype.hasOwnProperty.call(previous, name) ? previous[name] : undefined;
     const existing = await lstat(target).catch(() => null);
+    let current: string | null = null;
     if (existing) {
       // A file already holds the name. Replace it only after proving the bytes
       // are the ones we last wrote: an unclaimed name, a name that is no longer
       // a plain file, or a digest that moved all mean the user owns it now.
-      const current = recorded === undefined || existing.isSymbolicLink() || !existing.isFile()
+      current = recorded === undefined || existing.isSymbolicLink() || !existing.isFile()
         ? null
         : await readFile(target, 'utf8').catch(() => null);
       if (current === null || digest(current) !== recorded) {
@@ -232,7 +236,7 @@ export async function materializeOdNextDeviceFrames(input: {
         continue;
       }
     }
-    await writeFile(target, shell.text, { encoding: 'utf8' });
+    if (current !== shell.text) await writeFile(target, shell.text, { encoding: 'utf8' });
     next[name] = digest(shell.text);
     staged.push(managedName(name));
   }
@@ -263,6 +267,29 @@ export async function materializeOdNextDeviceFrames(input: {
     { encoding: 'utf8' },
   );
   return { staged: staged.sort(), skipped: skipped.sort() };
+}
+
+/** Only a selected frame can block production; never trust a same-name file. */
+export async function verifyOdNextSelectedDeviceFrame(input: {
+  cwd: string;
+  resources: ReadonlyArray<OdNextTaskResource>;
+  staging: OdNextDeviceFrameStagingResult;
+  presentation: PrototypePresentationV1 | null | undefined;
+}): Promise<void> {
+  const platform = input.presentation?.deviceFrame;
+  if (!platform || platform === 'none' || input.presentation?.frameSource === 'existing-artifact') return;
+  const selectedPath = odNextDeviceFramePath(platform);
+  const resource = input.resources.find((candidate) => (
+    odNextDevicePlatformForResource(candidate.path) === platform && candidate.text.trim()
+  ));
+  const target = path.join(input.cwd, selectedPath);
+  const stat = await lstat(target).catch(() => null);
+  const actual = stat?.isFile() && !stat.isSymbolicLink()
+    ? await readFile(target, 'utf8').catch(() => null)
+    : null;
+  if (!resource || !input.staging.staged.includes(selectedPath) || actual !== resource.text) {
+    throw new Error(`Selected prototype frame is unavailable or modified: ${selectedPath}`);
+  }
 }
 
 export interface OdNextDeviceShellObservation {

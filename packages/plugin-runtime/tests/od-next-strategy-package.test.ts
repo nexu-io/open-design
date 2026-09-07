@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { BundledStrategyDeclarationV2Schema } from '@open-design/contracts';
+import {
+  BundledStrategyDeclarationV2Schema,
+  odNextTaskSkillOptionalV2,
+} from '@open-design/contracts';
 import { parseManifest } from '../src/index.js';
 
 const pluginRoot = fileURLToPath(
@@ -38,7 +41,7 @@ describe('bundled OD Next Strategy V2 package', () => {
   it('declares the inactive versioned asset set and exact planning recipe identity', () => {
     expect(manifest).toMatchObject({
       name: 'od-next-strategy',
-      version: '2.0.3',
+      version: '2.0.4',
       od: {
         kind: 'scenario',
         hidden: true,
@@ -58,6 +61,7 @@ describe('bundled OD Next Strategy V2 package', () => {
       ['ppt', 'active', ['deck']],
       ['marketing', 'active', ['image']],
       ['hyperframes', 'active', ['video']],
+      ['image', 'reserved', ['image']],
     ]);
   });
 
@@ -79,9 +83,13 @@ describe('bundled OD Next Strategy V2 package', () => {
       declaration.assets.taskProfileMapping.path,
     ];
     expect(new Set(assetPaths).size).toBe(assetPaths.length);
+    const optionalProfilePaths = new Set(declaration.assets.taskProfiles
+      .filter((profile) => odNextTaskSkillOptionalV2(profile.taskType))
+      .map((profile) => profile.path));
 
     for (const assetPath of assetPaths) {
       const content = readFileSync(`${pluginRoot}/${assetPath.slice(2)}`, 'utf8');
+      if (optionalProfilePaths.has(assetPath) && content.trim().length === 0) continue;
       expect(content.length, assetPath).toBeGreaterThan(100);
       // Resources (shells, stylesheets) are quoted as facts, never as
       // instructions, so the pre-Build vocabulary rule applies to prose only.

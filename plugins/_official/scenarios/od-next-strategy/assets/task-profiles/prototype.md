@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.3.0
 
 > Rollout: active
 
@@ -9,11 +9,25 @@ taskProfileVersion; this file is the prototype projection of that contract.
 
 ## Profile fields
 
-Resolve product surface and target device, audience, primary flow, required
-screens and interactions, fidelity, baseline artifact, content locks, brand
-references, and required output format. Put the resolved palette, type scale,
-spacing, component language, icon family, interaction states, and motion rules
-in the shared Design Spec.
+Resolve audience, primary flow, required screens and interactions, fidelity,
+baseline artifact, content locks, brand references, and required output format.
+Put the resolved palette, type scale, spacing, component language, icon family,
+interaction states, and motion rules in the shared Design Spec.
+
+Resolve product form, viewport, and frame independently from the full request,
+artifacts, and conversation. Store these fields at `taskSpecific.presentation`
+in the existing Plan; for Direct Edit, use the existing minimal change contract.
+Add no extra machine block, classification call, or frame-confirmation round.
+
+| Field | Values |
+|---|---|
+| `productSurface` | `website`, `web-app`, `mobile-app`, `desktop-app`, `tablet-app` |
+| `viewport` | `responsive`, `phone`, `desktop`, `tablet` |
+| `deviceFrame` | `none`, `ios`, `android`, `mobile-neutral` |
+| `frameSource` | `none`, `mobile-app-default`, `user-request`, `existing-artifact` |
+
+Viewport and device words do not determine product form or frame. Select the
+frame by the rules below; `deviceFrame: none` requires `frameSource: none`.
 
 Never silently omit a missing field: decide per the general orchestration
 Skill whether to enter the clarification stage, or convert the gap into an
@@ -131,23 +145,44 @@ record them in the Design Spec:
 
 ### Handheld device shell
 
-When the target device is a phone — the brief names iPhone / iOS, Android, or
-a mobile / 手机 app without naming a platform — the prototype ships inside the
-bundled handset shell, never a hand-drawn approximation of one. Open Design
-stages the shells at `.od-frames/` in the project directory and, when it
-resolved the platform, names the selected shell in the `device-frame` context
-fact and quotes its source in `device-frame-shell`.
+Choose in this order, updating affected fields through the existing contract
+update while retaining unrelated requirements:
 
-| Brief names | Shell |
+1. Explicit no-frame request: `deviceFrame: none`.
+2. Explicit frame request: the requested frame with `frameSource: user-request`.
+   A website in an iPhone demonstration remains `productSurface: website`.
+3. Existing artifact: preserve its frame with `frameSource: existing-artifact`
+   (or `none` when unframed) only if neither product form nor presentation is
+   requested to change.
+4. New or changed `mobile-app`: default to its iOS/Android frame, or
+   `mobile-neutral` without a single specified phone platform, with
+   `frameSource: mobile-app-default`; this source is exclusive to `mobile-app`.
+5. Other new or changed product forms: `deviceFrame: none`, including websites
+   with mobile adaptation or iPhone/Android browser targets. Changing a mobile
+   app into a website removes its default frame without another no-frame request.
+
+Production uses the accepted Plan's selection; resource availability alone
+selects nothing. With `none`, add no handset markup. Open Design stages shell
+resources at `.od-frames/`. When introducing or replacing a frame, its path
+must appear in the provided `availableShells` catalog. If unavailable, preserve
+the existing artifact and report the missing path as blocked; do not substitute a different
+frame or read an unlisted file with the same name. Otherwise use the
+corresponding bundled shell:
+
+| `deviceFrame` | Shell |
 |---|---|
-| iPhone, iOS, SwiftUI, UIKit, App Store | `.od-frames/iphone.html` |
-| Android, Material, Pixel, Galaxy, HarmonyOS, APK | `.od-frames/android.html` |
-| A phone / mobile app with no platform named | `.od-frames/neutral.html` |
-| Web app, landing page, responsive site, desktop app, tablet | no shell — the page is the product |
+| `ios` | `.od-frames/iphone.html` |
+| `android` | `.od-frames/android.html` |
+| `mobile-neutral` | `.od-frames/neutral.html` |
 
-- Use the selected shell's markup and CSS as the document skeleton and put
-  the product inside the `APP CONTENT START` / `APP CONTENT END` slot; the
-  app mounts in `.phone-content` and nowhere else.
+The following rules apply only when a frame is selected:
+
+- Preserve an `existing-artifact` shell. When introducing or replacing a frame,
+  have the existing Build write step read and copy the resource programmatically,
+  fill `APP CONTENT START` / `APP CONTENT END`, and add product styles/scripts.
+  Do not print fixed HTML into model context or add a separate source-read call.
+  Assemble in memory or scratch, then write the primary deliverable once; keep
+  the resource unchanged and mount product content only in `.phone-content`.
 - One handset persists across the whole prototype. Screen navigation and hash
   routes swap the content inside the screen; a new handset per route appears
   only when the user asks for a side-by-side board.
@@ -160,8 +195,8 @@ fact and quotes its source in `device-frame-shell`.
   content honors `--phone-safe-top` / `--phone-safe-bottom` so nothing sits
   under the status bar or the home indicator.
 - The shell is presentation, not a design system: it sets no typography,
-  palette, spacing, components, or navigation for the app. Never put an
-  Android app in the iPhone shell or the reverse.
+  palette, spacing, components, or navigation for the product. Its platform
+  follows the frozen presentation choice, not incidental device words.
 - Sheets, dialogs, toasts, and scrims mount inside the shell's screen, often
   outside the app's own wrapper, so the product's design tokens live on
   `:root` — never on an inner wrapper where an overlay cannot inherit them.
