@@ -174,7 +174,7 @@ Choose only from questions that remain unanswered and genuinely affect the desig
 
 #### 4. Control Types
 
-Supported \`type\` values are: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`, \`number\`, \`range\`, \`date\`, \`time\`, \`datetime-local\`, \`color\`, \`url\`, \`email\`, \`tel\`, \`file\`, \`switch\`, and \`direction-cards\`.
+Supported \`type\` values are: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`, \`number\`, \`range\`, \`date\`, \`time\`, \`datetime-local\`, \`color\`, \`url\`, \`email\`, \`tel\`, \`file\`, and \`switch\`.
 
 Special rules:
 - At most 6-7 options per question; merge near-duplicates instead of listing more.
@@ -185,13 +185,12 @@ Special rules:
 
 - Use \`maxSelections\` when a \`checkbox\` question needs a selection limit.
 - A \`file\` question may allow multiple files with \`multiple: true\`, but the answer returns filenames only, not file contents.
-- Use \`direction-cards\` only when the user explicitly asks to see visual directions. It is a trigger for Open Design's host-owned visual-style catalog: emit only the question's stable \`id\`, localized \`label\`, \`type: "direction-cards"\`, and \`required\` when appropriate. Omit \`options\`, \`cards\`, \`variant\`, and \`defaultValue\`; the host owns the versioned catalog, previews, recommendation, and stable style ids for the project kind.
 - For finite option sets, allow custom input by default: omit \`allowCustom\` or set it to \`true\`. Set it to \`false\` only when downstream systems require fixed machine IDs.
 - If the \`brand\` question is included, its \`id\` must be \`brand\`, and its option values must be \`pick_direction\`, \`brand_spec\`, and \`reference_match\`.
 
 #### 5. Recommended Answers
 
-- Based on the brief and known context, provide a sensible default for each non-visual question that is suitable for preselection. A host-owned \`direction-cards\` question is the exception and must not invent a default.
+- Based on the brief and known context, provide a sensible default for each non-visual question that is suitable for preselection.
 - Use \`defaultValue\` to preselect an answer: provide one option \`value\` for a single-choice question and an array of \`value\` entries for a multiple-choice question.
 - You may append "(Recommended)" to the option \`label\` and briefly explain the recommendation in \`description\`.
 - \`defaultValue\` must match an option's \`value\`, not its localized label.
@@ -223,7 +222,6 @@ If the user selects \`brand_spec\` or \`reference_match\` without providing an a
 
 - **An active design system is available:** Bind its tokens directly and follow the design system strictly.
 - **No design system or brand source is available:** Choose the best-matching option from the runtime's direction library based on the brief's domain, audience, and overall tone, then bind its visual tokens. Do not ask the user again. If a Host-owned direction-form answer supplies \`value\`, \`foundation\`, and \`guidance\`, resolve the library \`foundation\` (not the Host catalogue \`value\`) and apply \`guidance\` as the selected refinement. If the runtime provides only an index of direction IDs and names, first run \`"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>\` to retrieve the full specification. Never infer colors or fonts from the name alone. If the runtime provides the complete direction library inline, use the inline specification directly.
-- Send \`direction-cards\` only when the user explicitly asks to see direction options. Never send them proactively.
 
 ### 2. Plan
 

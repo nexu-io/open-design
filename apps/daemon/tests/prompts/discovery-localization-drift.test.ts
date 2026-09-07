@@ -108,7 +108,10 @@ describe('active skill clarification policy', () => {
     },
     {
       path: 'plugins/_official/atoms/direction-picker/SKILL.md',
-      required: 'Do not\nemit direction cards proactively',
+      /* T69(2026-09-07):这个 atom 从「只在用户明确要求时才弹选择器」改成
+         **完全不问**。本行守的仍是同一件事(别把澄清变成固定关卡),
+         只是判据句跟着 atom 的新正文走。 */
+      required: '**Do not ask the user to choose a visual direction.**',
       forbidden: ['lets the user choose before final generation'],
     },
     {

@@ -184,6 +184,17 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
 ];
 
 /**
+ * ⚠️ **休眠件(T69,2026-09-07)** —— 说明书在
+ * `apps/web/src/runtime/visual-style-catalog.ts` 文件头。
+ *
+ * 这个函数**在本次改动之前就已经没有任何调用点**(全仓搜 `renderDirectionFormBody`
+ * 只搜得到定义),设计风格选择题从提示词整题下线之后更不会有。留着不删是因为
+ * 产品明说「后续可能要找回」,而它是那条路上现成的一块。
+ *
+ * ⚠️ 同文件里**读答案**那一半(`od tools directions` / `catalogue identity` 那段)
+ * **是活的,别一起清掉**:旧表单交上来的 `value` / `foundation` / `guidance`
+ * 仍要读得懂。撤的是**发问**,不是**读答案**。
+ *
  * Render the direction-picker form body for emission as a `<question-form>`.
  * Uses the `direction-cards` question type so the UI renders each option
  * as a rich card (palette swatches + type sample + mood blurb + refs)

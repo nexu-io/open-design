@@ -489,19 +489,22 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('## Structured clarification on any turn');
       expect(prompt).toContain('`<question-form>` is assistant text for the OpenDesign UI, not a native tool call');
       expect(prompt).toContain(
-        'For a `direction-cards` question, emit only its intent fields; omit `options`, `cards`, `variant`, and `defaultValue`',
-      );
-      expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
       expect(prompt).toContain('Do not stop after an introductory sentence such as "先确认一下方向："');
     });
 
-    it('keeps the host-owned direction-card boundary in bare Ask mode', () => {
+    /**
+     * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
+     * 原用例守的是「裸 Ask 模式里也要保留 host 目录那条边界说明」——
+     * 那条说明本身就是在**教模型这个能力存在**,现在连它一起撤。
+     */
+    it('裸 Ask 模式里也不再提设计风格选择题', () => {
       const prompt = composeSystemPrompt({ sessionMode: 'chat' });
-      expect(prompt).toContain(
-        'the OpenDesign host supplies the project-kind visual catalog, previews, recommendation, and stable style ids',
-      );
+      // 防真空:那一整段结构化澄清的授权还在,不是因为整段没composed 才绿
+      expect(prompt).toContain('## Structured clarification on any turn');
+      expect(prompt).not.toContain('direction-cards');
+      expect(prompt).not.toContain('project-kind visual catalog');
     });
 
     it('pins filesystem artifact handoff for other CLI agents too', () => {

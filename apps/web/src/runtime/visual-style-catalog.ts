@@ -1,3 +1,58 @@
+/**
+ * ⚠️ **休眠件 —— 设计风格选择这一整套的说明书,后来人先读这一段。**
+ *
+ * 这份目录、`visual-style-deck.ts`、以及 `components/QuestionForm.tsx` 里的
+ * `VisualStylePicker` / `VisualDirectionStack` / `VisualDirectionCardView` /
+ * `VisualStylePreview` / `DirectionCardsPicker`,合起来是「看图选设计风格」那张卡。
+ * 代码全都**原样活着、随时能跑**,只是**没有上游会再触发它**。
+ *
+ * ── 为什么现在不可达(T69,2026-09-07)────────────────────────
+ *
+ * 产品裁决,逐字:
+ *
+ *   「选中态就是当前切换到的那个效果,或者你能否把提示词里让 agent 感知到
+ *     question-form 能出设计风格的那些提示词下掉?**不问了**,这些代码先讲提示词
+ *     干掉,**组件代码注释,后续可能要找回**」
+ *
+ * 于是断的是**源头**,不是渲染层:七条提示词路径里,让模型知道自己能出设计风格题
+ * 的话全部撤掉(`direction-cards` 这个类型 + 开场简报里那道 `tone`)。模型不再发,
+ * 这张卡自然不再出现。**渲染路径一行没删** —— 详见下面「安全网」。
+ *
+ * 这是**对交付稿的有意偏离**:交付稿 `729fa43ce7` 的 `cmp-clarify` 第 21 / 22 格
+ * 画的就是这张卡,状态标签逐字写着「选中一张 · 图上落绿勾,「下一步」才亮起」。
+ * 别当成漏做补回去。裁决全文见 `specs/current/chat-panel-decisions-sheet.md` 的 T69。
+ *
+ * ── 安全网:它为什么必须继续能渲染 ───────────────────────────
+ *
+ * 提示词撤了,不等于线上不会再来:缓存的旧提示词、旧版客户端、模型自己记住的旧
+ * 格式,都还可能发来一份 `direction-cards` 表单。渲染器因此**继续认这个类型**
+ * (`artifacts/question-form.ts` 的 `QuestionType` 联合类型里它还在),
+ * 否则那道题会变成一块只有标题的空白。
+ * 提示词与渲染器**故意不相等**这件事,判据写在
+ * `e2e/tests/question-form-type-parity.test.ts` 的 `DORMANT_TYPES`。
+ *
+ * 顺带:`prompts/directions.ts` 里**读答案**那半边也故意留着 —— 旧表单交上来的
+ * `value` / `foundation` / `guidance` 仍要读得懂。撤的是**发问**,不是**读答案**。
+ *
+ * ── 要找回来,动这几处就够 ───────────────────────────────────
+ *
+ * 1. 提示词七处放回去(六条 question-form 授权路径 + `direction-picker` atom):
+ *    类型清单里的 `direction-cards`、它的作者规则、以及开场简报示例里那道
+ *    `{ "id": "tone", "type": "radio", … }`。七处一起,少一处就只有部分路径会发。
+ * 2. `e2e/tests/question-form-type-parity.test.ts` 的 `DORMANT_TYPES` 清空,
+ *    判据从「渲染器 − 休眠集」变回集合相等。
+ * 3. `e2e/tests/question-form-visual-style-retired.test.ts` 整个删掉(它守的正是
+ *    "撤干净了"),`apps/daemon/tests/prompts/tone-single-select.test.ts` 翻回正向。
+ * 4. UI 侧**什么都不用改** —— 控件、目录、一批四张、换一批、网格切换、勾选圈
+ *    全都还在原地,连测试都还绿着(见下面「测试留着」)。
+ *
+ * ── 测试留着 ─────────────────────────────────────────────────
+ *
+ * `tests/runtime/visual-style-deck.test.ts`、`tests/components/QuestionForm.deck-batch.test.tsx`、
+ * `tests/components/QuestionForm.direction-cards-catalog.test.tsx`、
+ * `tests/components/chat/w75-visual-direction-card.test.tsx` 等一律**保留**:
+ * 它们测的是休眠件**本身**,是找回来那天的保障,不是这次断掉的那条接线。
+ */
 export type VisualStyleContext = 'deck' | 'prototype' | 'document' | 'image' | 'video';
 export type VisualStyleCategory = 'business' | 'editorial' | 'creative' | 'minimal';
 

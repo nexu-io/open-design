@@ -1326,6 +1326,110 @@ ${question}`),
     expect(persisted?.blockedContext).toBeUndefined();
   });
 
+  /**
+   * RED SPEC — reproduces the field failure recorded on Open Design Beta
+   * 0.21.1-beta.7, task `odnext_c4ee010be6b748dc9b92984946bc10a8`,
+   * run `e5d6181b-1705-4a44-964b-cdcb3fbcb6ac`.
+   *
+   * The user asked, in an OD Next prototype project:
+   *   「详细讲讲这个页面的实现思路,分十节展开,每节写满一段。
+   *     只输出文字,不要创建或修改文件。」
+   * The agent obeyed: 2940 characters of prose, no question form, no machine
+   * block, no file touched. The child process exited 0 and the daemon persisted
+   * the Run as `succeeded` with `errorCode: null` and `artifactCount: 0`.
+   *
+   * The task nevertheless landed terminal-`blocked` on
+   * `od_next_protocol_runtime_state_missing`, and the web client remapped the
+   * succeeded Run to `failed`, so a fully answered question was presented to
+   * the user as a task failure.
+   *
+   * Fixture shape is taken from that record, not invented: the route is still
+   * unlocked (production calls `prepareStrategyIntake`, never
+   * `prepareStrategyRequest`, on the request turn — routes.ts:2808), the
+   * clarification budget is untouched, and the completion evidence is what
+   * `validateRunDeliverable` resolves for a Run that wrote nothing.
+   */
+  it('does not fail a request turn whose only output was the answer the user asked for', () => {
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-1',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const proseOnlyAnswer = [
+      '这份页面的实现思路,分十节讲。',
+      '',
+      '**一、单文件架构与可编辑性**',
+      '整页收敛在一个 HTML 文件里,样式与脚本内联,便于整体替换。',
+      '',
+      '**二、版式栅格**',
+      '主栏与侧注共用一套基线网格,行高按字号的整数倍对齐。',
+    ].join('\n');
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol(proseOnlyAnswer),
+      // The process succeeded; nothing was written, because nothing was asked
+      // to be written.
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      updatedAt: 120,
+    });
+
+    expect(result.action).not.toBe('blocked');
+    const persisted = getStrategyTaskExecution(db, 'task-1');
+    expect(persisted?.outcome).not.toBe('blocked');
+    expect(persisted?.blockedContext).toBeUndefined();
+  });
+
+  /**
+   * Companion evidence for the spec above — expected to PASS today.
+   *
+   * It establishes that the block is not the agent misbehaving. Enumerate every
+   * Runtime State the schema admits for an unrouted request turn and feed each
+   * one to the same prose-only turn: all of them are refused too. There is no
+   * declaration the agent could have emitted that would have let a
+   * deliverable-free answer through, so "the reply did not carry the
+   * machine-readable state" describes a contract with no legal move, not a
+   * protocol violation.
+   */
+  it('admits no request-stage runtime state for a turn that delivers nothing', () => {
+    const declarable = [
+      runtimeState({ route: 'full_plan', outcome: 'clarification_required' }),
+      runtimeState({ route: 'full_plan', outcome: 'plan_ready', executionMode: 'simple' }),
+      runtimeState({ route: 'direct_edit', outcome: 'completed', executionMode: 'simple' }),
+    ];
+    const refusals = declarable.map((state, index) => {
+      const taskExecutionId = `task-declared-${index}`;
+      createStrategyTaskExecution(db, {
+        taskExecutionId,
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        snapshotId: snapshot.snapshotId,
+        selectedAgentId: AGENT_ID,
+        initialRunId: `run-declared-${index}`,
+        ...strategyTaskCreateIdentityFixture(),
+        createdAt: 100,
+      });
+      prepareStrategyIntake(db, {
+        taskExecutionId,
+        intake: intakePassed,
+        execution: executionPassed,
+      });
+      const outcome = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId,
+        runId: `run-declared-${index}`,
+        protocol: protocol(`答案正文。\n${block('open-design-runtime-state', state)}`),
+        completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+        updatedAt: 120,
+      });
+      return { declared: state.outcome, action: outcome.action };
+    });
+    expect(refusals).toEqual([
+      { declared: 'clarification_required', action: 'blocked' },
+      { declared: 'plan_ready', action: 'blocked' },
+      { declared: 'completed', action: 'blocked' },
+    ]);
+  });
+
   it('accepts a clarification turn whose state predicted a premature execution mode', () => {
     prepareStrategyRequest(db, {
       taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,

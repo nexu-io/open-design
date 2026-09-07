@@ -38,12 +38,41 @@ const PROMPT_PATHS: { rel: string; reachable: string }[] = [
   { rel: 'packages/contracts/src/prompts/discovery.ts', reachable: '当前无运行时消费者(镜像)' },
 ];
 
+/**
+ * **休眠类型** —— 渲染器还认,但提示词**不再向模型提供**。
+ *
+ * ── 判据变更(2026-09-07,T69)────────────────────────────────
+ *
+ * 本文件原来断言的是「提示词的类型清单 == 渲染器的类型清单」,**集合相等**。
+ * 产品当天裁决把设计风格选择题整题下线(逐字:「把提示词里让 agent 感知到
+ * question-form 能出设计风格的那些提示词下掉?**不问了**」),同时明确
+ * **组件代码留着当休眠件**(「后续可能要找回」)。
+ *
+ * 这两句话合起来就要求两侧**故意不相等**:
+ *  · 渲染器**继续**认 `direction-cards` —— 缓存的旧提示词、旧客户端、模型记住的
+ *    旧格式都还可能发来这种表单,认不得它那道题会渲染成一块空白;
+ *  · 提示词**不再**提它 —— 提了就等于告诉模型「你可以问设计风格」。
+ *
+ * 所以判据从「相等」放宽成「**提示词 == 渲染器 − 休眠集**」。放宽的**只有这一格**,
+ * 而且写成一份显式名单:任何**别的**类型在某条路上漏掉,照旧当场红。
+ *
+ * ⚠️ 往这个集合里加名字 = 宣布又一个能力对模型不可见,**必须有产品裁决**;
+ * 不要拿它当「这条路提示词写漏了」的消音器。
+ * 撤干净没有由 `question-form-visual-style-retired.test.ts` 正面守着。
+ */
+const DORMANT_TYPES = new Set(['direction-cards']);
+
 /** 事实源:web 渲染器认得的那些类型。提示词不能承诺渲染器做不到的事。 */
 function supportedTypes(): Set<string> {
   const src = read('apps/web/src/artifacts/question-form.ts');
   const union = /export type QuestionType =([\s\S]*?);/.exec(src);
   if (!union) throw new Error('QuestionType union not found');
   return new Set([...union[1]!.matchAll(/'([a-z-]+)'/g)].map((m) => m[1]!));
+}
+
+/** 提示词**应当**枚举的那些类型:渲染器认得的,减去已休眠的。 */
+function advertisedTypes(): Set<string> {
+  return new Set([...supportedTypes()].filter((type) => !DORMANT_TYPES.has(type)));
 }
 
 /**
@@ -82,19 +111,29 @@ describe('question-form 提示词跨路径一致性', () => {
     }
   });
 
-  it('六条路径都完整枚举了渲染器支持的每一个类型', () => {
+  it('六条路径都完整枚举了渲染器支持的、且仍在对模型开放的每一个类型', () => {
     const supported = supportedTypes();
     expect(supported.size, '联合类型抽空了 —— 抽取逻辑坏了,不是提示词的问题')
       .toBeGreaterThan(10);
+    const advertised = advertisedTypes();
+    /* 休眠集必须真的是渲染器认得的那些类型的子集 —— 否则名单里躺着一个
+       早就不存在的名字,这条放宽就成了永远不会被发现的空洞。 */
+    for (const dormant of DORMANT_TYPES) {
+      expect(supported.has(dormant), `休眠名单里的 ${dormant} 渲染器已经不认了 —— 名单该清了`)
+        .toBe(true);
+    }
 
     for (const { rel } of PROMPT_PATHS) {
       /*
        * 断言的是**和事实源相等**,不是「和第一条路相等」。
        * 拿其中一条当基准,六条一起漏掉同一个类型时会集体绿 —— 那正是这一族
        * 事故的形状(六份手抄件一起过时)。渲染器新增一个类型,六条必须都学会。
+       *
+       * 事实源今天是「渲染器 − 休眠集」(见 `DORMANT_TYPES`):**多**写一个休眠
+       * 类型和**少**写一个在用类型,两边都还是当场红。
        */
       expect([...typeListIn(rel, supported)].sort(), `${rel} 的类型清单和渲染器对不上`)
-        .toEqual([...supported].sort());
+        .toEqual([...advertised].sort());
     }
   });
 

@@ -578,7 +578,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   // "(skipped)",让 agent 拿默认值往下走。判据来自交付稿意图澄清那五格的状态标签
   // (5-1「一个都没选 ——『下一步』置灰」/ 5-4「没写字前『下一步』仍置灰」)。
   const requiredAnswered = form.questions.every((q) => {
-    if (!questionNeedsAnswer(q)) return true;
+    if (!questionNeedsAnswer(q, visualStyleContext)) return true;
     if (skippedQuestionIds.has(q.id)) return true;
     const v = currentAnswers[q.id];
     return questionAnswerIsPresent(v);
@@ -646,7 +646,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     if (!activeQuestion) return true;
     // 分步态下「下一步」也不许在半截的 Hex 上放行
     if (colorTextIsInvalid(activeQuestion.id)) return false;
-    if (!questionNeedsAnswer(activeQuestion)) return true;
+    if (!questionNeedsAnswer(activeQuestion, visualStyleContext)) return true;
     if (skippedQuestionIds.has(activeQuestion.id)) return true;
     return questionAnswerIsPresent(currentAnswers[activeQuestion.id]);
   })();
@@ -1399,6 +1399,18 @@ type VisualStyleView = 'fan' | 'grid';
  * 所以这里按稿子实现,不自造一个稿子上没有的输入位。
  */
 
+/**
+ * ⚠️ **休眠件(T69,2026-09-07)** —— 说明书在 `runtime/visual-style-catalog.ts`
+ * 文件头。设计风格选择题已从提示词整题下线(产品逐字「不问了 …… 组件代码注释,
+ * 后续可能要找回」),所以**正常流程里没有上游会再触发这个组件**。
+ *
+ * 代码保持可用是**有意的**:它同时是安全网 —— 缓存的旧提示词 / 旧客户端 / 模型
+ * 记住的旧格式若仍发来 `direction-cards` 或 `tone`,这里照旧渲染出完整的选择卡,
+ * 而不是一块空白。以下同族组件都属于这一批:`VisualDirectionStack`、
+ * `VisualDirectionCardView`、`VisualStylePreview`、`DirectionCardsPicker`。
+ *
+ * **不要**因为「线上看不到它」就删控件、删测试、或把裁决注释清理掉。
+ */
 function VisualStylePicker({
   cards,
   context,
@@ -2332,7 +2344,48 @@ function formWithVisualStyleOptions(
  * 稿子没画过那种卡,不该顺手把它也收紧。`required` 仍然独立成立。
  */
 const CHOICE_QUESTION_TYPES = new Set(['radio', 'checkbox', 'direction-cards']);
-function questionNeedsAnswer(q: QuestionForm['questions'][number]): boolean {
+
+/**
+ * 这道题**一个可点的东西都渲染不出来**。
+ *
+ * 只有 `direction-cards` 会落到这里,因为它是唯一一个**自己不带选项**的选择题:
+ * 素材要么来自 host 目录(前提是项目有 `visualStyleContext`),要么来自模型自带的
+ * 老式 `cards`。两条都没有时,渲染那两条分支
+ * (`visualStyleCards && visualStyleContext` / `q.cards && q.cards.length > 0`)
+ * 全都不成立 —— 屏幕上只剩一个标题。`options` 救不了它:`direction-cards` 没有
+ * 任何一条渲染分支读 `options`。
+ *
+ * ⚠️ 这个谓词是上面那两条渲染条件的**镜像**,改任何一边都要改另一边;
+ * `tests/components/question-form-direction-cards-dead-end.test.tsx` 的
+ * 「前提成立」与「对照组」两条用例就是钉这个对应关系的。
+ */
+function questionRendersNoChoices(
+  q: QuestionForm['questions'][number],
+  visualStyleContext: VisualStyleContext | undefined,
+): boolean {
+  if (q.type !== 'direction-cards') return false;
+  if (visualStyleContext !== undefined) return false; // host 目录接管,有整份目录可点
+  return !(q.cards && q.cards.length > 0);
+}
+
+/**
+ * 这道题算不算「必须先有答案才放行」。
+ *
+ * 判据来自交付稿意图澄清那五格(5-1「一个都没选 ——「下一步」置灰」),
+ * 所以有选项的问题一律必答,不看 `required`。
+ *
+ * **唯一的例外是渲染不出任何选项的题**:它挡住「下一步」就成了一条死路 ——
+ * 用户面对一道空题,既无从作答,又永远点不亮提交,整张表只剩「跳过」。
+ * 这在 2026-09-07 把设计风格题从提示词整题下线之后更要紧:`direction-cards`
+ * 从此是个**不再被宣传的类型**,它的每一次出现都是计划外的(缓存的旧提示词、
+ * 旧客户端、模型记住的旧格式),也就更可能缺素材。
+ * 这条例外压过 `required` —— 模型标不标必答,都改变不了「这道题没东西可点」。
+ */
+function questionNeedsAnswer(
+  q: QuestionForm['questions'][number],
+  visualStyleContext: VisualStyleContext | undefined,
+): boolean {
+  if (questionRendersNoChoices(q, visualStyleContext)) return false;
   return q.required === true || CHOICE_QUESTION_TYPES.has(q.type);
 }
 

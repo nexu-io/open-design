@@ -1,6 +1,6 @@
 ---
 name: direction-picker
-description: Optional host-owned visual catalog for users who explicitly ask to compare directions.
+description: Resolves the visual direction at the plan stage from the brief and design system, without asking the user.
 od:
   scenario: general
   mode: planning
@@ -8,37 +8,37 @@ od:
 
 # Direction picker
 
-Generative work benefits from explicit divergence before it converges. This
-atom lets the user compare Open Design's versioned visual-style catalog when
-they explicitly ask to see or compare direction options. Only in that case,
-emit one inline `<question-form>` with one `direction-cards` question. The
-submitted choice returns as the next user message.
+Converging work needs one committed visual direction before the build starts.
+This atom owns that moment in the `plan` stage: decide the direction, state it
+in one line, and lock onto it.
 
-`direction-cards` is a Host-owned catalog trigger, not an invitation for the
-agent to draft cards. Emit only the question's stable `id`, localized `label`,
-`type: "direction-cards"`, and `required` when appropriate. Omit `options`,
-`cards`, `variant`, and `defaultValue`: the Host selects the catalog, preview
-images, recommendation, and stable style ids from the project kind.
+Resolve the direction from what you already have, in this order:
 
-The submitted answer contains three parts: the stable Host catalogue `value`,
-a resolvable direction-library `foundation`, and the selected card's visual
-`guidance`. Use the foundation for deterministic palette/font tokens and apply
-the guidance as its refinement. Never pass the Host value to
-`od tools directions`.
+1. An active design system — its DESIGN.md palette, typography, spacing, and
+   component rules **are** the direction. Bind its tokens and stop here.
+2. A brand spec, reference URL, or screenshot the user supplied — parse that
+   source directly.
+3. Otherwise, infer the best-matching direction yourself from the brief's
+   domain, audience, and tone, then bind its visual tokens. If the runtime
+   provides only an index of direction ids and names, run
+   `"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>` to retrieve the full
+   specification — never infer colors or fonts from the name alone.
 
-The presence of this atom or the `plan` stage does not trigger a picker. Do not
-emit direction cards proactively. When the user has not explicitly requested
-options, infer a fitting direction from the brief, active design system, and
-known context, then continue.
+**Do not ask the user to choose a visual direction.** Not as a question-form,
+not as a markdown list of options, not as a "which of these feels right?"
+follow-up. The direction is yours to resolve; asking spends the user's turn on
+a decision they hired the agent to make.
 
 ## Convergence
 
-When a picker was explicitly requested, the atom completes when the submitted
-form answer contains a direction id. The agent's next turn must lock onto that
-direction — backtracking forces a fresh devloop iteration of the picker stage.
+The atom completes when the plan states the chosen direction. The agent's next
+turn must build against that direction — backtracking forces a fresh devloop
+iteration of the plan stage.
 
 ## Anti-patterns the prompt fragment forbids
 
-- Agent-authored direction options, card metadata, preview assets, or variants.
+- Asking the user to pick, compare, or confirm a visual direction.
 - Locking the user into a single direction with cosmetic alternates
-  (every direction must be a defensible standalone bet).
+  (a stated direction must be a defensible standalone bet).
+- Inferring palette or typography from a direction's name instead of
+  resolving its specification.
