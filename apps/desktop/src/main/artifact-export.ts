@@ -8,6 +8,7 @@ import type {
   DesktopExportArtifactResult,
 } from "@open-design/sidecar-proto";
 
+import { waitForArtifactContent, waitForArtifactResources } from "./artifact-export-readiness.js";
 import { DECK_PAGE_SIZE, DECK_PRINT_CSS, inferPageSize, waitForPrintableContent } from "./pdf-export.js";
 import { findRealElementRange, findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
 
@@ -37,7 +38,7 @@ export async function exportArtifact(
     window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
     window.webContents.on("will-navigate", (event) => event.preventDefault());
     await window.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(buildDocument(input))}`);
-    await waitForPrintableContent(window);
+    await waitForArtifactContent(input.format, window.webContents, () => waitForPrintableContent(window));
 
     if (input.format === "pdf") return await renderPdf(window, input);
     return await renderImage(window, input);
@@ -82,7 +83,7 @@ async function renderImage(
       }
       const [w] = window.getContentSize();
       window.setContentSize(w, Math.ceil(contentHeight));
-      await waitForPrintableContent(window);
+      await waitForArtifactResources(waitForPrintableContent(window));
     }
   }
   const image = await window.webContents.capturePage();

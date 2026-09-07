@@ -230,6 +230,9 @@ importers:
       electron:
         specifier: 41.3.0
         version: 41.3.0
+      jsdom:
+        specifier: 29.1.1
+        version: 29.1.1
       typescript:
         specifier: 6.0.3
         version: 6.0.3
