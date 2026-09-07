@@ -545,7 +545,7 @@ describe('exportProjectAsPdf', () => {
   });
 
   it('falls back to browser print when the desktop PDF export API is unavailable', async () => {
-    const fallback = vi.fn();
+    const fallback = vi.fn().mockResolvedValue('ready_to_save');
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'unavailable' } }), { status: 501 })));
 
@@ -558,6 +558,23 @@ describe('exportProjectAsPdf', () => {
     });
 
     expect(result).toBe('fallback');
+    expect(fallback).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates a failed browser PDF fallback', async () => {
+    const fallback = vi.fn().mockResolvedValue('failed');
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: { message: 'unavailable' } }), { status: 501 })));
+
+    const result = await exportProjectAsPdf({
+      deck: false,
+      fallbackPdf: fallback,
+      filePath: 'index.html',
+      projectId: 'proj-1',
+      title: 'Landing',
+    });
+
+    expect(result).toBe('failed');
     expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
@@ -1295,8 +1312,9 @@ describe('sandboxed preview Blob exports', () => {
     const revokeSpy = URL.revokeObjectURL as ReturnType<typeof vi.fn>;
     revokeSpy.mockClear();
 
-    await exportAsPdf('<p>test</p>', 'Blocked');
+    const result = await exportAsPdf('<p>test</p>', 'Blocked');
 
+    expect(result).toBe('failed');
     expect(alert).toHaveBeenCalledWith('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     expect(revokeSpy).toHaveBeenCalledWith('blob:test');
   });

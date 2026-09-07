@@ -3233,6 +3233,7 @@ export const ja: Dict = {
   'fileViewer.exportingElapsed': '書き出し中… {seconds}秒',
   'fileViewer.exportSlideEta': 'スライド {current}/{total} を書き出し中 · 残り約 {seconds}秒',
   'fileViewer.exportFailed': '書き出しに失敗しました。もう一度お試しください。',
+  'fileViewer.exportReady': '保存する準備ができました',
   'fileViewer.exportDone': '書き出しが完了しました',
   'fileViewer.exportImageFailed': '画像のキャプチャに失敗しました。再試行するか、ブラウザのスクリーンショット機能をご利用ください。',
   'fileViewer.exportImageModalSubtitle': '形式を選択して、現在のプレビューを画像としてダウンロードします。',

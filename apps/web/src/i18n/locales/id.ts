@@ -3233,6 +3233,7 @@ export const id: Dict = {
   'fileViewer.exportingElapsed': 'Mengekspor… {seconds}d',
   'fileViewer.exportSlideEta': 'Slide {current}/{total} · ~{seconds}d lagi',
   'fileViewer.exportFailed': 'Ekspor gagal. Silakan coba lagi.',
+  'fileViewer.exportReady': 'Siap disimpan',
   'fileViewer.exportDone': 'Ekspor selesai',
   'fileViewer.exportImageFailed': 'Gagal menangkap gambar. Silakan coba lagi atau gunakan alat tangkapan layar browser Anda.',
   'fileViewer.exportImageModalSubtitle': 'Pilih format, lalu unduh pratinjau saat ini sebagai gambar.',

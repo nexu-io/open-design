@@ -3416,6 +3416,7 @@ export const zhTW: Dict = {
   "fileViewer.exportSlideEta":
     "正在匯出第 {current}/{total} 張 · 約剩 {seconds} 秒",
   "fileViewer.exportFailed": "匯出失敗，請重試。",
+  "fileViewer.exportReady": "可以儲存了",
   "fileViewer.exportDone": "匯出完成",
   "fileViewer.exportImageFailed":
     "圖片擷取失敗，請重試或使用瀏覽器的截圖工具。",

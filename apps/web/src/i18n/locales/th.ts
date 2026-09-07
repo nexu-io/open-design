@@ -3233,6 +3233,7 @@ export const th: Dict = {
   'fileViewer.exportingElapsed': 'กำลังส่งออก… {seconds} วินาที',
   'fileViewer.exportSlideEta': 'สไลด์ {current}/{total} · เหลือ ~{seconds} วินาที',
   'fileViewer.exportFailed': 'การส่งออกล้มเหลว โปรดลองอีกครั้ง',
+  'fileViewer.exportReady': 'พร้อมบันทึก',
   'fileViewer.exportDone': 'ส่งออกเสร็จสิ้น',
   'fileViewer.exportImageFailed': 'การจับภาพล้มเหลว กรุณาลองอีกครั้งหรือใช้เครื่องมือจับภาพหน้าจอของเบราว์เซอร์',
   'fileViewer.exportImageModalSubtitle': 'เลือกรูปแบบ แล้วดาวน์โหลดตัวอย่างปัจจุบันเป็นรูปภาพ',

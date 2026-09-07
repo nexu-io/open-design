@@ -4093,6 +4093,7 @@ export interface Dict {
   'fileViewer.exportingElapsed': string;
   'fileViewer.exportSlideEta': string;
   'fileViewer.exportFailed': string;
+  'fileViewer.exportReady': string;
   'fileViewer.exportDone': string;
   'fileViewer.exportImageFailed': string;
   'fileViewer.exportImageModalSubtitle': string;

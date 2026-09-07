@@ -3233,6 +3233,7 @@ export const hu: Dict = {
   'fileViewer.exportingElapsed': 'Exportálás… {seconds}mp',
   'fileViewer.exportSlideEta': '{current}/{total}. dia · ~{seconds}mp van hátra',
   'fileViewer.exportFailed': 'Az exportálás nem sikerült. Próbáld újra.',
+  'fileViewer.exportReady': 'Mentésre kész',
   'fileViewer.exportDone': 'Exportálás kész',
   'fileViewer.exportImageFailed': 'A képrögzítés sikertelen. Kérjük, próbálja újra, vagy használja a böngészője képernyőkép eszközét.',
   'fileViewer.exportImageModalSubtitle': 'Válasszon formátumot, majd töltse le az aktuális előnézetet képként.',

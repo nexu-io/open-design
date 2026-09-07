@@ -776,11 +776,13 @@ export function exportAsImage(dataUrl: string, title: string): void {
   }
 }
 
-export type ProjectPdfExportResult = 'desktop' | 'fallback' | 'cancelled';
+export type PdfExportCompletion = 'ready_to_save' | 'failed';
+
+export type ProjectPdfExportResult = 'desktop' | 'fallback' | 'cancelled' | 'failed';
 
 export async function exportProjectAsPdf(opts: {
   deck: boolean;
-  fallbackPdf: () => void | Promise<void>;
+  fallbackPdf: () => PdfExportCompletion | Promise<PdfExportCompletion>;
   filePath: string;
   projectId: string;
   title: string;
@@ -810,8 +812,8 @@ export async function exportProjectAsPdf(opts: {
     return 'desktop';
   } catch (err) {
     console.warn('[exportProjectAsPdf] falling back to programmatic PDF:', err);
-    await opts.fallbackPdf();
-    return 'fallback';
+    const fallbackResult = await opts.fallbackPdf();
+    return fallbackResult === 'failed' ? 'failed' : 'fallback';
   }
 }
 
@@ -1403,7 +1405,7 @@ export async function exportAsPdf(
   html: string,
   title: string,
   opts?: SrcdocOptions & { sandboxedPreview?: boolean; onProgress?: ExportProgress },
-): Promise<void> {
+): Promise<PdfExportCompletion> {
   const sandboxedPreview = opts?.sandboxedPreview ?? true;
   // Generate a per-export nonce so the print-ready handshake is resistant to
   // spoofing by untrusted scripts inside the exported artifact.
@@ -1426,7 +1428,7 @@ export async function exportAsPdf(
     doc = injectParentPrintReadyCache(doc, nonce);
     try {
       const result = await printHostPdf(doc, nonce, opts?.deck ? { deck: true } : undefined);
-      if (result.ok) return;
+      if (result.ok) return 'ready_to_save';
       if (typeof alert !== 'undefined') {
         alert('Print failed. Please try Export PDF again or use the browser version.');
       }
@@ -1435,7 +1437,7 @@ export async function exportAsPdf(
         alert('Print failed. Please try Export PDF again or use the browser version.');
       }
     }
-    return;
+    return 'failed';
   }
 
   // Browser fallback (pure web): assemble the PDF programmatically — capture
@@ -1444,7 +1446,7 @@ export async function exportAsPdf(
   // below is kept only as a last-resort fallback if the capture path throws.
   try {
     await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, onProgress: opts?.onProgress });
-    return;
+    return 'ready_to_save';
   } catch (err) {
     console.warn('[exportAsPdf] programmatic PDF failed, falling back to print popup:', err);
   }
@@ -1473,7 +1475,7 @@ export async function exportAsPdf(
       alert('Popup blocked! Click the popup-blocked icon in your browser address bar (or browser menu), choose "Always allow pop-ups" for this site, then retry Export PDF.');
     }
     URL.revokeObjectURL(url);
-    return;
+    return 'failed';
   }
 
   if (sandboxedPreview) {
@@ -1488,6 +1490,7 @@ export async function exportAsPdf(
   // the Blob URL after the tab has had time to start loading it.
   win.location.href = url;
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return 'ready_to_save';
 }
 
 /**

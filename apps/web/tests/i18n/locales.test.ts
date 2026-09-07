@@ -195,6 +195,13 @@ describe('i18n locales', () => {
     }
   });
 
+  it('keeps Chinese export handoff copy focused on saving', () => {
+    expect(zhCN['fileViewer.exportReady']).toBe('可以保存了');
+    expect(zhTW['fileViewer.exportReady']).toBe('可以儲存了');
+    expect(zhCN['fileViewer.exportReady']).not.toMatch(/加载|載入/);
+    expect(zhTW['fileViewer.exportReady']).not.toMatch(/加载|載入/);
+  });
+
   it('keeps the recharge recovery action concise enough to sit beside retry', async () => {
     const expected: Record<Locale, string> = {
       ar: 'شحن',
