@@ -1,5 +1,5 @@
 import type { CAC } from "cac";
-import { readdir } from "node:fs/promises";
+import { appendFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { exactStorageObject } from "@open-design/release";
 import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/release-profile.ts";
@@ -7,6 +7,8 @@ import { writeObject } from "./control-common.ts";
 import { packSceneArtifact, unpackSceneArtifact } from "./scene-artifact.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, stageAcceptedElectronContribution } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
+import { projectReleaseTopology } from "./topology.ts";
+import { restoreSceneCache } from "./scene-cache.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -27,6 +29,18 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("topology", "Project release actions over declared runner and target data")
+    .option("--declaration <file>", "Active and deferred target declaration")
+    .option("--plans <directory>", "Release plan receipts")
+    .option("--output <directory>", "Resolved topology, scope and runner receipts")
+    .option("--github-output <file>", "Optional GitHub matrix output destination")
+    .option("--receipt <file>", "Optional receipt; defaults to stdout")
+    .action(async (options: Options) => {
+      const result = await projectReleaseTopology({ declaration: required(options, "declaration"), plans: required(options, "plans"), output: required(options, "output") });
+      if (options.githubOutput != null) await appendFile(required(options, "githubOutput"), `shell_matrix=${JSON.stringify(result.matrix)}\n`);
+      await emit(options, result);
+    });
+
   cli.command("prepare", "Compose and sign content from the declared Shell scenes")
     .option("--policy <file>", "Release policy receipt")
     .option("--channel <name>", "Release channel")
@@ -111,16 +125,20 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("baseline operation must be stage or promote");
     });
 
-  cli.command("scene <operation>", "Pack or unpack a lossless scene transport")
+  cli.command("scene <operation>", "Pack, unpack or restore a lossless scene transport")
     .option("--scene <directory>", "Source scene (pack)")
     .option("--archive <file>", "Source archive (unpack)")
     .option("--output <path>", "New archive (pack) or new scene directory (unpack)")
+    .option("--pending <file>", "Convergence planner receipt (restore)")
+    .option("--workload <name>", "Planner workload (restore)")
+    .option("--transport <file>", "New local scene.tar for downstream transfer (restore)")
     .option("--receipt <file>", "Optional receipt; defaults to stdout")
     .action(async (operation: string, options: Options) => {
       const output = required(options, "output");
       const result = operation === "pack" ? await packSceneArtifact(required(options, "scene"), output)
         : operation === "unpack" ? await unpackSceneArtifact(required(options, "archive"), output)
-        : (() => { throw new Error("scene operation must be pack or unpack"); })();
+        : operation === "restore" ? await restoreSceneCache({ pending: required(options, "pending"), workload: required(options, "workload"), transport: required(options, "transport"), output })
+        : (() => { throw new Error("scene operation must be pack or unpack or restore"); })();
       await emit(options, { schemaVersion: 1, operation: `exact.scene.${operation}`, ...result });
     });
 

@@ -63,18 +63,13 @@ describe("exact Electron release topology", () => {
     const convergence = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
 
     expect(workflow).toContain("options: [betahyx]");
-    expect(workflow).toContain("electron_scene_darwin_arm64");
-    expect(workflow).toContain("electron_scene_win32_x64");
-    expect(workflow).toContain("active_topology = [");
-    expect(workflow).toContain("deferred_topology = [");
-    expect(workflow).toContain('json.dumps({"include": active_topology}');
-    const activeTopology = workflow.match(/active_topology = \[([\s\S]*?)\]\n\s+deferred_topology = \[/u)?.[1];
-    const deferredTopology = workflow.match(/deferred_topology = \[([\s\S]*?)\]\n\s+root =/u)?.[1];
-    expect(activeTopology).toContain('"target": "darwin-arm64"');
-    expect(activeTopology).not.toContain("win32-x64");
-    expect(activeTopology).not.toContain("windows-2025");
-    expect(deferredTopology).toContain('"target": "win32-x64"');
-    expect(deferredTopology).toContain('"runs_on": "windows-2025"');
+    expect(workflow).toContain('exact-release-control.mjs" topology');
+    expect(workflow).toContain('--declaration .github/config/exact-topology.json');
+    expect(workflow).not.toContain("electron_actions =");
+    const topology = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/exact-topology.json"), "utf8"));
+    expect(topology.active.map((value: { shell: string; target: string }) => [value.shell, value.target])).toEqual([["terminal", "darwin-arm64"], ["electron", "darwin-arm64"]]);
+    expect(topology.active.every((value: { runs_on: string }) => value.runs_on === "macos-15")).toBe(true);
+    expect(topology.deferred).toEqual([{ shell: "electron", target: "win32-x64", workload: "electron_scene_win32_x64", runner_class: "electron_win32_x64", runs_on: "windows-2025" }]);
     expect(workflow).toContain("@open-design/tools-release exec tools-release electron-scene");
     expect(workflow).toContain("@open-design/tools-release exec tools-release electron-distribution");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
@@ -106,7 +101,8 @@ describe("exact Electron release topology", () => {
     expect(scene.indexOf("path: ${{ runner.temp }}/exact-plan")).toBeLessThan(scene.indexOf("- name: Restore converged scene"));
     expect(scene).toContain("path: ${{ runner.temp }}/exact-scene-artifact/scene.tar");
     expect(scene).toContain("exact-release-control.mjs\" scene pack");
-    expect(scene).toContain("exact-release-control.mjs\" scene unpack");
+    expect(scene).toContain("exact-release-control.mjs\" scene restore");
+    expect(scene).not.toContain("zipfile");
     expect(scene).not.toContain('operation:"exact.scene.');
     expect(workflow).not.toContain('operation:"release.authorize"');
     expect(workflow).not.toContain('operation:"release.policy.resolve"');

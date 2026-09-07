@@ -3,6 +3,7 @@
   "suites": {
     "convergence-control": [
       ".github/config/convergence-exact.json",
+      ".github/config/exact-topology.json",
       ".github/scripts/convergence.py",
       ".github/scripts/handoff.py",
       ".github/scripts/lib/config.py",
@@ -13,6 +14,8 @@
       ".github/workflows/release-prerelease.yml",
       ".github/workflows/release-stable.yml",
       "tools/release/src/exact/scene-artifact.ts",
+      "tools/release/src/exact/scene-cache.ts",
+      "tools/release/src/exact/topology.ts",
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/control-cli.ts",
       "tools/release/esbuild.config.mjs"

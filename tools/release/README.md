@@ -43,7 +43,7 @@ registry. They do not build or validate Electron artifacts and cannot serve as
 an acceptance path.
 
 The workspace CLI and the relocatable `dist/exact-control.mjs` share the
-`scene pack|unpack`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
+`topology`, `scene pack|unpack|restore`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
 `baseline stage|promote` commands. Use explicit flags and consume their receipts;
 workflows must not construct transient JSON requests for these operations.
 The relocatable build runs with Node 24 without a workspace install. Credentials
@@ -56,6 +56,10 @@ immutable R2 cache publication. Unpack only creates a new scene directory and
 rejects links and unsafe paths; it does not repair installed applications or
 replace the consumer's full scene verification. The cache policy is versioned
 to miss older, lossy directory artifacts without deleting them.
+`scene restore` requires a complete cache hit from the convergence planner,
+verifies the downloaded ZIP digest, and accepts only its opaque `scene.tar`.
+`topology` projects full/hot actions over the workflow's declarative target and
+runner configuration; it does not enable deferred targets or create cache hits.
 
 `activate` and `baseline promote` accept `--channel-head` for a relocated local
 file. Its bytes must match the original publication receipt: relocation never

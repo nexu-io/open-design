@@ -896,6 +896,9 @@ importers:
       cac:
         specifier: 6.7.14
         version: 6.7.14
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
       sharp:
         specifier: 0.35.3
         version: 0.35.3(@types/node@24.12.2)

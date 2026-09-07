@@ -161,26 +161,9 @@ jobs:
         env:
           CHANNEL: ${{ inputs.channel }}
         run: |
-          python3 - <<'PY'
-          import json, os
-          active_topology = [
-              {"shell": "terminal", "target": "darwin-arm64", "workload": "terminal_scene_darwin_arm64", "runner_class": "terminal_darwin_arm64", "runs_on": "macos-15", "mode": "full"},
-              {"shell": "electron", "target": "darwin-arm64", "workload": "electron_scene_darwin_arm64", "runner_class": "electron_darwin_arm64", "runs_on": "macos-15"},
-          ]
-          deferred_topology = [
-              {"shell": "electron", "target": "win32-x64", "workload": "electron_scene_win32_x64", "runner_class": "electron_win32_x64", "runs_on": "windows-2025"},
-          ]
-          root = os.path.join(os.environ["RUNNER_TEMP"], "exact-plan")
-          os.makedirs(root, exist_ok=True)
-          electron_plan = json.load(open(os.path.join(root, "electron-darwin-arm64.json")))
-          electron_actions = {action["id"] for action in electron_plan["actions"]}
-          active_topology[1]["mode"] = "full" if "electron.distribution" in electron_actions else "hot"
-          with open(os.path.join(root, "topology.json"), "w") as destination:
-              json.dump({"active": active_topology, "deferred": deferred_topology}, destination, sort_keys=True, separators=(",", ":"))
-              destination.write("\n")
-          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write("shell_matrix=" + json.dumps({"include": active_topology}, separators=(",", ":")) + "\n")
-          PY
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" topology \
+            --declaration .github/config/exact-topology.json --plans "$RUNNER_TEMP/exact-plan" \
+            --output "$RUNNER_TEMP/exact-plan" --github-output "$GITHUB_OUTPUT"
 
       - name: Resolve reusable scene results
         id: convergence
@@ -188,16 +171,7 @@ jobs:
           OD_WORKLOAD_RESULTS_BASE_URL: ${{ secrets.OD_WORKLOAD_RESULTS_BASE_URL }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/exact-plan"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"], "exact-plan")
-          topology = json.loads(root.joinpath("topology.json").read_text())["active"]
-          root.joinpath("scope.json").write_text(json.dumps({"enabled": {item["workload"]: True for item in topology}}, sort_keys=True) + "\n")
-          root.joinpath("runners.json").write_text(json.dumps({item["runner_class"]: [item["runs_on"]] for item in topology}, sort_keys=True) + "\n")
-          PY
-          RUNNER_PLAN=$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])),separators=(",",":")))' "$RUNNER_TEMP/exact-plan/runners.json")
+          RUNNER_PLAN=$(cat "$RUNNER_TEMP/exact-plan/runners.json")
           python3 .github/scripts/convergence.py \
             --config .github/config/convergence-exact.json \
             github-output \
@@ -243,31 +217,9 @@ jobs:
           WORKLOAD: ${{ matrix.workload }}
         shell: bash
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import hashlib, json, os, urllib.request, zipfile
-          from pathlib import Path, PurePosixPath
-          root = Path(os.environ["RUNNER_TEMP"])
-          workload = json.loads((root / "exact-plan" / "pending.json").read_text())["workloads"][os.environ["WORKLOAD"]]
-          result = workload.get("result")
-          if not workload.get("resultHit") or not result:
-              raise SystemExit("convergence planner omitted a required scene without a result")
-          product = result["products"]["scene"]
-          archive = root / "exact-scene-cache.zip"
-          urllib.request.urlretrieve(product["source"], archive)
-          if hashlib.sha256(archive.read_bytes()).hexdigest() != product["data"]["sha256"]:
-              raise SystemExit("converged scene product digest mismatch")
-          destination = root / "exact-scene-artifact"
-          destination.mkdir(parents=True)
-          with zipfile.ZipFile(archive) as source:
-              for entry in source.infolist():
-                  path = PurePosixPath(entry.filename.rstrip("/"))
-                  if not entry.filename or entry.filename.startswith(("/", "\\")) or "\\" in entry.filename or ".." in path.parts:
-                      raise SystemExit(f"unsafe converged scene entry: {entry.filename!r}")
-              source.extractall(destination)
-          PY
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene unpack \
-            --archive "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene restore \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
 
       - uses: pnpm/action-setup@v5
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}

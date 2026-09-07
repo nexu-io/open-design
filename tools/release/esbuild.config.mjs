@@ -14,7 +14,7 @@ await build({
 });
 
 await build({
-  banner: { js: "#!/usr/bin/env node" },
+  banner: { js: "#!/usr/bin/env node\nimport { createRequire as exactCreateRequire } from 'node:module'; const require = exactCreateRequire(import.meta.url);" },
   bundle: true,
   entryPoints: ["./src/exact/control-cli.ts"],
   format: "esm",
