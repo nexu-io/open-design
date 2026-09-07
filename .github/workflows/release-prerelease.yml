@@ -17,8 +17,32 @@ on:
         required: false
         type: string
         default: ""
+      enable_mac_x64:
+        description: "Build and publish macOS x64 (Intel) artifacts. ON by default: stable ships Intel and stable is gated on validated prerelease artifacts, so an Intel-less prerelease cannot be promoted. The switch stays so a run that is explicitly not about Intel can buy back the ~12 min it adds to the critical path (~33 min on the macos-15-intel fleet against ~21 min everywhere else); turning it off costs that build its promotion eligibility."
+        required: false
+        type: boolean
+        default: true
+      enable_smoke:
+        description: "Run the packaged smoke suites (mac arm64, mac Intel, Windows). ON by default. Smoke no longer runs inside the build jobs and now costs this pipeline nothing but a dispatch: release-prerelease-smoke.yml picks it up after the packages are in R2 and re-downloads them from R2, so it exercises the artifact a user actually receives. Turn it off only to skip those runners entirely."
+        required: false
+        type: boolean
+        default: true
+      enable_tests:
+        description: "Dispatch the code test suites (P0 Functional E2E, E2E Vitest, daemon shards, verify) into release-prerelease-tests.yml. ON by default. They run against this build's commit in a workflow of their own, gate nothing here, and cost this pipeline only the seconds the dispatch takes."
+        required: false
+        type: boolean
+        default: true
+      mac_sign_mode:
+        description: "macOS signing depth for both mac lanes. 'sign-only' (default) codesigns with the Apple certificate but skips the Apple notary round-trip, which is minutes of waiting on Apple that no prerelease consumer needs. 'notarize' also notarizes and staples — use it for the last prerelease before a stable promotion, since stable ships notarized. 'no' skips signing entirely and will FAIL the stable promotion gate, which requires platforms.mac.signed == true."
+        required: true
+        type: choice
+        options:
+          - "no"
+          - "sign-only"
+          - "notarize"
+        default: "sign-only"
       win_x64_smoke_mode:
-        description: "Windows x64 smoke coverage."
+        description: "Windows x64 smoke coverage, applied only when enable_smoke is on. enable_smoke decides WHETHER packaged smoke runs; this input decides HOW DEEP the Windows one goes."
         required: true
         type: choice
         options:
@@ -53,8 +77,28 @@ on:
         required: false
         type: string
         default: ""
+      enable_mac_x64:
+        description: "Build and publish macOS x64 (Intel) artifacts. ON by default: stable ships Intel and stable is gated on validated prerelease artifacts, so an Intel-less prerelease cannot be promoted. The switch stays so a run that is explicitly not about Intel can buy back the ~12 min it adds to the critical path; turning it off costs that build its promotion eligibility."
+        required: false
+        type: boolean
+        default: true
+      enable_smoke:
+        description: "Run the packaged smoke suites (mac arm64, mac Intel, Windows). ON by default. Smoke no longer runs inside the build jobs: release-prerelease-smoke.yml picks it up after the packages are in R2 and re-downloads them from R2, so it exercises the artifact a user actually receives."
+        required: false
+        type: boolean
+        default: true
+      enable_tests:
+        description: "Dispatch the code test suites (P0 Functional E2E, E2E Vitest, daemon shards, verify) into release-prerelease-tests.yml. ON by default. They run against this build's commit in a workflow of their own and gate nothing here."
+        required: false
+        type: boolean
+        default: true
+      mac_sign_mode:
+        description: "macOS signing depth for both mac lanes: no / sign-only / notarize. Defaults to sign-only — codesigned but not sent to Apple's notary service. Use notarize for the last prerelease before a stable promotion. 'no' fails the stable promotion gate, which requires platforms.mac.signed == true."
+        required: false
+        type: string
+        default: "sign-only"
       win_x64_smoke_mode:
-        description: "Windows x64 smoke coverage: skip, core, or full."
+        description: "Windows x64 smoke coverage, applied only when enable_smoke is on: skip, core, or full."
         required: false
         type: string
         default: "core"
@@ -84,14 +128,26 @@ on:
       previous_commit:
         description: "Commit SHA of the previously published prerelease; empty on cold start."
         value: ${{ jobs.metadata.outputs.previous_commit }}
-      mac_arm64_smoke_result:
-        description: "macOS arm64 packaged smoke outcome; advisory to publication."
-        value: ${{ jobs.build_mac.outputs.smoke_result }}
-      win_x64_smoke_result:
-        description: "Windows x64 packaged smoke outcome; advisory to publication."
-        value: ${{ jobs.build_win.outputs.smoke_result }}
+      # --- Advisory signals ------------------------------------------------
+      # Nothing below gates publication.
+      #
+      # The code tests and the packaged mac/Windows smoke no longer run in this
+      # workflow at all: they are dispatched into release-prerelease-tests.yml
+      # and release-prerelease-smoke.yml, which have concurrency groups of their
+      # own. That is the whole point — a validation job that outlives `publish`
+      # used to hold this workflow open, and this workflow's concurrency group
+      # is a single repository-wide string, so the next prerelease could not
+      # even START until the last one's tests finished. Their results reach a
+      # human through the progressive Feishu card (release-prerelease-card.yml),
+      # which watches all three runs, not through outputs here.
+      #
+      # Linux keeps its in-job smoke because the whole Linux lane is opt-in
+      # behind vars.ENABLE_STABLE_LINUX and is not on anyone's critical path.
+      linux_x64_smoke_result:
+        description: "Linux AppImage smoke outcome. Advisory; `skipped` unless vars.ENABLE_STABLE_LINUX is on."
+        value: ${{ jobs.build_linux.outputs.smoke_result }}
       version_metadata_url:
-        description: "Public R2 URL of this build's version metadata.json."
+        description: "Public R2 URL of this build's version metadata.json. This is the authoritative \"did a package actually ship?\" signal — it is non-empty only when the publish job wrote metadata. Do NOT read the overall workflow conclusion for that: it now goes red whenever an advisory test job fails, even though the package shipped."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
@@ -175,7 +231,12 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ inputs.ref != '' && inputs.ref || github.ref }}
-          fetch-depth: 0
+          # Shallow. Nothing in this workflow reads git history: the built
+          # commit arrives as an explicit input/env (RELEASE_COMMIT), `pnpm
+          # guard` uses `git ls-files` (index, not history), and tools-pack /
+          # tools-release never shell out to git. A full clone of this
+          # repository is a 2.2 GiB pack and cost 44-102s per job.
+          fetch-depth: 1
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -218,115 +279,81 @@ jobs:
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm exec tools-release check-storage
-  functional_e2e:
-    name: P0 Functional E2E
+  dispatch_validation:
+    name: Dispatch prerelease validation
+    # Fire-and-forget, and deliberately absent from every other job's `needs`.
+    #
+    # This workflow holds ONE repository-wide concurrency group
+    # (`open-design-release-prerelease`, cancel-in-progress: false), so any job
+    # that outlives `publish` keeps that group held and stops the NEXT
+    # prerelease from STARTING — not from publishing, from starting. The test
+    # suites were doing exactly that. Handing them to workflows of their own
+    # costs this pipeline the seconds it takes to POST a dispatch.
+    #
+    # A dispatch failure is loud (this job goes red) and harmless: nothing
+    # depends on this job, so `publish` cannot see it.
     needs: metadata
-    uses: ./.github/workflows/ui-extended-main.yml
-    with:
-      ref: ${{ needs.metadata.outputs.commit }}
-      suite: p0
-  e2e_vitest:
-    name: E2E Vitest
-    needs: metadata
+    if: ${{ needs.metadata.result == 'success' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PRIMARY_REF: ${{ needs.metadata.outputs.branch }}
+      FALLBACK_REF: ${{ github.event.repository.default_branch || 'main' }}
+      # `secrets` is not a context an `if:` may read, so the card dispatch
+      # checks for its own credentials through env instead. A fork, or a
+      # repository without the Feishu app configured, simply skips the card.
+      FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+      FEISHU_RELEASE_CHAT_ID: ${{ secrets.FEISHU_RELEASE_CHAT_ID }}
     steps:
-      - name: Checkout
+      - name: Checkout dispatch helper
         uses: actions/checkout@v6.0.2
         with:
-          ref: ${{ needs.metadata.outputs.commit }}
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Setup Playwright
-        run: pnpm -C e2e exec playwright install --with-deps chromium
-      # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
-      # The daemon launches the installed Chromium directly instead of through
-      # Playwright. Restore user namespaces on this ephemeral runner so the real
-      # Chromium sandbox remains enabled rather than disabling that protection.
-      - name: Allow Chromium user namespaces on GitHub Ubuntu
-        shell: bash
-        run: |
-          set -euo pipefail
-          if sysctl kernel.apparmor_restrict_unprivileged_userns >/dev/null 2>&1; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
-      - name: Prebuild workspace type declarations
-        run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-          pnpm --filter @open-design/web build:sidecar
-      - name: Run E2E Vitest
-        run: pnpm --filter @open-design/e2e test
-  daemon_unit_tests:
-    name: Daemon tests (${{ matrix.shard }}/4)
-    needs: metadata
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ needs.metadata.outputs.commit }}
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Run daemon test shard
+          # Deliberately the ref this workflow was loaded from, NOT the built
+          # commit. The helper is infrastructure that ships with this file, so
+          # the two are always in step; pinning it to the built commit would
+          # break the moment a release branch carried an older .github tree.
+          fetch-depth: 1
+      - name: Dispatch prerelease code tests
+        if: ${{ inputs.enable_tests }}
         env:
-          OD_WATCHER_TEST_DEBUG: "1"
-        run: pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4
-  verify:
-    name: Verify build (typecheck + tests)
-    needs: metadata
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6.0.2
-        with:
-          ref: ${{ needs.metadata.outputs.commit }}
-          fetch-depth: 0
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build daemon and desktop (typecheck dependencies)
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+          VERSION: ${{ needs.metadata.outputs.release_version }}
         run: |
-          pnpm --filter @open-design/daemon build
-          pnpm --filter @open-design/desktop build
-      - name: Typecheck workspaces
-        run: pnpm -r --workspace-concurrency=4 --if-present run typecheck
-      - name: Check repository layout policies
-        run: pnpm guard
+          bash .github/scripts/release/dispatch-validation.sh release-prerelease-tests.yml \
+            -f "commit=$COMMIT" \
+            -f "version=$VERSION" \
+            -f "origin_run_id=$GITHUB_RUN_ID"
+      - name: Dispatch progressive Feishu card
+        if: ${{ env.FEISHU_APP_ID != '' && env.FEISHU_RELEASE_CHAT_ID != '' }}
+        env:
+          BRANCH: ${{ needs.metadata.outputs.branch }}
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+          EXPECT_SMOKE: ${{ inputs.enable_smoke }}
+          EXPECT_TESTS: ${{ inputs.enable_tests }}
+          PREVIOUS_COMMIT: ${{ needs.metadata.outputs.previous_commit }}
+          VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: |
+          bash .github/scripts/release/dispatch-validation.sh release-prerelease-card.yml \
+            -f "version=$VERSION" \
+            -f "commit=$COMMIT" \
+            -f "branch=$BRANCH" \
+            -f "previous_commit=$PREVIOUS_COMMIT" \
+            -f "origin_run_id=$GITHUB_RUN_ID" \
+            -f "expect_tests=$EXPECT_TESTS" \
+            -f "expect_smoke=$EXPECT_SMOKE"
   build_mac:
     name: Build prerelease mac arm64
-    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
+    # Deliberately NOT gated on any test suite, and neither is `publish`. A
+    # prerelease exists so a person can install it and test it by hand;
+    # automated CI is a parallel opinion about the same commit, not a valve on
+    # delivery. Chaining the two meant a single flaky suite cost the team a
+    # whole day's package — the expensive failure mode, and the one this
+    # pipeline kept hitting. The suites still run on every prerelease, in
+    # release-prerelease-tests.yml, where they can take as long as they like
+    # without holding this workflow's concurrency group.
+    needs: metadata
     runs-on: macos-14
-    outputs:
-      smoke_result: ${{ steps.mac_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -335,7 +362,8 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-          fetch-depth: 0
+          # Shallow — see the metadata job's checkout for why.
+          fetch-depth: 1
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -396,6 +424,7 @@ jobs:
             echo "Continuing into tools-pack because electron-builder is the source of truth for whether packaging actually works."
           fi
       - name: Prepare Apple signing certificate
+        if: ${{ inputs.mac_sign_mode != 'no' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -431,9 +460,22 @@ jobs:
             --mac-compression normal
             --to all
             --json
-            --signed
-            --notarize
           )
+          # Signing depth is a dispatch input (default sign-only), mirroring
+          # release-beta.yml. Prerelease keeps --signed on every mode except an
+          # explicit 'no', because tools/release/src/metadata/prepare-stable.ts
+          # requires platforms.mac.signed == true (and platforms.macIntel.signed
+          # == true) in the prerelease metadata it promotes; an unsigned
+          # prerelease cannot become a stable release. Notarization is what the
+          # default drops: it is a round-trip to Apple's notary service that
+          # buys nothing for an internal channel, and metadata carries no
+          # notarized field for the stable gate to check.
+          case "${{ inputs.mac_sign_mode }}" in
+            no) ;;
+            sign-only) build_args+=(--signed) ;;
+            notarize) build_args+=(--signed --notarize) ;;
+            *) echo "unsupported mac_sign_mode: ${{ inputs.mac_sign_mode }}" >&2; exit 1 ;;
+          esac
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
           else
@@ -463,9 +505,14 @@ jobs:
             --mac-compression normal
             --to all
             --json
-            --signed
-            --notarize
           )
+          # Signing depth follows mac_sign_mode — see the primary mac arm64 build.
+          case "${{ inputs.mac_sign_mode }}" in
+            no) ;;
+            sign-only) build_args+=(--signed) ;;
+            notarize) build_args+=(--signed --notarize) ;;
+            *) echo "unsupported mac_sign_mode: ${{ inputs.mac_sign_mode }}" >&2; exit 1 ;;
+          esac
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
           else
@@ -492,7 +539,8 @@ jobs:
           done <<< "$cache_ids"
           echo "deletedFailedCacheKey=$matched_key count=$count"
 
-      - name: Verify prerelease mac_arm64 notarization
+      - name: Verify prerelease mac_arm64 signature and notarization
+        if: ${{ inputs.mac_sign_mode != 'no' }}
         run: |
           set -euo pipefail
           build_json="$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -515,9 +563,18 @@ jobs:
             echo "prerelease app not found in DMG: $candidate_app" >&2
             exit 1
           fi
+          # The signature is checked on every signed build, because
+          # platforms.mac[Intel].signed == true is what the stable promotion
+          # gate reads. The stapled-ticket and Gatekeeper assessments only pass
+          # for a notarized build, so they follow mac_sign_mode rather than
+          # failing the job for doing exactly what it was asked to do.
           codesign --verify --deep --strict "$candidate_app"
-          xcrun stapler validate "$candidate_app"
-          spctl --assess --type execute --verbose=4 "$candidate_app"
+          if [ "${{ inputs.mac_sign_mode }}" = "notarize" ]; then
+            xcrun stapler validate "$candidate_app"
+            spctl --assess --type execute --verbose=4 "$candidate_app"
+          else
+            echo "mac_sign_mode=${{ inputs.mac_sign_mode }}: signature verified; skipping stapler/spctl, which require a notarization ticket this build did not request."
+          fi
 
       - name: Capture mac framework diagnostics
         if: ${{ failure() }}
@@ -590,22 +647,6 @@ jobs:
             ${{ runner.temp }}/release-build/mac_arm64/build.json
             ${{ runner.temp }}/mac-framework-diagnostics.txt
           if-no-files-found: warn
-      - name: Smoke prerelease mac packaged runtime
-        id: mac_smoke
-        continue-on-error: true
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-prerelease
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
       - name: Write mac_arm64 release report
         if: ${{ always() }}
         env:
@@ -617,7 +658,9 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_arm64/report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.md
-          RELEASE_SMOKE_MODE: core
+          # The build jobs no longer smoke; the packaged smoke lives in
+          # release-prerelease-smoke.yml and writes its own report there.
+          RELEASE_SMOKE_MODE: skip
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           REPORT_TITLE: mac_arm64 prerelease build
@@ -626,14 +669,6 @@ jobs:
       - name: Publish mac_arm64 report summary
         if: ${{ always() }}
         run: cat "${{ runner.temp }}/release-report/mac_arm64/summary.md" >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload mac e2e spec report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-prerelease-mac-e2e-report
-          path: ${{ runner.temp }}/release-report/mac_arm64
-          if-no-files-found: warn
       - name: Prune mac_arm64 tools-pack cache
         continue-on-error: true
         run: bash .github/scripts/release/cache/mac.sh
@@ -689,7 +724,10 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip
-          RELEASE_SIGNED: "true"
+          # platforms.mac[Intel].signed in the published metadata comes from
+          # this value via the platform manifest, and the stable promotion gate
+          # reads it. It must describe what was actually done, not a constant.
+          RELEASE_SIGNED: ${{ inputs.mac_sign_mode != 'no' && 'true' || 'false' }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -705,12 +743,22 @@ jobs:
           path: ${{ runner.temp }}/release-platform-manifests/mac_arm64.json
           if-no-files-found: error
           retention-days: 1
+      # The packaged smoke used to run here, after the publish manifest. It now
+      # runs in release-prerelease-smoke.yml against the DMG re-downloaded from
+      # R2 — closer to what a user installs, and off this workflow's
+      # concurrency group entirely.
   build_mac_intel:
     name: Build prerelease mac intel x64
-    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
+    # Tests never gate delivery on this channel — see build_mac.
+    needs: metadata
+    # On by default, and switchable. Intel is this pipeline's critical path: it
+    # runs on the slower macos-15-intel fleet and takes ~33 min against ~21 min
+    # for every other platform. It still builds on every run, because the stable
+    # promotion gate reads platforms.macIntel out of the prerelease metadata and
+    # an Intel-less prerelease simply cannot be promoted — see the
+    # enable_mac_x64 input description and AGENTS.md "Release channel model".
+    if: ${{ inputs.enable_mac_x64 }}
     runs-on: macos-15-intel
-    outputs:
-      smoke_result: ${{ steps.mac_x64_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -719,7 +767,8 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-          fetch-depth: 0
+          # Shallow — see the metadata job's checkout for why.
+          fetch-depth: 1
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -758,6 +807,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Prepare Apple signing certificate
+        if: ${{ inputs.mac_sign_mode != 'no' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -793,9 +843,14 @@ jobs:
             --mac-compression normal
             --to all
             --json
-            --signed
-            --notarize
           )
+          # Signing depth follows mac_sign_mode — see the primary mac arm64 build.
+          case "${{ inputs.mac_sign_mode }}" in
+            no) ;;
+            sign-only) build_args+=(--signed) ;;
+            notarize) build_args+=(--signed --notarize) ;;
+            *) echo "unsupported mac_sign_mode: ${{ inputs.mac_sign_mode }}" >&2; exit 1 ;;
+          esac
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
           else
@@ -826,9 +881,14 @@ jobs:
             --mac-compression normal
             --to all
             --json
-            --signed
-            --notarize
           )
+          # Signing depth follows mac_sign_mode — see the primary mac arm64 build.
+          case "${{ inputs.mac_sign_mode }}" in
+            no) ;;
+            sign-only) build_args+=(--signed) ;;
+            notarize) build_args+=(--signed --notarize) ;;
+            *) echo "unsupported mac_sign_mode: ${{ inputs.mac_sign_mode }}" >&2; exit 1 ;;
+          esac
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
           else
@@ -855,7 +915,8 @@ jobs:
           done <<< "$cache_ids"
           echo "deletedFailedCacheKey=$matched_key count=$count"
 
-      - name: Verify prerelease mac_x64 notarization
+      - name: Verify prerelease mac_x64 signature and notarization
+        if: ${{ inputs.mac_sign_mode != 'no' }}
         run: |
           set -euo pipefail
           build_json="$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -878,26 +939,18 @@ jobs:
             echo "prerelease app not found in DMG: $candidate_app" >&2
             exit 1
           fi
+          # The signature is checked on every signed build, because
+          # platforms.mac[Intel].signed == true is what the stable promotion
+          # gate reads. The stapled-ticket and Gatekeeper assessments only pass
+          # for a notarized build, so they follow mac_sign_mode rather than
+          # failing the job for doing exactly what it was asked to do.
           codesign --verify --deep --strict "$candidate_app"
-          xcrun stapler validate "$candidate_app"
-          spctl --assess --type execute --verbose=4 "$candidate_app"
-
-      - name: Smoke prerelease mac_x64 packaged runtime
-        id: mac_x64_smoke
-        continue-on-error: true
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
-          OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/mac_x64/build.log
-          OD_PACKAGED_E2E_MAC: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-intel
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-        run: |
-          set -euo pipefail
-          pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+          if [ "${{ inputs.mac_sign_mode }}" = "notarize" ]; then
+            xcrun stapler validate "$candidate_app"
+            spctl --assess --type execute --verbose=4 "$candidate_app"
+          else
+            echo "mac_sign_mode=${{ inputs.mac_sign_mode }}: signature verified; skipping stapler/spctl, which require a notarization ticket this build did not request."
+          fi
 
       - name: Write mac_x64 release report
         if: ${{ always() }}
@@ -910,7 +963,9 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/mac_x64/report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.md
-          RELEASE_SMOKE_MODE: core
+          # The build jobs no longer smoke; the packaged smoke lives in
+          # release-prerelease-smoke.yml and writes its own report there.
+          RELEASE_SMOKE_MODE: skip
           RELEASE_TARGET: mac_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           REPORT_TITLE: mac_x64 prerelease build
@@ -974,7 +1029,10 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_x64-report.zip
-          RELEASE_SIGNED: "true"
+          # platforms.mac[Intel].signed in the published metadata comes from
+          # this value via the platform manifest, and the stable promotion gate
+          # reads it. It must describe what was actually done, not a constant.
+          RELEASE_SIGNED: ${{ inputs.mac_sign_mode != 'no' && 'true' || 'false' }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -990,12 +1048,12 @@ jobs:
           path: ${{ runner.temp }}/release-platform-manifests/mac_x64.json
           if-no-files-found: error
           retention-days: 1
+      # Packaged smoke moved to release-prerelease-smoke.yml — see build_mac.
   build_win:
     name: Build prerelease win x64
-    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
+    # Tests never gate delivery on this channel — see build_mac.
+    needs: metadata
     runs-on: windows-latest
-    outputs:
-      smoke_result: ${{ steps.win_smoke.outcome }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -1004,17 +1062,25 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-          fetch-depth: 0
+          # Shallow — see the metadata job's checkout for why.
+          fetch-depth: 1
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
           version: 10.33.2
+      # No `cache: pnpm`. It caches the pnpm STORE, and on this repository that
+      # store never paid for itself on Windows. Measured across four consecutive
+      # prerelease runs: on a miss (3 of 4) it cost 100s / 66s / 43s in the
+      # "Post Setup Node.js" save with no install speedup, and on the one hit it
+      # traded a 32s restore for a 36s faster install — a wash. Worse, it
+      # competes for the repository's 10 GB Actions cache budget against the
+      # per-lane tools-pack caches, which are worth ~11 min of build time each.
+      # This is now the only release build job without it, which is exactly the
+      # shape every other build job (mac arm64, mac Intel, linux) already had.
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: pnpm
-          cache-dependency-path: pnpm-lock.yaml
       - name: Compute Windows tools-pack cache key
         id: win_tools_pack_cache_key
         shell: pwsh
@@ -1125,44 +1191,6 @@ jobs:
             gh cache delete $cache.id
           }
           "deletedFailedCacheKey=$matchedKey count=$($caches.Count)"
-      - name: Build prerelease win_x64 update fixture
-        if: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = "Stop"
-          $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
-          if (-not $match.Success) { throw "full Windows smoke requires a counted prerelease version; got ${{ needs.metadata.outputs.release_version }}" }
-          $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-prerelease-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
-          $updateOutput = pnpm.cmd @buildArgs
-          if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
-          $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
-          $updateBuild = $updateOutput | ConvertFrom-Json
-          pnpm.cmd exec tools-pack win validate-payload --namespace release-prerelease-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
-      - name: Smoke prerelease windows packaged runtime
-        id: win_smoke
-        if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
-        continue-on-error: true
-        working-directory: e2e
-        env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
-          OD_PACKAGED_E2E_WIN: "1"
-          OD_PACKAGED_E2E_NAMESPACE: release-prerelease-win
-          OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease
-          OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
-          OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.win_x64_smoke_mode }}
-          OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.win_x64_smoke_mode == 'full' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' && 'tools-serve' || '' }}
-          OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
-          OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
-          if ($LASTEXITCODE -ne 0) {
-            exit $LASTEXITCODE
-          }
       - name: Write win_x64 release report
         if: ${{ always() }}
         env:
@@ -1173,7 +1201,8 @@ jobs:
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
           RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
           RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
-          RELEASE_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
+          # See the mac lanes: packaged smoke moved out of this job.
+          RELEASE_SMOKE_MODE: skip
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           REPORT_TITLE: win_x64 prerelease build
@@ -1183,14 +1212,6 @@ jobs:
         if: ${{ always() }}
         shell: pwsh
         run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
-
-      - name: Upload windows e2e spec report
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: open-design-prerelease-win-e2e-report
-          path: ${{ runner.temp }}\release-report\win_x64
-          if-no-files-found: warn
       - name: Prune Windows tools-pack cache
         shell: pwsh
         continue-on-error: true
@@ -1257,9 +1278,14 @@ jobs:
           path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
           if-no-files-found: error
           retention-days: 1
+      # The Windows update fixture and the packaged Windows smoke both moved
+      # to release-prerelease-smoke.yml, which rebuilds the fixture there when
+      # `full` coverage is requested and installs the setup.exe re-downloaded
+      # from R2 — see build_mac.
   build_linux:
     name: Build prerelease linux x64
-    needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]
+    # Tests never gate delivery on this channel — see build_mac.
+    needs: metadata
     if: ${{ vars.ENABLE_STABLE_LINUX == 'true' }}
     runs-on: ubuntu-latest
     outputs:
@@ -1272,7 +1298,8 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-          fetch-depth: 0
+          # Shallow — see the metadata job's checkout for why.
+          fetch-depth: 1
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
         with:
@@ -1380,12 +1407,19 @@ jobs:
           retention-days: 1
   publish:
     name: Publish prerelease release
+    # No test suite appears in `needs` or `if`, and none may be added.
+    # prerelease is the internal channel: its job is to put a package in a
+    # colleague's hands so a human can test it, and machine CI is a second,
+    # parallel signal about the same commit — not a valve on the first one. A
+    # flaky suite used to mean nobody got a build that day, which is a worse
+    # outcome than shipping an internal package alongside a red test. The
+    # suites now live in release-prerelease-tests.yml and the packaged smoke in
+    # release-prerelease-smoke.yml; the progressive Feishu card is what carries
+    # their verdict to a human. Stable is unaffected: its promotion gate reads
+    # the prerelease metadata through tools/release/src/metadata/prepare-stable.ts
+    # and runs its own checks.
     needs:
       - metadata
-      - functional_e2e
-      - e2e_vitest
-      - daemon_unit_tests
-      - verify
       - build_mac
       - build_mac_intel
       - build_win
@@ -1395,12 +1429,8 @@ jobs:
         always() &&
         !cancelled() &&
         needs.metadata.result == 'success' &&
-        needs.functional_e2e.result == 'success' &&
-        needs.e2e_vitest.result == 'success' &&
-        needs.daemon_unit_tests.result == 'success' &&
-        needs.verify.result == 'success' &&
         needs.build_mac.result == 'success' &&
-        needs.build_mac_intel.result == 'success' &&
+        (needs.build_mac_intel.result == 'success' || needs.build_mac_intel.result == 'skipped') &&
         needs.build_win.result == 'success' &&
         (needs.build_linux.result == 'success' || needs.build_linux.result == 'skipped')
       }}
@@ -1419,13 +1449,11 @@ jobs:
       BRANCH_NAME: ${{ needs.metadata.outputs.branch }}
       ENABLE_LINUX: ${{ needs.build_linux.result == 'success' }}
       ENABLE_MAC: "true"
-      ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
       GITHUB_RELEASE_ENABLED: "false"
-      MAC_INTEL_SIGNED: "true"
       RELEASE_CHANNEL: prerelease
       RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
-      RELEASE_SIGNED: "true"
+      RELEASE_SIGNED: ${{ inputs.mac_sign_mode != 'no' && 'true' || 'false' }}
       RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
       REPORT_MODE: zip
       STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
@@ -1434,17 +1462,20 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-          fetch-depth: 0
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
+          # Shallow — see the metadata job's checkout for why.
+          fetch-depth: 1
+      # The artifact downloads below run on the runner's own Node, and the pnpm
+      # toolchain this job actually uses is set up further down, right before
+      # `pnpm install`. The Setup Node.js that used to sit here was a second,
+      # redundant copy of that one — it paid for its own post-job step and
+      # bought nothing.
       - name: Download mac prerelease publish manifest
         uses: actions/download-artifact@v8
         with:
           name: open-design-prerelease-mac-arm64-publish-manifest
           path: ${{ runner.temp }}/release-platform-manifests
       - name: Download mac intel prerelease publish manifest
+        if: ${{ needs.build_mac_intel.result == 'success' }}
         uses: actions/download-artifact@v8
         with:
           name: open-design-prerelease-mac-x64-publish-manifest
@@ -1496,7 +1527,7 @@ jobs:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
           ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
-          ENABLE_MAC_X64: "true"
+          ENABLE_MAC_X64: ${{ needs.build_mac_intel.result == 'success' }}
           ENABLE_WIN_X64: "true"
           LINUX_X64_RESULT: ${{ needs.build_linux.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
@@ -1512,7 +1543,7 @@ jobs:
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_SIGNED: "true"
+          RELEASE_SIGNED: ${{ inputs.mac_sign_mode != 'no' && 'true' || 'false' }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1534,7 +1565,7 @@ jobs:
         env:
           ENABLE_LINUX_X64: ${{ needs.build_linux.result == 'success' }}
           ENABLE_MAC_ARM64: "true"
-          ENABLE_MAC_X64: "true"
+          ENABLE_MAC_X64: ${{ needs.build_mac_intel.result == 'success' }}
           ENABLE_WIN_X64: "true"
           LINUX_X64_RESULT: ${{ needs.build_linux.result }}
           MAC_ARM64_RESULT: ${{ needs.build_mac.result }}
@@ -1560,6 +1591,49 @@ jobs:
       - name: Cleanup workflow artifacts
         if: ${{ success() }}
         run: bash .github/scripts/release/github/cleanup-artifacts.sh
+  dispatch_smoke:
+    name: Dispatch packaged smoke
+    # Packaged smoke needs a package, so unlike dispatch_validation this one
+    # waits for `publish` — but it only waits long enough to POST the dispatch.
+    # The smoke itself downloads the artifacts back out of R2 in
+    # release-prerelease-smoke.yml, which is both closer to what a user installs
+    # and completely off this workflow's concurrency group.
+    needs:
+      - metadata
+      - publish
+    if: ${{ inputs.enable_smoke && needs.publish.result == 'success' && needs.publish.outputs.version_metadata_url != '' }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PRIMARY_REF: ${{ needs.metadata.outputs.branch }}
+      FALLBACK_REF: ${{ github.event.repository.default_branch || 'main' }}
+    steps:
+      - name: Checkout dispatch helper
+        uses: actions/checkout@v6.0.2
+        with:
+          # Deliberately the ref this workflow was loaded from, NOT the built
+          # commit. The helper is infrastructure that ships with this file, so
+          # the two are always in step; pinning it to the built commit would
+          # break the moment a release branch carried an older .github tree.
+          fetch-depth: 1
+      - name: Dispatch packaged smoke
+        env:
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+          VERSION: ${{ needs.metadata.outputs.release_version }}
+          VERSION_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
+          WIN_X64_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
+          WIN_X64_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
+          WIN_X64_UPDATE_TARGET_VERSION: ${{ inputs.win_x64_update_target_version }}
+        run: |
+          bash .github/scripts/release/dispatch-validation.sh release-prerelease-smoke.yml \
+            -f "commit=$COMMIT" \
+            -f "version=$VERSION" \
+            -f "origin_run_id=$GITHUB_RUN_ID" \
+            -f "version_metadata_url=$VERSION_METADATA_URL" \
+            -f "win_x64_smoke_mode=$WIN_X64_SMOKE_MODE" \
+            -f "win_x64_update_metadata_url=$WIN_X64_UPDATE_METADATA_URL" \
+            -f "win_x64_update_target_version=$WIN_X64_UPDATE_TARGET_VERSION"
   cleanup_partial_release_assets:
     name: Cleanup unpublished prerelease asset artifacts
     needs:

@@ -1,0 +1,170 @@
+name: release-prerelease-card
+
+# The progressive Feishu card for one prerelease.
+#
+# The old card was a custom-bot webhook post at the very end of the pipeline:
+# one immutable message, delivered only once everything had finished, and blind
+# to whether the packages had actually shipped. This replaces it with a Feishu
+# *application* bot, which can PATCH a message it sent — so one card is created
+# when the first platform's package lands in R2 and is edited in place as the
+# rest of the platforms, the code tests, and the packaged smoke report in.
+#
+# Exactly one job writes that card, on purpose. A PATCH replaces the whole card,
+# so three build jobs updating "their own" row would each erase the other two.
+# This job therefore owns the message and learns the state by polling the jobs
+# API of the three runs involved (build/publish, tests, smoke).
+#
+# It is dispatched by release-prerelease.yml's `dispatch_validation` job at the
+# moment the build commit is resolved — before any package exists — and it holds
+# a concurrency group of its own, so its long watch cannot delay a build.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Prerelease version this card reports, e.g. 0.21.1-prerelease.3."
+        required: true
+        type: string
+      commit:
+        description: "Commit being built. Also the changelog's upper bound."
+        required: true
+        type: string
+      branch:
+        description: "Branch that was built."
+        required: false
+        type: string
+        default: ""
+      previous_commit:
+        description: "Commit of the previously published prerelease; the changelog's lower bound. Empty on a cold start, which the card reports as 首个 Prerelease 包."
+        required: false
+        type: string
+        default: ""
+      origin_run_id:
+        description: "Run id of the release-prerelease pipeline this card is watching."
+        required: true
+        type: string
+      expect_tests:
+        description: "Whether release-prerelease-tests.yml was dispatched for this build. When false the card renders no test rows instead of waiting for results that will never arrive."
+        required: false
+        type: boolean
+        default: true
+      expect_smoke:
+        description: "Whether release-prerelease-smoke.yml will be dispatched once the packages publish."
+        required: false
+        type: boolean
+        default: true
+
+run-name: prerelease card · ${{ inputs.version }} · origin-run ${{ inputs.origin_run_id }}
+
+permissions:
+  # Reads the job state of the build, test, and smoke runs. It writes nothing to
+  # the repository — the only side effect is a Feishu message.
+  actions: read
+  contents: read
+
+concurrency:
+  group: release-prerelease-card-${{ inputs.origin_run_id }}
+  cancel-in-progress: false
+
+jobs:
+  card:
+    name: Track prerelease on one Feishu card
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    # Long enough to outlive the slowest lane it watches (mac Intel build ~33
+    # min, P0 Functional E2E, then the packaged smoke after publish), with the
+    # watcher's own budget set below it so the card gets a final "timed out"
+    # update instead of being killed mid-poll.
+    timeout-minutes: 150
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          # Deliberately the ref this workflow was dispatched on, NOT the built
+          # commit: the watcher is infrastructure, and pinning it to the build's
+          # commit would run whatever notifier that branch happened to carry.
+          fetch-depth: 1
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Compute changelog since last prerelease
+        id: changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREV: ${{ inputs.previous_commit }}
+          CUR: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          file="$RUNNER_TEMP/changelog.txt"
+          : > "$file"
+          # Set the output before any early return, so every path below still
+          # hands the card a real (possibly empty) file: no baseline, or an
+          # unreachable commit, means an empty changelog, never a failed card.
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$PREV" ] || [ -z "$CUR" ]; then
+            echo "no comparable range (PREV='${PREV}' CUR='${CUR}'); changelog stays empty"
+            exit 0
+          fi
+
+          raw="$RUNNER_TEMP/changelog-compare.txt"
+          meta="$RUNNER_TEMP/changelog-compare-meta.txt"
+          : > "$raw"
+          : > "$meta"
+
+          # Reproduces `git log --no-merges --pretty=format:'%s (%h)' PREV..CUR`
+          # against the compare API, so the card needs no git history at all:
+          #   * `select((.parents | length) < 2)` is --no-merges.
+          #   * %s is the subject — the first paragraph folded onto one line —
+          #     so split on the blank line, then collapse any interior newline.
+          #   * %h abbreviated to 10 characters, which is what git's automatic
+          #     abbreviation resolves to on this repository's object count.
+          # `--paginate` walks the compare endpoint's Link headers; both the page
+          # order and the order within a page are oldest-first, so a single `tac`
+          # at the end restores git log's newest-first order (which matters: the
+          # card renders only the first 30 lines).
+          subject='(.commit.message | split("\n\n")[0] | gsub("[\r\n]+"; " ") | sub("^\\s+"; "") | sub("\\s+$"; ""))'
+          if ! gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${CUR}?per_page=100" \
+              --jq ".commits[] | select((.parents | length) < 2) | \"\\(${subject}) (\\(.sha[0:10]))\"" \
+              > "$raw"; then
+            echo "::warning::compare ${PREV}...${CUR} failed (commit unreachable, history rewritten, or API error); the card will carry no changelog"
+            exit 0
+          fi
+
+          tac "$raw" > "$file"
+
+          # The compare endpoint caps at 250 commits. Pagination still returns
+          # the newest page last, so the newest 30 lines the card renders are
+          # exact either way; only the "共 N 条" total would under-report.
+          if gh api "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${CUR}?per_page=1" \
+              --jq '.total_commits' > "$meta" 2>/dev/null; then
+            total="$(tr -d '[:space:]' < "$meta")"
+            collected="$(wc -l < "$raw" | tr -d ' ')"
+            echo "compare ${PREV}...${CUR}: total_commits=${total} non-merge lines collected=${collected}"
+            if printf '%s' "$total" | grep -Eq '^[0-9]+$' && [ "$total" -gt 250 ]; then
+              echo "::warning::compare returned ${total} commits, above the endpoint's 250 cap; the card lists the newest commits correctly but its total under-reports"
+            fi
+          fi
+
+      - name: Track the prerelease on one card
+        env:
+          BRANCH: ${{ inputs.branch }}
+          CARD_TIMEOUT_MS: "8400000"
+          CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
+          CHANNEL_LABEL: Prerelease
+          COMMIT: ${{ inputs.commit }}
+          EXPECT_SMOKE: ${{ inputs.expect_smoke }}
+          EXPECT_TESTS: ${{ inputs.expect_tests }}
+          FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
+          FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+          FEISHU_RELEASE_CHAT_ID: ${{ secrets.FEISHU_RELEASE_CHAT_ID }}
+          GH_TOKEN: ${{ github.token }}
+          ORIGIN_RUN_ID: ${{ inputs.origin_run_id }}
+          PREVIOUS_COMMIT: ${{ inputs.previous_commit }}
+          RELEASE_CHANNEL: prerelease
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          VERSION: ${{ inputs.version }}
+        run: node --experimental-strip-types tools/release/src/notifications/prerelease-progress-card.ts
