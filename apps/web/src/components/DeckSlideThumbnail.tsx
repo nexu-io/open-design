@@ -137,10 +137,30 @@ export const DeckSlideThumbnail = memo(function DeckSlideThumbnail({
         root.appendChild(styleEl);
       }
 
+      // The canvas stands in for the deck's `<html>`/`<body>`, so it must wear
+      // their attributes: a deck that activates one of its themes with
+      // `<body data-theme="holm">` has every theme token behind
+      // `body[data-theme="holm"]`, and the parser re-points that selector at
+      // `.od-thumb-canvas[data-theme="holm"]`. Without the attribute here the
+      // rewritten rule matches nothing and the slide renders unthemed.
       const canvas = document.createElement('div');
-      canvas.className = 'od-thumb-canvas';
+      for (const [name, value] of parsed.canvasAttributes) {
+        try {
+          canvas.setAttribute(name, value);
+        } catch {
+          // Ignore invalid attribute names carried over from the source.
+        }
+      }
+      canvas.classList.add('od-thumb-canvas');
+      // Any inline style the source body carried (theme overrides live there
+      // too) stays, but the thumbnail's own sizing is appended last so it wins.
+      const inheritedStyle = canvas.getAttribute('style') ?? '';
+      const inheritedPrefix =
+        inheritedStyle.trim() && !inheritedStyle.trim().endsWith(';')
+          ? `${inheritedStyle};`
+          : inheritedStyle;
       canvas.style.cssText =
-        `position:absolute;top:0;left:0;transform-origin:top left;overflow:hidden;` +
+        `${inheritedPrefix}position:absolute;top:0;left:0;transform-origin:top left;overflow:hidden;` +
         `width:${parsed.designWidth}px;height:${parsed.designHeight}px;`;
 
       let mountPoint: HTMLElement = canvas;
