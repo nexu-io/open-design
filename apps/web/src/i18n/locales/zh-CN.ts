@@ -897,7 +897,7 @@ export const zhCN: Dict = {
   "workspaceTabs.project": "项目",
   "workspaceTabs.pluginDetails": "插件详情",
   "workspaceTabs.marketplace": "插件市场",
-  "homeHero.title": "我们来设计点{word}",
+  "homeHero.title": "让我们创建{word}",
   "homeHero.titleWords": "原型,幻灯片,文档",
   "homeHero.subtitle": "好的作品，从这里开始",
   "homeHero.startWithTemplate": "从模板开始…",

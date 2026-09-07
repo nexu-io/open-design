@@ -138,7 +138,7 @@
 
      Georgia carries no CJK glyphs (1111 codepoints, zero Han), so the Chinese
      headline would fall straight through to the UI sans and look unchanged.
-     The two Song faces behind it are what actually make 我们来设计点什么？read
+     The two Song faces behind it are what actually make 让我们创建原型 read
      as a serif; drop them if the headline should stay sans in Chinese. */
   font-family: Georgia, "Songti SC", STSong, SimSun, serif;
   font-weight: 600;

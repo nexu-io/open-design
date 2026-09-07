@@ -4,8 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import styles from './RotatingTitleWord.module.css';
 
 /**
- * The headline's rotating noun: 「我们来设计点 __？」 cycles 文档 → 幻灯片 →
- * 原型 → 幻灯片 → 文档.
+ * The headline's rotating noun: 「让我们创建 __」 cycles 原型 → 幻灯片 → 文档.
  *
  * This is 21st.dev's `@satoriui/typewriter-loop`, ported rather than copied:
  * the original is a shadcn/Tailwind component (`@/components/ui`, `cn()` from
