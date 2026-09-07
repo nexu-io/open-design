@@ -31,7 +31,8 @@ export type DeckThumbnailFallbackReason =
   | 'no-slides'
   | 'no-styles'
   | 'viewport-media-query'
-  | 'external-stylesheet';
+  | 'external-stylesheet'
+  | 'unresolved-theme-variable';
 
 /** One reconstructed wrapper element between the shadow root and the slide. */
 export interface DeckThumbnailAncestor {
@@ -57,6 +58,11 @@ export interface ParsedDeckThumbnails {
   /** Wrapper chain from outermost→innermost (excludes `<html>`/`<body>` and the
    *  slide itself), e.g. `[.deck-shell, .deck-stage]` or `[deck-stage]`. */
   ancestors: DeckThumbnailAncestor[];
+  /** `<html>`+`<body>` attributes the thumbnail canvas must carry. The canvas
+   *  is the shadow-tree stand-in for the document root chain, so a deck that
+   *  selects its active theme with `body[data-theme="holm"]` only matches once
+   *  the canvas actually wears `data-theme="holm"` (see `rewriteRootSelectors`). */
+  canvasAttributes: Array<[string, string]>;
   designWidth: number;
   designHeight: number;
 }
@@ -98,6 +104,7 @@ function unrenderable(reason: DeckThumbnailFallbackReason): ParsedDeckThumbnails
     fontFaces: '',
     fontLinks: [],
     ancestors: [],
+    canvasAttributes: [],
     designWidth: DEFAULT_DESIGN_WIDTH,
     designHeight: DEFAULT_DESIGN_HEIGHT,
   };
@@ -183,6 +190,16 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
   const absolutized = baseHref ? absolutizeCssUrls(withViewport, baseHref) : withViewport;
   const { css: withoutFonts, fontFaces } = extractFontFaces(absolutized);
   const styleText = rewriteRootSelectors(withoutFonts);
+  const canvasAttributes = collectCanvasAttributes(doc);
+
+  // Last line of defence for the whole rewrite pipeline: if the canvas still
+  // cannot resolve the custom properties it paints itself with, this deck would
+  // render as an unthemed (typically white-on-white) miniature. Render it in the
+  // isolated iframe instead of shipping a thumbnail that does not look like the
+  // slide.
+  if (findUnresolvedThemeVariable(styleText, canvasAttributes)) {
+    return unrenderable('unresolved-theme-variable');
+  }
 
   const ancestors = collectAncestors(slideEls[0]!);
   const slides = slideEls
@@ -196,6 +213,7 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
     fontFaces,
     fontLinks,
     ancestors,
+    canvasAttributes,
     designWidth: designSize.width,
     designHeight: designSize.height,
   };
@@ -480,19 +498,489 @@ function extractStylesheetImports(css: string): StylesheetImportExtraction {
   return { css: chunks.join(''), fontLinks, unsafe };
 }
 
-// Rewrite `:root`/`html` to `:host`, so document-level variables inherit into
-// the reconstructed slide. Body rules belong on the design canvas itself: host
-// page styles intentionally own the shadow host's dark thumbnail frame and win
-// over ordinary `:host` declarations, which used to hide transparent slides on
-// that dark frame. Applying body paint/layout to `.od-thumb-canvas` preserves
-// the source deck's paper/background inside the frame. Compound selectors like
-// `body.dark` are left untouched.
+const CANVAS_CLASS = 'od-thumb-canvas';
+const CANVAS_SELECTOR = `.${CANVAS_CLASS}`;
+const HOST_SELECTOR = ':host';
+
+// The shadow thumbnail has no `<html>` and no `<body>`. `.od-thumb-canvas` is
+// their stand-in: it is the outermost element of the slide's shadow tree and it
+// wears the merged `<html>`+`<body>` attributes (see `collectCanvasAttributes`),
+// so root-scoped selectors can be re-pointed at it and still discriminate.
+//
+// Rewrite rules, per compound selector:
+//   - `body`, and any `body[attr]` / `body.class` / `body#id` → `.od-thumb-canvas…`
+//     keeping the qualifiers, so `body[data-theme="holm"]` matches the canvas
+//     when (and only when) the source body actually carried that theme. A deck
+//     that ships eight themes and activates one via the body attribute
+//     therefore keeps exactly the active one — the other seven rewrite to
+//     `.od-thumb-canvas[data-theme="helix"]` etc. and match nothing.
+//   - bare `:root` / `html` → `:host`. Document-level custom properties belong
+//     on the host so they inherit into the whole shadow tree, and host page
+//     styles intentionally own the shadow host's dark thumbnail frame.
+//   - `:root`/`html` carrying a STRUCTURAL qualifier (`html[data-theme]`,
+//     `:root.dark`) → `.od-thumb-canvas…`, because the qualifier lives on an
+//     element the shadow tree no longer has; the canvas is the element that
+//     inherited it. Pseudo-only qualifiers (`html:hover`, `:root::before`) stay
+//     on `:host`, where they still describe the same box.
+// Adjacent canvas-derived compounds then collapse (`html[data-theme="x"] body`
+// → `.od-thumb-canvas[data-theme="x"]`), since both halves now name one element.
 function rewriteRootSelectors(css: string): string {
-  return css.replace(
-    /(^|[{};,])(\s*)(:root|html|body)(\s*)(?=[,{])/g,
-    (_whole, prefix: string, whitespace: string, selector: string, trailing: string) =>
-      `${prefix}${whitespace}${selector.toLowerCase() === 'body' ? '.od-thumb-canvas' : ':host'}${trailing}`,
-  );
+  return mapRulePreludes(css, rewriteSelectorList);
+}
+
+// Walk top-level CSS structure and hand every RULE prelude (the selector list
+// before a `{`) to `rewrite`. At-rule preludes (`@media …`, `@supports …`) and
+// keyframe stops (`from`, `0%`) are selector-shaped but are not element
+// selectors, so they pass through untouched; the rules nested inside an
+// `@media` block still get rewritten because they carry their own prelude.
+// Comments are already stripped upstream by `stripCssComments`.
+function mapRulePreludes(css: string, rewrite: (prelude: string) => string): string {
+  let out = '';
+  let segmentStart = 0;
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  // Depths at which an `@keyframes` block was opened; its children are stops.
+  const keyframeDepths: number[] = [];
+
+  for (let i = 0; i < css.length; i += 1) {
+    const char = css[i]!;
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      continue;
+    }
+    if (char === '{') {
+      const prelude = css.slice(segmentStart, i);
+      const trimmed = prelude.trim();
+      const insideKeyframes = keyframeDepths.length > 0;
+      out += trimmed.startsWith('@') || insideKeyframes ? prelude : rewrite(prelude);
+      if (/^@(?:-[\w-]+-)?keyframes\b/i.test(trimmed)) keyframeDepths.push(depth);
+      out += '{';
+      depth += 1;
+      segmentStart = i + 1;
+    } else if (char === '}') {
+      out += css.slice(segmentStart, i + 1);
+      depth = Math.max(0, depth - 1);
+      if (keyframeDepths.at(-1) === depth) keyframeDepths.pop();
+      segmentStart = i + 1;
+    } else if (char === ';') {
+      out += css.slice(segmentStart, i + 1);
+      segmentStart = i + 1;
+    }
+  }
+  return out + css.slice(segmentStart);
+}
+
+function rewriteSelectorList(prelude: string): string {
+  return splitTopLevel(prelude, ',')
+    .map((piece) => {
+      const leading = /^\s*/.exec(piece)?.[0] ?? '';
+      const trailing = /\s*$/.exec(piece)?.[0] ?? '';
+      const core = piece.slice(leading.length, piece.length - trailing.length);
+      if (!core) return piece;
+      return `${leading}${rewriteSelector(core)}${trailing}`;
+    })
+    .join(',');
+}
+
+type CompoundKind = 'canvas' | 'host' | 'other';
+
+interface RewrittenCompound {
+  combinator: string;
+  kind: CompoundKind;
+  /** Everything after the stand-in selector, e.g. `[data-theme="holm"]`. */
+  qualifiers: string;
+  text: string;
+}
+
+const ROOT_KEYWORD_RE = /^(:root|html|body)(?![\w-])/i;
+// `[`, `.` and `#` are the qualifiers that live ON the element; a compound that
+// carries one cannot survive as `:host`, because the attribute/class/id moved
+// to the canvas with `collectCanvasAttributes`.
+const STRUCTURAL_QUALIFIER_RE = /[[.#]/;
+
+function rewriteSelector(selector: string): string {
+  const parts = splitCompounds(selector).map<RewrittenCompound>(({ combinator, compound }) => {
+    const keyword = ROOT_KEYWORD_RE.exec(compound);
+    if (!keyword) return { combinator, kind: 'other', qualifiers: '', text: compound };
+    const qualifiers = compound.slice(keyword[0].length);
+    const isBody = keyword[1]!.toLowerCase() === 'body';
+    if (isBody || STRUCTURAL_QUALIFIER_RE.test(qualifiers)) {
+      return { combinator, kind: 'canvas', qualifiers, text: `${CANVAS_SELECTOR}${qualifiers}` };
+    }
+    return { combinator, kind: 'host', qualifiers, text: `${HOST_SELECTOR}${qualifiers}` };
+  });
+
+  // `html[data-theme="x"] body` names one element twice now; keep one compound
+  // carrying both sets of qualifiers instead of emitting a selector
+  // (`.od-thumb-canvas[…] .od-thumb-canvas`) that can never match.
+  const collapsed: RewrittenCompound[] = [];
+  for (const part of parts) {
+    const previous = collapsed.at(-1);
+    const joinedByDescent = part.combinator === '' || part.combinator === '>';
+    if (previous && previous.kind === 'canvas' && part.kind === 'canvas' && joinedByDescent) {
+      const qualifiers = `${previous.qualifiers}${part.qualifiers}`;
+      collapsed[collapsed.length - 1] = {
+        combinator: previous.combinator,
+        kind: 'canvas',
+        qualifiers,
+        text: `${CANVAS_SELECTOR}${qualifiers}`,
+      };
+      continue;
+    }
+    collapsed.push(part);
+  }
+
+  return collapsed
+    .map((part, index) => {
+      if (index === 0) return part.text;
+      return part.combinator === '' ? ` ${part.text}` : ` ${part.combinator} ${part.text}`;
+    })
+    .join('');
+}
+
+/** Split on a top-level separator, ignoring ones inside `[]`, `()` or strings. */
+function splitTopLevel(text: string, separator: string): string[] {
+  const pieces: string[] = [];
+  let current = '';
+  let brackets = 0;
+  let parens = 0;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+  for (const char of text) {
+    if (quote) {
+      current += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === '[') brackets += 1;
+    else if (char === ']') brackets = Math.max(0, brackets - 1);
+    else if (char === '(') parens += 1;
+    else if (char === ')') parens = Math.max(0, parens - 1);
+    if (char === separator && brackets === 0 && parens === 0) {
+      pieces.push(current);
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  pieces.push(current);
+  return pieces;
+}
+
+interface SelectorCompound {
+  /** `''` for the descendant combinator (and for the first compound). */
+  combinator: string;
+  compound: string;
+}
+
+/** Split a complex selector into its compounds and the combinators between. */
+function splitCompounds(selector: string): SelectorCompound[] {
+  const parts: SelectorCompound[] = [];
+  let current = '';
+  let pending = '';
+  let brackets = 0;
+  let parens = 0;
+  let quote: '"' | "'" | null = null;
+  let escaped = false;
+
+  const flush = () => {
+    if (!current) return;
+    parts.push({ combinator: parts.length === 0 ? '' : pending, compound: current });
+    current = '';
+    pending = '';
+  };
+
+  for (const char of selector) {
+    if (quote) {
+      current += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === quote) quote = null;
+      continue;
+    }
+    if (char === '"' || char === "'") {
+      quote = char;
+      current += char;
+      continue;
+    }
+    if (char === '[') brackets += 1;
+    else if (char === ']') brackets = Math.max(0, brackets - 1);
+    else if (char === '(') parens += 1;
+    else if (char === ')') parens = Math.max(0, parens - 1);
+    if (brackets === 0 && parens === 0) {
+      if (/\s/.test(char)) {
+        flush();
+        // Descendant, unless an explicit combinator is already pending
+        // (`a > b` sees a space, then `>`, then a space).
+        continue;
+      }
+      if (char === '>' || char === '+' || char === '~') {
+        flush();
+        pending = char;
+        continue;
+      }
+    }
+    current += char;
+  }
+  flush();
+  return parts;
+}
+
+// The canvas is the only element that can carry what `<html>`/`<body>` carried,
+// so it inherits both elements' attributes (body wins a name collision, classes
+// are unioned). Attributes come from untrusted deck markup and are applied to a
+// live element in the app-origin shadow DOM, so they go through the same
+// DOMPurify profile as the reconstructed wrapper chain.
+function collectCanvasAttributes(doc: Document): Array<[string, string]> {
+  const merged = new Map<string, string>();
+  const classes: string[] = [];
+  for (const el of [doc.documentElement, doc.body]) {
+    if (!el) continue;
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.toLowerCase() === 'class') {
+        for (const token of attr.value.split(/\s+/)) {
+          if (token && !classes.includes(token)) classes.push(token);
+        }
+        continue;
+      }
+      merged.set(attr.name, attr.value);
+    }
+  }
+  if (classes.length > 0) merged.set('class', classes.join(' '));
+  if (merged.size === 0) return [];
+
+  const probe = doc.createElement('div');
+  for (const [name, value] of merged) {
+    try {
+      probe.setAttribute(name, value);
+    } catch {
+      // Ignore attribute names the source made up that the DOM rejects.
+    }
+  }
+  const clean = sanitizeThumbnailMarkup(probe.outerHTML);
+  if (!clean) return [];
+  return Array.from(clean.attributes).map((a) => [a.name, a.value] as [string, string]);
+}
+
+// Properties whose failure is visible as "this thumbnail does not look like the
+// slide at all": an unresolved `background`/`color` paints the canvas
+// transparent and the text in the inherited colour, which is how a deck ends up
+// rendering white-on-white.
+const CRITICAL_PAINT_PROPS = new Set(['background', 'background-color', 'color']);
+
+interface CanvasIdentity {
+  classes: Set<string>;
+  attributes: Map<string, string>;
+}
+
+function canvasIdentity(canvasAttributes: Array<[string, string]>): CanvasIdentity {
+  const attributes = new Map<string, string>();
+  const classes = new Set<string>([CANVAS_CLASS]);
+  for (const [name, value] of canvasAttributes) {
+    const lower = name.toLowerCase();
+    attributes.set(lower, value);
+    if (lower === 'class') {
+      for (const token of value.split(/\s+/)) if (token) classes.add(token);
+    }
+  }
+  attributes.set('class', [...classes].join(' '));
+  return { classes, attributes };
+}
+
+/**
+ * Detect the one failure the selector rewrite can still produce silently: the
+ * canvas paints itself with a custom property that no rule reaching the canvas
+ * defines, WHILE the deck does define that property somewhere the canvas cannot
+ * reach. That pairing is the signature of a root-scoped theme we failed to
+ * re-point — the deck has the colour, the thumbnail just cannot see it — and it
+ * renders as an unthemed miniature instead of the slide.
+ *
+ * The second half of the condition is what keeps this from being a door that is
+ * always shut. A deck that simply never defines `--shell` anywhere is not
+ * mis-rewritten; it renders identically in the iframe, so falling back would buy
+ * nothing. Only a variable that exists but is out of reach is evidence that the
+ * static clone lost the deck's theme.
+ *
+ * Returns the offending custom property, or null when nothing is out of reach.
+ */
+function findUnresolvedThemeVariable(
+  css: string,
+  canvasAttributes: Array<[string, string]>,
+): string | null {
+  const identity = canvasIdentity(canvasAttributes);
+  const definedOnCanvas = new Map<string, string>();
+  const definedOutOfReach = new Set<string>();
+  const paint = new Map<string, string>();
+
+  for (const block of iterateRuleBlocks(css)) {
+    const reachesCanvas = selectorListReachesCanvas(block.selector, identity);
+    for (const { property, value } of iterateDeclarations(block.body)) {
+      if (property.startsWith('--')) {
+        if (reachesCanvas) definedOnCanvas.set(property, value);
+        else definedOutOfReach.add(property);
+        continue;
+      }
+      if (reachesCanvas && CRITICAL_PAINT_PROPS.has(property)) paint.set(property, value);
+    }
+  }
+
+  for (const value of paint.values()) {
+    const missing = firstUnresolvedVar(value, definedOnCanvas, new Set());
+    if (missing && definedOutOfReach.has(missing)) return missing;
+  }
+  return null;
+}
+
+interface CssDeclaration {
+  property: string;
+  value: string;
+}
+
+function* iterateDeclarations(body: string): Generator<CssDeclaration> {
+  for (const raw of splitTopLevel(body, ';')) {
+    const colon = raw.indexOf(':');
+    if (colon < 0) continue;
+    const property = raw.slice(0, colon).trim().toLowerCase();
+    if (!property) continue;
+    yield { property, value: raw.slice(colon + 1).trim() };
+  }
+}
+
+/** `var(--x)` references with no fallback — the ones that can go unresolved. */
+const REQUIRED_VAR_RE = /var\(\s*(--[\w-]+)\s*([,)])/g;
+
+function firstUnresolvedVar(
+  value: string,
+  defined: Map<string, string>,
+  seen: Set<string>,
+): string | null {
+  for (const match of value.matchAll(REQUIRED_VAR_RE)) {
+    if (match[2] !== ')') continue;
+    const name = match[1]!;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const resolved = defined.get(name);
+    if (resolved === undefined) return name;
+    const nested = firstUnresolvedVar(resolved, defined, seen);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+// Does any selector in this list put its SUBJECT on (or above) the canvas, so
+// that its declarations reach the canvas box? Deliberately biased towards "yes"
+// for anything this parser cannot read confidently: a false "yes" only keeps the
+// existing behaviour, while a false "no" would push a healthy deck onto the
+// iframe fallback for no reason.
+function selectorListReachesCanvas(selectorList: string, identity: CanvasIdentity): boolean {
+  if (selectorList.trim().startsWith('@')) return false;
+  for (const selector of splitTopLevel(selectorList, ',')) {
+    const subject = splitCompounds(selector.trim()).at(-1);
+    if (subject && compoundReachesCanvas(subject.compound, identity)) return true;
+  }
+  return false;
+}
+
+function compoundReachesCanvas(compound: string, identity: CanvasIdentity): boolean {
+  // A pseudo-element is a generated box, not the canvas; custom properties set
+  // on it do not inherit to the canvas's children.
+  if (compound.includes('::')) return false;
+  // `:host` is the canvas's ancestor, so its inherited values reach the canvas.
+  if (/^:host\b/i.test(compound)) return true;
+
+  let rest = compound;
+  const type = /^(\*|[a-zA-Z][\w-]*)/.exec(rest);
+  if (type) {
+    const tag = type[1]!.toLowerCase();
+    // `body`/`html`/`deck-stage`/… name elements the shadow tree does not have
+    // at this position; only the canvas's own tag (or the universal selector)
+    // can be the canvas.
+    if (tag !== '*' && tag !== 'div') return false;
+    rest = rest.slice(type[0].length);
+  }
+
+  while (rest.length > 0) {
+    const char = rest[0]!;
+    if (char === '.') {
+      const match = /^\.([\w-]+)/.exec(rest);
+      if (!match) return true;
+      if (!identity.classes.has(match[1]!)) return false;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
+    if (char === '#') {
+      const match = /^#([\w-]+)/.exec(rest);
+      if (!match) return true;
+      if (identity.attributes.get('id') !== match[1]) return false;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
+    if (char === '[') {
+      const end = rest.indexOf(']');
+      if (end < 0) return true;
+      if (!attributeSelectorMatches(rest.slice(1, end), identity)) return false;
+      rest = rest.slice(end + 1);
+      continue;
+    }
+    if (char === ':') {
+      // Pseudo-classes (`:not(…)`, `:hover`, `:nth-child(…)`) describe state or
+      // structure this static parser does not model; skip rather than guess.
+      const match = /^:[\w-]+(\([^)]*\))?/.exec(rest);
+      if (!match) return true;
+      rest = rest.slice(match[0].length);
+      continue;
+    }
+    return true;
+  }
+  return true;
+}
+
+const ATTRIBUTE_SELECTOR_RE =
+  /^\s*([\w-]+)\s*(?:([~|^$*]?=)\s*(?:"([^"]*)"|'([^']*)'|([^\s\]]+))\s*([iIsS])?)?\s*$/;
+
+function attributeSelectorMatches(inner: string, identity: CanvasIdentity): boolean {
+  const match = ATTRIBUTE_SELECTOR_RE.exec(inner);
+  if (!match) return true;
+  const actual = identity.attributes.get(match[1]!.toLowerCase());
+  if (actual === undefined) return false;
+  const operator = match[2];
+  if (!operator) return true;
+  const insensitive = (match[6] ?? '').toLowerCase() === 'i';
+  const have = insensitive ? actual.toLowerCase() : actual;
+  const want = (() => {
+    const raw = match[3] ?? match[4] ?? match[5] ?? '';
+    return insensitive ? raw.toLowerCase() : raw;
+  })();
+  switch (operator) {
+    case '=':
+      return have === want;
+    case '~=':
+      return want !== '' && have.split(/\s+/).includes(want);
+    case '|=':
+      return have === want || have.startsWith(`${want}-`);
+    case '^=':
+      return want !== '' && have.startsWith(want);
+    case '$=':
+      return want !== '' && have.endsWith(want);
+    case '*=':
+      return want !== '' && have.includes(want);
+    default:
+      return true;
+  }
 }
 
 // Lift `@font-face` blocks out; they're ignored inside a shadow root and must be
