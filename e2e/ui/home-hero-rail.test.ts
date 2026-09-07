@@ -1403,7 +1403,9 @@ test('[P0] empty home composer submits the active prototype suggestion without e
 
 test('[P1] home session mode toggle switches Ask planning prompts away from design routing', async ({ page }) => {
   await routeProjectCreates(page);
+  await routeCreatedProjectConversationReads(page);
   await routeRunsAccepted(page);
+  const runRequests = trackRunRequests(page);
   await gotoEntryHome(page);
 
   const modeTrigger = page.getByTestId('composer-mode-trigger');
@@ -1424,10 +1426,16 @@ test('[P1] home session mode toggle switches Ask planning prompts away from desi
   const askBody = await askRequestPromise.then((request) => request.postDataJSON() as {
     conversationMode?: string;
     pluginId?: string | null;
+    appliedPluginSnapshotId?: string | null;
   });
 
   expect(askBody.conversationMode).toBe('chat');
-  expect(askBody.pluginId ?? null).toBeNull();
+  expect(askBody).not.toHaveProperty('pluginId');
+  expect(askBody).not.toHaveProperty('appliedPluginSnapshotId');
+  await runRequests.expectCount(1, {
+    message: 'the Ask project should auto-send exactly one first run',
+  });
+  expect(runRequests.bodies[0]).not.toHaveProperty('appliedPluginSnapshotId');
 
   await gotoEntryHome(page);
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1440,10 +1448,14 @@ test('[P1] home session mode toggle switches Ask planning prompts away from desi
   const designBody = await designRequestPromise.then((request) => request.postDataJSON() as {
     conversationMode?: string;
     pluginId?: string | null;
+    automaticStrategyTaskProfile?: string | null;
+    appliedPluginSnapshotId?: string | null;
   });
 
   expect(designBody.conversationMode).toBe('design');
-  expect(typeof designBody.pluginId).toBe('string');
+  expect(designBody.automaticStrategyTaskProfile).toBe('prototype');
+  expect(designBody).not.toHaveProperty('pluginId');
+  expect(designBody).not.toHaveProperty('appliedPluginSnapshotId');
 });
 
 test('[P0] home design-system picker carries explicit and cleared selections into project creation', async ({ page }) => {
@@ -1567,22 +1579,35 @@ test('[P2] home template picker offers no clear control and dismisses on Escape 
   await expect(page.getByTestId('home-hero-template-menu')).toHaveCount(0);
 });
 
-test('[P1] home suggestion entry remains retryable after create failures', async ({ page }) => {
+test('[P0] home project creation failure preserves the draft and remains retryable', async ({ page }) => {
   const projectCreateCount = await routeProjectCreates(page, { failFirstCreate: true });
+  await routeCreatedProjectConversationReads(page);
   await routeRunsAccepted(page);
   const runRequests = trackRunRequests(page);
   await gotoEntryHome(page);
 
-  await page.getByTestId('home-hero-submit').click();
+  const prompt = 'Create a launch page for a robotics studio.';
+  const input = page.getByTestId('home-hero-input');
+  const submit = page.getByTestId('home-hero-submit');
+  await input.fill(prompt);
+  await submit.click();
+
   await expect.poll(projectCreateCount).toBe(1);
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId('home-hero-submit')).toBeEnabled();
-  await expect(page.getByRole('alert').filter({ hasText: /Failed to start the run/i })).toBeVisible();
-  await runRequests.expectNone({ message: 'failed blank project create should not start a run' });
+  await expect(page.getByTestId('entry-view-home')).toHaveAttribute('data-active', 'true');
+  await expect(input).toHaveText(prompt);
+  await expect(submit).toBeEnabled();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Could not create project' }),
+  ).toBeVisible();
+  await runRequests.expectNone({ message: 'a rejected project create must not start a run' });
 
-  await page.getByTestId('home-hero-submit').click();
+  await submit.click();
   await expect.poll(projectCreateCount).toBe(2);
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
+  await runRequests.expectCount(1, {
+    message: 'the successful retry must start exactly one run',
+  });
 });
 
 test('[P2] zh-CN home smoke exposes the localized creation type, design system, working directory, and run entries', async ({ page }) => {
@@ -2119,6 +2144,30 @@ async function routeRunsAccepted(page: Page) {
   await routeSuccessfulRuns(page, {
     runId: 'home-run-smoke',
     eventBody: successfulRunEventBody(),
+  });
+}
+
+async function routeCreatedProjectConversationReads(page: Page) {
+  await page.route('**/api/projects/*/conversations', async (route) => {
+    const projectId = decodeURIComponent(
+      new URL(route.request().url()).pathname.split('/').at(-2) ?? '',
+    );
+    await route.fulfill({
+      json: {
+        conversations: [{
+          id: `conv-${projectId}`,
+          projectId,
+          title: null,
+          sessionMode: 'design',
+          messageCount: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }],
+      },
+    });
+  });
+  await page.route('**/api/projects/*/conversations/*/messages', async (route) => {
+    await route.fulfill({ json: { messages: [] } });
   });
 }
 

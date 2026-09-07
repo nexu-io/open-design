@@ -3131,8 +3131,20 @@ test('[P1] home design card deletion supports cancel and confirm flows', async (
   await expectWorkspaceReady(page);
 
   const { projectId } = getProjectContextFromUrl(page);
-  await page.goto('/projects');
+  const workspaceProjectTab = page.locator(
+    `[data-workspace-tab-id^="project:${projectId}:"]`,
+  );
+  await expect(workspaceProjectTab).toHaveCount(1);
+
+  // Keep the same workspace shell mounted so this test witnesses the deletion
+  // event clearing the already-open project tab, not a page reload rebuilding
+  // chrome from persisted state.
+  await page.evaluate(() => {
+    window.history.pushState({}, '', '/projects');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
   await expectDesignsView(page);
+  await expect(workspaceProjectTab).toHaveCount(1);
 
   const designCard = homeDesignCard(page, projectName);
   await expect(designCard).toBeVisible();
@@ -3147,6 +3159,7 @@ test('[P1] home design card deletion supports cancel and confirm flows', async (
   await confirmDialog.getByRole('button', { name: /^cancel$/i }).click();
   await expect(confirmDialog).toHaveCount(0);
   await expect(designCard).toBeVisible();
+  await expect(workspaceProjectTab).toHaveCount(1);
 
   // Confirm flow: same trigger, this time accept the confirm modal.
   await designCard.hover();
@@ -3157,6 +3170,7 @@ test('[P1] home design card deletion supports cancel and confirm flows', async (
   await expect(confirmDialog2).toContainText(projectName);
   await confirmDialog2.getByRole('button', { name: /^delete$/i }).click();
   await expect(homeDesignCard(page, projectName)).toHaveCount(0);
+  await expect(workspaceProjectTab).toHaveCount(0);
 
   const response = await page.request.get(`/api/projects/${projectId}`);
   expect(response.status()).toBe(404);
