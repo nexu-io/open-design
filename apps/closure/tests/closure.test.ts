@@ -5,9 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createStandaloneGenerationBinding,
   createStandaloneRuntimeLayoutCapabilityHandler,
-  createStandaloneShellCapabilityRouter,
-  createStandaloneShellUpdaterCapabilityHandler,
-  initialShellUpdaterSnapshot,
   type GenerationRecord,
 } from "@open-design/standalone";
 
@@ -60,23 +57,14 @@ describe("Closure generation runtime", () => {
     };
     const scope = { channel: "betahyx", namespace: "closure-runtime" } as const;
     const binding = createStandaloneGenerationBinding(generation, scope);
-    const updater = {
-      shellType: firstType,
-      readSnapshot: async () => initialShellUpdaterSnapshot(firstType),
-      waitForChange: async () => initialShellUpdaterSnapshot(firstType),
-      invoke: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot(firstType) }),
-      confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: initialShellUpdaterSnapshot(firstType) }),
-    };
     const request = {
       binding,
       attachment: { id: `${firstType}-fixture`, shell: { type: firstType, version: "0.1.0", buildHash: "d".repeat(64), digest: "e".repeat(64) } },
-      capabilities: createStandaloneShellCapabilityRouter([
-        createStandaloneShellUpdaterCapabilityHandler(updater),
-        createStandaloneRuntimeLayoutCapabilityHandler({
+      // A compatible product generation starts without any updater provider.
+      capabilities: createStandaloneRuntimeLayoutCapabilityHandler({
           scope,
           layout: { dataRoot: join(runtimeRoot, "data"), logsRoot: join(runtimeRoot, "logs"), resourceStoreRoot: join(runtimeRoot, "store"), runtimeRoot: join(runtimeRoot, "processes"), sidecarSupervisorPath: join(runtimeRoot, "supervisor.mjs") },
-        }),
-      ]),
+      }),
     };
     const handle = await standaloneGenerationHandoff(request);
     const otherType = firstType === "electron" ? "terminal" : "electron";

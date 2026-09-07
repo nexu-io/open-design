@@ -29,7 +29,6 @@ import {
 } from "@open-design/electron-contract/runtime-auth";
 import {
   createStandaloneGenerationBootloader,
-  createStandaloneShellUpdaterCapabilityClient,
   readStandaloneRuntimeLayoutCapability,
   type StandaloneGenerationResourceBinding,
   type StandaloneHandoffRequest,
@@ -154,15 +153,6 @@ async function startOpenDesignGeneration(request: StandaloneHandoffRequest): Pro
     requestId: "open-design-runtime-layout",
     scope: request.binding.scope,
   });
-  const shellUpdater = createStandaloneShellUpdaterCapabilityClient({
-    attachmentId: request.attachment.id,
-    bindingDigest: request.binding.digest,
-    capabilities: request.capabilities,
-    shellType: request.attachment.shell.type,
-  });
-  // Prove both the generation command line and the Shell-owned updater line
-  // before starting mutable product processes.
-  await shellUpdater.readSnapshot();
   await Promise.all([mkdir(layout.dataRoot, { recursive: true }), mkdir(layout.logsRoot, { recursive: true }), mkdir(layout.runtimeRoot, { recursive: true })]);
 
   let daemon: ManagedRuntime | null = null;
