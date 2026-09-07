@@ -4109,10 +4109,17 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
   white-space: nowrap;
 }
 /* 分界脚注(同一格):OPEND-2714 之后它住在线中间,而不是线下面自己占一行。
-   `inline-flex` + `gap` 是为了分支图标和字在同一条基线上并排。
-   这条规则**不依赖祖先**:陈列页和裸夹具都会单独渲染 `.fork-note`。 */
+   `flex` + `gap` 是为了分支图标和字在同一条基线上并排 —— 值照稿子写的 `flex`,
+   不改成 `inline-flex`:它是 `.fork-sep` 这个 flex 容器的项目,外层 display 会被
+   **块化**,两个写法在产线上算出来一模一样,那就没有理由和稿子分岔。
+   这条规则**不依赖祖先**:陈列页和裸夹具都会单独渲染 `.fork-note`。
+
+   ⚠️ 稿子还有一条 `padding-bottom: 2px`,**跟着两块式一起去掉了**(OPEND-2714)——
+   它是「脚注自己占线下面一行」时给那一行留的下边距。现在脚注是线里的一格,
+   而 `.fork-sep` 是 `align-items: center`:居中对齐算的是**边框盒**,底下多 2px
+   会把字整体顶高 1px,两侧发丝线还在正中,字却不在了。 */
 .fork-note {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   font-size: var(--font-size-12);
