@@ -144,8 +144,31 @@ describe('报错卡兜底文案(E2)', () => {
 });
 
 describe('第 4 档:联系支持提为主(E6)', () => {
-  it('封号这张卡上的〔联系支持〕是主按钮', () => {
+  /*
+   * ⚠️ OPEND-2772(T68)缩小了这一档的适用面,没有删掉它。
+   *
+   * 第 4 档的意思一直是「这张卡不能是死路」——上面三档都没答案时,把常驻次级的
+   * 〔联系支持〕提上来。产品 2026-09-07 推翻 §6.Z 的阶梯之后,**非 Cloud 的卡主位
+   * 归那颗〔切换到 OpenDesign Cloud 并重试〕**,那本身就是一条活路,所以这一档不再
+   * 需要在 BYOK 上提〔联系支持〕。
+   *
+   * 提为主的场景**仍然存在**,而且正是最该有的那个:已经跑在 Cloud 上的 run
+   * (它拿不到 Cloud CTA)。所以这一节改成两侧都钉,而不是把它删掉。
+   */
+  it('BYOK 封号:主位归 Cloud CTA,〔联系支持〕退回常驻次级', () => {
     renderChat(failedMessage({}, { failureDetail: 'account_suspended' }));
+    const support = screen.getByTestId('chat-error-contact-support');
+    expect(support.dataset.primary).toBeUndefined();
+    expect(
+      screen.getByTestId('chat-error-switch-to-cloud').dataset.runErrorAction,
+    ).toBe('primary');
+  });
+
+  it('已经在 Cloud 上的封号:没有 Cloud CTA,〔联系支持〕仍然提为主', () => {
+    renderChat(
+      failedMessage({ agentId: 'amr' }, { failureDetail: 'account_suspended' }),
+    );
+    expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
     const support = screen.getByTestId('chat-error-contact-support');
     expect(support.dataset.primary).toBe('true');
   });

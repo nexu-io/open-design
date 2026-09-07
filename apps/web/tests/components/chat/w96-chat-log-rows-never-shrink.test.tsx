@@ -78,10 +78,6 @@ vi.mock('../../../src/components/AssistantMessage', () => ({
 vi.mock('../../../src/components/ChatComposer', () => ({
   ChatComposer: forwardRef((_props, _ref) => <div data-testid="composer" />),
 }));
-vi.mock('../../../src/components/AmrGuidance', () => ({
-  AmrGuidance: () => <div data-testid="amr-guidance" />,
-}));
-
 afterEach(() => {
   cleanup();
   document.body.innerHTML = '';

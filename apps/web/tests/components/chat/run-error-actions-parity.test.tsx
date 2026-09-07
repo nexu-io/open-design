@@ -45,11 +45,24 @@ describe('失败卡三颗按钮同壳', () => {
     expect(src).not.toMatch(/className="chat-error-action chat-error-retry"/);
   });
 
-  it('重试要走报错卡动作组件的 primary,和旁边两颗同一出口', () => {
+  /*
+   * ⚠️ OPEND-2772(T68)之后重试**不再写死 primary**:主按钮位归那颗
+   * 〔切换到 OpenDesign Cloud 并重试〕,阶梯自己那一档(重试也在内)统一让位
+   * 到次级。让位是由**同一个** `errorActionVariant` 决定的,所以这条判据从
+   * 「它是不是 primary」改成「它的分量是不是跟旁边那几颗同源」—— 这才是这份
+   * 文件真正要守的东西(同一副壳、同一套 radius/padding)。
+   *
+   * 「一张卡只有一颗主按钮」由 `opend-2772-one-card-one-cta.test.tsx` 钉。
+   */
+  it('重试要走报错卡动作组件,分量跟旁边几颗同一个出口', () => {
     const src = readChatPane();
     const near = sliceAround(src, "promptTemplates.retry");
     expect(near).toMatch(/<RunErrorCardAction/);
-    expect(near).toMatch(/variant="primary"/);
+    expect(near).toMatch(/variant=\{errorActionVariant\}/);
+    // 没有 Cloud CTA 的那一档(已经跑在 Cloud 上)重试仍然是主按钮
+    expect(src).toMatch(
+      /errorActionVariant: 'primary' \| 'secondary' =\s*\n?\s*showCloudSwitchCta \? 'secondary' : 'primary';/,
+    );
   });
 
   it('旁边两颗同样走报错卡动作组件 —— 尺寸不再由调用方各写一份', () => {

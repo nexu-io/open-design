@@ -45,10 +45,6 @@ vi.mock('../../../src/components/ChatComposer', () => ({
   ChatComposer: forwardRef((_props, _ref) => <div data-testid="composer" />),
 }));
 
-vi.mock('../../../src/components/AmrGuidance', () => ({
-  AmrGuidance: () => <div data-testid="amr-guidance" />,
-}));
-
 vi.mock('../../../src/analytics/events', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/analytics/events')>();
   return {

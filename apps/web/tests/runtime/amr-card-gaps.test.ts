@@ -22,7 +22,7 @@
 // 升级套餐)必须**原样保留**。把分支删掉能让上面 8 条变绿,但会让这三条变红
 // —— 两组断言合起来才钉得住「不再吞,但也没拆坏」。
 //
-// 第三组是结构不变式:`switch-to-cloud` / `showSwitchCard` 的语义是「推荐
+// 第三组是结构不变式:`switch-to-cloud` / `cloudSwitchCta` 的语义是「推荐
 // Open Design 智能体(= AMR)」。阶梯注释里已经写了「a run that is ALREADY on
 // Cloud never trips rung 3」,但在 AMR 早退的年代那句话没有执行点。一旦让 AMR
 // 往下走,它就必须真的成立,否则我们会当着 AMR 用户的面劝他切到 AMR。
@@ -159,13 +159,13 @@ describe('AMR 分支不再吞掉后续映射', () => {
   it('非 AMR 的「需要登录」仍然是「去终端登录」那张,并且仍然推荐 AMR', () => {
     const ui = resolveRunFailureUi('AGENT_AUTH_REQUIRED', null, 'claude');
     expect(ui.messageKey).toBe('chat.runError.signInMessage.other');
-    expect(ui.showSwitchCard).toBe(true);
+    expect(ui.cloudSwitchCta).toBe(true);
   });
 
   it('非 AMR 的额度用完仍然是档 3(切到 Cloud)', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'hard_quota', 'claude');
     expect(ui.primaryAction).toBe('switch-to-cloud');
-    expect(ui.showSwitchCard).toBe(true);
+    expect(ui.cloudSwitchCta).toBe(true);
   });
 
   it('非 AMR 的工作区额度用完仍然是档 3', () => {
@@ -257,9 +257,9 @@ describe('不变式:已经在 Cloud 上的 run 不许再被劝去 Cloud', () => 
     for (const code of CODES) {
       for (const detail of DETAILS) {
         const ui = resolveRunFailureUi(code, detail, 'amr');
-        if (ui.showSwitchCard || ui.primaryAction === 'switch-to-cloud') {
+        if (ui.cloudSwitchCta || ui.primaryAction === 'switch-to-cloud') {
           offenders.push(
-            `${code} / ${detail ?? 'null'} → primary=${ui.primaryAction} switchCard=${ui.showSwitchCard}`,
+            `${code} / ${detail ?? 'null'} → primary=${ui.primaryAction} switchCard=${ui.cloudSwitchCta}`,
           );
         }
       }
@@ -270,12 +270,12 @@ describe('不变式:已经在 Cloud 上的 run 不许再被劝去 Cloud', () => 
   // 反向:这条不变式只对 AMR 生效。别的 agent 的推荐卡是产品要的,不许被顺手
   // 关掉 —— 否则「不变式」会变成一次静默的全局降级。
   it('别的 agent 该推荐时照旧推荐', () => {
-    expect(resolveRunFailureUi('RATE_LIMITED', null, 'claude').showSwitchCard).toBe(true);
-    expect(resolveRunFailureUi('UPSTREAM_UNAVAILABLE', null, 'claude').showSwitchCard).toBe(
+    expect(resolveRunFailureUi('RATE_LIMITED', null, 'claude').cloudSwitchCta).toBe(true);
+    expect(resolveRunFailureUi('UPSTREAM_UNAVAILABLE', null, 'claude').cloudSwitchCta).toBe(
       true,
     );
     expect(
-      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'hard_quota', 'claude').showSwitchCard,
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'hard_quota', 'claude').cloudSwitchCta,
     ).toBe(true);
   });
 });

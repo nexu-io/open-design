@@ -54,6 +54,7 @@ import { getResolvedDeviceId } from '../analytics/client';
 import {
   trackChatPanelClick,
   trackMessageQueueClick,
+  trackRunFailedToastGoAmrClick,
   trackRunFailedToastSurfaceView,
   trackRunRecoveryActionClick,
   trackRunRecoveryActionSurfaceView,
@@ -112,6 +113,7 @@ import { AssistantMessage, type QuestionFormSubmitHandler } from './AssistantMes
 import { chatSeam } from './chat/ChatRoot';
 import { PlanPill } from './chat/PlanPill';
 import { planPillState } from '../runtime/chat/plan-pill';
+import { assistantMessageNeverHadARun } from '../runtime/chat/host-authored-message';
 import { Reconnect } from './chat/Reconnect';
 import { UserStatusCard } from './chat/UserStatusCard';
 import type { ChatReconnectView } from '../runtime/chat/reconnect-state';
@@ -121,7 +123,6 @@ import {
   DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
   type NextStepActionsVariant,
 } from './NextStepActions';
-import { AmrGuidance } from './AmrGuidance';
 import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
@@ -2260,22 +2261,32 @@ export function ChatPane({
       : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
         ? 'warning'
         : 'danger';
-  // 阶梯第 4 档的唯一外显:常驻次级的〔联系支持〕升格成主按钮。
-  const contactSupportIsPrimary = runFailureUi?.primaryAction === 'contact-support';
   // The failed run whose error this top-level card represents. AssistantMessage
   // suppresses only THIS message's per-message error pill (to avoid the
   // duplicate); other failed turns — older history, or once a follow-up makes
   // this no longer the last assistant — keep their pill so the error survives.
   const errorCardOwnerId =
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
-  // AMR promotion card payload (only the non-AMR model/auth/quota case).
-  const amrSwitchPayload =
-    runFailureUi?.showSwitchCard
-    && failedRunErrorEvent?.code !== 'UPSTREAM_UNAVAILABLE'
-    && retryAssistant
-    && failedRunErrorEvent?.code
+  /**
+   * 主按钮位上那颗〔切换到 OpenDesign Cloud 并重试〕的埋点载荷(OPEND-2772)。
+   *
+   * 载荷原样保留 —— 它以前是喂给第二张卡 `AmrGuidance` 的 props,那张卡挂载时发
+   * `surface_view`、点击时发 `ui_click(go_amr)`。卡没了,**这两个事件没跟着没**:
+   * `surface_view` 交回给下面报错卡自己那个 effect(它本来就在发,只是当年为了
+   * 不和切换卡重复而在有切换卡时早退),`ui_click` 搬到这颗 CTA 的 onClick 上。
+   *
+   * 两处**放开**:
+   * ① 原来 `UPSTREAM_UNAVAILABLE` 在这里被单独否掉 —— 映射表里明写着它要出切换卡
+   *    (`amr-guidance.ts` 的 `UPSTREAM_UNAVAILABLE` 分支),这行否决没有任何注释
+   *    说明理由,查遍规格与决策表也找不到出处。产品 2026-09-07 要「铺到所有报错」,
+   *    这条无出处的例外一并撤掉。
+   * ② 原来还要求结构化 `code` 在场。落库早于结构化码的老行没有 code,它们同样是
+   *    BYOK 失败,同样该有出路;`error_code` 缺失时按埋点里既有的写法留空串。
+   */
+  const cloudSwitchTracking =
+    runFailureUi?.cloudSwitchCta && retryAssistant
       ? {
-          errorCode: failedRunErrorEvent.code,
+          errorCode: failedRunErrorEvent?.code ?? '',
           projectId: projectId ?? '',
           projectKind: projectKindForTracking,
           conversationId: activeConversationId,
@@ -2283,9 +2294,10 @@ export function ChatPane({
           runId: retryAssistant.runId ?? null,
         }
       : null;
-  // 阶梯第 3 / 4 档的卡自己画不出「能把这次失败推进下去」的按钮:第 3 档那颗
-  // 在下面那张切换卡上,第 4 档给的是〔联系支持〕(开对话,不是恢复)。判据抽成
-  // `hasSelfContainedRecovery`,免得这里跟着阶梯的档位一档档手写。
+  // 阶梯第 3 / 4 档的卡自己画不出「能把这次失败推进下去」的按钮:第 3 档的答案
+  // 是那颗 Cloud CTA(阶梯之外,所有非 Cloud 的卡都有),第 4 档给的是〔联系支持〕
+  // (开对话,不是恢复)。判据抽成 `hasSelfContainedRecovery`,免得这里跟着阶梯的
+  // 档位一档档手写。
   const runFailureHasAction = Boolean(
     retryAssistant &&
       onRetry &&
@@ -2293,12 +2305,34 @@ export function ChatPane({
       (hasSelfContainedRecovery(runFailureUi) || canResumeFailedRun),
   );
   // The generic local-CLI escape hatch is only used when the failure card has
-  // no direct recovery action. AMR guidance remains visible whenever the
-  // classifier asks for it, alongside a case-specific retry when applicable.
+  // no direct recovery action from the ladder. It survives OPEND-2772 as a
+  // secondary — the Cloud CTA points the other way, and taking away the only
+  // door back to a local runtime was never part of that decision.
   const showByokRecoveryCta =
     showByokRecoveryAction && Boolean(onSwitchToLocalCli) && !runFailureHasAction;
   const showErrorActions = showByokRecoveryCta || runFailureHasAction;
-  const showAmrGuidance = Boolean(amrSwitchPayload);
+  const showCloudSwitchCta = Boolean(cloudSwitchTracking);
+  /**
+   * 一张卡只有一颗主按钮。
+   *
+   * OPEND-2772 之后主位归那颗〔切换到 OpenDesign Cloud 并重试〕,所以阶梯算出来的
+   * 那一颗(换个模型 / 去设置 / 在终端登录 / 重试 / 续跑 …)**退到次级**。
+   * ⚠️ 是让位,不是删除:重试对上游 5xx、网络抖动这类失败仍然是真正的自救路径,
+   * 一刀切掉会伤到它们(三个候选摆在 `run-error-catalog.md` §6.ZB 末尾,等产品挑)。
+   */
+  const errorActionVariant: 'primary' | 'secondary' =
+    showCloudSwitchCta ? 'secondary' : 'primary';
+  /**
+   * 阶梯第 4 档的唯一外显:常驻次级的〔联系支持〕升格成主按钮。
+   *
+   * ⚠️ 只在**没有** Cloud CTA 时升格 —— 有它的时候主位已经有主了,一张卡上不许
+   * 并排两颗主按钮(交付稿第 78 / 79 格都只画了一颗)。判据读的是**真的画没画出来**
+   * 的那个旗标,不是 `runFailureUi.cloudSwitchCta`:第 4 档存在的理由就是「卡不能是
+   * 死路」,万一哪天有一条路让分类器说了要 CTA 而这颗按钮没渲染,那张卡会一颗主
+   * 按钮都不剩 —— 正是这一档要防的那件事。
+   */
+  const contactSupportIsPrimary =
+    runFailureUi?.primaryAction === 'contact-support' && !showCloudSwitchCta;
   /**
    * 报错卡上那两颗**常驻**次级(交付稿第 78 格的前两颗)。
    *
@@ -2336,7 +2370,7 @@ export function ChatPane({
     else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
       actions.push('manual_retry');
     }
-    if (showAmrGuidance && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
+    if (showCloudSwitchCta && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
     return actions;
   }, [
     canResumeFailedRun,
@@ -2344,7 +2378,7 @@ export function ChatPane({
     onSwitchToAmrAndRetry,
     retryAssistant,
     runFailureUi,
-    showAmrGuidance,
+    showCloudSwitchCta,
   ]);
   const recoveryAnalyticsProps = useCallback((
     assistantMessage: ChatMessage,
@@ -2400,11 +2434,14 @@ export function ChatPane({
   }, [analytics.track, recoveryAnalyticsProps]);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
-    // The hosted-AMR nudge owns this same surface_view when it renders below
-    // the error card. For all other failed-run guidance (AMR auth/balance,
-    // Antigravity auth/quota, upstream outage, generic retry), the chat error
-    // card itself is the visible run_failed_toast surface.
-    if (showAmrGuidance) return;
+    /*
+     * 报错卡就是 `run_failed_toast` 这个面。
+     *
+     * 这里原来有一句 `if (showAmrGuidance) return;` —— 因为当年切换卡在场时,
+     * **它**挂载后会发同一个事件,两边都发就重了。OPEND-2772 把那张卡删掉之后
+     * 这条早退就成了纯漏报:凡是出 Cloud CTA 的失败(现在是所有 BYOK 失败)
+     * 一条 surface_view 都不会有。事件属主收回给这张卡,props 一个字段没变。
+     */
 
     const key = [
       projectId ?? '',
@@ -2430,7 +2467,6 @@ export function ChatPane({
   }, [
     activeConversationId,
     analytics.track,
-    showAmrGuidance,
     displayError,
     failedRunErrorEvent?.code,
     projectId,
@@ -4198,7 +4234,7 @@ export function ChatPane({
                         {showByokRecoveryCta ? (
                           <RunErrorCardAction
                             type="button"
-                            variant="primary"
+                            variant={errorActionVariant}
                             onClick={onSwitchToLocalCli}
                           >
                             {t('avatar.useLocal')}
@@ -4250,7 +4286,7 @@ export function ChatPane({
                             ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 onClick={() => {
                                   onLaunchAntigravityOauth?.();
                                 }}
@@ -4260,7 +4296,7 @@ export function ChatPane({
                             ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 onClick={() => {
                                   onLaunchAntigravityOauth?.();
                                 }}
@@ -4278,7 +4314,7 @@ export function ChatPane({
                                */
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 data-testid="chat-error-switch-model"
                                 onClick={() => {
                                   trackRecoveryClick(retryAssistant, 'switch_model_retry');
@@ -4302,7 +4338,7 @@ export function ChatPane({
                                */
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 data-testid="chat-error-open-settings"
                                 onClick={() => {
                                   onOpenSettings?.('execution');
@@ -4313,7 +4349,7 @@ export function ChatPane({
                             ) : runFailureUi.primaryAction === 'recharge' ? (
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 onClick={() => {
                                   const attribution = recordAmrEntry(
                                     analytics.track,
@@ -4353,7 +4389,7 @@ export function ChatPane({
                             ) : runFailureUi.primaryAction === 'upgrade' ? (
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 onClick={() => {
                                   const attribution = recordAmrEntry(
                                     analytics.track,
@@ -4394,7 +4430,7 @@ export function ChatPane({
                               // re-sending Retry path, which would resume + repeat.
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 onClick={() =>
                                   {
                                     trackRecoveryClick(retryAssistant, 'resume_run');
@@ -4417,7 +4453,7 @@ export function ChatPane({
                                */
                               <RunErrorCardAction
                                 type="button"
-                                variant="primary"
+                                variant={errorActionVariant}
                                 data-testid="chat-error-retry"
                                 onClick={() => {
                                   trackRecoveryClick(retryAssistant, 'manual_retry');
@@ -4430,26 +4466,54 @@ export function ChatPane({
                             ) : null}
                           </RunErrorCardActionGroup>
                         ) : null}
+                        {/*
+                          * 主按钮位:〔切换到 OpenDesign Cloud 并重试〕(OPEND-2772)。
+                          *
+                          * 这一颗**不是新造的**。它原来长在报错卡下面那张独立的
+                          * `AmrGuidance` 上,于是同一次失败在屏幕上出两张卡 —— 工单
+                          * 截图圈的正是这个,产品原话「不能新旧一起出现吧??」。
+                          * 那张卡整块删掉,这颗 CTA 收进来,排在最右(稿子第 79 格:
+                          * 次要在左、主动作在最右)。
+                          *
+                          * **文案一个字没动**:仍是切换卡上那句 `chat.amrCard.switchCta`。
+                          * 动作也没重造:走 `onSwitchToAmrAndRetry` ——
+                          * `ProjectView.handleSwitchToAmrAndRetry` 先武装一次性自动重试,
+                          * 再**先切 mode 再切 agent**(顺序有坑:反过来 BYOK 用户会留在
+                          * 原 provider)。宿主没接的时候回落打开 Cloud 设置,和原来一样。
+                          */}
+                        {showCloudSwitchCta && cloudSwitchTracking ? (
+                          <RunErrorCardAction
+                            type="button"
+                            variant="primary"
+                            data-testid="chat-error-switch-to-cloud"
+                            onClick={() => {
+                              trackRunFailedToastGoAmrClick(analytics.track, {
+                                page_name: 'chat_panel',
+                                area: 'chat_panel',
+                                element: 'go_amr',
+                              });
+                              recordAmrEntry(
+                                analytics.track,
+                                'chat_error_switch_retry_card',
+                                new Date(),
+                                { metricsConsent: config?.telemetry?.metrics === true },
+                              );
+                              if (retryAssistant && onSwitchToAmrAndRetry) {
+                                trackRecoveryClick(retryAssistant, 'switch_runtime_retry', {
+                                  agentProviderId: 'amr',
+                                  modelId: config?.agentModels?.amr?.model?.trim() || 'default',
+                                });
+                                onSwitchToAmrAndRetry(retryAssistant);
+                              } else {
+                                onOpenAmrSettings?.();
+                              }
+                            }}
+                          >
+                            {t('chat.amrCard.switchCta')}
+                          </RunErrorCardAction>
+                        ) : null}
                       </>
                     )}
-                  />
-                ) : null}
-                {showAmrGuidance && amrSwitchPayload ? (
-                  <AmrGuidance
-                    {...amrSwitchPayload}
-                    sourceDetail="chat_error_switch_retry_card"
-                    metricsConsent={config?.telemetry?.metrics === true}
-                    onActivate={() => {
-                      if (retryAssistant && onSwitchToAmrAndRetry) {
-                        trackRecoveryClick(retryAssistant, 'switch_runtime_retry', {
-                          agentProviderId: 'amr',
-                          modelId: config?.agentModels?.amr?.model?.trim() || 'default',
-                        });
-                        onSwitchToAmrAndRetry(retryAssistant);
-                      } else {
-                        onOpenAmrSettings?.();
-                      }
-                    }}
                   />
                 ) : null}
                 {/*
@@ -6357,6 +6421,19 @@ export function isAssistantMessageStreaming(
   if (isTerminalRunStatus(message.runStatus)) return false;
   if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
+  /*
+   * 面板级的 `paneStreaming` 说的是「**有一次运行正在跑**」。下面那条兜底把它投影到
+   * 最后一条助手消息上,是为了 API / BYOK 模式的乐观占位 —— 那一档的真运行既没有
+   * runId 也没有 runStatus(`ProjectView` 建占位时 `runStatus` 只在 daemon 模式下给)。
+   *
+   * 但宿主自己补发的卡(记忆卡、品牌协助卡)同样没有这两样,而且它**从来不是一次
+   * 运行**。轮次结束之后才回报的记忆提取,常常正好落在用户已经发出下一轮的时候:
+   * 卡成了最后一条助手消息,面板又在流,于是它被当成了那条正在跑的消息 ——
+   * 屏幕上因此同时有两个「进行中」,而它没有 runId,那一个永远不会结束(OPEND-2745)。
+   *
+   * 判据与理由都在 `assistantMessageNeverHadARun`。
+   */
+  if (assistantMessageNeverHadARun(message)) return false;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;
   if (message.endedAt !== undefined) return false;

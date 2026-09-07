@@ -1351,51 +1351,6 @@
   border-radius: var(--radius-sm);
 }
 
-/* Hosted-agent recovery is another user decision, so it reuses the shared
-   action-card shell. Only supporting copy and benefits remain local here. */
-.amr-card__body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--text-muted);
-}
-.amr-card__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.amr-card__chip {
-  font-size: 12px;
-  line-height: 1.4;
-  padding: 3px 8px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
-}
-.amr-card__cta {
-  appearance: none;
-  cursor: pointer;
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: white;
-  font: inherit;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 7px 14px;
-  border-radius: var(--radius-sm);
-  max-width: 100%;
-  white-space: normal;
-  text-align: left;
-  line-height: 1.35;
-  transition:
-    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.amr-card__cta:hover {
-  background: var(--accent-hover, var(--accent));
-}
-
 /* -------- Composer -------------------------------------------------- */
 .pane {
   /* Queue / PlanPill are siblings of the composer, so this is the one source

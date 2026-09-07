@@ -8,6 +8,7 @@ import { upstreamActivityAt } from "../runtime/chat/upstream-activity";
 import type { RecordFileScope } from "../runtime/chat/record-file-open";
 import { FileOpsSummary } from "./FileOpsSummary";
 import { messageArtifactRefs } from "../runtime/chat/artifact-refs";
+import { assistantMessageNeverHadARun } from "../runtime/chat/host-authored-message";
 import {
   renderMarkdown,
   type MarkdownLinkClickHandler,
@@ -1317,6 +1318,28 @@ function AssistantMessageImpl({
         (!nextUserContent || !parseSubmittedAnswers(seg.form, nextUserContent)),
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
+  /**
+   * 这一行要不要报「这一轮怎么样了」。
+   *
+   * ⚠️ 先说反面:**跑完之后这一行是要报终态的**(稿子:绿勾 + 已完成)。原来只要壳里
+   * 有内容就把状态词整个藏掉,于是跑完也不出 —— 用户 2026-08-26 指认「这个状态你好像
+   * 也丢了」。运行中的去重已经由 `showCompletionRow` 整行不出来解决,不归这里管。
+   * 所以这里只列**具名的例外**,一条都不能凭「看起来重复」加进来。
+   *
+   * 三条例外:
+   *  ① 报错卡那一轮 —— 原因和下一步由报错卡说,这一行让位;
+   *  ② 问卷还悬着的那一轮 —— run 进程上确实终止了,但握手没完成;挂绿勾会把它变成
+   *     假成功,回放老式子标签表单时尤其明显;
+   *  ③ **宿主自己补发的卡从来没有过一轮**(记忆卡、品牌协助卡)。它是上一轮的附属
+   *     组件,给它挂「已完成」是在陈述一件没发生过的事,读起来就是又一轮 ——
+   *     工单 OPEND-2745 里那「两个进行中」正是同一条判据缺口的另一面。
+   *
+   * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
+   */
+  const hideRunStatus =
+    message.id === errorCardOwnerId
+    || hasPendingQuestionForm
+    || assistantMessageNeverHadARun(message);
   // "Next step" is a delivery affordance, not a generic terminal-state card.
   // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
   // only a successful turn that actually produced something may surface it.
@@ -1630,18 +1653,8 @@ function AssistantMessageImpl({
                   forceVisible: true,
                   isLast: !!isLast,
                   createdAt: message.createdAt,
-                  /*
-                   * 跑完之后这一行**要**报终态(稿子:绿勾 + 已完成)。
-                   * 原来只要壳里有内容就把状态词整个藏掉,于是跑完也不出 ——
-                   * 用户 2026-08-26 指认「这个状态你好像也丢了」。
-                   * 运行中的去重已经由 `showCompletionRow` 整行不出来解决。
-                   * 只在报错卡那一轮仍然让位:原因和下一步由报错卡说。
-                   */
-                  // A clarification run may be process-terminal while its
-                  // inline form is still waiting for an answer. Showing the
-                  // green Done label here turns that handshake into a false
-                  // success, especially when replaying legacy child-tag forms.
-                  hideRunStatus: message.id === errorCardOwnerId || hasPendingQuestionForm,
+                  // 判据与三条理由都在上面 `hideRunStatus` 的定义处。
+                  hideRunStatus,
                   onContinueRemaining: continueRemaining,
                 }}
               />
@@ -1658,7 +1671,7 @@ function AssistantMessageImpl({
                 forking={forking}
                 isLast={!!isLast}
                 createdAt={message.createdAt}
-                hideRunStatus={message.id === errorCardOwnerId || hasPendingQuestionForm}
+                hideRunStatus={hideRunStatus}
                 onContinueRemaining={continueRemaining}
               />
             )}

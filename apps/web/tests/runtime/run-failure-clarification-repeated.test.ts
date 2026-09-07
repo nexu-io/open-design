@@ -87,9 +87,10 @@ describe('智能体又问一次那一轮的报错卡', () => {
 
   it('仍然给〔重试〕—— 重试重开一个任务,提问那一次就合法了', () => {
     const ui = resolveRunFailureUi(CODE, null, 'mock-agent', null);
+    // 主按钮位归 Cloud CTA(OPEND-2772,非 Cloud 的卡一律有),但〔重试〕**没被删** ——
+    // 它退到次级,仍然是这一档自己的答案。
     expect(ui.primaryAction).toBe('retry');
-    // 不是模型/额度问题,别推 Cloud;别多长按钮。
-    expect(ui.showSwitchCard).toBe(false);
+    expect(ui.cloudSwitchCta).toBe(true);
     expect(ui.secondaryRetry).toBe(false);
     expect(ui.suppressCard).not.toBe(true);
   });

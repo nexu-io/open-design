@@ -85,8 +85,9 @@ describe('回复缺了机器结构那一轮的报错卡', () => {
 
     // 偶发漏写、重跑常常就对 —— 阶梯第 2 级,重试是对的。
     expect(ui.primaryAction).toBe('retry');
-    // 不是模型/额度问题,别推 Cloud;也别多长出第二颗按钮。
-    expect(ui.showSwitchCard).toBe(false);
+    // 主按钮位归 Cloud CTA(OPEND-2772,非 Cloud 的卡一律有);〔重试〕退到次级但仍在。
+    // ⚠️ 「别多长出第二颗**卡**」这条更严了:那张独立的切换卡已经整块删掉。
+    expect(ui.cloudSwitchCta).toBe(true);
     expect(ui.secondaryRetry).toBe(false);
     // 这张卡必须画出来,不能像断线那条一样让别的界面接管。
     expect(ui.suppressCard).not.toBe(true);

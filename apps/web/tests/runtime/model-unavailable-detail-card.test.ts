@@ -186,7 +186,7 @@ describe('模型不可用:daemon 已经命名的病因,不该在界面上退回�
       expect(ui.primaryAction, `detail=${detail}`).toBe('switch-model');
       expect(ui.secondaryRetry, `detail=${detail}`).toBe(false);
       // 跑在 AMR 上的 run 不该被推销 AMR(`withoutCloudSelfPromotion` 的不变式)。
-      expect(ui.showSwitchCard, `detail=${detail}`).toBe(false);
+      expect(ui.cloudSwitchCta, `detail=${detail}`).toBe(false);
     }
   });
 });

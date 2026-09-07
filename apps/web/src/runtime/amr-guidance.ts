@@ -1,6 +1,6 @@
 // Shared logic that maps a failed run's error code + agent into the failure
 // UI: which contextual button the gray error card shows, whether to override
-// the error text, and whether to show the AMR promotion card below. Kept in
+// the error text, and whether the card's primary is 〔switch to Cloud〕. Kept in
 // its own module so ChatPane / ProjectView / AssistantMessage can import it
 // without a circular dependency.
 import {
@@ -205,18 +205,6 @@ export function amrProfileBadgeLabel(profile: string | null | undefined): string
   if (profile === 'local') return 'LOCAL';
   return null;
 }
-
-// Codes that mean a non-AMR agent hit "the model service rejected or could not
-// serve the run" — auth missing/invalid, quota/rate exhausted, or the upstream
-// model endpoint was unavailable. These are the failures worth promoting AMR
-// for. Generic process failures (AGENT_EXECUTION_FAILED) and missing binaries
-// (AGENT_UNAVAILABLE) are excluded.
-const PROMOTE_AMR_CODES = new Set<string>([
-  'AGENT_AUTH_REQUIRED',
-  'UNAUTHORIZED',
-  'RATE_LIMITED',
-  'UPSTREAM_UNAVAILABLE',
-]);
 
 // Primary action offered in the gray error card.
 //   - retry:                       re-run with the current agent.
@@ -484,8 +472,20 @@ export interface RunFailureUi {
   // Show a secondary plain "retry" button alongside the primary action (used
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
-  // Show the AMR promotion card under the gray error card.
-  showSwitchCard: boolean;
+  /**
+   * 报错卡主按钮位上那颗〔切换到 OpenDesign Cloud 并重试〕。
+   *
+   * 这个字段以前叫 `showSwitchCard`,说的是「在报错卡**下面**另起一张推荐卡」。
+   * OPEND-2772:产品看到上下两张卡同时出现,原话「**不能新旧一起出现吧??**」——
+   * 第二张卡整块删掉,它的 CTA 收进报错卡的主按钮位。所以这里说的不再是「多一张
+   * 卡」,而是「这张卡的主按钮是不是它」。
+   *
+   * 取值由**出口不变式**统一决定,不再由每一条映射自己挑(产品 2026-09-07
+   * 「主 cta 都是切换至 cloud」+「8-26 推翻掉吧」,见 `run-error-catalog.md` §6.ZB):
+   * 非 Cloud 的 run 一律为 true,已经在 Cloud 上的 run 一律为 false
+   * (`withoutCloudSelfPromotion`)。映射自己写的值会被出口覆盖。
+   */
+  cloudSwitchCta: boolean;
   /**
    * Draw no error card at all — some other surface already owns this story.
    *
@@ -775,12 +775,18 @@ export function daemonFailureVerdictFrom(
 }
 
 /**
- * Does THIS card draw a control that can push the failed run forward?
+ * Does the LADDER hand this card a control that can push the failed run forward?
  *
- * Rung 3 and rung 4 both answer no: rung 3's button lives on the switch card
- * rendered underneath, and "contact support" opens a conversation, not a
- * recovery. Callers use it to decide whether to offer the generic local-CLI
- * escape hatch alongside.
+ * Rung 3 and rung 4 both answer no: rung 3's answer is the hosted alternative
+ * and rung 4's 〔contact support〕 opens a conversation, not a recovery.
+ * Callers use it to decide whether to offer the generic local-CLI escape hatch
+ * alongside.
+ *
+ * ⚠️ Reads the ladder ONLY. Since OPEND-2772 a BYOK / local-CLI card also
+ * carries 〔switch to OpenDesign Cloud〕 in its primary slot (`cloudSwitchCta`),
+ * which IS a control that pushes the run forward — but that one is universal,
+ * so folding it in here would make this predicate constantly true for every
+ * non-Cloud run and destroy the distinction its callers are asking about.
  */
 export function hasSelfContainedRecovery(ui: RunFailureUi | null | undefined): boolean {
   if (!ui) return false;
@@ -799,7 +805,7 @@ function failureCard(
   extra: Partial<
     Pick<
       RunFailureUi,
-      'secondaryRetry' | 'showSwitchCard' | 'messageVars' | 'messageCauseKey'
+      'secondaryRetry' | 'cloudSwitchCta' | 'messageVars' | 'messageCauseKey'
     >
   > = {},
 ): RunFailureUi {
@@ -808,10 +814,10 @@ function failureCard(
     titleKey,
     messageKey,
     secondaryRetry: extra.secondaryRetry ?? false,
-    // Rung 3 says the way out is the hosted alternative, so the switch card is
-    // that rung's button and is always on. Any other rung may still promote AMR
-    // for its own reasons, but has to ask for it.
-    showSwitchCard: extra.showSwitchCard ?? Boolean(nature.localDeadEnd),
+    // 映射自己写的值只对**已经在 Cloud 上**的 run 有意义(那一侧由
+    // `withoutCloudSelfPromotion` 往回摘)。非 Cloud 的 run 一律由出口不变式
+    // `withCloudSwitchCta` 置 true —— 见 `RunFailureUi.cloudSwitchCta`。
+    cloudSwitchCta: extra.cloudSwitchCta ?? Boolean(nature.localDeadEnd),
     ...(extra.messageVars ? { messageVars: extra.messageVars } : {}),
     ...(extra.messageCauseKey ? { messageCauseKey: extra.messageCauseKey } : {}),
   };
@@ -888,10 +894,10 @@ function clientEnvironmentCard(causeKey: RunFailureCauseKey): RunFailureUi {
  * quota/entitlement failures that reach rung 3 in the first place.
  */
 function withoutCloudSelfPromotion(ui: RunFailureUi): RunFailureUi {
-  if (!ui.showSwitchCard && ui.primaryAction !== 'switch-to-cloud') return ui;
+  if (!ui.cloudSwitchCta && ui.primaryAction !== 'switch-to-cloud') return ui;
   return {
     ...ui,
-    showSwitchCard: false,
+    cloudSwitchCta: false,
     primaryAction:
       ui.primaryAction === 'switch-to-cloud' ? 'contact-support' : ui.primaryAction,
   };
@@ -899,6 +905,36 @@ function withoutCloudSelfPromotion(ui: RunFailureUi): RunFailureUi {
 
 /** The hosted agent — the one every rung-3 mapping points at. */
 const CLOUD_NATIVE_AGENT_ID = 'amr';
+
+/**
+ * 这一轮跑在**不是** Cloud 的智能体上 —— 也就是 BYOK / 本地 CLI。
+ *
+ * 抽成具名判据而不是散写 `agentId !== 'amr'`:它是 OPEND-2772 那条不变式的
+ * **唯一**判据,`withoutCloudSelfPromotion`(往回摘)和 `withCloudSwitchCta`
+ * (往上铺)是同一条线的两侧,分开写迟早会各漂各的。
+ */
+function runsOnALocalAgent(agentId: string | null | undefined): boolean {
+  return agentId !== CLOUD_NATIVE_AGENT_ID;
+}
+
+/**
+ * OPEND-2772 · 把〔切换到 OpenDesign Cloud 并重试〕铺到**每一张** BYOK /
+ * 本地 CLI 的报错卡上。
+ *
+ * 产品 2026-09-07 逐字:「2772 的『统一』是『铺到所有报错』,主 cta 都是切换至
+ * cloud」,并且明确「**8-26 推翻掉吧**」—— 被推翻的是 `run-error-catalog.md`
+ * §6.Z 那条「不是一律劝切 Cloud、第 1 档永远优先」。在那条规则下,只有 6 类失败
+ * 拿得到这颗按钮(登录类 2、限速、上游过载、hard_quota、workspace_credits),
+ * 而**不出**的约三十类里包括进程崩了(S19,每月 20,868 次,第二大桶)和没装
+ * CLI(S01)。
+ *
+ * 这里只动**主按钮位**。每一类失败自己的标题 / 正文一个字都没改,阶梯算出来的
+ * 那颗动作(换个模型 / 去设置 / 在终端登录 / 重试 …)也一颗都没删 —— 它们让出
+ * 主位,退到次级(见 `ChatPane` 的 `errorActionVariant`)。
+ */
+function withCloudSwitchCta(ui: RunFailureUi): RunFailureUi {
+  return ui.cloudSwitchCta ? ui : { ...ui, cloudSwitchCta: true };
+}
 
 /**
  * Nothing on this card can move the run forward and retrying is futile
@@ -1396,13 +1432,17 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
 //   - AMR agent, anything else      → keeps walking the table below
 //   - fine-grained failure_detail (hard quota, workspace credits, text-detected
 //     cli-missing) → named type + fix, overriding a too-coarse code
-//   - non-AMR agent, model/auth/quota error → plain retry + promotion card
+//   - non-AMR agent, model/auth/quota error → plain retry + named copy
 //   - any agent, generic failure            → plain retry
 //
 // AMR is the DEFAULT hosted agent, so anything its branch fails to hand on is a
 // gap on the most-used path. The branch therefore names only what is genuinely
 // AMR-specific and then falls through; `withoutCloudSelfPromotion` at the exit
 // keeps that safe by making rung 3 unreachable for a run already on Cloud.
+//
+// The exit has TWO sides and they are the same line read from either end
+// (OPEND-2772): a run on Cloud gets the Cloud CTA stripped, a run on anything
+// else gets it added — every failure, not a hand-picked list.
 export function resolveRunFailureUi(
   code: string | null | undefined,
   detail: string | null | undefined,
@@ -1417,7 +1457,9 @@ export function resolveRunFailureUi(
     rawMessage,
     verdict,
   );
-  return agentId === CLOUD_NATIVE_AGENT_ID ? withoutCloudSelfPromotion(ui) : ui;
+  return runsOnALocalAgent(agentId)
+    ? withCloudSwitchCta(ui)
+    : withoutCloudSelfPromotion(ui);
 }
 
 function resolveRunFailureUiIgnoringSelfPromotion(
@@ -1445,7 +1487,7 @@ function resolveRunFailureUiIgnoringSelfPromotion(
       titleKey: 'chat.runError.title.cliSessionRefused',
       messageKey: 'chat.runError.cliSessionRefusedMessage',
       secondaryRetry: false,
-      showSwitchCard: false,
+      cloudSwitchCta: false,
     };
   }
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
@@ -1488,7 +1530,7 @@ function resolveRunFailureUiIgnoringSelfPromotion(
         : 'chat.runError.membershipConcurrencyLimitMessageNoTime',
       ...(retryAt ? { messageVars: { retryAt } } : {}),
       secondaryRetry: false,
-      showSwitchCard: false,
+      cloudSwitchCta: false,
     };
   }
   // Engine-neutral failure_detail (timeout, empty output, stale resumed session,
@@ -1574,7 +1616,7 @@ function resolveRunFailureUiIgnoringSelfPromotion(
     // No catch-all. Everything past this point — S11 connection dropped, S09
     // rate limit, S10 upstream unavailable, S08 provider quota, S01 missing CLI
     // — is agent-neutral and was dead code for AMR while this branch ended in a
-    // generic card. The exit-point invariant strips the AMR promotion those
+    // generic card. The exit-point invariant strips the Cloud CTA those
     // shared mappings carry for BYOK agents.
   }
   // Antigravity's auth flow is terminal-only — see the
@@ -1631,7 +1673,7 @@ function resolveRunFailureUiIgnoringSelfPromotion(
       { transient: true },
       'chat.runError.title.signInRequired.other',
       'chat.runError.signInMessage.other',
-      { showSwitchCard: true },
+      { cloudSwitchCta: true },
     );
   }
   // Non-antigravity rate limit / upstream outage: name the type and explain the
@@ -1643,7 +1685,7 @@ function resolveRunFailureUiIgnoringSelfPromotion(
       { transient: true },
       'chat.runError.title.rateLimited',
       'chat.runError.rateLimitedMessage',
-      { showSwitchCard: true },
+      { cloudSwitchCta: true },
     );
   }
   if (code === 'UPSTREAM_UNAVAILABLE') {
@@ -1651,10 +1693,9 @@ function resolveRunFailureUiIgnoringSelfPromotion(
       { transient: true },
       'chat.runError.title.upstreamUnavailable',
       'chat.runError.upstreamUnavailableMessage',
-      { showSwitchCard: true },
+      { cloudSwitchCta: true },
     );
   }
-  const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
   // Nothing above claimed this failure — but two very different situations end
   // up here, and until now they shared one answer.
   //
@@ -1675,13 +1716,9 @@ function resolveRunFailureUiIgnoringSelfPromotion(
   // Reading the verdict without this guard would therefore strip the Retry from
   // exactly the case that is supposed to keep it.
   if (daemonNamedTheFailure(detail) && daemonSaysRetryIsFutile(verdict)) {
-    return failureCard({}, 'chat.runError.title.generic', null, {
-      showSwitchCard: promote,
-    });
+    return failureCard({}, 'chat.runError.title.generic', null);
   }
   // Copy comes from RUN_FAILURE_FALLBACK_MESSAGE_KEY at render time, not from
   // the upstream string, which stays in the collapsible diagnostic area.
-  return failureCard({ transient: true }, 'chat.runError.title.generic', null, {
-    showSwitchCard: promote,
-  });
+  return failureCard({ transient: true }, 'chat.runError.title.generic', null);
 }
