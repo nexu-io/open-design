@@ -55,12 +55,16 @@ export function useProjectRunSummaries(
       return undefined;
     }
     let cancelled = false;
+    let nextRefreshGeneration = 0;
+    let lastAppliedRefreshGeneration = 0;
 
     const refresh = async () => {
+      const refreshGeneration = ++nextRefreshGeneration;
       const results = await Promise.all(
         ids.map((id) => listRunsForProject(id, workspaceContextRef.current)),
       );
-      if (cancelled) return;
+      if (cancelled || refreshGeneration < lastAppliedRefreshGeneration) return;
+      lastAppliedRefreshGeneration = refreshGeneration;
       // An unreadable project yields null; skipping it leaves that row blank
       // rather than asserting a status nobody verified.
       const runs = results.flatMap((result) => result?.runs ?? []);
