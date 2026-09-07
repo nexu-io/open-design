@@ -557,7 +557,11 @@ import {
 } from './run-lifecycle-tracer.js';
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
-import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
+import {
+  classifyLiveErrorEvent,
+  classifyRunFailure,
+  isResumableFailure,
+} from './run-failure-classification.js';
 import { validateRunDeliverable } from './run-deliverable-validation.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
@@ -1949,7 +1953,6 @@ function filesystemEmptyAnswerFallbackText(fileNames) {
 export function __forTestFilesystemEmptyAnswerFallbackText(fileNames) {
   return filesystemEmptyAnswerFallbackText(fileNames);
 }
-
 
 export function shouldReportRunCompletedFromMessage(saved, body = {}) {
   return Boolean(
@@ -11859,6 +11862,28 @@ export async function startServer({
         if ((run.plainArtifactStdout?.length ?? 0) < PLAIN_ARTIFACT_STDOUT_CAP) {
           run.plainArtifactStdout =
             ((run.plainArtifactStdout ?? '') + data.chunk).slice(0, PLAIN_ARTIFACT_STDOUT_CAP);
+        }
+      }
+      // Stamp the canonical failure classification (#3408 §5) onto every error
+      // event at this single choke point, so both the live SSE payload and the
+      // persisted status:error event carry the daemon-decided `user_action` the
+      // web error card uses to pick its CTA. Reuse the same `classifyRunFailure`
+      // the run finalizer/analytics use, so the two layers can't drift.
+      if (
+        event === 'error' &&
+        data &&
+        typeof data.error === 'object' &&
+        data.error &&
+        data.error.user_action === undefined
+      ) {
+        const failure = classifyLiveErrorEvent({
+          errorData: data,
+          agentId: run.agentId,
+          events: run.events,
+        });
+        if (failure) {
+          data.error.failure_category = failure.failure_category;
+          data.error.user_action = failure.user_action;
         }
       }
       persistRunEventToAssistantMessage(db, run, event, data);

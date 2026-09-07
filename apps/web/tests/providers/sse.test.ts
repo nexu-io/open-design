@@ -2481,6 +2481,113 @@ describe('streamViaDaemon', () => {
     expect(statusLabels).not.toContain('waiting_for_first_output');
     expect(statusLabels).not.toContain('tool_call_update');
   });
+
+  it('overwrites preliminary error frame user_action with finalize-time failureAction from end event', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-refine-action' });
+      if (url === '/api/runs/run-refine-action/events') {
+        return sseResponse(
+          'event: error\ndata: {"error":{"code":"RATE_LIMITED","user_action":"retry"}}\n\n' +
+          'event: end\ndata: {"code":1,"status":"failed","failureCategory":"model_unavailable","failureDetail":"model_not_found","failureAction":"switch_model"}\n\n',
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      handlers,
+      history: [{ id: '1', role: 'user', content: 'Design button' }],
+      signal: new AbortController().signal,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const [surfacedError] = handlers.onError.mock.calls[0] as unknown as [
+      Error & { failureCategory?: string; failureDetail?: string; userAction?: string; user_action?: string },
+    ];
+    expect(surfacedError.failureCategory).toBe('model_unavailable');
+    expect(surfacedError.failureDetail).toBe('model_not_found');
+    expect(surfacedError.userAction).toBe('switch_model');
+    expect(surfacedError.user_action).toBe('switch_model');
+  });
+
+  it('carries finalize-time failureAction onto terminal error without preliminary error frame', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-no-err-frame' });
+      if (url === '/api/runs/run-no-err-frame/events') {
+        return sseResponse(
+          'event: end\ndata: {"code":1,"status":"failed","failureCategory":"prompt_too_large","failureDetail":"prompt_too_large","failureAction":"reduce_context"}\n\n',
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      handlers,
+      history: [{ id: '1', role: 'user', content: 'Design large page' }],
+      signal: new AbortController().signal,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const [surfacedError] = handlers.onError.mock.calls[0] as unknown as [
+      Error & { failureCategory?: string; failureDetail?: string; userAction?: string; user_action?: string },
+    ];
+    expect(surfacedError.failureCategory).toBe('prompt_too_large');
+    expect(surfacedError.failureDetail).toBe('prompt_too_large');
+    expect(surfacedError.userAction).toBe('reduce_context');
+    expect(surfacedError.user_action).toBe('reduce_context');
+  });
+
+  it('carries finalize-time failureAction from terminal REST status after closed SSE attempts', async () => {
+    const handlers = createDaemonHandlers();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-rest-fallback' });
+      if (url === '/api/runs/run-rest-fallback/events') {
+        // Closed/empty SSE stream without an end frame
+        return sseResponse('');
+      }
+      if (url === '/api/runs/run-rest-fallback') {
+        return new Response(
+          JSON.stringify({
+            id: 'run-rest-fallback',
+            status: 'failed',
+            exitCode: 1,
+            failureCategory: 'model_unavailable',
+            failureDetail: 'model_not_found',
+            failureAction: 'switch_model',
+            createdAt: 1,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamViaDaemon({
+      agentId: 'claude',
+      handlers,
+      history: [{ id: '1', role: 'user', content: 'Design button' }],
+      signal: new AbortController().signal,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+    const [surfacedError] = handlers.onError.mock.calls[0] as unknown as [
+      Error & { failureCategory?: string; failureDetail?: string; userAction?: string; user_action?: string },
+    ];
+    expect(surfacedError.failureCategory).toBe('model_unavailable');
+    expect(surfacedError.failureDetail).toBe('model_not_found');
+    expect(surfacedError.userAction).toBe('switch_model');
+    expect(surfacedError.user_action).toBe('switch_model');
+  });
 });
 
 describe('streamMessageOpenAI', () => {

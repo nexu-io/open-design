@@ -120,7 +120,7 @@ export async function streamProxyEndpoint(
         }
 
         if (parsed.event === 'error') {
-          handlers.onError(new Error(proxyErrorMessage(parsed.data)));
+          handlers.onError(proxyError(parsed.data));
           return;
         }
 
@@ -300,4 +300,31 @@ function proxyErrorMessage(data: Record<string, unknown>): string {
     if (typeof message === 'string' && message) return message;
   }
   return String(data.message ?? 'proxy error');
+}
+
+// Build the Error for a BYOK proxy `error` SSE frame, forwarding the daemon's
+// `code` and canonical failure classification (#3408 §5) — which the daemon
+// now stamps onto the proxy error (failure_category / user_action) — onto the
+// Error object. The chat layer (ProjectView/useConversationChat onError) reads
+// `code` / `userAction` / `failureCategory` off the Error to drive the error
+// card's CTA; without this the BYOK path lost them and fell back to a bare
+// Retry even for model-unavailable / quota / auth failures.
+function proxyError(data: Record<string, unknown>): Error {
+  const error = new Error(proxyErrorMessage(data)) as Error & {
+    code?: string;
+    userAction?: string;
+    failureCategory?: string;
+  };
+  const nested =
+    data.error && typeof data.error === 'object'
+      ? (data.error as Record<string, unknown>)
+      : {};
+  if (typeof nested.code === 'string') error.code = nested.code;
+  if (typeof nested.failure_category === 'string') {
+    error.failureCategory = nested.failure_category;
+  }
+  if (typeof nested.user_action === 'string') {
+    error.userAction = nested.user_action;
+  }
+  return error;
 }

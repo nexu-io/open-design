@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import type {
+  TrackingRunFailureCategory,
+  TrackingRunFailureUserAction,
+} from '@open-design/contracts';
 import {
   DEFAULT_AMR_RECHARGE_URL,
   OPEN_DESIGN_PRICING_URL,
@@ -613,5 +617,289 @@ describe('resolveRunFailureUi', () => {
       const ui = resolveRunFailureUi('AGENT_AUTH_REQUIRED', null, agent);
       expect(ui.primaryAction).not.toBe('launch-terminal-auth');
     }
+  });
+});
+
+// #3408 §5: the daemon's canonical `user_action` is the authoritative CTA
+// signal. The resolver must prefer it over re-deriving from the raw error code,
+// and fall back to the code map only when it is absent or `none`. The
+// `user_action` value list mirrors the daemon classifier's
+// `TrackingRunFailureUserAction` union so the two layers can't drift.
+describe('resolveRunFailureUi — daemon user_action drives the CTA', () => {
+  it('maps every user_action to the expected primary action (compile-time exhaustive)', () => {
+    // Compile-time exhaustive map ensuring all non-none user actions are mapped
+    const userActionMap = {
+      retry: { agentId: 'claude', expected: 'retry' },
+      login: { agentId: 'amr', expected: 'authorize' },
+      recharge: { agentId: 'amr', expected: 'recharge' },
+      upgrade: { agentId: 'amr', expected: 'upgrade' },
+      switch_model: { agentId: 'claude', expected: 'switch-model' },
+      reduce_context: { agentId: 'claude', expected: 'reduce-context' },
+      install_cli: { agentId: 'claude', expected: 'retry' },
+      fix_config: { agentId: 'claude', expected: 'retry' },
+    } satisfies Record<
+      Exclude<TrackingRunFailureUserAction, 'none'>,
+      { agentId: string | null; expected: string }
+    >;
+
+    for (const [userAction, { agentId, expected }] of Object.entries(userActionMap) as Array<[
+      Exclude<TrackingRunFailureUserAction, 'none'>,
+      { agentId: string | null; expected: string },
+    ]>) {
+      const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', agentId, {
+        userAction,
+      });
+      expect(ui.primaryAction).toBe(expected);
+    }
+
+    // Additional agent-specific variants
+    expect(
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'antigravity', {
+        userAction: 'login',
+      }).primaryAction,
+    ).toBe('launch-terminal-auth');
+    expect(
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'claude', {
+        userAction: 'login',
+      }).primaryAction,
+    ).toBe('retry');
+    expect(
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'antigravity', {
+        userAction: 'switch_model',
+      }).primaryAction,
+    ).toBe('launch-terminal-switch-model');
+    expect(
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'amr', {
+        userAction: 'switch_model',
+      }).primaryAction,
+    ).toBe('switch-model');
+  });
+
+  it('maps every failure_category to the expected title/display (compile-time exhaustive)', () => {
+    const categoryMap = {
+      auth: 'chat.runError.title.signInRequired',
+      rate_limit: 'chat.runError.title.rateLimited',
+      insufficient_balance: 'chat.runError.title.balance',
+      entitlement_required: 'chat.amrBalanceGate.title',
+      model_unavailable: 'chat.runError.title.modelUnavailable',
+      prompt_too_large: 'chat.runError.title.promptTooLarge',
+      upstream_unavailable: 'chat.runError.title.upstreamUnavailable',
+      timeout: 'chat.runError.title.timedOut',
+      empty_output: 'chat.runError.title.emptyOutput',
+      tool_error: 'chat.runError.title.generic',
+      process_exit: 'chat.runError.title.generic',
+      user_cancel: 'chat.runError.title.generic',
+      unknown: 'chat.runError.title.generic',
+    } satisfies Record<TrackingRunFailureCategory, string>;
+
+    for (const [category, expectedTitleKey] of Object.entries(categoryMap) as Array<[
+      TrackingRunFailureCategory,
+      string,
+    ]>) {
+      const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'claude', {
+        failureCategory: category,
+      });
+      expect(ui.titleKey).toBe(expectedTitleKey);
+    }
+  });
+
+  it('preserves localized error guidance, messageKey, and details when overlaying user_action', () => {
+    // model_window_limit carries a custom title, localized message with retryAt, and secondaryRetry
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'claude',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z.',
+      {
+        failureCategory: 'rate_limit',
+        failureDetail: 'model_window_limit',
+        userAction: 'switch_model',
+      },
+    );
+    expect(ui.titleKey).toBe('chat.runError.title.modelWindowLimit');
+    expect(ui.messageKey).toBe('chat.runError.modelWindowLimitMessage');
+    expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
+    expect(ui.primaryAction).toBe('switch-model');
+    expect(ui.secondaryRetry).toBe(true);
+
+    // AMR_TIER_UPGRADE_REQUIRED preserves plans upgrade action
+    const upgradeUi = resolveRunFailureUi(
+      'AMR_TIER_UPGRADE_REQUIRED',
+      'amr',
+      {
+        failureCategory: 'tier_entitlement_required',
+        userAction: 'upgrade',
+      },
+    );
+    expect(upgradeUi.primaryAction).toBe('upgrade');
+    expect(upgradeUi.titleKey).toBe('chat.amrBalanceGate.title');
+  });
+
+  it('promotes the AMR switch card for non-AMR switch_model, not for AMR itself', () => {
+    expect(
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'claude', {
+        userAction: 'switch_model',
+      }).showSwitchCard,
+    ).toBe(true);
+    expect(
+      resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'amr', {
+        userAction: 'switch_model',
+      }).showSwitchCard,
+    ).toBe(false);
+  });
+
+  it('names the failure type for the new context/model classes', () => {
+    expect(
+      resolveRunFailureUi(null, 'claude', { userAction: 'reduce_context' })
+        .titleKey,
+    ).toBe('chat.runError.title.promptTooLarge');
+    expect(
+      resolveRunFailureUi(null, 'claude', { userAction: 'switch_model' })
+        .titleKey,
+    ).toBe('chat.runError.title.modelUnavailable');
+  });
+
+  it('lets a classified user_action beat the raw-code map', () => {
+    // The bare code would resolve to a plain generic retry with no card; the
+    // daemon-decided user_action takes precedence.
+    const byCode = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'claude');
+    expect(byCode.primaryAction).toBe('retry');
+    expect(byCode.showSwitchCard).toBe(false);
+
+    const byAction = resolveRunFailureUi('AGENT_EXECUTION_FAILED', 'claude', {
+      userAction: 'switch_model',
+    });
+    expect(byAction.primaryAction).toBe('switch-model');
+    expect(byAction.showSwitchCard).toBe(true);
+  });
+
+  it('falls through to the code map when no user_action is supplied', () => {
+    // An unclassified run (older daemon) must resolve exactly like the 2-arg
+    // form — here the AMR balance code still yields the recharge CTA.
+    const withEmptyClassification = resolveRunFailureUi(
+      'AMR_INSUFFICIENT_BALANCE',
+      'amr',
+      { failureCategory: null, userAction: null },
+    );
+    expect(withEmptyClassification).toEqual(
+      resolveRunFailureUi('AMR_INSUFFICIENT_BALANCE', 'amr'),
+    );
+    expect(withEmptyClassification.primaryAction).toBe('recharge');
+  });
+
+  it('falls through on the partial-classification edge (category set, user_action none/absent)', () => {
+    // The daemon landed a category but no actionable user_action. The CTA must
+    // still reach the code map rather than rendering a blank action.
+    const noneAction = resolveRunFailureUi('AMR_INSUFFICIENT_BALANCE', 'amr', {
+      failureCategory: 'insufficient_balance',
+      userAction: 'none',
+    });
+    expect(noneAction.primaryAction).toBe('recharge');
+
+    const absentAction = resolveRunFailureUi('RATE_LIMITED', 'claude', {
+      failureCategory: 'rate_limit',
+    });
+    expect(absentAction.primaryAction).toBe('retry');
+    expect(absentAction.showSwitchCard).toBe(true);
+  });
+
+  it('handles unknown or forward-compatible user_action strings by falling back to base UI', () => {
+    // A future daemon might introduce a new user_action string that this web build
+    // does not explicitly know. It must degrade gracefully to the base UI rather than throw,
+    // retaining actionful recovery CTAs such as recharge.
+    const uiRateLimited = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'claude',
+      {
+        userAction: 'future_unknown_action' as unknown as TrackingRunFailureUserAction,
+      },
+    );
+    expect(uiRateLimited.primaryAction).toBe('retry');
+    expect(uiRateLimited.titleKey).toBe('chat.runError.title.rateLimited');
+    expect(uiRateLimited.showSwitchCard).toBe(true);
+
+    const uiBalance = resolveRunFailureUi(
+      'AMR_INSUFFICIENT_BALANCE',
+      'amr',
+      {
+        userAction: 'future_unknown_action' as unknown as TrackingRunFailureUserAction,
+      },
+    );
+    expect(uiBalance.primaryAction).toBe('recharge');
+    expect(uiBalance.titleKey).toBe('chat.runError.title.balance');
+  });
+
+  it('lets failure_category drive display over proxy HTTP error codes (#4734 BYOK)', () => {
+    // sendProxyError returns UPSTREAM_UNAVAILABLE for HTTP 400 with model_unavailable
+    const byokModelUnavailable = resolveRunFailureUi(
+      'UPSTREAM_UNAVAILABLE',
+      'claude',
+      {
+        failureCategory: 'model_unavailable',
+        userAction: 'switch_model',
+      },
+    );
+    expect(byokModelUnavailable.titleKey).toBe('chat.runError.title.modelUnavailable');
+    expect(byokModelUnavailable.messageKey).toBe('chat.runError.modelUnavailableMessage');
+    expect(byokModelUnavailable.primaryAction).toBe('switch-model');
+    expect(byokModelUnavailable.showSwitchCard).toBe(true);
+
+    // sendProxyError returns UPSTREAM_UNAVAILABLE for HTTP 400 with prompt_too_large
+    const byokPromptTooLarge = resolveRunFailureUi(
+      'UPSTREAM_UNAVAILABLE',
+      'claude',
+      {
+        failureCategory: 'prompt_too_large',
+        userAction: 'reduce_context',
+      },
+    );
+    expect(byokPromptTooLarge.titleKey).toBe('chat.runError.title.promptTooLarge');
+    expect(byokPromptTooLarge.messageKey).toBe('chat.runError.promptTooLargeMessage');
+    expect(byokPromptTooLarge.primaryAction).toBe('reduce-context');
+  });
+
+  it('preserves Antigravity RATE_LIMITED terminal switch-model CTA when user_action is retry', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'antigravity',
+      {
+        userAction: 'retry',
+      },
+    );
+    expect(ui.primaryAction).toBe('launch-terminal-switch-model');
+    expect(ui.titleKey).toBe('chat.runError.title.rateLimited');
+    expect(ui.secondaryRetry).toBe(true);
+    expect(ui.showSwitchCard).toBe(false);
+  });
+
+  it('preserves code-derived fallback controls when daemon user_action is absent or none with mismatched category (#4734)', () => {
+    // When code is AGENT_EXECUTION_FAILED and user_action is absent:
+    // Category should only update titleKey / messageKey, controls stay from code (primaryAction: 'retry')
+    const absentAction = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'claude',
+      {
+        failureCategory: 'prompt_too_large',
+      },
+    );
+    expect(absentAction.titleKey).toBe('chat.runError.title.promptTooLarge');
+    expect(absentAction.messageKey).toBe('chat.runError.promptTooLargeMessage');
+    expect(absentAction.primaryAction).toBe('retry');
+    expect(absentAction.secondaryRetry).toBe(false);
+
+    // When code is AGENT_EXECUTION_FAILED and user_action is explicitly 'none':
+    // Client must not invent an action; controls stay from code (primaryAction: 'retry')
+    const noneAction = resolveRunFailureUi(
+      'AGENT_EXECUTION_FAILED',
+      'claude',
+      {
+        failureCategory: 'prompt_too_large',
+        userAction: 'none',
+      },
+    );
+    expect(noneAction.titleKey).toBe('chat.runError.title.promptTooLarge');
+    expect(noneAction.messageKey).toBe('chat.runError.promptTooLargeMessage');
+    expect(noneAction.primaryAction).toBe('retry');
+    expect(noneAction.secondaryRetry).toBe(false);
   });
 });

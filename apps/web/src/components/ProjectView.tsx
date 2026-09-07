@@ -11911,6 +11911,7 @@ export function ProjectView({
           conversationError={error}
           onAuthorizeAndRetry={handleSwitchToAmrAndRetry}
           onLaunchTerminalAuth={handleLaunchAntigravityOauth}
+          onOpenSettings={onOpenSettings}
           conversationId={activeConversationId}
         />
       </div>

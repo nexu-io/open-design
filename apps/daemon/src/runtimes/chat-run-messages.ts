@@ -1,6 +1,10 @@
 import { performance } from 'node:perf_hooks';
 import type Database from 'better-sqlite3';
-import type { PersistedAgentEvent } from '@open-design/contracts';
+import type {
+  PersistedAgentEvent,
+  TrackingRunFailureCategory,
+  TrackingRunFailureUserAction,
+} from '@open-design/contracts';
 import type { RunFinishedProps } from '@open-design/contracts/analytics';
 import {
   appendMessageAgentEvents,
@@ -24,6 +28,7 @@ type ChatRunMessageState = {
   errorCode?: string | null;
   failureCategory?: string | null;
   failureDetail?: string | null;
+  failureAction?: string | null;
 };
 
 type PendingMessageEvents = {
@@ -280,7 +285,8 @@ export function persistRunFailureClassification(
   if (!run.assistantMessageId) return;
   const failureCategory = run.failureCategory ?? null;
   const failureDetail = run.failureDetail ?? null;
-  if (!failureCategory && !failureDetail) return;
+  const failureAction = run.failureAction ?? null;
+  if (!failureCategory && !failureDetail && !failureAction) return;
   try {
     finalizeRunMessageEvents(db, run);
     const row = db
@@ -308,8 +314,13 @@ export function persistRunFailureClassification(
       : { kind: 'status', label: 'error' };
     const enriched: Record<string, unknown> = {
       ...base,
-      ...(failureCategory ? { failureCategory } : {}),
-      ...(failureDetail ? { failureDetail } : {}),
+      ...(failureCategory
+        ? { failureCategory, failure_category: failureCategory }
+        : {}),
+      ...(failureDetail
+        ? { failureDetail, failure_detail: failureDetail }
+        : {}),
+      ...(failureAction ? { user_action: failureAction } : {}),
     };
     if (run.errorCode && typeof enriched.code !== 'string') enriched.code = run.errorCode;
     if (idx >= 0) {
@@ -354,11 +365,21 @@ export function runSseEventToPersistedAgentEvent(
       : typeof record.message === 'string'
         ? record.message
         : '';
+    const failureCategory =
+      typeof error.failure_category === 'string'
+        ? (error.failure_category as TrackingRunFailureCategory)
+        : undefined;
+    const userAction =
+      typeof error.user_action === 'string'
+        ? (error.user_action as TrackingRunFailureUserAction)
+        : undefined;
     return {
       kind: 'status',
       label: 'error',
       ...(message ? { detail: message } : {}),
       ...(typeof error.code === 'string' ? { code: error.code } : {}),
+      ...(failureCategory ? { failure_category: failureCategory } : {}),
+      ...(userAction ? { user_action: userAction } : {}),
     };
   }
   if (event !== 'agent') return null;

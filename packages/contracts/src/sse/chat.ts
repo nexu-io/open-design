@@ -1,5 +1,5 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
-import type { RunFailureCategory, RunFailureDetail } from '../api/chat.js';
+import type { RunFailureAction, RunFailureCategory, RunFailureDetail } from '../api/chat.js';
 import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
@@ -107,6 +107,7 @@ export interface ChatSseEndPayload {
    *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
   failureCategory?: RunFailureCategory | null;
   failureDetail?: RunFailureDetail | null;
+  failureAction?: RunFailureAction | null;
   strategyTask?: StrategyTaskProjectionV2;
 }
 

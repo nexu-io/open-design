@@ -7,6 +7,10 @@ import {
   isModelWindowLimitFailure,
   readMembershipConcurrencyResetAt,
   readModelWindowResetAt,
+  type RunFailureCategory,
+  type RunFailureDetail,
+  type TrackingRunFailureCategory,
+  type TrackingRunFailureUserAction,
 } from '@open-design/contracts';
 
 // AMR model-gateway console (account, balance, top-up, plans).
@@ -161,11 +165,21 @@ const PROMOTE_AMR_CODES = new Set<string>([
 // user has a Retry button after the external step completes (OAuth /
 // switching models happens out-of-band; we can't auto-retry from the
 // daemon side).
+//   - switch-model:                non-AMR model_unavailable / quota — open the
+//                                  model picker and pick another model. Pairs
+//                                  with the AMR promotion card (switching to AMR
+//                                  is the steadiest "other model").
+//   - reduce-context:              prompt_too_large / context overflow — the
+//                                  context sent is too big; trim selected
+//                                  context (or switch to a stdin-capable
+//                                  adapter) before retrying.
 export type RunFailurePrimaryAction =
   | 'retry'
   | 'authorize'
   | 'recharge'
   | 'upgrade'
+  | 'switch-model'
+  | 'reduce-context'
   | 'launch-terminal-auth'
   | 'launch-terminal-switch-model'
   // No self-contained recovery button. Used when retrying is futile (e.g. a
@@ -495,7 +509,328 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
 //     cli-missing) → named type + fix, overriding a too-coarse code
 //   - non-AMR agent, model/auth/quota error → plain retry + promotion card
 //   - non-AMR agent, generic failure        → plain retry
+export type RunFailureClassificationSignal = {
+  failureCategory?: RunFailureCategory | string | null;
+  failureDetail?: RunFailureDetail | string | null;
+  userAction?: TrackingRunFailureUserAction | null;
+  user_action?: TrackingRunFailureUserAction | null;
+};
+
 export function resolveRunFailureUi(
+  code: string | null | undefined,
+  detailOrAgentId?: string | null | undefined,
+  agentIdOrClassification?: string | null | RunFailureClassificationSignal,
+  rawMessage?: string | null,
+  options?: RunFailureClassificationSignal | null,
+): RunFailureUi {
+  let detail: string | null | undefined;
+  let agentId: string | null | undefined;
+  let rawMsg: string | null | undefined;
+  let classification: RunFailureClassificationSignal | null | undefined;
+
+  if (arguments.length <= 2) {
+    detail = null;
+    agentId = detailOrAgentId;
+    rawMsg = null;
+    classification = undefined;
+  } else if (
+    typeof agentIdOrClassification === 'object' &&
+    agentIdOrClassification !== null
+  ) {
+    // 3-arg form: (code, agentId, classification)
+    detail = null;
+    agentId = detailOrAgentId;
+    rawMsg = rawMessage;
+    classification = agentIdOrClassification;
+  } else {
+    // 3/4/5-arg form: (code, detail, agentId, rawMessage?, options?)
+    detail = detailOrAgentId;
+    agentId = typeof agentIdOrClassification === 'string' ? agentIdOrClassification : null;
+    rawMsg = rawMessage;
+    classification = options;
+  }
+
+  const failureCategory =
+    classification?.failureCategory ??
+    (classification as { failure_category?: string | null })?.failure_category;
+  const failureDetail =
+    classification?.failureDetail ??
+    (classification as { failure_detail?: string | null })?.failure_detail ??
+    detail;
+
+  const rawBaseUi = uiFromErrorCode(code, failureDetail, agentId, rawMsg);
+  const hasSpecificDetail =
+    typeof failureDetail === 'string' &&
+    (failureDetail in AGENT_AGNOSTIC_DETAIL_FAILURE_UI ||
+      failureDetail in DETAIL_FAILURE_UI ||
+      failureDetail === 'model_window_limit' ||
+      failureDetail === 'membership_concurrency_limit');
+  const baseUi = hasSpecificDetail
+    ? rawBaseUi
+    : overlayCategoryDisplay(rawBaseUi, failureCategory, agentId);
+  const userAction = classification?.userAction ?? classification?.user_action;
+  if (!userAction || userAction === 'none') {
+    return baseUi;
+  }
+  return uiFromUserAction(baseUi, userAction, agentId, code);
+}
+
+// Category drives display (titleKey / messageKey) only (#4734) without changing
+// the action controls (primaryAction / secondaryRetry / showSwitchCard).
+function overlayCategoryDisplay(
+  baseUi: RunFailureUi,
+  category: string | null | undefined,
+  agentId: string | null | undefined,
+): RunFailureUi {
+  if (!category) return baseUi;
+  switch (category) {
+    case 'model_unavailable':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.modelUnavailable',
+        messageKey: 'chat.runError.modelUnavailableMessage',
+      };
+    case 'prompt_too_large':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.promptTooLarge',
+        messageKey: 'chat.runError.promptTooLargeMessage',
+      };
+    case 'insufficient_balance':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.balance',
+        messageKey: 'chat.amrError.balanceMessage',
+      };
+    case 'entitlement_required':
+      return {
+        ...baseUi,
+        titleKey: 'chat.amrBalanceGate.title',
+        messageKey: null,
+      };
+    case 'auth':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.signInRequired',
+        messageKey:
+          agentId === 'amr'
+            ? 'chat.runError.signInMessage.amr'
+            : baseUi.messageKey ?? 'chat.runError.signInMessage.other',
+      };
+    case 'rate_limited':
+    case 'rate_limit':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.rateLimited',
+        messageKey: baseUi.messageKey ?? 'chat.runError.rateLimitedMessage',
+      };
+    case 'quota_exhausted':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.rateLimited',
+        messageKey: 'chat.runError.quotaExhaustedMessage',
+      };
+    case 'upstream_unavailable':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.upstreamUnavailable',
+        messageKey: 'chat.runError.upstreamUnavailableMessage',
+      };
+    case 'cli_not_installed':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.cliMissing',
+        messageKey: 'chat.runError.cliMissingMessage',
+      };
+    case 'tool_loop':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.toolLoop',
+        messageKey: 'chat.runError.toolLoopMessage',
+      };
+    case 'output_invalid':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.outputInvalid',
+        messageKey: 'chat.runError.outputInvalidMessage',
+      };
+    case 'runtime_config':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.runtimeConfig',
+        messageKey: 'chat.runError.runtimeConfigMessage',
+      };
+    case 'timeout':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.timedOut',
+        messageKey: 'chat.runError.timedOutMessage',
+      };
+    case 'empty_output':
+      return {
+        ...baseUi,
+        titleKey: 'chat.runError.title.emptyOutput',
+        messageKey: 'chat.runError.emptyOutputMessage',
+      };
+    default:
+      return baseUi;
+  }
+}
+
+// CTA driven by the daemon-decided `user_action`. Overlays the action-specific
+// primary recovery controls onto the base UI resolved from classification/code
+// so localized guidance and failure details are preserved (#4734).
+function uiFromUserAction(
+  baseUi: RunFailureUi,
+  userAction: Exclude<TrackingRunFailureUserAction, 'none'>,
+  agentId: string | null | undefined,
+  code: string | null | undefined,
+): RunFailureUi {
+  switch (userAction) {
+    case 'login': {
+      if (agentId === 'amr') {
+        return {
+          ...baseUi,
+          primaryAction: 'authorize',
+          titleKey:
+            baseUi.titleKey === 'chat.runError.title.generic'
+              ? 'chat.runError.title.signInRequired'
+              : baseUi.titleKey,
+          messageKey: baseUi.messageKey ?? 'chat.runError.signInMessage.amr',
+          secondaryRetry: false,
+          showSwitchCard: false,
+        };
+      }
+      if (agentId === 'antigravity') {
+        return {
+          ...baseUi,
+          primaryAction: 'launch-terminal-auth',
+          titleKey:
+            baseUi.titleKey === 'chat.runError.title.generic'
+              ? 'chat.runError.title.signInRequired'
+              : baseUi.titleKey,
+          secondaryRetry: true,
+          showSwitchCard: false,
+        };
+      }
+      // Non-AMR, non-antigravity: their login lives in the user's own terminal,
+      // so offer Retry (re-run after they log in locally) + promote AMR.
+      return {
+        ...baseUi,
+        primaryAction: 'retry',
+        titleKey:
+          baseUi.titleKey === 'chat.runError.title.generic'
+            ? 'chat.runError.title.signInRequired'
+            : baseUi.titleKey,
+        messageKey: baseUi.messageKey ?? 'chat.runError.signInMessage.other',
+        secondaryRetry: false,
+        showSwitchCard: true,
+      };
+    }
+    case 'recharge':
+      return {
+        ...baseUi,
+        primaryAction: 'recharge',
+        titleKey:
+          baseUi.titleKey === 'chat.runError.title.generic'
+            ? 'chat.runError.title.balance'
+            : baseUi.titleKey,
+        messageKey: baseUi.messageKey ?? 'chat.amrError.balanceMessage',
+        secondaryRetry: true,
+        showSwitchCard: false,
+      };
+    case 'upgrade':
+      return {
+        ...baseUi,
+        primaryAction: 'upgrade',
+        titleKey:
+          baseUi.titleKey === 'chat.runError.title.generic'
+            ? 'chat.amrBalanceGate.title'
+            : baseUi.titleKey,
+        secondaryRetry: true,
+        showSwitchCard: false,
+      };
+    case 'switch_model': {
+      // Antigravity has no `--model` flag (upstream #35): switching means
+      // opening agy's TUI, same terminal-launch handler as auth.
+      if (agentId === 'antigravity') {
+        return {
+          ...baseUi,
+          primaryAction: 'launch-terminal-switch-model',
+          titleKey:
+            baseUi.titleKey === 'chat.runError.title.generic'
+              ? 'chat.runError.title.rateLimited'
+              : baseUi.titleKey,
+          secondaryRetry: true,
+          showSwitchCard: false,
+        };
+      }
+      return {
+        ...baseUi,
+        primaryAction: 'switch-model',
+        titleKey:
+          baseUi.titleKey === 'chat.runError.title.generic'
+            ? 'chat.runError.title.modelUnavailable'
+            : baseUi.titleKey,
+        secondaryRetry: true,
+        // AMR is the steadiest "other model" — promote it alongside.
+        showSwitchCard: agentId !== 'amr',
+      };
+    }
+    case 'reduce_context':
+      return {
+        ...baseUi,
+        primaryAction: 'reduce-context',
+        titleKey:
+          baseUi.titleKey === 'chat.runError.title.generic'
+            ? 'chat.runError.title.promptTooLarge'
+            : baseUi.titleKey,
+        secondaryRetry: true,
+        showSwitchCard: false,
+      };
+    case 'install_cli':
+    case 'fix_config':
+      // No dedicated button for these in the card vocabulary; the raw daemon
+      // guidance text explains the fix and Retry re-runs once it's resolved.
+      return {
+        ...baseUi,
+        primaryAction: 'retry',
+        secondaryRetry: false,
+        showSwitchCard: false,
+      };
+    case 'retry': {
+      // A mid-response connection drop keeps its localized copy even when the
+      // daemon classifies the action as a plain retry.
+      if (code === 'AGENT_CONNECTION_DROPPED') {
+        return {
+          ...baseUi,
+          primaryAction: 'retry',
+          titleKey: 'chat.runError.title.connectionDropped',
+          messageKey: 'chat.connectionDropped',
+          secondaryRetry: false,
+          showSwitchCard: false,
+        };
+      }
+      // Antigravity RATE_LIMITED retains its terminal switch model action even when userAction is 'retry'
+      if (agentId === 'antigravity' && code === 'RATE_LIMITED') {
+        return baseUi;
+      }
+      const promote = typeof code === 'string' && PROMOTE_AMR_CODES.has(code);
+      return {
+        ...baseUi,
+        primaryAction: 'retry',
+        secondaryRetry: false,
+        showSwitchCard: agentId !== 'amr' && (baseUi.showSwitchCard || promote),
+      };
+    }
+    default: {
+      // Forward compatibility: unknown or future user_action strings leave baseUi untouched!
+      return baseUi;
+    }
+  }
+}
+
+function uiFromErrorCode(
   code: string | null | undefined,
   detail: string | null | undefined,
   agentId: string | null | undefined,
@@ -647,6 +982,8 @@ export function resolveRunFailureUi(
   // win, and before the generic code branches so it can correct them.
   const detailUi = typeof detail === 'string' ? DETAIL_FAILURE_UI[detail] : undefined;
   if (detailUi) return detailUi;
+
+
   // Agent-neutral: a mid-response connection drop (any agent) gets a clear,
   // localized "lost connection — retry" message instead of the raw SDK string.
   // Not an AMR-promotable case: the break is the user's own network path, which

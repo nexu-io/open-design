@@ -122,4 +122,42 @@ describe('SideChatTab', () => {
       }),
     );
   });
+
+  it('forwards onOpenSettings to ChatPane for recovery actions in side chat', () => {
+    const config = { mode: 'daemon' } as unknown as AppConfig;
+    const conversations = [
+      {
+        id: 'conv-1',
+        title: 'Current',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        projectId: 'project-1',
+        messageCount: 0,
+        sessionMode: 'design',
+      },
+    ] as unknown as Conversation[];
+    const onOpenSettings = vi.fn();
+
+    render(
+      <SideChatTab
+        projectId="project-1"
+        conversationId="conv-1"
+        config={config}
+        agentsById={new Map()}
+        locale="en"
+        projectFiles={[]}
+        conversations={conversations}
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        onOpenSettings={onOpenSettings}
+      />,
+    );
+
+    expect(chatPaneMock).toHaveBeenCalled();
+    expect(chatPaneMock.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        onOpenSettings,
+      }),
+    );
+  });
 });

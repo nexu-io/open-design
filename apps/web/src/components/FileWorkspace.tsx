@@ -103,6 +103,7 @@ import {
   type ProjectFile,
   type ProjectFolder,
 } from '../types';
+import type { SettingsSection } from './SettingsDialog';
 import {
   resolveLocalizedText,
   type ChatSessionMode,
@@ -343,6 +344,7 @@ interface Props {
   // sign-in) instead of a bare retry.
   onAuthorizeAndRetry?: (message: ChatMessage) => void;
   onLaunchTerminalAuth?: () => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
   // Conversation id for the AMR promotion-card telemetry payload.
   conversationId?: string | null;
   // Project-level actions (settings, handoff, avatar menu) rendered at the
@@ -1367,6 +1369,7 @@ export function FileWorkspace({
   onWorkspaceContextsChange,
   messages = [],
   conversationId,
+  onOpenSettings,
   fileActionsBefore,
   headerActions,
   viewerOnly = false,
@@ -4463,6 +4466,7 @@ export function FileWorkspace({
             onRenameConversation={onRenameConversation}
             onSessionModeChange={onConversationSessionModeChange}
             onNewConversation={onNewConversation}
+            onOpenSettings={onOpenSettings}
             activeConversationChat={activeConversationChat}
             onRequestOpenFile={openFile}
           />

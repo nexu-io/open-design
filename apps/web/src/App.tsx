@@ -5119,6 +5119,7 @@ function AppInner() {
         onInitialRevisionJobConsumed={(jobId) =>
           handleDesignSystemRevisionJobConsumed(route.designSystemId, jobId)
         }
+        onOpenSettings={openSettings}
       />
     );
   } else if (route.kind === 'home' && route.view === 'settings') {

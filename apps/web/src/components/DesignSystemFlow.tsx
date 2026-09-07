@@ -43,7 +43,7 @@ import {
   saveMessage,
   saveTabs,
 } from '../state/projects';
-import { appendErrorStatusEvent } from '../runtime/chat-events';
+import { appendErrorStatusEvent, runFailureFieldsFromError } from '../runtime/chat-events';
 import { parseDesignMd } from '../runtime/design-md-parse';
 import {
   buildDesignSystemPackageAuditRepairPrompt,
@@ -87,6 +87,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
 import { connectorAuthSnapshotChanged } from './connectors-state';
 import { FileWorkspace, type FileRefreshResult } from './FileWorkspace';
+import type { SettingsSection } from './SettingsDialog';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './Loading';
 import { Toast } from './Toast';
@@ -196,6 +197,7 @@ interface DetailProps {
   onProjectsRefresh?: () => Promise<void> | void;
   initialRevisionJob?: DesignSystemGenerationJob | null;
   onInitialRevisionJobConsumed?: (jobId: string) => void;
+  onOpenSettings?: (section?: SettingsSection) => void;
 }
 
 // Translator handle for the plain (non-component) helpers in this file that
@@ -1642,6 +1644,7 @@ export function DesignSystemDetailView({
   onProjectsRefresh,
   initialRevisionJob,
   onInitialRevisionJobConsumed,
+  onOpenSettings,
 }: DetailProps) {
   const { locale, t } = useI18n();
   const { context: workspaceContext } = useWorkspaceContext();
@@ -2641,10 +2644,12 @@ export function DesignSystemDetailView({
           },
           onError: (error) => {
             const message = error.message;
+            const code = (error as { code?: string })?.code;
+            const failure = runFailureFieldsFromError(error);
             setChatError(message);
             updateAssistant(
               (previous) => ({
-                ...appendErrorStatusEvent(previous, message),
+                ...appendErrorStatusEvent(previous, message, code, failure),
                 endedAt: Date.now(),
                 runStatus: 'failed',
               }),
@@ -2871,6 +2876,7 @@ export function DesignSystemDetailView({
             onSelectConversation={selectProjectChatConversation}
             onDeleteConversation={() => {}}
             onNewConversation={createProjectChatConversation}
+            onOpenSettings={onOpenSettings}
           />
         </div>
       </aside>

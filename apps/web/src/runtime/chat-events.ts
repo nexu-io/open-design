@@ -1,9 +1,16 @@
+import type {
+  TrackingRunFailureCategory,
+  TrackingRunFailureUserAction,
+} from '@open-design/contracts';
+
 import type { ChatMessage } from '../types';
 import type { RunFailureCategory, RunFailureDetail } from '@open-design/contracts';
 
 export interface RunFailureClassificationFields {
   failureCategory?: RunFailureCategory | null;
   failureDetail?: RunFailureDetail | null;
+  failure_category?: TrackingRunFailureCategory;
+  user_action?: TrackingRunFailureUserAction;
 }
 
 /** Read the daemon failure classification the streaming layer stamped onto a
@@ -15,14 +22,26 @@ export function runFailureFieldsFromError(
   const e = err as {
     failureCategory?: RunFailureCategory | null;
     failureDetail?: RunFailureDetail | null;
+    failure_category?: TrackingRunFailureCategory | null;
+    user_action?: TrackingRunFailureUserAction | null;
+    userAction?: string | null;
   } | null;
-  if (!e || (!e.failureCategory && !e.failureDetail)) return undefined;
+  if (!e || (!e.failureCategory && !e.failureDetail && !e.failure_category && !e.user_action && !e.userAction)) return undefined;
   return {
     ...(e.failureCategory ? { failureCategory: e.failureCategory } : {}),
     ...(e.failureDetail ? { failureDetail: e.failureDetail } : {}),
+    ...(e.failure_category ? { failure_category: e.failure_category } : {}),
+    ...(e.user_action
+      ? { user_action: e.user_action }
+      : e.userAction
+        ? { user_action: e.userAction as TrackingRunFailureUserAction }
+        : {}),
   };
 }
 
+export const errorStatusClassificationFromError = runFailureFieldsFromError;
+
+export type ErrorStatusClassification = RunFailureClassificationFields;
 export function appendErrorStatusEvent(
   message: ChatMessage,
   detail: string,
@@ -46,6 +65,8 @@ export function appendErrorStatusEvent(
       ...(code ? { code } : {}),
       ...(failure?.failureCategory ? { failureCategory: failure.failureCategory } : {}),
       ...(failure?.failureDetail ? { failureDetail: failure.failureDetail } : {}),
+      ...(failure?.failure_category ? { failure_category: failure.failure_category } : {}),
+      ...(failure?.user_action ? { user_action: failure.user_action } : {}),
     };
     if (JSON.stringify(merged) === JSON.stringify(last)) return message;
     const nextEvents = events.slice();
@@ -63,6 +84,8 @@ export function appendErrorStatusEvent(
         ...(code ? { code } : {}),
         ...(failure?.failureCategory ? { failureCategory: failure.failureCategory } : {}),
         ...(failure?.failureDetail ? { failureDetail: failure.failureDetail } : {}),
+        ...(failure?.failure_category ? { failure_category: failure.failure_category } : {}),
+        ...(failure?.user_action ? { user_action: failure.user_action } : {}),
       },
     ],
   };
