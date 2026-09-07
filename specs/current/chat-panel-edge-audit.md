@@ -81,7 +81,7 @@
 | 文案 / 动作决策表 | `apps/web/src/runtime/amr-guidance.ts` —— `RunFailurePrimaryAction:179`(`retry \| authorize \| recharge \| upgrade \| launch-terminal-auth \| launch-terminal-switch-model \| none`)、`RunFailureUi:248–265`、**`resolveRunFailureUi():496–665`**;兜底分支 `:659–665`(`title.generic` + 原始串 + retry) |
 | 色调 | `ChatPane.tsx:1535–1542 runErrorTone`(authorize/recharge/upgrade → brand;`AGENT_CONNECTION_DROPPED` → warning;其余 danger) |
 | 「复制详情」 | `ChatPane.tsx:1547–1559 copyErrorDiagnostic`,按钮 `:2785–2793`,文本 `buildRunErrorDiagnosticText:4534`(含 error_code / runId / projectId / conversationId / agentId) |
-| 「切到 Cloud」 | **另一张卡**:`apps/web/src/components/AmrGuidance.tsx`,挂在报错卡下方 `ChatPane.tsx:2988–3005`,由 `runFailureUi.showSwitchCard` 控制 |
+| 「切到 Cloud」 | ~~**另一张卡**:`apps/web/src/components/AmrGuidance.tsx`,挂在报错卡下方,由 `runFailureUi.showSwitchCard` 控制~~ → **已合并**(OPEND-2772 / T68):第二张卡删除,CTA 收进报错卡主按钮位,开关更名 `runFailureUi.cloudSwitchCta`,非 Cloud 的失败**一律**为 true |
 | BYOK 逃生口 | `ChatPane.tsx:2802–2810`(`t('avatar.useLocal')`),开关 `showByokRecoveryCta:1602–1603`,由 `ProjectView.tsx:11211/11220` 接线 |
 | 可续跑 | `ChatPane.tsx:1480–1483 canResumeFailedRun`;契约字段 `ChatSseEndPayload.resumable`(`packages/contracts/src/sse/chat.ts:95`) |
 | 失败分类(daemon 侧) | `apps/daemon/src/run-failure-classification.ts`(`classifyRunFailure:1038`、`isResumableFailure:610`);写到终帧 `apps/daemon/src/runtimes/runs.ts:524/1135/1214` |
@@ -303,7 +303,7 @@ CSS 3105 注释解释了为什么白底不红底:「红底又和下面那三个�
 - **〔样式〕`.d` 为空时不编一句**(B18 明写)。
 - **⚠〔形态〕动作集合。** 稿子是**三枚固定**动作,产品是**按错误分流的一枚主动作 + 若干条件动作**。而 `error-ux-design.md` 原则 4 明确「**重试只在有用时出现**」(额度用完 / 封号 / CPU 不支持这类不给重试)。**稿子的「从失败处重试」常驻与那条原则直接冲突**,见 §4 R2。
 - **〔形态〕原始错误折叠区**:稿子没有,产品有(`.run-error__diagnostic`,chat.css:987)。`run-error-catalog.md` Q-21 还在讨论这一区默认显示什么。删掉会丢排障能力,见 §4 R5。
-- **〔形态〕`AmrGuidance` 第二张卡**:稿子没有;它今天承担「切到 Open Design 智能体」的引导(报错设计方案说这句只在两处出现)。
+- ~~**〔形态〕`AmrGuidance` 第二张卡**:稿子没有;它今天承担「切到 Open Design 智能体」的引导(报错设计方案说这句只在两处出现)。~~ **已消除**(OPEND-2772 / T68):那张卡删掉了,稿子和产品在这一点上对齐。
 - **〔数据〕原因取值**:B18 要求取 `status(label: error).detail` —— `failedRunErrorEvent`(`ChatPane.tsx:1296–1303`)正是这条,**做得到**。
 - **〔数据〕「导出日志」在 chat 里没有实现**:只有剪贴板复制。要么复用 `ExportDiagnosticsButton.tsx`(现只挂 `SettingsDialog.tsx:64`),要么另开。
 - **〔样式〕稿内不一致**:组件稿(5342)「联系支持」是带字的 `mod-secondary`;场景稿(4429)是 `mod-ghost mod-sm mod-icon` 纯图标 + tooltip。按 §6「两者都画了的以组件稿为准」→ 用带字版,但记进待决。
@@ -316,11 +316,17 @@ CSS 3105 注释解释了为什么白底不红底:「红底又和下面那三个�
 **没有重试,没有联系支持。** cmp-ops:「切换到 Cloud — 已登录直接切,未登录先登录。」
 
 **现在**
-等价能力在,但是**第二张卡**:`AmrGuidance`(`ChatPane.tsx:2988–3005`),开关 `runFailureUi.showSwitchCard`(在 `AGENT_AGNOSTIC_FAILURE_UI` 与登录类分支上置 true,`UPSTREAM_UNAVAILABLE` 时被排掉,`ChatPane.tsx:1575`)。反方向的 BYOK → 本地 CLI 逃生口是报错卡里的 `t('avatar.useLocal')` 按钮(:2802–2810)。
+~~等价能力在,但是**第二张卡**:`AmrGuidance`,开关 `runFailureUi.showSwitchCard`(在 `AGENT_AGNOSTIC_FAILURE_UI` 与登录类分支上置 true,`UPSTREAM_UNAVAILABLE` 时被排掉)。~~
+
+**已合并(OPEND-2772 / T68,2026-09-07)**:一张卡。CTA 在报错卡动作排最右、`variant="primary"`
+(`ChatPane.tsx` 的 `chat-error-switch-to-cloud`),开关更名 `runFailureUi.cloudSwitchCta` 且
+**非 Cloud 的失败一律为 true**(出口不变式 `withCloudSwitchCta`)。`UPSTREAM_UNAVAILABLE`
+那条**没有任何注释说明理由**的单独否决一并撤掉。反方向的 BYOK → 本地 CLI 逃生口
+(`t('avatar.useLocal')`)保留,降为次级 —— 它只在 api 模式缺 key/baseUrl/model 时出现。
 
 **差在哪**
-- **〔形态〕两张卡 → 一张卡。** 把 `AmrGuidance` 的主 CTA 收进报错卡的 primary 位。
-- **〔样式〕文案逐字替换**:现有 `chat.amrCard.switchTitle/switchBody/switchCta` 换成稿子原文。
+- ~~**〔形态〕两张卡 → 一张卡。** 把 `AmrGuidance` 的主 CTA 收进报错卡的 primary 位。~~ **已做**(OPEND-2772 / T68,红测 `apps/web/tests/components/chat/opend-2772-one-card-one-cta.test.tsx`)。
+- **〔样式〕文案逐字替换**:现有 `chat.amrCard.switchTitle/switchBody/switchCta` 换成稿子原文。⚠️ **没做,而且是有意不做**:产品 2026-09-07 逐字「我没让你改文案吧?」。合并后主 CTA 仍念产品那句 `chat.amrCard.switchCta`「切换到 OpenDesign Cloud 并重试」,不是稿子的「切换到 Cloud」;`switchTitle` / `switchBody` / 三枚 chip 随卡一起下线。
 - **〔数据〕做得到** —— `showSwitchCard` 已经在算,`onSwitchToAmrAndRetry` 已经接线。
 - **⚠ 但这一格的文案对不上最大的真实场景。** 稿子写的是「需要云端算力」;而 `error-ux-design.md` 的 **S08 供应商额度用完(每月 23,333 次、9,220 台设备、环比 ↑55%、P0 第一大类,今天一个按钮都没有)** 才是这张卡最该承接的内容,它的文案是「{供应商} 的额度用完了 —— 这是你在 {供应商} 那边的额度,重试不会恢复」。**卡面能复用,文案要产品给第二套。**
 

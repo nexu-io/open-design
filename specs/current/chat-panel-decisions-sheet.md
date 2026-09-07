@@ -304,6 +304,172 @@ QA 报的是「专业版余额 $1.79 发新任务,没有任何低余额提示」
 - 改口径:`amr-balance-gate.test.ts`、`w116-amr-low-balance-all-tiers.test.ts`、`amr-balance-gate-personal-tiers.test.ts`、`amr-low-balance-optout-removed.test.ts`、`w116-entry-shell-low-balance-tiers.test.tsx`、`ProjectView.amr-balance-card.test.tsx`。
 - **没动**:`t61-balance-card-turn-archive.test.tsx`、`w62-mid-run-balance-*`(除一行注释)、`upgrade-card-layout.test.tsx`、`ChatPane.wired-cards.test.tsx` —— 它们测的是保留下来的那几档。
 
+## 五之十四、记忆卡「两个进行中」+ 标签泄漏(T67)
+
+| # | 裁决 | 依据 / 说明 |
+|---|---|---|
+| **T67** | **记忆卡不删。打补丁修好它的呈现,不动消息编排、不动 daemon、不动契约。** | 产品口述 2026-09-07。工单 OPEND-2745(urgent)一度被产品改成「[ChatPanel][运行状态] **去掉记忆**」,追问「能修吗?不好修先把 memory 干掉?」时产品先答**先干掉**;把根因讲清楚之后产品改口,原话:<br><br>> 「**去修吧,先打补丁保证能正常运行,不要做大的重构**」<br><br>改口的理由是**问题不在那张卡,在它的送达形式**;而且删卡有真代价 —— 那张卡当初就是为修 **OPEND-2607** 加的(`useMemoryWrittenCard.ts` 开头逐字:一轮可以把三条规则沉进记忆库、库从 22 涨到 25,**而流水里什么都看不到**),删了等于把 2607 重新打开。 |
+
+### 工单症状与根因
+
+QA 报的是两件(Beta 0.21.1-beta.7,会话 `7f04b326`):**① 提交后同时出现两个「进行中」**,下面那个是单独冒出来的记忆消息;**② 那条消息把 `<od-card type="memory-applied">…</od-card>` 的原文直接摊在屏幕上**。实际只有一次运行。
+
+**两件是同一个根因。** 记忆卡是宿主补发的一条助手消息(`ProjectView.tsx` 收到 `useMemoryWrittenCard` 的批次后 `appendConversationMessage`),它**从来不是一次运行**:没有 runId、没有 runStatus、没有 startedAt / endedAt。而 `ChatPane.isAssistantMessageStreaming` 的兜底只问「是不是最后一条助手消息 + 面板在不在流」,**没问这条消息自己有没有过一次运行**。
+
+记忆提取跑在轮次结束**之后**(守护进程在子进程关闭时才排队),回报常常正好落在用户已经发出下一轮的时候:卡成了最后一条助手消息,面板又在流 —— 于是它被当成了那条正在跑的消息。接下来:
+
+- `AssistantMessage` 据此把 `turnRunStatus` 定成 `running`,画出执行记录壳(转球 + 一直往上走的秒表)。**这就是第二个「进行中」**,而且它没有 runId,那一个永远不会结束。
+- 运行中的正文归壳内(D43),壳内叙述走 `ThinkingMarkdown` —— **那条链上没有任何一处 `splitOnOdCards`**,于是 od-card 被当成纯 markdown 渲染,标签原文摊到了屏幕上。**这就是泄漏**。
+
+所以泄漏是①的直接后果,不是第二个 bug:这条消息一旦不再被当成正在跑的运行,正文就回到壳外的普通 `prose-block`,`splitOnOdCards` → `OdCardView` 照常生效。
+
+### 代码怎么落的(两条渲染层条件,共用一个判据)
+
+- 新增 `apps/web/src/runtime/chat/host-authored-message.ts` 的 `assistantMessageNeverHadARun()`:runId / runStatus / startedAt / endedAt **四样都没有**。
+- `ChatPane.isAssistantMessageStreaming`:面板级流式不再投影到这种消息上。
+- `AssistantMessage` 的 `hideRunStatus` 加第三条例外:没跑过的消息不挂「已完成」。复制、时间**照旧** —— 它们说的是这段内容本身,不是某一轮的结果。
+
+⚠️ **判据为什么是四样一起看,而不是「没有 runId / runStatus 就不算在跑」。** 后者会误伤真运行:API / BYOK 模式下的乐观占位正是那个形状(`ProjectView.tsx` 建占位时 `runStatus: config.mode === 'daemon' ? 'running' : undefined`),它靠的就是这条兜底。分开两者的是 **`startedAt`** —— 每条真占位都写了它,宿主补发的卡一条都没有。红测里专门留了这条反向锚点。
+
+### 有意没做的
+
+- **没有**把记忆卡并进上一条 run 消息。那要动落库,daemon 有 `mergeMessageWriteForDaemonBacked` 守卫,属于产品说的「大重构」。
+- **没有**删卡、删 `useMemoryWrittenCard`、删 `chat.memoryWrittenSummary`。
+- **没有**给记忆卡换送达方式。它今天仍是一条助手消息 —— 只是不再冒充一次运行。
+
+### 顺带查到、**本单不修**的邻接缺陷
+
+执行记录壳内的叙述整条链上没有 od-card 处理(`ExecutionShell.tsx` / `ThinkingMarkdown.tsx` 都不调 `splitOnOdCards`)。后果是**模型自己发的** `<od-card>` 只要落在 done 标记之前,就会:运行中把标签原文摊出来,跑完之后连同壳一起收起、卡整个看不见。而系统提示词恰恰让模型「在回复最开头」发 `memory-applied` / `task-brief` 这两张卡(`apps/daemon/src/prompts/system.ts`、`packages/contracts/src/prompts/system.ts`)。
+
+这条**不在 OPEND-2745 的边界内**(工单点的是宿主补发的那条消息),改它要动壳内渲染,超出「打补丁」的授权范围。**要单独立项、单独红测。**
+
+## 五之十五、一次失败只出一张卡,主 CTA 一律切 Cloud(T68)
+
+| # | 裁决 | 依据 / 说明 |
+|---|---|---|
+| **T68** | **报错卡与切换卡合并成一张:主按钮位一律是〔切换到 OpenDesign Cloud 并重试〕,铺到所有 BYOK / 本地 CLI 的失败;第二张卡整块删除。⚠️ 明确推翻 2026-08-26 的 §6.Z「主按钮阶梯」。** | 工单 **OPEND-2772(urgent · 孙庆雨)**「用户自己的 CLI/BYOK 报错,统一 CTA 引导切换 OpenDesign Cloud」,正文只有一张截图:Claude 本地 CLI 登录过期,红框圈住**上下两张卡同时出现**。产品口述 2026-09-07,逐字:<br><br>> 「**2772 的『统一』是『铺到所有报错』,主 cta 都是切换至 cloud,具体样式按设计稿**」<br><br>> 「我没让你改文案吧? 应该是所有 cta 按钮都是切换到 cloud? 然后 2772 应该有个附件,就是之前旧的报错卡片也出现了,我们应该直接干掉旧的报错卡片。**不能新旧一起出现吧??**」<br><br>> 「**8-26 推翻掉吧**」<br><br>被推翻的是 `run-error-catalog.md` §6.Z 那段(原话):「**为什么不是「一律劝切 Cloud」**:付费用 CLI/BYOK 的人遇到『换个模型就好』的问题,主按钮却劝他再买一份 Cloud,那是把营销放在解决问题前面。所以第 1 档永远优先。」推翻记录落在同一份文档新增的 **§6.ZB**,原文保留不删。 |
+
+### 终态长什么样
+
+一张 `RunErrorCard`,自上而下:红标题一行 → 一句人话 → 靠右一排动作。动作排是
+
+  〔联系支持〕次级 · 〔导出日志〕次级 · (阶梯自己那颗,次级)· 〔重试 / 续跑〕次级 · **〔切换到 OpenDesign Cloud 并重试〕主**
+
+最右那颗是主(交付稿第 78 / 79 格都是「次要在左、主动作在最右」),而且**整张卡只有一颗主按钮**。
+
+### 三条边界,一条都没越
+
+- **文案一个字没动。** 每一类失败保留它自己的标题 / 正文;主 CTA 复用切换卡上原来那句 `chat.amrCard.switchCta`「切换到 OpenDesign Cloud 并重试」,**没有**换成稿子第 79 格的「切换到 Cloud」——「改文案」产品明确说了不在授权范围内。
+- **阶梯不删,只让位。** §6.Z 的四档仍然在算(`primaryActionForFailure` 一行没动),换个模型 / 去设置 / 在终端登录 / 授权并重试 / 重试 / 续跑**一颗都没删**,统一退到次级(`ChatPane` 的 `errorActionVariant`)。
+- **AMR 不能被劝去买 AMR。** 出口不变式两侧同源:非 Cloud 走 `withCloudSwitchCta`(往上铺),Cloud 走 `withoutCloudSelfPromotion`(往回摘),判据都是 `runsOnALocalAgent()` 一个函数。全矩阵反向用例在 `amr-card-gaps.test.ts`(10 code × 7 detail)与新红测里各一份。
+
+### 摆出来、**没有自己拍板**的一条:〔重试〕
+
+交付稿第 79 格只画了两枚按钮 ——〔导出日志〕〔切换到 Cloud〕,**没有重试、没有联系支持**;
+产品说「具体样式按设计稿」。但重试对某些失败是真正的自救(上游 5xx、网络抖动、S30 里
+混着的握手中断),一刀切掉会伤到它们;〔联系支持〕又是产品自己点名「好多都应该得有」的。
+本轮取**保守解 A**:两颗常驻次级和重试都留在卡上,只降为次级。三个候选写进
+`run-error-catalog.md` §6.ZB 末尾的表,等产品挑。
+
+### 顺手处理掉的一条无理由否决
+
+`UPSTREAM_UNAVAILABLE` 在映射表里明写着要出切换卡,却在 `ChatPane` 里被**单独否掉**,
+代码里没有任何注释说明理由,规格与决策表里也查不到出处 —— 也就是说上游过载(S10,
+每月 11,200 次)在产品里从来没有过这颗出路。这次一并撤掉。同时撤掉的还有
+`PROMOTE_AMR_CODES` 这张表:它列的四个 code 在兜底分支之前**全都已经 return**,
+`promote` 恒为 false,是一段没人发现的死码。
+
+### 埋点怎么搬的(一个事件都没丢)
+
+- `surface_view`(element=`run_failed_toast`):以前切换卡在场时由**切换卡**发,报错卡那个 effect 主动早退避让。卡没了,早退那一句也删掉 —— 事件属主收回报错卡,props 一个字段没变。⚠️ 不删这句话的话,凡是出 Cloud CTA 的失败(现在是所有 BYOK 失败)一条 surface_view 都不会有。
+- `ui_click`(element=`go_amr`)+ `recordAmrEntry('chat_error_switch_retry_card')`:原样搬到新 CTA 的 onClick,归因来源字符串**逐字不变**(动它会断漏斗)。
+- `run_recovery_action` 的 `switch_runtime_retry`:曝光与点击两侧都还在,判据从 `showAmrGuidance` 换成同义的 `showCloudSwitchCta`。
+
+### 测试
+
+- 新增红测 `apps/web/tests/components/chat/opend-2772-one-card-one-cta.test.tsx`(17 条)。**故意不 mock `AmrGuidance`** —— 第一条判据就是「那张卡还在不在」,stub 掉等于把要照的东西糊住。撤实现验红:9 条红、8 条绿(6 条 AMR 反向用例本来就该绿)。
+- 字段更名 `showSwitchCard` → `cloudSwitchCta`(「第二张卡」这个概念没有了,名字不能留着骗人)。
+- 口径翻转 `amr-guidance.test.ts`(11 处)、`run-error-ladder.test.ts`、`run-failure-clarification-repeated.test.ts`、`run-failure-agent-reply-incomplete.test.ts` —— 都是「非 Cloud 的卡有没有这颗 CTA」,从 false 翻成 true(循环用例翻成 `agent !== 'amr'`)。**AMR 那一侧一条都没翻。**
+- 删除 `apps/web/tests/components/AmrGuidance.test.tsx`(组件没了);7 份 ChatPane 测试里的 `vi.mock('.../AmrGuidance')` 桩一并摘掉。
+- `ChatPane.error-card-ladder.test.tsx` 的第 4 档那一节**改成两侧都钉**,不是删:BYOK 封号主位归 Cloud CTA、〔联系支持〕退回次级;**已经在 Cloud 上**的封号仍然把〔联系支持〕提为主 —— 提为主这条规则本身没有被删,只是适用面缩到了拿不到 Cloud CTA 的那一侧。
+- `run-error-actions-parity.test.tsx` 的「重试是 primary」改成「重试和旁边几颗同一个 `errorActionVariant` 出口」,并补一条源码断言钉住「没有 Cloud CTA 时它仍是 primary」。
+
+### 顺带清掉的死码 / 留下的死键
+
+- **已删**:`styles/chat.css` 里 `.amr-card__body` / `__chips` / `__chip` / `__cta` / `__cta:hover` 五条规则(唯一的使用者就是那张卡)。
+- **没删,报上来等拍板**:`chat.amrCard.switchTitle` / `switchBody` / `chipOfficial` / `chipNoKey` / `chipAutoRetry` 五个 i18n 键随卡下线后**成了死键**(19 个 locale × 5 + `types.ts`)。产品说了「我没让你改文案吧」,所以这一轮**一个字典都没动**;要清的话是一次纯机械删除,单独一个 PR 更干净。`switchCta` 仍在用,不能删。
+
+## 五之十六、设计风格选择题从提示词整题下线(T69)
+
+| # | 裁决 | 依据 / 代价 / 连带 |
+|---|---|---|
+| **T69** | **「看图选设计风格」这道题整题不问了 —— 从**提示词源头**断掉,不在渲染层拦。组件代码**原地留着当休眠件**,不删。** | 产品口述 2026-09-07(OPEND-2760),原话:<br><br>> 「选中态就是当前切换到的那个效果,或者你能否**把提示词里让 agent 感知到 question-form 能出设计风格的那些提示词下掉**?**不问了**,这些代码先讲提示词干掉,**组件代码注释,后续可能要找回**」<br><br>⚠️ **产品没有给出理由**,这里不代为补写。<br><br>工单原标题是「去掉随机、平铺、换一批、选中状态」四个控件。调研发现按字面做**不自洽**:`direction-cards` / `tone` 都躺在 `CHOICE_QUESTION_TYPES` 里,去掉选中态 ⇒ `requiredAnswered` 永远 false ⇒ 「下一步」**永远置灰**,整道题只剩「跳过」(判据钉在 `qf-next-gate.test.tsx`,来自交付稿 5-1 / 5-2)。把这条摆给产品之后,才有了上面这句「不问了」。 |
+
+### 这是对交付稿的**有意偏离**
+
+交付稿 `729fa43ce7` 的 `cmp-clarify` 第 21 / 22 格(`docs/design/chat-panel/src/body-components.html`)画的就是这张卡,四个控件**一个不少**:`换一批`(`:722/:761`)、网格切换 `.vswitch`(同行)、`随机`(`:746/:785`)、选中态 `.vopt.is-on` + `.pick > .ck`(`:753`);第 22 格状态标签逐字写着「**选中一张 · 图上落绿勾,「下一步」才亮起**」。
+
+**后来人不要当成漏做补回去。**
+
+### 推翻了哪几条
+
+- **2026-08-27 产品口径**(逐字记在 `apps/web/src/runtime/visual-style-deck.ts` 文件头):「点击换一批时,顺序从 22 个里每次挑 6 个出来」「但如果用户选中了一个,那要保留选中的这个,**不能把用户选中的给轮换出去了,不然无法取消选择了**」→ **不再有触发它的路径**。⚠️ 结论本身**没有被证伪**,代码和 5 条测试**全部原样保留**,找回来那天直接生效。
+- **2026-09-04**「先改成 4 吧」(`VISUAL_STYLE_BATCH_SIZE = 4`,OPEND-2584)→ 同上,保留不动。
+- **2026-08-27 用户裁决**「视觉调性就是要单选」→ **调性题本身没了**。原来守它的 `apps/daemon/tests/prompts/tone-single-select.test.ts` 里那条 `选项还在 —— 别把这题整个删了` 是**防误删**守卫;这次的删除**是产品指令不是误删**,该文件已翻成反向守卫(文件名故意不改,保住裁决链)。
+- **B39**「+22 别出现了,直接渲染 22 个」、**B53**「看全部交给网格切换」、**B56**「视觉方向底栏顺序 `Shuffle / Random / Next`」(均在 `specs/current/chat-panel-feedback.md`)→ 都**只在这张卡出现时才有意义**,随卡一起休眠。
+
+### 断在哪儿:**七**条路径,不是六条
+
+前六条就是 `e2e/tests/question-form-type-parity.test.ts` 那份清单。**第七条是最容易漏的一条**:`plugins/_official/atoms/direction-picker/SKILL.md` —— 它不在 parity 清单里,却被 `od-default`(**默认设计路由**)、`od-next-strategy`、`od-new-generation`、`od-tune-collab`、`od-plugin-authoring` 五个官方场景挂在 `plan` 阶段整段拼进系统提示词。只改前六条,默认路由照旧会教模型出方向卡。
+
+每条路撤的是两样东西:类型清单里的 `direction-cards` + 它的作者规则;以及开场简报示例里那道 `{ "id": "tone", "label": "Visual tone", "type": "radio", … }` —— **`tone` 是第二个、也更隐蔽的入口**,它长得像普通单选,渲染时被 `QuestionForm.tsx` 的 `asksVisualDirection`(`q.id === 'tone'`)认走换成整份目录。只撤 `direction-cards` 会留下它。
+
+`direction-picker` atom 改成「**自己定方向、不问用户**」(设计系统 → 用户给的品牌源 → 自己推断),这不是新造的产品规则 —— `discovery.ts` RULE 2 和 `directions.ts` 早就写着「pick the best-matching direction yourself … without asking」。
+
+### 判据变更:提示词与渲染器**故意不相等**
+
+`question-form-type-parity.test.ts` 原本断言「提示词类型清单 **==** 渲染器类型清单」。现在放宽成「**== 渲染器 − 休眠集**」(`DORMANT_TYPES = {'direction-cards'}`),理由:
+
+- 渲染器**继续**认 `direction-cards` —— 缓存的旧提示词、旧版客户端、模型记住的旧格式都还可能发来这种表单,认不得它那道题会渲染成一块只有标题的空白;
+- 提示词**不再**提它 —— 提了就等于告诉模型「你可以问设计风格」,连否定句(「不要发 direction-cards」)也一起撤,否定句同样是在宣告这个能力存在。
+
+⚠️ **往 `DORMANT_TYPES` 里加名字 = 宣布又一个能力对模型不可见,必须有产品裁决**,不是「这条路写漏了」的消音器。已实测:把 `direction-cards` 加回任何一条路的类型清单,parity **当场红**。
+
+**撤的是「发问」,不是「读答案」**:`prompts/directions.ts` 里解读旧表单答案那半边(`value` / `foundation` / `guidance`、`od tools directions`)**故意留着**,和渲染器继续认这个类型是同一件事的两面。
+
+### 顺带修掉的一条死路(本来就在,不是这次改出来的)
+
+一道**渲染不出任何选项**的 `direction-cards`(既没有 `visualStyleContext`、模型又没带 `cards`)此前会:只剩一个标题 + 「下一步」**永远置灰** ⇒ 整张表只剩「跳过」。`visualStyleContextForProjectKind` 对 `audio` / `brand` / `orbit` / `design_system` 以及项目类型未落定(`null`)都返回 `undefined`,所以这个死角真实可达。
+
+下线之后 `direction-cards` 变成**不再被宣传的类型**,它的每一次出现都是计划外的,也就更可能缺素材 —— 安全网必须真的兜得住,不能只是「留着代码」。修法是一条具名不变量 `questionRendersNoChoices`:**一道渲染不出任何选项的题不能充当提交门闩**(压过 `required`)。红测 `apps/web/tests/components/question-form-direction-cards-dead-end.test.tsx`,含防真空与对照组各一条 —— 有卡可点时 5-1 的门闩照旧生效。
+
+### 验收陈列页第 21 / 22 格:**建议,未执行**
+
+`docs/design/chat-mirror` 那页是 ChatPanel 1:1 重构的验收依据,`mirror-gallery.test.tsx:624/626` 两格分别写着「视觉方向 · 看图选择(风格类问题不能用文字选项),没选时「下一步」置灰」和「选中一张 · 图上落绿勾,「下一步」才亮起」。
+
+**我没有动它,挖洞要留痕。三个选项摆给产品:**
+
+1. **两格标成「已休眠」**(推荐)—— 格子照旧渲染(组件还在,渲染得出来),标题加前缀、备注里写明「T69 起正常流程不出现,提示词已撤;这两格是找回时的对照件」。好处:82 格矩阵不缺号,找回那天有现成基线。
+2. **整格删掉** —— 矩阵从 82 变 80,后续所有按编号引用的文档要跟着改号。代价最大。
+3. **保留原样不加说明** —— 最省事,但验收人会照着一张线上根本不存在的卡验收。**不建议。**
+
+### 测试怎么处理的
+
+**保留(测休眠件本身,是找回时的保障)**:`tests/runtime/visual-style-deck.test.ts`、`QuestionForm.deck-batch.test.tsx`、`QuestionForm.direction-cards-catalog.test.tsx`、`chat/w75-visual-direction-card.test.tsx`、`chat/visual-at-limit-affordance.test.ts`、`chat/visual-option-stack-opacity.test.ts`、`chat/visual-card-aspect.test.ts`、`chat/visual-card-spacing.test.ts`、`chat/question-form-carousel-nav-inset.test.tsx` —— 九个文件**一个没删**。
+
+**改口径(测的是这次断掉的那条接线)**:`apps/daemon/tests/prompts/` 下 `core-slim.test.ts`(三处)、`discovery-form.test.ts`、`system.test.ts`(两处)、`discovery-localization-drift.test.ts`(direction-picker 那一行的判据句)、`tone-single-select.test.ts`(整份翻向)、`system-prompt-matrix.test.ts` 快照(**只有 `totalChars` 变了,section 一个没增没减**);`packages/contracts/tests/system-prompt.test.ts`(两处)。
+
+**新增**:`e2e/tests/question-form-visual-style-retired.test.ts`(七条路径正面守「撤干净」)、`apps/web/tests/components/question-form-direction-cards-dead-end.test.tsx`(死路兜底)。
+
+### i18n:六个 `qf.visual*` 键**一个不删**
+
+`qf.visualReshuffle` / `qf.visualRandom` / `qf.visualViewGrid` / `qf.visualViewFan` / `qf.visualPrev` / `qf.visualNext` 的唯一消费者是 `QuestionForm.tsx`,而那些控件**还在**(只是不可达)。删键会让休眠件编译不过,等于把「留着随时能找回」变成谎话。19 个 locale + `types.ts` 一处未动。
+
+### 本单**不修**的邻接面(留给产品拍)
+
+- `plugins/_official/examples/guizang-ppt/`(及其 `design-templates/guizang-ppt/` 镜像)仍会在用户明确要求时发 `direction-cards`。它是**opt-in 的示例插件**、有自己作者写的流程,不是「产品默认去问设计风格」;渲染器还认这个类型,所以它继续能跑。**要不要一起下线,是插件策略问题,需要产品单独说。**
+- `direction-picker` atom 仍挂在五个官方场景的 `plan` 阶段。我只改了它**说什么**(不再问),**没有**把它从场景清单和 marketplace 里摘掉 —— 那是插件拓扑改动,越出本单范围。
+
 ## 六、需要我做实测才能定的(3 条,不用你们操心)
 
 T10(Claude 到底发不发原生清单)、T1(AMR 打码与归一)、T2(提测分不分批)—— 我来。
