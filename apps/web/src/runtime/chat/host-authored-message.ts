@@ -38,3 +38,56 @@ export function assistantMessageNeverHadARun(message: ChatMessage): boolean {
     && message.endedAt === undefined
   );
 }
+
+/**
+ * **这条会话此刻停在哪一轮上** —— 倒着找最后一条**真的跑过一轮**的助手消息。
+ *
+ * 面板上一大票「只发给当前这一轮」的东西都挂在这个 id 上:下一步引导、继续未完成
+ * 的任务、投稿到 Open Design、产物卡的登记、以及乐观占位那条流式兜底。它们问的
+ * 都是同一个问题 ——「**哪一轮是这条会话的当前落点**」。
+ *
+ * ⚠️ 那个问题的答案**不等于**「流水里最后一条 assistant 消息」。宿主补发的卡
+ * (记忆卡、品牌协助卡)也是 assistant 消息,但它是**上一轮的附属组件,不是新的
+ * 一轮**(OPEND-2745 的裁决原话)。而记忆提取偏偏跑在轮次结束**之后**,所以它
+ * 几乎总是落在刚交付的那一轮后面 —— 于是「最后一条」被它顶掉,那一轮的入口整块
+ * 消失。
+ *
+ * ⚠️ 这**不会**让入口变粘:收走它的仍然是**下一轮助手消息**,一条真的跑过的
+ * 消息照旧顶掉前一条。宿主卡只是不再冒充那个「下一轮」。
+ *
+ * 整条会话一条真运行都没有(只有宿主卡)时返回 `undefined` —— 没有哪一轮是当前
+ * 落点,本来就不该有人认领这些入口。
+ */
+export function lastAssistantTurnId(messages: readonly ChatMessage[]): string | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message || message.role !== 'assistant') continue;
+    if (assistantMessageNeverHadARun(message)) continue;
+    return message.id;
+  }
+  return undefined;
+}
+
+/**
+ * **转录的队尾,但宿主补发的卡对它是透明的。**
+ *
+ * 「最后一条消息是什么」是另一个问题,和上面那个不一样:它连**用户消息**一起看。
+ * 失败轮的恢复入口(〔重试〕/〔续跑〕/报错卡)问的正是这个 —— 一轮失败之后,
+ * 只要用户还没往下走,那一轮就仍然是等着被推进的那一件事。
+ *
+ * ⚠️ 透明的只有**宿主补发的助手卡**这一类。用户自己发出的下一句照旧拦得住 ——
+ * 他已经走过去了,恢复入口跟着收走;那是 OPEND-2644 判过的同一条线。
+ *
+ * 整条转录里除了宿主卡什么都没有时返回 `null`。
+ */
+export function trailingMessageIgnoringHostCards(
+  messages: readonly ChatMessage[],
+): ChatMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message) continue;
+    if (assistantMessageNeverHadARun(message)) continue;
+    return message;
+  }
+  return null;
+}
