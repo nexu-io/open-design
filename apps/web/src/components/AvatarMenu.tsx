@@ -36,7 +36,7 @@ import { isMacPlatform } from '../utils/platform';
 import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
-  workspaceBillingSnapshotForContext,
+  workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import {
   projectWorkspaceContext,
@@ -278,13 +278,43 @@ export function AvatarMenu({
       cancelled = true;
     };
   }, [open, amrAvailable]);
-  const exactWorkspaceSnapshot = workspaceBillingSnapshotForContext(
+  /*
+   * The plan tier of the workspace in scope, read through the ONE projection
+   * that is allowed to answer that question.
+   *
+   * This used to read the exact billing SNAPSHOT directly, which is the same
+   * source `workspaceBillingSummaryForContext` consults first — but only the
+   * first. The projection also carries a fallback that was approved and is
+   * load-bearing: when a TEAM workspace has no authorized snapshot, a
+   * team-namespaced account tier may stand in for it (a personal tier may not,
+   * because it describes the account's own subscription and cannot name a team
+   * workspace's plan). Reading the snapshot directly walked around that
+   * fallback, and there was no third source to catch the fall.
+   *
+   * The snapshot goes missing for reasons that have nothing to do with the
+   * viewer's entitlements: A answers the snapshot route 409
+   * `billing_workspace_snapshot_unsupported` while `/wallet/balance` still
+   * answers 200; a rolling deploy leaves an old API pod 404/405-ing the route
+   * for a few minutes; a local vela CLI predates `--workspace-id`. The daemon
+   * then omits the `workspaceSnapshot` key entirely. On this surface that
+   * turned into `scopedPlanId: null`, `canUpgradeVelaPlan(null) === false`, and
+   * a veto landing BEFORE `canReachWorkspaceBillingEntrance` ever got asked —
+   * so a team owner clicked a plan-gated model and nothing happened at all.
+   *
+   * Ordering is unchanged where it matters: the projection consults the
+   * snapshot FIRST, so a present snapshot still outranks the account tier.
+   *
+   * It is a pure function of the response this component already holds, so the
+   * corrected tier lands on the same render frame — there is no second async
+   * hop that would paint the wrong identity first and fix it later.
+   */
+  const scopedWorkspaceBilling = workspaceBillingSummaryForContext(
     workspaceBillingResponse,
     workspaceContext,
   );
   const scopedPlanId =
     workspaceContext?.workspaceType === 'team'
-      ? exactWorkspaceSnapshot?.billing.planId?.trim() || null
+      ? scopedWorkspaceBilling?.membershipTier?.trim() || null
       : workspaceContext?.workspaceType === 'personal'
         ? workspaceBillingResponse?.summary?.membershipTier?.trim() || null
         : null;
