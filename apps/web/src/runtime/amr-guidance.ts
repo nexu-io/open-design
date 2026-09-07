@@ -1150,6 +1150,54 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.upstreamUnavailable',
     'chat.runError.upstreamUnavailableMessage',
   ),
+  // S10 as well — the OTHER half of the same scenario, and the half the daemon
+  // actually reaches most often. Catalogue R-051 ("上游 5xx / 过载 529 / 网关 502
+  // upstream_error") names exactly these two details, both 可重试, and points
+  // them at S10「模型服务商报错 / 过载」— 11,200 runs/month, 8.8% of failures,
+  // 2,056 devices.
+  //
+  // They were structurally unreachable, for the same reason the
+  // `model_unavailable` family above was: the ONE code web has an S10 card for
+  // is `UPSTREAM_UNAVAILABLE`, and the ACP/JSON-RPC path never emits it. That
+  // path's `fail()` (`agent-protocol/acp/session.ts`) hard-codes
+  // `AGENT_EXECUTION_FAILED` and — unlike the json-event-stream and Claude
+  // paths in `server.ts`, which both run `classifyAgentServiceFailure` — never
+  // upgrades the code from the text. So an AMR/vela run whose provider replied
+  // 「Our servers are currently overloaded」 arrives at this table carrying the
+  // opaque code plus one of these two details, and nothing claimed it.
+  //
+  // What that cost the user is not a missing sentence. The generic card's
+  // `messageKey` is null, and a null messageKey is what hands the description
+  // slot back to the upstream string — so the card rendered vela's whole
+  // diagnostic envelope (`json-rpc id 4: opencode event stream: {"id":"evt_…",
+  // …,"sessionID":"ses_…"}`) while the one sentence that described the failure,
+  // 「Our servers are currently overloaded. Please try again later.」, sat
+  // quoted inside it. (Observed on packaged 0.21.2-beta.1, 2026-09-07.)
+  //
+  // Same card as `fatal_rpc_error` above, deliberately: one scenario, one
+  // story, and the copy + its 19 locales already exist. `daemonNamedTheFailure`
+  // has been naming these two as the known gap in its own docblock ("genuinely
+  // transient ones (`upstream_5xx`, `provider_high_demand`)"); this closes it.
+  //
+  // Ladder rung 2 — the provider's wobble passes, so Retry is the honest button
+  // and matches the daemon's own verdict for this family (`retryable: true` /
+  // `user_action: 'retry'`, `run-failure-classification.ts` upstreamDetail).
+  //
+  // ⚠️ `upstream_client_error` and `network_error` — the other two members of
+  // `upstreamDetail()` — are deliberately NOT here. A 4xx / request-shape
+  // rejection is R-050, not R-051, and repeats identically (`retryable: false`),
+  // so S10's 「稍后再试通常就好」 would be a lie; `network_error` is the residue
+  // where the endpoint was never reached, which R-054 sends to the client
+  // environment card, not to a provider-outage card. Both need their own row,
+  // and neither is what this change is about.
+  upstream_5xx: retryWithGuidance(
+    'chat.runError.title.upstreamUnavailable',
+    'chat.runError.upstreamUnavailableMessage',
+  ),
+  provider_high_demand: retryWithGuidance(
+    'chat.runError.title.upstreamUnavailable',
+    'chat.runError.upstreamUnavailableMessage',
+  ),
   // S18 · risk control suspended the account (catalogue R-064: "card — contact
   // support, no Retry"). Resolved here, ahead of the AMR branch, because the
   // suspension is the ACCOUNT's and the AMR catch-all below would otherwise
