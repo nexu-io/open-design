@@ -7574,6 +7574,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         if (err?.code === 'ARTIFACT_MANIFEST_INVALID') {
           return sendApiError(res, 400, 'BAD_REQUEST', err.message);
         }
+        console.error('[api/projects/:id/files] Upload failed:', err);
         sendApiError(res, 500, 'INTERNAL_ERROR', 'upload failed');
       }
     },

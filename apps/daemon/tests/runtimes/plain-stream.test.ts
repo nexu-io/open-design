@@ -7,6 +7,7 @@ import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifacts,
   plainStdoutFromRunEvents,
+  textDeltaFromRunEvents,
 } from '../../src/runtimes/plain-stream.js';
 import { listFiles, writeProjectFile } from '../../src/projects.js';
 
@@ -146,6 +147,21 @@ describe('plain stream artifact extraction', () => {
 
     expect(artifacts).toHaveLength(1);
     expect(artifacts[0]?.content).toBe('<!doctype html><html></html>');
+  });
+
+  it('reconstructs text deltas from agent run events', () => {
+    const text = textDeltaFromRunEvents([
+      { event: 'status', data: { type: 'status', label: 'running' } },
+      { event: 'agent', data: { type: 'text_delta', delta: 'Hello ' } },
+      { event: 'stdout', data: { chunk: 'ignored' } },
+      { event: 'agent', data: { type: 'text_delta', delta: '<artifact identifier="app" type="text/html"><h1>App</h1></artifact>' } },
+    ]);
+
+    expect(text).toBe('Hello <artifact identifier="app" type="text/html"><h1>App</h1></artifact>');
+    const artifacts = extractPlainStreamArtifacts(text);
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]?.identifier).toBe('app');
+    expect(artifacts[0]?.content).toBe('<h1>App</h1>');
   });
 
   it('extracts artifact tags inside indented backtick examples to match web markdown context', () => {

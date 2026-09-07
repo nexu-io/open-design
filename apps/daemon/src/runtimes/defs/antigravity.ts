@@ -10,7 +10,7 @@ import { dirname, join } from 'node:path';
 
 import { DEFAULT_MODEL_OPTION } from './shared.js';
 import { agentCapabilities } from '../capabilities.js';
-import type { RuntimeAgentDef } from '../types.js';
+import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
 
 const ANTIGRAVITY_SKIP_PERMISSIONS_FLAG = '--dangerously-skip-permissions';
 
@@ -168,6 +168,36 @@ export async function waitForAgyToReadModel(
   }
   return false;
 }
+ 
+export function parseAntigravityModels(
+  stdout: string,
+): RuntimeModelOption[] | null {
+  const lines = String(stdout || '').split(/\r?\n/);
+  const out: RuntimeModelOption[] = [DEFAULT_MODEL_OPTION];
+  const seen = new Set<string>();
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith('Fetching')) continue;
+    const parts = line.split('\t');
+    let id = '';
+    let label = '';
+    if (parts.length >= 2) {
+      id = parts[0]!.trim();
+      label = parts[1]!.trim();
+    } else {
+      const match = line.match(/^(\S+)\s+(.+)$/);
+      if (match) {
+        id = match[1]!.trim();
+        label = match[2]!.trim();
+      }
+    }
+    if (id && label && !seen.has(id)) {
+      seen.add(id);
+      out.push({ id, label });
+    }
+  }
+  return out.length > 1 ? out : null;
+}
 
 export const antigravityAgentDef = {
   id: 'antigravity',
@@ -178,13 +208,24 @@ export const antigravityAgentDef = {
   capabilityFlags: {
     [ANTIGRAVITY_SKIP_PERMISSIONS_FLAG]: 'skipPermissions',
   },
+  listModels: {
+    args: ['models'],
+    parse: parseAntigravityModels,
+    timeoutMs: 5000,
+  },
   fallbackModels: [
     DEFAULT_MODEL_OPTION,
+    { id: 'Gemini 3.8 Flash (High)', label: 'Gemini 3.8 Flash (High)' },
+    { id: 'Gemini 3.8 Flash (Medium)', label: 'Gemini 3.8 Flash (Medium)' },
+    { id: 'Gemini 3.8 Flash (Low)', label: 'Gemini 3.8 Flash (Low)' },
+    { id: 'Gemini 3.7 Flash (High)', label: 'Gemini 3.7 Flash (High)' },
+    { id: 'Gemini 3.7 Flash (Medium)', label: 'Gemini 3.7 Flash (Medium)' },
+    { id: 'Gemini 3.7 Flash (Low)', label: 'Gemini 3.7 Flash (Low)' },
+    { id: 'Gemini 3.6 Flash (High)', label: 'Gemini 3.6 Flash (High)' },
+    { id: 'Gemini 3.6 Flash (Medium)', label: 'Gemini 3.6 Flash (Medium)' },
+    { id: 'Gemini 3.6 Flash (Low)', label: 'Gemini 3.6 Flash (Low)' },
     { id: 'Gemini 3.1 Pro (High)', label: 'Gemini 3.1 Pro (High)' },
     { id: 'Gemini 3.1 Pro (Low)', label: 'Gemini 3.1 Pro (Low)' },
-    { id: 'Gemini 3.5 Flash (High)', label: 'Gemini 3.5 Flash (High)' },
-    { id: 'Gemini 3.5 Flash (Medium)', label: 'Gemini 3.5 Flash (Medium)' },
-    { id: 'Gemini 3.5 Flash (Low)', label: 'Gemini 3.5 Flash (Low)' },
     {
       id: 'Claude Sonnet 4.6 (Thinking)',
       label: 'Claude Sonnet 4.6 (Thinking)',
@@ -192,7 +233,7 @@ export const antigravityAgentDef = {
     { id: 'Claude Opus 4.6 (Thinking)', label: 'Claude Opus 4.6 (Thinking)' },
     { id: 'GPT-OSS 120B (Medium)', label: 'GPT-OSS 120B (Medium)' },
   ],
-  supportsCustomModel: false,
+  supportsCustomModel: true,
   // We deliberately do NOT opt into `resumesSessionViaCli` / agy's `-c`
   // resume flag on follow-up turns. Tested both shapes; `-c` activates
   // agy's internal agentic loop (multi-step model retries, tool calls,
@@ -208,27 +249,30 @@ export const antigravityAgentDef = {
   // JSON fences (see `sanitizePriorAssistantTurnForTranscript` in
   // apps/web/src/providers/daemon.ts). The stronger OVERRIDE block
   // composed in server.ts gives a second line of defense for weak
-  // plain-stream models like Gemini 3.5 Flash.
+  // plain-stream models.
   buildArgs: (
     prompt,
     _imagePaths,
-    _extra = [],
+    extraAllowedDirs = [],
     options = {},
     runtimeContext = {},
   ) => {
-    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
-      writeAntigravityModelSelection(
-        options.model,
-        runtimeContext.antigravitySettingsPath,
-      );
-    }
-    // Print mode via `-p <prompt>`. Older OD used `agy -p -` and wrote the
-    // prompt on stdin, but current agy (reproduced on 1.1.13) treats `-`
-    // as the literal prompt string and ignores stdin — the model only
-    // ever sees a single dash (#7161). Passing the real prompt as the
-    // `-p` argument matches the verified working CLI form
-    // (`agy -p "say hello"`).
     const args: string[] = [];
+    if (options.model && options.model !== DEFAULT_MODEL_OPTION.id) {
+      args.push('--model', options.model);
+    }
+    const dirs = (extraAllowedDirs || []).filter(
+      (dir) => typeof dir === 'string' && dir.trim(),
+    );
+    if (runtimeContext.cwd && typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.trim()) {
+      dirs.push(runtimeContext.cwd.trim());
+    }
+    if (runtimeContext.promptFilePath) {
+      dirs.push(dirname(runtimeContext.promptFilePath));
+    }
+    for (const dir of dirs) {
+      args.push('--add-dir', dir);
+    }
     // Always opt into `--log-file` when the daemon supplied a path so
     // it can post-exit grep for the actual upstream failure shape
     // (auth missing vs quota reached vs upstream error) — without it
@@ -245,11 +289,25 @@ export const antigravityAgentDef = {
     if (agentCapabilities.get('antigravity')?.skipPermissions) {
       args.push(ANTIGRAVITY_SKIP_PERMISSIONS_FLAG);
     }
-    args.push('-p', prompt);
+    const printTimeout = process.env.OD_AGY_PRINT_TIMEOUT;
+    if (printTimeout) {
+      args.push('--print-timeout', printTimeout);
+    }
+    args.push('--output-format', 'stream-json');
+    if (runtimeContext.promptFilePath) {
+      args.push(
+        '-p',
+        `Read the system instructions, conversation history, and user request from the file ${runtimeContext.promptFilePath}. Follow the instructions strictly and provide the final response to the user's latest request.`,
+      );
+    } else {
+      args.push('-p', prompt);
+    }
     return args;
   },
+  promptViaFile: true,
   promptViaStdin: false,
-  streamFormat: 'plain',
+  capturesSessionIdFromStream: true,
+  streamFormat: 'antigravity-stream-json',
   installUrl: 'https://antigravity.google/cli',
   docsUrl: 'https://antigravity.google/docs/cli-overview',
 } satisfies RuntimeAgentDef;
