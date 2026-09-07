@@ -39,6 +39,14 @@ OD_WRITE_MIRROR="$PWD/docs/design/chat-mirror/mirror-exec.html" \
   pnpm --filter @open-design/web exec vitest run \
   -c vitest.config.ts tests/components/chat/mirror-gallery.test.tsx
 
+# ①.5 上字体 —— **别跳这一步**
+#      仓库里那份陈列页**故意不带字体字节**:同一份字节 apps/web/public/fonts/ 里已经
+#      有了,再 base64 复制一份进 HTML 要 +423KB,还会撑破 CI 的单文件 1048576 字节闸。
+#      所以字体在**本地**注入,注入结果不提交。跳过这一步的话整页读数都是回退面
+#      PingFang SC 量出来的(见下面「守卫」第 3 条)。
+node docs/design/chat-mirror/inline-fonts.mjs
+node docs/design/chat-mirror/check-fonts.mjs   # 前置闸,退出码 0 才能开始量
+
 # ② 稿子那一侧 —— 稿子的版本**写死在脚本里**(DRAFT_COMMIT),不靠「我起的那个服务是新的」
 node docs/design/chat-mirror/build-matrix.mjs --out /tmp/od-serve/chat-matrix/matrix.html
 cp docs/design/chat-mirror/mirror-exec.html /tmp/od-serve/chat-mirror/
@@ -46,7 +54,15 @@ cp docs/design/chat-mirror/mirror-exec.html /tmp/od-serve/chat-mirror/
 # ③ 逐格量(两页要同源同域,外链样式才加载得到)
 cd /tmp/od-serve && python3 -m http.server 17699 --bind 127.0.0.1 &
 DIFF_BASE=http://127.0.0.1:17699 node docs/design/chat-mirror/diff-cells.mjs 1 90 > diff.json
+
+# ④ 量完把字体摘掉再看 git —— 带字体的那份是**本地产物**,不提交
+node docs/design/chat-mirror/inline-fonts.mjs --strip
 ```
+
+> **`mirror-exec.html` 的两种形态**:仓库里那份 **776,980 字节、不带字体**,页顶有一条
+> 黄色横幅明写「这份页面还没上字体」;本地跑完 `inline-fonts.mjs` 之后是 **约 1.20MB、
+> 带三个内联字体面**,横幅自动隐藏。**只提交前者。** 跑完 `git status` 看到
+> `mirror-exec.html` 变脏是预期的,`--strip` 或重新生成都能还原。
 
 `diff-cells.mjs` 的几个开关(默认值就是推荐值,改之前先读它文件里对应那段注释):
 `DIFF_NUMWILD=0` 关掉配对时的数字通配(关了以后带数字的元素会整批掉进 onlyDesign / onlyOurs)、
@@ -119,7 +135,7 @@ MIRROR_PICK=".stage, .gap" MIRROR_NO_FULL=1 node docs/design/chat-mirror/shoot.m
 > 还在照旧印,给验收的人看的是三个不存在的缺陷。同理还有测试文件里那些硬编码注记 ——
 > 页面重跑照样把旧话印出来,它们不会自己过期。
 
-## 这把尺子自己的两条守卫
+## 这把尺子自己的三条守卫
 
 页面是**挑着内联**样式的(`pick()`),而漏挑一族的后果不是「少了点样式」,是那一格的元素
 退回浏览器默认值 —— 逐格比对会把整条规则的每个属性都报成「实现没对上」,长得和真差异一模一样。
@@ -132,3 +148,20 @@ MIRROR_PICK=".stage, .gap" MIRROR_NO_FULL=1 node docs/design/chat-mirror/shoot.m
    重写了一遍 —— 它曾经把 DOM 上的 `data-orb-box` 丢了,壳头那颗 24px 的球被画成 20,
    于是壳头高度 36 → 32,报成「壳头比稿子矮」。这类地方现在逐条列在页面脚本的开头,
    加第五处之前先想清楚能不能不加。
+3. **字体真的加载进来了没有**(`check-fonts.mjs`,量数之前的**前置闸**,退出码 0 才算数)。
+   注意它在**仓库原样的页面上本来就该红** —— 那份故意不带字体,红是在提醒你
+   「还没跑 `inline-fonts.mjs`,现在量出来的数不作数」,不是仓库坏了。
+   生成器也在页顶留了一条黄色横幅说同一件事,上了字体它会被注入块自动藏掉,
+   所以「有字体」和「横幅不见了」是同一件事的两种表现,不会各说各话。
+   这一条是 2026-09-07 补的,补之前它坏了很久:陈列页**一条 `@font-face` 都没有**
+   (全文零声明、零 `<link>`、零 `@import`),却照着产品声明了
+   `--sans: "Albert Sans", …`;而稿子那一侧(`build-matrix.mjs` 抽的矩阵页)
+   **自带 base64 内联的 Albert Sans / JiduMono Pro**。于是长期以来的逐格比对
+   实际上是「Albert Sans 的稿子」对「PingFang SC 的我们」——
+   `geom` 那一列 680 条差异里有 **61 条是这么来的假差**,
+   其中 **6 格(16 / 17 / 27 / 66 / 71 / 87)整格的 geom 差都是假的**,
+   另有 **1 格(43)的真差被错字体正好抵消掉、一直没报出来**。
+   这种坏法没有任何视觉症状,只能靠量。判据是**差分**(同一段文本带不带这个字族
+   必须不一样宽)加一个**反向对照**(一个不存在的字族差分必须为 0),
+   不是 `document.fonts.check()` —— 那句在一条 `@font-face` 都没有时返回 `true`,
+   真空成立,正好放过这次要抓的坏法。

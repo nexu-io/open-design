@@ -2485,12 +2485,61 @@ describe('镜像陈列页', () => {
     expect(flagged, `有格子的规则没内联,读数不可信:\n${flagged.join('\n')}`).toHaveLength(0);
   });
 
+  /**
+   * **生成出来的页面不带字体字节,而且明写着自己不带。**
+   *
+   * 字体不进仓库是有意的(同一份字节 `public/fonts/` 里已经有了,再复制一份要 +423KB
+   * 并撑破 CI 的单文件 1MB 闸,见 {@link FONTS_MISSING_MARK} 上面那段)。
+   * 但「不带字体」和「忘了带字体」在页面上长得一模一样 —— 上一次就是这么坏了很久:
+   * 页面照常好看,只有几何读数悄悄退回回退面 `PingFang SC`。
+   *
+   * 所以这里钉两件事:生成物**确实没有**字体字节(别哪天有人又把 423KB 塞回来),
+   * 以及它**带着那条记号** —— 记号是人和 `check-fonts.mjs` 共同的抓手。
+   * 「字体真的被浏览器用上了」由 `docs/design/chat-mirror/check-fonts.mjs` 的差分守卫
+   * 在真浏览器里判,不在这里判(jsdom 没有字体)。
+   */
+  it('生成物不带字体字节,并且明写着「还没上字体」', () => {
+    const page = buildPage();
+
+    // ① 没有字体字节。回归闸:+423KB 会让这个文件过不了 CI 的 Static gate。
+    //    判据必须是**声明**(`@font-face {`)而不是「出现了 @font-face 这几个字」——
+    //    页面里内联的 ChatRoot.module.css 注释里就提到过它一次。这一条第一版就栽在
+    //    这儿:`not.toContain('@font-face')` 把注释里的那次也算上,一跑就红。
+    //    同族的坑正是这次要修的 bug 本身(「全文唯一一处 @font-face 字样在注释里」)。
+    expect(page.match(/@font-face\s*\{/g) ?? [], '页面里出现了内联字体声明 —— 字体不进仓库,只在本地由 inline-fonts.mjs 注入')
+      .toHaveLength(0);
+    expect(page).not.toContain('data:font/');
+    expect(
+      Buffer.byteLength(page, 'utf-8'),
+      'CI 的 Check changed tracked file sizes 卡每个变更文件 1048576 字节',
+    ).toBeLessThan(900_000);
+
+    // ② 带着记号,而且记号说得出该跑哪条命令。
+    expect(page).toContain(`id="${FONTS_MISSING_MARK}"`);
+    expect(page).toContain('docs/design/chat-mirror/inline-fonts.mjs');
+
+    // ③ 记号必须能被注入块盖掉:走类选择器,不能是行内 style(行内会赢过注入块)。
+    expect(page).not.toMatch(new RegExp(`id="${FONTS_MISSING_MARK}"[^>]*\\sstyle=`));
+
+    // ④ 记号在 <h1> 之后、第一格之前 —— 打开就看得见,又不挤进任何一格。
+    const mark = page.indexOf(`id="${FONTS_MISSING_MARK}"`);
+    expect(mark).toBeGreaterThan(page.indexOf('<h1>'));
+    expect(mark).toBeLessThan(page.indexOf('<section class="cell"'));
+  });
+
   it('写出陈列页(给了 OD_WRITE_MIRROR 落点时)', () => {
     const out = process.env.OD_WRITE_MIRROR;
     if (!out) return;
     mkdirSync(dirname(out), { recursive: true });
     writeFileSync(out, buildPage(), 'utf-8');
     expect(readFileSync(out, 'utf-8').length).toBeGreaterThan(1000);
+    // 生成物没有字体 —— 别让人拿着它直接开量。
+    console.warn(
+      `\n[mirror] 写出 ${out}\n`
+      + '[mirror] 这份页面**还没上字体**,现在量出来的几何读数是回退面 PingFang SC 的。\n'
+      + '[mirror] 量之前先跑:node docs/design/chat-mirror/inline-fonts.mjs\n'
+      + '[mirror] 然后确认:node docs/design/chat-mirror/check-fonts.mjs(退出码 0)\n',
+    );
   });
 });
 
@@ -2747,6 +2796,68 @@ function baseVars(): string {
   if (!m) throw new Error('base.css 里找不到 :root —— 变量内联会缺,先修这里');
   return `:root{${(m[1] ?? '').trim()}}`;
 }
+
+/* ── 字体:这一页**故意不带**字体字节,量数之前必须先在本地补 ─────────────
+ *
+ * ## 先说清楚这里曾经坏在哪
+ *
+ * 2026-09-07 之前这一页**一条 `@font-face` 都没有**,却照着产品声明了
+ * `--sans: "Albert Sans", "PingFang SC", …`;而稿子那一侧
+ * (`build-matrix.mjs` 抽的矩阵页)**自带 base64 内联的 Albert Sans / JiduMono Pro**。
+ * 于是长期以来的逐格比对实际上是「Albert Sans 的稿子」对「PingFang SC 的我们」——
+ * 行高、文本宽度、折行位置、卡片高度**整批带偏**,方向单一、不会自己抵消。
+ * 实测:`geom` 那一列 680 条差异里 **61 条是这么来的假差**,
+ * **6 格(16 / 17 / 27 / 66 / 71 / 87)整格的 geom 差都是假的**,
+ * 另有 **1 格(43)的真差被错字体正好抵消掉、一直没报出来**。
+ *
+ * 这种坏法**没有任何视觉症状**:中文照常显示,英文换成另一套字形,页面照常好看。
+ * 除非有人专门去量,否则永远发现不了 —— 所以它必须有一条会自己变红的守卫,
+ * 而不是靠人记得。
+ *
+ * ## 为什么字节不进仓库
+ *
+ * 三个字体文件**本来就在这个仓库里**(`public/fonts/`)。把同一份字节再 base64
+ * 复制一份进这张 HTML,换不来任何新能力,却要 +423KB,并且直接撑破 CI 的
+ * `Static gate` → `Check changed tracked file sizes`(**每个变更文件 1048576 字节**)。
+ * 所以:**页面提交版本不含字体,字体在本地按需注入**。
+ * 注入工具和守卫都在仓库里,clone 下来跑一条命令就有:
+ *
+ * ```bash
+ * node docs/design/chat-mirror/inline-fonts.mjs   # 从 base.css 现场解析描述符 + 内联 public/fonts 的字节
+ * node docs/design/chat-mirror/check-fonts.mjs    # 前置闸:没上字体就红,退出码 0 才能开始量
+ * ```
+ *
+ * ## 所以生成器留的是一个**记号**,不是字体
+ *
+ * `buildPage()` 在页面顶部放一条 {@link FONTS_MISSING_MARK} 横幅,明写
+ * 「这份页面还没上字体,量出来的数不准」。它是三件事同时:
+ *  · 双击打开这份原始页面的人**一眼就能看见**;
+ *  · `inline-fonts.mjs` 注入字体时会连带把它隐藏掉(注入块里有一条
+ *    `#od-fonts-missing{display:none!important}`),所以「有字体」和「横幅不见了」
+ *    是同一件事的两种表现,不会各说各话;
+ *  · `check-fonts.mjs` 认这个 id,红的时候直接告诉人去跑哪条命令。
+ *
+ * 横幅走正常文档流放在 `<h1>` 之后,**不影响读数**:`diff-cells.mjs` 的 `geom`
+ * 是**格内相对坐标**(`box.x - originBox.x`),页顶多一个块不会动到任何一格。
+ */
+const FONTS_MISSING_MARK = 'od-fonts-missing';
+
+/**
+ * 「这份页面还没上字体」的可见记号。样式必须能被注入块用 `!important` 盖掉,
+ * 所以走类选择器而不是行内 style —— 行内 style 会赢过注入块,横幅就永远关不掉了。
+ */
+function fontsMissingBanner(): string {
+  return `<p id="${FONTS_MISSING_MARK}" class="fontwarn">⚠️ <b>这份页面还没上字体</b> ——`
+    + ` 现在量出来的行高 / 文本宽度 / 折行位置 / 卡片高度都是回退面 <code>PingFang SC</code> 的,`
+    + ` 不是产品真实的 <code>Albert Sans</code> / <code>JiduMono Pro</code>,`
+    + ` 而稿子那一侧是自带内联字体的,比出来的差异会整批带偏。<br>`
+    + ` 先跑 <code>node docs/design/chat-mirror/inline-fonts.mjs</code>(再跑`
+    + ` <code>check-fonts.mjs</code> 确认退出码 0),然后再量、再截图、再下结论。</p>`;
+}
+
+const FONTS_MISSING_CSS = `.fontwarn{margin:0 0 16px;padding:10px 14px;border-radius:8px;`
+  + `border:1px solid #e0b000;background:#fff8e1;color:#5a4300;font-size:13px;line-height:1.6}`
+  + `.fontwarn code{background:rgba(0,0,0,.06);border-radius:4px;padding:1px 4px}`;
 
 function buildPage(): string {
   const tokens = read('src/styles/tokens.css');
@@ -3075,6 +3186,7 @@ ${liveCells}`;
   return `<!doctype html>
 <html lang="zh-CN" data-theme="light"><head><meta charset="utf-8">
 <title>执行记录 · 镜像陈列页</title>
+<style>${FONTS_MISSING_CSS}</style>
 <style>${baseVars()}
 ${tokens}</style>
 <style>${seam}</style>
@@ -3113,6 +3225,7 @@ ${tokens}</style>
 <style>${PAGE_CSS}</style>
 </head><body>
 <h1>执行记录 · 镜像陈列页</h1>
+${fontsMissingBanner()}
 <p class="lead">这一页里的每一格都是<b>我们的组件</b>渲染的,数据全部走一遍真实事件流。
 编号与 <code>docs/design/chat-matrix/matrix-82.html</code> 一致,两页并排开着逐格对照即可。
 覆盖<b>执行记录</b>(组件 7 / 9 / 10 / 11 / 12,第 1–11 格)、<b>理解段</b>(组件 3 / 4 / 5 / 8,第 12–27 格)、
