@@ -5,9 +5,47 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { PREVIEW_RUNTIME_CAPABILITIES } from '@open-design/contracts/runtime/preview-runtime';
+
 import { parseByteRange, resolveProjectFilePath } from '../src/projects.js';
 import { startServer } from '../src/server.js';
 import { load } from 'cheerio';
+
+/**
+ * The scoped preview origin must advertise every capability whose module it
+ * installs, and install a module for every capability it advertises.
+ *
+ * This is a fail-closed contract, not a formatting detail. The bootstrap's
+ * `register()` returns early unless the capability is in `available`
+ * (apps/daemon/src/http/preview-runtime-bootstrap.ts), so a module that ships
+ * without being advertised is dead code the host can never switch on — deck
+ * navigation, tweaks, or the palette would silently stop working with the
+ * bridge still sitting in the document. The reverse gap is just as bad: an
+ * advertised capability with no module makes the host negotiate a mode nothing
+ * answers.
+ *
+ * Asserting the two sets against each other (rather than pinning the rendered
+ * `var available=[...]` text) is what keeps this honest when the capability
+ * contract legitimately grows: adding a capability to
+ * `PREVIEW_RUNTIME_CAPABILITIES` without wiring both halves here goes red,
+ * while wiring both halves stays green without editing this assertion.
+ */
+function expectScopedPreviewAdvertisesEveryInstalledCapability(body: string): void {
+  const advertisedJson = body.match(/var available=(\[[^\]]*\]);/u)?.[1];
+  expect(advertisedJson, 'preview runtime bootstrap did not declare available capabilities').toBeTruthy();
+  const advertised = JSON.parse(advertisedJson!) as string[];
+
+  // `register(capability,` in the bootstrap's own definition is the parameter
+  // name, not a call; every real registration passes a quoted literal.
+  const installed = [...body.matchAll(/register\((['"])([a-z_]+)\1,/gu)].map((match) => match[2]!);
+  expect(installed.length).toBeGreaterThan(0);
+
+  expect([...new Set(installed)].sort()).toEqual([...advertised].sort());
+  // The converged transport is the full-capability one: it serves the document
+  // at a real URL with every bridge installed, so nothing in the shared
+  // contract may be missing from it.
+  expect([...advertised].sort()).toEqual([...PREVIEW_RUNTIME_CAPABILITIES].sort());
+}
 
 // ---------------------------------------------------------------------------
 // parseByteRange — RFC 7233 unit tests
@@ -1887,7 +1925,7 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     expect(html.body).toContain('data-od-preview-observability');
     expect(html.body).toContain("register(\"observability\"");
     expect(html.body).toContain('data-od-preview-runtime');
-    expect(html.body).toContain('"content_measurement","scroll","snapshot","observability","selection","comment","inspect","draw","tweaks","palette","deck","edit"');
+    expectScopedPreviewAdvertisesEveryInstalledCapability(html.body);
     expect(html.body).toContain("register('tweaks'");
     expect(html.body).toContain("register('palette'");
     expect(html.body).toContain("register('edit'");

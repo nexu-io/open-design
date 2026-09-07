@@ -788,7 +788,15 @@ test('[P0] deck presentation host exit remains usable after the sandboxed slide 
 
   const overlay = page.locator('.present-overlay');
   await expect(overlay).toBeVisible();
-  const presentedSlide = overlay.frameLocator('iframe[title="present"]');
+  // Presenting is a view change, not a navigation. The document the user was
+  // already looking at is promoted to fill the window and the overlay carries
+  // only host chrome above it, so the overlay owning no browsing context of
+  // its own is part of the invariant rather than an implementation detail: a
+  // second iframe here — even at the same URL — would drop the JS heap,
+  // timers and canvas contexts the running deck is holding.
+  await expect(overlay.locator('iframe')).toHaveCount(0);
+  await expect(page.locator('.html-viewer.is-tab-present')).toBeVisible();
+  const presentedSlide = artifactPreviewFrame(page);
   const slideHeading = presentedSlide.getByRole('heading', { name: 'Slide One' });
   await expect(slideHeading).toBeVisible();
   await slideHeading.click();
