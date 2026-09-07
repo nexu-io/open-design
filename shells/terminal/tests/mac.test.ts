@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -34,6 +34,8 @@ describe("Terminal macOS carrier", () => {
       expect(JSON.parse(readFileSync(distributionReceipt, "utf8"))).toMatchObject({ operation: "terminal.distribution.build", target, archive: { file: distribution } });
       run("tar", ["-xzf", distribution, "-C", directories.unpacked]);
       const root = join(directories.unpacked, "nexu-terminal");
+      expect(existsSync(join(root, "runtime/fixture-lifecycle.mjs"))).toBe(false);
+      expect(JSON.parse(readFileSync(join(root, "install-manifest.json"), "utf8"))).not.toHaveProperty("fixtureLifecycle");
       const terminal = (installRoot: string, storeRoot: string, channel: string, namespace: string, operation: string, options: TerminalOptions = {}) => {
         const result = run("sh", [join(installRoot, "sh/terminal.sh"), "--root", installRoot, "--store-root", storeRoot,
           "--namespace-root", join(storeRoot, "explicit-scopes", channel, namespace), "--channel", channel, "--namespace", namespace, "--operation", operation,

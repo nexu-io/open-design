@@ -72,7 +72,6 @@ export function expectedShellBuildHash(scene: string, target: string, nodeArchiv
   const nodeExecutable = target.startsWith("win32-") ? "carrier/node/node.exe" : "carrier/node/bin/node";
   const lines = [
     `carrier_lock=${digest("carrier.lock")}`,
-    `fixture_lifecycle=${digest("runtime/fixture-lifecycle.mjs")}`,
     `fixture_shell_updater=${digest("runtime/fixture-shell-updater.mjs")}`,
     `fossil=${digest("runtime/fossil.mjs")}`,
     `runtime_modules=${digest("runtime/modules.json")}`,

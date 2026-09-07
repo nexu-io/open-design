@@ -76,11 +76,17 @@ The local Sidecar issues a persisted attachment capability on first attachment;
 heartbeat and release cannot take over a live reference by guessing its ID.
 Content restart uses the same transition protocol as Shell install: it defers by
 default while foreign references exist and only stops them on an explicit force.
-Standalone owns this shared lifecycle as a pure reducer; Terminal only supplies
-the locked-file persistence and process adapter. Instance health is keyed to the
+Standalone owns the shared reducer, host runtime, serialized lifecycle ledger,
+and versioned control client. Terminal supplies only the Sidecar transport and
+generation-loading adapter; lifecycle commands no longer use the old
+`domain/operation` protocol or a Terminal-specific lock file. Short-lived native
+commands restore one scoped attachment credential through the public client.
+The historical lifecycle model is test-only and is not distributed.
+Instance health is keyed to the
 exact generation launcher binding, while Shell identities and capability hashes
-remain attachment facts. A transition advances from `reserved` to `stopped-sealed` before the stop
-effect; a sealed fence can only be completed exactly or expire, never released.
+remain attachment facts. A transition advances from `reserved` to `stopped-sealed`;
+this logical result does not prove physical retirement, which remains owned by
+Sidecar's resource-set guard. A sealed fence cannot be released into normal startup.
 Shell auto-update is independently declared by `contract/shell-updater.schema.json`.
 Terminal ships a non-user-facing fixture provider that exercises Electron's
 future check/download/progress/ready/defer/foreign-reference block/forced-stop

@@ -1,21 +1,18 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { bootstrapSidecarProcess, handoffCurrentSidecarGeneration, SidecarFactory } from "@open-design/sidecar";
 
-import { FileFixtureLifecyclePort } from "./fixture-lifecycle.mjs";
 import { FixtureShellUpdaterPort } from "./fixture-shell-updater.mjs";
 
 const ACTION = "standalone.request.v1";
 const CONFIG_ENV = "OD_TERMINAL_SIDECAR_CONFIG_V1";
 const REQUEST_FIELDS = new Set([
-  "schemaVersion", "scope", "domain", "operation", "generation", "binding", "attachment",
-  "attachmentCapability", "readiness", "attachmentId", "fence", "kind", "options", "token",
+  "schemaVersion", "scope", "domain", "operation", "options",
   "action", "bindingDigest", "generationId", "afterRevision", "timeoutMs", "proof",
 ]);
-const capabilityDigest = (token) => createHash("sha256").update(token).digest("hex");
 
 function readConfig() {
   const serialized = process.env[CONFIG_ENV];
@@ -49,23 +46,25 @@ class TerminalSidecarRuntime {
     this.scope = Object.freeze({ channel: config.channel, namespace: config.namespace });
     this.layout = standalone.validateStandaloneRuntimeLayout(config.layout);
     if (this.layout.resourceStoreRoot !== config.storeRoot) throw new Error("Terminal layout escaped its Store root");
-    this.lifecycle = new FileFixtureLifecyclePort(config.storeRoot, {
-      algebra: standalone.SHARED_LIFECYCLE_ALGEBRA,
-      transitionLeaseDurationMs: Number.parseInt(process.env.OD_FIXTURE_TRANSITION_LEASE_MS ?? "30000", 10),
+    this.lifecycle = new standalone.StandaloneHostLifecycle(this.scope, {
+      statePort: new standalone.StandaloneHostLifecycleLedger(config.storeRoot, this.scope),
     });
-    this.transitions = new Map();
     this.updaterQueues = new Map();
-    this.runtimeHandles = new Map();
-    this.selectedBindingDigest = null;
-    this.selectedGenerationId = null;
-    this.handoff = new standalone.FossilHandoffHost(async (binding) => {
-      const launcherBytes = await readFile(binding.launcher.path);
-      if (createHash("sha256").update(launcherBytes).digest("hex") !== binding.launcher.blobSha256) {
-        throw new Error("materialized Standalone launcher failed Sidecar handoff binding");
-      }
-      const generation = await import(pathToFileURL(binding.launcher.path).href);
-      return standalone.resolveStandaloneGenerationHandoff(generation);
+    this.control = new standalone.StandaloneHostRuntime({
+      scope: this.scope,
+      lifecycle: this.lifecycle,
+      capabilities: () => standalone.createStandaloneRuntimeLayoutCapabilityHandler({ layout: this.layout, scope: this.scope }),
+      resolveGeneration: async (binding) => {
+        const expected = process.env.OD_TERMINAL_EXPECTED_BINDING_DIGEST;
+        if (expected != null && expected !== binding.digest) throw new Error("Terminal Sidecar successor received another generation binding");
+        const launcherBytes = await readFile(binding.launcher.path);
+        if (createHash("sha256").update(launcherBytes).digest("hex") !== binding.launcher.blobSha256) {
+          throw new Error("materialized Standalone launcher failed Sidecar handoff binding");
+        }
+        return standalone.resolveStandaloneGenerationHandoff(await import(pathToFileURL(binding.launcher.path).href));
+      },
     });
+    this.lifecycleClient = new standalone.StandaloneHostControlClient(this.scope, request => this.control.request(request));
   }
 
   assertScope(scope) {
@@ -80,139 +79,16 @@ class TerminalSidecarRuntime {
     this.assertScope(message.scope);
     if (Object.keys(message).some(key => !REQUEST_FIELDS.has(key))) throw new Error("Terminal Sidecar request contains unsupported fields");
     if (message.domain === "generation") return await this.generationRequest(message);
-    if (message.domain === "lifecycle") return await this.lifecycleRequest(message);
     if (message.domain === "shell-updater") return await this.updaterRequest(message);
     if (message.domain === "maintenance") return await this.maintenanceRequest(message);
     throw new Error("invalid Terminal Sidecar request domain");
-  }
-
-  async lifecycleRequest(message) {
-    const scope = this.scope;
-    if (message.operation === "start") {
-      const status = await this.lifecycle.status(scope);
-      const existing = status.occupants.some(({ attachmentId }) => attachmentId === message.attachment.id);
-      const token = existing ? message.attachmentCapability : randomBytes(32).toString("hex");
-      if (typeof token !== "string") {
-        throw Object.assign(new Error("Terminal Sidecar attachment capability is required"), {
-          code: "attachment-capability-required",
-        });
-      }
-      return await this.startBoundGeneration(message, token, async () => await this.lifecycle.startWithCapability(
-        scope,
-        message.generation,
-        message.attachment,
-        {
-          candidateHash: capabilityDigest(token),
-          presentedHash: message.attachmentCapability == null ? null : capabilityDigest(message.attachmentCapability),
-        },
-        message.binding,
-      ));
-    }
-    if (message.operation === "heartbeat") {
-      return await this.lifecycle.heartbeatWithCapability(
-        scope,
-        message.attachment,
-        capabilityDigest(message.attachmentCapability ?? ""),
-      );
-    }
-    if (message.operation === "ready") return await this.lifecycle.awaitReady(scope, message.readiness);
-    if (message.operation === "release") {
-      const released = await this.lifecycle.releaseWithCapability(
-        scope,
-        message.attachmentId,
-        capabilityDigest(message.attachmentCapability ?? ""),
-      );
-      const handle = this.runtimeHandles.get(message.attachmentId);
-      if (handle != null) {
-        await handle.close();
-        this.runtimeHandles.delete(message.attachmentId);
-      }
-      return released;
-    }
-    if (message.operation === "status") return await this.lifecycle.status(scope);
-    if (message.operation === "stop") {
-      const stopped = await this.lifecycle.stop(scope, message.fence);
-      for (const [attachmentId, handle] of this.runtimeHandles) {
-        await handle.close().catch(() => undefined);
-        this.runtimeHandles.delete(attachmentId);
-      }
-      return stopped;
-    }
-    if (message.operation === "occupants") return await this.lifecycle.occupants(scope);
-    if (message.operation === "begin-transition") {
-      const result = await this.lifecycle.beginTransition(scope, message.kind, message.options);
-      if (result.state === "blocked") return result;
-      const token = randomUUID();
-      this.transitions.set(token, { kind: message.kind, transition: result.transition });
-      return { state: "acquired", transition: this.transitionDescriptor(token, result.transition) };
-    }
-    if (message.operation === "transition") {
-      const held = this.transitions.get(message.token);
-      if (held == null) throw new Error("Terminal Sidecar transition is unavailable");
-      const transition = held.transition;
-      if (message.action === "renew") {
-        await transition.renew();
-        return this.transitionDescriptor(message.token, transition);
-      }
-      if (message.action === "release") {
-        await transition.release();
-        this.transitions.delete(message.token);
-        return { released: true };
-      }
-      if (message.action === "force-stop") {
-        await transition.forceStop();
-        return this.transitionDescriptor(message.token, transition);
-      }
-      if (message.action === "complete-start") {
-        const capability = randomBytes(32).toString("hex");
-        const status = await this.startBoundGeneration(message, capability, async () => {
-          return await transition.completeBoundStart(message.generation, message.attachment, message.binding, capabilityDigest(capability));
-        });
-        this.transitions.delete(message.token);
-        return status;
-      }
-      throw new Error("Terminal Sidecar transition action is invalid");
-    }
-    throw new Error(`unsupported Terminal Sidecar lifecycle operation: ${message.operation}`);
-  }
-
-  async startBoundGeneration(message, attachmentCapability, start) {
-    if (message.binding == null) throw new Error("Terminal Sidecar generation start requires an exact binding");
-    const expectedBindingDigest = process.env.OD_TERMINAL_EXPECTED_BINDING_DIGEST;
-    if (this.selectedBindingDigest == null && expectedBindingDigest != null && expectedBindingDigest !== message.binding.digest) {
-      throw new Error(`Terminal Sidecar successor expected ${expectedBindingDigest}/${process.env.OD_TERMINAL_EXPECTED_GENERATION_ID ?? "unknown"}, received ${message.binding.digest}/${message.binding.generationId}`);
-    }
-    if (this.selectedBindingDigest != null && this.selectedBindingDigest !== message.binding.digest) {
-      throw new Error(`Terminal Sidecar host selected ${this.selectedBindingDigest}/${this.selectedGenerationId}, received ${message.binding.digest}/${message.binding.generationId}`);
-    }
-    this.selectedBindingDigest ??= message.binding.digest;
-    this.selectedGenerationId ??= message.binding.generationId;
-    const handle = await this.handoff.handoff({
-      binding: message.binding,
-      attachment: message.attachment,
-      capabilities: this.standalone.createStandaloneRuntimeLayoutCapabilityHandler({ layout: this.layout, scope: this.scope }),
-    });
-    try {
-      const status = await start();
-      const exact = await handle.readStatus();
-      if (
-        exact.state !== "running"
-        || exact.bindingDigest !== message.binding.digest
-        || exact.generationId !== message.generation.id
-      ) throw new Error("Standalone launcher did not acknowledge its exact Sidecar generation");
-      this.runtimeHandles.set(message.attachment.id, handle);
-      return { ...status, attachmentCapability };
-    } catch (error) {
-      await handle.close().catch(() => undefined);
-      throw error;
-    }
   }
 
   async generationRequest(message) {
     if (message.operation !== "handoff" || typeof message.bindingDigest !== "string" || typeof message.generationId !== "string") {
       throw new Error("unsupported Terminal Sidecar generation operation");
     }
-    const status = await this.lifecycle.status(this.scope);
+    const status = await this.lifecycle.status();
     if (status.references !== 0) {
       return { accepted: false, occupants: status.occupants, reason: "occupied" };
     }
@@ -241,7 +117,7 @@ class TerminalSidecarRuntime {
     const trustedKeys = new Map((message.options.trustedKeys ?? []).map(
       ({ keyId, publicKey }) => [keyId, publicKey],
     ));
-    const updater = new FixtureShellUpdaterPort(this.config.storeRoot, this.scope, this.lifecycle, {
+    const updater = new FixtureShellUpdaterPort(this.config.storeRoot, this.scope, this.lifecycleClient, {
       ...message.options,
       algebra: this.standalone.SHELL_UPDATE_ALGEBRA,
       standalone: this.standalone,
@@ -266,23 +142,11 @@ class TerminalSidecarRuntime {
     if (message.operation !== "sweep-if-idle") {
       throw new Error(`unsupported Terminal Sidecar maintenance operation: ${message.operation}`);
     }
-    const status = await this.lifecycle.status(this.scope);
+    const status = await this.lifecycle.status();
     if (status.references !== 0) return { status: "deferred", reason: "occupied", occupants: status.occupants };
     const sweep = await this.standalone.sweepStandaloneStore(this.config.storeRoot);
     const cleanup = await this.standalone.cleanupStandaloneTrash(this.config.storeRoot, message.options ?? {});
     return { status: "complete", sweep, cleanup };
-  }
-
-  transitionDescriptor(token, transition) {
-    return {
-      token,
-      attemptId: transition.attemptId ?? token,
-      fence: transition.fence,
-      expiresAt: transition.expiresAt,
-      heartbeatIntervalMs: transition.heartbeatIntervalMs,
-      occupants: transition.occupants,
-      phase: transition.phase ?? "reserved",
-    };
   }
 }
 
@@ -304,6 +168,10 @@ if (await bootstrapSidecarProcess(stamp, {
 let runtime = null;
 const client = SidecarFactory.create({
   handlers: {
+    [standalone.STANDALONE_HOST_CONTROL_ACTION]: async (input) => {
+      if (runtime == null) throw new Error("Terminal Sidecar runtime is not ready");
+      return await runtime.control.request(input);
+    },
     [ACTION]: async (input) => {
       if (runtime == null) throw new Error("Terminal Sidecar runtime is not ready");
       return await runtime.request(input);
@@ -327,7 +195,7 @@ const client = SidecarFactory.create({
         previousHostPid: Number.parseInt(process.env.OD_TERMINAL_PREVIOUS_HOST_PID ?? "0", 10) || null,
         runtimeRoot: client.resources.runtimeRoot,
         layout: active.layout,
-        lifecycle: await active.lifecycle.status(active.scope),
+        lifecycle: await active.lifecycle.status(),
       };
     },
     async stop() { runtime = null; },

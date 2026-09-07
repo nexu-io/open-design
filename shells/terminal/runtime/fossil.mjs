@@ -52,7 +52,7 @@ async function validateInstallation(value) {
   if (manifest?.schemaVersion !== 1 || manifest.shell?.type !== "terminal" || manifest.shell?.version !== value.shell.version || !digestPattern.test(manifest.shell?.buildHash) || manifest.target !== value.target) throw new Error("installed manifest identity mismatch");
   if (manifest.runtime?.name !== "node" || manifest.runtime?.version !== value.runtime.version || manifest.runtime?.sha256 !== value.runtime.digest) throw new Error("installed runtime binding mismatch");
   const descriptorPath = (descriptor) => descriptor?.file ?? descriptor?.entrypoint;
-  const descriptors = [manifest.carrierLock, manifest.contracts, manifest.runtimeModules, manifest.fossil, manifest.sidecarBootstrap, manifest.sidecarHost, manifest.fixtureLifecycle, manifest.fixtureShellUpdater, manifest.standalone, manifest.seed?.closure, manifest.seed?.standaloneLauncher, manifest.releaseDocuments?.content, manifest.trust,
+  const descriptors = [manifest.carrierLock, manifest.contracts, manifest.runtimeModules, manifest.fossil, manifest.sidecarBootstrap, manifest.sidecarHost, manifest.fixtureShellUpdater, manifest.standalone, manifest.seed?.closure, manifest.seed?.standaloneLauncher, manifest.releaseDocuments?.content, manifest.trust,
     manifest.shellFiles?.sh?.terminal, manifest.shellFiles?.sh?.install, manifest.shellFiles?.ps1?.terminal, manifest.shellFiles?.ps1?.install];
   for (const descriptor of descriptors) {
     const entrypoint = descriptorPath(descriptor);
@@ -88,11 +88,6 @@ async function readUrl(url) {
 }
 
 function sidecarRequestTimeoutMs(message) {
-  if (message.domain === "lifecycle" && message.operation === "start") return 120_000;
-  if (message.domain === "lifecycle" && message.operation === "transition" && message.action === "complete-start") return 120_000;
-  if (message.domain === "runtime") return 120_000;
-  if (message.domain === "lifecycle" && new Set(["release", "stop"]).has(message.operation)) return 60_000;
-  if (message.domain === "lifecycle" && message.operation === "transition" && message.action === "force-stop") return 60_000;
   if (message.domain === "generation" && message.operation === "handoff") return 60_000;
   if (message.domain === "shell-updater" && message.operation === "invoke") return 10 * 60_000;
   if (message.domain === "shell-updater" && message.operation === "wait") return (message.timeoutMs ?? 0) + 2_000;
@@ -211,38 +206,21 @@ async function handoffTerminalSidecarGeneration(binding, convergence) {
   throw new Error("Terminal Sidecar exact generation successor did not become ready");
 }
 
-function sidecarLifecycle(requestAttachmentCapability) {
-  const call = (operation, scope, input = {}) => sidecarRequest({ domain: "lifecycle", operation, scope, ...input });
-  return {
-    start: (scope, generation, attachment, binding) => call("start", scope, { generation, binding, attachment, attachmentCapability: requestAttachmentCapability }),
-    awaitReady: (scope, readiness) => call("ready", scope, { readiness }),
-    heartbeat: (scope, attachment) => call("heartbeat", scope, { attachment, attachmentCapability: requestAttachmentCapability }),
-    release: (scope, attachmentId) => call("release", scope, { attachmentId, attachmentCapability: requestAttachmentCapability }),
-    status: (scope) => call("status", scope),
-    stop: (scope, fence) => call("stop", scope, { fence }),
-    occupants: (scope) => call("occupants", scope),
-    async beginTransition(scope, kind, options) {
-      const result = await call("begin-transition", scope, { kind, options });
-      if (result.state === "blocked") return result;
-      const descriptor = result.transition;
-      const transitionCall = (action, input = {}) => call("transition", scope, { action, token: descriptor.token, ...input });
-      return {
-        state: "acquired",
-        transition: {
-          attemptId: descriptor.attemptId ?? descriptor.token,
-          fence: descriptor.fence,
-          expiresAt: descriptor.expiresAt,
-          heartbeatIntervalMs: descriptor.heartbeatIntervalMs,
-          occupants: descriptor.occupants,
-          phase: descriptor.phase ?? "reserved",
-          renew: () => transitionCall("renew"),
-          release: () => transitionCall("release"),
-          forceStop: () => transitionCall("force-stop"),
-          completeBoundStart: (generation, attachment, binding) => transitionCall("complete-start", { generation, binding, attachment }),
-        },
-      };
-    },
-  };
+async function sidecarControlRequest(standalone, message) {
+  if (activeSidecarStamp == null) throw new Error("Terminal Sidecar has not converged");
+  return await invokeSidecar(activeSidecarStamp, standalone.STANDALONE_HOST_CONTROL_ACTION, message, {
+    timeoutMs: standalone.standaloneHostControlRequestTimeoutMs(message),
+  });
+}
+
+function sidecarLifecycle(standalone, request) {
+  const scope = { channel: request.channel, namespace: request.namespace };
+  const client = new standalone.StandaloneHostControlClient(scope, message => sidecarControlRequest(standalone, message));
+  if (request.attachmentCapability != null) client.restoreAttachmentCredential({
+    schemaVersion: 1, scope, attachmentId: request.attachmentId ?? "terminal-control",
+    attachmentCapability: request.attachmentCapability,
+  });
+  return client;
 }
 
 function sidecarShellUpdater(scope, options) {
@@ -312,7 +290,7 @@ async function execute(request, installation) {
   const keys = await trustedKeys(installation);
   const storeRoot = resolve(request.storeRoot);
   const store = new standalone.StandaloneStore(storeRoot, { channel: request.channel, namespace: request.namespace });
-  const lifecycle = sidecarLifecycle(request.attachmentCapability);
+  const lifecycle = sidecarLifecycle(standalone, request);
   const shell = {
     type: "terminal",
     version: installation.manifest.shell.version,
@@ -354,7 +332,8 @@ async function execute(request, installation) {
   }
   if (request.operation === "start") {
     await ensureInstalledSeed(request, installation, store, keys, feedback);
-    return { ...await bootloader.start(), sidecar: sidecar() };
+    const status = await bootloader.start();
+    return { ...status, attachmentCapability: lifecycle.exportAttachmentCredential(request.attachmentId ?? "terminal-control").attachmentCapability, sidecar: sidecar() };
   }
   if (request.operation === "heartbeat") return { ...await launcher.heartbeat(), sidecar: sidecar() };
   if (request.operation === "release") return { ...await launcher.release(), sidecar: sidecar() };
@@ -410,7 +389,9 @@ async function execute(request, installation) {
       await handoffTerminalSidecarGeneration(binding, sidecarConvergence);
     }
   }
-  return updater.applyNow(launcher, { force: request.operation === "apply-update-force" });
+  const result = await updater.applyNow(launcher, { force: request.operation === "apply-update-force" });
+  if (result.status !== "applied") return result;
+  return { ...result, lifecycle: { ...result.lifecycle, attachmentCapability: lifecycle.exportAttachmentCredential(request.attachmentId ?? "terminal-control").attachmentCapability } };
 }
 
 let operation = "unknown";

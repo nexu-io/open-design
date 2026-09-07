@@ -67,7 +67,6 @@ try {
     capabilities = [ordered]@{ contentUpdater = "standalone-v4"; sharedInstance = "sidecar-v1"; shellUpdater = "sidecar-v1" }
     carrierLock = [ordered]@{ file = "carrier.lock"; sha256 = Digest (Join-Path $root "carrier.lock") }
     contracts = [ordered]@{ file = "contract/index.json"; sha256 = Digest $contractIndexPath }
-    fixtureLifecycle = [ordered]@{ entrypoint = "runtime/fixture-lifecycle.mjs"; sha256 = Digest (Join-Path $root "runtime/fixture-lifecycle.mjs") }
     fixtureShellUpdater = [ordered]@{ entrypoint = "runtime/fixture-shell-updater.mjs"; sha256 = Digest (Join-Path $root "runtime/fixture-shell-updater.mjs") }
     fossil = [ordered]@{ entrypoint = "runtime/fossil.mjs"; sha256 = Digest (Join-Path $root "runtime/fossil.mjs") }
     releaseDocuments = [ordered]@{

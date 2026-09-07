@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { FileFixtureLifecyclePort } from "../runtime/fixture-lifecycle.mjs";
+import { FileFixtureLifecyclePort } from "./fixtures/legacy-lifecycle.mjs";
 import { FixtureShellUpdaterPort } from "../runtime/fixture-shell-updater.mjs";
 import { SHARED_LIFECYCLE_ALGEBRA, SHELL_UPDATE_ALGEBRA } from "@open-design/standalone";
 import { cleanupFixtures, terminalRoot } from "./helpers.js";

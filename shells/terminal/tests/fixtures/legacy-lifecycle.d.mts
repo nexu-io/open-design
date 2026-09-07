@@ -1,3 +1,4 @@
+// Test-only declaration for the retained updater model; never distributed.
 import type {
   GenerationRecord,
   LifecycleAttachment,

@@ -1,4 +1,4 @@
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +12,7 @@ import {
 } from "@open-design/sidecar";
 import {
   createStandaloneGenerationBinding,
+  STANDALONE_HOST_CONTROL_ACTION,
   resolveStandaloneRuntimeLayout,
   sha256Hex,
   type GenerationRecord,
@@ -127,28 +128,50 @@ describe("Terminal Sidecar refinement", () => {
     expect(concurrent.description.resources.pid).toBe(generationPid);
     const attachment = { id: "terminal-a", shell: { type: "terminal", version: "0.1.0", buildHash: "c".repeat(64), digest: "d".repeat(64) } };
     const [first, concurrentAttachment] = await Promise.all([
-      invokeSidecar<any>(stamp, "standalone.request.v1", {
-        schemaVersion: 1,
-        domain: "lifecycle",
-        operation: "start",
+      invokeSidecar<any>(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1,
+      operation: "lifecycle.start",
+      attachmentCapability: null,
         scope,
         generation: firstGeneration,
         binding: firstBinding,
         attachment,
       }),
-      invokeSidecar<any>(stamp, "standalone.request.v1", {
-        schemaVersion: 1,
-        domain: "lifecycle",
-        operation: "start",
+      invokeSidecar<any>(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1,
+      operation: "lifecycle.start",
+      attachmentCapability: null,
         scope,
         generation: firstGeneration,
         binding: firstBinding,
         attachment: { ...attachment, id: "terminal-concurrent" },
       }),
     ]);
-    expect(first).toMatchObject({ bindingDigest: firstBinding.digest, attachmentCapability: expect.any(String) });
-    expect(concurrentAttachment).toMatchObject({ bindingDigest: firstBinding.digest, attachmentCapability: expect.any(String) });
-    expect([first.references, concurrentAttachment.references].sort()).toEqual([1, 2]);
+    expect(first).toMatchObject({ status: { bindingDigest: firstBinding.digest }, attachmentCapability: expect.any(String) });
+    expect(concurrentAttachment).toMatchObject({ status: { bindingDigest: firstBinding.digest }, attachmentCapability: expect.any(String) });
+    expect([first.status.references, concurrentAttachment.status.references].sort()).toEqual([1, 2]);
+    const scopeRoot = join(storeRoot, "channels", scope.channel, "namespaces", scope.namespace);
+    expect(existsSync(join(scopeRoot, "host-lifecycle.json"))).toBe(true);
+    expect(existsSync(join(scopeRoot, "fixture", "lifecycle.json"))).toBe(false);
+    await expect(invokeSidecar(stamp, "standalone.request.v1", {
+      schemaVersion: 1, domain: "lifecycle", operation: "status", scope,
+    })).rejects.toThrow("invalid Terminal Sidecar request domain");
+    await expect(invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1, operation: "lifecycle.start", scope,
+      generation: firstGeneration, binding: firstBinding, attachment, attachmentCapability: null,
+    })).rejects.toThrow("capability is required");
+    await expect(invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1, operation: "lifecycle.start", scope,
+      generation: firstGeneration, binding: firstBinding, attachment, attachmentCapability: "forged-capability",
+    })).rejects.toThrow("capability is invalid");
+    await expect(invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1, operation: "lifecycle.heartbeat", scope,
+      attachment, attachmentCapability: first.attachmentCapability,
+    })).resolves.toMatchObject({ references: 2 });
+    await expect(invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1, operation: "runtime.invoke", scope, attachmentCapability: first.attachmentCapability,
+      command: { requestId: "owner-still-live", attachmentId: attachment.id, bindingDigest: firstBinding.digest, command: "test-probe" },
+    })).resolves.toMatchObject({ requestId: "owner-still-live", outcome: "unsupported" });
     await expect(invokeSidecar<any>(stamp, "standalone.request.v1", {
       schemaVersion: 1,
       domain: "maintenance",
@@ -160,18 +183,16 @@ describe("Terminal Sidecar refinement", () => {
     ]) });
     const originalHost = await getSidecarStatus<any>(stamp, { generationPid });
     expect(originalHost).toMatchObject({ control: "ready", generationPid, hostPid: expect.any(Number), layout: config.layout });
-    await invokeSidecar(stamp, "standalone.request.v1", {
+    await invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
       schemaVersion: 1,
-      domain: "lifecycle",
-      operation: "release",
+      operation: "lifecycle.release",
       scope,
       attachmentId: attachment.id,
       attachmentCapability: first.attachmentCapability,
     });
-    await invokeSidecar(stamp, "standalone.request.v1", {
+    await invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
       schemaVersion: 1,
-      domain: "lifecycle",
-      operation: "release",
+      operation: "lifecycle.release",
       scope,
       attachmentId: "terminal-concurrent",
       attachmentCapability: concurrentAttachment.attachmentCapability,
@@ -182,8 +203,12 @@ describe("Terminal Sidecar refinement", () => {
       operation: "sweep-if-idle",
       scope,
     })).resolves.toMatchObject({ status: "complete" });
-    const idle = await invokeSidecar<any>(stamp, "standalone.request.v1", { schemaVersion: 1, domain: "lifecycle", operation: "status", scope });
-    await invokeSidecar(stamp, "standalone.request.v1", { schemaVersion: 1, domain: "lifecycle", operation: "stop", scope, fence: idle.fence });
+    const idle = await invokeSidecar<any>(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1,
+      operation: "lifecycle.status", scope });
+    await invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
+      schemaVersion: 1,
+      operation: "lifecycle.stop", scope, fence: idle.fence });
     await invokeSidecar(stamp, "standalone.request.v1", {
       schemaVersion: 1,
       domain: "generation",
@@ -194,31 +219,29 @@ describe("Terminal Sidecar refinement", () => {
     });
     const successor = await waitForSuccessor(stamp, generationPid, originalHost.hostPid);
     expect(successor).toMatchObject({ control: "ready", generationPid, previousHostPid: originalHost.hostPid });
-    const second = await invokeSidecar<any>(stamp, "standalone.request.v1", {
+    const second = await invokeSidecar<any>(stamp, STANDALONE_HOST_CONTROL_ACTION, {
       schemaVersion: 1,
-      domain: "lifecycle",
-      operation: "start",
+      operation: "lifecycle.start",
+      attachmentCapability: null,
       scope,
       generation: secondGeneration,
       binding: secondBinding,
       attachment: { ...attachment, id: "terminal-b" },
     });
-    expect(second).toMatchObject({ bindingDigest: secondBinding.digest, references: 1 });
-    await invokeSidecar(stamp, "standalone.request.v1", {
+    expect(second.status).toMatchObject({ bindingDigest: secondBinding.digest, references: 1 });
+    await invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
       schemaVersion: 1,
-      domain: "lifecycle",
-      operation: "release",
+      operation: "lifecycle.release",
       scope,
       attachmentId: "terminal-b",
       attachmentCapability: second.attachmentCapability,
     });
-    await expect(invokeSidecar(stamp, "standalone.request.v1", {
+    await expect(invokeSidecar(stamp, STANDALONE_HOST_CONTROL_ACTION, {
       schemaVersion: 1,
-      domain: "lifecycle",
-      operation: "status",
+      operation: "lifecycle.status",
       scope,
       fault: "crash",
-    })).rejects.toThrow("unsupported fields");
+    })).rejects.toThrow("fields must be exactly");
     const beforeCrash = await getSidecarStatus<any>(stamp, { generationPid });
     expect(beforeCrash.hostPid).toBe(successor.hostPid);
     // Fault injection belongs to the test process, not the production protocol.
