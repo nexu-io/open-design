@@ -6059,36 +6059,15 @@ function queuedTipPlacement(
               <div className="chat-queued-send-main">
                 <span className="chat-queued-send-title">{summarizeQueuedPrompt(item, t)}</span>
               </div>
-              {/* 稿子这一组是 `编辑 → 移除 → 第三颗`,而且「编辑」用的是**魔杖**不是铅笔。
-                  原来我们排的是 编辑 → 立即发送 → 移除,三枚图形和顺序全和稿子对不上。 */}
+              {/* 三颗按的是**升级顺序**:先「对现在这一轮动手」,最后才是「删掉」
+                  (OPEND-2715)。领头那一颗永远是「立刻让它生效」—— 有在跑的一轮
+                  时是「引导对话」(掐掉重发),没有时退回普通的「立即发送」;两副
+                  面孔换的是名字和语义,不换位置,所以这一格的落点是稳的。
+                  「移除」压在最后:指针从行末扫过来,第一个碰到的不该是不可逆的那颗。
+                  「编辑」用的是稿子的**魔杖**,不是铅笔。 */}
               <div className="chat-queued-send-actions">
-                {onEdit ? (
-                  <button
-                    type="button"
-                    className="chat-queued-send-action chat-queued-send-tooltip od-tooltip"
-                    title={t('chat.queuedEdit')}
-                    data-tooltip={t('chat.queuedEdit')}
-                    data-tooltip-placement={queuedTipPlacement(index, 'top')}
-                    aria-label={t('chat.queuedEdit')}
-                    onClick={() => onEdit(item)}
-                  >
-                    <Icon name="magic" size={13} />
-                  </button>
-                ) : null}
-                {onRemove ? (
-                  <button
-                    type="button"
-                    className="chat-queued-send-action chat-queued-send-tooltip od-tooltip"
-                    onClick={() => onRemove(item.id)}
-                    title={t('chat.comments.remove')}
-                    data-tooltip={t('chat.comments.remove')}
-                    data-tooltip-placement={queuedTipPlacement(index, 'top')}
-                    aria-label={t('chat.comments.remove')}
-                  >
-                    <QueueTrashIcon size={13} />
-                  </button>
-                ) : null}
-                {/* 第三颗 —— 稿子标的是「引导对话」(B11)。产品裁决(OPEND-2602,
+                {/* 领头这一颗 —— 稿子标的是「引导对话」(B11),排在这一组的
+                    最前面是 OPEND-2715 的裁决。产品裁决(OPEND-2602,
                     2026-09-03)之后它干的事是:**中断正在跑的那一轮,然后立刻把这条
                     发出去**。原来那条「不打断、把消息写进 agent 子进程还开着的 stdin」
                     的路已经作废 —— 27 个 runtime 里只有两个的 CLI 中途还读 stdin,
@@ -6140,7 +6119,33 @@ function queuedTipPlacement(
                   >
                     <Icon name="arrow-up" size={13} />
                   </button>
-                )}
+                )}                {onEdit ? (
+                  <button
+                    type="button"
+                    className="chat-queued-send-action chat-queued-send-tooltip od-tooltip"
+                    title={t('chat.queuedEdit')}
+                    data-tooltip={t('chat.queuedEdit')}
+                    data-tooltip-placement={queuedTipPlacement(index, 'top')}
+                    aria-label={t('chat.queuedEdit')}
+                    onClick={() => onEdit(item)}
+                  >
+                    <Icon name="magic" size={13} />
+                  </button>
+                ) : null}
+                {onRemove ? (
+                  <button
+                    type="button"
+                    className="chat-queued-send-action chat-queued-send-tooltip od-tooltip"
+                    onClick={() => onRemove(item.id)}
+                    title={t('chat.comments.remove')}
+                    data-tooltip={t('chat.comments.remove')}
+                    data-tooltip-placement={queuedTipPlacement(index, 'top')}
+                    aria-label={t('chat.comments.remove')}
+                  >
+                    <QueueTrashIcon size={13} />
+                  </button>
+                ) : null}
+
               </div>
             </div>
           );
