@@ -71,6 +71,7 @@ const SECTION_MARKERS = [
   ['critique-panel', '## Panelist role definitions'],
   ['active-ds-visual-direction-override', '## Active design system visual direction'],
   ['filesystem-handoff-override', '## Filesystem handoff'],
+  ['skill-write-boundary', '## Editing skills'],
   ['clarifying-questions', '## Structured clarification on any turn'],
   ['role-marker-guard', ROLE_MARKER_GUARD_SENTINEL],
 ] as const satisfies ReadonlyArray<readonly [string, string]>;
