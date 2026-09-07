@@ -146,17 +146,18 @@
 
 .deploy-social-share__url {
   min-width: 0;
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--selected);
+  font-size: 11px;
   line-height: 1.2;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .deploy-social-share__url:hover {
-  color: var(--text);
+  color: var(--selected);
   text-decoration: underline;
 }
 

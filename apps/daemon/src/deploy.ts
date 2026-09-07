@@ -1,11 +1,33 @@
-import fs from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { hash as blake3Hash } from 'blake3-wasm';
-import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
 import { findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
+import { listFiles, readProjectFile, validateProjectPath } from './projects.js';
+import { withDeployConfigFileLock, writeDeployConfigFile } from './deploy/config-file.js';
+import { DeployError } from './deploy/errors.js';
+import {
+  displayDevConfigPath,
+  DISPLAYDEV_PROVIDER_ID,
+  publicDisplayDevConfig,
+  readDisplayDevConfig,
+  writeDisplayDevConfig,
+  type DisplayDevConfigHints,
+} from './integrations/displaydev.js';
+
+export { DeployError } from './deploy/errors.js';
+export {
+  deployToDisplayDev,
+  assertDisplayDevPreviewUrl,
+  DISPLAYDEV_FETCH_TIMEOUT_MS,
+  DISPLAYDEV_PROVIDER_ID,
+  fetchDisplayDevArtifactAccessSettings,
+  publicDisplayDevConfig,
+  readDisplayDevConfig,
+  SAVED_DISPLAYDEV_TOKEN_MASK,
+  writeDisplayDevConfig,
+} from './integrations/displaydev.js';
 
 export const VERCEL_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -13,15 +35,19 @@ export const SAVED_TOKEN_MASK = 'saved-vercel-token';
 export const SAVED_CLOUDFLARE_TOKEN_MASK = 'saved-cloudflare-token';
 
 type JsonObject = Record<string, any>;
-type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID;
-type DeployErrorDetails = JsonObject | string | undefined;
+type DeployProviderId = typeof VERCEL_PROVIDER_ID | typeof CLOUDFLARE_PAGES_PROVIDER_ID | typeof DISPLAYDEV_PROVIDER_ID;
 type DeployConfig = {
   token: string;
   teamId?: string | undefined;
   teamSlug?: string | undefined;
   accountId?: string | undefined;
+  apiUrl?: string | undefined;
   projectName?: string | undefined;
   cloudflarePages?: CloudflarePagesConfigHints | undefined;
+  displayDev?: DisplayDevConfigHints | undefined;
+};
+type DeployConfigInput = Partial<DeployConfig> & {
+  clearToken?: boolean | undefined;
 };
 type CloudflarePagesConfigHints = {
   lastZoneId?: string;
@@ -60,23 +86,13 @@ export const CLOUDFLARE_PAGES_ASSET_MAX_BYTES = 25 * 1024 * 1024;
 const VERCEL_PROTECTED_MESSAGE =
   'Deployment is protected by Vercel. Disable Deployment Protection or use a custom domain to make this link public.';
 
-export class DeployError extends Error {
-  status: number;
-  details: DeployErrorDetails;
-  code?: string | undefined;
-
-  constructor(message: string, status = 400, details: DeployErrorDetails = undefined, code?: string) {
-    super(message);
-    this.name = 'DeployError';
-    this.status = status;
-    this.details = details;
-    this.code = code;
+export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID, runtimeDataDir?: string) {
+  if (providerId === DISPLAYDEV_PROVIDER_ID) {
+    return displayDevConfigPath(requiredDisplayDevRuntimeDataDir(runtimeDataDir));
   }
-}
-
-export function deployConfigPath(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
   const base = process.env.OD_USER_STATE_DIR || path.join(os.homedir(), '.open-design');
-  return path.join(base, providerId === CLOUDFLARE_PAGES_PROVIDER_ID ? 'cloudflare-pages.json' : 'vercel.json');
+  if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return path.join(base, 'cloudflare-pages.json');
+  return path.join(base, 'vercel.json');
 }
 
 export async function readVercelConfig(): Promise<DeployConfig> {
@@ -110,53 +126,49 @@ export async function readCloudflarePagesConfig(): Promise<DeployConfig> {
   }
 }
 
-export async function writeVercelConfig(input: Partial<DeployConfig>) {
-  const current = await readVercelConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const next = {
-    token:
-      tokenInput && tokenInput !== SAVED_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    teamId: typeof input?.teamId === 'string' ? input.teamId.trim() : current.teamId,
-    teamSlug:
-      typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
-  };
-  await writeDeployConfigFile(deployConfigPath(VERCEL_PROVIDER_ID), next);
-  return publicDeployConfig(next);
+export async function writeVercelConfig(input: DeployConfigInput) {
+  const configPath = deployConfigPath(VERCEL_PROVIDER_ID);
+  return withDeployConfigFileLock(configPath, async () => {
+    const current = await readVercelConfig();
+    const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+    const next = {
+      token:
+        tokenInput && tokenInput !== SAVED_TOKEN_MASK
+          ? tokenInput
+          : current.token,
+      teamId: typeof input?.teamId === 'string' ? input.teamId.trim() : current.teamId,
+      teamSlug:
+        typeof input?.teamSlug === 'string' ? input.teamSlug.trim() : current.teamSlug,
+    };
+    await writeDeployConfigFile(configPath, next);
+    return publicDeployConfig(next);
+  });
 }
 
-export async function writeCloudflarePagesConfig(input: Partial<DeployConfig>) {
-  const current = await readCloudflarePagesConfig();
-  const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
-  const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
-  const next: DeployConfig = {
-    token:
-      tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
-        ? tokenInput
-        : current.token,
-    accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
-    // Legacy installs may already have a saved Cloudflare Pages projectName.
-    // New writes intentionally stop treating it as user configuration: the
-    // deploy route derives a Pages project name from the current OD project,
-    // mirroring Vercel's automatic `od-${projectId}` deployment name.
-    projectName: '',
-  };
-  if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
-  if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
-  if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
-  await writeDeployConfigFile(deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID), next);
-  return publicCloudflarePagesConfig(next);
-}
-
-async function writeDeployConfigFile(file: string, config: DeployConfig) {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-  try {
-    fs.chmodSync(file, 0o600);
-  } catch {
-    // Best effort on filesystems that do not support chmod.
-  }
+export async function writeCloudflarePagesConfig(input: DeployConfigInput) {
+  const configPath = deployConfigPath(CLOUDFLARE_PAGES_PROVIDER_ID);
+  return withDeployConfigFileLock(configPath, async () => {
+    const current = await readCloudflarePagesConfig();
+    const tokenInput = typeof input?.token === 'string' ? input.token.trim() : '';
+    const cloudflarePages = normalizeCloudflarePagesConfigHints(input?.cloudflarePages, current.cloudflarePages);
+    const next: DeployConfig = {
+      token:
+        tokenInput && tokenInput !== SAVED_CLOUDFLARE_TOKEN_MASK
+          ? tokenInput
+          : current.token,
+      accountId: typeof input?.accountId === 'string' ? input.accountId.trim() : current.accountId,
+      // Legacy installs may already have a saved Cloudflare Pages projectName.
+      // New writes intentionally stop treating it as user configuration: the
+      // deploy route derives a Pages project name from the current OD project,
+      // mirroring Vercel's automatic `od-${projectId}` deployment name.
+      projectName: '',
+    };
+    if (Object.keys(cloudflarePages).length > 0) next.cloudflarePages = cloudflarePages;
+    if (!next.token) throw new DeployError('Cloudflare API token is required.', 400, undefined, 'CF_TOKEN_REQUIRED');
+    if (!next.accountId) throw new DeployError('Cloudflare account ID is required.', 400, undefined, 'CF_ACCOUNT_ID_REQUIRED');
+    await writeDeployConfigFile(configPath, next);
+    return publicCloudflarePagesConfig(next);
+  });
 }
 
 export function publicDeployConfig(config: Partial<DeployConfig>) {
@@ -186,23 +198,47 @@ export function publicCloudflarePagesConfig(config: Partial<DeployConfig>) {
   return body;
 }
 
-export async function readDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID) {
+export async function readDeployConfig(
+  providerId: DeployProviderId = VERCEL_PROVIDER_ID,
+  runtimeDataDir?: string,
+): Promise<DeployConfig> {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return readCloudflarePagesConfig();
+  if (providerId === DISPLAYDEV_PROVIDER_ID) return readDisplayDevConfig(requiredDisplayDevRuntimeDataDir(runtimeDataDir));
   return readVercelConfig();
 }
 
-export async function writeDeployConfig(providerId: DeployProviderId = VERCEL_PROVIDER_ID, input: Partial<DeployConfig> = {}) {
+export async function writeDeployConfig(
+  providerId: DeployProviderId = VERCEL_PROVIDER_ID,
+  input: DeployConfigInput = {},
+  runtimeDataDir?: string,
+  options: { expectedToken?: string } = {},
+) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return writeCloudflarePagesConfig(input);
+  if (providerId === DISPLAYDEV_PROVIDER_ID) {
+    return writeDisplayDevConfig(
+      input,
+      requiredDisplayDevRuntimeDataDir(runtimeDataDir),
+      options,
+    );
+  }
   return writeVercelConfig(input);
+}
+
+function requiredDisplayDevRuntimeDataDir(runtimeDataDir: string | undefined) {
+  if (!runtimeDataDir) {
+    throw new Error('display.dev config requires the resolved daemon data directory.');
+  }
+  return runtimeDataDir;
 }
 
 export function publicDeployConfigForProvider(providerId: DeployProviderId = VERCEL_PROVIDER_ID, config: Partial<DeployConfig> = {}) {
   if (providerId === CLOUDFLARE_PAGES_PROVIDER_ID) return publicCloudflarePagesConfig(config);
+  if (providerId === DISPLAYDEV_PROVIDER_ID) return publicDisplayDevConfig(config);
   return publicDeployConfig(config);
 }
 
 export function isDeployProviderId(value: unknown): value is DeployProviderId {
-  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID;
+  return value === VERCEL_PROVIDER_ID || value === CLOUDFLARE_PAGES_PROVIDER_ID || value === DISPLAYDEV_PROVIDER_ID;
 }
 
 function normalizeCloudflarePagesConfigHints(input: unknown, fallback: CloudflarePagesConfigHints = {}): CloudflarePagesConfigHints {

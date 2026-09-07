@@ -23,4 +23,32 @@ describe('shared API error codes', () => {
     const code: ApiErrorCode = 'AGENT_RUNTIME_DEF_INVALID';
     expect(code).toBe('AGENT_RUNTIME_DEF_INVALID');
   });
+
+  it('exposes every deploy-provider error emitted across the web/daemon contract', () => {
+    const deployProviderCodes = [
+      'NOT_HTML',
+      'MISSING_REFERENCES',
+      'PROVIDER_FORBIDDEN',
+      'VERCEL_TOKEN_REQUIRED',
+      'VERCEL_DEPLOY_FAILED',
+      'VERCEL_BAD_RESPONSE',
+      'CF_TOKEN_REQUIRED',
+      'CF_ACCOUNT_ID_REQUIRED',
+      'CF_PROJECT_NAME_UNRESOLVED',
+      'CF_ZONE_REQUIRED',
+      'CF_ZONE_INVALID',
+      'CF_ZONE_MISMATCH',
+      'CF_ZONE_INACTIVE',
+      'CF_ZONE_PARTIAL',
+      'CF_SUBDOMAIN_INVALID',
+      'CF_DOMAIN_ALREADY_BOUND',
+      'CF_DNS_RECORD_CONFLICT',
+      'CF_DNS_RECORD_MISSING',
+      'CF_UNKNOWN_ASSET_HASH',
+      'CF_ASSET_TOO_LARGE',
+      'CF_BAD_RESPONSE',
+    ] satisfies ApiErrorCode[];
+
+    expect(API_ERROR_CODES).toEqual(expect.arrayContaining(deployProviderCodes));
+  });
 });

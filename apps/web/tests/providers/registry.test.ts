@@ -12,6 +12,7 @@ import {
   CLOUDFLARE_PAGES_PROVIDER_ID,
   connectConnector,
   DEFAULT_DEPLOY_PROVIDER_ID,
+  DISPLAYDEV_PROVIDER_ID,
   deleteDesignSystemDraft,
   uninstallDesignSystem,
   DesignSystemDeleteError,
@@ -2185,6 +2186,14 @@ describe('deploy provider registry helpers', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith('/api/deploy/config?providerId=cloudflare-pages');
+  });
+
+  it('rejects a failed deploy config load instead of treating the provider as unconfigured', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { message: 'deploy config unavailable' },
+    }), { status: 503 })));
+
+    await expect(fetchDeployConfig(DISPLAYDEV_PROVIDER_ID)).rejects.toThrow('deploy config unavailable');
   });
 
   it('fetches Cloudflare Pages zones from the deploy helper route', async () => {

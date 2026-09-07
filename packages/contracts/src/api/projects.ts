@@ -820,7 +820,7 @@ export interface MessagesResponse {
   messages: ChatMessage[];
 }
 
-export type DeployProviderId = 'vercel-self' | 'cloudflare-pages';
+export type DeployProviderId = 'vercel-self' | 'cloudflare-pages' | 'displaydev-self';
 export type DeploymentStatus =
   | 'deploying'
   | 'preparing-link'
@@ -852,6 +852,48 @@ export interface CloudflarePagesDeploySelection {
   zoneName: string;
   domainPrefix: string;
 }
+
+export interface DisplayDevConfigHints {
+  defaultArtifactName?: string;
+}
+
+export interface DisplayDevDeploySelection {
+  name?: string;
+  visibility?: 'public' | 'company' | 'private';
+  sharedWith?: string[];
+  saveDefaults?: boolean;
+  authentication?:
+    | { mode: 'saved-key' }
+    | { mode: 'anonymous'; save?: boolean }
+    | { mode: 'api-key'; apiKey: string; save?: boolean };
+}
+
+export type DisplayDevDeploymentInfo =
+  | {
+      mode: 'anonymous';
+      shortId: string;
+      claimUrl: string;
+      claimUrlRedacted?: never;
+      expiresAt?: string;
+    }
+  | {
+      mode: 'anonymous';
+      shortId: string;
+      claimUrl?: never;
+      claimUrlRedacted: true;
+      expiresAt?: string;
+    }
+  | {
+      mode: 'authenticated';
+      shortId: string;
+      accessSettingsMissing: true;
+    }
+  | {
+      mode: 'authenticated';
+      shortId: string;
+      visibility: 'public' | 'company' | 'private';
+      sharedWith: string[];
+    };
 
 export type DeploymentLinkStatus =
   | 'ready'
@@ -924,17 +966,20 @@ export interface DeployConfigResponse {
   accountId?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
+  displayDev?: DisplayDevConfigHints;
   target: 'preview' | 'production';
 }
 
 export interface UpdateDeployConfigRequest {
   providerId?: DeployProviderId;
   token?: string;
+  clearToken?: boolean;
   teamId?: string;
   teamSlug?: string;
   accountId?: string;
   projectName?: string;
   cloudflarePages?: CloudflarePagesConfigHints;
+  displayDev?: DisplayDevConfigHints;
 }
 
 export interface DeploymentInfo {
@@ -950,6 +995,7 @@ export interface DeploymentInfo {
   statusMessage?: string;
   reachableAt?: number;
   cloudflarePages?: CloudflarePagesDeploymentInfo;
+  displayDev?: DisplayDevDeploymentInfo;
   createdAt: number;
   updatedAt: number;
 }
@@ -963,9 +1009,13 @@ export interface DeployProjectFileRequest {
   providerId?: DeployProviderId;
   cloudflarePages?: CloudflarePagesDeploySelection;
   target?: 'preview' | 'production';
+  displayDev?: DisplayDevDeploySelection;
 }
 
-export interface DeployProjectFileResponse extends DeploymentInfo {}
+export interface DeployProjectFileResponse extends DeploymentInfo {
+  displayDevConfigSaveFailed?: boolean;
+  savedDisplayDevConfig?: DeployConfigResponse;
+}
 
 export interface CheckDeploymentLinkResponse extends DeploymentInfo {}
 

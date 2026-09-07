@@ -32,6 +32,7 @@ interface CapturedRequest {
   method: string;
   url: string;
   body: string;
+  headers: http.IncomingHttpHeaders;
 }
 
 interface StubServer {
@@ -59,6 +60,7 @@ async function startStubServer(): Promise<StubServer> {
         method: req.method ?? '',
         url: req.url ?? '',
         body: raw,
+        headers: req.headers,
       };
       requests.push(captured);
       const response = responder?.(captured) ?? { status: 200, body: { ok: true } };
@@ -332,6 +334,448 @@ describe('od deploy CLI', () => {
       zoneName: 'example.com',
       domainPrefix: 'my-project',
     });
+  });
+
+  it('sends display.dev artifact and access selections from CLI flags', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: { ...STUB_DEPLOYMENT, providerId: 'displaydev-self' },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-name',
+      'Review draft',
+      '--displaydev-visibility',
+      'private',
+      '--displaydev-shared-with',
+      'alice@example.com, bob@example.com',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        name: 'Review draft',
+        visibility: 'private',
+        sharedWith: ['alice@example.com', 'bob@example.com'],
+      },
+    });
+  });
+
+  it('uses a named environment variable for one display.dev publish without requesting persistence', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: {
+        ...STUB_DEPLOYMENT,
+        providerId: 'displaydev-self',
+        displayDev: {
+          mode: 'authenticated',
+          shortId: 'authenticated-1',
+          visibility: 'company',
+          sharedWith: [],
+        },
+      },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-api-key-env',
+      'OD_TEST_DISPLAYDEV_API_KEY',
+      '--displaydev-name',
+      'Authenticated draft',
+      '--displaydev-visibility',
+      'company',
+      '--daemon-url',
+      stub.baseUrl,
+    ], {
+      env: { OD_TEST_DISPLAYDEV_API_KEY: 'displaydev-key-from-env' },
+    });
+
+    expect(result.code).toBe(0);
+    expect(stub.requests.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'POST', url: '/api/projects/proj-1/deploy' },
+    ]);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        name: 'Authenticated draft',
+        visibility: 'company',
+        authentication: {
+          mode: 'api-key',
+          apiKey: 'displaydev-key-from-env',
+        },
+      },
+    });
+    expect(JSON.parse(stub.requests[0]!.body).displayDev.authentication)
+      .not.toHaveProperty('save');
+  });
+
+  it('uses the current environment value on each invocation without saving rotated keys', async () => {
+    for (const token of ['displaydev-key-before-rotation', 'displaydev-key-after-rotation']) {
+      const result = await runCli([
+        'deploy',
+        'proj-1',
+        '--file',
+        'index.html',
+        '--provider',
+        'displaydev-self',
+        '--displaydev-api-key-env',
+        'OD_TEST_DISPLAYDEV_ROTATED_API_KEY',
+        '--daemon-url',
+        stub.baseUrl,
+      ], {
+        env: { OD_TEST_DISPLAYDEV_ROTATED_API_KEY: token },
+      });
+      expect(result.code).toBe(0);
+    }
+
+    expect(stub.requests.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'POST', url: '/api/projects/proj-1/deploy' },
+      { method: 'POST', url: '/api/projects/proj-1/deploy' },
+    ]);
+    expect(stub.requests.map((request) => (
+      JSON.parse(request.body).displayDev.authentication
+    ))).toEqual([
+      {
+        mode: 'api-key',
+        apiKey: 'displaydev-key-before-rotation',
+      },
+      {
+        mode: 'api-key',
+        apiKey: 'displaydev-key-after-rotation',
+      },
+    ]);
+  });
+
+  it('does not replace the saved display.dev key when the publish fails', async () => {
+    stub.setResponder((request) => request.url === '/api/projects/proj-1/deploy'
+      ? {
+          status: 502,
+          body: {
+            error: {
+              code: 'UPSTREAM_UNAVAILABLE',
+              message: 'display.dev is unavailable',
+            },
+          },
+        }
+      : { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'unexpected request' } } });
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-api-key-env',
+      'OD_TEST_DISPLAYDEV_FAILED_API_KEY',
+      '--daemon-url',
+      stub.baseUrl,
+    ], {
+      env: { OD_TEST_DISPLAYDEV_FAILED_API_KEY: 'displaydev-key-that-must-not-be-saved' },
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/display\.dev is unavailable/i);
+    expect(stub.requests.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'POST', url: '/api/projects/proj-1/deploy' },
+    ]);
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      displayDev: {
+        authentication: {
+          mode: 'api-key',
+          apiKey: 'displaydev-key-that-must-not-be-saved',
+        },
+      },
+    });
+    expect(JSON.parse(stub.requests[0]!.body).displayDev.authentication)
+      .not.toHaveProperty('save');
+  });
+
+  it('publishes anonymously without requesting a saved display.dev key change', async () => {
+    stub.setResponder((request) => {
+      if (request.url === '/api/projects/proj-1/deployments') {
+        return { status: 200, body: { deployments: [] } };
+      }
+      return {
+        status: 200,
+        body: {
+          ...STUB_DEPLOYMENT,
+          providerId: 'displaydev-self',
+          displayDev: {
+            mode: 'anonymous',
+            shortId: 'anonymous-1',
+            claimUrl: 'https://app.display.dev/claim?code=claim-1',
+          },
+        },
+      };
+    });
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-anonymous',
+      '--displaydev-name',
+      'Anonymous draft',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'GET', url: '/api/projects/proj-1/deployments' },
+      { method: 'POST', url: '/api/projects/proj-1/deploy' },
+    ]);
+    expect(JSON.parse(stub.requests[1]!.body)).toMatchObject({
+      providerId: 'displaydev-self',
+      displayDev: {
+        name: 'Anonymous draft',
+        authentication: { mode: 'anonymous' },
+      },
+    });
+    expect(JSON.parse(stub.requests[1]!.body).displayDev.authentication)
+      .not.toHaveProperty('save');
+  });
+
+  it('documents that display.dev authentication flags do not mutate the saved API key', async () => {
+    const result = await runCli(['deploy', '--help']);
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(0);
+    expect(result.stdout).toMatch(/--displaydev-api-key-env[^\n]*without changing the saved API key/);
+    expect(result.stdout).toMatch(/--displaydev-anonymous[^\n]*without changing the saved API key/);
+  });
+
+  it('does not clear the saved key when anonymous mode targets an owned display.dev artifact', async () => {
+    stub.setResponder((request) => request.url === '/api/projects/proj-1/deployments'
+      ? {
+          status: 200,
+          body: {
+            deployments: [{
+              ...STUB_DEPLOYMENT,
+              fileName: 'index.html',
+              providerId: 'displaydev-self',
+              displayDev: { mode: 'authenticated', shortId: 'owned-1' },
+            }],
+          },
+        }
+      : { status: 500, body: { error: { code: 'INTERNAL_ERROR', message: 'unexpected request' } } });
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-anonymous',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toMatch(/owned display\.dev artifact/i);
+    expect(stub.requests.map(({ method, url }) => ({ method, url }))).toEqual([
+      { method: 'GET', url: '/api/projects/proj-1/deployments' },
+    ]);
+  });
+
+  it.each([
+    ['API key environment selection', ['--displaydev-api-key-env', 'OD_TEST_DISPLAYDEV_CONFLICT_KEY']],
+    ['visibility selection', ['--displaydev-visibility', 'private']],
+    ['recipient selection', ['--displaydev-shared-with', 'alice@example.com']],
+  ])('rejects anonymous mode combined with %s before making a request', async (_label, extraArgs) => {
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-anonymous',
+      ...extraArgs,
+      '--daemon-url',
+      stub.baseUrl,
+    ], {
+      env: { OD_TEST_DISPLAYDEV_CONFLICT_KEY: 'unused-key' },
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/displaydev-anonymous/i);
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it.each([
+    ['vercel-self', ['--displaydev-api-key-env', 'OD_TEST_DISPLAYDEV_NON_PROVIDER_KEY']],
+    ['cloudflare-pages', ['--displaydev-anonymous']],
+    ['vercel-self', ['--displaydev-name', 'Wrong provider']],
+  ])('rejects display.dev flags for the %s provider before making a request', async (provider, extraArgs) => {
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      provider,
+      ...extraArgs,
+      '--daemon-url',
+      stub.baseUrl,
+    ], {
+      env: { OD_TEST_DISPLAYDEV_NON_PROVIDER_KEY: 'unused-key' },
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/provider displaydev-self/i);
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('rejects an empty API key environment variable before making a request', async () => {
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-api-key-env',
+      'OD_TEST_DISPLAYDEV_MISSING_API_KEY',
+      '--daemon-url',
+      stub.baseUrl,
+    ], {
+      env: { OD_TEST_DISPLAYDEV_MISSING_API_KEY: '   ' },
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('OD_TEST_DISPLAYDEV_MISSING_API_KEY');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it('keeps workspace headers on the display.dev deploy request', async () => {
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-api-key-env',
+      'OD_TEST_DISPLAYDEV_WORKSPACE_API_KEY',
+      '--workspace',
+      'workspace-a',
+      '--workspace-member',
+      'member-a',
+      '--daemon-url',
+      stub.baseUrl,
+    ], {
+      env: { OD_TEST_DISPLAYDEV_WORKSPACE_API_KEY: 'workspace-key' },
+    });
+
+    expect(result.code).toBe(0);
+    expect(stub.requests).toHaveLength(1);
+    for (const request of stub.requests) {
+      expect(request.headers).toMatchObject({
+        'x-od-workspace-id': 'workspace-a',
+        'x-od-workspace-member-id': 'member-a',
+      });
+    }
+  });
+
+  it('warns on stderr when authenticated access settings cannot be hydrated', async () => {
+    const response = {
+      ...STUB_DEPLOYMENT,
+      providerId: 'displaydev-self',
+      displayDev: {
+        mode: 'authenticated',
+        shortId: 'authenticated-1',
+        accessSettingsMissing: true,
+      },
+    };
+    stub.setResponder(() => ({ status: 200, body: response }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toMatch(/warning:.*access settings could not be loaded/i);
+    expect(result.stdout).toBe(`${JSON.stringify(response)}\n`);
+    expect(JSON.parse(result.stdout)).toEqual(response);
+  });
+
+  it('prints the claim URL for an anonymous display.dev publish', async () => {
+    stub.setResponder(() => ({
+      status: 200,
+      body: {
+        ...STUB_DEPLOYMENT,
+        providerId: 'displaydev-self',
+        displayDev: {
+          mode: 'anonymous',
+          shortId: 'anonymous-1',
+          claimUrl: 'https://app.display.dev/claim?code=claim-1',
+          expiresAt: '2026-09-25T00:00:00.000Z',
+        },
+      },
+    }));
+
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('Claim URL → https://app.display.dev/claim?code=claim-1');
+    expect(result.stdout).toContain('Expires → 2026-09-25T00:00:00.000Z');
+  });
+
+  it('rejects an invalid display.dev visibility before making a request', async () => {
+    const result = await runCli([
+      'deploy',
+      'proj-1',
+      '--file',
+      'index.html',
+      '--provider',
+      'displaydev-self',
+      '--displaydev-visibility',
+      'publik',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toMatch(/displaydev-visibility/i);
+    expect(stub.requests).toHaveLength(0);
   });
 
   // Default provider is vercel-self when --provider is omitted
