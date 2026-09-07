@@ -10,7 +10,11 @@ import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { isDaemonProxyConnectionFailure } from '../runtime/daemon-proxy-failure';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import { markProjectCreatedByViewer } from '../collab/useProjectCollab';
-import { API_ERROR_CODES, type ApiErrorCode } from '@open-design/contracts';
+import {
+  API_ERROR_CODES,
+  isSameWorkspacePrincipal,
+  type ApiErrorCode,
+} from '@open-design/contracts';
 import type {
   AppliedPluginSnapshot,
   ApplyResult,
@@ -434,7 +438,14 @@ export async function bootstrapProjectRoute(
         if (
           !context
           || body.scope.workspaceId !== suppliedContext.workspaceId
-          || workspaceIdentityCacheKey(context) !== suppliedIdentity
+          // Re-confirmation asks WHO, so it compares principals, not cache keys.
+          // The witness comes from the shell and carries the member's real role;
+          // the daemon's scope route answers with its placeholder `member` on
+          // its single branch. Demanding those agree meant a workspace owner's
+          // own project was never re-confirmed — `forbidden` here becomes
+          // `failure: 'missing'` in App with no fallback, so opening a team
+          // project from its directory card reported "项目不存在".
+          || !isSameWorkspacePrincipal(context, suppliedContext)
         ) {
           // A caller-supplied witness is exact authority, never a hint. If the
           // daemon cannot re-confirm it, do not retry this project headerless or
@@ -588,8 +599,13 @@ export async function bootstrapFirstOpenTeamProjectRoute(
   if (
     bootstrap.scope.kind !== 'team'
     || bootstrap.scope.context?.workspaceType !== 'team'
-    || workspaceIdentityCacheKey(bootstrap.scope.context)
-      !== workspaceIdentityCacheKey(exactContext)
+    // Same question, same answer as the re-confirmation above: does this local
+    // binding belong to the exact principal that authorized the bootstrap? The
+    // daemon's scope placeholder role is not evidence about that, and letting it
+    // decide killed this progressive first-open lane outright for every
+    // owner/admin — every first open silently fell back to the slow
+    // full-materialization path.
+    || !isSameWorkspacePrincipal(bootstrap.scope.context, exactContext)
   ) {
     // A shared placeholder must never be rendered through an unbound/local or
     // mismatched principal, including when the web is paired with an older

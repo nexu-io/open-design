@@ -20,6 +20,10 @@ import {
 import { KNOWN_PROVIDERS } from '../state/config';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { fetchProviderModels } from '../providers/provider-models';
+import {
+  canReachWorkspaceBillingEntrance,
+  workspaceBillingAuthorityContext,
+} from '@open-design/contracts';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import {
   canUpgradeVelaPlan,
@@ -298,13 +302,39 @@ export function AvatarMenu({
     amrResolvedProfile,
     financialWorkspaceId,
   );
-  // Personal workspaces always resolve `canManageBilling` true (the user is
-  // their own owner), so this does not affect the personal-workspace upgrade
-  // path.
+  /*
+   * Whether the viewer may be shown a billing entrance at all.
+   *
+   * This asked `workspaceContext.permissions.canManageBilling` directly, and got
+   * both halves of the question wrong on a project page:
+   *
+   *  - It bypassed {@link canReachWorkspaceBillingEntrance}, whose FIRST line
+   *    exempts a non-team workspace. `canManageBilling` is `readable && isOwner`
+   *    — a TEAM question about spending money that is not only yours. A personal
+   *    workspace has no second member, so asking it there only deletes the
+   *    person's own way to pay. (The comment that used to sit here claimed
+   *    personal workspaces were unaffected. They were affected from the day it
+   *    landed, because of the second half.)
+   *  - On a project page `workspaceContext` is the project's SCOPE, and the
+   *    daemon's scope fast path publishes a placeholder `role: 'member'` for
+   *    every caller — see `resolveLocalProjectWorkspaceScope`. So
+   *    `canManageBilling` was false even for the workspace owner, and
+   *    `openAmrUpgrade` returned early: a plan-gated model kept its "upgrade to
+   *    use this" tooltip and did nothing at all when clicked.
+   *
+   * `workspaceBillingAuthorityContext` is the one sanctioned way to answer a
+   * money question from a scope context: it adopts the real role, and ONLY the
+   * role, from the shell's authority when that authority names the same
+   * principal — never a different workspace's, and never anything else about it.
+   */
+  const billingEntranceContext = projectWorkspaceScope
+    ? workspaceBillingAuthorityContext(workspaceContext, ambientWorkspaceContext)
+    : workspaceContext;
   const amrCanUpgrade =
     !!amrAccount?.loggedIn &&
     canUpgradeVelaPlan(amrPlanId?.replace(/^team[_-]/i, '')) &&
-    Boolean(workspaceContext?.permissions?.canManageBilling) &&
+    billingEntranceContext !== null &&
+    canReachWorkspaceBillingEntrance(billingEntranceContext) &&
     amrPlansUrl !== null;
   const openAmrTarget = (
     targetUrl: string | null,

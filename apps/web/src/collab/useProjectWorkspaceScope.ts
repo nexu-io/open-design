@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isSameWorkspacePrincipal } from '@open-design/contracts';
 import type {
   ProjectVisibility,
   ProjectWorkspaceScope,
@@ -440,7 +441,16 @@ export function useProjectWorkspaceScope(
       !boundWorkspaceId
         ? initialScope.kind === 'unbound'
         : initialScope.workspaceId === boundWorkspaceId
-          && workspaceIdentityCacheKey(initialScopeContext) === callerIdentityKey
+          // Does this pre-fetched scope belong to the caller we are asserting?
+          // That is a WHO question, so it compares principals. `callerIdentityKey`
+          // above stays a cache key because every one of its other uses compares
+          // one caller identity against another caller identity; this is the one
+          // place that crosses sources, and the daemon's scope route always
+          // answers with its placeholder `role: 'member'`. Comparing keys here
+          // discarded the route bootstrap's exact answer on every project open by
+          // an owner or admin, costing a second scope round trip and a
+          // fail-closed FileViewer skeleton on first paint.
+          && isSameWorkspacePrincipal(initialScopeContext, callerWorkspaceContext)
     ),
   );
   const [state, setState] = useState<ProjectWorkspaceScopeState & {
