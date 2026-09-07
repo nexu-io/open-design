@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
 $NodeVersion = '24.19.0'
-$DshVersion = '0.1.1-rc.2'
+$DshVersion = '0.1.2-rc.1'
 $PnpmVersion = '11.7.0'
 # Freeze npm's view of the registry to just after $DshVersion was published.
 #
@@ -21,7 +21,7 @@ $PnpmVersion = '11.7.0'
 #
 # The cutoff must stay LATER than $DshVersion's publish time and EARLIER than
 # the next release candidate's. Update both values together.
-$DshResolutionCutoff = '2026-08-21T13:00:00Z'
+$DshResolutionCutoff = '2026-09-03T07:00:00Z'
 
 function Fail([string]$Message) {
   throw "DeepSeek Harness installer: $Message"
