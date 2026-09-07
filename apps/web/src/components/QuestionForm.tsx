@@ -811,7 +811,13 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   <StepProgress index={activeQuestionIndex} total={form.questions.length} />
                 ) : null}
               </div>
-              {q.help ? <div className="qf-help">{q.help}</div> : null}
+              {/* 一道题就是「题目 + 必填标识 + 用来作答的控件」,没有第四样。
+                  模型写的那行说明(`help`)夹在题目和控件中间,把两者推开,
+                  读起来像卡片自己的旁白而不是这道题的一部分(OPEND-2707)。
+                  这里是**不渲染**而不是藏起来:它是卡片正文这根纵向流里的
+                  一个块级兄弟,留着就还占一整行的行盒 —— 那行空白正是工单
+                  要一起去掉的。`help` 仍留在解析出来的表单结构上,已有的、
+                  流式进来的表单照旧原样往返。 */}
               {q.type === 'select' && q.options && !visualStyleCards
                 && questionUsesSelectMenu(q) ? (
                 <SelectChoice
