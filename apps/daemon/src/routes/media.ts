@@ -32,6 +32,7 @@ import {
 } from '../tool-tokens.js';
 import { scaffoldHyperFramesComposition } from '../media/hyperframes-scaffold.js';
 import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
+import { bearerTokenFromRequest } from '../http/tool-request-auth.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -849,7 +850,14 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         project.id,
         { mode: 'write', capability: 'writeFiles' },
       )) return;
-      const grant = optionalToolGrantFromRequest(req, { operation: 'media:generate' });
+      const suppliedToolToken = bearerTokenFromRequest(req);
+      const isRunScopedToolToken = suppliedToolToken?.startsWith('odtt_') === true;
+      const grant = isRunScopedToolToken
+        ? authorizeToolRequest(req, res, 'media:generate', {
+            endpoint: '/api/tools/media/generate',
+          })
+        : optionalToolGrantFromRequest(req, { operation: 'media:generate' });
+      if (isRunScopedToolToken && !grant) return;
       const grantDecision = resolveLegacyMediaRouteGrant({
         grant,
         projectId: req.params.id,

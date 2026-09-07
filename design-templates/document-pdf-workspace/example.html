@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Community Workshop Agreement · Fill &amp; prepare</title>
+  <style>
+    :root { --canvas:#eef1f2; --paper:#fffefd; --ink:#18211f; --muted:#68736e; --faint:#97a19c; --line:#dbe2e4; --accent:#145a66; --accent-soft:#e6f0f4; --panel:#f4f8fa; --success:#187452; --radius:8px; --shadow:0 20px 48px rgba(34,47,42,.10),0 3px 10px rgba(34,47,42,.05); }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:46px 22px; background:var(--canvas); color:var(--ink); font:13px/1.55 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    .mono { font-family:"DM Mono",ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .sheet { width:min(100%,794px); min-height:1123px; margin:0 auto; padding:32px 52px 36px; background:var(--paper); border:1px solid #e3e4df; box-shadow:var(--shadow); }
+    .context { display:flex; align-items:center; justify-content:space-between; gap:16px; padding-bottom:18px; border-bottom:1px solid var(--line); color:var(--muted); font-size:10px; letter-spacing:.06em; text-transform:uppercase; }
+    .context-left,.context-right { display:flex; align-items:center; gap:8px; }
+    .pdf-mark { display:inline-grid; width:28px; height:28px; place-items:center; border:0; border-radius:var(--radius); color:var(--accent); background:var(--accent-soft); font:9px "DM Mono",monospace; }
+    .task { padding:4px 7px; border-radius:999px; color:#124d55; background:var(--accent-soft); font:10px "DM Mono",monospace; letter-spacing:0; text-transform:none; }
+    .doc-header { position:relative; display:flex; justify-content:space-between; gap:24px; padding:28px 0 23px; }
+    .doc-header::after { position:absolute; bottom:0; left:0; width:136px; height:1px; background:var(--line); content:""; }
+    .kicker,.meta,.section-label { color:var(--muted); font:10px/1.55 "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+    h1 { margin:9px 0 8px; font-size:33px; line-height:1.08; letter-spacing:-.05em; }
+    .meta { font-size:9.5px; }
+    .wordmark { min-width:102px; padding-top:3px; color:var(--accent); font-size:11px; font-weight:700; letter-spacing:.09em; line-height:1.45; text-align:right; }
+    .intro { margin:16px 0 0; color:#3c4742; font-size:12.5px; line-height:1.75; }
+    .source { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:12px; margin-top:21px; padding:13px 15px; border:0; border-radius:var(--radius); background:var(--panel); }
+    .source-copy { min-width:0; }
+    .source-copy b,.source-copy span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .source-copy b { font-size:11.5px; }
+    .source-copy span { margin-top:2px; color:var(--muted); font:10px "DM Mono",monospace; }
+    section { margin-top:25px; }
+    .source + section { margin-top:53px; }
+    .section-label { margin-bottom:12px; color:var(--ink); font-size:14px; font-weight:650; letter-spacing:.055em; line-height:1.25; }
+    .agreement-grid { display:grid; grid-template-columns:1fr 1fr; overflow:hidden; border:1px solid var(--line); border-radius:var(--radius); }
+    .field { min-height:74px; padding:14px 16px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); }
+    .field:nth-child(2n) { border-right:0; }
+    .field:nth-last-child(-n+2) { border-bottom:0; }
+    .field span { display:table; width:max-content; margin-bottom:6px; padding:2px 5px; border-radius:4px; color:#526773; background:var(--accent-soft); font:500 9px "DM Mono",monospace; letter-spacing:.075em; text-transform:uppercase; }
+    .field b { font-size:12px; font-weight:600; }
+    .filled { color:var(--ink); }
+    .copy { color:#3c4742; font-size:12px; line-height:1.76; }
+    .copy p { margin:0 0 13px; }
+    .review { padding:0; background:none; }
+    .review-intro { padding:17px 18px; border-radius:var(--radius); background:var(--panel); }
+    .review h2 { margin:0 0 7px; font-size:14px; letter-spacing:-.02em; }
+    .review p { margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+    .review-status { margin-top:7px; padding:14px 18px 17px; border-radius:var(--radius); background:var(--panel); }
+    .output-file { display:grid; gap:4px; }
+    .output-file span { color:var(--accent); font:9px "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+    .file-row { display:flex; align-items:baseline; justify-content:space-between; min-width:0; gap:16px; }
+    .output-file b { min-width:0; color:var(--ink); font-size:12px; line-height:1.35; overflow-wrap:anywhere; }
+    .output-file small { flex:0 0 auto; color:var(--muted); font:9.5px "DM Mono",monospace; white-space:nowrap; }
+    .checks { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; margin-top:13px; padding-top:13px; border-top:1px solid var(--line); }
+    .checks-label { grid-column:1 / -1; margin-bottom:2px; color:var(--accent); font:9px "DM Mono",monospace; letter-spacing:.07em; text-transform:uppercase; }
+    .check { display:flex; align-items:center; gap:7px; min-height:48px; padding:10px 10px; border-radius:var(--radius); background:#fff; color:#33413b; font-size:10px; line-height:1.35; }
+    .tick { display:grid; width:13px; height:13px; flex:0 0 13px; place-items:center; border-radius:50%; color:white; background:#246f86; font-size:9px; }
+    .signature { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:72px; }
+    .signature div { min-height:62px; padding:13px 15px; border:1px solid var(--line); border-radius:var(--radius); background:transparent; color:var(--muted); font-size:10px; }
+    .signature b { display:block; margin-top:5px; color:var(--ink); font-size:12px; }
+    footer { display:flex; justify-content:space-between; gap:12px; margin-top:47px; padding-top:14px; border-top:1px solid var(--line); color:var(--faint); font:9px "DM Mono",monospace; }
+    @media (max-width:680px) { body { padding:0; } .sheet { min-height:100vh; padding:27px 24px; border:0; box-shadow:none; } .doc-header { grid-template-columns:1fr; display:grid; } .wordmark { text-align:left; } .agreement-grid,.signature,.checks { grid-template-columns:1fr; } .context-right { display:none; } }
+    @page { size:A4; margin:0; }
+    @media print {
+      body { padding:0; background:white; }
+      .sheet { width:210mm; min-height:297mm; margin:0; padding:8.47mm 13.76mm 9.53mm; border:0; box-shadow:none; }
+      .source, .agreement-grid, .review-intro, .review-status, .signature { break-inside:avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <div class="context">
+      <div class="context-left"><span>Fill &amp; prepare</span><span class="task">4 fields complete</span></div>
+      <div class="context-right mono">open-design-community-workshop-agreement.pdf</div>
+    </div>
+
+    <header class="doc-header">
+      <div>
+        <div class="kicker">Open Design · Community Programs</div>
+        <h1>Community Workshop Agreement</h1>
+        <div class="meta">Reference OD-COMM-2026-014 · Prepared 18 August 2026</div>
+      </div>
+      <div class="wordmark">OPEN<br />DESIGN</div>
+    </header>
+
+    <p class="intro">This agreement confirms the reservation of event facilities and related services for an Open Design community workshop and the host named below.</p>
+
+    <div class="source">
+      <span class="pdf-mark">PDF</span>
+      <div class="source-copy"><b>open-design-community-workshop-agreement.pdf</b><span>1.8 MB · supplied for internal review</span></div>
+    </div>
+
+    <section>
+      <div class="section-label">Event details</div>
+      <div class="agreement-grid">
+        <div class="field"><span>Event name</span><b class="filled">Open Design Community Workshop</b></div>
+        <div class="field"><span>Venue</span><b class="filled">Studio North</b></div>
+        <div class="field"><span>Event dates</span><b class="filled">14–16 September 2026</b></div>
+        <div class="field"><span>Client company</span><b class="filled">Open Design</b></div>
+      </div>
+    </section>
+
+    <section class="copy">
+      <div class="section-label">General terms</div>
+      <p>Open Design shall provide the final attendee estimate no later than ten business days before the first event date. Any variation to the reserved rooms or workshop programme must be confirmed in writing by both parties.</p>
+      <p>Payment terms, cancellation provisions and venue rules are set out in Schedule A. Open Design confirms that the event details above are accurate before the agreement is signed.</p>
+    </section>
+
+    <section class="review">
+      <div class="review-intro">
+        <h2>Prepared for final review</h2>
+        <p>The agreement details match the approved workshop brief and are ready to circulate for signature review.</p>
+      </div>
+      <div class="review-status">
+        <div class="output-file"><span>Output PDF</span><div class="file-row"><b>open-design-community-workshop-agreement-review.pdf</b><small>Editable review copy</small></div></div>
+        <div class="checks"><div class="checks-label">Pre-export checks</div><div class="check"><span class="tick">✓</span>Mandatory fields completed</div><div class="check"><span class="tick">✓</span>Dates match the source brief</div><div class="check"><span class="tick">✓</span>Output details confirmed</div></div>
+      </div>
+    </section>
+
+    <div class="signature"><div>Open Design signatory<b>To be confirmed</b></div><div>Date<b>Added after sign-off</b></div></div>
+    <footer><span>Open Design Community Workshop Agreement</span><span>Review copy · 1 of 1</span><span>Internal review</span></footer>
+  </main>
+</body>
+</html>

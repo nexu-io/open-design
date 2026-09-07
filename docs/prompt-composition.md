@@ -21,6 +21,51 @@ The API/BYOK mirror at `packages/contracts/src/prompts/system.ts:318` forks the
 same way. The two sides share no composition floor: a rule added to one holds
 only for the runs that take that side.
 
+## Outer Agent-turn envelopes
+
+The system-prompt fork above is the inner instruction source. Before a
+user-originated turn is written to an Agent process, the daemon gives it one
+canonical XML transport envelope with Markdown leaves:
+
+| User-originated turn | Canonical envelope | Owner |
+|---|---|---|
+| Ordinary Design/Chat turn | `open-design.agent-turn/v1` | `packages/contracts/src/prompts/agent-turn.ts` |
+| Admitted OD Next request, including unbound Discovery | `open-design.od-next-prompt-bundle/v2` | `packages/contracts/src/prompts/od-next-prompt-bundle-v2.ts` |
+
+`composeChatAgentTextPayload` in
+`apps/daemon/src/runtimes/chat-prompt-inputs.ts` owns this final boundary. The
+ordinary envelope has fixed instruction, attachment, context, lifecycle, and
+`user_first_prompt` slots; empty optional slots remain explicit markers, and
+`user_first_prompt` is always last. Discovery can occupy the lifecycle slot as
+either the full first-turn bootstrap or a compact reconstruction capsule, never
+both. For Discovery-enabled conversations, every cold physical context also
+includes the complete compact metadata index for the pinned auto-selectable
+official Skill catalog; only selected full Skill bodies are loaded later. The
+daemon attributes the actual lifecycle bytes, catalog revision, candidate count,
+and bootstrap/compact lifecycle kind in prompt-stack telemetry without storing
+the catalog body. For argv-bound adapters, the complete lifecycle payload must
+pass the adapter's prompt budget or the Run fails before spawn; discovery never
+silently degrades to lexical search.
+The XML serializer handles CDATA terminators; callers must not assemble these
+envelopes with string interpolation.
+
+Admitted V2 requests place the Discovery policy and complete catalog in
+`session_skills/discovery_skill`, not in an ordinary wrapper appended after
+the frozen Bundle. An unbound request keeps Core Strategy and general
+orchestration, but omits `task_type_skill`; the Agent reads a primary profile
+as needed and freezes its planning-time decision in `Plan.skillDecision`.
+No-primary artifact tasks use the internal generic V2 path; answer-only requests
+may terminate with explicit Host-validated `answered`. Explicit Chat/Plan modes
+still receive Discovery but keep their own execution boundaries.
+
+This does not rewrite OD Next's internal stage-to-stage handoffs. Once an
+OD Next request has entered its V2 task chain, non-request
+stage text retains the V2 protocol's established transport semantics. That is
+an internal orchestration delta, not a new user-originated prompt.
+
+The current unbound admission and evidence boundaries are documented in
+[Agent-native Skill Discovery V2](../specs/current/agent-native-skill-discovery-v2.md).
+
 ## Which runs take which path
 
 OD Next is opt-in and gated. `evaluateOdNextRollout`

@@ -59,6 +59,7 @@ test('a second-round edit of an existing artifact counts as touched, not zero', 
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
     filesWritten: 1,
+    filesWrittenPaths: [page],
   });
 });
 
@@ -86,6 +87,7 @@ test('created vs modified are reported separately and sum into touched', () => {
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 1,
     filesWritten: 2,
+    filesWrittenPaths: [path.join(root, 'a.html'), path.join(root, 'b.png')],
   });
 });
 
@@ -110,6 +112,7 @@ test('a touched DESIGN.md sets designSystemCreated but not artifact_count', () =
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
     filesWritten: 1, // …but it IS a written file
+    filesWrittenPaths: [path.join(root, 'DESIGN.md')],
   });
 
   // Editing it on a later round still flags the design-system signal.
@@ -159,6 +162,7 @@ test('non-artifact files and ignored dirs do not count as artifacts', () => {
     supportingMediaTouched: 0,
     // notes.txt IS a written file; node_modules stays ignored entirely.
     filesWritten: 1,
+    filesWrittenPaths: [path.join(root, 'notes.txt')],
   });
 });
 
@@ -315,5 +319,6 @@ test('a no-op turn (no file writes) reports zero', () => {
     renderDependencyTouchedPaths: [],
     supportingMediaTouched: 0,
     filesWritten: 0,
+    filesWrittenPaths: [],
   });
 });

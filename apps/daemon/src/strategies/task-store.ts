@@ -34,6 +34,7 @@ type DbRow = Record<string, unknown>;
 const TASK_STORE_SCHEMA_VERSION = 1 as const;
 const TERMINAL_OUTCOMES = new Set<StrategyTaskOutcome>([
   'completed',
+  'answered',
   'blocked',
   'canceled',
 ]);
@@ -219,7 +220,7 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
       outcome TEXT NOT NULL CHECK (
         outcome IN (
           'running', 'clarification_required', 'plan_ready',
-          'completed', 'blocked', 'canceled'
+          'completed', 'answered', 'blocked', 'canceled'
         )
       ),
       execution_mode TEXT CHECK (execution_mode IN ('simple', 'complex')),
@@ -279,7 +280,42 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_utf8_bytes INTEGER');
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_sha256 TEXT');
+  migrateAnsweredOutcome(db);
   migrateFrozenSkillPackageStore(db);
+}
+
+/** Rebuild only this table's CHECK constraint, preserving all rows and child FKs. */
+function migrateAnsweredOutcome(db: SqliteDb): void {
+  const original = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'strategy_task_executions'",
+  ).pluck().get();
+  if (typeof original !== 'string' || original.includes("'answered'")) return;
+  if (db.inTransaction) throw new Error('Strategy outcome migration requires an outer migration boundary.');
+  const schema = original.replace(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`]?strategy_task_executions["`]?/i,
+    'CREATE TABLE strategy_task_executions_answered')
+    .replace("'completed'", "'completed', 'answered'");
+  if (schema === original || !schema.includes("'answered'")) {
+    throw new Error('Strategy outcome migration could not recognize its source schema.');
+  }
+  const objects = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE tbl_name = 'strategy_task_executions' AND type IN ('index', 'trigger') AND sql IS NOT NULL",
+  ).all() as Array<{ sql: string }>;
+  const foreignKeys = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(schema);
+      db.exec('INSERT INTO strategy_task_executions_answered SELECT * FROM strategy_task_executions');
+      db.exec('DROP TABLE strategy_task_executions');
+      db.exec('ALTER TABLE strategy_task_executions_answered RENAME TO strategy_task_executions');
+      for (const object of objects) db.exec(object.sql);
+      if ((db.pragma('foreign_key_check') as unknown[]).length > 0) {
+        throw new Error('Strategy outcome migration violated a foreign key.');
+      }
+    }).immediate();
+  } finally {
+    if (foreignKeys) db.pragma('foreign_keys = ON');
+  }
 }
 
 export function createStrategyTaskExecution(
@@ -435,7 +471,7 @@ export function getStrategyTaskExecutionByRunId(
 export interface StrategyTaskTurnProjection {
   taskExecutionId: string;
   taskRunIndex: number;
-  /** The task settled `completed` — deliverable verified. Carried because the
+  /** The task settled successfully (verified delivery or explicit answer). Carried because the
    *  messages table has no strategy column, so a reload has no other way to
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
    *  (the "continue remaining tasks" offer) would resurrect on every reload. */
@@ -488,7 +524,7 @@ export function strategyTaskTurnsForRunIds(
         turns.set(row['runId'], {
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
-          delivered: row['outcome'] === 'completed',
+          delivered: row['outcome'] === 'completed' || row['outcome'] === 'answered',
         });
       }
     }
@@ -679,7 +715,7 @@ export function cancelStrategyTaskExecution(
       UPDATE strategy_task_executions
          SET revision = revision + 1, outcome = 'canceled', updated_at = ?
        WHERE task_execution_id = ? AND revision = ?
-         AND outcome NOT IN ('completed', 'blocked', 'canceled')
+         AND outcome NOT IN ('completed', 'answered', 'blocked', 'canceled')
     `).run(updatedAt, current.taskExecutionId, input.expectedRevision);
     if (result.changes !== 1) {
       throw new StrategyTaskTransitionConflictError(
@@ -1660,6 +1696,7 @@ function parseOutcome(value: unknown): StrategyTaskOutcome {
     || value === 'clarification_required'
     || value === 'plan_ready'
     || value === 'completed'
+    || value === 'answered'
     || value === 'blocked'
     || value === 'canceled'
   ) return value;

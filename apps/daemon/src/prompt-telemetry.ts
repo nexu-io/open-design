@@ -30,6 +30,7 @@ export type PromptTelemetrySectionKind =
   | 'skillPrompt'
   | 'designSystemPrompt'
   | 'pluginStagePrompt'
+  | 'skillDiscoveryLifecycle'
   | 'odNextExactFinalText'
   | 'cwdHint'
   | 'linkedDirsHint'
@@ -358,6 +359,33 @@ function metadataFingerprintSource(
   return summarizeMetadataValue(section.content ?? '');
 }
 
+function safeExactMetadata(
+  section: PromptTelemetryInputSection,
+): Record<string, unknown> | null {
+  if (section.kind !== 'skillDiscoveryLifecycle') return null;
+  if (!section.metadata || typeof section.metadata !== 'object') return {};
+  const metadata = section.metadata as Record<string, unknown>;
+  const lifecycleKind = metadata.lifecycleKind;
+  const catalogRevision = metadata.catalogRevision;
+  const candidateCount = metadata.candidateCount;
+  return {
+    lifecycleKind:
+      lifecycleKind === 'bootstrap' || lifecycleKind === 'compact' || lifecycleKind === 'none'
+        ? lifecycleKind
+        : 'unknown',
+    catalogRevision:
+      typeof catalogRevision === 'string' && /^sha256:[a-f0-9]{64}$/u.test(catalogRevision)
+        ? catalogRevision
+        : 'invalid',
+    candidateCount:
+      typeof candidateCount === 'number'
+        && Number.isSafeInteger(candidateCount)
+        && candidateCount >= 0
+        ? candidateCount
+        : 0,
+  };
+}
+
 function perSectionLimit(kind: PromptTelemetrySectionKind): number {
   return kind === 'daemonSystemPrompt'
     ? DAEMON_SYSTEM_PROMPT_MAX_BYTES
@@ -383,14 +411,15 @@ export function buildPromptStackTelemetry({
         : section.metadata !== undefined && section.metadata !== null);
     const isContentKind = REDACTED_CONTENT_KINDS.has(section.kind);
     const canCaptureContent = isContentKind && section.captureContent !== false;
+    const exactMetadata = safeExactMetadata(section);
     const redacted = isContentKind
       ? sanitizeSectionContent(section.kind, rawContent)
-      : JSON.stringify(metadataFingerprintSource(section));
-    const metadata = isContentKind
+      : JSON.stringify(exactMetadata ?? metadataFingerprintSource(section));
+    const metadata = exactMetadata ?? (isContentKind
       ? section.metadata && typeof section.metadata === 'object'
         ? summarizeMetadataValue(section.metadata)
         : undefined
-      : metadataFingerprintSource(section);
+      : metadataFingerprintSource(section));
     return {
       kind: section.kind,
       ordinal: index,

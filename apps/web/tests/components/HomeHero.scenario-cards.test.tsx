@@ -123,10 +123,10 @@ describe('HomeHero scenario cards', () => {
     const prototypeChip = findChip('prototype')!;
     expect(prototypeChip.action).toMatchObject({
       kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
     });
-    // Wireframe reuses the web-prototype seed at lo-fi fidelity.
+    // Wireframe refines the Prototype task profile with lo-fi fidelity.
     expect(
       prototypeSceneProjectMetadata(prototypeChip, prototypeSubChipForSlug('wireframe')),
     ).toEqual({ kind: 'prototype', fidelity: 'wireframe' });

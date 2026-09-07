@@ -29,6 +29,7 @@ import { migrateLibrary } from './library-store.js';
 import { migratePlugins } from './plugins/persistence.js';
 import { migrateProjectScenarioBindings } from './plugins/scenario-binding.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import { migrateSkillDiscoveryState } from './skill-discovery/state.js';
 import { migrateOdNextRolloutStore } from './strategies/od-next/rollout.js';
 import { migrateStrategyTaskStore } from './strategies/task-store.js';
 
@@ -571,6 +572,7 @@ function migrate(db: SqliteDb): void {
   migrateLibrary(db);
   migratePlugins(db);
   migrateProjectScenarioBindings(db);
+  migrateSkillDiscoveryState(db);
   migrateStrategyTaskStore(db);
   migrateOdNextRolloutStore(db);
   migrateCollabSyncSnapshots(db);

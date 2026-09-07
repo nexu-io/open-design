@@ -32,6 +32,7 @@ import {
   type InstalledPluginRecord,
   type RunContextSelection,
   type ProjectScenarioTaskProfile,
+  type ProjectSkillDiscovery,
   type WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import type { OpenDesignHostProjectImportSuccess } from '@open-design/host';
@@ -336,6 +337,7 @@ type EntryCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
   automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  skillDiscovery?: ProjectSkillDiscovery;
   /** Official example card the user picked under the automatic route. */
   exampleReference?: CreateProjectExampleReference;
   initialRunContext?: RunContextSelection | null;

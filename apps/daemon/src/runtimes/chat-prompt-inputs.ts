@@ -5,6 +5,7 @@ import {
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
   type OdNextPromptBundleHeadV2,
   type OdNextPromptBundleRecipeIdentityV2,
+  serializeOpenDesignAgentTurnV1,
   serializeOdNextPromptBundleV2,
 } from '@open-design/contracts';
 import { renderResearchCommandContract } from '../prompts/research-contract.js';
@@ -129,6 +130,8 @@ export function composeChatAgentTextPayload({
   projectAttachmentReferences,
   commentAttachmentReferences,
   imageReferences,
+  discoveryBootstrapMarkdown,
+  compactLifecycleCapsuleMarkdown,
   odNextRequestBundle,
   strategyInputStage = null,
 }: {
@@ -148,6 +151,8 @@ export function composeChatAgentTextPayload({
   projectAttachmentReferences: string;
   commentAttachmentReferences: string;
   imageReferences: string;
+  discoveryBootstrapMarkdown?: string | undefined;
+  compactLifecycleCapsuleMarkdown?: string | undefined;
   odNextRequestBundle?: {
     head: OdNextPromptBundleHeadV2;
     recipeIdentity: OdNextPromptBundleRecipeIdentityV2;
@@ -285,19 +290,36 @@ export function composeChatAgentTextPayload({
     clientSystemPrompt: clientInstructionPrompt,
     finalPromptOverride: null,
   });
-  const composedPrompt = [
-    instructionPrompt
-      ? `# Instructions (read first)\n\n${formOverride}${instructionPrompt}${cwdReference}${linkedDirectoryReferences}${echoGuard}\n\n---\n`
-      : cwdReference
-        ? `# Instructions\n\n${formOverride}${cwdReference}${linkedDirectoryReferences}${echoGuard}\n\n---\n`
-        : linkedDirectoryReferences
-          ? `# Instructions\n\n${formOverride}${linkedDirectoryReferences}${echoGuard}\n\n---\n`
-          : formOverride
-            ? `# Instructions\n\n${formOverride}${echoGuard}\n\n---\n`
-            : '',
-    `# User request\n\n${requestOrStageText}${projectAttachmentReferences}${commentAttachmentReferences}`,
-    imageReferences ? `\n\n${imageReferences}` : '',
-  ].join('');
+  const instructionBody = `${formOverride}${instructionPrompt}${echoGuard}`.trim();
+  const instructionsMarkdown = instructionBody
+    ? `${instructionPrompt ? '# Instructions (read first)' : '# Instructions'}\n\n${instructionBody}`
+    : '# Instructions\n\nFollow the user request using the available Open Design context and tools.';
+  const contextBody = [cwdReference, linkedDirectoryReferences]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n');
+  const attachmentsBody = [
+    projectAttachmentReferences,
+    commentAttachmentReferences,
+    imageReferences,
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('\n\n');
+  const composedPrompt = serializeOpenDesignAgentTurnV1({
+    instructionsMarkdown,
+    attachmentsMarkdown: attachmentsBody
+      ? `# Attachments\n\n${attachmentsBody}`
+      : null,
+    contextMarkdown: contextBody ? `# Context\n\n${contextBody}` : null,
+    ...(discoveryBootstrapMarkdown !== undefined
+      ? { discoveryBootstrapMarkdown }
+      : {}),
+    ...(compactLifecycleCapsuleMarkdown !== undefined
+      ? { compactLifecycleCapsuleMarkdown }
+      : {}),
+    userFirstPrompt: requestOrStageText,
+  });
 
   return {
     composedPrompt,

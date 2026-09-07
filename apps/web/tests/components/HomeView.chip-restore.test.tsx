@@ -57,8 +57,8 @@ const DEFAULT_PLUGIN = {
   },
 };
 
-// The Prototype chip binds to the bundled `example-web-prototype` plugin
-// (mirrors HomeView.prefill.test.tsx's fixture of the same name).
+// An old installed prototype plugin remains available for legacy persisted
+// selection tests; new task-chip defaults use DEFAULT_PLUGIN.
 const WEB_PROTOTYPE_PLUGIN = {
   ...DEFAULT_PLUGIN,
   id: 'example-web-prototype',
@@ -184,7 +184,7 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
   });
 
   it('restores the selected creation-type chip and its bound plugin after Home fully unmounts and remounts', async () => {
-    const fetchMock = fetchMockFor([WEB_PROTOTYPE_PLUGIN]);
+    const fetchMock = fetchMockFor([DEFAULT_PLUGIN, WEB_PROTOTYPE_PLUGIN]);
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
 
@@ -232,7 +232,7 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
     expect(screen.getByTestId('home-hero-template-clear')).toBeTruthy();
     expect(
       fetchMock.mock.calls.some(
-        ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
+        ([url]) => typeof url === 'string' && url.includes('/api/plugins/od-new-generation/apply'),
       ),
     ).toBe(false);
   });
@@ -246,7 +246,7 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
         projectKind: 'prototype',
       }),
     );
-    const fetchMock = fetchMockFor([WEB_PROTOTYPE_PLUGIN]);
+    const fetchMock = fetchMockFor([DEFAULT_PLUGIN, WEB_PROTOTYPE_PLUGIN]);
     vi.stubGlobal('fetch', fetchMock);
     stubAnimationFrame();
 

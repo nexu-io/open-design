@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Relaybase — Ops Console Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-muted: #fbfcfe;
+      --text: #1f2937;
+      --subtle: #667085;
+      --line: #e4e7ec;
+      --accent: #315efb;
+      --accent-soft: #eef4ff;
+      --success: #067647;
+      --danger: #b42318;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font-family: Inter, "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      padding: 24px 16px;
+      border-right: 1px solid var(--line);
+      background: var(--surface-muted);
+    }
+
+    .brand {
+      margin-bottom: 20px;
+      padding: 14px 12px;
+      border-radius: 14px;
+      background: var(--accent-soft);
+      color: #2347be;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .nav-group {
+      margin-bottom: 16px;
+    }
+
+    .nav-title {
+      margin: 0 0 10px;
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .nav-link {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 12px;
+      color: var(--text);
+      text-decoration: none;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .nav-link.active {
+      background: white;
+      border: 1px solid var(--line);
+      font-weight: 600;
+    }
+
+    .main {
+      padding: 28px;
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-size: clamp(24px, 3vw, 30px);
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 40px;
+      padding: 0 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      grid-column: span 4;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--surface);
+    }
+
+    .card h2 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .metric {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .meta {
+      margin-top: 8px;
+      color: var(--subtle);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .panel {
+      grid-column: span 7;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--surface);
+    }
+
+    .panel.small {
+      grid-column: span 5;
+    }
+
+    .panel h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+
+    .form-row {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .form-row label {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+
+    .control,
+    .select,
+    textarea {
+      width: 100%;
+      min-height: 42px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: white;
+      color: var(--text);
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .help {
+      color: var(--subtle);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .error {
+      color: var(--danger);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #ecfdf3;
+      color: var(--success);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .status.warn {
+      background: #fff7ed;
+      color: #b54708;
+    }
+
+    @media (max-width: 1080px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        border-right: none;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .card,
+      .panel,
+      .panel.small {
+        grid-column: span 12;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">Relaybase Ops Console</div>
+
+      <div class="nav-group">
+        <div class="nav-title">Overview</div>
+        <a class="nav-link active" href="#">Dashboard</a>
+        <a class="nav-link" href="#">Billing &amp; Revenue</a>
+        <a class="nav-link" href="#">Usage Reports</a>
+      </div>
+
+      <div class="nav-group">
+        <div class="nav-title">Operations</div>
+        <a class="nav-link" href="#">User Management</a>
+        <a class="nav-link" href="#">Workflow Settings</a>
+        <a class="nav-link" href="#">Audit Log</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="title">Workflow Settings</div>
+        <div class="actions">
+          <button class="btn">Save draft</button>
+          <button class="btn btn-primary">Apply changes</button>
+        </div>
+      </div>
+
+      <section class="grid">
+        <div class="card">
+          <h2>Monthly active workspaces</h2>
+          <p class="metric">2,481</p>
+          <div class="meta">Up 12.4% from last month</div>
+        </div>
+
+        <div class="card">
+          <h2>Workflow error rate</h2>
+          <p class="metric">0.82%</p>
+          <div class="meta">Mostly webhook timeouts on the export step</div>
+        </div>
+
+        <div class="card">
+          <h2>Runs within SLA</h2>
+          <p class="metric">86%</p>
+          <div class="meta">Retry policy change is rolling out this week</div>
+        </div>
+
+        <section class="panel">
+          <h2>Notification settings</h2>
+
+          <div class="form-row">
+            <label for="team-name">Escalation team</label>
+            <input class="control" id="team-name" value="Platform Operations Group Alpha" />
+            <div class="help">Alerts for failed workflow runs are routed to this team's on-call channel.</div>
+          </div>
+
+          <div class="form-row">
+            <label for="frequency">Digest frequency</label>
+            <select class="select" id="frequency">
+              <option>Daily at 09:00</option>
+              <option>Weekly on Monday at 09:00</option>
+              <option>Critical events only</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <label for="note">Runbook note</label>
+            <textarea id="note">When a nightly export run fails twice in a row, pause the schedule before retrying and link the incident in the escalation thread. Reference: https://example.com/ops-console/settings/workflow-notification-policy</textarea>
+            <div class="error">Example error: a change description is required before settings can be applied.</div>
+          </div>
+        </section>
+
+        <section class="panel small">
+          <h2>Recent job status</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Status</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>nightly-report-export</td>
+                <td><span class="status">Healthy</span></td>
+                <td>2026-04-07 09:12</td>
+              </tr>
+              <tr>
+                <td>customer-billing-reconcile</td>
+                <td><span class="status warn">Needs review</span></td>
+                <td>2026-04-07 08:58</td>
+              </tr>
+              <tr>
+                <td>workflow-setting-sync</td>
+                <td><span class="status">Healthy</span></td>
+                <td>2026-04-07 08:41</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

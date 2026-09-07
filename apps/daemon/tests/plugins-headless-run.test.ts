@@ -28,6 +28,7 @@ import { randomUUID } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { parseOpenDesignAgentTurnV1 } from '@open-design/contracts';
 import path from 'node:path';
 import url from 'node:url';
 import { promisify } from 'node:util';
@@ -137,6 +138,20 @@ async function runCliResult(
       code: failed.code ?? 1,
     };
   }
+}
+
+async function waitForRunTerminal(runId: string): Promise<{ status: string }> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}`);
+    expect(response.status).toBe(200);
+    const run = await response.json() as { status: string };
+    if (run.status === 'failed' || run.status === 'succeeded' || run.status === 'canceled') {
+      return run;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`run ${runId} did not finish`);
 }
 
 async function readSseUntilSuccess(resp: Response) {
@@ -764,7 +779,9 @@ process.stdin.on('end', () => {
         expect(prompt).toContain('The plugin\'s example brief is: _Generate a {{topic}} brief for {{audience}}._');
         expect(prompt).toContain(`- **topic**: ${topic}`);
         expect(prompt).toContain('- **audience**: general');
-        expect(prompt).toContain(`# User request\n\nGenerate a ${topic} brief for general.`);
+        expect(parseOpenDesignAgentTurnV1(prompt)).toMatchObject({
+          userFirstPrompt: `Generate a ${topic} brief for general.`,
+        });
       } finally {
         if (previousCapture === undefined) {
           delete process.env.OD_PROMPT_CAPTURE;
@@ -775,6 +792,513 @@ process.stdin.on('end', () => {
       }
     } finally {
       await rm(pluginRoot, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('lets a typeless Design turn discover and load Prototype within the same Agent process', async () => {
+    const projectId = `headless-skill-discovery-${randomUUID().slice(0, 8)}`;
+    const query = '帮我做一个官网';
+    const previousDiscoveryMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    try {
+    const createResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Agent-native Skill discovery',
+        conversationMode: 'design',
+        metadata: { kind: 'prototype' },
+        skillDiscovery: { mode: 'agent', catalog: 'open-design-official' },
+      }),
+    });
+    const createBody = await createResp.json() as {
+      conversationId: string;
+      project: {
+        id: string;
+        appliedPluginSnapshotId?: string | null;
+        metadata?: {
+          skillDiscoveryBinding?: { provenance?: string; catalog?: string };
+        };
+      };
+    };
+    expect(createResp.status, JSON.stringify(createBody)).toBe(200);
+    expect(createBody.project.appliedPluginSnapshotId ?? null).toBeNull();
+    expect(createBody.project.metadata?.skillDiscoveryBinding).toMatchObject({
+      provenance: 'no_explicit_task_type',
+      catalog: 'open-design-official',
+    });
+
+    const captureRoot = await mkdtemp(path.join(tmpdir(), 'od-skill-discovery-e2e-'));
+    const promptPath = path.join(captureRoot, 'prompt.xml');
+    const evidencePath = path.join(captureRoot, 'evidence.json');
+    const previousPromptCapture = process.env.OD_PROMPT_CAPTURE;
+    const previousDiscoveryEvidence = process.env.OD_DISCOVERY_EVIDENCE;
+    process.env.OD_PROMPT_CAPTURE = promptPath;
+    process.env.OD_DISCOVERY_EVIDENCE = evidencePath;
+    try {
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_PROMPT_CAPTURE, input);
+  void (async () => {
+    const headers = {
+      authorization: 'Bearer ' + process.env.OD_TOOL_TOKEN,
+      'content-type': 'application/json',
+    };
+    const blockedMediaResponse = await fetch(
+      process.env.OD_DAEMON_URL + '/api/projects/' + encodeURIComponent(process.env.OD_PROJECT_ID) + '/media/generate',
+      { method: 'POST', headers, body: JSON.stringify({}) },
+    );
+    const blockedMedia = await blockedMediaResponse.json();
+    if (blockedMediaResponse.status !== 409 || blockedMedia.error?.code !== 'TOOL_OPERATION_DENIED') {
+      throw new Error('pre-resolution media was not gated: ' + JSON.stringify(blockedMedia));
+    }
+    const catalogRevision = input.match(/- Catalog revision: \`(sha256:[a-f0-9]{64})\`/)?.[1];
+    const candidateLine = input.split('\\n').find(
+      (line) => line.trimStart().startsWith('{"id":"prototype"'),
+    );
+    if (!catalogRevision || !candidateLine) {
+      throw new Error('prompt did not expose the pinned Prototype metadata');
+    }
+    const candidate = JSON.parse(candidateLine.trim());
+    const prepareResponse = await fetch(process.env.OD_DAEMON_URL + '/api/tools/skills/load', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        id: candidate.id,
+        revision: catalogRevision,
+        candidateDigest: candidate.candidateDigest,
+        role: 'primary',
+        purpose: 'Create the requested official website prototype.',
+      }),
+    });
+    const prepared = await prepareResponse.json();
+    if (!prepareResponse.ok) throw new Error('prepare failed: ' + JSON.stringify(prepared));
+    const path = require('node:path');
+    const materializedRoot = prepared.resources.length > 0
+      ? '.od-skills/' + prepared.alias
+      : null;
+    for (const resource of prepared.resources) {
+      const destination = path.join(process.cwd(), materializedRoot, resource.relativePath);
+      fs.mkdirSync(path.dirname(destination), { recursive: true });
+      fs.writeFileSync(destination, Buffer.from(resource.bytesBase64, 'base64'));
+    }
+    const commitResponse = await fetch(
+      process.env.OD_DAEMON_URL + '/api/tools/skills/load/commit',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          pendingToken: prepared.pendingToken,
+          expectedStateRevision: prepared.expectedStateRevision,
+          materialization: {
+            materializedRoot,
+            resources: prepared.resources
+              .map(({ relativePath, digest, size }) => ({ relativePath, digest, size }))
+              .sort((left, right) => left.relativePath.localeCompare(right.relativePath, 'en')),
+          },
+        }),
+      },
+    );
+    const load = await commitResponse.json();
+    if (!commitResponse.ok) throw new Error('commit failed: ' + JSON.stringify(load));
+    const committedRoot = load.loaded.materialization?.materializedRoot;
+    fs.writeFileSync(process.env.OD_DISCOVERY_EVIDENCE, JSON.stringify({
+      candidateId: candidate.id,
+      status: load.state.status,
+      loadedProfileContainsPrototype: load.loaded.profileMarkdown.includes('Prototype execution profile v1'),
+      ordinaryOrchestrationIsStrategyNeutral:
+        load.loaded.generalOrchestration?.markdown.startsWith('# Open Design ordinary Agent-turn orchestration v1')
+        && load.loaded.profileMarkdown.includes('does not activate OD Next v2'),
+      loadedRole: load.loaded.resolvedRole,
+      strategyBindingAbsent: !Object.prototype.hasOwnProperty.call(load.loaded, 'strategyBinding'),
+      resourceBytesAbsent: load.loaded.materialization.resources.every(
+        (resource) => !Object.prototype.hasOwnProperty.call(resource, 'content')
+          && !Object.prototype.hasOwnProperty.call(resource, 'bytes'),
+      ),
+      materializedFrameExists: typeof committedRoot === 'string'
+        && fs.existsSync(path.join(process.cwd(), committedRoot, 'device-frames', 'iphone.html')),
+      preResolutionMediaBlocked: true,
+      loadedDirectlyFromCatalog: true,
+    }));
+    console.log(JSON.stringify({
+      type: 'text',
+      part: { text: 'discovery-loaded:' + candidate.id },
+    }));
+  })().catch((error) => {
+    console.error(String(error && error.stack || error));
+    process.exitCode = 1;
+  });
+});
+`,
+        async () => {
+          const run = await runCli([
+            'run',
+            'start',
+            '--project',
+            projectId,
+            '--conversation',
+            createBody.conversationId,
+            '--message',
+            query,
+            '--agent',
+            'opencode',
+            '--follow',
+          ], { timeout: 60_000 });
+          expect(run.stdout).toContain('discovery-loaded:prototype');
+          expect(run.stdout).toContain('"status":"succeeded"');
+        },
+      );
+
+      const prompt = await readFile(promptPath, 'utf8');
+      const parsedPrompt = parseOpenDesignAgentTurnV1(prompt);
+      expect(parsedPrompt.userFirstPrompt).toBe(query);
+      expect(parsedPrompt.discoveryBootstrapMarkdown).toContain('# Agent-native Skill Discovery');
+      expect(parsedPrompt.discoveryBootstrapMarkdown).toContain('# Official Skill metadata catalog');
+      expect(parsedPrompt.discoveryBootstrapMarkdown).toContain('"id":"prototype"');
+      expect(parsedPrompt.discoveryBootstrapMarkdown).not.toContain('tools skills search');
+      expect(prompt).not.toContain('open-design.od-next-prompt/v2');
+
+      const evidence = JSON.parse(await readFile(evidencePath, 'utf8')) as {
+        candidateId: string;
+        status: string;
+        loadedProfileContainsPrototype: boolean;
+        ordinaryOrchestrationIsStrategyNeutral: boolean;
+        loadedRole: string;
+        strategyBindingAbsent: boolean;
+        resourceBytesAbsent: boolean;
+        materializedFrameExists: boolean;
+        preResolutionMediaBlocked: boolean;
+        loadedDirectlyFromCatalog: boolean;
+      };
+      expect(evidence).toEqual({
+        candidateId: 'prototype',
+        status: 'resolved_skill',
+        loadedProfileContainsPrototype: true,
+        ordinaryOrchestrationIsStrategyNeutral: true,
+        loadedRole: 'primary',
+        strategyBindingAbsent: true,
+        resourceBytesAbsent: true,
+        materializedFrameExists: true,
+        preResolutionMediaBlocked: true,
+        loadedDirectlyFromCatalog: true,
+      });
+    } finally {
+      if (previousPromptCapture === undefined) delete process.env.OD_PROMPT_CAPTURE;
+      else process.env.OD_PROMPT_CAPTURE = previousPromptCapture;
+      if (previousDiscoveryEvidence === undefined) delete process.env.OD_DISCOVERY_EVIDENCE;
+      else process.env.OD_DISCOVERY_EVIDENCE = previousDiscoveryEvidence;
+      await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+      await rm(captureRoot, { recursive: true, force: true });
+    }
+    } finally {
+      if (previousDiscoveryMode === undefined) {
+        delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      } else {
+        process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousDiscoveryMode;
+      }
+    }
+  }, 60_000);
+
+  it('fails an oversized argv discovery lifecycle before spawn while preserving safe telemetry', async () => {
+    const projectId = `headless-skill-discovery-budget-${randomUUID().slice(0, 8)}`;
+    const previousDiscoveryMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    try {
+      const createResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Agent-native Skill discovery argv budget',
+          conversationMode: 'design',
+          metadata: { kind: 'prototype' },
+          skillDiscovery: { mode: 'agent', catalog: 'open-design-official' },
+        }),
+      });
+      const created = await createResp.json() as { conversationId: string };
+      expect(createResp.status, JSON.stringify(created)).toBe(200);
+
+      const runResp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          conversationId: created.conversationId,
+          agentId: 'aider',
+          message: '帮我做一个官网',
+        }),
+      });
+      const started = await runResp.json() as { runId?: string; error?: unknown };
+      expect(runResp.status, JSON.stringify(started)).toBe(202);
+      expect((await waitForRunTerminal(started.runId!)).status).toBe('failed');
+
+      const statusResp = await fetch(
+        `${baseUrl}/api/runs/${encodeURIComponent(started.runId!)}`,
+      );
+      const status = await statusResp.json() as {
+        errorCode?: string;
+        error?: string;
+        eventsLogPath?: string | null;
+      };
+      expect(statusResp.status, JSON.stringify(status)).toBe(200);
+      expect(status.errorCode).toBe('AGENT_PROMPT_TOO_LARGE');
+      expect(status.error).toContain('will not silently fall back to lexical search');
+      expect(status.eventsLogPath).toBeTruthy();
+
+      const durable = JSON.parse(await readFile(
+        path.join(path.dirname(status.eventsLogPath!), 'state.json'),
+        'utf8',
+      )) as {
+        promptTelemetry?: {
+          rawBytes: number;
+          sections: Array<{
+            kind: string;
+            rawBytes: number;
+            redactedBytes: number;
+            redactedContent?: string;
+            metadata?: {
+              lifecycleKind?: string;
+              catalogRevision?: string;
+              candidateCount?: number;
+            };
+          }>;
+        };
+      };
+      expect(durable.promptTelemetry?.sections).toHaveLength(1);
+      expect(durable.promptTelemetry?.sections[0]).toMatchObject({
+        kind: 'skillDiscoveryLifecycle',
+        rawBytes: expect.any(Number),
+        metadata: {
+          lifecycleKind: 'bootstrap',
+          catalogRevision: expect.stringMatching(/^sha256:[a-f0-9]{64}$/u),
+          candidateCount: 166,
+        },
+      });
+      expect(durable.promptTelemetry?.rawBytes).toBeGreaterThan(120_000);
+      expect(durable.promptTelemetry?.sections[0]?.rawBytes).toBe(
+        durable.promptTelemetry?.rawBytes,
+      );
+      expect(durable.promptTelemetry?.sections[0]?.redactedBytes).toBeLessThan(1_000);
+      expect(durable.promptTelemetry?.sections[0]?.redactedContent).toBeUndefined();
+    } finally {
+      if (previousDiscoveryMode === undefined) {
+        delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      } else {
+        process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousDiscoveryMode;
+      }
+      await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    }
+  }, 60_000);
+
+  it('composes a typeless attachment-only first turn with the terminal empty-prompt marker', async () => {
+    const projectId = `headless-attachment-only-${randomUUID().slice(0, 8)}`;
+    const previousDiscoveryMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    const captureRoot = await mkdtemp(path.join(tmpdir(), 'od-attachment-only-prompt-'));
+    const promptPath = path.join(captureRoot, 'prompt.xml');
+    const previousPromptCapture = process.env.OD_PROMPT_CAPTURE;
+    process.env.OD_PROMPT_CAPTURE = promptPath;
+    try {
+      const createResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Attachment-only Skill discovery',
+          conversationMode: 'design',
+          metadata: { kind: 'prototype' },
+          skillDiscovery: { mode: 'agent', catalog: 'open-design-official' },
+        }),
+      });
+      const created = await createResp.json() as { conversationId: string };
+      expect(createResp.status, JSON.stringify(created)).toBe(200);
+
+      const fileResp = await fetch(
+        `${baseUrl}/api/projects/${encodeURIComponent(projectId)}/files`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ name: 'brief.txt', content: 'Build the attached brief.' }),
+        },
+      );
+      expect(fileResp.status).toBe(200);
+
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_PROMPT_CAPTURE, input);
+  console.log(JSON.stringify({ type: 'text', part: { text: 'attachment-only-ok' } }));
+});
+`,
+        async () => {
+          const runResp = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              conversationId: created.conversationId,
+              agentId: 'opencode',
+              message: '',
+              currentPrompt: '',
+              attachments: ['brief.txt'],
+            }),
+          });
+          const runBody = await runResp.json() as { runId?: string; error?: unknown };
+          expect(runResp.status, JSON.stringify(runBody)).toBe(202);
+          const terminal = await waitForRunTerminal(runBody.runId!);
+          expect(terminal.status).toBe('succeeded');
+        },
+      );
+
+      const prompt = await readFile(promptPath, 'utf8');
+      expect(prompt.trimEnd().endsWith(
+        '  <user_first_prompt_empty />\n</open_design_agent_turn>',
+      ), prompt.slice(-600)).toBe(true);
+      expect(parseOpenDesignAgentTurnV1(prompt)).toMatchObject({
+        userFirstPrompt: '',
+        attachmentsMarkdown: expect.stringContaining('brief.txt'),
+        discoveryBootstrapMarkdown: expect.stringContaining('# Agent-native Skill Discovery'),
+      });
+    } finally {
+      if (previousPromptCapture === undefined) delete process.env.OD_PROMPT_CAPTURE;
+      else process.env.OD_PROMPT_CAPTURE = previousPromptCapture;
+      if (previousDiscoveryMode === undefined) delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      else process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousDiscoveryMode;
+      await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+      await rm(captureRoot, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it('does not enable discovery or gate wrappers after an explicit context plugin is added', async () => {
+    const projectId = `headless-context-plugin-${randomUUID().slice(0, 8)}`;
+    const previousDiscoveryMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    const captureRoot = await mkdtemp(path.join(tmpdir(), 'od-context-plugin-prompt-'));
+    const promptPath = path.join(captureRoot, 'prompt.xml');
+    const evidencePath = path.join(captureRoot, 'evidence.json');
+    const previousPromptCapture = process.env.OD_PROMPT_CAPTURE;
+    const previousEvidence = process.env.OD_DISCOVERY_EVIDENCE;
+    process.env.OD_PROMPT_CAPTURE = promptPath;
+    process.env.OD_DISCOVERY_EVIDENCE = evidencePath;
+    try {
+      const createResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Discovery binding with context plugin',
+          conversationMode: 'design',
+          metadata: { kind: 'prototype' },
+          skillDiscovery: { mode: 'agent', catalog: 'open-design-official' },
+        }),
+      });
+      const created = await createResp.json() as { conversationId: string };
+      expect(createResp.status, JSON.stringify(created)).toBe(200);
+
+      const patchResp = await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          metadata: {
+            kind: 'prototype',
+            contextPlugins: [{ id: 'example-web-prototype', title: 'Web Prototype' }],
+          },
+        }),
+      });
+      const patched = await patchResp.json() as {
+        project?: { metadata?: { contextPlugins?: unknown[]; skillDiscoveryBinding?: unknown } };
+      };
+      expect(patchResp.status, JSON.stringify(patched)).toBe(200);
+      expect(patched.project?.metadata?.contextPlugins).toHaveLength(1);
+      expect(patched.project?.metadata?.skillDiscoveryBinding).toBeTruthy();
+
+      await withFakeAgent(
+        'opencode',
+        `
+const fs = require('node:fs');
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { input += chunk; });
+process.stdin.on('end', () => {
+  fs.writeFileSync(process.env.OD_PROMPT_CAPTURE, input);
+  void (async () => {
+    const response = await fetch(
+      process.env.OD_DAEMON_URL + '/api/projects/' + encodeURIComponent(process.env.OD_PROJECT_ID) + '/media/generate',
+      {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer ' + process.env.OD_TOOL_TOKEN,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      },
+    );
+    const body = await response.json();
+    fs.writeFileSync(process.env.OD_DISCOVERY_EVIDENCE, JSON.stringify({ status: response.status, body }));
+    console.log(JSON.stringify({ type: 'text', part: { text: 'context-plugin-ok' } }));
+  })().catch((error) => {
+    console.error(String(error && error.stack || error));
+    process.exitCode = 1;
+  });
+});
+`,
+        async () => {
+          const runResp = await fetch(`${baseUrl}/api/runs`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              projectId,
+              conversationId: created.conversationId,
+              agentId: 'opencode',
+              message: 'Use the selected context plugin.',
+              currentPrompt: 'Use the selected context plugin.',
+            }),
+          });
+          const runBody = await runResp.json() as { runId?: string; error?: unknown };
+          expect(runResp.status, JSON.stringify(runBody)).toBe(202);
+          const terminal = await waitForRunTerminal(runBody.runId!);
+          expect(terminal.status).toBe('succeeded');
+        },
+      );
+
+      const prompt = parseOpenDesignAgentTurnV1(await readFile(promptPath, 'utf8'));
+      expect(prompt.discoveryBootstrapMarkdown).toBeUndefined();
+      expect(prompt.compactLifecycleCapsuleMarkdown).toBeUndefined();
+      const evidence = JSON.parse(await readFile(evidencePath, 'utf8')) as {
+        status: number;
+        body?: { error?: { code?: string } };
+      };
+      expect(evidence.status).not.toBe(409);
+      expect(evidence.body?.error?.code).not.toBe('TOOL_OPERATION_DENIED');
+    } finally {
+      if (previousPromptCapture === undefined) delete process.env.OD_PROMPT_CAPTURE;
+      else process.env.OD_PROMPT_CAPTURE = previousPromptCapture;
+      if (previousEvidence === undefined) delete process.env.OD_DISCOVERY_EVIDENCE;
+      else process.env.OD_DISCOVERY_EVIDENCE = previousEvidence;
+      if (previousDiscoveryMode === undefined) delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      else process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousDiscoveryMode;
+      await fetch(`${baseUrl}/api/projects/${encodeURIComponent(projectId)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+      await rm(captureRoot, { recursive: true, force: true });
     }
   }, 60_000);
 

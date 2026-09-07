@@ -154,12 +154,11 @@ describe('Home first-run guide trail', () => {
     });
   });
 
-  it('carries a default prototype straight to beat 2 through the static prompt-example fallback', async () => {
-    // The chip's default plugin exists (so the chip binds) but nothing
-    // matches the example filter — the chip renders static prompt-example
-    // cards, and the guide's beat 2 must land on the first of those.
+  it('advances an explicitly picked prototype to beat 2 through the static prompt-example fallback', async () => {
+    // Nothing matches the picked chip's example filter, so it renders static
+    // prompt-example cards and the guide's beat 2 lands on the first one.
     const WEB_PROTOTYPE_PLUGIN = {
-      id: 'example-web-prototype',
+      id: 'od-new-generation',
       title: 'Web Prototype',
       version: '0.1.0',
       trust: 'bundled' as const,
@@ -170,7 +169,7 @@ describe('Home first-run guide trail', () => {
       installedAt: 0,
       updatedAt: 0,
       manifest: {
-        name: 'example-web-prototype',
+        name: 'od-new-generation',
         title: 'Web Prototype',
         version: '0.1.0',
         description: 'General-purpose desktop web prototype.',

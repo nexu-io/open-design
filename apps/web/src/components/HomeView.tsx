@@ -26,7 +26,7 @@ import type {
 } from '@open-design/contracts';
 import {
   automaticStrategyTaskProfileForRouteId,
-  DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+  OPEN_DESIGN_OFFICIAL_SKILL_DISCOVERY,
 } from '@open-design/contracts';
 import { projectKindFromMetadataToTracking } from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
@@ -1962,8 +1962,8 @@ export function HomeView({
   // the composer carries no pill. This used to silently bind the Prototype
   // chip on the first catalog-resolution turn — which also meant Send had to
   // stay locked for that turn (`defaultChipSeedPending`). Neither is needed
-  // now: a naked prompt routes through the daemon's own scenario-default table
-  // exactly as it does when the user clears the type with the pill's ×.
+  // now: an untyped Design prompt requests agent-native official Skill
+  // discovery, while an untyped Ask prompt remains ordinary chat.
 
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
@@ -2939,9 +2939,8 @@ export function HomeView({
           );
       // A mentioned Skill travels with whatever the composer selected, rather
       // than replacing it: the pick decides the route, the Skill is material
-      // inside it. In Design mode, free-form prompts route through the default
-      // design router; in Ask mode they stay plain chat conversations with no
-      // hidden router plugin.
+      // inside it. In Design mode, a free-form prompt with no explicit route
+      // asks the Agent to discover an official Skill; Ask mode stays plain chat.
       const resolvedSkillId = activeSkill?.id ?? null;
       const submittedChip = submittedRouteChipId
         ? findChip(submittedRouteChipId)
@@ -2949,14 +2948,17 @@ export function HomeView({
       const productAutomaticScenario = submittedChip?.action.kind === 'apply-scenario'
         && submittedChip.action.automaticDefault === true
         && !pinsPluginOverAutomaticRoute(submittedActive, submittedRouteChipId);
+      const useAgentSkillDiscovery = sessionMode === 'design'
+        && !automaticStrategyTaskProfile
+        && !submittedActive
+        && !resolvedSkillId
+        && contextPlugins.length === 0;
       const routedPluginId =
         automaticStrategyTaskProfile
           ? null
-          : sessionMode === 'design'
-          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
           : submittedActive?.record.id ?? null;
       const pluginSelectionProvenance = sessionMode === 'design'
-        && (!submittedActive || productAutomaticScenario)
+        && productAutomaticScenario
         ? 'automatic-default' as const
         : null;
       // The example-prompt override is a one-shot marker. Decide whether to
@@ -2972,6 +2974,9 @@ export function HomeView({
         pluginId: routedPluginId,
         ...(pluginSelectionProvenance ? { pluginSelectionProvenance } : {}),
         ...(automaticStrategyTaskProfile ? { automaticStrategyTaskProfile } : {}),
+        ...(useAgentSkillDiscovery
+          ? { skillDiscovery: OPEN_DESIGN_OFFICIAL_SKILL_DISCOVERY }
+          : {}),
         // Rides only where the automatic route is actually claimed: an example
         // reference is meaningless without the route it belongs to.
         ...(automaticStrategyTaskProfile && submittedExampleReference
@@ -2996,7 +3001,9 @@ export function HomeView({
         taskKind: automaticStrategyTaskProfile
           ? null
           : submittedActive?.result?.appliedPlugin?.taskKind ?? null,
-        ...(!automaticStrategyTaskProfile ? { pluginInputs: submittedPluginInputs } : {}),
+        ...(!automaticStrategyTaskProfile && !useAgentSkillDiscovery
+          ? { pluginInputs: submittedPluginInputs }
+          : {}),
         projectKind: submittedProjectKind,
         projectMetadata: submittedProjectMetadata,
         designSystemId: submittedDesignSystemId,
@@ -3082,7 +3089,6 @@ export function HomeView({
   // #5517: with no recent projects the home (logo + heading + composer)
   // centers vertically instead of hugging the top, and the strip is skipped.
   const recentProjectsEmpty = !projectsLoading && projects.length === 0;
-
   return (
     <div
       className={`home-view${recentProjectsEmpty ? ' home-view--centered' : ''}${

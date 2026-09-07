@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   OD_NEXT_BUNDLE_ECHO_GUARD_V2,
+  parseOpenDesignAgentTurnV1,
   serializeOdNextPromptBundleV2,
 } from '@open-design/contracts';
 import {
@@ -259,7 +260,7 @@ describe('chat Agent exact-text production choke point', () => {
       hasCurrentPrompt: false,
     })).toBe('CLI headless prompt');
   });
-  it('preserves the ordinary Markdown prompt byte-for-byte while registering every leaf contributor', () => {
+  it('wraps every ordinary prompt in canonical XML while keeping Markdown leaf semantics', () => {
     const result = composeChatAgentTextPayload({
       formOverride: '[form override]\n',
       daemonSystemPrompt: '  daemon system  ',
@@ -277,6 +278,7 @@ describe('chat Agent exact-text production choke point', () => {
       projectAttachmentReferences: '\n\nattachment: `brief.md`',
       commentAttachmentReferences: '\n\ncomment: fix header',
       imageReferences: '@/uploads/a.png @/uploads/b.png',
+      discoveryBootstrapMarkdown: '# Skill discovery\n\nSearch, load, then continue in this turn.',
     });
 
     const clientInstruction = [
@@ -294,17 +296,26 @@ describe('chat Agent exact-text production choke point', () => {
     ].join('\n\n---\n\n');
     expect(result.clientInstructionPrompt).toBe(clientInstruction);
     expect(result.instructionPrompt).toBe(instruction);
-    expect(result.composedPrompt).toBe(
-      '# Instructions (read first)\n\n'
-      + '[form override]\n'
-      + instruction
-      + '\n\nworkspace: `/project`'
-      + '\n\nlinked: `/code`'
-      + '\n\ndo not echo\n\n---\n'
-      + '# User request\n\nBuild the dashboard.'
-      + '\n\nattachment: `brief.md`'
-      + '\n\ncomment: fix header'
-      + '\n\n@/uploads/a.png @/uploads/b.png',
+    expect(parseOpenDesignAgentTurnV1(result.composedPrompt)).toEqual({
+      instructionsMarkdown:
+        '# Instructions (read first)\n\n'
+        + '[form override]\n'
+        + instruction
+        + '\n\ndo not echo',
+      attachmentsMarkdown:
+        '# Attachments\n\nattachment: `brief.md`'
+        + '\n\ncomment: fix header'
+        + '\n\n@/uploads/a.png @/uploads/b.png',
+      contextMarkdown:
+        '# Context\n\nworkspace: `/project`\n\nlinked: `/code`',
+      discoveryBootstrapMarkdown:
+        '# Skill discovery\n\nSearch, load, then continue in this turn.',
+      userFirstPrompt: 'Build the dashboard.',
+    });
+    expect(result.composedPrompt).toMatch(/^<open_design_agent_turn /);
+    expect(result.composedPrompt.match(/<open_design_agent_turn /g)).toHaveLength(1);
+    expect(result.composedPrompt.indexOf('<user_first_prompt>')).toBeGreaterThan(
+      result.composedPrompt.indexOf('<discovery_bootstrap>'),
     );
   });
 

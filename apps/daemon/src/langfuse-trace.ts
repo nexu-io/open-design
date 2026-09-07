@@ -833,6 +833,9 @@ function cleanNumber(value: unknown): number | undefined {
 }
 
 function sectionAttributionBytes(section: PromptTelemetrySection): number {
+  if (section.kind === 'skillDiscoveryLifecycle') {
+    return cleanNumber(section.rawBytes) ?? 0;
+  }
   return cleanNumber(section.redactedBytes) ?? cleanNumber(section.rawBytes) ?? 0;
 }
 
@@ -938,7 +941,7 @@ function buildPromptStackBlameMetadata(
         estimatedCacheCreationInputTokens: cacheCreationBySection.get(section) ?? 0,
       })),
     promptStack_ttftAttribution: {
-      method: 'proportional_by_prompt_section_redacted_bytes',
+      method: 'proportional_by_prompt_section_attribution_bytes',
       estimation_warning:
         'Provider reports aggregate prompt/cache tokens only; section token values are estimates for diagnosis, not billing truth.',
       time_to_first_token_ms: timings?.time_to_first_token_ms,

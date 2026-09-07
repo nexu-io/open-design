@@ -93,9 +93,7 @@ function scenarioPlugin(id: string, title: string) {
 
 function stubPlugins() {
   const plugins = [
-    scenarioPlugin('example-web-clone', 'Website clone'),
-    scenarioPlugin('example-simple-deck', 'Slide deck'),
-    scenarioPlugin('example-web-prototype', 'Prototype'),
+    scenarioPlugin('od-new-generation', 'New generation'),
   ];
   vi.stubGlobal('fetch', vi.fn(async (url: RequestInfo | URL) => {
     const href = typeof url === 'string' ? url : url.toString();

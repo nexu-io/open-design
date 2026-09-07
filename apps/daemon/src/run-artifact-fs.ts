@@ -299,6 +299,8 @@ export interface RunArtifactDiff {
   // (`run_finished.files_written_count`). Same mtime-inclusive touched
   // semantics as `touched`; deletions are ignored.
   filesWritten: number;
+  /** Exact changed files for generic delivery validation; legacy artifact metrics stay unchanged. */
+  filesWrittenPaths: string[];
 }
 
 // Classify created vs modified tracked files between two snapshots into the
@@ -319,6 +321,7 @@ export function diffRunArtifacts(
   let renderDependencyTouched = 0;
   let supportingMediaTouched = 0;
   let filesWritten = 0;
+  const filesWrittenPaths: string[] = [];
   const contentTouchedPaths: string[] = [];
   const renderDependencyTouchedPaths: string[] = [];
   for (const [filePath, fingerprint] of after) {
@@ -331,6 +334,7 @@ export function diffRunArtifacts(
         prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
     filesWritten += 1;
+    filesWrittenPaths.push(filePath);
     const contentChanged = isNew || (!!prior && (
       prior.hash !== null && fingerprint.hash !== null
         ? prior.hash !== fingerprint.hash
@@ -374,6 +378,7 @@ export function diffRunArtifacts(
     renderDependencyTouchedPaths,
     supportingMediaTouched,
     filesWritten,
+    filesWrittenPaths,
   };
 }
 

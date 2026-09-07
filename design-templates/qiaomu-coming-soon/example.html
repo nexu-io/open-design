@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Launching Soon — OpenDesign</title>
+<!--
+  DNA donors:
+  1. SpaceX   — full-bleed cinematic canvas, uppercase + positive tracking 1.17px, ghost buttons rgba(240,240,250,0.1)
+                spectral near-white #f0f0fa, zero shadows zero cards, text set directly on the background
+  2. Framer   — extreme negative tracking (-5px display sizes), blue accent #0099ff as coordinate highlight
+                layered ambient shadows, rgba(255,255,255,0.1) top highlight
+  VARIANCE 9 / MOTION 8 / DENSITY 2 — maximum adventure
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+/* ─────────────────────────────── */
+/* Design read: VARIANCE 9, MOTION 8 */
+/* DNA: SpaceX cinematic full-bleed + Framer extreme typography */
+/* ─────────────────────────────── */
+:root {
+  /* SpaceX DNA: spectral white (#f0f0fa) */
+  --spectral: #f0f0fa;
+  /* Framer DNA: blue accent */
+  --blue: #0099ff;
+  --blue-glow: rgba(0,153,255,0.12);
+  /* SpaceX DNA: ghost buttons */
+  --ghost-bg: rgba(240,240,250,0.08);
+  --ghost-b: rgba(240,240,250,0.35);
+  --ease-out: cubic-bezier(0.23,1,0.32,1);
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; overflow: hidden; }
+body {
+  background: #000;
+  color: var(--spectral);
+  font-family: 'Barlow Condensed', -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  height: 100dvh;
+  overflow: hidden;
+  position: relative;
+  font-style: normal;
+}
+
+/* Craft density #2: selection */
+::selection { background: rgba(0,153,255,.3); color: #fff; }
+
+/* Craft density #3: focus ring */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; border-radius: 4px; }
+
+/* ─── Craft density #1: starfield ambient layer ─── */
+.starfield {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.star {
+  position: absolute;
+  background: #fff;
+  border-radius: 50%;
+  animation: twinkle var(--d) ease-in-out infinite;
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: var(--o); transform: scale(1); }
+  50% { opacity: calc(var(--o) * 0.3); transform: scale(0.85); }
+}
+
+/* Craft density #1 ambience: planet SVG + deep-space glow */
+.space-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+}
+
+/* SpaceX DNA: dark gradient overlay keeps text readable */
+.space-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 120% 120% at 75% 60%, rgba(0,20,60,0.6) 0%, rgba(0,0,0,0.4) 50%, transparent 80%);
+}
+
+/* Planet */
+.planet {
+  position: absolute;
+  right: 8%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(45vh, 45vw);
+  height: min(45vh, 45vw);
+}
+
+.planet-core {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #1a3060 0%, #0a1535 40%, #040c1f 100%);
+  box-shadow: 0 0 0 1px rgba(0,153,255,.08), 0 0 80px 20px rgba(0,40,120,.3), inset 0 0 60px rgba(0,0,0,.8);
+  position: relative;
+  overflow: hidden;
+  animation: rotate-planet 120s linear infinite;
+}
+
+@keyframes rotate-planet { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(30deg); } }
+
+/* Planet surface texture */
+.planet-core::before {
+  content: '';
+  position: absolute;
+  top: 15%;
+  left: 10%;
+  width: 30%;
+  height: 20%;
+  background: rgba(30,60,120,.5);
+  border-radius: 50%;
+  filter: blur(8px);
+}
+
+.planet-core::after {
+  content: '';
+  position: absolute;
+  bottom: 20%;
+  right: 15%;
+  width: 40%;
+  height: 25%;
+  background: rgba(10,30,80,.4);
+  border-radius: 50%;
+  filter: blur(12px);
+}
+
+/* Planet glow */
+.planet-glow {
+  position: absolute;
+  inset: -30%;
+  border-radius: 50%;
+  background: radial-gradient(circle, transparent 40%, rgba(0,153,255,.04) 65%, transparent 80%);
+  animation: pulse-glow 6s ease-in-out infinite;
+}
+
+@keyframes pulse-glow { 0%,100%{opacity:.6} 50%{opacity:1} }
+
+/* Coordinate ring (Framer precision + SpaceX engineering aesthetic) */
+.crosshair {
+  position: absolute;
+  right: 8%;
+  top: 50%;
+  transform: translateY(-50%);
+  width: min(45vh, 45vw);
+  height: min(45vh, 45vw);
+  z-index: 3;
+  pointer-events: none;
+  animation: rotate-slow 60s linear infinite;
+}
+
+@keyframes rotate-slow { from { transform: translateY(-50%) rotate(0deg); } to { transform: translateY(-50%) rotate(360deg); } }
+
+/* ─── Main content ─── */
+.content {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 max(32px, 6vw);
+}
+
+/* SpaceX DNA: uppercase + tracked-out nav */
+.nav-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px max(32px, 6vw);
+}
+
+.brand {
+  font-family: 'Space Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--spectral);
+  text-decoration: none;
+  opacity: .8;
+  transition: opacity 200ms var(--ease-out);
+}
+
+@media(hover:hover)and(pointer:fine){ .brand:hover{opacity:1} }
+
+.nav-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  color: rgba(240,240,250,.4);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+/* Craft density #7 display typography: oversized ghost word backdrop */
+/* Craft density #8 fluid type scale */
+.backdrop-word {
+  font-family: 'Barlow Condensed', sans-serif;
+  /* SpaceX DNA: uppercase */
+  text-transform: uppercase;
+  /* Framer DNA: extreme negative tracking */
+  letter-spacing: -4px;
+  font-weight: 700;
+  font-size: clamp(120px, 18vw, 280px);
+  line-height: 0.85;
+  /* Outlined-letter effect (craft density #7) */
+  -webkit-text-stroke: 1px rgba(240,240,250,.28);
+  color: rgba(240,240,250,.08);
+  position: absolute;
+  left: max(24px, 5vw);
+  bottom: 0;
+  z-index: -1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.main-copy {
+  max-width: 560px;
+}
+
+/* SpaceX DNA: uppercase label, restyled as a launch badge */
+.mission-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--blue);
+  margin-bottom: 24px;
+  padding: 8px 16px;
+  border: 1px solid rgba(0,153,255,.35);
+  border-radius: 20px;
+  background: rgba(0,153,255,.07);
+}
+
+.mission-label .status-dot { flex: none; }
+
+/* SpaceX DNA: uppercase tracked headline */
+.headline {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: clamp(44px, 6vw, 80px);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--spectral);
+  margin-bottom: 20px;
+  text-wrap: balance;
+  text-shadow: 0 0 48px rgba(0,153,255,.25);
+}
+
+.headline em {
+  font-style: normal;
+  color: rgba(240,240,250,.4);
+  font-weight: 300;
+}
+
+.subtext {
+  font-size: 15px;
+  font-weight: 400;
+  color: rgba(240,240,250,.55);
+  line-height: 1.65;
+  letter-spacing: .2px;
+  margin-bottom: 36px;
+  text-wrap: pretty;
+  max-width: 46ch;
+}
+
+.subtext strong {
+  color: rgba(240,240,250,.8);
+  font-weight: 400;
+}
+
+/* ─── Waitlist form (SpaceX ghost-control register) ─── */
+.waitlist {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin-bottom: 18px;
+}
+
+.email-field {
+  flex: 1 1 260px;
+  min-width: 220px;
+  padding: 14px 20px;
+  border-radius: 32px;
+  background: var(--ghost-bg);
+  border: 1px solid var(--ghost-b);
+  color: var(--spectral);
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  letter-spacing: .5px;
+  transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out);
+}
+
+.email-field::placeholder {
+  color: rgba(240,240,250,.35);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  font-size: 10px;
+}
+
+.email-field:focus {
+  outline: none;
+  border-color: rgba(0,153,255,.7);
+  background: rgba(0,153,255,.06);
+}
+
+/* SpaceX DNA: ghost button */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 28px;
+  border-radius: 32px;
+  background: var(--ghost-bg);
+  border: 1px solid var(--ghost-b);
+  color: var(--spectral);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 200ms var(--ease-out), border-color 200ms var(--ease-out), transform 160ms var(--ease-out);
+}
+
+.btn-ghost:active { transform: scale(0.97); }
+
+@media(hover:hover)and(pointer:fine){
+  .btn-ghost:hover {
+    background: rgba(240,240,250,.14);
+    border-color: rgba(240,240,250,.55);
+  }
+}
+
+.btn-blue {
+  background: rgba(0,153,255,.15);
+  border-color: rgba(0,153,255,.5);
+  color: #7dd3fc;
+}
+
+@media(hover:hover)and(pointer:fine){
+  .btn-blue:hover {
+    background: rgba(0,153,255,.25);
+    border-color: rgba(0,153,255,.8);
+  }
+}
+
+.form-note {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(240,240,250,.3);
+}
+
+.form-note.confirmed {
+  color: rgba(0,153,255,.75);
+}
+
+/* Coordinate HUD (bottom right) */
+.hud {
+  position: fixed;
+  bottom: 32px;
+  right: max(32px, 6vw);
+  z-index: 20;
+  text-align: right;
+}
+
+.hud-line {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  color: rgba(240,240,250,.25);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  line-height: 1.8;
+  display: block;
+}
+
+.hud-line.bright {
+  color: rgba(0,153,255,.6);
+}
+
+/* Craft density #4: signature interaction — magnetic cursor glow */
+.cursor-glow {
+  position: fixed;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0,153,255,.06) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  transition: transform 400ms var(--ease-out);
+}
+
+/* Craft density #6: editorial detail — hairlines + coordinate annotations */
+.coord-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.coord-h {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,153,255,.08) 20%, rgba(0,153,255,.08) 80%, transparent);
+}
+
+.coord-v {
+  position: absolute;
+  left: 35%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(0,153,255,.06) 20%, rgba(0,153,255,.06) 80%, transparent);
+}
+
+/* Entrance animation */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mission-label { animation: fadeUp 800ms var(--ease-out) 200ms both; }
+.headline { animation: fadeUp 800ms var(--ease-out) 350ms both; }
+.subtext { animation: fadeUp 800ms var(--ease-out) 480ms both; }
+.waitlist { animation: fadeUp 800ms var(--ease-out) 600ms both; }
+.form-note { animation: fadeUp 800ms var(--ease-out) 700ms both; }
+.backdrop-word { animation: fadeUp 1200ms var(--ease-out) 100ms both; }
+
+/* Craft density #5: layered tinted shadows (planet glow) */
+/* Implemented in the planet-core box-shadow */
+
+/* Responsive */
+@media(max-width: 768px) {
+  .planet, .crosshair { right: -10%; width: 60vw; height: 60vw; opacity: .4; }
+  .headline { font-size: clamp(36px, 10vw, 56px); }
+  .backdrop-word { font-size: clamp(90px, 26vw, 180px); }
+  .hud { display: none; }
+}
+
+@media(prefers-reduced-motion: reduce) {
+  .mission-label, .headline, .subtext, .waitlist, .form-note, .backdrop-word { animation: none; opacity: 1; transform: none; }
+  .crosshair, .status-dot, .planet-core, .planet-glow { animation: none; }
+  .twinkle { animation: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Starfield -->
+<div class="starfield" aria-hidden="true" id="starfield"></div>
+
+<!-- Space background -->
+<div class="space-bg" aria-hidden="true">
+  <!-- Planet -->
+  <div class="planet">
+    <div class="planet-core"></div>
+    <div class="planet-glow"></div>
+  </div>
+
+  <!-- Rotating coordinate ring (SVG) -->
+  <svg class="crosshair" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="48" stroke="rgba(0,153,255,0.06)" stroke-width="0.5" stroke-dasharray="4 6"/>
+    <circle cx="50" cy="50" r="38" stroke="rgba(0,153,255,0.04)" stroke-width="0.3"/>
+    <line x1="50" y1="2" x2="50" y2="18" stroke="rgba(0,153,255,0.2)" stroke-width="0.5"/>
+    <line x1="50" y1="82" x2="50" y2="98" stroke="rgba(0,153,255,0.2)" stroke-width="0.5"/>
+    <line x1="2" y1="50" x2="18" y2="50" stroke="rgba(0,153,255,0.2)" stroke-width="0.5"/>
+    <line x1="82" y1="50" x2="98" y2="50" stroke="rgba(0,153,255,0.2)" stroke-width="0.5"/>
+    <circle cx="50" cy="50" r="2" fill="none" stroke="rgba(0,153,255,0.3)" stroke-width="0.5"/>
+    <circle cx="50" cy="2" r="1" fill="rgba(0,153,255,0.4)"/>
+    <circle cx="50" cy="98" r="1" fill="rgba(0,153,255,0.4)"/>
+    <circle cx="2" cy="50" r="1" fill="rgba(0,153,255,0.4)"/>
+    <circle cx="98" cy="50" r="1" fill="rgba(0,153,255,0.4)"/>
+  </svg>
+</div>
+
+<!-- Coordinate overlay -->
+<div class="coord-overlay" aria-hidden="true">
+  <div class="coord-h"></div>
+  <div class="coord-v"></div>
+</div>
+
+<!-- Cursor glow -->
+<div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+
+<!-- Oversized ghost word backdrop -->
+<div class="backdrop-word" aria-hidden="true">Soon</div>
+
+<!-- Nav -->
+<nav class="nav-bar" aria-label="Main navigation">
+  <a href="#" class="brand">OpenDesign</a>
+  <div class="nav-status" aria-live="polite">
+    <span class="status-dot" aria-hidden="true"></span>
+    <span>LAUNCH · STANDBY</span>
+  </div>
+</nav>
+
+<!-- Main content -->
+<main class="content">
+  <div class="main-copy">
+    <div class="mission-label" role="note">
+      <span class="status-dot" aria-hidden="true"></span>
+      Launching soon
+    </div>
+    <h1 class="headline">
+      Something new is <em>entering orbit</em>
+    </h1>
+    <p class="subtext">
+      A new capability for the OpenDesign workspace is in final assembly.
+      <strong>Open source, agent-native, BYOK by design</strong>, built in the open with the community
+      that has carried the project past 91K+ GitHub stars. Leave your email and be first on the pad
+      when the countdown hits zero.
+    </p>
+    <form class="waitlist" id="waitlistForm" novalidate>
+      <input class="email-field" id="emailField" type="email" name="email" placeholder="your@email.com" autocomplete="email" aria-label="Email address" required>
+      <button class="btn-ghost btn-blue" type="submit">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M2 6h8M7 3l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Notify me
+      </button>
+    </form>
+    <span class="form-note" id="formNote" aria-live="polite">No spam · One launch announcement only</span>
+  </div>
+</main>
+
+<!-- Bottom-right coordinate HUD -->
+<div class="hud" aria-hidden="true">
+  <span class="hud-line bright">STARS — 91K+ AND CLIMBING</span>
+  <span class="hud-line bright">STATUS — FINAL ASSEMBLY</span>
+  <span class="hud-line" id="hudCountdown">T-MINUS 21D 00:00:00</span>
+  <span class="hud-line">OPENDESIGN · OD-LAUNCH-01</span>
+</div>
+
+<!-- Craft density #10 easter egg: rotating page titles -->
+<script>
+// Starfield generation
+const sf = document.getElementById('starfield');
+for (let i = 0; i < 180; i++) {
+  const s = document.createElement('div');
+  s.classList.add('star');
+  const size = Math.random() * 2 + 0.5;
+  s.style.cssText = `
+    width:${size}px;height:${size}px;
+    left:${Math.random()*100}%;top:${Math.random()*100}%;
+    opacity:${(Math.random()*0.6+0.1).toFixed(2)};
+    --o:${(Math.random()*0.6+0.1).toFixed(2)};
+    --d:${(Math.random()*4+2).toFixed(1)}s;
+    animation-delay:${(Math.random()*5).toFixed(1)}s;
+  `;
+  sf.appendChild(s);
+}
+
+// Craft density #4: cursor-tracking glow (signature interaction)
+const glow = document.getElementById('cursorGlow');
+document.addEventListener('mousemove', e => {
+  glow.style.left = e.clientX + 'px';
+  glow.style.top = e.clientY + 'px';
+});
+
+// Launch countdown (T-minus 21 days from first visit)
+const target = Date.now() + 21 * 24 * 3600 * 1000;
+const hudCountdown = document.getElementById('hudCountdown');
+function tickCountdown() {
+  const left = Math.max(0, Math.floor((target - Date.now()) / 1000));
+  const d = Math.floor(left / 86400);
+  const h = String(Math.floor((left % 86400) / 3600)).padStart(2, '0');
+  const m = String(Math.floor((left % 3600) / 60)).padStart(2, '0');
+  const s = String(left % 60).padStart(2, '0');
+  hudCountdown.textContent = `T-MINUS ${d}D ${h}:${m}:${s}`;
+}
+tickCountdown();
+setInterval(tickCountdown, 1000);
+
+// Waitlist form (front-end only confirmation state)
+const form = document.getElementById('waitlistForm');
+const emailField = document.getElementById('emailField');
+const formNote = document.getElementById('formNote');
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  const value = emailField.value.trim();
+  if (!value || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    formNote.textContent = 'Enter a valid email to board the list';
+    return;
+  }
+  formNote.textContent = 'Confirmed · You are on the launch list';
+  formNote.classList.add('confirmed');
+  emailField.value = '';
+});
+
+// Craft density #10: title easter egg
+const titles = [
+  'Launching Soon — OpenDesign',
+  'Final assembly underway — OpenDesign',
+  'T-minus counting — OpenDesign',
+  'Be first on the pad — OpenDesign',
+];
+let ti = 0;
+setInterval(() => {
+  ti = (ti + 1) % titles.length;
+  document.title = titles[ti];
+}, 3000);
+
+// prefers-reduced-motion check
+if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  document.querySelectorAll('.star').forEach(s => s.style.animation = 'none');
+}
+</script>
+</body>
+</html>

@@ -144,6 +144,10 @@ export function todoItemsFromTodoWriteInput(input: unknown): unknown {
  * only block — it has nothing left to write, so its deliverable validation
  * resolves `no_artifact`.
  *
+ * Discovery also permits an explicit `answered` terminal verdict. The Host
+ * validates its answer-only request contract, visible answer and no-primary
+ * resolution; it is not inferred from a successful process exit.
+ *
  * A mid-generation truncation is deliberately NOT covered by this: the caller
  * keeps `truncatedMidTurn` as an independent term, so a turn cut off by
  * `max_tokens` stays unfinished no matter what verdict was recorded.
@@ -151,5 +155,6 @@ export function todoItemsFromTodoWriteInput(input: unknown): unknown {
 export function strategyTaskProvesDelivery(
   strategyTask: { outcome?: unknown; terminal?: unknown } | null | undefined,
 ): boolean {
-  return strategyTask?.terminal === true && strategyTask.outcome === 'completed';
+  return strategyTask?.terminal === true
+    && (strategyTask.outcome === 'completed' || strategyTask.outcome === 'answered');
 }

@@ -11,7 +11,7 @@ export const OD_NEXT_TASK_CONFIGURATION_SCHEMA_V1 =
 export const OD_NEXT_REQUEST_INPUT_FACTS_SCHEMA_V1 =
   'open-design.od-next-request-input-facts/v1' as const;
 
-export type OdNextProductionTaskTypeV1 = Exclude<StrategyTaskTypeV2, 'generic'>;
+export type OdNextProductionTaskTypeV1 = StrategyTaskTypeV2;
 
 export interface OdNextTaskConfigurationV1 {
   schema: typeof OD_NEXT_TASK_CONFIGURATION_SCHEMA_V1;

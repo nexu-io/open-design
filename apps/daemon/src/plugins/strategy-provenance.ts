@@ -88,38 +88,55 @@ export function validateBundledStrategyActivationV2(
   }
   const binding = parsedBinding.data;
   const declaration = provenance.declaration;
+  const discovery = binding.selectionMode === 'agent-discovery';
   const selected = declaration.assets.taskProfiles.find(
-    (profile) => profile.taskType === binding.selectedTaskProfile.taskType,
+    (profile) => profile.taskType === binding.selectedTaskProfile?.taskType,
   );
   if (
     plugin.id !== declaration.id
     || binding.id !== declaration.id
     || binding.version !== plugin.version
     || binding.promptRecipe !== declaration.promptRecipe
-    || !selected
-    || normalizeStrategyAssetPath(selected.path) !== binding.selectedTaskProfile.path
-    || selected.version !== binding.selectedTaskProfile.version
+    || (!discovery && (
+      !selected
+      || normalizeStrategyAssetPath(selected.path) !== binding.selectedTaskProfile.path
+      || selected.version !== binding.selectedTaskProfile.version
+    ))
   ) {
     throw new InvalidBundledStrategyActivationV2Error(
       'Applied strategy binding does not match the bundled declaration.',
     );
   }
 
+  const profiles = discovery ? declaration.assets.taskProfiles : [selected!];
+  if (discovery && (
+    binding.availableTaskProfiles.length !== profiles.length
+    || profiles.some((profile) => !binding.availableTaskProfiles.some((available) => (
+      available.taskType === profile.taskType
+      && available.version === profile.version
+      && available.path === normalizeStrategyAssetPath(profile.path)
+    )))
+  )) {
+    throw new InvalidBundledStrategyActivationV2Error(
+      'Discovery profile roster does not match the bundled declaration.',
+    );
+  }
   const expectedPaths = [
     './open-design.json',
     './SKILL.md',
     declaration.assets.core.path,
     declaration.assets.orchestration.path,
-    selected.path,
+    ...profiles.map((profile) => profile.path),
     declaration.assets.taskProfileMapping.path,
-    ...(selected.resources ?? []).map((resource) => resource.path),
+    ...profiles.flatMap((profile) => profile.resources ?? []).map((resource) => resource.path),
+    ...(binding.discoveryCatalogRevision ? ['./agent-discovery/SKILL.md'] : []),
   ].map(normalizeStrategyAssetPath).sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
   const actualPaths = binding.assetDigests.map((asset) => asset.path);
   if (
     expectedPaths.length !== actualPaths.length
     || expectedPaths.some((assetPath, index) => assetPath !== actualPaths[index])
-    || binding.taskProfileVersions.length !== 1
-    || binding.taskProfileVersions[0] !== selected.version
+    || JSON.stringify(binding.taskProfileVersions)
+      !== JSON.stringify([...new Set(profiles.map((profile) => profile.version))])
   ) {
     throw new InvalidBundledStrategyActivationV2Error(
       'Applied strategy binding asset roster does not match the selected package.',

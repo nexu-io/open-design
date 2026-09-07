@@ -708,7 +708,8 @@ export function aggregateStoredStrategyTaskObservations(input: {
     );
   }
   const snapshot = getSnapshot(input.db, task.snapshotId);
-  const taskType = snapshot?.strategy?.selectedTaskProfile.taskType;
+  const taskType = task.planContract?.taskProfile.taskType
+    ?? snapshot?.strategy?.selectedTaskProfile?.taskType;
   return aggregateStrategyTaskObservations({
     task,
     observations: input.observations,

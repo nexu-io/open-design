@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { openDatabase } from '../src/db.js';
 import { startServer } from '../src/server.js';
 
 // End-to-end coverage for AMR (vela) ACP session resume through the FULL server
@@ -126,6 +127,75 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     // load (dead) → new (transparent reseed). Pre-feature this surfaced a failed
     // turn-2 and deferred the fresh session to a turn 3 the user had to trigger.
     expect(await readInvocations(logPath)).toEqual(['new', 'load', 'new']);
+  });
+
+  it('keeps a catalog-refresh Discovery bootstrap through ACP resume_failed auto-reseed', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-discovery-reseed-bin-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-discovery-reseed', {
+      logPath,
+      resumeFailed: true,
+    });
+
+    clearTelemetryEnv();
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr',
+      agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const fixtureIdentity = await createConversation(started.url, { skillDiscovery: true });
+    expect((await sendRunAndWait(started.url, fixtureIdentity, 'first request')).status)
+      .toBe('succeeded');
+
+    const [, conversationId] = fixtureIdentity.split('::');
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!conversationId || !dataDir) throw new Error('Discovery resume fixture is incomplete.');
+    const db = openDatabase(process.cwd(), { dataDir });
+    const drifted = db.prepare(`
+      UPDATE skill_discovery_conversations
+         SET catalog_revision = ?
+       WHERE conversation_id = ?
+    `).run(`sha256:${'0'.repeat(64)}`, conversationId);
+    expect(drifted.changes).toBe(1);
+
+    const turn2 = await sendRunAndWait(started.url, fixtureIdentity, 'second request');
+    expect(turn2.status).toBe('succeeded');
+    expect(await readInvocations(logPath)).toEqual(['new', 'load', 'new']);
+
+    const promptBudgets = (await readRunEvents(turn2.eventsLogPath))
+      .filter((event) => {
+        if (event.event !== 'agent' || !event.data || typeof event.data !== 'object') return false;
+        const data = event.data as Record<string, unknown>;
+        return data.type === 'diagnostic' && data.name === 'prompt_budget_v1';
+      })
+      .map((event) => event.data as Record<string, unknown>);
+    expect(promptBudgets.map((diagnostic) => diagnostic.sessionMode)).toEqual(['resume', 'new']);
+    for (const diagnostic of promptBudgets) {
+      expect(Number.isInteger(diagnostic.frameBytes as number)).toBe(true);
+      expect(Number.isInteger(diagnostic.promptBytes as number)).toBe(true);
+      expect(Number.isInteger(diagnostic.promptTokenEstimate as number)).toBe(true);
+    }
+
+    const durable = JSON.parse(await readFile(
+      path.join(path.dirname(turn2.eventsLogPath), 'state.json'),
+      'utf8',
+    )) as {
+      promptTelemetry?: {
+        sections?: Array<{
+          kind?: string;
+          metadata?: { lifecycleKind?: string };
+        }>;
+      };
+    };
+    expect(durable.promptTelemetry?.sections?.find(
+      (section) => section.kind === 'skillDiscoveryLifecycle',
+    )).toMatchObject({
+      metadata: { lifecycleKind: 'bootstrap' },
+    });
   });
 
   it('does not flash a client-visible error event during the transparent reseed', async () => {
@@ -514,6 +584,7 @@ function hasDiagnostic(events: RunEvent[], expected: Record<string, unknown>): b
 
 function snapshotEnv(): Record<string, string | undefined> {
   return {
+    OD_AGENT_NATIVE_SKILL_DISCOVERY: process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY,
     LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
     LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
     LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
@@ -566,7 +637,10 @@ async function putConfig(url: string, patch: Record<string, unknown>): Promise<v
   expect(response.status).toBe(200);
 }
 
-async function createConversation(url: string): Promise<string> {
+async function createConversation(
+  url: string,
+  options: { skillDiscovery?: boolean } = {},
+): Promise<string> {
   const projectId = `amr_resume_${randomUUID()}`;
   const workspaceId = `amr_resume_personal_${projectId}`;
   const workspaceMemberId = `amr_resume_owner_${projectId}`;
@@ -587,6 +661,12 @@ async function createConversation(url: string): Promise<string> {
       name: 'AMR resume smoke',
       metadata: { kind: 'prototype' },
       skipDiscoveryBrief: true,
+      ...(options.skillDiscovery
+        ? {
+            conversationMode: 'design',
+            skillDiscovery: { mode: 'agent', catalog: 'open-design-official' },
+          }
+        : {}),
     }),
   });
   expect(projectResponse.status).toBe(200);

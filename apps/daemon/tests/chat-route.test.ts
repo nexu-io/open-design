@@ -1680,11 +1680,11 @@ process.stdin.on('end', () => {
       },
     );
   });
-  it('closes the # Instructions block with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
+  it('closes the instructions element with an explicit "do not echo" guard so models do not parrot the prompt back', async () => {
     // claude-opus-4-7 (and a few other instruction-tuned models) start
-    // their reply by echoing the # Instructions block verbatim, which
+    // their reply by echoing the instructions element verbatim, which
     // shows up to users as the system prompt leading the visible
-    // answer. server.ts:9934 closes every Instructions block with a
+    // answer. The ordinary XML composer closes every instructions element with a
     // trailing guard line; this test pins the literal so a future
     // refactor cannot silently drop it.
     await withFakeAgent(
@@ -1697,7 +1697,7 @@ process.stdin.on('data', (chunk) => {
 });
 process.stdin.on('end', () => {
   const checks = [
-    prompt.includes('Do not quote, restate, or echo the # Instructions block above')
+    prompt.includes('Do not quote, restate, or echo the instructions element')
       ? 'has-echo-guard'
       : 'missing-echo-guard',
   ];

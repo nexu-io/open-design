@@ -2,6 +2,41 @@ import { describe, expect, it } from 'vitest';
 import { entryStrategyRoutingFields } from '../../src/components/entry-strategy-routing';
 
 describe('EntryShell automatic strategy routing', () => {
+  const skillDiscovery = {
+    mode: 'agent' as const,
+    catalog: 'open-design-official' as const,
+  };
+
+  it('carries agent skill discovery only for an untyped ordinary create', () => {
+    expect(entryStrategyRoutingFields({
+      skillDiscovery,
+    }, { kind: 'other' })).toEqual({
+      skillId: null,
+      skillDiscovery,
+    });
+  });
+
+  it('drops agent skill discovery when the user selected a Skill or plugin', () => {
+    expect(entryStrategyRoutingFields({
+      skillDiscovery,
+      skillId: 'frontend-design',
+    }, { kind: 'other' })).toEqual({
+      skillId: 'frontend-design',
+    });
+    expect(entryStrategyRoutingFields({
+      skillDiscovery,
+      pluginId: 'explicit-plugin',
+    }, { kind: 'other' })).toEqual({
+      skillId: null,
+    });
+    expect(entryStrategyRoutingFields({
+      skillDiscovery,
+      contextPlugins: [{ id: 'mentioned-plugin' }],
+    }, { kind: 'other' })).toEqual({
+      skillId: null,
+    });
+  });
+
   it.each([
     ['prototype', { kind: 'prototype' as const }],
     ['ppt', { kind: 'deck' as const }],
@@ -10,6 +45,7 @@ describe('EntryShell automatic strategy routing', () => {
   ] as const)('lets OD Next own the %s route without implicit plugin inputs', (taskProfile, metadata) => {
     expect(entryStrategyRoutingFields({
       automaticStrategyTaskProfile: taskProfile,
+      skillDiscovery,
       pluginInputs: { legacy: true },
     }, metadata)).toEqual({
       skillId: null,

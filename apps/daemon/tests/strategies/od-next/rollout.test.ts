@@ -29,12 +29,12 @@ function syntheticPolicy() {
 }
 
 describe('OD Next controlled rollout', () => {
-  it('owns all four artifact types once a mode is asked for, and none until then', () => {
+  it('owns the four artifact types and internal generic once a mode is asked for, and none until then', () => {
     const policy = readOdNextRolloutPolicy({ OD_NEXT_STRATEGY_ROLLOUT: 'active' });
     expect(policy).toMatchObject({
       requestedMode: 'active',
       requestedModeSource: 'env',
-      eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes'],
+      eligibleTaskTypes: ['prototype', 'ppt', 'marketing', 'hyperframes', 'generic'],
       productionActiveApproved: true,
       assignmentPercent: 100,
     });

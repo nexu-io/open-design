@@ -1,0 +1,87 @@
+{
+  "schema": "open-design.official-skill-discovery-catalog/v1",
+  "version": "1.0.0",
+  "taskProfiles": [
+    {
+      "id": "prototype",
+      "name": "Prototype",
+      "description": "Create an interactive product prototype, website, landing page, web app, or mobile app experience.",
+      "taskType": "prototype",
+      "autoSelectable": true,
+      "role": "primary",
+      "outputKinds": ["prototype", "website", "landing-page", "web-app", "mobile-app"],
+      "positiveExamples": [
+        "帮我做一个官网",
+        "设计并实现一个产品 landing page",
+        "Build an interactive web app prototype",
+        "做一个可以点击的移动端产品原型"
+      ],
+      "negativeExamples": [
+        "帮我分析现有官网的数据",
+        "总结这个网站的内容",
+        "只写一份网站需求文档"
+      ],
+      "conflictsWith": []
+    },
+    {
+      "id": "ppt",
+      "name": "Presentation Deck",
+      "description": "Create a structured slide presentation or pitch deck with a coherent visual narrative.",
+      "taskType": "ppt",
+      "autoSelectable": true,
+      "role": "primary",
+      "outputKinds": ["presentation", "deck", "slides"],
+      "positiveExamples": [
+        "帮我做一份融资路演 PPT",
+        "Turn this brief into a presentation deck",
+        "制作一套产品发布会幻灯片"
+      ],
+      "negativeExamples": [
+        "总结这份 PPT 的内容",
+        "只修改演讲稿里的一个错别字",
+        "解释什么是路演"
+      ],
+      "conflictsWith": []
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing Creative",
+      "description": "Create a campaign-ready marketing visual, advertisement, poster, or social creative.",
+      "taskType": "marketing",
+      "autoSelectable": true,
+      "role": "primary",
+      "outputKinds": ["marketing-creative", "advertisement", "poster", "social-image"],
+      "positiveExamples": [
+        "为新品做一张营销海报",
+        "Create a social campaign visual",
+        "生成一套广告创意图"
+      ],
+      "negativeExamples": [
+        "分析我们的营销漏斗",
+        "只写三条广告文案",
+        "解释品牌定位方法"
+      ],
+      "conflictsWith": []
+    },
+    {
+      "id": "hyperframes",
+      "name": "Hyperframes Motion",
+      "description": "Create a motion-design or video composition with timed scenes, transitions, and animation.",
+      "taskType": "hyperframes",
+      "autoSelectable": true,
+      "role": "primary",
+      "outputKinds": ["motion-design", "video", "animation"],
+      "positiveExamples": [
+        "做一支带转场的产品宣传视频",
+        "Create an animated launch sequence",
+        "制作一个有时间轴的动态视觉"
+      ],
+      "negativeExamples": [
+        "总结这段视频讲了什么",
+        "只提取视频字幕",
+        "解释动画设计原则"
+      ],
+      "conflictsWith": []
+    }
+  ]
+}

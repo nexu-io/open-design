@@ -45,6 +45,7 @@ const DEFAULT_TASK_TYPES: readonly OdNextRolloutTaskType[] = [
   'ppt',
   'marketing',
   'hyperframes',
+  'generic',
 ];
 const DEFAULT_AGENTS = ['codex', 'claude', 'opencode', 'amr'] as const;
 
@@ -98,6 +99,7 @@ export function readOdNextRolloutPolicy(
   const taskTypes = list(env.OD_NEXT_STRATEGY_TASK_TYPES).filter(
     (value): value is OdNextRolloutTaskType => (
       value === 'prototype' || value === 'ppt' || value === 'marketing' || value === 'hyperframes'
+      || value === 'generic'
     ),
   );
   const percent = Number(env.OD_NEXT_STRATEGY_ASSIGNMENT_PERCENT ?? '100');

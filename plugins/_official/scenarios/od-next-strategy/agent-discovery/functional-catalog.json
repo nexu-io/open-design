@@ -1,0 +1,2067 @@
+{
+  "schema": "open-design.official-functional-skill-discovery-catalog/v1",
+  "version": "1.0.0",
+  "skills": [
+    {
+      "source": "design-templates",
+      "sourceFolder": "bergside-trade-terminal",
+      "id": "bergside-trade-terminal",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Build a dark terminal-style trading dashboard: watchlist with sparklines, live price chart, open orders, order book with depth bars, and a recent-trades tape.",
+        "交易终端",
+        "trading dashboard",
+        "trading terminal",
+        "crypto dashboard",
+        "stock terminal",
+        "order book",
+        "watchlist",
+        "交易面板",
+        "行情看板",
+        "加密货币仪表盘",
+        "订单簿"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-branded-pdf-report",
+      "id": "document-branded-pdf-report",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Turn my brand update into a polished one-page branded PDF report: editorial narrative, brand signals, imagery, and a clear next action.",
+        "品牌报告",
+        "brand report",
+        "pdf report",
+        "brand brief",
+        "one-page report",
+        "PDF 报告",
+        "品牌简报",
+        "一页报告"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-branded-proposal",
+      "id": "document-branded-proposal",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Turn my pilot outline into a branded partner proposal covering recommendation, approach, scope, governance, and delivery.",
+        "提案",
+        "proposal",
+        "partner proposal",
+        "pilot proposal",
+        "scope document",
+        "statement of work",
+        "合作提案",
+        "方案书",
+        "项目建议书",
+        "SOW"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-data-visualization-report",
+      "id": "document-data-visualization-report",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Turn this quarter's numbers into a two-page data visualization report: executive signal, directly labeled charts, decisions, and a validation plan.",
+        "数据报告",
+        "data report",
+        "visualization report",
+        "executive report",
+        "chart report",
+        "quarterly report",
+        "可视化报告",
+        "经营分析报告",
+        "季度报告",
+        "图表报告"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-decision-memo",
+      "id": "document-decision-memo",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Write a one-page decision memo: recommendation, evidence, option trade-offs, controls, and next action.",
+        "决策备忘录",
+        "decision memo",
+        "memo",
+        "recommendation memo",
+        "options analysis",
+        "one-pager",
+        "备忘录",
+        "决策文档",
+        "方案对比",
+        "一页纸"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-docx-workspace",
+      "id": "document-docx-workspace",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Build an editable DOCX update from these source notes: decision-ready structure, headings, and tracked open items.",
+        "docx 文档",
+        "docx",
+        "word document",
+        "editable document",
+        "word template",
+        "Word 文档",
+        "可编辑文档",
+        "Word 模板"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-pdf-workspace",
+      "id": "document-pdf-workspace",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Fill the supplied facts into a review-ready, printable PDF service agreement.",
+        "协议",
+        "agreement",
+        "contract pdf",
+        "fill in form",
+        "printable pdf",
+        "service agreement",
+        "合同 PDF",
+        "填写表单",
+        "可打印 PDF",
+        "服务协议"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-resume",
+      "id": "document-resume",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Turn my experience into a refined one-page resume that emphasizes evidence, selected outputs, and measurable results.",
+        "简历",
+        "resume",
+        "cv",
+        "curriculum vitae",
+        "job application",
+        "个人简历",
+        "求职简历"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "document-writing-quality-review",
+      "id": "document-writing-quality-review",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "document",
+        "prototype"
+      ],
+      "positiveExamples": [
+        "Review this draft: prioritized findings, what to keep, and a concrete replacement draft.",
+        "文章评审",
+        "writing review",
+        "editorial review",
+        "proofread",
+        "copy review",
+        "improve my writing",
+        "写作评审",
+        "润色",
+        "校对",
+        "文案审查"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "0.1.0",
+      "resources": [
+        "example.html",
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "hallmark-artisan-landing",
+      "id": "hallmark-artisan-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Build a warm serif editorial page for a local coffee roasting studio: almanac masthead, two-column menu catalogue with line-art icons and prices, and a visit section.",
+        "手工艺",
+        "local business page",
+        "artisan",
+        "coffee roaster",
+        "bakery website",
+        "menu page",
+        "craft studio",
+        "咖啡店网页",
+        "小店官网",
+        "菜单页",
+        "本地商家"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "hallmark-terminal-landing",
+      "id": "hallmark-terminal-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Build a dark terminal-style landing page for a CLI deployment tool: mono type, pipeline panel in the hero, step-by-step command walkthrough, and pricing tiers.",
+        "开发者工具官网",
+        "developer tool landing",
+        "cli landing page",
+        "devtool website",
+        "terminal style",
+        "command line tool",
+        "CLI 工具落地页",
+        "终端风格",
+        "命令行工具"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "huashu-editorial-brutalism",
+      "id": "huashu-editorial-brutalism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "editorial-page"
+      ],
+      "positiveExamples": [
+        "Design the issue front page for an AI-industry weekly newsletter in a bold Businessweek-style editorial layout.",
+        "编辑野兽派",
+        "editorial brutalism",
+        "businessweek style",
+        "newsletter front page",
+        "magazine web",
+        "bold editorial",
+        "杂志风网页",
+        "newsletter 首页",
+        "商业周刊风格"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "huashu-ios-tiled-prototype",
+      "id": "huashu-ios-tiled-prototype",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "mobile-app"
+      ],
+      "positiveExamples": [
+        "Prototype a focus-timer iOS app as 4 iPhone screens side by side: today view, live session, insights, settings.",
+        "iOS 原型",
+        "ios prototype",
+        "multiple screens",
+        "app screens side by side",
+        "iphone mockup set",
+        "app flow overview",
+        "多屏",
+        "多个页面并排",
+        "app 流程图",
+        "iPhone 多屏"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "huashu-white-gallery",
+      "id": "huashu-white-gallery",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "gallery"
+      ],
+      "positiveExamples": [
+        "Make a quiet, museum-like gallery page for a studio's poster collection where the works carry all the color.",
+        "画廊页",
+        "gallery page",
+        "white gallery",
+        "masonry grid",
+        "curation",
+        "museum",
+        "artwork collection",
+        "作品集网格",
+        "瀑布流",
+        "策展",
+        "极简白"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-brand-character",
+      "id": "image-brand-character",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "brand-character"
+      ],
+      "positiveExamples": [
+        "Create a brand character sheet for a streetwear label: one locked mascot shown as hero art, three poses, four expressions, and a color reference strip.",
+        "吉祥物",
+        "mascot",
+        "brand character",
+        "character sheet",
+        "sticker set",
+        "brand IP",
+        "品牌角色",
+        "角色设定",
+        "IP 形象",
+        "贴纸"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-editorial-collage",
+      "id": "image-editorial-collage",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "editorial-collage"
+      ],
+      "positiveExamples": [
+        "Create a vertical editorial fashion collage: one hero portrait, torn-paper layers, two exact headline strings, and visible tape and paper fibers.",
+        "拼贴",
+        "collage",
+        "cut-paper",
+        "editorial collage",
+        "fashion editorial",
+        "zine",
+        "剪纸",
+        "杂志拼贴",
+        "时尚大片"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-event-poster",
+      "id": "image-event-poster",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "event-poster"
+      ],
+      "positiveExamples": [
+        "Create a 4:5 event poster for an indie music night: exact strings for title, date, city and doors time, oversized condensed type, screen-print texture.",
+        "活动海报",
+        "event poster",
+        "festival poster",
+        "exhibition poster",
+        "gig poster",
+        "talk poster",
+        "展览海报",
+        "音乐节海报",
+        "讲座海报",
+        "发布会海报"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-instagram-carousel-cover",
+      "id": "image-instagram-carousel-cover",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "social-cover"
+      ],
+      "positiveExamples": [
+        "Create a 4:5 Instagram carousel cover with one photographic hook, a short exact headline, and a visible 01 / 06 series index.",
+        "小红书封面",
+        "instagram cover",
+        "carousel cover",
+        "xiaohongshu cover",
+        "social cover",
+        "first slide",
+        "轮播封面",
+        "ins 封面",
+        "社媒封面",
+        "首图"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "image-promotion-poster",
+      "id": "image-promotion-poster",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "image",
+        "promotion-poster"
+      ],
+      "positiveExamples": [
+        "Create a 4:5 promotion poster for a beverage buy-one-get-one offer: product hero, exact offer copy, one forceful composition, bright retail energy.",
+        "促销海报",
+        "promotion poster",
+        "sale poster",
+        "product drop",
+        "limited offer",
+        "retail campaign",
+        "social ad",
+        "优惠海报",
+        "新品海报",
+        "活动促销",
+        "买一送一"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.webp",
+        "template.json"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "impeccable-insight-dashboard",
+      "id": "impeccable-insight-dashboard",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Build a light, editorial product-analytics dashboard: KPI band, weekly-active-users trend with prior-period comparison, signups-by-channel table, and a funnel.",
+        "数据分析仪表盘",
+        "analytics dashboard",
+        "product analytics",
+        "kpi dashboard",
+        "light dashboard",
+        "weekly active users",
+        "产品分析",
+        "KPI 看板",
+        "浅色仪表盘",
+        "增长看板"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "impeccable-serif-landing",
+      "id": "impeccable-serif-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Build a warm cream SaaS landing page for a team knowledge-base product: huge serif hero with an italic accent word, pill buttons, feature cards, and a dark CTA band.",
+        "SaaS 落地页",
+        "saas landing",
+        "serif landing page",
+        "warm landing",
+        "cream landing page",
+        "product website",
+        "衬线字落地页",
+        "暖色官网",
+        "产品官网"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "jp-ops-console",
+      "id": "jp-ops-console",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "settings"
+      ],
+      "positiveExamples": [
+        "Build a calm SaaS admin settings console: sidebar navigation, KPI cards, a notification settings form, and a job status table.",
+        "后台设置",
+        "admin console",
+        "settings console",
+        "saas admin",
+        "ops console",
+        "settings form",
+        "job table",
+        "管理控制台",
+        "运营后台",
+        "设置表单",
+        "任务列表"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "m3-habit-app",
+      "id": "m3-habit-app",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "mobile-app"
+      ],
+      "positiveExamples": [
+        "Design a Material 3 Android habit-tracker home screen: streak card, habit checklist, FAB, and bottom navigation in a phone frame.",
+        "打卡 app",
+        "material design",
+        "material you",
+        "md3",
+        "android app",
+        "habit tracker",
+        "daily checklist",
+        "streak",
+        "习惯养成",
+        "安卓 app",
+        "Material 风格",
+        "每日清单"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "m3-ops-dashboard",
+      "id": "m3-ops-dashboard",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Build a Material Design 3 operations dashboard: navigation rail, tonal service status cards, incident timeline, and resource usage rings.",
+        "运维仪表盘",
+        "material dashboard",
+        "md3 dashboard",
+        "ops dashboard",
+        "monitoring dashboard",
+        "incident timeline",
+        "service status",
+        "监控面板",
+        "Material 仪表盘",
+        "服务状态",
+        "事件时间线"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "promax-health-dashboard",
+      "id": "promax-health-dashboard",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Build a hospital operations dashboard with KPI cards, an admissions trend chart, a department donut chart, a recent-patients table, and today's schedule.",
+        "医疗仪表盘",
+        "healthcare dashboard",
+        "hospital dashboard",
+        "clinical analytics",
+        "patient records",
+        "medical admin",
+        "医院后台",
+        "门诊数据",
+        "病患列表",
+        "医疗数据看板"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "promax-pet-app",
+      "id": "promax-pet-app",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "mobile-app"
+      ],
+      "positiveExamples": [
+        "Design a cute pet-care mobile app home screen with a pet profile hero card, daily quick actions, an activity timeline, and a bottom tab bar.",
+        "宠物 app",
+        "pet app",
+        "pet care",
+        "cute app",
+        "playful mobile app",
+        "clay style app",
+        "养宠",
+        "萌系 app",
+        "可爱风",
+        "宠物管理"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-coming-soon",
+      "id": "qiaomu-coming-soon",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Design a coming-soon page for a product launch: space voyage theme, launch countdown, and an email waitlist signup.",
+        "即将上线",
+        "coming soon",
+        "waitlist page",
+        "launch countdown",
+        "teaser page",
+        "pre-launch",
+        "预约页",
+        "倒计时页",
+        "候补名单",
+        "预热页"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-dashboard",
+      "id": "qiaomu-dashboard",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Make an operations dashboard for an e-commerce team: KPI cards, weekly sales bar chart, category donut, and a recent orders table.",
+        "电商后台",
+        "dark dashboard",
+        "ecommerce dashboard",
+        "orders table",
+        "sales dashboard",
+        "admin dashboard",
+        "订单看板",
+        "销售仪表盘",
+        "深色仪表盘",
+        "运营后台"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-landing",
+      "id": "qiaomu-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Build a dark landing page for an AI meeting-notes SaaS: split hero with product mockup, feature grid, pricing tiers, and testimonials.",
+        "SaaS 官网",
+        "saas landing page",
+        "dark landing",
+        "linear style",
+        "ai product landing",
+        "pricing section",
+        "深色落地页",
+        "AI 产品官网",
+        "定价页",
+        "产品落地页"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-portfolio",
+      "id": "qiaomu-portfolio",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "portfolio"
+      ],
+      "positiveExamples": [
+        "Design a personal portfolio site for an independent product designer: editorial hero, selected work grid, about, and contact.",
+        "作品集",
+        "portfolio",
+        "personal site",
+        "designer website",
+        "selected work",
+        "case studies",
+        "个人网站",
+        "设计师主页",
+        "个人主页",
+        "案例展示"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-settings",
+      "id": "qiaomu-settings",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "settings"
+      ],
+      "positiveExamples": [
+        "Create a settings center for a SaaS app: sidebar sections, profile form, and a danger zone where deleting the workspace requires typing its name.",
+        "设置页",
+        "settings page",
+        "account settings",
+        "preferences",
+        "danger zone",
+        "profile form",
+        "账号设置",
+        "偏好设置",
+        "危险操作",
+        "个人资料表单"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "qiaomu-wizard",
+      "id": "qiaomu-wizard",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "wizard"
+      ],
+      "positiveExamples": [
+        "Build a three-step flight booking wizard: pick a flight, enter passenger details with validation, confirm payment, then show a success state.",
+        "多步表单",
+        "wizard",
+        "multi-step form",
+        "booking flow",
+        "checkout steps",
+        "onboarding steps",
+        "stepper",
+        "预订流程",
+        "分步向导",
+        "下单流程",
+        "步骤条"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "skill-brutalist",
+      "id": "skill-brutalist",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Make a brutalist terminal-style landing page for a deploy orchestration CLI: dark CRT look with red accents.",
+        "野兽派",
+        "brutalist",
+        "industrial",
+        "tactical terminal",
+        "crt",
+        "monospace ui",
+        "hazard red",
+        "工业风",
+        "战术终端",
+        "CRT 纹理",
+        "硬核界面"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "skill-compact-landing",
+      "id": "skill-compact-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Build a compact premium landing page for a webhook delivery tool: narrow column, quiet type, one clear CTA.",
+        "紧凑落地页",
+        "compact landing",
+        "minimal landing",
+        "narrow column",
+        "quiet landing page",
+        "developer tool page",
+        "窄版心",
+        "安静排版",
+        "小而精官网"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "skill-interface-design",
+      "id": "skill-interface-design",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "dashboard"
+      ],
+      "positiveExamples": [
+        "Design a dark ops dashboard for a solar fleet monitoring SaaS with a clear focal metric and quiet layered surfaces.",
+        "SaaS 后台",
+        "saas dashboard",
+        "admin panel",
+        "product ui",
+        "focal metric",
+        "layered surfaces",
+        "产品界面",
+        "管理面板",
+        "仪表盘设计",
+        "数据产品 UI"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "skill-mengto-landing",
+      "id": "skill-mengto-landing",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "landing-page"
+      ],
+      "positiveExamples": [
+        "Create a high-converting landing page for a reporting automation SaaS: one offer, one CTA, proof, FAQ, risk reversal.",
+        "高转化",
+        "high converting",
+        "conversion landing",
+        "single offer",
+        "sales page",
+        "faq section",
+        "risk reversal",
+        "转化落地页",
+        "单一 CTA",
+        "销售页",
+        "营销落地页"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "skill-minimalist",
+      "id": "skill-minimalist",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Design a quiet editorial-minimal product page for a research notes app: serif hero, bento grid, no gradients.",
+        "极简",
+        "minimalist",
+        "minimal product page",
+        "monochrome",
+        "editorial minimal",
+        "no gradients",
+        "极简产品页",
+        "单色",
+        "编辑极简",
+        "无渐变"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "skill-swiss-design",
+      "id": "skill-swiss-design",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Design a Swiss-style editorial homepage for a design journal: strict grid, one red accent, grotesque type.",
+        "瑞士风格",
+        "swiss design",
+        "international style",
+        "12-column grid",
+        "grotesque type",
+        "one red accent",
+        "国际主义",
+        "网格排版",
+        "瑞士网页",
+        "红色强调"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-bauhaus-geometry",
+      "id": "slides-style-bauhaus-geometry",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "包豪斯几何幻灯片",
+        "Bauhaus Geometry Slides",
+        "slides-style-bauhaus-geometry",
+        "Bauhaus Geometry slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "bauhaus",
+        "geometric slides",
+        "cobalt vermilion yellow",
+        "asymmetric deck",
+        "包豪斯",
+        "几何风 PPT",
+        "三色几何",
+        "战略汇报 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-bauhaus-primary",
+      "id": "slides-style-bauhaus-primary",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "包豪斯原色幻灯片",
+        "Bauhaus Primary Slides",
+        "slides-style-bauhaus-primary",
+        "Bauhaus Primary slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "bauhaus primary",
+        "primary colors",
+        "red blue yellow",
+        "modernist deck",
+        "三原色",
+        "包豪斯 PPT",
+        "红蓝黄",
+        "现代主义幻灯片"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-block-frame",
+      "id": "slides-style-block-frame",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "拼贴框架幻灯片",
+        "Block Frame Slides",
+        "slides-style-block-frame",
+        "Block Frame slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "block frame",
+        "collage deck",
+        "creative brief deck",
+        "design audit slides",
+        "portfolio deck",
+        "块状框架",
+        "拼贴 PPT",
+        "创意简报",
+        "设计评审 PPT",
+        "作品集 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-creative-voltage",
+      "id": "slides-style-creative-voltage",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "创意伏特幻灯片",
+        "Creative Voltage Slides",
+        "slides-style-creative-voltage",
+        "Creative Voltage slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "electric blue",
+        "neon yellow",
+        "halftone",
+        "launch deck",
+        "fundraising deck",
+        "bold pitch",
+        "电光蓝",
+        "荧光黄",
+        "发布会 PPT",
+        "融资 PPT",
+        "创意科技"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-daisy-days",
+      "id": "slides-style-daisy-days",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "雏菊日幻灯片",
+        "Daisy Days Slides",
+        "slides-style-daisy-days",
+        "Daisy Days slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "daisy",
+        "friendly deck",
+        "onboarding slides",
+        "workshop deck",
+        "pastel slides",
+        "community programme",
+        "雏菊",
+        "入职培训 PPT",
+        "工作坊 PPT",
+        "柔和粉彩",
+        "社区活动 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-editorial-forest",
+      "id": "slides-style-editorial-forest",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "林间编辑幻灯片",
+        "Editorial Forest Slides",
+        "slides-style-editorial-forest",
+        "Editorial Forest slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "forest green",
+        "editorial deck",
+        "annual report slides",
+        "magazine style deck",
+        "research recap",
+        "森林绿",
+        "杂志风 PPT",
+        "年报 PPT",
+        "研究汇报",
+        "品牌故事 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-electric-studio",
+      "id": "slides-style-electric-studio",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "钴蓝工作室幻灯片",
+        "Electric Studio Slides",
+        "slides-style-electric-studio",
+        "Electric Studio slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "cobalt split",
+        "b2b proposal deck",
+        "operating plan",
+        "product strategy deck",
+        "executive recommendation",
+        "钴蓝分割",
+        "B2B 提案 PPT",
+        "运营计划",
+        "产品战略 PPT",
+        "高管汇报"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-emerald-editorial",
+      "id": "slides-style-emerald-editorial",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "祖母绿编辑幻灯片",
+        "Emerald Editorial Slides",
+        "slides-style-emerald-editorial",
+        "Emerald Editorial slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "emerald",
+        "bodoni",
+        "fashion magazine deck",
+        "brand launch slides",
+        "campaign deck",
+        "祖母绿",
+        "时尚杂志风",
+        "品牌发布 PPT",
+        "campaign 汇报",
+        "高端报告"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-japanese-paper",
+      "id": "slides-style-japanese-paper",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "日式和纸编辑幻灯片",
+        "Japanese Paper Editorial Slides",
+        "slides-style-japanese-paper",
+        "Japanese Paper Editorial slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "washi",
+        "japanese paper",
+        "sumi ink",
+        "vertical text",
+        "mincho",
+        "exhibition deck",
+        "和纸",
+        "日式",
+        "墨色",
+        "竖排",
+        "展览 PPT",
+        "文化项目 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-kami-research",
+      "id": "slides-style-kami-research",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "和纸研究幻灯片",
+        "Kami Research Slides",
+        "slides-style-kami-research",
+        "Kami Research slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "research deck",
+        "academic slides",
+        "lab meeting",
+        "parchment",
+        "evidence-led",
+        "investment review",
+        "研究汇报 PPT",
+        "学术 PPT",
+        "组会",
+        "羊皮纸",
+        "投资评审"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-material-expressive",
+      "id": "slides-style-material-expressive",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "Material 表现主义流行幻灯片",
+        "Material Expressive Pop Slides",
+        "slides-style-material-expressive",
+        "Material Expressive Pop slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "material expressive",
+        "lavender lime coral",
+        "organic shapes",
+        "consumer tech deck",
+        "product launch slides",
+        "Material 风 PPT",
+        "薰衣草青柠",
+        "有机形状",
+        "消费科技",
+        "产品发布 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-notebook-tabs",
+      "id": "slides-style-notebook-tabs",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "活页标签幻灯片",
+        "Notebook Tabs Slides",
+        "slides-style-notebook-tabs",
+        "Notebook Tabs slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "notebook",
+        "binder tabs",
+        "ruled paper",
+        "coursework deck",
+        "thesis defense",
+        "study notes",
+        "笔记本",
+        "活页",
+        "课程 PPT",
+        "答辩 PPT",
+        "学习笔记"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-peoples-platform",
+      "id": "slides-style-peoples-platform",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "人民平台幻灯片",
+        "People's Platform Slides",
+        "slides-style-peoples-platform",
+        "People's Platform slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "campaign deck",
+        "public programme",
+        "community plan",
+        "civic",
+        "manifesto slides",
+        "竞选 PPT",
+        "公共项目",
+        "社区计划",
+        "公益汇报",
+        "政策宣讲"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-soft-editorial",
+      "id": "slides-style-soft-editorial",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "柔光编辑幻灯片",
+        "Soft Editorial Slides",
+        "slides-style-soft-editorial",
+        "Soft Editorial slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "soft editorial",
+        "cormorant",
+        "consulting deck",
+        "advisory",
+        "literary spacing",
+        "calm research",
+        "柔和编辑",
+        "咨询 PPT",
+        "顾问汇报",
+        "文学感",
+        "品牌长文"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-swiss-cobalt",
+      "id": "slides-style-swiss-cobalt",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "瑞士钴蓝场幻灯片",
+        "Swiss Cobalt Field Slides",
+        "slides-style-swiss-cobalt",
+        "Swiss Cobalt Field slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "swiss cobalt",
+        "cobalt field",
+        "grotesk",
+        "corporate strategy deck",
+        "investor deck",
+        "operating plan slides",
+        "瑞士钴蓝",
+        "企业战略 PPT",
+        "融资路演",
+        "运营计划 PPT",
+        "瑞士风 PPT"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-swiss-red-axis",
+      "id": "slides-style-swiss-red-axis",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "瑞士红轴幻灯片",
+        "Swiss Red Axis Slides",
+        "slides-style-swiss-red-axis",
+        "Swiss Red Axis slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "swiss red",
+        "red axis",
+        "manifesto deck",
+        "brand positioning slides",
+        "executive recommendation deck",
+        "瑞士红轴",
+        "宣言 PPT",
+        "品牌定位",
+        "高管建议",
+        "决策汇报"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "slides-style-takram-soft-tech",
+      "id": "slides-style-takram-soft-tech",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "ppt",
+        "deck",
+        "slides-style"
+      ],
+      "positiveExamples": [
+        "东方柔光科技幻灯片",
+        "Takram Soft Tech Slides",
+        "slides-style-takram-soft-tech",
+        "Takram Soft Tech slide style",
+        "apply this slide style",
+        "用这个风格做幻灯片",
+        "soft tech",
+        "takram",
+        "museum diagram",
+        "technology strategy deck",
+        "systems thinking",
+        "procurement",
+        "软科技",
+        "技术战略 PPT",
+        "系统思维",
+        "采购方案",
+        "研究提案"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "LICENSE",
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-bento-grid",
+      "id": "style-bento-grid",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Make a product features overview page as a bento grid: Apple-style cards with mixed sizes, stats and a testimonial.",
+        "便当网格",
+        "bento grid",
+        "bento layout",
+        "apple style",
+        "feature grid",
+        "modular cards",
+        "Bento 布局",
+        "苹果风格",
+        "功能网格",
+        "模块卡片"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-claymorphism",
+      "id": "style-claymorphism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Design a claymorphism home screen for a children's learning app: soft 3D pastel cards, a mascot and progress bars.",
+        "黏土风",
+        "claymorphism",
+        "clay style",
+        "soft 3d",
+        "pastel ui",
+        "kids app",
+        "children learning app",
+        "粘土风格",
+        "软 3D",
+        "儿童 app",
+        "粉彩界面"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-glassmorphism",
+      "id": "style-glassmorphism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Design a music streaming app home screen in a glassmorphism style: frosted glass cards over a vibrant gradient background.",
+        "毛玻璃",
+        "glassmorphism",
+        "frosted glass",
+        "backdrop blur",
+        "translucent cards",
+        "music app",
+        "磨砂玻璃",
+        "玻璃拟态",
+        "半透明",
+        "音乐 app"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-neubrutalism",
+      "id": "style-neubrutalism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Build a neubrutalist landing page for a creative studio: thick black borders, hard offset shadows and loud pop colors.",
+        "新野兽派",
+        "neubrutalism",
+        "neo-brutalism",
+        "thick black borders",
+        "offset shadows",
+        "pop colors",
+        "粗黑边框",
+        "偏移阴影",
+        "扁平撞色",
+        "创意工作室官网"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    },
+    {
+      "source": "design-templates",
+      "sourceFolder": "style-retro-futurism",
+      "id": "style-retro-futurism",
+      "autoSelectable": true,
+      "role": "auxiliary",
+      "outputKinds": [
+        "prototype",
+        "style"
+      ],
+      "positiveExamples": [
+        "Make a synthwave music festival promo page with neon glow, a retro sun, CRT scanlines and a glitching title.",
+        "复古未来",
+        "retro futurism",
+        "synthwave",
+        "cyberpunk",
+        "neon glow",
+        "vaporwave",
+        "80s",
+        "合成波",
+        "赛博朋克",
+        "霓虹",
+        "蒸汽波"
+      ],
+      "negativeExamples": [
+        "The user explicitly requests a different template or an incompatible visual style."
+      ],
+      "conflictsWith": [],
+      "version": "1.0.0",
+      "resources": [
+        "example.html"
+      ]
+    }
+  ]
+}

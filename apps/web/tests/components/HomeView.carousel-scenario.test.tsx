@@ -51,9 +51,9 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 import { HomeView } from '../../src/components/HomeView';
 import { requestHomeChip } from '../../src/runtime/home-intent';
 
-const WEB_PROTOTYPE_PLUGIN = {
-  id: 'example-web-prototype',
-  title: 'Web Prototype',
+const DEFAULT_SCENARIO_PLUGIN = {
+  id: 'od-new-generation',
+  title: 'New generation',
   version: '0.1.0',
   trust: 'bundled' as const,
   sourceKind: 'bundled' as const,
@@ -63,14 +63,19 @@ const WEB_PROTOTYPE_PLUGIN = {
   installedAt: 0,
   updatedAt: 0,
   manifest: {
-    name: 'example-web-prototype',
-    title: 'Web Prototype',
+    name: 'od-new-generation',
+    title: 'New generation',
     version: '0.1.0',
     description: 'General-purpose desktop web prototype.',
     od: {
       kind: 'scenario',
       taskKind: 'new-generation',
-      useCase: { query: 'Build a web prototype.' },
+      useCase: { query: 'Generate a {{artifactKind}} for {{audience}} on {{topic}}.' },
+      inputs: [
+        { name: 'artifactKind', type: 'string', required: true },
+        { name: 'audience', type: 'string', required: true },
+        { name: 'topic', type: 'string', required: true },
+      ],
     },
   },
 };
@@ -86,7 +91,7 @@ const APPLY_RESULT = {
   capabilitiesRequired: ['prompt:inject'],
   appliedPlugin: {
     snapshotId: 'snap-web-prototype',
-    pluginId: 'example-web-prototype',
+    pluginId: 'od-new-generation',
     pluginVersion: '0.1.0',
     manifestSourceDigest: 'a'.repeat(64),
     inputs: {},
@@ -113,7 +118,7 @@ function stubAnimationFrame() {
 function fetchMock() {
   return vi.fn<typeof fetch>(async (url) => {
     if (typeof url === 'string' && url === '/api/plugins') {
-      return new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
+      return new Response(JSON.stringify({ plugins: [DEFAULT_SCENARIO_PLUGIN] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
@@ -198,5 +203,6 @@ describe('HomeView one-click create from a scene-specific carousel line', () => 
       projectKind: 'prototype',
     });
     expect(submitted.projectMetadata).toEqual(metadata);
+    expect(submitted).not.toHaveProperty('skillDiscovery');
   });
 });

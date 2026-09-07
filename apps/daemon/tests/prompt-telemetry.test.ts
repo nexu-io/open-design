@@ -512,6 +512,37 @@ describe('prompt telemetry builder', () => {
     expect(telemetry.redactedContentBytes).toBe(320 * 1024);
   });
 
+  it('attributes Skill discovery lifecycle bytes and catalog identity without capturing the catalog body', () => {
+    const lifecycle = '# Discovery policy\n\n{"id":"prototype"}';
+    const telemetry = buildPromptStackTelemetry({
+      composedPrompt: lifecycle,
+      sections: [{
+        kind: 'skillDiscoveryLifecycle',
+        content: lifecycle,
+        metadata: {
+          lifecycleKind: 'bootstrap',
+          catalogRevision: `sha256:${'a'.repeat(64)}`,
+          candidateCount: 20,
+        },
+      }],
+    });
+
+    const section = telemetry.sections[0]!;
+    expect(section).toMatchObject({
+      kind: 'skillDiscoveryLifecycle',
+      present: true,
+      contentMode: 'metadata-only',
+      rawBytes: Buffer.byteLength(lifecycle, 'utf8'),
+      metadata: {
+        lifecycleKind: 'bootstrap',
+        catalogRevision: `sha256:${'a'.repeat(64)}`,
+        candidateCount: 20,
+      },
+    });
+    expect(section.redactedContent).toBeUndefined();
+    expect(telemetry.redactedContentBytes).toBe(0);
+  });
+
   it('removes redactedContent when content consent is unavailable', () => {
     const telemetry = buildPromptStackTelemetry({
       composedPrompt: 'hello',

@@ -65,10 +65,6 @@ function pluginRecord(id: string, title: string, tags: string[], od: Record<stri
 
 // The scenario each first-level task type binds (`home-hero/chips.ts`).
 const CHIP_DEFAULTS = [
-  pluginRecord('example-web-prototype', 'Web Prototype', ['prototype'], { mode: 'prototype' }),
-  pluginRecord('example-simple-deck', 'Simple Deck', ['deck'], { mode: 'deck' }),
-  pluginRecord('example-hyperframes', 'HyperFrames', ['hyperframes'], { mode: 'video' }),
-  pluginRecord('example-live-artifact', 'Live Artifact', ['live-artifact'], { mode: 'prototype' }),
   pluginRecord('od-new-generation', 'New generation', [], {}),
   pluginRecord('od-media-generation', 'Media generation', [], {}),
 ];
@@ -337,7 +333,7 @@ const DISMISS_CASES: DismissCase[] = [
     automaticStrategyTaskProfile: null,
     projectKind: 'prototype',
     projectMetadata: { kind: 'prototype', intent: 'live-artifact', fidelity: 'high-fidelity' },
-    pluginId: 'example-live-artifact',
+    pluginId: 'od-new-generation',
   },
 ];
 

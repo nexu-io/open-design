@@ -756,7 +756,7 @@ describe('buildTracePayload', () => {
       },
     ]);
     expect(trace.metadata.promptStack_ttftAttribution).toMatchObject({
-      method: 'proportional_by_prompt_section_redacted_bytes',
+      method: 'proportional_by_prompt_section_attribution_bytes',
       time_to_first_token_ms: 26_613,
       spawn_to_first_token_ms: 26_491,
       totalAttributionBytes: 1600,
@@ -772,6 +772,53 @@ describe('buildTracePayload', () => {
     expect(generation.metadata.promptStack_ttftAttribution).toEqual(
       trace.metadata.promptStack_ttftAttribution,
     );
+  });
+
+  it('attributes metadata-only Skill discovery lifecycle tokens by the bytes actually sent', () => {
+    const lifecycle = 'x'.repeat(2_000);
+    const userRequest = 'y'.repeat(100);
+    const promptTelemetry = buildPromptStackTelemetry({
+      composedPrompt: `${lifecycle}\n${userRequest}`,
+      sections: [
+        {
+          kind: 'skillDiscoveryLifecycle',
+          content: lifecycle,
+          metadata: {
+            lifecycleKind: 'bootstrap',
+            catalogRevision: `sha256:${'a'.repeat(64)}`,
+            candidateCount: 20,
+          },
+        },
+        { kind: 'userRequest', content: userRequest },
+      ],
+    });
+
+    const batch = buildTracePayload(makeCtx({
+      prefs: { metrics: true, content: true, artifactManifest: false },
+      promptTelemetry,
+    }));
+    const trace = bodyOf(batch, 'trace-create');
+
+    expect(trace.metadata.promptStack_topSectionsByBytes).toEqual([
+      expect.objectContaining({
+        kind: 'skillDiscoveryLifecycle',
+        contentMode: 'metadata-only',
+        rawBytes: 2_000,
+        attributionBytes: 2_000,
+        attributionShare: 0.952381,
+      }),
+      expect.objectContaining({
+        kind: 'userRequest',
+        attributionBytes: 100,
+        attributionShare: 0.047619,
+      }),
+    ]);
+    expect(trace.metadata.promptStack_ttftAttribution).toMatchObject({
+      method: 'proportional_by_prompt_section_attribution_bytes',
+      totalAttributionBytes: 2_100,
+      primarySectionKind: 'skillDiscoveryLifecycle',
+      primarySectionAttributionBytes: 2_000,
+    });
   });
 
   it('omits prompt-stack redactedContent when metrics or content consent is off', () => {

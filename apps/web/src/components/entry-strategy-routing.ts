@@ -3,6 +3,7 @@ import {
   type CreateProjectExampleReference,
   type ProjectMetadata,
   type ProjectScenarioTaskProfile,
+  type ProjectSkillDiscovery,
 } from '@open-design/contracts';
 
 interface EntryStrategyRoutingInput {
@@ -10,12 +11,16 @@ interface EntryStrategyRoutingInput {
   /** Official example card picked under an automatic OD Next route. */
   exampleReference?: CreateProjectExampleReference | null;
   skillId?: string | null;
+  pluginId?: string | null;
+  contextPlugins?: ReadonlyArray<{ id: string }> | null;
+  skillDiscovery?: ProjectSkillDiscovery | null;
   pluginInputs?: Record<string, unknown> | null;
 }
 
 export type EntryStrategyRoutingFields = {
   skillId: string | null;
   automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  skillDiscovery?: ProjectSkillDiscovery;
   exampleReference?: CreateProjectExampleReference;
   pluginInputs?: Record<string, unknown>;
 };
@@ -54,8 +59,16 @@ export function entryStrategyRoutingFields(
       ...(input.exampleReference ? { exampleReference: input.exampleReference } : {}),
     };
   }
+  const skillDiscovery = input.skillDiscovery
+    && !input.automaticStrategyTaskProfile
+    && !input.skillId
+    && !input.pluginId
+    && !(input.contextPlugins && input.contextPlugins.length > 0)
+      ? input.skillDiscovery
+      : null;
   return {
     skillId: input.skillId ?? null,
+    ...(skillDiscovery ? { skillDiscovery } : {}),
     ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
   };
 }

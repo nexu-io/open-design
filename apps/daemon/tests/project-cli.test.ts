@@ -71,6 +71,15 @@ async function startProjectStubServer(): Promise<StubServer> {
         }));
         return;
       }
+      if (captured.method === 'POST' && captured.url === '/api/projects') {
+        const body = JSON.parse(captured.body) as { id?: string; name?: string };
+        res.statusCode = 201;
+        res.end(JSON.stringify({
+          project: { id: body.id, name: body.name },
+          conversationId: 'conversation-created',
+        }));
+        return;
+      }
       if (captured.method === 'GET' && captured.url === '/api/projects/project-1') {
         res.statusCode = 200;
         res.end(JSON.stringify({
@@ -234,6 +243,96 @@ describe('od project CLI', () => {
     expect(projectHelp.stdout).toContain('--workspace-member <id>');
     expect(filesHelp.stdout).toContain('--workspace <id>');
     expect(filesHelp.stdout).toContain('--workspace-member <id>');
+    expect(projectHelp.stdout).toContain('--skill-discovery[=open-design-official]');
+  });
+
+  it.each([
+    ['default official marker', '--skill-discovery'],
+    ['explicit official marker', '--skill-discovery=open-design-official'],
+  ])('creates a typeless project with %s', async (_label, discoveryFlag) => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'create',
+      '--name',
+      'Agent Discovery',
+      discoveryFlag,
+      '--json',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
+    expect(stub.requests).toHaveLength(1);
+    expect(stub.requests[0]).toMatchObject({ method: 'POST', url: '/api/projects' });
+    expect(JSON.parse(stub.requests[0]!.body)).toMatchObject({
+      name: 'Agent Discovery',
+      skillId: null,
+      designSystemId: null,
+      skillDiscovery: {
+        mode: 'agent',
+        catalog: 'open-design-official',
+      },
+    });
+  });
+
+  it.each([
+    ['--skill', ['--skill', 'prototype']],
+    ['--plugin', ['--plugin', 'od-next-strategy']],
+  ])('rejects --skill-discovery with explicit %s selection before HTTP', async (_label, selector) => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'create',
+      '--skill-discovery',
+      ...selector,
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('--skill-discovery cannot be combined with explicit selection');
+    expect(stub.requests).toHaveLength(0);
+  });
+
+  it.each(['--task-type', '--task-profile'])(
+    'rejects unsupported explicit selector %s before HTTP when discovery is requested',
+    async (selector) => {
+      stub = await startProjectStubServer();
+
+      const result = await runCli([
+        'project',
+        'create',
+        '--skill-discovery',
+        selector,
+        'prototype',
+        '--daemon-url',
+        stub.baseUrl,
+      ]);
+
+      expect(result.code).not.toBe(0);
+      expect(result.stderr).toContain(`unknown flag: ${selector}`);
+      expect(stub.requests).toHaveLength(0);
+    },
+  );
+
+  it('rejects a non-official --skill-discovery value before HTTP', async () => {
+    stub = await startProjectStubServer();
+
+    const result = await runCli([
+      'project',
+      'create',
+      '--skill-discovery=community',
+      '--daemon-url',
+      stub.baseUrl,
+    ]);
+
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain('only accepts the value open-design-official');
+    expect(stub.requests).toHaveLength(0);
   });
 
   it.each([

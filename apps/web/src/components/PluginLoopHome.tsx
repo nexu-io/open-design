@@ -8,6 +8,7 @@ import type {
   ProjectMetadata,
   ProjectScenarioTaskProfile,
   LocalCatalogScope,
+  ProjectSkillDiscovery,
   RunContextSelection,
 } from '@open-design/contracts';
 import {
@@ -36,6 +37,8 @@ export interface PluginLoopSubmit {
   pluginSelectionProvenance?: 'automatic-default';
   /** Exact product-owned OD Next route; absent for ordinary plugin routing. */
   automaticStrategyTaskProfile?: ProjectScenarioTaskProfile | null;
+  /** Agent-owned Skill selection for a free-form submit with no explicit route. */
+  skillDiscovery?: ProjectSkillDiscovery | null;
   /**
    * Identity of the official example card the user picked under a task type.
    * Sent INSTEAD of `pluginId`/`appliedPluginSnapshotId`, and only alongside
@@ -64,10 +67,8 @@ export interface PluginLoopSubmit {
   // stamp on the new project's metadata. The daemon-side default
   // binding then resolves to the matching scenario plugin (image /
   // video / audio → od-media-generation, others → od-new-generation).
-  // Null means the caller did not stamp an explicit kind. HomeView's
-  // free-form fallback uses `other` and binds the hidden od-default
-  // router plugin so the agent infers the task type and asks only when
-  // the brief cannot be routed reliably.
+  // Null means the caller did not stamp an explicit kind. The free-form
+  // fallback uses `other` and asks the Agent to discover an official Skill.
   projectKind?: ProjectKind | null;
   projectMetadata?: ProjectMetadata | null;
   workingDir?: string | null;

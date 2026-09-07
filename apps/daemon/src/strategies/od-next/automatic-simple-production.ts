@@ -34,7 +34,7 @@ import { createOdNextNativeBuildPackageBindings } from './native-build-package.j
 
 type SqliteDb = Database.Database;
 
-const TERMINAL_OUTCOMES = new Set(['completed', 'blocked', 'canceled']);
+const TERMINAL_OUTCOMES = new Set(['completed', 'answered', 'blocked', 'canceled']);
 
 export class OdNextAutomaticProductionError extends Error {
   constructor(

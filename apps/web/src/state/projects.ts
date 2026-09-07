@@ -31,6 +31,7 @@ import type {
   PluginShareAction,
   ProjectPluginFolderInstallRequest,
   ProjectScenarioTaskProfile,
+  ProjectSkillDiscovery,
   ProjectVisibility,
   ProjectWorkspaceScopeResponse,
   TerminalSession,
@@ -741,6 +742,7 @@ export async function createProject(
     appliedPluginSnapshotId?: string;
     pluginInputs?: Record<string, unknown>;
     automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+    skillDiscovery?: ProjectSkillDiscovery;
     /**
      * Identity of the official example card the user picked under an automatic
      * OD Next route. A claim, not content: the daemon re-resolves it through

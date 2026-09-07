@@ -108,6 +108,11 @@ import { captureOdNextSessionSkillPackage } from '../strategies/od-next/session-
 import { resolveSkillCatalogScope } from '../skill-catalog-scope.js';
 import type { SkillInfo } from '../skills.js';
 import {
+  agentNativeSkillDiscoveryBehaviorEnabled,
+  readVerifiedProjectSkillDiscoveryBinding,
+} from '../skill-discovery/binding.js';
+import { readOfficialSkillDiscoveryPromptContextV1 } from '../skill-discovery/catalog.js';
+import {
   buildOdNextTaskConfigurationV1,
   createOdNextTaskInputSnapshot,
   OdNextTaskInputSnapshotError,
@@ -564,6 +569,8 @@ export interface RegisterRunRoutesDeps {
   };
   paths: {
     BUNDLED_PLUGINS_DIR?: string;
+    SKILLS_DIR?: string;
+    DESIGN_TEMPLATES_DIR?: string;
     PROJECTS_DIR: string;
     RUNTIME_DATA_DIR: string;
   };
@@ -1728,9 +1735,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         typeof requestBody.conversationId === 'string' && requestBody.conversationId
           ? requestBody.conversationId
           : getFirstProjectConversation(db, requestBody.projectId)?.id ?? null;
-      const defaultPluginId = defaultScenarioPluginIdForProjectMetadata(
+      const verifiedSkillDiscoveryBinding = agentNativeSkillDiscoveryBehaviorEnabled(process.env)
+        ? readVerifiedProjectSkillDiscoveryBinding(
+            rolloutProject?.metadata as ContractProjectMetadata | null | undefined,
+          )
+        : null;
+      const projectKindDefaultPluginId = defaultScenarioPluginIdForProjectMetadata(
         toScenarioProjectMetadata(rolloutProject?.metadata),
       );
+      const defaultPluginId = verifiedSkillDiscoveryBinding
+        ? null
+        : projectKindDefaultPluginId;
       const suppliedSnapshotWasNamed = typeof requestBody.appliedPluginSnapshotId === 'string'
         && requestBody.appliedPluginSnapshotId.trim().length > 0;
       const suppliedPluginWasNamed = typeof requestBody.pluginId === 'string'
@@ -1778,12 +1793,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       const projectPinIsAutomaticDefault = Boolean(
         projectHasExplicitPin
         && verifiedScenarioBinding?.provenance === 'automatic_default'
-        && verifiedScenarioBinding.pluginId === defaultPluginId,
+        && verifiedScenarioBinding.pluginId === projectKindDefaultPluginId,
       );
       const suppressAutomaticDefaultPinFallback = Boolean(
         projectPinIsAutomaticDefault
-        && verifiedExampleBinding
-        && !selectedExamplePlugin,
+        && (
+          verifiedSkillDiscoveryBinding
+          || (verifiedExampleBinding && !selectedExamplePlugin)
+        ),
       );
       const suppliedContextPluginWasNamed = Boolean(
         Array.isArray((rolloutProject?.metadata as ContractProjectMetadata | undefined)?.contextPlugins)
@@ -1819,12 +1836,20 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // operator the installation was never opted in.
       const rolloutAppConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const rolloutPolicy = readOdNextRolloutPolicy(process.env, rolloutAppConfig);
+      const admissionSessionMode = normalizeConversationSessionMode(
+        requestBody.sessionMode === 'chat' || requestBody.sessionMode === 'plan' || requestBody.sessionMode === 'design'
+          ? requestBody.sessionMode
+          : snapshotConversationId ? getConversation(db, snapshotConversationId)?.sessionMode : undefined,
+      );
       const rolloutTaskType = odNextTaskTypeForProjectScenarioBinding(
         verifiedStrategyBinding ?? verifiedScenarioBinding,
-      );
+      ) ?? (verifiedSkillDiscoveryBinding
+        && agentNativeSkillDiscoveryBehaviorEnabled(process.env)
+        ? 'generic' : null);
       const routeApplicability = explicitUserPlugin
         ? 'explicit_user' as const
-        : rolloutTaskType
+        : rolloutTaskType && (admissionSessionMode === 'design'
+          || !agentNativeSkillDiscoveryBehaviorEnabled(process.env))
           ? 'eligible' as const
           : 'not_applicable' as const;
       const rolloutMayObserve = routeApplicability === 'eligible'
@@ -1923,6 +1948,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         stoppedMode: readOdNextRolloutStop(db)?.mode ?? null,
         routeApplicability,
       });
+      if (rolloutTaskType === 'generic'
+        && admissionSessionMode === 'design'
+        && rolloutPolicy.requestedMode === 'active'
+        && strategyRolloutDecision.effectiveMode !== 'active') {
+        return sendApiError(res, 409, 'OD_NEXT_DISCOVERY_ADMISSION_FAILED',
+          'Agent Skill Discovery requires verified OD Next V2 admission.',
+          { reasonCodes: strategyRolloutDecision.reasonCodes });
+      }
       if (
         automaticAdmissionPreparationFailed
         && strategyRolloutDecision.effectiveMode === 'active'
@@ -2083,6 +2116,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
               internalStrategyActivation: {
                 taskType: strategyRolloutDecision.taskType,
                 plugin: rolloutPlugin,
+                ...(agentNativeSkillDiscoveryBehaviorEnabled(process.env)
+                  && ctx.paths.SKILLS_DIR && ctx.paths.DESIGN_TEMPLATES_DIR
+                  ? { discoveryCatalogRevision: readOfficialSkillDiscoveryPromptContextV1({
+                      bundledStrategyPlugin: rolloutPlugin,
+                      builtInFunctionalSkillsRoot: ctx.paths.SKILLS_DIR,
+                      builtInDesignTemplatesRoot: ctx.paths.DESIGN_TEMPLATES_DIR,
+                    }).catalog.revision }
+                  : {}),
               },
             }
           : {}),
@@ -2505,6 +2546,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         || strategyRolloutDecision.effectiveMode !== 'active'
         || !resolveAutomaticOrdinaryFallback
       ) return false;
+      if (strategyRolloutDecision.taskType === 'generic') {
+        sendApiError(res, 409, 'OD_NEXT_DISCOVERY_PREPARATION_FAILED',
+          error instanceof Error ? error.message : String(error));
+        return false;
+      }
       const provisionalSnapshot = resolvedSnapshot;
       if (provisionalSnapshot?.created === true) {
         if (!removeProvisionalAutomaticSnapshot(db, provisionalSnapshot)) {
@@ -3437,7 +3483,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const activeRun = task?.activeRunId ? design.runs.get(task.activeRunId) : null;
     let cancelRun = activeRun ?? run;
     let taskForCancel = task;
-    if (taskForCancel && !['completed', 'blocked', 'canceled'].includes(taskForCancel.outcome)) {
+    if (taskForCancel && !['completed', 'answered', 'blocked', 'canceled'].includes(taskForCancel.outcome)) {
       let canceled = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const physicalRunId = taskForCancel.activeRunId ?? cancelRun.id;
@@ -3454,13 +3500,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             ?? getStrategyTaskExecutionByRunId(db, runId);
           if (!latest) throw error;
           taskForCancel = latest;
-          if (['completed', 'blocked', 'canceled'].includes(latest.outcome)) {
+          if (['completed', 'answered', 'blocked', 'canceled'].includes(latest.outcome)) {
             canceled = latest;
             break;
           }
         }
       }
-      if (!canceled || !['completed', 'blocked', 'canceled'].includes(canceled.outcome)) {
+      if (!canceled || !['completed', 'answered', 'blocked', 'canceled'].includes(canceled.outcome)) {
         return sendApiError(
           res,
           409,

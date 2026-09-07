@@ -57,6 +57,34 @@ export type ProjectScenarioTaskProfile =
   | 'hyperframes';
 
 /**
+ * Client request for the first-turn Agent to select from Open Design's
+ * official Skill catalog. This marker is present only when the user did not
+ * choose a task type, plugin, or Skill explicitly.
+ */
+export interface ProjectSkillDiscovery {
+  mode: 'agent';
+  catalog: 'open-design-official';
+}
+
+export const OPEN_DESIGN_OFFICIAL_SKILL_DISCOVERY = {
+  mode: 'agent',
+  catalog: 'open-design-official',
+} as const satisfies ProjectSkillDiscovery;
+
+/**
+ * Daemon-owned proof that this project was created from a typeless Design
+ * submit and is therefore eligible for Agent-native official Skill discovery.
+ * Clients may request discovery through {@link ProjectSkillDiscovery}; they
+ * may not author this binding inside generic project metadata.
+ */
+export interface ProjectSkillDiscoveryBinding {
+  schemaVersion: 1;
+  provenance: 'no_explicit_task_type';
+  catalog: 'open-design-official';
+  boundAt: number;
+}
+
+/**
  * Daemon-owned identity for the scenario currently pinned to a project.
  *
  * The snapshot and plugin ids are deliberately stored together: provenance
@@ -308,6 +336,8 @@ export interface ProjectMetadata {
   strategyBinding?: ProjectStrategyBinding;
   /** Daemon-owned identity of the official example card that seeded this project. */
   exampleBinding?: ProjectExampleBinding;
+  /** Daemon-owned authority for a typeless Agent-native Skill discovery flow. */
+  skillDiscoveryBinding?: ProjectSkillDiscoveryBinding;
   // Stored on design-system projects so the review overview can remember
   // which generated sections were accepted or sent back for another pass.
   designSystemReview?: Record<string, DesignSystemReviewEntry>;
@@ -450,6 +480,8 @@ export interface CreateProjectRequest {
   pluginInputs?: Record<string, unknown>;
   /** Product-owned automatic OD Next route. The daemon validates and stamps it. */
   automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  /** First-turn Agent Skill discovery, used only when no explicit route was selected. */
+  skillDiscovery?: ProjectSkillDiscovery;
   /**
    * The official example card the user picked under a task type.
    *

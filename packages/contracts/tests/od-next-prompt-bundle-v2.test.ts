@@ -44,6 +44,22 @@ function bundle(overrides: Partial<OdNextPromptBundleV2> = {}): OdNextPromptBund
 }
 
 describe('OD Next canonical Prompt Bundle v2', () => {
+  it('round-trips an unbound generic request without fabricating a primary Skill block', () => {
+    const input = bundle({ taskMetadata: { taskType: 'generic' }, sessionSkills: {
+      generalOrchestrationSkill: bundle().sessionSkills.generalOrchestrationSkill,
+      discoverySkill: { skillName: 'skill_discovery', body: '# Discovery\n\n## Official catalog\n- prototype: websites <and> apps' },
+    } });
+    const xml = serializeOdNextPromptBundleV2(input);
+    expect(xml).toContain('<discovery_skill skill_name="skill_discovery">');
+    expect(xml).not.toContain('<task_type_skill');
+    expect(xml).toContain('<open_design_core_system_prompt>');
+    expect(xml).toContain('<general_orchestration_skill');
+    expect(parseOdNextPromptBundleV2(xml)).toEqual(input);
+    expect(() => serializeOdNextPromptBundleV2({ ...input, sessionSkills: {
+      generalOrchestrationSkill: input.sessionSkills.generalOrchestrationSkill,
+    } })).toThrow(/Task Skill or a Discovery Skill/);
+  });
+
   it('emits a nested tree with user_first_prompt as the last content element', () => {
     const xml = serializeOdNextPromptBundleV2(bundle());
     expect(xml.startsWith('<open_design_prompt_bundle schema="' + OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2 + '">'))

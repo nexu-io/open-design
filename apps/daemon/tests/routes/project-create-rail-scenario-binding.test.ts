@@ -41,19 +41,19 @@ const CREATE_RAIL_SURFACES: RailSurface[] = [
   {
     chipId: 'prototype',
     metadata: { kind: 'prototype' },
-    scenarioPluginId: 'example-web-prototype',
+    scenarioPluginId: 'od-new-generation',
     automaticStrategyTaskProfile: 'prototype',
   },
   {
     chipId: 'deck',
     metadata: { kind: 'deck' },
-    scenarioPluginId: 'example-simple-deck',
+    scenarioPluginId: 'od-new-generation',
     automaticStrategyTaskProfile: 'ppt',
   },
   {
     chipId: 'hyperframes',
     metadata: { kind: 'video', intent: 'hyperframes', videoModel: 'hyperframes-html' },
-    scenarioPluginId: 'example-hyperframes',
+    scenarioPluginId: 'od-new-generation',
     automaticStrategyTaskProfile: 'hyperframes',
   },
   // The media composer also stamps the picked model / prompt template on the
@@ -104,17 +104,20 @@ const CREATE_RAIL_SURFACES: RailSurface[] = [
   {
     chipId: 'web-clone',
     metadata: { kind: 'prototype', intent: 'web-clone' },
-    scenarioPluginId: 'example-web-clone',
+    scenarioPluginId: 'od-new-generation',
+    pluginInputs: { artifactKind: 'website reproduction', audience: 'the intended audience', topic: 'the user brief' },
   },
   {
     chipId: 'live-artifact',
     metadata: { kind: 'prototype', intent: 'live-artifact', fidelity: 'high-fidelity' },
-    scenarioPluginId: 'example-live-artifact',
+    scenarioPluginId: 'od-new-generation',
+    pluginInputs: { artifactKind: 'data-backed live artifact', audience: 'the intended audience', topic: 'the user brief' },
   },
   {
     chipId: 'webgl',
     metadata: { kind: 'prototype', intent: 'webgl-experience', fidelity: 'high-fidelity' },
-    scenarioPluginId: 'example-webgl-experience',
+    scenarioPluginId: 'od-new-generation',
+    pluginInputs: { artifactKind: 'WebGL experience', audience: 'the intended audience', topic: 'the user brief' },
   },
 ];
 
@@ -261,11 +264,12 @@ describe('create-rail scenario binding', () => {
 
     const namedDefaultOnOdNextRoute = await createProject(url, 'named-default', {
       metadata: { kind: 'prototype' },
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
+      pluginInputs: { artifactKind: 'web prototype', audience: 'the intended audience', topic: 'the user brief' },
     });
     expect(namedDefaultOnOdNextRoute.metadata.scenarioBinding).toMatchObject({
       provenance: 'explicit_user',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
     });
   });
 

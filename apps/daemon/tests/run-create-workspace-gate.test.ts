@@ -358,6 +358,7 @@ async function startServer(opts?: {
   authorizePluginRequest?: (req: any, res: any, pluginId: string) => Promise<boolean>;
   authorizePluginWithWorkspaceAuthority?: boolean;
   seedImplicitScenarioPlugin?: boolean;
+  seedSkillDiscoveryBinding?: boolean;
   teamProjectResourceState?: 'active' | 'deleted';
   loadPluginRegistryView?: () => Promise<any>;
 }) {
@@ -374,8 +375,23 @@ async function startServer(opts?: {
       name: id,
       createdAt: now,
       updatedAt: now,
-      ...(id === PERSONAL_PROJECT && opts?.seedImplicitScenarioPlugin
-        ? { metadata: { kind: 'prototype' } }
+      ...(id === PERSONAL_PROJECT
+        && (opts?.seedImplicitScenarioPlugin || opts?.seedSkillDiscoveryBinding)
+        ? {
+            metadata: {
+              ...(opts?.seedImplicitScenarioPlugin ? { kind: 'prototype' } : {}),
+              ...(opts?.seedSkillDiscoveryBinding
+                ? {
+                    skillDiscoveryBinding: {
+                      schemaVersion: 1,
+                      provenance: 'no_explicit_task_type',
+                      catalog: 'open-design-official',
+                      boundAt: now,
+                    },
+                  }
+                : {}),
+            },
+          }
         : {}),
     });
   }
@@ -1113,6 +1129,119 @@ describe('POST /api/runs — workspace mutation gate', () => {
         expect.anything(),
         'example-web-prototype',
       );
+    },
+  );
+
+  it('does not synthesize a project-kind plugin for an active Skill discovery binding', async () => {
+    const previousMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    try {
+      const authorizePluginRequest = vi.fn(async (_req, res) => {
+        sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
+        return false;
+      });
+      const baseUrl = await startServer({
+        authorizePluginRequest,
+        seedImplicitScenarioPlugin: true,
+        seedSkillDiscoveryBinding: true,
+      });
+      const resp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: PERSONAL_PROJECT,
+          agentId: 'claude',
+          message: 'let the agent select a Skill',
+        }),
+      });
+
+      expect(resp.status).toBe(202);
+      expect(authorizePluginRequest).not.toHaveBeenCalled();
+      expect(lastCreatedRun?.appliedPluginSnapshotId ?? null).toBeNull();
+    } finally {
+      if (previousMode === undefined) delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      else process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousMode;
+    }
+  });
+
+  it('keeps an explicit run plugin authoritative over a Skill discovery binding', async () => {
+    const previousMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    try {
+      const authorizePluginRequest = vi.fn(async () => true);
+      const baseUrl = await startServer({
+        authorizePluginRequest,
+        seedImplicitScenarioPlugin: true,
+        seedSkillDiscoveryBinding: true,
+      });
+      const resp = await fetch(`${baseUrl}/api/runs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+        },
+        body: JSON.stringify({
+          projectId: PERSONAL_PROJECT,
+          agentId: 'claude',
+          pluginId: 'example-web-prototype',
+          message: 'use the explicitly selected plugin',
+        }),
+      });
+
+      expect(resp.status).toBe(202);
+      expect(authorizePluginRequest).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'example-web-prototype',
+      );
+      expect(lastCreatedRun?.appliedPluginSnapshotId).toEqual(expect.any(String));
+    } finally {
+      if (previousMode === undefined) delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      else process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousMode;
+    }
+  });
+
+  it.each(['off', 'observe'] as const)(
+    'retains project-kind run fallback for a stored binding when mode is %s',
+    async (mode) => {
+      const previousMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+      process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = mode;
+      try {
+        const authorizePluginRequest = vi.fn(async (_req, res) => {
+          sendApiError(res, 404, 'PLUGIN_NOT_FOUND', 'plugin not found');
+          return false;
+        });
+        const baseUrl = await startServer({
+          authorizePluginRequest,
+          seedImplicitScenarioPlugin: true,
+          seedSkillDiscoveryBinding: true,
+        });
+        const resp = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...workspaceHeaders(OWNER_MEMBER_ID, 'owner'),
+          },
+          body: JSON.stringify({
+            projectId: PERSONAL_PROJECT,
+            agentId: 'claude',
+            message: 'legacy fallback remains available',
+          }),
+        });
+
+        expect(resp.status).toBe(404);
+        expect(authorizePluginRequest).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.anything(),
+          'example-web-prototype',
+        );
+      } finally {
+        if (previousMode === undefined) delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+        else process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = previousMode;
+      }
     },
   );
 

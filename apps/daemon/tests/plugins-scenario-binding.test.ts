@@ -62,14 +62,14 @@ describe('project scenario binding provenance', () => {
   it('stamps and verifies exact automatic identity while rejecting broad image inference', () => {
     const db = fixtureDb();
     db.prepare(`INSERT INTO applied_plugin_snapshots VALUES (?, ?, ?, ?)`)
-      .run('snapshot-2', 'project-2', 'example-web-prototype', 84);
+      .run('snapshot-2', 'project-2', 'od-new-generation', 84);
     db.prepare(`INSERT INTO projects VALUES (?, ?, ?)`)
       .run('project-2', JSON.stringify({ kind: 'prototype', intent: 'marketing' }), 'snapshot-2');
 
     const binding = writeProjectScenarioBinding(db, {
       projectId: 'project-2',
       snapshotId: 'snapshot-2',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
       provenance: 'automatic_default',
       taskProfile: 'marketing',
       boundAt: 85,
@@ -95,7 +95,7 @@ describe('project scenario binding provenance', () => {
     expect(() => writeProjectScenarioBinding(db, {
       projectId: 'project-2',
       snapshotId: 'snapshot-2',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
       provenance: 'automatic_default',
       taskProfile: 'prototype',
     })).toThrow(/mismatched scenario task profile/i);
@@ -105,7 +105,7 @@ describe('project scenario binding provenance', () => {
     })).toBeNull();
     expect(automaticScenarioTaskProfile({
       metadata: { kind: 'video', intent: 'hyperframes' },
-      pluginId: 'example-hyperframes',
+      pluginId: 'od-new-generation',
     })).toBe('hyperframes');
     db.close();
   });

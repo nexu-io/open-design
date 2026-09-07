@@ -11,6 +11,18 @@ asset packagers, fidelity audits — it belongs under `../skills/`
 instead. See `specs/current/skills-and-design-templates.md` for the
 full split.
 
+## Routing validation catalogue
+
+This branch pins the 60 template folders introduced by commit
+`7d44e4062d922ba2154f6bf7e42de6c44429bf51`, preserving every source file.
+See `specs/current/skill-discovery-routing-catalog.md` for the exact scope.
+Their `od.task_type`, bilingual names/descriptions, platform, scenario,
+category, and example prompt feed the official Discovery metadata.
+The product-owned declarations live in
+`plugins/_official/scenarios/od-next-strategy/agent-discovery/functional-catalog.json`
+with `source: "design-templates"`. Every folder and side file must have an
+exact matching declaration; this provider never reads user template roots.
+
 ## Daemon plumbing
 
 - Listed under `/api/design-templates`. The shape mirrors `/api/skills`

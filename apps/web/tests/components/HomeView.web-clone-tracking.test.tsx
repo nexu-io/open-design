@@ -44,8 +44,8 @@ vi.mock('../../src/analytics/provider', async (importOriginal) => {
 // exist so clicking the chip binds; the site examples themselves are static text
 // prompt cards from HOME_PROMPT_EXAMPLES, not plugins.
 const WEB_CLONE_BASE = {
-  id: 'example-web-clone',
-  title: 'Website clone',
+  id: 'od-new-generation',
+  title: 'New generation',
   version: '0.1.0',
   trust: 'bundled' as const,
   sourceKind: 'bundled' as const,
@@ -55,15 +55,15 @@ const WEB_CLONE_BASE = {
   installedAt: 0,
   updatedAt: 0,
   manifest: {
-    name: 'example-web-clone',
-    title: 'Website clone',
+    name: 'od-new-generation',
+    title: 'New generation',
     version: '0.1.0',
-    description: 'Recreate an existing website.',
-    tags: ['web-clone', 'website-clone'],
+    description: 'Create a new artifact from the user brief.',
+    tags: ['scenario', 'first-party', 'new-generation'],
     od: {
       kind: 'scenario',
       taskKind: 'new-generation',
-      useCase: { query: 'Recreate the website at {{targetUrl}}.' },
+      useCase: { query: 'Create a new artifact from the user brief.' },
     },
   },
 };

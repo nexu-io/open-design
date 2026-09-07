@@ -9,6 +9,7 @@ import { runResource } from './resource-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
 import { runDesignSystemsToolCli } from './tools-design-systems-cli.js';
+import { runSkillDiscoveryToolCli } from './skill-discovery/tools-cli.js';
 import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.js';
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
@@ -17,7 +18,11 @@ import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { SidecarFactory } from '@open-design/sidecar';
 import { APP_KEYS, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
-import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
+import {
+  EXPORT_FORMATS,
+  EXPORT_IMAGE_FORMATS,
+  OPEN_DESIGN_OFFICIAL_SKILL_DISCOVERY,
+} from '@open-design/contracts';
 import type { ArtifactLintFinding, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
 import { exportRoutePath } from './export-cli-routing.js';
@@ -256,7 +261,13 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   'workspace',
   'workspace-member',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set([
+  'help',
+  'h',
+  'json',
+  'follow',
+  'skill-discovery',
+]);
 const WORKSPACE_STRING_FLAGS = new Set([
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
   'member', 'role', 'email', 'app-user', 'lifecycle-state',
@@ -892,6 +903,16 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
       process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
       process.exitCode = 1;
     });
+} else if (argv[0] === 'tools' && argv[1] === 'skills') {
+  runSkillDiscoveryToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
 } else {
   await runDaemonCliStartup(argv, { printHelp: printRootHelp });
 }
@@ -980,6 +1001,9 @@ function printRootHelp() {
 
   od tools design-systems read --path <manifest-declared-path>
       Read active design-system pull-layer files through daemon wrapper commands.
+
+  od tools skills <search|load|deactivate|resolve|status|rehydrate> [options]
+      Discover and manage verified Open Design official Skills for an untyped run.
 
   od mcp live-artifacts
       Start the MCP server exposing live-artifact and connector tools.
@@ -6986,6 +7010,7 @@ async function runProject(args) {
     console.log(`Usage:
   od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
                     [--plugin <id>] [--inputs <json>] [--metadata-json <path|->]
+                    [--skill-discovery[=open-design-official]]
                     [--mode design|chat|plan]
   od project create-design-system <id> [--name "<title>"]
                     [--prompt "<text>" | --prompt-file <path|->] [--json]
@@ -7163,6 +7188,25 @@ Common options:
       return;
     }
     case 'create': {
+      const rawSkillDiscovery = flags['skill-discovery'];
+      const skillDiscoveryRequested = rawSkillDiscovery === true
+        || rawSkillDiscovery === 'open-design-official';
+      if (rawSkillDiscovery !== undefined && !skillDiscoveryRequested) {
+        console.error('--skill-discovery only accepts the value open-design-official');
+        process.exit(2);
+      }
+      if (skillDiscoveryRequested) {
+        const conflictingSelectors = [
+          ...(flags.skill !== undefined ? ['--skill'] : []),
+          ...(flags.plugin !== undefined ? ['--plugin'] : []),
+        ];
+        if (conflictingSelectors.length > 0) {
+          console.error(
+            `--skill-discovery cannot be combined with explicit selection: ${conflictingSelectors.join(', ')}`,
+          );
+          process.exit(2);
+        }
+      }
       const id = (typeof crypto !== 'undefined' && crypto.randomUUID)
         ? crypto.randomUUID()
         : Math.random().toString(36).slice(2);
@@ -7175,6 +7219,9 @@ Common options:
         skillId:        flags.skill ?? null,
         designSystemId: flags['design-system'] ?? null,
       };
+      if (skillDiscoveryRequested) {
+        body.skillDiscovery = OPEN_DESIGN_OFFICIAL_SKILL_DISCOVERY;
+      }
       const conversationMode = normalizeChatSessionModeFlag(flags.mode);
       if (conversationMode) body.conversationMode = conversationMode;
       if (flags['pending-prompt']) body.pendingPrompt = flags['pending-prompt'];
@@ -9530,11 +9577,27 @@ async function runSkills(args) {
   od skill list
   od skill show <id>
   od skill uninstall <id>
+  od skill discovery-catalog --json [--daemon-url <url>]
 
 \`od skills …\` remains an alias for compatibility.`);
     process.exit(args[0] ? 0 : 2);
   }
   if (args[0] === 'install' || args[0] === 'add') return runSkillInstall(args.slice(1));
+  if (args[0] === 'discovery-catalog') {
+    const flags = parseFlags(args.slice(1), {
+      string: LIBRARY_STRING_FLAGS,
+      boolean: LIBRARY_BOOLEAN_FLAGS,
+    });
+    const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
+    const response = await fetch(`${base}/api/diagnostics/skill-discovery-catalog`);
+    if (!response.ok) {
+      console.error(`Discovery catalog diagnostics failed (${response.status}).`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(JSON.stringify(await response.json(), null, 2) + '\n');
+    return;
+  }
   if (args[0] === 'uninstall' || args[0] === 'remove') return runSkillUninstall(args.slice(1));
   return runLibraryList('skills', args);
 }

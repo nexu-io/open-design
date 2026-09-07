@@ -67,8 +67,8 @@ export function diffSnapshots(input: DiffSnapshotsInput): SnapshotDiffReport {
   diffScalar(
     entries,
     'strategy.selectedTaskProfile.sha256',
-    a.strategy?.selectedTaskProfile.sha256,
-    b.strategy?.selectedTaskProfile.sha256,
+    a.strategy?.selectedTaskProfile?.sha256,
+    b.strategy?.selectedTaskProfile?.sha256,
   );
 
   // Inputs (typed scalar map).

@@ -2,6 +2,7 @@ import type {
   ChatRunStatusResponse,
   StrategyTaskProjectionV2,
 } from '@open-design/contracts';
+import { strategyTaskProvesDelivery } from '@open-design/contracts';
 
 type FetchRunStatus = (runId: string) => Promise<ChatRunStatusResponse | null>;
 
@@ -55,9 +56,9 @@ export function strategyBlockedMessageFields(
 /**
  * Message fields persisting ANY terminal strategy-task verdict.
  *
- * `blocked` terminates the turn's question form (above). `completed` is the
- * other verdict a surface has to remember: the daemon reached it by verifying
- * the canonical deliverable on disk, which outranks a TodoWrite snapshot the
+ * `blocked` terminates the turn's question form (above). `completed` and the
+ * Host-validated answer-only `answered` verdict also settle the work. Their
+ * authoritative completion outranks a TodoWrite snapshot the
  * agent left with stale pending items. Without the stamp the chat keeps
  * offering to "continue remaining tasks" on finished work, and accepting opens
  * a second task that can only block.
@@ -74,7 +75,7 @@ export function strategySettledMessageFields(
   | null {
   const blocked = strategyBlockedMessageFields(strategyTask);
   if (blocked) return blocked;
-  if (strategyTask?.terminal && strategyTask.outcome === 'completed') {
+  if (strategyTaskProvesDelivery(strategyTask)) {
     return { strategyTaskDelivered: true };
   }
   return null;

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRIDLOCK '86 — A Synthwave Night Festival</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --neon-blue: #0080FF;
+    --hot-pink: #FF006E;
+    --cyan: #00FFFF;
+    --deep: #1A1A2E;
+    --black: #0B0B14;
+    --purple: #5D34D0;
+    --gold: #FFD700;
+    --pink80: #FF10F0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Share Tech Mono', 'Courier New', monospace;
+    background: var(--black);
+    color: #E8E8FF;
+    overflow-x: hidden;
+    position: relative;
+  }
+  /* CRT scanlines over everything */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; z-index: 50; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(0,0,0,0.28) 0 1px, transparent 1px 3px);
+    opacity: 0.3;
+  }
+  /* subtle vignette */
+  body::after {
+    content: ""; position: fixed; inset: 0; z-index: 49; pointer-events: none;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+  }
+  .display { font-family: 'Orbitron', 'Share Tech Mono', monospace; }
+
+  /* ---------- nav ---------- */
+  nav {
+    position: relative; z-index: 5;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 44px;
+    border-bottom: 1px solid rgba(0,255,255,0.25);
+    background: rgba(11,11,20,0.7);
+  }
+  .logo {
+    font-family: 'Orbitron', monospace; font-weight: 900; font-size: 20px; letter-spacing: 3px;
+    color: var(--cyan);
+    text-shadow: 0 0 10px var(--cyan), 0 0 30px rgba(0,255,255,0.5);
+  }
+  .nav-links { display: flex; gap: 30px; font-size: 13px; letter-spacing: 2px; }
+  .nav-links a { color: #9C9CC9; text-decoration: none; text-transform: uppercase; transition: color .2s, text-shadow .2s; }
+  .nav-links a:hover { color: var(--cyan); text-shadow: 0 0 8px var(--cyan); }
+  .nav-links a.hot { color: var(--hot-pink); border: 1px solid var(--hot-pink); padding: 8px 16px; box-shadow: 0 0 12px rgba(255,0,110,0.5), inset 0 0 12px rgba(255,0,110,0.2); }
+  .nav-links a.hot:hover { color: #fff; text-shadow: 0 0 10px var(--hot-pink); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative; z-index: 1;
+    min-height: 560px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 60px 20px 90px;
+    background: linear-gradient(180deg, #0B0B14 0%, #1A1A2E 45%, #3D1758 78%, #6B1B6E 100%);
+    overflow: hidden;
+    border-bottom: 1px solid rgba(255,16,240,0.35);
+  }
+  /* retro sun */
+  .sun {
+    position: absolute; bottom: 96px; left: 50%; transform: translateX(-50%);
+    width: 300px; height: 300px; border-radius: 50%;
+    background: linear-gradient(180deg, var(--gold) 0%, #FF8C42 35%, var(--hot-pink) 70%, var(--pink80) 100%);
+    box-shadow: 0 0 80px rgba(255,0,110,0.8), 0 0 160px rgba(255,140,66,0.4);
+    -webkit-mask-image: repeating-linear-gradient(0deg, #000 0 26px, transparent 26px 34px);
+    mask-image: repeating-linear-gradient(0deg, #000 0 26px, transparent 26px 34px);
+  }
+  /* perspective grid floor */
+  .floor {
+    position: absolute; bottom: 0; left: -20%; right: -20%; height: 190px;
+    background:
+      repeating-linear-gradient(90deg, rgba(0,255,255,0.5) 0 2px, transparent 2px 78px),
+      repeating-linear-gradient(0deg, rgba(255,16,240,0.55) 0 2px, transparent 2px 40px),
+      linear-gradient(180deg, #2A0E45 0%, #12071F 100%);
+    transform: perspective(320px) rotateX(58deg);
+    transform-origin: top center;
+    border-top: 2px solid var(--pink80);
+    box-shadow: 0 -6px 30px rgba(255,16,240,0.5);
+  }
+  .hero-tag {
+    position: relative; z-index: 2;
+    font-size: 13px; letter-spacing: 5px; text-transform: uppercase; color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan);
+    margin-bottom: 18px;
+  }
+  .glitch {
+    position: relative; z-index: 2;
+    font-family: 'Orbitron', monospace; font-weight: 900;
+    font-size: clamp(58px, 8vw, 104px); letter-spacing: 6px; line-height: .95;
+    color: #FFFFFF;
+    text-shadow: 0 0 10px rgba(255,255,255,0.8), 0 0 34px var(--purple), 0 0 60px var(--hot-pink);
+    animation: glitch 3.2s infinite steps(1);
+  }
+  @keyframes glitch {
+    0%, 91%, 100% { transform: none; text-shadow: 0 0 10px rgba(255,255,255,.8), 0 0 34px var(--purple), 0 0 60px var(--hot-pink); }
+    92% { transform: skewX(-8deg) translateX(-6px); text-shadow: -4px 0 var(--hot-pink), 4px 0 var(--cyan); }
+    94% { transform: skewX(6deg) translateX(4px); text-shadow: 4px 0 var(--hot-pink), -4px 0 var(--cyan); }
+    96% { transform: none; }
+  }
+  @media (prefers-reduced-motion: reduce) { .glitch, .cursor { animation: none !important; } }
+  .hero-sub {
+    position: relative; z-index: 2;
+    margin-top: 20px; font-size: 16px; letter-spacing: 2px; color: #C9C9F2;
+  }
+  .hero-sub b { color: var(--gold); font-weight: 400; text-shadow: 0 0 8px rgba(255,215,0,0.7); }
+  .hero-btns { position: relative; z-index: 2; margin-top: 34px; display: flex; gap: 20px; }
+  .btn {
+    font-family: 'Share Tech Mono', monospace; font-size: 14px; letter-spacing: 3px; text-transform: uppercase;
+    padding: 15px 32px; cursor: pointer; background: transparent;
+    transition: box-shadow .2s, background .2s, color .2s;
+  }
+  .btn-pink {
+    color: #fff; border: 2px solid var(--hot-pink);
+    box-shadow: 0 0 16px rgba(255,0,110,0.6), inset 0 0 16px rgba(255,0,110,0.25);
+    text-shadow: 0 0 8px var(--hot-pink);
+  }
+  .btn-pink:hover { background: rgba(255,0,110,0.25); box-shadow: 0 0 30px rgba(255,0,110,0.9), inset 0 0 24px rgba(255,0,110,0.4); }
+  .btn-cyan {
+    color: var(--cyan); border: 2px solid var(--cyan);
+    box-shadow: 0 0 16px rgba(0,255,255,0.4), inset 0 0 16px rgba(0,255,255,0.15);
+    text-shadow: 0 0 8px var(--cyan);
+  }
+  .btn-cyan:hover { background: rgba(0,255,255,0.15); box-shadow: 0 0 30px rgba(0,255,255,0.7), inset 0 0 24px rgba(0,255,255,0.3); }
+
+  /* ---------- sections ---------- */
+  section { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 70px 40px; }
+  .sec-title {
+    font-family: 'Orbitron', monospace; font-weight: 700; font-size: 30px; letter-spacing: 4px; text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .t-cyan { color: var(--cyan); text-shadow: 0 0 12px rgba(0,255,255,0.7); }
+  .t-pink { color: var(--hot-pink); text-shadow: 0 0 12px rgba(255,0,110,0.7); }
+  .sec-sub { color: #8888B8; font-size: 13.5px; letter-spacing: 2px; margin-bottom: 36px; }
+
+  /* lineup */
+  .lineup { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .artist {
+    background: var(--deep);
+    border: 1px solid rgba(0,255,255,0.3);
+    padding: 26px 24px;
+    position: relative;
+    transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease;
+  }
+  .artist::before {
+    content: attr(data-day);
+    position: absolute; top: -1px; right: -1px;
+    font-size: 10.5px; letter-spacing: 2px; color: var(--black);
+    background: var(--cyan); padding: 4px 10px;
+  }
+  .artist:hover {
+    transform: translateY(-5px);
+    border-color: var(--hot-pink);
+    box-shadow: 0 0 24px rgba(255,0,110,0.45);
+  }
+  .artist:hover::before { background: var(--hot-pink); color: #fff; }
+  .a-wave { height: 34px; margin-bottom: 18px; }
+  .a-wave svg { width: 100%; height: 100%; }
+  .artist h3 { font-family: 'Orbitron', monospace; font-size: 19px; font-weight: 700; letter-spacing: 2px; color: #fff; margin-bottom: 6px; }
+  .artist p { font-size: 12.5px; color: #8888B8; letter-spacing: 1px; line-height: 1.6; }
+  .artist .time { display: inline-block; margin-top: 14px; font-size: 12px; color: var(--gold); border: 1px dashed rgba(255,215,0,0.5); padding: 4px 10px; }
+
+  /* tickets */
+  .tickets-bg { background: linear-gradient(180deg, transparent, rgba(93,52,208,0.12), transparent); }
+  .tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .tier {
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(26,26,46,0.75);
+    padding: 30px 26px; text-align: center;
+    transition: transform .25s ease, box-shadow .25s ease;
+  }
+  .tier:hover { transform: translateY(-5px); }
+  .tier h3 { font-family: 'Orbitron', monospace; font-size: 15px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 16px; }
+  .price { font-family: 'Orbitron', monospace; font-size: 44px; font-weight: 900; margin-bottom: 4px; }
+  .per { font-size: 11.5px; color: #8888B8; letter-spacing: 2px; margin-bottom: 22px; }
+  .tier ul { list-style: none; font-size: 13px; color: #B9B9E6; line-height: 2.1; margin-bottom: 24px; }
+  .tier .btn { width: 100%; }
+  .tier-blue { border-color: rgba(0,128,255,0.5); } .tier-blue .price { color: var(--neon-blue); text-shadow: 0 0 14px rgba(0,128,255,0.8); }
+  .tier-blue:hover { box-shadow: 0 0 26px rgba(0,128,255,0.4); }
+  .tier-pink { border-color: var(--hot-pink); position: relative; box-shadow: 0 0 22px rgba(255,0,110,0.35); }
+  .tier-pink .price { color: var(--hot-pink); text-shadow: 0 0 14px rgba(255,0,110,0.8); }
+  .tier-pink:hover { box-shadow: 0 0 36px rgba(255,0,110,0.6); }
+  .tier-pink::before {
+    content: "▲ MOST WANTED"; position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+    background: var(--hot-pink); color: #fff; font-size: 10.5px; letter-spacing: 2px; padding: 3px 12px;
+  }
+  .tier-gold { border-color: rgba(255,215,0,0.5); } .tier-gold .price { color: var(--gold); text-shadow: 0 0 14px rgba(255,215,0,0.8); }
+  .tier-gold:hover { box-shadow: 0 0 26px rgba(255,215,0,0.35); }
+
+  /* terminal footer */
+  footer {
+    position: relative; z-index: 1;
+    border-top: 1px solid rgba(0,255,255,0.25);
+    padding: 30px 44px 36px;
+    background: rgba(11,11,20,0.9);
+    font-size: 13px; color: #8888B8; letter-spacing: 1px;
+  }
+  .term { max-width: 1120px; margin: 0 auto; }
+  .term .ln { line-height: 1.9; }
+  .term .p { color: var(--cyan); }
+  .term .ok { color: var(--gold); }
+  .cursor { display: inline-block; width: 9px; height: 15px; background: var(--cyan); vertical-align: -2px; animation: blink 1s steps(1) infinite; box-shadow: 0 0 8px var(--cyan); }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+  <nav>
+    <div class="logo">GRIDLOCK'86</div>
+    <div class="nav-links">
+      <a href="#lineup">Lineup</a>
+      <a href="#tickets">Tickets</a>
+      <a href="#">Venue</a>
+      <a href="#">FAQ</a>
+      <a href="#tickets" class="hot">Get Access ►</a>
+    </div>
+  </nav>
+
+  <header class="hero">
+    <div class="sun"></div>
+    <div class="floor"></div>
+    <div class="hero-tag">// Transmission incoming · Night sector 7 //</div>
+    <h1 class="glitch display">GRIDLOCK<br>'86</h1>
+    <p class="hero-sub">A synthwave night festival · <b>OCT 24-26 2086</b> · Neo Kowloon Waterfront</p>
+    <div class="hero-btns">
+      <button class="btn btn-pink">Secure tickets</button>
+      <button class="btn btn-cyan">Watch teaser</button>
+    </div>
+  </header>
+
+  <section id="lineup">
+    <h2 class="sec-title t-cyan">The Lineup</h2>
+    <p class="sec-sub">&gt; 18 ACTS · 3 NIGHTS · 100% ANALOG SYNTHS_</p>
+    <div class="lineup">
+      <article class="artist" data-day="FRI 24">
+        <div class="a-wave"><svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,17 20,17 28,4 40,30 52,10 64,24 80,17 110,17 118,6 130,28 142,12 160,22 176,17 200,17" fill="none" stroke="#00FFFF" stroke-width="2"/></svg></div>
+        <h3>LAZER MIRAGE</h3>
+        <p>Headliner. Retro-electro duo behind the "Chrome Sunset" trilogy, playing the full album on original 1986 hardware.</p>
+        <span class="time">01:00 — MAIN GRID STAGE</span>
+      </article>
+      <article class="artist" data-day="SAT 25">
+        <div class="a-wave"><svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,17 16,17 26,8 36,26 48,4 62,30 74,14 92,20 108,17 126,10 138,24 154,8 168,26 184,17 200,17" fill="none" stroke="#FF006E" stroke-width="2"/></svg></div>
+        <h3>VHS ORACLE</h3>
+        <p>Darksynth priestess of the Berlin underground. Expect fog, strobes and a wall of Jupiter-8s.</p>
+        <span class="time">23:30 — NEON VAULT</span>
+      </article>
+      <article class="artist" data-day="SUN 26">
+        <div class="a-wave"><svg viewBox="0 0 200 34" preserveAspectRatio="none"><polyline points="0,17 22,17 32,12 44,22 56,6 70,28 84,16 100,17 116,9 130,25 146,13 162,21 178,17 200,17" fill="none" stroke="#FFD700" stroke-width="2"/></svg></div>
+        <h3>MIDNIGHT FREEWAY</h3>
+        <p>Outrun royalty. Closing ceremony set synced to a 200-drone skyline show over the bay.</p>
+        <span class="time">00:00 — ROOFTOP CIRCUIT</span>
+      </article>
+    </div>
+  </section>
+
+  <section id="tickets" class="tickets-bg">
+    <h2 class="sec-title t-pink">Access Passes</h2>
+    <p class="sec-sub">&gt; ALL PRICES IN NEO-CREDITS · CHIP IMPLANT NOT REQUIRED_</p>
+    <div class="tiers">
+      <div class="tier tier-blue">
+        <h3>Day Runner</h3>
+        <div class="price">Ⓝ89</div>
+        <div class="per">single night access</div>
+        <ul>
+          <li>+ One night, all stages</li>
+          <li>+ Holo-wristband</li>
+          <li>+ Arcade hall entry</li>
+        </ul>
+        <button class="btn btn-cyan">Select</button>
+      </div>
+      <div class="tier tier-pink">
+        <h3>Full Circuit</h3>
+        <div class="price">Ⓝ219</div>
+        <div class="per">3-night festival pass</div>
+        <ul>
+          <li>+ All nights, all stages</li>
+          <li>+ Synth museum tour</li>
+          <li>+ Limited cassette EP</li>
+          <li>+ Re-entry privileges</li>
+        </ul>
+        <button class="btn btn-pink">Select</button>
+      </div>
+      <div class="tier tier-gold">
+        <h3>Chrome Elite</h3>
+        <div class="price">Ⓝ499</div>
+        <div class="per">vip · 40 units only</div>
+        <ul>
+          <li>+ Backstage grid access</li>
+          <li>+ Rooftop drone show seats</li>
+          <li>+ Artist meet protocol</li>
+        </ul>
+        <button class="btn btn-cyan">Select</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="term">
+      <div class="ln"><span class="p">gridlock@mainframe:~$</span> query --next-transmission</div>
+      <div class="ln"><span class="ok">[OK]</span> Lineup wave 2 drops 09.01.2086 · 12:00 UTC. Stay tuned, night riders.</div>
+      <div class="ln"><span class="p">gridlock@mainframe:~$</span> © 2086 Gridlock Festival Group · Neo Kowloon <span class="cursor"></span></div>
+    </div>
+  </footer>
+</body>
+</html>

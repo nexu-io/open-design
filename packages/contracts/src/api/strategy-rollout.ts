@@ -1,6 +1,6 @@
 export type OdNextRolloutMode = 'off' | 'observe' | 'active';
 
-export type OdNextRolloutTaskType = 'prototype' | 'ppt' | 'marketing' | 'hyperframes';
+export type OdNextRolloutTaskType = 'prototype' | 'ppt' | 'marketing' | 'hyperframes' | 'generic';
 
 /**
  * Which authority decided the requested mode.

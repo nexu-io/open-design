@@ -1,6 +1,6 @@
 # Skills
 
-This directory contains **functional skills**: capabilities the agent invokes to do work on user input, such as briefs, audits, utilities, and asset packagers. Each folder has a `SKILL.md` and may include `assets/` or `references/`.
+This directory is reserved for **functional skills**: capabilities the agent invokes to do work on user input, such as briefs, audits, utilities, and asset packagers. This routing-validation branch intentionally ships no functional Skill folders. Its pinned template corpus is documented in [`skill-discovery-routing-catalog.md`](../specs/current/skill-discovery-routing-catalog.md).
 
 Rendering shapes for prototypes, decks, documents, images, video, and audio belong in [`design-templates/`](../design-templates/), not here. The classification rule and migration history live in [`specs/current/skills-and-design-templates.md`](../specs/current/skills-and-design-templates.md).
 
@@ -12,4 +12,4 @@ For a rendering template, follow [`docs/skills-contributing.md`](../docs/skills-
 
 ## License
 
-Skills in this directory are Apache-2.0 unless their own `LICENSE` says otherwise. [`web-clone/`](web-clone/) is adapted from [Jane-xiaoer/claude-skill-web-clone](https://github.com/Jane-xiaoer/claude-skill-web-clone). The MIT-licensed `guizang-ppt` rendering template lives under [`design-templates/guizang-ppt/`](../design-templates/guizang-ppt/).
+Preserve each imported Skill's own license and attribution alongside its files.

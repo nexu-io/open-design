@@ -34,6 +34,7 @@ import type {
   WorkspaceInvalidationSsePayload,
   ProjectWorkspaceScope,
   ProjectScenarioTaskProfile,
+  ProjectSkillDiscovery,
   WorkspaceProjectSummary,
 } from '@open-design/contracts';
 import { DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID } from '@open-design/contracts';
@@ -255,6 +256,7 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
   automaticStrategyTaskProfile?: ProjectScenarioTaskProfile;
+  skillDiscovery?: ProjectSkillDiscovery;
   /** Official example card the user picked under the automatic route. */
   exampleReference?: CreateProjectExampleReference;
   initialRunContext?: RunContextSelection | null;
@@ -3008,6 +3010,9 @@ function AppInner() {
           ...(input.pluginInputs ? { pluginInputs: input.pluginInputs } : {}),
           ...(input.automaticStrategyTaskProfile
             ? { automaticStrategyTaskProfile: input.automaticStrategyTaskProfile }
+            : {}),
+          ...(input.skillDiscovery
+            ? { skillDiscovery: input.skillDiscovery }
             : {}),
           ...(input.exampleReference
             ? { exampleReference: input.exampleReference }

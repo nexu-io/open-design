@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenDesign · New Project</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+    --bg: #FAF9F7;
+    --surface: #FFFFFF;
+    --border: #E8E4DE;
+    --border-focus: #4A6FA5;
+    --text-primary: rgba(0,0,0,.88);
+    --text-secondary: rgba(0,0,0,.55);
+    --text-disabled: rgba(0,0,0,.28);
+    --accent: #4A6FA5;
+    --accent-light: #EEF3FA;
+    --success: #2D7A4F;
+    --success-light: #EAF5EE;
+    --error: #B94040;
+    --error-light: #FDF0F0;
+    --warning: #96600A;
+    --step-inactive: #D0CBC3;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+    --shadow-md: 0 4px 16px rgba(0,0,0,.08), 0 2px 6px rgba(0,0,0,.04);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "DM Sans", -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+
+  .logo-mark {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .logo-mark svg { color: #fff; }
+
+  .topbar-right {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* ── Main content ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 16px 80px;
+  }
+
+  .wizard-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-md);
+    width: 100%;
+    max-width: 640px;
+    overflow: hidden;
+  }
+
+  /* ── Step track ── */
+  .steps-header {
+    padding: 28px 32px 0;
+  }
+
+  .steps-track {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 32px;
+  }
+
+  .step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    position: relative;
+  }
+
+  .step-item:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: calc(50% + 20px);
+    right: calc(-50% + 20px);
+    height: 1px;
+    background: var(--step-inactive);
+    transition: background 500ms var(--ease-out);
+  }
+
+  .step-item.done:not(:last-child)::after {
+    background: var(--accent);
+  }
+
+  .step-dot {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 2px solid var(--step-inactive);
+    background: var(--surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "DM Mono", monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--step-inactive);
+    transition: border-color 300ms var(--ease-out), background 300ms var(--ease-out), color 300ms var(--ease-out), box-shadow 300ms var(--ease-out);
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-item.active .step-dot {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 0 4px var(--accent-light);
+  }
+
+  .step-item.done .step-dot {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .step-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--step-inactive);
+    white-space: nowrap;
+    transition: color 300ms var(--ease-out);
+    text-align: center;
+  }
+
+  .step-item.active .step-label { color: var(--accent); }
+  .step-item.done .step-label { color: var(--text-secondary); }
+
+  /* ── Step panels ── */
+  .step-panel {
+    padding: 0 32px 32px;
+    display: none;
+    animation: panelIn 280ms var(--ease-out) both;
+  }
+
+  .step-panel.active { display: block; }
+
+  @keyframes panelIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    text-wrap: balance;
+  }
+
+  .panel-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  /* ── Form ── */
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  label .required {
+    color: var(--error);
+    margin-left: 2px;
+  }
+
+  .input-wrap {
+    position: relative;
+  }
+
+  input, select {
+    width: 100%;
+    height: 42px;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: var(--surface);
+    outline: none;
+    transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  input::placeholder { color: var(--text-disabled); }
+
+  input:focus, select:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(74,111,165,.12);
+  }
+
+  input.error, select.error {
+    border-color: var(--error);
+    background: var(--error-light);
+  }
+
+  input.valid {
+    border-color: var(--success);
+  }
+
+  .select-wrap {
+    position: relative;
+  }
+
+  .select-wrap::after {
+    content: '';
+    pointer-events: none;
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--text-secondary);
+  }
+
+  .field-error {
+    font-size: 12px;
+    color: var(--error);
+    display: none;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .field-error.show { display: flex; }
+
+  .field-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  /* ── Template list ── */
+  .flight-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .flight-card {
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color 200ms var(--ease-out), background 200ms var(--ease-out), transform 150ms var(--ease-out);
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    touch-action: manipulation;
+    position: relative;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .flight-card:hover { border-color: var(--accent); background: var(--accent-light); }
+  }
+
+  .flight-card:active { transform: scale(0.98); }
+
+  .flight-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+
+  .flight-card.selected::before {
+    content: '';
+    position: absolute;
+    top: -1.5px;
+    left: -1.5px;
+    right: -1.5px;
+    bottom: -1.5px;
+    border-radius: 11px;
+    border: 1.5px solid var(--accent);
+    pointer-events: none;
+  }
+
+  .flight-route {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .flight-arrow { color: var(--text-secondary); font-size: 12px; }
+
+  .flight-meta {
+    display: flex;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .flight-tag {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(0,0,0,.06);
+    color: var(--text-secondary);
+  }
+
+  .flight-price {
+    text-align: right;
+  }
+
+  .price-amount {
+    font-family: "DM Mono", monospace;
+    font-size: 18px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    display: block;
+  }
+
+  .price-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .selected-badge {
+    display: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .flight-card.selected .selected-badge { display: flex; }
+
+  /* ── Review summary ── */
+  .confirm-block {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .confirm-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+  }
+
+  .confirm-row:last-child { border-bottom: none; }
+
+  .confirm-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .confirm-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: right;
+  }
+
+  .confirm-total {
+    background: var(--accent-light);
+    font-weight: 600;
+  }
+
+  .confirm-total .confirm-value {
+    font-family: "DM Mono", monospace;
+    font-size: 18px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .payment-section {
+    margin-bottom: 20px;
+  }
+
+  .payment-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 11px;
+  }
+
+  /* ── Buttons ── */
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 28px;
+  }
+
+  .btn {
+    height: 44px;
+    border-radius: 9px;
+    border: none;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 20px;
+    transition: transform 160ms var(--ease-out), background 150ms, box-shadow 150ms;
+    touch-action: manipulation;
+  }
+
+  .btn:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    flex: 1;
+    box-shadow: 0 1px 3px rgba(74,111,165,.3);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover { background: #3A5F95; box-shadow: 0 2px 8px rgba(74,111,165,.4); }
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1.5px solid var(--border);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn-secondary:hover { background: var(--bg); border-color: rgba(0,0,0,.2); }
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ── Success state ── */
+  .success-panel {
+    display: none;
+    padding: 48px 32px;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .success-panel.active { display: flex; }
+
+  .success-icon-wrap {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--success-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    animation: successPop 600ms var(--ease-out) both;
+  }
+
+  @keyframes successPop {
+    0%   { transform: scale(0.6); opacity: 0; }
+    60%  { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); }
+  }
+
+  .success-checkmark {
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+    animation: drawCheck 500ms var(--ease-out) 200ms forwards;
+  }
+
+  @keyframes drawCheck {
+    to { stroke-dashoffset: 0; }
+  }
+
+  .success-title {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+  }
+
+  .success-subtitle {
+    font-size: 15px;
+    color: var(--text-secondary);
+    max-width: 360px;
+    line-height: 1.6;
+    margin-bottom: 8px;
+  }
+
+  .booking-code {
+    font-family: "DM Mono", monospace;
+    font-size: 22px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    background: var(--accent-light);
+    border: 1.5px solid rgba(74,111,165,.2);
+    padding: 12px 24px;
+    border-radius: 10px;
+    margin: 20px 0;
+    animation: fadeUp 400ms var(--ease-out) 500ms both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .success-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+    animation: fadeUp 400ms var(--ease-out) 700ms both;
+  }
+
+  /* ── Live region ── */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 600px) {
+    .main { padding: 20px 12px 60px; }
+    .steps-header { padding: 20px 20px 0; }
+    .step-panel { padding: 0 20px 24px; }
+    .field-row { grid-template-columns: 1fr; }
+    .success-panel { padding: 32px 20px; }
+    .panel-title { font-size: 18px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar" role="banner">
+  <a class="logo" href="#" aria-label="OpenDesign home">
+    <div class="logo-mark" aria-hidden="true">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21 4 19 4c-1.5 0-3 .5-4.5 2L11 9.2 2.8 7.4c-.5-.1-.9.2-1 .7L1.5 9c-.1.5.2 1 .7 1.2l6.6 2.6L5.5 17l-2 .5a.5.5 0 0 0 0 1l4.8 1.2 1.2 4.8a.5.5 0 0 0 1 0l.5-2 3.8-3.3 2.6 6.6c.2.5.7.8 1.2.7l.8-.3c.5-.1.8-.5.7-1z"/>
+      </svg>
+    </div>
+    OpenDesign
+  </a>
+  <span class="topbar-right">New project wizard</span>
+</header>
+
+<div aria-live="polite" class="sr-only" id="live-region"></div>
+
+<main class="main" id="main">
+  <div class="wizard-card" role="main">
+
+    <!-- Step track -->
+    <div class="steps-header">
+      <nav class="steps-track" aria-label="Setup progress">
+        <div class="step-item active" id="step-nav-1" role="listitem">
+          <div class="step-dot" aria-hidden="true"><span id="step-dot-1">1</span></div>
+          <span class="step-label">Pick a template</span>
+        </div>
+        <div class="step-item" id="step-nav-2" role="listitem">
+          <div class="step-dot" aria-hidden="true"><span id="step-dot-2">2</span></div>
+          <span class="step-label">Design system</span>
+        </div>
+        <div class="step-item" id="step-nav-3" role="listitem">
+          <div class="step-dot" aria-hidden="true"><span id="step-dot-3">3</span></div>
+          <span class="step-label">Generate</span>
+        </div>
+      </nav>
+    </div>
+
+    <!-- Step 1: pick a template -->
+    <section class="step-panel active" id="panel-1" aria-labelledby="title-1">
+      <h1 class="panel-title" id="title-1">Pick a starting template</h1>
+      <p class="panel-subtitle">New project · every template is a working file the agent remixes to your brand</p>
+
+      <div class="flight-list" role="radiogroup" aria-label="Available templates">
+        <div class="flight-card" id="tpl-landing" role="radio" aria-checked="false" tabindex="0" data-flight="LANDING" data-price="0">
+          <div>
+            <div class="flight-route">
+              <span>Prompt</span>
+              <span class="flight-arrow">→</span>
+              <span>Landing page</span>
+            </div>
+            <div class="flight-meta">
+              <span class="flight-tag">web-landing</span>
+              <span class="flight-tag">8 sections</span>
+              <span class="flight-tag">Responsive</span>
+            </div>
+          </div>
+          <div class="flight-price">
+            <span class="price-amount">1.2K</span>
+            <span class="price-label">remixes</span>
+          </div>
+          <div class="selected-badge" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="2 6 5 9 10 3"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="flight-card" id="tpl-deck" role="radio" aria-checked="false" tabindex="0" data-flight="DECK" data-price="0">
+          <div>
+            <div class="flight-route">
+              <span>Prompt</span>
+              <span class="flight-arrow">→</span>
+              <span>Pitch deck</span>
+            </div>
+            <div class="flight-meta">
+              <span class="flight-tag">deck-editorial</span>
+              <span class="flight-tag">16 slides</span>
+              <span class="flight-tag">16:9</span>
+            </div>
+          </div>
+          <div class="flight-price">
+            <span class="price-amount">864</span>
+            <span class="price-label">remixes</span>
+          </div>
+          <div class="selected-badge" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="2 6 5 9 10 3"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="flight-card" id="tpl-imagery" role="radio" aria-checked="false" tabindex="0" data-flight="IMAGERY" data-price="0">
+          <div>
+            <div class="flight-route">
+              <span>Prompt</span>
+              <span class="flight-arrow">→</span>
+              <span>Brand imagery</span>
+            </div>
+            <div class="flight-meta">
+              <span class="flight-tag">image-set</span>
+              <span class="flight-tag">6 images</span>
+              <span class="flight-tag">3 aspect ratios</span>
+            </div>
+          </div>
+          <div class="flight-price">
+            <span class="price-amount">537</span>
+            <span class="price-label">remixes</span>
+          </div>
+          <div class="selected-badge" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="2 6 5 9 10 3"/>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <p id="flight-select-error" class="field-error" role="alert" style="margin-top:12px;">Pick a template to continue</p>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="step1-next" type="button" aria-describedby="flight-select-error">
+          Next: design system
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 2: design system -->
+    <section class="step-panel" id="panel-2" aria-labelledby="title-2">
+      <h2 class="panel-title" id="title-2">Choose your design system</h2>
+      <p class="panel-subtitle">Tell the agent how your brand looks. Every artifact will follow these rules.</p>
+
+      <form id="passenger-form" novalidate>
+        <div class="field-group">
+          <div class="field-row">
+            <div class="field">
+              <label for="project-name">Project name <span class="required" aria-hidden="true">*</span></label>
+              <input type="text" id="project-name" name="projectName" placeholder="Q3 marketing site…" autocomplete="off" required aria-required="true" aria-describedby="project-name-error">
+              <span class="field-error" id="project-name-error" role="alert">Enter a project name</span>
+            </div>
+            <div class="field">
+              <label for="brand-name">Brand name <span class="required" aria-hidden="true">*</span></label>
+              <input type="text" id="brand-name" name="brandName" placeholder="Acme Studio…" autocomplete="organization" required aria-required="true" aria-describedby="brand-name-error">
+              <span class="field-error" id="brand-name-error" role="alert">Enter a brand name</span>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="accent-color">Accent color <span class="required" aria-hidden="true">*</span></label>
+            <input type="text" id="accent-color" name="accentColor" placeholder="#4A6FA5…" maxlength="7" autocomplete="off" spellcheck="false" required aria-required="true" aria-describedby="accent-color-error accent-color-hint">
+            <span class="field-error" id="accent-color-error" role="alert">Enter a six-digit hex color</span>
+            <span class="field-hint" id="accent-color-hint">Six hex digits, with or without the leading #</span>
+          </div>
+
+          <div class="field">
+            <label for="heading-font">Heading font <span class="required" aria-hidden="true">*</span></label>
+            <input type="text" id="heading-font" name="headingFont" placeholder="Space Grotesk…" autocomplete="off" spellcheck="false" required aria-required="true" aria-describedby="heading-font-error">
+            <span class="field-error" id="heading-font-error" role="alert">Enter a heading font</span>
+          </div>
+
+          <div class="field">
+            <label for="email">Email for finished files</label>
+            <input type="email" id="email" name="email" placeholder="you@studio.com…" autocomplete="email" spellcheck="false" aria-describedby="email-error">
+            <span class="field-error" id="email-error" role="alert">Enter a valid email address</span>
+          </div>
+        </div>
+      </form>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step2-back" type="button">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 7H3M7 3L3 7l4 4"/></svg>
+          Back
+        </button>
+        <button class="btn btn-primary" id="step2-next" type="button">
+          Next: review and generate
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h8M7 3l4 4-4 4"/></svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 3: generate -->
+    <section class="step-panel" id="panel-3" aria-labelledby="title-3">
+      <h2 class="panel-title" id="title-3">Review and generate</h2>
+      <p class="panel-subtitle">Check the setup, pick which key to run on, and hand it to the agent</p>
+
+      <div class="confirm-block" id="confirm-summary">
+        <div class="confirm-row">
+          <span class="confirm-label">Template</span>
+          <span class="confirm-value" id="confirm-flight">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-label">Design system</span>
+          <span class="confirm-value" id="confirm-time">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-label">Project</span>
+          <span class="confirm-value" id="confirm-passenger">—</span>
+        </div>
+        <div class="confirm-row">
+          <span class="confirm-label">Heading font</span>
+          <span class="confirm-value" id="confirm-phone">—</span>
+        </div>
+        <div class="confirm-row confirm-total">
+          <span class="confirm-label" style="font-weight:600;color:var(--text-primary)">Output</span>
+          <span class="confirm-value" id="confirm-price">—</span>
+        </div>
+      </div>
+
+      <div class="payment-section">
+        <p class="payment-title">Model provider (BYOK)</p>
+        <div class="field-group">
+          <div class="field">
+            <label for="pay-method">Run with your own key <span class="required" aria-hidden="true">*</span></label>
+            <div class="select-wrap">
+              <select id="pay-method" name="payMethod" required aria-required="true" aria-describedby="pay-method-error">
+                <option value="">Choose a key…</option>
+                <option value="anthropic">Your Anthropic key</option>
+                <option value="openai">Your OpenAI key</option>
+                <option value="google">Your Google key</option>
+                <option value="other">Another provider key</option>
+              </select>
+            </div>
+            <span class="field-error" id="pay-method-error" role="alert">Choose which key to run with</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-secondary" id="step3-back" type="button">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 7H3M7 3L3 7l4 4"/></svg>
+          Back
+        </button>
+        <button class="btn btn-primary" id="step3-submit" type="button">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.5l-6 6L3 7.5"/></svg>
+          Generate project
+        </button>
+      </div>
+    </section>
+
+    <!-- Success state -->
+    <div class="success-panel" id="success-panel" role="status" aria-live="assertive" aria-label="Project created">
+      <div class="success-icon-wrap" aria-hidden="true">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <circle cx="20" cy="20" r="18" stroke="#2D7A4F" stroke-width="2" fill="none"/>
+          <polyline class="success-checkmark" points="12,21 18,27 28,13" stroke="#2D7A4F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+        </svg>
+      </div>
+      <h2 class="success-title">Project created</h2>
+      <p class="success-subtitle">The agent is generating your first draft now. It will appear in your workspace, styled to your design system.</p>
+      <div class="booking-code" id="booking-code" aria-label="Project ID" translate="no">OD-2026-831047</div>
+      <p class="success-meta">You can close this window; generation continues in your workspace</p>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  'use strict';
+
+  // ── State ──
+  const state = {
+    currentStep: 1,
+    selectedFlight: null,
+    flightData: {
+      LANDING: { label: 'Landing page · web-landing', output: 'Clickable prototype' },
+      DECK:    { label: 'Pitch deck · deck-editorial', output: '16-slide deck' },
+      IMAGERY: { label: 'Brand imagery · image-set', output: '6-image set' },
+    },
+    passengerData: {}
+  };
+
+  const announce = (msg) => {
+    const el = document.getElementById('live-region');
+    el.textContent = '';
+    requestAnimationFrame(() => { el.textContent = msg; });
+  };
+
+  // ── Step navigation ──
+  function goToStep(n) {
+    const panels = document.querySelectorAll('.step-panel');
+    panels.forEach(p => p.classList.remove('active'));
+    document.getElementById(`panel-${n}`)?.classList.add('active');
+
+    const navItems = document.querySelectorAll('.step-item');
+    navItems.forEach((item, i) => {
+      item.classList.remove('active', 'done');
+      if (i + 1 < n) item.classList.add('done');
+      if (i + 1 === n) item.classList.add('active');
+    });
+
+    // Swap in checkmark icons
+    for (let i = 1; i <= 3; i++) {
+      const dot = document.getElementById(`step-dot-${i}`);
+      if (i < n) {
+        dot.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2.5 7 5.5 10 11.5 4"/></svg>`;
+      } else {
+        dot.textContent = i;
+      }
+    }
+
+    state.currentStep = n;
+    announce(`Step ${n}: ${['Pick a template','Design system','Generate'][n-1]}`);
+
+    // Focus the panel title
+    const title = document.getElementById(`title-${n}`);
+    if (title) { title.setAttribute('tabindex', '-1'); title.focus(); }
+  }
+
+  // ── Template selection ──
+  document.querySelectorAll('.flight-card').forEach(card => {
+    const select = () => {
+      document.querySelectorAll('.flight-card').forEach(c => {
+        c.classList.remove('selected');
+        c.setAttribute('aria-checked', 'false');
+      });
+      card.classList.add('selected');
+      card.setAttribute('aria-checked', 'true');
+      state.selectedFlight = card.dataset.flight;
+      document.getElementById('flight-select-error').classList.remove('show');
+      announce(`Selected ${state.flightData[state.selectedFlight].label}`);
+    };
+
+    card.addEventListener('click', select);
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(); }
+    });
+  });
+
+  // ── Step 1 next ──
+  document.getElementById('step1-next').addEventListener('click', () => {
+    if (!state.selectedFlight) {
+      document.getElementById('flight-select-error').classList.add('show');
+      announce('Pick a template to continue');
+      return;
+    }
+    goToStep(2);
+  });
+
+  // ── Validators ──
+  const validators = {
+    projectName: v => v.trim().length >= 1,
+    brandName: v => v.trim().length >= 1,
+    accentColor: v => /^#?[0-9a-fA-F]{6}$/.test(v.trim()),
+    headingFont: v => v.trim().length >= 2,
+    email: v => v === '' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+  };
+
+  function validateField(input) {
+    const name = input.name;
+    const val = input.value;
+    const errEl = document.getElementById(`${input.id}-error`);
+    if (!validators[name]) return true;
+    const ok = validators[name](val);
+    input.classList.toggle('error', !ok && (input.required || val !== ''));
+    input.classList.toggle('valid', ok);
+    if (errEl) errEl.classList.toggle('show', !ok && (input.required || val !== ''));
+    return ok || (!input.required && val === '');
+  }
+
+  // Validate on blur
+  document.querySelectorAll('#passenger-form input').forEach(input => {
+    input.addEventListener('blur', () => validateField(input));
+  });
+
+  // ── Step 2 buttons ──
+  document.getElementById('step2-back').addEventListener('click', () => goToStep(1));
+  document.getElementById('step2-next').addEventListener('click', () => {
+    const inputs = document.querySelectorAll('#passenger-form input[required]');
+    let allValid = true;
+    let firstError = null;
+    inputs.forEach(input => {
+      const ok = validateField(input);
+      if (!ok && !firstError) firstError = input;
+      if (!ok) allValid = false;
+    });
+    // Email optional
+    const emailInput = document.getElementById('email');
+    const emailOk = validateField(emailInput);
+    if (!emailOk) { allValid = false; if (!firstError) firstError = emailInput; }
+
+    if (!allValid) {
+      firstError?.focus();
+      announce('Fix the highlighted fields to continue');
+      return;
+    }
+    state.passengerData = {
+      projectName: document.getElementById('project-name').value.trim(),
+      brandName: document.getElementById('brand-name').value.trim(),
+      accentColor: document.getElementById('accent-color').value.trim(),
+      headingFont: document.getElementById('heading-font').value.trim(),
+    };
+    fillConfirm();
+    goToStep(3);
+  });
+
+  // ── Fill the review summary ──
+  function fillConfirm() {
+    const fd = state.flightData[state.selectedFlight];
+    const accent = state.passengerData.accentColor.startsWith('#')
+      ? state.passengerData.accentColor
+      : `#${state.passengerData.accentColor}`;
+    document.getElementById('confirm-flight').textContent = fd.label;
+    document.getElementById('confirm-time').textContent = `${state.passengerData.brandName} · ${accent.toUpperCase()}`;
+    document.getElementById('confirm-passenger').textContent = state.passengerData.projectName;
+    document.getElementById('confirm-phone').textContent = state.passengerData.headingFont;
+    document.getElementById('confirm-price').textContent = fd.output;
+  }
+
+  // ── Step 3 buttons ──
+  document.getElementById('step3-back').addEventListener('click', () => goToStep(2));
+  document.getElementById('step3-submit').addEventListener('click', () => {
+    const payMethod = document.getElementById('pay-method');
+    const errEl = document.getElementById('pay-method-error');
+    if (!payMethod.value) {
+      payMethod.classList.add('error');
+      errEl.classList.add('show');
+      payMethod.focus();
+      announce('Choose which key to run with');
+      return;
+    }
+    payMethod.classList.remove('error');
+    errEl.classList.remove('show');
+    submitOrder();
+  });
+
+  document.getElementById('pay-method').addEventListener('change', function() {
+    this.classList.remove('error');
+    document.getElementById('pay-method-error').classList.remove('show');
+  });
+
+  // ── Kick off generation ──
+  function submitOrder() {
+    const btn = document.getElementById('step3-submit');
+    btn.disabled = true;
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke-opacity=".3"/><path d="M8 2a6 6 0 0 1 6 6" style="stroke-dasharray:20;animation:spin 600ms linear infinite"/></svg> Generating…`;
+
+    // Add the spin animation
+    const style = document.createElement('style');
+    style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+
+    setTimeout(() => {
+      // Hide all panels, show success
+      document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.step-item').forEach(item => {
+        item.classList.remove('active');
+        item.classList.add('done');
+      });
+      document.querySelectorAll('.step-dot span').forEach((dot, i) => {
+        dot.innerHTML = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2.5 7 5.5 10 11.5 4"/></svg>`;
+      });
+      document.getElementById('success-panel').classList.add('active');
+      announce('Project created. Project ID OD-2026-831047');
+    }, 1600);
+  }
+</script>
+</body>
+</html>

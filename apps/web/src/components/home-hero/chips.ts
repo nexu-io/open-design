@@ -23,22 +23,9 @@ import type { ProjectKind, ProjectMetadata } from '@open-design/contracts';
 import type { DefaultScenarioPluginId } from '@open-design/contracts';
 import type { IconName } from '../Icon';
 
-// Plugin ids the chip rail can dispatch to. Most chips route to a
-// `DefaultScenarioPluginId` so the same fallback table the daemon
-// uses for naked Home queries stays the source of truth. Specialised
-// chips (HyperFrames lives under `plugins/_official/examples/hyperframes/`
-// and surfaces as the `example-hyperframes` bundled plugin id) bypass
-// the default table by carrying their own plugin id directly. The
-// curated union keeps typo safety while letting the rail evolve
-// independently of the default-binding mapping.
-export type ChipScenarioPluginId =
-  | DefaultScenarioPluginId
-  | 'example-hyperframes'
-  // Powered-preview scenarios: real-time GPU / off-main-thread artifacts that
-  // render in the cross-origin-isolated "powered preview" iframe. Kept as
-  // explicit members — like example-hyperframes — so the rail can name a
-  // scenario the default table has not mapped yet; both are mapped today.
-  | 'example-webgl-experience';
+// Chips share the daemon's scenario defaults; visual Skills are not pinned
+// merely by choosing an output type.
+export type ChipScenarioPluginId = DefaultScenarioPluginId;
 
 export type ChipAction =
   | {
@@ -124,20 +111,18 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     icon: 'artboard',
     group: 'create',
     description: 'Interactive app mockups',
-    // Prototype now binds to the bundled `example-web-prototype` plugin,
-    // which ships `assets/template.html` (single-file HTML prototype
-    // seed), `references/layouts.md` (paste-ready section layouts), and
-    // a P0 checklist. The previous routing to the generic
-    // od-new-generation router left the agent to invent every section's
-    // CSS, producing inconsistent type scales and density between turns.
-    // Web-prototype's manifest owns the editable `{{fidelity}}`,
-    // `{{artifactKind}}`, `{{audience}}`, `{{designSystem}}`, and
-    // `{{template}}` slots; Home renders those placeholders inline.
+    // The automatic task-profile route owns execution guidance. The retained
+    // generic scenario supplies the composer entry without selecting a template.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-prototype',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
       automaticDefault: true,
+      inputs: {
+        artifactKind: 'web prototype',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
     },
   },
   {
@@ -147,16 +132,18 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'Source-first site reproduction',
     hint: 'Paste a target URL, then reconstruct the site and audit the clone.',
-    // Website reproduction binds the bundled `example-web-clone` plugin.
-    // Stored as a prototype so the artifact keeps prototype preview
-    // behavior; `intent: 'web-clone'` is what routes the scenario plugin
-    // (see `defaultScenarioPluginIdForProjectMetadata`) and splits these
-    // projects into their own `web_clone` analytics kind.
+    // The intent preserves clone-specific behavior and analytics while the
+    // generic scenario supplies the creation entry.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-clone',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
       automaticDefault: true,
+      inputs: {
+        artifactKind: 'website reproduction',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
       projectMetadata: {
         kind: 'prototype',
         intent: 'web-clone',
@@ -175,21 +162,17 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     icon: 'present',
     group: 'create',
     description: 'Presentations & pitch decks',
-    // Slide deck binds to `example-simple-deck`, which ships a 353-line
-    // `assets/template.html` (the 1920×1080 + scale-to-fit + nav + print
-    // framework paired with proven slide CSS), 8 paste-ready layouts in
-    // `references/layouts.md` (cover, body, big-stat, three-point,
-    // pipeline, dark quote, before/after, closing), and a P0/P1/P2
-    // checklist that catches overflow at 1280×800 / 1440×900. The
-    // previous routing to od-new-generation gave the agent only the
-    // generic deck-framework directive — which fixed nav but not slide
-    // layout — so density bugs (168px headline + absolute footer
-    // collision) shipped on default decks.
+    // The deck task profile supplies execution guidance without a fixed seed.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-simple-deck',
+      pluginId: 'od-new-generation',
       projectKind: 'deck',
       automaticDefault: true,
+      inputs: {
+        artifactKind: 'presentation deck',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
     },
   },
   {
@@ -229,15 +212,18 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'Motion graphics & loops',
     hint: 'Author HTML-based motion: captions, audio-reactive visuals, scene transitions.',
-    // HyperFrames is its own bundled scenario (motion-graphics
-    // specialisation of Video). It surfaces in PluginsHomeSection's
-    // primary category list, so the rail picks it up too rather than
-    // hiding the specialised bucket behind the generic Video chip.
+    // Exact intent keeps the HyperFrames task-profile route separate from
+    // ordinary video generation without selecting a motion template.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-hyperframes',
+      pluginId: 'od-new-generation',
       projectKind: 'video',
       automaticDefault: true,
+      inputs: {
+        artifactKind: 'HTML motion composition',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
       projectMetadata: {
         kind: 'video',
         intent: 'hyperframes',
@@ -252,14 +238,17 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'Shaders, 3D & generative GPU visuals',
     hint: 'Build a full-screen real-time WebGL2 shader / 3D scene that runs live on the GPU.',
-    // Powered-preview scenario: binds the bundled `example-webgl-experience`
-    // plugin (shader/3D seed + P0 checklist). The artifact auto-detects into
-    // powered preview via its `getContext('webgl2')` call.
+    // The artifact auto-detects into powered preview via its WebGL context.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-webgl-experience',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
       automaticDefault: true,
+      inputs: {
+        artifactKind: 'WebGL experience',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
       projectMetadata: {
         kind: 'prototype',
         intent: 'webgl-experience',
@@ -276,9 +265,14 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     hint: 'Build a refreshable artifact backed by connector or local data.',
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-live-artifact',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
       automaticDefault: true,
+      inputs: {
+        artifactKind: 'data-backed live artifact',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
       projectMetadata: {
         kind: 'prototype',
         intent: 'live-artifact',
@@ -293,15 +287,17 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     group: 'create',
     description: 'Source-first site reproduction',
     hint: 'Paste a target URL, then reconstruct the site and audit the clone.',
-    // Website reproduction binds the bundled `example-web-clone` plugin.
-    // Stored as a prototype so the artifact keeps prototype preview
-    // behavior; `intent: 'web-clone'` is what routes the scenario plugin
-    // (see `defaultScenarioPluginIdForProjectMetadata`) and splits these
-    // projects into their own `web_clone` analytics kind.
+    // The intent preserves clone-specific behavior and analytics while the
+    // generic scenario supplies the creation entry.
     action: {
       kind: 'apply-scenario',
-      pluginId: 'example-web-clone',
+      pluginId: 'od-new-generation',
       projectKind: 'prototype',
+      inputs: {
+        artifactKind: 'website reproduction',
+        audience: 'the intended audience',
+        topic: 'the user brief',
+      },
       projectMetadata: {
         kind: 'prototype',
         intent: 'web-clone',

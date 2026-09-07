@@ -187,6 +187,25 @@ vi.mock('../../src/components/EntryView', () => ({
       </button>
       <button
         type="button"
+        onClick={() => {
+          void Promise.resolve(onCreateProject({
+            name: 'Discovery project',
+            skillId: null,
+            designSystemId: null,
+            pendingPrompt: 'Choose the right official Skill for this task',
+            autoSendFirstMessage: true,
+            metadata: { kind: 'other' },
+            skillDiscovery: {
+              mode: 'agent',
+              catalog: 'open-design-official',
+            },
+          })).catch(() => {});
+        }}
+      >
+        Create discovery project
+      </button>
+      <button
+        type="button"
         onClick={() => void onCreatePluginShareProject(
           'plugin-source',
           'publish-github',
@@ -1221,6 +1240,22 @@ describe('App project creation routing', () => {
     expect(window.sessionStorage.getItem('od:auto-send-prompt:project-new')).toBe(
       'Build the retained artifact prompt',
     );
+  });
+
+  it('passes Home agent Skill discovery through the App create request', async () => {
+    mockedListProjects.mockResolvedValue([]);
+
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create discovery project' }));
+
+    await waitFor(() => expect(mockedCreateProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skillDiscovery: {
+          mode: 'agent',
+          catalog: 'open-design-official',
+        },
+      }),
+    ));
   });
 
   it('enters the project preparing surface before Home project creation settles', async () => {

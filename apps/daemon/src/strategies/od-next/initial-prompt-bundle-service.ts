@@ -32,6 +32,10 @@ import { isTokenExpired, readAllTokens } from '../../mcp-tokens.js';
 import { resolveProjectDir } from '../../projects.js';
 import { getSnapshot } from '../../plugins/snapshots.js';
 import { resolveOdNextStrategyRequestRecipeV2 } from '../../plugins/strategy-recipe.js';
+import {
+  readOfficialSkillDiscoveryPromptContextV1,
+  type OfficialSkillDiscoveryCatalogSourcesV1,
+} from '../../skill-discovery/catalog.js';
 import { resolveExternalMcpServersForRun } from '../../run-tool-bundle.js';
 import {
   composeChatAgentTextPayload,
@@ -164,6 +168,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
   atomPromptsEnabled: boolean;
   syntheticCanary: boolean;
   automaticAdmission: boolean;
+  skillDiscoverySources?: OfficialSkillDiscoveryCatalogSourcesV1;
   runtimeCapabilitySnapshot?: unknown;
   getRuntimeVersions: () => Promise<DetectedRuntimeVersions | null>;
 }): Promise<OdNextStrategyRequestRecipeV2 | null> {
@@ -183,6 +188,26 @@ export async function resolveOdNextPromptRecipeForRun(input: {
     },
   });
   if (!resolvedRecipe) return null;
+  if (snapshot.strategy.discoveryCatalogRevision) {
+    if (!input.skillDiscoverySources) {
+      throw new Error('OD Next discovery catalog source is unavailable.');
+    }
+    const context = readOfficialSkillDiscoveryPromptContextV1(input.skillDiscoverySources);
+    if (context.catalog.revision !== snapshot.strategy.discoveryCatalogRevision) {
+      throw new Error('OD Next discovery catalog no longer matches its immutable snapshot.');
+    }
+    resolvedRecipe.skillDiscovery = {
+      policy: context.policyMarkdown,
+      catalog: context.catalogMarkdown,
+      catalogRevision: context.catalog.revision,
+      ...(snapshot.strategy.selectedTaskProfile
+        ? { explicitTaskType: snapshot.strategy.selectedTaskProfile.taskType }
+        : {}),
+      taskProfileVersions: Object.fromEntries(context.catalog.candidates
+        .filter((candidate) => candidate.origin.kind === 'bundled-task-profile')
+        .map((candidate) => [candidate.id, candidate.version])),
+    };
+  }
 
   if (input.syntheticCanary && process.env.NODE_ENV === 'production') {
     throw new Error('OD Next synthetic runtime planning facts are local-only.');

@@ -16,6 +16,7 @@ type ServerModule = {
 };
 
 const originalDataDir = process.env.OD_DATA_DIR;
+const originalSkillDiscoveryMode = process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
 let started: StartedServer | null = null;
 let dataDir: string | null = null;
 let serverModule: ServerModule | null = null;
@@ -28,6 +29,11 @@ describe('project design-system copy route', () => {
     dataDir = null;
     if (originalDataDir === undefined) delete process.env.OD_DATA_DIR;
     else process.env.OD_DATA_DIR = originalDataDir;
+    if (originalSkillDiscoveryMode === undefined) {
+      delete process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY;
+    } else {
+      process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = originalSkillDiscoveryMode;
+    }
     serverModule = null;
     vi.resetModules();
   }, 30_000);
@@ -211,6 +217,29 @@ describe('project design-system copy route', () => {
     );
     expect(copiedTabs.tabs).toEqual(['index.html']);
     expect(copiedTabs.active).toBe('index.html');
+  }, 60_000);
+
+  it('does not carry daemon-owned Skill discovery eligibility into a duplicate', async () => {
+    process.env.OD_AGENT_NATIVE_SKILL_DISCOVERY = 'active';
+    dataDir = await mkdtemp(join(tmpdir(), 'od-project-copy-discovery-'));
+    started = await startIsolatedServer(dataDir);
+
+    const sourceId = `source-discovery-${Date.now()}`;
+    const created = await postJson<{
+      project: { metadata: Record<string, unknown> };
+    }>(`${started.url}/api/projects`, {
+      id: sourceId,
+      name: 'Discovery Source',
+      conversationMode: 'design',
+      skillDiscovery: { mode: 'agent', catalog: 'open-design-official' },
+      metadata: { kind: 'prototype' },
+    });
+    expect(created.project.metadata).toHaveProperty('skillDiscoveryBinding');
+
+    const copied = await postJson<{
+      project: { metadata: Record<string, unknown> };
+    }>(`${started.url}/api/projects/${sourceId}/duplicate`, {});
+    expect(copied.project.metadata).not.toHaveProperty('skillDiscoveryBinding');
   }, 60_000);
 
   it('rejects generic duplication for design-system-like projects', async () => {

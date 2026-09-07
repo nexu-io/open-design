@@ -93,6 +93,11 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
+import {
+  agentNativeSkillDiscoveryBehaviorEnabled,
+  createProjectSkillDiscoveryBinding,
+  parseProjectSkillDiscoveryRequest,
+} from '../../skill-discovery/binding.js';
 import { isSafeId } from '../../projects.js';
 import {
   ensureTeamProjectCommentConversations,
@@ -1916,6 +1921,7 @@ function cloneProjectMetadataForDuplicate(sourceProject: any): Record<string, un
   delete sourceMetadata.projectLocationId;
   delete sourceMetadata.fromTrustedPicker;
   delete sourceMetadata.orchestratorWorkspace;
+  delete sourceMetadata.skillDiscoveryBinding;
   return {
     ...sourceMetadata,
     sourceProjectId: sourceProject.id,
@@ -3733,6 +3739,56 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       if (typeof name !== 'string' || !name.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'name required');
       }
+      const initialSessionMode = normalizeChatSessionMode(
+        req.body?.conversationMode ?? req.body?.sessionMode,
+      );
+      let requestedSkillDiscovery: ReturnType<
+        typeof parseProjectSkillDiscoveryRequest
+      > | null = null;
+      if (req.body?.skillDiscovery !== undefined) {
+        try {
+          requestedSkillDiscovery = parseProjectSkillDiscoveryRequest(
+            req.body.skillDiscovery,
+          );
+        } catch (error) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            error instanceof Error ? error.message : 'skillDiscovery is invalid',
+          );
+        }
+      }
+      if (requestedSkillDiscovery) {
+        const requestedContextPlugins =
+          metadata && typeof metadata === 'object' && 'contextPlugins' in metadata
+            ? metadata.contextPlugins
+            : req.body?.contextPlugins;
+        const hasExplicitContextPlugins = requestedContextPlugins !== undefined
+          && (!Array.isArray(requestedContextPlugins) || requestedContextPlugins.length > 0);
+        const hasExplicitSkill = typeof skillId === 'string' && skillId.trim().length > 0;
+        const hasExplicitPlugin = (
+          typeof req.body?.pluginId === 'string' && req.body.pluginId.trim().length > 0
+        ) || (
+          typeof req.body?.appliedPluginSnapshotId === 'string'
+          && req.body.appliedPluginSnapshotId.trim().length > 0
+        );
+        if (
+          initialSessionMode !== 'design'
+          || req.body?.automaticStrategyTaskProfile !== undefined
+          || hasExplicitSkill
+          || hasExplicitPlugin
+          || req.body?.exampleReference !== undefined
+          || hasExplicitContextPlugins
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'skillDiscovery requires a typeless Design request with no explicit plugin, task profile, Skill, example, or context plugin',
+          );
+        }
+      }
       // baseDir is privileged: it lets a project root directly inside the
       // user's filesystem. The /api/import/folder endpoint is the only
       // path that's allowed to set it, because that's where realpath() +
@@ -3899,6 +3955,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
               && key !== 'scenarioBinding'
               && key !== 'strategyBinding'
               && key !== 'exampleBinding'
+              && key !== 'skillDiscoveryBinding'
             )),
           )
         : null;
@@ -3950,9 +4007,6 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
                 : null;
       const now = Date.now();
       const cid = randomId();
-      const initialSessionMode = normalizeChatSessionMode(
-        req.body?.conversationMode ?? req.body?.sessionMode,
-      );
       const requestedAutomaticStrategyTaskProfile =
         req.body?.automaticStrategyTaskProfile === 'prototype'
         || req.body?.automaticStrategyTaskProfile === 'ppt'
@@ -4068,22 +4122,29 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           'automaticStrategyTaskProfile does not match this automatic Design route',
         );
       }
-      const projectMetadata = automaticStrategyBinding || exampleBinding
+      const skillDiscoveryBinding = requestedSkillDiscovery
+        && agentNativeSkillDiscoveryBehaviorEnabled(process.env)
+          ? createProjectSkillDiscoveryBinding(now)
+          : null;
+      const projectMetadata = automaticStrategyBinding || exampleBinding || skillDiscoveryBinding
         ? {
             ...(baseProjectMetadata ?? {}),
             ...(automaticStrategyBinding
               ? { strategyBinding: automaticStrategyBinding }
               : {}),
             ...(exampleBinding ? { exampleBinding } : {}),
+            ...(skillDiscoveryBinding ? { skillDiscoveryBinding } : {}),
           }
         : baseProjectMetadata;
-      const defaultScenarioPluginId = defaultScenarioPluginIdForProjectMetadata(
-        projectMetadata && typeof projectMetadata.kind === 'string'
-          ? projectMetadata as Parameters<
-              typeof defaultScenarioPluginIdForProjectMetadata
-            >[0]
-          : null,
-      );
+      const defaultScenarioPluginId = skillDiscoveryBinding
+        ? null
+        : defaultScenarioPluginIdForProjectMetadata(
+            projectMetadata && typeof projectMetadata.kind === 'string'
+              ? projectMetadata as Parameters<
+                  typeof defaultScenarioPluginIdForProjectMetadata
+                >[0]
+              : null,
+          );
       const automaticDefaultRouting = initialSessionMode === 'design'
         && Boolean(defaultScenarioPluginId)
         && !explicitPlugin
@@ -4953,6 +5014,14 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             'metadata cannot be cleared while exampleBinding is daemon-owned',
           );
         }
+        if (existing?.metadata?.skillDiscoveryBinding) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'metadata cannot be cleared while skillDiscoveryBinding is daemon-owned',
+          );
+        }
         if (existing?.metadata?.baseDir) {
           return sendApiError(
             res,
@@ -5013,6 +5082,18 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
             400,
             'BAD_REQUEST',
             'exampleBinding is daemon-owned',
+          );
+        }
+        if (
+          'skillDiscoveryBinding' in patch.metadata
+          && JSON.stringify(patch.metadata.skillDiscoveryBinding)
+            !== JSON.stringify(existingMeta?.skillDiscoveryBinding)
+        ) {
+          return sendApiError(
+            res,
+            400,
+            'BAD_REQUEST',
+            'skillDiscoveryBinding is daemon-owned',
           );
         }
         if ('fromTrustedPicker' in patch.metadata
@@ -5115,6 +5196,12 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
           patch.metadata = {
             ...patch.metadata,
             exampleBinding: existingMeta.exampleBinding,
+          };
+        }
+        if (existingMeta?.skillDiscoveryBinding) {
+          patch.metadata = {
+            ...patch.metadata,
+            skillDiscoveryBinding: existingMeta.skillDiscoveryBinding,
           };
         }
       }

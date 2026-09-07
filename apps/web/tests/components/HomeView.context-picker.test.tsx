@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildWorkspacePermissions,
   buildWorkspaceSeatSummary,
-  DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
   type DesignSystemSummary,
   type InstalledPluginRecord,
   type ConnectorDetail,
@@ -102,7 +101,7 @@ const WORKSPACE_DESIGN_SYSTEM: DesignSystemSummary = {
   status: 'published',
 };
 
-const WEB_PROTOTYPE_PLUGIN = makePlugin('example-web-prototype', 'Web Prototype');
+const WEB_PROTOTYPE_PLUGIN = makePlugin('od-new-generation', 'New generation');
 const MCP_SERVER: McpServerConfig = {
   id: 'linear',
   label: 'Linear',
@@ -315,7 +314,11 @@ describe('HomeView context picker', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: '',
-      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: null,
+      skillDiscovery: {
+        mode: 'agent',
+        catalog: 'open-design-official',
+      },
       attachments: [file],
     }));
   });
@@ -387,12 +390,13 @@ describe('HomeView context picker', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Build @Chart Plugin @Deck Plugin',
-      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: null,
       contextPlugins: [
         expect.objectContaining({ id: 'chart-plugin', title: 'Chart Plugin' }),
         expect.objectContaining({ id: 'deck-plugin', title: 'Deck Plugin' }),
       ],
     }));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('skillDiscovery');
   });
 
   it('binds a selected home skill to the created project payload', async () => {
@@ -442,10 +446,11 @@ describe('HomeView context picker', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: '@Prototype Lab',
-      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: null,
       skillId: SKILL.id,
       projectKind: 'prototype',
     }));
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('skillDiscovery');
   });
 
   it('keeps the active type chip when the user picks a skill (#2972)', async () => {
@@ -580,6 +585,7 @@ describe('HomeView context picker', () => {
     })));
     expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('pluginSource');
     expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('pluginInputs');
+    expect(onSubmit.mock.calls[0]?.[0]).not.toHaveProperty('skillDiscovery');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -635,7 +641,11 @@ describe('HomeView context picker', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: '@Linear @Slack',
-      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: null,
+      skillDiscovery: {
+        mode: 'agent',
+        catalog: 'open-design-official',
+      },
       contextMcpServers: [
         expect.objectContaining({ id: 'linear', label: 'Linear', transport: 'stdio' }),
       ],
@@ -889,7 +899,11 @@ describe('HomeView context picker', () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'Summarize @Slack, then draft follow-ups',
-      pluginId: DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID,
+      pluginId: null,
+      skillDiscovery: {
+        mode: 'agent',
+        catalog: 'open-design-official',
+      },
       contextConnectors: [
         expect.objectContaining({ id: 'slack', name: 'Slack' }),
       ],

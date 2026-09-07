@@ -589,6 +589,17 @@ describe('task observation rollout', () => {
     expect(batch.filter((event) => event.type === 'span-create')).toHaveLength(1);
   });
 
+  it('finalizes an answer-only task without relabeling it as a delivered artifact', async () => {
+    db.prepare(`UPDATE strategy_task_executions SET outcome = 'answered', route = 'full_plan', input_stage = 'request', execution_mode = NULL, updated_at = 2000 WHERE task_execution_id = 'task-1'`).run();
+    const fetchImpl = vi.fn<typeof fetch>(async () => acceptedResponse());
+    const rollout = service({ mode: 'send', fetchImpl });
+    await expect(rollout.finalizeForRun('run-1')).resolves.toMatchObject({ action: 'sent' });
+    await expect(rollout.finalizeForRun('run-1')).resolves.toMatchObject({ action: 'already_finalized' });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(deliveryRow().aggregateDigest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(getStrategyTaskExecution(db, 'task-1')?.outcome).toBe('answered');
+  });
+
   it('rebuilds safe Run quality from durable facts before exporting the Task payload', async () => {
     vi.stubEnv(
       'OPEN_DESIGN_TELEMETRY_RELAY_URL',

@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ember Lane Roastworks — this week's roasts</title>
+  <meta name="description" content="A small coffee roasting studio in Porto. Eight roasts a week, drum-roasted by hand, bagged the same morning. No subscriptions, no rush." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=Source+Serif+4:ital,wght@0,400;0,500;1,400&display=swap" />
+  <style>
+    /* Warm-paper editorial catalogue for a local shop · Almanac theme
+     * accent: warm-amber · enrichment: inline line-art SVG coffee silhouettes */
+
+    :root {
+      --color-paper: oklch(94% 0.022 80);
+      --color-paper-2: oklch(91% 0.024 80);
+      --color-ink: oklch(24% 0.020 50);
+      --color-ink-soft: oklch(40% 0.020 55);
+      --color-rule: oklch(78% 0.020 70);
+      --color-accent: oklch(58% 0.14 50);
+
+      --font-display: "IM Fell English SC", "IM Fell English", "EB Garamond", "Cormorant Garamond", Georgia, serif;
+      --font-body: "Source Serif 4", "Iowan Old Style", Georgia, serif;
+
+      --space-3xs: 0.25rem;
+      --space-2xs: 0.5rem;
+      --space-xs: 0.75rem;
+      --space-sm: 1rem;
+      --space-md: 1.5rem;
+      --space-lg: 2rem;
+      --space-xl: 3rem;
+      --space-2xl: 4.5rem;
+      --space-3xl: 6.5rem;
+
+      --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+      --dur-micro: 140ms;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { overflow-x: clip; }
+
+    body {
+      margin: 0;
+      background: var(--color-paper);
+      background-image:
+        radial-gradient(circle at 20% 10%, oklch(92% 0.026 75 / 0.5), transparent 40%),
+        radial-gradient(circle at 80% 90%, oklch(92% 0.026 60 / 0.4), transparent 50%);
+      color: var(--color-ink);
+      font-family: var(--font-body);
+      font-size: 1.0625rem;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      max-width: 64rem;
+      margin: 0 auto;
+      padding: var(--space-2xl) var(--space-lg) var(--space-3xl);
+    }
+
+    /* Masthead — almanac plate-banner */
+    .masthead {
+      text-align: center;
+      border-block-end: 2px double var(--color-rule);
+      padding-block-end: var(--space-lg);
+      margin-block-end: var(--space-2xl);
+    }
+
+    .masthead__rule {
+      width: 4ch;
+      border: 0;
+      border-block-start: 1px solid var(--color-ink);
+      margin: 0 auto var(--space-md);
+    }
+
+    .masthead__brand {
+      font-family: var(--font-display);
+      font-size: clamp(2.5rem, 6vw, 4.5rem);
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      margin: 0 0 var(--space-2xs);
+      color: var(--color-ink);
+      line-height: 1;
+    }
+
+    .masthead__sub {
+      font-family: var(--font-display);
+      font-size: 0.875rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--color-ink-soft);
+      margin: 0;
+    }
+
+    .masthead__sub strong { color: var(--color-accent); font-weight: 400; }
+
+    /* Section heading */
+    .todays {
+      text-align: center;
+      margin-block-end: var(--space-xl);
+    }
+
+    .todays__head {
+      font-family: var(--font-display);
+      font-size: clamp(1.5rem, 3vw, 2.25rem);
+      font-weight: 400;
+      letter-spacing: 0.02em;
+      margin: 0 0 var(--space-2xs);
+      color: var(--color-ink);
+    }
+
+    .todays__date {
+      font-family: var(--font-body);
+      font-style: italic;
+      font-size: 1rem;
+      color: var(--color-ink-soft);
+      margin: 0;
+    }
+
+    /* Catalogue grid */
+    .catalogue {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0;
+      border-block-start: 1px solid var(--color-rule);
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .roast {
+      display: grid;
+      grid-template-columns: 96px 1fr auto;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-lg) var(--space-md);
+      border-block-end: 1px solid var(--color-rule);
+      position: relative;
+      transition: background var(--dur-micro) var(--ease-out);
+    }
+
+    .roast:nth-child(odd) {
+      border-inline-end: 1px solid var(--color-rule);
+    }
+
+    .roast:hover { background: var(--color-paper-2); }
+
+    .roast__shape {
+      width: 96px;
+      height: 96px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-ink-soft);
+    }
+
+    .roast__shape svg {
+      width: 100%;
+      height: 100%;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .roast__shape--accent svg { stroke: var(--color-accent); }
+
+    .roast__body { min-width: 0; }
+
+    .roast__name {
+      font-family: var(--font-display);
+      font-size: 1.375rem;
+      font-weight: 400;
+      letter-spacing: 0.01em;
+      margin: 0 0 var(--space-3xs);
+      color: var(--color-ink);
+    }
+
+    .roast__desc {
+      font-family: var(--font-body);
+      font-style: italic;
+      font-size: 0.9375rem;
+      color: var(--color-ink-soft);
+      margin: 0;
+      line-height: 1.4;
+    }
+
+    .roast__price {
+      font-family: var(--font-display);
+      font-size: 1.125rem;
+      font-variant-numeric: tabular-nums;
+      color: var(--color-ink);
+      white-space: nowrap;
+    }
+
+    .roast__price--out {
+      color: var(--color-ink-soft);
+      font-style: italic;
+      font-family: var(--font-body);
+      font-size: 0.9375rem;
+    }
+
+    /* Visit */
+    .visit {
+      margin-block-start: var(--space-2xl);
+      padding: var(--space-xl) var(--space-md);
+      border-block-start: 2px double var(--color-rule);
+      border-block-end: 2px double var(--color-rule);
+      text-align: center;
+    }
+
+    .visit__head {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 400;
+      margin: 0 0 var(--space-md);
+    }
+
+    .visit__lines {
+      display: grid;
+      gap: var(--space-2xs);
+      font-family: var(--font-body);
+      font-size: 1rem;
+      color: var(--color-ink);
+    }
+
+    .visit__lines em {
+      font-style: italic;
+      color: var(--color-ink-soft);
+    }
+
+    /* Colophon */
+    .colophon {
+      margin-block-start: var(--space-2xl);
+      text-align: center;
+      font-family: var(--font-display);
+      font-size: 0.75rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--color-ink-soft);
+    }
+
+    /* Mobile */
+    @media (max-width: 48rem) {
+      .catalogue { grid-template-columns: 1fr; }
+      .roast:nth-child(odd) { border-inline-end: none; }
+      .roast { grid-template-columns: 64px 1fr auto; gap: var(--space-sm); padding: var(--space-md) var(--space-2xs); }
+      .roast__shape { width: 64px; height: 64px; }
+      .roast__name { font-size: 1.125rem; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="masthead">
+      <hr class="masthead__rule" />
+      <h1 class="masthead__brand">Ember Lane Roastworks</h1>
+      <p class="masthead__sub">Porto · est. 2024 · batch n.º 312 · drum-roasted <strong>by hand</strong></p>
+    </header>
+
+    <section class="todays">
+      <h2 class="todays__head">This week's roasts</h2>
+      <p class="todays__date">Roasted Tuesday — bagged the same morning — eight coffees, small batches</p>
+    </section>
+
+    <ul class="catalogue" role="list" aria-label="This week's coffees">
+      <!-- 1 -->
+      <li class="roast">
+        <span class="roast__shape roast__shape--accent" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><ellipse cx="48" cy="48" rx="22" ry="32" transform="rotate(24 48 48)"/><path d="M36 26 q18 10 6 22 t8 22"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">House espresso</h3>
+          <p class="roast__desc">A two-farm blend, roasted a shade past medium. Cocoa, hazelnut, holds up in milk.</p>
+        </div>
+        <span class="roast__price">€9.50</span>
+      </li>
+      <!-- 2 -->
+      <li class="roast">
+        <span class="roast__shape" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><path d="M24 30 L72 30 L56 62 L40 62 Z"/><path d="M40 62 L40 72 L56 72 L56 62"/><path d="M32 38 L64 38 M36 46 L60 46"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Filter, washed lot</h3>
+          <p class="roast__desc">High-grown, washed, light roast. Stone fruit and black tea. Best on paper filter.</p>
+        </div>
+        <span class="roast__price">€12.00</span>
+      </li>
+      <!-- 3 -->
+      <li class="roast">
+        <span class="roast__shape" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><path d="M30 64 L36 40 L60 40 L66 64 Z"/><path d="M36 40 L32 22 L64 22 L60 40"/><circle cx="48" cy="52" r="3"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Moka blend, dark</h3>
+          <p class="roast__desc">Roasted slow and dark for the stovetop pot. Toasted bread, molasses, no bite.</p>
+        </div>
+        <span class="roast__price">€8.80</span>
+      </li>
+      <!-- 4 -->
+      <li class="roast">
+        <span class="roast__shape roast__shape--accent" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><path d="M24 40 L64 40 L60 68 L28 68 Z"/><path d="M64 44 q14 0 12 10 t-14 6"/><ellipse cx="44" cy="76" rx="26" ry="4"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Honey process</h3>
+          <p class="roast__desc">Sun-dried in the fruit. Sweeter, rounder, a little wild. Cups like apricot jam.</p>
+        </div>
+        <span class="roast__price">€13.50</span>
+      </li>
+      <!-- 5 -->
+      <li class="roast">
+        <span class="roast__shape" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><path d="M30 68 L30 44 q0 -14 18 -14 t18 14 L66 68 Z"/><path d="M48 30 L48 20 L60 16"/><path d="M30 56 L66 56"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Decaf, sugarcane</h3>
+          <p class="roast__desc">Sugarcane-process decaf that still tastes of coffee. Caramel, soft orange, late cups.</p>
+        </div>
+        <span class="roast__price">€10.00</span>
+      </li>
+      <!-- 6 -->
+      <li class="roast">
+        <span class="roast__shape" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><rect x="28" y="26" width="40" height="48" rx="4"/><path d="M28 38 L68 38"/><path d="M40 26 q8 -10 16 0"/><path d="M38 52 q10 8 20 0"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Seasonal micro-lot</h3>
+          <p class="roast__desc">Twelve kilos a season, roasted once. Ask what it is this week.</p>
+        </div>
+        <span class="roast__price roast__price--out">sold out</span>
+      </li>
+      <!-- 7 -->
+      <li class="roast">
+        <span class="roast__shape roast__shape--accent" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><circle cx="48" cy="44" r="20"/><path d="M48 24 L48 12 M62 30 L70 22"/><path d="M34 64 L30 80 L66 80 L62 64"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Cold-brew coarse</h3>
+          <p class="roast__desc">Ground coarse for the twelve-hour steep. Dark chocolate, fig, zero acidity.</p>
+        </div>
+        <span class="roast__price">€11.00</span>
+      </li>
+      <!-- 8 -->
+      <li class="roast">
+        <span class="roast__shape" aria-hidden="true">
+          <svg viewBox="0 0 96 96"><ellipse cx="34" cy="48" rx="12" ry="18" transform="rotate(-18 34 48)"/><path d="M30 34 q8 8 0 14 t4 14"/><ellipse cx="62" cy="48" rx="12" ry="18" transform="rotate(18 62 48)"/><path d="M66 34 q-8 8 0 14 t-4 14"/></svg>
+        </span>
+        <div class="roast__body">
+          <h3 class="roast__name">Roaster's pair</h3>
+          <p class="roast__desc">Two half-bags — the espresso and the filter — for people who cannot decide.</p>
+        </div>
+        <span class="roast__price">€15.00</span>
+      </li>
+    </ul>
+
+    <section class="visit">
+      <h2 class="visit__head">Visit</h2>
+      <div class="visit__lines">
+        <span><strong>Rua das Oliveiras 18, Porto</strong></span>
+        <span><em>Wednesday – Sunday, 8 a.m. to 4 p.m. — the roaster runs on Tuesdays, come watch</em></span>
+        <span><em>No subscriptions. Bags travel well; bring a friend one.</em></span>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      <span>Ember Lane · batch three hundred twelve · roasted this Tuesday past</span>
+    </footer>
+  </main>
+</body>
+</html>

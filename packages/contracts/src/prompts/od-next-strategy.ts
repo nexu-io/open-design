@@ -32,9 +32,9 @@ export interface OdNextStrategyRequestRecipeV2 {
   strategyVersion: string;
   snapshotId: string;
   packageHash: string;
-  taskProfileDigest: string;
+  taskProfileDigest: string | null;
   taskProfileVersion: string;
-  taskType: Exclude<StrategyTaskTypeV2, 'generic'>;
+  taskType: StrategyTaskTypeV2;
   planningFacts?: {
     capabilitySnapshotHash: string;
     inputRefs: ReadonlyArray<string>;
@@ -52,7 +52,14 @@ export interface OdNextStrategyRequestRecipeV2 {
   executionProfile: 'filesystem' | 'text_artifact';
   coreStrategy: string;
   generalOrchestration: string;
-  taskSkill: string;
+  taskSkill: string | null;
+  skillDiscovery?: {
+    policy: string;
+    catalog: string;
+    catalogRevision: string;
+    explicitTaskType?: Exclude<StrategyTaskTypeV2, 'generic'>;
+    taskProfileVersions?: Partial<Record<Exclude<StrategyTaskTypeV2, 'generic'>, string>>;
+  } | undefined;
   activeStages: ReadonlyArray<OdNextPromptBundleStageV2>;
   /**
    * Non-prompt files declared by the selected task profile (see
@@ -182,6 +189,32 @@ function requireText(value: string, field: string): string {
   const trimmed = value.trim();
   if (!trimmed) throw new TypeError(`${field} must not be empty.`);
   return trimmed;
+}
+
+function verifyTaskSkillV2(input: OdNextStrategyRequestRecipeV2): string | null {
+  if (input.taskSkill === null) {
+    if (input.taskType !== 'generic' || input.taskProfileDigest !== null || !input.skillDiscovery) {
+      throw new TypeError('Only a Discovery-enabled generic request may omit its Task Skill and digest.');
+    }
+    return null;
+  }
+  if (input.taskType === 'generic' || input.taskProfileDigest === null) {
+    throw new TypeError('A concrete Task Skill requires a matching typed profile and digest.');
+  }
+  return requireText(input.taskSkill, 'taskSkill');
+}
+
+function renderSkillDiscoveryV2(discovery: NonNullable<OdNextStrategyRequestRecipeV2['skillDiscovery']>): string {
+  if (!/^sha256:[a-f0-9]{64}$/.test(discovery.catalogRevision)) {
+    throw new TypeError('Skill Discovery catalogRevision must be a sha256:-prefixed digest.');
+  }
+  return [
+    requireText(discovery.policy, 'skillDiscovery.policy'),
+    requireText(discovery.catalog, 'skillDiscovery.catalog'),
+    discovery.explicitTaskType
+      ? `## Explicit user selection\n\nThe client explicitly selected ${discovery.explicitTaskType}. Honor this constraint when discovering Skills; do not silently replace it with another primary task type.`
+      : '## Unbound task\n\nNo primary task type was selected by the user. Decide from the query and official metadata whether to read a primary Skill, auxiliary Skills, or none. Generic is an internal V2 execution path, not an official Skill.',
+  ].join('\n\n');
 }
 
 export function resolveOdNextDeckFrameworkMode(input: {
@@ -396,7 +429,7 @@ export function odNextPromptCacheIdentityV2(input: Pick<
   return [
     input.recipe,
     requireSha256(input.packageHash, 'packageHash'),
-    requireSha256(input.taskProfileDigest, 'taskProfileDigest'),
+    input.taskProfileDigest === null ? 'unbound' : requireSha256(input.taskProfileDigest, 'taskProfileDigest'),
   ].join(':');
 }
 
@@ -647,6 +680,12 @@ export function renderOdNextOutputContractV2(
       packageHash: input.packageHash,
       snapshotId: RUNTIME_OWNED_PLACEHOLDERS.appliedSnapshot,
     },
+    ...(input.skillDiscovery ? { skillDecision: {
+      catalogRevision: input.skillDiscovery.catalogRevision,
+      primarySkillId: null,
+      auxiliarySkillIds: [],
+      skills: [],
+    } } : {}),
     taskProfile: {
       schemaVersion: '2',
       taskType: input.taskType,
@@ -713,6 +752,11 @@ export function renderOdNextOutputContractV2(
     executionMode: null,
     reasonCodes: [],
   } satisfies StrategyRuntimeStateV2;
+  const discoveryContract = input.skillDiscovery ? `
+
+Skill Discovery is active. The Plan Contract must include skillDecision. Its exact fields are catalogRevision, primarySkillId (one official primary id or null), auxiliarySkillIds (at most two unique official auxiliary ids), and skills (one digest record for each selected id, no extras). Each record has exactly id, role (primary or auxiliary), candidateDigest, and contentDigest. Copy revision and sha256:-prefixed digests from the frozen catalog and successful load receipts, never invent them. The example's empty selection is valid only when your actual decision is no Skill. Use the taskProfileVersion for the primary you actually selected from runtime_facts.taskProfileVersions; with no primary, use taskType generic and the genericProfileVersion. Respect any explicit client task selection. Generic is an internal execution path, not a Skill to load. You may discover additional useful auxiliary Skills while executing; the accepted Plan records the planning-time decision and does not erase subsequent read history.
+
+If the query needs only an answer, you may finish without a Plan or artifact: first record primary resolution none through the Discovery tool, provide a visible answer, and emit exactly one Runtime State with route full_plan, inputStage request, outcome answered, executionMode null, and reasonCodes []. Auxiliary Skill reads are permitted. Never use answered for an unfinished artifact request, during Production, after emitting a Plan, or with an active primary Skill. The Host validates this explicit answer-only terminal outcome; process exit alone does not complete a task.` : '';
 
   return `The JSON field sets below are the exact V2 contract shapes. Replace example values with resolved run values; do not add fields. Every value named \`copy-…\`, plus the all-zero capabilitySnapshotHash, is a placeholder: copy the real value byte-for-byte from the <recipe_identity> attributes or the <runtime_facts> block in <context>, and never invent one. Every buildRequirements entry is an object with exactly id and text; every readinessArtifacts entry is an object with exactly id, version, and a 64-character lowercase-hex digest. Every buildPackages entry is an object with exactly id, objective, inputs, outputs, sharedConstraints, dependsOn, and allowedResources, where inputs, dependsOn, and allowedResources are string arrays that may be empty, outputs and sharedConstraints are non-empty string arrays, and dependsOn lists ids of other Build Packages in this same plan. A simple plan leaves buildPackages empty; a complex plan needs at least two Build Packages, an acyclic dependsOn graph, and exactly one owning Build Package per output. Ids must be unique within requiredDeliverables and within buildRequirements, and taskProfile.canonicalDeliverable.id must itself appear as one of the requiredDeliverables ids: when a plan declares several deliverables, list the canonical one among them rather than alongside them. designSpec.source is exactly existing-artifact, brand, or resolved-baseline. Emit JSON only between the matching tags, without Markdown fences or a second copy. Emit exactly one Runtime State block on every response. Emit at most one Plan Contract block, only when a complete Full Plan is ready. Keep machine blocks separate from visible prose.
 
@@ -734,7 +778,7 @@ When the outcome is clarification_required, executionMode MUST be null — the e
 ${stableJson(clarificationStateExample)}
 </${OD_NEXT_RUNTIME_STATE_BLOCK}>
 
-The visible decision summary contains only the goal, deliverables, key constraints, assumptions, risks, and open decisions. Machine blocks are consumed by Open Design and must not be paraphrased.`;
+The visible decision summary contains only the goal, deliverables, key constraints, assumptions, risks, and open decisions. Machine blocks are consumed by Open Design and must not be paraphrased.${discoveryContract}`;
 }
 
 /**
@@ -756,6 +800,12 @@ export function renderOdNextRuntimeFactsV2(
 
 ${stableJson({
     taskProfileVersion: input.taskProfileVersion,
+    ...(input.skillDiscovery ? {
+      discoveryCatalogRevision: input.skillDiscovery.catalogRevision,
+      genericProfileVersion: '2.0.0',
+      taskProfileVersions: input.skillDiscovery.taskProfileVersions ?? {},
+      explicitTaskType: input.skillDiscovery.explicitTaskType ?? null,
+    } : {}),
     appliedSnapshot: input.snapshotId,
     selectedAgentId: context.agentId?.trim() || 'selected-agent-id-from-runtime',
     capabilitySnapshotHash: planningFacts.capabilitySnapshotHash,
@@ -802,13 +852,13 @@ export function composeOdNextStrategyRequestPromptV2(
     input.generalOrchestration,
     'generalOrchestration',
   );
-  const taskSkill = requireText(input.taskSkill, 'taskSkill');
+  const taskSkill = verifyTaskSkillV2(input);
   assertOdNextPlanningBuildOnlyV2(coreStrategy, 'coreStrategy');
   assertOdNextPlanningBuildOnlyV2(
     generalOrchestration,
     'generalOrchestration',
   );
-  assertOdNextPlanningBuildOnlyV2(taskSkill, 'taskSkill');
+  if (taskSkill !== null) assertOdNextPlanningBuildOnlyV2(taskSkill, 'taskSkill');
   const deckFrameworkMode = context.deckFrameworkMode
     ?? resolveOdNextDeckFrameworkMode({
       taskType: input.taskType,
@@ -828,7 +878,8 @@ export function composeOdNextStrategyRequestPromptV2(
     composeOdNextStrategyStableRequestContextV2(stableContext, input.executionProfile),
     `## OD Next core strategy\n\n${coreStrategy}`,
     `## OD Next general orchestration\n\n${generalOrchestration}`,
-    `## Task Skill — ${input.taskType}\n\nExactly this one Task Skill is active for the logical task.\n\n${taskSkill}`,
+    taskSkill === null ? '' : `## Task Skill — ${input.taskType}\n\nExactly this one Task Skill is active for the logical task.\n\n${taskSkill}`,
+    input.skillDiscovery ? renderSkillDiscoveryV2(input.skillDiscovery) : '',
     ...stageBlocks,
     renderMachineOutputSection(input, context),
   ].filter((section) => section.length > 0);
@@ -844,7 +895,7 @@ export function composeOdNextStrategyRequestPromptV2(
 function verifyOdNextRecipeV2(input: OdNextStrategyRequestRecipeV2): {
   coreStrategy: string;
   generalOrchestration: string;
-  taskSkill: string;
+  taskSkill: string | null;
   stages: OdNextPromptBundleStageV2[];
   snapshotId: string;
   strategyVersion: string;
@@ -858,10 +909,10 @@ function verifyOdNextRecipeV2(input: OdNextStrategyRequestRecipeV2): {
   }
   const coreStrategy = requireText(input.coreStrategy, 'coreStrategy');
   const generalOrchestration = requireText(input.generalOrchestration, 'generalOrchestration');
-  const taskSkill = requireText(input.taskSkill, 'taskSkill');
+  const taskSkill = verifyTaskSkillV2(input);
   assertOdNextPlanningBuildOnlyV2(coreStrategy, 'coreStrategy');
   assertOdNextPlanningBuildOnlyV2(generalOrchestration, 'generalOrchestration');
-  assertOdNextPlanningBuildOnlyV2(taskSkill, 'taskSkill');
+  if (taskSkill !== null) assertOdNextPlanningBuildOnlyV2(taskSkill, 'taskSkill');
   return {
     coreStrategy,
     generalOrchestration,
@@ -920,7 +971,12 @@ export function composeOdNextStrategyBundleHeadV2(
         skillName: 'general_orchestration',
         body: verified.generalOrchestration,
       },
-      taskTypeSkill: { skillName: input.taskType, body: verified.taskSkill },
+      ...(verified.taskSkill === null ? {} : {
+        taskTypeSkill: { skillName: input.taskType, body: verified.taskSkill },
+      }),
+      ...(input.skillDiscovery ? {
+        discoverySkill: { skillName: 'skill_discovery', body: renderSkillDiscoveryV2(input.skillDiscovery) },
+      } : {}),
     },
     activeStages: verified.stages,
   };

@@ -176,6 +176,39 @@ describe('createProject local plugin identity', () => {
     expect(body).not.toHaveProperty('pluginInputs');
   });
 
+  it('preserves the agent skill-discovery marker in the create payload', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
+      project: {
+        id: 'project-agent-skill-discovery',
+        name: 'Agent skill discovery project',
+        skillId: null,
+        designSystemId: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      conversationId: 'conversation-1',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await createProject({
+      name: 'Agent skill discovery project',
+      skillId: null,
+      designSystemId: null,
+      metadata: { kind: 'other' },
+      skillDiscovery: {
+        mode: 'agent',
+        catalog: 'open-design-official',
+      },
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      skillDiscovery: {
+        mode: 'agent',
+        catalog: 'open-design-official',
+      },
+    });
+  });
+
   it('preserves selected local resource catalogue scopes without adding Workspace headers', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
       project: {
