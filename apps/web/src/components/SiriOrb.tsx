@@ -19,10 +19,20 @@ interface Props {
   size?: number;
   state?: SiriOrbState;
   /**
-   * Palette overrides. Only `c1` (and `c2`, the bloom) are meant to change —
-   * see the constraints documented in the stylesheet before touching the rest.
+   * Palette overrides, by role: `c1` is the base accent, `c2` the second
+   * accent AND the outer bloom, `c5` the narrow specular glint. Those are the
+   * three slots a caller has any business setting — `c3` is the dark side and
+   * must never go chromatic, and `c4` only bridges the lightness between them.
+   * Anything left unset follows `c1` under `literal`; see the constraints
+   * documented in the stylesheet before reaching past these.
    */
-  colors?: { c1?: string; c2?: string };
+  colors?: { c1?: string; c2?: string; c5?: string };
+  /**
+   * Render the given accents literally — nothing lightens them and nothing
+   * pushes their hue. Required to recolour the orb at all: the stock build is
+   * tuned around `#00FF08` in six places. See `.isLiteral` in the stylesheet.
+   */
+  literal?: boolean;
   className?: string;
   /** Announced to assistive tech; omit to keep the orb decorative. */
   label?: string;
@@ -55,6 +65,7 @@ export function SiriOrb({
   size = 24,
   state = 'thinking',
   colors,
+  literal = false,
   className,
   label,
 }: Props) {
@@ -62,18 +73,28 @@ export function SiriOrb({
   const style = {
     '--size': `${size}px`,
     '--blur': m.blur,
-    '--contrast': m.contrast,
+    // `contrast()` stretches the gap between channels. On `#00FF08` — R and B
+    // already at the bounds — that only changes lightness; on a mid-channel
+    // accent it shifts the hue, which a literal orb cannot afford.
+    '--contrast': literal ? 1 : m.contrast,
     '--dot': m.dot,
     '--shadow': m.shadow,
     '--rim': m.rim,
     '--mask': m.mask,
     ...(colors?.c1 ? { '--c1': colors.c1 } : {}),
     ...(colors?.c2 ? { '--c2': colors.c2 } : {}),
+    ...(colors?.c5 ? { '--c5': colors.c5 } : {}),
   } as CSSProperties;
 
   return (
     <span
-      className={[styles.orb, STATE_CLASS[state], m.tiny ? styles.isTiny : '', className]
+      className={[
+        styles.orb,
+        STATE_CLASS[state],
+        m.tiny ? styles.isTiny : '',
+        literal ? styles.isLiteral : '',
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
       style={style}

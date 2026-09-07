@@ -145,6 +145,78 @@
   --bg: color-mix(in srgb, var(--c1) 24%, #101010);
 }
 
+/* Literal build: the orb shows the accents it was given and nothing else.
+ *
+ * The stock build is tuned around `#00FF08` specifically, and six separate
+ * things assume it. Three hardcode green in slots the `colors` prop cannot
+ * reach — `--c4`, `--c5`, `--fill` — plus `.isTiny`, which mixes `--c4`
+ * against a green-black. The other three push whatever hue they are given:
+ * the white highlights, the saturate/contrast pair, and the texture pass (see
+ * the three rules below). None of them disturb `#00FF08`, whose R sits at 0.00
+ * and G at 1.00 — pinned at the channel bounds, it has nowhere to move. An
+ * accent with a mid channel does move: `#FF8D02` (G 141) came out green, then
+ * yellow, then red as each was fixed in turn.
+ *
+ * So this is not "recolour" — it is "stop the build from editing the colour".
+ * The slots below default to `--c1`, and a caller that passes its own `c2` or
+ * `c5` keeps it (the component sets those inline, which outranks this rule);
+ * either way nothing but the dark side is left over.
+ *
+ * The original's structural constraints all still hold: `--c3` is untouched
+ * and still exactly 2 of the 8 layers, `--c2` stays chromatic, and `--c4` is
+ * still a distinct layer — it just no longer bridges a hue, only the lightness
+ * the `contrast()` pass needs. Declared after `.isTiny` because both are
+ * single-class selectors and `--c4` is set by both. */
+.isLiteral {
+  --c2: var(--c1);
+  --c4: var(--c1);
+  --c5: var(--c1);
+  --fill: var(--c1);
+  /* The stock 1.12 is a compensation tuned for `#00FF08`, whose R and B are
+     already pinned at the channel bounds — saturating it cannot move the hue.
+     A mid-channel accent has room to move, and 1.12 walks `#FF8D02` (G 141)
+     visibly toward red. Single-hue means the orb IS the colour, so no filter
+     may push it off. `--contrast` is set inline by the component and is
+     neutralised there for the same reason. */
+  --sat: 1;
+}
+
+/* Nothing may lighten a literal orb, only darken it.
+ *
+ * Every highlight in the stock build is white, screen-blended. Screening white
+ * over `#00FF08` just raises R and B toward a paler green — the hue holds
+ * because G is already 255. Screening it over `#FF8D02` raises G from 141
+ * toward 255 with R already pinned, and that IS the definition of yellow: the
+ * highlight reads as a different colour rather than a brighter one. Screening
+ * the accent over itself does the same thing, so there is no "tint the
+ * highlight instead" fix at the blend level — the top-lit modelling simply has
+ * to go, leaving the dark side to do the shaping. A caller that wants the
+ * glint back names a colour for it in `c5` instead; a chosen lighter tone is a
+ * hue the designer picked, not one the compositor invented. The disc still
+ * turns, so the orb still reads as working. */
+.isLiteral .sheen {
+  display: none;
+}
+
+.isLiteral .rim {
+  box-shadow: inset 0 calc(var(--rim) * -1.2) calc(var(--rim) * 2.4) hsl(0 0% 0% / 0.4);
+}
+
+/* The dot texture is the single biggest hue-pusher, and it has to go too.
+ *
+ * It composites `mix-blend-mode: overlay` over a `contrast(2)` backdrop, and
+ * overlay branches per channel on 0.5: below it multiplies, at or above it
+ * screens. `#00FF08` sits nowhere near that seam — R is 0.00 and G is 1.00, so
+ * both channels take the same branch every time and the green only gets darker
+ * or lighter. `#FF8D02` puts G at 0.553, a hair over the seam, so the texture
+ * drives G down while R stays pinned at 1.0 and the whole orb reads as red
+ * rather than orange. Measured at 14px: the accent came out around `#E03A08`.
+ *
+ * The texture only ever added grain, and at 14px there is no grain to see. */
+.isLiteral .disc::after {
+  display: none;
+}
+
 /* Drifting specular sheen — keeps the highlight from reading as printed on. */
 .sheen {
   background:
