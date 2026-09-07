@@ -2145,6 +2145,7 @@ export const th: Dict = {
   'chat.deleteConversationConfirm': 'ลบ "{title}" หรือไม่?',
   'chat.untitledConversation': 'บทสนทนาที่ไม่มีชื่อ',
   'chat.forkedConversationTitle': 'ฟอร์กของ {title}',
+  'chat.forkConversationSucceeded': 'สร้างฟอร์กแล้ว ตอนนี้คุณอยู่ใน “{title}”',
   'chat.forkConversationFailed': 'ไม่สามารถ fork บทสนทนานี้ได้',
   'chat.startTitle': 'เริ่มแชทได้เลย',
   'chat.startHint': 'อธิบายสิ่งที่ต้องการสร้าง หรือเริ่มจากตัวอย่างเหล่านี้:',

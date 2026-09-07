@@ -2672,6 +2672,15 @@ test('[P1] project detail assistant completion actions support copy, fork, and f
   await expect
     .poll(() => getProjectContextFromUrl(page).conversationId)
     .not.toBe(conversationId);
+  const forkConversationId = getProjectContextFromUrl(page).conversationId;
+  expect(forkConversationId).toBeTruthy();
+  await expect(page.locator('.od-toast[role="status"]')).toContainText('Fork created');
+
+  await page.getByTestId('conversation-history-trigger').click();
+  const forkHistoryItem = page.getByTestId(`conversation-item-${forkConversationId}`);
+  await expect(forkHistoryItem).toHaveClass(/active/);
+  await expect(page.getByTestId('conversation-list').locator('.chat-conv-item').first())
+    .toHaveAttribute('data-testid', `conversation-item-${forkConversationId}`);
 });
 
 test('[P1] project detail fork emits correlated click and result analytics', async ({ page }) => {

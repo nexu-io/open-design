@@ -2145,6 +2145,7 @@ export const id: Dict = {
   'chat.deleteConversationConfirm': 'Hapus "{title}"? Semua pesannya ikut dihapus.',
   'chat.untitledConversation': 'Percakapan tanpa judul',
   'chat.forkedConversationTitle': 'Fork {title}',
+  'chat.forkConversationSucceeded': 'Fork dibuat. Anda sekarang berada di “{title}”.',
   'chat.forkConversationFailed': 'Tidak dapat membuat fork percakapan ini.',
   'chat.startTitle': 'Mulai percakapan',
   'chat.startHint': 'Jelaskan apa yang ingin kamu hasilkan, atau mulai dari salah satu contoh ini:',

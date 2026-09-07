@@ -2145,6 +2145,7 @@ export const fa: Dict = {
   'chat.deleteConversationConfirm': 'آیا «{title}» حذف شود؟ این کار پیام‌های آن را حذف می‌کند.',
   'chat.untitledConversation': 'مکالمه بدون عنوان',
   'chat.forkedConversationTitle': 'فورک {title}',
+  'chat.forkConversationSucceeded': 'فورک ساخته شد. اکنون در «{title}» هستید.',
   'chat.forkConversationFailed': 'فورک کردن این مکالمه ممکن نبود.',
   'chat.startTitle': 'یک مکالمه شروع کنید',
   'chat.startHint': 'آنچه می‌خواهید بسازید را توصیف کنید، یا از یکی از این نمونه‌ها شروع کنید:',

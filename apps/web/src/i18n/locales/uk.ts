@@ -2145,6 +2145,7 @@ export const uk: Dict = {
   'chat.deleteConversationConfirm': 'Видалити "{title}"? Це видалить усі її повідомлення.',
   'chat.untitledConversation': 'Розмова без назви',
   'chat.forkedConversationTitle': 'Форк {title}',
+  'chat.forkConversationSucceeded': 'Форк створено. Ви перейшли до «{title}».',
   'chat.forkConversationFailed': 'Не вдалося створити форк цієї розмови.',
   'chat.startTitle': 'Почніть розмову',
   'chat.startHint': 'Опишіть, що хочете згенерувати, або почніть з одного з цих прикладів:',

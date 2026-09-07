@@ -2145,6 +2145,7 @@ export const ar: Dict = {
   'chat.deleteConversationConfirm': 'هل تريد حذف "{title}"؟ سيؤدي هذا لإزالة رسائلها.',
   'chat.untitledConversation': 'محادثة بدون عنوان',
   'chat.forkedConversationTitle': 'تفرع {title}',
+  'chat.forkConversationSucceeded': 'تم إنشاء التفرع. أنت الآن في «{title}».',
   'chat.forkConversationFailed': 'تعذر تفرع هذه المحادثة.',
   'chat.startTitle': 'ابدأ محادثة',
   'chat.startHint': 'صِف ما تريد إنشاءه، أو ابدأ من أحد هذه الأمثلة:',

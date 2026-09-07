@@ -2145,6 +2145,7 @@ export const ptBR: Dict = {
   'chat.deleteConversationConfirm': 'Excluir "{title}"? Isso remove as mensagens.',
   'chat.untitledConversation': 'Conversa sem título',
   'chat.forkedConversationTitle': 'Fork de {title}',
+  'chat.forkConversationSucceeded': 'Fork criado. Agora você está em “{title}”.',
   'chat.forkConversationFailed': 'Não foi possível bifurcar esta conversa.',
   'chat.startTitle': 'Comece uma conversa',
   'chat.startHint': 'Descreva o que você quer gerar ou comece por um destes exemplos:',

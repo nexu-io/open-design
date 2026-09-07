@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { QuestionForm } from '../../src/artifacts/question-form';
@@ -11,6 +11,7 @@ const analyticsMocks = vi.hoisted(() => ({
   newRequestId: vi.fn(() => 'fork-request-1'),
   track: vi.fn(),
 }));
+const navigate = vi.hoisted(() => vi.fn());
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -51,6 +52,7 @@ const chatPaneProps: {
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
   messages?: ChatMessage[];
+  chatLogTray?: React.ReactNode;
 } = {};
 
 const fileWorkspaceProps: {
@@ -102,7 +104,7 @@ vi.mock('../../src/providers/registry', () => ({
 }));
 
 vi.mock('../../src/router', () => ({
-  navigate: vi.fn(),
+  navigate: (...args: unknown[]) => navigate(...args),
 }));
 
 vi.mock('../../src/state/projects', () => ({
@@ -145,6 +147,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
     messages?: ChatMessage[];
+    chatLogTray?: React.ReactNode;
   }) => {
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
     chatPaneProps.onForkFromMessage = props.onForkFromMessage;
@@ -153,7 +156,8 @@ vi.mock('../../src/components/ChatPane', () => ({
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
     chatPaneProps.messages = props.messages;
-    return null;
+    chatPaneProps.chatLogTray = props.chatLogTray;
+    return props.chatLogTray ?? null;
   },
 }));
 
@@ -212,6 +216,7 @@ describe('ProjectView conversation delete', () => {
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
     chatPaneProps.messages = undefined;
+    chatPaneProps.chatLogTray = undefined;
     fileWorkspaceProps.questionForm = undefined;
   });
 
@@ -548,6 +553,34 @@ describe('ProjectView conversation fork analytics', () => {
         duration_ms: expect.any(Number),
       }),
       { requestId: 'fork-request-1' },
+    );
+  });
+
+  it('confirms a successful fork while selecting and listing the new conversation', async () => {
+    prepareForkHarness();
+    createConversation.mockResolvedValue({ id: 'conv-fork', title: 'Conversation 1 fork' });
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[1]!);
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent('chat.forkConversationSucceeded');
+    expect(chatPaneProps.activeConversationId).toBe('conv-fork');
+    expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual([
+      'conv-fork',
+      'conv-1',
+    ]);
+    expect(navigate).toHaveBeenLastCalledWith(
+      {
+        kind: 'project',
+        projectId: 'project-1',
+        conversationId: 'conv-fork',
+        fileName: null,
+      },
+      { replace: true },
     );
   });
 
