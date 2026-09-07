@@ -360,6 +360,8 @@ interface Props {
   viewerOnly?: boolean;
   /** First-open placeholder: do not mount cached/write-capable workspace tabs. */
   materializationPending?: boolean;
+  /** See DesignFilesPanel's `filesAuthoritative`. */
+  filesAuthoritative?: boolean;
   /** Optional override for the read-only notice text. */
   readonlyNotice?: string;
   /**
@@ -1371,6 +1373,7 @@ export function FileWorkspace({
   headerActions,
   viewerOnly = false,
   materializationPending = false,
+  filesAuthoritative = true,
   readonlyNotice,
   fileSyncBadge = null,
 }: Props) {
@@ -4165,10 +4168,16 @@ export function FileWorkspace({
           />
         </div>
       ) : null}
-      {viewerOnly && !initialMaterializationPending ? (
+      {/* The banner asserts a reason ("this is a shared project"), so it renders
+          only when the caller knows one. `viewerOnly` is fail-closed and is also
+          true while ownership is still unproven -- falling back to the generic
+          copy there told a personal project's owner it was someone else's
+          shared project for as long as the workspace context took to resolve
+          (OPEND-2283). Controls stay disabled either way; only the claim waits. */}
+      {viewerOnly && readonlyNotice && !initialMaterializationPending ? (
         <div className="workspace-readonly-notice" role="status">
           <Icon name="lock" size={14} />
-          <span>{readonlyNotice ?? t('workspace.readonlyNotice')}</span>
+          <span>{readonlyNotice}</span>
         </div>
       ) : null}
       <div className="ws-body">
@@ -4282,6 +4291,7 @@ export function FileWorkspace({
             filesRefreshKey={filesRefreshKey}
             viewerOnly={viewerOnly}
             downloadPending={fileSyncBadge === 'downloading'}
+            filesAuthoritative={filesAuthoritative}
             rootDirName={rootDirName}
             reloading={reloading}
             running={Boolean(streaming)}

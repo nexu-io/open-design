@@ -363,6 +363,23 @@ async function waitForSingleSketchFile(page: Page, projectId: string): Promise<s
   return sketchName;
 }
 
+async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Plan mode' | 'Design mode') {
+  // #5517 composer mode picker: Ask maps to the real `chat` session mode.
+  const modeId = modeTitle === 'Ask mode' ? 'chat' : modeTitle === 'Plan mode' ? 'plan' : 'design';
+  const modeName = modeTitle.replace(' mode', '');
+  const trigger = page.getByTestId('chat-composer').getByTestId('composer-mode-trigger');
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+
+  const menu = page.getByTestId('composer-mode-menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-chat')).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-plan')).toBeVisible();
+  await expect(menu.getByTestId('composer-mode-menu-design')).toBeVisible();
+  await menu.getByTestId(`composer-mode-menu-${modeId}`).click();
+  await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
+}
+
 async function openDesignFile(page: Page, fileName: string) {
   const fileTab = page.getByRole('tab', { name: new RegExp(fileName.replace(/\./g, '\\.'), 'i') });
   if (await fileTab.isVisible()) {
@@ -699,7 +716,7 @@ test('[P1] design files tab launcher creates a sketch and exposes editor menu ac
   await expect(page.getByTestId('sketch-menu-clear')).toBeDisabled();
 });
 
-test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) => {
+test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensions', async ({ page }) => {
   test.setTimeout(90_000);
   const analyticsBodies: string[] = [];
   await page.unroute('**/api/app-config').catch(() => {});
@@ -760,10 +777,7 @@ test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) =
   const projectId = await createProjectViaApi(page, 'Plan and sketch analytics');
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  // The session-mode picker left the composer (#7635), so `session_mode_toggle`
-  // can no longer be produced from here; the sketch action is the analytics
-  // under test.
-  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await selectComposerSessionMode(page, 'Plan mode');
   await openAllProjectFiles(page);
   await page.getByTestId('design-files-empty-new-sketch').click();
 
@@ -771,9 +785,10 @@ test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) =
   await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
   await expectProjectFileToContain(page, projectId, sketchName, '"type": "excalidraw"');
 
+  await expect.poll(() => analyticsBodies.join('\n')).toContain('session_mode_toggle');
   await expect.poll(() => analyticsBodies.join('\n'), { timeout: T.medium }).toContain('new_sketch');
   const raw = analyticsBodies.join('\n');
-  expect(raw).not.toContain('session_mode_toggle');
+  expect(raw).toContain('"mode_after":"plan"');
   expect(raw).toContain(projectId);
 });
 

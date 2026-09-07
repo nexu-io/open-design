@@ -87,7 +87,6 @@ import {
   normalizeAgentModelChoice,
 } from './agentModelSelection';
 import {
-  modelVersionLabel,
   orderModelOptionsByAvailability,
   SearchableModelSelect,
 } from './modelOptions';
@@ -1069,21 +1068,6 @@ export function InlineModelSwitcher({
           ? currentModelLabel
           : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
-  // Visible chip text drops the company token the way the model rows do
-  // (`claude-fable-5` → `fable-5`); the aria-label/tooltip above keep the full
-  // name, so the company stays available to anyone who needs it spelled out.
-  const chipModelName =
-    config.mode === 'daemon' && currentModelId
-      ? modelVersionLabel(currentModelId, chipModel)
-      : chipModel;
-  // Brand mark for that same model. `default` is the agent's own pick rather
-  // than a named model, so it keeps the agent logo instead of guessing a vendor.
-  const chipModelIconSrc =
-    config.mode === 'daemon'
-      ? currentModelId && currentModelId !== 'default'
-        ? modelProviderIconSrc(currentModelId)
-        : null
-      : modelProviderIconSrc(config.model.trim() || null);
 
   // Compact home chip surfaces the selected model name + a connection-status
   // dot; label/tooltip fall back to the agent name. In CLI mode the agent's
@@ -1123,47 +1107,40 @@ export function InlineModelSwitcher({
         ref={chipRef}
         type="button"
         className={
-          'inline-switcher__chip' +
-          (compact ? ' inline-switcher__chip--icon' : '')
+          'inline-switcher__chip od-tooltip' +
+          (compact ? ' inline-switcher__chip--icon' : '') +
+          (showAmrReminder ? ' has-amr-reminder' : '')
         }
         data-testid="inline-model-switcher-chip"
         onClick={handleChipClick}
         aria-haspopup="menu"
         aria-expanded={open}
-        // No hover bubble: the chip already prints the model it would name,
-        // and the popover it opens spells out the agent — a tooltip repeating
-        // both only covered the composer text under it. The accessible name
-        // stays, so the icon-only treatment is still announced.
         aria-label={
           compact
             ? `${chipAgentLabel} · ${chipModel}`
             : `${chipMode} · ${chipPrimary} · ${chipModel}`
         }
+        data-tooltip={
+          compact
+            ? `${chipAgentLabel} · ${chipModel}`
+            : `${chipMode} · ${chipPrimary} · ${chipModel}`
+        }
+        data-tooltip-placement="bottom"
       >
+        {showAmrReminder ? (
+          <span
+            className="inline-switcher__amr-reminder-dot inline-switcher__amr-reminder-dot--chip"
+            data-testid="inline-model-switcher-amr-reminder"
+            aria-hidden="true"
+          />
+        ) : null}
         {compact ? (
           <>
-            {/* Reachability dot leads the chip: it qualifies the whole run
-                that follows (brand mark + model name) rather than reading as
-                punctuation wedged into the model label. */}
-            <span
-              className="inline-switcher__chip-conn"
-              data-connected={chipConnected ? 'true' : 'false'}
-              aria-hidden="true"
-            />
-            {/* The selected MODEL's brand mark — the same artwork its row in
-                the list below carries, so the chip and the row a user just
-                clicked show the same thing. Falls back to the agent logo (and
-                then the BYOK link glyph) when the vendor has no mark. */}
+            {/* Same agent logo (with the BYOK link-glyph fallback) the full
+                chip leads with, so the compact pill still says which agent the
+                model belongs to. */}
             <span className="inline-switcher__chip-icon" aria-hidden="true">
-              {chipModelIconSrc ? (
-                <img
-                  className="inline-switcher__chip-model-logo"
-                  src={chipModelIconSrc}
-                  alt=""
-                  width={18}
-                  height={18}
-                />
-              ) : config.mode === 'daemon' && currentAgent ? (
+              {config.mode === 'daemon' && currentAgent ? (
                 <AgentIcon id={currentAgent.id} size={18} />
               ) : (
                 <span className="inline-switcher__byok-glyph">
@@ -1171,9 +1148,16 @@ export function InlineModelSwitcher({
                 </span>
               )}
             </span>
-            <span className="inline-switcher__chip-model-name">
-              {chipModelName}
-            </span>
+            {/* Divider sits right after the agent logo; the status dot then
+                leads the model name so the dot reads as part of the model
+                label rather than trailing the logo. */}
+            <span className="inline-switcher__chip-divider" aria-hidden="true" />
+            <span
+              className="inline-switcher__chip-conn"
+              data-connected={chipConnected ? 'true' : 'false'}
+              aria-hidden="true"
+            />
+            <span className="inline-switcher__chip-model-name">{chipModel}</span>
           </>
         ) : (
           <>
@@ -1195,7 +1179,7 @@ export function InlineModelSwitcher({
               <span className="inline-switcher__chip-sep" aria-hidden="true">
                 ·
               </span>
-              <span className="inline-switcher__chip-model">{chipModelName}</span>
+              <span className="inline-switcher__chip-model">{chipModel}</span>
             </span>
             <Icon
               name="chevron-down"
@@ -1449,7 +1433,7 @@ export function InlineModelSwitcher({
                             })()}
                           </span>
                           <span className="inline-switcher__agent-name">
-                            {modelVersionLabel(m.id, m.label)}
+                            {m.label}
                           </span>
                           {lockedHint ? (
                             <span
