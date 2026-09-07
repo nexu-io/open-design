@@ -1,6 +1,7 @@
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { parseReleaseVersion } from "@open-design/release";
 
 import {
   canonicalBytes,
@@ -60,7 +61,7 @@ function validSignature(value: unknown, candidates: unknown, keys: readonly Sign
 function requireRelease(request: JsonObject): void {
   const channel = String(request.channel ?? "");
   if (!IDENTIFIER.test(channel)) throw new Error("invalid release channel");
-  if (!new RegExp(`^\\d+\\.\\d+\\.\\d+-${channel.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\.\\d+$`, "u").test(String(request.releaseVersion ?? ""))) throw new Error("releaseVersion does not belong to channel");
+  parseReleaseVersion(String(request.releaseVersion ?? ""), channel);
   if (!SOURCE_COMMIT.test(String(request.sourceCommit ?? ""))) throw new Error("sourceCommit must be a full lowercase SHA");
   if (!VERSION.test(String(request.standaloneVersion ?? ""))) throw new Error("invalid standaloneVersion");
   if (typeof request.publishedAt !== "string" || !request.publishedAt.includes("T")) throw new Error("publishedAt must be an ISO timestamp");

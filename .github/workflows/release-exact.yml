@@ -310,39 +310,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          root = Path(os.environ["RUNNER_TEMP"])
-          scene = json.loads((root / "exact-scene" / "scene.json").read_text())
-          if scene.get("target") != os.environ["TARGET"] or not isinstance(scene.get("shellBuildHash"), str):
-              raise SystemExit("restored or built Shell scene identity mismatch")
-          release_owned_fields = {"artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"}
-          def find_release_owned_fields(value, path="$"):
-              if isinstance(value, dict):
-                  for key, nested in value.items():
-                      field_path = f"{path}.{key}"
-                      if key in release_owned_fields:
-                          yield field_path
-                      yield from find_release_owned_fields(nested, field_path)
-              elif isinstance(value, list):
-                  for index, nested in enumerate(value):
-                      yield from find_release_owned_fields(nested, f"{path}[{index}]")
-          violations = sorted(find_release_owned_fields(scene))
-          if violations:
-              raise SystemExit(f"Shell scene contains release-owned fields: {', '.join(violations)}")
-          pending = json.loads((root / "exact-plan" / "pending.json").read_text())["workloads"][os.environ["WORKLOAD"]]
-          if pending["run"]:
-              destination = root / "convergence-products" / os.environ["WORKLOAD"]
-              destination.mkdir(parents=True)
-              manifest = {
-                  "workload": os.environ["WORKLOAD"],
-                  "digest": pending["digest"],
-                  "executionClass": pending["executionClass"],
-                  "products": {"scene": {"type": "job", "source": os.environ["ARTIFACT_NAME"], "data": {"target": os.environ["TARGET"]}}},
-              }
-              (destination / "product-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-          PY
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene contribute \
+            --scene "$RUNNER_TEMP/exact-scene" --target "$TARGET" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/convergence-products"
 
       - name: Pack scene transport
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}

@@ -50,3 +50,17 @@ it("rejects unknown commands, missing arguments and non-boolean switches", async
   await expect(f.invoke(policyArgs.map(value => value === "false" ? "yes" : value))).rejects.toThrow("must be true or false");
   await expect(f.invoke([...policyArgs, "--bypass"])).rejects.toThrow("Unknown option");
 });
+
+it("keeps workspace command names distinct from the relocatable exact grammar", async () => {
+  const root = await mkdtemp(join(tmpdir(), "release-workspace-cli-")); roots.push(root);
+  const cli = join(root, "workspace.mjs");
+  await build({ entryPoints: [resolve("src/index.ts")], outfile: cli, bundle: true, format: "esm", platform: "node", target: "node24",
+    external: ["@open-design/shell-electron/*"],
+    banner: { js: "import { createRequire as exactCreateRequire } from 'node:module'; const require = exactCreateRequire(import.meta.url);" } });
+  const invoke = (args: string[]) => run(process.execPath, [cli, ...args], { cwd: root });
+  const help = (await invoke(["--help"])).stdout;
+  expect(help).toContain("prepare-metadata <channel>");
+  expect(help).not.toContain("prepare <channel>");
+  await expect(invoke(["prepare"])).rejects.toThrow("--policy is required");
+  await expect(invoke(["finalize"])).rejects.toThrow("--policy is required");
+});

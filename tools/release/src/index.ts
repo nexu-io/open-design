@@ -138,7 +138,7 @@ cli
   });
 
 cli
-  .command("prepare <channel>", "Prepare release metadata outputs for a lane")
+  .command("prepare-metadata <channel>", "Prepare legacy release metadata outputs for a lane")
   .action(async (channel: string) => {
     if (channel === "beta") {
       await import("./metadata/prepare-beta.ts");

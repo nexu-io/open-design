@@ -13,7 +13,8 @@ afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => awai
 const digest = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
 describe("exact release control", () => {
-  it.each(["electron", "terminal"])("signs %s contributions with real resource and optional updater capabilities", async (shellType) => {
+  it.each(["electron", "terminal"].flatMap(shellType => ["betahyx", "stable", "prerelease"].map(channel => ({ shellType, channel }))))("signs $shellType/$channel contributions with real resource and optional updater capabilities", async ({ shellType, channel }) => {
+    const releaseVersion = channel === "stable" ? "0.1.0" : `0.1.0-${channel}.1`;
     const root = await mkdtemp(join(tmpdir(), "exact-control-resource-"));
     roots.push(root);
     const scene = join(root, "scene"), output = join(root, "prepared");
@@ -52,12 +53,12 @@ describe("exact release control", () => {
       const prepareRequest = {
         schemaVersion: 1,
         operation: "exact.prepare",
-        channel: "betahyx",
-        releaseVersion: "0.1.0-betahyx.1",
+        channel,
+        releaseVersion,
         sourceCommit: "c".repeat(40),
         publishedAt: "2026-09-05T00:00:00Z",
         standaloneVersion: "0.1.0",
-        artifactBaseUrl: "https://releases.invalid/betahyx/0.1.0-betahyx.1",
+        artifactBaseUrl: `https://releases.invalid/${channel}/${releaseVersion}`,
         closureArtifactFile: closure,
         standaloneArtifactFile: launcher,
         resourceReceiptFile: join(scene, "closure-resources.json"),
@@ -65,6 +66,7 @@ describe("exact release control", () => {
         outputDirectory: output,
       };
       const resourceReceiptPath = join(scene, "closure-resources.json");
+      await expect(executeExactPackControl({ ...prepareRequest, releaseVersion: channel === "stable" ? "0.1.0-stable.1" : "0.1.0" }, join(output, "prepare-receipt.json"))).rejects.toThrow("release version must be");
       const resourceReceipt = JSON.parse(await readFile(resourceReceiptPath, "utf8"));
       await writeFile(resourceReceiptPath, JSON.stringify({ ...resourceReceipt, operation: "closure.resources.development" }));
       await expect(executeExactPackControl(prepareRequest, join(output, "prepare-receipt.json"))).rejects.toThrow("resource receipt is invalid");
@@ -102,6 +104,7 @@ describe("exact release control", () => {
       if (previous.keyId == null) delete process.env.OD_EXACT_SIGNING_KEY_ID; else process.env.OD_EXACT_SIGNING_KEY_ID = previous.keyId;
     }
     const envelope = JSON.parse(await readFile(join(output, "documents/content-metadata.json"), "utf8"));
+    expect(envelope.metadata).toMatchObject({ channel, releaseVersion });
     expect(envelope.metadata.resources).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "standalone-launcher" }),
       expect.objectContaining({ id: "closure" }),

@@ -42,7 +42,7 @@ async function runPrepare(channel: string, env: Record<string, string>): Promise
   try {
     const result = await execFileAsync(
       process.execPath,
-      [tsxCliPath, "tools/release/src/index.ts", "prepare", channel],
+      [tsxCliPath, "tools/release/src/index.ts", "prepare-metadata", channel],
       {
         cwd: workspaceRoot,
         env: {

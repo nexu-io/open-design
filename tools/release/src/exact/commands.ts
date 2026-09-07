@@ -9,6 +9,7 @@ import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRele
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
+import { contributeScene } from "./scene-contribution.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -125,20 +126,23 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("baseline operation must be stage or promote");
     });
 
-  cli.command("scene <operation>", "Pack, unpack or restore a lossless scene transport")
+  cli.command("scene <operation>", "Transport scenes or contribute a release-neutral convergence candidate")
     .option("--scene <directory>", "Source scene (pack)")
     .option("--archive <file>", "Source archive (unpack)")
     .option("--output <path>", "New archive (pack) or new scene directory (unpack)")
     .option("--pending <file>", "Convergence planner receipt (restore)")
     .option("--workload <name>", "Planner workload (restore)")
     .option("--transport <file>", "New local scene.tar for downstream transfer (restore)")
+    .option("--target <target>", "Expected scene target (contribute)")
+    .option("--artifact <name>", "Job artifact name (contribute)")
     .option("--receipt <file>", "Optional receipt; defaults to stdout")
     .action(async (operation: string, options: Options) => {
       const output = required(options, "output");
       const result = operation === "pack" ? await packSceneArtifact(required(options, "scene"), output)
         : operation === "unpack" ? await unpackSceneArtifact(required(options, "archive"), output)
         : operation === "restore" ? await restoreSceneCache({ pending: required(options, "pending"), workload: required(options, "workload"), transport: required(options, "transport"), output })
-        : (() => { throw new Error("scene operation must be pack or unpack or restore"); })();
+        : operation === "contribute" ? await contributeScene({ scene: required(options, "scene"), target: required(options, "target"), pending: required(options, "pending"), workload: required(options, "workload"), artifact: required(options, "artifact"), output })
+        : (() => { throw new Error("scene operation must be pack or unpack or restore or contribute"); })();
       await emit(options, { schemaVersion: 1, operation: `exact.scene.${operation}`, ...result });
     });
 

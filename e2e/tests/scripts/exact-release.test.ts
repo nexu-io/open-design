@@ -102,6 +102,7 @@ describe("exact Electron release topology", () => {
     expect(scene).toContain("path: ${{ runner.temp }}/exact-scene-artifact/scene.tar");
     expect(scene).toContain("exact-release-control.mjs\" scene pack");
     expect(scene).toContain("exact-release-control.mjs\" scene restore");
+    expect(scene).toContain("exact-release-control.mjs\" scene contribute");
     expect(scene).not.toContain("zipfile");
     expect(scene).not.toContain('operation:"exact.scene.');
     expect(workflow).not.toContain('operation:"release.authorize"');
@@ -113,8 +114,11 @@ describe("exact Electron release topology", () => {
   it("checks release-neutral scenes by owned fields rather than coincidental version values", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
 
-    expect(workflow).toContain('release_owned_fields = {"artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"}');
-    expect(workflow).toContain("find_release_owned_fields(scene)");
+    expect(workflow).toContain('exact-release-control.mjs" scene contribute');
+    expect(workflow).not.toContain("find_release_owned_fields");
+    const source = await readFile(resolve(workspaceRoot, "tools/release/src/exact/scene-contribution.ts"), "utf8");
+    expect(source).toContain('["artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"]');
+    expect(source).toContain("releaseOwnedFields(scene)");
     expect(workflow).not.toContain('for release_field in (os.environ["RELEASE_VERSION"]');
   });
 
