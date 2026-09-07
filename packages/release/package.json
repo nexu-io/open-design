@@ -1,6 +1,6 @@
 {
   "name": "@open-design/release",
-  "version": "0.21.3",
+  "version": "0.21.4",
   "private": true,
   "type": "module",
   "description": "Open Design release domain primitives.",
