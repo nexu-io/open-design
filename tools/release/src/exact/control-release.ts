@@ -6,6 +6,7 @@ import { isReleaseChannel } from "@open-design/release";
 
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { createAcceptedShellBaselineReceipt } from "./accepted-baseline.ts";
+import { collectInstalledAcceptance } from "./installed-acceptance.ts";
 import { createExactPlanFromRegistryFile } from "./plan.ts";
 import { authorizeReleaseCapability, readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt, type ReleaseTarget } from "../policy/release-profile.ts";
 
@@ -369,6 +370,11 @@ export async function executeExactReleaseControl(requestValue: JsonObject, recei
     return;
   }
   if (requestValue.schemaVersion !== 1) throw new Error("unsupported exact release request schema");
+  if (requestValue.operation === "exact.acceptance") {
+    const { credential, policy } = await collectInstalledAcceptance(requestValue);
+    validateReleaseArtifactTrust(policy, [credential]);
+    return await writeObject(receiptPath, credential);
+  }
   if (requestValue.operation === "exact.publish") return await publish(requestValue, receiptPath);
   if (requestValue.operation === "exact.activate") return await activate(requestValue, receiptPath);
   if (requestValue.operation === "exact.baseline.promote") return await promoteAcceptedElectronBaseline(requestValue, receiptPath);

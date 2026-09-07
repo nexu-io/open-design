@@ -19,7 +19,7 @@ export function canonicalBytes(value: unknown): Buffer {
 }
 
 export async function readObject(path: string): Promise<JsonObject> {
-  const value: unknown = JSON.parse(await readFile(resolve(path), "utf8"));
+  const value: unknown = JSON.parse((await readFile(resolve(path), "utf8")).replace(/^\uFEFF/u, ""));
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error(`JSON document must be an object: ${path}`);
   return value as JsonObject;
 }

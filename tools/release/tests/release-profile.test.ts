@@ -38,6 +38,28 @@ function request(profile: "exact-validation" | "prerelease-distribution" | "stab
 }
 
 describe("tools-release profile policy", () => {
+  it.each(["refs/heads/main", "refs/heads/feat/electron-shell-exact-delivery", "refs/heads/fix/startup"])("allows betahyx validation from the actual branch %s", (sourceRef) => {
+    expect(resolveReleasePolicy({ ...request("exact-validation"), sourceRef }).sourceRef).toBe(sourceRef);
+  });
+
+  it.each(["refs/tags/v1.2.3", "main", "refs/heads/", "refs/heads/bad..name", "refs/heads/topic.lock", "refs/heads/topic\nother"])("rejects a non-branch or malformed source ref %j", (sourceRef) => {
+    expect(() => resolveReleasePolicy({ ...request("exact-validation"), sourceRef })).toThrow("valid refs/heads branch");
+  });
+
+  it.each(["ab", "abcdefghijk", "beta1", "Beta", "bet-axy", "bet_axy", "beta\n"])("rejects custom channel syntax %j before rollout selection", (channel) => {
+    expect(() => resolveReleasePolicy({ ...request("exact-validation"), channel })).toThrow("3–10 lowercase letters");
+  });
+
+  it.each(["abc", "abcdefghij", "preview"])("keeps valid custom channel %s closed until rollout", (channel) => {
+    expect(() => resolveReleasePolicy({ ...request("exact-validation"), channel })).toThrow("does not permit channel");
+  });
+
+  it.each(["stable-distribution", "prerelease-distribution"] as const)("restricts %s to the version-matched release branch", (profile) => {
+    for (const sourceRef of ["refs/heads/main", "refs/heads/feat/electron", "refs/heads/release/v1.2.4"]) {
+      expect(() => resolveReleasePolicy({ ...request(profile), sourceRef })).toThrow("matching release/vX.Y.Z ref");
+    }
+  });
+
   it("keeps every workflow profile on one capability boundary", () => {
     const receipts = [request("exact-validation"), request("prerelease-distribution"), request("stable-distribution")]
       .map(resolveReleasePolicy);

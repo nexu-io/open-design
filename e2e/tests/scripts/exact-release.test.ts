@@ -14,6 +14,14 @@ const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("delegates source branch eligibility to tools-release without weakening exact checkout binding", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    expect(workflow).not.toContain('[[ "$SOURCE_REF" =~');
+    expect(workflow).toContain('test "$(git rev-parse HEAD)" = "$SOURCE_SHA"');
+    expect(workflow).toContain('git ls-remote --refs origin "$SOURCE_REF"');
+    expect(workflow).toContain("tools-release.mjs release-policy");
+  });
+
   it("runs the current release matrix on macOS while retaining the deferred Windows declaration", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const convergence = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/convergence-exact.json"), "utf8"));
@@ -92,6 +100,8 @@ describe("exact Electron release topology", () => {
     expect(workflow).toContain('"operation": "exact.baseline.promote"');
     expect(workflow).not.toContain(".github/scripts/pack.py");
     expect(workflow).not.toContain(".github/scripts/release.py");
+    expect(workflow).not.toContain("installed_acceptance.py");
+    expect(workflow).toContain('operation: "exact.acceptance"');
     expect(workflow).not.toContain("node tools/release/src/exact/control-cli.ts");
     expect(workflow).not.toContain("somechan");
     expect(workflow).not.toContain("somepreview");
@@ -129,8 +139,12 @@ describe("exact Electron release topology", () => {
     const installIdentity = { appBundleId: "io.open-design.betahyx", executableName: "open-design-betahyx" };
     const updater = { channel: "betahyx", mechanism: "standalone" };
     const required = { artifact, installIdentity, platformTrust, shell, shellMetadata, target: "darwin-arm64", updater };
-    await writeFile(join(publishedRoot, "publish-receipt.json"), JSON.stringify({ channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit }));
-    await writeFile(join(root, "required-acceptance.json"), JSON.stringify(required));
+    const target = { endpointUrl: "https://storage.invalid", bucket: "release", publicBaseUrl: "https://release.invalid", latestChannelHeadUrl: "https://storage.invalid/release/betahyx/latest/channel-head.json" };
+    const publishReceipt = join(publishedRoot, "publish-receipt.json"), policyReceipt = join(root, "policy.json");
+    const policyRequest = join(root, "policy-request.json");
+    await writeFile(policyRequest, JSON.stringify({ schemaVersion: 1, operation: "release.policy.resolve", profile: "exact-validation", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit, sourceRef: "refs/heads/feat/electron", switches: { endUserDistribution: false, stableAuthorized: false }, target }));
+    await run(process.execPath, [resolve(workspaceRoot, "tools/release/bin/tools-release.mjs"), "release-policy", "--request", policyRequest, "--receipt", policyReceipt]);
+    await writeFile(publishReceipt, JSON.stringify({ schemaVersion: 1, operation: "exact.publish", profile: "exact-validation", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit, target, requiredAcceptances: [required] }));
 
     const installedFiles = await Promise.all(["host.mjs", "supervisor.mjs", "content.json", "trust.json", "seed.bin"].map(async (file) => {
       const body = Buffer.from(`installed:${file}`);
@@ -154,14 +168,13 @@ describe("exact Electron release topology", () => {
       { attemptId: "acceptance-attempt", event: "shutdown.complete" },
     ].map((event) => JSON.stringify(event)).join("\n"));
 
-    await run("python3", [
-      resolve(workspaceRoot, ".github/scripts/release/installed_acceptance.py"),
-      "--root", root,
-      "--installed-root", installedRoot,
-      "--shell-type", "electron",
-      "--target", "darwin-arm64",
-      "--runtime-log", runtimeLog,
-    ]);
+    const acceptanceRequest = join(root, "acceptance-request.json");
+    const input = { schemaVersion: 1, operation: "exact.acceptance", publishReceipt, policyReceipt, installedRoot, shellType: "electron", target: "darwin-arm64", runtimeLog };
+    const collect = async (value: unknown) => {
+      await writeFile(acceptanceRequest, JSON.stringify(value));
+      await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/exact-control.mjs"), "--request", acceptanceRequest, "--receipt", join(acceptanceRoot, "electron-darwin-arm64.json")]);
+    };
+    await collect(input);
     const credential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
     expect(credential).toMatchObject({ artifact, installIdentity, platformTrust, shell, shellMetadata, target: "darwin-arm64", updater });
 
@@ -187,12 +200,7 @@ describe("exact Electron release topology", () => {
     await writeFile(join(standaloneGenerations, `${generationId}.json`), JSON.stringify({
       schemaVersion: 4, id: generationId, channel: "betahyx", releaseVersion: "1.2.3-betahyx.4",
     }));
-    await run("python3", [
-      resolve(workspaceRoot, ".github/scripts/release/installed_acceptance.py"),
-      "--root", root, "--installed-root", installedRoot, "--shell-type", "electron", "--target", "darwin-arm64",
-      "--runtime-log", runtimeLog, "--hot-acceptance-receipt", hotReceipt,
-      "--standalone-state", standaloneState, "--standalone-generations-root", standaloneGenerations,
-    ]);
+    await collect({ ...input, hotAcceptanceReceipt: hotReceipt, standaloneState, standaloneGenerationsRoot: standaloneGenerations });
     const hotCredential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
     expect(hotCredential.installed.proof).toMatchObject({
       baselineReleaseVersion: "1.2.3-betahyx.3",

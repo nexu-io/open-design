@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Full current-main commit to build
+        description: Full source-branch tip commit to build
         required: true
         type: string
       channel:
@@ -76,7 +76,6 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$SOURCE_REF" =~ ^refs/heads/(main|release/v[0-9]+\.[0-9]+\.[0-9]+)$ ]]
 
       - uses: actions/checkout@v6.0.2
         with:
@@ -975,6 +974,8 @@ jobs:
         env:
           SHELL_TYPE: ${{ matrix.shell }}
           TARGET: ${{ matrix.target }}
+          CHANNEL: ${{ inputs.channel }}
+          ACCEPTANCE_MODE: ${{ matrix.mode }}
         shell: bash
         run: |
           set -euo pipefail
@@ -985,24 +986,29 @@ jobs:
           else
             installed_root="$RUNNER_TEMP/installed-shell"
           fi
-          runtime_args=()
-          if [[ "$SHELL_TYPE" == "electron" ]]; then
-            runtime_args=(--runtime-log "$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/${ELECTRON_NAMESPACE}-headless/runtime/electron/logs/electron-runtime.jsonl")
-            if [[ "${{ matrix.mode }}" == "hot" ]]; then
-              standalone_root="$RUNNER_TEMP/electron-user-data/exact/channels/${{ inputs.channel }}/namespaces/${ELECTRON_NAMESPACE}-headless/runtime/electron/standalone-store"
-              runtime_args+=(
-                --hot-acceptance-receipt "$RUNNER_TEMP/electron-cdp-receipt.json"
-                --standalone-state "$standalone_root/channels/${{ inputs.channel }}/namespaces/${ELECTRON_NAMESPACE}-headless/state.json"
-                --standalone-generations-root "$standalone_root/channels/${{ inputs.channel }}/generations"
-              )
-            fi
-          fi
-          python3 .github/scripts/release/installed_acceptance.py \
-            --root "$RUNNER_TEMP" \
-            --installed-root "$installed_root" \
-            --shell-type "$SHELL_TYPE" \
-            --target "$TARGET" \
-            "${runtime_args[@]}"
+          node --input-type=module - "$installed_root" <<'JS'
+          import { writeFileSync } from "node:fs";
+          import { join } from "node:path";
+          const { RUNNER_TEMP: root, SHELL_TYPE: shellType, TARGET: target, CHANNEL: channel, ELECTRON_NAMESPACE: namespace, ACCEPTANCE_MODE: mode } = process.env;
+          const runtimeRoot = join(root, "electron-user-data/exact/channels", channel, "namespaces", `${namespace}-headless/runtime/electron`);
+          const store = join(runtimeRoot, "standalone-store/channels", channel);
+          const request = {
+            schemaVersion: 1, operation: "exact.acceptance", shellType, target,
+            installedRoot: process.argv[2], runtimeProofRoot: root,
+            publishReceipt: join(root, "published/publish-receipt.json"),
+            policyReceipt: join(root, "published/release-policy.json"),
+            ...(shellType !== "electron" ? {} : { runtimeLog: join(runtimeRoot, "logs/electron-runtime.jsonl") }),
+            ...(mode !== "hot" ? {} : {
+              hotAcceptanceReceipt: join(root, "electron-cdp-receipt.json"),
+              standaloneState: join(store, "namespaces", `${namespace}-headless/state.json`),
+              standaloneGenerationsRoot: join(store, "generations"),
+            }),
+          };
+          writeFileSync(join(root, "acceptance-request.json"), JSON.stringify(request) + "\n");
+          JS
+          node "$RUNNER_TEMP/published/exact-release-control.mjs" \
+            --request "$RUNNER_TEMP/acceptance-request.json" \
+            --receipt "$RUNNER_TEMP/acceptance/$SHELL_TYPE-$TARGET.json"
 
       - uses: actions/upload-artifact@v4
         with:

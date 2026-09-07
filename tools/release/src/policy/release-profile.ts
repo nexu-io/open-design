@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+
 import { parseReleaseBaseVersion, parseReleaseVersion } from "@open-design/release";
 
 import { readObject, writeObject, type JsonObject } from "../exact/control-common.ts";
@@ -81,6 +83,8 @@ export function releaseTargetsEqual(left: unknown, right: ReleaseTarget): boolea
 
 const SHA = /^[0-9a-f]{40}$/u;
 const RELEASE_REF = /^refs\/heads\/release\/v(\d+\.\d+\.\d+)$/u;
+// Publication policy, not a restriction on the fossil metadata reader grammar.
+const CUSTOM_CHANNEL = /^[a-z]{3,10}$/u;
 const profileRegistry = Object.freeze({
   "exact-validation": Object.freeze({ channel: "betahyx", switches: Object.freeze({ endUserDistribution: false, stableAuthorized: false }) }),
   "prerelease-distribution": Object.freeze({ channel: "prerelease", switches: Object.freeze({ endUserDistribution: false, stableAuthorized: false }) }),
@@ -165,6 +169,10 @@ export function resolveReleasePolicy(value: unknown): ReleasePolicyReceipt {
   if (request.schemaVersion !== 1 || request.operation !== "release.policy.resolve") throw new Error("release policy request schema or operation is unsupported");
   const profile = profileName(request.profile);
   const definition = profileRegistry[profile];
+  if (typeof request.channel !== "string"
+    || (request.channel !== "stable" && request.channel !== "prerelease" && !CUSTOM_CHANNEL.test(request.channel))) {
+    throw new Error("custom release channel must contain 3–10 lowercase letters");
+  }
   if (request.channel !== definition.channel) throw new Error(`${profile} does not permit channel ${String(request.channel)}`);
   if (typeof request.releaseVersion !== "string") throw new Error("release version must be a string");
   const parsedVersion = parseReleaseVersion(request.releaseVersion, definition.channel);
@@ -174,9 +182,11 @@ export function resolveReleasePolicy(value: unknown): ReleasePolicyReceipt {
   }
   if (typeof request.sourceCommit !== "string" || !SHA.test(request.sourceCommit)) throw new Error("release source commit must be a full lowercase SHA");
   if (typeof request.sourceRef !== "string") throw new Error("release source ref must be a string");
-  if (profile === "exact-validation") {
-    if (request.sourceRef !== "refs/heads/main") throw new Error("exact-validation requires refs/heads/main");
-  } else {
+  if (!request.sourceRef.startsWith("refs/heads/")
+    || spawnSync("git", ["check-ref-format", request.sourceRef], { stdio: "ignore" }).status !== 0) {
+    throw new Error("release source ref must be a valid refs/heads branch");
+  }
+  if (profile !== "exact-validation") {
     const match = RELEASE_REF.exec(request.sourceRef);
     if (match?.[1] !== parsedVersion.baseVersion) throw new Error(`${profile} requires the matching release/vX.Y.Z ref`);
   }

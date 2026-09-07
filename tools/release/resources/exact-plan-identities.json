@@ -128,22 +128,30 @@
       ]
     },
     "electron.acceptance.full": {
-      "inherits": ["electron.cdp.control"],
+      "inherits": ["electron.cdp.control", "release.acceptance.control"],
       "paths": [
-        ".github/scripts/release/installed_acceptance.py",
         ".github/workflows/release-exact.yml",
         "e2e/tests/scripts/exact-release.test.ts",
         "shells/electron/tests/runtime-lifecycle.test.ts"
       ]
     },
     "closure.acceptance.hot": {
-      "inherits": ["electron.cdp.control"],
+      "inherits": ["electron.cdp.control", "release.acceptance.control"],
       "paths": [
         "packages/standalone/src",
         "shells/electron/tests/standalone-authority.test.ts",
         "shells/electron/tests/standalone-host-lifecycle.test.ts",
         "shells/terminal/tests/bootloader-handoff.test.ts",
         "shells/terminal/tests/sidecar.test.ts"
+      ]
+    },
+    "release.acceptance.control": {
+      "paths": [
+        "tools/release/src/exact/installed-acceptance.ts",
+        "tools/release/src/exact/control-common.ts",
+        "tools/release/src/exact/control-release.ts",
+        "tools/release/src/policy/release-profile.ts",
+        "tools/release/tests/installed-acceptance.test.ts"
       ]
     },
     "electron.cdp.control": {
