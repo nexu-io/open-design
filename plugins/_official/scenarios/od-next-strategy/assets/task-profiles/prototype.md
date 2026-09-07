@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.2.1
 
 > Rollout: active
 
@@ -105,6 +105,15 @@ record them in the Design Spec:
 - Give key actions clear clickable affordances and result feedback, and
   handle default, hover, focus, selected, loading, empty, success, failure,
   and disabled states wherever the declared flow needs them.
+- On initial render and every transition, show only the variants appropriate
+  to the current state of each conditional region: empty content only for an
+  empty result, submission success only after success, and one selected
+  mode's preview at a time.
+- Keep inactive variants out of layout and interaction. If using HTML
+  `hidden`, preserve its hiding behavior against component `display: flex`
+  or `display: grid` styles. On transitions and resets, update visible
+  content and feedback together, while keeping applicable form errors,
+  loading indicators, and recovery actions available.
 - Modals, menus, drawers, and page transitions have explicit enter, exit, and
   return paths.
 - Use semantic controls, visible keyboard focus, accessible names, useful alt
