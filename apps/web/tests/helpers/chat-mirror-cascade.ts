@@ -354,6 +354,21 @@ export function expand(prop: string, value: string): Array<[string, string]> {
       return [['padding-left', v]];
     case 'padding-inline-end':
       return [['padding-right', v]];
+    /*
+     * `margin-inline-*` 是 OPEND-2641(分步进度和「必填」角标之间的气口)加进来的。
+     * 那一格的判据是**两个行内元素之间到底隔了多少** —— 无头 Chrome 实测:
+     * 把 `.qf-step-progress` 的 `margin-inline-start` 置 0,`1/4` 和角标之间的
+     * 间距就是 0.0px(JSX 里两者中间没有空白文本节点,`req.nextSibling === prog`),
+     * 紧贴着角标的圆边框。加进来之前这一轴读回 `<unset>`,任何「断言它是 6px」都会假绿。
+     * 逻辑属性落到物理格子上的规矩照抄上面 `padding-inline-*` 那两条。
+     */
+    case 'margin-inline-start':
+      return [['margin-left', v]];
+    case 'margin-inline-end':
+      return [['margin-right', v]];
+    case 'margin-left':
+    case 'margin-right':
+      return [[prop, v]];
     case 'padding-top':
     case 'padding-right':
     case 'padding-bottom':
@@ -375,6 +390,8 @@ export function expand(prop: string, value: string): Array<[string, string]> {
      *
      * ⚠️ 仍然不在名单里的:`letter-spacing` / `-webkit-line-clamp` / `display` /
      * `animation-*` / `transform`。要量它们得先照这里再加一格。
+     * ⚠️ `margin` 只收了 `margin-inline-*` 和左右两条长手(见下面那格),
+     * **`margin` / `margin-block` 简写没展开** —— 用简写写的外距在这把尺子上看不见。
      * ⚠️ `font` 简写不展开(`expand('font', …)` 返回空),所以「同一条规则里
      * `font: inherit` 在长手之前」这种写法量出来的是长手值 —— 和浏览器一致;
      * 但「只写 `font:` 简写、指望它带出 line-height」的规则,这把尺子看不见。
