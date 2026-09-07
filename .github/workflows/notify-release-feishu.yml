@@ -51,6 +51,16 @@ on:
         required: false
         type: boolean
         default: false
+      enable_smoke:
+        description: "Also run the packaged smoke suites (mac arm64, mac Intel, Windows) inside the build jobs. Off by default: smoke never blocks publication but costs ~2.5 min on the Windows critical path. TURN THIS ON for the last prerelease before promoting a stable release."
+        required: false
+        type: boolean
+        default: false
+      mac_sign_mode:
+        description: "macOS signing depth: no / sign-only / notarize. Empty uses sign-only — codesigned (which the stable promotion gate requires) but not sent to Apple's notary service. Use notarize for the last prerelease before a stable promotion."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -107,6 +117,18 @@ jobs:
       # a `type: boolean` callee input). A manual dispatch can check the box —
       # which is what a pre-stable prerelease must do, since stable ships Intel.
       enable_mac_x64: ${{ inputs.enable_mac_x64 || false }}
+      # Packaged smoke is opt-in for the same reason and with the same `|| false`
+      # boolean coercion: `inputs` is unset on push, and a bare
+      # `${{ inputs.enable_smoke }}` would forward '' to a `type: boolean`
+      # callee input. Smoke is advisory (continue-on-error), so a release-branch
+      # push spends nothing on it; a pre-stable dispatch checks the box.
+      enable_smoke: ${{ inputs.enable_smoke || false }}
+      # Same failure mode as win_x64_smoke_mode above: a `workflow_call`
+      # `default:` only applies to an OMITTED input, so the final arm must name
+      # a real mode, never ''. sign-only keeps platforms.mac.signed == true,
+      # which is what the stable promotion gate reads; it drops only the Apple
+      # notary round-trip, which no prerelease consumer needs.
+      mac_sign_mode: ${{ inputs.mac_sign_mode || 'sign-only' }}
 
   notify:
     name: Notify Feishu (release)
@@ -122,21 +144,73 @@ jobs:
           # can differ — anchoring on the built commit keeps the changelog range
           # (previous_commit..commit) correct for manual prerelease runs.
           ref: ${{ needs.build.outputs.commit }}
-          fetch-depth: 0
+          # Shallow on purpose. The only thing this job runs from the repository
+          # is tools/release/src/notifications/feishu.ts, which imports nothing
+          # but node builtins; the changelog range now comes from the compare
+          # API below instead of local history. A full clone of this repository
+          # is a 2.2 GiB pack and cost 4m09s of a 56m pipeline (run
+          # 34102146769) to serve exactly one `git log`.
 
       - name: Compute changelog since last prerelease
         id: changelog
         env:
+          GH_TOKEN: ${{ github.token }}
           PREV: ${{ needs.build.outputs.previous_commit }}
           CUR: ${{ needs.build.outputs.commit }}
         run: |
           set -euo pipefail
           file="$RUNNER_TEMP/changelog.txt"
           : > "$file"
-          if [ -n "$PREV" ] && git cat-file -e "${PREV}^{commit}" 2>/dev/null && git cat-file -e "${CUR}^{commit}" 2>/dev/null; then
-            git log --no-merges --pretty=format:'%s (%h)' "${PREV}..${CUR}" > "$file" || true
-          fi
+          # Set the output before any early return, so every path below still
+          # hands feishu.ts a real (possibly empty) file — the same contract the
+          # local-git version had: no baseline, or an unreachable commit, means
+          # an empty changelog, not a failed notification.
           echo "file=$file" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$PREV" ] || [ -z "$CUR" ]; then
+            echo "no comparable range (PREV='${PREV}' CUR='${CUR}'); changelog stays empty"
+            exit 0
+          fi
+
+          raw="$RUNNER_TEMP/changelog-compare.txt"
+          meta="$RUNNER_TEMP/changelog-compare-meta.txt"
+          : > "$raw"
+          : > "$meta"
+
+          # Reproduces `git log --no-merges --pretty=format:'%s (%h)' PREV..CUR`:
+          #   * `select((.parents | length) < 2)` is --no-merges.
+          #   * %s is the subject — the first paragraph, folded onto one line —
+          #     so split on the blank line, then collapse any interior newline.
+          #   * %h abbreviated to 10 characters, which is what git's automatic
+          #     abbreviation resolves to on this repository's object count.
+          # `--paginate` walks the compare endpoint's Link headers; both the page
+          # order and the order within a page are oldest-first, so a single `tac`
+          # at the end restores git log's newest-first order (which matters: the
+          # card renders only the first 30 lines).
+          subject='(.commit.message | split("\n\n")[0] | gsub("[\r\n]+"; " ") | sub("^\\s+"; "") | sub("\\s+$"; ""))'
+          if ! gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${CUR}?per_page=100" \
+              --jq ".commits[] | select((.parents | length) < 2) | \"\\(${subject}) (\\(.sha[0:10]))\"" \
+              > "$raw"; then
+            echo "::warning::compare ${PREV}...${CUR} failed (commit unreachable, history rewritten, or API error); posting the card without a changelog"
+            exit 0
+          fi
+
+          tac "$raw" > "$file"
+
+          # The compare endpoint caps at 250 commits. Pagination still returns
+          # the newest page last, so the newest 30 lines the card renders are
+          # exact either way; only the "共 N 条" total would under-report. Say so
+          # in the log rather than silently disagreeing with the real range.
+          if gh api "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${CUR}?per_page=1" \
+              --jq '.total_commits' > "$meta" 2>/dev/null; then
+            total="$(tr -d '[:space:]' < "$meta")"
+            collected="$(wc -l < "$raw" | tr -d ' ')"
+            echo "compare ${PREV}...${CUR}: total_commits=${total} non-merge lines collected=${collected}"
+            if printf '%s' "$total" | grep -Eq '^[0-9]+$' && [ "$total" -gt 250 ]; then
+              echo "::warning::compare returned ${total} commits, above the endpoint's 250 cap; the card lists the newest commits correctly but its total under-reports"
+            fi
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
