@@ -52,7 +52,7 @@ async function validateInstallation(value) {
   if (manifest?.schemaVersion !== 1 || manifest.shell?.type !== "terminal" || manifest.shell?.version !== value.shell.version || !digestPattern.test(manifest.shell?.buildHash) || manifest.target !== value.target) throw new Error("installed manifest identity mismatch");
   if (manifest.runtime?.name !== "node" || manifest.runtime?.version !== value.runtime.version || manifest.runtime?.sha256 !== value.runtime.digest) throw new Error("installed runtime binding mismatch");
   const descriptorPath = (descriptor) => descriptor?.file ?? descriptor?.entrypoint;
-  const descriptors = [manifest.carrierLock, manifest.contracts, manifest.runtimeModules, manifest.fossil, manifest.sidecarBootstrap, manifest.sidecarHost, manifest.fixtureShellUpdater, manifest.standalone, manifest.seed?.closure, manifest.seed?.standaloneLauncher, manifest.releaseDocuments?.content, manifest.trust,
+  const descriptors = [manifest.carrierLock, manifest.contracts, manifest.runtimeModules, manifest.fossil, manifest.sidecarBootstrap, manifest.sidecarHost, manifest.standalone, manifest.seed?.closure, manifest.seed?.standaloneLauncher, manifest.releaseDocuments?.content, manifest.trust,
     manifest.shellFiles?.sh?.terminal, manifest.shellFiles?.sh?.install, manifest.shellFiles?.ps1?.terminal, manifest.shellFiles?.ps1?.install];
   for (const descriptor of descriptors) {
     const entrypoint = descriptorPath(descriptor);
@@ -89,8 +89,6 @@ async function readUrl(url) {
 
 function sidecarRequestTimeoutMs(message) {
   if (message.domain === "generation" && message.operation === "handoff") return 60_000;
-  if (message.domain === "shell-updater" && message.operation === "invoke") return 10 * 60_000;
-  if (message.domain === "shell-updater" && message.operation === "wait") return (message.timeoutMs ?? 0) + 2_000;
   return 5_000;
 }
 
@@ -223,15 +221,8 @@ function sidecarLifecycle(standalone, request) {
   return client;
 }
 
-function sidecarShellUpdater(scope, options) {
-  const request = (operation, input = {}) => sidecarRequest({ domain: "shell-updater", operation, scope, options, ...input });
-  return {
-    shellType: options.shellType,
-    readSnapshot: () => request("read"),
-    waitForChange: (afterRevision, timeoutMs) => request("wait", { afterRevision, timeoutMs }),
-    invoke: (action) => request("invoke", { action }),
-    confirmInstalled: (proof) => request("confirm-installed", { proof }),
-  };
+function sidecarShellUpdater(standalone, scope, shellType) {
+  return new standalone.StandaloneHostControlUpdater(shellType, scope, message => sidecarControlRequest(standalone, message));
 }
 
 async function trustedKeys(installation) {
@@ -310,12 +301,7 @@ async function execute(request, installation) {
     return launcher;
   });
   if (request.operation.startsWith("shell-update-")) {
-    const updaterOptions = {
-      algebra: standalone.SHELL_UPDATE_ALGEBRA,
-      attachmentId: request.attachmentId ?? `${shell.type}-updater`,
-      shellType: shell.type,
-    };
-    const updater = sidecarShellUpdater({ channel: request.channel, namespace: request.namespace }, updaterOptions);
+    const updater = sidecarShellUpdater(standalone, { channel: request.channel, namespace: request.namespace }, shell.type);
     const action = ({
       "shell-update-check": "check",
       "shell-update-download": "download",
@@ -325,8 +311,7 @@ async function execute(request, installation) {
       "shell-update-abandon": "abandon",
     })[request.operation];
     if (request.operation === "shell-update-confirm") {
-      const snapshot = await updater.readSnapshot();
-      return updater.confirmInstalled(snapshot.handoff?.shell);
+      throw new Error("Terminal installation confirmation requires an installed identity bound to a durable installer claim");
     }
     return action == null ? updater.readSnapshot() : updater.invoke(action);
   }
@@ -370,16 +355,9 @@ async function execute(request, installation) {
   if (request.operation === "prepare-update") {
     const preparation = await updater.prepareLatest(request.activationPolicy);
     if (preparation.status !== "shell-reinstall-required") return preparation;
-    const updaterOptions = {
-      algebra: standalone.SHELL_UPDATE_ALGEBRA,
-      attachmentId: request.attachmentId ?? `${shell.type}-updater`,
-      channelHeadUrl: request.channelHeadUrl,
-      shellType: shell.type,
-      target: installation.manifest.target,
-      trustedKeys: [...keys].map(([keyId, publicKey]) => ({ keyId, publicKey })),
-    };
-    const shellUpdater = sidecarShellUpdater({ channel: request.channel, namespace: request.namespace }, updaterOptions);
-    return installation.closure.prepareClosureShellUpdate({ requirement: preparation.requirement, shell, updater: shellUpdater });
+    // No native installer provider is registered yet. Preserve the explicit
+    // compatibility requirement without manufacturing a candidate or success.
+    return installation.closure.prepareClosureShellUpdate({ requirement: preparation.requirement, shell, updater: null });
   }
   const prepared = await store.preparedGeneration();
   const currentLifecycle = await lifecycle.status({ channel: request.channel, namespace: request.namespace });

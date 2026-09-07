@@ -139,9 +139,9 @@ const residualAllowedExactPaths = new Set([
   "shells/terminal/tests/fixtures/standalone-launcher.mjs",
   // Existing updater model fixture retained during native host cutover; never shipped.
   "shells/terminal/tests/fixtures/legacy-lifecycle.mjs",
+  "shells/terminal/tests/fixtures/legacy-shell-updater.mjs",
   // Terminal distributions execute these native runtime entrypoints with the
   // verified embedded Node after leaving the pnpm/TypeScript workspace.
-  "shells/terminal/runtime/fixture-shell-updater.mjs",
   "shells/terminal/runtime/fossil.mjs",
   "shells/terminal/runtime/sidecar-bootstrap.mjs",
   "shells/terminal/runtime/sidecar-host.mjs",

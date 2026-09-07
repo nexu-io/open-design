@@ -5,13 +5,11 @@ import { pathToFileURL } from "node:url";
 
 import { bootstrapSidecarProcess, handoffCurrentSidecarGeneration, SidecarFactory } from "@open-design/sidecar";
 
-import { FixtureShellUpdaterPort } from "./fixture-shell-updater.mjs";
-
 const ACTION = "standalone.request.v1";
 const CONFIG_ENV = "OD_TERMINAL_SIDECAR_CONFIG_V1";
 const REQUEST_FIELDS = new Set([
   "schemaVersion", "scope", "domain", "operation", "options",
-  "action", "bindingDigest", "generationId", "afterRevision", "timeoutMs", "proof",
+  "bindingDigest", "generationId",
 ]);
 
 function readConfig() {
@@ -49,7 +47,6 @@ class TerminalSidecarRuntime {
     this.lifecycle = new standalone.StandaloneHostLifecycle(this.scope, {
       statePort: new standalone.StandaloneHostLifecycleLedger(config.storeRoot, this.scope),
     });
-    this.updaterQueues = new Map();
     this.control = new standalone.StandaloneHostRuntime({
       scope: this.scope,
       lifecycle: this.lifecycle,
@@ -64,7 +61,6 @@ class TerminalSidecarRuntime {
         return standalone.resolveStandaloneGenerationHandoff(await import(pathToFileURL(binding.launcher.path).href));
       },
     });
-    this.lifecycleClient = new standalone.StandaloneHostControlClient(this.scope, request => this.control.request(request));
   }
 
   assertScope(scope) {
@@ -79,7 +75,6 @@ class TerminalSidecarRuntime {
     this.assertScope(message.scope);
     if (Object.keys(message).some(key => !REQUEST_FIELDS.has(key))) throw new Error("Terminal Sidecar request contains unsupported fields");
     if (message.domain === "generation") return await this.generationRequest(message);
-    if (message.domain === "shell-updater") return await this.updaterRequest(message);
     if (message.domain === "maintenance") return await this.maintenanceRequest(message);
     throw new Error("invalid Terminal Sidecar request domain");
   }
@@ -111,31 +106,6 @@ class TerminalSidecarRuntime {
       generationPid: Number(process.env.OD_TERMINAL_GENERATION_PID ?? 0) || null,
       retiringHostPid: process.pid,
     };
-  }
-
-  async updaterRequest(message) {
-    const trustedKeys = new Map((message.options.trustedKeys ?? []).map(
-      ({ keyId, publicKey }) => [keyId, publicKey],
-    ));
-    const updater = new FixtureShellUpdaterPort(this.config.storeRoot, this.scope, this.lifecycleClient, {
-      ...message.options,
-      algebra: this.standalone.SHELL_UPDATE_ALGEBRA,
-      standalone: this.standalone,
-      trustedKeys,
-      withRetiredStandalone: async (_input, continuation) => await continuation(),
-    });
-    if (message.operation === "read") return await updater.readSnapshot();
-    if (message.operation === "wait") return await updater.waitForChange(message.afterRevision, message.timeoutMs);
-    const key = message.options.shellType ?? "electron";
-    const previous = this.updaterQueues.get(key) ?? Promise.resolve();
-    const operation = previous.catch(() => undefined).then(async () => {
-      if (message.operation === "invoke") return await updater.invoke(message.action);
-      if (message.operation === "confirm-installed") return await updater.confirmInstalled(message.proof);
-      throw new Error(`unsupported Terminal Sidecar updater operation: ${message.operation}`);
-    });
-    this.updaterQueues.set(key, operation);
-    try { return await operation; }
-    finally { if (this.updaterQueues.get(key) === operation) this.updaterQueues.delete(key); }
   }
 
   async maintenanceRequest(message) {

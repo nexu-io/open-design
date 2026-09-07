@@ -80,7 +80,7 @@ printf '%s\n' '{"name":"@open-design/sidecar","type":"module","exports":{".":"./
 printf '%s\n' '{"name":"@open-design/platform","type":"module","exports":{".":"./dist/index.mjs"}}' > "$stage/runtime/node_modules/@open-design/platform/package.json"
 cp "$closure_file" "$stage/seed/closure.mjs"
 cp "$standalone_launcher_file" "$stage/seed/standalone-launcher.mjs"
-cp "$terminal_source/runtime/fossil.mjs" "$terminal_source/runtime/sidecar-bootstrap.mjs" "$terminal_source/runtime/sidecar-host.mjs" "$terminal_source/runtime/fixture-shell-updater.mjs" "$stage/runtime/"
+cp "$terminal_source/runtime/fossil.mjs" "$terminal_source/runtime/sidecar-bootstrap.mjs" "$terminal_source/runtime/sidecar-host.mjs" "$stage/runtime/"
 cp "$terminal_source/sh/terminal.sh" "$terminal_source/sh/install.sh" "$stage/sh/"
 cp "$terminal_source/ps1/terminal.ps1" "$terminal_source/ps1/install.ps1" "$stage/ps1/"
 cp "$terminal_source"/contract/*.json "$stage/contract/"
@@ -88,7 +88,6 @@ node_sha=$(sha256_file "$stage/carrier/node/bin/node")
 fossil_sha=$(sha256_file "$stage/runtime/fossil.mjs")
 sidecar_host_sha=$(sha256_file "$stage/runtime/sidecar-host.mjs")
 sidecar_bootstrap_sha=$(sha256_file "$stage/runtime/sidecar-bootstrap.mjs")
-fixture_shell_updater_sha=$(sha256_file "$stage/runtime/fixture-shell-updater.mjs")
 standalone_sha=$(sha256_file "$stage/runtime/standalone/index.mjs")
 standalone_launcher_sha=$(sha256_file "$stage/seed/standalone-launcher.mjs")
 closure_sha=$(sha256_file "$stage/seed/closure.mjs")
@@ -109,7 +108,6 @@ printf '%s\n' "schema=1" "target=$target" "shell_version=$shell_version" "node_v
 shell_build_inputs="$stage/.shell-build-inputs"
 printf '%s\n' \
   "carrier_lock=$(sha256_file "$stage/carrier.lock")" \
-  "fixture_shell_updater=$fixture_shell_updater_sha" \
   "fossil=$fossil_sha" \
   "runtime_modules=$runtime_modules_sha" \
   "sidecar_host=$sidecar_host_sha" \
@@ -126,8 +124,8 @@ printf '%s\n' \
 for contract in "$stage"/contract/*.json; do printf 'contract/%s=%s\n' "$(basename -- "$contract")" "$(sha256_file "$contract")" >> "$shell_build_inputs"; done
 shell_build_hash=$(sha256_file "$shell_build_inputs")
 rm "$shell_build_inputs"
-printf '{"closure":{"file":"seed/closure.mjs","sha256":"%s","size":%s},"fixtureShellUpdater":{"entrypoint":"runtime/fixture-shell-updater.mjs","sha256":"%s"},"fossil":{"entrypoint":"runtime/fossil.mjs","sha256":"%s"},"node":{"archiveSha256":"%s","executable":"carrier/node/bin/node","executableSha256":"%s","version":"%s"},"runtimeModules":{"file":"runtime/modules.json","sha256":"%s"},"schemaVersion":1,"shellBuildHash":"%s","shellVersion":"%s","sidecarBootstrap":{"entrypoint":"runtime/sidecar-bootstrap.mjs","sha256":"%s"},"sidecarHost":{"entrypoint":"runtime/sidecar-host.mjs","sha256":"%s"},"standalone":{"entrypoint":"seed/standalone-launcher.mjs","sha256":"%s"},"standaloneRuntime":{"entrypoint":"runtime/standalone/index.mjs","sha256":"%s"},"target":"%s"}\n' \
-  "$closure_sha" "$(file_size "$stage/seed/closure.mjs")" "$fixture_shell_updater_sha" "$fossil_sha" "$node_archive_sha256" "$node_sha" "$node_version" "$runtime_modules_sha" "$shell_build_hash" "$shell_version" "$sidecar_bootstrap_sha" "$sidecar_host_sha" "$standalone_launcher_sha" "$standalone_sha" "$target" > "$stage/scene.json"
+printf '{"closure":{"file":"seed/closure.mjs","sha256":"%s","size":%s},"fossil":{"entrypoint":"runtime/fossil.mjs","sha256":"%s"},"node":{"archiveSha256":"%s","executable":"carrier/node/bin/node","executableSha256":"%s","version":"%s"},"runtimeModules":{"file":"runtime/modules.json","sha256":"%s"},"schemaVersion":1,"shellBuildHash":"%s","shellVersion":"%s","sidecarBootstrap":{"entrypoint":"runtime/sidecar-bootstrap.mjs","sha256":"%s"},"sidecarHost":{"entrypoint":"runtime/sidecar-host.mjs","sha256":"%s"},"standalone":{"entrypoint":"seed/standalone-launcher.mjs","sha256":"%s"},"standaloneRuntime":{"entrypoint":"runtime/standalone/index.mjs","sha256":"%s"},"target":"%s"}\n' \
+  "$closure_sha" "$(file_size "$stage/seed/closure.mjs")" "$fossil_sha" "$node_archive_sha256" "$node_sha" "$node_version" "$runtime_modules_sha" "$shell_build_hash" "$shell_version" "$sidecar_bootstrap_sha" "$sidecar_host_sha" "$standalone_launcher_sha" "$standalone_sha" "$target" > "$stage/scene.json"
 scene_sha=$(sha256_file "$stage/scene.json")
 if [ -e "$scene_directory" ]; then fail "scene destination already exists"; fi
 mv "$stage" "$scene_directory"

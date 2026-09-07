@@ -64,7 +64,6 @@ try {
   Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/fossil.mjs") -Destination (Join-Path $stage "runtime/fossil.mjs")
   Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/sidecar-bootstrap.mjs") -Destination (Join-Path $stage "runtime/sidecar-bootstrap.mjs")
   Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/sidecar-host.mjs") -Destination (Join-Path $stage "runtime/sidecar-host.mjs")
-  Copy-Item -LiteralPath (Join-Path $terminalSource "runtime/fixture-shell-updater.mjs") -Destination (Join-Path $stage "runtime/fixture-shell-updater.mjs")
   Get-ChildItem -LiteralPath (Join-Path $terminalSource "sh") -File | Where-Object Name -In @("terminal.sh", "install.sh") | Copy-Item -Destination (Join-Path $stage "sh")
   Get-ChildItem -LiteralPath (Join-Path $terminalSource "ps1") -File | Where-Object Name -In @("terminal.ps1", "install.ps1") | Copy-Item -Destination (Join-Path $stage "ps1")
   Get-ChildItem -LiteralPath (Join-Path $terminalSource "contract") -Filter "*.json" | Copy-Item -Destination (Join-Path $stage "contract")
@@ -72,7 +71,6 @@ try {
   $fossilSha = Digest (Join-Path $stage "runtime/fossil.mjs")
   $sidecarHostSha = Digest (Join-Path $stage "runtime/sidecar-host.mjs")
   $sidecarBootstrapSha = Digest (Join-Path $stage "runtime/sidecar-bootstrap.mjs")
-  $fixtureShellUpdaterSha = Digest (Join-Path $stage "runtime/fixture-shell-updater.mjs")
   $standaloneSha = Digest (Join-Path $stage "runtime/standalone/index.mjs")
   $standaloneLauncherSha = Digest (Join-Path $stage "seed/standalone-launcher.mjs")
   $closureSha = Digest (Join-Path $stage "seed/closure.mjs")
@@ -91,7 +89,6 @@ try {
   [IO.File]::WriteAllText((Join-Path $stage "carrier.lock"), "$lock`n", [Text.UTF8Encoding]::new($false))
   $buildLines = @(
     "carrier_lock=$(Digest (Join-Path $stage 'carrier.lock'))",
-    "fixture_shell_updater=$fixtureShellUpdaterSha",
     "fossil=$fossilSha",
     "runtime_modules=$runtimeModulesSha",
     "sidecar_host=$sidecarHostSha",
@@ -113,7 +110,6 @@ try {
   Remove-Item -LiteralPath $buildInput
   $sceneManifest = [ordered]@{
     closure = [ordered]@{ file = "seed/closure.mjs"; sha256 = $closureSha; size = Size (Join-Path $stage "seed/closure.mjs") }
-    fixtureShellUpdater = [ordered]@{ entrypoint = "runtime/fixture-shell-updater.mjs"; sha256 = $fixtureShellUpdaterSha }
     fossil = [ordered]@{ entrypoint = "runtime/fossil.mjs"; sha256 = $fossilSha }
     node = [ordered]@{ archiveSha256 = $NodeArchiveSha256; executable = "carrier/node/node.exe"; executableSha256 = $nodeSha; version = $NodeVersion }
     runtimeModules = [ordered]@{ file = "runtime/modules.json"; sha256 = $runtimeModulesSha }

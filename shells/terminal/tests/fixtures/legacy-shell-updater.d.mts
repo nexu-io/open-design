@@ -1,3 +1,4 @@
+// Test-only declaration; never part of the installed carrier.
 import type {
   LifecyclePort,
   LifecycleScope,

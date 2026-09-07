@@ -35,7 +35,10 @@ describe("Terminal macOS carrier", () => {
       run("tar", ["-xzf", distribution, "-C", directories.unpacked]);
       const root = join(directories.unpacked, "nexu-terminal");
       expect(existsSync(join(root, "runtime/fixture-lifecycle.mjs"))).toBe(false);
+      expect(existsSync(join(root, "runtime/fixture-shell-updater.mjs"))).toBe(false);
       expect(JSON.parse(readFileSync(join(root, "install-manifest.json"), "utf8"))).not.toHaveProperty("fixtureLifecycle");
+      expect(JSON.parse(readFileSync(join(root, "install-manifest.json"), "utf8"))).not.toHaveProperty("fixtureShellUpdater");
+      expect(JSON.parse(readFileSync(join(root, "install-manifest.json"), "utf8"))).toMatchObject({ capabilities: { shellUpdater: "unavailable" } });
       const terminal = (installRoot: string, storeRoot: string, channel: string, namespace: string, operation: string, options: TerminalOptions = {}) => {
         const result = run("sh", [join(installRoot, "sh/terminal.sh"), "--root", installRoot, "--store-root", storeRoot,
           "--namespace-root", join(storeRoot, "explicit-scopes", channel, namespace), "--channel", channel, "--namespace", namespace, "--operation", operation,

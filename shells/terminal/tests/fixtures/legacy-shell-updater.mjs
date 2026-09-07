@@ -1,3 +1,4 @@
+// Test-only legacy model. No production carrier may import or distribute it.
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";

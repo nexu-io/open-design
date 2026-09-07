@@ -4,7 +4,7 @@
   "title": "Terminal installed manifest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "shell", "target", "carrierLock", "shellFiles", "contracts", "runtime", "runtimeModules", "fossil", "sidecarBootstrap", "sidecarHost", "fixtureShellUpdater", "standalone", "seed", "releaseDocuments", "trust", "capabilities"],
+  "required": ["schemaVersion", "shell", "target", "carrierLock", "shellFiles", "contracts", "runtime", "runtimeModules", "fossil", "sidecarBootstrap", "sidecarHost", "standalone", "seed", "releaseDocuments", "trust", "capabilities"],
   "properties": {
     "schemaVersion": {"const": 1},
     "shell": {
@@ -78,15 +78,6 @@
       }
     },
     "runtimeModules": {"$ref": "#/$defs/fileDigest"},
-    "fixtureShellUpdater": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["entrypoint", "sha256"],
-      "properties": {
-        "entrypoint": {"const": "runtime/fixture-shell-updater.mjs"},
-        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
-      }
-    },
     "standalone": {
       "type": "object",
       "additionalProperties": false,
@@ -137,7 +128,7 @@
       "properties": {
         "contentUpdater": {"const": "standalone-v4"},
         "sharedInstance": {"const": "sidecar-v1"},
-        "shellUpdater": {"const": "sidecar-v1"}
+        "shellUpdater": {"const": "unavailable"}
       }
     }
   },

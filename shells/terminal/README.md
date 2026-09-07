@@ -88,16 +88,15 @@ remain attachment facts. A transition advances from `reserved` to `stopped-seale
 this logical result does not prove physical retirement, which remains owned by
 Sidecar's resource-set guard. A sealed fence cannot be released into normal startup.
 Shell auto-update is independently declared by `contract/shell-updater.schema.json`.
-Terminal ships a non-user-facing fixture provider that exercises Electron's
-future check/download/progress/ready/defer/foreign-reference block/forced-stop
-installer handoff. Candidate and install-attempt epochs are immutable transaction
-identities, and available actions are derived from persisted phase rather than
-trusted as input. Handoff is not installation success: the updater remains in
-`handed-off` until a newly attached Shell proves the exact expected type, version,
-build hash and installed-manifest digest, then advances to `installed`; only exact
-confirmation or explicit abandonment can leave that phase. Neither capability exposes commands,
-executable paths or argv to the Web layer. Fossil rejection distinguishes an
-installer requirement from an incompatible active Shell reference.
+Updater commands consume `StandaloneHostControlUpdater`. The native Terminal
+installer provider is not yet registered, so the installed manifest declares
+`shellUpdater: unavailable` and those commands fail closed. An incompatible
+content update still returns its explicit Shell version requirement, with no
+fabricated candidate or snapshot. Installation confirmation cannot copy the
+candidate's identity: it requires a real replacement bound to a durable claim.
+The former fixture updater is test-only and is not included in scene or
+distribution artifacts. Real provider registration, guarded installation and
+replacement confirmation remain required before claiming Shell update delivery.
 
 Standalone generation state is a revisioned pure state machine. Update authority
 forms `none < silent < user`; background policy cannot revoke or downgrade an
@@ -193,13 +192,13 @@ also replaces an unrelated prepared generation and receives the first health
 proof under its exact signed identity. The same mutable
 `somechan/latest/channel-head.json` object is promoted across three beta rounds;
 `somepreview/latest` proves that another non-stable channel remains isolated.
-The fixture Shell updater additionally proves that a ready Electron installer is
-blocked by a live Terminal reference, can be deferred, and can take the explicit
-forced-stop handoff; the old Shell is rejected as installation proof and the
-extracted replacement Shell completes it. It launches the Sidecar with Node and scripts from the
-installed archive, then covers attachment capabilities, default-deferred and
-forced content restart, transition lease recovery after a Sidecar crash, and
-idle-only blob sweep/cleanup. It also closes the final logical reference and
+Legacy model tests cover updater transition scenarios but are not evidence of
+real installation. Native acceptance now verifies that unavailable updater
+commands and unproved confirmation are rejected without stopping live consumers
+or producing an installed record. It launches the Sidecar with Node and scripts
+from the installed archive; separate native Sidecar coverage checks attachment
+capabilities, host crash recovery, and idle-only blob sweep/cleanup.
+The native carrier test also closes the final logical reference and
 reattaches the same Terminal identity through a fresh Sidecar host while keeping
 the supervisor generation stable; a later content activation performs another
 exact host handoff.

@@ -72,7 +72,6 @@ export function expectedShellBuildHash(scene: string, target: string, nodeArchiv
   const nodeExecutable = target.startsWith("win32-") ? "carrier/node/node.exe" : "carrier/node/bin/node";
   const lines = [
     `carrier_lock=${digest("carrier.lock")}`,
-    `fixture_shell_updater=${digest("runtime/fixture-shell-updater.mjs")}`,
     `fossil=${digest("runtime/fossil.mjs")}`,
     `runtime_modules=${digest("runtime/modules.json")}`,
     `sidecar_host=${digest("runtime/sidecar-host.mjs")}`,
@@ -246,14 +245,14 @@ export function verifyExactLifecycle(root: string, store: string, terminal: Term
   expect(reattached.result.sidecar.hostPid).not.toBe(first.result.sidecar.hostPid);
   expect(terminal(root, store, "somechan", "shared", "release", { attachmentId: "terminal-a", attachmentCapability: reattached.result.attachmentCapability }).result.references).toBe(0);
   expect(terminal(root, store, "somechan", "updater-scenario", "start", { attachmentId: "terminal-active" }).result).toMatchObject({ state: "running" });
-  expect(terminal(root, store, "somechan", "updater-scenario", "shell-update-check").result).toMatchObject({ outcome: "accepted", snapshot: { state: "available" } });
-  const downloadedShell = terminal(root, store, "somechan", "updater-scenario", "shell-update-download").result;
-  expect(downloadedShell).toMatchObject({ snapshot: { state: "ready", handoff: { shell: { type: "terminal", version: "0.0.0", buildHash: "0".repeat(64) } } } });
-  expect(downloadedShell.snapshot.handoff.shell).not.toMatchObject({ version: "0.1.0" });
-  expect(terminal(root, store, "somechan", "updater-scenario", "shell-update-install").result).toMatchObject({ outcome: "blocked", snapshot: { blockedBy: [{ attachmentId: "terminal-active" }] } });
-  expect(terminal(root, store, "somechan", "updater-scenario", "shell-update-later").result).toMatchObject({ snapshot: { state: "ready" } });
-  expect(terminal(root, store, "somechan", "updater-scenario", "shell-update-force").result).toMatchObject({ outcome: "accepted", snapshot: { state: "handed-off" } });
-  expect(terminal(root, store, "somechan", "updater-scenario", "shell-update-confirm").result).toMatchObject({ outcome: "accepted", snapshot: { state: "installed", handoff: { shell: downloadedShell.snapshot.handoff.shell } } });
+  for (const operation of ["shell-update-status", "shell-update-check", "shell-update-download", "shell-update-install", "shell-update-force"]) {
+    expect(() => terminal(root, store, "somechan", "updater-scenario", operation)).toThrow("updater Shell type is unavailable");
+  }
+  expect(() => terminal(root, store, "somechan", "updater-scenario", "shell-update-confirm")).toThrow("durable installer claim");
+  expect(terminal(root, store, "somechan", "updater-scenario", "status").result).toMatchObject({ state: "running", references: 1 });
+  const legacyUpdaterRoot = join(store, "channels", "somechan", "namespaces", "updater-scenario", "fixture");
+  expect(existsSync(join(legacyUpdaterRoot, "shell-updater.json"))).toBe(false);
+  expect(existsSync(join(legacyUpdaterRoot, "shell-candidate.json"))).toBe(false);
   releases.promote(releases.beta2);
   expect(terminal(root, store, "somechan", "shared", "prepare-update", { channelHeadUrl: releases.latestUrls.somechan, activationPolicy: "authorize-silent", feedbackFile }).result).toMatchObject({ status: "prepared", authorized: true });
   expect(readFileSync(join(store, "blobs", "sha256", releases.beta2.artifactSha256))).toEqual(readFileSync(releases.beta2.artifactFile));
@@ -273,7 +272,7 @@ export function verifyExactLifecycle(root: string, store: string, terminal: Term
   expect(terminal(root, store, "somechan", "shared", "prepare-update", { channelHeadUrl: releases.latestUrls.somechan, activationPolicy: "observe" }).result).toMatchObject({
     state: "update-required",
     minimumVersion: "0.2.0",
-    snapshot: { state: "failed", error: { message: expect.stringContaining("lacks Shell lane") } },
+    snapshot: null,
   });
   releases.promote(releases.preview1);
   expect(terminal(root, store, "somepreview", "shared", "prepare-update", { channelHeadUrl: releases.latestUrls.somepreview, activationPolicy: "authorize-user" }).result).toMatchObject({ status: "prepared", authorized: true });
