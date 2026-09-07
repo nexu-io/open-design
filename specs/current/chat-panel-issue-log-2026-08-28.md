@@ -56,6 +56,82 @@
 - [ ] 聚焦浏览器证据改由远端执行，避免占用本机：`functional-e2e` p0p1 run `33366584600` 覆盖 AMR recovery、workspace restoration 与 Question Form；顺序生图与 Queue witness 仍需单独补齐。首个 run `33366389708` 仅因调度时误传短 SHA 导致 checkout 失败，没有执行测试，不计为产品失败。
 - [x] beta.7 新项目硬刷新曾出现一次 `Minified React error #185`；beta.8 已对精确 project / history 会话连续硬刷新 10 次，renderer 未新增 #185，当前无法复现并以新包证据关闭。
 - [x] beta.7 `od_next_protocol_runtime_state_missing` 已完成归因：QA 探针要求“只回复一句”，但 Home 固定 `sessionMode=design` 并自动进入 OD Next full-plan；run / transport 实际 succeeded，失败卡来自策略协议 fail-closed。此探针不用于证明 cold send；不隐藏失败卡、不做关键词猜测。未来若要支持 Design 模式纯问答，需显式 structured intent，作为独立产品设计而非本次尾项。
+### 滚动冻结:2026-09-07 在活的现场上做的实测(第一次有硬数据)
+
+包 `0.21.2-beta.1`。两次冻结现场,均通过 Electron 主进程 inspector +
+`webContents.sendInputEvent` 注入**真滚轮**测量(JS 合成的 `WheelEvent` 不走这条路,量不出来)。
+
+**缺陷形状(实测,非推断)**
+
+| 量 | 值 |
+|---|---|
+| 布局侧 | `scrollHeight` 1442 / `clientHeight` 583 / `layoutMax` 859 —— **全部正确** |
+| 真滚轮能到 | **6px**(平滑减速到 6 后死住) |
+| 键盘 PageDown 能到 | **6px** —— **也走不动** |
+| JS `scrollTo(99999)` | 859.5 —— 到底 |
+| `scrollIntoView` | 840 —— 能到 |
+| `scrollTop` 写入拦截 | **`[]`,一次 JS 写都没有** |
+
+**两条由此确立的结论**
+
+1. **不是我们的代码在把它拽回去。** 写入拦截全程为空,滚轮位移是引擎自己在 6 处夹取。
+2. **不只是滚轮。** 键盘同样死在 6 —— 现代 Chromium 的 **scroll unification** 让滚轮/键盘/拖滚动条
+   全部走合成器 scroll tree,只有 JS 程序性滚动走 Blink 自己那条路。所以卡住的是 **cc 侧 ScrollNode
+   的 bounds**,它停在 589,而 Blink 侧的 1442 是对的。
+
+**冻结值恒为 589 = 6 + 583**,两次现场同一个数字。02:20:04 的采样抓到 `sh 589 / max 6` —— 那一刻
+**合成器的 6 是正确的**,随后内容长到 845 → 1350 → 1735,上限再没更新过。**冻结发生在新助手消息
+刚开始渲染、内容从 589 往上长的那一瞬间。**
+
+**它是彻底冻死,不是滞后**:往滚动盒里追加 1000px,布局上限从 2102 涨到 3114,滚轮仍然只到 6。
+新的内容变化根本标不脏它。
+
+**解法矩阵(全部实测)**
+
+| 施加的改动 | 治好了吗 |
+|---|---|
+| 纯样式改动(内联写入与当前算出值相同的 `grid-template`) | ✗ |
+| **`grid-template: minmax(0,1fr)` → `100% / 100%`(候选修法)** | **✗ 当场证伪** |
+| 拿掉消息上残留的单位 transform + 取消全部动画 | ✗ |
+| 追加 1000px 内容 | ✗ |
+| `overflow-y` 切 hidden 再切回 | ✗ |
+| `will-change: transform` 上下线 | ✗ |
+| `transform: translateZ(0)` 上下线 | ✗ |
+| 滚动盒**自身高度**动 1px 再还原 | ✗ |
+| 把尾部占位块高度钉成 0 | ✗ |
+| **`display:none` → 回来(销毁重建布局盒)** | **✓** |
+
+⚠️ **`display:none` 那一格不要再跑。** 答案早就知道(只有重建能治),它唯一的作用是**终结现场** ——
+2026-09-07 就是这么浪费掉一个现场的。**规矩:先跑全量只读取证落盘,再只做非破坏性实验。**
+
+**已排除的成因**
+
+- **CSS 容器查询(`container-type: inline-size`)** —— 第二次冻结的现场里**一个 artifact card 都没有**
+  (DOM 计数 0),照样冻。
+- **祖先链上的合成边界** —— 整条链 `transform`/`filter`/`contain`/`will-change`/`content-visibility`
+  全为 `none`/`auto`。
+- **嵌套滚动盒吃掉了滚轮** —— 探针的 `inner_scroller_free` 为 `0 verdicts discarded`。
+
+**两次现场的共同点(未证实,是当前最可疑的方向)**
+
+1. `msg user` / `msg assistant` 都挂着 `msg-enter` 动画且 **`fill: "both"`**,结束后 transform 永久留着。
+2. **滚动盒用 ResizeObserver 观察自己**(`ChatPane.tsx` 的 `resizeObserver?.observe(el)`),回调里又写
+   `spacer.style.height` —— **一个长在会冻的那个盒子上的自喂环**。`origin/main` **没有**这一条
+   (它只观察子元素),这正好对上产品问的「为什么之前不会有问题」。ResizeObserver 回调跑在布局之后、
+   绘制之前;回调把布局再弄脏,Blink 要多跑一趟,而绘制属性在第二趟里没被重新标脏 —— 能解释
+   「Blink 侧对、cc 侧陈旧」。
+
+**结构差(对 `origin/main`)**:`.chat-log-viewport` 这个元素**在 main 上根本不存在**(CSS/TSX 各 0 处命中)。
+`77859f01f7`(8/31)新造了它,`0e8bbdaa69`(8/31)把它从 flex 改成 grid,`.chat-log` 因此丢掉 `flex:1`、
+改由 grid 轨道定高。OPEND-2645 建单是 9/4。**建单日期不等于缺陷起始日期,这是相关不是证明。**
+
+**观测缺口(实测发现)**:探针**每个聊天日志元素只报一次**。同一个会话里第二次冻结,遥测拿不到 ——
+第二次现场全程 `reported` 停在 2。
+
+**工具**(会话内,`scratchpad/`):`freeze-capture.mjs` 全量只读取证落盘;`freeze-watch.mjs` 800ms 只读采样;
+`wheel-test.mjs` / `try-fix.mjs` 注入真滚轮验证;`input-matrix.mjs` 滚轮/键盘/JS 三路对照。
+**这套东西要产品化到仓库里**,否则下一个现场还是靠临时脚本。
+
 - [ ] **上面那条裁决的边界已量清,并挖出一条它盖不住的真缺陷(2026-09-07 复查)。**
   为了把「纯问答被判失败」钉成可回归的形状,在 `apps/daemon/tests/strategies/od-next/coordinator.test.ts`
   写了一条红测(**故意留红、未提交**),复现现场:task `odnext_c4ee010be6b748dc9b92984946bc10a8`,
