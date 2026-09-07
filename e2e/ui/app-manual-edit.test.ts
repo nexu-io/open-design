@@ -6,6 +6,7 @@ import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace'
 import type { Page } from '@playwright/test';
 import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
+import { PREVIEW_URL_GUARD_MAX_HTML_BYTES } from '@open-design/contracts/runtime/preview-guards';
 
 const STORAGE_KEY = 'open-design:config';
 test.describe.configure({ timeout: T.xlong });
@@ -809,6 +810,82 @@ test('[P0] deck presentation host exit remains usable after the sandboxed slide 
   expect(presenter.isClosed()).toBe(true);
 });
 
+/**
+ * The transport this branch is named after, end to end.
+ *
+ * Every other presentation spec uses a deck small enough for the daemon to
+ * buffer. A document over `PREVIEW_URL_GUARD_MAX_HTML_BYTES` takes a different
+ * branch: the scoped preview origin streams it and injects the runtime
+ * bootstrap on the way past, rather than assembling the response in memory.
+ * Nothing covered that combination — scoped origin *and* streaming *and*
+ * presentation — which is where both of this branch's red jobs turned out to
+ * live. That is not a coincidence worth leaving uncovered.
+ *
+ * Deliberately not covered here, because the daemon-side unit specs already
+ * own them and duplicating them through the UI would only make this slower and
+ * flakier: which capabilities the bootstrap advertises, and whether the
+ * presentation bridge is injected exactly once. This spec asserts only what the
+ * UI can actually observe — that the document really did arrive over the
+ * streaming path, and that presenting it works.
+ */
+test('[P0] a deck too large to buffer presents, advances and exits on the scoped origin', async ({ page }) => {
+  await routeMockAgents(page);
+  const projectId = await createEmptyProject(page, 'Streaming deck presentation');
+  await seedDeckArtifact(
+    page,
+    projectId,
+    'streaming-deck.html',
+    'Streaming Deck',
+    ['Slide One', 'Slide Two'],
+    { padBytes: PREVIEW_URL_GUARD_MAX_HTML_BYTES + 4096 },
+  );
+  await page.goto(`/projects/${projectId}/files/streaming-deck.html`);
+  await openDesignFile(page, 'streaming-deck.html');
+
+  const frame = artifactPreviewFrame(page);
+  await expect(frame.getByRole('heading', { name: 'Slide One' })).toBeVisible();
+
+  // Prove the transport rather than assuming it: the document has to have come
+  // from the scoped preview origin (`n-<session>` / `p-<session>`), and to be
+  // over the threshold that makes the daemon stream it instead of buffering.
+  // `location.origin` is "null" in this sandbox, so read the URL itself.
+  const served = await frame.locator('body').evaluate(() => ({
+    href: location.href,
+    bytes: document.documentElement.outerHTML.length,
+  }));
+  expect(served.href).toMatch(/^https?:\/\/[np]-[^./]+\.localhost(?::\d+)?\//u);
+  expect(served.bytes).toBeGreaterThan(PREVIEW_URL_GUARD_MAX_HTML_BYTES);
+
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const popupPromise = page.waitForEvent('popup');
+  await page.getByRole('menuitem', { name: /^In this tab/i }).click();
+  const presenter = await popupPromise;
+
+  const overlay = page.locator('.present-overlay');
+  await expect(overlay).toBeVisible();
+  await expect(frame.getByRole('heading', { name: 'Slide One' })).toBeVisible();
+
+  // Advance while presenting. It has to come from inside the document: the
+  // product hides both host slide controls in this mode — the inline one lives
+  // in `.viewer-toolbar` (`display: none` under `.is-tab-present`) and the
+  // floating one is gated on `!inTabPresent`. So this is the real presenter
+  // gesture, and it exercises the streamed document's own deck runtime.
+  const frameBox = await artifactPreview(page).boundingBox();
+  expect(frameBox).not.toBeNull();
+  await page.mouse.click(
+    Math.round(frameBox!.x + frameBox!.width / 2),
+    Math.round(frameBox!.y + frameBox!.height / 2),
+  );
+  await page.keyboard.press('ArrowRight');
+  await expect(frame.getByRole('heading', { name: 'Slide Two' })).toBeVisible();
+
+  const presenterClosed = presenter.waitForEvent('close');
+  await overlay.getByRole('button', { name: 'Exit presentation' }).click();
+  await expect(overlay).toHaveCount(0);
+  await presenterClosed;
+  expect(presenter.isClosed()).toBe(true);
+});
+
 test('[P1] deck thumbnail rail keeps complete 16:9 slides separated and aligned', async ({ page }) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Deck thumbnail rail layout');
@@ -1127,6 +1204,13 @@ async function seedDeckArtifact(
     stopsSlideMessagePropagation?: boolean;
     handlesKeyboard?: boolean;
     frameworkDeck?: boolean;
+    /**
+     * Pad the document past `PREVIEW_URL_GUARD_MAX_HTML_BYTES` so the daemon
+     * serves it through the streaming branch of the scoped preview origin
+     * instead of buffering it. The padding is an HTML comment, so it changes
+     * the transport without changing what the deck renders.
+     */
+    padBytes?: number;
   } = {},
 ) {
   const slideHtml = slides
@@ -1194,7 +1278,8 @@ async function seedDeckArtifact(
     {
       data: {
         name: fileName,
-        content: `<!doctype html><html><body>${deckChrome}${deckHtml}${protocolText}${slideScript}</body></html>`,
+        content: `<!doctype html><html><body>${deckChrome}${deckHtml}${protocolText}${slideScript}`
+          + `${options.padBytes ? `<!-- ${'x'.repeat(options.padBytes)} -->` : ''}</body></html>`,
         artifactManifest: {
           version: 1,
           kind: 'deck',
