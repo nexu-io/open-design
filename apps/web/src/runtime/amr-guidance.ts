@@ -168,6 +168,7 @@ export type RunFailurePrimaryAction =
   | 'upgrade'
   | 'launch-terminal-auth'
   | 'launch-terminal-switch-model'
+  | 'reduce-context'
   // No self-contained recovery button. Used when retrying is futile (e.g. a
   // hard quota / exhausted credits) and the only forward path is the AMR switch
   // card rendered below, so the card shows guidance copy without a dead Retry.
@@ -349,10 +350,20 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.cliMissingMessage',
   ),
   // Input exceeded the model context window (user_action: reduce_context).
-  AGENT_PROMPT_TOO_LARGE: retryWithGuidance(
-    'chat.runError.title.promptTooLarge',
-    'chat.runError.promptTooLargeMessage',
-  ),
+  AGENT_PROMPT_TOO_LARGE: {
+    primaryAction: 'reduce-context',
+    titleKey: 'chat.runError.title.promptTooLarge',
+    messageKey: 'chat.runError.promptTooLargeMessage',
+    secondaryRetry: true,
+    showSwitchCard: false,
+  },
+  PROMPT_TOO_LARGE: {
+    primaryAction: 'reduce-context',
+    titleKey: 'chat.runError.title.promptTooLarge',
+    messageKey: 'chat.runError.promptTooLargeMessage',
+    secondaryRetry: true,
+    showSwitchCard: false,
+  },
   // Selected model is missing/disabled (user_action: switch_model).
   AMR_MODEL_UNAVAILABLE: retryWithGuidance(
     'chat.runError.title.modelUnavailable',

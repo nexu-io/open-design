@@ -119,6 +119,7 @@ export const ar: Dict = {
   'chat.runError.title.artifactMissing': 'لم يتم إنشاء أي مخرجات',
   'chat.runError.signInMessage.amr': 'لم يتم تسجيل دخول وكيل OpenDesign Cloud بعد — سجّل الدخول لبدء استخدامه.',
   'chat.runError.signInMessage.other': '{agent} لم يسجّل الدخول. تحقق من حالة تسجيل الدخول محليًا. نوصي بوكيل OpenDesign Cloud — أكثر ثباتًا وأفضل قيمة.',
+  'chat.runError.reduceContextCta': 'محادثة جديدة',
   'chat.runError.agentFallback': 'الوكيل',
   'chat.runError.sourceLabel': 'تفاصيل الخطأ',
   'chat.runError.sourceExpandAria': 'توسيع مصدر الخطأ',

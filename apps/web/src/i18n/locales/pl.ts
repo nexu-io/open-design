@@ -119,6 +119,7 @@ export const pl: Dict = {
   'chat.runError.title.artifactMissing': 'Nie utworzono rezultatu',
   'chat.runError.signInMessage.amr': 'Agent OpenDesign Cloud nie jest jeszcze zalogowany — zaloguj się, aby zacząć go używać.',
   'chat.runError.signInMessage.other': '{agent} nie jest zalogowany. Sprawdź jego stan logowania lokalnie. Polecamy agenta OpenDesign Cloud — stabilniejszego i korzystniejszego.',
+  'chat.runError.reduceContextCta': 'Nowa rozmowa',
   'chat.runError.agentFallback': 'agent',
   'chat.runError.sourceLabel': 'Szczegóły błędu',
   'chat.runError.sourceExpandAria': 'Rozwiń źródło błędu',

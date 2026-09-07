@@ -301,7 +301,6 @@ describe('resolveRunFailureUi', () => {
     const cases: Array<[string, string, string | null]> = [
       ['ARTIFACT_NOT_FOUND', 'chat.runError.title.artifactMissing', null],
       ['AGENT_UNAVAILABLE', 'chat.runError.title.cliMissing', 'chat.runError.cliMissingMessage'],
-      ['AGENT_PROMPT_TOO_LARGE', 'chat.runError.title.promptTooLarge', 'chat.runError.promptTooLargeMessage'],
       ['AMR_MODEL_UNAVAILABLE', 'chat.runError.title.modelUnavailable', 'chat.runError.modelUnavailableMessage'],
       ['TOOL_LOOP_DETECTED', 'chat.runError.title.toolLoop', 'chat.runError.toolLoopMessage'],
       ['ROLE_MARKER_HALLUCINATION', 'chat.runError.title.outputInvalid', 'chat.runError.outputInvalidMessage'],
@@ -315,6 +314,21 @@ describe('resolveRunFailureUi', () => {
           titleKey,
           messageKey,
           secondaryRetry: false,
+          showSwitchCard: false,
+        });
+      }
+    }
+  });
+
+  it('maps prompt-too-large root cause to reduce-context action (#4782)', () => {
+    for (const code of ['AGENT_PROMPT_TOO_LARGE', 'PROMPT_TOO_LARGE']) {
+      for (const agent of ['claude', 'codex', 'amr', 'antigravity', null]) {
+        const ui = resolveRunFailureUi(code, null, agent);
+        expect(ui).toMatchObject({
+          primaryAction: 'reduce-context',
+          titleKey: 'chat.runError.title.promptTooLarge',
+          messageKey: 'chat.runError.promptTooLargeMessage',
+          secondaryRetry: true,
           showSwitchCard: false,
         });
       }

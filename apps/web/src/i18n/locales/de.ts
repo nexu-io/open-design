@@ -119,6 +119,7 @@ export const de: Dict = {
   'chat.runError.title.artifactMissing': 'Kein Ergebnis erzeugt',
   'chat.runError.signInMessage.amr': 'Der OpenDesign Cloud-Agent ist noch nicht angemeldet – melde dich an, um ihn zu nutzen.',
   'chat.runError.signInMessage.other': '{agent} ist nicht angemeldet. Prüfe den Anmeldestatus lokal. Wir empfehlen den OpenDesign Cloud-Agenten – stabiler und günstiger.',
+  'chat.runError.reduceContextCta': 'Neue Unterhaltung',
   'chat.runError.agentFallback': 'der Agent',
   'chat.runError.sourceLabel': 'Fehlerdetails',
   'chat.runError.sourceExpandAria': 'Fehlerquelle einblenden',

@@ -119,6 +119,7 @@ export const uk: Dict = {
   'chat.runError.title.artifactMissing': 'Результат не створено',
   'chat.runError.signInMessage.amr': 'Агент OpenDesign Cloud ще не ввійшов — увійдіть, щоб почати користуватися ним.',
   'chat.runError.signInMessage.other': '{agent} не ввійшов. Перевірте стан входу локально. Рекомендуємо агента OpenDesign Cloud — стабільніший і вигідніший.',
+  'chat.runError.reduceContextCta': 'Нова розмова',
   'chat.runError.agentFallback': 'агент',
   'chat.runError.sourceLabel': 'Деталі помилки',
   'chat.runError.sourceExpandAria': 'Розгорнути джерело помилки',
