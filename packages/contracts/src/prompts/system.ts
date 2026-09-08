@@ -4,7 +4,7 @@
  * content-philosophy charter. Stacked on top:
  *
  *   1. The discovery + planning + huashu-philosophy layer (./discovery.ts)
- *      — interactive question-form syntax, direction-picker fork,
+ *      — interactive question-form syntax,
  *      brand-spec extraction, TodoWrite reinforcement, 5-dim critique,
  *      and the embedded `directions.ts` library.
  *   2. The active design system's DESIGN.md (if any) — palette, typography,

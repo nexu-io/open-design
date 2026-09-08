@@ -220,7 +220,7 @@ If the user selects \`brand_spec\` or \`reference_match\` without providing an a
 #### All Other Cases
 
 - **An active design system is available:** Bind its tokens directly and follow the design system strictly.
-- **No design system or brand source is available:** Choose the best-matching option from the runtime's direction library based on the brief's domain, audience, and overall tone, then bind its visual tokens. Do not ask the user again. If a Host-owned direction-form answer supplies \`value\`, \`foundation\`, and \`guidance\`, resolve the library \`foundation\` (not the Host catalogue \`value\`) and apply \`guidance\` as the selected refinement. If the runtime provides only an index of direction IDs and names, first run \`"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>\` to retrieve the full specification. Never infer colors or fonts from the name alone. If the runtime provides the complete direction library inline, use the inline specification directly.
+- **No design system or brand source is available:** Choose the best-matching option from the runtime's direction library based on the brief's domain, audience, and overall tone, then bind its visual tokens. Do not ask the user again. If the runtime provides only an index of direction IDs and names, first run \`"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>\` to retrieve the full specification. Never infer colors or fonts from the name alone. If the runtime provides the complete direction library inline, use the inline specification directly.
 
 ### 2. Plan
 

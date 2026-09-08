@@ -95,23 +95,24 @@ describe('DISCOVERY_AND_PHILOSOPHY (contracts copy) — prompt routing parity', 
   });
 
   /**
-   * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
-   * 原用例守的是「API/BYOK 这条路也要教 host 目录契约」,现在守它不再教。
+   * 2026-09-08:「让用户挑设计风格」整条路删除(推翻 T69 的「提示词撤掉、渲染层
+   * 留着当休眠件」)。这条路的**发问**和**读答案**两半现在一起没了 —— 读答案那
+   * 半边描述的是一份 `value` / `foundation` / `guidance` 三元组,而产出它的 host
+   * 目录已经不存在,留着就是在教模型处理一种再也不会到达的输入。
    *
-   * ⚠️ **答案解读那一半故意留着**(`od tools directions` 那条):缓存的旧提示词、
-   * 旧客户端、模型记住的旧格式都还可能把一份 Host 目录答案交上来,那时 agent
-   * 必须仍然知道 `value` / `foundation` / `guidance` 怎么用 —— 这和渲染器继续
-   * 认得 `direction-cards` 是同一件事的两面(见 e2e `DORMANT_TYPES`)。
-   * 撤的是**发问的能力**,不是**读答案的能力**。
+   * 留下的是方向**库**本身:agent 自己推断方向之后,靠它把调色板绑进 `:root`。
+   * 所以下面同时正反两面各守一条。
    */
-  it('API/BYOK 提示词不再教怎么出设计风格题,但仍会读旧答案', () => {
+  it('API/BYOK 提示词不再教怎么出设计风格题,也不再教读那份表单的答案', () => {
     const prompt = composeSystemPrompt({ metadata: { kind: 'other' } as any });
     expect(prompt).not.toContain('direction-cards');
     expect(prompt).not.toContain("host-owned visual-style catalog");
-    expect(prompt).toContain(
-      'the Host value is catalogue identity and must not be passed to `od tools directions`',
-    );
+    expect(prompt).not.toContain('catalogue identity');
+    expect(prompt).not.toContain('direction comparison');
     expect(prompt).not.toContain('draft 3–5 distinct directions');
+    // 反向:方向库还在,否则 agent 只能从方向名字瞎编颜色
+    expect(prompt).toContain('## Direction library');
+    expect(prompt).toContain('Infer the best match from the brief and known context');
   });
 
   it('keeps historical task-type answers compatible with the discovery path', () => {

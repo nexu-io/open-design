@@ -1,25 +1,26 @@
 /**
  * Built-in design direction library.
  *
- * Distilled from huashu-design's "5 schools × 20 philosophies" idea. The
- * library gives the agent concrete visual references to infer from by default.
- * When the user explicitly asks to compare visual directions, it can also
- * render these schools as `<question-form>` choices. Each school carries a
- * concrete spec — fonts, palette in OKLch, mood keywords, real-world
- * references — that the agent encodes into active CSS `:root` tokens.
+ * Distilled from huashu-design's "5 schools × 20 philosophies" idea. Each
+ * school carries a concrete spec — fonts, palette in OKLch, mood keywords,
+ * real-world references — that the agent encodes into active CSS `:root`
+ * tokens.
  *
- * The library has TWO purposes:
+ * ⚠️ **This library is the agent's own reference, never a question for the
+ * user.** The 2026-09-08 ruling deleted the whole "let the user pick a design
+ * style" path — the `direction-picker` atom, the `direction-cards` question
+ * type, and the host visual-style catalogue are all gone (see
+ * `e2e/tests/design-direction-picker-removed.test.ts`). What survives is the
+ * build-time half: the agent infers the best-matching direction itself, then
+ * sees the full spec (palette values, font stacks, layout posture, mood) —
+ * inline in the system prompt, or pulled on demand through
+ * `od tools directions --id <id>` — and binds the seed template's `:root` to
+ * those values. Without it the agent would improvise colours from a direction's
+ * name, which `core-slim.ts` explicitly forbids.
  *
- *   1. Render-time: the prompt embeds these as choices the user picks from.
- *      One radio click → a deterministic palette + type stack, no model
- *      improvisation.
- *   2. Build-time: once chosen, the agent sees the full spec (palette
- *      values, font stacks, layout posture, mood) inline in its system
- *      prompt and binds the seed template's `:root` to those values.
- *
- * Adding a new direction: append to `DESIGN_DIRECTIONS` and it shows up in
- * the picker automatically. Keep them visually *distinct* — two near-
- * identical directions defeat the purpose.
+ * Adding a new direction: append to `DESIGN_DIRECTIONS`; both the inline block
+ * and the CLI pick it up. Keep them visually *distinct* — two near-identical
+ * directions defeat the purpose.
  */
 
 export interface DesignDirection {
@@ -184,67 +185,6 @@ export const DESIGN_DIRECTIONS: DesignDirection[] = [
 ];
 
 /**
- * ⚠️ **休眠件(T69,2026-09-07)** —— 说明书在
- * `apps/web/src/runtime/visual-style-catalog.ts` 文件头。
- *
- * 这个函数**在本次改动之前就已经没有任何调用点**(全仓搜 `renderDirectionFormBody`
- * 只搜得到定义),设计风格选择题从提示词整题下线之后更不会有。留着不删是因为
- * 产品明说「后续可能要找回」,而它是那条路上现成的一块。
- *
- * ⚠️ 同文件里**读答案**那一半(`od tools directions` / `catalogue identity` 那段)
- * **是活的,别一起清掉**:旧表单交上来的 `value` / `foundation` / `guidance`
- * 仍要读得懂。撤的是**发问**,不是**读答案**。
- *
- * Render the direction-picker form body for emission as a `<question-form>`.
- * Uses the `direction-cards` question type so the UI renders each option
- * as a rich card (palette swatches + type sample + mood blurb + refs)
- * instead of a plain radio. Falls back gracefully — older clients that
- * don't recognise `direction-cards` treat it as text.
- */
-export function renderDirectionFormBody(): string {
-  const cards = DESIGN_DIRECTIONS.map((d) => ({
-    id: d.id,
-    label: d.label,
-    mood: d.mood,
-    references: d.references,
-    palette: [
-      d.palette.bg,
-      d.palette.surface,
-      d.palette.border,
-      d.palette.muted,
-      d.palette.fg,
-      d.palette.accent,
-    ],
-    displayFont: d.displayFont,
-    bodyFont: d.bodyFont,
-  }));
-
-  const form = {
-    description:
-      'No brand to match — pick a visual direction. Each one ships with a real palette, font stack, and layout posture. You can override the accent below.',
-    questions: [
-      {
-        id: 'direction',
-        label: 'Direction',
-        type: 'direction-cards',
-        required: true,
-        options: DESIGN_DIRECTIONS.map((d) => d.id),
-        cards,
-      },
-      {
-        id: 'accent_override',
-        label: 'Accent override (optional)',
-        type: 'text',
-        placeholder:
-          'e.g. "use moss green instead of cobalt", "no orange — too brand-y for us"',
-      },
-    ],
-  };
-
-  return JSON.stringify(form, null, 2);
-}
-
-/**
  * The block we splice into the system prompt so the agent has each
  * direction's full spec inline (palette, fonts, posture). Used by the
  * discovery prompt to teach the agent *how* to bind a chosen direction
@@ -254,7 +194,7 @@ export function renderDirectionSpecBlock(): string {
   const lines: string[] = [
     '## Direction library — infer and bind by default',
     '',
-    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. If the user explicitly requested direction comparison and selected one in a Host-owned direction form, its answer carries a stable Host `value`, a `foundation` id from this library, and visual `guidance`. Bind the named foundation from this library, then apply the guidance as the selected refinement; the Host value is catalogue identity and must not be passed to `od tools directions`. Replace the seed template\'s `:root` block with the chosen foundation\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
+    'Each direction below carries a CSS-ready palette (OKLch values) and font stacks. Infer the best match from the brief and known context, then bind it without asking. Replace the seed template\'s `:root` block with the chosen direction\'s palette and font stacks **verbatim** — do not improvise. Posture cues describe how that direction *behaves* (border weight, radius, accent budget); honour them in the layout choices.',
     '',
   ];
   for (const d of DESIGN_DIRECTIONS) {
@@ -286,10 +226,4 @@ export function renderDirectionSpecBlock(): string {
     lines.push('');
   }
   return lines.join('\n');
-}
-
-/** Look up an inferred or user-selected direction by id or label. */
-export function findDirectionByLabel(label: string): DesignDirection | undefined {
-  const trimmed = label.trim();
-  return DESIGN_DIRECTIONS.find((d) => d.label === trimmed || d.id === trimmed);
 }
