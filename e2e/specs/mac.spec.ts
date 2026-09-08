@@ -11,13 +11,23 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { createFakeAgentRuntimes } from '@/fake-agents';
 import { T } from '@/timeouts';
 import {
+  capturePackagedFailureEvidence,
+  PACKAGED_FAILURE_EVIDENCE_DIR,
+} from '@/vitest/packaged-failure-evidence';
+import {
   assertPackagedHomeFirstRunResult,
+  describePackagedHomeFirstRunStall,
   PACKAGED_HOME_FIRST_RUN_OUTPUT,
   PACKAGED_HOME_FIRST_RUN_PROMPT,
+  PACKAGED_HOME_FIRST_RUN_STAGE_TIMEOUT_MS,
+  packagedHomeFirstRunDiagnosticsExpression,
   packagedHomeFirstRunExpression,
+  packagedHomeFirstRunInPageAwaitMs,
   packagedHomeFirstRunSnapshotExpression,
+  packagedHomeFirstRunStageSatisfied,
   packagedHomeFirstRunSubmitExpression,
   type PackagedHomeFirstRunResult,
+  type PackagedHomeFirstRunStage,
   waitForPackagedHomeFirstRunSetup,
 } from '@/vitest/packaged-home-first-run';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
@@ -428,6 +438,8 @@ macDescribe('packaged mac runtime smoke', () => {
     const fakeAgentRoot = join(toolsPackDir, 'fixtures', `home-first-run-${namespace}`);
     let firstRunInstalledAppPath: string | null = null;
     let firstRunStarted = false;
+    let firstRunDesktopLogPath: string | null = null;
+    let firstRunFailure: unknown = null;
     try {
       await resetPackagedRuntimeState();
       const fakeAgents = await createFakeAgentRuntimes({
@@ -440,6 +452,7 @@ macDescribe('packaged mac runtime smoke', () => {
 
       const start = await runToolsPackJson<MacStartResult>('start');
       firstRunStarted = true;
+      firstRunDesktopLogPath = start.logPath;
       expect(start.source).toBe('installed');
       await waitForHealthyDesktop();
 
@@ -459,16 +472,28 @@ macDescribe('packaged mac runtime smoke', () => {
       });
 
       await waitForPackagedHomeFirstRunSubmit();
-      const firstRun = await waitForPackagedHomeFirstRunOutput();
+      // Two stages, so a red gate can say which half broke. The first ends when
+      // the daemon owns a finished run row; only then is a missing message a
+      // rendering problem rather than an unfinished one.
+      const runFinished = await waitForPackagedHomeFirstRunStage('run-terminal');
+      expect(runFinished.terminalRunStatus).toBe('succeeded');
+
+      const firstRun = await waitForPackagedHomeFirstRunStage('assistant-output');
       expect(firstRun.submitClicked).toBe(true);
       expect(firstRun.projectId).toEqual(expect.any(String));
       expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
       expect(firstRun.hrefAfter).toContain(`/projects/${firstRun.projectId}`);
-      expect(firstRun.injectedAuthorityOutageCount).toBe(1);
-      expect(firstRun.createRunRequestCount).toBeGreaterThanOrEqual(2);
-      expect(firstRun.createRunResponseStatuses[0]).toBe(503);
-      expect(firstRun.createRunResponseStatuses.at(-1)).toBeGreaterThanOrEqual(200);
-      expect(firstRun.createRunResponseStatuses.at(-1)).toBeLessThan(300);
+      // With nothing injected, a cold first run must reach the daemon cleanly:
+      // every create attempt answers 2xx, so no attempt was ever recovered from.
+      // The exact attempt count is deliberately not pinned — the injected outage
+      // made the real count unobservable, and guessing it here would trade a
+      // swallowed red for a false one.
+      expect(firstRun.createRunRequestCount).toBeGreaterThanOrEqual(1);
+      expect(firstRun.createRunResponseStatuses).toHaveLength(firstRun.createRunRequestCount);
+      for (const status of firstRun.createRunResponseStatuses) {
+        expect(status).toBeGreaterThanOrEqual(200);
+        expect(status).toBeLessThan(300);
+      }
       expect(firstRun.runEventRequestCount).toBeGreaterThan(0);
       expect(firstRun.runEventResponseStatuses).toContain(200);
       expect(firstRun.runEventsContainExpectedOutput).toBe(true);
@@ -477,7 +502,16 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(firstRun.workspaceTabClicksBeforeOutput).toBe(0);
       expect(firstRun.navigationEntryCountAfter).toBe(firstRun.navigationEntryCountBefore);
       expect(firstRun.performanceTimeOriginAfter).toBe(firstRun.performanceTimeOriginBefore);
+    } catch (error) {
+      firstRunFailure = error;
+      throw error;
     } finally {
+      // Capture before uninstall: cleanup removes the installed app and the next
+      // case's reset deletes the runtime namespace, so evidence not copied out
+      // here no longer exists by the time anyone reads the report.
+      if (firstRunFailure != null) {
+        await capturePackagedHomeFirstRunFailure(firstRunFailure, firstRunDesktopLogPath);
+      }
       if (firstRunStarted || firstRunInstalledAppPath != null) {
         await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
           console.error('failed to uninstall packaged first-Home-run app during cleanup', error);
@@ -485,7 +519,12 @@ macDescribe('packaged mac runtime smoke', () => {
       }
       await rm(fakeAgentRoot, { force: true, recursive: true }).catch(() => undefined);
     }
-  }, 180_000);
+    // Budget: every wait above (desktop health 90s, composer readiness 45s, the
+    // two staged run waits 90s) must be able to expire and still leave room for
+    // the evidence capture in `finally`. A Vitest-level timeout aborts the case
+    // mid-cleanup, which is exactly how the earlier failures came back with
+    // `logs: {skipped: true}` and nothing else.
+  }, 300_000);
 
   test('installs, starts, inspects, stops, and uninstalls the built mac artifact', async () => {
     const report = await createPackagedSmokeReport('mac');
@@ -2310,34 +2349,104 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
-async function waitForPackagedHomeFirstRunOutput(): Promise<PackagedHomeFirstRunResult> {
-  const timeoutMs = 15_000;
+/**
+ * Wait for one stage of the cold first run, polling inside the page.
+ *
+ * Each `tools-pack mac inspect` pays a full Node + tsx cold start, so a Node-side
+ * poll loop spends most of its budget starting processes instead of observing
+ * the product. Handing the wait to the page turns one process into one window of
+ * continuous observation, and a transient inspect failure now costs a retry
+ * rather than the whole wait.
+ */
+async function waitForPackagedHomeFirstRunStage(
+  stage: PackagedHomeFirstRunStage,
+): Promise<PackagedHomeFirstRunResult> {
+  const timeoutMs = PACKAGED_HOME_FIRST_RUN_STAGE_TIMEOUT_MS[stage];
   const startedAt = Date.now();
-  let lastResult: unknown = null;
+  let snapshot: PackagedHomeFirstRunResult | null = null;
+  let lastError: unknown = null;
 
-  while (Date.now() - startedAt < timeoutMs) {
-    const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
-      '--expr',
-      packagedHomeFirstRunSnapshotExpression(),
-    ]);
-    lastResult = inspect;
-    if (inspect.eval?.ok === true) {
-      const snapshot = assertPackagedHomeFirstRunResult(inspect.eval.value);
-      lastResult = snapshot;
-      if (
-        snapshot.assistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
-        && snapshot.daemonAssistantText.includes(PACKAGED_HOME_FIRST_RUN_OUTPUT)
-        && snapshot.runEventsContainExpectedOutput
-      ) {
-        return snapshot;
+  for (;;) {
+    const awaitMs = packagedHomeFirstRunInPageAwaitMs(timeoutMs - (Date.now() - startedAt));
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        packagedHomeFirstRunSnapshotExpression({ awaitMs, stage }),
+      ]);
+      if (inspect.eval?.ok === true) {
+        snapshot = assertPackagedHomeFirstRunResult(inspect.eval.value);
+        lastError = null;
+        if (packagedHomeFirstRunStageSatisfied(stage, snapshot)) return snapshot;
+      } else {
+        lastError = inspect.eval ?? inspect;
       }
+    } catch (error) {
+      lastError = error;
     }
-    await delay(750);
+    if (Date.now() - startedAt >= timeoutMs) break;
+    await delay(250);
   }
 
   throw new Error(
-    `packaged first Home run did not render assistant output without recovery: ${formatUnknown(lastResult)}`,
+    [
+      `packaged first Home run stage "${stage}" timed out after ${Math.round((Date.now() - startedAt) / 1000)}s`,
+      describePackagedHomeFirstRunStall(stage, snapshot),
+      ...(lastError == null ? [] : [`last inspection error: ${formatUnknown(lastError)}`]),
+      `snapshot: ${formatUnknown(snapshot)}`,
+    ].join('\n'),
   );
+}
+
+/**
+ * Persist what a failed cold first run left behind, before cleanup destroys it.
+ *
+ * The daemon's own run rows are the only observation that separates "the run is
+ * still going" from "the run failed"; the DOM, the conversation messages, and
+ * the run event stream all read as "no output" in both cases and cannot falsify
+ * one another. Capture runs while the desktop is still alive, then the desktop
+ * log last so it also covers the diagnostic requests themselves.
+ */
+async function capturePackagedHomeFirstRunFailure(
+  error: unknown,
+  desktopLogPath: string | null,
+): Promise<void> {
+  try {
+    const { report } = await createPackagedSmokeReport('mac');
+    const entries = await capturePackagedFailureEvidence(report, PACKAGED_FAILURE_EVIDENCE_DIR, [
+      { name: 'error.txt', read: async () => `${formatUnknown(error)}\n` },
+      {
+        name: 'runs.json',
+        read: async () => {
+          const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+            '--expr',
+            packagedHomeFirstRunDiagnosticsExpression(),
+          ]);
+          if (inspect.eval?.ok !== true) {
+            throw new Error(`packaged diagnostics eval failed: ${formatUnknown(inspect.eval)}`);
+          }
+          return `${JSON.stringify(inspect.eval.value, null, 2)}\n`;
+        },
+      },
+      {
+        name: 'tools-pack-logs.json',
+        read: async () => `${JSON.stringify(await runToolsPackJson<LogsResult>('logs'), null, 2)}\n`,
+      },
+      {
+        name: 'desktop-latest.log',
+        read: async () => {
+          if (desktopLogPath == null) {
+            throw new Error('the packaged desktop never started, so no log path was reported');
+          }
+          return await readFile(desktopLogPath);
+        },
+      },
+    ]);
+    console.error(
+      `packaged first Home run failure evidence in ${report.root}: ${JSON.stringify(entries, null, 2)}`,
+    );
+  } catch (captureError) {
+    console.error('failed to capture packaged first Home run failure evidence', captureError);
+  }
 }
 
 async function waitForPackagedHomeFirstRunSubmit(): Promise<void> {

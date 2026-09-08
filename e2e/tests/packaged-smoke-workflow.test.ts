@@ -2731,6 +2731,34 @@ process.stdin.on("end", () => {
     expect(dailyWorkflow).toContain("RELEASE_STATE: ${{ needs.build.outputs.release_state }}");
   });
 
+  it("[P1] gives every exempted beta smoke step a visible failure signal", async () => {
+    // `continue-on-error: true` is deliberate — a red packaged smoke must not
+    // block the daily beta channel — but it also turns the job green, which is
+    // how a release-gating mac_arm64 case stayed red for eleven days. The
+    // exemption stays; the silence does not. Each exempted smoke step must feed
+    // its outcome to `tools-release write-report`, which turns a failure into a
+    // run annotation plus a caution banner at the top of the step summary.
+    const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const steps = workflow.split(/^ {6}- name: /m).slice(1);
+    const exemptedSmokeStepIds = steps
+      .filter((step) => /^ {8}continue-on-error: true$/m.test(step))
+      .map((step) => /^ {8}id: (\w+_smoke)$/m.exec(step)?.[1])
+      .filter((id): id is string => id != null);
+
+    // Guard the guard: an empty list would make every assertion below vacuous.
+    expect(exemptedSmokeStepIds).toEqual(["mac_arm64_smoke", "win_x64_smoke"]);
+
+    for (const stepId of exemptedSmokeStepIds) {
+      const reportStep = steps.find((step) =>
+        step.includes(`RELEASE_SMOKE_OUTCOME: \${{ steps.${stepId}.outcome }}`),
+      );
+      expect(reportStep, `no report step consumes ${stepId}.outcome`).toBeDefined();
+      expect(reportStep).toContain("pnpm exec tools-release write-report");
+      expect(reportStep).toContain('RELEASE_SMOKE_EXEMPT: "true"');
+      expect(reportStep).toContain("if: ${{ always() }}");
+    }
+  });
+
   it("[P2] daily beta resolve defaults to main and preserves the ref override", async () => {
     // Beta is the daily R&D channel and must track the development tip (main).
     // Selecting the highest-semver release/vX.Y.Z branch stalls the build: once
