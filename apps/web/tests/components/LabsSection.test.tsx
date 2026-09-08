@@ -4,7 +4,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   OdNextRolloutControlStatus,
-  OdNextRolloutLatchStatus,
   OdNextRolloutMode,
   OdNextRolloutModeSource,
 } from '@open-design/contracts';
@@ -20,7 +19,6 @@ vi.mock('../../src/analytics/provider', () => ({
 function status(overrides: {
   requestedMode?: OdNextRolloutMode;
   requestedModeSource?: OdNextRolloutModeSource;
-  latch?: OdNextRolloutLatchStatus | null;
 } = {}): OdNextRolloutControlStatus {
   const requestedMode = overrides.requestedMode ?? 'off';
   return {
@@ -29,11 +27,6 @@ function status(overrides: {
     requestedMode,
     requestedModeSource: overrides.requestedModeSource ?? 'default',
     effectiveMode: requestedMode,
-    latch: overrides.latch ?? null,
-    revision: 0,
-    updatedAt: null,
-    lastEvent: null,
-    resetAllowed: false,
   };
 }
 
@@ -595,39 +588,6 @@ describe('LabsSection', () => {
     expect(
       screen.getByText('An environment variable is controlling this setting, so it cannot be changed here.'),
     ).toBeTruthy();
-  });
-
-  it('locks the switch and explains when the local safety latch has tripped', async () => {
-    stubFetch({
-      rolloutStatus: status({
-        requestedMode: 'active',
-        requestedModeSource: 'app_config',
-        latch: { mode: 'observe', reasonCode: 'quality_regression', latchedAt: 1 },
-      }),
-    });
-    renderSection();
-    await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('true'));
-    expect(
-      screen.getByText('Paused automatically after a problem was detected. Generation is using the original approach.'),
-    ).toBeTruthy();
-  });
-
-  it('reports the latch, not the environment, when both would lock the switch', async () => {
-    stubFetch({
-      rolloutStatus: status({
-        requestedMode: 'active',
-        requestedModeSource: 'env',
-        latch: { mode: 'off', reasonCode: 'machine_contract_leak', latchedAt: 1 },
-      }),
-    });
-    renderSection();
-    await waitFor(() => expect(switchEl().getAttribute('aria-disabled')).toBe('true'));
-    expect(
-      screen.getByText('Paused automatically after a problem was detected. Generation is using the original approach.'),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText('An environment variable is controlling this setting, so it cannot be changed here.'),
-    ).toBeNull();
   });
 
   it('keeps the page usable when the daemon cannot be reached', async () => {

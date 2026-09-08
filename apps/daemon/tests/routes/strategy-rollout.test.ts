@@ -8,39 +8,21 @@
 // choice rather than about this daemon's disk.
 import type { Server } from 'node:http';
 
-import Database from 'better-sqlite3';
 import express from 'express';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { registerStrategyRolloutRoutes } from '../../src/routes/strategy-rollout.js';
-import { migrateOdNextRolloutStore } from '../../src/strategies/od-next/rollout.js';
-
-function analyticsStub() {
-  return {
-    capture: vi.fn().mockResolvedValue(undefined),
-    captureSafety: vi.fn(),
-    mergeAnonymousPerson: vi.fn(),
-    identifyGroup: vi.fn(),
-    shutdown: vi.fn(),
-  } as never;
-}
 
 describe('GET /api/strategies/od-next/rollout', () => {
   let server: Server | null = null;
-  let db: Database.Database | null = null;
   let baseUrl = '';
 
   const start = async (
     readOdNextPreference: () => Promise<{ odNextStrategyMode?: 'off' | 'observe' | 'active' | null }>,
   ) => {
-    db = new Database(':memory:');
-    migrateOdNextRolloutStore(db);
     const app = express();
     app.use(express.json());
     registerStrategyRolloutRoutes(app, {
-      db,
-      analytics: analyticsStub(),
-      getAppVersion: () => '0.0.0',
       requireLocalDaemonRequest: (_req, _res, next) => next(),
       readOdNextPreference,
     });
@@ -60,8 +42,6 @@ describe('GET /api/strategies/od-next/rollout', () => {
   afterEach(async () => {
     if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
     server = null;
-    db?.close();
-    db = null;
   });
 
   it('reports the saved mode and the authority that set it', async () => {
@@ -97,6 +77,20 @@ describe('GET /api/strategies/od-next/rollout', () => {
       requestedModeSource: 'app_config',
       effectiveMode: 'off',
     });
+  });
+
+  it('offers no way to change the mode from here', async () => {
+    // The reset this route used to expose existed only to lift a stop latch.
+    // With the latch gone there is nothing here to write, and the one way to
+    // turn OD Next off is `PUT /api/app-config` — which is also the one place
+    // a typo is refused rather than absorbed.
+    await start(async () => ({}));
+    const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout/reset`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedRevision: 0 }),
+    });
+    expect(response.status).toBe(404);
   });
 
   it('fails instead of calling an unreadable config an unconfigured one', async () => {
