@@ -1,0 +1,45 @@
+{
+  "fixtureKind": "sanitized_real_best_effort",
+  "runtime": "vela-pi",
+  "velaVersion": "0.0.1-test.pi.98057bb",
+  "piVersion": "0.85.1",
+  "modelEndpoint": "loopback_fixture",
+  "recordingDigest": "sha256:817162fd2acf6753c24663be283c6d84d386f1a4b18d2f71273b250b79cda50d",
+  "cases": [
+    {
+      "caseId": "main_run",
+      "outcome": "passed",
+      "evidence": "real_pi_acp_end_turn"
+    },
+    {
+      "caseId": "tool",
+      "outcome": "passed",
+      "evidence": "real_pi_write_tool_and_file_bytes"
+    },
+    {
+      "caseId": "child_success",
+      "outcome": "unavailable",
+      "evidence": "no_child_adapter"
+    },
+    {
+      "caseId": "child_failure_parent_recovers",
+      "outcome": "unavailable",
+      "evidence": "no_child_adapter"
+    },
+    {
+      "caseId": "cancel",
+      "outcome": "passed",
+      "evidence": "real_pi_session_cancel"
+    },
+    {
+      "caseId": "timeout",
+      "outcome": "passed",
+      "evidence": "host_deadline_session_cancel"
+    },
+    {
+      "caseId": "resume",
+      "outcome": "passed",
+      "evidence": "new_vela_process_loads_durable_pi_tool_history"
+    }
+  ]
+}

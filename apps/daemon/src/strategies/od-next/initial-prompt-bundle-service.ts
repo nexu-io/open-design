@@ -44,6 +44,7 @@ import type { RuntimeAgentDef } from '../../runtimes/types.js';
 import type { DetectedRuntimeVersions } from '../../runtimes/detection.js';
 import {
   evaluateOdNextExecutionEligibility,
+  evaluateOdNextAdmissionEligibility,
   hashOdNextRuntimeCapabilitySnapshotV1,
   resolveBundledOdNextRuntimeCapability,
 } from '../../runtimes/od-next-capability-gate.js';
@@ -239,7 +240,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
     }
     capabilitySnapshot = capability.snapshot;
   }
-  const eligibility = evaluateOdNextExecutionEligibility(capabilitySnapshot, 'complex');
+  const eligibility = evaluateOdNextAdmissionEligibility(capabilitySnapshot);
   if (!eligibility.eligible && !input.syntheticCanary) {
     throw new Error(
       `OD Next runtime planning facts unavailable: ${eligibility.reason}`,
@@ -253,7 +254,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
       inputRefs: ['request'],
       productionRoutes: catalog.productionRoutes,
       outputKinds: catalog.outputKinds,
-      nativeChildLifecycleVerified: eligibility.eligible,
+      nativeChildLifecycleVerified: evaluateOdNextExecutionEligibility(capabilitySnapshot, 'complex').eligible,
     },
   };
 }

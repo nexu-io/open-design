@@ -590,6 +590,22 @@ describe('OD Next complex production enforcement', () => {
     })).toEqual({ eligible: true, reasonCodes: [] });
   });
 
+  it('does not allow Pi single-Agent admission to escalate into complex production', () => {
+    const capability = resolveBundledOdNextRuntimeCapability({
+      agentId: 'amr', amrRuntime: 'pi', agentCliVersion: '0.0.1-test.pi.98057bb',
+    }).snapshot!;
+    const original = planContract(snapshot, capability);
+    const plan = OpenDesignPlanContractV2Schema.parse({
+      ...original,
+      runManifest: { ...original.runManifest, selectedAgentId: 'amr' },
+    });
+    const result = evaluateOdNextComplexEligibility({
+      plan, selectedAgentId: 'amr', capabilitySnapshot: capability,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.reasonCodes).toContain('od_next_complex_native_subagents_unverified');
+  });
+
   it('fails closed for unknown, unsupported, missing, mismatched, and drifted capability snapshots', () => {
     const verified = capabilitySnapshot();
     const plan = planContract(snapshot, verified);
