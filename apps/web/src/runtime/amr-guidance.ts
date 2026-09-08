@@ -302,6 +302,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
   | 'chat.runError.runtimeConfigMessage'
+  | 'chat.runError.apiKeyInvalidMessage'
   | 'chat.runError.quotaExhaustedMessage'
   | 'chat.runError.workspaceCreditsMessage'
   | 'chat.runError.timedOutMessage'
@@ -448,6 +449,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.toolLoop'
   | 'chat.runError.title.outputInvalid'
   | 'chat.runError.title.runtimeConfig'
+  | 'chat.runError.title.apiKeyInvalid'
   | 'chat.runError.title.quotaExhausted'
   | 'chat.runError.title.timedOut'
   | 'chat.runError.title.emptyOutput'
@@ -1149,6 +1151,39 @@ const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   cli_not_installed: retryWithGuidance(
     'chat.runError.title.cliMissing',
     'chat.runError.cliMissingMessage',
+  ),
+  // S05 · 自带 API key 没配好。
+  //
+  // daemon 认得这一格,而且判得完全对:`authDetail` 的正则(「invalid api key」/
+  // 「api key … invalid」,`run-failure-classification.ts`)把它从 `auth_required`
+  // 里单独摘出来,category `auth`、user_action `login`、retryable false。web 这边
+  // 一直没有这一格,于是整轮落到最后那张通用卡 —— 标题「任务执行失败」、正文是
+  // 兜底句、卡上唯一像出路的按钮是〔联系支持〕。API key 填错了把人支去联系客服,
+  // 是这张卡最不该做的事,而且卡上没有任何通往「改 key」的入口,尽管 daemon 说的
+  // 就是 `login`。(实测:packaged BYOK `byok-opencode`,code AGENT_EXECUTION_FAILED
+  // + detail invalid_api_key。)
+  //
+  // 为什么在这张表、而不是上面那张 agent-agnostic 表:两张表的分界线正好是这一格
+  // 需要的那一条。
+  //   · AMR 与 Antigravity 的登录各有自己的分支,排在这张表**之前**:AMR 卡内一键
+  //     登录(S04)、Antigravity 去终端登录 —— 两条都不该被这一格抢走。
+  //   · 其余 agent 走到这里时,`AGENT_AUTH_REQUIRED` 那条**码级**分支还在后面,
+  //     它渲染的是 S02「{agent} 尚未登录」。daemon 已经把「没登录」(auth_required)
+  //     和「key 填错了」(invalid_api_key)分开,文案文档也把它们分成两格
+  //     (S02 vs S05),所以覆盖那颗过粗的码正是这张表存在的理由 —— 见表头注释
+  //     「This layer can OVERRIDE a code mapping」。
+  //
+  // 主按钮〔去设置〕是阶梯第 1 档:落点是 `execution` 这一节,BYOK 的 key 输入框
+  // (`ByokKeyField`)和本机 CLI 的 `agent_cli_env` 都渲染在那一屏,也正是发送前
+  // 那道 BYOK 闸门(`ProjectView` 的 `requiresByokPreflight` →
+  // `onOpenSettings('execution')`)落的同一个地方 —— 不新造入口。
+  //
+  // 不带重试:文档 S05 那一排只有〔去设置〕,而且 key 没改之前重试必然同样结果
+  // (设计原则四)。
+  invalid_api_key: failureCard(
+    { directFix: 'open-settings' },
+    'chat.runError.title.apiKeyInvalid',
+    'chat.runError.apiKeyInvalidMessage',
   ),
 };
 

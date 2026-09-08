@@ -2861,6 +2861,14 @@ export interface Dict {
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;
   'chat.runError.title.runtimeConfig': string;
+  /**
+   * S05 · 自带 API key 没配好(daemon `failure_detail: invalid_api_key`)。
+   *
+   * 主语固定,没有插值槽 —— 说的是「你填的那把 key」,不是「哪一个 agent」,
+   * 所以它和 S02 的 `title.signInRequired.other` 不是同一句话:那边要点名是哪个
+   * 本地 agent 还没登录,这边说的是 key 本身填错了。
+   */
+  'chat.runError.title.apiKeyInvalid': string;
   'chat.runError.title.quotaExhausted': string;
   'chat.runError.title.timedOut': string;
   'chat.runError.title.emptyOutput': string;
@@ -2890,6 +2898,8 @@ export interface Dict {
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
   'chat.runError.runtimeConfigMessage': string;
+  /** S05 的正文。同样没有插值槽。 */
+  'chat.runError.apiKeyInvalidMessage': string;
   'chat.runError.quotaExhaustedMessage': string;
   'chat.runError.workspaceCreditsMessage': string;
   'chat.runError.timedOutMessage': string;
