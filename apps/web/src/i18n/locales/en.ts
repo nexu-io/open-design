@@ -67,7 +67,7 @@ export const en: Dict = {
   'chat.amrCard.chipOfficial': 'Official hosting',
   'chat.amrCard.chipNoKey': 'No API key',
   'chat.amrCard.chipAutoRetry': 'Auto-retry after sign-in',
-  'chat.amrCard.switchCta': 'Switch to OpenDesign Cloud & retry',
+  'chat.amrCard.switchCta': 'Switch to Cloud',
   'chat.amrError.authMessage': 'Your OpenDesign Cloud account isn\'t authorized yet. Authorize it and this run retries automatically.',
   'chat.amrError.balanceMessage': 'Your OpenDesign Cloud allowance has run out. Top up to keep this run going.',
   'chat.amrError.authorizeCta': 'Authorize & retry',

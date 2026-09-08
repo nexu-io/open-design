@@ -67,7 +67,7 @@ export const esES: Dict = {
   'chat.amrCard.chipOfficial': 'Alojamiento oficial',
   'chat.amrCard.chipNoKey': 'Sin API Key',
   'chat.amrCard.chipAutoRetry': 'Reintento automático tras iniciar sesión',
-  'chat.amrCard.switchCta': 'Cambiar a OpenDesign Cloud y reintentar',
+  'chat.amrCard.switchCta': 'Cambiar a Cloud',
   'chat.amrError.authMessage': 'Tu cuenta de OpenDesign Cloud aún no está autorizada. Autorízala y esta ejecución se reintentará automáticamente.',
   'chat.amrError.balanceMessage': 'Tu saldo de OpenDesign Cloud se ha agotado. Recarga para continuar esta ejecución.',
   'chat.amrError.authorizeCta': 'Autorizar y reintentar',

@@ -67,7 +67,7 @@ export const th: Dict = {
   'chat.amrCard.chipOfficial': 'โฮสติ้งอย่างเป็นทางการ',
   'chat.amrCard.chipNoKey': 'ไม่ต้องใช้ API Key',
   'chat.amrCard.chipAutoRetry': 'ลองใหม่อัตโนมัติหลังเข้าสู่ระบบ',
-  'chat.amrCard.switchCta': 'สลับไปยัง OpenDesign Cloud และลองใหม่',
+  'chat.amrCard.switchCta': 'สลับไปยัง Cloud',
   'chat.amrError.authMessage': 'บัญชี OpenDesign Cloud ของคุณยังไม่ได้รับอนุญาต ให้สิทธิ์แล้วงานนี้จะถูกลองใหม่โดยอัตโนมัติ',
   'chat.amrError.balanceMessage': 'ยอดเงิน OpenDesign Cloud ของคุณหมดแล้ว เติมเงินเพื่อดำเนินงานนี้ต่อ',
   'chat.amrError.authorizeCta': 'ให้สิทธิ์และลองใหม่',

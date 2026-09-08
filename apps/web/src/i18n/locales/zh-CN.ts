@@ -68,7 +68,7 @@ export const zhCN: Dict = {
   "chat.amrCard.chipOfficial": "官方托管",
   "chat.amrCard.chipNoKey": "无需 API Key",
   "chat.amrCard.chipAutoRetry": "授权后自动重试",
-  "chat.amrCard.switchCta": "切换到 OpenDesign Cloud 并重试",
+  "chat.amrCard.switchCta": "切换到 Cloud",
   "chat.amrError.authMessage":
     "OpenDesign Cloud 账号尚未授权。完成授权后将自动重试当前任务。",
   "chat.amrError.balanceMessage":

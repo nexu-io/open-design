@@ -67,7 +67,7 @@ export const ko: Dict = {
   'chat.amrCard.chipOfficial': '공식 호스팅',
   'chat.amrCard.chipNoKey': 'API 키 불필요',
   'chat.amrCard.chipAutoRetry': '로그인 후 자동 재시도',
-  'chat.amrCard.switchCta': 'OpenDesign Cloud로 전환하고 재시도',
+  'chat.amrCard.switchCta': 'Cloud로 전환',
   'chat.amrError.authMessage': 'OpenDesign Cloud 계정이 아직 인증되지 않았습니다. 인증하면 이 작업이 자동으로 재시도됩니다.',
   'chat.amrError.balanceMessage': 'OpenDesign Cloud 잔액이 부족합니다. 충전하여 이 작업을 계속 진행하세요.',
   'chat.amrError.authorizeCta': '인증하고 재시도',

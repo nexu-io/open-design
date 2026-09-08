@@ -473,7 +473,7 @@ export interface RunFailureUi {
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
   /**
-   * 报错卡主按钮位上那颗〔切换到 OpenDesign Cloud 并重试〕。
+   * 报错卡主按钮位上那颗〔切换到 Cloud〕。
    *
    * 这个字段以前叫 `showSwitchCard`,说的是「在报错卡**下面**另起一张推荐卡」。
    * OPEND-2772:产品看到上下两张卡同时出现,原话「**不能新旧一起出现吧??**」——
@@ -918,7 +918,7 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
 }
 
 /**
- * OPEND-2772 · 把〔切换到 OpenDesign Cloud 并重试〕铺到**每一张** BYOK /
+ * OPEND-2772 · 把〔切换到 Cloud〕铺到**每一张** BYOK /
  * 本地 CLI 的报错卡上。
  *
  * 产品 2026-09-07 逐字:「2772 的『统一』是『铺到所有报错』,主 cta 都是切换至
