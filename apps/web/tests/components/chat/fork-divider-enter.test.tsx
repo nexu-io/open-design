@@ -9,7 +9,7 @@
  *  `853da24ea5 → 361b78253e` 的 diff 里没有一行碰 animation / transition /
  *  cubic-bezier / scale / 时长,逐条查过):
  *
- *   点出来的那两块要「落」一下:静态稿里它们本来就在,分不出是点击的结果;
+ *   点出来的那块要「落」一下:静态稿里它本来就在,分不出是点击的结果;
  *   落这一下(4px + 淡入)说的是「这是刚才那一下带来的」。
  *   钉住展示的那一格不挂 .is-new,页面一加载就该是已经落好的样子。
  *
@@ -17,15 +17,14 @@
  *     from { opacity: 0; transform: translateY(-4px); }
  *     to   { opacity: 1; transform: none; }
  *   }
- *   .fork-sep.is-new,
- *   .fork-note.is-new { animation: fork-in var(--duration-normal) var(--ease-out) both; }
- *   .fork-note.is-new { animation-delay: 60ms; }
+ *   .fork-sep.is-new { animation: fork-in var(--duration-normal) var(--ease-out) both; }
  *
- * 我们这边 `.fork-sep` / `.fork-note` 两条静态规则早就搬了,这一段**整段没搬**,
- * 全仓对 `fork-in` / `.is-new` 零命中。
+ * ⚠️ 稿子原本是**两块**(线 + 线下的脚注),脚注晚 60ms 落。OPEND-2714 之后
+ * 文案住进了线中间那一格,只剩一块 —— 一块就没有先后可言,那条 60ms 的延迟
+ * 跟着脚注一起走了。这里量的是**改完之后**的那一块。
  *
  * 「展示的那一格不挂 `.is-new`」在产品里天然成立:陈列页那一格
- * (`mirror-gallery.test.tsx`)是手写的裸 `.fork-sep` / `.fork-note`,
+ * (`mirror-gallery.test.tsx`)是手写的裸 `.fork-sep`,
  * 类只由 `AssistantMessage` 挂,所以陈列页仍然是落好的静态样子。
  *
  * ## 尺子
@@ -113,7 +112,6 @@ function resolveVars(value: string, map: Map<string, string>, depth = 0): string
  */
 const DESIGN_DURATION = '200ms';
 const DESIGN_EASING = 'cubic-bezier(0, 0, 0, 1)';
-const DESIGN_DELAY = '60ms';
 
 const TOKENS = lightTokens();
 /** 我们同名 token 解出来的值 —— 和稿子分叉时单独红出来,好指认是 token 漂了。 */
@@ -131,10 +129,8 @@ beforeAll(() => {
   stage.id = 'stage';
   stage.innerHTML = `
     <div class="msg assistant" id="msg">
-      <div class="fork-sep is-new" id="sep-new"></div>
-      <div class="fork-note is-new" id="note-new"></div>
-      <div class="fork-sep" id="sep-plain"></div>
-      <div class="fork-note" id="note-plain"></div>
+      <div class="fork-sep is-new" id="sep-new"><i></i><span id="note-new"></span><i></i></div>
+      <div class="fork-sep" id="sep-plain"><i></i><span id="note-plain"></span><i></i></div>
     </div>`;
   document.body.appendChild(stage);
 });
@@ -222,9 +218,9 @@ describe('分叉分界 · 入场', () => {
     ).toBe(`fork-in ${DESIGN_DURATION} ${DESIGN_EASING} both`);
   });
 
-  it('脚注跟着落,但晚 60ms —— 线先落,注解后到', () => {
-    expect(css('note-new').animation).toBe(`fork-in ${DESIGN_DURATION} ${DESIGN_EASING} both`);
-    expect(css('note-new').animationDelay).toBe(DESIGN_DELAY);
+  it('线里的文案跟着线一起落 —— 它没有自己的动画,也没有自己的延迟', () => {
+    expect(['', 'none']).toContain(css('note-new').animation);
+    expect(css('note-new').animationDelay).toBe('0s');
   });
 
   it('关键帧是「上方 4px 淡入」,不是从 scale(0) 起手', () => {
@@ -237,16 +233,16 @@ describe('分叉分界 · 入场', () => {
   it('没挂 .is-new 的不动 —— 类是那个开关', () => {
     expect(['', 'none']).toContain(css('sep-plain').animation);
     expect(['', 'none']).toContain(css('note-plain').animation);
-    expect(css('note-plain').animationDelay).not.toBe(DESIGN_DELAY);
   });
 
-  it('产品真的把 .is-new 挂上去了(线和脚注两处)', () => {
+  it('产品真的把 .is-new 挂上去了(就线这一处,文案在它里面)', () => {
     const { container } = renderForked();
     const sep = container.querySelector('[data-testid="assistant-fork-divider"]');
     const note = container.querySelector('[data-testid="assistant-fork-note"]');
     expect(sep, '分界线没渲染出来 —— 夹具变了').toBeTruthy();
-    expect(note, '脚注没渲染出来 —— 夹具变了').toBeTruthy();
+    expect(note, '文案没渲染出来 —— 夹具变了').toBeTruthy();
     expect(sep!.classList.contains('is-new')).toBe(true);
-    expect(note!.classList.contains('is-new')).toBe(true);
+    expect(sep!.contains(note!), '文案该住在线里面').toBe(true);
+    expect(note!.classList.contains('is-new'), '里面那一格不该再单独挂动画').toBe(false);
   });
 });

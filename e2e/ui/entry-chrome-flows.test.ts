@@ -1142,7 +1142,10 @@ test('[P0] signed-out Local setup can navigate the surviving rail destinations',
 test('[P0] @critical home composer delegates the default prototype scenario to daemon authority', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
+  // The mode chip left the Home composer (2026-09-08, product) — Design is
+  // still what this request routes as, it just is not stated on a control any
+  // more. The routing itself is asserted from the request body below.
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
 
   const input = page.getByTestId('home-hero-input');
   const prompt =

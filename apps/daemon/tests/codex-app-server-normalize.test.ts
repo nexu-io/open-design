@@ -280,7 +280,24 @@ describe('codex app-server -> OpenDesign event normalization', () => {
           },
         },
       ]);
+      /*
+       * `item/started` now opens the row in its EARLY form rather than its
+       * settled one, so the row can fill in from
+       * `item/commandExecution/outputDelta` while the command runs — a settled
+       * row makes every later update invisible, because the client drops any
+       * early row whose id already has a settled one. The settled pair below is
+       * unchanged and still arrives from `item/completed`. Full rationale and
+       * the timing assertions live in
+       * `codex-app-server-command-output-stream.test.ts`.
+       */
       expect(events).toEqual([
+        {
+          type: 'tool_in_flight',
+          id: 'c1',
+          name: 'Bash',
+          input: { command: 'echo hi' },
+          startedAt: expect.any(Number),
+        },
         { type: 'tool_use', id: 'c1', name: 'Bash', input: { command: 'echo hi' } },
         { type: 'tool_result', toolUseId: 'c1', content: 'hi\n', isError: false },
       ]);

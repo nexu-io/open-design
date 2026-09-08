@@ -215,7 +215,9 @@ describe('聊天面板描边图标的笔画粗细', () => {
         <QuotedRefs quotes={[{ id: 'q1', text: '一段引文', messageId: 'm1' }]} onClear={() => {}} />
       </I18nProvider>,
     );
-    const svg = container.querySelector('[data-testid="chat-quoted-refs"] > svg');
+    // OPEND-2713 之后气泡不再是芯片的直接子元素:它和移除键叠进了最前面那一格,
+    // 而且**排在按钮后面**(`.remove:focus-visible ~ .icon` 的前提)。
+    const svg = container.querySelector('[data-testid="chat-quoted-refs"] button + svg');
     expect(svg, '引用芯片没渲染出气泡').not.toBeNull();
     const el = svg as unknown as SVGSVGElement;
     expect(Number(el.getAttribute('stroke-width'))).toBe(DESIGN_BASELINE);

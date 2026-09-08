@@ -722,14 +722,14 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
         {/* 稿子的卡头标题是 `<b>`(`.card > .h b { font-weight: inherit }`),不是 div ——
             标签不一样,逐元素比样式时从这里开始整段串位 */}
         <b className="question-form-title">{form.title}</b>
-        {stepped ? (
-          <span
-            className="qf-step-progress"
-            aria-label={`${activeQuestionIndex + 1} / ${form.questions.length}`}
-          >
-            {activeQuestionIndex + 1}/{form.questions.length}
-          </span>
-        ) : null}
+        {/*
+          OPEND-2641:分步进度(`1/4`)**不在这里** —— 它跟着当前问句走,
+          渲染在 `.qf-label` 的末尾(见下面 `<StepProgress />` 的调用点)。
+          卡头留给卡的名字和**整卡**状态(「已选 N」/「已回答」/ 倒计时)。
+          进度说的是「这一问在第几问」,那是问句的属性,不是卡的属性;
+          而且卡头是 flex,进度和「已选 N」当时各写了一句 `margin-inline-start: auto`,
+          一行两个 auto 把剩余空间对半分,进度停在卡头中间和计数抢位置。
+        */}
         {pickedCount > 0 ? <PickedCount t={t} count={pickedCount} /> : null}
         {answered ? <span className="question-form-pill">{t('qf.answered')}</span> : null}
         {/*
@@ -801,8 +801,23 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
               <div className="qf-label">
                 {q.label}
                 {q.required ? <span className="qf-required">{t('qf.required')}</span> : null}
+                {/*
+                  OPEND-2641:进度收在**问句这一行的末尾** —— 跟在问句文字后面,
+                  也跟在「必填」角标后面。分步态下 `questionsToRender` 只有当前那一问
+                  (上面 `stepped && activeQuestion ? [activeQuestion] : …`),
+                  所以这里不需要再判「这一问是不是当前问」。
+                */}
+                {stepped ? (
+                  <StepProgress index={activeQuestionIndex} total={form.questions.length} />
+                ) : null}
               </div>
-              {q.help ? <div className="qf-help">{q.help}</div> : null}
+              {/* 一道题就是「题目 + 必填标识 + 用来作答的控件」,没有第四样。
+                  模型写的那行说明(`help`)夹在题目和控件中间,把两者推开,
+                  读起来像卡片自己的旁白而不是这道题的一部分(OPEND-2707)。
+                  这里是**不渲染**而不是藏起来:它是卡片正文这根纵向流里的
+                  一个块级兄弟,留着就还占一整行的行盒 —— 那行空白正是工单
+                  要一起去掉的。`help` 仍留在解析出来的表单结构上,已有的、
+                  流式进来的表单照旧原样往返。 */}
               {q.type === 'select' && q.options && !visualStyleCards
                 && questionUsesSelectMenu(q) ? (
                 <SelectChoice
@@ -2828,6 +2843,23 @@ function AmountChoice({
  */
 /** 一个绝不会出现在任何译文里的哨兵,用来标记 `{count}` 的落点。 */
 const PICKED_COUNT_SLOT = '\u0000';
+/**
+ * 分步表单「这一问是第几问」的行内进度(`1/4`)。
+ *
+ * 不变量:它**属于当前问句**,所以渲染在 `.qf-label` 的末尾,不在卡头里
+ * (OPEND-2641)。卡头只留卡的名字和整卡状态 —— 「已选 N」是整张卡的状态,
+ * 进度不是;两个都挂在卡头上时,它们会抢同一条 `margin-inline-start: auto`。
+ *
+ * 可读名字保留 `第几 / 共几` 的念法(`1 / 4`),显示文本仍是紧凑的 `1/4`。
+ */
+function StepProgress({ index, total }: { index: number; total: number }) {
+  return (
+    <span className="qf-step-progress" aria-label={`${index + 1} / ${total}`}>
+      {index + 1}/{total}
+    </span>
+  );
+}
+
 function PickedCount({ t, count }: { t: ReturnType<typeof useT>; count: number }) {
   const rendered = t('qf.picked', { count: PICKED_COUNT_SLOT });
   const at = rendered.indexOf(PICKED_COUNT_SLOT);
