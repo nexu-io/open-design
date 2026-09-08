@@ -36,11 +36,11 @@ describe('renderActiveStageBlock', () => {
       stageId: 'plan',
       bodies: [
         { atomId: 'todo-write',       body: 'TodoWrite-driven plan.' },
-        { atomId: 'direction-picker', body: '3-5 directions.' },
+        { atomId: 'file-write', body: 'Write the file.' },
       ],
     });
     expect(out).toContain('### todo-write');
-    expect(out).toContain('### direction-picker');
+    expect(out).toContain('### file-write');
     expect(out).toMatch(/---/);
     // Only one separator between two atoms.
     expect(out.match(/---/g)?.length).toBe(1);

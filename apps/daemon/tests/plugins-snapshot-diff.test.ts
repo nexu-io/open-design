@@ -131,7 +131,7 @@ describe('diffSnapshots — pipeline', () => {
     });
     const b = make({
       pipeline: { stages: [
-        { id: 'plan',     atoms: ['todo-write', 'direction-picker'] },
+        { id: 'plan',     atoms: ['todo-write', 'file-write'] },
         { id: 'critique', atoms: ['critique-theater'] },
       ] },
     });

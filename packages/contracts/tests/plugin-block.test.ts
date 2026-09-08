@@ -69,12 +69,12 @@ describe('renderPluginBlock', () => {
   it('renders one bullet per atom id when atoms are present', () => {
     const out = renderPluginBlock(
       makeSnapshot({
-        resolvedContext: { items: [], atoms: ['todo-write', 'direction-picker'] },
+        resolvedContext: { items: [], atoms: ['todo-write', 'file-write'] },
       }),
     );
     expect(out).toContain('## Plugin atoms');
     expect(out).toContain('- `todo-write`');
-    expect(out).toContain('- `direction-picker`');
+    expect(out).toContain('- `file-write`');
   });
 
   it('trims plugin description and example query', () => {

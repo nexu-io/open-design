@@ -47,21 +47,13 @@ describe('AssistantMessage client-provided system copy', () => {
       JSON.stringify({
         questions: [
           {
+            // `isDirectionForm` 认的是**表单形状**(id === 'direction' / 标题含
+            // "visual direction"),不是某个 question 类型 —— 选设计风格那个类型
+            // 已于 2026-09-08 整条删除。模型自己造的普通单选仍要被 suppress。
             id: 'direction',
             label: 'Direction',
-            type: 'direction-cards',
+            type: 'radio',
             options: ['Modern minimal'],
-            cards: [
-              {
-                id: 'Modern minimal',
-                label: 'Modern minimal',
-                mood: 'Clean and restrained.',
-                references: ['Linear'],
-                palette: ['#ffffff', '#111111'],
-                displayFont: 'serif',
-                bodyFont: 'sans-serif',
-              },
-            ],
           },
         ],
       }),

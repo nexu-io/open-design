@@ -128,7 +128,7 @@ describe('canonical XML keyed sibling lists', () => {
           tag: 'stage',
           attributes: [['name', 'plan']],
           children: [
-            { kind: 'text', tag: 'atom', attributes: [['name', 'direction-picker']], text: 'a' },
+            { kind: 'text', tag: 'atom', attributes: [['name', 'file-write']], text: 'a' },
             { kind: 'marker', tag: 'atom', attributes: [['name', 'todo-write']] },
           ],
         },
@@ -145,7 +145,7 @@ describe('canonical XML keyed sibling lists', () => {
       [
         '<stages>',
         '  <stage name="plan">',
-        '    <atom name="direction-picker">',
+        '    <atom name="file-write">',
         '      <![CDATA[a]]>',
         '    </atom>',
         '    <atom name="todo-write" />',

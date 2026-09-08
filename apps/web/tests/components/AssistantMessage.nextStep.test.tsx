@@ -567,7 +567,7 @@ describe('AssistantMessage next-step affordance during the question phase', () =
       'Pick a direction.',
       '',
       '<question-form id="direction" title="Visual direction">',
-      '{"questions":[{"id":"dir","label":"Direction","type":"direction-cards","options":["A","B"]}]}',
+      '{"questions":[{"id":"dir","label":"Direction","type":"radio","options":["A","B"]}]}',
       '</question-form>',
     ].join('\n');
     render(

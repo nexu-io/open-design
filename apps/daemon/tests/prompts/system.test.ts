@@ -153,7 +153,7 @@ describe('composeSystemPrompt', () => {
       designSystemBody: '# ComfyUI\n\n--accent: #ffd500',
       metadata: { kind: 'prototype' } as any,
       activeStageBlocks: [
-        '\n\n## Active stage: plan\n\n### direction-picker\n\nAsk for 3-5 directions.',
+        '\n\n## Active stage: plan\n\n### file-write\n\nWrite the file.',
       ],
     });
 
@@ -167,7 +167,7 @@ describe('composeSystemPrompt', () => {
     expect(prompt).not.toContain('<question-form id="direction"');
     expect(prompt).not.toContain('Pick a visual direction');
     expect(prompt.indexOf('## Active design system visual direction')).toBeGreaterThan(
-      prompt.indexOf('### direction-picker'),
+      prompt.indexOf('### file-write'),
     );
   });
 

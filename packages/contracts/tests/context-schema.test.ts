@@ -60,7 +60,7 @@ describe('ResolvedContextSchema', () => {
         { kind: 'atom', id: 'todo-write', label: 'TodoWrite' },
       ],
       promptFragments: { 's1': 'Use skill 1 first.' },
-      atoms: ['todo-write', 'direction-picker'],
+      atoms: ['todo-write', 'file-write'],
     };
     expect(ResolvedContextSchema.parse(value)).toEqual(value);
   });
