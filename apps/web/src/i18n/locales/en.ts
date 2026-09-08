@@ -4206,7 +4206,7 @@ export const en: Dict = {
   'updater.viewVersionFeatures': 'Explore new features',
   'updater.manualDownload': 'Download manually',
   'whatsNew.updatedTitle': 'OpenDesign {version} is here',
-  'whatsNew.cta': 'View the release notes',
+  'whatsNew.cta': 'Explore Arena',
   'newsletter.label': 'Newsletter (optional)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

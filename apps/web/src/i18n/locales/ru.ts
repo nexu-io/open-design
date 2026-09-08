@@ -4130,7 +4130,7 @@ export const ru: Dict = {
   'updater.viewVersionFeatures': 'Что нового в этой версии',
   'updater.manualDownload': 'Скачать вручную',
   'whatsNew.updatedTitle': 'OpenDesign {version} уже здесь',
-  'whatsNew.cta': 'Посмотреть примечания к выпуску',
+  'whatsNew.cta': 'Открыть Arena',
   'newsletter.label': 'Рассылка (необязательно)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Модель памяти',

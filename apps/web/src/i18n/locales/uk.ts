@@ -4058,7 +4058,7 @@ export const uk: Dict = {
   'updater.viewVersionFeatures': 'Переглянути нові функції',
   'updater.manualDownload': 'Завантажити вручну',
   'whatsNew.updatedTitle': 'OpenDesign {version} уже тут',
-  'whatsNew.cta': 'Переглянути примітки до випуску',
+  'whatsNew.cta': 'Переглянути Arena',
   'newsletter.label': 'Розсилка (необов’язково)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

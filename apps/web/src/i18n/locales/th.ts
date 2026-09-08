@@ -4192,7 +4192,7 @@ export const th: Dict = {
   'updater.viewVersionFeatures': 'ดูฟีเจอร์ใหม่',
   'updater.manualDownload': 'ดาวน์โหลดด้วยตนเอง',
   'whatsNew.updatedTitle': 'OpenDesign {version} มาแล้ว',
-  'whatsNew.cta': 'ดูบันทึกการอัปเดต',
+  'whatsNew.cta': 'สำรวจ Arena',
   'newsletter.label': 'Newsletter (optional)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'โมเดลหน่วยความจำ',

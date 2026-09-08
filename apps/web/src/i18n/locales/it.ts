@@ -4130,7 +4130,7 @@ export const it: Dict = {
   'updater.viewVersionFeatures': 'Scopri le novità',
   'updater.manualDownload': 'Scarica manualmente',
   'whatsNew.updatedTitle': 'OpenDesign {version} è arrivato',
-  'whatsNew.cta': 'Vedi le note di rilascio',
+  'whatsNew.cta': 'Esplora Arena',
   'newsletter.label': 'Newsletter (opzionale)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Modello di memoria',

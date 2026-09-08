@@ -4192,7 +4192,7 @@ export const id: Dict = {
   'updater.viewVersionFeatures': 'Lihat fitur versi baru',
   'updater.manualDownload': 'Unduh manual',
   'whatsNew.updatedTitle': 'OpenDesign {version} sudah hadir',
-  'whatsNew.cta': 'Lihat catatan rilis',
+  'whatsNew.cta': 'Jelajahi Arena',
   'newsletter.label': 'Newsletter (optional)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

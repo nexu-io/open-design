@@ -4130,7 +4130,7 @@ export const tr: Dict = {
   'updater.viewVersionFeatures': 'Yeni özellikleri keşfet',
   'updater.manualDownload': 'Elle indir',
   'whatsNew.updatedTitle': 'OpenDesign {version} yayında',
-  'whatsNew.cta': 'Sürüm notlarını görüntüle',
+  'whatsNew.cta': 'Arena\'yı keşfet',
   'newsletter.label': 'Bülten (isteğe bağlı)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

@@ -4130,7 +4130,7 @@ export const hu: Dict = {
   'updater.viewVersionFeatures': 'Új funkciók felfedezése',
   'updater.manualDownload': 'Kézi letöltés',
   'whatsNew.updatedTitle': 'Megjött az OpenDesign {version}',
-  'whatsNew.cta': 'Kiadási megjegyzések megtekintése',
+  'whatsNew.cta': 'Arena felfedezése',
   'newsletter.label': 'Newsletter (optional)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

@@ -4130,7 +4130,7 @@ export const ja: Dict = {
   'updater.viewVersionFeatures': '新バージョンの機能を見る',
   'updater.manualDownload': '手動でダウンロード',
   'whatsNew.updatedTitle': 'OpenDesign {version} に更新しました',
-  'whatsNew.cta': 'リリースノートを見る',
+  'whatsNew.cta': 'Arena を見る',
   'newsletter.label': 'ニュースレター（任意）',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

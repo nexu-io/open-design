@@ -4058,7 +4058,7 @@ export const fa: Dict = {
   'updater.viewVersionFeatures': 'مشاهده قابلیت‌های نسخه جدید',
   'updater.manualDownload': 'دانلود دستی',
   'whatsNew.updatedTitle': 'OpenDesign {version} آمد',
-  'whatsNew.cta': 'مشاهده یادداشت‌های انتشار',
+  'whatsNew.cta': 'کاوش در Arena',
   'newsletter.label': 'Newsletter (optional)',
   'newsletter.placeholder': 'you@studio.com',
   'settings.memoryModelInlineLabel': 'Memory model',

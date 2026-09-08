@@ -4384,7 +4384,7 @@ export const zhTW: Dict = {
   "updater.restartAnyway": "仍然重新啟動",
 
   "whatsNew.updatedTitle": "OpenDesign {version} 已更新",
-  "whatsNew.cta": "查看更新說明",
+  "whatsNew.cta": "查看評測站",
 
   'designBrowser.copyScreenshot': '複製截圖',
   'designBrowser.hardReload': '強制重新整理',
