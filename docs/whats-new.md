@@ -103,19 +103,37 @@ parser rather than trusting review:
    uploaded — an exit code from the upload alone is not treated as proof.
 
 Republishing the current `main` content without a code change: run the
-**whats-new-publish** workflow manually (`workflow_dispatch`). Its `dry_run`
-input validates the document and reports the live-vs-proposed `id` without
-uploading; a dry run works from any branch, while a real publish is restricted
-to `main` so what ships is always reviewed content.
+**whats-new-publish** workflow manually (`workflow_dispatch`) against `main`.
+Its `dry_run` input validates the document and reports the live-vs-proposed
+`id` without uploading; a dry run needs no credentials and works from any
+branch, so it is a safe way to preview a copy change before it merges. A real
+publish only runs on `main` — see the trust boundary below.
 
 Propagation takes up to ~15 minutes: the object's own `max-age=300` plus the
 daemon's ~10 minute in-process cache.
 
-### Credentials
+### Credentials and the trust boundary
 
-The workflow uses bucket-scoped R2 S3 credentials held as repository secrets —
-`CLOUDFLARE_R2_WHATS_NEW_AK`, `CLOUDFLARE_R2_WHATS_NEW_SK`,
-`CLOUDFLARE_R2_WHATS_NEW_URL`, and `CLOUDFLARE_R2_WHATS_NEW_BUCKET` — the same
-shape used for the releases and repository-assets buckets. The repository-wide
-`CLOUDFLARE_API_TOKEN` is a Pages-scoped token and cannot reach R2; do not
-route this publish through it.
+The card is visible to every installed client as soon as it lands, so
+"published" has to imply "reviewed". The control that guarantees it is the
+**`whats-new-publish` GitHub environment**:
+
+- its deployment-branch policy allows **`main` only**, so a job that declares
+  the environment cannot start on any other ref;
+- the R2 credentials are **environment secrets on that environment** —
+  `CLOUDFLARE_R2_WHATS_NEW_AK`, `CLOUDFLARE_R2_WHATS_NEW_SK`,
+  `CLOUDFLARE_R2_WHATS_NEW_URL`, `CLOUDFLARE_R2_WHATS_NEW_BUCKET`.
+
+Both halves are load-bearing. `workflow_dispatch` runs the workflow file from
+the ref it is dispatched against, so every check written inside the workflow is
+editable by whoever triggers it — including the `main`-only assertion. What is
+not editable is where the secrets live: dropping the `environment:` declaration
+to escape the branch policy also drops access to the secrets, and the publisher
+then fails naming the variables it is missing.
+
+**Do not add these as repository secrets.** Repository secrets are readable
+from any job on any branch, which would let anyone with write access publish
+unreviewed content by dispatching a modified workflow from their own branch.
+
+The repository-wide `CLOUDFLARE_API_TOKEN` is a Pages-scoped token and cannot
+reach R2 at all; do not route this publish through it.
