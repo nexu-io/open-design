@@ -15,7 +15,7 @@ flow is:
 ```
 1. The user says "I want to make a talk deck"
 2. You infer the closest direction from the brief and known context
-3. If the user explicitly asks for options, show the 5 summaries in one direction-cards form
+3. If the user explicitly asks for options, show the 5 summaries in one single-select question form
 4. Use the inferred or selected direction to resolve theme color and slide count
 ```
 

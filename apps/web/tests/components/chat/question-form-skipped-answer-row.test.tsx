@@ -22,7 +22,7 @@
  *   · 整张表都被跳 → 一行都不剩,两个渲染方各自退回兜底 ——
  *     `AnsweredSummary` 直接 `return null`(什么都不画),
  *     `AssistantMessage` 的历史回放块改画 `qf.lockedSubmitted`
- *     (`AssistantMessage.tsx`,条件正是 `flat.length === 0 && visualItems.length === 0`)。
+ *     (`AssistantMessage.tsx`,条件正是 `flat.length === 0`)。
  *     那句话在这个分支里**必然**是假的 —— 它只在「一个答案都没有」时才出现。
  *
  * 修法因此是一句话:**提交出去的文本对某道题写了 `(skipped)`,收口就要照着念**,
@@ -116,7 +116,6 @@ describe('跳过之后,收口那一块照着提交出去的内容念', () => {
     const summary = summarizeQuestionFormAnswers(
       FORM,
       { pages: 'pdp', tone: '' },
-      undefined,
       false,
       SKIPPED,
     );
@@ -128,7 +127,7 @@ describe('跳过之后,收口那一块照着提交出去的内容念', () => {
 
   it('压根没提交过的题不算跳过 —— 不许替用户宣布', () => {
     // 回放时标签没对上、或表单还在流式长出来,这道题根本不在 `answers` 里。
-    const summary = summarizeQuestionFormAnswers(FORM, { pages: 'pdp' }, undefined, false, SKIPPED);
+    const summary = summarizeQuestionFormAnswers(FORM, { pages: 'pdp' }, false, SKIPPED);
     expect(summary.items).toEqual([
       { label: '除了设置页,还有哪几页要一起换', value: '商品详情页' },
     ]);
@@ -137,19 +136,18 @@ describe('跳过之后,收口那一块照着提交出去的内容念', () => {
   it('整张表都跳过时,收口仍旧有内容 —— 兜底那句「答案已发送」再也够不着', () => {
     /*
      * `AssistantMessage` 的历史回放块用的就是这个条件:
-     *   `flat.length === 0 && visualItems.length === 0` → 画 `qf.lockedSubmitted`。
+     *   `flat.length === 0` → 画 `qf.lockedSubmitted`。
      * 它只在「一个答案都没有」时出现,所以那句话在这个分支里必然是假的。
      * 这里锁的是让它够不着的前提。
      */
     const summary = summarizeQuestionFormAnswers(
       FORM,
       { pages: '', tone: '' },
-      undefined,
       false,
       SKIPPED,
     );
     expect(summary.items.map((item) => item.value)).toEqual([SKIPPED, SKIPPED]);
-    expect(summary.items.length > 0 || summary.visualItems.length > 0).toBe(true);
+    expect(summary.items.length).toBeGreaterThan(0);
   });
 
   it('渲染出来:被跳的题挂在自己那一行上,不是一句笼统的「答案已发送」', () => {
@@ -175,7 +173,7 @@ describe('跳过之后,收口那一块照着提交出去的内容念', () => {
     cleanup();
     const replayed = parseSubmittedAnswers(FORM, sent);
     expect(replayed).not.toBeNull();
-    const summary = summarizeQuestionFormAnswers(FORM, replayed!, undefined, false, SKIPPED);
+    const summary = summarizeQuestionFormAnswers(FORM, replayed!, false, SKIPPED);
     expect(summary.items).toEqual([
       { label: '除了设置页,还有哪几页要一起换', value: SKIPPED },
       { label: '想要什么调性', value: SKIPPED },

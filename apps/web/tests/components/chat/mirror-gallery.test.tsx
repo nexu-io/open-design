@@ -41,7 +41,6 @@ import { fileURLToPath } from 'node:url';
 import type { PersistedAgentEvent } from '@open-design/contracts';
 import { I18nProvider, tForLanguageTag } from '../../../src/i18n';
 import { Icon, type IconName } from '../../../src/components/Icon';
-import type { VisualStyleContext } from '../../../src/runtime/visual-style-catalog';
 import { ExecutionShell } from '../../../src/components/chat/ExecutionShell';
 import { QuestionFormView } from '../../../src/components/QuestionForm';
 import { OdCardView } from '../../../src/components/OdCard';
@@ -500,38 +499,12 @@ const ASK_MULTI_CUSTOM: QuestionForm = {
   title: '还有哪些要一起改',
   questions: [{ ...(ASK_MULTI.questions[0] as QuestionForm['questions'][number]), allowCustom: true }],
 };
-/*
- * 稿子第 21 / 22 格是**四张**卡,文案逐字取自交付稿(`.vopt > .vmeta > .vt`)。
- * `allowCustom: false`:稿子这两格的底栏是「换一批 / 随机 / 下一步」,没有「自己填」。
- */
-const ASK_CARDS: QuestionForm = {
-  id: 'q5',
-  title: '先定个视觉方向',
-  questions: [{
-    /*
-     * 走**内置风格目录**那一路(`id: 'tone'` + `visualStyleContext`),不是模型现给的几张卡。
-     *
-     * 原来这里写的是 `type: 'direction-cards'` 配四张手捏的卡。那是照错了组件:
-     * 固定四张天生没有「下一批」,底栏于是只剩「随机」,左下落回通用的「跳过 · 你来判断」——
-     * 和稿子的「换一批 | 随机 | 下一步」对不上。产品里「先定个视觉方向」走的是目录
-     * (prototype 档 26 张、一页 4 张),「换一批」和「+22」本来就都有。
-     */
-    id: 'tone',
-    label: '这套电商 App 原型走哪种感觉?四张预览用的是同一份示例内容,比的是风格。',
-    type: 'radio',
-    allowCustom: false,
-    options: [{ label: '', value: '' }],
-  }],
-};
-
 const askCell = (
   gid: number, sub: string, state: string, form: QuestionForm,
   opts: {
     draft?: Record<string, string | string[]>;
     answered?: Record<string, string | string[]>;
     notes?: string[];
-    /** 给了就走「内置风格目录」那一路(稿子第 21 / 22 格),而不是模型现给的固定几张卡 */
-    visualStyleContext?: VisualStyleContext;
   } = {},
 ): Cell => ({
   gid, sub, cmp: '意图澄清', state, family: '理解段',
@@ -539,7 +512,6 @@ const askCell = (
     <QuestionFormView
       form={form}
       interactive={!opts.answered}
-      {...(opts.visualStyleContext ? { visualStyleContext: opts.visualStyleContext } : {})}
       // 必须给 onSubmit:组件的锁判据是 `!interactive || !onSubmit || submittedAnswers`,
       // 不给就整张锁成「已回答」,陈列页照出来的就是假的
       {...(opts.answered ? { submittedAnswers: opts.answered } : { onSubmit: () => undefined })}
@@ -620,14 +592,24 @@ const UNDERSTANDING: Cell[] = [
   askCell(20, '5-6', '多选勾上「自己填」· 是在已勾项之外再加一条', ASK_MULTI_CUSTOM, {
     draft: { extras: ['detail', 'search', '还有会员中心里那两张小卡,也是同一张商品卡缩小的'] },
   }),
-  askCell(21, '5-9', '视觉方向 · 看图选择(风格类问题不能用文字选项),没选时「下一步」置灰', ASK_CARDS,
-    { visualStyleContext: 'prototype' }),
-  askCell(22, '5-10', '选中一张 · 图上落绿勾,「下一步」才亮起', ASK_CARDS,
-    { visualStyleContext: 'prototype', draft: { tone: 'prototype-content-led-product' } }),
+  {
+    gid: 21, sub: '5-9', cmp: '意图澄清', family: '理解段',
+    state: '视觉方向 · 看图选择 —— 已整条删除',
+    missing: '**这一格已经拍板不做,不是没做完**。2026-09-08 产品裁决把「让用户挑设计风格」这条路**整条删除**(逐字:「od-next-strategy 的 plan 阶段确实挂着 direction-picker? 那你为啥不直接干掉? 还额外加一个不许问.. 有病吗.. **都删掉啊**」)。\n\n交付稿 `729fa43ce7` 的第 21 / 22 / 25 格画的正是这张卡 —— **本页与交付稿在这三格上是有意偏离**,别当成漏做补回去。删掉的是 `direction-picker` atom、`direction-cards` question 类型、host 视觉风格目录(`visual-style-catalog` / `visual-style-deck`)和 `VisualStylePicker` 一族控件;方向**库**(`DESIGN_DIRECTIONS` / `od tools directions`)留着,那是 agent 自己推断方向时绑定调色板的事实源。判据在 `e2e/tests/design-direction-picker-removed.test.ts`,裁决全文见 `specs/current/chat-panel-decisions-sheet.md`。',
+  },
+  {
+    gid: 22, sub: '5-10', cmp: '意图澄清', family: '理解段',
+    state: '选中一张 · 图上落绿勾 —— 已整条删除',
+    missing: '同第 21 格:选设计风格这条路在 2026-09-08 整条删除,本页与交付稿在这一格上有意偏离。',
+  },
   askCell(23, '5-11', '已回答 · 点「下一步」后收成陈述', ASK, { answered: { scope: 'share' } }),
   askCell(24, '5-12', '已回答 · 多选,勾了几条就列几条', ASK_MULTI, { answered: { extras: ['detail', 'search'] } }),
-  askCell(25, '5-13', '已回答 · 视觉方向,带上你选的那张图', ASK_CARDS,
-    { visualStyleContext: 'prototype', answered: { tone: 'prototype-content-led-product' } }),
+  {
+    gid: 25, sub: '5-13', cmp: '意图澄清', family: '理解段',
+    state: '已回答 · 视觉方向带缩略图 —— 已整条删除',
+    missing: '同第 21 格。收口里那条带缩略图的答案(`visualItems` / `.av` / `.mod-visual-answer`)'
+      + '随目录一起删掉了,「已确认」块现在只有纯文本行这一种形态。',
+  },
   {
     gid: 26, sub: '8-1', cmp: '记忆组件', state: '收起', family: '理解段',
     node: () => (

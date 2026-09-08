@@ -45,8 +45,7 @@ export type QuestionType =
   | 'email'
   | 'tel'
   | 'file'
-  | 'switch'
-  | 'direction-cards';
+  | 'switch';
 
 /**
  * 颜色答案的规范形 —— **唯一**的一处实现。
@@ -74,30 +73,6 @@ export function normalizeHexColor(raw: unknown): string | null {
   return `#${body.toLowerCase()}`;
 }
 
-/**
- * Rich card metadata for a single `direction-cards` option. The picker
- * renders a swatch row, a serif/sans type sample, a mood blurb, and a
- * "refs" line so users can scan visually instead of squinting at radio
- * labels. This remains a legacy-compatibility payload: current catalog-backed
- * forms omit it and let the host supply versioned cards for the project kind.
- */
-export interface DirectionCard {
-  /** Legacy radio value returned in the answer; matches an option when legacy options exist. */
-  id: string;
-  /** Short headline on the card (e.g. "Editorial — Monocle / FT magazine"). */
-  label: string;
-  /** One- or two-sentence mood blurb. */
-  mood: string;
-  /** Real-world exemplars (≤ 4). */
-  references: string[];
-  /** 4–6 swatch hex / OKLch strings for the palette row. */
-  palette: string[];
-  /** Display (headline) font stack, used to render the live "Aa" sample. */
-  displayFont: string;
-  /** Body font stack, used to render the secondary sample. */
-  bodyFont: string;
-}
-
 export interface FormOption {
   label: string;
   value: string;
@@ -117,10 +92,6 @@ export interface FormOption {
    * 它是**给人扫读用的短标记**,不是答案:提交出去的仍然是 `value`。
    */
   trailingLabel?: string;
-  /** Host-only context returned to the agent for a catalog-backed visual choice. */
-  foundationDirectionId?: string;
-  /** Host-only refinement text returned with the selected visual choice. */
-  agentGuidance?: string;
 }
 
 export interface FormQuestion {
@@ -150,8 +121,6 @@ export interface FormQuestion {
   multiple?: boolean;
   /** File inputs only. Mirrors the native file input accept attribute. */
   accept?: string;
-  /** Legacy compatibility for `direction-cards`; current host-owned forms omit it. */
-  cards?: DirectionCard[];
 }
 
 export interface QuestionForm {
@@ -633,7 +602,6 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     qo.maxSelections > 0
       ? qo.maxSelections
       : undefined;
-  const cards = parseDirectionCards(qo.cards);
   const defaultValue = normalizeDefaultValueForType(type, parseDefaultValue(qo, options));
   const allowCustom =
     qo.allowCustom === false
@@ -667,7 +635,6 @@ function mapRawQuestion(q: unknown, index: number): FormQuestion | null {
     ...(step !== undefined ? { step } : {}),
     ...(multiple && type === 'file' ? { multiple } : {}),
     ...(accept && type === 'file' ? { accept } : {}),
-    ...(cards ? { cards } : {}),
   };
 }
 
@@ -951,13 +918,6 @@ function normalizeType(raw: unknown, options?: FormOption[]): QuestionType {
   if (lower === 'tel' || lower === 'phone') return 'tel';
   if (lower === 'file' || lower === 'upload' || lower === 'attachment') return 'file';
   if (lower === 'switch' || lower === 'toggle' || lower === 'boolean') return 'switch';
-  if (
-    lower === 'direction-cards' ||
-    lower === 'directions' ||
-    lower === 'cards' ||
-    lower === 'direction'
-  )
-    return 'direction-cards';
   return 'text';
 }
 
@@ -1060,32 +1020,6 @@ function parseDefaultValue(
   return undefined;
 }
 
-function parseDirectionCards(raw: unknown): DirectionCard[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out: DirectionCard[] = [];
-  for (const entry of raw) {
-    if (!entry || typeof entry !== 'object') continue;
-    const e = entry as Record<string, unknown>;
-    const id = typeof e.id === 'string' && e.id.trim().length > 0 ? e.id.trim() : null;
-    const label = typeof e.label === 'string' ? e.label : null;
-    if (id === null || label === null) continue;
-    const mood = typeof e.mood === 'string' ? e.mood : '';
-    const references = Array.isArray(e.references)
-      ? e.references.filter((r): r is string => typeof r === 'string').slice(0, 6)
-      : [];
-    const palette = Array.isArray(e.palette)
-      ? e.palette.filter((p): p is string => typeof p === 'string').slice(0, 8)
-      : [];
-    const displayFont = typeof e.displayFont === 'string' ? e.displayFont : 'Georgia, serif';
-    const bodyFont =
-      typeof e.bodyFont === 'string'
-        ? e.bodyFont
-        : '-apple-system, system-ui, sans-serif';
-    out.push({ id, label, mood, references, palette, displayFont, bodyFont });
-  }
-  return out.length > 0 ? out : undefined;
-}
-
 /**
  * Format a finished set of answers into a prose user message that the
  * agent can read on its next turn. The shape is stable enough that the
@@ -1119,16 +1053,6 @@ function formOptionDisplayForValue(
   const match = question.options?.find((option) => option.value === value || option.label === value);
   if (!match) return value;
   if (match.value === match.label) return match.label;
-  if (
-    question.type === 'direction-cards' &&
-    match.foundationDirectionId &&
-    match.agentGuidance
-  ) {
-    return (
-      `${match.label} [foundation: ${match.foundationDirectionId}; ` +
-      `guidance: ${match.agentGuidance}] [value: ${match.value}]`
-    );
-  }
   return `${match.label} [value: ${match.value}]`;
 }
 

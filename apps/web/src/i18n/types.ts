@@ -4503,12 +4503,6 @@ export interface Dict {
   'chat.edge.reconnectFailed': string;
   'chat.edge.reconnecting': string;
   'chat.edge.retrying': string;
-  'qf.visualNext': string;
-  'qf.visualPrev': string;
-  'qf.visualRandom': string;
-  'qf.visualReshuffle': string;
-  'qf.visualViewFan': string;
-  'qf.visualViewGrid': string;
   'qf.confirmed': string;
   'qf.picked': string;
   'qf.moreOptions': string;

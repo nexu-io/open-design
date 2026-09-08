@@ -16,45 +16,15 @@ import type {
 } from 'react';
 import { Button } from '@open-design/components';
 import { tForLanguageTag, useT } from '../i18n';
-import type { DirectionCard, FormOption, QuestionForm } from '../artifacts/question-form';
+import type { FormOption, QuestionForm } from '../artifacts/question-form';
 import {
   formatFormAnswers,
   formOptionValueForLabel,
   normalizeHexColor,
 } from '../artifacts/question-form';
-import {
-  visualStyleCardsForContext,
-  visualStyleFoundationDirectionId,
-  type VisualStyleCard,
-  type VisualStyleContext,
-  type VisualStyleVariant,
-} from '../runtime/visual-style-catalog';
-import {
-  VISUAL_STYLE_BATCH_SIZE,
-  resolveVisualStyleBatch,
-  rotateVisualStyleBatch,
-} from '../runtime/visual-style-deck';
 import { Icon } from './Icon';
 
 export type QuestionFormInteraction =
-  | {
-      element: 'visual_style_card';
-      questionId: string;
-      styleId: string;
-      styleContext: VisualStyleContext;
-      /**
-       * 挑中这张卡的地方。曾经还有 `'gallery'`(画廊弹窗里挑的)——
-       * 那个弹窗是分页时代的溢出面,整份目录进一沓之后已整体退场(B53),
-       * 于是只剩卡片自己这一条路。留着这个键是因为它描述的是**位置**,
-       * 以后真要区分「一沓里挑的」和「网格里挑的」就往这里加档。
-       */
-      source: 'inline';
-    }
-  | {
-      element: 'visual_style_refresh';
-      questionId: string;
-      styleContext: VisualStyleContext;
-    }
   | {
       element: 'step_back' | 'step_next' | 'step_skip';
       questionId: string;
@@ -91,7 +61,6 @@ interface Props {
     files?: QuestionFormFileSubmission[],
   ) => void;
   submitDisabled?: boolean;
-  visualStyleContext?: VisualStyleContext;
   // When enabled, the form moves on after the timeout. Any unanswered field,
   // including a required one, is submitted as "(skipped)".
   autoContinueAfterTimeout?: boolean;
@@ -125,7 +94,6 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     onInteraction,
     onSubmit,
     submitDisabled = false,
-    visualStyleContext,
     autoContinueAfterTimeout = false,
   },
   ref,
@@ -137,8 +105,8 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   // tag they follow the app UI locale as before.
   const t = useMemo(() => tForLanguageTag(form.lang) ?? uiT, [form.lang, uiT]);
   const initial = useMemo(
-    () => buildInitialState(form, submittedAnswers, draftAnswers, visualStyleContext),
-    [form, submittedAnswers, draftAnswers, visualStyleContext],
+    () => buildInitialState(form, submittedAnswers, draftAnswers),
+    [form, submittedAnswers, draftAnswers],
   );
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(initial);
   const [fileAnswers, setFileAnswers] = useState<Record<string, File[]>>({});
@@ -195,37 +163,11 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   const activeQuestion = form.questions[activeQuestionIndex];
   const isLastQuestion = activeQuestionIndex === form.questions.length - 1;
   const questionsToRender = stepped && activeQuestion ? [activeQuestion] : form.questions;
-  /*
-   * 交付稿第 21 / 22 格的底栏**只有一行**,逐颗核对过是 `换一批 | 随机 | 下一步` 三颗
-   * (曾经记成还有一颗「撑开」——**没有**;「铺开成网格」是选项区右上角那枚开关,不在底栏)。
-   * 我们原来是两行 —— 选择器自带一行(换一批 / 随机),卡片底栏又是一行(跳过 / 下一步)。
-   *
-   * 合并的方向是**把「下一步」交给选择器那一行**,不是反过来把两颗动作提上来:
-   * 「换一批 / 随机」的闭包(翻牌、重置这一沓、还剩几张)长在选择器里,提上来要搬一整套状态;
-   * 而「下一步」只依赖这里已有的 `handleSubmit` / `ready`,顺着 props 往下传就行。
-   * (试过 portal:`renderToStaticMarkup` 不渲染 portal,验收陈列页会照出一行空插槽。)
-   *
-   * 只在「这张卡上就这一道视觉方向题」时合并 —— 多道题时每道都有自己的选择器,
-   * 「下一步」只有一颗,往哪一行放都是错的,那时保持两行。
-   */
-  const soleQuestion = questionsToRender.length === 1 ? questionsToRender[0] : undefined;
-  const visualFootDelegated =
-    !locked
-    && !stepped
-    && !hideInternalSubmit
-    && Boolean(
-      visualStyleContext
-      && soleQuestion
-      && soleQuestion.id === 'tone'
-      && (soleQuestion.type === 'checkbox' || soleQuestion.type === 'radio')
-      && soleQuestion.options,
-    );
   /** 多选题勾了几行 —— 稿子把它摆在卡头右侧(`.h .n`) */
   const pickedCount = questionsToRender.reduce((sum, q) => {
     return sum + pickedCheckboxChoiceCount(
       q,
       currentAnswers[q.id],
-      visualStyleContext,
       otherOpen.has(q.id),
     );
   }, 0);
@@ -433,7 +375,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
           if (shouldAdoptStreamedDefault(q, next[q.id]!, touched)) {
             next[q.id] = recommendedValueWithinDeclaredRange(
               q,
-              canonicalizeQuestionValue(q, q.defaultValue!, visualStyleContext),
+              canonicalizeQuestionValue(q, q.defaultValue!),
             );
             changed = true;
           }
@@ -444,12 +386,11 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
           next[q.id] = canonicalizeQuestionValue(
             q,
             submittedAnswers[q.id]!,
-            visualStyleContext,
-          );
+                  );
         } else if (q.defaultValue !== undefined) {
           next[q.id] = recommendedValueWithinDeclaredRange(
             q,
-            canonicalizeQuestionValue(q, q.defaultValue, visualStyleContext),
+            canonicalizeQuestionValue(q, q.defaultValue),
           );
         } else {
           next[q.id] = emptyQuestionValue(q);
@@ -457,7 +398,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       }
       return changed ? next : prev;
     });
-  }, [form, submittedAnswers, touched, visualStyleContext]);
+  }, [form, submittedAnswers, touched]);
 
   function update(id: string, value: string | string[]) {
     if (locked) return;
@@ -506,7 +447,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   ) {
     if (!onSubmit) return;
     const submittedAnswers = answersWithSkippedQuestions(form, answers, skippedIds);
-    const submissionForm = formWithVisualStyleOptions(form, visualStyleContext);
+    const submissionForm = form;
     const files = collectFileSubmissions(form, fileAnswers, skippedIds);
     if (files.length > 0) {
       onSubmit(formatFormAnswers(submissionForm, submittedAnswers), submittedAnswers, source, files);
@@ -525,7 +466,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   function handleSkipAll() {
     if (locked || !onSubmit) return;
     const empty: Record<string, string | string[]> = {};
-    onSubmit(formatFormAnswers(formWithVisualStyleOptions(form, visualStyleContext), empty), empty, 'skip');
+    onSubmit(formatFormAnswers(form, empty), empty, 'skip');
   }
 
   function handleSkipCurrent() {
@@ -578,7 +519,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
   // "(skipped)",让 agent 拿默认值往下走。判据来自交付稿意图澄清那五格的状态标签
   // (5-1「一个都没选 ——『下一步』置灰」/ 5-4「没写字前『下一步』仍置灰」)。
   const requiredAnswered = form.questions.every((q) => {
-    if (!questionNeedsAnswer(q, visualStyleContext)) return true;
+    if (!questionNeedsAnswer(q)) return true;
     if (skippedQuestionIds.has(q.id)) return true;
     const v = currentAnswers[q.id];
     return questionAnswerIsPresent(v);
@@ -610,29 +551,6 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       {form.submitLabel ?? t('qf.submitDefault')}
     </Button>
   );
-  /*
-   * 视觉方向那一行最左那颗「跳过」(稿子 `729fa43ce7` 把原来那颗「换一批」换成了它,
-   * 「换一批」挪去了预览区顶栏)。
-   *
-   * **行为不新造**:它就是底栏原本那颗跳过 —— 合并只在 `!stepped` 时发生,
-   * 那一路本来点的就是 `handleSkipAll`(整张表单没答的题一律按「(skipped)」序列化,
-   * 和倒计时走完那条自动继续是同一套语义)。文案取现成的 `questionForm.skip`
-   * (稿子这一格写的就是「跳过」),不是 `questions.skipAll` 那句更长的
-   * 「跳过 · 你来判断」—— 这一行右边还并排站着「随机」和「下一步」,长句会把它们挤散。
-   */
-  const visualSkipButton = (
-    <Button
-      type="button"
-      size="sm"
-      variant="ghost"
-      className="qf-visual-foot-action"
-      data-action="skip"
-      onClick={handleSkipAll}
-      disabled={submitDisabled}
-    >
-      {t('questionForm.skip')}
-    </Button>
-  );
   // A manual Skip all is always available, including for required questions.
   const canSkipAll = true;
   const hasRequiredQuestions = form.questions.some((q) => q.required === true);
@@ -646,7 +564,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
     if (!activeQuestion) return true;
     // 分步态下「下一步」也不许在半截的 Hex 上放行
     if (colorTextIsInvalid(activeQuestion.id)) return false;
-    if (!questionNeedsAnswer(activeQuestion, visualStyleContext)) return true;
+    if (!questionNeedsAnswer(activeQuestion)) return true;
     if (skippedQuestionIds.has(activeQuestion.id)) return true;
     return questionAnswerIsPresent(currentAnswers[activeQuestion.id]);
   })();
@@ -701,7 +619,6 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       <AnsweredSummary
         form={form}
         answers={submittedAnswers}
-        visualStyleContext={visualStyleContext}
         t={t}
       />
     );
@@ -760,32 +677,6 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
       <div className="question-form-body">
         {questionsToRender.map((q) => {
           const value = currentAnswers[q.id];
-          /*
-           * 内置风格目录接管哪几道题(2026-08-26 用户裁决:「为什么不把 tone 的内容
-           * 换到 direction-cards 里?」)。
-           *
-           * 目录是**产品自己的功能**:每个 context 一沓真预览图,共 96 张,住在 R2
-           * (`repo-assets.open-design.ai/style-catalog/v1/`)。而模型**现开**的
-           * `direction-cards` 没有素材 —— 预览面只能画占位块,用户看到的就是几张
-           * 「纯色卡」。同一件事(选视觉方向)不该有真图和占位块两副样子。
-           *
-           * 所以判据从「id 恰好叫 tone」放宽到「**这道题在问视觉方向**」:
-           *  · discovery 简报里的 `tone`(模型按提示词发的纯文字选项);
-           *  · 模型自己开的 `direction-cards`。
-           * 两者都由目录接管,前提是这个项目**有视觉风格上下文**(deck / prototype /
-           * document / image / video)—— 没有上下文就没有对应的那一沓,只能原样渲染。
-           *
-           * 为什么换掉模型的选项不会「说两件事」:答案是按 `formatFormAnswers` 拼成
-           * **文本行**回给模型的(`- 视觉方向: Content-led product`),不是机器 id 契约。
-           * `tone` 那条路今天就是这么替换的,已经在线上跑着。
-           */
-          const asksVisualDirection =
-            (q.id === 'tone' && (q.type === 'checkbox' || q.type === 'radio') && !!q.options) ||
-            q.type === 'direction-cards';
-          const visualStyleCards =
-            visualStyleContext && asksVisualDirection
-              ? visualStyleCardsForContext(visualStyleContext)
-              : null;
           return (
             /*
               稿子的 `.cbody` 直接放 `.q` + `.opts`,中间没有「一个问题一个字段容器」这层。
@@ -818,8 +709,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   一个块级兄弟,留着就还占一整行的行盒 —— 那行空白正是工单
                   要一起去掉的。`help` 仍留在解析出来的表单结构上,已有的、
                   流式进来的表单照旧原样往返。 */}
-              {q.type === 'select' && q.options && !visualStyleCards
-                && questionUsesSelectMenu(q) ? (
+              {q.type === 'select' && q.options && questionUsesSelectMenu(q) ? (
                 <SelectChoice
                   question={q}
                   options={q.options}
@@ -836,7 +726,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   }
                 />
               ) : null}
-              {(q.type === 'radio' || q.type === 'select') && q.options && !visualStyleCards
+              {(q.type === 'radio' || q.type === 'select') && q.options
                 && !questionUsesSelectMenu(q) ? (
                 <div className="qf-options" role="radiogroup" aria-label={q.label}>
                   {q.options.map((opt) => (
@@ -854,7 +744,7 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                     : null}
                 </div>
               ) : null}
-              {q.type === 'checkbox' && q.options && !visualStyleCards ? (
+              {q.type === 'checkbox' && q.options ? (
                 <div className="qf-options" role="group" aria-label={q.label}>
                   {q.options.map((opt) => {
                     const arr = Array.isArray(value) ? value : [];
@@ -878,31 +768,6 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                     : null}
                 </div>
               ) : null}
-              {visualStyleCards && visualStyleContext ? (
-                <VisualStylePicker
-                  cards={visualStyleCards}
-                  context={visualStyleContext}
-                  formId={form.id}
-                  questionId={q.id}
-                  value={
-                    Array.isArray(value)
-                      ? value
-                      : typeof value === 'string' && value
-                        ? [value]
-                        : []
-                  }
-                  disabled={locked}
-                  selectionMode={q.type === 'checkbox' ? 'multiple' : 'single'}
-                  maxSelections={q.type === 'checkbox' ? q.maxSelections : 1}
-                  onChange={(next) =>
-                    update(q.id, q.type === 'radio' ? (next[0] ?? '') : next)
-                  }
-                  onInteraction={onInteraction}
-                  submitSlot={visualFootDelegated ? submitButton : undefined}
-                  skipSlot={visualFootDelegated ? visualSkipButton : undefined}
-                />
-              ) : null}
-
               {q.type === 'text' ? (
                 <input
                   type="text"
@@ -1016,29 +881,12 @@ export const QuestionFormView = forwardRef<QuestionFormHandle, Props>(function Q
                   onChange={(e) => update(q.id, e.target.value)}
                 />
               ) : null}
-              {q.type === 'direction-cards' && !visualStyleCards && q.cards && q.cards.length > 0 ? (
-                <DirectionCardsPicker
-                  cards={q.cards}
-                  formId={form.id}
-                  questionId={q.id}
-                  value={typeof value === 'string' ? value : ''}
-                  disabled={locked}
-                  onSelect={(cardId) => pickFixed(q, cardId)}
-                />
-              ) : null}
-              {q.type === 'direction-cards' && !visualStyleCards && q.cards && q.cards.length > 0 && shouldRenderCustomChoice(q) ? (
-                <div className="qf-options">
-                  {renderOwnChoice(q, customSingleValue(q, value), (next) => update(q.id, next))}
-                </div>
-              ) : null}
             </Fragment>
           );
         })}
         {/* 稿子里底栏在 `.cbody` 里面(白底那一块):`.cbody > .foot`。
             挪到 body 外面,底栏就落在卡的面板底色上,和稿子差一层底色。 */}
-        {/* 「下一步」已经交给视觉方向那一行时,这里整段不出 ——
-            稿子第 21 / 22 格的底栏就那一行,再留一条空的底栏会多撑出 8px + 一行高。 */}
-        {hideInternalSubmit || visualFootDelegated ? null : (
+        {hideInternalSubmit ? null : (
           <div className="question-form-foot" data-chat-scroll-anchor="question-footer">
             {locked ? (
               <span className="qf-locked-note">
@@ -1375,856 +1223,25 @@ function OptionCopy({ option }: { option: FormOption }) {
   );
 }
 
-/**
- * 叠放态的手势常量，逐个取自交付稿 `docs/design/chat-panel-next.html` 里
- * 那段 `visual-fan` 脚本：拖过 `THROW` 就当你要翻页，剩下的路交给动效；
- * 位移小于 `TAP` 压根不算拖，让它照常当点击（选中一张仍然靠点）。
- */
-const VISUAL_STACK_THROW = 56;
-const VISUAL_STACK_TAP = 6;
-/** 甩出去那一下的时长，到点才把卡排到队尾 —— 直接换顺序会让它从手上瞬移。 */
-const VISUAL_STACK_THROW_MS = 190;
-
-/** 叠成一沓（默认）/ 铺成网格。右上角那枚开关在两者之间切。 */
-type VisualStyleView = 'fan' | 'grid';
-
-/*
- * **画廊弹窗已整体退场**(B53,2026-08-27)。
- *
- * 它原来的入口是卡片条末尾那颗 `+N`(`.qf-visual-more`),干的是「这一页只放得下 4 张,
- * 其余的到弹窗里翻」——**分页时代的溢出面**。2026-08-26 裁决「整份目录进一沓」把分页撤掉,
- * `+N` 跟着退场,`openGallery()` 就此没有任何调用点,弹窗连同它的分类页签
- * (All / Business / Editorial / Creative / Minimal)在正常流程里再也打不开。
- *
- * 收敛方向按交付稿定:`docs/design/chat-matrix/matrix-82.html` 第 #21 / #22 格底栏
- * **只有** `换一批 / 随机 / 下一步` 三个动作;稿子里的「铺开」是选项区右上角那枚
- * `.vbar > .vswitch`(`aria-label="铺成网格"`),把 `data-view` 在 `fan` / `grid`
- * 之间切,**是内联的**,不是弹窗 —— 也就是这里的 `[data-action="toggle-view"]`。
- * 全稿 84 格里唯一的 `role="dialog"` 是「联系支持」。
- *
- * 「看全部」这件事没丢(`chat-panel-feedback.md` §C:「不能因为稿子是 4 张就不做看全部」)——
- * 一次铺开整份目录,比弹窗里再分五个页签更直接。
- *
- * **一并去掉的**:`visual_style_gallery_open` / `visual_style_category_tab` 两个埋点、
- * `interaction_source` 的 `'gallery'` 一档、`category_id` 参数、`.qf-visual-dialog*` 那族样式。
- *
- * **要产品拍的一条**(已写进 `specs/current/chat-panel-feedback.md` 的 B53 行):
- * 自定义答案的输入框原来只长在这个弹窗里,跟着一起没了。稿子的视觉方向卡本来就没有
- * 「自己填」(#20 那种文字多选才有),而 `direction-cards` 那条路一直就没有 ——
- * 所以这里按稿子实现,不自造一个稿子上没有的输入位。
- */
-
-/**
- * ⚠️ **休眠件(T69,2026-09-07)** —— 说明书在 `runtime/visual-style-catalog.ts`
- * 文件头。设计风格选择题已从提示词整题下线(产品逐字「不问了 …… 组件代码注释,
- * 后续可能要找回」),所以**正常流程里没有上游会再触发这个组件**。
- *
- * 代码保持可用是**有意的**:它同时是安全网 —— 缓存的旧提示词 / 旧客户端 / 模型
- * 记住的旧格式若仍发来 `direction-cards` 或 `tone`,这里照旧渲染出完整的选择卡,
- * 而不是一块空白。以下同族组件都属于这一批:`VisualDirectionStack`、
- * `VisualDirectionCardView`、`VisualStylePreview`、`DirectionCardsPicker`。
- *
- * **不要**因为「线上看不到它」就删控件、删测试、或把裁决注释清理掉。
- */
-function VisualStylePicker({
-  cards,
-  context,
-  formId,
-  questionId,
-  value,
-  disabled,
-  selectionMode,
-  maxSelections,
-  onChange,
-  onInteraction,
-  submitSlot,
-  skipSlot,
-}: {
-  cards: VisualStyleCard[];
-  context: VisualStyleContext;
-  formId: string;
-  questionId: string;
-  value: string[];
-  disabled: boolean;
-  selectionMode: 'single' | 'multiple';
-  maxSelections?: number;
-  onChange: (value: string[]) => void;
-  onInteraction?: (interaction: QuestionFormInteraction) => void;
-  /**
-   * 稿子第 21 / 22 格的底栏是**一行**,逐颗核对过只有三个动作:
-   * `换一批 | 随机 | 下一步`(#21 那格「下一步」是 `disabled`)。**没有第四颗** ——
-   * 「铺开 / 撑开」不在底栏,是选项区右上角那枚 `.vbar > .vswitch`(见 `VisualDirectionStack`)。
-   * 「下一步」由外层 `QuestionFormView` 造好交下来 —— 它只依赖那边的 `handleSubmit` / `ready`;
-   * 反过来把「换一批 / 随机」提上去就要搬走翻牌、重置这一沓、还剩几张一整套状态。
-   */
-  submitSlot?: ReactNode;
-  /**
-   * 底栏最左那颗「跳过」(稿子 `729fa43ce7` 把原来那颗「换一批」换成了它)。
-   * 和 `submitSlot` 同进同退:只有底栏被合并进选择器这一行时才交下来,
-   * 否则卡片自己的底栏还在,那颗「跳过」就在那儿。
-   */
-  skipSlot?: ReactNode;
-}) {
-  const t = useT();
-  /*
-   * 这一沓里放的是【这一批的 6 张】,不是整份目录(2026-08-27 产品口径:
-   * 「点击换一批时,顺序从 22 个里每次挑 6 个出来」)。挑哪 6 张、
-   * 「换一批」怎么换、选中的那张怎么钉住,全在 `runtime/visual-style-deck.ts`,
-   * 那边有逐条的理由和单测。
-   *
-   * `batchHint` 只是【提示】不是真相:每次渲染都要 `resolveVisualStyleBatch`
-   * 修一遍 —— 目录可能换了(切换产物类型),「随机」也可能从整份目录里
-   * 抽中一张不在牌面上的卡,那张必须被拉进来,不然用户抽中了却看不见、取消不掉。
-   */
-  const allValues = cards.map((card) => card.value);
-  /*
-   * 【首屏就要有一份真的牌面】,不能拿 `null` 当起点。
-   *
-   * `resolveVisualStyleBatch` 在没有上一批可参照时,只能把选中的值塞进**第一个空槽**——
-   * 于是「取消选择」会当场把那张卡挪到槽 0,牌面跟着重排,用户点下去的那一下
-   * 看起来像没生效(实测:选满两张再取消第一张,第二张会跳到最前面,而它是选中的,
-   * 于是最前面那张仍然带着勾)。存一份初始牌面之后,`current` 永远是真的,
-   * 钉住的那张就只会待在它自己的槽里。
-   */
-  const [batchHint, setBatchHint] = useState<string[]>(() =>
-    resolveVisualStyleBatch({ all: allValues, current: null, keep: value }),
-  );
-  /** 下一次「换一批」从目录的第几张开始补。 */
-  const [cursor, setCursor] = useState(0);
-  /** 换过一批 / 替人随机挑过之后，把这一沓翻回第一张 —— 见 VisualDirectionStack。 */
-  const [stackResetToken, setStackResetToken] = useState(0);
-  /** 「随机」抽中的那张 —— 交给这一沓翻到最前面(见 `pickRandomStyle`) */
-  const [revealValue, setRevealValue] = useState<string | undefined>(undefined);
-  const customValue =
-    value.find((candidate) => !cards.some((card) => card.value === candidate)) ?? '';
-  const byValue = new Map(cards.map((card) => [card.value, card] as const));
-  const batchValues = resolveVisualStyleBatch({
-    all: allValues,
-    current: batchHint,
-    keep: value,
-  });
-  const compactCards = batchValues
-    .map((candidate) => byValue.get(candidate))
-    .filter((card): card is VisualStyleCard => card !== undefined);
-
-  /** 每张卡交给叠放外壳的那一份：值、方向名、预览面，以及自己能不能点。 */
-  const stackOptions: VisualDirectionOption[] = compactCards.map((card) => ({
-    value: card.value,
-    title: card.title,
-    preview: (
-      <VisualStylePreview
-        context={context}
-        variant={card.variant}
-        preview={card.preview}
-        eager={!disabled}
-      />
-    ),
-    disabled:
-      disabled ||
-      (selectionMode === 'multiple' &&
-        !value.includes(card.value) &&
-        maxSelections !== undefined &&
-        value.length >= maxSelections),
-  }));
-
-  function shuffle() {
-    // 目录还不够一批的时候没得换 —— 牌面上本来就是全部
-    if (cards.length <= VISUAL_STYLE_BATCH_SIZE) return;
-    onInteraction?.({
-      element: 'visual_style_refresh',
-      questionId,
-      styleContext: context,
-    });
-    const next = rotateVisualStyleBatch({
-      all: allValues,
-      current: batchValues,
-      keep: value,   // 选中的那张钉住:轮走了就再也点不到,于是取消不掉
-      cursor,
-    });
-    setBatchHint(next.batch);
-    setCursor(next.cursor);
-    /* 翻页位置归零 —— 不然新的一批还压在旧的翻页位置上,最前面那张是第三张。
-       `revealValue` 也要清掉:它是「随机」留下的,不清的话这一沓会去找一张
-       可能已经不在牌面上的卡。 */
-    setRevealValue(undefined);
-    setStackResetToken((current) => current + 1);
-  }
-
-  /** 「随机」：替人挑一张没选过的，顺手把这一沓翻回第一张，不然选完还压在底下。 */
-  function pickRandomStyle() {
-    if (cards.length === 0) return;
-    const unpicked = cards.filter((card) => !value.includes(card.value));
-    const pool = unpicked.length > 0 ? unpicked : cards;
-    const card = pool[Math.floor(Math.random() * pool.length)];
-    if (!card) return;
-    selectStyle(card);
-    /*
-     * 把随机选中的那张**翻到最前面**,不然选完它还压在底下,用户看不见自己抽到了什么。
-     *
-     * 光 bump token 不够 —— `VisualDirectionStack` 的那个 effect 是拿 `revealValue`
-     * 去找下标的,没给就 `at = -1`,于是弹回第一张。这里原来漏了 `revealValue`,
-     * 一沓只有 4 张时碰巧看不出来(概率 1/4 撞对),整份目录进来之后就露馅了。
-     */
-    setRevealValue(card.value);
-    setStackResetToken((current) => current + 1);
-  }
-
-  function selectStyle(card: VisualStyleCard) {
-    onInteraction?.({
-      element: 'visual_style_card',
-      questionId,
-      styleId: card.value,
-      styleContext: context,
-      source: 'inline',
-    });
-    if (selectionMode === 'single') {
-      onChange([card.value]);
-      return;
-    }
-    if (value.includes(card.value)) {
-      onChange(value.filter((candidate) => candidate !== card.value));
-      return;
-    }
-    if (maxSelections !== undefined && value.length >= maxSelections) return;
-    onChange([...value, card.value]);
-  }
-
-  /*
-   * 「换一批」在【预览区顶栏】,排在网格切换左边 —— 稿子 `729fa43ce7` 把它从底栏
-   * 挪了上来:
-   *   <div class="vbar"><span class="sp"></span>
-   *     <button class="visual-refresh">换一批</button>
-   *     <button class="vswitch" …>
-   * 顺序是它自己说的话:换的是这一沓的**内容**,和旁边那枚「怎么摆」是一组的,
-   * 而底栏那一行留给「这道题怎么了结」(跳过 / 随机 / 下一步)。
-   * 样式不是共享 ghost 档 —— 稿子给了它自己的一档(`.visual-refresh`,24px 胶囊、
-   * 12px / 400),所以这里换成 `.qf-visual-refresh` 这个钩子。
-   */
-  const reshuffleAction = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      className="qf-visual-refresh"
-      data-action="reshuffle"
-      disabled={disabled || cards.length <= VISUAL_STYLE_BATCH_SIZE}
-      onClick={shuffle}
-    >
-      {t('qf.visualReshuffle')}
-    </Button>
-  );
-  const decideActions = (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="qf-visual-foot-action"
-        data-action="random"
-        disabled={disabled || cards.length === 0}
-        onClick={pickRandomStyle}
-      >
-        {t('qf.visualRandom')}
-      </Button>
-      {/* 「+N」那颗删掉:整份目录已经在这一沓里了,右上角那枚四方块负责摊开看全部
-          (2026-08-26 裁决) */}
-    </>
-  );
-  return (
-    <VisualDirectionStack
-      artifactType={context}
-      options={stackOptions}
-      formId={formId}
-      questionId={questionId}
-      values={value}
-      disabled={disabled}
-      inputType={selectionMode === 'single' ? 'radio' : 'checkbox'}
-      revealToken={stackResetToken}
-      revealValue={revealValue}
-      onSelect={(option) => {
-        const card = cards.find((candidate) => candidate.value === option.value);
-        if (card) selectStyle(card);
-      }}
-      refreshSlot={reshuffleAction}
-      footer={
-        <>
-          {/* 稿子的底栏最左是「跳过」(`729fa43ce7` 把原来那颗「换一批」换成了它);
-              和「下一步」一样由外层交下来 —— 它要的 `handleSkipAll` 长在外层。
-              只有底栏被合并进这一行时才给(见 `visualFootDelegated`):没合并时
-              卡片自己的底栏还在,那颗「跳过」就在那儿,这里再给一颗是两颗。 */}
-          {skipSlot}
-          <span className="qf-visual-foot-gap" />
-          {decideActions}
-          {/* 稿子里「下一步」和这两颗在**同一行**;它由外层交下来(见 `submitSlot`) */}
-          {submitSlot}
-        </>
-      }
-    >
-      {/*
-        目录里没有的那个答案(模型给的 `defaultValue`,或上一轮存下来的草稿)。
-        它原来是一颗 `<button>` —— 点开画廊弹窗、在里面改。弹窗退场之后那扇门就不存在了,
-        再留一颗按不出反应的按钮才是真的死码,所以整项降成**一句陈述**。
-      */}
-      {customValue ? (
-        <span className="qf-visual-custom-summary">
-          <Icon name="check" size={12} />
-          <span>{customValue}</span>
-        </span>
-      ) : null}
-    </VisualDirectionStack>
-  );
-}
-
-/** 交给叠放外壳的一张卡：值、压在图左下角的方向名、预览面。 */
-interface VisualDirectionOption {
-  value: string;
-  title: string;
-  /** 预览面。目录卡给真图，agent 自己开的方向卡给占位块（见 `VisualDirectionPlaceholder`）。 */
-  preview: ReactNode;
-  disabled?: boolean;
-}
-
-/**
- * 视觉方向的排布外壳 —— 交付稿第 21 / 22 格（`.opts.mod-visual`）那一套。
- *
- * 风格这类问题不能用文字选项：抽象词说不清，所以这一格给的是图。默认把几张
- * 预览【叠成一沓】：这是问一句、问完就收走的东西，不该是这一屏最大的一块；
- * 左右箭头或直接拖着翻，右上角那枚开关铺成网格挨个比。
- *
- * 两个调用方共用它：目录驱动的 `VisualStylePicker`，和 agent 自己在表单里
- * 开的 `direction-cards`。它只管排布、翻页和勾选，不碰数据来源与提交逻辑。
- */
-function VisualDirectionStack({
-  options,
-  formId,
-  questionId,
-  values,
-  disabled,
-  inputType,
-  artifactType,
-  revealToken,
-  revealValue,
-  refreshSlot,
-  footer,
-  children,
-  onSelect,
-}: {
-  options: VisualDirectionOption[];
-  formId: string;
-  questionId: string;
-  values: string[];
-  disabled: boolean;
-  inputType: 'radio' | 'checkbox';
-  artifactType?: string;
-  /**
-   * 这个数一变，就把 `revealValue` 那张翻到最前面（没给就翻回第一张）。
-   * 「换一批」和「随机」都要用：替人挑完还压在底下看不见，等于没挑。
-   */
-  revealToken?: number;
-  revealValue?: string;
-  /**
-   * 预览区顶栏里排在网格切换**左边**的那颗(稿子 `729fa43ce7` 的 `.visual-refresh`
-   * ——「换一批」)。目录驱动那一路才有;agent 自开的方向卡就那么几张,
-   * 没有「下一批」可换,所以那一路不传。
-   */
-  refreshSlot?: ReactNode;
-  /** 页脚那一行的动作(稿子 #21 / #22:跳过 / 随机 / 下一步)。「换一批」不在这里 ——
-      `729fa43ce7` 把它挪到了顶栏(见 `refreshSlot`);「看全部」也不在,
-      它是上面那枚 `.qf-visual-switch`,一下铺开整份目录。 */
-  footer?: ReactNode;
-  onSelect: (option: VisualDirectionOption) => void;
-  children?: ReactNode;
-}) {
-  const t = useT();
-  const [view, setView] = useState<VisualStyleView>('fan');
-  /** 这一沓当前谁在最前面 —— 左右箭头和拖拽都只改这个数，位置一律交回 CSS。 */
-  const [stackStart, setStackStart] = useState(0);
-  const stackRef = useRef<HTMLDivElement | null>(null);
-  const draggedRef = useRef(false);
-  const throwTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /* 只在 token 变的那一下读一次当前的牌面，不把它们挂进依赖里 —— 挂进去的话
-     每次重排都会把这一沓弹回去，人手动翻的那几下就白翻了。 */
-  const revealRef = useRef({ options, revealValue });
-  revealRef.current = { options, revealValue };
-
-  useEffect(() => {
-    const { options: current, revealValue: wanted } = revealRef.current;
-    const at = wanted ? current.findIndex((option) => option.value === wanted) : -1;
-    setStackStart(at > 0 ? at : 0);
-  }, [revealToken]);
-  useEffect(
-    () => () => {
-      if (throwTimerRef.current !== null) clearTimeout(throwTimerRef.current);
-    },
-    [],
-  );
-
-  const stackOptions = rotateVisualStack(options, stackStart);
-
-  /**
-   * 翻这一沓。`delta` 为 1 是「下一张」（把最前面那张排到队尾），-1 是
-   * 「上一张」（把队尾那张提到最前面）。箭头和拖拽走的是同一条路，所以
-   * 两种操作走完的结果一定一致，不会各自算出一套位置来。
-   */
-  function stepStack(delta: 1 | -1) {
-    if (options.length < 2) return;
-    setStackStart((current) => (current + delta + options.length) % options.length);
-  }
-
-  /**
-   * 叠放态里最前面那张可以拖着翻。不用拖满全程 —— 超过阈值就当你要翻，剩下
-   * 的路由动效走完（和真机上甩卡一样）；位移不够就弹回原位，小于 TAP 更是
-   * 压根不算拖，让它照常当点击：选中一张仍然靠点。
-   */
-  function handleStackPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    draggedRef.current = false;
-    if (disabled || view !== 'fan' || options.length < 2) return;
-    const stack = stackRef.current;
-    const target =
-      event.target instanceof Element ? event.target.closest('.qf-visual-card') : null;
-    if (!stack || !(target instanceof HTMLElement)) return;
-    if (target !== stack.firstElementChild) return;
-
-    const startX = event.clientX;
-    const startY = event.clientY;
-    let dx = 0;
-    let dy = 0;
-    let moved = false;
-
-    const settle = () => {
-      target.style.transition = '';
-      target.style.transform = '';
-      target.style.zIndex = '';
-    };
-
-    const onMove = (moveEvent: PointerEvent) => {
-      dx = moveEvent.clientX - startX;
-      dy = moveEvent.clientY - startY;
-      if (!moved && Math.hypot(dx, dy) < VISUAL_STACK_TAP) return;
-      moved = true;
-      draggedRef.current = true;
-      target.style.transition = 'none';
-      target.style.transform = `translate(${dx}px, ${dy}px) rotate(${dx / 22}deg)`;
-      target.style.zIndex = '9';
-    };
-
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-      if (!moved) return;
-      // 交回给 CSS 那条 transform 过渡
-      target.style.transition = '';
-      if (Math.hypot(dx, dy) <= VISUAL_STACK_THROW) {
-        settle();
-        return;
-      }
-      if (prefersReducedMotion()) {
-        settle();
-        stepStack(1);
-        return;
-      }
-      target.style.transform = `translate(${dx * 2.2}px, ${dy * 2.2}px) rotate(${dx / 10}deg)`;
-      // 收尾用定时器而不是 transitionend：甩出去这一下若被边界情形吃掉，
-      // transitionend 永远不来，那张卡就卡在手上了。
-      throwTimerRef.current = setTimeout(() => {
-        throwTimerRef.current = null;
-        settle();
-        stepStack(1);
-      }, VISUAL_STACK_THROW_MS);
-    };
-
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
-  }
-
-  /** 拖完手指抬起来那一下浏览器还会补一个 click —— 别让它顺手选中这张卡。 */
-  function handleStackClickCapture(event: ReactMouseEvent<HTMLDivElement>) {
-    if (!draggedRef.current) return;
-    draggedRef.current = false;
-    event.preventDefault();
-    event.stopPropagation();
-  }
-
-  const switchLabel = view === 'fan' ? t('qf.visualViewGrid') : t('qf.visualViewFan');
-
-  return (
-    <div
-      className="qf-visual-picker"
-      data-artifact-type={artifactType}
-      data-question-id={questionId}
-      data-testid="question-form-visual-picker"
-      data-view={view}
-    >
-      {/* 顶栏只管【这一组预览】:换一批和叠放 / 网格切换并排靠右(稿子 `729fa43ce7`
-          改的就是这一条,原文「标题与倒计时仍在卡头里,这里不会长成第二个卡头」)。
-          切换那枚的图标画的是【点下去会变成什么】,不是现在是什么。 */}
-      <div className="qf-visual-bar">
-        {refreshSlot}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="qf-visual-switch"
-          data-action="toggle-view"
-          disabled={disabled}
-          onClick={() => setView((current) => (current === 'fan' ? 'grid' : 'fan'))}
-          title={switchLabel}
-          aria-label={switchLabel}
-        >
-          {view === 'fan' ? <Icon name="grid-4" size={15} /> : <VisualStackIcon />}
-        </Button>
-      </div>
-      <div className="qf-visual-stage">
-        <div
-          className="qf-visual-stack"
-          ref={stackRef}
-          onPointerDown={handleStackPointerDown}
-          onClickCapture={handleStackClickCapture}
-        >
-          {stackOptions.map((option, index) => (
-            <VisualDirectionCardView
-              key={option.value}
-              option={option}
-              formId={formId}
-              questionId={questionId}
-              selected={values.includes(option.value)}
-              disabled={option.disabled === true}
-              inputType={inputType}
-              /* 叠放态里只有最前面那张露在外面，后面几张不该抢走 Tab 焦点 */
-              tabbable={view === 'grid' || index === 0}
-              onSelect={() => onSelect(option)}
-            />
-          ))}
-        </div>
-        {view === 'fan' && options.length > 1 ? (
-          <div className="qf-visual-nav">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="qf-visual-nav-button"
-              data-nav="prev"
-              disabled={disabled}
-              title={t('qf.visualPrev')}
-              aria-label={t('qf.visualPrev')}
-              onClick={() => stepStack(-1)}
-            >
-              <Icon name="chevron-left" size={15} />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="qf-visual-nav-button"
-              data-nav="next"
-              disabled={disabled}
-              title={t('qf.visualNext')}
-              aria-label={t('qf.visualNext')}
-              onClick={() => stepStack(1)}
-            >
-              <Icon name="chevron-right" size={15} />
-            </Button>
-          </div>
-        ) : null}
-      </div>
-      {/* 页脚不铺底色也不画线 —— 它靠位置说话。稿子在这一格里多给了「换一批」
-          「随机」两个出口：挑图这件事本来就该有「都不喜欢」和「帮我决定」。 */}
-      {footer ? <div className="qf-visual-foot">{footer}</div> : null}
-      {children}
-    </div>
-  );
-}
-
-/**
- * 把 `cards` 转成叠放态的显示顺序 —— `start` 之前的挪到队尾。
- * 位置本身全由 CSS 的 `nth-child` 决定，这里只负责谁排第几。
- */
-function rotateVisualStack<T>(cards: T[], start: number): T[] {
-  if (cards.length < 2) return cards;
-  const at = ((start % cards.length) + cards.length) % cards.length;
-  return at === 0 ? cards : [...cards.slice(at), ...cards.slice(0, at)];
-}
-
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-/** 稿子里那枚「叠回一沓」的图标：一张卡在前、一张在后。路径逐字取自交付稿。 */
-function VisualStackIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      aria-hidden
-    >
-      <rect x="8.5" y="3.5" width="11.5" height="15.5" rx="2" />
-      <path d="M5.5 6.5v11a2.5 2.5 0 0 0 2.5 2.5h8" />
-    </svg>
-  );
-}
-
-function VisualDirectionCardView({
-  option,
-  formId,
-  questionId,
-  selected,
-  disabled,
-  inputType,
-  tabbable,
-  onSelect,
-}: {
-  option: VisualDirectionOption;
-  formId: string;
-  questionId: string;
-  selected: boolean;
-  disabled: boolean;
-  inputType: 'radio' | 'checkbox';
-  /** 叠放态里被压在下面的那几张不参与 Tab 序 —— 它们在视觉上还没露出来。 */
-  tabbable?: boolean;
-  onSelect: () => void;
-}) {
-  /*
-   * 交付稿 `.vopt`:
-   *   <button class="vopt" type="button">
-   *     <span class="vpv"><span class="pick"><svg class="ck"/></span>…预览…</span>
-   *     <span class="vmeta"><span class="vt">克制留白</span></span>
-   *   </button>
-   *
-   * 原来是 `<label>` 套一枚隐藏的 `<input>`,勾和名字都直接贴在卡上(没有 `.vpv` / `.vmeta` 两层)。
-   * 和固定选项同一条(D52):标签不一样,逐元素比样式时整段串位。
-   * 可达性同样用 ARIA 补:自己声明 role + aria-checked,回车/空格都能选。
-   */
-  return (
-    <button
-      type="button"
-      role={inputType === 'checkbox' ? 'checkbox' : 'radio'}
-      aria-checked={selected}
-      className={`qf-visual-card${selected ? ' qf-visual-card-on' : ''}${disabled ? ' qf-visual-card-disabled' : ''}`}
-      title={option.title}
-      disabled={disabled}
-      tabIndex={tabbable === false ? -1 : undefined}
-      onClick={onSelect}
-    >
-      <span className="qf-visual-card-preview">
-        {/* 未选中也画空圈，不是选中才冒出来 —— 空圈在告诉人「这几张是可选的」。
-            落绿勾靠 CSS 换成 --tick-img，和多选那一枚是同一张。 */}
-        <span className="qf-visual-card-check" aria-hidden>
-          <Icon name="check" size={12} />
-        </span>
-        {option.preview}
-      </span>
-      <span className="qf-visual-card-meta">
-        <span className="qf-visual-card-name">{option.title}</span>
-      </span>
-    </button>
-  );
-}
-
-/**
- * 没有预览图时的占位面。
- *
- * 一块纯灰压住图片该占的范围，不画内容 —— 这是占位不是效果图。稿子在这里
- * 把代价写明白了：四张会长得一样，「能不能比出风格差异」要等真图。
- * agent 自己开的 `direction-cards` 目前就走这一支（内置精选预览图是另一条
- * 待办）；素材到位后换掉这一层即可，外框、勾选圈、方向名都不用动。
- */
-function VisualDirectionPlaceholder() {
-  return <span className="qf-visual-preview qf-visual-preview-blank" aria-hidden />;
-}
-
-function VisualStylePreview({
-  context,
-  variant,
-  preview,
-  eager = false,
-}: {
-  context: VisualStyleContext;
-  variant: VisualStyleCard['variant'];
-  preview?: VisualStyleCard['preview'];
-  /** The active six-card batch should be ready before a hidden card rotates forward. */
-  eager?: boolean;
-}) {
-  if (preview) {
-    return (
-      <span className="qf-visual-preview" data-style={variant}>
-        <img
-          className="qf-visual-preview-image"
-          src={preview.thumbnailSrc}
-          alt={preview.alt}
-          width={640}
-          height={480}
-          loading={eager ? 'eager' : 'lazy'}
-          decoding="async"
-        />
-      </span>
-    );
-  }
-  if (context === 'deck') {
-    return (
-      <span className="qf-visual-preview qf-visual-preview-deck" data-style={variant} aria-hidden>
-        <span className="qf-preview-slide qf-preview-slide-hero">
-          <span className="qf-preview-kicker" />
-          <span className="qf-preview-title" />
-          <span className="qf-preview-title qf-preview-title-short" />
-          <span className="qf-preview-accent" />
-        </span>
-        <span className="qf-preview-slide qf-preview-slide-copy">
-          <span className="qf-preview-copy-lines">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="qf-preview-figure" />
-        </span>
-        <span className="qf-preview-slide qf-preview-slide-data">
-          <span className="qf-preview-chart">
-            <i />
-            <i />
-            <i />
-            <i />
-          </span>
-        </span>
-      </span>
-    );
-  }
-  return (
-    <span className="qf-visual-preview qf-visual-preview-prototype" data-style={variant} aria-hidden>
-      <span className="qf-preview-app">
-        <span className="qf-preview-appbar">
-          <i />
-          <i />
-          <i />
-        </span>
-        <span className="qf-preview-app-body">
-          <span className="qf-preview-sidebar">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="qf-preview-content">
-            <span className="qf-preview-content-head" />
-            <span className="qf-preview-content-grid">
-              <i />
-              <i />
-              <i />
-            </span>
-            <span className="qf-preview-content-list">
-              <i />
-              <i />
-            </span>
-          </span>
-        </span>
-      </span>
-    </span>
-  );
-}
-
-/**
- * agent 自己在表单里开的「视觉方向」（`direction-cards`）。
- *
- * 和目录驱动的 `VisualStylePicker` 共用同一套排布外壳（交付稿第 21 / 22 格）：
- * 默认叠成一沓、左右箭头或拖着翻、右上角切成网格。区别只在两处 ——
- *  · 预览面是占位块：这批卡是 agent 现场开的，没有素材（真图是另一条待办）；
- *  · 页脚只给「随机」：卡就这么几张，没有「下一批」可换。
- *
- * 卡上不再画色板 / Aa 字样 / mood / 参考名（D45 按新稿作废）：稿子的理由是
- * 「方向名底下不挂一句描述」—— 这张卡存在的前提就是抽象词说不清所以给你看图，
- * 再补一段文字等于承认图没说清。`palette` / `mood` / `references` 仍在数据里，
- * 只是这一版不展示。
- */
-function DirectionCardsPicker({
-  cards,
-  formId,
-  questionId,
-  value,
-  disabled,
-  onSelect,
-}: {
-  cards: DirectionCard[];
-  formId: string;
-  questionId: string;
-  value: string;
-  disabled: boolean;
-  onSelect: (cardId: string) => void;
-}) {
-  const t = useT();
-  /** 「随机」替人挑完之后，要把挑中的那张翻到最前面 —— 见 VisualDirectionStack。 */
-  const [reveal, setReveal] = useState<{ token: number; value?: string }>({ token: 0 });
-  const options: VisualDirectionOption[] = cards.map((card) => ({
-    value: card.id,
-    title: card.label,
-    preview: <VisualDirectionPlaceholder />,
-    disabled,
-  }));
-  /* 提交回来的值可能是卡的 id，也可能是它的标题 —— 两种都算选中这一张。 */
-  const selected = cards.find((card) => card.id === value || card.label === value);
-
-  return (
-    <VisualDirectionStack
-      options={options}
-      formId={formId}
-      questionId={questionId}
-      values={selected ? [selected.id] : []}
-      disabled={disabled}
-      inputType="radio"
-      revealToken={reveal.token}
-      revealValue={reveal.value}
-      onSelect={(option) => onSelect(option.value)}
-      footer={
-        <>
-          <span className="qf-visual-foot-gap" />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="qf-visual-foot-action"
-            data-action="random"
-            disabled={disabled || cards.length === 0}
-            onClick={() => {
-              const pool = cards.filter((card) => card.id !== selected?.id);
-              const pick = (pool.length > 0 ? pool : cards)[
-                Math.floor(Math.random() * (pool.length > 0 ? pool.length : cards.length))
-              ];
-              if (!pick) return;
-              onSelect(pick.id);
-              setReveal((current) => ({ token: current.token + 1, value: pick.id }));
-            }}
-          >
-            {t('qf.visualRandom')}
-          </Button>
-        </>
-      }
-    />
-  );
-}
-
 function buildInitialState(
   form: QuestionForm,
   submitted: Record<string, string | string[]> | undefined,
   draft: Record<string, string | string[]> | undefined,
-  visualStyleContext: VisualStyleContext | undefined,
 ): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
   for (const q of form.questions) {
     if (submitted && submitted[q.id] !== undefined) {
-      out[q.id] = canonicalizeQuestionValue(q, submitted[q.id]!, visualStyleContext);
+      out[q.id] = canonicalizeQuestionValue(q, submitted[q.id]!);
       continue;
     }
     if (draft && draft[q.id] !== undefined && q.type !== 'file') {
-      out[q.id] = canonicalizeQuestionValue(q, draft[q.id]!, visualStyleContext);
+      out[q.id] = canonicalizeQuestionValue(q, draft[q.id]!);
       continue;
     }
     if (q.defaultValue !== undefined) {
       out[q.id] = recommendedValueWithinDeclaredRange(
         q,
-        canonicalizeQuestionValue(q, q.defaultValue, visualStyleContext),
+        canonicalizeQuestionValue(q, q.defaultValue),
       );
       continue;
     }
@@ -2329,78 +1346,19 @@ function emptyQuestionValue(q: QuestionForm['questions'][number]): string | stri
   return '';
 }
 
-function formWithVisualStyleOptions(
-  form: QuestionForm,
-  visualStyleContext: VisualStyleContext | undefined,
-): QuestionForm {
-  if (!visualStyleContext) return form;
-  let expanded = false;
-  const questions = form.questions.map((question) => {
-    if (!questionUsesVisualStyleCatalog(question)) {
-      return question;
-    }
-    expanded = true;
-    return {
-      ...question,
-      options: visualStyleCardsForContext(visualStyleContext).map((card) => ({
-        label: card.title,
-        value: card.value,
-        description: card.description,
-        foundationDirectionId: visualStyleFoundationDirectionId(card.variant),
-        agentGuidance: card.description,
-      })),
-    };
-  });
-  return expanded ? { ...form, questions } : form;
-}
-
 /**
  * 有选项的问题必须先有答案(稿子 5-1 / 5-3 / 5-4);自由输入不在这条规则里 ——
  * 稿子没画过那种卡,不该顺手把它也收紧。`required` 仍然独立成立。
  */
-const CHOICE_QUESTION_TYPES = new Set(['radio', 'checkbox', 'direction-cards']);
-
-/**
- * 这道题**一个可点的东西都渲染不出来**。
- *
- * 只有 `direction-cards` 会落到这里,因为它是唯一一个**自己不带选项**的选择题:
- * 素材要么来自 host 目录(前提是项目有 `visualStyleContext`),要么来自模型自带的
- * 老式 `cards`。两条都没有时,渲染那两条分支
- * (`visualStyleCards && visualStyleContext` / `q.cards && q.cards.length > 0`)
- * 全都不成立 —— 屏幕上只剩一个标题。`options` 救不了它:`direction-cards` 没有
- * 任何一条渲染分支读 `options`。
- *
- * ⚠️ 这个谓词是上面那两条渲染条件的**镜像**,改任何一边都要改另一边;
- * `tests/components/question-form-direction-cards-dead-end.test.tsx` 的
- * 「前提成立」与「对照组」两条用例就是钉这个对应关系的。
- */
-function questionRendersNoChoices(
-  q: QuestionForm['questions'][number],
-  visualStyleContext: VisualStyleContext | undefined,
-): boolean {
-  if (q.type !== 'direction-cards') return false;
-  if (visualStyleContext !== undefined) return false; // host 目录接管,有整份目录可点
-  return !(q.cards && q.cards.length > 0);
-}
+const CHOICE_QUESTION_TYPES = new Set(['radio', 'checkbox']);
 
 /**
  * 这道题算不算「必须先有答案才放行」。
  *
  * 判据来自交付稿意图澄清那五格(5-1「一个都没选 ——「下一步」置灰」),
  * 所以有选项的问题一律必答,不看 `required`。
- *
- * **唯一的例外是渲染不出任何选项的题**:它挡住「下一步」就成了一条死路 ——
- * 用户面对一道空题,既无从作答,又永远点不亮提交,整张表只剩「跳过」。
- * 这在 2026-09-07 把设计风格题从提示词整题下线之后更要紧:`direction-cards`
- * 从此是个**不再被宣传的类型**,它的每一次出现都是计划外的(缓存的旧提示词、
- * 旧客户端、模型记住的旧格式),也就更可能缺素材。
- * 这条例外压过 `required` —— 模型标不标必答,都改变不了「这道题没东西可点」。
  */
-function questionNeedsAnswer(
-  q: QuestionForm['questions'][number],
-  visualStyleContext: VisualStyleContext | undefined,
-): boolean {
-  if (questionRendersNoChoices(q, visualStyleContext)) return false;
+function questionNeedsAnswer(q: QuestionForm['questions'][number]): boolean {
   return q.required === true || CHOICE_QUESTION_TYPES.has(q.type);
 }
 
@@ -2420,7 +1378,6 @@ function questionAnswerIsPresent(value: string | string[] | undefined): boolean 
 function canonicalizeQuestionValue(
   q: QuestionForm['questions'][number],
   value: string | string[],
-  visualStyleContext: VisualStyleContext | undefined,
 ): string | string[] {
   /*
    * 值进状态只有这一个入口(提交历史 / 草稿 / 模型默认值三条路都从这儿过),
@@ -2431,76 +1388,9 @@ function canonicalizeQuestionValue(
     return normalizeHexColor(value) ?? value;
   }
   if (Array.isArray(value)) {
-    return value.map((entry) =>
-      normalizeVisualStyleQuestionValue(q, entry, visualStyleContext),
-    );
+    return value.map((entry) => formOptionValueForLabel(q, entry));
   }
-  return normalizeVisualStyleQuestionValue(q, value, visualStyleContext);
-}
-
-const LEGACY_VISUAL_STYLE_VARIANTS: Readonly<Record<string, VisualStyleVariant>> = {
-  editorial: 'editorial',
-  'editorial / magazine': 'editorial',
-  magazine: 'editorial',
-  minimal: 'minimal',
-  'modern minimal': 'minimal',
-  'modern-minimal': 'minimal',
-  'soft gradients': 'minimal',
-  'soft-gradient': 'minimal',
-  'soft-gradients': 'minimal',
-  playful: 'playful',
-  'playful / illustrative': 'playful',
-  illustrative: 'playful',
-  utility: 'utility',
-  'tech / utility': 'utility',
-  tech: 'utility',
-  luxury: 'luxury',
-  'luxury / refined': 'luxury',
-  refined: 'luxury',
-  brutalist: 'brutalist',
-  experimental: 'brutalist',
-  human: 'human',
-  'human / approachable': 'human',
-  approachable: 'human',
-};
-
-/**
- * Maps the original seven tone aliases to the full catalog's stable card
- * IDs. Unknown/custom answers deliberately pass through unchanged.
- */
-export function normalizeVisualStyleQuestionValue(
-  q: QuestionForm['questions'][number],
-  value: string,
-  visualStyleContext: VisualStyleContext | undefined,
-): string {
-  const optionValue = formOptionValueForLabel(q, value);
-  if (!visualStyleContext || !questionUsesVisualStyleCatalog(q)) {
-    return optionValue;
-  }
-
-  const cards = visualStyleCardsForContext(visualStyleContext);
-  const normalized = optionValue.trim().toLocaleLowerCase();
-  const directMatch = cards.find(
-    (card) =>
-      card.value.toLocaleLowerCase() === normalized ||
-      card.title.toLocaleLowerCase() === normalized,
-  );
-  if (directMatch) return directMatch.value;
-
-  const variant = LEGACY_VISUAL_STYLE_VARIANTS[normalized];
-  return variant
-    ? (cards.find((card) => card.variant === variant)?.value ?? optionValue)
-    : optionValue;
-}
-
-function questionUsesVisualStyleCatalog(
-  question: QuestionForm['questions'][number],
-): boolean {
-  return question.type === 'direction-cards' || (
-    question.id === 'tone' &&
-    (question.type === 'checkbox' || question.type === 'radio') &&
-    !!question.options
-  );
+  return formOptionValueForLabel(q, value);
 }
 
 function shouldRenderCustomChoice(q: QuestionForm['questions'][number]): boolean {
@@ -2508,39 +1398,29 @@ function shouldRenderCustomChoice(q: QuestionForm['questions'][number]): boolean
 }
 
 function questionValueIsKnown(q: QuestionForm['questions'][number], value: string): boolean {
-  if (q.options?.some((option) => option.value === value || option.label === value)) return true;
-  if (q.cards?.some((card) => card.id === value || card.label === value)) return true;
-  return false;
+  return q.options?.some((option) => option.value === value || option.label === value) ?? false;
 }
 
 /**
  * 卡头数字数的是画面里勾中的选项行，不是提交协议里的数组项。
  *
  * 「自己填」无论暂时为空，还是被逗号拆成多条提交值，界面上都只有一行；恢复旧会话时
- * 重复/别名值也不能把同一行重复计算。视觉目录的稳定 card id 不在模型原始 options 里，
- * 但仍是普通的固定选项，必须逐张计数。
+ * 重复/别名值也不能把同一行重复计算。
  */
 function pickedCheckboxChoiceCount(
   q: QuestionForm['questions'][number],
   value: string | string[] | undefined,
-  visualStyleContext: VisualStyleContext | undefined,
   ownChoiceOpen: boolean,
 ): number {
   if (q.type !== 'checkbox' || !Array.isArray(value)) return 0;
 
-  const catalogValues = visualStyleContext && questionUsesVisualStyleCatalog(q)
-    ? new Set(visualStyleCardsForContext(visualStyleContext).map((card) => card.value))
-    : null;
   const fixedValues = new Set<string>();
   let hasCustomValue = false;
 
   for (const entry of value) {
     const normalized = entry.trim();
     if (!normalized) continue;
-    const fixed = catalogValues
-      ? catalogValues.has(normalized)
-      : questionValueIsKnown(q, normalized);
-    if (fixed) fixedValues.add(normalized);
+    if (questionValueIsKnown(q, normalized)) fixedValues.add(normalized);
     else hasCustomValue = true;
   }
 
@@ -2956,12 +1836,10 @@ function parseSubmittedOptionToken(raw: string): string {
 function AnsweredSummary({
   form,
   answers,
-  visualStyleContext,
   t,
 }: {
   form: QuestionForm;
   answers: Record<string, string | string[]>;
-  visualStyleContext?: VisualStyleContext;
   t: ReturnType<typeof useT>;
 }) {
   // This locked-form renderer follows design frame #24: each checkbox value
@@ -2970,22 +1848,16 @@ function AnsweredSummary({
   const summary = summarizeQuestionFormAnswers(
     form,
     answers,
-    visualStyleContext,
     true,
     t('qf.answeredSkipped'),
   );
   const flat = summary.items;
-  const single = flat.length === 1 && summary.visualItems.length === 0;
+  const single = flat.length === 1;
 
-  if (flat.length === 0 && summary.visualItems.length === 0) return null;
+  if (flat.length === 0) return null;
 
   return (
-    /*
-     * 稿子给带缩略图的那一格单独一档圆角(`.answered.mod-visual-answer`,12px 而非
-     * 16px)—— 判据是**这块里有没有图**,不是「这道题是不是视觉方向题」:
-     * 目录里的卡不一定都有预览图,没图的那些收成的是纯文字陈述,和其它答案一样。
-     */
-    <div className={`answered${summary.visualItems.length > 0 ? ' mod-visual-answer' : ''}`}>
+    <div className="answered">
       <div className="k">{t('qf.answeredConfirmed')}</div>
       {single ? (
         <div className={`ab${isShortValueAnswer(flat[0]!) ? ' mod-value' : ''}`}>
@@ -3002,20 +1874,6 @@ function AnsweredSummary({
           ))}
         </ul>
       ) : null}
-      {summary.visualItems.map((item) => (
-        <div key={item.label} className="ab">
-          <span className="ak">{item.label}</span>
-          <b>{item.cards.map((card) => card.title).join(' / ')}</b>
-          {item.cards.map((card) => (
-            <img
-              key={card.src}
-              className="av"
-              src={card.src}
-              alt={`${item.label}: ${card.title}`}
-            />
-          ))}
-        </div>
-      ))}
     </div>
   );
 }
@@ -3069,19 +1927,13 @@ export interface QuestionFormAnsweredSummary {
    * 一个数」。两者一起构成稿子说的「短答案」——见 {@link isShortValueAnswer}。
    */
   items: Array<{ label: string; value: string; swatch?: string; numeric?: true }>;
-  visualItems: Array<{
-    label: string;
-    cards: Array<{ title: string; src: string }>;
-  }>;
 }
 
 /**
  * Build the design's compact "Confirmed" rows from either the just-submitted
- * snapshot or a later replay. Both paths must resolve catalog-backed visual
- * choices the same way: the internal style id is protocol data, while the UI
- * shows the catalog title and its selected preview. `splitMultiValueItems`
- * preserves the locked-form design's one-row-per-checkbox-value layout; the
- * replay path keeps its established one-row-per-question summary.
+ * snapshot or a later replay. `splitMultiValueItems` preserves the locked-form
+ * design's one-row-per-checkbox-value layout; the replay path keeps its
+ * established one-row-per-question summary.
  *
  * `skippedLabel` 是「已跳过」的本地化说法(`qf.answeredSkipped`)。给了它,
  * **提交过但没有值**的题就照 `formatFormAnswers` 写给模型的 `(skipped)` 念出来,
@@ -3094,22 +1946,16 @@ export interface QuestionFormAnsweredSummary {
 export function summarizeQuestionFormAnswers(
   form: QuestionForm,
   answers: Record<string, string | string[]>,
-  visualStyleContext?: VisualStyleContext,
   splitMultiValueItems = false,
   skippedLabel?: string,
 ): QuestionFormAnsweredSummary {
   const items: QuestionFormAnsweredSummary['items'] = [];
-  const visualItems: QuestionFormAnsweredSummary['visualItems'] = [];
 
   const readable = (question: QuestionForm['questions'][number], value: string): string => {
     const option = question.options?.find(
       (candidate) => candidate.value === value || candidate.label === value,
     );
-    if (option) return option.label;
-    const card = question.cards?.find(
-      (candidate) => candidate.id === value || candidate.label === value,
-    );
-    return card?.label ?? value;
+    return option?.label ?? value;
   };
 
   for (const question of form.questions) {
@@ -3143,42 +1989,22 @@ export function summarizeQuestionFormAnswers(
       continue;
     }
 
-    const catalog = visualStyleContext && questionUsesVisualStyleCatalog(question)
-      ? visualStyleCardsForContext(visualStyleContext)
-      : [];
-    const normalized = catalog.length > 0 && visualStyleContext
-      ? values.map((value) =>
-          normalizeVisualStyleQuestionValue(question, value, visualStyleContext),
-        )
-      : values;
-    const selectedCards = catalog.flatMap((card) =>
-      normalized.includes(card.value) && card.preview
-        ? [{ title: card.title, src: card.preview.src }]
-        : [],
-    );
-
-    if (selectedCards.length > 0) {
-      visualItems.push({ label: question.label, cards: selectedCards });
-    }
-
-    const readableWithoutPreview = normalized
-      .filter((value) => !catalog.some((card) => card.value === value && card.preview))
-      .map((value) => catalog.find((card) => card.value === value)?.title ?? readable(question, value));
+    const readableValues = values.map((value) => readable(question, value));
     // 滑块和数字框答出来的是一个标量,和颜色同属稿子说的「短答案」(见
     // `isShortValueAnswer`)。跳过那一档不在这里 —— 它念的是「已跳过」,是句话不是值。
     const numeric = question.type === 'range' || question.type === 'number';
     if (splitMultiValueItems) {
-      for (const value of readableWithoutPreview) {
+      for (const value of readableValues) {
         items.push({ label: question.label, value, ...(numeric ? { numeric: true } : {}) });
       }
-    } else if (readableWithoutPreview.length > 0) {
+    } else if (readableValues.length > 0) {
       items.push({
         label: question.label,
-        value: readableWithoutPreview.join(', '),
+        value: readableValues.join(', '),
         ...(numeric ? { numeric: true } : {}),
       });
     }
   }
 
-  return { items, visualItems };
+  return { items };
 }

@@ -31,8 +31,6 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { QuestionFormView } from '../../../src/components/QuestionForm';
 import type { QuestionForm } from '../../../src/artifacts/question-form';
-import type { VisualStyleContext } from '../../../src/runtime/visual-style-catalog';
-import { visualStyleCardsForContext } from '../../../src/runtime/visual-style-catalog';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(
@@ -55,8 +53,7 @@ const form: QuestionForm = {
 };
 
 function answered(
-  over: { form?: QuestionForm; answers?: Record<string, string | string[]>;
-          visualStyleContext?: VisualStyleContext } = {},
+  over: { form?: QuestionForm; answers?: Record<string, string | string[]> } = {},
 ): HTMLElement {
   const { container } = render(
     <QuestionFormView
@@ -64,7 +61,6 @@ function answered(
       interactive={false}
       submittedAnswers={over.answers ?? { kind: 'An editorial page' }}
       onSubmit={() => undefined}
-      {...(over.visualStyleContext ? { visualStyleContext: over.visualStyleContext } : {})}
     />,
   );
   const block = container.querySelector<HTMLElement>('.answered');
@@ -110,28 +106,6 @@ describe('「已确认」陈述块的底', () => {
       .find((chunk) => chunk.includes('.answered {'));
     expect(rule, '找不到 `.answered` 那条规则').toBeTruthy();
     expect(rule!, '16px 被写成了字面值').not.toMatch(/--answered-radius:\s*16px/);
-  });
-
-  it('带缩略图的视觉方向答案降到 12px 那一档', () => {
-    const context: VisualStyleContext = 'deck';
-    const card = visualStyleCardsForContext(context).find((c) => c.preview);
-    expect(card, '目录里没有带预览图的卡 —— 这条会变成空转').toBeTruthy();
-    const block = answered({
-      form: {
-        ...form,
-        questions: [{ id: 'tone', label: 'Visual direction', type: 'radio', options: [] }],
-      },
-      answers: { tone: card!.value },
-      visualStyleContext: context,
-    });
-    expect(block.querySelector('.av'), '这一格没渲染出缩略图,变体的前提不成立').toBeTruthy();
-    expect(
-      block.classList.contains('mod-visual-answer'),
-      '带缩略图的那档没挂上 `mod-visual-answer`',
-    ).toBe(true);
-    expect(getComputedStyle(block).getPropertyValue('--answered-radius').trim()).toBe(
-      'var(--radius-lg)',
-    );
   });
 
   it('「已确认」是绿字,而且不挂勾', () => {

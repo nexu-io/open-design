@@ -907,8 +907,6 @@ export interface QuestionsFormClickProps {
     | 'brand_bg_chip'
     | 'skip'
     | 'submit'
-    | 'visual_style_card'
-    | 'visual_style_refresh'
     | 'step_back'
     | 'step_next'
     | 'step_skip';
@@ -922,13 +920,6 @@ export interface QuestionsFormClickProps {
   // 'task_type' (single-shot default-router brief) | 'discovery' | other.
   form_id?: string;
   question_id?: string;
-  style_id?: string;
-  style_context?: 'deck' | 'prototype' | 'document' | 'image' | 'video';
-  // visual_style_card only: where the card was picked. The `'gallery'` arm and
-  // the `category_id` it carried retired with the visual-style gallery dialog
-  // (B53) — that dialog was the paging-era overflow surface, and the whole
-  // catalog now lives in the inline stack/grid.
-  interaction_source?: 'inline';
   step_index?: number;
   step_count?: number;
   project_id: string;

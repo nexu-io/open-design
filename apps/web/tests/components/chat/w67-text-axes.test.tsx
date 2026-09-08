@@ -55,7 +55,6 @@ import { I18nProvider } from '../../../src/i18n';
 import { QuestionFormView } from '../../../src/components/QuestionForm';
 import type { QuestionForm } from '../../../src/artifacts/question-form';
 import { AssistantFooter } from '../../../src/components/AssistantMessage';
-import { visualStyleCardsForContext } from '../../../src/runtime/visual-style-catalog';
 import { Reconnect } from '../../../src/components/chat/Reconnect';
 import { ChatRoot } from '../../../src/components/chat/ChatRoot';
 import chatRootStyles from '../../../src/components/chat/ChatRoot.module.css';
@@ -257,30 +256,14 @@ describe('② 确认卡卡头 —— 稿子 `.card > .h`(729fa43ce7:1337)', () =
   });
 });
 
-/* ══ ④ 选项行 / 卡头标题字重 / 视觉方向卡头内距 ═══════════════════════════
+/* ══ ④ 选项行 / 卡头标题字重 ═══════════════════════════════════════════
  *
- * 三条都是新基线 `729fa43ce7` 才有的、或新基线才照出来的。
+ * 两条都是新基线 `729fa43ce7` 才有的、或新基线才照出来的。
+ * (原来还有第三条「视觉方向卡头内距」—— 那张卡在 2026-09-08 随整条选风格的路
+ *  一起删掉了,见 `e2e/tests/design-direction-picker-removed.test.ts`。)
  * 每一条的期望值都不是从稿子的注释读来的,而是把**稿子那份 CSS 在稿子那份
  * HTML 上真算了一遍**的胜出值(脚本见交付报告;结果逐条抄在下面)。
  */
-
-/** 视觉方向那张卡 —— `type: 'direction-cards'` + `visualStyleContext` 才长出来。 */
-const VISUAL_FORM: QuestionForm = {
-  id: 'directions',
-  title: '先定个视觉方向',
-  questions: [
-    {
-      id: 'direction',
-      label: '视觉方向',
-      type: 'direction-cards',
-      required: true,
-      options: [
-        { label: '克制留白', value: 'restrained' },
-        { label: '编辑杂志', value: 'editorial' },
-      ],
-    },
-  ],
-} as unknown as QuestionForm;
 
 describe('④-1 选项行字号 —— 稿子 `.opt`(729fa43ce7:1420)', () => {
   /*
@@ -341,36 +324,6 @@ describe('④-2 带选项的卡,标题字重降到 500 —— 稿子 `.card:has(
     ).container;
     expect(container.querySelector('.qf-options'), '这张卡不该有选项区').toBeNull();
     expect(CSS.resolved(pick(container, '.question-form-title'))['font-weight']).toBe('600');
-  });
-});
-
-describe('④-3 视觉方向卡的卡头内距 —— 稿子 `.card:has(> .cbody > .opts.mod-visual) > .h`', () => {
-  /*
-   * 稿子 `729fa43ce7:visual-fan.css`:
-   *   .card:has(> .cbody > .opts.mod-visual) > .h { padding-inline: 16px; }
-   * 只收视觉方向这一张卡 —— 其余确认卡仍是通用卡头的 `padding: 9px 11px`。
-   */
-  it('视觉方向卡的卡头左右各 16', () => {
-    const container = render(
-      <I18nProvider>
-        <QuestionFormView form={VISUAL_FORM} interactive visualStyleContext="prototype" onSubmit={() => {}} />
-      </I18nProvider>,
-    ).container;
-    expect(pick(container, '.qf-visual-picker'), '这张卡没长出视觉选择器,前提不成立').toBeTruthy();
-    const measured = CSS.resolved(pick(container, '.question-form-head'));
-    expect(measured['padding-left']).toBe('16px');
-    expect(measured['padding-right']).toBe('16px');
-  });
-
-  it('反向对照:别的确认卡仍是 11', () => {
-    const container = render(
-      <I18nProvider>
-        <QuestionFormView form={RADIO_FORM} interactive onSubmit={() => {}} />
-      </I18nProvider>,
-    ).container;
-    const measured = CSS.resolved(pick(container, '.question-form-head'));
-    expect(measured['padding-left']).toBe('11px');
-    expect(measured['padding-right']).toBe('11px');
   });
 });
 

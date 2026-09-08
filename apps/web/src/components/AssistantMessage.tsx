@@ -80,7 +80,6 @@ import {
   type QuestionFormFileSubmission,
   type QuestionFormInteraction,
 } from "./QuestionForm";
-import type { VisualStyleContext } from "../runtime/visual-style-catalog";
 import { splitStreamingArtifact, stripArtifact, stripRecoveredHtmlFallbackForDisplay } from "../artifacts/strip";
 import { stripInternalControlMarkers } from "../artifacts/internal-markers";
 import { BRAND_BROWSER_TAB_ID } from "../runtime/brand-browser-bridge";
@@ -1491,7 +1490,6 @@ function AssistantMessageImpl({
             questionFormSubmitDisabled || strategyBlockedNotice !== null
           }
           strategyBlockedNotice={strategyBlockedNotice}
-          visualStyleContext={visualStyleContextForProjectKind(projectKind)}
           projectId={projectId}
           conversationId={conversationId}
           runId={message.runId ?? null}
@@ -3281,7 +3279,6 @@ function ProseBlock({
   onSubmitQuestionForm,
   questionFormSubmitDisabled,
   strategyBlockedNotice = null,
-  visualStyleContext,
   projectId,
   conversationId,
   runId,
@@ -3306,7 +3303,6 @@ function ProseBlock({
   questionFormSubmitDisabled: boolean;
   /** Localized blocked-task notice; non-null terminates form interaction. */
   strategyBlockedNotice?: string | null;
-  visualStyleContext?: VisualStyleContext;
   onRequestOpenFile?: (name: string) => void;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }) {
@@ -3479,7 +3475,6 @@ function ProseBlock({
             onSubmit={onSubmitQuestionForm}
             submitDisabled={questionFormSubmitDisabled}
             strategyBlockedNotice={strategyBlockedNotice}
-            visualStyleContext={visualStyleContext}
           />
         );
       })}
@@ -3496,10 +3491,19 @@ function ProseBlock({
   );
 }
 
+/**
+ * 这张表单**在问视觉方向**。判据只剩两条形状线索:表单 id 恰好叫 `direction`,
+ * 或标题里写着 "visual direction"。
+ *
+ * 原来还有第三条(`q.type === 'direction-cards'`)—— 那个 question 类型在
+ * 2026-09-08 连同整条选风格的路一起删掉了(见
+ * `e2e/tests/design-direction-picker-removed.test.ts`)。剩下这两条仍然成立:
+ * 模型**自己**造一道问方向的普通单选,提示词管不住,而有活跃设计体系时
+ * 那道题不该出现 —— `suppressDirectionForms` 守的正是这一档。
+ */
 function isDirectionForm(form: QuestionForm): boolean {
   if (form.id.toLowerCase() === "direction") return true;
-  if (form.title.toLowerCase().includes("visual direction")) return true;
-  return form.questions.some((q) => q.type === "direction-cards");
+  return form.title.toLowerCase().includes("visual direction");
 }
 
 function FormBlock({
@@ -3512,7 +3516,6 @@ function FormBlock({
   onSubmit,
   submitDisabled,
   strategyBlockedNotice = null,
-  visualStyleContext,
 }: {
   form: QuestionForm;
   assistantMessageId: string;
@@ -3524,7 +3527,6 @@ function FormBlock({
   submitDisabled: boolean;
   /** Localized blocked-task notice rendered under the disabled form. */
   strategyBlockedNotice?: string | null;
-  visualStyleContext?: VisualStyleContext;
 }) {
   const t = useT();
   const analytics = useAnalytics();
@@ -3547,18 +3549,17 @@ function FormBlock({
     [form, nextUserContent],
   );
   const submittedSummary = useMemo(() => {
-    if (!submittedFromHistory) return { items: [], visualItems: [] };
+    if (!submittedFromHistory) return { items: [] };
     // 跳过的题也要占一行。`formatFormAnswers` 已经把它们写成 `(skipped)` 发给模型了,
     // 收口不念出来的话,用户看不出自己跳过了什么;整张表都跳时更会一行不剩,
     // 退回那句「答案已发送」—— 而那一分支恰恰是「一个答案都没有」才成立的。
     return summarizeQuestionFormAnswers(
       form,
       submittedFromHistory,
-      visualStyleContext,
       false,
       t('qf.answeredSkipped'),
     );
-  }, [form, submittedFromHistory, t, visualStyleContext]);
+  }, [form, submittedFromHistory, t]);
   useEffect(() => {
     const syncSubmitLock = () => {
       const outstanding = readInlineQuestionFormSubmitted(formKey);
@@ -3640,15 +3641,6 @@ function FormBlock({
         form_id: questionsFormTrackingId(form.id),
         question_id: questionsFormTrackingId(interaction.questionId),
         project_id: projectId,
-        ...("styleId" in interaction
-          ? { style_id: questionsFormTrackingId(interaction.styleId) }
-          : {}),
-        ...("styleContext" in interaction
-          ? { style_context: interaction.styleContext }
-          : {}),
-        ...("source" in interaction
-          ? { interaction_source: interaction.source }
-          : {}),
         ...("stepIndex" in interaction
           ? {
               step_index: interaction.stepIndex,
@@ -3824,13 +3816,13 @@ function FormBlock({
 
   if (submittedFromHistory) {
     const flat = submittedSummary.items;
-    const single = flat.length === 1 && submittedSummary.visualItems.length === 0;
+    const single = flat.length === 1;
     return (
       /*
        * 已回答的收口(稿子第 23 / 24 / 25 格)。
        *
        * 稿子这一块**没有卡**:一行绿色的「已确认」,底下是 `标签 值` 的纯文本行,
-       * 多选就列成几行,视觉方向那格再挂一张 57px 的缩略图。
+       * 多选就列成几行。
        * 原来这里是灰底圆角卡 + 一枚 ✓ 圆圈 + 一排胶囊 —— 那是稿子之前的形态。
        *
        * 类名与 `QuestionForm` 里的 `AnsweredSummary` 共用(`.answered / .k / .ab / .ak / .al / .av`),
@@ -3851,7 +3843,7 @@ function FormBlock({
         data-message-id={assistantMessageId}
       >
         <div className="k">{t("qf.answeredConfirmed")}</div>
-        {flat.length === 0 && submittedSummary.visualItems.length === 0 ? (
+        {flat.length === 0 ? (
           <div className="ab">{t("qf.lockedSubmitted")}</div>
         ) : null}
         {single ? (
@@ -3869,15 +3861,6 @@ function FormBlock({
             ))}
           </ul>
         ) : null}
-        {submittedSummary.visualItems.map((item) => (
-          <div key={item.label} className="ab">
-            <span className="ak">{item.label}</span>
-            <b>{item.cards.map((c) => c.title).join(" / ")}</b>
-            {item.cards.map((card) => (
-              <img key={card.src} className="av" src={card.src} alt={`${item.label}: ${card.title}`} />
-            ))}
-          </div>
-        ))}
       </div>
     );
   }
@@ -3893,7 +3876,6 @@ function FormBlock({
         onInteraction={handleInteraction}
         onSubmit={onSubmit ? (...args) => void handleSubmit(...args) : undefined}
         submitDisabled={submitDisabled || submitting}
-        visualStyleContext={visualStyleContext}
         autoContinueAfterTimeout
       />
       {strategyBlockedNotice ? (
@@ -4123,32 +4105,6 @@ function QuestionFormLoading() {
   );
 }
 
-function visualStyleContextForProjectKind(
-  projectKind: TrackingProjectKind | null,
-): VisualStyleContext | undefined {
-  if (projectKind === "slide_deck") return "deck";
-  if (
-    projectKind === "prototype" ||
-    projectKind === "web_clone" ||
-    projectKind === "wireframe" ||
-    projectKind === "mobile" ||
-    projectKind === "live_artifact" ||
-    projectKind === "template" ||
-    projectKind === "other"
-  ) {
-    // Generic/template projects share the same HTML product surface and
-    // generation rules as prototypes. They must therefore receive the same
-    // host-owned visual catalogue when an agent emits `direction-cards`.
-    // Without this mapping, the protocol-valid options-only form renders no
-    // cards because there is neither a catalogue context nor legacy `cards`
-    // metadata in the model payload.
-    return "prototype";
-  }
-  if (projectKind === "document") return "document";
-  if (projectKind === "image") return "image";
-  if (projectKind === "video" || projectKind === "hyperframes") return "video";
-  return undefined;
-}
 
 function SystemReminderBlock({
   text,

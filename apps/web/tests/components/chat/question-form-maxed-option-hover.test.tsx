@@ -29,14 +29,14 @@
  *
  * ── 判据出处(不自造) ────────────────────────────────────────────
  * · 静息底色:稿子 `.opt { background: transparent }`,禁用态稿子没画 → 照静息。
- *   同一件事仓库里已经做过一遍:`.qf-visual-card.qf-visual-card-disabled` 写成
+ *   同样的两类写法在别处也用过:禁用态写成
  *   两个类 (0,2,0),专门把底色和描边**从全局 `button:disabled` 手里抢回来**,
  *   注释原文「会把卡刷成 --bg-subtle 的灰片…写成两个类 (0,2,0) 才压得回去」。
  *   「选不了」只由 `opacity` 表达 —— 那一路也是这么做的。
  * · hover 不许有反馈:稿子对禁用态的规矩写在 `.btn:disabled:hover` ——
  *   把静息值**原样重述**一遍,即「hover 照终态」。
  * · 光标:稿子 `.btn:disabled { cursor: not-allowed }`,产品里
- *   `.qf-visual-card-disabled` / `.qf-chip-disabled` 声明的也都是 `not-allowed`。
+ *   `.qf-chip-disabled` 声明的也是 `not-allowed`。
  *
  * ── 为什么自己算层叠 ──────────────────────────────────────────────
  * 这次的差异**纯粹**是层叠结果(几条规则的文本都没问题,错的是谁压谁),

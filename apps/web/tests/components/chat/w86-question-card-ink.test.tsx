@@ -29,19 +29,12 @@
  * ⚠️ **面板基线 500 不动**(`ChatRoot.module.css`,`typography-baseline.test.ts` 钉着)。
  * 动的只有「按钮不继承字重」这一类元素,下面有反向对照钉住。
  *
- * ── 第二条:视觉方向卡的卡头标题(第 21 / 22 格)──────────────────────
- * 稿子 `components.css:1318` 是 `.card:has(> .cbody > .opts) > .h > b { font-weight: 500 }`,
- * 而视觉方向那张卡的容器类名是 `.opts.mod-visual` —— **它就是一个 `.opts`**,所以稿子那张
- * 卡的卡头标题跟着降到 500。我们把这条搬过来时钩子只挂了 `.qf-options`,而视觉方向卡
- * 渲染的是 `.qf-visual-picker`,于是漏网,停在通用卡头的 600。真机读数:
- *
- *   稿 cell 21 / 22 `.h > b` → 500     我们 `.question-form-title` → 600
- *   稿 cell 16–20   `.h > b` → 500     我们                        → 500  ← 带选项的卡本来就对
+ * ⚠️ 原来这里还有第二条(视觉方向卡的卡头标题)—— 那张卡在 2026-09-08 随整条
+ * 选设计风格的路一起删掉了(见 `e2e/tests/design-direction-picker-removed.test.ts`)。
  *
  * ── 这一轮**没有**改的、量下来两边一样的 ──────────────────────────────
  *   ·「自己填」的 textarea:稿 `.opt .own-ta` 自己写着 `font-weight: 500`,实测两边都 500。
  *   · 重连失败那行「连接失败」:实测两边都 500。
- *   · 预览卡里的方向名(`.vt` / `.qf-visual-card-name`):实测两边都 600。
  */
 import { beforeAll, describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
@@ -96,19 +89,6 @@ const TEXT_ONLY: QuestionForm = {
   questions: [{ id: 'topic', label: '主题', type: 'text' }],
 };
 
-/** 视觉方向:`id: 'tone'` + `visualStyleContext` 走内置风格目录,渲染 `.qf-visual-picker`。 */
-const VISUAL: QuestionForm = {
-  id: 'q5-visual',
-  title: '先定个视觉方向',
-  questions: [{
-    id: 'tone',
-    label: '这套电商 App 原型走哪种感觉?',
-    type: 'radio',
-    allowCustom: false,
-    options: [{ label: '', value: '' }],
-  }],
-};
-
 beforeAll(() => {
   for (const rel of SHEETS) {
     const style = document.createElement('style');
@@ -119,7 +99,7 @@ beforeAll(() => {
 
 function mount(
   form: QuestionForm,
-  extra: { draft?: Record<string, string | string[]>; visual?: boolean } = {},
+  extra: { draft?: Record<string, string | string[]> } = {},
 ): HTMLElement {
   const { container } = render(
     <I18nProvider initial="zh-CN">
@@ -130,7 +110,6 @@ function mount(
           interactive
           onSubmit={() => undefined}
           {...(extra.draft ? { draftAnswers: extra.draft } : {})}
-          {...(extra.visual ? { visualStyleContext: 'prototype' as const } : {})}
         />
       </div></div>
     </I18nProvider>,
@@ -209,17 +188,8 @@ describe('W86 ① 静息选项行的字重要对上稿子的真实渲染值', ()
   });
 });
 
-describe('W86 ② 视觉方向卡的卡头标题跟带选项的卡同档', () => {
-  it('视觉方向卡的卡头标题是 500', () => {
-    const root = mount(VISUAL, { visual: true });
-    expect(
-      root.querySelector('.qf-visual-picker'),
-      '这张卡没走视觉方向那一路,下面守的东西不存在',
-    ).toBeTruthy();
-    expect(weight(root.querySelector('.question-form-title'))).toBe('500');
-  });
-
-  it('反向对照:带选项的确认卡本来就是 500,没被这条改动影响', () => {
+describe('W86 ② 带选项的确认卡,卡头标题降到 500', () => {
+  it('带选项的确认卡的卡头标题是 500', () => {
     const root = mount(OPTIONS);
     expect(weight(root.querySelector('.question-form-title'))).toBe('500');
   });
@@ -227,15 +197,7 @@ describe('W86 ② 视觉方向卡的卡头标题跟带选项的卡同档', () =>
   it('反向对照:既没选项也没预览的纯文本卡仍然是 600(稿子 `.card > .h b`)', () => {
     const root = mount(TEXT_ONLY);
     expect(root.querySelector('.qf-options')).toBeNull();
-    expect(root.querySelector('.qf-visual-picker')).toBeNull();
     expect(weight(root.querySelector('.question-form-title'))).toBe('600');
-  });
-
-  it('反向对照:「换一批」仍在预览区顶栏里(332b96a427 刚落地的位置)', () => {
-    const root = mount(VISUAL, { visual: true });
-    const refresh = root.querySelector('.qf-visual-refresh');
-    expect(refresh, '「换一批」不见了').toBeTruthy();
-    expect(refresh!.closest('.qf-visual-bar'), '「换一批」被搬出顶栏了').toBeTruthy();
   });
 });
 
@@ -245,19 +207,6 @@ describe('W86 ② 视觉方向卡的卡头标题跟带选项的卡同档', () =>
  * 每条钉一个断言,理由和实测写在用例里。
  */
 describe('W86 ③ 这几处产品本来就对 —— 钉住', () => {
-  it('预览卡上的方向名是 600 —— 稿子 `.vt` 实测也是 600,两边同值', () => {
-    /*
-     * 派单里写的是「卡标题字重:稿 500 / 我们 600」。查下来这句话指的**不是**这个元素:
-     * 实测(系统 Chrome headless,交付稿 `729fa43ce7`)`.vt` = 600,我们
-     * `.qf-visual-card-name` = 600,**两边一样**。真正差一档的是**卡头那只 `<b>`**
-     * (上面那组用例),两者是卡上两个不同的元素,别再混成一条。
-     */
-    const root = mount(VISUAL, { visual: true });
-    const name = root.querySelector('.qf-visual-card-name');
-    expect(name, '方向名没渲染出来').toBeTruthy();
-    expect(weight(name)).toBe('600');
-  });
-
   it('选项行左 5 右 11 的**不对称**是有出处的,不许顺手并回对称简写', () => {
     /*
      * 稿子是**对称的** `.opts.mod-stack .opt { padding-inline: 5px }` ——
@@ -302,60 +251,4 @@ describe('W86 ③ 这几处产品本来就对 —— 钉住', () => {
     ).not.toMatch(/padding-inline:\s/);
   });
 
-  it('叠放那一沓仍然是**整沓居中**,补偿量跟着卡宽走', () => {
-    /*
-     * 派单里写的是「叠放负外距:稿 -38px / 我们 -68px」。这两个数不是各自拍的,
-     * 都是同一条式子 `calc(--fan-w / -2 + c)` 算出来的:居中的是**整沓的外接框**
-     * (后面三张转出去的角实打实占地方),所以要往右补「左侧多支出那一截的一半」。
-     *   稿子:卡 152 宽 → 连角横跨 227,超出 75,补 38 → margin-left = -38
-     *   我们:卡 200 宽 → 连角横跨 263,超出 63,补 32 → margin-left = -68
-     * 卡宽从 152 变成 200 是 `visual-card-aspect.test.ts` 钉着的 2026-08-27 产品裁决
-     * (素材 96 张全是 1600×1200 的 4:3 横图,竖卡会切掉近一半构图)。
-     * -68 是那条裁决的**导出量**,不是独立的一处走样。
-     * 真机复核(跑着的产品,注入真实标记):这一沓左留白 47.1 / 右留白 46,基本相等。
-     *
-     * 这条钉的是**式子还在**:谁把 `-68px` 写死、或者改了 `--qf-fan-w` 却没动补偿量,
-     * 整沓就会偏到一边去,而那是眼睛才看得出、单测看不见的那类走样。
-     */
-    const css = readFileSync(
-      resolve(HERE, '../../../src/styles/viewer/composio.css'),
-      'utf-8',
-    ).replace(/\/\*[\s\S]*?\*\//g, '');
-    const decl = /margin-left:\s*calc\(\s*var\(--qf-fan-w\)\s*\/\s*-2\s*\+\s*(\d+)px\s*\)/.exec(css);
-    expect(decl, '叠放卡的居中补偿不再是「跟着 --qf-fan-w 算」了').toBeTruthy();
-    const fanW = /--qf-fan-w:\s*(\d+)px/.exec(css);
-    expect(fanW, '--qf-fan-w 的定义处不见了').toBeTruthy();
-
-    const w = Number(fanW?.[1] ?? NaN);
-    const c = Number(decl?.[1] ?? NaN);
-    expect(Number.isFinite(w) && Number.isFinite(c), '卡宽或补偿量读不出来').toBe(true);
-    /*
-     * 几何自洽:四张卡绕**底边中点**旋转 0 / -5 / -8 / -11 度,再各自平移 i×(-12, -8)。
-     * 算出整沓外接框相对最前面那张的左右支出,补偿量应当 ≈ 左支出的一半。
-     */
-    const h = (w * 3) / 4; // 4/3 横卡
-    const deg = [0, -5, -8, -11];
-    let minX = Infinity;
-    let maxX = -Infinity;
-    deg.forEach((d, i) => {
-      const rad = (d * Math.PI) / 180;
-      const cx = i * -12;
-      const cy = i * -8;
-      // 支点 = 底边中点(相对卡左上角是 (w/2, h))
-      const corners: [number, number][] = [[0, 0], [w, 0], [0, h], [w, h]];
-      for (const [px, py] of corners) {
-        const dx = px - w / 2;
-        const dy = py - h;
-        const rx = dx * Math.cos(rad) - dy * Math.sin(rad) + w / 2 + cx;
-        minX = Math.min(minX, rx);
-        maxX = Math.max(maxX, rx);
-      }
-    });
-    const leftOverhang = -minX; // 前排卡左边界之外多支出的一截
-    expect(
-      Math.abs(c - leftOverhang / 2),
-      `补偿量 ${c}px 和卡宽 ${w}px 对不上:整沓外接框左支出 ${leftOverhang.toFixed(1)}px,应当补一半`,
-    ).toBeLessThan(3);
-    expect(maxX, '整沓右边界不该超出前排卡').toBeLessThanOrEqual(w + 0.5);
-  });
 });

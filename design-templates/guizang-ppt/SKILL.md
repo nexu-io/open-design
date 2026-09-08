@@ -79,7 +79,7 @@ chrome style, and slide count. Use the closest fit and continue without asking.
 
 Only when the user explicitly asks to see or compare direction options, open
 `references/styles.md` and present the 1-line summaries in one
-`direction-cards` question form:
+single-select (`radio`) question form:
 
 ```
 1. Monocle Editorial · International magazine style ✦ default
