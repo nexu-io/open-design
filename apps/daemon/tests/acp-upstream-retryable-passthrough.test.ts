@@ -175,3 +175,146 @@ describe('the passthrough does not hand out retries nobody granted', () => {
     expect(failure?.user_action).toBe('retry');
   });
 });
+
+/**
+ * The rule above ("only `true` is read") is stated for the message-string
+ * reader, and the negative anchors that police it all feed the string form —
+ * where `inferRpcErrorRetryable` matches `"isRetryable":true` and returns
+ * `undefined` for anything else, so an upstream "no" is correctly left
+ * undecided.
+ *
+ * The STRUCTURED reader is the same statement arriving as ACP `error.data`
+ * instead, which is the shape an adapter produces when it forwards opencode's
+ * `error.data` object through rather than re-serialising it into the sentence
+ * (`apps/web/src/providers/daemon.ts` already reads `isRetryable` off exactly
+ * that object). Nothing above exercises it with a `false`, and the two readers
+ * are only equivalent if they agree on that value: `session.ts` composes them
+ * with `??`, so a structural `false` short-circuits the message reader
+ * entirely and becomes the frame's verdict.
+ */
+describe('a structured isRetryable is read under the same rule as the string form', () => {
+  /**
+   * Verbatim `error.data` from the real APIError envelope already frozen as row
+   * B5 of the ACP landing table (`acp-service-failure.test.ts`) — the same
+   * bytes the string-form anchor above parses, lifted out of the sentence.
+   */
+  const APIERROR_404_DATA = {
+    message: 'Not Found',
+    statusCode: 404,
+    isRetryable: false,
+    responseBody: '<html><head><title>404 Not Found</title></head>',
+  };
+
+  const APIERROR_404_STRING =
+    'json-rpc id 4: opencode event stream: opencode session error: '
+    + '{"error":{"name":"APIError","data":{"message":"Not Found","statusCode":404,'
+    + '"isRetryable":false,"responseBody":"<html><head><title>404 Not Found</title></head>"}}}';
+
+  it('reaches the same verdict for the same payload in either shape', () => {
+    // Proof the fixture can see the defect: the word IS in both shapes.
+    expect(APIERROR_404_DATA.isRetryable).toBe(false);
+    expect(APIERROR_404_STRING).toContain('"isRetryable":false');
+
+    const asMessage = bridgeRetryable(APIERROR_404_STRING, undefined);
+    const asData = bridgeRetryable('json-rpc id 4: Not Found', APIERROR_404_DATA);
+    expect(asMessage).toBeUndefined();
+    expect(asData).toBe(asMessage);
+  });
+
+  /**
+   * The consequence, and the reason this is not a style point. `[code=upstream_error]
+   * stream idle timeout` is the transport blip already frozen as row B1 with
+   * `retryable: true` / `user_action: 'retry'` — the daemon reads that text and
+   * knows it is retryable. Hand it the SDK's coarse `false` structurally and,
+   * because `??` stops at a boolean, the message reader that would have said
+   * `true` never runs: `fail()` stamps `false`, the classifier adopts it as
+   * `retryableHint`, and `isResumableFailure` withdraws Continue — the exact
+   * failure mode this PR exists to remove, reintroduced through the other door.
+   */
+  const SDK_NO_ON_A_TRANSPORT_BLIP = {
+    isRetryable: false,
+    message: '[code=upstream_error] stream idle timeout: no data received within configured window',
+  };
+
+  /**
+   * Row B1's text verbatim — the sentence the daemon shows and the only thing
+   * the classifier reads. It rides along with the structured `data` above
+   * because vela forwards the whole `session.error` envelope in the message
+   * regardless; the structural copy is the addition under test.
+   */
+  const TRANSPORT_BLIP_MESSAGE =
+    'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":'
+    + '{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received '
+    + 'within configured window\\""}}}}';
+
+  /**
+   * The full chain as `session.ts` runs it: the composed bridge verdict, then
+   * `fail(message, { details, …retryable })` — which stamps
+   * `options.retryable ?? false` and carries `details` on the frame — then the
+   * classifier reading that frame back.
+   */
+  function classifyStructured(message: string, data: unknown) {
+    const retryable = bridgeRetryable(message, data);
+    return classifyRunFailure({
+      result: 'failed',
+      status: { status: 'failed', error: message, errorCode: null },
+      agentId: 'amr',
+      events: [
+        { event: 'diagnostic', data: { type: 'runtime_close', rpc_close_reason: 'fatal_rpc_error' } },
+        {
+          event: 'error',
+          data: {
+            message,
+            error: {
+              code: 'AGENT_EXECUTION_FAILED',
+              message,
+              retryable: retryable ?? false,
+              details: data,
+            },
+          },
+        },
+      ],
+    } as Parameters<typeof classifyRunFailure>[0]);
+  }
+
+  it('does not let a structural no override the classifier on a transport blip', () => {
+    // Control: the identical payload with the flag only in the message is
+    // already retryable today. The structural copy must not change that answer.
+    expect(bridgeRetryable(TRANSPORT_BLIP_MESSAGE, undefined)).toBe(true);
+    expect(bridgeRetryable(TRANSPORT_BLIP_MESSAGE, SDK_NO_ON_A_TRANSPORT_BLIP)).not.toBe(false);
+
+    const failure = classifyStructured(TRANSPORT_BLIP_MESSAGE, SDK_NO_ON_A_TRANSPORT_BLIP);
+    expect(failure?.failure_category).toBe('upstream_unavailable');
+    expect(failure?.failure_detail).toBe('stream_disconnected');
+    expect(failure?.retryable).toBe(true);
+    expect(failure?.user_action).toBe('retry');
+    // The affordance row B1 already promises this failure, and the one a
+    // structural `false` silently took away.
+    expect(isResumableFailure(failure)).toBe(true);
+  });
+
+  it('still hands out no retry the structural payload did not earn', () => {
+    // The other half of the rule: declining to read `false` must not be read as
+    // reading `true`. The adapter shape here is the fullest one — the envelope
+    // kept in the sentence AND its `data` forwarded structurally — so the text
+    // evidence row B5 was frozen on is present, and `upstream_client_error` is
+    // reached from it rather than from any hint. `fail()` still stamps `false`
+    // on an undecided frame, so nothing about this row moves.
+    const failure = classifyStructured(APIERROR_404_STRING, APIERROR_404_DATA);
+    expect(bridgeRetryable(APIERROR_404_STRING, APIERROR_404_DATA)).not.toBe(true);
+    expect(failure?.failure_detail).toBe('upstream_client_error');
+    expect(failure?.retryable).toBe(false);
+    expect(failure?.user_action).toBe('none');
+    expect(isResumableFailure(failure)).toBe(false);
+  });
+
+  it('keeps reading a structural yes, which is the direction this PR added', () => {
+    // Guard against "fixing" the above by deleting the branch: the accepted
+    // direction must survive.
+    expect(rpcErrorRetryable({ isRetryable: true, message: 'socket closed' })).toBe(true);
+    // And the ACP-native `retryable` field is a protocol-level statement, not a
+    // coarse SDK flag — it is out of scope here and keeps both of its values.
+    expect(rpcErrorRetryable({ retryable: false })).toBe(false);
+    expect(rpcErrorRetryable({ retryable: true })).toBe(true);
+  });
+});

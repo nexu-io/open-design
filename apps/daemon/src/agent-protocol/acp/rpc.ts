@@ -101,9 +101,15 @@ export function rpcErrorData(raw: unknown): unknown {
   return error && 'data' in error ? error.data : undefined;
 }
 /**
- * Reads the `retryable` boolean from a structured RPC error `data` payload.
- * Returns `undefined` when the field is absent so callers can distinguish
- * "explicitly false" from "not present" and apply their own default.
+ * Reads an upstream retryability statement out of a structured RPC error `data`
+ * payload. Returns `undefined` when no statement is present so callers can
+ * distinguish "explicitly false" from "not present" and apply their own default.
+ *
+ * The two spellings are not read with equal authority, and deliberately so:
+ * ACP's own `retryable` is honoured in both directions, while the vendor
+ * `isRetryable` flag is honoured only when it says `true` — the same asymmetry
+ * `inferRpcErrorRetryable` applies to that field's string form, so the bridge's
+ * verdict does not depend on which shape the adapter happened to send.
  *
  * @param data - The value of `error.data` extracted via `rpcErrorData`.
  */
@@ -118,7 +124,22 @@ export function rpcErrorRetryable(data: unknown): boolean | undefined {
   // dropping the one authoritative word upstream said about its own failure —
   // `run-failure-classification.ts` already knew this spelling
   // (`latestRetryable` reads `error.data.isRetryable`); the bridge did not.
-  if (typeof details?.isRetryable === 'boolean') return details.isRetryable;
+  //
+  // Only `true` is read, under exactly the rule `inferRpcErrorRetryable` states
+  // for the string form of the same field. The two readers are composed with
+  // `??` in `session.ts`, so returning `false` here would not merely record a
+  // "no" — it would short-circuit the message reader that may hold a better
+  // answer, and hand `fail()` a verdict the classifier then adopts. Letting a
+  // coarse SDK flag force `false` is the drift `run-failure-classification.ts`
+  // refuses by name; an explicit upstream "no" is already served by the
+  // branches that can disprove it (a 4xx re-fails identically, and
+  // `upstreamDetail` routes it to `upstream_client_error`).
+  //
+  // `retryable` above is a different thing and keeps both values: it is the
+  // ACP protocol's own field, a statement the agent makes deliberately about
+  // this frame, not a status-code-derived SDK flag riding along inside a
+  // vendor payload.
+  if (details?.isRetryable === true) return true;
   return undefined;
 }
 /**
