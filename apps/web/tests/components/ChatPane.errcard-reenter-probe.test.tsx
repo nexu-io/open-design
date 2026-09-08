@@ -12,6 +12,33 @@
 //
 // 这个文件把几种失败形态各造一条「重挂后的转录」,只问一件事:
 // 报错卡(`[data-user-action-card="run-recovery"]`)还在不在。
+//
+// ## 三个 ref 上跑同一份用例的结果(2026-09-08)
+//
+// | 用例                                   | 9180cfdb3e | 1bdc052283 | d82385309f |
+// |                                        | (#7518 前) | (#7518 后, | (main,     |
+// |                                        |            |  #7863 前) |  #7863 后) |
+// |----------------------------------------|-----------|-----------|-----------|
+// | A 守护进程写的失败 + 落库 error 帧      |    绿     |    绿     |    绿     |
+// | B 宿主卡(记忆卡)顶在队尾              |    红     |    红     |  绿(修好)|
+// | C 失败轮没有落库的 error 帧             |    红     |    红     |    红     |
+// | D 交付失败 + error 帧                   |    绿     |    绿     |    绿     |
+// | E 交付失败、error 帧没落库              |    红     |    红     |    红     |
+// | G 断流失败(DAEMON_STREAM_DISCONNECTED) |  **绿**   |  **红**   |  **红**   |
+// | F 失败轮后面有用户消息(按设计收卡)     |    绿     |    绿     |    绿     |
+//
+// 读法:
+//  · #7863(`4c5873c7cc`)**不是**病因 —— 它只把 B 从红修成绿,C/E/G 三格前后一模一样。
+//  · G 是 **#7518(`ad09d38839`,2026-09-07)引入的回归**:那一版给
+//    `DAEMON_STREAM_DISCONNECTED` 加了 `suppressCard: true`,把这条失败交给
+//    「重新连接」那一行去说;而那一行是 `ProjectView` 的 `reconnectView`
+//    useState(ProjectView.tsx:3284)—— 退出 project 就没了。交接对象不在场,
+//    卡也不画,那一轮失败在屏幕上一个字都不剩。
+//    ⚠️ 对比:紧挨着的余额那一档**检查了**接手方在不在
+//    (`balanceCardCannotTakeTheHandoff`,ChatPane.tsx:2257),断流这一档没有。
+//  · C / E 是老问题,#7518 前后同形:整张卡唯一的开关是 `displayError`
+//    (ChatPane.tsx:4213),而它在「映射表没有文案 + 面板 error 为空 +
+//    消息上没有 error 帧」三者同时成立时会变 null。
 import { cleanup, render } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
