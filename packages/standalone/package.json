@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@open-design/download": "workspace:*",
+    "@open-design/platform": "workspace:*",
     "esbuild": "0.28.0",
     "jszip": "3.10.1"
   },

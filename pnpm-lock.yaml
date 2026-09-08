@@ -746,6 +746,9 @@ importers:
       '@open-design/download':
         specifier: workspace:*
         version: link:../download
+      '@open-design/platform':
+        specifier: workspace:*
+        version: link:../platform
       esbuild:
         specifier: 0.28.0
         version: 0.28.0

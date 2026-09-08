@@ -20,6 +20,10 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
   shared code must not import Electron or Sidecar transport. A logical lifecycle
   result is never proof that physical processes have retired.
 - Verify signatures before fetching or materializing components.
+- Maintenance and namespace state transactions share a private coordinator over
+  Platform kernel ownership. Bound acquisition waits, never owner lifetimes;
+  do not resurrect TTL/heartbeat lock stealing or stale-file deletion. Process
+  death releases coordination only, not activation or recovery evidence.
 - Address immutable blobs by SHA-256 and fail closed on size or digest mismatch.
 - Keep generation preparation separate from activation and successful-start acknowledgement.
 - Explicit `recoverGeneration` authenticates and materializes a pinned signed

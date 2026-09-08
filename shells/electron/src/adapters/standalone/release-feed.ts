@@ -1,4 +1,5 @@
 import type { KeyObject } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import {
@@ -142,11 +143,27 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
    * exact archive identity are authoritative in this authenticated manifest. */
   async readCapsule(candidate: ElectronReleaseExactCandidate): Promise<SignedDocument<ElectronCapsuleManifest>> {
     const exact = this.validateCandidate(candidate), binding = exact.distribution.capsule;
-    const envelope = json<SignedDocument<ElectronCapsuleManifest>>(await bytes(this.options.fetch ?? globalThis.fetch,
-      binding.manifest.url, "Electron Capsule manifest", binding.manifest), "Electron Capsule manifest");
-    verifyDocument(envelope, this.options.trustedKeys);
-    assertElectronCapsuleReleaseManifest(binding, envelope.document, this.options.target);
-    return structuredClone(envelope);
+    if (binding.manifest.size > 1024 * 1024) throw new Error("Electron Capsule manifest exceeds the metadata size limit");
+    // A signed candidate already binds these exact bytes. Retain them through
+    // the same CAS as the archive so recovery needs neither latest nor a live
+    // metadata server. This is acquisition, never selection or activation.
+    const cacheRoot = join(this.options.cacheRoot, "capsule");
+    return await withStandaloneMaintenanceLock(cacheRoot, async () => {
+      const acquired = await ensureStandaloneBlob(cacheRoot, {
+        sha256: binding.manifest.sha256, size: binding.manifest.size, mediaType: "application/json",
+        sources: [{ kind: "remote", url: binding.manifest.url }],
+      }, { fetch: this.options.fetch, resourceId: "electron-capsule-manifest" }).catch(error => {
+        throw new Error("Electron Capsule manifest acquisition or exact lane binding failed", { cause: error });
+      });
+      const snapshot = await readFile(acquired.path);
+      if (snapshot.length !== binding.manifest.size || sha256Hex(snapshot) !== binding.manifest.sha256) {
+        throw new Error("Electron Capsule manifest failed exact lane binding");
+      }
+      const envelope = json<SignedDocument<ElectronCapsuleManifest>>(snapshot, "Electron Capsule manifest");
+      verifyDocument(envelope, this.options.trustedKeys);
+      assertElectronCapsuleReleaseManifest(binding, envelope.document, this.options.target);
+      return structuredClone(envelope);
+    });
   }
 
   /** Preparation is shared CAS acquisition, never module execution or an arm.

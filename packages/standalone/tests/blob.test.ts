@@ -82,12 +82,12 @@ describe("Standalone blob repository", () => {
     await expect(stat(join(root, "trash"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
-  it("renews a long maintenance lease so a competing sweep cannot steal it", async () => {
+  it("keeps a long maintenance owner exclusive until its operation finishes", async () => {
     const root = await mkdtemp(join(tmpdir(), "standalone-maintenance-")); roots.push(root);
     const entered: string[] = [];
     let releaseFirst!: () => void;
     const firstMayFinish = new Promise<void>((resolveFinish) => { releaseFirst = resolveFinish; });
-    const timing = { heartbeatIntervalMs: 25, leaseDurationMs: 120 };
+    const timing = { timeoutMs: 2_000 };
     const first = withStandaloneMaintenanceLock(root, async () => {
       entered.push("first");
       await firstMayFinish;

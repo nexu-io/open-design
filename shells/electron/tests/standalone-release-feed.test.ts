@@ -119,8 +119,21 @@ describe("Electron release-exact feed", () => {
     expect(repaired.root).toBe(prepared.root);
     expect(await readFile(join(repaired.root, "capsule.cjs"), "utf8")).toBe(module);
     expect(vi.mocked(fetcher).mock.calls.filter(([url]) => String(url) === capsuleArchiveUrl)).toHaveLength(1);
-    expect((await readdir(cacheRoot)).filter(name => !before.includes(name)).sort()).toEqual(["capsule", "locks"]);
-    expect((await readdir(join(cacheRoot, "capsule"))).sort()).toEqual(["blobs", "downloads", "locks", "materialized", "staging", "trash"]);
+    expect((await readdir(cacheRoot)).filter(name => !before.includes(name)).sort()).toEqual(["capsule"]);
+    expect((await readdir(join(cacheRoot, "capsule"))).sort()).toEqual(["blobs", "downloads", "materialized", "staging", "trash"]);
+  });
+
+  it("retains the exact signed manifest for offline recovery without rediscovery", async () => {
+    const { feed, bodies, fetcher, capsule } = await fixture();
+    const candidate = (await feed.check())!;
+    const prepared = await feed.prepareCapsule(candidate);
+    bodies.clear();
+    vi.mocked(fetcher).mockClear();
+    await writeFile(join(prepared.root, "capsule.cjs"), "interrupted materialization");
+    const recovered = await feed.prepareCapsule(candidate);
+    expect(recovered.envelope.document).toEqual(capsule);
+    expect(await readFile(join(recovered.root, "capsule.cjs"), "utf8")).toContain("createElectronCapsuleDefinition");
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it.each([{ minimumCarrierVersion: "9.0.0" }, { badSignature: true }, { target: "win32-x64" }])("refuses Capsule before archive acquisition when trust or carrier compatibility fails %j", async options => {

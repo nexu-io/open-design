@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, open, readFile, rename, stat, unlink, writeFile, type FileHandle } from "node:fs/promises";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import {
@@ -16,6 +16,7 @@ import {
 import { ensureStandaloneBlob, materializeStandaloneBlob, type StandaloneBlobCandidate } from "./blob.js";
 import { StandaloneFeedbackEmitter, type StandaloneFeedbackHandler } from "./feedback.js";
 import { withStandaloneMaintenanceLock } from "./maintenance.js";
+import { withStandaloneTransaction } from "./transaction.js";
 import {
   INITIAL_GENERATION_STATE,
   StandaloneStateConflictError,
@@ -93,10 +94,6 @@ async function readJson<T>(path: string): Promise<T> {
   return JSON.parse(await readFile(path, "utf8")) as T;
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolveDelay) => setTimeout(resolveDelay, milliseconds));
-}
-
 export class StandaloneStore {
   readonly root: string;
   readonly channel: string;
@@ -111,7 +108,6 @@ export class StandaloneStore {
 
   private get namespaceRoot(): string { return join(this.root, "channels", this.channel, "namespaces", this.namespace); }
   private get statePath(): string { return join(this.namespaceRoot, "state.json"); }
-  private get stateLockPath(): string { return join(this.namespaceRoot, "state.lock"); }
   private get generationsRoot(): string { return join(this.root, "channels", this.channel, "generations"); }
   private generationPath(id: string): string { return join(this.generationsRoot, `${id}.json`); }
   private generationMetadataPath(id: string): string {
@@ -125,35 +121,7 @@ export class StandaloneStore {
   }
 
   private async withStateTransaction<T>(operation: () => Promise<T>): Promise<T> {
-    await mkdir(dirname(this.stateLockPath), { recursive: true });
-    let handle: FileHandle | undefined;
-    const owner = canonicalJson({ owner: randomUUID(), pid: process.pid, acquiredAt: new Date().toISOString() });
-    for (let attempt = 0; attempt < 250; attempt += 1) {
-      try { handle = await open(this.stateLockPath, "wx"); break; }
-      catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        let age: number;
-        try { age = Date.now() - (await stat(this.stateLockPath)).mtimeMs; }
-        catch (statError) {
-          if ((statError as NodeJS.ErrnoException).code === "ENOENT") continue;
-          throw statError;
-        }
-        if (age > 120_000) { await unlink(this.stateLockPath).catch(() => undefined); continue; }
-        await delay(20);
-      }
-    }
-    if (handle === undefined) throw new Error(`timed out acquiring generation state transaction: ${this.channel}/${this.namespace}`);
-    try {
-      await handle.writeFile(owner);
-      return await operation();
-    } finally {
-      await handle.close();
-      const currentOwner = await readFile(this.stateLockPath, "utf8").catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return null;
-        throw error;
-      });
-      if (currentOwner === owner) await unlink(this.stateLockPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== "ENOENT") throw error; });
-    }
+    return withStandaloneTransaction(this.namespaceRoot, "generation-state", operation, 5_000);
   }
 
   async readState(): Promise<GenerationState> {
