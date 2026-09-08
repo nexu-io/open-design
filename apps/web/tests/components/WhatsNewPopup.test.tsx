@@ -10,7 +10,7 @@
  *    (`/api/whats-new`) for cover/headline/bullets/link, and the RUNNING app
  *    version (`useAppVersion`, i.e. `/api/version`) for the title. No literal
  *    version and no hardcoded English notes.
- *  - the footer is close + open-release, so no surface pretends to perform an
+ *  - the footer is close + open-highlight, so no surface pretends to perform an
  *    update. Applying an update belongs to the real updater (UpdaterPopup).
  *
  * It also keeps the original once-per-activation fetch/show guard: an effect
@@ -308,12 +308,12 @@ describe('WhatsNewPopup actions', () => {
     mockedFetchWhatsNew.mockResolvedValue(SHOW_PAYLOAD);
   });
 
-  it('offers exactly close and open-release — never an update action', async () => {
+  it('offers exactly close and open-highlight — never an update action', async () => {
     renderCard(true);
 
     await screen.findByTestId('whats-new-popup');
     expect(screen.getByTestId('whats-new-dismiss').textContent).toBe('Close');
-    expect(screen.getByTestId('whats-new-cta').textContent).toBe('View the release notes');
+    expect(screen.getByTestId('whats-new-cta').textContent).toBe('Explore Arena');
     // The fake surface's "Update now" CTA is gone: applying an update is the
     // real updater's job (UpdaterPopup), not this post-update card's.
     expect(screen.queryByRole('button', { name: 'Update now' })).toBeNull();
@@ -330,7 +330,7 @@ describe('WhatsNewPopup actions', () => {
     expect(screen.queryByTestId('whats-new-popup')).toBeNull();
   });
 
-  it('open-release bridges the highlight link and marks the highlight seen', async () => {
+  it('open-highlight bridges the highlight link and marks the highlight seen', async () => {
     renderCard(true);
 
     fireEvent.click(await screen.findByTestId('whats-new-cta'));
