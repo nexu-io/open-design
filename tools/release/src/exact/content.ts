@@ -2,7 +2,7 @@ import { createHash, createPrivateKey, createPublicKey, sign, verify } from "nod
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { parseReleaseVersion } from "@open-design/release";
-import { composeElectronCapsuleManifest, validateElectronCapsuleContent } from "@open-design/shell-electron/build/contracts";
+import { composeElectronCapsuleManifest, validateElectronCapsuleContent, validateElectronCapsuleRelease, assertElectronCapsuleReleaseManifest } from "@open-design/shell-electron/build/contracts";
 
 import {
   canonicalBytes,
@@ -308,6 +308,13 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
       await copyFile(manifest, destination);
       capsuleFiles.push(destination);
       artifacts.push(await describeFile(archive, "application/zip"));
+      const distribution = distributions.get("electron")!.find(value => value.target === scene.target)!;
+      const manifestDescription = await describeFile(destination), archiveDescription = await describeFile(archive);
+      distribution.capsule = validateElectronCapsuleRelease({ schemaVersion: 1,
+        manifest: { url: publicObjectUrl(String(prepared.artifactBaseUrl), destination), sha256: manifestDescription.sha256, size: manifestDescription.size },
+        archive: { url: publicObjectUrl(String(prepared.artifactBaseUrl), archive), sha256: archiveDescription.sha256, size: archiveDescription.size },
+      });
+      assertElectronCapsuleReleaseManifest(distribution.capsule, (await readObject(destination)).document, scene.target);
     }
   }
   const contentSource = await checkedFile(prepared.contentMetadata, "content metadata", request.contentMetadataFile), contentFile = join(documents, "content-metadata.json");

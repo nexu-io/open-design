@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
+import { verifyDocument } from "@open-design/standalone";
 
 import { prepareContent, finalizeContent } from "../src/exact/content.ts";
 
@@ -104,6 +105,18 @@ describe("exact release control", () => {
       expect(metadata.document.distributions[0].updater == null).toBe(shellType === "terminal");
       expect(finalized.requiredAcceptances[0].updater == null).toBe(shellType === "terminal");
       expect(finalized.documents.some((file: { file: string }) => file.file.endsWith("capsule-darwin-arm64.json"))).toBe(shellType === "electron");
+      if (shellType === "electron") {
+        const capsule = metadata.document.distributions[0].capsule;
+        const manifestBytes = await readFile(join(finalDirectory, "documents", "capsule-darwin-arm64.json"));
+        expect(capsule).toEqual({ schemaVersion: 1,
+          manifest: { url: `${prepareRequest.artifactBaseUrl}/capsule-darwin-arm64.json`, sha256: digest(manifestBytes), size: manifestBytes.byteLength },
+          archive: { url: `${prepareRequest.artifactBaseUrl}/capsule-darwin-arm64-${digest(capsuleBytes)}.zip`, sha256: digest(capsuleBytes), size: capsuleBytes.byteLength },
+        });
+        expect(() => verifyDocument(metadata, { "release-test": keys.publicKey })).not.toThrow();
+        const tampered = structuredClone(metadata);
+        tampered.document.distributions[0].capsule.archive.sha256 = "e".repeat(64);
+        expect(() => verifyDocument(tampered, { "release-test": keys.publicKey })).toThrow("signature");
+      } else expect(metadata.document.distributions[0]).not.toHaveProperty("capsule");
     } finally {
       if (previous.key == null) delete process.env.OD_EXACT_ED25519_PRIVATE_KEY; else process.env.OD_EXACT_ED25519_PRIVATE_KEY = previous.key;
       if (previous.keyId == null) delete process.env.OD_EXACT_SIGNING_KEY_ID; else process.env.OD_EXACT_SIGNING_KEY_ID = previous.keyId;

@@ -1,4 +1,4 @@
-import { compareVersions } from "@open-design/standalone";
+import { compareVersions, type ArtifactReference } from "@open-design/standalone";
 
 export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v3" as const;
 export type ElectronCapsuleTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
@@ -14,6 +14,36 @@ export type ElectronCapsuleManifest = Readonly<{
 }>;
 export type ElectronCapsuleContent = Readonly<Pick<ElectronCapsuleManifest,
   "schemaVersion" | "protocol" | "target" | "entrypoint" | "archive">>;
+
+/** Electron metadata binds both objects; compatibility has one authority in
+ * the referenced, independently signed manifest, never a second latest feed. */
+export type ElectronCapsuleRelease = Readonly<{
+  schemaVersion: 1;
+  manifest: Readonly<ArtifactReference>;
+  archive: Readonly<ArtifactReference>;
+}>;
+
+export function validateElectronCapsuleRelease(input: unknown): ElectronCapsuleRelease {
+  const value = record(input, ["schemaVersion", "manifest", "archive"]);
+  if (value.schemaVersion !== 1) throw new Error("unsupported Capsule release binding");
+  const reference = (input: unknown): Readonly<ArtifactReference> => {
+    const ref = record(input, ["url", "sha256", "size"]);
+    if (typeof ref.url !== "string" || typeof ref.size !== "number" || !Number.isSafeInteger(ref.size) || ref.size <= 0) throw new Error("invalid Capsule release reference");
+    const url = new URL(ref.url);
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.hash) throw new Error("invalid Capsule release URL");
+    return Object.freeze({ url: ref.url, sha256: digest(ref.sha256), size: ref.size });
+  };
+  return Object.freeze({ schemaVersion: 1, manifest: reference(value.manifest), archive: reference(value.archive) });
+}
+
+/** Call after authenticating the exact manifest bytes through Standalone. */
+export function assertElectronCapsuleReleaseManifest(binding: ElectronCapsuleRelease, input: unknown, target: ElectronCapsuleTarget): ElectronCapsuleManifest {
+  const release = validateElectronCapsuleRelease(binding), manifest = validateElectronCapsuleManifest(input);
+  if (manifest.target !== target || manifest.archive.sha256 !== release.archive.sha256 || manifest.archive.size !== release.archive.size) {
+    throw new Error("Capsule release manifest escaped its exact distribution binding");
+  }
+  return manifest;
+}
 
 function record(input: unknown, keys: readonly string[]): Record<string, unknown> {
   if (input == null || typeof input !== "object" || Array.isArray(input)

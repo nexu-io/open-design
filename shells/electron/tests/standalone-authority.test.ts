@@ -407,6 +407,8 @@ describe("Electron production Standalone authority", () => {
       const shellArtifact = Buffer.from("signed shell-only electron distribution");
       const shellArtifactUrl = `${releaseOrigin}/electron-v020.dmg`;
       const shellMetadataUrl = `${releaseOrigin}/electron-v020.json`;
+      const capsuleManifest = await readFile(capsule.manifestFile), capsuleArchive = await readFile(capsule.archiveFile);
+      const capsuleManifestUrl = `${releaseOrigin}/capsule-manifest.json`, capsuleArchiveUrl = `${releaseOrigin}/capsule.zip`;
       const shellDocument: StandaloneShellMetadata = {
         schemaVersion: 1,
         channel: manifest.channel,
@@ -419,6 +421,10 @@ describe("Electron production Standalone authority", () => {
           artifact: { url: shellArtifactUrl, sha256: createHash("sha256").update(shellArtifact).digest("hex"), size: shellArtifact.byteLength, mediaType: "application/x-apple-diskimage" },
           platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: 'identifier "io.nexu.electron-foundation"', teamIdentifier: "adhoc" },
           updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
+          ...{ capsule: { schemaVersion: 1,
+            manifest: { url: capsuleManifestUrl, sha256: createHash("sha256").update(capsuleManifest).digest("hex"), size: capsuleManifest.byteLength },
+            archive: { url: capsuleArchiveUrl, sha256: createHash("sha256").update(capsuleArchive).digest("hex"), size: capsuleArchive.byteLength },
+          } },
         }],
       };
       const shellMetadata = Buffer.from(canonicalJson(signStandaloneShellMetadata(shellDocument, [{ keyId: "release", privateKey: keys.privateKey }])));
@@ -431,6 +437,8 @@ describe("Electron production Standalone authority", () => {
       releases.set(installation.update.channelHeadUrl, shellOnlyHead);
       releases.set(shellMetadataUrl, shellMetadata);
       releases.set(shellArtifactUrl, shellArtifact);
+      releases.set(capsuleManifestUrl, capsuleManifest);
+      releases.set(capsuleArchiveUrl, capsuleArchive);
       const checkedShell = await prepared.updater.invoke("check");
       if (checkedShell.outcome !== "accepted") throw new Error(`shell-only check failed: ${JSON.stringify(checkedShell)}`);
       expect(checkedShell).toMatchObject({ outcome: "accepted", snapshot: { state: "available", candidateId: shellDocument.releaseVersion } });

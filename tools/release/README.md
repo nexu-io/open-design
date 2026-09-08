@@ -55,6 +55,9 @@ that input; the public Shell builder still verifies its target, digest and size.
 Without these inputs the cold scene path builds its baseline Capsule locally.
 This input path does not itself establish a cache hit or authorize reuse: the
 planner and convergence cache must bind the source recipe to verified artifacts.
+Final Electron metadata binds the published Capsule manifest and archive by
+URL, SHA-256 and size. Compatibility is declared once in the signed Capsule
+manifest; no separate Capsule latest pointer is published.
 
 Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
 artifact / convergence ZIP. It preserves native executable permissions,

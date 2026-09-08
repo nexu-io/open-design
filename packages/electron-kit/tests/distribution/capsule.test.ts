@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { buildElectronCapsuleContent } from "@/distribution/capsule.js";
-import { assertElectronCapsuleCompatibility, composeElectronCapsuleManifest, validateElectronCapsuleContent, validateElectronCapsuleManifest } from "@/contracts/capsule.js";
+import { assertElectronCapsuleCompatibility, assertElectronCapsuleReleaseManifest, composeElectronCapsuleManifest, validateElectronCapsuleContent, validateElectronCapsuleManifest, validateElectronCapsuleRelease } from "@/contracts/capsule.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -17,6 +17,26 @@ async function fixture() {
   return { root, entryPath, outputRoot: join(root, "first"), target: "darwin-arm64" as const };
 }
 describe("independent Capsule build", () => {
+  it("binds signed release references to one target manifest without duplicating its compatibility", () => {
+    const release = validateElectronCapsuleRelease({ schemaVersion: 1,
+      manifest: { url: "https://release.invalid/capsule.json", sha256: "a".repeat(64), size: 500 },
+      archive: { url: "https://release.invalid/capsule.zip", sha256: "b".repeat(64), size: 100 },
+    });
+    const manifest = composeElectronCapsuleManifest({ content: {
+      schemaVersion: 1, protocol: "electron-capsule-v3", target: "darwin-arm64", entrypoint: "capsule.cjs",
+      archive: { sha256: release.archive.sha256, size: release.archive.size, treeSha256: "c".repeat(64) },
+    }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
+    expect(assertElectronCapsuleReleaseManifest(release, manifest, "darwin-arm64")).toEqual(manifest);
+    expect(release).not.toHaveProperty("provides");
+    expect(() => assertElectronCapsuleReleaseManifest(release, manifest, "win32-x64")).toThrow("binding");
+    expect(() => assertElectronCapsuleReleaseManifest(release, { ...manifest, archive: { ...manifest.archive, size: 101 } }, "darwin-arm64")).toThrow("binding");
+    expect(() => assertElectronCapsuleReleaseManifest(release, { ...manifest, archive: { ...manifest.archive, sha256: "d".repeat(64) } }, "darwin-arm64")).toThrow("binding");
+    for (const invalid of [{ ...release, schemaVersion: 2 }, { ...release, latest: "https://release.invalid/latest" },
+      ...["file:///capsule.zip", "https://user:password@release.invalid/capsule.zip", "https://release.invalid/capsule.zip#fragment"].map(url => ({ ...release, archive: { ...release.archive, url } })),
+      { ...release, manifest: { ...release.manifest, sha256: "wrong" } }, { ...release, archive: { ...release.archive, size: 0 } }]) {
+      expect(() => validateElectronCapsuleRelease(invalid)).toThrow();
+    }
+  });
   it("binds deterministic module bytes and tree separately from compatibility metadata", async () => {
     const input = await fixture(), first = await buildElectronCapsuleContent(input);
     const second = await buildElectronCapsuleContent({ ...input, outputRoot: join(input.root, "second") });

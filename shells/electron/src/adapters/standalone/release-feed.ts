@@ -6,12 +6,16 @@ import {
   sha256Hex,
   verifyStandaloneChannelHead,
   verifyStandaloneShellMetadata,
+  verifyDocument,
+  type SignedDocument,
   type SignedStandaloneChannelHead,
   type SignedStandaloneShellMetadata,
   type StandaloneShellDistribution,
   type StandaloneShellIdentity,
   type StandaloneUpdateSource,
 } from "@open-design/standalone";
+import { assertElectronCapsuleReleaseManifest, validateElectronCapsuleRelease,
+  type ElectronCapsuleManifest, type ElectronCapsuleRelease } from "@open-design/electron-kit/contracts";
 
 import type { ElectronStandaloneTarget } from "./installation.js";
 
@@ -30,7 +34,7 @@ export function resolveElectronChannelHeadOverride(argv: readonly string[] = pro
 
 export type ElectronReleaseExactCandidate = Readonly<{
   candidateId: string;
-  distribution: StandaloneShellDistribution;
+  distribution: StandaloneShellDistribution & Readonly<{ capsule: ElectronCapsuleRelease }>;
   metadata: SignedStandaloneShellMetadata;
 }>;
 
@@ -135,7 +139,19 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
     if (order === 0 && (distribution.shell.version !== this.options.shell.version || distribution.shell.buildHash !== this.options.shell.buildHash)) {
       throw new Error("persisted Electron immutable exact release collides with the installed Shell identity");
     }
-    return Object.freeze({ candidateId: candidate.candidateId, distribution: structuredClone(distribution), metadata: structuredClone(candidate.metadata) });
+    const capsule = validateElectronCapsuleRelease((distribution as StandaloneShellDistribution & { capsule?: unknown }).capsule);
+    return Object.freeze({ candidateId: candidate.candidateId, distribution: { ...structuredClone(distribution), capsule }, metadata: structuredClone(candidate.metadata) });
+  }
+
+  /** Resolve the already selected lane, not latest again. Compatibility and
+   * exact archive identity are authoritative in this authenticated manifest. */
+  async readCapsule(candidate: ElectronReleaseExactCandidate): Promise<SignedDocument<ElectronCapsuleManifest>> {
+    const exact = this.validateCandidate(candidate), binding = exact.distribution.capsule;
+    const envelope = json<SignedDocument<ElectronCapsuleManifest>>(await bytes(this.options.fetch ?? globalThis.fetch,
+      binding.manifest.url, "Electron Capsule manifest", binding.manifest), "Electron Capsule manifest");
+    verifyDocument(envelope, this.options.trustedKeys);
+    assertElectronCapsuleReleaseManifest(binding, envelope.document, this.options.target);
+    return structuredClone(envelope);
   }
 
   async download(candidate: ElectronReleaseExactCandidate): Promise<Readonly<{ path: string; candidate: ElectronReleaseExactCandidate }>> {

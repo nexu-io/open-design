@@ -87,6 +87,10 @@ separately from Closure seeds. The physical main verifies that installed baselin
 against installation trust, target, and carrier compatibility before materializing
 and executing it; no statically bundled Capsule fallback remains. Online Capsule
 selection is a separate integration step, not implied by baseline startup.
+Electron release metadata also signs exact Capsule manifest/archive references.
+The feed validates those references and resolves the manifest from the already
+selected candidate, without rereading latest. Signature, target and archive
+binding checks precede consumption; compatibility remains in the manifest.
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.
