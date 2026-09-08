@@ -1,0 +1,5 @@
+.root { display: contents; }
+.entry { position: fixed; right: 16px; bottom: 88px; z-index: 101; display: block; min-width: 24px; min-height: 24px; }
+.overlayRoot { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+.layer { position: fixed; display: block; overflow: auto; pointer-events: auto; }
+.entry[hidden], .layer[hidden] { display: none; }

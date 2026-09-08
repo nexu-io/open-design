@@ -87,6 +87,9 @@ import {
   type SettingsHighlight,
 } from './components/SettingsDialog';
 import { PrivacyConsentModal } from './components/PrivacyConsentModal';
+import { TestCampaignModal } from './components/TestCampaignModal';
+import { ProductionCampaignModal } from './components/ProductionCampaignModal';
+import { ProductionCampaignHover } from './components/ProductionCampaignHover';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
@@ -5319,6 +5322,7 @@ function AppInner() {
           || amrLoginStatus?.user?.plan?.trim()
           || null
         }
+        amrAccountId={amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null}
         config={config}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}
@@ -5462,6 +5466,7 @@ function AppInner() {
               || amrLoginStatus?.user?.plan?.trim()
               || null
             }
+            amrAccountId={amrLoginStatus?.user?.id ?? amrLoginStatus?.credentialRevision ?? null}
             metricsConsent={config.telemetry?.metrics === true}
             installationId={config.installationId}
           />
@@ -5483,6 +5488,18 @@ function AppInner() {
           dockLine
         />
       )}
+      <TestCampaignModal
+        authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+        sessionSubject={amrLoginStatus?.user?.id ?? null}
+      />
+      <ProductionCampaignModal
+        authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+        sessionSubject={amrLoginStatus?.user?.id ?? null}
+      />
+      <ProductionCampaignHover
+        authenticated={isAmrSessionAuthenticated(amrLoginStatus)}
+        sessionSubject={amrLoginStatus?.user?.id ?? null}
+      />
       <TooltipLayer />
       <UpdateDialog />
       {/* Mounted at shell level, outside the route views, so a survey armed by

@@ -97,6 +97,7 @@ import {
   workspaceAnalyticsDimensions,
 } from '../analytics/workspace';
 import { WorkbenchCampaignBadge } from './WorkbenchCampaignBadge';
+import { canRenderProductionCampaignBadge, ProductionCampaignBadge } from './ProductionCampaignBadge';
 import { workspaceChromeAccountActionsHost } from './workspaceChromeActions';
 
 const REPO_URL = 'https://github.com/nexu-io/open-design';
@@ -1110,6 +1111,7 @@ export function WorkspaceTopRightAccountCluster({
   workspaceContextLoading,
   amrLoggedIn = null,
   amrAccountPlan = null,
+  amrAccountId = null,
   metricsConsent = false,
   installationId,
 }: {
@@ -1121,6 +1123,7 @@ export function WorkspaceTopRightAccountCluster({
   workspaceContextLoading?: boolean;
   amrLoggedIn?: boolean | null;
   amrAccountPlan?: string | null;
+  amrAccountId?: string | null;
   metricsConsent?: boolean;
   installationId?: string | null;
 }) {
@@ -1165,14 +1168,19 @@ export function WorkspaceTopRightAccountCluster({
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
-      leadingSlot={campaignAudience ? (
-        <WorkbenchCampaignBadge
-          audience={campaignAudience}
-          page="project"
-          metricsConsent={metricsConsent}
-          installationId={installationId}
-          loggedIn={amrLoggedIn}
-        />
+      leadingSlot={campaignAudience || canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? (
+        <>
+          {campaignAudience ? (
+            <WorkbenchCampaignBadge
+              audience={campaignAudience}
+              page="project"
+              metricsConsent={metricsConsent}
+              installationId={installationId}
+              loggedIn={amrLoggedIn}
+            />
+          ) : null}
+          {canRenderProductionCampaignBadge(amrLoggedIn === true, amrAccountId) ? <ProductionCampaignBadge authenticated sessionSubject={amrAccountId} /> : null}
+        </>
       ) : null}
       updaterSlot={updaterSlot}
       onOpenSettings={onOpenSettings}
