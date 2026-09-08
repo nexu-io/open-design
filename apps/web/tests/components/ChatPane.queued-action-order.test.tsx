@@ -17,8 +17,6 @@ const translations: Record<string, string> = {
   'chat.queuedReorder': 'Drag to reorder',
   'chat.queuedEdit': 'Edit',
   'chat.queuedSteer': 'Steer',
-  'chat.queuedSteerInterrupts': 'Steer — interrupts the current run',
-  'chat.send': 'Send',
   'chat.comments.remove': 'Remove',
 };
 
@@ -74,7 +72,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function renderQueuedStrip(options: { steerable: boolean }) {
+function renderQueuedStrip(options: { sendable: boolean } = { sendable: true }) {
   return render(
     <ChatPane
       messages={[]}
@@ -87,8 +85,7 @@ function renderQueuedStrip(options: { steerable: boolean }) {
         { id: 'queued-2', prompt: 'Second queued follow-up' },
       ]}
       onRemoveQueuedSend={vi.fn()}
-      onSendQueuedNow={vi.fn()}
-      onSteerQueuedSend={options.steerable ? vi.fn() : undefined}
+      onSendQueuedNow={options.sendable ? vi.fn() : undefined}
       onUpdateQueuedSend={vi.fn()}
       onReorderQueuedSends={vi.fn()}
       onEnsureProject={async () => 'project-1'}
@@ -115,33 +112,42 @@ function actionLabelsPerRow(container: HTMLElement): string[][] {
  * OPEND-2715. The queued row's three actions read left to right as
  * steer-the-conversation, then edit, then delete.
  *
- * The order is an escalation order, and it has to be stable across both faces
- * of the third button: the leading slot is always "act on this now" — whether
- * that means interrupting the running turn ("steer") or plain "send now" when
- * there is no run to interrupt — and the destructive one is always last, so it
- * is never the button the pointer arrives at first.
+ * The order is an escalation order: the leading slot is always "act on this
+ * now" and the destructive one is always last, so delete is never the button
+ * the pointer arrives at first.
+ *
+ * The leading slot used to have two faces — "steer" while a run was
+ * interruptible, plain "send now" otherwise — and this file's job was partly to
+ * prove the slot did not move between them. Product merged the faces on
+ * 2026-09-08 ("引导对话就是原本的立即发送,只不过换了个名字跟 codex 对齐"), so
+ * the same order now has to hold with the host offering the handler or not:
+ * `onSteerQueuedSend` is gone, and a queued row reads the same either way.
+ * `tests/components/chat/queue-steer-single-button.test.tsx` owns what that one
+ * button is called; this file only owns where it sits.
  */
 describe('queued send row action order', () => {
-  it('leads with steer when a run is interruptible', () => {
-    const { container } = renderQueuedStrip({ steerable: true });
+  it('leads with steer, whatever the run state', () => {
+    const { container } = renderQueuedStrip();
 
     expect(actionLabelsPerRow(container)).toEqual([
-      ['Steer — interrupts the current run', 'Edit', 'Remove'],
-      ['Steer — interrupts the current run', 'Edit', 'Remove'],
+      ['Steer', 'Edit', 'Remove'],
+      ['Steer', 'Edit', 'Remove'],
     ]);
   });
 
-  it('leads with plain send-now when there is no run to steer', () => {
-    const { container } = renderQueuedStrip({ steerable: false });
+  it('still leads with steer when the host offers no handler at all', () => {
+    // The button is disabled in this state, not renamed and not reordered —
+    // the escalation order is a layout fact, not a run-state one.
+    const { container } = renderQueuedStrip({ sendable: false });
 
     expect(actionLabelsPerRow(container)).toEqual([
-      ['Send', 'Edit', 'Remove'],
-      ['Send', 'Edit', 'Remove'],
+      ['Steer', 'Edit', 'Remove'],
+      ['Steer', 'Edit', 'Remove'],
     ]);
   });
 
   it('puts the steer button first and the destructive one last in the DOM', () => {
-    const { container } = renderQueuedStrip({ steerable: true });
+    const { container } = renderQueuedStrip();
 
     const actions = container.querySelector('.chat-queued-send-actions');
     expect(actions?.firstElementChild?.getAttribute('data-testid')).toBe(
@@ -150,12 +156,13 @@ describe('queued send row action order', () => {
     expect(actions?.lastElementChild?.getAttribute('aria-label')).toBe('Remove');
   });
 
-  it('puts the send-now button first when steering is unavailable', () => {
-    const { container } = renderQueuedStrip({ steerable: false });
+  it('never renders the retired icon-only send-now face', () => {
+    const { container } = renderQueuedStrip({ sendable: false });
 
+    expect(container.querySelector('[data-testid="chat-queued-send-now"]')).toBeNull();
     const actions = container.querySelector('.chat-queued-send-actions');
     expect(actions?.firstElementChild?.getAttribute('data-testid')).toBe(
-      'chat-queued-send-now',
+      'chat-queued-send-steer',
     );
     expect(actions?.lastElementChild?.getAttribute('aria-label')).toBe('Remove');
   });

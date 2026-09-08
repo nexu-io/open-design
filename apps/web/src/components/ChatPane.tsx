@@ -624,17 +624,16 @@ interface Props {
   onRemoveQueuedSend?: (id: string) => void;
   onUpdateQueuedSend?: (id: string, update: QueuedSendUpdate) => void;
   onReorderQueuedSends?: (orderedIds: string[]) => void;
-  onSendQueuedNow?: (id: string) => void;
   /**
-   * B11 「引导对话」: interrupt the turn that is still running and send this
-   * queued item straight away (OPEND-2602). Supplied whenever the host has a
-   * live run on this conversation — interrupting works on every agent, so this
-   * is NOT gated on the agent's `promptInputFormat`. Absent means there is
-   * nothing to interrupt, and the queue row falls back to `onSendQueuedNow`
-   * under its own name.
+   * B11 「引导对话」: send this queued item now. When a turn is still running
+   * the host stops it first and sends this item as the next turn (OPEND-2602);
+   * when nothing is running it just sends. That branch is the host's, and it is
+   * the same one call either way — which is exactly why the queue row shows one
+   * button under one name (product ruling 2026-09-08).
    */
-  onSteerQueuedSend?: (id: string) => void;
-  /** Why steering is unavailable right now, shown on the fallback button. */
+  onSendQueuedNow?: (id: string) => void;
+  /** Why steering is unavailable right now. Threaded but not rendered — see
+   *  `QueuedSendStrip`'s docblock for why it is kept. */
   steerBlockedReason?: string | null;
   // Names that exist in the project folder. Tool cards and chips use this
   // set to decide whether a path can be opened as a tab.
@@ -1287,7 +1286,6 @@ export function ChatPane({
   onUpdateQueuedSend,
   onReorderQueuedSends,
   onSendQueuedNow,
-  onSteerQueuedSend,
   steerBlockedReason,
   onRequestOpenFile,
   onRequestPluginDetails,
@@ -4675,20 +4673,13 @@ export function ChatPane({
                   }
                 : undefined}
               onReorder={onReorderQueuedSends}
+              /* One button, one event. The row's leading action used to report
+                 `send_now` or `steer` depending on which of the two faces was
+                 showing; the faces merged (2026-09-08 ruling), so the survivor
+                 reports `'steer'` — the name the button now carries. This
+                 surface no longer emits `send_now` at all. */
               onSendNow={onSendQueuedNow
                 ? (id) => {
-                    trackMessageQueueClick(analytics.track, {
-                      page_name: 'chat_panel',
-                      area: 'message_queue',
-                      element: 'send_now',
-                      project_id: projectId ?? '',
-                      queue_length: queuedItems.length,
-                    });
-                    onSendQueuedNow(id);
-                  }
-                : undefined}
-              onSteer={onSteerQueuedSend
-                ? (item) => {
                     trackMessageQueueClick(analytics.track, {
                       page_name: 'chat_panel',
                       area: 'message_queue',
@@ -4696,7 +4687,7 @@ export function ChatPane({
                       project_id: projectId ?? '',
                       queue_length: queuedItems.length,
                     });
-                    onSteerQueuedSend(item.id);
+                    onSendQueuedNow(id);
                   }
                 : undefined}
               steerBlockedReason={steerBlockedReason ?? null}
@@ -5952,7 +5943,6 @@ function queuedTipPlacement(
   onRemove,
   onReorder,
   onSendNow,
-  onSteer,
   steerBlockedReason,
 }: {
   containerRef?: MutableRefObject<HTMLDivElement | null>;
@@ -5961,22 +5951,22 @@ function queuedTipPlacement(
   onEdit?: (item: QueuedSendItem) => void;
   onRemove?: (id: string) => void;
   onReorder?: (orderedIds: string[]) => void;
-  onSendNow?: (id: string) => void;
   /**
-   * B11 「引导对话」. Present ONLY when there is a live run on this conversation
-   * to interrupt. The parent owns that judgement — the strip must never infer
-   * it, or the button ends up promising an interruption that never happens.
+   * Send this queued item now. Rendered as the row's leading 「引导对话」
+   * button — one button, always that name (product ruling 2026-09-08; see the
+   * long note at the render site). The host decides whether "now" means
+   * "interrupt the turn in flight first"; the strip never infers it.
    */
-  onSteer?: (item: QueuedSendItem) => void;
+  onSendNow?: (id: string) => void;
   /**
    * Why steering is unavailable right now (e.g. 「当前 agent 不支持中途插话」).
    *
-   * NOT rendered. It used to be the fallback button's `title` / `data-tooltip`,
-   * which is that button's only visible name — so the one string on screen was
-   * answering "why is this not 引导对话" while the button's actual job (stop the
-   * running turn, send this row as its own turn) went unnamed. The name slot is
-   * back to naming the button; where this explanation belongs is a UI-placement
-   * decision that has not been made, so it stays threaded rather than deleted.
+   * NOT rendered, and has no producer anywhere in the repo — it was already
+   * dormant before the two button faces were merged. It is kept deliberately:
+   * where this explanation belongs on screen is a UI-placement decision that
+   * has not been made, and `tests/i18n/queue-steer-terminology.test.ts` pins
+   * the sibling copy keys against the day it gets placed. Deleting it is its
+   * own decision, not a side effect of merging the button.
    */
   steerBlockedReason?: string | null;
 }) {
@@ -6102,66 +6092,63 @@ function queuedTipPlacement(
                 <span className="chat-queued-send-title">{summarizeQueuedPrompt(item, t)}</span>
               </div>
               {/* 三颗按的是**升级顺序**:先「对现在这一轮动手」,最后才是「删掉」
-                  (OPEND-2715)。领头那一颗永远是「立刻让它生效」—— 有在跑的一轮
-                  时是「引导对话」(掐掉重发),没有时退回普通的「立即发送」;两副
-                  面孔换的是名字和语义,不换位置,所以这一格的落点是稳的。
+                  (OPEND-2715)。领头那一颗永远是「引导对话」,落点是稳的。
                   「移除」压在最后:指针从行末扫过来,第一个碰到的不该是不可逆的那颗。
                   「编辑」用的是稿子的**魔杖**,不是铅笔。 */}
               <div className="chat-queued-send-actions">
                 {/* 领头这一颗 —— 稿子标的是「引导对话」(B11),排在这一组的
-                    最前面是 OPEND-2715 的裁决。产品裁决(OPEND-2602,
-                    2026-09-03)之后它干的事是:**中断正在跑的那一轮,然后立刻把这条
-                    发出去**。原来那条「不打断、把消息写进 agent 子进程还开着的 stdin」
-                    的路已经作废 —— 27 个 runtime 里只有两个的 CLI 中途还读 stdin,
-                    而实测连真 claude 也不处理轮次中途写进去的 user 帧。
+                    最前面是 OPEND-2715 的裁决。
 
-                    所以这颗只由「此刻有没有一轮可中断」决定:
-                      · `onSteer` 有值 = 当前会话有一轮在跑 → 「引导对话」。
-                      · 没有 → 退回普通的「立即发送」,**连名字一起退回去**。
-                    这里不再看 agent 能不能中途插话:中断对所有 agent 都成立。
-                    也不再看这一行带不带附件:中断 + 重发走的是完整的发送路径,
-                    附件和批注原样跟着走。
+                    ## 为什么只有一颗
 
-                    引导态**带文字标签**(稿子 `.qops button.mod-steer` 的 `<svg/><span>`)。
-                    这不是装饰:两副面孔永远不同时出现(下面是二选一的三元式),
-                    所以用户没有「和旁边那颗比一比」的机会 —— 图标一样时他无从知道
-                    按下去是「排在后面」还是「掐掉这一轮重来」。让这一行自己把名字说出来,
-                    是唯一在屏幕上分得开两条路的办法。退回态仍旧只有图标:
-                    它就是普通的「发送」,和编辑 / 移除同级。
+                    这里曾经是个二选一的三元式:有一轮可中断时画「引导对话」,
+                    没有时退回一颗只有图标的「立即发送」。产品 2026-09-08 当面
+                    裁掉了那个分叉:
 
-                    引导态的 hover 三处说的是它按下去干的事里**最要紧**的那一半 ——
-                    会中断当前运行。它按名字开头(`chat.queuedSteerInterrupts` 各语言
-                    都以可见标签起手),所以无障碍名仍旧含着屏幕上那行字。
-                    退回态没有可见文字,tooltip 就是它唯一的名字,那一格只写「发送」。 */}
-                {onSteer ? (
-                  <button
-                    type="button"
-                    className="chat-queued-send-action chat-queued-send-action-steer chat-queued-send-tooltip od-tooltip"
-                    title={t('chat.queuedSteerInterrupts')}
-                    data-tooltip={t('chat.queuedSteerInterrupts')}
-                    data-tooltip-placement={queuedTipPlacement(index, 'top')}
-                    aria-label={t('chat.queuedSteerInterrupts')}
-                    data-testid="chat-queued-send-steer"
-                    onClick={() => onSteer(item)}
-                  >
-                    <Icon name="arrow-up" size={13} />
-                    <span className="chat-queued-send-action-label">{t('chat.queuedSteer')}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="chat-queued-send-action chat-queued-send-tooltip od-tooltip"
-                    title={t('chat.send')}
-                    data-tooltip={t('chat.send')}
-                    data-tooltip-placement={queuedTipPlacement(index, 'top')}
-                    aria-label={t('chat.send')}
-                    data-testid="chat-queued-send-now"
-                    onClick={() => onSendNow?.(item.id)}
-                    disabled={!onSendNow}
-                  >
-                    <Icon name="arrow-up" size={13} />
-                  </button>
-                )}                {onEdit ? (
+                      「引导对话就是原本的立即发送啊,只不过我们换了个名字
+                        跟 codex 客户端对齐了下」
+
+                    照着代码核过,这话是字面成立的 —— `ProjectView` 喂给两边的
+                    实参**是同一个函数** `sendQueuedChatSendNow`,它自己按
+                    `currentConversationBusy` 分支:在跑就先掐掉那一轮再发,
+                    没在跑就直接发。两副面孔换掉的只有名字、一个门
+                    (`canSteerCurrentTurn`)和埋点的 `element` 值,按下去发生的
+                    事一模一样。门和退回态因此一起撤掉。
+
+                    交付稿(`729fa43ce7:docs/design/chat-panel-next.html` 组件 17
+                    「Queue」)里也只有这一颗:三行队列样例每一行都是
+                    `<button class="mod-tip-e mod-steer" aria-label="引导对话"
+                    data-tip="引导对话"><svg/><span>引导对话</span></button>`,
+                    那颗无标签的图标键**稿子里根本不存在**。
+
+                    ## 名字
+
+                    带文字标签是稿子的 `.qops button.mod-steer`(`<svg/><span>`),
+                    不是装饰:队列行里三颗按钮挨着,只有它把自己干的事写在脸上。
+                    三处名字(`title` / `data-tooltip` / `aria-label`)按稿子的
+                    `data-tip` 逐字收敛回「引导对话」本身 —— 屏幕上写着一句、
+                    读屏念出另一句是 WCAG 2.5.3(Label in Name)那一条。
+                    早先挂在 hover 上的 `chat.queuedSteerInterrupts`
+                    (「会中断当前运行」)是稿子之外后加的,随这次收敛退场。
+
+                    这里不看 agent 能不能中途插话(中断对所有 agent 都成立),
+                    也不看这一行带不带附件:中断 + 重发走的是完整发送路径,
+                    附件和批注原样跟着走。 */}
+                <button
+                  type="button"
+                  className="chat-queued-send-action chat-queued-send-action-steer chat-queued-send-tooltip od-tooltip"
+                  title={t('chat.queuedSteer')}
+                  data-tooltip={t('chat.queuedSteer')}
+                  data-tooltip-placement={queuedTipPlacement(index, 'top')}
+                  aria-label={t('chat.queuedSteer')}
+                  data-testid="chat-queued-send-steer"
+                  onClick={() => onSendNow?.(item.id)}
+                  disabled={!onSendNow}
+                >
+                  <Icon name="arrow-up" size={13} />
+                  <span className="chat-queued-send-action-label">{t('chat.queuedSteer')}</span>
+                </button>
+                {onEdit ? (
                   <button
                     type="button"
                     className="chat-queued-send-action chat-queued-send-tooltip od-tooltip"
