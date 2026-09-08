@@ -220,13 +220,13 @@ describe("exact Electron release topology", () => {
       "--end-user-distribution", "false", "--stable-authorized", "false", "--receipt", policyReceipt]);
     await writeFile(publishReceipt, JSON.stringify({ schemaVersion: 1, operation: "exact.publish", profile: "exact-validation", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit, target, requiredAcceptances: [required] }));
 
-    const installedFiles = await Promise.all(["host.mjs", "supervisor.mjs", "content.json", "trust.json", "seed.bin", "updater-provider.mjs"].map(async (file) => {
+    const installedFiles = await Promise.all(["host.mjs", "supervisor.mjs", "content.json", "trust.json", "seed.bin", "updater-provider.mjs", "capsule-manifest.json", "capsule.zip"].map(async (file) => {
       const body = Buffer.from(`installed:${file}`);
       await writeFile(join(installedRoot, file), body);
       return { file, sha256: createHash("sha256").update(body).digest("hex"), size: body.length };
     }));
     await writeFile(join(installedRoot, "standalone-installation.json"), JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       channel: "betahyx",
       releaseVersion: "1.2.3-betahyx.4",
       target: "darwin-arm64",
@@ -235,6 +235,7 @@ describe("exact Electron release topology", () => {
       supervisor: installedFiles[1],
       content: installedFiles[2],
       trust: installedFiles[3],
+      capsule: { manifest: installedFiles[6], archive: installedFiles[7] },
       seeds: [installedFiles[4]],
     }));
     const baseUserDataRoot = join(root, "user-data");

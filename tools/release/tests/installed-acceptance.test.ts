@@ -39,7 +39,7 @@ async function fixture() {
   const body = Buffer.from("installed payload");
   await writeFile(join(root, "payload.bin"), body);
   const file = { file: "payload.bin", sha256: createHash("sha256").update(body).digest("hex"), size: body.length };
-  const installation = { schemaVersion: 2, channel: policy.channel, releaseVersion: policy.releaseVersion, target: required.target, host: file, updaterProvider: file, supervisor: file, content: file, trust: file, seeds: [file] };
+  const installation = { schemaVersion: 3, channel: policy.channel, releaseVersion: policy.releaseVersion, target: required.target, host: file, updaterProvider: file, supervisor: file, content: file, trust: file, capsule: { manifest: file, archive: file }, seeds: [file] };
   await save("standalone-installation.json", installation);
   const events = ["startup.committed", "shutdown.complete"].map((event) => ({ attemptId: "attempt-1", event }));
   const runtimeLog = join(root, "runtime.jsonl");
@@ -101,6 +101,21 @@ it("requires a verified updater provider in the installed acceptance proof", asy
   const { updaterProvider: _removed, ...incomplete } = f.installation;
   await f.save("standalone-installation.json", incomplete);
   await expect(executeExactReleaseControl(f.input, f.output)).rejects.toThrow();
+});
+
+it.each(["manifest", "archive"])("requires verified installed Capsule %s bytes", async name => {
+  const f = await fixture();
+  await f.save("standalone-installation.json", { ...f.installation,
+    capsule: { ...f.installation.capsule, [name]: { ...f.installation.capsule.archive, sha256: "f".repeat(64) } } });
+  await expect(executeExactReleaseControl(f.input, f.output)).rejects.toThrow("binding mismatch");
+  await f.save("standalone-installation.json", { ...f.installation, capsule: {} });
+  await expect(executeExactReleaseControl(f.input, f.output)).rejects.toThrow("path is invalid");
+});
+
+it("rejects the retired pre-Capsule installation schema", async () => {
+  const f = await fixture();
+  await f.save("standalone-installation.json", { ...f.installation, schemaVersion: 2 });
+  await expect(executeExactReleaseControl(f.input, f.output)).rejects.toThrow("release identity mismatch");
 });
 
 it("rejects wrong release, duplicate topology, and policy mismatches", async () => {

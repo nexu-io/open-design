@@ -91,13 +91,17 @@ async function hotProof(input: JsonObject, published: JsonObject): Promise<JsonO
 async function electronProof(input: JsonObject, published: JsonObject, required: JsonObject): Promise<JsonObject> {
   const installationPath = join(input.installedRoot, "standalone-installation.json");
   const installation = await readObject(installationPath);
-  if (installation.schemaVersion !== 2 || installation.channel !== published.channel || installation.target !== required.target
+  if (installation.schemaVersion !== 3 || installation.channel !== published.channel || installation.target !== required.target
     || !nonempty(installation.releaseVersion) || (input.hotAcceptanceReceipt == null && installation.releaseVersion !== published.releaseVersion)) {
     throw new Error("installed Electron release identity mismatch");
   }
   if (!Array.isArray(installation.seeds)) throw new Error("installed Electron seeds are invalid");
   const files: JsonObject = {};
   for (const name of ["host", "updaterProvider", "supervisor", "content", "trust"]) files[name] = await installedFile(input.installedRoot, installation[name], name);
+  files.capsule = {
+    manifest: await installedFile(input.installedRoot, installation.capsule?.manifest, "Capsule manifest"),
+    archive: await installedFile(input.installedRoot, installation.capsule?.archive, "Capsule archive"),
+  };
   files.seeds = await Promise.all(installation.seeds.map((value: JsonObject) => installedFile(input.installedRoot, value, "seed")));
   if (!nonempty(input.runtimeLog)) throw new Error("installed Electron acceptance requires its runtime log");
   return {
