@@ -509,6 +509,14 @@ const AMR_RESUME_FAILURE_PATTERN = /"kind"\s*:\s*"resume_failed"/;
 const AMR_OPENCODE_EVENT_STREAM_RESUME_FAILURE_PATTERNS: RegExp[] = [
   /opencode SSE ended before prompt completion/i,
   /opencode event stream:\s*opencode SSE ended before prompt completion/i,
+  // vela 0.0.35 (#1847) split the compaction continuation onto its own
+  // request, and worded its EOF differently. Same bridge, same stream, same
+  // "the event stream ended before the prompt finished" — only the phase it
+  // died in is new, so it belongs to the same recoverable class. Until this
+  // line existed the wording matched nothing in the repository, so a
+  // compaction that died mid-continuation could not even reach the re-seed
+  // path and ended the conversation on a hard failure instead.
+  /opencode compaction continuation ended before prompt completion/i,
 ];
 
 /** True when vela's ACP output carries a resume_failed signal. */
