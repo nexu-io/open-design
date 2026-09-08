@@ -5699,6 +5699,14 @@ type InspectSpliceScan = {
   headOpenEnd: number;
   // Position in `out` at the first top-level `</head>` close tag, or -1.
   headCloseStart: number;
+  // Position in `out` immediately after the first top-level `<html ...>` open
+  // tag, or -1. A document may legally omit `<head>` entirely — the browser
+  // supplies one — and the block still has to land inside the document.
+  htmlOpenEnd: number;
+  // Position in `out` immediately after any leading doctype/processing
+  // instructions. Nothing may be spliced ahead of these: a style written before
+  // `<!doctype html>` reads back fine and is discarded by the next parse.
+  prologEnd: number;
   // Raw inner-text of every real `<style data-od-inspect-overrides>` element
   // discovered during the walk, in source order. Excludes occurrences inside
   // raw-text element contents and HTML comments. Hydration parses these
@@ -5719,6 +5727,9 @@ function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
   let outLen = 0;
   let headOpenEnd = -1;
   let headCloseStart = -1;
+  let htmlOpenEnd = -1;
+  let prologEnd = 0;
+  let sawContent = false;
   let i = 0;
   function emit(text: string): void {
     if (!text) return;
@@ -5744,6 +5755,8 @@ function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
       const end = source.indexOf('>', i + 2);
       const stop = end < 0 ? source.length : end + 1;
       emit(source.slice(i, stop));
+      // Only a doctype/PI that precedes every element counts as prolog.
+      if (!sawContent) prologEnd = outLen;
       i = stop;
       continue;
     }
@@ -5769,6 +5782,8 @@ function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
     }
     const name = openMatch[1]!.toLowerCase();
     const isSelfClose = /\/\s*>$/.test(tagText);
+    sawContent = true;
+    if (name === 'html' && htmlOpenEnd < 0) htmlOpenEnd = outLen + tagText.length;
     if (name === 'head' && headOpenEnd < 0) headOpenEnd = outLen + tagText.length;
     if (name === 'style' && styleTagIsInspectOverrideBlock(tagText)) {
       // Strip the entire override block. A self-closing <style /> is a
@@ -5810,7 +5825,7 @@ function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
     emit(tagText);
     i = tagEnd + 1;
   }
-  return { out: parts.join(''), headOpenEnd, headCloseStart, bodies };
+  return { out: parts.join(''), headOpenEnd, headCloseStart, htmlOpenEnd, prologEnd, bodies };
 }
 
 // Splice (or remove) the inspect overrides <style> block in an HTML
@@ -5827,7 +5842,7 @@ function stripInspectOverridesAndIndex(source: string): InspectSpliceScan {
 // browser. Pure string transform — no DOM, no parser dependency.
 export function applyInspectOverridesToSource(source: string, css: string): string {
   const trimmed = css.trim();
-  const { out, headOpenEnd, headCloseStart } = stripInspectOverridesAndIndex(source);
+  const { out, headOpenEnd, headCloseStart, htmlOpenEnd, prologEnd } = stripInspectOverridesAndIndex(source);
   if (!trimmed) return out;
   const block = `<style data-od-inspect-overrides>\n${trimmed}\n</style>\n`;
   if (headCloseStart >= 0) {
@@ -5836,7 +5851,15 @@ export function applyInspectOverridesToSource(source: string, css: string): stri
   if (headOpenEnd >= 0) {
     return out.slice(0, headOpenEnd) + block + out.slice(headOpenEnd);
   }
-  return block + out;
+  // No `<head>` in the source. It is still a document, so the block goes inside
+  // it: after `<html ...>` when there is one, and otherwise after any doctype.
+  // Prepending would put the style ahead of the doctype, where it reads back
+  // perfectly and is dropped by the first parse that follows — losing the
+  // user's styling on the next save with nothing to show for it.
+  if (htmlOpenEnd >= 0) {
+    return out.slice(0, htmlOpenEnd) + block + out.slice(htmlOpenEnd);
+  }
+  return out.slice(0, prologEnd) + block + out.slice(prologEnd);
 }
 
 function anchorStateLabel(state: PreviewCommentAnchorState): string {
