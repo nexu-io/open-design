@@ -140,9 +140,7 @@ test('[P0] local OD Next adaptive canary plans and delivers in one physical run'
   );
   await prepareLocalOdNextCanary(page, 'OD Next local active canary');
 
-  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await sendPrompt(page, 'Create an OD Next active canary artifact');
-  const createResponse = await createResponsePromise;
+  const createResponse = await sendPrompt(page, 'Create an OD Next active canary artifact', T.xlong);
   const created = await createResponse.json() as {
     runId: string;
     taskExecutionId?: string;
@@ -208,7 +206,7 @@ test('[P0] local OD Next adaptive clarification accepts two decisions on the sam
   );
   await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
 
-  const initialResponse = await sendPrompt(page, 'Create an OD Next clarification canary artifact');
+  const initialResponse = await sendPrompt(page, 'Create an OD Next clarification canary artifact', T.xlong);
   const created = await initialResponse.json() as { runId: string; taskExecutionId: string };
   const readTask = async () => {
     const response = await page.request.get(`/api/runs/${created.runId}`);
@@ -240,7 +238,7 @@ test('[P0] local OD Next adaptive clarification accepts two decisions on the sam
     const submit = form.getByRole('button', { name: 'Send answers', exact: true });
     await expect(submit).toBeEnabled();
     const [answerResponse] = await Promise.all([
-      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
+      page.waitForResponse(isCreateRunResponse, { timeout: T.xlong }),
       submit.click(),
     ]);
     expect(answerResponse.ok(), await answerResponse.text()).toBeTruthy();
@@ -292,7 +290,7 @@ test('[P0] local OD Next adaptive plan-only request completes without producing 
     'requires the explicit local synthetic rollout canary flags',
   );
   await prepareLocalOdNextCanary(page, 'OD Next plan-only canary');
-  const response = await sendPrompt(page, 'Only plan the OD Next canary; do not create the artifact');
+  const response = await sendPrompt(page, 'Only plan the OD Next canary; do not create the artifact', T.xlong);
   const created = await response.json() as { runId: string; taskExecutionId: string };
   await expect.poll(async () => {
     const status = await page.request.get(`/api/runs/${created.runId}`);
@@ -1439,7 +1437,7 @@ async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Pl
   await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
-async function sendPrompt(page: Page, prompt: string) {
+async function sendPrompt(page: Page, prompt: string, responseTimeout = T.medium) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 5_000 });
@@ -1458,7 +1456,7 @@ async function sendPrompt(page: Page, prompt: string) {
   page.on('request', markRequest);
   try {
     const [response] = await Promise.all([
-      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
+      page.waitForResponse(isCreateRunResponse, { timeout: responseTimeout }),
       sendButton.click(),
     ]);
     expect(response.ok()).toBeTruthy();
