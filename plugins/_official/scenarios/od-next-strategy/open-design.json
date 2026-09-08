@@ -109,7 +109,7 @@
         },
         {
           "id": "plan",
-          "atoms": ["direction-picker", "todo-write"]
+          "atoms": ["todo-write"]
         },
         {
           "id": "generate",

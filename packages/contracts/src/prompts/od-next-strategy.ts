@@ -235,7 +235,7 @@ export function resolveOdNextDeckFrameworkMode(input: {
  */
 export const OD_NEXT_PROMPT_STAGE_CONTRACT_V2 = [
   { id: 'discovery', atoms: ['discovery-question-form'] },
-  { id: 'plan', atoms: ['direction-picker', 'todo-write'] },
+  { id: 'plan', atoms: ['todo-write'] },
   { id: 'generate', atoms: ['file-write', 'live-artifact'] },
 ] as const;
 

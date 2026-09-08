@@ -43,7 +43,7 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
   taskSkill: '# Prototype\n\nProduce the declared editable prototype.',
   activeStages: [
     { name: 'discovery', atoms: [{ name: 'discovery-question-form' }] },
-    { name: 'plan', atoms: [{ name: 'direction-picker' }, { name: 'todo-write' }] },
+    { name: 'plan', atoms: [{ name: 'todo-write' }] },
     { name: 'generate', atoms: [{ name: 'file-write' }, { name: 'live-artifact' }] },
   ],
 };
@@ -277,7 +277,6 @@ describe('OD Next V2 prompt recipe', () => {
         "## Active stage: discovery",
         "### discovery-question-form",
         "## Active stage: plan",
-        "### direction-picker",
         "### todo-write",
         "## Active stage: generate",
         "### file-write",
@@ -530,10 +529,10 @@ describe('OD Next V2 prompt recipe', () => {
       ...recipe,
       activeStages: [
         recipe.activeStages[0]!,
-        { name: 'plan', atoms: [{ name: 'direction-picker' }] },
+        { name: 'plan', atoms: [{ name: 'discovery-question-form' }] },
         recipe.activeStages[2]!,
       ],
-    })).toThrow(/must declare exactly direction-picker, todo-write/i);
+    })).toThrow(/must declare exactly todo-write/i);
     expect(() => composeOdNextStrategyRequestPromptV2({
       ...recipe,
       activeStages: [recipe.activeStages[1]!, recipe.activeStages[0]!, recipe.activeStages[2]!],

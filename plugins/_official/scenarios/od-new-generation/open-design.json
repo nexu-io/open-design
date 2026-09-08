@@ -87,7 +87,6 @@
         {
           "id": "plan",
           "atoms": [
-            "direction-picker",
             "todo-write"
           ]
         },

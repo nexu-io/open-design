@@ -294,7 +294,7 @@ describe('non-OD-Next scenario golden witness', () => {
     const stages = official.od?.pipeline?.stages;
     expect(stages).toEqual([
       { id: 'discovery', atoms: ['discovery-question-form'] },
-      { id: 'plan', atoms: ['direction-picker', 'todo-write'] },
+      { id: 'plan', atoms: ['todo-write'] },
       { id: 'generate', atoms: ['file-write', 'live-artifact'] },
       {
         id: 'critique',

@@ -24,7 +24,6 @@ export class InvalidOdNextStrategyPromptRecipeV2Error extends Error {
 
 const REQUIRED_PROMPT_BODY_ATOMS = new Set([
   'discovery-question-form',
-  'direction-picker',
   'todo-write',
 ]);
 

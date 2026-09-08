@@ -64,7 +64,7 @@ describe('bundled OD Next Strategy V2 package', () => {
   it('declares discovery, plan, and generate without a repeating stage', () => {
     expect(manifest.od?.pipeline?.stages).toEqual([
       { id: 'discovery', atoms: ['discovery-question-form'] },
-      { id: 'plan', atoms: ['direction-picker', 'todo-write'] },
+      { id: 'plan', atoms: ['todo-write'] },
       { id: 'generate', atoms: ['file-write', 'live-artifact'] },
     ]);
     expect(manifest.od?.pipeline?.stages.some((stage) => stage.repeat)).toBe(false);

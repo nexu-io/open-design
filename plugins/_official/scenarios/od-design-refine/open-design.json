@@ -83,12 +83,6 @@
     "pipeline": {
       "stages": [
         {
-          "id": "direction",
-          "atoms": [
-            "direction-picker"
-          ]
-        },
-        {
           "id": "patch",
           "atoms": [
             "patch-edit"

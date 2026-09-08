@@ -3571,28 +3571,6 @@
       "mode": "review"
     },
     {
-      "name": "open-design/direction-picker",
-      "title": "Direction picker",
-      "version": "0.1.0",
-      "source": "github:nexu-io/open-design@main/plugins/_official/atoms/direction-picker",
-      "publisher": {
-        "id": "open-design",
-        "url": "https://open-design.ai"
-      },
-      "capabilitiesSummary": [
-        "prompt:inject"
-      ],
-      "description": "Resolves the visual direction at the plan stage from the brief and design system, without asking the user.",
-      "tags": [
-        "atom",
-        "first-party",
-        "planning"
-      ],
-      "homepage": "https://github.com/nexu-io/open-design/tree/main/plugins/_official/atoms/direction-picker",
-      "license": "MIT",
-      "mode": "planning"
-    },
-    {
       "name": "open-design/discovery-question-form",
       "title": "Discovery question form",
       "version": "0.1.0",

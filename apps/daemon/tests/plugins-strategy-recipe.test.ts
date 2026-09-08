@@ -80,7 +80,6 @@ beforeAll(async () => {
   expect(registered.registered.map((record) => record.id)).toEqual(
     expect.arrayContaining([
       'discovery-question-form',
-      'direction-picker',
       'todo-write',
     ]),
   );
@@ -217,7 +216,6 @@ describe('OD Next V2 request recipe wiring', () => {
       '## Active stage: discovery',
       '### discovery-question-form',
       '## Active stage: plan',
-      '### direction-picker',
       '### todo-write',
       '## Active stage: generate',
       '### file-write',
@@ -280,9 +278,9 @@ describe('OD Next V2 request recipe wiring', () => {
     await expect(resolveRecipe({
       loadAtomBodies: async (database, atomIds) => (
         (await loadBundledAtomBodiesStrict(database, atomIds))
-          .filter((entry) => entry.atomId !== 'direction-picker')
+          .filter((entry) => entry.atomId !== 'discovery-question-form')
       ),
-    })).rejects.toThrow(/direction-picker/i);
+    })).rejects.toThrow(/discovery-question-form/i);
 
     await expect(resolveRecipe({
       loadAtomBodies: async (database, atomIds) => (

@@ -10,8 +10,8 @@
 // returns the implicit list and `mergeAutoOAuthPrompts` (re-used) does
 // the dedupe.
 //
-// Other atom stages that auto-derive surfaces in the future (e.g.
-// `direction-picker` could auto-derive a `choice`) plug in here.
+// Other atom stages that auto-derive surfaces in the future (e.g. a
+// review-style atom deriving its own `choice`) plug in here.
 
 import type {
   GenUISurfaceSpec,

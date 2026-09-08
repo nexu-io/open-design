@@ -31,10 +31,6 @@
 //     template already knows its task type and locked direction, and
 //     re-raising those GenUI surfaces would interrogate the user for
 //     answers the template already encodes.
-//   - The injected `plan` carries only `todo-write`, NOT
-//     `direction-picker`: a template's direction is fixed by its
-//     reference seed, so we add the todolist without re-exploring
-//     directions the template intentionally locked.
 //
 // Pure module — no fs / SQLite / network — so the daemon's apply path
 // stays pure.
@@ -52,7 +48,7 @@ const DESIGN_ARTIFACT_ATOMS = new Set(['file-write', 'live-artifact']);
 const MEDIA_MODES = new Set(['image', 'video', 'audio']);
 
 // Mirrors the `plan` / `critique` stages declared by the bundled
-// od-new-generation scenario, minus `direction-picker` (see header).
+// od-new-generation scenario.
 function buildPlanStage(): PipelineStage {
   return { id: 'plan', atoms: ['todo-write'] };
 }

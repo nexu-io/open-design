@@ -1,6 +1,6 @@
 ---
 name: od-tune-collab
-description: Default reference pipeline for the tune-collab taskKind — pick a direction, patch-edit the existing artifact, critique, hand off.
+description: Default reference pipeline for the tune-collab taskKind — patch-edit the existing artifact, critique, hand off.
 od:
   scenario: tune-collab
   mode: scenario
@@ -19,7 +19,6 @@ artifact lineage chain stays intact across multi-turn tune cycles.
 ```jsonc
 {
   "stages": [
-    { "id": "direction", "atoms": ["direction-picker"] },
     { "id": "patch",     "atoms": ["patch-edit"] },
     {
       "id": "critique",

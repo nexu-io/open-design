@@ -51,7 +51,6 @@ const expectedQualitySections = [
   '## Active stage: discovery',
   '### discovery-question-form',
   '## Active stage: plan',
-  '### direction-picker',
   '### todo-write',
   '## Active stage: critique',
   '### critique-theater',
@@ -147,7 +146,6 @@ beforeAll(async () => {
   expect(registered.registered.map((plugin) => plugin.id)).toEqual(
     expect.arrayContaining([
       'discovery-question-form',
-      'direction-picker',
       'todo-write',
       'critique-theater',
     ]),
