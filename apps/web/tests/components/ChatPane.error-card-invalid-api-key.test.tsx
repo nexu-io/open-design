@@ -139,7 +139,14 @@ function renderChat(message: ChatMessage, onOpenSettings = vi.fn()) {
       activeConversationId="conv-1"
       onSelectConversation={vi.fn()}
       onDeleteConversation={vi.fn()}
-      config={{ agentId: 'byok-opencode', agentCliEnv: {} } as unknown as AppConfig}
+      config={
+        {
+          // 跟着这条消息走 —— 卡是钉在失败那一轮的助手消息上的
+          // (`resolveRunFailureUi` 读 `retryAssistant.agentId`),config 只是陪衬。
+          agentId: (message as { agentId?: string }).agentId ?? 'byok-opencode',
+          agentCliEnv: {},
+        } as unknown as AppConfig
+      }
     />,
   );
   return { ...rendered, onOpenSettings };
@@ -197,9 +204,12 @@ describe('S05 · 自带 API key 没配好,卡上要有自己的文案和改 key 
   });
 
   // daemon 对这一格的 code 有两种写法(ACP 的 AGENT_EXECUTION_FAILED,以及
-  // 认出授权失败时的 AGENT_AUTH_REQUIRED)。两条都要落到 S05 —— 否则同一件事
-  // 会因为码不同渲染成两张卡。
-  it('码是 AGENT_AUTH_REQUIRED 时同样落 S05,而不是 S02「尚未登录」', () => {
+  // 认出授权失败时的 AGENT_AUTH_REQUIRED)。**同一个 BYOK agent** 的这两条都要落到
+  // S05 —— 否则同一件事会因为码不同渲染成两张卡。
+  //
+  // 注意这一条的作用域:它说的是「BYOK 这一轮,码不同也是同一张卡」,不是「谁报
+  // invalid_api_key 都归 S05」。后者正是评审拦下来的越界,钉在下面那个 describe。
+  it('BYOK 的码是 AGENT_AUTH_REQUIRED 时同样落 S05,而不是 S02「尚未登录」', () => {
     const { container } = renderChat(
       failedMessage({ failureDetail: 'invalid_api_key', code: 'AGENT_AUTH_REQUIRED' }),
     );
@@ -207,6 +217,100 @@ describe('S05 · 自带 API key 没配好,卡上要有自己的文案和改 key 
     expect(titleOf(container)!.textContent).not.toContain(
       'chat.runError.title.signInRequired.other',
     );
+  });
+});
+
+/**
+ * 评审拦截(PR #7893,PerishCode):〔去设置〕只能给**那把 key 我们自己存着**的
+ * 一档,别的 agent 报 key 错要留在它原本的终端认证路上。
+ *
+ * 为什么这条会成立:`authDetail()` 是从**任何** agent 拍平的 stderr 上读出来的
+ * (`apps/daemon/src/run-failure-classification.ts`),所以本机 CLI 一样会报
+ * `invalid_api_key` —— `claude` 那句 `Invalid API key · Please run /login` 同时命中
+ * `AGENT_AUTH_FAILURE_RE`(→ code `AGENT_AUTH_REQUIRED`)和这条 detail。而本机
+ * CLI 的登录态在用户自己的终端里:`opencode` / `kimi` / `qwen` 在设置页那一屏
+ * **连一个 key 输入框都没有**,把人送过去等于送到一屏改不了那把 key 的界面,
+ * 还顺手吃掉了它们本来该看到的 S02「{agent} 尚未登录」。
+ *
+ * 判据:`byokApiKeyIsEditableInSettings`(`apps/web/src/utils/byokProvider.ts`)——
+ * `byok-opencode` 加 `API_PROTOCOL_AGENT_IDS` 那八个 `*-api`,也就是发送前那道
+ * BYOK 闸门(`ProjectView.requiresByokPreflight`)管的同一档。
+ *
+ * 撤掉那道收窄(把 `apiKeyInvalidCardFor` 里的 `byokApiKeyIsEditableInSettings`
+ * 判空去掉,或把这一格塞回 `DETAIL_FAILURE_UI`)之后,下面这两条本机 CLI 必红。
+ */
+describe('评审拦截 · 〔去设置〕只给 key 能在设置里改的那一档', () => {
+  // 本机 CLI 那一档原本走的就是这张卡:code `AGENT_AUTH_REQUIRED` →
+  // `resolveRunFailureUi` 末段那条码级分支 → S02。这里断言的是「保留原状」,
+  // 不是新设计 —— 这两把 i18n key 在这个 PR 之前就在用。
+  const S02_TITLE = 'chat.runError.title.signInRequired.other';
+  const S02_MESSAGE = 'chat.runError.signInMessage.other';
+
+  it('claude 报 key 错仍是 S02「{agent} 尚未登录」,且不长出〔去设置〕', () => {
+    const { container } = renderChat(
+      failedMessage({
+        agentId: 'claude',
+        failureDetail: 'invalid_api_key',
+        code: 'AGENT_AUTH_REQUIRED',
+        raw: 'Invalid API key · Please run /login',
+      }),
+    );
+    expect(titleOf(container)!.textContent).toContain(S02_TITLE);
+    expect(titleOf(container)!.textContent).not.toContain(
+      'chat.runError.title.apiKeyInvalid',
+    );
+    expect(descriptionOf(container)!.textContent).toContain(S02_MESSAGE);
+    expect(openSettingsButtonOf(container)).toBeNull();
+  });
+
+  // 评审点名的那个:opencode 在设置页那一屏连 key 输入框都没有。
+  it('opencode 报 key 错仍是 S02,且不长出〔去设置〕', () => {
+    const { container } = renderChat(
+      failedMessage({
+        agentId: 'opencode',
+        failureDetail: 'invalid_api_key',
+        code: 'AGENT_AUTH_REQUIRED',
+        raw: 'AI_APICallError: Invalid API key',
+      }),
+    );
+    expect(titleOf(container)!.textContent).toContain(S02_TITLE);
+    expect(descriptionOf(container)!.textContent).toContain(S02_MESSAGE);
+    expect(openSettingsButtonOf(container)).toBeNull();
+  });
+
+  // BYOK 那一档不只有 `byok-opencode`:`mode === 'api'` 的一轮,消息上记的是
+  // `API_PROTOCOL_AGENT_IDS` 里那八个 `*-api` 之一
+  // (`ProjectView` 的 `apiProtocolAgentId(config.apiProtocol)`)。收窄不能把
+  // 它们一起关在门外 —— 它们的 key 就填在设置页那一屏。
+  it.each(['anthropic-api', 'openai-api', 'bedrock-api'])(
+    '%s 落 S05,并且〔去设置〕点下去到 execution 这一节',
+    (agentId) => {
+      const { container, onOpenSettings } = renderChat(
+        failedMessage({ agentId, failureDetail: 'invalid_api_key' }),
+      );
+      expect(titleOf(container)!.textContent).toContain(
+        'chat.runError.title.apiKeyInvalid',
+      );
+      const button = openSettingsButtonOf(container);
+      expect(button).toBeTruthy();
+      fireEvent.click(button!);
+      expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    },
+  );
+
+  // Antigravity 的登录只能在终端里做,它在 `resolveRunFailureUi` 里排在这一格
+  // **之前**,本来就抢不走。钉一条,免得日后有人把这一格往上挪。
+  it('antigravity 报 key 错仍走它自己的终端登录卡', () => {
+    const { container } = renderChat(
+      failedMessage({
+        agentId: 'antigravity',
+        failureDetail: 'invalid_api_key',
+        code: 'AGENT_AUTH_REQUIRED',
+        raw: 'invalid api key',
+      }),
+    );
+    expect(titleOf(container)!.textContent).toContain(S02_TITLE);
+    expect(openSettingsButtonOf(container)).toBeNull();
   });
 });
 

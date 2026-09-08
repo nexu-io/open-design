@@ -2872,6 +2872,10 @@ export interface Dict {
    * 主语固定,没有插值槽 —— 说的是「你填的那把 key」,不是「哪一个 agent」,
    * 所以它和 S02 的 `title.signInRequired.other` 不是同一句话:那边要点名是哪个
    * 本地 agent 还没登录,这边说的是 key 本身填错了。
+   *
+   * 只给 BYOK / API 提供商那一档用(判据 `byokApiKeyIsEditableInSettings`,
+   * `utils/byokProvider.ts`)。本机 CLI 报同一条 detail 时留在 S02 —— 它们的登录
+   * 在用户自己的终端里,详见 `runtime/amr-guidance.ts` 的 `apiKeyInvalidCardFor`。
    */
   'chat.runError.title.apiKeyInvalid': string;
   'chat.runError.title.quotaExhausted': string;

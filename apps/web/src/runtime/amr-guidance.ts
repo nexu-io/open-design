@@ -9,6 +9,7 @@ import {
   readModelWindowResetAt,
 } from '@open-design/contracts';
 import type { RunFailureAction } from '@open-design/contracts';
+import { byokApiKeyIsEditableInSettings } from '../utils/byokProvider';
 
 // AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
@@ -1202,40 +1203,55 @@ const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.cliMissing',
     'chat.runError.cliMissingMessage',
   ),
-  // S05 · 自带 API key 没配好。
-  //
-  // daemon 认得这一格,而且判得完全对:`authDetail` 的正则(「invalid api key」/
-  // 「api key … invalid」,`run-failure-classification.ts`)把它从 `auth_required`
-  // 里单独摘出来,category `auth`、user_action `login`、retryable false。web 这边
-  // 一直没有这一格,于是整轮落到最后那张通用卡 —— 标题「任务执行失败」、正文是
-  // 兜底句、卡上唯一像出路的按钮是〔联系支持〕。API key 填错了把人支去联系客服,
-  // 是这张卡最不该做的事,而且卡上没有任何通往「改 key」的入口,尽管 daemon 说的
-  // 就是 `login`。(实测:packaged BYOK `byok-opencode`,code AGENT_EXECUTION_FAILED
-  // + detail invalid_api_key。)
-  //
-  // 为什么在这张表、而不是上面那张 agent-agnostic 表:两张表的分界线正好是这一格
-  // 需要的那一条。
-  //   · AMR 与 Antigravity 的登录各有自己的分支,排在这张表**之前**:AMR 卡内一键
-  //     登录(S04)、Antigravity 去终端登录 —— 两条都不该被这一格抢走。
-  //   · 其余 agent 走到这里时,`AGENT_AUTH_REQUIRED` 那条**码级**分支还在后面,
-  //     它渲染的是 S02「{agent} 尚未登录」。daemon 已经把「没登录」(auth_required)
-  //     和「key 填错了」(invalid_api_key)分开,文案文档也把它们分成两格
-  //     (S02 vs S05),所以覆盖那颗过粗的码正是这张表存在的理由 —— 见表头注释
-  //     「This layer can OVERRIDE a code mapping」。
-  //
-  // 主按钮〔去设置〕是阶梯第 1 档:落点是 `execution` 这一节,BYOK 的 key 输入框
-  // (`ByokKeyField`)和本机 CLI 的 `agent_cli_env` 都渲染在那一屏,也正是发送前
-  // 那道 BYOK 闸门(`ProjectView` 的 `requiresByokPreflight` →
-  // `onOpenSettings('execution')`)落的同一个地方 —— 不新造入口。
-  //
-  // 不带重试:文档 S05 那一排只有〔去设置〕,而且 key 没改之前重试必然同样结果
-  // (设计原则四)。
-  invalid_api_key: failureCard(
+};
+
+/**
+ * S05 · 自带 API key 没配好 —— **只对那把 key 我们自己存着的一轮成立**。
+ *
+ * daemon 认得这一格,而且判得完全对:`authDetail` 的正则(「invalid api key」/
+ * 「api key … invalid」,`run-failure-classification.ts`)把它从 `auth_required`
+ * 里单独摘出来,category `auth`、user_action `login`、retryable false。web 这边
+ * 一直没有这一格,于是 BYOK 那一轮落到最后那张通用卡 —— 标题「任务执行失败」、
+ * 正文是兜底句、卡上唯一像出路的按钮是〔联系支持〕。API key 填错了把人支去联系
+ * 客服,是这张卡最不该做的事,而且卡上没有任何通往「改 key」的入口,尽管 daemon
+ * 说的就是 `login`。(实测:packaged BYOK `byok-opencode`,code
+ * AGENT_EXECUTION_FAILED + detail invalid_api_key。)
+ *
+ * ⚠️ 判据不是「这条 detail」,是「这把 key 在谁手上」。
+ *
+ * `authDetail()` 是从**任何** agent 拍平的 stderr 上读出来的,所以本机 CLI 一样
+ * 会报 `invalid_api_key` —— `claude` 那句 `Invalid API key · Please run /login`
+ * 同时命中 `AGENT_AUTH_FAILURE_RE`(→ code `AGENT_AUTH_REQUIRED`)和这条 detail。
+ * 而本机 CLI 的登录态在用户自己的终端里:把它们送去设置页,是把人送到一屏**改不了
+ * 那把 key** 的界面上(`opencode` / `kimi` / `qwen` 在那一屏连输入框都没有),
+ * 同时还吃掉了它们本来该看到的 S02「{agent} 尚未登录」+ 终端登录指引。
+ * 这条作用域就是 PR #7893 评审拦下来的那一条。
+ *
+ * 所以这一格按 `byokApiKeyIsEditableInSettings` 收窄到 BYOK / API 提供商那一档
+ * (`utils/byokProvider.ts`,和发送前那道 BYOK 闸门是同一条线);不在这一档的
+ * agent 一律**继续往下走**,落回它们原本的那条路 —— code `AGENT_AUTH_REQUIRED` /
+ * `UNAUTHORIZED` 的走 S02,其余的走原来的兜底。这一格一个字都不替它们改。
+ *
+ * 摆位:和它原来所在的 `DETAIL_FAILURE_UI` 同一个位置,在 AMR / Antigravity 的
+ * 分支**之后**(AMR 卡内一键登录 S04、Antigravity 去终端登录,两条都不该被抢走),
+ * 在码级分支**之前**(覆盖过粗的 `AGENT_AUTH_REQUIRED` 正是这一层存在的理由)。
+ *
+ * 主按钮〔去设置〕是阶梯第 1 档:落点是 `execution` 这一节,BYOK 的 key 输入框
+ * (`ByokKeyField`)就渲染在那一屏,也正是发送前那道 BYOK 闸门(`ProjectView` 的
+ * `requiresByokPreflight` → `onOpenSettings('execution')`)落的同一个地方 ——
+ * 不新造入口。
+ *
+ * 不带重试:文档 S05 那一排只有〔去设置〕,而且 key 没改之前重试必然同样结果
+ * (设计原则四)。
+ */
+function apiKeyInvalidCardFor(agentId: string | null | undefined): RunFailureUi | null {
+  if (!byokApiKeyIsEditableInSettings(agentId)) return null;
+  return failureCard(
     { directFix: 'open-settings' },
     'chat.runError.title.apiKeyInvalid',
     'chat.runError.apiKeyInvalidMessage',
-  ),
-};
+  );
+}
 
 // Agent-agnostic failure causes keyed by the daemon's `failure_detail`, resolved
 // BEFORE the AMR/Antigravity agent branches (unlike DETAIL_FAILURE_UI above).
@@ -1777,6 +1793,13 @@ function resolveRunFailureUiIgnoringSelfPromotion(
         { secondaryRetry: true },
       );
     }
+  }
+  // S05 · key 填错了 —— 只在这把 key 归我们保管时才认。判据、摆位理由和它替谁
+  // 让路,全写在 `apiKeyInvalidCardFor` 的注释里。不在这一档的 agent 返回 null,
+  // 于是继续往下走它原本那条路(码是 AGENT_AUTH_REQUIRED / UNAUTHORIZED 的落 S02)。
+  if (detail === 'invalid_api_key') {
+    const apiKeyCard = apiKeyInvalidCardFor(agentId);
+    if (apiKeyCard) return apiKeyCard;
   }
   // Fine-grained daemon classification overrides a too-coarse code (e.g.
   // hard_quota vs a transient 429 both arriving as RATE_LIMITED). Placed after
