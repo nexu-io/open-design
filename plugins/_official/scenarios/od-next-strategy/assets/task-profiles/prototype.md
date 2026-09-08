@@ -1,4 +1,4 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.2.2
 
 > Rollout: active
 
@@ -175,8 +175,9 @@ Open Design stages `.od-frames/layout.css` beside the handset shells and
 quotes it in the `layout-primitives` context fact. It is structure only —
 display, flex/grid, overflow, wrapping, ratio — and sets no palette, type,
 spacing scale, or component look. Put the whole block into the document's own
-`<style>` as its first rule set (`@layer od-layout` must come first so the
-product's CSS always wins), keep the `OD-LAYOUT-PRIMITIVES v1` marker comments,
+`<style>` as its first rule set (`@layer od-layout` must come first; product CSS
+overrides normal layout declarations while ordinary `hidden` stays hidden),
+keep the `OD-LAYOUT-PRIMITIVES v1` marker comments,
 and compose the shapes below from it instead of re-deriving them per card,
 row, tile, or chip.
 
