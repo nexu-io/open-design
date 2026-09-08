@@ -871,15 +871,34 @@ function switchModelWithGuidance(
  * and a retry here is a whole new run against the same rewritten TLS chain or
  * the same blocked route, i.e. the same answer.
  *
- * 文案取产品文档 S30 的**润色列**终稿:「当前地区暂不支持此服务」/
- * 「暂不支持当前网络所在地区,请尝试切换网络后再试。」
+ * ⚠️ 待产品补格 —— 这张卡**没有**用产品文档 S30 的润色列,是故意的。
  *
- * ⚠️ 这里此前抄的是同一格的**「原文提示」**栏 —— 那一栏是草稿(带按钮、带
- * `{供应商}` 和括号成因),不是终稿。终稿把成因收进了标题,正文里不再点名成因,
- * 所以 `messageCauseKey` 这条通路仍在(五个成因各自的译文也都还在词典里),
- * 只是当前这句话不引用它:哪天产品把成因写回句子里,接线是现成的。
+ * S30 的场景名是「公司网络 / 代理 / 证书」,`原文时机` 列出三个成因(地区不支持 /
+ * 证书校验失败 / 代理不可达),但 `润色标题` + `润色正文` 那张表**只写了一行**,
+ * 而且那一行的「场景内的情况」写死是**「地区不支持」**:「当前地区暂不支持此服务」/
+ * 「暂不支持当前网络所在地区,请尝试切换网络后再试。」证书和代理那两个成因,
+ * 文档至今没有润色格。
  *
- * 终稿同样没有承诺「装个证书就好了」—— 上游实测过装了也不行的构建。
+ * 而这张卡服务的五个 detail 里**没有一个是地区拦截**(判据见
+ * `clientEnvironmentFailureDetail`,`apps/daemon/src/run-failure-classification.ts`):
+ * `host_policy_block` 是 Windows AppLocker 拦住了二进制启动、`local_storage_failure`
+ * 是本机 SQLite/WAL 读写失败、`certificate_failure` 是 TLS 信任链被拒、
+ * `proxy_configuration` 是代理设置本身不对、`network_configuration` 是连接压根没建起来
+ * (ENOTFOUND / ECONNREFUSED / EHOSTUNREACH —— 该文件自己的注释就写着「a machine that
+ * just went offline fails at DNS」「nothing is wrong at the provider」)。
+ *
+ * 决定性的一条:daemon **有**地区拦截的判据,但它不在这五格里 —— 上游那句
+ * `Country, region, or territory not supported` 命中的是 `isUpstreamClientErrorText`,
+ * 落到 `failure_detail: 'upstream_client_error'`(同文件,并由
+ * `apps/daemon/tests/run-failure-classification.test.ts` 钉住)。
+ *
+ * 所以把 S30 的润色句接到这里,等于对着一次本机磁盘失败说「你所在的地区不支持,
+ * 换个网络」—— 既是错误诊断,给的处置也完全没用。文案宁可留旧的,也不自拟:
+ * 这五格保持原文案,等产品为「本机存储 / 系统策略 / 证书 / 代理」补格,
+ * 或等 `upstream_client_error` 拆出真正的地区拦截 detail 再接 S30。
+ *
+ * 旧文案同样没有承诺「装个证书就好了」—— 上游实测过装了也不行的构建。
+ * `messageCauseKey` 这条通路继续为正文的 `{cause}` 供值,五个成因各写各的。
  *
  * 〔重试〕 stays as the SECONDARY on purpose. The upstream sentence these
  * classify on ("unknown certificate verification error") covers two different
@@ -1429,23 +1448,49 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // resolved here, ahead of every agent branch: the proxy, the certificate
   // store, the route and the host policy belong to the user's machine, so the
   // card is the same one whichever agent happened to be running.
+  //
+  // ⚠️ 待拍板 — 这五格用的是**旧文案**,不是 S30 的润色列。S30 唯一那行润色格
+  // 的适用情况是「地区不支持」,而这五格一个都不是地区拦截(真正的地区信号落在
+  // `upstream_client_error`)。完整判据写在 `clientEnvironmentCard` 的文档注释里。
+  //
+  // ⚠️ 待拍板 — `certificate_failure` 是 TLS 信任链被拒(多半是公司中间盒),
+  // 不构成地区拦截。S30 的 `原文时机` 点了「证书校验失败」这个成因,但润色表里
+  // 没有给它写行,所以这一格没有可照抄的终稿。
   certificate_failure: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.certificate',
   ),
+  // ⚠️ 待拍板 — 代理**设置本身**不对(`unsupported proxy protocol` /
+  // `proxy configuration`)。处置是去改代理,不是换地区。S30 的 `原文时机` 点了
+  // 「代理不可达」,润色表同样没给它写行。
   proxy_configuration: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.proxy',
   ),
+  // ⚠️ 待拍板 — 连接压根没建起来(ENOTFOUND / ECONNREFUSED / EHOSTUNREACH /
+  // getaddrinfo)。这是**掉线**的第一形态,不是地区拦截 —— 对着一台刚断网的机器
+  // 说「你所在地区不支持」是错误诊断。文档里最接近的是 S11「当前网络中断」/
+  // S29「网络连接未能恢复」,但那两格的时机都是「跑到一半连接断了 / 重连失败」,
+  // 和「一次都没连上」不是同一件事,归属要产品拍板,不自行改路由。
   network_configuration: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.network',
   ),
+  // ⚠️ 待拍板 — Windows Application Control / AppLocker 拦住了二进制启动。
+  // 纯本机 OS 策略,整条链路上没有网络,更没有地区。文档 S01–S32 没有任何一格
+  // 讲系统策略拦截。
   host_policy_block: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.hostPolicy',
   ),
   // ⚠️ 待拍板 — this one is a local SQLite/WAL I/O failure, not a network path.
   // The design gives the environment family exactly one card (S30) and W28's
-  // brief lists all five under it, so it renders here; but S30's 润色 copy
-  // (「暂不支持当前网络所在地区」) does not describe this failure any better than
-  // the draft did. Either it needs its own sentence or it needs its own scenario.
+  // brief lists all five under it, so it renders here.
+  //
+  // 文档里**没有**这一格:S19「进程崩了」的 `原文时机` 明写「能识别的原因
+  // (Windows 找不到 node、配置文件坏了、**磁盘读写出错**…)研发逐个识别后走对应
+  // 场景」—— 也就是说产品知道磁盘读写出错该有自己的场景,但 S01–S32 里始终没写。
+  // (S27 提到磁盘空间不足,时机是「客户端起不来」;S32 的「凭据保存失败」限定在
+  // 登录流程 —— 两格都不是运行中的本机存储失败。)
+  //
+  // 所以这一格没有可照抄的终稿,更不能套 S30 的「地区不支持 / 切换网络」:
+  // 那对一次磁盘 I/O 失败既诊断错了,给的处置也一点用没有。等产品补格。
   local_storage_failure: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.localStorage',
   ),

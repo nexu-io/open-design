@@ -114,12 +114,16 @@ describe('S30 · daemon 判定不可重试的环境失败,卡片不能给〔重�
     }
   });
 
-  it('S30 的中文正文逐字照产品文档的润色列,并且不承诺「配好证书就能用」', () => {
-    // ⚠️ 这里此前钉的是同一格的「原文提示」栏(草稿:带 {供应商}、带括号成因)。
-    // 终稿在表格的 `润色标题` / `润色正文` 两列,成因收进了标题。
-    expect(zhCN['chat.runError.title.clientEnvironment']).toBe('当前地区暂不支持此服务');
+  /**
+   * ⚠️ 这一格**没有**换成产品文档 S30 的润色列,判据写在
+   * `amr-guidance.ts` 的 `clientEnvironmentCard` 文档注释里:S30 唯一那行润色格
+   * 只适用于「地区不支持」,而这五格一个都不是地区拦截。所以正文继续钉旧文案 ——
+   * 「宁可留旧的,也不许自拟」。
+   */
+  it('S30 的中文正文逐字照设计稿,并且不承诺「配好证书就能用」', () => {
+    expect(zhCN['chat.runError.title.clientEnvironment']).toBe('网络环境不对');
     expect(zhCN['chat.runError.clientEnvironmentMessage']).toBe(
-      '暂不支持当前网络所在地区，请尝试切换网络后再试。',
+      '看起来走了代理或公司网络，{agent} 拒绝了请求（{cause}）。换一个网络出口，或在设置里调整代理。',
     );
     expect(zhCN['chat.runError.clientEnvironmentCause.certificate']).toBe('证书校验失败');
     expect(zhCN['chat.runError.openSettingsCta']).toBe('去设置');
@@ -130,12 +134,7 @@ describe('S30 · daemon 判定不可重试的环境失败,卡片不能给〔重�
     }
   });
 
-  /**
-   * 五个成因的译文仍然各不相同 —— 终稿的正文暂时不引用 `{cause}`,但那条通路
-   * (`messageCauseKey` → `runFailureMessageVars.cause`)还在,词典里也还各写各的。
-   * 哪天产品把成因写回句子里,不该先发现五格早已被合并成一句。
-   */
-  it('五格的 {cause} 各不相同,通路复用时不会五格一个说法', () => {
+  it('五格的 {cause} 各不相同,卡上不会五格一个说法', () => {
     const rendered = new Set(
       CLIENT_ENVIRONMENT_DETAILS.map(
         (detail) => zhCN[CAUSE_KEY_BY_DETAIL[detail] as keyof typeof zhCN],
