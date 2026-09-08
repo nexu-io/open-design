@@ -65,9 +65,16 @@ async function buildResource(input: Readonly<{
 
 /** Build inputs only; signing, cache selection, preparation and activation remain
  * with their existing authorities. No partial set can become a complete receipt. */
+export async function buildClosureDataResource(input: Readonly<{
+  id: ClosureDataResourceId; workspaceRoot: string; outputDirectory: string;
+}>): Promise<ClosureDataResourceArtifact> {
+  const resource = CLOSURE_DATA_RESOURCES.find(resource => resource.id === input.id);
+  if (resource == null) throw new Error(`unknown Closure data resource: ${input.id}`);
+  return buildResource({ resource, workspaceRoot: resolve(input.workspaceRoot), outputDirectory: resolve(input.outputDirectory) });
+}
+
 export async function buildClosureDataResources(input: Readonly<{ workspaceRoot: string; outputDirectory: string }>): Promise<readonly ClosureDataResourceArtifact[]> {
-  const workspaceRoot = resolve(input.workspaceRoot), outputDirectory = resolve(input.outputDirectory);
-  const results = await Promise.allSettled(CLOSURE_DATA_RESOURCES.map(resource => buildResource({ resource, workspaceRoot, outputDirectory })));
+  const results = await Promise.allSettled(CLOSURE_DATA_RESOURCES.map(({ id }) => buildClosureDataResource({ ...input, id })));
   const failure = results.find(result => result.status === "rejected");
   if (failure?.status === "rejected") throw failure.reason;
   return Object.freeze(results.map(result => {

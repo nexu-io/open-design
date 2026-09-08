@@ -11,6 +11,7 @@ import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
+import { buildReleaseDataResource } from "./resource-build.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 
@@ -61,12 +62,13 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });
 
-  cli.command("build <operation>", "Build Capsule content, native scenes or distributions through public Shell builders")
+  cli.command("build <operation>", "Build independent resources, Capsule content, native scenes or distributions")
     .option("--root <directory>", "Checked-out workspace with built inputs")
     .option("--shell <name>", "electron or terminal")
     .option("--target <target>", "Native platform architecture")
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
+    .option("--resource-id <id>", "Closure data resource group (resource)")
     .option("--plan <file>", "Electron plan (scene)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (scene)")
@@ -79,6 +81,16 @@ export function registerExactCommands(cli: CAC): void {
     .option("--release-version <version>", "Release version (distribution)")
     .option("--source-commit <sha>", "Exact source commit (distribution)")
     .action(async (operation: string, options: Options) => {
+      if (operation === "resource") {
+        const allowed = new Set(["root", "resourceId", "output", "receipt", "--"]);
+        for (const key of Object.keys(options)) if (!allowed.has(key)) {
+          throw new Error(`resource build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
+        }
+        await buildReleaseDataResource({ root: required(options, "root"), resourceId: required(options, "resourceId"),
+          output: required(options, "output"), receipt: required(options, "receipt") });
+        return;
+      }
+      if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
       const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
       if (operation !== "scene" && (options.capsuleContent != null || options.capsuleArchive != null)) throw new Error("prebuilt Capsule inputs are only supported by build scene");
       if (operation === "scene") await buildReleaseScene({ ...common,
@@ -90,7 +102,7 @@ export function registerExactCommands(cli: CAC): void {
       else if (operation === "capsule") await buildReleaseCapsule(common);
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be capsule or scene or distribution");
+      else throw new Error("build operation must be resource or capsule or scene or distribution");
     });
 
   cli.command("topology", "Project release actions over declared runner and target data")

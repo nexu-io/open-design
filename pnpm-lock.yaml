@@ -924,6 +924,9 @@ importers:
 
   tools/release:
     dependencies:
+      '@open-design/closure':
+        specifier: workspace:*
+        version: link:../../apps/closure
       '@open-design/metatool':
         specifier: workspace:*
         version: link:../../packages/metatool

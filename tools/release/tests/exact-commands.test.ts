@@ -69,6 +69,21 @@ it("rejects unknown commands, missing arguments and non-boolean switches", async
   await expect(f.invoke([...policyArgs, "--bypass"])).rejects.toThrow("Unknown option");
 });
 
+it("builds one Closure data resource without requiring Shell, platform or release identity", async () => {
+  const f = await fixture();
+  const pkg = join(f.root, "tools/release/node_modules/@open-design/closure");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "@open-design/closure", type: "module", exports: { "./build-resources": "./build.mjs" } }));
+  await writeFile(join(pkg, "build.mjs"), "export async function buildClosureDataResource(request) { return { request }; }\n");
+  const output = join(f.root, "resource"), receipt = join(f.root, "resource.json");
+  const args = ["build", "resource", "--root", f.root, "--resource-id", "design-systems", "--output", output, "--receipt", receipt];
+  await f.invoke(args);
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "closure.data-resource.build",
+    resource: { request: { id: "design-systems", workspaceRoot: f.root, outputDirectory: output } } });
+  await expect(f.invoke([...args, "--shell", "electron"])).rejects.toThrow("resource build does not accept --shell");
+  await expect(f.invoke([...args, "--target", "darwin-arm64"])).rejects.toThrow("resource build does not accept --target");
+});
+
 it("keeps workspace command names distinct from the relocatable exact grammar", async () => {
   const root = await mkdtemp(join(tmpdir(), "release-workspace-cli-")); roots.push(root);
   const cli = join(root, "workspace.mjs");

@@ -67,6 +67,14 @@ Final Electron metadata binds the published Capsule manifest and archive by
 URL, SHA-256 and size. Compatibility is declared once in the signed Capsule
 manifest; no separate Capsule latest pointer is published.
 
+`build resource --resource-id <id> --root <workspace> --output <directory>
+--receipt <file>` invokes the Closure public producer for one declared data
+group. It needs no Shell, platform, channel or version and does not compile
+Closure, Web or daemon. Its `closure.data-resource.build` receipt describes one
+artifact, never a complete resource set or a reusable-result authorization.
+The planner owns build/restore selection; release composition must still verify
+all required resources before producing complete signed content.
+
 Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
 artifact / convergence ZIP. It preserves native executable permissions,
 read-only files and hidden inputs, while convergence retains ownership of

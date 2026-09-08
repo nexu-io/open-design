@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { OPEN_DESIGN_DATA_RESOURCE_IDS } from "@open-design/contracts";
 import { CLOSURE_DATA_RESOURCES } from "../src/data-resources.js";
-import { buildClosureDataResources } from "../src/build/data-resources.js";
+import { buildClosureDataResource, buildClosureDataResources } from "../src/build/data-resources.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -24,6 +24,17 @@ async function fixture() {
 describe("independent Closure data blobs", () => {
   it("produces exactly the product contract data set", () => {
     expect(CLOSURE_DATA_RESOURCES.map(({ id }) => id)).toEqual(OPEN_DESIGN_DATA_RESOURCE_IDS);
+  });
+  it("builds one declared group without reading unrelated inputs or emitting a complete receipt", async () => {
+    const input = await fixture();
+    const baseline = await buildClosureDataResources(input);
+    await rm(join(input.workspaceRoot, "skills"), { recursive: true });
+    const selected = await buildClosureDataResource({ ...input, id: "design-systems" });
+    expect(selected).toEqual(baseline.find(resource => resource.id === "design-systems"));
+    expect(selected).not.toHaveProperty("resources");
+    await expect(buildClosureDataResource({ ...input, id: "unknown" as never })).rejects.toThrow("unknown Closure data resource");
+    await expect(buildClosureDataResource({ ...input, id: "skills" })).rejects.toThrow();
+    await expect(buildClosureDataResources(input)).rejects.toThrow();
   });
   it("rebuilds deterministic archives and changes only the selected resource bytes", async () => {
     const input = await fixture();
