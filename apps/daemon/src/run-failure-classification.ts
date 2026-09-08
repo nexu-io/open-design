@@ -728,17 +728,25 @@ function readRuntimeCloseReason(
  * Invariant: a verdict the daemon reached on its own survives without its own
  * prose. The ACP stage watchdog decides a stage is over and kills the child —
  * nothing upstream reported anything — and it stamps that decision as
- * `error.details.kind === 'timeout'` (see `agent-protocol/acp/session.ts`).
+ * `error.details.kind === 'acp_stage_timeout'` (see `agent-protocol/acp/session.ts`).
  * Reading the marker rather than regex-matching the sentence it happened to
  * write is what stops a reworded, wrapped, localized or dropped message from
  * silently re-filing a watchdog kill as an opaque `process_exit / exit_code` —
  * which is `retryable: false` / `user_action: 'none'`, the one verdict this
  * failure must never get, since a retry is its entire remedy.
  *
- * Deliberately narrow: only the daemon writes this marker, and only for the
- * stage watchdog. An agent's own error frame cannot forge a timeout verdict
- * with it, because agent-supplied data lands under `error.data`, not
- * `error.details` (see `eventErrorText`).
+ * The value is matched exactly, and it is namespaced to the mechanism that
+ * writes it. `error.details` is NOT a daemon-private slot — `fail()` copies an
+ * agent's JSON-RPC `error.data` straight into it — so the marker's protection
+ * comes from being a name no upstream payload emits, not from the slot being
+ * unreachable. A generic `kind: 'timeout'`, which any vendor SDK might send for
+ * its own timeout, would have been read here as a watchdog kill that never
+ * happened, and would additionally have outranked the forced-signal guard below.
+ *
+ * This is collision resistance, not authentication: an adapter that deliberately
+ * sent `kind: 'acp_stage_timeout'` would still be believed. Making the verdict
+ * unforgeable requires carrying it in a field agent payload can never reach —
+ * see the note on `fail()` in `agent-protocol/acp/session.ts`.
  */
 function hasDaemonTimeoutVerdict(
   events: RunEventForFailureClassification[] = [],
@@ -755,7 +763,7 @@ function hasDaemonTimeoutVerdict(
     const details = nested?.details && typeof nested.details === 'object'
       ? nested.details as Record<string, unknown>
       : null;
-    if (details?.kind === 'timeout') return true;
+    if (details?.kind === 'acp_stage_timeout') return true;
   }
   return false;
 }

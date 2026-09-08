@@ -118,7 +118,7 @@ describe('ACP stage timeout — server wiring', () => {
       .map((event) => event.data as ErrorFrame);
     expect(errorFrames.length).toBeGreaterThan(0);
     for (const frame of errorFrames) {
-      expect(frame.error?.details).toMatchObject({ kind: 'timeout', action: 'retry' });
+      expect(frame.error?.details).toMatchObject({ kind: 'acp_stage_timeout', action: 'retry' });
       expect(frame.error?.retryable).toBe(true);
     }
 
