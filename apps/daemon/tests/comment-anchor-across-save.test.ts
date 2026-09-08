@@ -78,6 +78,13 @@ function bridgeAnchoring(servedHtml: string, doc: DomDocument): {
     witness?: { text?: string; label?: string },
   ) => DomElement | null;
 } {
+  const grabOptional = (name: string): string | null => {
+    try {
+      return grab(name);
+    } catch {
+      return null;
+    }
+  };
   const grab = (name: string): string => {
     const start = servedHtml.indexOf(`function ${name}(`);
     if (start < 0) throw new Error(`bridge does not define ${name}`);
@@ -94,7 +101,11 @@ function bridgeAnchoring(servedHtml: string, doc: DomDocument): {
   // eslint-disable-next-line no-new-func
   return new Function(
     'document',
-    `${grab('domSelectorFor')}\n${grab('commentTargetMatchesWitness')}\n`
+    // The corroboration helper is the fix; before it exists the resolver must
+    // still be runnable, so its absence produces a clean failing assertion
+    // rather than an extraction error that says nothing about the product.
+    `${grab('domSelectorFor')}\n`
+      + `${grabOptional('commentTargetMatchesWitness') ?? 'function commentTargetMatchesWitness(){ return true; }'}\n`
       + `${grab('findCommentTargetByIdentity')}\n`
       + 'return { domSelectorFor: domSelectorFor, findCommentTargetByIdentity: findCommentTargetByIdentity };',
   )(doc) as ReturnType<typeof bridgeAnchoring>;
