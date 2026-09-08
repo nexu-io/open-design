@@ -10,6 +10,7 @@ import type {
   ElectronShellAppearance,
   ElectronShellDefinition,
   ElectronShellManifest,
+  ElectronCapsuleSession,
 } from "@open-design/electron-kit/runtime";
 import type { ElectronMacRuntimePolicy } from "@open-design/electron-kit/macos";
 import { createElectronStartupPresentation } from "@open-design/electron-capsule";
@@ -24,7 +25,7 @@ import { createInstallerRecoveryIntentAdapter } from "../adapters/updater/instal
 import { createWindowsCommittedObserver } from "../adapters/windows/lifecycle.js";
 import { assertShellWarmupBindings } from "./warmup-bindings.js";
 
-export function createElectronShellDefinition(installedManifest: ElectronShellManifest): ElectronShellDefinition {
+export function createElectronShellDefinition(installedManifest: ElectronShellManifest, shell: ElectronCapsuleSession["shell"]): ElectronShellDefinition {
   const shellManifest = installedManifest;
   const warmup = runtime.warmup as ElectronWarmupTopology;
   const windowTitles: Readonly<Record<string, string>> = appearance.windowTitles;
@@ -60,6 +61,7 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
     createStandaloneAuthority: createElectronStandaloneAuthorityFactory(
       shellManifest,
       standalone as ElectronPhysicalResourceSetDeclaration,
+      shell,
       { channelHeadUrl: resolveElectronChannelHeadOverride() },
     ),
   });

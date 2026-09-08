@@ -1,7 +1,7 @@
 import { app } from "electron";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { runElectronCarrier } from "@/runtime/index.js";
-import type { ElectronCapsuleModule } from "@/runtime/startup/capsule.js";
+import type { ElectronCapsuleModule, LoadedElectronCapsule } from "@/runtime/startup/capsule.js";
 import type { ElectronShellManifest } from "@/contracts/index.js";
 
 const mock = vi.hoisted(() => ({
@@ -31,8 +31,10 @@ const manifest: ElectronShellManifest = {
   shell: { type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) },
 };
 const preflight = { schemaVersion: 1 as const, atoms: [] };
+const shell = { type: "electron", version: "0.2.0", buildHash: "c".repeat(64), digest: "d".repeat(64) };
 function capsule() {
   return {
+    shell,
     createElectronCapsuleDefinition: vi.fn(() => ({ manifest,
       appearance: { schemaVersion: 1, window: { width: 1040, height: 700, title: "Test" },
         splash: { width: 1280, height: 900, minimumVisibleMs: 0, backgroundColor: "#000000", foregroundColor: "#ffffff",
@@ -58,13 +60,16 @@ it("establishes physical integrity and activation before loading one Capsule in-
   expect(mock.bind.mock.invocationCallOrder[0]).toBeLessThan(mock.begin.mock.invocationCallOrder[0]!);
   expect(mock.begin.mock.invocationCallOrder[0]).toBeLessThan(loadCapsule.mock.invocationCallOrder[0]!);
   expect(module.runElectronCapsule).toHaveBeenCalledExactlyOnceWith(expect.any(Object), expect.objectContaining({
-    manifest, presentation: "headless", namespace: "test-headless", nodeRuntime: { command: "/physical/platform/bin/node", env: {} },
+    manifest, shell, presentation: "headless", namespace: "test-headless", nodeRuntime: { command: "/physical/platform/bin/node", env: {} },
   }));
+  expect(module.createElectronCapsuleDefinition).toHaveBeenCalledWith(manifest, shell);
+  expect(manifest.shell.version).toBe("0.1.0");
+  expect(mock.log).toHaveBeenCalledWith("capsule.definition.loaded", { pid: process.pid, carrier: manifest.shell, shell });
   expect(mock.exit).not.toHaveBeenCalled();
 });
 
 it("cancels a pending Capsule load without invoking a late factory or startup", async () => {
-  const pending = Promise.withResolvers<ElectronCapsuleModule>();
+  const pending = Promise.withResolvers<LoadedElectronCapsule>();
   const entered = Promise.withResolvers<void>();
   const module = capsule();
   const running = runElectronCarrier({ manifest, preflight, headless: true,
@@ -86,13 +91,14 @@ it("cancels a pending Capsule load without invoking a late factory or startup", 
   expect(app.eventNames()).toEqual([]);
 });
 
-it.each(["channel", "shell"])("does not let Capsule mutate established %s through its factory argument", async field => {
+it.each(["channel", "shell", "capability"])("does not let Capsule mutate established %s through its factory argument", async field => {
   const module = capsule();
   const original = module.createElectronCapsuleDefinition;
-  module.createElectronCapsuleDefinition = installed => {
-    const definition = original(installed);
+  module.createElectronCapsuleDefinition = (installed, capability) => {
+    const definition = original(installed, capability);
     if (field === "channel") Object.assign(installed, { channel: "foreign" });
-    else Object.assign(installed.shell, { version: "99.0.0" });
+    else if (field === "shell") Object.assign(installed.shell, { version: "99.0.0" });
+    else Object.assign(capability, { version: "99.0.0" });
     return { ...definition, manifest: installed };
   };
   await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
@@ -103,7 +109,7 @@ it.each(["channel", "shell"])("does not let Capsule mutate established %s throug
 
 it("rejects Capsule attempts to redeclare fixed preflight", async () => {
   const module = capsule(), original = module.createElectronCapsuleDefinition;
-  module.createElectronCapsuleDefinition = installed => ({ ...original(installed), preflight });
+  module.createElectronCapsuleDefinition = (installed, capability) => ({ ...original(installed, capability), preflight });
   await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
   expect(module.runElectronCapsule).not.toHaveBeenCalled();
   expect(mock.exit).toHaveBeenCalledWith(1);

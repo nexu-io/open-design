@@ -16,10 +16,9 @@ export async function loadInstalledElectronCapsule(manifest: ElectronShellManife
   const seed = await loadElectronInstalledCapsuleSeed({ resourceRoot: installation.resourceRoot,
     channel: manifest.channel, target, carrierVersion: manifest.shell.version });
   const capsule = seed.envelope.document;
-  if (capsule.provides.shellVersion !== manifest.shell.version) throw new Error("Electron baseline Capsule differs from its installed Shell capability");
   const materialized = await materializeStandaloneBlob(join(installation.runtimeRoot, "capsule"),
     { ...capsule.archive, mediaType: "application/zip", sources: [] }, seed.archivePath,
     { type: "zip", entrypoint: capsule.entrypoint, treeSha256: capsule.archive.treeSha256 });
   return await load({ envelope: seed.envelope, trustedKeys: seed.trustedKeys, root: materialized.path,
-    carrier: { target, version: manifest.shell.version } });
+    carrier: { target, shell: manifest.shell } });
 }

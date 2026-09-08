@@ -36,7 +36,7 @@ Shell and the typed adapter boundary consumed by repository tools.
 - `config/carrier.json` owns fixed preflight and physical lifecycle budgets;
   it is the only runtime policy file copied into the physical scene. Capsule
   owns `config/runtime.json` warmup/recovery policy and must not redeclare preflight.
-  Capsule protocol v3 expresses this boundary; regenerate local v1/v2 experiment
+  Capsule protocol v4 expresses this boundary; regenerate local v1/v2/v3 experiment
   artifacts instead of adding compatibility aliases for their definition shape.
 - Compose the public electron-capsule startup presentation with product media;
   do not put loading HTML or DOM mechanics back into Shell adapters or kit.
@@ -44,6 +44,11 @@ Shell and the typed adapter boundary consumed by repository tools.
   electron-capsule session runner. It receives established carrier identity and
   startup authority; do not recreate OS listeners, platform discovery or quit
   protection in product composition.
+- The verified loader supplies composite Shell capability separately from the
+  installed manifest. Closure attachment/compatibility uses that capability;
+  installer confirmation, LKG capture and carrier compatibility use the physical
+  manifest identity. Provider schema 2 carries both explicitly. Never turn
+  Capsule-provided capability into proof of a replaced installation.
 
 `electron-kit` owns reusable Electron mechanics. `electron-contract` is the
 browser-safe declaration leaf in that build closure. App producers and web

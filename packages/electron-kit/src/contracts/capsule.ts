@@ -1,6 +1,6 @@
-import { compareVersions, type ArtifactReference } from "@open-design/standalone";
+import { canonicalJson, compareVersions, sha256Hex, validateShellIdentity, type ArtifactReference, type StandaloneShellIdentity } from "@open-design/standalone";
 
-export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v3" as const;
+export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v4" as const;
 export type ElectronCapsuleTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
 export type ElectronCapsuleManifest = Readonly<{
   schemaVersion: 1;
@@ -105,4 +105,29 @@ export function assertElectronCapsuleCompatibility(manifest: ElectronCapsuleMani
   if (validated.target !== carrier.target || compareVersions(carrier.version, validated.requires.carrierVersion) < 0) {
     throw new Error("Capsule requires a compatible carrier installation");
   }
+}
+
+/** Call only with authenticated Capsule metadata and the verified physical
+ * installation. Capability is not an installer identity. Version-only metadata
+ * changes preserve build identity but never the exact runtime binding digest. */
+export function resolveElectronCompositeShellIdentity(input: ElectronCapsuleManifest, carrier: Readonly<{
+  target: ElectronCapsuleTarget;
+  shell: StandaloneShellIdentity;
+}>): Readonly<StandaloneShellIdentity> {
+  const manifest = validateElectronCapsuleManifest(input);
+  validateShellIdentity(carrier.shell);
+  if (carrier.shell.type !== "electron") throw new Error("Electron Capsule requires an Electron carrier");
+  assertElectronCapsuleCompatibility(manifest, { target: carrier.target, version: carrier.shell.version });
+  const { schemaVersion, protocol, target, entrypoint, archive } = manifest;
+  const buildHash = electronCompositeShellBuildHash({ schemaVersion, protocol, target, entrypoint, archive }, carrier.shell.buildHash);
+  return Object.freeze({ type: "electron", version: manifest.provides.shellVersion, buildHash,
+    digest: sha256Hex(canonicalJson({ carrier: carrier.shell, capsule: manifest })) });
+}
+
+/** Release-neutral capability fingerprint shared by runtime and publication.
+ * Content descriptors cannot carry release versions or installer identity. */
+export function electronCompositeShellBuildHash(input: ElectronCapsuleContent, carrierBuildHash: string): string {
+  const content = validateElectronCapsuleContent(input);
+  return sha256Hex(canonicalJson({ protocol: content.protocol, target: content.target,
+    carrierBuildHash: digest(carrierBuildHash), archive: content.archive }));
 }

@@ -33,7 +33,7 @@ export async function runElectronCapsule(
   definition: ElectronShellDefinition,
   context: ElectronCapsuleSession,
 ): Promise<void> {
-  const { manifest, presentation, paths, preflight, resourceRoot, nodeRuntime, processErrors } = context;
+  const { manifest, shell, presentation, paths, preflight, resourceRoot, nodeRuntime, processErrors } = context;
   const sessionNamespace = context.namespace;
   const runtimeRoot = paths.runtimeRoot;
   let rendererLease: ElectronRendererLease | null = null;
@@ -58,7 +58,7 @@ export async function runElectronCapsule(
   const appearance = validateElectronShellAppearance(definition.appearance);
   const warmupTopology = validateElectronRuntimeWarmupTopology(definition.warmup);
   const scope: StandaloneScope = { channel: manifest.channel, namespace: sessionNamespace };
-  const attachment: StandaloneHandoffAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
+  const attachment: StandaloneHandoffAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell };
   let authority: ElectronStandaloneAuthority | null = null;
   let preparedRuntime: ElectronStandalonePreparedRuntime | null = null;
   let generation: GenerationRecord | null = null;
@@ -219,7 +219,7 @@ export async function runElectronCapsule(
         preparedRuntime = await authority.prepare({
           correlationId: randomUUID(),
           scope,
-          shell: manifest.shell,
+          shell,
         });
         generation = preparedRuntime.generation;
         generationBinding = preparedRuntime.binding;

@@ -41,7 +41,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
     await json(join(source, "scene.json"), { schemaVersion: 1, target: item.target, shellVersion: "0.1.0", shellBuildHash: sha(item.shell),
       closure: { file: "closure.mjs", sha256: sha("closure"), size: 7 }, standalone: { entrypoint: "launcher.mjs", sha256: sha("launcher") },
       ...(item.shell !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
-        schemaVersion: 1, protocol: "electron-capsule-v3", target: item.target, entrypoint: "capsule.cjs",
+        schemaVersion: 1, protocol: "electron-capsule-v4", target: item.target, entrypoint: "capsule.cjs",
         archive: { sha256: sha("capsule"), size: 7, treeSha256: "a".repeat(64) },
       } } }) });
     await packSceneArtifact(source, join(scenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));

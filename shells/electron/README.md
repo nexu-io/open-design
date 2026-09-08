@@ -104,6 +104,13 @@ Content metadata schema 5 expresses the public requirement as
 The requirement carries no Capsule selection; the Shell interprets whether its
 current composition, an updated Capsule, or a physical installation can satisfy it.
 Regenerate experimental schema-4 metadata; do not infer between both shapes.
+Capsule protocol v4 keeps the physical manifest separate from the authenticated
+composite capability passed to the session. The latter binds carrier build inputs
+and exact Capsule bytes; version-only changes preserve its build hash, not its
+runtime binding digest. Closure uses composite capability, while installer
+confirmation/LKG capture and carrier compatibility use physical identity.
+Provider schema 2 and the `capsule.definition.loaded` log distinguish both;
+regenerate earlier Capsule/provider experiments instead of inferring identities.
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.

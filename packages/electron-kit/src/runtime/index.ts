@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { BrowserWindow, app, nativeImage, protocol } from "electron";
-import { canonicalJson } from "@open-design/standalone";
+import { canonicalJson, validateShellIdentity } from "@open-design/standalone";
 import { bindNodePlatform } from "@open-design/standalone/packages";
 import {
   validateElectronShellManifest, validateElectronShellAppearance,
@@ -19,7 +19,7 @@ import {
   completeElectronStartupCancellation, installElectronStartupQuitBarrier,
   isElectronStartupCancelledError, type ElectronStartupQuitBarrier,
 } from "./startup/cancellation.js";
-import type { ElectronCapsuleModule } from "./startup/capsule.js";
+import type { LoadedElectronCapsule } from "./startup/capsule.js";
 import type { ElectronCapsuleCleanup } from "./startup/capsule-session.js";
 import type { ElectronPreflightTopology } from "./startup/preflight/index.js";
 
@@ -57,7 +57,7 @@ export type ElectronCarrierDefinition = Readonly<{
   loadCapsule(manifest: ElectronShellManifest, installation: Readonly<{
     resourceRoot: string;
     runtimeRoot: string;
-  }>): Promise<ElectronCapsuleModule>;
+  }>): Promise<LoadedElectronCapsule>;
 }>;
 
 async function runElectronCarrierSession(input: ElectronCarrierDefinition, context: ElectronRuntimeContext): Promise<void> {
@@ -124,12 +124,15 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
 
   // The physical quit/activation barrier already exists when Capsule code runs.
   const capsule = await startupQuit.guard(input.loadCapsule(manifest, Object.freeze({ resourceRoot, runtimeRoot: paths.runtimeRoot })));
-  const definition = capsule.createElectronCapsuleDefinition(manifest);
+  const shell = Object.freeze({ ...capsule.shell });
+  validateShellIdentity(shell);
+  if (shell.type !== manifest.shell.type) throw new Error("Capsule capability escaped its physical Shell type");
+  const definition = capsule.createElectronCapsuleDefinition(manifest, shell);
   if (canonicalJson(definition.manifest) !== canonicalJson(manifest) || "preflight" in definition) {
     throw new Error("Capsule cannot replace the established carrier identity or preflight");
   }
   validateElectronShellAppearance(definition.appearance);
-  log.write("capsule.definition.loaded", { pid: process.pid });
+  log.write("capsule.definition.loaded", { pid: process.pid, carrier: manifest.shell, shell });
   await startupQuit.guard(app.whenReady());
   if (process.platform === "darwin" && presentation === "interactive" && manifest.iconDataUrl != null) {
     const icon = nativeImage.createFromDataURL(manifest.iconDataUrl);
@@ -138,7 +141,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   }
   await startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
   await startupQuit.guard(capsule.runElectronCapsule(definition, Object.freeze({
-    manifest, presentation, namespace, paths, preflight, resourceRoot, nodeRuntime,
+    manifest, shell, presentation, namespace, paths, preflight, resourceRoot, nodeRuntime,
     log, processErrors, ingress, activation, startup, startupQuit,
     registerCleanup(steps: ElectronCapsuleCleanup) {
       if (startupQuit.cancelled) throw new Error("Electron Capsule cannot acquire cancelled startup owners");

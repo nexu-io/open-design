@@ -3,7 +3,7 @@ import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { parseReleaseVersion } from "@open-design/release";
 import { STANDALONE_METADATA_SCHEMA, verifyStandaloneMetadata, type SignedStandaloneMetadata, type StandaloneShellRequirement } from "@open-design/standalone";
-import { composeElectronCapsuleManifest, validateElectronCapsuleContent, validateElectronCapsuleRelease, assertElectronCapsuleReleaseManifest } from "@open-design/shell-electron/build/contracts";
+import { composeElectronCapsuleManifest, electronCompositeShellBuildHash, validateElectronCapsuleContent, validateElectronCapsuleRelease, assertElectronCapsuleReleaseManifest } from "@open-design/shell-electron/build/contracts";
 
 import {
   canonicalBytes,
@@ -160,6 +160,7 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       if (content.target !== scene.target) throw new Error("Electron Capsule baseline target mismatch");
       const archiveFile = join(scene.directory, "capsule.zip"), archive = await describeFile(archiveFile, "application/zip");
       if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Electron Capsule baseline archive mismatch");
+      scene.capabilityBuildHash = electronCompositeShellBuildHash(content, scene.shellBuildHash);
       const manifest = composeElectronCapsuleManifest({ content, version: String(shell.version),
         minimumCarrierVersion: String(shell.version), providedShellVersion: String(shell.version) });
       const manifestFile = join(resolve(request.outputDirectory), "documents", `capsule-${scene.target}.json`);
@@ -169,6 +170,8 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       await writeObject(manifestFile, signed("document", manifest, keys));
       scene.capsule = { manifest: await describeFile(manifestFile), archive: await describeFile(archived, "application/zip") };
     }
+    shell.buildHash = createHash("sha256").update(canonicalBytes((shell.scenes as JsonObject[])
+      .map(({ target, capabilityBuildHash }) => ({ target, shellBuildHash: capabilityBuildHash })))).digest("hex");
   }
   const old = await previousRequirements(request.previousContentMetadataFile, String(request.channel), keys);
   for (const shell of shellRecords) {

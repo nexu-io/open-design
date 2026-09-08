@@ -3,34 +3,35 @@ import { lstat, readFile, readdir, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { isAbsolute, join, resolve } from "node:path";
 import { Script, constants } from "node:vm";
-import { canonicalJson, standaloneTreeSha256, verifyDocument, type SignedDocument, type StandaloneTrustedKeyRing } from "@open-design/standalone";
-import { assertElectronCapsuleCompatibility, validateElectronCapsuleManifest, type ElectronCapsuleManifest, type ElectronCapsuleTarget } from "../../contracts/capsule.js";
+import { canonicalJson, standaloneTreeSha256, verifyDocument, type SignedDocument, type StandaloneShellIdentity, type StandaloneTrustedKeyRing } from "@open-design/standalone";
+import { resolveElectronCompositeShellIdentity, validateElectronCapsuleManifest, type ElectronCapsuleManifest, type ElectronCapsuleTarget } from "../../contracts/capsule.js";
 import type { ElectronShellDefinition, ElectronShellManifest } from "../../contracts/index.js";
 import type { ElectronCapsuleSession } from "./capsule-session.js";
 
 export type ElectronCapsuleModule = Readonly<{
-  createElectronCapsuleDefinition(manifest: ElectronShellManifest): ElectronShellDefinition;
+  createElectronCapsuleDefinition(manifest: ElectronShellManifest, shell: Readonly<StandaloneShellIdentity>): ElectronShellDefinition;
   runElectronCapsule(definition: ElectronShellDefinition, session: ElectronCapsuleSession): Promise<void>;
 }>;
+export type LoadedElectronCapsule = ElectronCapsuleModule & Readonly<{ shell: Readonly<StandaloneShellIdentity> }>;
 export type LoadElectronCapsuleInput = Readonly<{
   envelope: SignedDocument<ElectronCapsuleManifest>;
   trustedKeys: StandaloneTrustedKeyRing;
   root: string;
-  carrier: Readonly<{ target: ElectronCapsuleTarget; version: string }>;
+  carrier: Readonly<{ target: ElectronCapsuleTarget; shell: StandaloneShellIdentity }>;
 }>;
 
 /** One loader per carrier process. Call only after stable OS identity/single
  * instance ownership. Acquisition and startup commit/recovery remain outside.
  * A failed load stays failed; this is not an in-process hot replacement API. */
-export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput) => Promise<ElectronCapsuleModule> {
+export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput) => Promise<LoadedElectronCapsule> {
   let selected: string | null = null;
-  let loading: Promise<ElectronCapsuleModule> | null = null;
+  let loading: Promise<LoadedElectronCapsule> | null = null;
   return async input => {
     verifyDocument(input.envelope, input.trustedKeys);
     const manifest = validateElectronCapsuleManifest(input.envelope.document);
-    assertElectronCapsuleCompatibility(manifest, input.carrier);
+    const shell = resolveElectronCompositeShellIdentity(manifest, input.carrier);
     if (!isAbsolute(input.root) || resolve(input.root) !== input.root) throw new Error("Capsule root must be absolute and normalized");
-    const selection = canonicalJson({ root: input.root, manifest });
+    const selection = canonicalJson({ root: input.root, manifest, shell });
     if (selected != null && selected !== selection) throw new Error("Capsule replacement requires a new carrier process");
     if (loading != null) return loading;
     selected = selection;
@@ -51,7 +52,7 @@ export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput)
       evaluate(module.exports, createRequire(entrypoint), module, entrypoint, root);
       if (typeof module.exports.createElectronCapsuleDefinition !== "function") throw new Error("Capsule module lacks its definition factory");
       if (typeof module.exports.runElectronCapsule !== "function") throw new Error("Capsule module lacks its startup entry");
-      return Object.freeze({ createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition,
+      return Object.freeze({ shell, createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition,
         runElectronCapsule: module.exports.runElectronCapsule });
     })();
     return loading;

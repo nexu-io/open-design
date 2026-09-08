@@ -34,7 +34,7 @@ describe("exact release control", () => {
       closure: { sha256: digest(await readFile(closure)) },
       standalone: { sha256: digest(await readFile(launcher)) },
       ...(shellType !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
-        schemaVersion: 1, protocol: "electron-capsule-v3", target: "darwin-arm64", entrypoint: "capsule.cjs",
+        schemaVersion: 1, protocol: "electron-capsule-v4", target: "darwin-arm64", entrypoint: "capsule.cjs",
         archive: { sha256: digest(capsuleBytes), size: capsuleBytes.byteLength, treeSha256: "d".repeat(64) },
       } } }),
     };
@@ -143,6 +143,26 @@ describe("exact release control", () => {
         tampered.document.distributions[0].capsule.archive.sha256 = "e".repeat(64);
         expect(() => verifyDocument(tampered, { "release-test": keys.publicKey })).toThrow("signature");
       } else expect(metadata.document.distributions[0]).not.toHaveProperty("capsule");
+      if (shellType === "electron") {
+        // Same carrier, changed Capsule: do not inherit a floor proven for other code.
+        const prior = signStandaloneMetadata({ ...currentContent.metadata, shell: {
+          electron: { ...currentContent.metadata.shell.electron, version: { min: "0.0.9" } },
+        } }, "release-test", keys.privateKey);
+        await writeFile(historyFile, JSON.stringify(prior));
+        const changedBytes = Buffer.from("changed Capsule on unchanged carrier");
+        await writeFile(join(scene, "capsule.zip"), changedBytes);
+        const changedManifest = { ...manifest, capsule: { ...manifest.capsule!, content: {
+          ...manifest.capsule!.content, archive: { ...manifest.capsule!.content.archive, sha256: digest(changedBytes), size: changedBytes.byteLength },
+        } } };
+        await writeFile(manifestPath, JSON.stringify(changedManifest));
+        const changedOutput = join(root, "changed-capsule");
+        await prepareContent({ ...prepareRequest, outputDirectory: changedOutput, previousContentMetadataFile: historyFile,
+          shells: [{ type: shellType, version: "0.1.0", scenes: [{ target: "darwin-arm64", sceneDirectory: scene, sceneManifestSha256: digest(await readFile(manifestPath)) }] }],
+        }, join(changedOutput, "prepare-receipt.json"));
+        const changed = JSON.parse(await readFile(join(changedOutput, "prepare-receipt.json"), "utf8"));
+        expect(changed.shells[0].buildHash).not.toBe(prepared.shells[0].buildHash);
+        expect(changed.shells[0].minimumVersion).toBe("0.1.0");
+      }
     } finally {
       if (previous.key == null) delete process.env.OD_EXACT_ED25519_PRIVATE_KEY; else process.env.OD_EXACT_ED25519_PRIVATE_KEY = previous.key;
       if (previous.keyId == null) delete process.env.OD_EXACT_SIGNING_KEY_ID; else process.env.OD_EXACT_SIGNING_KEY_ID = previous.keyId;

@@ -13,4 +13,7 @@ Consume the established carrier session and register cleanup before acquiring
 runtime/window owners. Identity, platform verification, activation recording and
 the quit barrier precede Capsule execution. Do not recreate them here or rely on
 error-class identity across independently bundled carrier/Capsule modules.
+Use session.shell for Closure compatibility/attachments and manifest.shell for
+physical installer recovery/confirmation. Never project Capsule capability back
+into the fixed installation identity.
 Tests use the @/ source alias and live beside src under tests/.

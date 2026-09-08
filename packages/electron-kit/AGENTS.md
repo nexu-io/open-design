@@ -15,6 +15,11 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Capsule content builds emit release-neutral bytes and a content descriptor;
   public contracts compose version and compatibility metadata without loading a
   compiler. Keep build-cache policy and final signature authority in tools.
+- Capsule protocol v4 supplies a verified composite Shell identity alongside the
+  immutable physical manifest. Its build hash binds carrier build inputs and
+  exact Capsule content, excluding release versions; its runtime digest binds
+  the full authenticated combination. Do not accept module-exported identity
+  or use composite capability as physical installer proof.
 - Loading documents, animation, DOM updates and startup/session sequencing belong
   to electron-capsule. Establish presentation permission, physical integrity and
   activation/quit protection before invoking its versioned startup entry. Native

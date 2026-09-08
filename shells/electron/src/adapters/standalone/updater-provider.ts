@@ -15,11 +15,12 @@ import { ElectronReleaseExactFeed } from "./release-feed.js";
 import { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 
-export const ELECTRON_UPDATER_PROVIDER_CONFIG_ENV = "OD_ELECTRON_UPDATER_PROVIDER_V1";
+export const ELECTRON_UPDATER_PROVIDER_CONFIG_ENV = "OD_ELECTRON_UPDATER_PROVIDER_V2";
 export type ElectronUpdaterProviderConfig = Readonly<{
-  schemaVersion: 1;
+  schemaVersion: 2;
   scope: LifecycleScope;
   shell: StandaloneShellIdentity;
+  carrier: StandaloneShellIdentity;
   resourceRoot: string;
   storeRoot: string;
   runtimeRoot: string;
@@ -29,19 +30,21 @@ export type ElectronUpdaterProviderConfig = Readonly<{
 export function parseElectronUpdaterProviderConfig(input: unknown): ElectronUpdaterProviderConfig {
   if (input == null || typeof input !== "object" || Array.isArray(input)) throw new Error("Electron updater provider configuration is invalid");
   const value = input as ElectronUpdaterProviderConfig;
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["channelHeadUrl", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot"])) throw new Error("Electron updater provider configuration fields are invalid");
-  if (value.schemaVersion !== 1) throw new Error("Electron updater provider schema is unsupported");
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["carrier", "channelHeadUrl", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot"])) throw new Error("Electron updater provider configuration fields are invalid");
+  if (value.schemaVersion !== 2) throw new Error("Electron updater provider schema is unsupported");
   if (value.scope == null || JSON.stringify(Object.keys(value.scope).sort()) !== JSON.stringify(["channel", "namespace"])) throw new Error("Electron updater provider scope is invalid");
   const scope = Object.freeze({ ...validateStandaloneScope(value.scope) });
-  if (value.shell == null || JSON.stringify(Object.keys(value.shell).sort()) !== JSON.stringify(["buildHash", "digest", "type", "version"])) throw new Error("Electron updater provider Shell is invalid");
-  validateShellIdentity(value.shell);
-  if (value.shell.type !== "electron") throw new Error("Electron updater provider cannot serve another Shell");
+  for (const identity of [value.shell, value.carrier]) {
+    if (identity == null || JSON.stringify(Object.keys(identity).sort()) !== JSON.stringify(["buildHash", "digest", "type", "version"])) throw new Error("Electron updater provider Shell is invalid");
+    validateShellIdentity(identity);
+    if (identity.type !== "electron") throw new Error("Electron updater provider cannot serve another Shell");
+  }
   for (const path of [value.resourceRoot, value.runtimeRoot, value.storeRoot]) {
     if (typeof path !== "string" || resolve(path) !== path) throw new Error("Electron updater provider paths must be absolute and normalized");
   }
   const url = new URL(value.channelHeadUrl);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.hash) throw new Error("Electron updater provider feed URL is invalid");
-  return Object.freeze({ ...value, scope, shell: Object.freeze({ ...value.shell }), channelHeadUrl: url.href });
+  return Object.freeze({ ...value, scope, shell: Object.freeze({ ...value.shell }), carrier: Object.freeze({ ...value.carrier }), channelHeadUrl: url.href });
 }
 
 export async function runElectronUpdaterProvider(): Promise<void> {
@@ -70,7 +73,7 @@ export async function runElectronUpdaterProvider(): Promise<void> {
         const lifecycle = new StandaloneHostControlClient(config.scope, createStandaloneHostControlTransport({ ...expectedStamp, app: "standalone" }));
         const feed = new ElectronReleaseExactFeed({
           cacheRoot: config.storeRoot, channel: config.scope.channel, channelHeadUrl: config.channelHeadUrl,
-          currentReleaseVersion: installation.declaration.releaseVersion, shell: config.shell,
+          currentReleaseVersion: installation.declaration.releaseVersion, shell: config.carrier,
           target: installation.declaration.target, trustedKeys: installation.trustedKeys,
         });
         const updater = new ElectronStandaloneHostUpdater("electron", lifecycle, new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron"), {
@@ -81,7 +84,7 @@ export async function runElectronUpdaterProvider(): Promise<void> {
       },
       status() {
         return { control: "ready", providerSha256: installation.declaration.updaterProvider.sha256, supervisorSha256: installation.declaration.supervisor.sha256,
-          resourceRoot: config.resourceRoot, dataRoot: config.storeRoot, runtimeRoot: config.runtimeRoot, shell: config.shell };
+          resourceRoot: config.resourceRoot, dataRoot: config.storeRoot, runtimeRoot: config.runtimeRoot, shell: config.shell, carrier: config.carrier };
       },
       async stop() { handler = null; },
     },

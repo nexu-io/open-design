@@ -187,6 +187,7 @@ const verifyInstallerPlatformTrust: VerifyInstallerPlatformTrust = async ({ arti
 export function createElectronStandaloneAuthorityFactory(
   manifest: ElectronShellManifest,
   resourcesInput: ElectronPhysicalResourceSetDeclaration,
+  shell: Readonly<StandaloneShellIdentity>,
   options: Readonly<{
     verifyInstallerPlatformTrust?: VerifyInstallerPlatformTrust;
     captureInstallerLastKnownGood?: CaptureInstallerLastKnownGood;
@@ -202,7 +203,7 @@ export function createElectronStandaloneAuthorityFactory(
   return ({ installedShellPath, namespaceRoot, nodeRuntime, observeFeedback, resourceRoot, runtimeRoot }) => ({
     async prepare(request) {
       if (!isElectronStandaloneScope(manifest, request.scope)) throw new Error("Electron Standalone authority request escaped its Shell scope");
-      if (canonicalJson(request.shell) !== canonicalJson(manifest.shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
+      if (canonicalJson(request.shell) !== canonicalJson(shell)) throw new Error("Electron Standalone authority request escaped its Shell identity");
       const installation = await loadElectronStandaloneInstallation({ resourceRoot, channel: request.scope.channel, target: resolveElectronStandaloneTarget() });
       const channelHeadUrl = options.channelHeadUrl ?? installation.declaration.update.channelHeadUrl;
       const storeRoot = resolveElectronStandaloneStoreRoot(runtimeRoot);
@@ -272,7 +273,7 @@ export function createElectronStandaloneAuthorityFactory(
         const providerStamp = resourceSet.resources.find(({ id }) => id === "electron-updater")?.stamp;
         if (providerStamp == null) throw new Error("Electron resource set lacks its updater provider");
         const providerConfig = parseElectronUpdaterProviderConfig({
-          schemaVersion: 1, scope: request.scope, shell: request.shell, resourceRoot: resolve(resourceRoot), storeRoot,
+          schemaVersion: 2, scope: request.scope, shell: request.shell, carrier: manifest.shell, resourceRoot: resolve(resourceRoot), storeRoot,
           runtimeRoot: join(runtimeRoot, "electron-updater"), channelHeadUrl,
         });
         const provider = await convergeSidecarLaunch({
@@ -284,7 +285,7 @@ export function createElectronStandaloneAuthorityFactory(
         if (canonicalJson(providerStatus) !== canonicalJson({
           control: "ready", providerSha256: installation.declaration.updaterProvider.sha256,
           supervisorSha256: installation.declaration.supervisor.sha256, resourceRoot: resolve(resourceRoot),
-          dataRoot: storeRoot, runtimeRoot: providerConfig.runtimeRoot, shell: request.shell,
+          dataRoot: storeRoot, runtimeRoot: providerConfig.runtimeRoot, shell: request.shell, carrier: manifest.shell,
         })) throw new Error("Electron updater provider escaped its installed launch contract");
         if (reuse == null) {
           const converged = await convergeSidecarLaunch({
@@ -359,7 +360,7 @@ export function createElectronStandaloneAuthorityFactory(
           channel: request.scope.channel,
           channelHeadUrl,
           currentReleaseVersion: installation.declaration.releaseVersion,
-          shell: request.shell,
+          shell: manifest.shell,
           target: installation.declaration.target,
           trustedKeys: installation.trustedKeys,
         }),
@@ -396,7 +397,7 @@ export function createElectronStandaloneAuthorityFactory(
             }
             const expectedShell = snapshot.handoff.shell;
             const proof = confirmationRequest.proof;
-            if (canonicalJson(proof) !== canonicalJson(request.shell)
+            if (canonicalJson(proof) !== canonicalJson(manifest.shell)
               || proof.type !== expectedShell.type || proof.version !== expectedShell.version || proof.buildHash !== expectedShell.buildHash
               || claim.receipt?.installAttemptId !== claim.installAttemptId || claim.receipt.artifactPath !== claim.artifact.path
               || claim.receipt.artifactSha256 !== claim.artifact.sha256) {
@@ -508,7 +509,7 @@ export function createElectronStandaloneAuthorityFactory(
             const lastKnownGood = await (options.captureInstallerLastKnownGood ?? captureMacElectronLastKnownGood)({
               appPath: resolve(installedShellPath),
               authorityRoot: storeRoot,
-              shell: request.shell,
+              shell: manifest.shell,
               installIdentity: { appId: manifest.appId, executableName: manifest.executableName, namespace: manifest.namespace, productName: manifest.productName },
             });
             const exactInstallationRequest = Object.freeze({ ...installationRequest, artifactIdentity, platformTrust });

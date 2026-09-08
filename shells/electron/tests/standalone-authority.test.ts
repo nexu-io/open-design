@@ -226,7 +226,7 @@ describe("Electron production Standalone authority", () => {
       shell: { type: "electron", version: "0.1.0", buildHash: "a".repeat(64), digest: "b".repeat(64) },
     };
     const feedback: { generationId?: string; phase: string; state: string }[] = [];
-    const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
+    const authority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
       installedShellPath: join(root, "Current.app"),
       namespaceRoot: join(runtimeRoot, "namespace"),
       nodeRuntime: { command: process.execPath, env: {} },
@@ -264,7 +264,7 @@ describe("Electron production Standalone authority", () => {
       });
       expect(await handle.readStatus()).toMatchObject({ state: "running", references: 1 });
 
-      const incompatible = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
+      const incompatible = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "other-namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -487,7 +487,7 @@ describe("Electron production Standalone authority", () => {
       };
       await expect(prepared.armShellInstallation({ request: installationRequest, install })).rejects.toThrow("requires explicit recovery");
       expect(installerCalls).toBe(0);
-      const abandonAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
+      const abandonAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -564,7 +564,7 @@ describe("Electron production Standalone authority", () => {
         async install() { throw new Error("injected second crash after sealed claim"); },
       })).rejects.toThrow("injected second crash after sealed claim");
       expect(await restoredHandle.close()).toMatchObject({ state: "stopped", generationId: applied.generation.id, bindingDigest: applied.binding.digest });
-      const retryAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, authorityOptions)({
+      const retryAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, manifest.shell, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -624,7 +624,8 @@ describe("Electron production Standalone authority", () => {
         version: handoff.shell.version,
         shell: { ...handoff.shell, digest: "d".repeat(64) },
       };
-      const replacementAuthority = createElectronStandaloneAuthorityFactory(replacementManifest, physicalResources, authorityOptions)({
+      const replacementShell = { ...replacementManifest.shell, version: "9.0.0", buildHash: "e".repeat(64), digest: "f".repeat(64) };
+      const replacementAuthority = createElectronStandaloneAuthorityFactory(replacementManifest, physicalResources, replacementShell, authorityOptions)({
         installedShellPath: join(root, "Current.app"),
         namespaceRoot: join(runtimeRoot, "namespace"),
         nodeRuntime: { command: process.execPath, env: {} },
@@ -634,7 +635,7 @@ describe("Electron production Standalone authority", () => {
       const replacement = await replacementAuthority.prepare({
         correlationId: "replacement-authority-test",
         scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace },
-        shell: replacementManifest.shell,
+        shell: replacementShell,
       });
       const replacementClaim = await replacement.readShellInstallationClaim();
       expect(replacementClaim).toMatchObject({ state: "armed", identity: { installAttemptId: secondInstallAttemptId } });
@@ -663,6 +664,7 @@ describe("Electron production Standalone authority", () => {
         expected: rearmedReplacementClaim.identity,
         proof: { ...replacementManifest.shell, digest: "e".repeat(64) },
       })).rejects.toThrow("proof differs");
+      await expect(replacement.confirmShellInstallation({ expected: rearmedReplacementClaim.identity, proof: replacementShell })).rejects.toThrow("proof differs");
       const confirmationReceipt = await replacement.confirmShellInstallation({ expected: rearmedReplacementClaim.identity, proof: replacementManifest.shell });
       expect(confirmationReceipt).toMatchObject({ state: "consumed", installAttemptId: secondInstallAttemptId });
       expect(await replacement.updater.readSnapshot()).toMatchObject({ state: "installed", installAttemptId: secondInstallAttemptId });
@@ -673,13 +675,13 @@ describe("Electron production Standalone authority", () => {
       expect(await replacement.confirmShellInstallation({ expected: consumedClaim.identity, proof: replacementManifest.shell })).toEqual(confirmationReceipt);
       expect((await getSidecarStatus<{ hostPid: number }>(stamp)).hostPid).toBe(confirmedHost.hostPid);
       const replacementHandle = await replacement.start({
-        attachment: { id: "electron-replacement", shell: replacementManifest.shell },
+        attachment: { id: "electron-replacement", shell: replacementShell },
         capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } },
       });
       expect(await replacementHandle.readStatus()).toMatchObject({ state: "running", generationId: replacement.generation.id, bindingDigest: replacement.binding.digest });
-      const sibling = await replacementAuthority.prepare({ correlationId: "close-sibling", scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace }, shell: replacementManifest.shell });
+      const sibling = await replacementAuthority.prepare({ correlationId: "close-sibling", scope: { channel: replacementManifest.channel, namespace: replacementManifest.namespace }, shell: replacementShell });
       const siblingHandle = await sibling.start({
-        attachment: { id: "electron-sibling", shell: replacementManifest.shell },
+        attachment: { id: "electron-sibling", shell: replacementShell },
         capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } },
       });
       await replacementHandle.close();

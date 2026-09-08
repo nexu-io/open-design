@@ -13,13 +13,22 @@ async function fixture(source = 'module.exports.createElectronCapsuleDefinition 
   const root = await mkdtemp(join(tmpdir(), "capsule-load-")); roots.push(root);
   const body = Buffer.from(`${source}\n${startup ? 'module.exports.runElectronCapsule = async () => {};' : ''}`), entrypoint = join(root, "capsule.cjs");
   await writeFile(entrypoint, body);
-  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v3", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
+  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v4", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
     requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 100, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength }]) } });
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  return { root, entrypoint, envelope: signDocument(manifest, [{ keyId: "test", privateKey }]), trustedKeys: { test: publicKey }, carrier: { target: "darwin-arm64" as const, version: "1.0.0" } };
+  return { root, entrypoint, envelope: signDocument(manifest, [{ keyId: "test", privateKey }]), trustedKeys: { test: publicKey },
+    carrier: { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "b".repeat(64), digest: "c".repeat(64) } } };
 }
 describe("verified Capsule loading", () => {
+  it("does not take composite identity from executable module exports", async () => {
+    const input = await fixture('module.exports.shell = {type:"electron", version:"99.0.0"}; module.exports.createElectronCapsuleDefinition = () => ({});');
+    const loaded = await createElectronCapsuleLoader()(input);
+    expect(loaded.shell.version).toBe(input.envelope.document.provides.shellVersion);
+    expect(loaded.shell.version).not.toBe("99.0.0");
+    expect(Object.isFrozen(loaded.shell)).toBe(true);
+    expect(input.carrier.shell.version).toBe("1.0.0");
+  });
   it("requires the versioned startup entry and rejects the former definition-only protocol", async () => {
     const input = await fixture('module.exports.createElectronCapsuleDefinition = () => ({});', false);
     await expect(createElectronCapsuleLoader()(input)).rejects.toThrow("startup entry");
@@ -27,12 +36,17 @@ describe("verified Capsule loading", () => {
       .toThrow("unsupported Capsule manifest");
     expect(() => validateElectronCapsuleManifest({ ...input.envelope.document, protocol: "electron-capsule-v2" }))
       .toThrow("unsupported Capsule manifest");
+    expect(() => validateElectronCapsuleManifest({ ...input.envelope.document, protocol: "electron-capsule-v3" }))
+      .toThrow("unsupported Capsule manifest");
   });
   it("loads once in the current process and rejects in-process replacement", async () => {
     const input = await fixture(), load = createElectronCapsuleLoader();
     const [first, second] = await Promise.all([load(input), load(input)]);
     expect(second).toBe(first);
-    expect(first.createElectronCapsuleDefinition({} as never)).toMatchObject({ pid: process.pid });
+    expect(first.createElectronCapsuleDefinition({} as never, first.shell)).toMatchObject({ pid: process.pid });
+    expect(first.shell.version).toBe("2.0.0");
+    expect(first.shell.digest).not.toBe(input.carrier.shell.digest);
+    await expect(load({ ...input, carrier: { ...input.carrier, shell: { ...input.carrier.shell, digest: "d".repeat(64) } } })).rejects.toThrow("new carrier process");
     await expect(load(await fixture())).rejects.toThrow("new carrier process");
   });
   it("rejects untrusted signatures and modified bytes before executing them", async () => {
@@ -51,6 +65,6 @@ describe("verified Capsule loading", () => {
   it("supports native dynamic imports without a second process", async () => {
     const input = await fixture('module.exports.createElectronCapsuleDefinition = () => import("node:os").then(os => ({ platform: os.platform() }));');
     const loaded = await createElectronCapsuleLoader()(input);
-    await expect(loaded.createElectronCapsuleDefinition({} as never)).resolves.toMatchObject({ platform: process.platform });
+    await expect(loaded.createElectronCapsuleDefinition({} as never, loaded.shell)).resolves.toMatchObject({ platform: process.platform });
   });
 });

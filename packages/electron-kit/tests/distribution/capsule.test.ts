@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { buildElectronCapsuleContent } from "@/distribution/capsule.js";
-import { assertElectronCapsuleCompatibility, assertElectronCapsuleReleaseManifest, composeElectronCapsuleManifest, validateElectronCapsuleContent, validateElectronCapsuleManifest, validateElectronCapsuleRelease } from "@/contracts/capsule.js";
+import { assertElectronCapsuleCompatibility, assertElectronCapsuleReleaseManifest, composeElectronCapsuleManifest, resolveElectronCompositeShellIdentity, validateElectronCapsuleContent, validateElectronCapsuleManifest, validateElectronCapsuleRelease } from "@/contracts/capsule.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -17,13 +17,35 @@ async function fixture() {
   return { root, entryPath, outputRoot: join(root, "first"), target: "darwin-arm64" as const };
 }
 describe("independent Capsule build", () => {
+  it("derives composite capability from authenticated Capsule and physical carrier without rewriting either", () => {
+    const carrier = { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "a".repeat(64), digest: "b".repeat(64) } };
+    const manifest = composeElectronCapsuleManifest({ content: {
+      schemaVersion: 1, protocol: "electron-capsule-v4", target: carrier.target, entrypoint: "capsule.cjs",
+      archive: { sha256: "c".repeat(64), size: 100, treeSha256: "d".repeat(64) },
+    }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
+    const before = JSON.stringify({ carrier, manifest });
+    const shell = resolveElectronCompositeShellIdentity(manifest, carrier);
+    expect(shell).toMatchObject({ type: "electron", version: "3.0.0", buildHash: expect.stringMatching(/^[a-f0-9]{64}$/), digest: expect.stringMatching(/^[a-f0-9]{64}$/) });
+    expect(shell.buildHash).not.toBe(carrier.shell.buildHash);
+    expect(shell.digest).not.toBe(carrier.shell.digest);
+    expect(Object.isFrozen(shell)).toBe(true);
+    expect(JSON.stringify({ carrier, manifest })).toBe(before);
+    const renamed = resolveElectronCompositeShellIdentity({ ...manifest, version: "2.0.1", provides: { shellVersion: "3.0.1" } }, carrier);
+    expect(renamed.buildHash).toBe(shell.buildHash);
+    expect(renamed.digest).not.toBe(shell.digest);
+    expect(resolveElectronCompositeShellIdentity({ ...manifest, archive: { ...manifest.archive, sha256: "e".repeat(64) } }, carrier).buildHash).not.toBe(shell.buildHash);
+    expect(resolveElectronCompositeShellIdentity(manifest, { ...carrier, shell: { ...carrier.shell, buildHash: "e".repeat(64) } }).buildHash).not.toBe(shell.buildHash);
+    expect(() => resolveElectronCompositeShellIdentity(manifest, { ...carrier, shell: { ...carrier.shell, version: "0.9.0" } })).toThrow("carrier");
+    expect(() => resolveElectronCompositeShellIdentity(manifest, { ...carrier, target: "win32-x64" })).toThrow("carrier");
+    expect(() => resolveElectronCompositeShellIdentity(manifest, { ...carrier, shell: { ...carrier.shell, type: "terminal" } })).toThrow("Electron");
+  });
   it("binds signed release references to one target manifest without duplicating its compatibility", () => {
     const release = validateElectronCapsuleRelease({ schemaVersion: 1,
       manifest: { url: "https://release.invalid/capsule.json", sha256: "a".repeat(64), size: 500 },
       archive: { url: "https://release.invalid/capsule.zip", sha256: "b".repeat(64), size: 100 },
     });
     const manifest = composeElectronCapsuleManifest({ content: {
-      schemaVersion: 1, protocol: "electron-capsule-v3", target: "darwin-arm64", entrypoint: "capsule.cjs",
+      schemaVersion: 1, protocol: "electron-capsule-v4", target: "darwin-arm64", entrypoint: "capsule.cjs",
       archive: { sha256: release.archive.sha256, size: release.archive.size, treeSha256: "c".repeat(64) },
     }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
     expect(assertElectronCapsuleReleaseManifest(release, manifest, "darwin-arm64")).toEqual(manifest);

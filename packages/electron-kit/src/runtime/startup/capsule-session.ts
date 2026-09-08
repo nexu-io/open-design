@@ -1,4 +1,4 @@
-import type { NodeRuntimeBinding } from "@open-design/standalone";
+import type { NodeRuntimeBinding, StandaloneShellIdentity } from "@open-design/standalone";
 import type { ElectronShellManifest } from "../../contracts/index.js";
 import type { ElectronActivationAttempt } from "../session/activation.js";
 import type { installElectronLaunchIngress } from "../session/launch-ingress.js";
@@ -17,6 +17,8 @@ export type ElectronCapsuleCleanup = Pick<ElectronStartupCancellationSteps,
  * activation bookkeeping and the final process/window teardown. */
 export type ElectronCapsuleSession = Readonly<{
   manifest: ElectronShellManifest;
+  /** Verified composite capability; manifest.shell remains physical installation proof. */
+  shell: Readonly<StandaloneShellIdentity>;
   presentation: "headless" | "interactive";
   namespace: string;
   paths: ElectronNamespacePaths;
