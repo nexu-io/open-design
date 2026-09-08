@@ -4,6 +4,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "n
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { createPackage } from "@electron/asar";
 
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -209,7 +210,15 @@ describe("exact Electron release topology", () => {
     const platformTrust = { designatedRequirement: 'identifier "io.open-design.betahyx"', mode: "verify-only", platform: "macos", teamIdentifier: "adhoc" };
     const artifact = { mediaType: "application/x-apple-diskimage", sha256: "c".repeat(64), size: 73, url: "https://release.invalid/app.dmg" };
     const shellMetadata = { sha256: "d".repeat(64), size: 41, url: "https://release.invalid/electron-metadata.json" };
-    const installIdentity = { appBundleId: "io.open-design.betahyx", executableName: "open-design-betahyx", namespace: "acceptance" };
+    const installIdentity = { appId: "io.open-design.betahyx", executableName: "open-design-betahyx", namespace: "acceptance", productName: "OpenDesign" };
+    const archiveSource = join(root, "archive-source"); await mkdir(archiveSource);
+    const physical = { schemaVersion: 2, ...installIdentity, publisher: "OpenDesign", protocol: "open-design",
+      version: "1.2.3-betahyx.4", channel: "betahyx", shell: { ...shell, digest: "f".repeat(64) } };
+    const packPhysical = async () => {
+      await writeFile(join(archiveSource, "shell.json"), JSON.stringify(physical));
+      await createPackage(archiveSource, join(installedRoot, "app.asar"));
+    };
+    await packPhysical();
     const updater = { channel: "betahyx", mechanism: "standalone" };
     const required = { artifact, installIdentity, platformTrust, shell, shellMetadata, target: "darwin-arm64", updater };
     const target = { endpointUrl: "https://storage.invalid", bucket: "release", publicBaseUrl: "https://release.invalid", latestChannelHeadUrl: "https://storage.invalid/release/betahyx/latest/channel-head.json" };
@@ -256,11 +265,14 @@ describe("exact Electron release topology", () => {
     await collect();
     const credential = JSON.parse(await readFile(join(acceptanceRoot, "electron-darwin-arm64.json"), "utf8"));
     expect(credential).toMatchObject({ artifact, installIdentity, platformTrust, shell, shellMetadata, target: "darwin-arm64", updater });
+    expect(credential.installed.proof.physical.manifest).toEqual(physical);
 
     const installationPath = join(installedRoot, "standalone-installation.json");
     const installation = JSON.parse(await readFile(installationPath, "utf8"));
     installation.releaseVersion = "1.2.3-betahyx.3";
     await writeFile(installationPath, JSON.stringify(installation));
+    physical.version = installation.releaseVersion;
+    await packPhysical();
     const line = (state: string, candidateVersion?: string) => ({
       lines: { closure: { state, ...(candidateVersion == null ? {} : { candidateVersion }) }, shell: { currentVersion: "1.2.3", state: "current" } },
     });

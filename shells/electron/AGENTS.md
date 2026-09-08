@@ -14,6 +14,8 @@ Shell and the typed adapter boundary consumed by repository tools.
   `/lifecycle/inspection` is the lightweight diagnostic/CDP leaf for relocatable
   controllers: it must not load build dependencies or launch a runtime. Location
   inspection is read-only; explicit CDP updater calls use the running product contract.
+  Installed manifest inspection delegates to the isolated Kit ASAR reader and
+  returns actual physical bytes/identity, never a caller's expected release receipt.
   Local callers use typed functions, not private source paths or adapter subprocesses.
   tools-release exposes scene/distribution commands over `/build`; manifest
   resolution is internal product composition, not a separate command or file RPC.

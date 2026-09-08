@@ -10,9 +10,11 @@ it("loads compiled public APIs and idle lifecycle without build dependencies or 
      import { tmpdir } from "node:os";
      import { buildElectronPackage, buildElectronScene, buildElectronInstaller } from "@open-design/shell-electron/build";
      import { controlElectronDevelopment, controlElectronRuntime } from "@open-design/shell-electron/lifecycle";
+     import { readElectronInstalledManifest } from "@open-design/shell-electron/lifecycle/inspection";
      const root = await mkdtemp(join(tmpdir(), "electron-public-loading-"));
      try {
        for (const build of [buildElectronPackage, buildElectronScene, buildElectronInstaller]) assert.equal(typeof build, "function");
+       assert.equal(typeof readElectronInstalledManifest, "function");
        const scope = { channel: "dev", namespace: "public-loading-" + process.pid, controlRuntimeRoot: root };
        const dev = await controlElectronDevelopment({ ...scope, schemaVersion: 2, operation: "electron.dev.status" }, { logFd: 2 });
        const runtime = await controlElectronRuntime({ ...scope, schemaVersion: 1, operation: "electron.runtime.status" });

@@ -335,6 +335,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: 3.1050.0
         version: 3.1050.0
+      '@electron/asar':
+        specifier: 3.4.1
+        version: 3.4.1
       '@ffmpeg-installer/ffmpeg':
         specifier: 1.1.0
         version: 1.1.0
@@ -569,6 +572,9 @@ importers:
 
   packages/electron-kit:
     dependencies:
+      '@electron/asar':
+        specifier: 3.4.1
+        version: 3.4.1
       '@open-design/electron-contract':
         specifier: workspace:*
         version: link:../electron-contract
@@ -943,6 +949,9 @@ importers:
         specifier: 2.9.0
         version: 2.9.0
     devDependencies:
+      '@electron/asar':
+        specifier: 3.4.1
+        version: 3.4.1
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2

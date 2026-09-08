@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { createPackage } from "@electron/asar";
 import { describeElectronRuntimeDiagnostics } from "@open-design/shell-electron/lifecycle/inspection";
 import { collectReleaseAcceptance } from "../src/exact/acceptance.ts";
 
@@ -32,10 +33,19 @@ async function fixture() {
     shell: { type: "electron", version: "1.2.3", buildHash: "b".repeat(64) }, target: "darwin-arm64",
     artifact: { url: "https://release.invalid/app.dmg", sha256: "c".repeat(64), size: 42 },
     shellMetadata: { url: "https://release.invalid/shell.json", sha256: "d".repeat(64), size: 20 },
-    installIdentity: { appId: "io.open-design.betahyx", namespace: "acceptance" },
+    installIdentity: { appId: "io.open-design.betahyx", namespace: "acceptance", executableName: "open-design", productName: "OpenDesign" },
     platformTrust: { platform: "macos", mode: "verify-only" }, updater: { mechanism: "standalone" },
   };
   const published = { schemaVersion: 1, operation: "exact.publish", profile: policy.profile, channel: policy.channel, releaseVersion: policy.releaseVersion, sourceCommit: policy.sourceCommit, target: policy.target, requiredAcceptances: [required] };
+  const physical = { schemaVersion: 2, ...required.installIdentity, publisher: "OpenDesign", protocol: "open-design",
+    channel: policy.channel, version: policy.releaseVersion, shell: { ...required.shell, digest: "e".repeat(64) } };
+  const archiveSource = join(root, "archive-source");
+  await mkdir(archiveSource);
+  const archive = async (manifest: unknown) => {
+    await writeFile(join(archiveSource, "shell.json"), JSON.stringify(manifest));
+    await createPackage(archiveSource, join(root, "app.asar"));
+  };
+  await archive(physical);
   const body = Buffer.from("installed payload");
   await writeFile(join(root, "payload.bin"), body);
   const file = { file: "payload.bin", sha256: createHash("sha256").update(body).digest("hex"), size: body.length };
@@ -46,8 +56,32 @@ async function fixture() {
   const log = async (values: unknown[]) => await writeFile(runtimeLog, values.map((value) => JSON.stringify(value)).join("\n"));
   await log(events);
   const input = { schemaVersion: 1, operation: "exact.acceptance", policyReceipt: await save("policy.json", policy), publishReceipt: await save("publish.json", published), shellType: "electron", target: "darwin-arm64", installedRoot: root, runtimeLog };
-  return { root, input, save, installation, published, events, log, output: join(root, "acceptance.json") };
+  return { root, input, save, installation, published, physical, archive, events, log, output: join(root, "acceptance.json") };
 }
+
+it.each(["buildHash", "version"])("rejects a different actual physical Shell %s despite matching declared installation files", async field => {
+  const f = await fixture();
+  await f.archive({ ...f.physical, shell: { ...f.physical.shell, [field]: field === "version" ? "9.0.0" : "f".repeat(64) } });
+  await expect(executeExactReleaseControl(f.input, f.output)).rejects.toThrow("physical Shell identity mismatch");
+});
+
+it.each(["appId", "namespace", "executableName", "productName", "channel", "version"])("rejects a different installed manifest %s", async field => {
+  const f = await fixture();
+  await f.archive({ ...f.physical, [field]: field === "version" ? "9.0.0" : "different" });
+  await expect(executeExactReleaseControl(f.input, f.output)).rejects.toThrow("physical Shell identity mismatch");
+});
+
+it("records hashes of the actual installed archive and physical manifest", async () => {
+  const f = await fixture();
+  await executeExactReleaseControl(f.input, f.output);
+  const hash = (body: Buffer | string) => createHash("sha256").update(body).digest("hex");
+  const archive = await readFile(join(f.root, "app.asar"));
+  expect(JSON.parse(await readFile(f.output, "utf8")).installed).toMatchObject({
+    shell: f.published.requiredAcceptances[0]!.shell,
+    proof: { physical: { manifest: f.physical, manifestSha256: hash(JSON.stringify(f.physical)),
+      archive: { file: "app.asar", sha256: hash(archive), size: archive.length } } },
+  });
+});
 
 it("binds installed evidence to the policy and published target", async () => {
   const f = await fixture();
@@ -164,6 +198,14 @@ it("requires a mounted hot renderer followed by a separate cold start of the sam
   await f.log([...hot, ...cold]);
   await executeExactReleaseControl(input, f.output);
   expect(JSON.parse(await readFile(f.output, "utf8")).installed.proof.hotUpdate).toMatchObject({ rendererAttemptId: "hot", rendererBindingDigest: bindingDigest, coldAttemptId: "cold" });
+  // Hot delivery may reuse a physical baseline from an earlier release of the
+  // same channel, but its own manifest must still match that installation.
+  const baselineReleaseVersion = "1.2.3-betahyx.3";
+  await f.save("standalone-installation.json", { ...f.installation, releaseVersion: baselineReleaseVersion });
+  await expect(executeExactReleaseControl(input, f.output)).rejects.toThrow("physical Shell identity mismatch");
+  await f.archive({ ...f.physical, version: baselineReleaseVersion });
+  await executeExactReleaseControl(input, f.output);
+  expect(JSON.parse(await readFile(f.output, "utf8")).installed.proof.baselineReleaseVersion).toBe(baselineReleaseVersion);
   for (const invalid of [
     [...hot.filter((event) => event.event !== "renderer.generation.committed"), ...cold],
     hot,

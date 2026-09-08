@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { readElectronInstalledManifest } from "@open-design/shell-electron/lifecycle/inspection";
 
 import { readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { canonicalBytes, readObject, type JsonObject } from "./control-common.ts";
@@ -104,10 +105,18 @@ async function electronProof(input: JsonObject, published: JsonObject, required:
   };
   files.seeds = await Promise.all(installation.seeds.map((value: JsonObject) => installedFile(input.installedRoot, value, "seed")));
   if (!nonempty(input.runtimeLog)) throw new Error("installed Electron acceptance requires its runtime log");
+  const physical = await readElectronInstalledManifest(input.installedRoot);
+  const { manifest } = physical;
+  const shell = { type: manifest.shell.type, version: manifest.shell.version, buildHash: manifest.shell.buildHash };
+  if (!canonicalBytes(shell).equals(canonicalBytes(required.shell)) || manifest.channel !== published.channel
+    || manifest.version !== installation.releaseVersion
+    || (["appId", "executableName", "namespace", "productName"] as const).some(key => manifest[key] !== required.installIdentity?.[key])) {
+    throw new Error("installed Electron physical Shell identity mismatch");
+  }
   return {
-    shell: required.shell, target: installation.target,
+    shell, target: installation.target,
     proof: {
-      installationSha256: digest(await readFile(installationPath)), files,
+      installationSha256: digest(await readFile(installationPath)), files, physical,
       runtime: await runtimeProof(input.runtimeLog), baselineReleaseVersion: installation.releaseVersion,
       ...(input.hotAcceptanceReceipt == null ? {} : { hotUpdate: await hotProof(input, published) }),
     },

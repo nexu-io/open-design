@@ -19,6 +19,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
     "@aws-sdk/client-s3": "3.1050.0",
     "@ffmpeg-installer/ffmpeg": "1.1.0",
     "@ffprobe-installer/ffprobe": "2.1.2",

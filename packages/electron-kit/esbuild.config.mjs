@@ -41,6 +41,7 @@ const publicEntries = {
   "commands/pack": "commands/pack",
   "cdp-api": "cdp-api",
   "update/installation/index": "update/installation/index",
+  "update/installation/inspection": "update/installation/inspection",
 };
 for (const [entry, output] of Object.entries(publicEntries)) {
   await build({

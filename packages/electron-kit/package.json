@@ -57,6 +57,10 @@
     "./installation": {
       "types": "./dist/update/installation/index.d.ts",
       "default": "./dist/update/installation/index.mjs"
+    },
+    "./installation/inspection": {
+      "types": "./dist/update/installation/inspection.d.ts",
+      "default": "./dist/update/installation/inspection.mjs"
     }
   },
   "scripts": {
@@ -65,6 +69,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@electron/asar": "3.4.1",
     "@open-design/electron-contract": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "electron-builder": "26.8.1",

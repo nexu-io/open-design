@@ -12,6 +12,10 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Keep concrete macOS/Windows distribution and installer policy in Shell JSON. electron-kit may validate a finite supported matrix and translate it to builder configuration; distribution policy must not leak into the release-neutral scene.
 - Keep persistent cache roots, cache files, convergence graphs, hit/miss policy, retention, and immutable artifact registration outside electron-kit. `tools-pack` owns build-work reuse, `tools-release` owns verified final-artifact reuse, and convergence may cache only opaque scene products.
 - A verified signed artifact is byte-immutable. `distribution/projection/` may model copy/wrap/sidecar metadata after reuse, but build information that must enter signed bytes is a pre-sign identity input and requires a rebuild.
+- `/installation/inspection` reads the actual packed physical manifest and hashes
+  the same archive snapshot without launching Electron or changing installed state.
+  Keep its ASAR reader isolated from runtime exports; observation is not platform
+  signature verification and never substitutes Capsule capability for carrier identity.
 - Capsule content builds emit release-neutral bytes and a content descriptor;
   public contracts compose version and compatibility metadata without loading a
   compiler. Keep build-cache policy and final signature authority in tools.
