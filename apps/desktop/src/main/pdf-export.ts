@@ -330,15 +330,80 @@ async function unhideDeckSlidesForPrint(window: BrowserWindow): Promise<void> {
  */
 export const PRINTABLE_CONTENT_WAIT_TIMEOUT_MS = 15_000;
 
-/** Per-resource ceiling inside the page, kept below the outer bound so a single
- *  stalled image drops out while the rest of the document still settles
- *  normally, instead of every export paying the full outer timeout. */
-const IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS = 10_000;
+/**
+ * Per-resource ceiling inside the page, kept below the outer bound so a single
+ * stalled image drops out while the rest of the document still settles
+ * normally, instead of every export paying the full outer timeout.
+ *
+ * Derived rather than hard-coded so a caller on a tighter budget (the chat
+ * card's first-viewport thumbnail spends 5s where an export spends 15s) keeps
+ * the same inner/outer relationship instead of accidentally inverting it and
+ * making every resource pay the whole budget. At the default budget this is
+ * exactly the 10s it has always been.
+ */
+export function inPageResourceBudget(budgetMs: number): number {
+  return Math.max(1_000, Math.round((budgetMs * 2) / 3));
+}
 
-export async function waitForPrintableContent(window: BrowserWindow): Promise<void> {
+export type PrintableContentWaitOptions = {
+  /** Total ceiling for this wait. Defaults to {@link PRINTABLE_CONTENT_WAIT_TIMEOUT_MS}. */
+  budgetMs?: number;
+  /**
+   * Only wait for resources that intersect the first viewport.
+   *
+   * An export renders the whole document, so it has to wait for the whole
+   * document. A first-viewport cover does not: waiting on the 200th image of a
+   * long page cannot change a single pixel of the shot, it just spends the
+   * thumbnail's (much tighter) budget. Off by default — every existing caller
+   * keeps waiting for everything.
+   */
+  firstViewportOnly?: boolean;
+};
+
+/**
+ * Does `rect` overlap the first viewport of a `viewportHeight`-tall window?
+ *
+ * Serialized into the page, so it stays dependency-free. A zero-height element
+ * sitting at the top counts as visible: an `<img>` that has not loaded yet
+ * frequently lays out with no height, and it is precisely the thing the cover
+ * is waiting for.
+ */
+export function intersectsFirstViewport(
+  rect: { bottom: number; top: number },
+  viewportHeight: number,
+): boolean {
+  return rect.top < viewportHeight && rect.bottom >= 0;
+}
+
+export async function waitForPrintableContent(
+  window: BrowserWindow,
+  options?: PrintableContentWaitOptions,
+): Promise<void> {
+  const budgetMs =
+    typeof options?.budgetMs === "number" && Number.isFinite(options.budgetMs) && options.budgetMs > 0
+      ? options.budgetMs
+      : PRINTABLE_CONTENT_WAIT_TIMEOUT_MS;
   const pageSettled = window.webContents.executeJavaScript(
     `(function() {
-      var RESOURCE_TIMEOUT_MS = ${IN_PAGE_RESOURCE_WAIT_TIMEOUT_MS};
+      var RESOURCE_TIMEOUT_MS = ${inPageResourceBudget(budgetMs)};
+      var FIRST_VIEWPORT_ONLY = ${options?.firstViewportOnly === true};
+      var ${intersectsFirstViewport.name} = ${intersectsFirstViewport.toString()};
+
+      // Scope gate. With FIRST_VIEWPORT_ONLY off this is the identity filter,
+      // so an export's resource set is byte-for-byte what it always was.
+      function inCaptureScope(el) {
+        if (!FIRST_VIEWPORT_ONLY) return true;
+        try {
+          return ${intersectsFirstViewport.name}(
+            el.getBoundingClientRect(),
+            window.innerHeight || document.documentElement.clientHeight || 0
+          );
+        } catch (e) {
+          // Unmeasurable (detached, or a stub surface): keep it rather than
+          // silently skipping a resource the shot may need.
+          return true;
+        }
+      }
 
       // Resolve-on-timeout (never reject): a resource we gave up on is treated
       // exactly like one that fired 'error' — the capture proceeds without it.
@@ -356,7 +421,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
       }
 
       function waitForImages() {
-        return Promise.all(Array.from(document.images || []).map(function(img) {
+        return Promise.all(Array.from(document.images || []).filter(inCaptureScope).map(function(img) {
           if (img.complete) return Promise.resolve();
           return withDeadline(new Promise(function(resolve) {
             img.addEventListener('load', resolve, { once: true });
@@ -377,7 +442,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
 
       function waitForCssBackgroundImages() {
         var urls = new Set();
-        Array.from(document.querySelectorAll('*')).forEach(function(el) {
+        Array.from(document.querySelectorAll('*')).filter(inCaptureScope).forEach(function(el) {
           var style = window.getComputedStyle(el);
           cssUrlValues(style.backgroundImage).forEach(function(url) { urls.add(url); });
           cssUrlValues(style.borderImageSource).forEach(function(url) { urls.add(url); });
@@ -422,7 +487,7 @@ export async function waitForPrintableContent(window: BrowserWindow): Promise<vo
     raced = await Promise.race([
       pageSettled,
       new Promise<symbol>((resolve) => {
-        timer = setTimeout(() => resolve(OUTER_TIMEOUT), PRINTABLE_CONTENT_WAIT_TIMEOUT_MS);
+        timer = setTimeout(() => resolve(OUTER_TIMEOUT), budgetMs);
       }),
     ]);
   } finally {

@@ -25,10 +25,8 @@
 // personal_byok workspace still has full team features.
 
 import {
-  useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -38,6 +36,7 @@ import {
 import { createPortal } from 'react-dom';
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import {
+  canReachWorkspaceBillingEntrance,
   workspaceSeatCapacityState,
   type WorkspaceActiveResponse,
   type WorkspaceBillingSummary,
@@ -58,11 +57,8 @@ import { GITHUB_STARS_FALLBACK_LABEL, formatStars, useGithubStars } from './useG
 import { PlanWordmark, planBadgeTierForWorkspace } from './PlanWordmark';
 import { RemixIcon } from './RemixIcon';
 import { InviteDialog } from './InviteDialog';
-import { RailRecentRow } from './entry-nav-rail/RailRecentRow';
-import { useProjectRunSummaries } from '../hooks/useProjectRunStatuses';
 import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
-import type { Project } from '../types';
 import { isRtlLocale, useI18n } from '../i18n';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
 import { ENTRY_RAIL_TOGGLE_EVENT } from './entryRailBridge';
@@ -79,7 +75,11 @@ import {
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
 import { shouldShowCreditsBalance } from './entry-rail-account-state';
-import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import {
+  AMR_CONSOLE_AUTO_RECHARGE_INTENT,
+  amrAutoRechargeUrlForProfile,
+  amrPlansUrlForProfile,
+} from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
@@ -246,18 +246,6 @@ interface Props {
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
   footerNotice?: ReactNode;
-  /** Projects for the rail's 最近浏览过 section (per product: 在插件下边新增一个
-   *  类型). The SAME catalog and the SAME order 全部项目's 最近浏览过 tab shows —
-   *  EntryShell hands over the one it already feeds that grid, so the two can
-   *  never drift; this list only takes the head of it. Empty (or absent) hides
-   *  the section entirely. */
-  recentProjects?: Project[];
-  /** Row actions for the 最近浏览过 list's ⋮ menu. Omit either to drop its item. */
-  onRenameRecentProject?: (id: string, name: string) => void;
-  onDeleteRecentProject?: (id: string) => Promise<boolean | void> | boolean | void;
-  /** Opens one of those projects — the pull-first opener, so a shared project
-   *  that is not local yet still lands. */
-  onOpenRecentProject?: (id: string) => void | Promise<unknown>;
   /** One-off targeted announcement coordination owned by the Home shell. */
   priorityAnnouncementActive?: boolean;
   onPriorityAnnouncementPendingChange?: (pending: boolean) => void;
@@ -315,211 +303,6 @@ function NavButton({
   );
 }
 
-/** How many of the recent projects the rail lists. The rail is navigation, not
- *  a grid: past ~8 rows the section outgrows the destinations above it and the
- *  whole rail starts to scroll. 全部项目 is one click away for the rest, and the
- *  section's own footer row goes there. */
-const RAIL_RECENT_LIMIT = 8;
-
-/** Remembers the section's open/closed state across launches, next to the
- *  rail's own `od.entry.railOpen`. A disclosure the user closed should stay
- *  closed — re-opening it on every boot is the whole reason to have the
- *  control. */
-const RECENT_SECTION_STORAGE_KEY = 'od.entry.railRecentOpen';
-
-function readStoredRecentOpen(): boolean {
-  if (typeof window === 'undefined') return true;
-  try {
-    // Default OPEN: the section is new and a collapsed-by-default disclosure
-    // reads as a missing feature.
-    return window.localStorage.getItem(RECENT_SECTION_STORAGE_KEY) !== 'false';
-  } catch {
-    return true;
-  }
-}
-
-/**
- * Which finished run the user has already looked at, per project (per product:
- * 点进去之后对号换回默认 icon).
- *
- * Invariant: a ✓ is acknowledged for ONE specific finished run — the value is
- * that run's id — and a newer finished run is a new notice. Keyed on the run
- * rather than the project so the acknowledgement stays correct even when the
- * section was collapsed (and not polling) for the whole of the next run: on
- * re-expanding, the newest terminal run's id no longer matches and the ✓ shows
- * again. Only a project whose live status is `succeeded` consults this at all.
- *
- * Persisted next to the section's own open/closed flag: a reload re-reads the
- * same runs feed and would otherwise re-raise every ✓ the user has already
- * cleared.
- */
-const RECENT_SEEN_DONE_STORAGE_KEY = 'od.entry.railRecentSeenDone';
-
-type AcknowledgedRuns = Readonly<Record<string, string>>;
-
-function readStoredSeenDone(): AcknowledgedRuns {
-  if (typeof window === 'undefined') return {};
-  try {
-    const raw = window.localStorage.getItem(RECENT_SEEN_DONE_STORAGE_KEY);
-    const parsed: unknown = raw ? JSON.parse(raw) : null;
-    // Anything but a plain object of run ids — including a bare list of
-    // project ids, which cannot say which run it meant — reads as "nothing
-    // acknowledged". The worst case is one ✓ the user has already seen, never a
-    // missing one.
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    const acknowledged: Record<string, string> = {};
-    for (const [projectId, runId] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof runId === 'string' && runId) acknowledged[projectId] = runId;
-    }
-    return acknowledged;
-  } catch {
-    return {};
-  }
-}
-
-function writeStoredSeenDone(acknowledged: AcknowledgedRuns): void {
-  try {
-    window.localStorage.setItem(RECENT_SEEN_DONE_STORAGE_KEY, JSON.stringify(acknowledged));
-  } catch {
-    // Private mode / storage disabled: the ✓ still clears for this session.
-  }
-}
-
-/**
- * 最近浏览过 — a collapsible list of the projects the 全部项目 view's own
- * 最近浏览过 tab would show, sitting under 插件 in the rail (per product).
- *
- * It takes the catalog EntryShell already feeds that grid and shows the head of
- * it in the same order (most recently touched first), so the rail and the grid
- * can never disagree about what "recent" means. Rows open the project through
- * the same pull-first opener the grid uses.
- */
-function RailRecentSection({
-  projects,
-  onOpen,
-  onRename,
-  onDelete,
-  workspaceContext,
-  label,
-}: {
-  projects: Project[];
-  onOpen?: (id: string) => void | Promise<unknown>;
-  onRename?: (id: string, name: string) => void;
-  onDelete?: (id: string) => Promise<boolean | void> | boolean | void;
-  workspaceContext?: WorkspaceCollabContext | null;
-  label: string;
-}) {
-  const [open, setOpen] = useState(readStoredRecentOpen);
-  const items = useMemo(
-    () => [...projects].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, RAIL_RECENT_LIMIT),
-    [projects],
-  );
-  // Run status for the rows' leading glyph. `Project.status` cannot serve it —
-  // it only arrives on the UNSCOPED project list, so it is absent for every
-  // workspace-bound project (see the hook's own note) — and this is the same
-  // feed the workspace tab dropdown reads, which is what keeps the two glyph
-  // columns telling one story.
-  // Only polled while the disclosure is open: it costs one request per listed
-  // project (≤ RAIL_RECENT_LIMIT), and a collapsed section shows no glyphs.
-  const runStatusProjectIds = useMemo(() => items.map((item) => item.id), [items]);
-  const runSummaryByProjectId = useProjectRunSummaries(runStatusProjectIds, {
-    enabled: open,
-    workspaceContext,
-  });
-  const [seenDone, setSeenDone] = useState<AcknowledgedRuns>(readStoredSeenDone);
-
-  // Opening a project is what spends its ✓ (per product): the finished run on
-  // screen is recorded as seen. Recorded only when there is actually one, so
-  // the store stays the list of notices the user has dismissed rather than of
-  // every project ever opened.
-  const openProject = useCallback(
-    (id: string) => {
-      const summary = runSummaryByProjectId.get(id);
-      if (summary?.status === 'succeeded' && summary.latestTerminalRunId) {
-        const runId = summary.latestTerminalRunId;
-        setSeenDone((prev) => {
-          if (prev[id] === runId) return prev;
-          const next = { ...prev, [id]: runId };
-          writeStoredSeenDone(next);
-          return next;
-        });
-      }
-      return onOpen?.(id);
-    },
-    [onOpen, runSummaryByProjectId],
-  );
-
-  function toggle() {
-    setOpen((wasOpen) => {
-      const next = !wasOpen;
-      try {
-        window.localStorage.setItem(RECENT_SECTION_STORAGE_KEY, String(next));
-      } catch {
-        // Private mode / storage disabled: the section still toggles, it just
-        // forgets. Never let a storage failure swallow the interaction.
-      }
-      return next;
-    });
-  }
-
-  // Nothing to list is not an empty state worth a row: a workspace with no
-  // projects yet should see the rail it had before this section existed.
-  if (items.length === 0) return null;
-
-  return (
-    <div className="entry-nav-rail__recent">
-      <button
-        type="button"
-        className="entry-nav-rail__recent-head"
-        onClick={toggle}
-        aria-expanded={open}
-        data-testid="entry-nav-recent-toggle"
-      >
-        {/* Title first, chevron trailing (per product: 展开和收起的按钮在最右侧).
-            DOM order follows the visual one rather than an `order` swap, so the
-            reading order matches too. */}
-        <span className="entry-nav-rail__recent-title">{label}</span>
-        <span className="entry-nav-rail__recent-chevron" aria-hidden>
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={14} />
-        </span>
-      </button>
-      {/* The canonical disclosure pair (index.css / composio.css): the outer
-          grid animates 0fr → 1fr, the inner box carries the clip. `hidden` on
-          the wrapper would skip the transition entirely. */}
-      <div className={`accordion-collapsible${open ? ' open' : ''}`}>
-        <div className="accordion-collapsible-inner">
-          <ul className="entry-nav-rail__recent-list">
-            {items.map((project) => {
-              const summary = runSummaryByProjectId.get(project.id);
-              const status = summary?.status;
-              // An acknowledged ✓ is DROPPED, not drawn quieter: the row goes
-              // back to its default chat mark (per product). Every other status
-              // is live and stays. Acknowledged means THIS finished run was
-              // seen; a newer one is a new notice.
-              const acknowledged =
-                status === 'succeeded'
-                && summary?.latestTerminalRunId !== undefined
-                && seenDone[project.id] === summary.latestTerminalRunId;
-              return (
-                <li key={project.id}>
-                  <RailRecentRow
-                    project={project}
-                    workspaceContext={workspaceContext}
-                    runStatus={acknowledged ? undefined : status}
-                    onOpen={openProject}
-                    onRename={onRename}
-                    onDelete={onDelete}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function handleWorkspaceMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>): void {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   const items = Array.from(
@@ -555,6 +338,7 @@ export function teamConsoleUrl(
     | 'settings'
     | 'billing'
     | 'create-team'
+    | 'auto-recharge'
     | 'invite',
 ): string {
   // B's console routes: members live at /team, everything account/billing
@@ -573,6 +357,7 @@ export function teamConsoleUrl(
   const path =
     section === 'members' ? 'team'
     : section === 'billing' ? 'dashboard'
+    : section === 'auto-recharge' ? 'dashboard'
     : section === 'create-team' || section === 'invite' ? 'dashboard'
     : section;
   try {
@@ -584,6 +369,17 @@ export function teamConsoleUrl(
       segments.push(path);
     }
     url.pathname = `/${segments.join('/')}`;
+    // Auto-recharge lives on the same dashboard; the intent asks B to open its
+    // settings dialog on arrival. See AMR_CONSOLE_AUTO_RECHARGE_INTENT for the
+    // (unconfirmed) B-side handler this depends on.
+    //
+    // NOTE(sync/main): the `upgrade` / `plans` billing deep-links that used to
+    // sit here were REMOVED by origin/main — generic plan comparison now goes to
+    // public Pricing via `workspaceUpgradeUrl`. Auto-recharge is a different
+    // destination and keeps its intent.
+    if (section === 'auto-recharge') {
+      url.searchParams.set('billing', AMR_CONSOLE_AUTO_RECHARGE_INTENT);
+    }
     // Vela owns the final invite action because only its dashboard has the
     // authoritative subscription + seat state needed to choose between
     // upgrading to Team, buying seats, and sending an invite. `invite=auto`
@@ -607,7 +403,16 @@ export function teamConsoleUrl(
 /**
  * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
  * owns comparison; selecting a concrete card there is what hands checkout to
- * Cloud. A resolved workspace without billing permission still returns null.
+ * Cloud.
+ *
+ * Who may be shown the entrance is `canReachWorkspaceBillingEntrance`'s call,
+ * not this function's: a team member without `canManageBilling` still gets
+ * null (B refuses the action, so the link could only ever be a dead button),
+ * while a personal workspace is never gated on a team-membership permission —
+ * its wallet is the signer's own. Both the audience split in
+ * `runtime/amr-balance-branch.ts` and this resolver read that one predicate, so
+ * the dialog a user is routed to and the link that dialog can offer are always
+ * decided for the same user (§6.Y).
  */
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
@@ -623,11 +428,36 @@ export function workspaceUpgradeUrl(
   _billing: WorkspaceBillingSummary | null | undefined,
   options?: { fallbackProfile: string | null | undefined },
 ): string | null {
-  // Billing is owner-only. Missing context can use the caller's fallback
-  // profile because there is no workspace identity to authorize yet.
-  if (context && context.permissions?.canManageBilling !== true) return null;
+  // Missing context can use the caller's fallback profile because there is no
+  // workspace identity to authorize yet.
+  if (context && !canReachWorkspaceBillingEntrance(context)) return null;
   if (!context && !options) return null;
   return amrPlansUrlForProfile(options?.fallbackProfile);
+}
+
+/**
+ * Where the Max-tier balance card sends THIS workspace's owner — the console's
+ * auto-recharge settings (触发阈值 / 充值金额 / 每月上限).
+ *
+ * Sibling of {@link workspaceUpgradeUrl} and deliberately built the same way,
+ * so the two upgrade destinations cannot drift: same settings-URL base, same
+ * profile fallback when no workspace identity exists yet.
+ *
+ * Gated on `canManageAutoRecharge` rather than `canManageBilling` because that
+ * is the permission for the surface being linked to (contract:
+ * `writable && isOwner`, versus billing's `readable && isOwner`). The two agree
+ * for a healthy active workspace and differ only where the workspace is
+ * readable but not writable — there the link is withheld and the caller falls
+ * back to the plans link rather than sending an owner to an action B rejects.
+ */
+export function workspaceAutoRechargeUrl(
+  context: WorkspaceCollabContext | null | undefined,
+  options: { fallbackProfile: string | null | undefined },
+): string | null {
+  if (context && context.permissions?.canManageAutoRecharge !== true) return null;
+  const settingsUrl = context?.workspaceSettingsUrl?.trim() || null;
+  if (settingsUrl) return teamConsoleUrl(settingsUrl, 'auto-recharge');
+  return amrAutoRechargeUrlForProfile(options.fallbackProfile);
 }
 
 export type WorkspaceInviteTarget =
@@ -1498,10 +1328,6 @@ export function EntryNavRail({
   onSignedOut,
   updaterSlot,
   footerNotice,
-  recentProjects,
-  onOpenRecentProject,
-  onRenameRecentProject,
-  onDeleteRecentProject,
   priorityAnnouncementActive,
   onPriorityAnnouncementPendingChange,
   priorityAnnouncementCurrentPlanId,
@@ -2030,17 +1856,6 @@ export function EntryNavRail({
             >
               <Icon name="puzzle" size={16} />
             </NavButton>
-            {/* 最近浏览过 sits under 插件 (per product) — the last thing in the
-                destination list, because it is a list of CONTENT rather than a
-                place to go. */}
-            <RailRecentSection
-              projects={recentProjects ?? []}
-              onOpen={onOpenRecentProject}
-              onRename={onRenameRecentProject}
-              onDelete={onDeleteRecentProject}
-              workspaceContext={context}
-              label={t('recentProjects.collectionRecent')}
-            />
             {/* Product decision (2026-07-20): 成员 and 数据大盘 leave the rail
                 entirely — both surfaces live in B's console and the rail should
                 not advertise them. Workspace 设置 stays, and still links OUT to

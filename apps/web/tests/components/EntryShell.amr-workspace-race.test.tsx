@@ -560,10 +560,7 @@ describe('EntryShell AMR workspace precheck race', () => {
       await Promise.resolve();
     });
     expect(mockedCheckAmrBalanceGate).toHaveBeenCalledTimes(1);
-    // The Home arrow never flashes a busy treatment (the destination Chat frame
-    // owns progress); the in-flight window is only visible as the disabled lock.
-    expect((screen.getByTestId('home-hero-submit') as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
+    expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('true');
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400);

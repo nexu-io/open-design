@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import type { ArtifactExportFormat } from '../runtime/chat/artifact-export';
+import { AnchoredMenuShell } from './chat/AnchoredMenuShell';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import {
@@ -182,6 +184,7 @@ import { fetchAppVersionInfo } from '../providers/registry';
 import { copyToClipboard } from '../lib/copy-to-clipboard';
 import { buildReactComponentSrcdoc } from '../runtime/react-component';
 import { shouldConsumeSlideNav } from '../runtime/slide-nav';
+import { actionRequestKey, shouldConsumeActionRequest } from '../runtime/action-request';
 import { findHtmlEntriesReferencing } from '../runtime/jsx-module-refs';
 import {
   buildLazySrcdocTransport,
@@ -1729,10 +1732,10 @@ interface Props {
   onCommentModeChange?: (active: boolean) => void;
   // Bumped nonce asking this viewer to open its Share/Export menu (chat-side
   // "Share" next-step action). Only HTML artifacts expose a Share menu.
-  shareRequest?: { nonce: number } | null;
+  shareRequest?: { nonce: number; anchorId?: string } | null;
   // Bumped nonce asking this viewer to open its Download/Export menu (chat-side
   // "Download" next-step action).
-  downloadRequest?: { nonce: number } | null;
+  downloadRequest?: { nonce: number; anchorId?: string } | null;
   // Bumped nonce asking a deck preview to flip to `slideIndex` (a queued chat
   // send for this file just started processing).
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
@@ -6933,7 +6936,7 @@ function ReactComponentViewer({
                             data-tooltip={shareAccess === 'private'
                               ? t('fileViewer.workspaceSharePrivateDescription')
                               : t('fileViewer.workspaceShareWorkspaceDescription')}
-                            data-tooltip-placement="bottom"
+                            data-tooltip-placement="top"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <RemixIcon name="question-line" size={14} />
@@ -7010,7 +7013,7 @@ function ReactComponentViewer({
                             data-testid="publish-help"
                             aria-label={t('fileViewer.publishSingleFileDescription')}
                             data-tooltip={t('fileViewer.publishSingleFileDescription')}
-                            data-tooltip-placement="bottom"
+                            data-tooltip-placement="top"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <RemixIcon name="question-line" size={14} />
@@ -7354,8 +7357,8 @@ function HtmlViewer({
   onOpenFileReplacing?: (openName: string, closeName: string) => void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
-  shareRequest?: { nonce: number } | null;
-  downloadRequest?: { nonce: number } | null;
+  shareRequest?: { nonce: number; anchorId?: string } | null;
+  downloadRequest?: { nonce: number; anchorId?: string } | null;
   slideNavRequest?: { slideIndex: number; nonce: number } | null;
   // Read-only viewer of a team-shared project: comment-only, no edit/export.
   viewerOnly?: boolean;
@@ -9394,6 +9397,30 @@ function HtmlViewer({
   const speakerNotesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const boardPreviewScaleOptions = localCommentSideDockActive ? { canvasPadding: 0 } : undefined;
   const shareRef = useRef<HTMLDivElement | null>(null);
+  /*
+   * 菜单开在哪儿。
+   *
+   * `null` = 工具栏点开的那一条路,菜单原地长在 `.chrome-share-menu` 里,和搬动
+   * 之前完全一样。有值 = 产物卡上那枚胶囊点开的,菜单要开在**那枚按钮**旁边
+   * (产品 2026-08-27)—— 菜单本身是同一块,只是换个地方渲染。
+   */
+  const [menuAnchorId, setMenuAnchorId] = useState<string | null>(null);
+  const [menuOrigin, setMenuOrigin] = useState<'toolbar' | 'artifact-card'>('toolbar');
+  /*
+   * 稳定身份 —— 这个回调会进 `AnchoredMenuShell` 里那条 effect 的依赖数组。
+   * 传内联箭头的话它每次渲染都是新的,effect 于是每帧重跑;菜单已隐藏期间
+   * 每帧都会再调一次关闭。行为上无害(幂等),但白烧一遍,而且把「翻真时发
+   * 一次」变成「只要还真就一直发」,读起来会误导。
+   */
+  /*
+   * 只关「开」这一个状态就够了 —— `menuAnchorId` 不用在这里清:每一条会把菜单
+   * 打开的路都会自己设它(卡片那两条 effect 各自设成锚点 id,工具栏那条设成
+   * null),所以不存在「带着上一次的锚点被重新打开」的路径。
+   * 试过在这里也清一遍,消融时没有任何用例因此变红 —— 那就是没用的代码,不留。
+   */
+  const closeDeployMenu = useCallback(() => setDeployMenuOpen(false), []);
+  // portal 出去的那一份要单独算「点在里面」,否则外点关闭会把它自己关掉
+  const anchoredMenuRef = useRef<HTMLDivElement | null>(null);
   const [chromeActionsHost, setChromeActionsHost] = useState<HTMLElement | null>(
     () => (typeof document === 'undefined' ? null : resolveChromeActionsHost()),
   );
@@ -13976,6 +14003,18 @@ function HtmlViewer({
     const onDocClick = (e: MouseEvent) => {
       if (!shareRef.current) return;
       if (shareRef.current.contains(e.target as Node)) return;
+      /*
+       * 搬到产物卡旁边的那一份 portal 在 `<body>` 下,不在 `shareRef` 的子树里 ——
+       * 不单独认它,点自己的菜单项会先把菜单关掉(`useDismissOnOutsideInteraction`
+       * 的 docblock 早写过这条前提)。锚点那枚按钮也算「里面」,否则点它等于
+       * 「关掉 + 再开一次」。
+       */
+      const target = e.target as Node;
+      if (anchoredMenuRef.current?.contains(target)) return;
+      if (
+        menuAnchorId &&
+        (target as Element)?.closest?.(`[data-artifact-anchor="${menuAnchorId}"]`)
+      ) return;
       setDeployMenuOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -13988,7 +14027,7 @@ function HtmlViewer({
       document.removeEventListener('mousedown', onDocClick);
       document.removeEventListener('keydown', onKey);
     };
-  }, [deployMenuOpen, workspaceActive]);
+  }, [deployMenuOpen, workspaceActive, menuAnchorId]);
 
   useEffect(() => {
     if (!workspaceActive || !inTabPresent) return;
@@ -15072,34 +15111,76 @@ function HtmlViewer({
   // different intent. The artifact source may still be loading when the request
   // lands (the file was just auto-opened), so we defer until `canShare` flips
   // true and only consume each nonce once.
-  const consumedShareNonceRef = useRef<number | null>(null);
   useEffect(() => {
     const nonce = shareRequest?.nonce;
     if (nonce == null) return;
-    if (consumedShareNonceRef.current === nonce) return;
     if (!canShare) return;
-    consumedShareNonceRef.current = nonce;
+    /*
+     * 消费记录放在**组件外面**(`runtime/action-request`),不是组件内的 ref ——
+     * ref 随组件一起死,`FileViewer` 一重挂就归零,而父组件里那个 nonce 从来不
+     * 清空,于是旧请求被当成新请求重放,菜单自己弹出来(用户 2026-08-27:
+     * 「这个弹窗动不动自己弹出来」)。`slide-nav` 早就是这么修的。
+     *
+     * 顺序也要紧:`canShare` 的判断必须在消费之前 —— 否则文件还没加载完那一轮
+     * 就把 nonce 吃掉了,等真能分享时反而不开了。
+     */
+    if (!shouldConsumeActionRequest(actionRequestKey('share', projectId, file.name), nonce)) return;
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
+    /*
+     * 开的是**同一块**分享菜单;`anchorId` 只决定它开在哪儿 —— 产物卡传锚点,
+     * 菜单就贴着卡上那枚按钮;「下一步引导」那行不传,菜单照旧开在预览区工具栏
+     * 下面(产品 2026-08-27:「为啥不直接复用现在那个分享弹窗??」)。
+     */
+    const nextAnchorId = shareRequest?.anchorId ?? null;
+    const wasOpenOnThisEntry = deployMenuOpen
+      && unifiedActionTab === 'share'
+      && menuAnchorId === nextAnchorId;
+    setMenuAnchorId(nextAnchorId);
+    setMenuOrigin(nextAnchorId ? 'artifact-card' : 'toolbar');
     setUnifiedActionTab('share');
-    setDeployMenuOpen(true);
-  }, [shareRequest?.nonce, canShare, projectId, file.name]);
+    setDeployMenuOpen(!wasOpenOnThisEntry);
+  }, [
+    shareRequest?.nonce,
+    shareRequest?.anchorId,
+    canShare,
+    projectId,
+    file.name,
+    deployMenuOpen,
+    unifiedActionTab,
+    menuAnchorId,
+  ]);
 
   // Parallel to shareRequest, but opens the Download / Export menu instead — the
   // assistant "next step" card's Download row routes here so it surfaces the same
   // PDF / image / zip / standalone-HTML / template options the toolbar exposes.
-  const consumedDownloadNonceRef = useRef<number | null>(null);
   useEffect(() => {
     const nonce = downloadRequest?.nonce;
     if (nonce == null) return;
-    if (consumedDownloadNonceRef.current === nonce) return;
     if (!canDownload) return;
-    consumedDownloadNonceRef.current = nonce;
+    // 同分享那条:消费记录在组件外,重挂之后不重放。
+    if (!shouldConsumeActionRequest(actionRequestKey('download', projectId, file.name), nonce)) return;
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
+    /* 与分享同一条路,换成导出菜单。 */
+    const nextAnchorId = downloadRequest?.anchorId ?? null;
+    const wasOpenOnThisEntry = deployMenuOpen
+      && unifiedActionTab === 'export'
+      && menuAnchorId === nextAnchorId;
+    setMenuAnchorId(nextAnchorId);
+    setMenuOrigin(nextAnchorId ? 'artifact-card' : 'toolbar');
     setUnifiedActionTab('export');
-    setDeployMenuOpen(true);
-  }, [downloadRequest?.nonce, canDownload, projectId, file.name]);
+    setDeployMenuOpen(!wasOpenOnThisEntry);
+  }, [
+    downloadRequest?.nonce,
+    downloadRequest?.anchorId,
+    canDownload,
+    projectId,
+    file.name,
+    deployMenuOpen,
+    unifiedActionTab,
+    menuAnchorId,
+  ]);
 
   // A queued chat send for this deck just started: flip the preview to the
   // slide its marked element lives on. We write the cached slide state first so
@@ -15133,10 +15214,27 @@ function HtmlViewer({
     fireArtifactHeaderClick(sourceLabel);
     setExportReadyNudge(false);
     markExportReadyNudgeSeen(projectId, file.name);
+    /*
+     * 工具栏这条路**永远开在原地**,所以先把上一次卡片留下的锚点清掉。
+     * `menuAnchorId` 只在卡片那条路上被设过,以前没有任何地方清它:于是卡上开过
+     * 一次之后再点工具栏,菜单会去找卡上那枚按钮 —— 卡还在就开错地方,卡滚走了
+     * 就 `findAnchor` 落空、什么都不画,表现为**点了没反应**。
+     */
+    setMenuAnchorId(null);
+    setMenuOrigin('toolbar');
     setDeployMenuOpen((v) => {
       const nextTab = tab === 'share' && !rawCanShare ? 'export' : tab;
       setUnifiedActionTab(nextTab);
-      return !(v && unifiedActionTab === nextTab);
+      /*
+       * 「再点一次 = 关掉」只在**同一条路、同一个页签**上成立。
+       *
+       * 上一次开在产物卡上时(`menuAnchorId` 有值),点工具栏是「换个地方开」,
+       * 不是关 —— 何况那一份此刻多半根本不可见(卡滚走了 / 锚点还没挂上),
+       * 把它当成「开着」再取反,用户就会看到**点了没反应**:第一下悄悄关掉了
+       * 一块看不见的菜单,得再点一下才出来。
+       */
+      const wasOpenOnThisSurface = v && menuAnchorId === null;
+      return !(wasOpenOnThisSurface && unifiedActionTab === nextTab);
     });
   };
   const openShareMenu = () => openUnifiedActionMenu('share', 'share_dropdown');
@@ -15367,6 +15465,80 @@ function HtmlViewer({
 
   const changeImageExportFormat = (format: ImageExportFormat) => {
     setImageExportFormat(format);
+  };
+
+  /*
+   * 一种导出格式一段动作 —— 菜单项和「产物卡格式浮层直接点名的那一种」共用同一份。
+   *
+   * 原来这四段各自内联在菜单项的 `onClick` 里,只有从这个菜单点进来才跑得到。
+   * 产物卡上的〔导出〕现在会带着选好的格式过来(`downloadRequest.format`),
+   * 它需要**同一段**动作而不是「把菜单展开让人再选一次」;两份实现必然分叉,
+   * 所以先收成一处。
+   *
+   * PPTX / Markdown 不在这里:前者要先开导出参数弹窗,后者只有 markdown 产物
+   * 才有,而 markdown 根本不走这个 viewer —— 两条都留在菜单里各自的入口。
+   */
+  const runExportFormat = (format: ArtifactExportFormat) => {
+    if (format === 'image') {
+      void openImageExportModal();
+      return;
+    }
+    setDeployMenuOpen(false);
+    if (format === 'zip') {
+      fireShareExport('zip', () => exportProjectAsZip({
+        projectId,
+        filePath: file.name,
+        fallbackHtml: source ?? '',
+        fallbackTitle: exportTitle,
+        workspaceContext,
+      }));
+      return;
+    }
+    if (format === 'html') {
+      fireShareExport('html', () => exportProjectAsHtml({
+        projectId,
+        filePath: file.name,
+        fallbackTitle: exportTitle,
+        workspaceContext,
+      }));
+      return;
+    }
+    // Pixel-perfect screenshot PDF (matches the preview, same renderer as
+    // image/PPTX). Chosen over Chromium's vector printToPDF because that path
+    // drops CJK glyphs in the packaged runtime (no embedded fonts) —
+    // unacceptable for a Chinese-first product. Falls back to the
+    // vector/browser print path on web or on failure.
+    fireShareExport('pdf', async () => {
+      if (isOpenDesignHostAvailable()) {
+        const res = await exportProjectScreenshotPdf({
+          projectId,
+          fileName: file.name,
+          title: exportTitle,
+          workspaceContext,
+          // Broader deck signal than the viewer's nav so runtime-managed decks
+          // (<deck-stage>) paginate per slide; the vector fallback below uses
+          // the SAME signal, so an artifact exports identically with or without
+          // a desktop host (no per-host divergence).
+          deck: deckExportSignal,
+        });
+        if (res.ok) return;
+        // A SEMANTIC failure (bad deck routing, unreadable renderer output,
+        // renderer 502, …) must surface — NOT silently downgrade to the vector
+        // PDF, which can reintroduce the CJK-glyph / fidelity bugs the
+        // screenshot path exists to avoid. Only a genuinely unavailable
+        // renderer (no host / 501 / transport) falls through to the vector path
+        // below.
+        if (!('unavailable' in res)) throw new Error(res.error);
+      }
+      await exportProjectAsPdf({
+        deck: deckExportSignal,
+        fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: deckExportSignal, onProgress: onExportProgress }),
+        filePath: file.name,
+        projectId,
+        title: exportTitle,
+        workspaceContext,
+      });
+    });
   };
 
   // Component-scoped so both the save flow and the modal Cancel button can
@@ -16296,9 +16468,10 @@ function HtmlViewer({
                 type="button"
                 role="tab"
                 className={`viewer-tab ${mode === id ? 'active' : ''}`}
+                aria-label={label}
                 aria-selected={mode === id}
                 disabled={viewerOnly && id === 'source'}
-                title={viewerOnly && id === 'source' ? viewerOnlyDisabledTitle : undefined}
+                title={viewerOnly && id === 'source' ? viewerOnlyDisabledTitle : label}
                 onClick={() => {
                   fireArtifactToolbarClick(id);
                   selectMode(id);
@@ -16782,12 +16955,37 @@ function HtmlViewer({
                   </button>
                 ) : null}
                 {deployMenuOpen && (rawCanShare || rawCanDownload) ? (
-                  <div className="share-menu-popover chrome-unified-popover" role="menu">
+                  /*
+                    * **同一块菜单,只是可能换个地方开。**
+                    *
+                    * `menuAnchorId` 为空 = 工具栏点开的,原地渲染,和搬动之前逐字一致;
+                    * 有值 = 产物卡上那枚胶囊点开的,portal 到 body 贴着那枚按钮开
+                    * (产品 2026-08-27:「为啥这个发布弹窗是这样的?? 为啥不直接复用
+                    *  现在那个分享弹窗??」「导出这个样式也不对呢, 为啥不直接复用?」)。
+                    *
+                    * 下面两块面板一行都没动 —— 这正是「一份实现」的意思。
+                    */
+                  <AnchoredMenuShell
+                    anchorId={menuAnchorId}
+                    wrapperClassName="share-menu chrome-share-menu chrome-share-menu--unified"
+                    className="share-menu-popover chrome-unified-popover"
+                    portalRef={anchoredMenuRef}
+                    /*
+                     * 锚点滚出可视区(或整条消息被虚拟化掉)就把菜单收起来 ——
+                     * 产品 2026-08-27:「在界面中如果原 button 不可见, 就自动
+                     * 收起来 下拉框吧?」壳那一层已经先做了可逆的视觉隐藏,
+                     * 这里是**真的关掉**:菜单里有发布/部署这类会改状态的动作,
+                     * 留着一块看不见但仍可被键盘走到的面板不合适。
+                     * 仓库里同样的取舍已有两处先例(`InlineModelSwitcher`、
+                     * `ModelSelectSearchable` 都是锚点离开边界即 `setOpen(false)`)。
+                     */
+                    onAnchorHidden={closeDeployMenu}
+                  >
                     {unifiedActionTab === 'share' && rawCanShare ? (
                       <div className="chrome-unified-panel chrome-unified-panel--share">
                       {/* Team-only, same as ReactComponentViewer's copy of this card above —
                           see the comment there (recvq5bM78HWCE). */}
-                      {workspaceContextHasTeamIdentity(workspaceContext) ? (
+                      {menuOrigin === 'toolbar' && workspaceContextHasTeamIdentity(workspaceContext) ? (
                       <>
                       {/* Access control gets the same section-label + row treatment as the
                           publish / deploy / save tiers below; its explanation moves into the
@@ -16804,7 +17002,7 @@ function HtmlViewer({
                           data-tooltip={shareAccess === 'private'
                             ? t('fileViewer.workspaceSharePrivateDescription')
                             : t('fileViewer.workspaceShareWorkspaceDescription')}
-                          data-tooltip-placement="bottom"
+                          data-tooltip-placement="top"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <RemixIcon name="question-line" size={14} />
@@ -16887,7 +17085,7 @@ function HtmlViewer({
                           data-testid="publish-help"
                           aria-label={t('fileViewer.publishSingleFileDescription')}
                           data-tooltip={t('fileViewer.publishSingleFileDescription')}
-                          data-tooltip-placement="bottom"
+                          data-tooltip-placement="top"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <RemixIcon name="question-line" size={14} />
@@ -16954,121 +17152,94 @@ function HtmlViewer({
                       ) : null}
                       </>
                       ) : null}
-                      {/* The share panel is organized by intent, not by
-                          backend: the publish card above is the hero "get a
-                          link" path; social icons appear only once ANY link
-                          exists (published or deployed); Vercel/Cloudflare are
-                          the secondary "more ways to publish" tier; save-as-
-                          template keeps its spot at the bottom. */}
-                      {/* Icons only for a CLEAN link (published file or a
-                          deployment whose share page is live) — a protected or
-                          still-preparing deployment must not hand out a URL
-                          that recipients cannot open. */}
-                      {activeProjectSocialShare && (shareableDeploymentUrl || publishedFileUrl) ? (
+                      {menuOrigin === 'toolbar' ? (
                         <>
+                          {/* Icons only for a clean link. Artifact-card Share is
+                              intentionally narrower: Quick Share above only. */}
+                          {activeProjectSocialShare && (shareableDeploymentUrl || publishedFileUrl) ? (
+                            <>
+                              <div className="share-menu-section-label" role="presentation">
+                                {t('socialShare.projectSection')}
+                              </div>
+                              <SocialShareGrid share={activeProjectSocialShare} />
+                            </>
+                          ) : null}
+                          <div className="share-menu-divider" />
                           <div className="share-menu-section-label" role="presentation">
-                            {t('socialShare.projectSection')}
+                            {t('fileViewer.shareMenuPublishOnline')}
                           </div>
-                          <SocialShareGrid share={activeProjectSocialShare} />
+                          {DEPLOY_PROVIDER_OPTIONS.map((option) => (
+                            <button
+                              key={option.id}
+                              type="button"
+                              className="share-menu-item"
+                              role="menuitem"
+                              disabled={streaming || viewerOnly}
+                              title={
+                                viewerOnly
+                                  ? viewerOnlyDisabledTitle
+                                  : streaming
+                                    ? t('fileViewer.shareAfterGenerationComplete')
+                                    : undefined
+                              }
+                              onClick={() => {
+                                void openDeployModal(option.id);
+                              }}
+                            >
+                              <span className="share-menu-icon"><RemixIcon name={deployActionIconFor(option.id)} size={15} /></span>
+                              <span>{deployActionLabelFor(option.id)}</span>
+                            </button>
+                          ))}
+                          {sharePageUrl ? (
+                            <>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                disabled={!canCopyShareLink || viewerOnly}
+                                title={
+                                  viewerOnly
+                                    ? viewerOnlyDisabledTitle
+                                    : canCopyShareLink
+                                      ? undefined
+                                      : shareUnavailableHint
+                                }
+                                onClick={() => {
+                                  void copyShareLink(sharePageUrl);
+                                }}
+                              >
+                                <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
+                                <span>{copyShareLinkLabel}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="share-menu-item"
+                                role="menuitem"
+                                disabled={!canOpenSharePage || viewerOnly}
+                                title={
+                                  viewerOnly
+                                    ? viewerOnlyDisabledTitle
+                                    : canOpenSharePage
+                                      ? undefined
+                                      : shareLinkStatusHint || shareUnavailableHint
+                                }
+                                onClick={() => {
+                                  if (!canOpenSharePage) return;
+                                  window.open(sharePageUrl, '_blank', 'noopener');
+                                }}
+                              >
+                                <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
+                                <span>{t('fileViewer.openSharePage')}</span>
+                              </button>
+                            </>
+                          ) : null}
+                          {sharePageUrl && (shareLinkStatusHint || shareUnavailableHint) ? (
+                            <div className="share-menu-section-label" role="presentation">
+                              {shareLinkStatusHint || shareUnavailableHint}
+                            </div>
+                          ) : null}
                         </>
                       ) : null}
-                      <div className="share-menu-divider" />
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuPublishOnline')}
-                      </div>
-                      {DEPLOY_PROVIDER_OPTIONS.map((option) => (
-                        <button
-                          key={option.id}
-                          type="button"
-                          className="share-menu-item"
-                          role="menuitem"
-                          disabled={streaming || viewerOnly}
-                          title={
-                            viewerOnly
-                              ? viewerOnlyDisabledTitle
-                              : streaming
-                                ? t('fileViewer.shareAfterGenerationComplete')
-                                : undefined
-                          }
-                          onClick={() => {
-                            void openDeployModal(option.id);
-                          }}
-                        >
-                          <span className="share-menu-icon"><RemixIcon name={deployActionIconFor(option.id)} size={15} /></span>
-                          <span>{deployActionLabelFor(option.id)}</span>
-                        </button>
-                      ))}
-                      {sharePageUrl ? (
-                        <>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            disabled={!canCopyShareLink || viewerOnly}
-                            title={
-                              viewerOnly
-                                ? viewerOnlyDisabledTitle
-                                : canCopyShareLink
-                                  ? undefined
-                                  : shareUnavailableHint
-                            }
-                            onClick={() => {
-                              void copyShareLink(sharePageUrl);
-                            }}
-                          >
-                            <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                            <span>{copyShareLinkLabel}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="share-menu-item"
-                            role="menuitem"
-                            disabled={!canOpenSharePage || viewerOnly}
-                            title={
-                              viewerOnly
-                                ? viewerOnlyDisabledTitle
-                                : canOpenSharePage
-                                  ? undefined
-                                  : shareLinkStatusHint || shareUnavailableHint
-                            }
-                            onClick={() => {
-                              if (!canOpenSharePage) return;
-                              window.open(sharePageUrl, '_blank', 'noopener');
-                            }}
-                          >
-                            <span className="share-menu-icon"><RemixIcon name="external-link-line" size={15} /></span>
-                            <span>{t('fileViewer.openSharePage')}</span>
-                          </button>
-                        </>
-                      ) : null}
-                      {sharePageUrl && (shareLinkStatusHint || shareUnavailableHint) ? (
-                        <div className="share-menu-section-label" role="presentation">
-                          {shareLinkStatusHint || shareUnavailableHint}
-                        </div>
-                      ) : null}
-                      <div className="share-menu-divider" />
-                      <div className="share-menu-section-label" role="presentation">
-                        {t('fileViewer.shareMenuSave')}
-                      </div>
-                      <button
-                        type="button"
-                        className="share-menu-item"
-                        role="menuitem"
-                        disabled={savingTemplate || viewerOnly}
-                        title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                        onClick={() => {
-                          openSaveAsTemplateModal();
-                        }}
-                      >
-                        <span className="share-menu-icon"><RemixIcon name="file-copy-line" size={15} /></span>
-                        <span>
-                          {savingTemplate
-                            ? t('fileViewer.savingTemplate')
-                            : templateNote
-                              ? templateNote
-                              : t('fileViewer.saveAsTemplate')}
-                        </span>
-                      </button>
                       </div>
                     ) : null}
                     {unifiedActionTab === 'export' && rawCanDownload ? (
@@ -17079,48 +17250,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={viewerOnly}
                     title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={() => {
-                      setDeployMenuOpen(false);
-                      // Pixel-perfect screenshot PDF (matches the preview, same
-                      // renderer as image/PPTX). Chosen over Chromium's vector
-                      // printToPDF because that path drops CJK glyphs in the
-                      // packaged runtime (no embedded fonts) — unacceptable for a
-                      // Chinese-first product. Falls back to the vector/browser
-                      // print path on web or on failure.
-                      fireShareExport('pdf', async () => {
-                        if (isOpenDesignHostAvailable()) {
-                          const res = await exportProjectScreenshotPdf({
-                            projectId,
-                            fileName: file.name,
-                            title: exportTitle,
-                            workspaceContext,
-                            // Broader deck signal than the viewer's nav so
-                            // runtime-managed decks (<deck-stage>) paginate per
-                            // slide; the vector fallback below uses the SAME
-                            // signal, so an artifact exports identically with or
-                            // without a desktop host (no per-host divergence).
-                            deck: deckExportSignal,
-                          });
-                          if (res.ok) return;
-                          // A SEMANTIC failure (bad deck routing, unreadable
-                          // renderer output, renderer 502, …) must surface — NOT
-                          // silently downgrade to the vector PDF, which can
-                          // reintroduce the CJK-glyph / fidelity bugs the
-                          // screenshot path exists to avoid. Only a genuinely
-                          // unavailable renderer (no host / 501 / transport)
-                          // falls through to the vector path below.
-                          if (!('unavailable' in res)) throw new Error(res.error);
-                        }
-                        await exportProjectAsPdf({
-                          deck: deckExportSignal,
-                          fallbackPdf: () => exportAsPdf(source ?? '', exportTitle, { deck: deckExportSignal, onProgress: onExportProgress }),
-                          filePath: file.name,
-                          projectId,
-                          title: exportTitle,
-                          workspaceContext,
-                        });
-                      });
-                    }}
+                    onClick={() => runExportFormat('pdf')}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-line" size={15} /></span>
                     <span>{t('fileViewer.exportPdf')}</span>
@@ -17151,9 +17281,7 @@ function HtmlViewer({
                       type="button"
                       className="share-menu-item"
                       role="menuitem"
-                      onClick={() => {
-                        void openImageExportModal();
-                      }}
+                      onClick={() => runExportFormat('image')}
                     >
                       <span className="share-menu-icon"><RemixIcon name="image-line" size={15} /></span>
                       <span>{t('fileViewer.exportImage')}</span>
@@ -17169,16 +17297,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={viewerOnly}
                     title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={() => {
-                      setDeployMenuOpen(false);
-                      fireShareExport('zip', () => exportProjectAsZip({
-                        projectId,
-                        filePath: file.name,
-                        fallbackHtml: source ?? '',
-                        fallbackTitle: exportTitle,
-                        workspaceContext,
-                      }));
-                    }}
+                    onClick={() => runExportFormat('zip')}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
                     <span>{t('fileViewer.exportZip')}</span>
@@ -17189,15 +17308,7 @@ function HtmlViewer({
                     role="menuitem"
                     disabled={viewerOnly}
                     title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
-                    onClick={() => {
-                      setDeployMenuOpen(false);
-                      fireShareExport('html', () => exportProjectAsHtml({
-                        projectId,
-                        filePath: file.name,
-                        fallbackTitle: exportTitle,
-                        workspaceContext,
-                      }));
-                    }}
+                    onClick={() => runExportFormat('html')}
                   >
                     <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
                     <span>{t('fileViewer.exportHtml')}</span>
@@ -17218,7 +17329,7 @@ function HtmlViewer({
                   ) : null}
                       </div>
                     ) : null}
-                  </div>
+                  </AnchoredMenuShell>
                 ) : null}
               </div>
               {viewerOnly ? null : (

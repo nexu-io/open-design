@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 
-// The composer keeps Design Toolbox discoverable inside the "+" menu, and it
-// must not regress into a persistent quick pill above the input. Plugins are
-// deliberately absent from this menu — that surface was removed.
+// The composer keeps Plugins and Design Toolbox discoverable inside the "+"
+// menu. They must not regress into persistent quick pills above the input.
 
 if (typeof HTMLElement.prototype.scrollTo !== 'function') {
   HTMLElement.prototype.scrollTo = function () {};
@@ -18,7 +17,7 @@ afterEach(() => {
 });
 
 describe('composer resource discovery', () => {
-  it('carries neither persistent quick pills nor a resource row in the plus menu', () => {
+  it('keeps Plugins and Design Toolbox in the plus menu without persistent quick pills', () => {
     render(
       <ChatPane
         messages={[]}
@@ -40,10 +39,7 @@ describe('composer resource discovery', () => {
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
 
-    expect(screen.queryByTestId('composer-plus-plugins')).toBeNull();
-    // The Design Toolbox left the "+" menu with the resource submenus (#7635);
-    // it opens through the composer handle (next-step actions) instead.
-    expect(screen.queryByRole('menuitem', { name: /Design Toolbox|设计百宝箱/i })).toBeNull();
-    expect(screen.getByRole('menuitem', { name: /Attach|附加/i })).toBeTruthy();
+    expect(screen.getByTestId('composer-plus-plugins')).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: /Design Toolbox|设计百宝箱/i })).toBeTruthy();
   });
 });

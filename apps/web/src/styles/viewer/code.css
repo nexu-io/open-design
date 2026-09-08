@@ -469,6 +469,10 @@
   padding: 24px;
 }
 .image-body img {
+  /* Keep the hairline inside the 100% fit box. Without border-box, a large
+     artifact consumes the full content box first and its 1px border extends
+     past the preview viewport, so the edge against the clipped side vanishes. */
+  box-sizing: border-box;
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
@@ -981,39 +985,23 @@
 }
 .assistant-label { font-weight: 500; color: var(--text-muted); font-size: 11px; }
 
+/* 一轮**内部**那一档间距。稿子 `docs/design/chat-panel/src/scene-shell.css`:
+   `.flow { … gap: 12px }` —— 「同一个人连着说的几块之间是 12」。
+   轮次**之间**的 24 不在这里,在 `routines.css` 的 `.chat-log` 那一段。 */
 .assistant-flow {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 .prose-block {
-  line-height: var(--prose-line-height, 1.75);
-  color: var(--text);
-  font-size: var(--prose-font-size, 15px);
-  letter-spacing: -0.01em;
-}
-/* Streaming caret — a blinking block riding the end of the last prose block,
-   tracking the final character as tokens arrive (Lobe-style typing cursor). */
-.prose-block[data-stream-cursor="true"] > *:last-child::after {
-  content: "";
-  display: inline-block;
-  width: 0.5em;
-  height: 1em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--purple);
-  border-radius: 1px;
-  animation: stream-caret-blink 1s steps(2, start) infinite;
-}
-@keyframes stream-caret-blink {
-  0%, 50% { opacity: 1; }
-  50.01%, 100% { opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .prose-block[data-stream-cursor="true"] > *:last-child::after { animation: none; opacity: 1; }
+  line-height: var(--prose-line-height, 1.7);
+  color: var(--text-strong);
+  font-size: var(--prose-font-size, 13px);
+  letter-spacing: normal;
 }
 .prose-block .md-p { margin: 0; }
+.prose-block strong { font-weight: 600; }
 .prose-block .md-p + .md-p { margin-top: 14px; }
 .prose-block .md-h {
   margin: 24px 0 10px;
@@ -1791,17 +1779,4 @@
 }
 .live-code-pre code {
   font-family: inherit;
-}
-.live-code-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 1px;
-  vertical-align: text-bottom;
-  background: var(--purple);
-  border-radius: 1px;
-  animation: stream-caret-blink 1s steps(2, start) infinite;
-}
-@media (prefers-reduced-motion: reduce) {
-  .live-code-caret { animation: none; opacity: 1; }
 }

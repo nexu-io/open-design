@@ -47,7 +47,6 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
-import { HOME_APPLY_TEMPLATE_EVENT } from '../../src/components/home-hero/chips';
 import { homeHeroPromptText, setHomeHeroPrompt } from '../helpers/home-hero-lexical';
 
 // HomeHero's prompt input migrated from a <textarea>+highlight overlay to the
@@ -157,31 +156,10 @@ afterEach(() => {
 // #5517 removed the inline template rail from Home; scenario templates are
 // picked from the composer footer's radial Template picker instead.
 async function pickHomeTemplate(id: string) {
-  // A type already picked retires the row, and the pill has no menu — so
-  // switching means clearing back to the empty state first.
-  const clear = screen.queryByTestId('home-hero-template-clear');
-  if (clear) fireEvent.click(clear);
-  const lead = await screen.findByTestId('home-hero-type-pill-prototype');
-  await waitFor(() => expect((lead as HTMLButtonElement).disabled).toBe(false));
-  let pill = screen.queryByTestId(`home-hero-type-pill-${id}`);
-  if (!pill) {
-    // Types behind 更多 mount only while its popover is open.
-    fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
-    pill = screen.queryByTestId(`home-hero-type-pill-${id}-more`);
-  }
-  if (pill) {
-    fireEvent.click(pill);
-    return;
-  }
-  // Types outside the fixed row (media, HyperFrames, …) are reached the way
-  // the workspace tabs-bar hands one off: the apply-template window event,
-  // which HomeHero applies exactly as a row click.
-  fireEvent.keyDown(document, { key: 'Escape' });
-  await act(async () => {
-    window.dispatchEvent(
-      new CustomEvent(HOME_APPLY_TEMPLATE_EVENT, { detail: { chipId: id } }),
-    );
-  });
+  const trigger = await screen.findByTestId('home-hero-template-trigger');
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByTestId(`home-hero-template-wedge-${id}`));
 }
 
 describe('HomeView context picker', () => {
@@ -674,6 +652,20 @@ describe('HomeView context picker', () => {
           headers: { 'content-type': 'application/json' },
         });
       }
+      // These cases render HomeView with an active Workspace context, so the
+      // reference-project picker reads the workspace-scoped catalog. The
+      // unscoped `/api/projects` route only ever serves unbound projects
+      // (OPEND-2370), which is why it cannot stand in for this one.
+      if (typeof url === 'string' && url.startsWith('/api/workspaces/workspace-a/projects')) {
+        return new Response(JSON.stringify({
+          projects: [
+            { project: referenceProject, workspaceId: 'workspace-a', visibility: 'personal' },
+          ],
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (typeof url === 'string' && url === '/api/projects') {
         return new Response(JSON.stringify({ projects: [referenceProject] }), {
           status: 200,
@@ -714,29 +706,24 @@ describe('HomeView context picker', () => {
     );
 
     await screen.findByTestId('home-hero-input');
-    // 引用其它项目 moved from the "+" menu into the working-dir chip's menu.
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-reference-project'));
+    fireEvent.click(screen.getByTestId('home-hero-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
     await screen.findByText('Reference A');
     fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
 
-    // The TRIGGER takes the reference's name and the prompt is left alone (per
-    // product: 工作目录会换成后边的文件名，不要在上边的输入框展示).
     await waitFor(() => {
-      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('Reference A');
+      expect(homeHeroPromptText().trim()).toBe('@Reference A');
     });
-    expect(homeHeroPromptText().trim()).toBe('');
-    // A reference on its own is not a request; type first, then submit.
-    setHomeHeroPrompt('Describe this');
-    await settle();
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('selected reference folder');
     });
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(homeHeroPromptText().trim()).toBe('Describe this');
-    expect(screen.getByTestId('working-dir-trigger').textContent).toContain('Reference A');
+    expect(homeHeroPromptText().trim()).toBe('@Reference A');
+    expect(screen.getByTestId('home-hero-context-workspace-project:reference-a').textContent).toContain(
+      'Reference A',
+    );
   });
 
   it('keeps referenced project context visible after its inline mention is deleted', async () => {
@@ -758,6 +745,20 @@ describe('HomeView context picker', () => {
       }
       if (typeof url === 'string' && url === '/api/mcp/servers') {
         return new Response(JSON.stringify({ servers: [], templates: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      // These cases render HomeView with an active Workspace context, so the
+      // reference-project picker reads the workspace-scoped catalog. The
+      // unscoped `/api/projects` route only ever serves unbound projects
+      // (OPEND-2370), which is why it cannot stand in for this one.
+      if (typeof url === 'string' && url.startsWith('/api/workspaces/workspace-a/projects')) {
+        return new Response(JSON.stringify({
+          projects: [
+            { project: referenceProject, workspaceId: 'workspace-a', visibility: 'personal' },
+          ],
+        }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
@@ -802,22 +803,20 @@ describe('HomeView context picker', () => {
     );
 
     await screen.findByTestId('home-hero-input');
-    // 引用其它项目 moved from the "+" menu into the working-dir chip's menu.
-    fireEvent.click(screen.getByTestId('working-dir-trigger'));
-    fireEvent.click(await screen.findByTestId('working-dir-reference-project'));
+    fireEvent.click(screen.getByTestId('home-hero-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
     await screen.findByText('Reference A');
     fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
 
-    // Nothing lands in the prompt — the working-directory trigger is the only
-    // place the reference shows, exactly like a picked folder.
     await waitFor(() => {
-      expect(screen.getByTestId('working-dir-trigger').textContent).toContain('Reference A');
+      expect(homeHeroPromptText().trim()).toBe('@Reference A');
     });
-    expect(homeHeroPromptText()).not.toContain('@Reference A');
     setHomeHeroPrompt('Describe this');
     await settle();
 
-    expect(screen.getByTestId('working-dir-trigger').textContent).toContain('Reference A');
+    expect(screen.getByTestId('home-hero-context-workspace-project:reference-a').textContent).toContain(
+      'Reference A',
+    );
     fireEvent.click(screen.getByTestId('home-hero-submit'));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));

@@ -8,8 +8,7 @@
 // body-level portal), so the `.app`-scoped "one control system" normalization
 // in chat.css never reached it and the controls drifted to 28/30/32px. Even
 // though the row centers them, the differing heights left the pills and Send
-// visibly misaligned against the left buttons.
-//
+// visibly misaligned against the left buttons.//
 // This spec is the regression boundary: the utility controls share the compact
 // 28px geometry, Send keeps its deliberate emphasis as the supplied 32px
 // disc (#7635), and every control shares one vertical center so the toolbar
@@ -114,14 +113,12 @@ test('[P1] composer footer controls keep their size hierarchy on one baseline', 
     '.avatar-agent-trigger',
     '.composer-send',
   ]);
-
   const centers = controls.map((c) => c.center);
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
   const send = controls.find((control) => control.sel === '.composer-send');
   const utilityControls = controls.filter((control) => control.sel !== '.composer-send');
-  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);
-  for (const control of utilityControls) {
+  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(32);  for (const control of utilityControls) {
     expect(control.height, `control heights: ${JSON.stringify(controls)}`).toBe(28);
   }
 

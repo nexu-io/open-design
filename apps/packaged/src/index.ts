@@ -115,6 +115,35 @@ async function main(): Promise<void> {
   // the deadlock fix must not depend on which desktop build the shell
   // happens to bundle. appendSwitch is idempotent for the same key.
   app.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
+  // 关掉内层滚动容器的橡皮筋回弹(产品裁决 2026-09-07:「直接关掉」)。
+  //
+  // ## 为什么
+  //
+  // Electron 40 → 41 把 Chromium 从 144 跳到 **146,整个跳过了 145**,而
+  // `kOverscrollEffectOnNonRootScrollers` 的默认值正好在 145 从 DISABLED 翻成
+  // ENABLED(已拉 branch-heads/7559 与 7680 的 `cc/base/features.cc` 逐字核实)。
+  // 它管的是「非根滚动容器撞到滚动边界时怎么表现」——145 之前只有整页会弹,
+  // 之后聊天区这类内层容器也会弹。
+  //
+  // 我们在追的缺陷是:聊天区的滚动范围被**永久冻**在某个早期内容高度上,
+  // 布局全对、JS 程序性滚动能到底,但**滚轮和键盘都到不了**(scroll unification
+  // 之后两者都走合成器)。位置(滚动边界)、平台(macOS 弹性 overscroll)、
+  // 版本窗口三样都对得上。
+  //
+  // ⚠️ **这是缓解不是根治**:合成页面 89 个用例没能复现,因果链没有建立。
+  // 判据仍然是 `client_chat_scroll_frozen` 的事件量 —— 带着这一行还在报,
+  // 说明这条线错了,该把这两个 feature 放回去再找别的。
+  //
+  // ## 代价
+  //
+  // macOS 上所有内层滚动区失去橡皮筋回弹(整页仍然弹)。产品知情并选择了它 ——
+  // 相对「滚不动」这个代价可以接受。
+  //
+  // 必须在 whenReady 之前:Chromium 在会话初始化时就消费这些开关。
+  app.commandLine.appendSwitch(
+    "disable-features",
+    "OverscrollEffectOnNonRootScrollers,OverscrollBehaviorRespectedOnAllScrollContainers",
+  );
 
   const afterQuit = parseLauncherAfterQuitArgs(process.argv.slice(1));
   const handoffResume = parseLauncherHandoffResumeArgs(process.argv.slice(1));

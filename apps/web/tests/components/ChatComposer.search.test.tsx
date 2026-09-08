@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import { I18nProvider } from '../../src/i18n';
 import { ANNOTATION_EVENT } from '../../src/components/PreviewDrawOverlay';
 import { uploadProjectFiles } from '../../src/providers/registry';
 import { readExpandedIndexCss } from '../helpers/read-expanded-css';
@@ -33,6 +34,40 @@ afterEach(() => {
 });
 
 describe('ChatComposer /search command', () => {
+  it('rejects dropped folders before the upload path can read them', async () => {
+    const directory = new File([], 'reference-assets');
+    mockedUploadProjectFiles.mockResolvedValue({ uploaded: [], failed: [] });
+
+    render(
+      <ChatComposer
+        projectId="project-1"
+        projectFiles={[]}
+        streaming={false}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    fireEvent.drop(screen.getByTestId('chat-composer'), {
+      dataTransfer: {
+        files: [directory],
+        items: [
+          {
+            kind: 'file',
+            getAsFile: () => directory,
+            webkitGetAsEntry: () => ({ isDirectory: true, isFile: false, name: directory.name }),
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/folders can't be attached/i)).toBeTruthy();
+    });
+    expect(mockedUploadProjectFiles).not.toHaveBeenCalled();
+  });
+
   it('sends staged file attachments even when the text draft is empty', async () => {
     const onSend = vi.fn();
     mockedUploadProjectFiles.mockResolvedValue({
@@ -56,7 +91,11 @@ describe('ChatComposer /search command', () => {
       target: { files: [file] },
     });
 
-    await waitFor(() => expect(screen.getByText('brief.pdf')).toBeTruthy());
+    // 文档卡的名字拆成【主名 + 后缀】两段(后缀永不参与截断),所以整串不是
+    // 一个文本节点 —— 按托盘的 textContent 找,别用 getByText。
+    await waitFor(() =>
+      expect(screen.getByTestId('staged-attachments').textContent).toContain('brief.pdf'),
+    );
     fireEvent.click(screen.getByTestId('chat-send'));
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
@@ -99,7 +138,9 @@ describe('ChatComposer /search command', () => {
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     fireEvent.click(screen.getByText('designs/landing.html'));
 
-    await waitFor(() => expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html'));
+    await waitFor(() =>
+      expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html'),
+    );
 
     fireEvent.change(screen.getByTestId('chat-file-input'), {
       target: { files: [new File(['pasted'], 'pasted.png', { type: 'image/png' })] },
@@ -478,52 +519,53 @@ describe('ChatComposer /search command', () => {
   it('previews a staged image attachment from its chip', async () => {
     const longName = 'drawing-2026-05-13T09-25-03-040Z-with-extra-long-name.png';
     render(
-      <ChatComposer
-        projectId="project-1"
-        projectFiles={[
-          {
-            name: longName,
-            path: `uploads/${longName}`,
-            kind: 'image',
-            mime: 'image/png',
-            size: 1234,
-            mtime: Date.now(),
-          },
-        ]}
-        streaming={false}
-        onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-      />,
+      <I18nProvider initial="fr">
+        <ChatComposer
+          projectId="project-1"
+          projectFiles={[
+            {
+              name: longName,
+              path: `uploads/${longName}`,
+              kind: 'image',
+              mime: 'image/png',
+              size: 1234,
+              mtime: Date.now(),
+            },
+          ]}
+          streaming={false}
+          onEnsureProject={async () => 'project-1'}
+          onSend={vi.fn()}
+          onStop={vi.fn()}
+        />
+      </I18nProvider>,
     );
 
     await typeAndSettle('@drawing');
     await waitFor(() => expect(screen.getByText(`uploads/${longName}`)).toBeTruthy());
     fireEvent.click(screen.getByText(`uploads/${longName}`));
 
-    const chip = screen.getByTestId('staged-contexts').querySelector('.staged-chip.staged-image');
-    const previewTrigger = screen.getByRole('button', { name: `Preview ${longName}` });
+    const chip = screen.getByTestId('staged-attachments').querySelector('[data-testid="staged-attachment-image"]');
+    const previewTrigger = screen.getByRole('button', { name: `Aperçu de ${longName}` });
     expect(chip?.contains(previewTrigger)).toBe(true);
-    expect(chip?.contains(screen.getByRole('button', { name: `Remove ${longName}` }))).toBe(true);
+    expect(chip?.contains(screen.getByRole('button', { name: `Retirer ${longName}` }))).toBe(true);
     expect(previewTrigger.querySelector('img')).toBeTruthy();
-    // Image chips are thumbnail-only (mirroring the home composer); the
-    // filename lives in the tooltip instead of chip text.
-    expect(previewTrigger.querySelector('.staged-name')).toBeNull();
+    // 图卡上不挂文件名 —— 缩略图本身就是它的名字,名字只进 title / aria-label。
+    expect(chip?.textContent).toBe('');
     expect(previewTrigger.getAttribute('title')).toBe(longName);
-    expect(chip?.classList.contains('staged-chip--image-file')).toBe(true);
 
     fireEvent.click(previewTrigger);
 
     const dialog = screen.getByRole('dialog', { name: longName });
     expect(dialog).toBeTruthy();
     expect(dialog.classList.contains('staged-preview-modal')).toBe(true);
-    expect(dialog.querySelector('.staged-preview-card')).toBeTruthy();
-    expect(dialog.querySelector('.staged-preview-head')).toBeTruthy();
+    const card = within(dialog).getByTestId('staged-preview-card');
+    expect(within(dialog).getByTestId('staged-preview-head')).toBeTruthy();
     const previewImage = screen.getByRole('img', { name: longName }) as HTMLImageElement;
     expect(previewImage.src).toContain(`/api/projects/project-1/raw/uploads/${longName}`);
-    expect(dialog.querySelector('.staged-preview-card > img')).toBe(previewImage);
+    // 图必须是卡的**直接子节点**(套一层就会破坏那套等比撑满的布局)
+    expect(card.querySelector(':scope > img')).toBe(previewImage);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Fermer' }));
     expect(screen.queryByRole('dialog', { name: longName })).toBeNull();
   });
 
@@ -578,10 +620,10 @@ describe('ChatComposer /search command', () => {
     expect(prompt).toContain('Canonical query:');
     expect(prompt).toContain('EV market 2025 trends');
     expect(prompt).toContain(
-      'If the OD command fails because Tavily is not configured or unavailable',
+      'If the OD command fails, keep the stderr / exit status in the tool trace and daemon logs',
     );
     expect(prompt).toContain(
-      'use your own search capability as fallback and label the fallback clearly',
+      'use your own search capability as fallback. Label the fallback clearly',
     );
     expect(prompt).toContain('write a reusable Markdown report into Design Files');
     expect(prompt).toContain('research/<safe-query-slug>.md');

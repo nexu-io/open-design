@@ -50,20 +50,15 @@ test('[P1] keeps the project account action host anchored to the right edge', as
   expect(1280 - accountActionsRect.right).toBeLessThanOrEqual(24);
 });
 
-test('[P2] captures the workspace staged contexts surface', async ({ page }) => {
+test('[P2] captures the workspace staged attachments surface', async ({ page }) => {
   await configureVisualPage(page);
   await gotoVisualHome(page);
   await gotoVisualWorkspace(page);
 
   await prepareVisualWorkspaceFileList(page);
-  // The row is no longer unconditionally present: 56b538aa4 ("compact the
-  // project composer like #5517") moved the design-system picker out of the
-  // staged-context bar into the composer's icon row, and the picker was the
-  // only thing keeping the bar mounted on a fresh project. `StagedRunContexts`
-  // now renders once the run genuinely carries context, so stage an attachment
-  // — the fixture already answers `/api/projects/*/upload` with
-  // visual-reference.txt — instead of asserting a bar the composer only used to
-  // draw because the picker lived inside it.
+  // Attachments use the composer tray; `staged-contexts` is reserved for
+  // run context such as skills, MCP servers, connectors, and plugins. Keep the
+  // visual witness on the surface the user actually sees after an upload.
   const uploadResponse = page.waitForResponse(
     (response) => response.url().includes('/upload') && response.request().method() === 'POST',
   );
@@ -74,15 +69,13 @@ test('[P2] captures the workspace staged contexts surface', async ({ page }) => 
   });
   expect((await uploadResponse).ok()).toBeTruthy();
 
-  const stagedContexts = page.getByTestId('staged-contexts');
-  await expect(stagedContexts).toBeVisible();
-  // Stronger than the old `not.toBeEmpty()`: name the chip we staged, so an
-  // empty-but-present bar cannot satisfy the capture.
-  await expect(
-    stagedContexts.locator('.staged-name', { hasText: 'visual-reference.txt' }),
-  ).toBeVisible();
+  const stagedAttachments = page.getByTestId('staged-attachments');
+  await expect(stagedAttachments).toBeVisible();
+  // Document cards may middle-truncate their visible basename. The full file
+  // name remains the stable title contract on the card.
+  await expect(stagedAttachments.getByTitle('visual-reference.txt', { exact: true })).toBeVisible();
 
-  await captureVisual(page, 'visual-workspace-staged-contexts');
+  await captureVisual(page, 'visual-workspace-staged-attachments');
 });
 
 test('[P1] @critical captures CSS hotspot workspace, preview, and settings surfaces', async ({ page }) => {
@@ -256,11 +249,10 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
   await gotoVisualHome(page);
 
   const chip = page.getByTestId('inline-model-switcher-chip');
-  // BYOK identity reads off the compact chip now: the selected model's brand
-  // mark leads (the link glyph is only the fallback for a vendor without one)
-  // and the configured model name follows it. That is what the
+  // BYOK identity reads off the compact chip now: the link glyph stands in for
+  // an agent logo and the configured model name follows it. That is what the
   // `aria-selected` mode tab used to prove.
-  await expect(chip.locator('.inline-switcher__chip-model-logo')).toBeVisible();
+  await expect(chip.locator('.inline-switcher__byok-glyph')).toBeVisible();
   await expect(chip).toHaveAttribute('aria-label', /gpt-4o/);
   await chip.click();
   const popover = page.getByTestId('inline-model-switcher-popover');

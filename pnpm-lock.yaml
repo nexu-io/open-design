@@ -363,6 +363,9 @@ importers:
       shiki:
         specifier: 4.1.0
         version: 4.1.0
+      thinking-orbs:
+        specifier: 0.3.1
+        version: 0.3.1(react@18.3.1)
       three:
         specifier: 0.185.1
         version: 0.185.1
@@ -6234,6 +6237,11 @@ packages:
 
   text-segmentation@1.0.3:
     resolution: {integrity: sha512-iOiPUo/BGnZ6+54OsWxZidGCsdU8YbE4PSpdPinp7DeMtUJNJBoJ/ouUSTJjHkh1KntHaltHl/gDs2FC4i5+Nw==}
+
+  thinking-orbs@0.3.1:
+    resolution: {integrity: sha512-3BG1aeB1RUTxItCml/BBuIz5JRM4kZqGuyx+vouv0fXTtcR9ZNoKjWGneHPx94y74GxgArwJZ1qbJR5dt54kSw==}
+    peerDependencies:
+      react: '>=18.0.0'
 
   three@0.185.1:
     resolution: {integrity: sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==}
@@ -12423,6 +12431,10 @@ snapshots:
     dependencies:
       utrie: 1.0.2
     optional: true
+
+  thinking-orbs@0.3.1(react@18.3.1):
+    dependencies:
+      react: 18.3.1
 
   three@0.185.1: {}
 

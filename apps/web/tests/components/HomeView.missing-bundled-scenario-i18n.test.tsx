@@ -44,11 +44,10 @@ async function renderMissingImageScenario(locale: 'en' | 'zh-CN') {
     </I18nProvider>,
   );
 
-  // Image lives behind the type row's 更多 popover.
-  const more = await screen.findByTestId('home-hero-type-pills-more');
-  await waitFor(() => expect((more as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(more);
-  fireEvent.click(await screen.findByTestId('home-hero-type-pill-image-more'));
+  const trigger = await screen.findByTestId('home-hero-template-trigger');
+  await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByTestId('home-hero-template-wedge-image'));
   return screen.findByRole('alert');
 }
 

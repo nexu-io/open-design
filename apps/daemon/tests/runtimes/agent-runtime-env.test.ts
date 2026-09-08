@@ -333,3 +333,47 @@ describe('applyAgentLaunchEnv', () => {
     expect(result.Path).toBe(existing);
   });
 });
+
+describe('claude task-tool exposure', () => {
+  // Claude Code >= 2.1.x moved the plan/todo capability from `TodoWrite` to the
+  // `TaskCreate` / `TaskUpdate` / `TaskList` / `TaskGet` family, and gates that
+  // family behind `CLAUDE_CODE_ENABLE_TODO_TOOLS` for the current model
+  // generation. Measured on claude 2.1.247, `claude -p --output-format
+  // stream-json --verbose`, reading the init frame's `tools` array:
+  //
+  //   --model opus   (claude-opus-5)    → Task, TaskOutput, TaskStop
+  //   --model sonnet (claude-sonnet-5)  → Task, TaskOutput, TaskStop
+  //   … same two, with CLAUDE_CODE_ENABLE_TODO_TOOLS=1
+  //                                     → + TaskCreate, TaskGet, TaskList, TaskUpdate
+  //
+  // `TodoWrite` is exposed on NO model in that build. Without this variable the
+  // Task→TodoWrite reducer in claude-stream.ts is dead code on every model the
+  // picker offers by alias, and a Claude run can never draw the Todos card.
+  it('enables the Task tool family so Claude can emit a plan', () => {
+    const env = spawnEnvForAgent('claude', { PATH: '/bin' });
+    expect(env.CLAUDE_CODE_ENABLE_TODO_TOOLS).toBe('1');
+  });
+
+  // The flag is the user's to override: Settings → Local CLI → Advanced env is
+  // an explicit low-level CLI override and already wins over inherited env
+  // (see the precedence note above spawnEnvForAgent).
+  it('never overrides an explicit user value', () => {
+    expect(
+      spawnEnvForAgent('claude', { PATH: '/bin', CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' })
+        .CLAUDE_CODE_ENABLE_TODO_TOOLS,
+    ).toBe('0');
+    expect(
+      spawnEnvForAgent('claude', { PATH: '/bin' }, { CLAUDE_CODE_ENABLE_TODO_TOOLS: '0' })
+        .CLAUDE_CODE_ENABLE_TODO_TOOLS,
+    ).toBe('0');
+  });
+
+  // Claude Code's flag, so only Claude Code's adapter. codebuddy/amp share the
+  // `claude-stream-json` parser but are different binaries.
+  it('does not leak the flag into other adapters', () => {
+    expect(spawnEnvForAgent('codex', { PATH: '/bin' }).CLAUDE_CODE_ENABLE_TODO_TOOLS)
+      .toBeUndefined();
+    expect(spawnEnvForAgent('codebuddy', { PATH: '/bin' }).CLAUDE_CODE_ENABLE_TODO_TOOLS)
+      .toBeUndefined();
+  });
+});
