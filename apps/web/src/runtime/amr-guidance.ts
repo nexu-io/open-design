@@ -395,16 +395,30 @@ export function resolveRunErrorCardDescription(input: {
   paneErrorCameFromARun: boolean;
   /** The failed run's own upstream string, off its persisted error event. */
   failedRunRawDetail: string | null;
+  /**
+   * This turn really did end in a terminal, user-facing failure — a failed run
+   * process, or a run whose result never got delivered — and no other surface
+   * is announcing it.
+   *
+   * It is the answer to "is there something to be silent ABOUT", which is a
+   * different question from every source above ("do we have words for it").
+   * When it holds and the three sources are all empty, the card still has to
+   * appear: it is the only thing on screen carrying 〔Retry〕〔Export logs〕
+   * 〔Contact support〕, and dropping it drops the whole recovery surface with
+   * the explanation. The shell header's "run failed" line is written on the
+   * assumption that this card is below it saying why.
+   */
+  turnEndedInTerminalFailure: boolean;
 }): RunErrorCardDescription {
   if (input.handedToAnotherSurface) return { render: 'none' };
   if (input.mappedMessageKey) {
     return { render: 'mapped', messageKey: input.mappedMessageKey };
   }
-  if (input.paneError != null) {
-    // An empty pane slot still SHADOWS the run's raw detail (it is the higher
-    // priority source), and an empty card says nothing — so no card, exactly as
-    // before. Whether that silence is right is a separate question from this one.
-    if (!input.paneError) return { render: 'none' };
+  // An empty pane slot is not a source — it used to SHADOW the run's own detail
+  // (being the higher-priority source) and take the card down with it, which is
+  // the same silence this function now refuses everywhere else. Only a slot
+  // with words in it decides anything.
+  if (input.paneError) {
     return input.paneErrorCameFromARun
       ? { render: 'fallback' }
       : { render: 'app-text', text: input.paneError };
@@ -412,7 +426,12 @@ export function resolveRunErrorCardDescription(input: {
   // Nothing in the pane slot, so the only text left is the run's own — raw by
   // definition, whether or not a `runFailureUi` was resolved for it.
   if (input.failedRunRawDetail) return { render: 'fallback' };
-  return { render: 'none' };
+  // Nothing to say, but something to say it ABOUT: a terminal failure always
+  // gets a card, so the turn keeps its explanation and its way out. Ordered
+  // last so every handoff and every more precise source still wins.
+  return input.turnEndedInTerminalFailure
+    ? { render: 'fallback' }
+    : { render: 'none' };
 }
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
