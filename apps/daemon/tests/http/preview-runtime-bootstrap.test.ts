@@ -43,6 +43,20 @@ describe('preview runtime bootstrap', () => {
     const bootstrap = buildPreviewRuntimeBootstrap({
       ...identity,
       availableCapabilities: ['deck', 'snapshot'],
+      // Both advertised capabilities need a module behind them, because a
+      // capability nothing registered for is no longer reported as applied.
+      // What this case is about is the OTHER filter: `edit` is requested below
+      // and must be dropped for not being advertised.
+      modules: [
+        {
+          capabilities: ['deck'],
+          source: "register('deck',function(){return {enable:function(){},disable:function(){}};});",
+        },
+        {
+          capabilities: ['snapshot'],
+          source: "register('snapshot',function(){return {enable:function(){},disable:function(){}};});",
+        },
+      ],
     });
     const source = bootstrap.replace(/^<script[^>]*>/u, '').replace(/<\/script>$/u, '');
     const messages: unknown[] = [];

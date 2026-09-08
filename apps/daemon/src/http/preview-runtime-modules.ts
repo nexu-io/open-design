@@ -68,11 +68,21 @@ export function buildSharedLazyScriptRuntimeModule(
   if (capabilities.length === 0) {
     throw new TypeError('shared preview runtime module needs at least one capability');
   }
-  const installFunction = `function installSharedBridge(){if(sharedBridgeInstalled)return;sharedBridgeInstalled=true;\n`
-    + `${scriptBody(scriptTag)}\n}`;
+  // Latch AFTER the body, not before. Latching first hides a failed install:
+  // the capability that asked takes the throw and is correctly left out, and
+  // every later one sharing this script finds the flag set, returns, and is
+  // reported live against a bridge that never installed. `failed` keeps the
+  // first failure honest for every later asker without re-running a body that
+  // may already have half-run.
+  const installFunction = `function installSharedBridge(){\n`
+    + `if(sharedBridgeInstalled)return;\n`
+    + `if(sharedBridgeFailed)throw new Error('shared preview bridge failed to install');\n`
+    + `sharedBridgeFailed=true;\n`
+    + `${scriptBody(scriptTag)}\n`
+    + `sharedBridgeFailed=false;sharedBridgeInstalled=true;\n}`;
   return {
     capabilities,
-    source: `/* ${marker} */\nvar sharedBridgeInstalled=false;\n${installFunction}\n`
+    source: `/* ${marker} */\nvar sharedBridgeInstalled=false;var sharedBridgeFailed=false;\n${installFunction}\n`
       + capabilities.map((capability) => (
         `register(${JSON.stringify(capability)},function(){return {enable:installSharedBridge,disable:function(){}};});`
       )).join('\n'),
@@ -93,10 +103,15 @@ var editStyle=document.createElement('style');
 editStyle.setAttribute('data-od-edit-bridge-style','');
 editStyle.textContent=${JSON.stringify(styleBody(buildManualEditBridgeStyle()))};
 (document.head||document.documentElement).appendChild(editStyle);
-var editBridgeInstalled=false;
+var editBridgeInstalled=false;var editBridgeFailed=false;
 function setEditMode(enabled){
-  if(!editBridgeInstalled&&enabled){editBridgeInstalled=true;
+  // Latched after the body: see installSharedBridge. A failed install that
+  // marks itself done reports edit as live against a bridge that is not there.
+  if(!editBridgeInstalled&&enabled){
+    if(editBridgeFailed)throw new Error('manual edit bridge failed to install');
+    editBridgeFailed=true;
 ${scriptBody(buildManualEditBridge(false))}
+    editBridgeFailed=false;editBridgeInstalled=true;
   }
   if(!editBridgeInstalled)return;
   window.dispatchEvent(new MessageEvent('message',{data:{type:'od-edit-mode',enabled:!!enabled},source:parent}));
@@ -133,9 +148,13 @@ export function buildDeckRuntimeModule(
       + `deckStyle.setAttribute('data-od-deck-fix','');\n`
       + `deckStyle.textContent=${JSON.stringify(styleBody(assets.styleTag))};\n`
       + `(document.head||document.documentElement).appendChild(deckStyle);\n`
-      + `var deckEnabled=false;var deckInstalled=false;\n`
-      + `function installDeckBridge(){if(!deckEnabled||deckInstalled)return;deckInstalled=true;\n`
-      + `${scriptBody(assets.scriptTag)}\n}\n`
+      + `var deckEnabled=false;var deckInstalled=false;var deckFailed=false;\n`
+      + `function installDeckBridge(){\n`
+      + `if(!deckEnabled||deckInstalled)return;\n`
+      + `if(deckFailed)throw new Error('deck bridge failed to install');\n`
+      + `deckFailed=true;\n`
+      + `${scriptBody(assets.scriptTag)}\n`
+      + `deckFailed=false;deckInstalled=true;\n}\n`
       + `function scheduleDeckBridge(){\n`
       + `if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installDeckBridge,{once:true});\n`
       + `else installDeckBridge();}\n`
