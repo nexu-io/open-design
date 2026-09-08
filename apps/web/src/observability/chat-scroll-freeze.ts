@@ -1256,6 +1256,25 @@ function runFrame(active: Surface): void {
     return;
   }
 
+  // Whose scroller was this batch aimed at?
+  //
+  // Asked ONCE per wheel-bearing frame, here, and the single answer is used by
+  // both the shortfall ledger below and the freeze verdict further down. It
+  // used to be asked only at report time, on the grounds that it is the
+  // expensive check — but "expensive" does not survive reading it: the walk is
+  // the ancestor chain from the wheel target up to the chat log, which is
+  // nesting depth and never transcript length, it returns immediately when the
+  // wheel was aimed at the log itself, and `absorbsWheelInDirection` rejects on
+  // geometry before it will pay for a `getComputedStyle`. Layout is already
+  // clean here, because the frame callback above has just read `scrollHeight`.
+  //
+  // Asking early is what makes the answer usable. A wheel a code block or a
+  // tool-output box absorbed is a wheel the chat log was never asked to move,
+  // so it is not evidence about the chat log — and everything below this line
+  // records evidence about the chat log.
+  const innerScrollerCount = countAbsorbingScrollers(active.element, wheelTarget);
+  const absorbedByInnerScroller = innerScrollerCount > 0;
+
   // One round of "the wheel asked to go further; this is where it stopped".
   // Read BEFORE `observeWheelBatch`, which replaces the baseline this is
   // judged against.
@@ -1266,7 +1285,15 @@ function runFrame(active: Surface): void {
   // below a baseline it never actually failed to pass, and banking that as a
   // shortfall permanently claims `ledger.first` — the field the report exists
   // for — with a number the wheel had nothing to do with.
-  if (wheelPx > 0 && ceilingProbeAttributable(active.state, geometry)) {
+  //
+  // An absorbed wheel is the same mistake by a different route, and a worse
+  // one, because it is indistinguishable from a real round by arithmetic
+  // alone: the chat log genuinely did not move, and it genuinely has travel
+  // left, because the user was scrolling something else entirely. `first` is
+  // never evicted, so one such round owns "where the drift began" for the life
+  // of the surface. It is excluded here rather than retracted later for that
+  // exact reason — there is no taking `first` back.
+  if (!absorbedByInnerScroller && wheelPx > 0 && ceilingProbeAttributable(active.state, geometry)) {
     recordCeilingProbe(active.ledger, {
       at,
       reachedPx: geometry.scrollTop,
@@ -1283,25 +1310,22 @@ function runFrame(active: Surface): void {
   active.state = result.state;
   if (result.verdict.kind !== 'frozen') return;
 
-  // Last gate before reporting, and the expensive one — so it runs only
-  // here. If a scrollable box between the wheel target and the chat log
-  // still had travel in the requested direction, the chat log was never
-  // asked to move and this is not our defect. Every code block and
-  // tool-output box in a transcript is such a box.
+  // The attribution answered at the top of this frame, applied to the verdict.
+  // If a scrollable box between the wheel target and the chat log still had
+  // travel in the requested direction, the chat log was never asked to move
+  // and this is not our defect. Every code block and tool-output box in a
+  // transcript is such a box.
   //
-  // It runs UNCONDITIONALLY, before any de-duplication. This is attribution,
-  // not reporting: its job is to decide whose scroller the notch was aimed
-  // at, and that question has the same answer whether or not an event has
-  // already been sent. Putting a `reported` check above it — which this
-  // branch briefly did — leaves the streak reset below unreachable on a
-  // surface that has reported, so wheels the transcript's own code blocks
-  // absorbed keep climbing `stallWheelCount` for a chat scroller nobody was
-  // scrolling. A later snapshot then shows ordinary nested scrolling as a
-  // stall streak, which is the exact evidence this probe exists to produce.
-  // An instrument that is slightly more expensive is survivable; one that
+  // Nothing may put a de-duplication check above this branch. That is not a
+  // style preference: `observeWheelBatch` has ALREADY folded the notch into
+  // the stall streak by the time we get here, and the retraction below is the
+  // only thing that takes it back out. Gating the branch on `reported` — which
+  // this PR briefly did, to save the walk — left ordinary code-block scrolling
+  // climbing `stallWheelCount` for a chat scroller nobody was scrolling, and a
+  // later snapshot then presents that as exactly the signal this probe exists
+  // to produce. An instrument that costs a little more is survivable; one that
   // manufactures its own findings is not.
-  const innerScrollerCount = countAbsorbingScrollers(active.element, wheelTarget);
-  if (innerScrollerCount > 0) {
+  if (absorbedByInnerScroller) {
     // The only trace this decision leaves. A suppressed freeze and a chat
     // that never froze are otherwise indistinguishable from outside, which is
     // how a real 1493px failure produced no event and no explanation.
@@ -1311,12 +1335,12 @@ function runFrame(active: Surface): void {
     // is what must be unconditional; the bookkeeping about why a report did
     // not happen is meaningless once one has.
     if (!freezeTelemetryAlreadySent(active)) active.innerScrollerSuppressions += 1;
-    // Clear the streak as well as the verdict. Leaving it at the threshold
-    // would re-run this ancestor walk — which does read layout — on every
-    // single frame for as long as the user keeps scrolling that inner box.
-    // It is also the only thing keeping an absorbed wheel out of the streak:
-    // the notch has already been folded in by `observeWheelBatch` above, and
-    // this is where it is taken back out.
+    // Clear the streak as well as the verdict. This is the retraction: the
+    // notch has already been folded in by `observeWheelBatch` above, and this
+    // is where it is taken back out, so an absorbed wheel can never leave a
+    // stall standing in a snapshot. Leaving the streak parked at the threshold
+    // would also mean re-deciding a freeze on every single frame for as long
+    // as the user keeps scrolling that inner box.
     active.state = {
       ...active.state,
       reported: false,

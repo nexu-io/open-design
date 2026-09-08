@@ -824,6 +824,10 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     // Retracted every time it reaches the bar, so a reader of the snapshot
     // never sees absorbed notches standing as a stall.
     expect(after?.detector.stallWheelCount).toBeLessThan(FREEZE_WHEEL_COUNT);
+    // Nor in the ledger. Six notches aimed at a code block add no rounds of
+    // "the chat log would not go further" to the shortfall record.
+    expect(after?.ledger.probeCount).toBe(atReport?.ledger.probeCount);
+    expect(after?.ledger.probes).toBe(atReport?.ledger.probes);
     // The counter keeps its meaning — "seen and NOT reported" — so it does not
     // collect verdicts on a surface whose event has already gone.
     expect(after?.innerScrollerSuppressions).toBe(0);
@@ -855,6 +859,14 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     // Same retraction, same bound, on a surface that has never reported: the
     // gate's behaviour is not a function of whether an event went out.
     expect(surface?.detector.stallWheelCount).toBeLessThan(FREEZE_WHEEL_COUNT);
+    // And the ledger stayed empty. This is the half that cannot be undone
+    // later: `ledger.first` is never evicted, so a single absorbed round would
+    // own `shortfall_first_*` — the field the whole report is read for — for
+    // the life of the surface, while looking arithmetically identical to a
+    // real one. The chat log did not move and it does have travel left; the
+    // user was simply scrolling something else.
+    expect(surface?.ledger.probeCount).toBe(0);
+    expect(surface?.ledger.first).toBeNull();
   });
 
   it('sends exactly one event per surface however long the freeze goes on', () => {
