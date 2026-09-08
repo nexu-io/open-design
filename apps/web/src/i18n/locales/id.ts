@@ -67,7 +67,7 @@ export const id: Dict = {
   'chat.amrCard.chipOfficial': 'Hosting resmi',
   'chat.amrCard.chipNoKey': 'Tanpa API Key',
   'chat.amrCard.chipAutoRetry': 'Coba ulang otomatis setelah masuk',
-  'chat.amrCard.switchCta': 'Beralih ke OpenDesign Cloud & coba lagi',
+  'chat.amrCard.switchCta': 'Beralih ke Cloud',
   'chat.amrError.authMessage': 'Akun OpenDesign Cloud Anda belum diotorisasi. Otorisasi sekarang dan proses ini akan dicoba ulang otomatis.',
   'chat.amrError.balanceMessage': 'Saldo OpenDesign Cloud Anda habis. Isi ulang untuk melanjutkan proses ini.',
   'chat.amrError.authorizeCta': 'Otorisasi & coba lagi',

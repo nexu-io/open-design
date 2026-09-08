@@ -68,7 +68,7 @@ export const zhTW: Dict = {
   "chat.amrCard.chipOfficial": "官方代管",
   "chat.amrCard.chipNoKey": "無需 API Key",
   "chat.amrCard.chipAutoRetry": "授權後自動重試",
-  "chat.amrCard.switchCta": "切換到 OpenDesign Cloud 並重試",
+  "chat.amrCard.switchCta": "切換到 Cloud",
   "chat.amrError.authMessage":
     "OpenDesign Cloud 帳號尚未授權。完成授權後將自動重試目前任務。",
   "chat.amrError.balanceMessage":

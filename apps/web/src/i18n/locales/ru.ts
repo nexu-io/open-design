@@ -67,7 +67,7 @@ export const ru: Dict = {
   'chat.amrCard.chipOfficial': 'Официальный хостинг',
   'chat.amrCard.chipNoKey': 'Без API-ключа',
   'chat.amrCard.chipAutoRetry': 'Авто-повтор после входа',
-  'chat.amrCard.switchCta': 'Переключиться на OpenDesign Cloud и повторить',
+  'chat.amrCard.switchCta': 'Переключиться на Cloud',
   'chat.amrError.authMessage': 'Ваш аккаунт OpenDesign Cloud ещё не авторизован. Авторизуйте его, и это выполнение будет автоматически повторено.',
   'chat.amrError.balanceMessage': 'Баланс OpenDesign Cloud исчерпан. Пополните, чтобы продолжить это выполнение.',
   'chat.amrError.authorizeCta': 'Авторизовать и повторить',

@@ -67,7 +67,7 @@ export const ja: Dict = {
   'chat.amrCard.chipOfficial': '公式ホスティング',
   'chat.amrCard.chipNoKey': 'API キー不要',
   'chat.amrCard.chipAutoRetry': 'サインイン後に自動再試行',
-  'chat.amrCard.switchCta': 'OpenDesign Cloud に切り替えて再試行',
+  'chat.amrCard.switchCta': 'Cloud に切り替える',
   'chat.amrError.authMessage': 'OpenDesign Cloud アカウントがまだ認可されていません。認可するとこのタスクは自動で再試行されます。',
   'chat.amrError.balanceMessage': 'OpenDesign Cloud の残高が不足しています。チャージしてこのタスクを続行してください。',
   'chat.amrError.authorizeCta': '認可して再試行',

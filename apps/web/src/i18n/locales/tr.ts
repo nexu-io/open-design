@@ -67,7 +67,7 @@ export const tr: Dict = {
   'chat.amrCard.chipOfficial': 'Resmi hizmet',
   'chat.amrCard.chipNoKey': 'API anahtarı gerekmez',
   'chat.amrCard.chipAutoRetry': 'Giriş sonrası otomatik yeniden deneme',
-  'chat.amrCard.switchCta': 'OpenDesign Cloud\'ye geç ve yeniden dene',
+  'chat.amrCard.switchCta': 'Cloud\'ye geç',
   'chat.amrError.authMessage': 'OpenDesign Cloud hesabınız henüz yetkilendirilmedi. Yetkilendirin ve bu çalıştırma otomatik olarak yeniden denensin.',
   'chat.amrError.balanceMessage': 'OpenDesign Cloud bakiyeniz bitti. Çalıştırmaya devam etmek için bakiye yükleyin.',
   'chat.amrError.authorizeCta': 'Yetkilendir ve yeniden dene',

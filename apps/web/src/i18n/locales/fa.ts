@@ -67,7 +67,7 @@ export const fa: Dict = {
   'chat.amrCard.chipOfficial': 'میزبانی رسمی',
   'chat.amrCard.chipNoKey': 'بدون کلید API',
   'chat.amrCard.chipAutoRetry': 'تلاش مجدد خودکار پس از ورود',
-  'chat.amrCard.switchCta': 'سوئیچ به OpenDesign Cloud و تلاش مجدد',
+  'chat.amrCard.switchCta': 'سوئیچ به Cloud',
   'chat.amrError.authMessage': 'حساب OpenDesign Cloud شما هنوز مجاز نشده است. آن را مجاز کنید تا این اجرا به‌طور خودکار دوباره انجام شود.',
   'chat.amrError.balanceMessage': 'موجودی OpenDesign Cloud شما تمام شده است. برای ادامه این اجرا شارژ کنید.',
   'chat.amrError.authorizeCta': 'اعطای دسترسی و تلاش مجدد',

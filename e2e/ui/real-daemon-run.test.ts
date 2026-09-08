@@ -619,10 +619,10 @@ test('[P1] real daemon classifies a Claude prompt-too-long result and preserves 
   await expect(card).toContainText('Conversation too long', { timeout: 15_000 });
   await expect(card).toContainText('exceed what the AI can process');
   await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
-  // OPEND-2772 / 规格 T68:切换卡整块删掉,那颗〔切换到 OpenDesign Cloud 并重试〕
+  // OPEND-2772 / 规格 T68:切换卡整块删掉,那颗〔切换到 Cloud〕
   // 收进报错卡,并铺到**所有** BYOK / 本地 CLI 的失败 —— 这一轮跑的是本地 claude,
   // 所以它在场,而〔重试〕退到次级(判据 `runsOnALocalAgent`)。
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Switch to Cloud/i })).toHaveCount(1);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);

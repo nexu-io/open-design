@@ -2314,7 +2314,7 @@ export function ChatPane({
   const errorCardOwnerId =
     retryAssistant && failedRunErrorEvent ? retryAssistant.id : null;
   /**
-   * 主按钮位上那颗〔切换到 OpenDesign Cloud 并重试〕的埋点载荷(OPEND-2772)。
+   * 主按钮位上那颗〔切换到 Cloud〕的埋点载荷(OPEND-2772)。
    *
    * 载荷原样保留 —— 它以前是喂给第二张卡 `AmrGuidance` 的 props,那张卡挂载时发
    * `surface_view`、点击时发 `ui_click(go_amr)`。卡没了,**这两个事件没跟着没**:
@@ -2361,7 +2361,7 @@ export function ChatPane({
   /**
    * 一张卡只有一颗主按钮。
    *
-   * OPEND-2772 之后主位归那颗〔切换到 OpenDesign Cloud 并重试〕,所以阶梯算出来的
+   * OPEND-2772 之后主位归那颗〔切换到 Cloud〕,所以阶梯算出来的
    * 那一颗(换个模型 / 去设置 / 在终端登录 / 重试 / 续跑 …)**退到次级**。
    * ⚠️ 是让位,不是删除:重试对上游 5xx、网络抖动这类失败仍然是真正的自救路径,
    * 一刀切掉会伤到它们(三个候选摆在 `run-error-catalog.md` §6.ZB 末尾,等产品挑)。
@@ -4514,7 +4514,7 @@ export function ChatPane({
                           </RunErrorCardActionGroup>
                         ) : null}
                         {/*
-                          * 主按钮位:〔切换到 OpenDesign Cloud 并重试〕(OPEND-2772)。
+                          * 主按钮位:〔切换到 Cloud〕(OPEND-2772)。
                           *
                           * 这一颗**不是新造的**。它原来长在报错卡下面那张独立的
                           * `AmrGuidance` 上,于是同一次失败在屏幕上出两张卡 —— 工单
@@ -4522,7 +4522,9 @@ export function ChatPane({
                           * 那张卡整块删掉,这颗 CTA 收进来,排在最右(稿子第 79 格:
                           * 次要在左、主动作在最右)。
                           *
-                          * **文案一个字没动**:仍是切换卡上那句 `chat.amrCard.switchCta`。
+                          * **键没换**:仍是切换卡上那句 `chat.amrCard.switchCta`;它的值
+                          * 2026-09-08 按交付稿第 79 格对齐成「切换到 Cloud」(产品原话
+                          * 「切换到 cloud 就行了」),标题 / 正文按产品裁决**不对齐**。
                           * 动作也没重造:走 `onSwitchToAmrAndRetry` ——
                           * `ProjectView.handleSwitchToAmrAndRetry` 先武装一次性自动重试,
                           * 再**先切 mode 再切 agent**(顺序有坑:反过来 BYOK 用户会留在

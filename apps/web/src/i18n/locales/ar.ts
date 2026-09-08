@@ -67,7 +67,7 @@ export const ar: Dict = {
   'chat.amrCard.chipOfficial': 'استضافة رسمية',
   'chat.amrCard.chipNoKey': 'بدون مفتاح API',
   'chat.amrCard.chipAutoRetry': 'إعادة المحاولة تلقائيًا بعد تسجيل الدخول',
-  'chat.amrCard.switchCta': 'التبديل إلى OpenDesign Cloud وإعادة المحاولة',
+  'chat.amrCard.switchCta': 'التبديل إلى Cloud',
   'chat.amrError.authMessage': 'حساب OpenDesign Cloud الخاص بك لم يتم تفويضه بعد. فوِّضه وستُعاد محاولة هذه المهمة تلقائيًا.',
   'chat.amrError.balanceMessage': 'نفد رصيد OpenDesign Cloud الخاص بك. اشحن للاستمرار في هذه المهمة.',
   'chat.amrError.authorizeCta': 'تفويض وإعادة المحاولة',
