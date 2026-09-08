@@ -1,0 +1,99 @@
+{
+  "source": {
+    "tag": "open-design-v0.22.0",
+    "sha256": "a3b585762f67680089adea5942be44e35338cc37c87d1c21e82285e718882479",
+    "electron": "41.3.0",
+    "arch": "arm64",
+    "macOS": "14.8.9"
+  },
+  "runs": [
+    {
+      "id": 34228271858,
+      "full": {
+        "variant": "full",
+        "seconds": {
+          "outerSign": 2.41,
+          "signatureVerify": 3.775,
+          "zip": 32.014,
+          "uploadSubmit": 22.565,
+          "appleWait": 169.014,
+          "staple": 2.177,
+          "stapleValidate": 0.373,
+          "gatekeeper": 9.24,
+          "dmg": 45.049
+        },
+        "submissionId": "a28d4028-252b-4c7e-b623-176931f6f980",
+        "files": 14774,
+        "appBytes": 960735767,
+        "uploadBytes": 411561074,
+        "status": "Accepted",
+        "dmgBytes": 504623088
+      },
+      "minimal": {
+        "variant": "minimal",
+        "seconds": {
+          "outerSign": 0.878,
+          "signatureVerify": 3.24,
+          "headlessSmoke": 2.398,
+          "zip": 9.375,
+          "uploadSubmit": 8.176,
+          "appleWait": 36.575,
+          "staple": 1.634,
+          "stapleValidate": 0.28,
+          "gatekeeper": 1.115,
+          "dmg": 8.433
+        },
+        "submissionId": "f02472bb-69f4-4bc3-8d3f-0ef62d7f3fbe",
+        "files": 64,
+        "appBytes": 239135878,
+        "uploadBytes": 104882788,
+        "status": "Accepted",
+        "dmgBytes": 114858361
+      }
+    },
+    {
+      "id": 34228928057,
+      "full": {
+        "variant": "full",
+        "seconds": {
+          "outerSign": 2.045,
+          "signatureVerify": 4.278,
+          "zip": 31.488,
+          "uploadSubmit": 17.02,
+          "appleWait": 181.301,
+          "staple": 1.294,
+          "stapleValidate": 0.207,
+          "gatekeeper": 6.588,
+          "dmg": 25.818
+        },
+        "submissionId": "6be6d027-6695-4e9a-997e-ae6aa6d4c558",
+        "files": 14774,
+        "appBytes": 960735767,
+        "uploadBytes": 411561077,
+        "status": "Accepted",
+        "dmgBytes": 507724731
+      },
+      "minimal": {
+        "variant": "minimal",
+        "seconds": {
+          "outerSign": 0.397,
+          "signatureVerify": 2.463,
+          "headlessSmoke": 2.121,
+          "zip": 9.14,
+          "uploadSubmit": 9.39,
+          "appleWait": 44.034,
+          "staple": 1.644,
+          "stapleValidate": 0.378,
+          "gatekeeper": 1.222,
+          "dmg": 7.403
+        },
+        "submissionId": "26780e57-2026-4409-875b-61bcf2675701",
+        "files": 64,
+        "appBytes": 239135878,
+        "uploadBytes": 104882794,
+        "status": "Accepted"
+      },
+      "note": "Minimal: notarization, staple validation and Gatekeeper passed; subsequent hdiutil create failed with Resource busy. Its dmg timing is a failed attempt, not a successful build."
+    }
+  ]
+}
