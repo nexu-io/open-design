@@ -3445,7 +3445,7 @@ export const esES: Dict = {
   'assistant.copyMarkdown': 'Copiar',
   'assistant.forkConversation': 'Nueva conversación',
   'assistant.forkingConversation': 'Iniciando nueva conversación…',
-  'assistant.forkNote': 'El contexto anterior viene contigo: sigue hablando.',
+  'assistant.forkNote': 'Continuación del chat',
   'assistant.shareToOpenDesign': 'Compartir con OpenDesign',
   'assistant.shareToOpenDesignBusy': 'Preparando paquete…',
   'assistant.feedbackPrompt': 'Comentarios',

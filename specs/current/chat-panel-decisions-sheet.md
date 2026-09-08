@@ -489,7 +489,10 @@ T4 / T6 是小的默认值问题,现状能跑,不急。
 
 **未决 / 未做**
 
-- **其余 17 个 locale 仍是旧句子的各自译文**,没有跟着改 —— 翻译属于产品文案,不自拟。要补的话需要产品逐条给。
-- `.fork-sep span` 带着 `overflow: hidden; text-overflow: ellipsis`,但标签本身是 flex 容器,`text-overflow` 永远不生效;长译文会被切掉而不是省略号。自 #2714 落地起如此,修法要给标签加一层纯文本内层。
 - `docs/design/chat-mirror/mirror-exec.html` 是**生成产物**,仍停在两块式旧形态且写着旧文案。重建会产生约 776KB 的巨型 diff,单独一件事。
 - daemon 在源会话没有标题时整个压掉 `forkedInto` 戳(`routes/project/conversations.ts`「拿不到源标题就不盖」)。标题现在已经不渲染了,无标题的源会话理应仍然值得那条分界线。
+
+**已收尾**
+
+- ~~**其余 17 个 locale 仍是旧句子的各自译文**,没有跟着改。~~ **已补齐(2026-09-08 用户拍板「都改」)**:除已定稿的 `en` / `zh-CN` / `zh-TW` 外的 **16 支**语言包(目录下共 19 支)全部改成对齐新英文 `Continued from chat` 的说法 —— 说的是「来处」(这段是从上一个会话接着来的),不再是旧句的「上下文已带过来 + 接着说」。用词跟各 locale 自己的 `assistant.forkConversation` 走(`es-ES` 例外:`conversación` 那条会到 1.63×,改用 `chat`)。长度全部控制在英文 19 字符的 1.5× 以内,最长 `de` 28 字符。
+- ~~`.fork-sep span` 带着 `overflow: hidden; text-overflow: ellipsis`,但标签本身是 flex 容器,`text-overflow` 永远不生效;长译文会被切掉而不是省略号。~~ **已修**(#7868 评审线程 → 修复 PR):文案搬进内层 `.fork-note-label`,截断四条(`min-width: 0` / `overflow: hidden` / `text-overflow: ellipsis` / `white-space: nowrap`)落在那一层;`.fork-sep span` 同时换成子组合符 `.fork-sep > span`,否则内层会被一起按成 `flex: none`,不可收缩的 flex item 宽度恒等于内容宽度,省略号照样轮不到。守卫 `apps/web/tests/components/chat/fork-note-label-ellipsis.test.tsx`(含两组坏形态对照,证明判据不是空过)。

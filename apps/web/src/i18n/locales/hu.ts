@@ -3445,7 +3445,7 @@ export const hu: Dict = {
   'assistant.copyMarkdown': 'Másolás',
   'assistant.forkConversation': 'Új beszélgetés',
   'assistant.forkingConversation': 'Új beszélgetés indítása…',
-  'assistant.forkNote': 'A fenti előzmény átjött – csak folytasd.',
+  'assistant.forkNote': 'Beszélgetés folytatása',
   'assistant.shareToOpenDesign': 'Megosztás az OpenDesignnal',
   'assistant.shareToOpenDesignBusy': 'Csomag előkészítése…',
   'assistant.feedbackPrompt': 'Visszajelzés',

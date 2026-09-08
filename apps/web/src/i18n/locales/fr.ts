@@ -3445,7 +3445,7 @@ export const fr: Dict = {
   'assistant.copyMarkdown': 'Copier',
   'assistant.forkConversation': 'Nouvelle conversation',
   'assistant.forkingConversation': 'Démarrage d’une nouvelle conversation…',
-  'assistant.forkNote': 'Le contexte ci-dessus vous suit — continuez simplement.',
+  'assistant.forkNote': 'Suite de la conversation',
   'assistant.shareToOpenDesign': 'Partager avec OpenDesign',
   'assistant.shareToOpenDesignBusy': 'Préparation du partage…',
   'assistant.feedbackPrompt': 'Avis',

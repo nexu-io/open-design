@@ -1056,7 +1056,10 @@ const OUTRO: Cell[] = [
         <i aria-hidden />
         <span className="fork-note">
           <Icon name="fork" size={12} />
-          从上一个会话继续
+          {/* 内层 `.fork-note-label` 照产线的结构写:`.fork-note` 是 flex 容器,
+              文案落成裸文本会进匿名 flex item,`text-overflow` 永远不生效。
+              陈列页这一格要照得出真形态,所以这一层不能省。 */}
+          <span className="fork-note-label">从上一个会话继续</span>
         </span>
         <i aria-hidden />
       </div>
@@ -1065,6 +1068,7 @@ const OUTRO: Cell[] = [
       '**已接线**:分叉时 daemon 给新会话末尾那条 seeded 助手消息盖上 `forkedInto` 并落库(`messages.forked_into_json`),所以**刷新之后分界还在**',
       '两侧的线都从外沿透明化到贴着字的实色 —— 稿子的理由是让它读起来像「一段的开头」,而不是把这一列切成两半的硬横线',
       '⚠️ **和稿子分岔了(OPEND-2714)**:稿子这一格是两块 —— 线上写源会话标题、线下再一行脚注。产品裁决改成 Codex 那一种:**分支图标配一行文案,一起摆进线中间**,源会话标题不再上屏。文案 `assistant.forkNote`,19 语已补齐',
+      '**文案外面还套着一层 `.fork-note-label`**:并成一行之后 `.fork-note` 是 flex 容器,裸文本会落进匿名 flex item,`text-overflow` 是非继承属性因此永远不生效 —— 德语 / 俄语那样的长译文在 62% 上限处是被**齐口切断**的,没有省略号。截断四条(`min-width: 0` / `overflow` / `text-overflow` / `white-space`)现在挂在内层,`.fork-sep > span` 也换成了子组合符,免得把内层一起按成 `flex: none`',
     ],
   },
   {

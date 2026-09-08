@@ -3445,7 +3445,7 @@ export const id: Dict = {
   'assistant.copyMarkdown': 'Salin',
   'assistant.forkConversation': 'Percakapan baru',
   'assistant.forkingConversation': 'Memulai percakapan baru…',
-  'assistant.forkNote': 'Konteks di atas ikut terbawa — lanjutkan saja.',
+  'assistant.forkNote': 'Lanjutan dari percakapan',
   'assistant.shareToOpenDesign': 'Bagikan ke OpenDesign',
   'assistant.shareToOpenDesignBusy': 'Menyiapkan paket…',
   'assistant.feedbackPrompt': 'Masukan',

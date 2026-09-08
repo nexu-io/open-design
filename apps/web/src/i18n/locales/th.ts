@@ -3445,7 +3445,7 @@ export const th: Dict = {
   'assistant.copyMarkdown': 'คัดลอก',
   'assistant.forkConversation': 'สนทนาใหม่',
   'assistant.forkingConversation': 'กำลังเริ่มสนทนาใหม่…',
-  'assistant.forkNote': 'บริบทด้านบนติดมาด้วยแล้ว — คุยต่อได้เลย',
+  'assistant.forkNote': 'ต่อจากการสนทนาก่อนหน้า',
   'assistant.shareToOpenDesign': 'แชร์ไปยัง OpenDesign',
   'assistant.shareToOpenDesignBusy': 'กำลังเตรียมแพ็กเกจ…',
   'assistant.feedbackPrompt': 'ข้อเสนอแนะ',

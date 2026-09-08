@@ -3445,7 +3445,7 @@ export const ja: Dict = {
   'assistant.copyMarkdown': 'コピー',
   'assistant.forkConversation': '新しい会話',
   'assistant.forkingConversation': '新しい会話を開始中…',
-  'assistant.forkNote': 'ここまでの文脈はそのまま引き継いでいます。続けてどうぞ。',
+  'assistant.forkNote': '前の会話からの続き',
   'assistant.shareToOpenDesign': 'OpenDesign に共有',
   'assistant.shareToOpenDesignBusy': 'パッケージを準備中…',
   'assistant.feedbackPrompt': 'フィードバック',

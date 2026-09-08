@@ -3445,7 +3445,7 @@ export const uk: Dict = {
   'assistant.copyMarkdown': 'Копіювати',
   'assistant.forkConversation': 'Нова розмова',
   'assistant.forkingConversation': 'Починається нова розмова…',
-  'assistant.forkNote': 'Контекст вище перенесено — просто продовжуйте.',
+  'assistant.forkNote': 'Продовження розмови',
   'assistant.shareToOpenDesign': 'Поділитися з OpenDesign',
   'assistant.shareToOpenDesignBusy': 'Готуємо пакет…',
   'assistant.feedbackPrompt': 'Відгук',
