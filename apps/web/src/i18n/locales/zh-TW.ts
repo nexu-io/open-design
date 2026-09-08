@@ -3685,7 +3685,7 @@ export const zhTW: Dict = {
   "assistant.unfinishedMore": "還有 {n} 個",
   "assistant.continueRemaining": "繼續剩餘任務",
   "chat.resumeRunCta": "繼續執行",
-  "chat.runError.contactSupportCta": "聯絡支援",
+  "chat.runError.contactSupportCta": "聯絡我們",
   "chat.runError.exportLogsCta": "匯出日誌",
   "chat.runError.switchModelCta": "換個模型",
   "chat.runError.openSettingsCta": "開啟設定",

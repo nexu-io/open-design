@@ -3480,7 +3480,7 @@ export const ru: Dict = {
   'assistant.unfinishedMore': '+{n} еще',
   'assistant.continueRemaining': 'Продолжить оставшиеся задачи',
   'chat.resumeRunCta': 'Продолжить выполнение',
-  'chat.runError.contactSupportCta': "Связаться с поддержкой",
+  'chat.runError.contactSupportCta': "Связаться с нами",
   'chat.runError.exportLogsCta': "Экспорт логов",
   'chat.runError.switchModelCta': "Сменить модель",
   'chat.runError.openSettingsCta': 'Открыть настройки',

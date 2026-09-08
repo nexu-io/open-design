@@ -3480,7 +3480,7 @@ export const id: Dict = {
   'assistant.unfinishedMore': '+{n} lagi',
   'assistant.continueRemaining': 'Lanjutkan',
   'chat.resumeRunCta': 'Lanjutkan proses',
-  'chat.runError.contactSupportCta': "Hubungi dukungan",
+  'chat.runError.contactSupportCta': "Hubungi kami",
   'chat.runError.exportLogsCta': "Ekspor log",
   'chat.runError.switchModelCta': "Ganti model",
   'chat.runError.openSettingsCta': 'Buka pengaturan',

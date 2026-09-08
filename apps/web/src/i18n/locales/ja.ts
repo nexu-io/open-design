@@ -3480,7 +3480,7 @@ export const ja: Dict = {
   'assistant.unfinishedMore': '+{n} 件',
   'assistant.continueRemaining': '残りのタスクを続ける',
   'chat.resumeRunCta': '実行を続ける',
-  'chat.runError.contactSupportCta': "サポートに問い合わせる",
+  'chat.runError.contactSupportCta': "お問い合わせ",
   'chat.runError.exportLogsCta': "ログを書き出す",
   'chat.runError.switchModelCta': "モデルを変更",
   'chat.runError.openSettingsCta': '設定を開く',

@@ -3494,7 +3494,7 @@ export const en: Dict = {
   'assistant.unfinishedMore': '+{n} more',
   'assistant.continueRemaining': 'Continue remaining tasks',
   'chat.resumeRunCta': 'Continue the run',
-  'chat.runError.contactSupportCta': "Contact support",
+  'chat.runError.contactSupportCta': "Contact us",
   'chat.runError.exportLogsCta': "Export logs",
   'chat.runError.switchModelCta': "Switch model",
   'chat.runError.openSettingsCta': 'Open settings',

@@ -3480,7 +3480,7 @@ export const fa: Dict = {
   'assistant.unfinishedMore': '+{n} بیشتر',
   'assistant.continueRemaining': 'ادامه وظایف باقی مانده',
   'chat.resumeRunCta': 'ادامهٔ اجرا',
-  'chat.runError.contactSupportCta': "تماس با پشتیبانی",
+  'chat.runError.contactSupportCta': "تماس با ما",
   'chat.runError.exportLogsCta': "خروجی گرفتن گزارش‌ها",
   'chat.runError.switchModelCta': "تغییر مدل",
   'chat.runError.openSettingsCta': 'باز کردن تنظیمات',

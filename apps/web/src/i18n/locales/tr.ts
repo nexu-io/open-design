@@ -3480,7 +3480,7 @@ export const tr: Dict = {
   'assistant.unfinishedMore': '+{n} daha',
   'assistant.continueRemaining': 'Kalan görevleri sürdür',
   'chat.resumeRunCta': 'Çalıştırmayı sürdür',
-  'chat.runError.contactSupportCta': "Destekle iletişime geç",
+  'chat.runError.contactSupportCta': "Bize ulaşın",
   'chat.runError.exportLogsCta': "Günlükleri dışa aktar",
   'chat.runError.switchModelCta': "Model değiştir",
   'chat.runError.openSettingsCta': 'Ayarları aç',

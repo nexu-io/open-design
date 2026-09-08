@@ -3480,7 +3480,7 @@ export const esES: Dict = {
   'assistant.unfinishedMore': '+{n} más',
   'assistant.continueRemaining': 'Continuar tareas pendientes',
   'chat.resumeRunCta': 'Continuar la ejecución',
-  'chat.runError.contactSupportCta': "Contactar con soporte",
+  'chat.runError.contactSupportCta': "Contactar con nosotros",
   'chat.runError.exportLogsCta': "Exportar registros",
   'chat.runError.switchModelCta': "Cambiar de modelo",
   'chat.runError.openSettingsCta': 'Abrir ajustes',

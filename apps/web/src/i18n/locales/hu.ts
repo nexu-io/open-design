@@ -3480,7 +3480,7 @@ export const hu: Dict = {
   'assistant.unfinishedMore': '+{n} további',
   'assistant.continueRemaining': 'Hátralévő feladatok folytatása',
   'chat.resumeRunCta': 'Futás folytatása',
-  'chat.runError.contactSupportCta': "Kapcsolatfelvétel a támogatással",
+  'chat.runError.contactSupportCta': "Kapcsolatfelvétel",
   'chat.runError.exportLogsCta': "Naplók exportálása",
   'chat.runError.switchModelCta': "Modellváltás",
   'chat.runError.openSettingsCta': 'Beállítások megnyitása',

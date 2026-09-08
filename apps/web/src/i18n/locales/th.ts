@@ -3480,7 +3480,7 @@ export const th: Dict = {
   'assistant.unfinishedMore': 'ทิ้งเพิ่มมาอีก +{n}',
   'assistant.continueRemaining': 'สานต่อภาระหน้าที่หลงเหลือที',
   'chat.resumeRunCta': 'ดำเนินการต่อ',
-  'chat.runError.contactSupportCta': "ติดต่อฝ่ายสนับสนุน",
+  'chat.runError.contactSupportCta': "ติดต่อเรา",
   'chat.runError.exportLogsCta': "ส่งออกบันทึก",
   'chat.runError.switchModelCta': "เปลี่ยนโมเดล",
   'chat.runError.openSettingsCta': 'เปิดการตั้งค่า',

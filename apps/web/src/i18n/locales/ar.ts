@@ -3480,7 +3480,7 @@ export const ar: Dict = {
   'assistant.unfinishedMore': '+{n} أكثر',
   'assistant.continueRemaining': 'متابعة المهام المتبقية',
   'chat.resumeRunCta': 'متابعة التشغيل',
-  'chat.runError.contactSupportCta': "التواصل مع الدعم",
+  'chat.runError.contactSupportCta': "التواصل معنا",
   'chat.runError.exportLogsCta': "تصدير السجلات",
   'chat.runError.switchModelCta': "تغيير النموذج",
   'chat.runError.openSettingsCta': 'فتح الإعدادات',

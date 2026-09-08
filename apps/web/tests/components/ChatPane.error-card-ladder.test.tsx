@@ -103,6 +103,14 @@ function renderChat(
       onSend={vi.fn()}
       onStop={vi.fn()}
       onRetry={vi.fn()}
+      /*
+       * 这份文件里凡是提到〔切换到 Cloud〕的判据,说的都是 `ProjectView` 那个宿主 ——
+       * 也只有它接了这颗 CTA 的动作。夹具原来一个都没接,于是它模拟的其实是
+       * `workspace/SideChatTab`(两个 AMR 口子都不接),而那儿这颗按钮点了没反应,
+       * 现在也不再画。补上这一条,夹具才和它想照的那个宿主对得上;
+       * 全文件 11 条断言的期望值一条都没动。
+       */
+      onSwitchToAmrAndRetry={vi.fn()}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}

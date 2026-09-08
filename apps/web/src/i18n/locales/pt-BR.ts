@@ -3480,7 +3480,7 @@ export const ptBR: Dict = {
   'assistant.unfinishedMore': '+{n} mais',
   'assistant.continueRemaining': 'Continuar tarefas restantes',
   'chat.resumeRunCta': 'Continuar a execução',
-  'chat.runError.contactSupportCta': "Falar com o suporte",
+  'chat.runError.contactSupportCta': "Fale conosco",
   'chat.runError.exportLogsCta': "Exportar registros",
   'chat.runError.switchModelCta': "Trocar de modelo",
   'chat.runError.openSettingsCta': 'Abrir configurações',

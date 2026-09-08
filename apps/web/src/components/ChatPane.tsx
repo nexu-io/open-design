@@ -2382,7 +2382,30 @@ export function ChatPane({
   const showByokRecoveryCta =
     showByokRecoveryAction && Boolean(onSwitchToLocalCli) && !runFailureHasAction;
   const showErrorActions = showByokRecoveryCta || runFailureHasAction;
-  const showCloudSwitchCta = Boolean(cloudSwitchTracking);
+  /**
+   * 这颗〔切换到 Cloud〕的**接手方在不在**。
+   *
+   * 和 `balanceCardCannotTakeTheHandoff` / `reconnectRowCannotTakeTheHandoff`
+   * 同一个形状,同一条不变量:**让位只在接手方真的在场时成立**。
+   *
+   * 这颗 CTA 自己不做事,它把这一轮交给宿主 —— `onSwitchToAmrAndRetry`
+   * (`ProjectView.handleSwitchToAmrAndRetry`:先武装一次性自动重试,再先切 mode
+   * 后切 agent),接不住时回落 `onOpenAmrSettings`。两个都没接的宿主,这颗按钮
+   * 的 onClick 走完两个分支什么都不会发生。
+   *
+   * 三个宿主里正好有这一种:`workspace/SideChatTab` 接了 `onRetry`,两个 AMR
+   * 口子一个都没接(`DesignSystemFlow` 三个都没接)。在那儿画出来的是一颗
+   * **点了没反应**的主按钮,而且它一出场,`errorActionVariant` 就把真能用的
+   * 〔重试〕挤到次级、`contactSupportIsPrimary` 也跟着不再升格 —— 第 4 档那种
+   * 本来就没有恢复动作的卡会连一颗主按钮都不剩。用户在一轮失败之后,屏幕上唯一
+   * 显眼的那颗按钮是假的。
+   *
+   * ⚠️ 这不是在 OPEND-2772「铺到所有报错」上开例外:铺不铺由
+   * `runFailureUi.cloudSwitchCta` 说了算,这里只回答**这个宿主接不接得住**。
+   */
+  const cloudSwitchCtaCannotTakeTheHandoff = !onSwitchToAmrAndRetry && !onOpenAmrSettings;
+  const showCloudSwitchCta =
+    Boolean(cloudSwitchTracking) && !cloudSwitchCtaCannotTakeTheHandoff;
   /**
    * 一张卡只有一颗主按钮。
    *

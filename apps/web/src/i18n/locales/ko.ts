@@ -3480,7 +3480,7 @@ export const ko: Dict = {
   'assistant.unfinishedMore': '+{n}개 추가',
   'assistant.continueRemaining': '남은 작업 계속하기',
   'chat.resumeRunCta': '실행 계속하기',
-  'chat.runError.contactSupportCta': "지원팀에 문의",
+  'chat.runError.contactSupportCta': "문의하기",
   'chat.runError.exportLogsCta': "로그 내보내기",
   'chat.runError.switchModelCta': "모델 변경",
   'chat.runError.openSettingsCta': '설정 열기',

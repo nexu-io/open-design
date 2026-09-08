@@ -3675,7 +3675,7 @@ export const zhCN: Dict = {
   "assistant.unfinishedMore": "还有 {n} 个",
   "assistant.continueRemaining": "继续剩余任务",
   "chat.resumeRunCta": "继续运行",
-  "chat.runError.contactSupportCta": "联系支持",
+  "chat.runError.contactSupportCta": "联系我们",
   "chat.runError.exportLogsCta": "导出日志",
   "chat.runError.switchModelCta": "换个模型",
   "chat.runError.openSettingsCta": "去设置",

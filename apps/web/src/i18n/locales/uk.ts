@@ -3480,7 +3480,7 @@ export const uk: Dict = {
   'assistant.unfinishedMore': '+ще {n}',
   'assistant.continueRemaining': 'Продовжити залишкові завдання',
   'chat.resumeRunCta': 'Продовжити виконання',
-  'chat.runError.contactSupportCta': "Звернутися до підтримки",
+  'chat.runError.contactSupportCta': "Зв’язатися з нами",
   'chat.runError.exportLogsCta': "Експортувати логи",
   'chat.runError.switchModelCta': "Змінити модель",
   'chat.runError.openSettingsCta': 'Відкрити налаштування',
