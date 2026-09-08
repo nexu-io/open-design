@@ -174,6 +174,9 @@ process.stdin.setEncoding('utf8');
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
   prompt += chunk;
+  // OpenCode uses text stdin and receives EOF. A quiet interval is not the
+  // end of a large prompt; its user request may be in a later pipe chunk.
+  if (agentId === 'opencode') return;
   if (emitted) return;
   if (emitTimer) clearTimeout(emitTimer);
   emitTimer = setTimeout(() => {
@@ -234,6 +237,10 @@ async function emitRun(promptText) {
   if (promptText.includes('Return an empty daemon smoke response')) {
     emitEmptySuccess();
     return;
+  }
+  if (promptText.includes('od-next-adaptive-v1')
+    || promptText.includes('# OD Next adaptive continuation — clarification')) {
+    if (await emitOdNextAdaptiveCanary(promptText)) return;
   }
   if (promptText.includes('# OD Next native continuation — production')) {
     await emitOdNextProductionRun();
@@ -373,6 +380,97 @@ function odNextPromptIdentity(promptText) {
     return identity;
   }
   return JSON.parse(readFileSync(odNextIdentityPath, 'utf8'));
+}
+
+// These fixtures exercise the real daemon with the adaptive recipe. The old
+// v2 emitters below deliberately remain intact for frozen-task compatibility.
+async function emitOdNextAdaptiveCanary(promptText) {
+  if (promptText.includes('# OD Next adaptive continuation — clarification')) {
+    const sessionFlag = args.indexOf('-s');
+    if (agentId !== 'opencode' || sessionFlag < 0 || args[sessionFlag + 1] !== 'fake-opencode') {
+      throw new Error('adaptive clarification must resume the original native session');
+    }
+  }
+  const isClarification = promptText.includes('Create an OD Next clarification canary artifact')
+    || promptText.includes('[form answers — od-next-canary-platform]')
+    || promptText.includes('[form answers — od-next-canary-scope]');
+  if (isClarification) {
+    if (promptText.includes('[form answers — od-next-canary-scope]')) {
+      await emitOdNextAdaptiveDelivery('<html><body><h1>OD Next Active Canary</h1><p>One main Agent turn.</p></body></html>');
+    } else if (promptText.includes('[form answers — od-next-canary-platform]')) {
+      emitOdNextAdaptiveQuestion('scope', 'Confirm delivery scope', 'Complete requested scope', 'complete');
+    } else {
+      emitOdNextAdaptiveQuestion('platform', 'Target platform', 'Desktop web', 'desktop');
+    }
+    return true;
+  }
+  if (promptText.includes('Only plan the OD Next canary; do not create the artifact')) {
+    emitOdNextAdaptiveState(
+      'Plan only: establish the requested layout, then produce the artifact after a future instruction to execute.',
+      { outcome: 'completed', deliveryKind: 'plan' },
+    );
+    return true;
+  }
+  if (promptText.includes('Create an OD Next blocked canary')) {
+    emitOdNextAdaptiveState('The local canary was blocked by its fixture guard.', {
+      outcome: 'blocked', reasonCodes: ['od_next_canary_fixture_blocked'],
+    });
+    return true;
+  }
+  if (promptText.includes('Create an OD Next active canary artifact')) {
+    await emitOdNextAdaptiveDelivery('<html><body><h1>OD Next Active Canary</h1><p>One main Agent turn.</p></body></html>', { plan: true });
+    return true;
+  }
+  return false;
+}
+
+function emitOdNextAdaptiveState(text, state) {
+  emitSuccess(text + '\\n<open-design-runtime-state>\\n'
+    + JSON.stringify({ schema: 'open-design.strategy-state/adaptive-v1', ...state })
+    + '\\n</open-design-runtime-state>', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+function emitOdNextAdaptiveQuestion(id, label, optionLabel, optionValue) {
+  const form = '<question-form id="od-next-canary-' + id + '" title="' + label + '">'
+    + JSON.stringify({ questions: [{ id, label, type: 'radio',
+      options: [{ label: optionLabel, value: optionValue }], required: true }] })
+    + '</question-form>';
+  emitOdNextAdaptiveState('A decision is needed before continuing.\\n' + form, {
+    outcome: 'clarification_required', reasonCodes: ['od_next_clarification_required'],
+  });
+}
+
+async function emitOdNextAdaptiveDelivery(html, options = {}) {
+  if (options.plan) {
+    if (agentId !== 'opencode') throw new Error('adaptive progress fixture requires opencode');
+    writeJson({ type: 'step_start', sessionID: 'fake-opencode', part: { type: 'step-start' } });
+    emitOdNextAdaptiveTodos('start', [
+      { content: 'Prepare the canary layout', status: 'completed' },
+      { content: 'Create the canary artifact', status: 'in_progress' },
+    ]);
+    // Keep the real running-plan UI observable before producing the file.
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  await writeFileFs(join(projectDir(), 'od-next-active-canary.html'), html, 'utf8');
+  if (options.plan) {
+    emitOdNextAdaptiveTodos('complete', [
+      { content: 'Prepare the canary layout', status: 'completed' },
+      { content: 'Create the canary artifact', status: 'completed' },
+    ]);
+  }
+  emitOdNextAdaptiveState(
+    options.message || 'Created od-next-active-canary.html in the same agent turn.',
+    { outcome: 'completed', deliveryKind: 'artifact' },
+  );
+}
+
+function emitOdNextAdaptiveTodos(id, todos) {
+  writeJson({ type: 'tool_use', sessionID: 'fake-opencode', part: {
+    type: 'tool', tool: 'todowrite', callID: 'adaptive-plan-' + id,
+    state: { status: 'completed', input: { todos }, output: 'Plan updated.' },
+  } });
 }
 
 function emitOdNextPlanningRun(promptText, inputStage = 'request') {

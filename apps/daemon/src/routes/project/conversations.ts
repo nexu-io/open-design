@@ -310,6 +310,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           ...message,
           strategyTaskExecutionId: turn.taskExecutionId,
           strategyTaskRunIndex: turn.taskRunIndex,
+          ...(turn.executionPolicy ? { strategyTaskExecutionPolicy: turn.executionPolicy } : {}),
           ...(turn.delivered ? { strategyTaskDelivered: true } : {}),
         };
       }),

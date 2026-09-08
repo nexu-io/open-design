@@ -521,6 +521,7 @@ import {
   resolveOdNextPromptRecipeForRun,
 } from './strategies/od-next/initial-prompt-bundle-service.js';
 import { OdNextMachineProtocolStream } from './strategies/od-next/protocol.js';
+import { finalizeAdaptiveStrategyTurn } from './strategies/od-next/adaptive-execution.js';
 import {
   blockAutomaticContinuation,
   prepareAutomaticStrategyContinuation,
@@ -10168,7 +10169,7 @@ export async function startServer({
       odNextRecipeIdentity,
       odNextRuntimeFacts,
       odNextStableContextPrompt: odNextStableRequestContext
-        ? composeOdNextStrategyStableRequestContextV2(odNextStableRequestContext)
+        ? composeOdNextStrategyStableRequestContextV2(odNextStableRequestContext, odNextStrategyRecipe?.recipe)
         : '',
       activeSkillDir,
       activeSkillDirs: odNextStrategyRecipe ? [] : activeSkillDirs,
@@ -10374,7 +10375,7 @@ export async function startServer({
       'currentPrompt',
     );
     const strategyProtocol = strategyTaskAtStart
-      ? new OdNextMachineProtocolStream()
+      ? new OdNextMachineProtocolStream({ executionPolicy: strategyTaskAtStart.executionPolicy })
       : null;
     let strategyVisibleEmitted = '';
     let strategyProtocolResult = null;
@@ -12732,7 +12733,7 @@ export async function startServer({
 
     let args;
     const observeClaudeNativeChildBehavior =
-      def.id === 'claude' && strategyTaskAtStart !== null;
+      def.id === 'claude' && strategyTaskAtStart != null;
     const nativeBuildPackageBindings =
       def.id === 'claude'
       && strategyTaskAtStart?.executionMode === 'complex'
@@ -12764,7 +12765,7 @@ export async function startServer({
       // Optional argv flags are gated on the `--help` capability map, which used
       // to be filled only by `GET /api/agents`. Probe it here so a daemon that
       // has never served that route still builds the same argv as one that has.
-      await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
+      const advertisedCapabilities = await ensureDetectedRuntimeCapabilities(def.id, configuredAgentEnv);
       args = def.buildArgs(
         composed,
         promptImagePaths,
@@ -12785,6 +12786,8 @@ export async function startServer({
             ? { nativeBuildPackageBindings }
             : {}),
           ...(observeClaudeNativeChildBehavior
+            && (strategyTaskAtStart?.executionPolicy !== 'adaptive_v1'
+              || advertisedCapabilities?.forwardSubagentText === true)
             ? { observeNativeChildBehavior: true }
             : {}),
         },
@@ -15568,6 +15571,9 @@ export async function startServer({
           strategyTaskAtStart
           && (
             strategyProtocolResult?.runtimeState?.outcome === 'completed'
+            || (strategyProtocolResult?.adaptiveRuntimeState?.outcome === 'completed'
+              && (!strategyProtocolResult.adaptiveRuntimeState.deliveryKind
+                || strategyProtocolResult.adaptiveRuntimeState.deliveryKind === 'artifact'))
             || mayInferDirectEditCompletion
           )
         ) {
@@ -15635,7 +15641,36 @@ export async function startServer({
             }
           }
         }
-        if (strategyTaskAtStart && strategyProtocolResult) {
+        if (strategyTaskAtStart?.executionPolicy === 'adaptive_v1' && strategyProtocolResult) {
+          if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+          try {
+            const result = finalizeAdaptiveStrategyTurn(db, {
+              taskExecutionId: strategyTaskAtStart.taskExecutionId,
+              runId: run.id,
+              parsed: strategyProtocolResult,
+              completionEvidence: {
+                physicalStatus: 'succeeded',
+                deliverableValid,
+                visibleConclusion: strategyProtocolResult.visibleText.trim().length > 0,
+              },
+            });
+            run.strategyTask = projectStrategyTask(result.task, run.id);
+            if (result.action === 'blocked') {
+              const stopSignal = rolloutStopSignalForBlockedContinuation(result.reasonCodes);
+              const stopMode = stopSignal ? stopModeForOdNextSignal(stopSignal) : null;
+              if (stopSignal && stopMode) latchOdNextRolloutForRun(run, stopMode, stopSignal);
+            }
+          } catch (error) {
+            if (run.cancelRequested || design.runs.isTerminal(run.status)) return;
+            send('error', createSseErrorPayload(
+              'OD_NEXT_TASK_STATE_INVALID',
+              error instanceof Error ? error.message : String(error),
+              { retryable: false },
+            ));
+            finishStrategyAwarePhysicalRun('failed', 1, signal);
+            return;
+          }
+        } else if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;
           const plan = strategyProtocolResult.planContract
             ?? strategyProtocolResult.repairPlanContract;

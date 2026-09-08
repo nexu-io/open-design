@@ -5,6 +5,8 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   composeOdNextStrategyContinuationV2,
+  composeOdNextAdaptiveClarificationContinuationV1,
+  strategyExecutionPolicyForRecipe,
   defaultScenarioPluginIdForProjectMetadata,
   InstalledPluginRecordSchema,
   RUN_RESULT_PACKAGE_SCHEMA,
@@ -100,6 +102,8 @@ import {
   beginStrategyClarification,
   prepareStrategyIntake,
 } from '../strategies/od-next/coordinator.js';
+import { beginAdaptiveStrategyClarification } from '../strategies/od-next/adaptive-execution.js';
+import { inspectBundledStrategyProvenanceV2 } from '../plugins/strategy-provenance.js';
 import type { FrozenSkillPackageV1 } from '../strategies/od-next/frozen-skill-package.js';
 import { InvalidFrozenSkillPackageError } from '../strategies/od-next/frozen-skill-package.js';
 import type { ResolvedExamplePluginRecord } from '../strategies/od-next/example-skill-source.js';
@@ -1157,22 +1161,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       };
     }
     const latestMapping = task.runs.at(-1);
+    const awaitingPolicyStage = task.executionPolicy === 'adaptive_v1'
+      ? task.route === null && ['request', 'clarification'].includes(task.inputStage)
+      : task.route === 'full_plan' && task.inputStage === 'request' && task.clarificationCount === 0;
     if (
-      task.route !== 'full_plan'
-      || task.inputStage !== 'request'
+      !awaitingPolicyStage
       || task.outcome !== 'clarification_required'
       || task.activeRunId !== null
       || task.terminalRunId !== null
-      || task.clarificationCount !== 0
       || !latestMapping
       || latestMapping.runId !== task.latestRunId
-      || latestMapping.inputStage !== 'request'
+      || latestMapping.inputStage !== task.inputStage
     ) {
       return {
         kind: 'error',
         status: 409,
         code: 'STRATEGY_TASK_STATE_MISMATCH',
-        message: 'strategy task is not awaiting its first clarification answer',
+        message: 'strategy task is not awaiting a clarification answer',
       };
     }
     const sourceRun = design.runs.get(task.latestRunId);
@@ -1209,7 +1214,14 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     continuation: ClarificationContinuation,
   ): void {
     const { task, answer, sourceRunId, taskRunIndex } = continuation;
-    const instruction = composeOdNextStrategyContinuationV2({
+    const instruction = task.executionPolicy === 'adaptive_v1'
+      ? composeOdNextAdaptiveClarificationContinuationV1({
+          nativeSessionResume: true,
+          taskExecutionId: task.taskExecutionId,
+          taskRunIndex,
+          answer,
+        })
+      : composeOdNextStrategyContinuationV2({
       stage: 'clarification',
       nativeSessionResume: true,
       taskExecutionId: task.taskExecutionId,
@@ -1850,6 +1862,10 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         }
       }
       const rolloutPlugin = rolloutResolved?.ok ? rolloutResolved.record : null;
+      const rolloutProvenance = rolloutPlugin ? inspectBundledStrategyProvenanceV2(rolloutPlugin) : null;
+      const rolloutExecutionPolicy = rolloutProvenance?.kind === 'inactive'
+        ? strategyExecutionPolicyForRecipe(rolloutProvenance.declaration.promptRecipe)
+        : 'plan_build_v2';
       let rolloutVersions: Awaited<ReturnType<typeof ensureDetectedRuntimeVersions>> | null = null;
       let rolloutCapability: ReturnType<typeof resolveBundledOdNextRuntimeCapability> | null = null;
       let advertisedCapabilityGap: string[] = [];
@@ -1873,6 +1889,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             advertisedCapabilityGap = odNextAdvertisedCapabilityGap({
               agentId: effectiveAgentId,
               advertised,
+              executionPolicy: rolloutExecutionPolicy,
             });
           }
           rolloutCapability = effectiveAgentId
@@ -1899,8 +1916,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         (rolloutVersions as ({ invocable?: boolean } | null))?.invocable === true
         && rolloutCapability?.reason === 'capability_resolved'
         && rolloutCapability.snapshot?.nativeSessionContinuation.support === 'verified'
-        && nativeSubagents?.support === 'verified'
-        && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')
+        && (rolloutExecutionPolicy === 'adaptive_v1'
+          || (nativeSubagents?.support === 'verified'
+            && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')))
         && advertisedCapabilityGap.length === 0
       );
       // An installed CLI that does not advertise what OD Next will demand at
@@ -2648,6 +2666,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // provisional snapshot below.
       const taskExecutionId = `odnext_${randomUUID().replaceAll('-', '')}`;
       try {
+        const binding = resolvedSnapshot?.ok ? resolvedSnapshot.snapshot.strategy : null;
+        if (!binding) throw new Error('OD Next task requires a frozen strategy binding.');
         const projectRoot = resolveProjectDir(
           PROJECTS_DIR,
           meta.projectId!,
@@ -2676,6 +2696,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           serviceTier: meta.serviceTier,
           mediaExecution: mediaExecution.policy,
           route: 'full_plan',
+          executionPolicy: strategyExecutionPolicyForRecipe(binding.promptRecipe),
           mode: 'unresolved',
         });
         createdTaskInputSnapshot = createOdNextTaskInputSnapshot({
@@ -2739,7 +2760,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
                 }
                 seedRunUserMessage();
                 if (clarificationContinuation && !clarificationContinuation.retry) {
-                  beginStrategyClarification(db, {
+                  const begin = clarificationContinuation.task.executionPolicy === 'adaptive_v1'
+                    ? beginAdaptiveStrategyClarification : beginStrategyClarification;
+                  begin(db, {
                     taskExecutionId: clarificationContinuation.task.taskExecutionId,
                     sourceRunId: clarificationContinuation.sourceRunId,
                     nextRunId: candidate.id,
@@ -3663,7 +3686,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         ...(clarificationContinuation && !clarificationContinuation.retry
           ? {
               beforeClaimCommit: (candidate) => {
-                beginStrategyClarification(db, {
+                const begin = clarificationContinuation.task.executionPolicy === 'adaptive_v1'
+                  ? beginAdaptiveStrategyClarification : beginStrategyClarification;
+                begin(db, {
                   taskExecutionId: clarificationContinuation.task.taskExecutionId,
                   sourceRunId: clarificationContinuation.sourceRunId,
                   nextRunId: candidate.id,

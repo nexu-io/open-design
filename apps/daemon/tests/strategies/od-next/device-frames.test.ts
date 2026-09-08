@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { resolvePluginFolder } from '../../../src/plugins/registry.js';
-import { createBundledStrategyBindingV2 } from '../../../src/plugins/strategy-package.js';
+import { createBundledStrategyBindingV2, StrategyPackageIdentityError } from '../../../src/plugins/strategy-package.js';
 import {
   InvalidOdNextDeviceFrameRootError,
   OD_NEXT_DEVICE_FRAME_MANIFEST,
@@ -40,6 +40,40 @@ const SHELLS = [
   { path: './assets/task-profiles/prototype/notes.md', text: 'not a shell' },
 ];
 const PRIMITIVES = { path: './assets/task-profiles/prototype/layout.css', text: '/* OD-LAYOUT-PRIMITIVES v1 */\n@layer od-layout { .od-stack { display: flex; } }\n/* /OD-LAYOUT-PRIMITIVES v1 */\n' };
+
+async function frozenLegacyResources(options: { omitLayout?: boolean } = {}) {
+  const bundledPluginsDir = await projectDir();
+  const folder = path.join(bundledPluginsDir, 'scenarios', 'od-next-strategy');
+  await cp(path.join(BUNDLED_PLUGINS_DIR, 'scenarios', 'od-next-strategy'), folder, { recursive: true });
+  const manifestPath = path.join(folder, 'open-design.json');
+  const currentManifestText = await readFile(manifestPath, 'utf8');
+  const legacyManifest = JSON.parse(currentManifestText);
+  legacyManifest.version = '2.0.0';
+  legacyManifest.od.strategy.promptRecipe = 'od-next-plan-build-v2';
+  if (options.omitLayout) {
+    const profile = legacyManifest.od.strategy.assets.taskProfiles.find(
+      (candidate: { taskType: string }) => candidate.taskType === 'prototype',
+    );
+    profile.resources = profile.resources.filter(
+      (resource: { path: string }) => !resource.path.endsWith('/layout.css'),
+    );
+  }
+  await writeFile(manifestPath, JSON.stringify(legacyManifest));
+  const resolved = await resolvePluginFolder({
+    folder,
+    folderId: 'od-next-strategy',
+    sourceKind: 'bundled',
+    source: folder,
+    trust: 'bundled',
+  });
+  if (!resolved.ok) throw new Error(resolved.errors.join('; '));
+  const snapshot = {
+    pluginId: 'od-next-strategy',
+    strategy: createBundledStrategyBindingV2({ plugin: resolved.record, taskType: 'prototype' }),
+  };
+  const resources = await loadOdNextTaskResourcesForSnapshot({ bundledPluginsDir, snapshot });
+  return { bundledPluginsDir, folder, manifestPath, currentManifestText, snapshot, resources };
+}
 
 describe('materializeOdNextDeviceFrames', () => {
   it('stages the shells under .od-frames, records ownership, and leaves unrelated files alone', async () => {
@@ -217,6 +251,57 @@ describe('materializeOdNextDeviceFrames', () => {
 });
 
 describe('loadOdNextTaskResourcesForSnapshot', () => {
+  it('keeps frozen legacy resources when a bundled update changes the recipe, manifest, and prompts', async () => {
+    const fixture = await frozenLegacyResources();
+    await writeFile(fixture.manifestPath, fixture.currentManifestText);
+    await writeFile(path.join(fixture.folder, 'assets', 'core-system-prompt.md'), 'A newer adaptive prompt.');
+    await writeFile(path.join(fixture.folder, 'assets', 'task-profiles', 'prototype.md'), 'A newer task profile.');
+
+    expect(fixture.snapshot.strategy.promptRecipe).toBe('od-next-plan-build-v2');
+    expect(await loadOdNextTaskResourcesForSnapshot(fixture)).toEqual(fixture.resources);
+  });
+
+  it('does not add resources introduced after the task roster was frozen', async () => {
+    const fixture = await frozenLegacyResources({ omitLayout: true });
+    await writeFile(fixture.manifestPath, fixture.currentManifestText);
+
+    const resources = await loadOdNextTaskResourcesForSnapshot(fixture);
+    expect(resources).toEqual(fixture.resources);
+    expect(resources.map((resource) => path.posix.basename(resource.path)))
+      .toEqual(['iphone.html', 'android.html', 'neutral.html']);
+  });
+
+  it('rejects a changed resource and an inconsistent frozen package digest', async () => {
+    const fixture = await frozenLegacyResources();
+    await writeFile(path.join(fixture.folder, 'assets', 'task-profiles', 'prototype', 'layout.css'), 'changed bytes');
+    await expect(loadOdNextTaskResourcesForSnapshot(fixture))
+      .rejects.toThrow(/Frozen OD Next resource digest changed/);
+    await expect(loadOdNextTaskResourcesForSnapshot({
+      ...fixture,
+      snapshot: {
+        ...fixture.snapshot,
+        strategy: { ...fixture.snapshot.strategy, packageHash: '0'.repeat(64) },
+      },
+    })).rejects.toThrow(/Frozen OD Next resource roster failed package hash validation/);
+  });
+
+  it.each(['resource-file', 'resource-directory', 'plugin-root'] as const)(
+    'rejects a %s symlink escape even when the resource bytes still match',
+    async (kind) => {
+      const fixture = await frozenLegacyResources();
+      const frames = path.join(fixture.folder, 'assets', 'task-profiles', 'prototype', 'device-frames');
+      const target = kind === 'resource-file' ? path.join(frames, 'iphone.html')
+        : kind === 'resource-directory' ? frames : fixture.folder;
+      const outside = path.join(await projectDir(), 'original-resource');
+      await cp(target, outside, { recursive: true });
+      await rm(target, { recursive: true });
+      await symlink(outside, target);
+
+      await expect(loadOdNextTaskResourcesForSnapshot(fixture))
+        .rejects.toThrow(StrategyPackageIdentityError);
+    },
+  );
+
   it('re-reads the bundled prototype shells through the applied binding and stays empty elsewhere', async () => {
     const folder = path.join(BUNDLED_PLUGINS_DIR, 'scenarios', 'od-next-strategy');
     const resolved = await resolvePluginFolder({

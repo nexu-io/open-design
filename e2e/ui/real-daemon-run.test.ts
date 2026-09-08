@@ -131,7 +131,8 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
   await expectProjectFileToContain(page, projectId, GENERATED_FILE, GENERATED_HEADING);
 });
 
-test('[P0] local OD Next active canary follows one public task across physical runs', async ({ page }) => {
+test('[P0] local OD Next adaptive canary plans and delivers in one physical run', async ({ page }, testInfo) => {
+  test.setTimeout(T.xlong * 2);
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -139,21 +140,25 @@ test('[P0] local OD Next active canary follows one public task across physical r
   );
   await prepareLocalOdNextCanary(page, 'OD Next local active canary');
 
-  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await sendPrompt(page, 'Create an OD Next active canary artifact');
-  const createResponse = await createResponsePromise;
+  const createResponse = await sendPrompt(page, 'Create an OD Next active canary artifact', T.xlong);
   const created = await createResponse.json() as {
     runId: string;
     taskExecutionId?: string;
     strategyTask?: { taskExecutionId: string; inputStage: string; terminal: boolean };
   };
-  expect(created.strategyTask).toMatchObject({ inputStage: 'request', terminal: false });
+  expect(created.strategyTask).toMatchObject({
+    executionPolicy: 'adaptive_v1', inputStage: 'request', terminal: false,
+  });
   expect(created.taskExecutionId).toBe(created.strategyTask?.taskExecutionId);
+  await expect(page.locator('.op-todo')).toBeVisible({ timeout: T.medium });
+  await testInfo.attach('adaptive-running-plan', {
+    body: await page.screenshot(), contentType: 'image/png',
+  });
 
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
   await expect(page.getByText(
-    'Created od-next-active-canary.html through the continued native session.',
+    'Created od-next-active-canary.html in the same agent turn.',
   ).last()).toBeVisible();
 
   await expect.poll(async () => {
@@ -168,22 +173,32 @@ test('[P0] local OD Next active canary follows one public task across physical r
     };
     return status.strategyTask;
   }, { timeout: 20_000 }).toMatchObject({
-    inputStage: 'production',
+    inputStage: 'request',
     outcome: 'completed',
     terminal: true,
-    activeRunId: expect.not.stringMatching(new RegExp(`^${created.runId}$`)),
+    activeRunId: created.runId,
   });
 
   const list = await page.request.get(`/api/runs?projectId=${encodeURIComponent(projectId)}`);
   const body = await list.json() as {
-    runs: Array<{ strategyTask?: { taskExecutionId: string } }>;
+    runs: Array<{ strategyTask?: { taskExecutionId: string; nextRunId?: string } }>;
   };
   expect(body.runs.filter((run) => (
     run.strategyTask?.taskExecutionId === created.taskExecutionId
-  ))).toHaveLength(2);
+  ))).toHaveLength(1);
+  expect(body.runs.every((run) => run.strategyTask?.nextRunId === undefined)).toBe(true);
+  await expect(page.locator('.op-todo-complete')).toBeVisible();
+  await expect(artifactPreviewFrame(page).getByRole('heading', { name: 'OD Next Active Canary' })).toBeVisible();
+  await testInfo.attach('adaptive-delivered', {
+    body: await page.screenshot(), contentType: 'image/png',
+  });
+  await testInfo.attach('adaptive-physical-runs', {
+    body: Buffer.from(JSON.stringify(body, null, 2)), contentType: 'application/json',
+  });
 });
 
-test('[P0] local OD Next clarification canary preserves one taskExecutionId through the public form', async ({ page }) => {
+test('[P0] local OD Next adaptive clarification accepts two decisions on the same task', async ({ page }, testInfo) => {
+  test.setTimeout(T.xlong * 2);
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -191,46 +206,115 @@ test('[P0] local OD Next clarification canary preserves one taskExecutionId thro
   );
   await prepareLocalOdNextCanary(page, 'OD Next local clarification canary');
 
-  const createResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await sendPrompt(page, 'Create an OD Next clarification canary artifact');
-  const created = await (await createResponsePromise).json() as {
-    runId: string;
-    taskExecutionId: string;
-  };
-  await expect.poll(async () => {
+  const initialResponse = await sendPrompt(page, 'Create an OD Next clarification canary artifact', T.xlong);
+  const created = await initialResponse.json() as { runId: string; taskExecutionId: string };
+  const readTask = async () => {
     const response = await page.request.get(`/api/runs/${created.runId}`);
-    return (await response.json() as { strategyTask?: { outcome: string } }).strategyTask?.outcome;
-  }, { timeout: 20_000 }).toBe('clarification_required');
-
-  const form = page.locator('.question-form').first();
-  await expect(form).toBeVisible();
-  await form.getByText('Desktop web', { exact: true }).click();
-  const clarificationResponsePromise = page.waitForResponse(isCreateRunResponse);
-  await form.getByRole('button', { name: 'Send answers' }).click();
-  const clarificationResponse = await clarificationResponsePromise;
-  const clarificationText = await clarificationResponse.text();
-  expect(clarificationResponse.ok(), clarificationText).toBeTruthy();
-  const clarification = JSON.parse(clarificationText) as {
-    taskExecutionId: string;
-    strategyTask?: { inputStage: string };
+    expect(response.ok(), await response.text()).toBeTruthy();
+    return (await response.json() as {
+      strategyTask?: {
+        taskExecutionId: string; activeRunId: string; outcome: string; terminal: boolean;
+      };
+    }).strategyTask;
   };
-  expect(clarification.taskExecutionId).toBe(created.taskExecutionId);
-  expect(clarification.strategyTask?.inputStage).toBe('clarification');
+  const runIds = [created.runId];
 
+  for (const option of ['Desktop web', 'Complete requested scope']) {
+    await expect.poll(readTask, { timeout: T.long }).toMatchObject({
+      taskExecutionId: created.taskExecutionId,
+      executionPolicy: 'adaptive_v1',
+      activeRunId: runIds.at(-1),
+      outcome: 'clarification_required',
+      terminal: false,
+    });
+    // A reload must recover the latest waiting task and preserve the previous
+    // answer's occurrence claim before the user submits the next decision.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForLoadingToClear(page);
+    await expect(page.getByTestId('question-form-summary')).toHaveCount(runIds.length - 1);
+    const form = page.locator('.question-form').filter({ hasText: option });
+    await expect(form).toBeVisible({ timeout: T.medium });
+    await form.getByText(option, { exact: true }).click();
+    const submit = form.getByRole('button', { name: 'Send answers', exact: true });
+    await expect(submit).toBeEnabled();
+    const [answerResponse] = await Promise.all([
+      page.waitForResponse(isCreateRunResponse, { timeout: T.xlong }),
+      submit.click(),
+    ]);
+    expect(answerResponse.ok(), await answerResponse.text()).toBeTruthy();
+    const answered = await answerResponse.json() as {
+      runId: string; taskExecutionId: string; strategyTask?: { inputStage: string };
+    };
+    expect(answered.taskExecutionId).toBe(created.taskExecutionId);
+    expect(answered.strategyTask?.inputStage).toBe('clarification');
+    expect(runIds).not.toContain(answered.runId);
+    runIds.push(answered.runId);
+  }
+
+  await expect.poll(readTask, { timeout: T.long }).toMatchObject({
+    taskExecutionId: created.taskExecutionId,
+    activeRunId: runIds.at(-1),
+    outcome: 'completed',
+    terminal: true,
+  });
   const { projectId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [OD_NEXT_CANARY_FILE]);
   await expect(page.getByText(
-    'Created od-next-active-canary.html through the continued native session.',
+    'Created od-next-active-canary.html in the same agent turn.',
   ).last()).toBeVisible();
+  const list = await page.request.get(`/api/runs?projectId=${encodeURIComponent(projectId)}`);
+  expect(list.ok(), await list.text()).toBeTruthy();
+  const body = await list.json() as {
+    runs: Array<{ id: string; strategyTask?: { taskExecutionId: string; inputStage: string } }>;
+  };
+  const taskRuns = body.runs.filter((run) => run.strategyTask?.taskExecutionId === created.taskExecutionId);
+  expect(taskRuns.map((run) => run.id).sort()).toEqual(runIds.sort());
+  expect(taskRuns.every((run) => run.strategyTask?.inputStage !== 'production')).toBe(true);
+  await testInfo.attach('adaptive-question-runs', {
+    body: Buffer.from(JSON.stringify(taskRuns, null, 2)), contentType: 'application/json',
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForLoadingToClear(page);
+  await expect(page.getByTestId('question-form-summary')).toHaveCount(2);
+  await expect(page.locator('.question-form')).toHaveCount(0);
+  await testInfo.attach('adaptive-two-decisions', {
+    body: await page.screenshot(), contentType: 'image/png',
+  });
+});
+
+test('[P0] local OD Next adaptive plan-only request completes without producing an artifact', async ({ page }, testInfo) => {
+  test.setTimeout(T.xlong * 2);
+  test.skip(
+    process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
+      || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
+    'requires the explicit local synthetic rollout canary flags',
+  );
+  await prepareLocalOdNextCanary(page, 'OD Next plan-only canary');
+  const response = await sendPrompt(page, 'Only plan the OD Next canary; do not create the artifact', T.xlong);
+  const created = await response.json() as { runId: string; taskExecutionId: string };
   await expect.poll(async () => {
-    const response = await page.request.get(`/api/runs/${created.runId}`);
-    return (await response.json() as {
-      strategyTask?: { taskExecutionId: string; outcome: string; terminal: boolean };
-    }).strategyTask;
-  }, { timeout: 20_000 }).toMatchObject({
+    const status = await page.request.get(`/api/runs/${created.runId}`);
+    return (await status.json() as { strategyTask?: unknown }).strategyTask;
+  }, { timeout: T.long }).toMatchObject({
     taskExecutionId: created.taskExecutionId,
+    executionPolicy: 'adaptive_v1',
+    activeRunId: created.runId,
+    inputStage: 'request',
     outcome: 'completed',
     terminal: true,
+  });
+  await expect(page.getByText('Plan only: establish the requested layout', { exact: false }).last()).toBeVisible();
+  const { projectId } = await currentProjectContext(page);
+  const filesResponse = await page.request.get(`/api/projects/${projectId}/files`);
+  expect(filesResponse.ok(), await filesResponse.text()).toBeTruthy();
+  const files = await filesResponse.json() as { files: Array<{ name: string; kind: string }> };
+  expect(files.files.filter((file) => file.kind === 'html' || /\.html?$/i.test(file.name))).toEqual([]);
+  const runsResponse = await page.request.get(`/api/runs?projectId=${encodeURIComponent(projectId)}`);
+  const runs = await runsResponse.json() as { runs: Array<{ id: string }> };
+  expect(runs.runs.map((run) => run.id)).toEqual([created.runId]);
+  await expect(runErrorCard(page)).toHaveCount(0);
+  await testInfo.attach('adaptive-plan-only', {
+    body: await page.screenshot(), contentType: 'image/png',
   });
 });
 
@@ -1353,7 +1437,7 @@ async function selectComposerSessionMode(page: Page, modeTitle: 'Ask mode' | 'Pl
   await expect(trigger).toHaveAttribute('aria-label', `Mode: ${modeName}`);
 }
 
-async function sendPrompt(page: Page, prompt: string) {
+async function sendPrompt(page: Page, prompt: string, responseTimeout = T.medium) {
   const input = page.getByTestId('chat-composer-input');
   const sendButton = page.getByTestId('chat-send');
   await expect(input).toBeVisible({ timeout: 5_000 });
@@ -1372,7 +1456,7 @@ async function sendPrompt(page: Page, prompt: string) {
   page.on('request', markRequest);
   try {
     const [response] = await Promise.all([
-      page.waitForResponse(isCreateRunResponse, { timeout: T.medium }),
+      page.waitForResponse(isCreateRunResponse, { timeout: responseTimeout }),
       sendButton.click(),
     ]);
     expect(response.ok()).toBeTruthy();

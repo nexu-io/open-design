@@ -28,7 +28,7 @@ import type {
   TrackingRunRecoveryActionType,
   TrackingRunTerminalTrigger,
 } from '../analytics/events.js';
-import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
+import type { StrategyExecutionPolicy, StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { OdNextRolloutDecision } from './strategy-rollout.js';
 
 // The daemon's run-failure taxonomy, re-exported under product-facing names so
@@ -920,9 +920,12 @@ export interface ChatMessage {
    * back explicitly and reload recovery follows its active physical Run.
    */
   strategyTaskExecutionId?: string;
+  /** Frozen task policy from the daemon; adaptive user-question rounds keep
+   *  their own message identity instead of folding into the first Run. */
+  strategyTaskExecutionPolicy?: StrategyExecutionPolicy;
   /**
    * Position of this message's Run within its logical task chain. A Full Plan
-   * turn spans several physical Runs (request -> production) that the user
+   * legacy turn spans several physical Runs (request -> production) that the user
    * asked for once, so only index 0 opens a conversation turn; later indices
    * continue the same one and must not be drawn as separate answers.
    */

@@ -146,6 +146,25 @@ describe('normalizeConversationMessageOrder', () => {
 });
 
 describe('mergeServerMessagesIntoConversation across a multi-Run task', () => {
+  it('does not mistake an adaptive question round for an absorbed automatic continuation', () => {
+    const source: ChatMessage = {
+      id: 'a-platform',
+      role: 'assistant',
+      content: 'platform form',
+      strategyTaskExecutionId: 'adaptive-task',
+      strategyTaskExecutionPolicy: 'adaptive_v1',
+      strategyTaskRunIndex: 0,
+    };
+    const local = [{ ...source, content: 'platform form plus its final explanation' }];
+    const server: ChatMessage[] = [
+      source,
+      { id: 'u-platform', role: 'user', content: 'platform answer' },
+      { ...source, id: 'a-scope', content: 'scope form', strategyTaskRunIndex: 1 },
+    ];
+    expect(mergeServerMessagesIntoConversation(local, server)[0]?.content)
+      .toBe('platform form plus its final explanation');
+  });
+
   it('does not keep the live copy that absorbed a successor Run', () => {
     // Live streaming re-points the SAME assistant message at each successor
     // Run of a Full Plan task, so the local copy of the FIRST message ends up

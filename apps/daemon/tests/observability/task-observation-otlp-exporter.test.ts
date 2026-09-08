@@ -43,6 +43,7 @@ function task(outcome: StrategyTaskExecutionRecord['outcome'] = 'completed'):
 StrategyTaskExecutionRecord {
   return {
     schemaVersion: 1,
+    executionPolicy: 'plan_build_v2',
     revision: 2,
     taskExecutionId: TASK_ID,
     projectId: 'project-fixture',

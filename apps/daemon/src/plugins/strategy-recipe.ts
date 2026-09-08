@@ -3,6 +3,8 @@ import {
   assertOdNextPlanningBuildOnlyV2,
   OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
   OD_NEXT_PROMPT_RECIPE_ID,
+  OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID,
+  OD_NEXT_ADAPTIVE_PROMPT_STAGE_CONTRACT,
   OD_NEXT_STRATEGY_ID,
   type AppliedPluginSnapshot,
   type OdNextPromptBundleStageV2,
@@ -115,7 +117,8 @@ export async function resolveOdNextStrategyRequestRecipeV2(input: {
   if (
     input.snapshot.pluginId !== OD_NEXT_STRATEGY_ID
     || binding.id !== OD_NEXT_STRATEGY_ID
-    || binding.promptRecipe !== OD_NEXT_PROMPT_RECIPE_ID
+    || (binding.promptRecipe !== OD_NEXT_PROMPT_RECIPE_ID
+      && binding.promptRecipe !== OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID)
   ) {
     throw new InvalidOdNextStrategyPromptRecipeV2Error(
       'Applied snapshot does not match the OD Next V2 recipe identity.',
@@ -154,8 +157,11 @@ export async function resolveOdNextStrategyRequestRecipeV2(input: {
       );
     }
     const activeStages: OdNextPromptBundleStageV2[] = [];
+    const stageContract = binding.promptRecipe === OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID
+      ? OD_NEXT_ADAPTIVE_PROMPT_STAGE_CONTRACT
+      : OD_NEXT_PROMPT_STAGE_CONTRACT_V2;
     for (const [index, stage] of pipeline.stages.entries()) {
-      const expected = OD_NEXT_PROMPT_STAGE_CONTRACT_V2[index];
+      const expected = stageContract[index];
       if (!expected || stage.id !== expected.id) {
         throw new InvalidOdNextStrategyPromptRecipeV2Error(
           'OD Next validated stage order changed before prompt composition.',

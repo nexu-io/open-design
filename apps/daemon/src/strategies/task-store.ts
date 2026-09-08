@@ -6,17 +6,22 @@ import {
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2,
   OD_NEXT_REQUEST_TURN_SCHEMA_V1,
   OD_NEXT_STRATEGY_ID,
+  OD_NEXT_PROMPT_RECIPE_ID,
+  OdNextAdaptiveTaskStateV1Schema,
   OpenDesignPlanContractV2Schema,
   StrategyRuntimeStateV2Schema,
   StrategyRuntimeTransitionV2Schema,
   parseOdNextPromptBundleV1,
   parseOdNextPromptBundleV2,
   parseOdNextRequestTurnV1,
+  strategyExecutionPolicyForRecipe,
   type OpenDesignPlanContractV2,
   type StrategyExecutionModeV2,
   type StrategyInputStageV2,
   type StrategyOutcomeV2,
   type StrategyRouteV2,
+  type StrategyExecutionPolicy,
+  type StrategyPromptRecipe,
 } from '@open-design/contracts';
 import type Database from 'better-sqlite3';
 
@@ -110,6 +115,7 @@ export interface StrategyTaskExecutionRecord {
   strategyVersion: string;
   strategyPackageHash: string;
   selectedAgentId: string;
+  executionPolicy: StrategyExecutionPolicy;
   route: StrategyRouteV2 | null;
   inputStage: StrategyInputStageV2;
   outcome: StrategyTaskOutcome;
@@ -117,7 +123,7 @@ export interface StrategyTaskExecutionRecord {
   blockedContext?: StrategyTaskBlockedContext;
   planContract?: OpenDesignPlanContractV2;
   planContractHash?: string;
-  clarificationCount: 0 | 1;
+  clarificationCount: number;
   planContractRepairAttempts: 0 | 1;
   initialRunId: string;
   latestRunId: string;
@@ -155,7 +161,7 @@ export interface StrategyTaskBlockedContext {
 }
 
 export interface StrategyTaskTransitionState {
-  route: StrategyRouteV2;
+  route: StrategyRouteV2 | null;
   inputStage: StrategyInputStageV2;
   outcome: StrategyTaskOutcome;
   executionMode: StrategyExecutionModeV2 | null;
@@ -225,7 +231,7 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
       execution_mode TEXT CHECK (execution_mode IN ('simple', 'complex')),
       plan_contract_json TEXT,
       plan_contract_hash TEXT,
-      clarification_count INTEGER NOT NULL DEFAULT 0 CHECK (clarification_count BETWEEN 0 AND 1),
+      clarification_count INTEGER NOT NULL DEFAULT 0 CHECK (clarification_count >= 0),
       plan_contract_repair_attempts INTEGER NOT NULL DEFAULT 0 CHECK (
         plan_contract_repair_attempts BETWEEN 0 AND 1
       ),
@@ -279,7 +285,51 @@ export function migrateStrategyTaskStore(db: SqliteDb): void {
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text TEXT');
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_utf8_bytes INTEGER');
   addColumnIfMissing(db, 'strategy_task_runs', 'final_text_sha256 TEXT');
+  migrateClarificationCountConstraint(db);
   migrateFrozenSkillPackageStore(db);
+}
+
+/** Rebuild only the legacy constraint, retaining every row, index, and child reference. */
+function migrateClarificationCountConstraint(db: SqliteDb): void {
+  const table = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'strategy_task_executions'",
+  ).get() as { sql: string } | undefined;
+  const legacyConstraint = /CHECK\s*\(\s*clarification_count\s+BETWEEN\s+0\s+AND\s+1\s*\)/iu;
+  if (!table || !legacyConstraint.test(table.sql)) return;
+  if (db.inTransaction) {
+    throw new InvalidStrategyTaskRecordError(
+      'Strategy clarification migration must run outside an existing transaction.',
+    );
+  }
+  const replacement = table.sql
+    .replace(/^CREATE TABLE\s+(?:"strategy_task_executions"|strategy_task_executions)/iu,
+      'CREATE TABLE strategy_task_executions_adaptive_migration')
+    .replace(legacyConstraint, 'CHECK (clarification_count >= 0)');
+  if (!replacement.startsWith('CREATE TABLE strategy_task_executions_adaptive_migration')) {
+    throw new InvalidStrategyTaskRecordError('Unrecognized strategy task table declaration.');
+  }
+  const dependentSql = db.prepare(
+    "SELECT sql FROM sqlite_master WHERE tbl_name = 'strategy_task_executions' AND type IN ('index', 'trigger') AND sql IS NOT NULL",
+  ).all() as Array<{ sql: string }>;
+  const foreignKeys = db.pragma('foreign_keys', { simple: true });
+  db.pragma('foreign_keys = OFF');
+  try {
+    db.transaction(() => {
+      db.exec(replacement);
+      db.exec(`
+        INSERT INTO strategy_task_executions_adaptive_migration SELECT * FROM strategy_task_executions;
+        DROP TABLE strategy_task_executions;
+        ALTER TABLE strategy_task_executions_adaptive_migration RENAME TO strategy_task_executions;
+      `);
+      for (const entry of dependentSql) db.exec(entry.sql);
+      const foreignKeyViolations = db.pragma('foreign_key_check') as unknown[];
+      if (foreignKeyViolations.length > 0) {
+        throw new InvalidStrategyTaskRecordError('Strategy task migration failed foreign-key validation.');
+      }
+    }).immediate();
+  } finally {
+    db.pragma(`foreign_keys = ${foreignKeys ? 'ON' : 'OFF'}`);
+  }
 }
 
 export function createStrategyTaskExecution(
@@ -326,6 +376,7 @@ export function createStrategyTaskExecution(
         'Strategy task Snapshot identity does not match its verified strategy binding.',
       );
     }
+    assertPromptBundleRecipe(promptBundle, binding.data.promptRecipe);
     const verifiedFrozenSkillPackage = insertableFrozenSkillPackage(frozenSkillPackage);
     const frozenInputIdentity: StrategyTaskFrozenInputIdentity = {
       schema: 'open-design.od-next-frozen-input-identity/v1',
@@ -435,6 +486,7 @@ export function getStrategyTaskExecutionByRunId(
 export interface StrategyTaskTurnProjection {
   taskExecutionId: string;
   taskRunIndex: number;
+  executionPolicy?: StrategyExecutionPolicy;
   /** The task settled `completed` — deliverable verified. Carried because the
    *  messages table has no strategy column, so a reload has no other way to
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
@@ -470,13 +522,15 @@ export function strategyTaskTurnsForRunIds(
         SELECT r.run_id AS runId,
                r.task_execution_id AS taskExecutionId,
                r.task_run_index AS taskRunIndex,
-               t.outcome AS outcome
+               t.outcome AS outcome,
+               s.strategy_json AS strategyBinding
           FROM strategy_task_runs r
           -- LEFT so a mapping whose task row is gone still yields its turn
           -- position: losing that would un-fold an already-rendered Full Plan
           -- turn into orphan answers, a worse failure than a missing verdict.
           LEFT JOIN strategy_task_executions t
             ON t.task_execution_id = r.task_execution_id
+          LEFT JOIN applied_plugin_snapshots s ON s.id = t.snapshot_id
          WHERE r.run_id IN (${chunk.map(() => '?').join(', ')})
       `).all(...chunk) as DbRow[];
       for (const row of rows) {
@@ -485,9 +539,21 @@ export function strategyTaskTurnsForRunIds(
           || typeof row['taskExecutionId'] !== 'string'
           || typeof row['taskRunIndex'] !== 'number'
         ) continue;
+        // This read-side stamp comes from the same frozen binding as rowToTask.
+        // A damaged/missing binding must not make the entire history unreadable.
+        let executionPolicy: StrategyExecutionPolicy | undefined;
+        if (typeof row['strategyBinding'] === 'string') {
+          try {
+            const binding = AppliedStrategyBindingV2Schema.safeParse(JSON.parse(row['strategyBinding']));
+            if (binding.success) executionPolicy = strategyExecutionPolicyForRecipe(binding.data.promptRecipe);
+          } catch {
+            // Existing rows without a readable policy retain legacy rendering.
+          }
+        }
         turns.set(row['runId'], {
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
+          ...(executionPolicy ? { executionPolicy } : {}),
           delivered: row['outcome'] === 'completed',
         });
       }
@@ -507,8 +573,8 @@ export function getAwaitingClarificationStrategyTaskExecution(
     const rows = db.prepare(`
       SELECT * FROM strategy_task_executions
        WHERE project_id = ? AND conversation_id = ?
-         AND route = 'full_plan'
-         AND input_stage = 'request'
+         AND (route = 'full_plan' OR route IS NULL)
+         AND input_stage IN ('request', 'clarification')
          AND outcome = 'clarification_required'
        ORDER BY updated_at DESC, task_execution_id ASC
        LIMIT 2
@@ -563,10 +629,10 @@ export function compareAndTransitionStrategyTaskExecution(
         })
       : null;
     const clarificationCount = current.clarificationCount
-      + (next.inputStage === 'clarification' && current.inputStage !== 'clarification' ? 1 : 0);
+      + (next.inputStage === 'clarification' && input.nextRun ? 1 : 0);
     const repairAttempts = current.planContractRepairAttempts
       + (next.inputStage === 'contract_repair' && current.inputStage !== 'contract_repair' ? 1 : 0);
-    if (clarificationCount > 1) {
+    if (current.executionPolicy === 'plan_build_v2' && clarificationCount > 1) {
       throw new InvalidStrategyTaskTransitionError(
         'Strategy tasks allow exactly one clarification stage at most.',
       );
@@ -794,16 +860,20 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
   }
 
   const route = parseNullableRoute(row['route']);
+  const executionPolicy = strategyExecutionPolicyForRecipe(binding.data.promptRecipe);
   const inputStage = parseStage(row['input_stage']);
   const outcome = parseOutcome(row['outcome']);
   const executionMode = parseNullableExecutionMode(row['execution_mode']);
-  validateStoredState({ route, inputStage, outcome, executionMode });
+  validateStoredState({ route, inputStage, outcome, executionMode }, executionPolicy);
   const blockedContext = parseStoredBlockedContext(
     row['blocked_reason_codes_json'],
     row['blocked_visible_text'],
     outcome,
   );
   const plan = parseStoredPlanContract(row['plan_contract_json'], row['plan_contract_hash']);
+  if (executionPolicy === 'adaptive_v1' && plan.contract) {
+    throw new InvalidStrategyTaskRecordError('Adaptive tasks do not carry a Plan Contract.');
+  }
   if (
     (inputStage === 'production' || outcome === 'plan_ready')
     && (!plan.contract || !plan.hash)
@@ -906,7 +976,8 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     );
   }
 
-  const clarificationCount = requireBoundedCount(
+  const clarificationCount = (executionPolicy === 'adaptive_v1'
+    ? requireNonNegativeInteger : requireBoundedCount)(
     row['clarification_count'],
     'clarification_count',
   );
@@ -920,6 +991,7 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     inputStage,
     clarificationCount,
     planContractRepairAttempts,
+    executionPolicy,
   );
   const frozenSkillPackage = getFrozenSkillPackage(db, taskExecutionId);
   const promptBundle = parseStoredFinalText({
@@ -930,6 +1002,7 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     sha256: row['prompt_bundle_sha256'],
   });
   parseStoredPromptBundle(promptBundle);
+  assertPromptBundleRecipe(promptBundle, binding.data.promptRecipe);
   if (!sameFinalTextIdentity(promptBundle, mappings[0]!.finalText)) {
     throw new InvalidStrategyTaskRecordError(
       'Initial strategy task Run text must exactly match the persisted Prompt Bundle.',
@@ -954,6 +1027,7 @@ function rowToTask(db: SqliteDb, row: DbRow): StrategyTaskExecutionRecord {
     strategyVersion,
     strategyPackageHash,
     selectedAgentId: requireStoredString(row['selected_agent_id'], 'selected_agent_id'),
+    executionPolicy,
     route,
     inputStage,
     outcome,
@@ -1111,6 +1185,20 @@ function parseStoredPromptBundle(identity: StrategyTaskFinalTextIdentity): void 
   throw new InvalidStrategyTaskRecordError(
     'Persisted OD Next Prompt Bundle does not carry a Prompt Bundle schema.',
   );
+}
+
+function assertPromptBundleRecipe(
+  identity: StrategyTaskFinalTextIdentity,
+  recipe: StrategyPromptRecipe,
+): void {
+  const persistedRecipe = identity.schema === OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1
+    ? OD_NEXT_PROMPT_RECIPE_ID
+    : parseOdNextPromptBundleV2(identity.text).context.recipeIdentity.recipe;
+  if (persistedRecipe !== recipe) {
+    throw new InvalidStrategyTaskRecordError(
+      'Prompt Bundle recipe must match the task frozen Snapshot recipe.',
+    );
+  }
 }
 
 /**
@@ -1304,8 +1392,9 @@ function validateRunChain(
   mappings: StrategyTaskRunMapping[],
   route: StrategyRouteV2 | null,
   currentStage: StrategyInputStageV2,
-  clarificationCount: 0 | 1,
+  clarificationCount: number,
   repairCount: 0 | 1,
+  executionPolicy: StrategyExecutionPolicy,
 ): void {
   if (mappings.length === 0 || mappings[0]?.inputStage !== 'request') {
     throw new InvalidStrategyTaskRecordError(
@@ -1325,6 +1414,11 @@ function validateRunChain(
     'clarification:production',
     'contract_repair:production',
   ]);
+  if (executionPolicy === 'adaptive_v1') {
+    allowed.clear();
+    allowed.add('request:clarification');
+    allowed.add('clarification:clarification');
+  }
   for (let index = 1; index < mappings.length; index += 1) {
     const previous = mappings[index - 1];
     const current = mappings[index];
@@ -1369,7 +1463,7 @@ function validateRunChain(
       'Direct Edit can only own its single request Run.',
     );
   }
-  if (route === null && mappings.length !== 1) {
+  if (executionPolicy === 'plan_build_v2' && route === null && mappings.length !== 1) {
     throw new InvalidStrategyTaskRecordError(
       'An unrouted strategy task cannot own a next Run.',
     );
@@ -1381,6 +1475,38 @@ function validateTransition(
   input: CompareAndTransitionStrategyTaskInput,
 ): StrategyTaskTransitionState {
   const next = input.to;
+  if (current.executionPolicy === 'adaptive_v1') {
+    const state = OdNextAdaptiveTaskStateV1Schema.safeParse(next);
+    if (!state.success) {
+      throw new InvalidStrategyTaskTransitionError(
+        state.error.issues[0]?.message ?? 'Illegal adaptive task state.',
+      );
+    }
+    if (input.nextRun) {
+      if (
+        current.outcome !== 'clarification_required'
+        || next.inputStage !== 'clarification'
+        || next.outcome !== 'running'
+        || input.nextRun.sourceRunId !== current.latestRunId
+      ) {
+        throw new InvalidStrategyTaskTransitionError(
+          'Adaptive continuation must answer the latest waiting Run in a running clarification stage.',
+        );
+      }
+    } else if (next.inputStage !== current.inputStage) {
+      throw new InvalidStrategyTaskTransitionError(
+        'An adaptive stage change must atomically claim its next Run.',
+      );
+    } else if (current.outcome !== 'running') {
+      throw new InvalidStrategyTaskTransitionError(
+        'A waiting adaptive task requires a user continuation before another result.',
+      );
+    }
+    return next;
+  }
+  if (next.route === null) {
+    throw new InvalidStrategyTaskTransitionError('A legacy strategy transition requires its route.');
+  }
   if (current.route && current.route !== next.route) {
     throw new InvalidStrategyTaskTransitionError('Strategy route is locked for the task chain.');
   }
@@ -1479,6 +1605,12 @@ function resolvePlanContract(
   candidate: OpenDesignPlanContractV2 | undefined,
   next: StrategyTaskTransitionState,
 ): { json: string | null; hash: string | null } {
+  if (current.executionPolicy === 'adaptive_v1') {
+    if (candidate || current.planContract || current.planContractHash) {
+      throw new InvalidStrategyTaskTransitionError('Adaptive tasks do not carry a Plan Contract.');
+    }
+    return { json: null, hash: null };
+  }
   let contract = current.planContract;
   let hash = current.planContractHash;
   if (candidate) {
@@ -1593,7 +1725,16 @@ function validateStoredState(state: {
   inputStage: StrategyInputStageV2;
   outcome: StrategyTaskOutcome;
   executionMode: StrategyExecutionModeV2 | null;
-}): void {
+}, executionPolicy: StrategyExecutionPolicy): void {
+  if (executionPolicy === 'adaptive_v1') {
+    const parsed = OdNextAdaptiveTaskStateV1Schema.safeParse(state);
+    if (!parsed.success) {
+      throw new InvalidStrategyTaskRecordError(
+        parsed.error.issues[0]?.message ?? 'Persisted adaptive task state is invalid.',
+      );
+    }
+    return;
+  }
   if (state.route === null) {
     if (
       state.inputStage !== 'request'

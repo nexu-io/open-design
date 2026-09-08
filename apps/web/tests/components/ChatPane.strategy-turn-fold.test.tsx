@@ -112,6 +112,30 @@ describe('foldStrategyTaskTurns', () => {
     expect(assistants[1]!.content).toContain('T2_PROD');
     expect(assistants[0]!.content).not.toContain('T2_');
   });
+
+  it('keeps adaptive question rounds attached to their own assistant and user answer', () => {
+    const input = [
+      { id: 'u-request', role: 'user', content: 'Build the requested artifact' } as ChatMessage,
+      assistant({
+        id: 'a-platform', content: 'PLATFORM_FORM', runId: 'r-platform',
+        strategyTaskExecutionId: 'odnext_adaptive', strategyTaskRunIndex: 0,
+        strategyTaskExecutionPolicy: 'adaptive_v1',
+      }),
+      { id: 'u-platform', role: 'user', content: 'PLATFORM_ANSWER' } as ChatMessage,
+      assistant({
+        id: 'a-scope', content: 'SCOPE_FORM', runId: 'r-scope',
+        strategyTaskExecutionId: 'odnext_adaptive', strategyTaskRunIndex: 1,
+        strategyTaskExecutionPolicy: 'adaptive_v1',
+      }),
+      { id: 'u-scope', role: 'user', content: 'SCOPE_ANSWER' } as ChatMessage,
+      assistant({
+        id: 'a-delivery', content: 'DELIVERY', runId: 'r-delivery',
+        strategyTaskExecutionId: 'odnext_adaptive', strategyTaskRunIndex: 2,
+        strategyTaskExecutionPolicy: 'adaptive_v1',
+      }),
+    ];
+    expect(foldStrategyTaskTurns(input)).toEqual(input);
+  });
 });
 
 describe('foldStrategyTaskTurns settlement', () => {

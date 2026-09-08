@@ -71,6 +71,33 @@ function machineBlock(tag: string, value: unknown): string {
 }
 
 describe('OD Next machine protocol stream', () => {
+  it('isolates adaptive status parsing from frozen V2 and hides every chunk of its wire block', () => {
+    const adaptive = {
+      schema: 'open-design.strategy-state/adaptive-v1',
+      outcome: 'completed',
+      deliveryKind: 'artifact',
+      reasonCodes: [],
+    };
+    const wire = `Done.\n${machineBlock('open-design-runtime-state', adaptive)}`;
+    for (let split = 0; split <= wire.length; split += 1) {
+      const stream = new OdNextMachineProtocolStream({ executionPolicy: 'adaptive_v1' });
+      const visible = stream.push(wire.slice(0, split)) + stream.push(wire.slice(split));
+      expect(visible).toBe('Done.\n');
+      const result = stream.finish();
+      expect(result.adaptiveRuntimeState).toEqual(adaptive);
+      expect(result.runtimeState).toBeUndefined();
+      expect(result.issues).toEqual([]);
+    }
+    const legacy = new OdNextMachineProtocolStream();
+    legacy.push(wire);
+    expect(legacy.finish().issues.map((issue) => issue.code))
+      .toContain('od_next_protocol_runtime_state_invalid_schema');
+    const adaptiveStream = new OdNextMachineProtocolStream({ executionPolicy: 'adaptive_v1' });
+    adaptiveStream.push(machineBlock('open-design-runtime-state', state));
+    expect(adaptiveStream.finish().issues.map((issue) => issue.code))
+      .toContain('od_next_protocol_runtime_state_invalid_schema');
+  });
+
   it('recognizes exact blocks across every chunk boundary and never returns machine bytes', () => {
     const wire = [
       'Ready to build.\n',

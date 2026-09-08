@@ -2,6 +2,22 @@ import { z } from 'zod';
 
 export const OD_NEXT_STRATEGY_ID = 'od-next-strategy' as const;
 export const OD_NEXT_PROMPT_RECIPE_ID = 'od-next-plan-build-v2' as const;
+export const OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID = 'od-next-adaptive-v1' as const;
+export const OD_NEXT_ADAPTIVE_RUNTIME_STATE_SCHEMA = 'open-design.strategy-state/adaptive-v1' as const;
+export const StrategyPromptRecipeSchema = z.enum([
+  OD_NEXT_PROMPT_RECIPE_ID,
+  OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID,
+]);
+export type StrategyPromptRecipe = z.infer<typeof StrategyPromptRecipeSchema>;
+export const StrategyExecutionPolicySchema = z.enum(['plan_build_v2', 'adaptive_v1']);
+export type StrategyExecutionPolicy = z.infer<typeof StrategyExecutionPolicySchema>;
+
+/** Execution semantics are frozen by the task's applied recipe, not a live setting. */
+export function strategyExecutionPolicyForRecipe(recipe: StrategyPromptRecipe): StrategyExecutionPolicy {
+  return StrategyPromptRecipeSchema.parse(recipe) === OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID
+    ? 'adaptive_v1'
+    : 'plan_build_v2';
+}
 export const OD_NEXT_APPLIED_STRATEGY_SCHEMA = 'open-design.applied-strategy/v2' as const;
 export const OD_NEXT_PLAN_CONTRACT_SCHEMA = 'open-design.plan-contract/v2' as const;
 export const OD_NEXT_RUNTIME_STATE_SCHEMA = 'open-design.strategy-state/v2' as const;
@@ -69,6 +85,31 @@ export const StrategyOutcomeV2Schema = z.enum([
   'canceled',
 ]);
 export type StrategyOutcomeV2 = z.infer<typeof StrategyOutcomeV2Schema>;
+
+/** The agent reports a result; the host owns task identity and continuation stages. */
+export const OdNextAdaptiveRuntimeStateV1Schema = z.object({
+  schema: z.literal(OD_NEXT_ADAPTIVE_RUNTIME_STATE_SCHEMA),
+  outcome: z.enum(['clarification_required', 'completed', 'blocked']),
+  deliveryKind: z.enum(['artifact', 'answer', 'plan']).optional(),
+  reasonCodes: z.array(z.string().min(1)).default([]),
+}).strict().superRefine((value, context) => {
+  if (value.deliveryKind !== undefined && value.outcome !== 'completed') {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['deliveryKind'],
+      message: 'Only a completed adaptive result may declare its delivery kind.',
+    });
+  }
+});
+export type OdNextAdaptiveRuntimeStateV1 = z.infer<typeof OdNextAdaptiveRuntimeStateV1Schema>;
+
+export const OdNextAdaptiveTaskStateV1Schema = z.object({
+  route: z.null(),
+  inputStage: z.enum(['request', 'clarification']),
+  outcome: z.enum(['running', 'clarification_required', 'completed', 'blocked', 'canceled']),
+  executionMode: z.null(),
+}).strict();
+export type OdNextAdaptiveTaskStateV1 = z.infer<typeof OdNextAdaptiveTaskStateV1Schema>;
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
 const relativeAssetPathSchema = z.string().min(1).refine(
@@ -163,7 +204,7 @@ const StrategyTaskProfileAssetDeclarationV2Schema = StrategyAssetDeclarationV2Sc
 export const BundledStrategyDeclarationV2Schema = z.object({
   schema: z.literal(OD_NEXT_BUNDLED_STRATEGY_SCHEMA),
   id: z.literal(OD_NEXT_STRATEGY_ID),
-  promptRecipe: z.literal(OD_NEXT_PROMPT_RECIPE_ID),
+  promptRecipe: StrategyPromptRecipeSchema,
   assets: z.object({
     core: StrategyAssetDeclarationV2Schema,
     orchestration: StrategyAssetDeclarationV2Schema,
@@ -214,7 +255,7 @@ export const AppliedStrategyBindingV2Schema = z.object({
   assetDigests: z.array(StrategyAssetDigestV2Schema).min(1),
   selectedTaskProfile: SelectedStrategyTaskProfileV2Schema,
   taskProfileVersions: z.array(z.string().min(1)).min(1),
-  promptRecipe: z.literal(OD_NEXT_PROMPT_RECIPE_ID),
+  promptRecipe: StrategyPromptRecipeSchema,
 }).strict().superRefine((value, context) => {
   const paths = value.assetDigests.map((asset) => asset.path);
   if (new Set(paths).size !== paths.length) {
@@ -740,6 +781,7 @@ export type StrategyTaskBlockedContextV2 = z.infer<typeof StrategyTaskBlockedCon
 
 export const StrategyTaskProjectionV2Schema = z.object({
   taskExecutionId: z.string().min(1),
+  executionPolicy: StrategyExecutionPolicySchema.optional(),
   strategy: StrategyTaskProjectionIdentityV2Schema,
   inputStage: StrategyInputStageV2Schema,
   outcome: z.union([z.literal('running'), StrategyOutcomeV2Schema]),
@@ -764,6 +806,22 @@ export const StrategyTaskProjectionV2Schema = z.object({
       path: ['nextRunId'],
       message: 'Terminal task projections may not advertise a next Run.',
     });
+  }
+  if (value.executionPolicy === 'adaptive_v1') {
+    const state = OdNextAdaptiveTaskStateV1Schema.safeParse({
+      route: value.route,
+      inputStage: value.inputStage,
+      outcome: value.outcome,
+      executionMode: value.executionMode,
+    });
+    if (!state.success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['outcome'],
+        message: 'Adaptive task projections must match the adaptive task state.',
+      });
+    }
+    return;
   }
   if (value.route === 'direct_edit' && value.executionMode !== 'simple') {
     context.addIssue({

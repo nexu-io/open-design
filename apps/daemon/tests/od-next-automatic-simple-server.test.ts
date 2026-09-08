@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppliedStrategyBindingV2,
   OdNextRuntimeCapabilitySnapshotV1,
@@ -19,6 +19,28 @@ import {
 } from '@open-design/contracts';
 
 const uuidControl = vi.hoisted(() => ({ forced: [] as string[] }));
+const catalogFixture = vi.hoisted(() => ({ root: null as string | null }));
+
+// Only the catalog location is injected. The real registry, package digest,
+// prompt composer, task store, protocol, and native continuation run unchanged.
+vi.mock('../src/daemon-paths.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/daemon-paths.js')>();
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  return {
+    ...actual,
+    resolveDaemonResourceDir: (...args: Parameters<typeof actual.resolveDaemonResourceDir>) => {
+      const resolved = actual.resolveDaemonResourceDir(...args);
+      if (args[1] !== path.join('plugins', '_official')) return resolved;
+      if (!catalogFixture.root) {
+        catalogFixture.root = fs.mkdtempSync(path.join(os.tmpdir(), 'od-next-catalog-fixture-'));
+        fs.cpSync(resolved, catalogFixture.root, { recursive: true });
+      }
+      return catalogFixture.root;
+    },
+  };
+});
 let pendingAutomaticFixtureIdentity: {
   initialRunId: string;
   taskExecutionId: string;
@@ -92,9 +114,7 @@ const execFileP = promisify(execFile);
 const DAEMON_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(DAEMON_ROOT, '../..');
 const CREATIVE_VOLTAGE_EXAMPLE_DIR = path.join(
-  REPO_ROOT,
-  'plugins',
-  '_official',
+  catalogFixture.root!,
   'examples',
   'fs-creative-voltage',
 );
@@ -151,6 +171,14 @@ describe('OD Next automatic production through the real server', () => {
   let started: StartedServer | null = null;
   let binDir: string | null = null;
   let sequence = 0;
+
+  beforeEach(async () => {
+    await restoreCurrentStrategyPackage();
+  });
+
+  afterAll(async () => {
+    if (catalogFixture.root) await rm(catalogFixture.root, { recursive: true, force: true });
+  });
 
   afterEach(async () => {
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
@@ -1211,6 +1239,11 @@ describe('OD Next automatic production through the real server', () => {
         selections: [],
       });
     expect(activeTask?.runs[0]?.finalText).toEqual(activeTask?.promptBundle);
+    const promptBundleText = activeTask?.promptBundle.text ?? '';
+    expect(activeTask?.executionPolicy).toBe('adaptive_v1');
+    expect(parseOdNextPromptBundleV2(promptBundleText).context.recipeIdentity.recipe)
+      .toBe('od-next-adaptive-v1');
+    expect(promptBundleText).toContain('open-design.strategy-state/adaptive-v1');
     expect(activeTask?.promptBundle.utf8Bytes).toBe(
       Buffer.byteLength(activeTask?.promptBundle.text ?? '', 'utf8'),
     );
@@ -1772,6 +1805,7 @@ describe('OD Next automatic production through the real server', () => {
       ...createRunRequest(fixture, 'Build the operator prototype.'),
       attachments: ['brief.pdf', 'notes.txt'],
     };
+    await writeFile(`${fixture.logPath}.hold-response`, 'Wait for the catalog upgrade.');
 
     queueFixtureIds(fixture);
     const created = await postRun(started!.url, body);
@@ -1786,6 +1820,11 @@ describe('OD Next automatic production through the real server', () => {
       },
     });
     expect(uuidControl.forced).toEqual([]);
+    await waitForInvocationCount(fixture.logPath, fixture.projectId, 1);
+    // The task is already frozen. Upgrade the live package before its first
+    // result; repair and production must still use the saved V2 instructions.
+    await restoreCurrentStrategyPackage();
+    await rm(`${fixture.logPath}.hold-response`);
     const liveMutation = [
       'LIVE_CONTEXT_MUTATION_MUST_NOT_EXPORT',
       '/Users/alice/live-only.txt',
@@ -2435,6 +2474,7 @@ describe('OD Next automatic production through the real server', () => {
       capability?: OdNextRuntimeCapabilitySnapshotV1;
     } = {},
   ) {
+    await installLegacyStrategyFixture();
     const suffix = `${mode}-${Date.now()}-${++sequence}`;
     if (mode !== 'direct') {
       const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
@@ -2578,6 +2618,40 @@ describe('OD Next automatic production through the real server', () => {
     };
   }
 });
+
+function strategyFixtureFolder(): string {
+  if (!catalogFixture.root) throw new Error('The test catalog has not been initialized.');
+  return path.join(catalogFixture.root, 'scenarios', 'od-next-strategy');
+}
+
+async function restoreCurrentStrategyPackage(): Promise<void> {
+  await cp(
+    path.join(REPO_ROOT, 'plugins', '_official', 'scenarios', 'od-next-strategy'),
+    strategyFixtureFolder(),
+    { recursive: true },
+  );
+}
+
+async function installLegacyStrategyFixture(): Promise<void> {
+  const folder = strategyFixtureFolder();
+  const manifestPath = path.join(folder, 'open-design.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
+  manifest.version = '2.0.0-test.0';
+  manifest.title = 'Synthetic frozen V2 integration fixture';
+  manifest.od.strategy.promptRecipe = 'od-next-plan-build-v2';
+  manifest.od.pipeline.stages = OD_NEXT_PROMPT_STAGE_CONTRACT_V2.map((stage) => ({
+    id: stage.id, atoms: [...stage.atoms],
+  }));
+  // A small synthetic legacy package, not a copy of a historical production
+  // prompt. The retained V2 composer supplies its real full output contract.
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await writeFile(path.join(folder, 'assets', 'core-system-prompt.md'),
+    '# Synthetic frozen V2 test strategy\nFollow the V2 host output contract. Full Plan ends the request with plan_ready; Production writes the canonical deliverable.\n');
+  await writeFile(path.join(folder, 'assets', 'general-orchestration.md'),
+    '# Synthetic V2 orchestration\nCreate a complete Plan Contract before Production. Use the same frozen Design Spec in every Build Package. Deliver after all required source is written.\n');
+  await writeFile(path.join(folder, 'assets', 'task-profiles', 'prototype.md'),
+    '# Synthetic V2 prototype profile\nResolve the goal, audience, constraints, visual direction, and canonical prototype deliverable in the Plan Contract. Preserve the requested scope.\n');
+}
 
 async function createPublicRolloutFixture(
   label: string,
@@ -2747,7 +2821,10 @@ process.stdin.on('end', () => {
   }
   console.log(JSON.stringify({
     type: 'item.completed',
-    item: { id: 'answer', type: 'agent_message', text: 'Ordinary public run completed.' },
+    item: { id: 'answer', type: 'agent_message', text: stdin.includes('od-next-adaptive-v1')
+      ? '<open-design-runtime-state>{"schema":"open-design.strategy-state/adaptive-v1","outcome":"completed","deliveryKind":"answer"}</open-design-runtime-state>\\n'
+        + '\\nPublic routing fixture completed.'
+      : 'Ordinary public run completed.' },
   }));
   console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 1 } }));
   setTimeout(() => process.exit(0), 5);
@@ -2799,6 +2876,9 @@ async function startDaemon(
 async function stopServer(server: StartedServer | null): Promise<void> {
   if (!server) return;
   await Promise.resolve(server.shutdown?.());
+  // Some fixture probes inspect only response.status. Their unconsumed
+  // keep-alive sockets must not hold a test restart for the product's 120s TTL.
+  server.server.closeAllConnections();
   if (server.server.listening) {
     await new Promise<void>((resolve) => server.server.close(() => resolve()));
   }
@@ -2809,10 +2889,7 @@ async function createStrategySnapshot(
   conversationId: string,
   linkToProject = true,
 ) {
-  const source = path.resolve(
-    import.meta.dirname,
-    '../../../plugins/_official/scenarios/od-next-strategy',
-  );
+  const source = strategyFixtureFolder();
   const resolved = await resolvePluginFolder({
     folder: source,
     folderId: 'od-next-strategy',
@@ -2829,7 +2906,7 @@ async function createStrategySnapshot(
     conversationId,
     runId: null,
     pluginId: 'od-next-strategy',
-    pluginVersion: '2.0.0',
+    pluginVersion: strategy.version,
     manifestSourceDigest: 'od-next-server-test-manifest',
     strategy,
     taskKind: 'new-generation',
@@ -2853,10 +2930,7 @@ async function createStrategySnapshot(
 }
 
 async function createStrategyTemplate() {
-  const source = path.resolve(
-    import.meta.dirname,
-    '../../../plugins/_official/scenarios/od-next-strategy',
-  );
+  const source = strategyFixtureFolder();
   const resolved = await resolvePluginFolder({
     folder: source,
     folderId: 'od-next-strategy',
@@ -3071,19 +3145,31 @@ function finish() {
   if (appliedSnapshot) {
     text = text.replaceAll(${JSON.stringify(plan.strategy.snapshotId)}, appliedSnapshot);
   }
-  console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
-  console.log(JSON.stringify({ type: 'turn.started' }));
-  if (staleTodoList) {
+  let emitted = false;
+  function emitResult() {
+    if (emitted) return;
+    emitted = true;
+    console.log(JSON.stringify({ type: 'thread.started', thread_id: ${JSON.stringify(THREAD_ID)} }));
+    console.log(JSON.stringify({ type: 'turn.started' }));
+    if (staleTodoList) {
     // Observed on real turns: the deliverable is written, but the LAST plan
     // snapshot the agent emits still carries unchecked items.
     console.log(JSON.stringify({ type: 'item.completed', item: { id: 'todo-1', type: 'todo_list', items: [
       { text: 'Draft the layout', completed: true },
       { text: 'Deliver the runnable entry', completed: false },
     ] } }));
+    }
+    console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text } }));
+    console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } }));
+    setTimeout(() => process.exit(0), 5);
   }
-  console.log(JSON.stringify({ type: 'item.completed', item: { id: 'answer', type: 'agent_message', text } }));
-  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 10, cached_input_tokens: 0, output_tokens: 5 } }));
-  setTimeout(() => process.exit(0), 5);
+  const holdResponse = logPath + '.hold-response';
+  if (fs.existsSync(holdResponse)) {
+    const watcher = fs.watch(path.dirname(logPath), () => {
+      if (!fs.existsSync(holdResponse)) { watcher.close(); emitResult(); }
+    });
+    if (!fs.existsSync(holdResponse)) { watcher.close(); emitResult(); }
+  } else emitResult();
 }
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (chunk) => { stdin += chunk; });

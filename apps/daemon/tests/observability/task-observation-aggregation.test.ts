@@ -57,6 +57,7 @@ function task(
 ): StrategyTaskExecutionRecord {
   return {
     schemaVersion: 1,
+    executionPolicy: 'plan_build_v2',
     revision: 5,
     taskExecutionId: 'task-1',
     projectId: 'project-1',
