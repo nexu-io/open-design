@@ -165,16 +165,8 @@ function closerAt(src: string, open: number, close: string): number {
   return src.length;
 }
 
-/**
- * 顶层逗号拆分(括号 / 方括号 / 引号里的逗号不算)。
- *
- * 导出是给那些**自己算胜出者**的量尺用的:`resolved()` 要过 `expand()` 的属性
- * 白名单,`display` / `overflow` / `text-overflow` / `flex` 这类不在名单里的属性
- * 会被静默丢掉(读回 {@link UNSET}),照着它断言必然假绿。那些量尺仍然该复用
- * 这里已校准的拆分与特异性,不该各自再抄一份裸 `split(',')` ——
- * 裸拆的三种下场见 `createResolver` 里 `matchingBranch` 的注释。
- */
-export function splitList(src: string): string[] {
+/** 顶层逗号拆分(括号 / 方括号 / 引号里的逗号不算)。 */
+function splitList(src: string): string[] {
   const out: string[] = [];
   let depth = 0;
   let quote = '';
