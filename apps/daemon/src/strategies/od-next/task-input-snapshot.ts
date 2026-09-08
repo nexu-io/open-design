@@ -526,6 +526,7 @@ export function buildOdNextTaskConfigurationV1(input: {
   serviceTier?: unknown;
   mediaExecution: MediaExecutionPolicy;
   route?: 'direct_edit' | 'full_plan';
+  executionPolicy?: 'plan_build_v2' | 'adaptive_v1';
   mode?: 'simple' | 'complex' | 'unresolved';
 }): OdNextTaskConfigurationV1 {
   const selectedAgentId = safeOptionalConfig(input.selectedAgentId, 'selected agent id');
@@ -551,7 +552,8 @@ export function buildOdNextTaskConfigurationV1(input: {
     taskType: input.taskType,
     locale: normalizeLocale(input.locale),
     selectedAgentId,
-    route: input.route ?? 'full_plan',
+    ...(input.executionPolicy ? { executionPolicy: input.executionPolicy } : {}),
+    route: input.executionPolicy === 'adaptive_v1' ? null : input.route ?? 'full_plan',
     mode: input.mode ?? 'unresolved',
     configuration: {
       sessionMode,

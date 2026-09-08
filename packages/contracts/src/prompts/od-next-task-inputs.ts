@@ -3,6 +3,7 @@ import type { MediaExecutionMode, MediaSurface } from '../api/media.js';
 import type { StrategyTaskTypeV2 } from '../plugins/strategy-v2.js';
 import type {
   StrategyExecutionModeV2,
+  StrategyExecutionPolicy,
   StrategyRouteV2,
 } from '../plugins/strategy-v2.js';
 
@@ -18,7 +19,8 @@ export interface OdNextTaskConfigurationV1 {
   taskType: OdNextProductionTaskTypeV1;
   locale: string;
   selectedAgentId: string;
-  route: StrategyRouteV2;
+  executionPolicy?: StrategyExecutionPolicy;
+  route: StrategyRouteV2 | null;
   mode: StrategyExecutionModeV2 | 'unresolved';
   configuration: {
     sessionMode: ChatSessionMode;

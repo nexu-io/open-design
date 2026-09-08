@@ -60,6 +60,7 @@ import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   resolveQuestionFormStrategyTaskExecutionId,
   strategySettledMessageFields,
+  strategyTaskIdentityMessageFields,
 } from '../runtime/strategy-question-continuation';
 import {
   type AmrWalletSnapshot,
@@ -491,6 +492,7 @@ function messagesThatAbsorbedASuccessorRun(
 ): Set<string> {
   const lastRunIndexByTask = new Map<string, number>();
   for (const message of serverMessages) {
+    if (message.strategyTaskExecutionPolicy === 'adaptive_v1') continue;
     const task = message.strategyTaskExecutionId;
     if (!task) continue;
     const runIndex = message.strategyTaskRunIndex ?? 0;
@@ -498,6 +500,7 @@ function messagesThatAbsorbedASuccessorRun(
   }
   const absorbed = new Set<string>();
   for (const message of serverMessages) {
+    if (message.strategyTaskExecutionPolicy === 'adaptive_v1') continue;
     const task = message.strategyTaskExecutionId;
     if (!task) continue;
     if ((message.strategyTaskRunIndex ?? 0) < (lastRunIndexByTask.get(task) ?? 0)) {
@@ -5337,6 +5340,7 @@ export function ProjectView({
         // below without replaying their final Run again.
         const needsTaskProjectionProbe = Boolean(
           message.strategyTaskExecutionId
+          && message.strategyTaskExecutionPolicy !== 'adaptive_v1'
           && message.runId
           && message.runStatus === 'succeeded',
         );
@@ -5431,7 +5435,8 @@ export function ProjectView({
         const projectedActiveRunId = physicalStatus.strategyTask?.activeRunId;
         const taskRunAdvanced = Boolean(
           projectedActiveRunId
-          && projectedActiveRunId !== runId,
+          && projectedActiveRunId !== runId
+          && physicalStatus.strategyTask?.executionPolicy !== 'adaptive_v1',
         );
         const reattachRunId = taskRunAdvanced && projectedActiveRunId
           ? projectedActiveRunId
@@ -5482,7 +5487,7 @@ export function ProjectView({
             message.id,
             (prev) => ({
               ...prev,
-              strategyTaskExecutionId: status.strategyTask!.taskExecutionId,
+              ...strategyTaskIdentityMessageFields(status.strategyTask),
               ...(settledFields ?? {}),
             }),
             true,
@@ -5752,9 +5757,7 @@ export function ProjectView({
               lastRunEventId: undefined,
               strategyTaskPrefixLength: message.content.length,
               strategyTaskPrefixEventCount: message.events?.length ?? 0,
-              ...(status.strategyTask?.taskExecutionId
-                ? { strategyTaskExecutionId: status.strategyTask.taskExecutionId }
-                : {}),
+              ...strategyTaskIdentityMessageFields(status.strategyTask),
             }),
             true,
           );
@@ -5941,9 +5944,7 @@ export function ProjectView({
                 lastRunEventId: undefined,
                 strategyTaskPrefixLength: replayedContent.length,
                 strategyTaskPrefixEventCount: replayedEvents.length,
-                ...(strategyTask?.taskExecutionId
-                  ? { strategyTaskExecutionId: strategyTask.taskExecutionId }
-                  : {}),
+                ...strategyTaskIdentityMessageFields(strategyTask),
               }),
               true,
             );
@@ -8378,6 +8379,7 @@ export function ProjectView({
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...strategyTaskIdentityMessageFields(strategyTask),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: latestAssistantMsg.content.length,
@@ -8399,6 +8401,7 @@ export function ProjectView({
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...strategyTaskIdentityMessageFields(strategyTask),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: prev.content.length,
@@ -8588,6 +8591,7 @@ export function ProjectView({
               runStatus: 'queued' as const,
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...strategyTaskIdentityMessageFields(strategyTask),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: latestAssistantMsg.content.length,
@@ -8606,6 +8610,7 @@ export function ProjectView({
               runStatus: 'queued',
               taskAnalytics: resolvedTaskAnalytics,
               ...(strategyTaskExecutionId ? { strategyTaskExecutionId } : {}),
+              ...strategyTaskIdentityMessageFields(strategyTask),
               ...(isTaskSuccessor
                 ? {
                     strategyTaskPrefixLength: prev.content.length,

@@ -222,7 +222,7 @@ function readBundledStrategyPackageV2(input: {
   };
 }
 
-function readControlledStrategyAsset(pluginRoot: string, assetPath: string): Uint8Array {
+export function readControlledStrategyAsset(pluginRoot: string, assetPath: string): Uint8Array {
   let normalized: string;
   try {
     normalized = normalizeStrategyAssetPath(assetPath);

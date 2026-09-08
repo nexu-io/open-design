@@ -1,12 +1,12 @@
 ---
 name: od-next-strategy
-description: Bundled OD Next V2 strategy entrypoint for route-locked planning and Build execution.
+description: Bundled OD Next strategy entrypoint for adaptive planning and continuous execution.
 ---
 
-# OD Next Strategy V2
+# OD Next Adaptive Strategy
 
 This bundled scenario packages the stable content used by the internal OD Next
-planning and Build recipe. It is not a portable strategy selector and does not
+adaptive execution recipe. It is not a portable strategy selector and does not
 activate itself.
 
 When Open Design supplies a validated V2 binding, load the assets in this order:
@@ -23,6 +23,7 @@ identity with their profile, are never concatenated into the prompt head, and
 are staged by Open Design into the project directory (`.od-frames/`) for the
 rule card to reference.
 
-The runtime owns route selection, task-chain state, session continuation, and
-machine-contract parsing. Content in this folder must not infer that those
-runtime facts exist unless Open Design supplied them.
+The runtime owns task state, session continuation, and outcome parsing.
+The main Agent decides planning depth and organizes work using actual tools.
+Content in this folder must not infer that those runtime facts exist unless
+Open Design supplied them.

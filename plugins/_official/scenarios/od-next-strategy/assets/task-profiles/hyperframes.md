@@ -1,23 +1,24 @@
-# OD Next HyperFrames Task Profile v2.0.0
+# OD Next HyperFrames Task Profile v2.1.0
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill; how HyperFrames is actually invoked is defined
-by the engineering implementation. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+Planning depth, clarification, execution, and the ship-on-write boundary
+follow the general orchestration Skill. This profile supplies task-specific
+requirements and artifact constraints; it does not require a complete machine
+plan or a resolved profile object. User-requested answers, discussion, and
+plan-only work follow the Core Strategy's requested-delivery-stage rule.
 
-## Profile fields
+## Requirements to consider
 
 Resolve platform and purpose, duration, frame shape and rate, script or
 storyboard locks, scenes, supplied media, on-screen copy, voice, music,
-captions, and required source and rendered outputs. Freeze palette, type,
-composition, scene language, motion timing, transitions, safe areas, and
-audio rules in the Design Spec.
+captions, and required source and rendered outputs. Keep palette, type,
+composition, scene language, motion timing, transitions, safe areas, and audio
+rules consistent.
 
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose.
+Resolve meaningful gaps using available context, or follow the general
+orchestration Skill to ask for a material decision or state a reversible
+assumption with its impact.
 
 Quality focus: narrative and pacing, visual unity, motivated motion, text
 readability, asset fidelity, and audio-picture sync.
@@ -28,8 +29,8 @@ The canonical deliverable is editable HyperFrames source — a timeline-driven
 HTML source artifact — with a stable render entry. Final-cut files such as
 MP4 are rendered by Open Design's product-side engineering capability after
 the source is written and are outside the Agent's responsibility, unless the
-task contract explicitly assigns a rendered media file to a Build Package; a
-package that owns rendering declares the exact format, duration, frame
+task contract explicitly assigns a rendered media file to an assigned work item;
+work that owns rendering declares the exact format, duration, frame
 dimensions, and frame rate.
 
 Writing the HyperFrames HTML source artifact to disk IS the delivery: no
@@ -81,7 +82,7 @@ scope; this profile's defaults fill in only what has not been specified.
   look.
 
 When task configuration provides the following values, execute them and
-record them in the Design Spec:
+apply them consistently while writing:
 
 - **Visual style** sets the visual language: motion graphics leads with
   typography and graphic movement; live-action look leads with camera
@@ -109,7 +110,7 @@ record them in the Design Spec:
 - When the task includes voiceover, music, or sound effects, keep visual
   changes aligned with the sound's rhythm and meaning, and keep voice,
   captions, music, sound effects, and visual transitions aligned to the
-  frozen timing plan.
+  agreed timing plan.
 - Sync subtitles with the voiceover in both content and timing.
 - Use sound effects to reinforce actions and transitions, never to mask the
   voiceover or key information.
@@ -151,11 +152,11 @@ shot definitions):
   the stated production route; never describe a final-cut file as completed
   before that route has actually rendered it.
 
-## Build Packages
+## Collaboration boundaries
 
-Simple mode builds the full timeline in one context. Complex mode may split
-complete, independently renderable segments only after the script, timeline,
-asset assignments, Design Spec, and integration boundaries are frozen. A
-single shot stays within one package — never split a single shot.
-Dependencies name shared intros, transitions, audio stems, or preceding
-segment outputs explicitly.
+The main Agent chooses whether delegation helps. A full timeline can stay in
+one context. Delegated work covers complete independent segments with shared
+script, timing, asset assignments, design decisions, and integration
+boundaries. Keep a single shot together. Name dependencies on shared intros,
+transitions, audio stems, or preceding outputs. Serial execution remains valid
+when it meets the user's requirements.

@@ -1,22 +1,24 @@
-# OD Next Presentation Task Profile v2.0.0
+# OD Next Presentation Task Profile v2.1.0
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+Planning depth, clarification, execution, and the ship-on-write boundary
+follow the general orchestration Skill. This profile supplies task-specific
+requirements and artifact constraints; it does not require a complete machine
+plan or a resolved profile object. User-requested answers, discussion, and
+plan-only work follow the Core Strategy's requested-delivery-stage rule.
 
-## Profile fields
+## Requirements to consider
 
 Resolve audience, purpose, speaking time or page budget, source material and
 locked scope, story arc, data sources, brand references, and presentation
-format. Freeze type, color, page grid, margins, chart language, imagery, and
-section rhythm in the Design Spec. Record the chosen narrative structure in
-the Task Profile.
+format. Keep type, color, page grid, margins, chart language, imagery, and
+section rhythm consistent. Choose a narrative structure that fits the current
+request.
 
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose.
+Resolve meaningful gaps using available context, or follow the general
+orchestration Skill to ask for a material decision or state a reversible
+assumption with its impact.
 
 Quality focus: narrative coherence, one clear point per slide, readability,
 truthful data, layout fitted to content, and consistency across the deck.
@@ -140,7 +142,7 @@ slide type:
   the choice in one sentence.
 
 When the task configuration supplies the following values, execute them and
-record them in the Design Spec:
+apply them consistently while writing:
 
 - **Visual style** decides the palette, font pairing, and chart style: a
   data-dense style favors tables and chart density; a brand-forward visual
@@ -206,9 +208,10 @@ Meet the following in one pass, while writing the source:
   describe a PPTX or PDF that Open Design's engineering has not yet produced
   as completed.
 
-## Build Packages
+## Collaboration boundaries
 
-Simple mode owns the full narrative. Complex mode may split complete
-chapters, each finishable independently, only after the story arc, data
-definitions, page grid, and Design Spec are frozen. Each package returns a
-complete ordered chapter, not disconnected individual pages.
+The main Agent owns the full narrative and chooses whether delegation helps.
+Delegated work covers complete chapters with shared story arc, data
+definitions, page grid, and design decisions. Each child returns a complete
+ordered chapter, not disconnected individual pages. Serial execution remains
+valid when it meets the user's requirements.

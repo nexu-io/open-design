@@ -825,7 +825,7 @@ interface QueuedSendUpdate {
 const ANCHOR_TOP_PADDING = 12;
 
 /**
- * Fold an OD Next logical task into ONE conversation turn.
+ * Fold a legacy OD Next logical task into ONE conversation turn.
  *
  * A Full Plan turn runs as several physical Runs (request -> production). The
  * user asked once, and the daemon-issued continuation carries no prompt of its
@@ -846,7 +846,11 @@ export function foldStrategyTaskTurns(messages: ChatMessage[]): ChatMessage[] {
   for (const message of messages) {
     const taskId = message.strategyTaskExecutionId;
     const runIndex = message.strategyTaskRunIndex ?? 0;
-    if (message.role !== 'assistant' || !taskId) {
+    if (
+      message.role !== 'assistant'
+      || !taskId
+      || message.strategyTaskExecutionPolicy === 'adaptive_v1'
+    ) {
       folded.push(message);
       continue;
     }

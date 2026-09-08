@@ -3,6 +3,10 @@ import {
   OD_NEXT_RUNTIME_STATE_BLOCK,
   OpenDesignPlanContractV2Schema,
   StrategyRuntimeStateV2Schema,
+  OdNextAdaptiveRuntimeStateV1Schema,
+  OD_NEXT_ADAPTIVE_RUNTIME_STATE_SCHEMA,
+  type OdNextAdaptiveRuntimeStateV1,
+  type StrategyExecutionPolicy,
   type OpenDesignPlanContractV2,
   type StrategyRuntimeStateV2,
 } from '@open-design/contracts';
@@ -27,6 +31,7 @@ export interface OdNextMachineProtocolResult {
   visibleText: string;
   planContract?: OpenDesignPlanContractV2;
   runtimeState?: StrategyRuntimeStateV2;
+  adaptiveRuntimeState?: OdNextAdaptiveRuntimeStateV1;
   /**
    * Schema-valid semantic anchors recovered from wrapper/fence defects. They
    * are never accepted as wire output; the Coordinator may use exactly one as
@@ -181,6 +186,7 @@ function describeMachineSchemaFailure(
 
 export class OdNextMachineProtocolStream {
   private readonly maxMachineBlockBytes: number;
+  private readonly executionPolicy: StrategyExecutionPolicy;
   private pending = '';
   private current: CapturedBlock | null = null;
   private readonly blocks: CapturedBlock[] = [];
@@ -189,12 +195,16 @@ export class OdNextMachineProtocolStream {
   private readonly visible: string[] = [];
   private finished = false;
 
-  constructor(options: { maxMachineBlockBytes?: number } = {}) {
+  constructor(options: {
+    maxMachineBlockBytes?: number;
+    executionPolicy?: StrategyExecutionPolicy;
+  } = {}) {
     const max = options.maxMachineBlockBytes ?? 256 * 1024;
     if (!Number.isSafeInteger(max) || max < 1) {
       throw new TypeError('maxMachineBlockBytes must be a positive safe integer.');
     }
     this.maxMachineBlockBytes = max;
+    this.executionPolicy = options.executionPolicy ?? 'plan_build_v2';
   }
 
   push(chunk: string): string {
@@ -241,9 +251,13 @@ export class OdNextMachineProtocolStream {
       visibleText: this.visible.join(''),
       normalizations: [...this.normalizations],
       ...(plan.strict ? { planContract: plan.strict } : {}),
-      ...(runtime.strict ? { runtimeState: runtime.strict } : {}),
+      ...(runtime.strict?.schema === OD_NEXT_ADAPTIVE_RUNTIME_STATE_SCHEMA
+        ? { adaptiveRuntimeState: runtime.strict }
+        : runtime.strict ? { runtimeState: runtime.strict } : {}),
       ...(!plan.strict && plan.repair ? { repairPlanContract: plan.repair } : {}),
-      ...(!runtime.strict && runtime.repair ? { repairRuntimeState: runtime.repair } : {}),
+      ...(!runtime.strict && runtime.repair
+        && runtime.repair.schema !== OD_NEXT_ADAPTIVE_RUNTIME_STATE_SCHEMA
+        ? { repairRuntimeState: runtime.repair } : {}),
       issues,
     };
   }
@@ -406,10 +420,10 @@ export class OdNextMachineProtocolStream {
     kind: T,
     issues: OdNextProtocolIssue[],
   ): {
-    strict?: T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2;
-    repair?: T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2;
+    strict?: T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2 | OdNextAdaptiveRuntimeStateV1;
+    repair?: T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2 | OdNextAdaptiveRuntimeStateV1;
   } {
-    type Parsed = T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2;
+    type Parsed = T extends 'plan' ? OpenDesignPlanContractV2 : StrategyRuntimeStateV2 | OdNextAdaptiveRuntimeStateV1;
     const blocks = this.blocks.filter((block) => block.kind === kind);
     const metadata = MACHINE[kind];
     if (blocks.length > 1) {
@@ -423,7 +437,9 @@ export class OdNextMachineProtocolStream {
     if (!block || block.tooLarge) return {};
     const schema = kind === 'plan'
       ? OpenDesignPlanContractV2Schema
-      : StrategyRuntimeStateV2Schema;
+      : this.executionPolicy === 'adaptive_v1'
+        ? OdNextAdaptiveRuntimeStateV1Schema
+        : StrategyRuntimeStateV2Schema;
 
     if (block.exactOpen && block.exactClose) {
       const exactJson = jsonValue(block.body.trim());
@@ -458,7 +474,7 @@ export class OdNextMachineProtocolStream {
    * unchanged.
    */
   private normalizeMachineValue(kind: MachineKind, value: unknown): unknown {
-    if (kind !== 'runtime') return value;
+    if (kind !== 'runtime' || this.executionPolicy === 'adaptive_v1') return value;
     if (
       typeof value !== 'object'
       || value === null

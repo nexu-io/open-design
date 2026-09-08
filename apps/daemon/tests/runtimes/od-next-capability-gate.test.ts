@@ -554,6 +554,8 @@ describe('OD Next runtime capability gate', () => {
         eligible: false,
         reason: 'native_subagents_not_verified',
       });
+      expect(evaluateOdNextExecutionEligibility(capabilities, 'simple', 'adaptive_v1'))
+        .toEqual({ eligible: true, reason: 'eligible' });
     }
 
     for (const evidenceLevel of ['L0', 'L1'] as const) {

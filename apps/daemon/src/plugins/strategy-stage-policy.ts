@@ -3,7 +3,11 @@ import type {
   InstalledPluginRecord,
   PluginPipeline,
 } from '@open-design/contracts';
-import { OD_NEXT_PROMPT_STAGE_CONTRACT_V2 } from '@open-design/contracts';
+import {
+  OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID,
+  OD_NEXT_ADAPTIVE_PROMPT_STAGE_CONTRACT,
+  OD_NEXT_PROMPT_STAGE_CONTRACT_V2,
+} from '@open-design/contracts';
 import { validateBundledStrategyActivationV2 } from './strategy-provenance.js';
 
 export class InvalidOdNextStrategyPipelineV2Error extends Error {
@@ -40,15 +44,21 @@ export function enforceOdNextStrategyPipelineV2(input: {
     );
   }
   const stages = input.pipeline?.stages;
+  const adaptive = input.binding.promptRecipe === OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID;
+  const contract = adaptive
+    ? OD_NEXT_ADAPTIVE_PROMPT_STAGE_CONTRACT
+    : OD_NEXT_PROMPT_STAGE_CONTRACT_V2;
   if (
     !Array.isArray(stages)
-    || stages.length !== OD_NEXT_PROMPT_STAGE_CONTRACT_V2.length
+    || stages.length !== contract.length
   ) {
     throw new InvalidOdNextStrategyPipelineV2Error(
-      'OD Next V2 pipeline must contain exactly discovery, plan, and generate.',
+      adaptive
+        ? 'OD Next adaptive pipeline must contain exactly discovery and generate.'
+        : 'OD Next V2 pipeline must contain exactly discovery, plan, and generate.',
     );
   }
-  for (const [index, expected] of OD_NEXT_PROMPT_STAGE_CONTRACT_V2.entries()) {
+  for (const [index, expected] of contract.entries()) {
     const actual = stages[index];
     if (
       !actual
@@ -67,7 +77,7 @@ export function enforceOdNextStrategyPipelineV2(input: {
   // Return a fresh, version-owned shape so later generic policy code cannot
   // append a quality stage by mutating the manifest-derived array.
   return {
-    stages: OD_NEXT_PROMPT_STAGE_CONTRACT_V2.map((stage) => ({
+    stages: contract.map((stage) => ({
       id: stage.id,
       atoms: [...stage.atoms],
     })),

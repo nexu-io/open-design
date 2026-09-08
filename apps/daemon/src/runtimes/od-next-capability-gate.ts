@@ -680,7 +680,10 @@ export const OD_NEXT_REQUIRED_ADVERTISED_CAPABILITIES: Readonly<
 export function odNextAdvertisedCapabilityGap(input: {
   agentId: string;
   advertised: RuntimeCapabilityMap | null;
+  executionPolicy?: 'plan_build_v2' | 'adaptive_v1';
 }): string[] {
+  // Adaptive tasks can execute serially and never inject host Build Packages.
+  if (input.executionPolicy === 'adaptive_v1') return [];
   const required = OD_NEXT_REQUIRED_ADVERTISED_CAPABILITIES[input.agentId];
   if (!required || required.length === 0) return [];
   const advertised = input.advertised ?? {};
@@ -711,10 +714,12 @@ export function evaluateOdNextExecutionEligibility(
     };
   },
   _executionMode: OdNextExecutionMode,
+  executionPolicy: 'plan_build_v2' | 'adaptive_v1' = 'plan_build_v2',
 ): { eligible: boolean; reason: OdNextExecutionEligibilityReason } {
   if (capabilities.nativeSessionContinuation.support !== 'verified') {
     return { eligible: false, reason: 'native_continuation_not_verified' };
   }
+  if (executionPolicy === 'adaptive_v1') return { eligible: true, reason: 'eligible' };
   if (capabilities.nativeSubagents.support !== 'verified') {
     return { eligible: false, reason: 'native_subagents_not_verified' };
   }

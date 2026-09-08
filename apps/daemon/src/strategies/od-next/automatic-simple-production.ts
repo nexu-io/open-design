@@ -57,6 +57,7 @@ export function projectStrategyTask(
   const terminal = TERMINAL_OUTCOMES.has(task.outcome);
   return {
     taskExecutionId: task.taskExecutionId,
+    executionPolicy: task.executionPolicy,
     strategy: {
       id: task.strategyId,
       version: task.strategyVersion,

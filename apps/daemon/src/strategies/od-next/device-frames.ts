@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
-import { lstat, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  AppliedStrategyBindingV2Schema,
   OD_NEXT_DEVICE_FRAME_ROOT,
+  OD_NEXT_LAYOUT_PRIMITIVES_FILE,
   OD_NEXT_MANAGED_RESOURCE_FILES,
   OD_NEXT_STRATEGY_ID,
   detectOdNextLayoutPrimitives,
@@ -13,9 +15,9 @@ import {
   type AppliedPluginSnapshot,
   type OdNextDevicePlatformResolutionV1,
 } from '@open-design/contracts';
+import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 
-import { resolvePluginFolder } from '../../plugins/registry.js';
-import { loadBundledStrategyPromptAssetsV2 } from '../../plugins/strategy-package.js';
+import { readControlledStrategyAsset, StrategyPackageIdentityError } from '../../plugins/strategy-package.js';
 
 export interface OdNextTaskResource {
   path: string;
@@ -88,29 +90,51 @@ export interface OdNextDeviceFrameStagingResult {
 
 /**
  * Load the selected task profile's declared resources for an applied OD Next
- * snapshot, re-verified against the snapshot's package identity. Returns an
- * empty list for non-strategy snapshots and for profiles that ship nothing.
+ * snapshot. Its frozen resource digests remain authoritative after a bundled
+ * prompt or manifest update; no current manifest may add resources to an old
+ * task. Only daemon-managed resource paths can be read through this boundary.
  */
 export async function loadOdNextTaskResourcesForSnapshot(input: {
   bundledPluginsDir: string;
   snapshot: Pick<AppliedPluginSnapshot, 'pluginId' | 'strategy'> | null | undefined;
 }): Promise<OdNextTaskResource[]> {
-  const binding = input.snapshot?.strategy;
-  if (!binding || input.snapshot?.pluginId !== OD_NEXT_STRATEGY_ID) return [];
-  const folder = path.join(input.bundledPluginsDir, 'scenarios', OD_NEXT_STRATEGY_ID);
-  const resolved = await resolvePluginFolder({
-    folder,
-    folderId: OD_NEXT_STRATEGY_ID,
-    sourceKind: 'bundled',
-    source: folder,
-    trust: 'bundled',
-  });
-  if (!resolved.ok) {
-    throw new Error(`Bundled OD Next strategy is unavailable: ${resolved.errors.join('; ')}`);
+  if (!input.snapshot?.strategy || input.snapshot.pluginId !== OD_NEXT_STRATEGY_ID) return [];
+  const binding = AppliedStrategyBindingV2Schema.parse(input.snapshot.strategy);
+  if (strategyPackageHashFromDigests(binding.assetDigests) !== binding.packageHash) {
+    throw new StrategyPackageIdentityError('Frozen OD Next resource roster failed package hash validation.');
   }
-  return loadBundledStrategyPromptAssetsV2({ plugin: resolved.record, binding })
-    .taskResources
-    .map((resource) => ({ path: resource.path, text: resource.text }));
+  const taskType = binding.selectedTaskProfile.taskType;
+  if (taskType !== 'prototype') return [];
+  const profileRoot = './assets/task-profiles/prototype';
+  if (binding.selectedTaskProfile.path !== `${profileRoot}.md`) {
+    throw new StrategyPackageIdentityError('Frozen OD Next resource profile path is not managed.');
+  }
+  const resources = OD_NEXT_MANAGED_RESOURCE_FILES.flatMap((name) => {
+    const resourcePath = name === OD_NEXT_LAYOUT_PRIMITIVES_FILE
+      ? `${profileRoot}/${name}`
+      : `${profileRoot}/device-frames/${name}`;
+    const frozen = binding.assetDigests.find((asset) => asset.path === resourcePath);
+    return frozen ? [frozen] : [];
+  });
+  if (resources.length === 0) return [];
+  const folder = path.join(input.bundledPluginsDir, 'scenarios', OD_NEXT_STRATEGY_ID);
+  const bundledRoot = await realpath(input.bundledPluginsDir);
+  const resourceRoot = await realpath(folder);
+  const relative = path.relative(bundledRoot, resourceRoot);
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new StrategyPackageIdentityError('Bundled OD Next resource root escapes the bundled directory.');
+  }
+  return resources.map((resource) => {
+    const bytes = readControlledStrategyAsset(resourceRoot, resource.path);
+    if (createHash('sha256').update(bytes).digest('hex') !== resource.sha256) {
+      throw new StrategyPackageIdentityError(`Frozen OD Next resource digest changed: ${resource.path}`);
+    }
+    try {
+      return { path: resource.path, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+    } catch {
+      throw new StrategyPackageIdentityError(`Frozen OD Next resource is not valid UTF-8: ${resource.path}`);
+    }
+  });
 }
 
 function digest(text: string): string {

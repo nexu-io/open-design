@@ -4,6 +4,7 @@ import {
   resolveQuestionFormStrategyTaskExecutionId,
   strategyBlockedMessageFields,
   strategySettledMessageFields,
+  strategyTaskIdentityMessageFields,
 } from '../../src/runtime/strategy-question-continuation';
 
 describe('question-form strategy continuation handle recovery', () => {
@@ -65,6 +66,24 @@ function blockedProjection(
     ...overrides,
   } as StrategyTaskProjectionV2;
 }
+
+describe('strategyTaskIdentityMessageFields', () => {
+  it('carries the frozen adaptive policy before a running task settles', () => {
+    expect(strategyTaskIdentityMessageFields(blockedProjection({
+      executionPolicy: 'adaptive_v1',
+      outcome: 'running',
+      terminal: false,
+      route: null,
+    }))).toEqual({
+      strategyTaskExecutionId: 'task-1',
+      strategyTaskExecutionPolicy: 'adaptive_v1',
+    });
+    expect(strategyTaskIdentityMessageFields(blockedProjection())).toEqual({
+      strategyTaskExecutionId: 'task-1',
+    });
+    expect(strategyTaskIdentityMessageFields(undefined)).toEqual({});
+  });
+});
 
 describe('strategyBlockedMessageFields', () => {
   it('derives message termination fields from a blocked terminal projection', () => {

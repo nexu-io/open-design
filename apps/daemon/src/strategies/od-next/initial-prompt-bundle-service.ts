@@ -5,6 +5,7 @@ import {
   OdNextRuntimeCapabilitySnapshotV1Schema,
   detectOdNextDevicePlatformFromText,
   executionProfileFromStreamFormat,
+  strategyExecutionPolicyForRecipe,
   type OdNextPromptBundleHeadV2,
   type OdNextPromptBundleRecipeIdentityV2,
   type OdNextStrategyRequestRecipeV2,
@@ -235,7 +236,9 @@ export async function resolveOdNextPromptRecipeForRun(input: {
     }
     capabilitySnapshot = capability.snapshot;
   }
-  const eligibility = evaluateOdNextExecutionEligibility(capabilitySnapshot, 'complex');
+  const eligibility = evaluateOdNextExecutionEligibility(
+    capabilitySnapshot, 'complex', strategyExecutionPolicyForRecipe(resolvedRecipe.recipe),
+  );
   if (!eligibility.eligible && !input.syntheticCanary) {
     throw new Error(
       `OD Next runtime planning facts unavailable: ${eligibility.reason}`,
@@ -249,7 +252,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
       inputRefs: ['request'],
       productionRoutes: catalog.productionRoutes,
       outputKinds: catalog.outputKinds,
-      nativeChildLifecycleVerified: eligibility.eligible,
+      nativeChildLifecycleVerified: evaluateOdNextExecutionEligibility(capabilitySnapshot, 'complex').eligible,
     },
   };
 }

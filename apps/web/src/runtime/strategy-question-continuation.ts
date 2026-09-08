@@ -1,9 +1,23 @@
 import type {
+  ChatMessage,
   ChatRunStatusResponse,
   StrategyTaskProjectionV2,
 } from '@open-design/contracts';
 
 type FetchRunStatus = (runId: string) => Promise<ChatRunStatusResponse | null>;
+
+/** Keep live SSE and status recovery on the same frozen rendering policy as history. */
+export function strategyTaskIdentityMessageFields(
+  strategyTask: StrategyTaskProjectionV2 | undefined,
+): Pick<ChatMessage, 'strategyTaskExecutionId' | 'strategyTaskExecutionPolicy'> {
+  if (!strategyTask) return {};
+  return {
+    strategyTaskExecutionId: strategyTask.taskExecutionId,
+    ...(strategyTask.executionPolicy
+      ? { strategyTaskExecutionPolicy: strategyTask.executionPolicy }
+      : {}),
+  };
+}
 
 /**
  * Recover the daemon-issued strategy task handle when the question form and

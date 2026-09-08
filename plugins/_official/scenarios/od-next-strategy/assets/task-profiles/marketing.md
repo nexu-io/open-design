@@ -1,23 +1,25 @@
-# OD Next Marketing Task Profile v2.0.0
+# OD Next Marketing Task Profile v2.1.0
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics and the artifact
-contract bind to the V2 machine contract at the recorded taskProfileVersion.
+Planning depth, clarification, execution, and the ship-on-write boundary
+follow the general orchestration Skill. This profile supplies task-specific
+requirements and artifact constraints; it does not require a complete machine
+plan or a resolved profile object. User-requested answers, discussion, and
+plan-only work follow the Core Strategy's requested-delivery-stage rule.
 
-## Profile fields
+## Requirements to consider
 
 Resolve channel, dimensions and aspect ratio, audience, communication goal,
 primary message and core selling point, call to action, brand assets, locked
-copy, legal constraints, and required size variants. Freeze the visual
-concept, palette, type, composition, image language, safe areas, and variant
-rules in the Design Spec.
+copy, legal constraints, and required size variants. Keep the visual concept,
+palette, type, composition, image language, safe areas, and variant rules
+consistent.
 
-Never silently drop a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into
-explicit assumptions with risks disclosed in prose. Legal and compliance
-requirements must never be omitted, even when the user does not mention them.
+Resolve meaningful gaps using available context, or follow the general
+orchestration Skill to ask for a material decision or state reversible
+assumptions with their impact. Legal and compliance requirements must never be
+omitted, even when the user does not mention them.
 
 Quality focus: first visual focal point, brand accuracy, channel fit, text
 readability, clear CTA, and asset and factual fidelity.
@@ -131,7 +133,7 @@ set in single-ink black rather than four-color overprint — are applied by
 product-side rendering at export. The Agent builds the canvas at physical
 dimensions in the HTML source artifact, keeps key content ≥5mm from the trim
 line, and writes the print parameters above into the delivery notes and the
-Build Package.
+assigned work item.
 
 ### Avoid templated AI visuals
 
@@ -156,7 +158,7 @@ Build Package.
   the choice in one sentence.
 
 When the task configuration specifies a visual style, adopt it as the primary
-visual approach and record it in the Design Spec: big-type poster styles make
+visual approach and apply it consistently: big-type poster styles make
 typography the subject; photographic styles make the photo the subject with
 text overlaid; gradient-block and geometric-abstract styles carry the
 information through graphic structure. The chosen style neither exempts the
@@ -179,10 +181,11 @@ Meet the following in one pass, while writing the source:
   image or PDF that Open Design's engineering has not yet rendered as
   completed.
 
-## Build Packages
+## Collaboration boundaries
 
-Use simple mode for one concept and a small coherent variant set. Complex
-mode may split independent creative directions or dimension groups only after
-the key visual, core message, brand rules, source assets, and Design Spec are
-frozen; mechanical scaling is forbidden. Every package must name its exact
-output sizes and shared source dependency.
+The main Agent chooses whether delegation helps. One concept and a small
+coherent variant set can stay in one context. Split independent requested
+creative directions or dimension groups only with clear shared key visuals,
+core message, brand rules, and source assets. Name the exact output sizes and
+shared source dependencies; mechanical scaling is forbidden. Serial execution
+remains valid when it meets the user's requirements.

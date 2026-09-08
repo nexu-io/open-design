@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   composeSystemPrompt as composeContractsSystemPrompt,
+  composeOdNextStrategyRequestPromptV2,
   type AppliedPluginSnapshot,
   type InstalledPluginRecord,
   type OdNextStrategyRequestRecipeV2,
@@ -99,8 +100,38 @@ afterAll(() => {
   db.close();
 });
 
-describe('OD Next V2 request recipe wiring', () => {
-  it('composes the real package and atom bodies as one planning/Build-only golden', async () => {
+describe('OD Next adaptive request recipe wiring', () => {
+  it.each(['prototype', 'ppt', 'marketing', 'hyperframes', 'image'] as const)(
+    'assembles the real %s profile without reinstating mandatory planning',
+    async (taskType) => {
+      const binding = createBundledStrategyBindingV2({ plugin, taskType });
+      const profileSnapshot = {
+        ...applyPlugin({
+          plugin,
+          inputs: {},
+          registry: EMPTY_REGISTRY,
+          internalStrategyBinding: binding,
+        }).result.appliedPlugin,
+        snapshotId: `snapshot-adaptive-${taskType}`,
+      };
+      const recipe = await resolveRecipe({ activeSnapshot: profileSnapshot });
+      if (!recipe) throw new Error('expected adaptive recipe');
+      const prompt = composeSystemPrompt({ odNextStrategyRecipe: recipe });
+
+      expect(recipe.recipe).toBe('od-next-adaptive-v1');
+      expect(recipe.activeStages.map((stage) => stage.name)).toEqual(['discovery', 'generate']);
+      expect(prompt.match(/^## Task Skill —/gm) ?? []).toHaveLength(taskType === 'image' ? 0 : 1);
+      expect(prompt).toContain('Later material questions remain allowed');
+      expect(prompt).toContain('If they ask only for a plan');
+      expect(prompt).toContain('Never perform any post-generation quality action');
+      expect(prompt).not.toMatch(/open-design\.plan-contract\/v2|planning-only|ask no second question round/);
+      expect(prompt).not.toMatch(/## Active stage: plan|freeze(?:s)? its decisions before Production/);
+      expect(prompt).not.toContain('Before writing any artifact files');
+      expect(prompt).not.toContain("agent's next turn must build");
+    },
+  );
+
+  it('composes the real adaptive package without mandatory planning or a post-generation loop', async () => {
     const recipe = await resolveRecipe();
     expect(recipe).not.toBeNull();
     if (!recipe) throw new Error('expected OD Next recipe');
@@ -140,19 +171,18 @@ describe('OD Next V2 request recipe wiring', () => {
     expect(prompt).toContain('compact operator interfaces');
     expect(prompt).toContain('Use concise product language.');
     expect(prompt).toContain('Prioritize incident triage.');
-    expect(prompt).toContain('open-design.plan-contract/v2');
-    expect(prompt).toContain('open-design.strategy-state/v2');
-    expect(prompt).toContain('capabilitySnapshotHash');
-    expect(prompt).toContain('productionRoutes');
-    expect(prompt).toContain('decisionSummary');
+    expect(recipe.recipe).toBe('od-next-adaptive-v1');
+    expect(prompt).toContain('open-design.strategy-state/adaptive-v1');
+    expect(prompt).not.toContain('open-design.plan-contract/v2');
+    expect(prompt).not.toContain('open-design.strategy-state/v2');
+    expect(prompt).not.toContain('Before writing any artifact files');
+    expect(prompt).not.toContain("agent's next turn must build");
+    expect(prompt).not.toContain('planning-only');
     expect(prompt.split('\n').filter((line) => (
       line.startsWith('## Active stage:') || line.startsWith('### ')
     ))).toEqual(expect.arrayContaining([
       '## Active stage: discovery',
       '### discovery-question-form',
-      '## Active stage: plan',
-      '### direction-picker',
-      '### todo-write',
       '## Active stage: generate',
       '### file-write',
       '### live-artifact',
@@ -214,14 +244,14 @@ describe('OD Next V2 request recipe wiring', () => {
     await expect(resolveRecipe({
       loadAtomBodies: async (database, atomIds) => (
         (await loadBundledAtomBodiesStrict(database, atomIds))
-          .filter((entry) => entry.atomId !== 'direction-picker')
+          .filter((entry) => entry.atomId !== 'discovery-question-form')
       ),
-    })).rejects.toThrow(/direction-picker/i);
+    })).rejects.toThrow(/discovery-question-form/i);
 
     await expect(resolveRecipe({
       loadAtomBodies: async (database, atomIds) => (
         (await loadBundledAtomBodiesStrict(database, atomIds)).map((entry) => (
-          entry.atomId === 'todo-write'
+          entry.atomId === 'discovery-question-form'
             ? { ...entry, body: `${entry.body}\n\n# Critique Theater` }
             : entry
         ))
@@ -231,7 +261,7 @@ describe('OD Next V2 request recipe wiring', () => {
     await expect(resolveRecipe({
       loadAtomBodies: async (database, atomIds) => (
         (await loadBundledAtomBodiesStrict(database, atomIds)).map((entry) => (
-          entry.atomId === 'todo-write'
+          entry.atomId === 'discovery-question-form'
             ? { ...entry, body: `${entry.body}\n\n### Hidden subsection` }
             : entry
         ))
@@ -241,7 +271,7 @@ describe('OD Next V2 request recipe wiring', () => {
     await expect(resolveRecipe({
       loadAtomBodies: async (database, atomIds) => (
         (await loadBundledAtomBodiesStrict(database, atomIds)).map((entry) => (
-          entry.atomId === 'todo-write'
+          entry.atomId === 'discovery-question-form'
             ? {
                 ...entry,
                 body: `${entry.body}\n\nRender-and-inspect using a browser screenshot of the DOM, then fix after inspection.`,
@@ -333,7 +363,7 @@ describe('OD Next V2 request recipe wiring', () => {
       },
     };
     await expect(resolveRecipe({ activeSnapshot: pipelineDrift })).rejects.toThrow(
-      /exactly discovery, plan, and generate/i,
+      /exactly discovery and generate/i,
     );
 
     const topLevelPollution = {
@@ -348,7 +378,7 @@ describe('OD Next V2 request recipe wiring', () => {
 
     const stagePollution = {
       stages: snapshot.pipeline!.stages.map((stage, index) => (
-        index === 2 ? { ...stage, acceptanceChecklist: ['review artifact'] } : stage
+        index === 1 ? { ...stage, acceptanceChecklist: ['review artifact'] } : stage
       )),
     } as PluginPipeline;
     expect(() => enforceOdNextStrategyPipelineV2({

@@ -1,22 +1,6 @@
-// Regression: OD Next admission must verify what the *installed* CLI
-// advertises, not only what the bundled fixture registry says the runtime
-// *path* is capable of.
-//
-// `claude.buildArgs` refuses to launch an admitted OD Next Run whose CLI does
-// not advertise `--forward-subagent-text`. Admission used to derive
-// `runtimeCapabilityVerified` purely from the bundled capability fixture plus a
-// `--version` probe, so a Claude build without that flag was still admitted and
-// the user's Run then died at spawn with AGENT_EXECUTION_FAILED.
-//
-// The symptom hid on developer machines: a real Claude Code install had already
-// populated `agentCapabilities` through full detection, so the cached map
-// answered "advertised" for a fake CLI that never advertised anything. On a
-// host with no Claude Code (CI) the map was empty and every OD Next-eligible
-// design run failed.
-//
-// Correct behaviour: an installed CLI that does not advertise the flags OD Next
-// will demand loses admission and takes the ordinary route, and the Run
-// succeeds.
+// Adaptive execution can complete serially without optional native-child flags.
+// Keep admission and launch aligned: missing flags must not cause a fallback or
+// a spawn failure. Frozen V2 capability requirements remain covered separately.
 import type { Server } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -53,7 +37,7 @@ describe('OD Next admission vs advertised CLI capabilities', () => {
     binDir = null;
   });
 
-  it('does not admit a Claude build whose help omits --forward-subagent-text', async () => {
+  it('runs an adaptive task serially when Claude omits optional child flags', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-next-advertised-caps-'));
     const fakeClaude = await writeUnadvertisedClaude(binDir, 'claude-unadvertised');
 
@@ -63,22 +47,16 @@ describe('OD Next admission vs advertised CLI capabilities', () => {
       agentCliEnv: { claude: { CLAUDE_BIN: fakeClaude } },
       telemetry: { metrics: false, content: false, artifactManifest: false },
       privacyDecisionAt: Date.now(),
-      // This case is about an opted-in installation still refusing a build
-      // that cannot carry the strategy, so the opt-in has to be explicit —
-      // otherwise the run is declined for being switched off and never
-      // reaches the capability gate at all.
+      // Exercise active admission, not the installation's default opt-out.
       odNextStrategyMode: 'active',
     });
 
     const run = await createAndWaitForRun(started.url);
 
-    // Admission, not spawn, is where the gap is enforced.
-    expect(run.strategyRolloutDecision?.effectiveMode).not.toBe('active');
-    expect(run.strategyRolloutDecision?.reasonCodes ?? []).toContain(
-      'od_next_rollout_capability_advertised_capability_missing',
-    );
-    expect(run.strategyTask).toBeUndefined();
-    // The ordinary route still runs the turn end to end.
+    expect(run.strategyRolloutDecision?.effectiveMode).toBe('active');
+    expect(run.strategyTask, JSON.stringify(run.strategyTask)).toMatchObject({
+      executionPolicy: 'adaptive_v1', inputStage: 'request', outcome: 'completed',
+    });
     expect(run.error ?? null).toBeNull();
     expect(run.status).toBe('succeeded');
   });
@@ -91,11 +69,28 @@ const fs = require('node:fs');
 if (process.argv.includes('--version')) { console.log('claude-code 2.1.233 (Claude Code)'); process.exit(0); }
 if (process.argv.includes('--help')) { console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]'); process.exit(0); }
 const W = (o) => fs.writeSync(1, JSON.stringify(o) + '\\n');
-W({ type: 'system', subtype: 'init', model: 'advertised-caps-test' });
-W({ type: 'assistant', message: { id: 'm_done', content: [
-  { type: 'text', text: 'Done.' },
-], stop_reason: 'end_turn' } });
-process.exit(0);
+if (process.argv.includes('--forward-subagent-text') || process.argv.includes('--agents')) {
+  throw new Error('Optional child flags must not be required for serial execution.');
+}
+let input = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+  if (!input.includes('\\n')) return;
+  const user = JSON.parse(input.slice(0, input.indexOf('\\n')));
+  const prompt = typeof user.message.content === 'string'
+    ? user.message.content : user.message.content.map((block) => block.text || '').join('');
+  if (!prompt.includes('open-design.strategy-state/adaptive-v1')) throw new Error('Expected adaptive instructions.');
+  W({ type: 'system', subtype: 'init', model: 'advertised-caps-test',
+    session_id: '019fffaa-0000-7000-8000-000000000077' });
+  W({ type: 'assistant', message: { id: 'm_done', content: [
+    { type: 'text', text: 'Plan: define the page, then implement it after approval.'
+      + '\\n<open-design-runtime-state>\\n' + JSON.stringify({
+        schema: 'open-design.strategy-state/adaptive-v1', outcome: 'completed', deliveryKind: 'plan',
+      }) + '\\n</open-design-runtime-state>' },
+  ], stop_reason: 'end_turn' } });
+  process.exit(0);
+});
 `, 'utf8');
   await chmod(bin, 0o755);
   return bin;
@@ -133,8 +128,8 @@ async function createAndWaitForRun(url: string): Promise<RunStatus> {
       assistantMessageId: `assistant_caps_${randomUUID()}`,
       clientRequestId: `client_caps_${randomUUID()}`,
       agentId: 'claude',
-      message: 'build a prototype',
-      currentPrompt: 'build a prototype',
+      message: 'Only plan a prototype. Do not create files yet.',
+      currentPrompt: 'Only plan a prototype. Do not create files yet.',
     }),
   });
   expect(runResponse.status).toBe(202);

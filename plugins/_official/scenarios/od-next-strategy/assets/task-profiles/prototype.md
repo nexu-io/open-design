@@ -1,24 +1,25 @@
-# OD Next Prototype Task Profile v2.2.0
+# OD Next Prototype Task Profile v2.3.0
 
 > Rollout: active
 
-Task routing, clarification, Build, and the ship-on-write boundary follow the
-general orchestration Skill. Profile field semantics, required-field rules,
-and the artifact contract bind to the V2 machine contract at the recorded
-taskProfileVersion; this file is the prototype projection of that contract.
+Planning depth, clarification, execution, and the ship-on-write boundary
+follow the general orchestration Skill. This profile supplies task-specific
+requirements and artifact constraints; it does not require a complete machine
+plan or a resolved profile object. User-requested answers, discussion, and
+plan-only work follow the Core Strategy's requested-delivery-stage rule.
 
-## Profile fields
+## Requirements to consider
 
 Resolve product surface and target device, audience, primary flow, required
 screens and interactions, fidelity, baseline artifact, content locks, brand
-references, and required output format. Put the resolved palette, type scale,
+references, and required output format. Keep the resolved palette, type scale,
 spacing, component language, icon family, interaction states, and motion rules
-in the shared Design Spec.
+consistent across the output.
 
-Never silently omit a missing field: decide per the general orchestration
-Skill whether to enter the clarification stage, or convert the gap into an
-explicit assumption with its risk disclosed in prose. When fidelity is
-wireframe or low-fi, content and interaction-state requirements downgrade to
+Resolve meaningful gaps using available context, or follow the general
+orchestration Skill to ask for a material decision or state a reversible
+assumption with its impact. When fidelity is wireframe or low-fi, content and
+interaction-state requirements downgrade to
 structural sketches and the visual-direction rules below do not apply; when
 fidelity is unspecified, default to high fidelity.
 
@@ -79,7 +80,7 @@ and this profile's defaults fill only what is left unspecified.
   by scenario and vocalize the choice in one sentence.
 
 When task configuration provides the following values, execute them and
-record them in the Design Spec:
+apply them consistently while writing:
 
 - **Visual style** sets the palette's character, the type pairing, and
   corner-radius and shadow intensity; the chosen style never exempts the
@@ -309,10 +310,11 @@ Meet the following in one pass, while writing the source:
 - Locked content, user-specified assets, and non-target regions stay
   untouched — no incidental edits.
 
-## Build Packages
+## Collaboration boundaries
 
-Use simple mode for a cohesive flow that benefits from one context. Complex
-mode may split only when the general orchestration Skill's independent-output
-conditions are met, and only along independently deliverable feature loops,
-roles, or device surfaces after navigation, content locks, and the Design
-Spec are frozen. Do not split one interaction loop across Children.
+The main Agent chooses whether to delegate. Keep a cohesive interaction flow
+in one context when splitting would break its consistency. When delegation
+helps, split along independently deliverable feature loops, roles, or device
+surfaces with shared navigation, content locks, and design decisions. Do not
+split one interaction loop across children. Full serial execution remains
+valid when it meets the user's requirements.

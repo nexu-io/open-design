@@ -5,13 +5,18 @@ import path from 'node:path';
 
 import { strategyPackageHashFromDigests } from '@open-design/plugin-runtime';
 import {
+  OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID,
+  OD_NEXT_PROMPT_RECIPE_ID,
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V1,
   OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2,
   OD_NEXT_REQUEST_TURN_SCHEMA_V1,
   serializeCanonicalXml,
   serializeOdNextPromptBundleV1,
+  parseOdNextPromptBundleV2,
+  serializeOdNextPromptBundleV2,
   type AppliedPluginSnapshot,
   type OpenDesignPlanContractV2,
+  type StrategyPromptRecipe,
 } from '@open-design/contracts';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,7 +32,9 @@ import {
   createStrategyTaskExecution,
   getStrategyTaskExecution,
   getStrategyTaskExecutionByRunId,
+  getAwaitingClarificationStrategyTaskExecution,
   migrateStrategyTaskStore,
+  strategyTaskTurnsForRunIds,
 } from '../../src/strategies/task-store.js';
 import {
   TEST_PROMPT_BUNDLE,
@@ -125,7 +132,7 @@ function compareAndTransitionStrategyTaskExecution(
   });
 }
 
-function strategyBinding() {
+function strategyBinding(promptRecipe: StrategyPromptRecipe = OD_NEXT_PROMPT_RECIPE_ID) {
   const assetDigests = [
     { path: './SKILL.md', sha256: 'a'.repeat(64) },
     { path: './assets/task-profiles/prototype.md', sha256: 'b'.repeat(64) },
@@ -143,11 +150,14 @@ function strategyBinding() {
       sha256: 'b'.repeat(64),
     },
     taskProfileVersions: ['2.0.0'],
-    promptRecipe: 'od-next-plan-build-v2' as const,
+    promptRecipe,
   };
 }
 
-function createStrategySnapshot(db: Database.Database): AppliedPluginSnapshot {
+function createStrategySnapshot(
+  db: Database.Database,
+  promptRecipe: StrategyPromptRecipe = OD_NEXT_PROMPT_RECIPE_ID,
+): AppliedPluginSnapshot {
   return createSnapshot(db, {
     projectId: 'project-1',
     conversationId: 'conversation-1',
@@ -155,7 +165,7 @@ function createStrategySnapshot(db: Database.Database): AppliedPluginSnapshot {
     pluginId: 'od-next-strategy',
     pluginVersion: '2.0.0',
     manifestSourceDigest: 'manifest-digest',
-    strategy: strategyBinding(),
+    strategy: strategyBinding(promptRecipe),
     taskKind: 'new-generation',
     inputs: {},
     resolvedContext: { items: [] },
@@ -239,6 +249,12 @@ function createTask(
   runId = 'run-request',
   taskExecutionId = 'task-1',
 ) {
+  const identity = strategyTaskCreateIdentityFixture();
+  if (snapshot.strategy?.promptRecipe === OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID) {
+    const bundle = parseOdNextPromptBundleV2(identity.promptBundleText);
+    bundle.context.recipeIdentity.recipe = OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID;
+    identity.promptBundleText = serializeOdNextPromptBundleV2(bundle);
+  }
   return createStrategyTaskExecution(db, {
     taskExecutionId,
     projectId: 'project-1',
@@ -246,7 +262,7 @@ function createTask(
     snapshotId: snapshot.snapshotId,
     selectedAgentId: AGENT_ID,
     initialRunId: runId,
-    ...strategyTaskCreateIdentityFixture(),
+    ...identity,
     createdAt: 100,
   });
 }
@@ -266,6 +282,214 @@ describe('durable strategy task store', () => {
     vi.restoreAllMocks();
     closeDatabase();
     fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('freezes adaptive semantics on a new task while an existing task stays legacy', () => {
+    const legacy = createTask(db, snapshot);
+    const adaptiveSnapshot = createStrategySnapshot(db, OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID);
+    const adaptive = createTask(db, adaptiveSnapshot, 'adaptive-request', 'adaptive-task');
+    expect(legacy.executionPolicy).toBe('plan_build_v2');
+    expect(adaptive.executionPolicy).toBe('adaptive_v1');
+    const history = strategyTaskTurnsForRunIds(db, [legacy.initialRunId, adaptive.initialRunId]);
+    expect(history.get(legacy.initialRunId)).toMatchObject({
+      taskExecutionId: legacy.taskExecutionId,
+      executionPolicy: 'plan_build_v2',
+    });
+    expect(history.get(adaptive.initialRunId)).toMatchObject({
+      taskExecutionId: adaptive.taskExecutionId,
+      executionPolicy: 'adaptive_v1',
+    });
+    const done = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: adaptive.taskExecutionId, expectedRevision: adaptive.revision,
+      to: { route: null, inputStage: 'request', outcome: 'completed', executionMode: null },
+    });
+    expect(done).toMatchObject({ outcome: 'completed', executionPolicy: 'adaptive_v1', route: null, executionMode: null });
+    expect(done.planContract).toBeUndefined();
+    expect(done.runs).toHaveLength(1);
+    expect(getStrategyTaskExecution(db, legacy.taskExecutionId)).toEqual(legacy);
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: legacy.taskExecutionId, expectedRevision: legacy.revision,
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'completed', executionMode: 'simple' },
+    })).toThrow(/cannot complete before Production/i);
+  });
+
+  it('continues repeated adaptive questions on the same task and counts actual Runs', () => {
+    const adaptiveSnapshot = createStrategySnapshot(db, OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID);
+    let task = createTask(db, adaptiveSnapshot);
+    const originalBundle = task.promptBundle;
+    for (let round = 1; round <= 3; round += 1) {
+      task = compareAndTransitionStrategyTaskExecution(db, {
+        taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+        to: { route: null, inputStage: task.inputStage, outcome: 'clarification_required', executionMode: null },
+      });
+      expect(task.clarificationCount).toBe(round - 1);
+      expect(getAwaitingClarificationStrategyTaskExecution(db, {
+        projectId: task.projectId, conversationId: task.conversationId,
+      })?.taskExecutionId).toBe(task.taskExecutionId);
+      task = compareAndTransitionStrategyTaskExecution(db, {
+        taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+        to: { route: null, inputStage: 'clarification', outcome: 'running', executionMode: null },
+        nextRun: { runId: `answer-${round}`, sourceRunId: task.latestRunId },
+      });
+      expect(task.clarificationCount).toBe(round);
+    }
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: null, inputStage: 'clarification', outcome: 'completed', executionMode: null },
+    });
+    expect(task.runs.map((run) => run.inputStage)).toEqual(['request', 'clarification', 'clarification', 'clarification']);
+    expect(task.promptBundle).toEqual(originalBundle);
+    closeDatabase();
+    db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toEqual(task);
+  });
+
+  it('rejects adaptive automatic continuation, stale answers, and Plan Contracts', () => {
+    const adaptiveSnapshot = createStrategySnapshot(db, OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID);
+    let task = createTask(db, adaptiveSnapshot);
+    const continueInput = () => ({
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: null, inputStage: 'clarification' as const, outcome: 'running' as const, executionMode: null },
+      nextRun: { runId: 'answer-1', sourceRunId: task.latestRunId },
+    });
+    expect(() => compareAndTransitionStrategyTaskExecution(db, continueInput())).toThrow(/latest waiting Run/i);
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: null, inputStage: 'request', outcome: 'completed', executionMode: null },
+      planContract: planContract(adaptiveSnapshot),
+    })).toThrow(/do not carry a Plan Contract/i);
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: null, inputStage: 'production', outcome: 'running', executionMode: null },
+    })).toThrow();
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: null, inputStage: 'request', outcome: 'clarification_required', executionMode: null },
+    });
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      ...continueInput(), nextRun: { runId: 'answer-1', sourceRunId: 'wrong-run' },
+    })).toThrow(/latest waiting Run/i);
+    const resumed = compareAndTransitionStrategyTaskExecution(db, continueInput());
+    expect(() => compareAndTransitionStrategyTaskExecution(db, continueInput())).toThrow(/revision changed/i);
+    const canceled = cancelStrategyTaskExecution(db, { taskExecutionId: task.taskExecutionId, expectedRevision: resumed.revision });
+    expect(canceled).toMatchObject({ outcome: 'canceled', route: null, executionMode: null });
+    expect(() => compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: canceled.revision,
+      to: { route: null, inputStage: 'clarification', outcome: 'running', executionMode: null },
+    })).toThrow(/terminal outcome canceled is sticky/i);
+  });
+
+  it('rejects a new recipe paired with an old frozen Bundle and persisted recipe drift', () => {
+    const adaptiveSnapshot = createStrategySnapshot(db, OD_NEXT_ADAPTIVE_PROMPT_RECIPE_ID);
+    expect(() => createStrategyTaskExecution(db, {
+      taskExecutionId: 'mismatch', projectId: 'project-1', conversationId: 'conversation-1',
+      snapshotId: adaptiveSnapshot.snapshotId, selectedAgentId: AGENT_ID, initialRunId: 'mismatch-run',
+      ...strategyTaskCreateIdentityFixture(),
+    })).toThrow(/frozen Snapshot recipe/i);
+    const task = createTask(db, adaptiveSnapshot);
+    persistBundleAs(db, task.taskExecutionId, OD_NEXT_PROMPT_BUNDLE_SCHEMA_V2, TEST_PROMPT_BUNDLE);
+    expect(() => getStrategyTaskExecution(db, task.taskExecutionId)).toThrow(/frozen Snapshot recipe/i);
+  });
+
+  it('migrates the legacy count constraint atomically without rewriting historical values or child rows', () => {
+    const legacy = new Database(':memory:');
+    try {
+      legacy.pragma('foreign_keys = ON');
+      legacy.exec(`
+        CREATE TABLE strategy_task_executions (
+          task_execution_id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL, conversation_id TEXT NOT NULL, updated_at INTEGER NOT NULL,
+          clarification_count INTEGER NOT NULL DEFAULT 0 CHECK (clarification_count BETWEEN 0 AND 1),
+          historical_payload BLOB
+        );
+        CREATE TABLE strategy_task_runs (
+          task_execution_id TEXT NOT NULL, run_id TEXT NOT NULL,
+          FOREIGN KEY(task_execution_id) REFERENCES strategy_task_executions(task_execution_id) ON DELETE CASCADE
+        );
+        CREATE INDEX retained_task_index ON strategy_task_executions(updated_at);
+        INSERT INTO strategy_task_executions VALUES ('old-task', 'p', 'c', 123, 1, X'000102FF');
+        INSERT INTO strategy_task_runs VALUES ('old-task', 'old-run');
+      `);
+      const before = legacy.prepare('SELECT task_execution_id, clarification_count, historical_payload FROM strategy_task_executions').get();
+      migrateStrategyTaskStore(legacy);
+      expect(legacy.prepare('SELECT task_execution_id, clarification_count, historical_payload FROM strategy_task_executions').get()).toEqual(before);
+      expect(legacy.prepare('SELECT task_execution_id, run_id FROM strategy_task_runs').all()).toEqual([{ task_execution_id: 'old-task', run_id: 'old-run' }]);
+      expect(legacy.pragma('foreign_keys', { simple: true })).toBe(1);
+      expect(legacy.pragma('foreign_key_check')).toEqual([]);
+      expect(legacy.prepare("SELECT name FROM sqlite_master WHERE name = 'retained_task_index'").get()).toBeDefined();
+      expect(() => legacy.prepare('UPDATE strategy_task_executions SET clarification_count = 2').run()).not.toThrow();
+      expect(() => legacy.prepare('UPDATE strategy_task_executions SET clarification_count = -1').run()).toThrow();
+      expect(() => migrateStrategyTaskStore(legacy)).not.toThrow();
+    } finally {
+      legacy.close();
+    }
+  });
+
+  it('reopens a full pre-upgrade database with the same frozen legacy task and permits its production continuation', () => {
+    let task = createTask(db, snapshot);
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: 'full_plan', inputStage: 'request', outcome: 'clarification_required', executionMode: null },
+    });
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: 'full_plan', inputStage: 'clarification', outcome: 'running', executionMode: null },
+      nextRun: { runId: 'legacy-answer', sourceRunId: task.latestRunId },
+    });
+    task = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: 'full_plan', inputStage: 'clarification', outcome: 'plan_ready', executionMode: 'simple' },
+      planContract: planContract(snapshot),
+    });
+    const snapshotBefore = getSnapshot(db, snapshot.snapshotId);
+    closeDatabase();
+
+    // Recreate only the old DDL in this disposable, otherwise complete database.
+    // The seed keeps the real task, snapshot, frozen Skill, and physical Run rows.
+    const historical = new Database(path.join(tempDir, 'app.sqlite'));
+    try {
+      const original = historical.prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'strategy_task_executions'",
+      ).get() as { sql: string };
+      const indexes = historical.prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'strategy_task_executions' AND sql IS NOT NULL",
+      ).all() as Array<{ sql: string }>;
+      historical.pragma('foreign_keys = OFF');
+      historical.transaction(() => {
+        historical.exec(original.sql
+          .replace('CREATE TABLE strategy_task_executions', 'CREATE TABLE legacy_strategy_task_executions')
+          .replace('CHECK (clarification_count >= 0)', 'CHECK (clarification_count BETWEEN 0 AND 1)'));
+        historical.exec(`
+          INSERT INTO legacy_strategy_task_executions SELECT * FROM strategy_task_executions;
+          DROP TABLE strategy_task_executions;
+          ALTER TABLE legacy_strategy_task_executions RENAME TO strategy_task_executions;
+        `);
+        for (const index of indexes) historical.exec(index.sql);
+      })();
+      historical.pragma('foreign_keys = ON');
+      expect(() => historical.prepare(
+        'UPDATE strategy_task_executions SET clarification_count = 2',
+      ).run()).toThrow(/CHECK constraint failed/);
+    } finally {
+      historical.close();
+    }
+
+    db = openDatabase(tempDir, { dataDir: tempDir });
+    expect(getStrategyTaskExecution(db, task.taskExecutionId)).toEqual(task);
+    expect(getSnapshot(db, snapshot.snapshotId)).toEqual(snapshotBefore);
+    expect(db.pragma('foreign_keys', { simple: true })).toBe(1);
+    expect(db.pragma('foreign_key_check')).toEqual([]);
+    const production = compareAndTransitionStrategyTaskExecution(db, {
+      taskExecutionId: task.taskExecutionId, expectedRevision: task.revision,
+      to: { route: 'full_plan', inputStage: 'production', outcome: 'running', executionMode: 'simple' },
+      nextRun: { runId: 'legacy-production', sourceRunId: task.latestRunId },
+    });
+    expect(production.executionPolicy).toBe('plan_build_v2');
+    expect(production.promptBundle).toEqual(task.promptBundle);
+    expect(production.planContract).toEqual(task.planContract);
+    expect(production.frozenSkillPackage).toEqual(task.frozenSkillPackage);
+    expect(production.runs.map((run) => run.inputStage))
+      .toEqual(['request', 'clarification', 'production']);
   });
 
   it('adds nullable/versioned tables without changing ordinary Run queries', () => {
