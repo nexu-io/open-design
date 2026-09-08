@@ -64,6 +64,7 @@ import {
   getDetectedRuntimeVersions,
 } from '../runtimes/detection.js';
 import {
+  evaluateOdNextAdmissionEligibility,
   odNextAdvertisedCapabilityGap,
   resolveBundledOdNextRuntimeCapability,
 } from '../runtimes/od-next-capability-gate.js';
@@ -1937,13 +1938,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           console.warn('[od-next-rollout] automatic capability preparation failed; using ordinary default', error);
         }
       }
-      const nativeSubagents = rolloutCapability?.snapshot?.nativeSubagents;
       const runtimeCapabilityVerified = Boolean(
         (rolloutVersions as ({ invocable?: boolean } | null))?.invocable === true
         && rolloutCapability?.reason === 'capability_resolved'
-        && rolloutCapability.snapshot?.nativeSessionContinuation.support === 'verified'
-        && nativeSubagents?.support === 'verified'
-        && (nativeSubagents.evidenceLevel === 'L2' || nativeSubagents.evidenceLevel === 'L3')
+        && rolloutCapability.snapshot
+        && evaluateOdNextAdmissionEligibility(rolloutCapability.snapshot).eligible
         && advertisedCapabilityGap.length === 0
       );
       // An installed CLI that does not advertise what OD Next will demand at

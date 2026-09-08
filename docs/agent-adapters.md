@@ -146,9 +146,13 @@ reasoning remains streamed as reasoning. Automatic same-run retries are disabled
 for AMR `none`; an explicit user Retry is a separate request.
 
 This initial Pi adapter accepts text and native file/shell tools. Image inputs
-and host MCP are rejected explicitly. Pi, Codex, DSH, and direct-model AMR paths have no validated OD Next native-child
-capability record in this adapter; they cannot reuse OpenCode's admission evidence. Explicit OD
-Next requirements therefore remain subject to the normal capability gate.
+and host MCP are rejected explicitly. Pi has its own OD Next continuation
+evidence from a real Vela/Pi replay against a loopback model: file writes,
+cross-process session loading, cancellation, and host deadlines. It can enter
+planning and simple production. The planner receives unverified native-child
+capability, and a complex plan remains blocked. Codex, DSH, and direct-model AMR
+paths remain outside OD Next admission. None of these paths reuse OpenCode's
+native-child evidence.
 Daemon-owned data continues to follow the root
 [`AGENTS.md` data-directory contract](../AGENTS.md#daemon-data-directory-contract).
 
