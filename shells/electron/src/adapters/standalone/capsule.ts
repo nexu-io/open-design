@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { materializeStandaloneBlob } from "@open-design/standalone";
-import { createElectronCapsuleLoader } from "@open-design/electron-kit/runtime";
+import { createElectronCapsuleLoader } from "@open-design/electron-kit/capsule-loader";
 import type { ElectronShellManifest } from "@open-design/electron-kit/contracts";
 import { loadElectronInstalledCapsuleSeed, resolveElectronStandaloneTarget } from "./installation.js";
 

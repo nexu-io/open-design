@@ -38,7 +38,8 @@ Shell and the typed adapter boundary consumed by repository tools.
 - `config/carrier.json` owns fixed preflight and physical lifecycle budgets;
   it is the only runtime policy file copied into the physical scene. Capsule
   owns `config/runtime.json` warmup/recovery policy and must not redeclare preflight.
-  Capsule protocol v4 expresses this boundary; regenerate local v1/v2/v3 experiment
+  Capsule protocol v5 expresses this boundary and carrier-owned final startup
+  commit; regenerate local v1/v2/v3/v4 experiment
   artifacts instead of adding compatibility aliases for their definition shape.
 - Compose the public electron-capsule startup presentation with product media;
   do not put loading HTML or DOM mechanics back into Shell adapters or kit.

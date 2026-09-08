@@ -5,12 +5,24 @@ import type { installElectronLaunchIngress } from "../session/launch-ingress.js"
 import type { ElectronRuntimeLog } from "../session/logging.js";
 import type { ElectronNamespacePaths } from "../session/namespace-paths.js";
 import type { ElectronProcessErrorLease } from "../session/process-errors.js";
-import type { ElectronStartupAttemptFence } from "./attempt.js";
+import type { ElectronStartupAttemptFence, ElectronStartupSignal } from "./attempt.js";
 import type { ElectronStartupCancellationSteps, ElectronStartupQuitBarrier } from "./cancellation.js";
 import type { ElectronPreflightResult } from "./preflight/index.js";
 
 export type ElectronCapsuleCleanup = Pick<ElectronStartupCancellationSteps,
   "disposeWarmup" | "settleRendererMount" | "releaseRendererIntegration" | "releaseStandaloneAttachment">;
+
+export type ElectronCapsuleReady = Readonly<{
+  signal: ElectronStartupSignal;
+  generationId: string;
+  /** Non-authoritative product notifications, only after the carrier commits. */
+  afterCommit?(): void | Promise<void>;
+}>;
+
+export type ElectronCapsuleStartup = Pick<ElectronStartupAttemptFence,
+  "attemptId" | "phase" | "bindingDigest" | "bind" | "accepts"> & Readonly<{
+    advance(signal: ElectronStartupSignal, phase: "runtime-ready" | "renderer-mounted"): void;
+  }>;
 
 /** Established carrier authority, passed in-process to one verified Capsule.
  * Capsule supplies cleanup for its owners; the carrier owns cancellation,
@@ -28,8 +40,8 @@ export type ElectronCapsuleSession = Readonly<{
   log: ElectronRuntimeLog;
   processErrors: ElectronProcessErrorLease;
   ingress: ReturnType<typeof installElectronLaunchIngress>;
-  activation: ElectronActivationAttempt;
-  startup: ElectronStartupAttemptFence;
-  startupQuit: ElectronStartupQuitBarrier;
+  activation: Pick<ElectronActivationAttempt, "stop">;
+  startup: ElectronCapsuleStartup;
+  startupQuit: Omit<ElectronStartupQuitBarrier, "commit">;
   registerCleanup(steps: ElectronCapsuleCleanup): void;
 }>;

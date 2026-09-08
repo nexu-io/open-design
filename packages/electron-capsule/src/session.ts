@@ -15,7 +15,7 @@ import {
 import {
   completeElectronShutdown, observeElectronInstallerHandoff, resolveElectronInstallerRecovery,
   ELECTRON_WARMUP_ATOMS, runElectronWarmupTopology, validateElectronRuntimeWarmupTopology,
-  type ElectronWarmupRun, type ElectronStartupSignal, type ElectronCapsuleSession,
+  type ElectronWarmupRun, type ElectronStartupSignal, type ElectronCapsuleSession, type ElectronCapsuleReady,
   focusElectronWindow,
   createElectronRendererMountAcknowledgement, mountElectronRendererLease,
   replaceElectronRendererLease, observeElectronRuntimeTerminal,
@@ -32,7 +32,7 @@ function requireWarmupState<T>(value: T | null, label: string): T {
 export async function runElectronCapsule(
   definition: ElectronShellDefinition,
   context: ElectronCapsuleSession,
-): Promise<void> {
+): Promise<ElectronCapsuleReady> {
   const { manifest, shell, presentation, paths, preflight, resourceRoot, nodeRuntime, processErrors } = context;
   const sessionNamespace = context.namespace;
   const runtimeRoot = paths.runtimeRoot;
@@ -73,6 +73,8 @@ export async function runElectronCapsule(
   const rendererShutdown = new AbortController();
   let rendererReplacement: Promise<unknown> | null = null;
   let rendererRecoveryParked = false;
+  let closing = false;
+  let removeQuitListener = () => {};
   const recoveringWindows = new WeakSet<BrowserWindow>();
   const rendererRecovery = definition.rendererRecovery;
   const crashBreaker = rendererRecovery == null ? null : new ElectronRendererCrashBreaker(rendererRecovery.policy);
@@ -182,7 +184,12 @@ export async function runElectronCapsule(
   });
 
   context.registerCleanup({
-    async disposeWarmup() { await warmup?.dispose(); },
+    async disposeWarmup() {
+      closing = true;
+      removeQuitListener();
+      rendererShutdown.abort(new Error("Electron startup cancelled"));
+      await warmup?.dispose();
+    },
     async settleRendererMount() { await rendererMount?.catch(() => undefined); },
     async releaseRendererIntegration() { await rendererLease?.releaseIntegration(); },
     async releaseStandaloneAttachment() {
@@ -336,17 +343,6 @@ export async function runElectronCapsule(
     pendingHandoffs.length > 0 ? "second-instance" : "initial-reveal",
   );
   if (splash != null && !splash.isDestroyed()) splash.destroy();
-  await context.startupQuit.guard(context.activation.commit());
-  context.startup.advance(startupSignal!, "committed");
-  context.log.write("startup.committed", { generationId: runtimeGeneration.id, presentation });
-  void Promise.resolve().then(() => definition.actions?.observeCommitted?.()).catch((error: unknown) => {
-    context.log?.write("shell.commit-observer.failed", { error });
-  });
-  for (const ingress of pendingHandoffs) {
-    if (ingress.type === "deep-link") dispatch(ingress.url);
-  }
-
-  let closing = false;
   let installerArming = Promise.resolve();
   const close = async () => {
     if (closing) return;
@@ -370,8 +366,9 @@ export async function runElectronCapsule(
       processErrors.dispose();
     }
   };
-  context.startupQuit.commit();
   const beforeQuit = (event: { preventDefault(): void }) => {
+    // Until the fixed carrier commits, its startup cancellation owns teardown.
+    if (context.startup.phase !== "committed") return;
     event.preventDefault();
     if (closing) return;
     void installerArming.catch((error: unknown) => {
@@ -384,6 +381,7 @@ export async function runElectronCapsule(
     });
   };
   app.on("before-quit", beforeQuit);
+  removeQuitListener = () => app.removeListener("before-quit", beforeQuit);
   void observeElectronRuntimeTerminal({
     runtime: runtimeStandaloneHandle,
     isClosing: () => closing,
@@ -418,4 +416,10 @@ export async function runElectronCapsule(
   });
   const smokeExitMs = Number(process.env.ELECTRON_KIT_SMOKE_EXIT_MS ?? "0");
   if (Number.isFinite(smokeExitMs) && smokeExitMs > 0) setTimeout(() => app.quit(), smokeExitMs).unref();
+  return { signal: startupSignal!, generationId: runtimeGeneration.id,
+    async afterCommit() {
+      for (const ingress of pendingHandoffs) if (ingress.type === "deep-link") dispatch(ingress.url);
+      await definition.actions?.observeCommitted?.();
+    },
+  };
 }

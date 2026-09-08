@@ -20,7 +20,7 @@ describe("independent Capsule build", () => {
   it("derives composite capability from authenticated Capsule and physical carrier without rewriting either", () => {
     const carrier = { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "a".repeat(64), digest: "b".repeat(64) } };
     const manifest = composeElectronCapsuleManifest({ content: {
-      schemaVersion: 1, protocol: "electron-capsule-v4", target: carrier.target, entrypoint: "capsule.cjs",
+      schemaVersion: 1, protocol: "electron-capsule-v5", target: carrier.target, entrypoint: "capsule.cjs",
       archive: { sha256: "c".repeat(64), size: 100, treeSha256: "d".repeat(64) },
     }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
     const before = JSON.stringify({ carrier, manifest });
@@ -45,7 +45,7 @@ describe("independent Capsule build", () => {
       archive: { url: "https://release.invalid/capsule.zip", sha256: "b".repeat(64), size: 100 },
     });
     const manifest = composeElectronCapsuleManifest({ content: {
-      schemaVersion: 1, protocol: "electron-capsule-v4", target: "darwin-arm64", entrypoint: "capsule.cjs",
+      schemaVersion: 1, protocol: "electron-capsule-v5", target: "darwin-arm64", entrypoint: "capsule.cjs",
       archive: { sha256: release.archive.sha256, size: release.archive.size, treeSha256: "c".repeat(64) },
     }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
     expect(assertElectronCapsuleReleaseManifest(release, manifest, "darwin-arm64")).toEqual(manifest);

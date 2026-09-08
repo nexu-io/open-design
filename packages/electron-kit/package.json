@@ -18,6 +18,10 @@
       "types": "./dist/runtime-api.d.ts",
       "default": "./dist/runtime-api.mjs"
     },
+    "./capsule-loader": {
+      "types": "./dist/runtime/startup/capsule.d.ts",
+      "default": "./dist/runtime/startup/capsule.mjs"
+    },
     "./renderer": {
       "types": "./dist/renderer-api.d.ts",
       "default": "./dist/renderer-api.mjs"

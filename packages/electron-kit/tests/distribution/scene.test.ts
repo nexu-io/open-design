@@ -77,7 +77,7 @@ describe("Electron scene", () => {
     const capsulePath = join(root, "capsule.zip");
     await writeFile(capsulePath, capsuleBytes);
     const capsuleContent = {
-      schemaVersion: 1 as const, protocol: "electron-capsule-v4" as const,
+      schemaVersion: 1 as const, protocol: "electron-capsule-v5" as const,
       target: "darwin-arm64" as const, entrypoint: "capsule.cjs" as const,
       archive: { sha256: createHash("sha256").update(capsuleBytes).digest("hex"),
         size: capsuleBytes.length, treeSha256: "c".repeat(64) },

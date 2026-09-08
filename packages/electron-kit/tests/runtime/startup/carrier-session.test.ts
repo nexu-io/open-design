@@ -5,7 +5,7 @@ import type { ElectronCapsuleModule, LoadedElectronCapsule } from "@/runtime/sta
 import type { ElectronShellManifest } from "@/contracts/index.js";
 
 const mock = vi.hoisted(() => ({
-  bind: vi.fn(), begin: vi.fn(), fail: vi.fn(), exit: vi.fn(), quit: vi.fn(), dispose: vi.fn(), log: vi.fn(),
+  bind: vi.fn(), begin: vi.fn(), commit: vi.fn(), fail: vi.fn(), exit: vi.fn(), quit: vi.fn(), dispose: vi.fn(), log: vi.fn(),
 }));
 vi.mock("electron", async () => {
   const { EventEmitter } = await import("node:events");
@@ -41,14 +41,18 @@ function capsule() {
           mutedColor: "#888888", initialLabel: "Starting", readyLabel: "Ready" } },
     })) as unknown as ElectronCapsuleModule["createElectronCapsuleDefinition"],
     runElectronCapsule: vi.fn<ElectronCapsuleModule["runElectronCapsule"]>(async (_definition, session) => {
-      session.startupQuit.commit();
+      const signal = session.startup.bind("e".repeat(64));
+      session.startup.advance(signal, "runtime-ready");
+      session.startup.advance(signal, "renderer-mounted");
+      return { signal, generationId: "f".repeat(64) };
     }),
   };
 }
 beforeEach(() => {
   vi.resetAllMocks();
   mock.bind.mockResolvedValue({ command: "/physical/platform/bin/node", env: {} });
-  mock.begin.mockResolvedValue({ attemptId: "test-attempt", fail: mock.fail });
+  mock.commit.mockResolvedValue(undefined);
+  mock.begin.mockResolvedValue({ attemptId: "test-attempt", fail: mock.fail, commit: mock.commit });
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 afterEach(() => { app.removeAllListeners(); vi.restoreAllMocks(); });
@@ -66,6 +70,83 @@ it("establishes physical integrity and activation before loading one Capsule in-
   expect(manifest.shell.version).toBe("0.1.0");
   expect(mock.log).toHaveBeenCalledWith("capsule.definition.loaded", { pid: process.pid, carrier: manifest.shell, shell });
   expect(mock.exit).not.toHaveBeenCalled();
+  expect(mock.commit).toHaveBeenCalledOnce();
+  expect(mock.log).toHaveBeenCalledWith("capsule.startup.ready", {
+    activationAttemptId: "test-attempt", generationId: "f".repeat(64), bindingDigest: "e".repeat(64),
+  });
+  expect(mock.log).toHaveBeenCalledWith("startup.committed", { generationId: "f".repeat(64), presentation: "headless" });
+});
+
+it("does not commit a partial Capsule startup or expose commit authority to it", async () => {
+  const module = capsule(), entered = Promise.withResolvers<void>(), complete = Promise.withResolvers<void>();
+  const original = module.runElectronCapsule.getMockImplementation()!;
+  module.runElectronCapsule.mockImplementation(async (definition, session) => {
+    expect(session.activation).not.toHaveProperty("commit");
+    expect(session.startupQuit).not.toHaveProperty("commit");
+    const ready = await original(definition, session);
+    entered.resolve();
+    await complete.promise;
+    return ready;
+  });
+  const running = runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
+  await Promise.race([entered.promise, running]);
+  expect(mock.exit).not.toHaveBeenCalled();
+  expect(mock.commit).not.toHaveBeenCalled();
+  complete.resolve();
+  await running;
+  expect(mock.commit).toHaveBeenCalledOnce();
+  expect(mock.exit).not.toHaveBeenCalled();
+});
+
+it.each(["missing", "binding", "generation"])("refuses a %s Capsule completion proof", async invalid => {
+  const module = capsule(), original = module.runElectronCapsule.getMockImplementation()!;
+  module.runElectronCapsule.mockImplementation(async (definition, session) => {
+    const ready = await original(definition, session);
+    return invalid === "missing" ? undefined as never : invalid === "generation" ? { ...ready, generationId: "invalid" }
+      : { ...ready, signal: { ...ready.signal, bindingDigest: "0".repeat(64) } };
+  });
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
+  expect(mock.commit).not.toHaveBeenCalled();
+  expect(mock.fail).toHaveBeenCalledOnce();
+  expect(mock.exit).toHaveBeenCalledWith(1);
+});
+
+it("keeps a failure after renderer readiness inside the uncommitted startup window", async () => {
+  const module = capsule(), original = module.runElectronCapsule.getMockImplementation()!;
+  module.runElectronCapsule.mockImplementation(async (definition, session) => {
+    await original(definition, session);
+    throw new Error("late Capsule initialization failed");
+  });
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
+  expect(mock.commit).not.toHaveBeenCalled();
+  expect(mock.fail).toHaveBeenCalledOnce();
+  expect(mock.exit).toHaveBeenCalledWith(1);
+});
+
+it("joins a pending durable commit before recording startup cancellation", async () => {
+  const entered = Promise.withResolvers<void>(), persisted = Promise.withResolvers<void>();
+  mock.commit.mockImplementation(() => { entered.resolve(); return persisted.promise; });
+  const running = runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => capsule() });
+  await entered.promise;
+  app.emit("before-quit", { preventDefault() {} });
+  expect(mock.fail).not.toHaveBeenCalled();
+  persisted.resolve();
+  await running;
+  expect(mock.fail).toHaveBeenCalledOnce();
+  expect(mock.log.mock.calls.some(([event]) => event === "startup.committed")).toBe(false);
+  expect(mock.quit).toHaveBeenCalledOnce();
+});
+
+it("rejects a Capsule trying to advance the carrier's final commit phase", async () => {
+  const module = capsule(), original = module.runElectronCapsule.getMockImplementation()!;
+  module.runElectronCapsule.mockImplementation(async (definition, session) => {
+    const ready = await original(definition, session);
+    session.startup.advance(ready.signal, "committed" as never);
+    return ready;
+  });
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
+  expect(mock.commit).not.toHaveBeenCalled();
+  expect(mock.fail).toHaveBeenCalledOnce();
 });
 
 it("cancels a pending Capsule load without invoking a late factory or startup", async () => {
@@ -129,6 +210,7 @@ it("cleans every registered Capsule owner before final cancellation even if one 
     });
     entered.resolve();
     await pending.promise;
+    throw new Error("cancelled startup must not finish");
   });
   const running = runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
   await entered.promise;

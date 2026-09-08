@@ -20,7 +20,7 @@ import {
   isElectronStartupCancelledError, type ElectronStartupQuitBarrier,
 } from "./startup/cancellation.js";
 import type { LoadedElectronCapsule } from "./startup/capsule.js";
-import type { ElectronCapsuleCleanup } from "./startup/capsule-session.js";
+import type { ElectronCapsuleCleanup, ElectronCapsuleStartup } from "./startup/capsule-session.js";
 import type { ElectronPreflightTopology } from "./startup/preflight/index.js";
 
 export * from "./session/logging.js";
@@ -93,6 +93,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
 
   let cleanup: ElectronCapsuleCleanup | null = null;
   let activationAcquisition: Promise<ElectronActivationAttempt> | null = null;
+  let activationCommit: Promise<void> | null = null;
   const startupQuit = installElectronStartupQuitBarrier({
     app,
     cancelAttempt() { ingress.dispose(); context.startup?.cancel(); },
@@ -105,6 +106,9 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
           async releaseStandaloneAttachment() { await cleanup?.releaseStandaloneAttachment(); },
           async failActivation() {
             const activation = await activationAcquisition?.catch(() => null);
+            // A quit racing the durable write must not let that write overwrite
+            // cancellation's failed record after startup owners have retired.
+            await activationCommit?.catch(() => undefined);
             await activation?.fail(error);
           },
           observe(failures) { log.write(failures.length === 0 ? "startup.cancelled" : "startup.cancellation.failed", { failures }); },
@@ -140,15 +144,51 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
     app.dock?.setIcon(icon);
   }
   await startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
-  await startupQuit.guard(capsule.runElectronCapsule(definition, Object.freeze({
+  const capsuleStartup: ElectronCapsuleStartup = Object.freeze({
+    get attemptId() { return startup.attemptId; },
+    get phase() { return startup.phase; },
+    get bindingDigest() { return startup.bindingDigest; },
+    bind: digest => startup.bind(digest),
+    accepts: signal => startup.accepts(signal),
+    advance(signal, phase) {
+      if (phase !== "runtime-ready" && phase !== "renderer-mounted") throw new Error("Capsule cannot commit carrier startup");
+      startup.advance(signal, phase);
+    },
+  });
+  const ready = await startupQuit.guard(capsule.runElectronCapsule(definition, Object.freeze({
     manifest, shell, presentation, namespace, paths, preflight, resourceRoot, nodeRuntime,
-    log, processErrors, ingress, activation, startup, startupQuit,
+    log, processErrors, ingress,
+    activation: Object.freeze({ stop: () => activation.stop() }),
+    startup: capsuleStartup,
+    startupQuit: Object.freeze({
+      get cancelled() { return startupQuit.cancelled; },
+      get settled() { return startupQuit.settled; },
+      guard: startupQuit.guard,
+      cancel: startupQuit.cancel,
+    }),
     registerCleanup(steps: ElectronCapsuleCleanup) {
       if (startupQuit.cancelled) throw new Error("Electron Capsule cannot acquire cancelled startup owners");
       if (cleanup != null) throw new Error("Electron Capsule startup cleanup is already registered");
       cleanup = steps;
     },
   })));
+  if (ready == null || ready.signal == null || startup.phase !== "renderer-mounted" || !startup.accepts(ready.signal)
+    || typeof ready.generationId !== "string" || !/^[a-f0-9]{64}$/u.test(ready.generationId)
+    || (ready.afterCommit != null && typeof ready.afterCommit !== "function")) {
+    throw new Error("Capsule did not complete the exact startup binding");
+  }
+  // Capsule has returned after installing all of its runtime owners. Only the
+  // fixed carrier can close the complete startup window and transfer quit.
+  log.write("capsule.startup.ready", { activationAttemptId: activation.attemptId,
+    generationId: ready.generationId, bindingDigest: ready.signal.bindingDigest });
+  activationCommit = activation.commit();
+  await startupQuit.guard(activationCommit);
+  startup.advance(ready.signal, "committed");
+  startupQuit.commit();
+  log.write("startup.committed", { generationId: ready.generationId, presentation });
+  void Promise.resolve().then(() => ready.afterCommit?.()).catch((error: unknown) => {
+    log.write("shell.commit-observer.failed", { error });
+  });
 }
 
 export async function runElectronCarrier(definition: ElectronCarrierDefinition): Promise<void> {

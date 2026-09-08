@@ -32,6 +32,7 @@ await build({
   target: "node24",
 });
 const publicEntries = {
+  "runtime/startup/capsule": "runtime/startup/capsule",
   "contracts/index": "contracts/index",
   "integrations/shortcuts/index": "integrations/shortcuts/index",
   "distribution/index": "distribution/index",

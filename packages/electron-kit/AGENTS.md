@@ -19,15 +19,23 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Capsule content builds emit release-neutral bytes and a content descriptor;
   public contracts compose version and compatibility metadata without loading a
   compiler. Keep build-cache policy and final signature authority in tools.
-- Capsule protocol v4 supplies a verified composite Shell identity alongside the
+- Capsule protocol v5 supplies a verified composite Shell identity alongside the
   immutable physical manifest. Its build hash binds carrier build inputs and
   exact Capsule content, excluding release versions; its runtime digest binds
   the full authenticated combination. Do not accept module-exported identity
   or use composite capability as physical installer proof.
+- Capsule returns exact renderer-ready evidence only after installing its runtime
+  owners. The carrier validates that evidence, owns the final durable activation
+  commit and releases the startup quit barrier. Do not expose either commit method
+  to Capsule or log complete startup from its partial initialization path.
 - Loading documents, animation, DOM updates and startup/session sequencing belong
   to electron-capsule. Establish presentation permission, physical integrity and
   activation/quit protection before invoking its versioned startup entry. Native
   launch ingress is registered before loading and delivers only typed events.
+- `/capsule-loader` is the Node-safe verification/loading leaf. Recovery inspection must
+  authenticate the same signed manifest, compatibility edges and exact materialized
+  bytes as execution without evaluating candidate code. An inspection receipt
+  never bypasses revalidation by the one-load-per-process carrier loader.
 - Physical scenes carry only validated carrier preflight/lifecycle configuration,
   never the Capsule warmup graph or renderer recovery policy. Reject Capsule
   preflight declarations after the fixed carrier has established OS identity.

@@ -1,10 +1,11 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { signDocument, standaloneTreeSha256 } from "@open-design/standalone";
-import { createElectronCapsuleLoader } from "@/runtime/startup/capsule.js";
+import { createElectronCapsuleLoader, inspectElectronCapsule } from "@/runtime/startup/capsule.js";
 import { validateElectronCapsuleManifest } from "@/contracts/capsule.js";
 
 const roots: string[] = [];
@@ -13,7 +14,7 @@ async function fixture(source = 'module.exports.createElectronCapsuleDefinition 
   const root = await mkdtemp(join(tmpdir(), "capsule-load-")); roots.push(root);
   const body = Buffer.from(`${source}\n${startup ? 'module.exports.runElectronCapsule = async () => {};' : ''}`), entrypoint = join(root, "capsule.cjs");
   await writeFile(entrypoint, body);
-  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v4", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
+  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v5", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
     requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 100, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength }]) } });
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -21,6 +22,37 @@ async function fixture(source = 'module.exports.createElectronCapsuleDefinition 
     carrier: { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "b".repeat(64), digest: "c".repeat(64) } } };
 }
 describe("verified Capsule loading", () => {
+  it("loads the public verification leaf under plain Node without an Electron host", () => {
+    expect(() => execFileSync(process.execPath, ["--input-type=module", "-e", `
+      import assert from "node:assert/strict";
+      import { createRequire } from "node:module";
+      const capsule = await import("@open-design/electron-kit/capsule-loader");
+      await assert.rejects(import("@open-design/electron-kit/capsule"), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
+      assert.equal(typeof capsule.inspectElectronCapsule, "function");
+      assert.equal(typeof capsule.createElectronCapsuleLoader, "function");
+      assert.equal(Object.keys(createRequire(import.meta.url).cache).some(path => /node_modules.*(?:electron|electron-builder|esbuild)\\//u.test(path)), false);
+    `], { stdio: "pipe", timeout: 10000 })).not.toThrow();
+  });
+  it("inspects a signed broken module without evaluating it or arming a load", async () => {
+    const input = await fixture('throw new Error("candidate code ran");');
+    const inspected = await inspectElectronCapsule(input);
+    expect(inspected).toMatchObject({ manifest: input.envelope.document, shell: { version: "2.0.0" }, entrypoint: { path: "capsule.cjs" } });
+    await expect(createElectronCapsuleLoader()(input)).rejects.toThrow("candidate code ran");
+  });
+  it("does not let a successful inspection authorize substituted executable bytes", async () => {
+    const input = await fixture();
+    await inspectElectronCapsule(input);
+    await writeFile(input.entrypoint, 'throw new Error("substitution executed");');
+    await expect(createElectronCapsuleLoader()(input)).rejects.toThrow("digest mismatch");
+  });
+  it("keeps inspection trust and compatibility checks identical to execution", async () => {
+    const input = await fixture('throw new Error("candidate code ran");');
+    await expect(inspectElectronCapsule({ ...input, trustedKeys: {} })).rejects.toThrow("signature verification");
+    await expect(inspectElectronCapsule({ ...input, carrier: { ...input.carrier, target: "darwin-x64" } })).rejects.toThrow();
+    await expect(inspectElectronCapsule({ ...input, carrier: { ...input.carrier, shell: { ...input.carrier.shell, version: "0.1.0" } } })).rejects.toThrow();
+    await mkdir(join(input.root, "extra"));
+    await expect(inspectElectronCapsule(input)).rejects.toThrow("inventory mismatch");
+  });
   it("does not take composite identity from executable module exports", async () => {
     const input = await fixture('module.exports.shell = {type:"electron", version:"99.0.0"}; module.exports.createElectronCapsuleDefinition = () => ({});');
     const loaded = await createElectronCapsuleLoader()(input);
@@ -37,6 +69,8 @@ describe("verified Capsule loading", () => {
     expect(() => validateElectronCapsuleManifest({ ...input.envelope.document, protocol: "electron-capsule-v2" }))
       .toThrow("unsupported Capsule manifest");
     expect(() => validateElectronCapsuleManifest({ ...input.envelope.document, protocol: "electron-capsule-v3" }))
+      .toThrow("unsupported Capsule manifest");
+    expect(() => validateElectronCapsuleManifest({ ...input.envelope.document, protocol: "electron-capsule-v4" }))
       .toThrow("unsupported Capsule manifest");
   });
   it("loads once in the current process and rejects in-process replacement", async () => {
