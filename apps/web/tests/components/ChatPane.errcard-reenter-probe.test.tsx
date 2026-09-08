@@ -252,6 +252,27 @@ describe('error card after leaving and re-entering the project', () => {
     expect(hasErrorCard(container)).toBe(true);
   });
 
+  it('G · a stream-disconnect failure keeps something on screen after re-entry', () => {
+    // Live, the reconnect row owns this failure and the card is deliberately
+    // suppressed (R9). After re-entry the `reconnect` prop is gone.
+    const { container } = renderReentered([
+      userTurn,
+      {
+        id: 'msg-a',
+        role: 'assistant',
+        content: 'Partial work.',
+        createdAt: 2,
+        startedAt: 2,
+        endedAt: 3,
+        runId: 'run-1',
+        runStatus: 'failed',
+        agentId: 'claude',
+        events: [daemonErrorEvent({ code: 'DAEMON_STREAM_DISCONNECTED' })],
+      } as ChatMessage,
+    ]);
+    expect(hasErrorCard(container)).toBe(true);
+  });
+
   it('F · a user message after the failed turn intentionally retires the card', () => {
     const { container } = renderReentered([
       userTurn,
