@@ -21,3 +21,29 @@ export function measureDocumentPages(): Array<{ x: number; y: number; width: num
     return { x: rect.left + scrollX, y: rect.top + scrollY, width: rect.width, height: rect.height };
   });
 }
+
+/** Match the existing page/deck stitchers: never reserve more than 320 MiB of raw RGBA pixels. */
+export const DOCUMENT_CAPTURE_MAX_BYTES = 320 * 1024 * 1024;
+
+/**
+ * CDP multiplies clip.scale by the renderer DPR. Cap the effective output at
+ * two physical pixels per CSS pixel without double-scaling Retina displays.
+ */
+export function documentCaptureScale(devicePixelRatio: number): number {
+  const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  return Math.min(2, 2 / dpr);
+}
+
+/** Estimate the decoded RGBA footprint before asking Chromium to allocate screenshots. */
+export function documentCaptureBytes(
+  pages: Array<{ width: number; height: number }>,
+  devicePixelRatio: number,
+): number {
+  const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const pixelScale = dpr * documentCaptureScale(dpr);
+  return pages.reduce((total, page) => {
+    const width = Math.max(1, Math.ceil(page.width * pixelScale));
+    const height = Math.max(1, Math.ceil(page.height * pixelScale));
+    return total + width * height * 4;
+  }, 0);
+}

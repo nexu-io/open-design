@@ -470,6 +470,24 @@
       .completion-status { grid-column: 2; }
     }
 
+    /* Keep the authored 940px A4 canvas intact in desktop previews, then scale
+       the complete document to the available iframe width. Shrinking only the
+       page box leaves the fixed-size report content taller than its A4 frame
+       at 100% editor zoom, where `.page { overflow: hidden }` clips the footer. */
+    @media screen and (min-width: 721px) {
+      body { overflow-x: hidden; }
+      .report {
+        width: 940px;
+        max-width: none;
+        zoom: clamp(.1, calc((100vw - 44px) / 940px), 1);
+      }
+      .page {
+        width: 940px;
+        height: 1329.4286px;
+        aspect-ratio: auto;
+      }
+    }
+
     @media print {
       @page { size: A4; margin: 0; }
       html, body { background: white; }

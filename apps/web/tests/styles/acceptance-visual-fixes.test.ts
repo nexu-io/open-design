@@ -109,6 +109,20 @@ describe('PR #7678 — document preset thumbnails are horizontally off-center', 
     expect(() => ruleValue(documentIframe, 'transform')).toThrow(/Missing CSS property/);
     expect(ruleValue(documentIframe, 'transform-origin')).toBe('top center');
   });
+
+  it('keeps the centered viewport fixed while its document scrolls internally', () => {
+    const documentIframe = cssDeclarations(
+      homeHeroCss,
+      '.home-hero__plugin-preset[data-od-scenario="documents"] .plugins-home__html-iframe',
+    );
+    expect(() => ruleValue(documentIframe, 'transition')).toThrow(/Missing CSS property/);
+    expect(() =>
+      cssDeclarations(
+        homeHeroCss,
+        '.home-hero__plugin-preset[data-od-scenario="documents"]:not(:disabled):hover .plugins-home__html[data-preview-motion="scroll"] .plugins-home__html-iframe',
+      ),
+    ).toThrow(/Missing CSS block/);
+  });
 });
 
 describe('recvpYEHCwtxXX — selected recent-project checkbox degrades to outline on hover', () => {

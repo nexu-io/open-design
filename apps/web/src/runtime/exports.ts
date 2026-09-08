@@ -1444,10 +1444,8 @@ export async function exportAsPdf(
   // below is kept only as a last-resort fallback if the capture path throws.
   let isPaperDocument = false;
   try {
-    const documentPages = new DOMParser().parseFromString(html, 'text/html')
-      .querySelector('[data-od-document-page]');
-    isPaperDocument = !!documentPages;
-    if (!documentPages) {
+    isPaperDocument = sourceLooksLikeAuthoredPaper(html);
+    if (!isPaperDocument) {
       await exportArtifactAsPdf(html, title, { deck: !!opts?.deck, onProgress: opts?.onProgress });
       return;
     }
@@ -1461,11 +1459,7 @@ export async function exportAsPdf(
   if (isPaperDocument) {
     // Print the sandboxed child itself. Printing the viewport-sized parent
     // wrapper can clip later paper pages and ignores the child's @page size.
-    const printPaper = `<script data-od-print-paper>window.addEventListener('load',function(){Promise.resolve(document.fonts&&document.fonts.ready).then(function(){requestAnimationFrame(function(){requestAnimationFrame(function(){window.print()})})})});<\/script>`;
-    const bodyClose = findRealTagOffset(doc, HTML_TAG_PATTERNS.bodyClose);
-    doc = bodyClose >= 0
-      ? doc.slice(0, bodyClose) + printPaper + doc.slice(bodyClose)
-      : doc + printPaper;
+    doc = injectPaperPrintScript(doc, title);
   }
   // Last-resort: wrap with allow-modals so the injected script can call
   // window.print(), then inject the self-printing script and open a popup.
@@ -1604,6 +1598,23 @@ export function injectPrintScript(doc: string, title: string): string {
 }
 
 /** @internal Exported for unit testing; not part of the public API surface. */
+export function sourceLooksLikeAuthoredPaper(html: string): boolean {
+  return new DOMParser().parseFromString(html, 'text/html')
+    .querySelector('[data-od-document-page]') !== null;
+}
+
+/** @internal Exported for unit testing; not part of the public API surface. */
+export function injectPaperPrintScript(doc: string, title: string): string {
+  // The readiness handshake runs inside this same child document and waits for
+  // fonts, <img> resources, CSS image URLs, and stable layout. Poll its local
+  // completion flag so paper printing keeps the authored @page context without
+  // regressing the resource-readiness guarantee of ordinary browser exports.
+  const safeTitle = JSON.stringify(title || 'artifact');
+  const script = `<script data-od-print-paper>(function(){try{document.title=${safeTitle}}catch(e){}function printAfterStableFrames(){requestAnimationFrame(function(){requestAnimationFrame(function(){window.focus();window.print()})})}window.addEventListener('load',function(){var deadline=Date.now()+30000;(function waitForPaperReady(){if(window.__odArtifactPrintReady===true||Date.now()>=deadline){printAfterStableFrames();return}setTimeout(waitForPaperReady,50)})()})})();<\/script>`;
+  return injectBeforeDocumentEnd(doc, script);
+}
+
+/** @internal Exported for unit testing; not part of the public API surface. */
 export function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // Wait for fonts, the window load event (which covers initial images), and
   // any images that are still loading after load fires (dynamically added or
@@ -1626,7 +1637,7 @@ export function injectPrintReadyHandshake(doc: string, nonce: string): string {
   // The nonce is a per-export random UUID that verifies the readiness signal
   // came from our injected handshake, not a spoofed message from untrusted
   // artifact code.
-  const script = `<script data-od-print-ready>(function(){window.parent.postMessage({type:'OD_PRINT_READY_STARTED',nonce:'${nonce}'},'*');function waitForImages(){var imgs=Array.from(document.images).filter(function(img){if(img.loading==='lazy')img.loading='eager';return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}function cssUrlValues(value){var urls=[];if(!value||value==='none')return urls;value.replace(/url\\((['"]?)(.*?)\\1\\)/g,function(_,q,rawUrl){if(rawUrl&&!/^data:/i.test(rawUrl))urls.push(rawUrl);return''});return urls}function waitForCssBackgroundImages(){var urls=new Set();Array.from(document.querySelectorAll('*')).forEach(function(el){var style=window.getComputedStyle(el);cssUrlValues(style.backgroundImage).forEach(function(url){urls.add(url)});cssUrlValues(style.borderImageSource).forEach(function(url){urls.add(url)});cssUrlValues(style.listStyleImage).forEach(function(url){urls.add(url)})});return Promise.all(Array.from(urls).map(function(url){return new Promise(function(r){var img=new Image();img.onload=r;img.onerror=r;img.src=url})}))}function nextFrame(){return new Promise(function(r){requestAnimationFrame(function(){r(true)})})}Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){return Promise.all([waitForImages(),waitForCssBackgroundImages()])}).then(nextFrame).then(nextFrame).then(function(){var __odReport=${reportPrintSizeWhenStable.toString()};function measure(){var de=document.documentElement;var b=document.body||de;return {width:Math.max(de.scrollWidth,b.scrollWidth,de.offsetWidth,b.offsetWidth),height:Math.max(de.scrollHeight,b.scrollHeight,de.offsetHeight,b.offsetHeight)}}__odReport(measure,function(size){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}',width:size.width,height:size.height},'*')},30)})})();<\/script>`;
+  const script = `<script data-od-print-ready>(function(){window.__odArtifactPrintReady=false;window.parent.postMessage({type:'OD_PRINT_READY_STARTED',nonce:'${nonce}'},'*');function waitForImages(){var imgs=Array.from(document.images).filter(function(img){if(img.loading==='lazy')img.loading='eager';return !img.complete});return Promise.all(imgs.map(function(img){return new Promise(function(r){img.addEventListener('load',r,{once:true});img.addEventListener('error',r,{once:true});if(img.complete)r()})}))}function cssUrlValues(value){var urls=[];if(!value||value==='none')return urls;value.replace(/url\\((['"]?)(.*?)\\1\\)/g,function(_,q,rawUrl){if(rawUrl&&!/^data:/i.test(rawUrl))urls.push(rawUrl);return''});return urls}function waitForCssBackgroundImages(){var urls=new Set();Array.from(document.querySelectorAll('*')).forEach(function(el){var style=window.getComputedStyle(el);cssUrlValues(style.backgroundImage).forEach(function(url){urls.add(url)});cssUrlValues(style.borderImageSource).forEach(function(url){urls.add(url)});cssUrlValues(style.listStyleImage).forEach(function(url){urls.add(url)})});return Promise.all(Array.from(urls).map(function(url){return new Promise(function(r){var img=new Image();img.onload=r;img.onerror=r;img.src=url})}))}function nextFrame(){return new Promise(function(r){requestAnimationFrame(function(){r(true)})})}Promise.all([document.fonts&&document.fonts.ready?document.fonts.ready.catch(function(){}):Promise.resolve(),new Promise(function(r){if(document.readyState==='complete')r();else window.addEventListener('load',r,{once:true})})]).then(function(){return Promise.all([waitForImages(),waitForCssBackgroundImages()])}).then(nextFrame).then(nextFrame).then(function(){window.__odArtifactPrintReady=true;var __odReport=${reportPrintSizeWhenStable.toString()};function measure(){var de=document.documentElement;var b=document.body||de;return {width:Math.max(de.scrollWidth,b.scrollWidth,de.offsetWidth,b.offsetWidth),height:Math.max(de.scrollHeight,b.scrollHeight,de.offsetHeight,b.offsetHeight)}}__odReport(measure,function(size){window.parent.postMessage({type:'OD_PRINT_READY',nonce:'${nonce}',width:size.width,height:size.height},'*')},30)})})();<\/script>`;
   return injectBeforeDocumentEnd(doc, script);
 }
 

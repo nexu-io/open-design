@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { measureDocumentPages } from '../../src/main/document-pages.js';
+import {
+  DOCUMENT_CAPTURE_MAX_BYTES,
+  documentCaptureBytes,
+  documentCaptureScale,
+  measureDocumentPages,
+} from '../../src/main/document-pages.js';
 
 afterEach(() => { document.body.replaceChildren(); vi.restoreAllMocks(); });
 function paper(height = 1122.5) {
@@ -30,5 +35,24 @@ describe('authored document pages', () => {
     page.style.overflow = 'hidden';
     Object.defineProperty(page, 'scrollHeight', { value: 1300 });
     expect(() => measureDocumentPages()).toThrow('exceeds its paper boundary');
+  });
+});
+
+describe('authored document capture budget', () => {
+  it('caps CDP output at two physical pixels per CSS pixel across DPRs', () => {
+    expect(documentCaptureScale(1)).toBe(2);
+    expect(documentCaptureScale(2)).toBe(1);
+    expect(documentCaptureScale(4)).toBe(0.5);
+    expect(documentCaptureScale(Number.NaN)).toBe(2);
+  });
+
+  it('estimates decoded RGBA bytes before allocating document screenshots', () => {
+    const a4 = { width: 793.7, height: 1122.5 };
+    const bytesAt1x = documentCaptureBytes([a4], 1);
+    const bytesAt2x = documentCaptureBytes([a4], 2);
+    expect(bytesAt2x).toBe(bytesAt1x);
+    expect(bytesAt2x).toBeLessThan(DOCUMENT_CAPTURE_MAX_BYTES);
+    expect(documentCaptureBytes(Array.from({ length: 100 }, () => a4), 2))
+      .toBeGreaterThan(DOCUMENT_CAPTURE_MAX_BYTES);
   });
 });

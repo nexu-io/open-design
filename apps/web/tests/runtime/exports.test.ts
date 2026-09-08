@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import {
   archiveFilenameFrom,
@@ -23,6 +24,7 @@ import {
   prepareImageExportTarget,
   planDeckImageCapture,
   requestPreviewSnapshot,
+  sourceLooksLikeAuthoredPaper,
   sourceLooksLikeExportableDeck,
   sourceLooksLikeNavigableDeck,
 } from '../../src/runtime/exports';
@@ -126,6 +128,17 @@ describe('sourceLooksLikeExportableDeck (#4604 horizontal deck export)', () => {
     expect(sourceLooksLikeExportableDeck('')).toBe(false);
     expect(sourceLooksLikeExportableDeck(null)).toBe(false);
     expect(sourceLooksLikeExportableDeck(undefined)).toBe(false);
+  });
+});
+
+describe('sourceLooksLikeAuthoredPaper', () => {
+  it('detects the document-page marker and rejects ordinary HTML with a real parser', () => {
+    const dom = new JSDOM();
+    vi.stubGlobal('DOMParser', dom.window.DOMParser);
+    expect(sourceLooksLikeAuthoredPaper('<main data-od-document-page>Paper</main>')).toBe(true);
+    expect(sourceLooksLikeAuthoredPaper('<main>Ordinary artifact</main>')).toBe(false);
+    vi.unstubAllGlobals();
+    dom.window.close();
   });
 });
 
@@ -1226,16 +1239,22 @@ describe('sandboxed preview Blob exports', () => {
   });
 
   it('prints authored paper inside the sandbox instead of slicing a viewport screenshot', async () => {
-    vi.stubGlobal('DOMParser', class {
-      parseFromString() { return { querySelector: () => ({}) }; }
-    });
+    const dom = new JSDOM();
+    vi.stubGlobal('DOMParser', dom.window.DOMParser);
     await exportAsPdf('<main data-od-document-page>One complete A4 sheet</main>', 'Paper');
     const wrapper = await capturedBlob!.text();
     expect(wrapper).toContain('sandbox="allow-scripts allow-modals"');
     expect(wrapper).toContain('&lt;script data-od-print-paper&gt;');
+    expect(wrapper).toContain('data-od-print-ready');
     expect(wrapper).toContain('document.fonts');
+    expect(wrapper).toContain('waitForImages');
+    expect(wrapper).toContain('waitForCssBackgroundImages');
+    expect(wrapper).toContain('window.__odArtifactPrintReady=true');
+    expect(wrapper).toContain('window.__odArtifactPrintReady===true');
+    expect(wrapper).toContain('document.title=&quot;Paper&quot;');
     expect(wrapper).not.toContain('window.__odPrintReady=false');
     expect(openCalls).toEqual([['', '_blank']]);
+    dom.window.close();
   });
 
   it('uses a sandboxed Blob wrapper with synchronous popup detection for PDF exports', async () => {

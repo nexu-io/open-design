@@ -9,8 +9,7 @@
 //      as an example preset under any media chip, so the "Media generation
 //      (default scenario)" card neither shows up nor shows up pre-selected.
 //   3. Document terms are matched on token boundaries: `annual-letter` is a
-//      document, while `newsletter` alone does not imply one. Email templates
-//      that intentionally opt into the document gallery use an explicit tag.
+//      document, while `newsletter` alone does not imply one.
 
 import { describe, expect, it } from 'vitest';
 import type { InstalledPluginRecord } from '@open-design/contracts';
@@ -79,28 +78,6 @@ const audioJingle = make({
   scenario: 'marketing',
 });
 
-// Mirrors plugins/_official/examples/email-marketing. It explicitly opts into
-// both the document gallery and the prototype surface.
-const emailMarketing = make({
-  id: 'example-email-marketing',
-  title: 'Email Marketing',
-  tags: [
-    'example',
-    'first-party',
-    'prototype',
-    'marketing',
-    'web',
-    'desktop',
-    'email',
-    'email-template',
-    'newsletter',
-    'document',
-  ],
-  mode: 'prototype',
-  surface: 'web',
-  scenario: 'marketing',
-});
-
 const genericNewsletter = make({
   id: 'example-generic-newsletter',
   title: 'Generic Newsletter',
@@ -160,11 +137,4 @@ describe('pluginMatchesExampleChip — document chip', () => {
     expect(pluginMatchesExampleChip(genericNewsletter, 'document')).toBe(false);
   });
 
-  it('allows an email template to opt into documents explicitly', () => {
-    expect(pluginMatchesExampleChip(emailMarketing, 'document')).toBe(true);
-  });
-
-  it('keeps email marketing available as a prototype', () => {
-    expect(pluginMatchesExampleChip(emailMarketing, 'prototype')).toBe(true);
-  });
 });

@@ -224,17 +224,30 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
     if (!html || html.includes('data-od-plugin-preview-motion')) return html;
     const bridge = `<script data-od-plugin-preview-motion>(function(){
   var animationFrame = 0;
+  var active = false;
   function scrollRoot(){ return document.scrollingElement || document.documentElement; }
-  function animateTo(target, duration){
+  function animateScroll(){
     cancelAnimationFrame(animationFrame);
     var root = scrollRoot();
+    var target = Math.max(0, Number(root ? root.scrollHeight : document.documentElement.scrollHeight) - window.innerHeight);
+    if (!active || target <= 0) return;
     var from = root ? Number(root.scrollTop || 0) : Number(window.scrollY || 0);
+    if (from >= target - 1) {
+      window.scrollTo(0, 0);
+      from = 0;
+    }
+    var duration = Math.max(1, Math.min(7500, (target - from) / 0.3));
     var startedAt = performance.now();
     function step(now){
+      if (!active) return;
       var progress = Math.min(1, (now - startedAt) / Math.max(1, duration));
-      var eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-      window.scrollTo(0, Math.round(from + (target - from) * eased));
-      if (progress < 1) animationFrame = requestAnimationFrame(step);
+      window.scrollTo(0, Math.round(from + (target - from) * progress));
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(step);
+      } else if (active) {
+        window.scrollTo(0, 0);
+        animationFrame = requestAnimationFrame(animateScroll);
+      }
     }
     animationFrame = requestAnimationFrame(step);
   }
@@ -242,17 +255,10 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
     if (event.source !== window.parent) return;
     var data = event.data;
     if (!data || data.type !== 'od:plugin-preview-motion' || data.motion !== 'scroll') return;
-    requestAnimationFrame(function(){
-      var root = scrollRoot();
-      var current = root ? Number(root.scrollTop || 0) : Number(window.scrollY || 0);
-      var maximum = Math.max(0, Number(root ? root.scrollHeight : document.documentElement.scrollHeight) - window.innerHeight);
-      var target = data.active ? maximum : 0;
-      var distance = Math.abs(target - current);
-      var duration = data.active
-        ? Math.min(7500, Math.max(900, distance / 0.3))
-        : Math.min(500, Math.max(180, distance / 1.2));
-      animateTo(target, duration);
-    });
+    active = data.active === true;
+    cancelAnimationFrame(animationFrame);
+    if (!active) { window.scrollTo(0, 0); return; }
+    animationFrame = requestAnimationFrame(animateScroll);
   });
 })();</script>`;
     const bodyClose = findRealTagOffset(html, HTML_TAG_PATTERNS.bodyClose);

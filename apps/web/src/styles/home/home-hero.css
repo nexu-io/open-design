@@ -2688,7 +2688,6 @@
 
 .home-hero__plugin-preset-preview .plugins-home__html-iframe {
   --home-html-preview-scale: 0.172;
-  --home-html-preview-overflow-y: 35.76px;
   transform: scale(var(--home-html-preview-scale));
 }
 
@@ -2701,16 +2700,6 @@
   left: 50%;
   translate: -50% 0;
   transform-origin: top center;
-  transition: top 1800ms linear;
-}
-
-/* Live HTML is the pre-bake fallback for a newly-added document template.
-   Its page scrolls inside the sandbox via the motion bridge; shift the scaled
-   viewport by its small outer overflow at the same time so the card can reveal
-   the actual bottom edge instead of stopping one crop-height early. */
-.home-hero__plugin-preset[data-od-scenario="documents"]:not(:disabled):hover .plugins-home__html[data-preview-motion="scroll"] .plugins-home__html-iframe,
-.home-hero__plugin-preset[data-od-scenario="documents"]:focus-visible .plugins-home__html[data-preview-motion="scroll"] .plugins-home__html-iframe {
-  top: calc(-1 * var(--home-html-preview-overflow-y));
 }
 
 /* Decks ship a fixed 16:9 stage that scales itself to its viewport, so the
@@ -2964,7 +2953,6 @@
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     --home-html-preview-scale: 0.146;
-    --home-html-preview-overflow-y: 21.68px;
   }
   /* Plan §B follow-up: chip rail must never require horizontal
      scrolling. The base rule already wraps; on narrow viewports
@@ -3012,7 +3000,6 @@
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     --home-html-preview-scale: 0.134;
-    --home-html-preview-overflow-y: 18.72px;
   }
 }
 

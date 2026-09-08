@@ -7,7 +7,12 @@ import { promisify } from "node:util";
 import { BrowserWindow, nativeImage } from "electron";
 import type { DesktopRenderSlidesInput, DesktopRenderSlidesResult } from "@open-design/sidecar-proto";
 
-import { measureDocumentPages } from "./document-pages.js";
+import {
+  DOCUMENT_CAPTURE_MAX_BYTES,
+  documentCaptureBytes,
+  documentCaptureScale,
+  measureDocumentPages,
+} from "./document-pages.js";
 
 import { waitForPrintableContent } from "./pdf-export.js";
 import { findRealTagEnd, findRealTagOffset, HTML_TAG_PATTERNS } from '@open-design/contracts/runtime/html-injection-points';
@@ -322,12 +327,12 @@ export async function renderDeckSlides(
     if (!wantsDeck) {
       // Page mode: capture the original, unmodified document. `paginate` (set by
       // the PDF path) splits a long page into one image per viewport.
+      const pageJpeg = shouldCapturePageAsJpeg(input.pageImageFormat, input.paginate);
       if (input.paginate && await window.webContents.executeJavaScript(
         "Boolean(document.querySelector('[data-od-document-page]'))", true,
       )) {
-        return finish(await captureDocumentPages(window, input.outputDir));
+        return finish(await captureDocumentPages(window, input.outputDir, pageJpeg, requestedPage));
       }
-      const pageJpeg = shouldCapturePageAsJpeg(input.pageImageFormat, input.paginate);
       return finish(
         await capturePage(window, pageJpeg, input.outputDir, input.paginate === true, requestedPage),
       );
@@ -1821,10 +1826,23 @@ function clampByte(value: number): number {
 async function captureDocumentPages(
   window: BrowserWindow,
   outputDir: string | undefined,
+  fallbackJpeg: boolean,
+  fallbackPageSize: Stage,
 ): Promise<DesktopRenderSlidesResult> {
   const debuggerClient = window.webContents.debugger;
-  debuggerClient.attach("1.3");
+  let attachedHere = false;
+  if (!debuggerClient.isAttached()) {
+    try {
+      debuggerClient.attach("1.3");
+      attachedHere = true;
+    } catch {
+      // DevTools or another client may own the debugger. Preserve the existing
+      // paginated PDF path instead of failing an otherwise exportable document.
+      return capturePage(window, fallbackJpeg, outputDir, true, fallbackPageSize);
+    }
+  }
   try {
+    await debuggerClient.sendCommand("Page.enable");
     await debuggerClient.sendCommand("Emulation.setEmulatedMedia", { media: "print" });
     window.setContentSize(PAGE_W, PAGE_VIEW_H);
     await waitForPrintableContent(window);
@@ -1833,12 +1851,21 @@ async function captureDocumentPages(
       `(${measureDocumentPages.toString()})()`, true,
     ) as ReturnType<typeof measureDocumentPages>;
     if (!pages.length) throw new Error("No document pages found");
+    const dpr = await queryDevicePixelRatio(window);
+    const captureScale = documentCaptureScale(dpr);
+    const captureBytes = documentCaptureBytes(pages, dpr);
+    if (captureBytes > DOCUMENT_CAPTURE_MAX_BYTES) {
+      throw new Error(
+        `Document capture exceeds the ${Math.round(DOCUMENT_CAPTURE_MAX_BYTES / 1024 / 1024)} MiB pixel budget`,
+      );
+    }
     const images: Array<{ buffer: Buffer; jpeg: boolean }> = [];
     for (const page of pages) {
       const shot = await debuggerClient.sendCommand("Page.captureScreenshot", {
         format: "png", captureBeyondViewport: true,
-        clip: { ...page, scale: 2 },
-      }) as { data: string };
+        clip: { ...page, scale: captureScale },
+      }) as { data?: string };
+      if (!shot.data) throw new Error("Chromium returned no document page capture");
       images.push({ buffer: Buffer.from(shot.data, "base64"), jpeg: false });
     }
     const size = nativeImage.createFromBuffer(images[0]!.buffer).getSize();
@@ -1846,7 +1873,13 @@ async function captureDocumentPages(
       width: size.width, height: size.height, mode: "page",
       documentPageSizes: pages.map(p => ({ width: p.width * 72 / 96, height: p.height * 72 / 96 })) };
   } finally {
-    debuggerClient.detach();
+    if (attachedHere && debuggerClient.isAttached()) {
+      try {
+        debuggerClient.detach();
+      } catch {
+        // Cleanup must not hide the capture error from this throwaway window.
+      }
+    }
   }
 }
 
