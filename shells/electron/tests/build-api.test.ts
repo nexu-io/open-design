@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { buildElectronScene, buildElectronInstaller } from "@/build-api.js";
+import { buildElectronCapsuleContent, buildElectronScene, buildElectronInstaller } from "@/build-api.js";
 import { resolveElectronSceneManifest } from "@/adapters/tools/manifests.js";
 
-const mock = vi.hoisted(() => ({ assemble: vi.fn(), load: vi.fn(), distribute: vi.fn(), install: vi.fn(), trust: vi.fn() }));
-vi.mock("@open-design/electron-kit/distribution", () => ({ assembleElectronScene: mock.assemble, loadElectronScene: mock.load, buildElectronDistribution: mock.distribute }));
+const mock = vi.hoisted(() => ({ capsule: vi.fn(), assemble: vi.fn(), load: vi.fn(), distribute: vi.fn(), install: vi.fn(), trust: vi.fn() }));
+vi.mock("@open-design/electron-kit/distribution", () => ({ buildElectronCapsuleContent: mock.capsule, assembleElectronScene: mock.assemble, loadElectronScene: mock.load, buildElectronDistribution: mock.distribute }));
 vi.mock("@open-design/electron-kit/installation", () => ({ inspectMacElectronAppTrust: mock.trust }));
 vi.mock("@/adapters/standalone/build.ts", () => ({ buildElectronStandaloneAuthority: async () => ({ host: {}, updaterProvider: {}, supervisor: {} }) }));
 vi.mock("@/adapters/standalone/assemble-installation.ts", () => ({ withElectronInstallation: mock.install }));
@@ -20,6 +20,15 @@ async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "electron-build-api-")); roots.push(root);
   return root;
 }
+
+it("selects the Capsule product entry without assembly or release identity", async () => {
+  const outputRoot = await fixture();
+  mock.capsule.mockResolvedValue({ content: "neutral" });
+  expect(await buildElectronCapsuleContent({ target: "darwin-arm64", outputRoot })).toEqual({ content: "neutral" });
+  expect(mock.capsule).toHaveBeenCalledWith({ target: "darwin-arm64", outputRoot, entryPath: expect.stringMatching(/\/shells\/electron\/src\/capsule\.ts$/u) });
+  expect(mock.assemble).not.toHaveBeenCalled();
+  expect(mock.distribute).not.toHaveBeenCalled();
+});
 
 it("composes scene identity in memory and resolves source entries through the package root", async () => {
   const root = await fixture();

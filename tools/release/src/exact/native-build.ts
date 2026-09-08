@@ -83,6 +83,17 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
+/** Release-neutral Capsule production uses the same workspace-owned public boundary. */
+export async function buildReleaseCapsule(input: BuildInput) {
+  if (input.shell !== "electron") throw new Error("Capsule build requires electron");
+  const buildTarget = target(input);
+  const { buildElectronCapsuleContent } = await electronBuilder(input.root);
+  const result = await buildElectronCapsuleContent({ target: buildTarget, outputRoot: resolve(input.output) });
+  const receipt = { schemaVersion: 1, operation: "electron.capsule.build", ...result };
+  await writeObject(input.receipt, receipt);
+  return receipt;
+}
+
 export async function buildReleaseDistribution(input: BuildInput & Readonly<{ scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
   const buildTarget = target(input), preparedRoot = resolve(input.prepared);
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare",

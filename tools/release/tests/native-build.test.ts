@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { buildReleaseDistribution, buildReleaseScene } from "../src/exact/native-build.ts";
+import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from "../src/exact/native-build.ts";
 import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
 
 const roots: string[] = [];
@@ -15,7 +15,7 @@ async function fixture() {
   const pkg = join(root, "tools/release/node_modules/@open-design/shell-electron");
   await mkdir(pkg, { recursive: true });
   await json(join(pkg, "package.json"), { name: "@open-design/shell-electron", type: "module", exports: { "./build": "./build.mjs" } });
-  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\n");
+  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\nexport async function buildElectronCapsuleContent(request) { return { request }; }\n");
   const plan = join(root, "plan.json"), receipt = join(root, "receipt.json");
   await json(plan, { plan: { target: "darwin-arm64", nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` } } } });
   return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
@@ -29,6 +29,14 @@ it("resolves only the public build export in the selected workspace and passes t
     resourceReceiptFile: f.resources, sceneDirectory: f.output, platformArchivePath: f.nodeArchive });
   await expect(buildReleaseScene({ ...f, target: "win32-x64" })).rejects.toThrow("plan identity is invalid");
   await expect(buildReleaseScene({ ...f, shell: "linux" })).rejects.toThrow("electron or terminal");
+});
+
+it("builds neutral Capsule content without Node archives, Closure inputs or version policy", async () => {
+  const f = await fixture(); await buildReleaseCapsule(f);
+  expect(JSON.parse(await readFile(f.receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "electron.capsule.build",
+    request: { target: f.target, outputRoot: f.output } });
+  await expect(buildReleaseCapsule({ ...f, shell: "terminal" })).rejects.toThrow("requires electron");
+  await expect(buildReleaseCapsule({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
 });
 
 it("binds native distribution to authorized prepared content, trust and scene", async () => {

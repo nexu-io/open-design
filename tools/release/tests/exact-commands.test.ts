@@ -42,6 +42,19 @@ it("resolves and reauthorizes the same policy with explicit identity binding", a
   await expect(f.invoke(args.map(value => value === "betahyx" ? "stable" : value))).rejects.toThrow("binding mismatch");
 });
 
+it("dispatches Capsule production through the selected workspace public package", async () => {
+  const f = await fixture();
+  const pkg = join(f.root, "tools/release/node_modules/@open-design/shell-electron");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "@open-design/shell-electron", type: "module", exports: { "./build": "./build.mjs" } }));
+  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronCapsuleContent(request) { return { request }; }\n");
+  const output = join(f.root, "content"), receipt = join(f.root, "capsule-receipt.json");
+  const args = ["build", "capsule", "--root", f.root, "--shell", "electron", "--target", "darwin-arm64", "--output", output, "--receipt", receipt];
+  await f.invoke(args);
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "electron.capsule.build", request: { target: "darwin-arm64", outputRoot: output } });
+  await expect(f.invoke(args.map(value => value === "electron" ? "terminal" : value))).rejects.toThrow("requires electron");
+});
+
 it("rejects unknown commands, missing arguments and non-boolean switches", async () => {
   const f = await fixture();
   expect((await f.invoke(["--help"])).stdout).toContain("baseline");

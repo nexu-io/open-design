@@ -10,7 +10,7 @@ import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts"
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
-import { buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
+import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 
@@ -61,7 +61,7 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });
 
-  cli.command("build <operation>", "Compose native scene or distribution inputs through public Shell builders")
+  cli.command("build <operation>", "Build Capsule content, native scenes or distributions through public Shell builders")
     .option("--root <directory>", "Checked-out workspace with built inputs")
     .option("--shell <name>", "electron or terminal")
     .option("--target <target>", "Native platform architecture")
@@ -82,9 +82,10 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
+      else if (operation === "capsule") await buildReleaseCapsule(common);
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be scene or distribution");
+      else throw new Error("build operation must be capsule or scene or distribution");
     });
 
   cli.command("topology", "Project release actions over declared runner and target data")

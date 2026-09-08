@@ -3,6 +3,17 @@ import type { ElectronExactSceneRequest, ElectronExactDistributionRequest } from
 
 export type { ElectronPackRequest, ElectronExactSceneRequest, ElectronExactDistributionRequest };
 
+/** Product-owned Capsule entry, independent of release versions and physical Node assembly. */
+export async function buildElectronCapsuleContent(input: Readonly<{
+  target: ElectronExactSceneRequest["target"];
+  outputRoot: string;
+}>) {
+  const [{ buildElectronCapsuleContent: buildContent }, { electronShellSource }] = await Promise.all([
+    import("@open-design/electron-kit/distribution"), import("./adapters/tools/resources.ts"),
+  ]);
+  return buildContent({ ...input, entryPath: electronShellSource("capsule.ts") });
+}
+
 /** Product declaration only; the calling tool owns archive acquisition and reuse. */
 export async function resolveElectronNodeArchive(target?: ElectronExactSceneRequest["target"]) {
   const { readElectronNodeArchive } = await import("./platform/build.ts");
