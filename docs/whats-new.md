@@ -7,15 +7,24 @@ if the source is unreachable or empty, no card shows and Home is unaffected.
 
 ## Where the content lives
 
-The card content is a single hand-curated JSON document on a dedicated R2
-bucket:
+The card content is a single hand-curated JSON document, kept in this
+repository at:
+
+```
+docs/whats-new.json
+```
+
+`.github/workflows/whats-new-publish.yml` publishes that file to the object the
+daemon reads:
 
 ```
 https://whatsnew.open-design.ai/whats-new.json
 ```
 
-There is **no per-release publish tooling** and the content is **not** carried
-in release `metadata.json`. To change what users see, edit that one file.
+Changing the card is therefore an ordinary pull request — no local Cloudflare
+credentials, no wrangler, no per-person bottleneck. The content is **not**
+carried in release `metadata.json`, and there is no per-release publish
+tooling: one file, edited when the copy should change.
 
 - The daemon proxies it at `GET /api/whats-new` (also `od whats-new [--json]`),
   so the web UI and CLI read the exact same payload.
@@ -40,8 +49,11 @@ card when the current `id` differs. So:
   document is deliberately curated, so surfacing the current highlight to a new
   user once is intended.
 
-To retire the card entirely, publish an empty object (`{}`) or a document
-without a valid `id`/`title`/`body`; the daemon then resolves to "no highlight".
+To retire the card entirely, publish an empty object (`{}`); the daemon then
+resolves to "no highlight". Any *other* incomplete document also resolves to
+"no highlight", but that is the accident case, not the intended one — the guard
+accepts only a complete highlight or the empty document, so taking the card
+down is an explicit act rather than something a typo can do for you.
 
 ## Document schema
 
@@ -62,8 +74,9 @@ without a valid `id`/`title`/`body`; the daemon then resolves to "no highlight".
 }
 ```
 
-Field rules (anything missing or malformed makes the card silently not show, so
-validate before uploading):
+Field rules — anything missing or malformed makes the card silently not show,
+which is why `pnpm guard` checks the repository document against the shipping
+parser rather than trusting review:
 
 - `id` — **required**, non-empty string. The show-once key.
 - `title`, `body` — **required**, non-empty strings.
@@ -74,16 +87,35 @@ validate before uploading):
   `zh-CN`, …); each may override `title`/`body`/`linkUrl`. An exact locale wins,
   then the bare language (`zh` for `zh-TW`), then the base fields.
 
-## Updating the file (S3 API)
+## Updating the card
 
-The bucket is S3-compatible. With an R2 token scoped to the bucket:
+1. Edit `docs/whats-new.json` and open a pull request.
+2. `pnpm guard` validates the document on every PR
+   (`scripts/check-whats-new-document.ts`). It runs the document through the
+   daemon's own parser and fails if the card would not show, if an optional
+   field would be silently dropped, or if a field name is misspelled. This
+   matters because the runtime is fail-safe: a malformed document does not
+   error, it just makes the card disappear.
+3. On merge to `main`, `whats-new-publish.yml` uploads the file
+   (`application/json`, `cache-control: public, max-age=300`) and then reads it
+   back from `https://whatsnew.open-design.ai/whats-new.json` with the edge
+   cache bypassed. The job fails unless the bytes served match the bytes
+   uploaded — an exit code from the upload alone is not treated as proof.
 
-```bash
-AWS_ACCESS_KEY_ID=… AWS_SECRET_ACCESS_KEY=… \
-aws s3 cp whats-new.json s3://<bucket>/whats-new.json \
-  --endpoint-url https://<account>.r2.cloudflarestorage.com \
-  --content-type application/json --cache-control 'public, max-age=300'
-```
+Republishing the current `main` content without a code change: run the
+**whats-new-publish** workflow manually (`workflow_dispatch`). Its `dry_run`
+input validates the document and reports the live-vs-proposed `id` without
+uploading; a dry run works from any branch, while a real publish is restricted
+to `main` so what ships is always reviewed content.
 
-Keep `Cache-Control` modest so an edit reaches users promptly; the daemon also
-caches the document for ~10 minutes.
+Propagation takes up to ~15 minutes: the object's own `max-age=300` plus the
+daemon's ~10 minute in-process cache.
+
+### Credentials
+
+The workflow uses bucket-scoped R2 S3 credentials held as repository secrets —
+`CLOUDFLARE_R2_WHATS_NEW_AK`, `CLOUDFLARE_R2_WHATS_NEW_SK`,
+`CLOUDFLARE_R2_WHATS_NEW_URL`, and `CLOUDFLARE_R2_WHATS_NEW_BUCKET` — the same
+shape used for the releases and repository-assets buckets. The repository-wide
+`CLOUDFLARE_API_TOKEN` is a Pages-scoped token and cannot reach R2; do not
+route this publish through it.

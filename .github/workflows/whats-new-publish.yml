@@ -1,0 +1,107 @@
+name: whats-new-publish
+
+# Publish the post-update "What's New" card from the repository copy of the
+# document (docs/whats-new.json) to the R2 object the daemon reads. Editing
+# the card is a copy change, so it goes through the normal PR review path and
+# publishes on merge; nobody needs local Cloudflare credentials.
+#
+# Standalone (not part of ci.yml): this workflow performs a trusted write and
+# must stay outside the low-privilege PR gate.
+#
+# Reachability: one job, no `needs`, so nothing upstream can skip it and leave
+# a downstream `if` unevaluated. Guards that could turn into a silent no-op are
+# deliberately step-level assertions that FAIL, not job-level `if` conditions
+# that skip — a publish that quietly does nothing looks green and leaves the
+# old card in place.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/whats-new.json"
+      - ".github/scripts/publish_whats_new.py"
+      - ".github/scripts/lib/r2.py"
+      - ".github/workflows/whats-new-publish.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate and diff against the live document without uploading
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never publish two documents at once; the object is last-write-wins.
+  group: whats-new-publish
+  cancel-in-progress: false
+
+env:
+  WHATS_NEW_DOCUMENT: docs/whats-new.json
+  WHATS_NEW_OBJECT_KEY: whats-new.json
+  # The exact URL the daemon fetches (DEFAULT_WHATS_NEW_URL in
+  # apps/daemon/src/services/whats-new.ts). Read-back verification hits this,
+  # not a configurable mirror, so a green run means the card users will see.
+  WHATS_NEW_PUBLIC_URL: https://whatsnew.open-design.ai/whats-new.json
+
+jobs:
+  publish:
+    name: publish whats-new.json
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Resolve run mode
+        id: mode
+        env:
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$REPOSITORY" != "nexu-io/open-design" ]; then
+            echo "This workflow publishes the nexu-io/open-design card only; got $REPOSITORY" >&2
+            exit 1
+          fi
+          dry_run=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
+            dry_run=true
+          fi
+          # A real publish always ships reviewed content from main. A dry run
+          # is read-only, so it stays available on any branch for previewing a
+          # copy change before it merges.
+          if [ "$dry_run" != "true" ] && [ "$REF" != "refs/heads/main" ]; then
+            echo "Publishing requires refs/heads/main; got $REF. Re-run with dry_run to preview a branch." >&2
+            exit 1
+          fi
+          echo "dry_run=$dry_run" >> "$GITHUB_OUTPUT"
+          echo "Mode: $([ "$dry_run" = "true" ] && echo 'dry run' || echo 'publish') from $REF"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # The content contract has exactly one implementation: the guard check
+      # that `pnpm guard` runs on every PR, which drives the document through
+      # the daemon's shipping parser. Re-running it here covers the cases the
+      # PR gate cannot: a manual dispatch on an arbitrary ref, and any direct
+      # write to main.
+      - name: Validate document against the shipping parser
+        run: npx --yes tsx@4.22.3 scripts/check-whats-new-document.ts
+
+      - name: Publish
+        env:
+          WHATS_NEW_DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+          # Bucket-scoped R2 S3 credentials, following the naming used by the
+          # releases / repository-assets / workload-results buckets.
+          WHATS_NEW_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_AK }}
+          WHATS_NEW_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_SK }}
+          WHATS_NEW_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_URL }}
+          WHATS_NEW_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_BUCKET }}
+        run: python3 .github/scripts/publish_whats_new.py
