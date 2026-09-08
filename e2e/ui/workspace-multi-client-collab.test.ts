@@ -670,11 +670,16 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       } else if (
         await ownerPage.getByTestId('board-mode-toggle').getAttribute('aria-pressed') === 'true'
       ) {
-        await ownerPage.getByTestId('board-mode-toggle').click({ timeout: T.medium });
+        await clickPreviewToolbarAction(ownerPage, 'board-mode-toggle', /^Comment$/);
       }
       const manualEditToggle = ownerPage.getByTestId('manual-edit-mode-toggle');
       await expect(manualEditToggle).toBeEnabled({ timeout: T.medium });
-      await manualEditToggle.click({ timeout: T.medium });
+      // The preview toolbar collapses actions into a "more" menu when they do
+      // not fit, so the inline button can be present and enabled while not
+      // being visible. `clickPreviewToolbarAction` takes the inline control
+      // when it is on screen and the overflow item otherwise; a raw click on
+      // the test id waits forever on the hidden inline copy.
+      await clickPreviewToolbarAction(ownerPage, 'manual-edit-mode-toggle', /^Edit$/);
       await expect(manualEditToggle).toHaveAttribute('aria-pressed', 'true', {
         timeout: T.medium,
       });
