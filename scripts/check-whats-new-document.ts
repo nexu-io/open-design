@@ -16,9 +16,13 @@
  *   the document is either a complete, parser-valid highlight, or the
  *   explicit empty retirement document `{}` — never something in between.
  *
- * It runs in `pnpm guard`, which is part of CI's always-on static gate, so
- * it covers the document no matter which validation lanes a PR's changed
- * paths select.
+ * It runs in `pnpm guard`, which CI invokes from the `preflight` job. That
+ * job is declared `inputs: ["*"]` / `reusable: false` in
+ * `.github/config/convergence.json` and its guard step carries no `if`, so it
+ * runs on every pull request. That matters here: the document lives under
+ * `docs/`, which `.github/config/scopes.json` treats as `certain-exempt` — a
+ * change to it selects no scoped validation workload at all, so a lane-routed
+ * test would simply never run for the one edit it exists to check.
  *
  * Run standalone: `pnpm exec tsx scripts/check-whats-new-document.ts`
  * Or as part of `pnpm guard` (registered in scripts/guard.ts).
