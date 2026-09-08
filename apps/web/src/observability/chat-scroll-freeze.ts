@@ -1334,7 +1334,8 @@ function runFrame(active: Surface): void {
     // the field means — see its docblock on `Surface`. The retraction below
     // is what must be unconditional; the bookkeeping about why a report did
     // not happen is meaningless once one has.
-    if (!freezeTelemetryAlreadySent(active)) active.innerScrollerSuppressions += 1;
+    const alreadySent = freezeTelemetryAlreadySent(active);
+    if (!alreadySent) active.innerScrollerSuppressions += 1;
     // Clear the streak as well as the verdict. This is the retraction: the
     // notch has already been folded in by `observeWheelBatch` above, and this
     // is where it is taken back out, so an absorbed wheel can never leave a
@@ -1343,7 +1344,19 @@ function runFrame(active: Surface): void {
     // as the user keeps scrolling that inner box.
     active.state = {
       ...active.state,
-      reported: false,
+      // Retract the VERDICT, not the history.
+      //
+      // Before this surface has reported there is no history: the verdict was
+      // discarded, no event went out, and the surface must still be able to
+      // report a real freeze later — so this goes back to false.
+      //
+      // After it has reported, an event DID go out, and `ScrollFreezeState`'s
+      // `reported` is documented as the permanent record of that. Writing
+      // false here unconditionally — which this branch did until review caught
+      // it, back when it was unreachable post-report — would leave a snapshot
+      // saying `surface.reported: true` beside `detector.reported: false` and
+      // contradict that contract to the one person who reads both.
+      reported: alreadySent,
       stallAt: null,
       stallWheelCount: 0,
       stallRequestedPx: 0,

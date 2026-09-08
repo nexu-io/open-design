@@ -831,6 +831,12 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     // The counter keeps its meaning — "seen and NOT reported" — so it does not
     // collect verdicts on a surface whose event has already gone.
     expect(after?.innerScrollerSuppressions).toBe(0);
+    // The retraction takes back the verdict, not the history. An event went
+    // out on this surface, and `detector.reported` is the record of it, so a
+    // snapshot can never show it disagreeing with `surface.reported`.
+    expect(after?.detector.reported).toBe(true);
+    expect(handle().snapshot().blockers.find((b) => b.id === 'surface_unreported')?.ok)
+      .toBe(false);
     // And moving the gate did not cost the de-duplication: `report()` owns it.
     expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
   });
@@ -867,6 +873,12 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     // user was simply scrolling something else.
     expect(surface?.ledger.probeCount).toBe(0);
     expect(surface?.ledger.first).toBeNull();
+    // The other side of the retraction: no event went out, so there is no
+    // history to keep and this surface must still be able to report a real
+    // freeze later.
+    expect(surface?.detector.reported).toBe(false);
+    expect(handle().snapshot().blockers.find((b) => b.id === 'surface_unreported')?.ok)
+      .toBe(true);
   });
 
   it('sends exactly one event per surface however long the freeze goes on', () => {
