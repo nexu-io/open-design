@@ -248,6 +248,14 @@ describe("Electron production Standalone authority", () => {
       expect(providerProcesses.length).toBeGreaterThan(0);
       expect(providerProcesses.every(({ pid }) => !hostProcesses.some((host) => host.pid === pid))).toBe(true);
       expect(await prepared.updater.readSnapshot()).toMatchObject({ state: "idle", shellType: "electron" });
+      const unused = prepared;
+      await unused.dispose();
+      await unused.dispose();
+      expect(await findSidecarProcesses(providerStamp)).toEqual([]);
+      expect(await findSidecarProcesses(stamp)).toEqual([]);
+      await expect(unused.start({ attachment: { id: "disposed", shell: manifest.shell }, capabilities: { async invoke() { throw new Error("must not attach"); } } }))
+        .rejects.toThrow("preparation is disposed");
+      prepared = await authority.prepare({ correlationId: "after-unused-preparation", scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell });
       let handle = await prepared.start({
         attachment: { id: "electron-test", shell: manifest.shell },
         capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } },
@@ -271,9 +279,13 @@ describe("Electron production Standalone authority", () => {
       expect(await getSidecarStatus(providerStamp)).toMatchObject({ shell: manifest.shell });
       await handle.close();
       const capsulePrepared = await capsuleAuthority.prepare({ correlationId: "capsule-only-join", scope: sharedScope, shell: nextCapability });
+      const unusedShared = await capsuleAuthority.prepare({ correlationId: "cancelled-shared-join", scope: sharedScope, shell: nextCapability });
+      await unusedShared.dispose();
+      expect(await shared.status(sharedScope)).toMatchObject({ state: "running", references: 1 });
       const capsuleHandle = await capsulePrepared.start({ attachment: { id: "electron-capsule-next", shell: nextCapability },
         capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } } });
       expect(await capsuleHandle.readStatus()).toMatchObject({ state: "running", references: 2 });
+      await expect(capsulePrepared.dispose()).rejects.toThrow("close the active Electron runtime attachment");
       expect(await getSidecarStatus(stamp)).toMatchObject({ hostPid: beforeCapsule.hostPid, generationPid: beforeCapsule.generationPid });
       expect(await getSidecarStatus(providerStamp)).toMatchObject({ shell: nextCapability });
       await capsuleHandle.close();
@@ -734,5 +746,7 @@ describe("Electron production Standalone authority", () => {
       })));
       expect(stopped.remainingPids).toEqual([]);
     }
-  }, 30_000);
+  // Real supervisor startup/retirement across independent ownership cases;
+  // the added preparation-disposal cases exceed the former 30s total budget.
+  }, 45_000);
 });

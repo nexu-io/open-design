@@ -61,6 +61,7 @@ export async function runElectronCapsule(
   const attachment: StandaloneHandoffAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell };
   let authority: ElectronStandaloneAuthority | null = null;
   let preparedRuntime: ElectronStandalonePreparedRuntime | null = null;
+  let preparationAcquisition: Promise<ElectronStandalonePreparedRuntime> | null = null;
   let generation: GenerationRecord | null = null;
   let generationBinding: StandaloneGenerationBinding | null = null;
   let startupSignal: ElectronStartupSignal | null = null;
@@ -193,8 +194,10 @@ export async function runElectronCapsule(
     async settleRendererMount() { await rendererMount?.catch(() => undefined); },
     async releaseRendererIntegration() { await rendererLease?.releaseIntegration(); },
     async releaseStandaloneAttachment() {
+      const prepared = await preparationAcquisition?.catch(() => null);
       const acquired = await runtimeAcquisition?.catch(() => null);
-      await (runtimeHandle ?? acquired)?.close();
+      try { await (runtimeHandle ?? acquired)?.close(); }
+      finally { await prepared?.dispose(); }
     },
   });
 
@@ -209,7 +212,8 @@ export async function runElectronCapsule(
     topology: warmupTopology,
     executors: {
       ...definition.warmupExecutors,
-      [ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE]: async () => {
+      [ELECTRON_WARMUP_ATOMS.RESOLVE_STANDALONE]: async ({ signal }) => {
+        signal.throwIfAborted();
         authority = definition.createStandaloneAuthority({
           nodeRuntime,
           installedShellPath: process.platform === "darwin" ? resolve(dirname(process.execPath), "../..") : process.execPath,
@@ -223,11 +227,13 @@ export async function runElectronCapsule(
             context.log?.write("standalone.feedback", { event });
           },
         });
-        preparedRuntime = await authority.prepare({
+        preparationAcquisition = authority.prepare({
           correlationId: randomUUID(),
           scope,
           shell,
         });
+        preparedRuntime = await preparationAcquisition;
+        signal.throwIfAborted();
         generation = preparedRuntime.generation;
         generationBinding = preparedRuntime.binding;
         startupSignal = context.startup!.bind(generationBinding.digest);
@@ -271,7 +277,8 @@ export async function runElectronCapsule(
           updaterRevisionAtStart = installerRecovery.snapshot.revision;
         }
       },
-      [ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY]: async () => {
+      [ELECTRON_WARMUP_ATOMS.AWAIT_STANDALONE_READY]: async ({ signal }) => {
+        signal.throwIfAborted();
         if (preparedRuntime == null || generation == null || generationBinding == null) {
           throw new Error("Standalone resolution has not completed");
         }

@@ -137,6 +137,8 @@ export type ElectronShellRenderer = Readonly<{
 }>;
 
 export type ElectronStandalonePreparedRuntime = Readonly<{
+  /** Release unclaimed preparation resources without disturbing sibling users. */
+  dispose(): Promise<void>;
   binding: StandaloneGenerationBinding;
   generation: GenerationRecord;
   updater: StandaloneShellUpdaterPort;

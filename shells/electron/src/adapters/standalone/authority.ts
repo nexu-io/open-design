@@ -366,11 +366,16 @@ export function createElectronStandaloneAuthorityFactory(
         if (needsActivation) {
           await store.activatePrepared(activationTarget, request.shell, state.revision, { failurePolicy: "explicit-recovery" });
         }
-        activeHost = await launchHost(binding, reuse, guard);
+        try { activeHost = await launchHost(binding, reuse, guard); }
+        catch (error) {
+          if (reuse == null) await guard.retireReplacement(initialResourceSet);
+          throw error;
+        }
       });
       feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
       let activeGeneration = generation;
       let activeAttachment: LifecycleAttachment | null = null;
+      let disposed = false;
       let sealedRuntimeStatus: StandaloneRuntimeStatus | null = null;
       const updater: StandaloneShellUpdaterPort = Object.freeze({
         shellType: request.shell.type,
@@ -401,6 +406,19 @@ export function createElectronStandaloneAuthorityFactory(
       return Object.freeze({
         binding,
         generation,
+        async dispose() {
+          if (disposed) return;
+          if (activeAttachment != null) throw new Error("close the active Electron runtime attachment before disposing preparation");
+          await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async guard => {
+            const current = await activeHost.lifecycle.status(request.scope).catch(() => null);
+            if (current == null) {
+              if (!await retireElectronOrphanedRuntime({ stamp: activeHost.stamp, scope: request.scope, ledger: lifecycleLedger, guard })) {
+                throw new Error("unresponsive Standalone host still owns preparation resources");
+              }
+            } else if (current.occupants.length === 0) await guard.retire();
+            disposed = true;
+          });
+        },
         updater,
         async readShellInstallationClaim() {
           const claim = await installerClaimLedger.read();
@@ -961,6 +979,7 @@ export function createElectronStandaloneAuthorityFactory(
           },
         }),
         async start({ attachment }): Promise<StandaloneRuntimeHandle> {
+          if (disposed) throw new Error("Electron Standalone preparation is disposed");
           if (activeAttachment != null) throw new Error("Electron Standalone prepared runtime already owns an attachment");
           const launcher = new VersionedLauncher(store, activeHost.lifecycle, request.shell, attachment.id, observeFeedback);
           let started: Awaited<ReturnType<VersionedLauncher["start"]>>;
