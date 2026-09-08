@@ -493,3 +493,112 @@ T4 / T6 是小的默认值问题,现状能跑,不急。
 - `.fork-sep span` 带着 `overflow: hidden; text-overflow: ellipsis`,但标签本身是 flex 容器,`text-overflow` 永远不生效;长译文会被切掉而不是省略号。自 #2714 落地起如此,修法要给标签加一层纯文本内层。
 - `docs/design/chat-mirror/mirror-exec.html` 是**生成产物**,仍停在两块式旧形态且写着旧文案。重建会产生约 776KB 的巨型 diff,单独一件事。
 - daemon 在源会话没有标题时整个压掉 `forkedInto` 戳(`routes/project/conversations.ts`「拿不到源标题就不盖」)。标题现在已经不渲染了,无标题的源会话理应仍然值得那条分界线。
+
+---
+
+## T69 被推翻:「设计风格选择」整条路删除(2026-09-08 用户当面裁决)
+
+**这条记录推翻 T69 的做法,不改写 T69 本身。** 上面「五之十六」整节连同它的
+「有意偏离」「不修的邻接面」逐字保留 —— 那是 2026-09-07 当天的真实决定和它
+当时的理由,历史不修。以下是**新的**决定。
+
+**裁决(逐字)**
+
+> 「od-next-strategy 的 plan 阶段确实挂着 direction-picker? 那你为啥不直接干掉?
+> 还额外加一个不许问.. 有病吗.. **都删掉啊**」
+
+T69 的做法是「**提示词撤干净 + 在 `direction-picker` 的 SKILL.md 里加一句
+Do not ask + 渲染层原地留着当安全网**」。产品推翻的正是这个三段式:既然这条路
+不要了,就不该留一个 atom 专门说「别问」,也不该留一整套渲染件等着被找回。
+⚠️ **产品仍然没有给出理由**,这里同样不代为补写。
+
+**实际删掉了什么**
+
+| 层 | 删除项 |
+|---|---|
+| atom | `plugins/_official/atoms/direction-picker/`(SKILL.md + open-design.json) |
+| 场景接线 | `od-default` / `od-new-generation` / `od-next-strategy` / `od-plugin-authoring` 的 `plan` 阶段去掉该 atom;`od-design-refine` / `od-tune-collab` 的 `direction` 阶段整个去掉(该 atom 是它唯一成员) |
+| 契约 / 花名册 | `OD_NEXT_PROMPT_STAGE_CONTRACT_V2`、`REQUIRED_PROMPT_BODY_ATOMS`、`FIRST_PARTY_ATOMS`、官方 marketplace registry |
+| question 类型 | `QuestionType` 里的 `direction-cards` 及其四个解析别名、`DirectionCard`、`FormQuestion.cards`、`parseDirectionCards`、答案再发时的 `foundation` / `guidance` 分支 |
+| host 目录 | `runtime/visual-style-catalog.ts`、`runtime/visual-style-deck.ts`(96 张预览图目录 + 一批 6 张的轮换) |
+| 控件 | `VisualStylePicker` / `VisualDirectionStack` / `VisualDirectionCardView` / `VisualStylePreview` / `VisualDirectionPlaceholder` / `DirectionCardsPicker`,以及 `visualStyleContext` 全链路、`visualStyleContextForProjectKind`、收口里的 `visualItems` |
+| 样式 / 文案 | `.qf-visual-*` / `.qf-preview-*` 约 810 行、`.answered .av`、`.answered.mod-visual-answer`;19 个 locale 的 6 个 `qf.visual*` 键 |
+| 埋点 | `visual_style_card` / `visual_style_refresh` 两个 element,以及 `style_id` / `style_context` / `interaction_source` 三个字段 |
+| 提示词 | `renderDirectionFormBody()`(两份镜像)、`findDirectionByLabel()`、三处「读 Host 表单答案」的散文 |
+| 文档 | `docs/atoms.md`、`docs/plugins-spec{,.zh-CN}.md` 的 §10 atom 表 / `choice` 产出方表 / 示例流水线 / taskKind atom 序列、`plugins/spec/SPEC{,.zh-CN}.md`、`create-image-campaign` 示例、`docs/screenshots/03-direction-picker.{png,svg}` |
+
+**删掉之后失去的正向职责(产品已知情并仍要求删)**
+
+那份 44 行的 SKILL.md 里除了「不许问」,还有三条正向职责,一并没了:
+
+1. **有活跃设计体系时,它的 `DESIGN.md` 调色板 / 字体 / 间距 / 组件规则就是方向,绑定 token 后停止。**
+2. **用户给了品牌规格 / 参考 URL / 截图时,直接解析那个来源。**
+3. **都没有时自己推断,并且必须跑 `od tools directions --id <id>` 取完整规格 —— never infer colors or fonts from the name alone。**
+
+第 4 条(atom 自己的收敛语义):**plan 阶段说出所选方向即完成,下一回合必须照它建;
+回退 = 强制多跑一次 plan 阶段的 devloop**。这条随 atom 一起没了,`plan` 阶段现在
+只剩 `todo-write`。
+
+⚠️ 这三条**并非全部落空**:`apps/daemon/src/prompts/core-slim.ts` 的
+「No design system or brand source is available」那一段仍然逐字教着同样的三档顺序
+和那句 `od tools directions --id <id>` / `Never infer colors or fonts from the name
+alone`。也就是说 1–3 在**默认设计会话**这条路上还在;失去的是**插件 / OD Next
+那条路**上的那一份 —— 那条路读的是 atom 正文,不是 `core-slim`。要不要在别处补
+回来,产品自己看这份清单决定。
+
+**留下的:方向库不是这条路的一部分**
+
+`DESIGN_DIRECTIONS` / `renderDirectionSpec{,Block}` / `renderDirectionIndexBlock` /
+`formatDirectionSpecText` / `od tools directions` **全部保留**。它们不是「读表单
+答案」那半边,而是 agent **自己推断出方向之后**把调色板绑进 `:root` 的事实源;
+`core-slim.ts` 那条「Never infer colors or fonts from the name alone」就靠它兑现。
+删了它 agent 会开始从方向名字瞎编颜色。反向断言钉在
+`e2e/tests/design-direction-picker-removed.test.ts` 最后一条用例(「方向**库**还活着」)。
+
+`findDirectionByLabel` 是唯一被判为「表单答案侧」而删掉的:零生产调用点,docblock
+自己写着「what the user sees in the form」,而**旧答案仍读得懂** ——
+`formatDirectionSpecText` 本来就同时匹配 id 和 label,一份带 label 的旧答案照样
+能被 `od tools directions` 解析出来。
+
+**守卫的处置**
+
+| 文件 | 处置 | 理由 |
+|---|---|---|
+| `e2e/tests/question-form-type-parity.test.ts` | `DORMANT_TYPES` 清空并删除,判据从「渲染器 − 休眠集」变回**集合相等** | 那个休眠集**只**为这一格的故意不相等而存在;类型没了,不相等的理由也没了 |
+| `e2e/tests/question-form-visual-style-retired.test.ts` | 删除 | 它守的是「提示词撤干净、渲染层还在」这个双面状态,现在两面都没了;由 `design-direction-picker-removed.test.ts` 取代 |
+| `apps/web/tests/runtime/visual-style-deck.test.ts` | 删除 | 被测模块不存在了 |
+| `QuestionForm.deck-batch.test.tsx` / `QuestionForm.direction-cards-catalog.test.tsx` / `QuestionForm.preview-loading.test.tsx` / `chat/w75-visual-direction-card.test.tsx` | 删除 | 同上,被测控件不存在了 |
+| `chat/visual-card-aspect.test.ts` / `visual-card-spacing.test.ts` / `visual-at-limit-affordance.test.ts` / `visual-option-stack-opacity.test.ts` / `question-form-carousel-nav-inset.test.tsx` | 删除 | 五份都只量这套控件的 CSS,规则已随控件删除 |
+| `question-form-direction-cards-dead-end.test.tsx` | 删除 | 它守的是「一道渲染不出选项的 `direction-cards` 不许锁死提交」。类型没了,`questionRendersNoChoices` 变成恒假的死码,一并删。**但那条不变量本身还有残余缺口**,见下面「邻接问题」 |
+| `apps/daemon/tests/prompts/tone-single-select.test.ts` | **一个字没改** | 它守的是「`tone` 那道题不再出现在提示词里」,和渲染层无关,删除之后照旧成立、照旧绿 |
+| `apps/daemon/tests/prompts/core-slim.test.ts` | 删掉「注入的 direction-picker atom」整条用例;去掉两条读 Host 答案的散文断言 | 前者的被测对象(atom SKILL.md)不存在了;后者断言的句子已从提示词删除 |
+| `apps/daemon/tests/prompts/discovery-localization-drift.test.ts` | 删掉 atom 那一行 | 同上;其余各行守的「别把澄清变成固定关卡」照旧 |
+| `apps/daemon/tests/plugins-bundled-atoms-roster.test.ts` | 从 Phase 4 名单里去掉 | 花名册断言的是磁盘上的实际清单 |
+| `packages/contracts/tests/directions.test.ts` | 判据换成方向**库**自身的不变量(id 唯一、规格完整、每条都进提示词块) | 原来只测 `findDirectionByLabel`;那个 helper 删了,但库还在,不该连带失去覆盖 |
+| `apps/daemon/tests/prompts/__snapshots__/system-prompt-matrix.test.ts.snap` | 更新 | **只有 `totalChars` 变了**,section 一个没增没减 |
+| `chat/mirror-gallery.test.tsx` 第 21 / 22 / 25 格 | 转成 `missing` 条目 | 见下 |
+
+**这仍然是对交付稿的有意偏离 —— 而且更彻底**
+
+交付稿 `729fa43ce7` 的 `cmp-clarify` 第 21 / 22 格画的就是这张卡(第 22 格状态标签
+逐字「选中一张 · 图上落绿勾,「下一步」才亮起」),第 25 格是它的已回答收口。
+T69 时代这三格还渲染得出来,只是不再被触发;**现在它们连渲染都不存在了**。
+镜像陈列页 `chat/mirror-gallery.test.tsx` 把这三格转成 `missing` 条目,理由写在
+条目正文里 —— 和 gid 70 那种「拍板不做」是同一个机制。**后来人不要当成漏做补回去。**
+
+**邻接问题(本单不修,列出来)**
+
+- `questionRendersNoChoices` 守的那条不变量 ——「一道渲染不出任何选项的题不能充当
+  提交门闩」—— 在 `direction-cards` 之外**仍有缺口**:一份 `{"type":"radio"}` 而
+  不带 `options` 的题会被 `normalizeType` 原样保留成 `radio`,它躺在
+  `CHOICE_QUESTION_TYPES` 里 ⇒ `questionNeedsAnswer` 恒真 ⇒ 「下一步」永远置灰。
+  这个洞**本来就在**(那条谓词从来只处理 `direction-cards`),不是这次删出来的,
+  修它要改的是通用选择题的门闩语义,需要单独一单。
+- `isDirectionForm`(`AssistantMessage.tsx`)保留了它的两条形状线索(表单 id 恰好
+  叫 `direction`、标题含 "visual direction"),只删掉 `q.type === 'direction-cards'`
+  那一条。模型**自己**造一道问方向的普通单选是提示词管不住的,而
+  `suppressDirectionForms` 在有活跃设计体系时把它藏起来仍然是对的行为。
+  `assistant.designSystemDirectionLocked` 那个 i18n 键因此也留着。
+- `docs/plans/plugins-implementation.md:293` 仍写着「`make-a-deck` 需要
+  `direction-picker` + `oauth-prompt`」。那是一份**有日期的实施排期**,不是活契约,
+  按「不改历史」留着。
