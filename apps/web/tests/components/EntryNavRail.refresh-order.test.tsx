@@ -47,6 +47,19 @@ type PendingRequest = {
 };
 
 const pendingRequests: PendingRequest[] = [];
+let reportVisibleRows: () => void = () => {};
+
+// The feature branch polls only rows reported visible by IntersectionObserver.
+class VisibleRowsObserver {
+  private rows: Element[] = [];
+  constructor(callback: IntersectionObserverCallback) {
+    reportVisibleRows = () => callback(this.rows.map((target) => ({
+      target, isIntersecting: true,
+    } as IntersectionObserverEntry)), this as unknown as IntersectionObserver);
+  }
+  observe(target: Element) { this.rows.push(target); }
+  disconnect() { this.rows = []; }
+}
 
 function run(
   projectId: string,
@@ -92,6 +105,8 @@ async function answer(
 
 beforeEach(() => {
   vi.useFakeTimers();
+  reportVisibleRows = () => {};
+  vi.stubGlobal('IntersectionObserver', VisibleRowsObserver);
   window.localStorage.clear();
   pendingRequests.length = 0;
   vi.stubGlobal(
@@ -128,6 +143,7 @@ it('keeps a newer Running rail state when an older two-project batch completes l
       />
     </I18nProvider>,
   );
+  await act(async () => reportVisibleRows());
   expect(pendingRequests.map(({ projectId }) => projectId)).toEqual(['p1', 'p2']);
 
   // When p1's old response is held by slow p2 while a newer batch applies Running.
