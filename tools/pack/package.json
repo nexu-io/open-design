@@ -25,7 +25,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "file:/Users/william/Documents/vela-amr-cli-evaluation/.task/amr-matrix-local-packages/powerformer-vela-cli-0.0.1-test.matrix-final.g2016972.tgz"
+    "@powerformer/vela-cli": "file:/Users/william/Documents/vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-0.0.1-test.pi.98057bb.tgz"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
