@@ -1,11 +1,11 @@
-import type { ElectronShellDefinition, ElectronShellManifest } from "../../contracts/index.js";
+import type { ElectronShellAppearance, ElectronShellDefinition } from "../../contracts/index.js";
 
 function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 /** Offline, sandboxed startup presentation; media is a Shell-owned asset. */
-export function electronSplashHtml(manifest: Pick<ElectronShellManifest, "productName" | "splash">, media?: ElectronShellDefinition["splashMedia"]): string {
+export function electronSplashHtml(manifest: Readonly<{ productName: string; splash: ElectronShellAppearance["splash"] }>, media?: ElectronShellDefinition["splashMedia"]): string {
   if (media != null && (media.mimeType !== "video/webm" || media.base64.length > 8_000_000
     || !/^[A-Za-z0-9+/]+={0,2}$/u.test(media.base64) || media.base64.length % 4 !== 0)) {
     throw new Error("invalid Electron splash media");

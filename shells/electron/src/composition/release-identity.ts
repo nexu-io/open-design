@@ -7,7 +7,6 @@ export type ElectronReleaseIdentityDeclaration = Readonly<{
   executableName: string;
   namespace: string;
   productName: string;
-  windowTitle: string;
 }>;
 
 export type ElectronReleaseIdentityRegistry = Readonly<{
@@ -42,8 +41,7 @@ function validateDeclaration(value: ElectronReleaseIdentityDeclaration, channel:
     || typeof value?.appId !== "string"
     || typeof value.executableName !== "string"
     || typeof value.namespace !== "string"
-    || typeof value.productName !== "string"
-    || typeof value.windowTitle !== "string") throw new Error(`Electron release identity declaration is invalid: ${channel}`);
+    || typeof value.productName !== "string") throw new Error(`Electron release identity declaration is invalid: ${channel}`);
   return value;
 }
 
@@ -65,7 +63,6 @@ export function createElectronReleaseManifest(
     namespace: request.namespace ?? declaration.namespace,
     productName: declaration.productName,
     version: request.releaseVersion,
-    window: { ...baseManifest.window, title: declaration.windowTitle },
   });
 }
 

@@ -38,7 +38,7 @@ describe("Electron renderer generation mount", () => {
     const dispose = vi.fn(), mounted = vi.fn();
     const createWindow = vi.fn((_options: unknown) => window);
     const input = {
-      context: { acknowledgement, manifest: { window: { width: 800, height: 600, title: "test" } } },
+      context: { acknowledgement, manifest: {}, windowPolicy: { width: 800, height: 600, title: "test" } },
       createWindow,
       ipc: { on(_channel: string, listener: typeof receive) { receive = listener; }, removeListener: vi.fn() },
       renderer: { mount: async () => ({ dispose }) },

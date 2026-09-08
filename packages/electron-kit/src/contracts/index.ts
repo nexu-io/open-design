@@ -22,7 +22,7 @@ export type { ElectronInstallerClaimIdentity, ElectronInstallerClaimSnapshot, El
 import type { ElectronMacRuntimePolicy } from "../platform/macos/contracts.js";
 import type { ElectronRendererRecoveryPolicy } from "../runtime/window/crash-recovery.js";
 
-export const ELECTRON_KIT_CONTRACT_VERSION = 1 as const;
+export const ELECTRON_KIT_CONTRACT_VERSION = 2 as const;
 export * from "./capsule.js";
 
 export type ElectronShellManifest = Readonly<{
@@ -36,6 +36,12 @@ export type ElectronShellManifest = Readonly<{
   channel: string;
   namespace: string;
   protocol: string;
+  shell: StandaloneShellIdentity;
+}>;
+
+/** Product presentation belongs to the Capsule, not the physical OS identity. */
+export type ElectronShellAppearance = Readonly<{
+  schemaVersion: 1;
   window: Readonly<{ width: number; height: number; title: string }>;
   splash: Readonly<{
     width: number;
@@ -47,7 +53,6 @@ export type ElectronShellManifest = Readonly<{
     initialLabel: string;
     readyLabel: string;
   }>;
-  shell: StandaloneShellIdentity;
 }>;
 
 export type ElectronShellActions = Readonly<{
@@ -110,12 +115,14 @@ export type ElectronShellRenderer = Readonly<{
   windowOptions?(input: Readonly<{
     acknowledgement: ElectronRendererMountAcknowledgement;
     manifest: ElectronShellManifest;
+    windowPolicy: ElectronShellAppearance["window"];
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
   }>): Readonly<BrowserWindowConstructorOptions>;
   mount(input: Readonly<{
     acknowledgement: ElectronRendererMountAcknowledgement;
     manifest: ElectronShellManifest;
+    windowPolicy: ElectronShellAppearance["window"];
     preflight: ElectronPreflightResult;
     presentation: "headless" | "interactive";
     contentUpdater: ElectronStandaloneContentUpdaterPort;
@@ -165,6 +172,7 @@ export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
 
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
+  appearance: ElectronShellAppearance;
   splashMedia?: Readonly<{ mimeType: "video/webm"; base64: string }>;
   mac: ElectronMacRuntimePolicy;
   preflight: ElectronPreflightTopology;
@@ -186,6 +194,7 @@ const version = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u;
 
 export function validateElectronShellManifest(value: ElectronShellManifest): ElectronShellManifest {
   if (value.schemaVersion !== ELECTRON_KIT_CONTRACT_VERSION) throw new Error("unsupported Electron Shell manifest schema");
+  if ("window" in value || "splash" in value || "appearance" in value) throw new Error("presentation must not be embedded in the physical Shell manifest");
   for (const [name, candidate] of Object.entries({
     appId: value.appId,
     channel: value.channel,
@@ -195,14 +204,27 @@ export function validateElectronShellManifest(value: ElectronShellManifest): Ele
   })) {
     if (!token.test(candidate)) throw new Error(`invalid Electron Shell ${name}`);
   }
-  if (value.productName.trim().length === 0 || value.publisher.trim().length === 0 || value.publisher.length > 128
-    || value.window.title.trim().length === 0) throw new Error("Electron Shell display identity is required");
+  if (value.productName.trim().length === 0 || value.publisher.trim().length === 0 || value.publisher.length > 128) throw new Error("Electron Shell display identity is required");
   if (!version.test(value.version)) throw new Error("invalid Electron Shell version");
   if (value.iconDataUrl != null && (typeof value.iconDataUrl !== "string" || value.iconDataUrl.length > 2_000_000
     || !/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u.test(value.iconDataUrl))) {
     throw new Error("invalid Electron Shell icon: expected an embedded PNG");
   }
-  if (!Number.isSafeInteger(value.window.width) || !Number.isSafeInteger(value.window.height) || value.window.width < 320 || value.window.height < 240) {
+  if (value.shell.type !== "electron" || !version.test(value.shell.version) || !digest.test(value.shell.buildHash) || !digest.test(value.shell.digest)) {
+    throw new Error("Electron Shell compatibility identity is invalid");
+  }
+  return structuredClone(value);
+}
+
+export function validateElectronShellAppearance(value: ElectronShellAppearance): ElectronShellAppearance {
+  if (value.schemaVersion !== 1 || Object.keys(value).sort().join(",") !== "schemaVersion,splash,window"
+    || value.window == null || value.splash == null
+    || Object.keys(value.window).sort().join(",") !== "height,title,width"
+    || Object.keys(value.splash).sort().join(",") !== "backgroundColor,foregroundColor,height,initialLabel,minimumVisibleMs,mutedColor,readyLabel,width") {
+    throw new Error("invalid Electron Capsule appearance schema");
+  }
+  if (typeof value.window.title !== "string" || value.window.title.trim().length === 0
+    || !Number.isSafeInteger(value.window.width) || !Number.isSafeInteger(value.window.height) || value.window.width < 320 || value.window.height < 240) {
     throw new Error("invalid Electron Shell window dimensions");
   }
   if (!Number.isSafeInteger(value.splash.width) || !Number.isSafeInteger(value.splash.height)
@@ -212,11 +234,9 @@ export function validateElectronShellManifest(value: ElectronShellManifest): Ele
     || !/^#[0-9a-f]{6}$/iu.test(value.splash.backgroundColor)
     || !/^#[0-9a-f]{6}$/iu.test(value.splash.foregroundColor)
     || !/^#[0-9a-f]{6}$/iu.test(value.splash.mutedColor)
+    || typeof value.splash.initialLabel !== "string" || typeof value.splash.readyLabel !== "string"
     || value.splash.initialLabel.trim().length === 0 || value.splash.readyLabel.trim().length === 0) {
     throw new Error("invalid Electron Shell splash policy");
-  }
-  if (value.shell.type !== "electron" || !version.test(value.shell.version) || !digest.test(value.shell.buildHash) || !digest.test(value.shell.digest)) {
-    throw new Error("Electron Shell compatibility identity is invalid");
   }
   return structuredClone(value);
 }

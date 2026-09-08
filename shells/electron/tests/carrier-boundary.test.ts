@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { expect, it } from "vitest";
 
@@ -9,7 +10,23 @@ it("keeps installed release identity out of the independent Capsule content", as
     write: false, metafile: true,
   });
   expect(Object.keys(result.metafile.inputs).filter(path => /(?:^|\/)config\/shell\.json$/u.test(path))).toEqual([]);
+  expect(Object.keys(result.metafile.inputs).some(path => /(?:^|\/)config\/appearance\.json$/u.test(path))).toBe(true);
+  expect(Object.keys(result.metafile.inputs).some(path => /release-identities\.json$/u.test(path))).toBe(false);
   expect(result.outputFiles[0]!.contents.byteLength).toBeGreaterThan(0);
+});
+
+it("builds loading changes from Capsule-owned appearance without editing carrier identity", async () => {
+  const options = { entryPoints: [fileURLToPath(new URL("../src/capsule.ts", import.meta.url))],
+    bundle: true, external: ["electron"], format: "cjs" as const, platform: "node" as const, target: "node24", write: false as const };
+  const before = await build(options);
+  const after = await build({ ...options, plugins: [{ name: "change-capsule-loading", setup(builder) {
+    builder.onLoad({ filter: /config\/appearance\.json$/ }, async ({ path }) => {
+      const appearance = JSON.parse(await readFile(path, "utf8"));
+      appearance.splash.initialLabel = "New Capsule loading policy";
+      return { contents: JSON.stringify(appearance), loader: "json" };
+    });
+  } }] });
+  expect(after.outputFiles[0]!.contents).not.toEqual(before.outputFiles[0]!.contents);
 });
 
 it("keeps tool lifecycle code out of every physical Shell bundle", async () => {

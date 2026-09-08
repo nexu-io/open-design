@@ -17,13 +17,13 @@ export async function mountElectronRendererLease(input: Readonly<{
   signal: AbortSignal;
 }>): Promise<ElectronRendererLease> {
   input.signal.throwIfAborted();
-  const { acknowledgement, manifest, preflight, presentation } = input.context;
-  const options = input.renderer.windowOptions?.({ acknowledgement, manifest, preflight, presentation });
+  const { acknowledgement, manifest, windowPolicy, preflight, presentation } = input.context;
+  const options = input.renderer.windowOptions?.({ acknowledgement, manifest, windowPolicy, preflight, presentation });
   const window = input.createWindow({
     ...options,
-    width: manifest.window.width,
-    height: manifest.window.height,
-    title: manifest.window.title,
+    width: windowPolicy.width,
+    height: windowPolicy.height,
+    title: windowPolicy.title,
     show: false,
     webPreferences: {
       ...options?.webPreferences,

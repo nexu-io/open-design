@@ -1,4 +1,4 @@
-# Electron Shell foundation
+# Electron product Shell
 
 The product layer is deliberately thin. It declares identity, window policy,
 the `od://` handler, ready-before preflight policy, concrete warmup topology, and adapters supplied to
@@ -9,11 +9,14 @@ receipts, validation, and its public carrier/Standalone atoms. The renderer reso
 prewarm node is a concrete Shell executor and the renderer consumes the warmed value.
 `src/main.ts` is only the process entry, `src/composition/definition.ts` is the
 single composition root, and `src/adapters/` contains concrete renderer, updater,
-installer, and platform bindings. This is an internal observation boundary for a
-possible later Desktop extraction, not a Desktop framework or public protocol.
+installer, and platform bindings. This is an internal composition boundary,
+not a second Desktop framework or a public transport protocol.
 Concrete host exemptions remain in that Shell config and are applied before app
 readiness. `config/distribution.json` separately owns the finite macOS/Windows artifact and NSIS
-presentation policy. `shell.json` owns the single publisher/product identity; `config/platforms/windows.json`
+presentation policy. `shell.json` schema 2 owns the physical publisher/product
+identity and Shell compatibility; Capsule-owned `config/appearance.json` owns
+window dimensions, per-channel titles and loading presentation. Old manifest
+presentation fields are rejected rather than merged. `config/platforms/windows.json`
 owns install scope and uninstall data retention. electron-kit derives registry endpoints from those declarations, while this Shell
 schedules post-ready registry reconciliation. These policies are consumed only by the relevant
 runtime or pack projection; the assembled scene remains independent of distribution and release policy.

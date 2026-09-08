@@ -24,6 +24,9 @@ Shell and the typed adapter boundary consumed by repository tools.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
 - Capsule composition consumes the explicit installed manifest; never bundle a
   default release manifest into its independently built product content.
+- `config/appearance.json` owns Capsule window/loading declarations and channel
+  title overrides. Physical manifest schema 2 excludes these presentation fields;
+  keep OS product identity, icons and installer endpoints physical.
 
 `electron-kit` owns reusable Electron mechanics. `electron-contract` is the
 browser-safe declaration leaf in that build closure. App producers and web

@@ -52,7 +52,7 @@ describe("Electron scene", () => {
       writeFile(paths.launcherResourcePath, "export const launcher = true;\n", "utf8"),
       writeFile(paths.rendererPreloadEntryPath, "export const preload = true;\n", "utf8"),
       writeFile(paths.manifestPath, `${JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         appId: "io.example.electron",
         productName: "Example Electron",
         publisher: "Example Company",
@@ -61,8 +61,6 @@ describe("Electron scene", () => {
         channel: "dev",
         namespace: "example-electron",
         protocol: "example",
-        window: { width: 800, height: 600, title: "Example Electron" },
-        splash: { width: 520, height: 320, minimumVisibleMs: 350, backgroundColor: "#151515", foregroundColor: "#ffffff", mutedColor: "#aaaaaa", initialLabel: "Preparing", readyLabel: "Ready" },
         shell: { type: "electron", version: "1.2.3", buildHash: "a".repeat(64), digest: "b".repeat(64) },
       })}\n`, "utf8"),
       writeFile(paths.runtimeConfigPath, `${JSON.stringify({

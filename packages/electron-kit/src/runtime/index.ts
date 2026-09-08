@@ -16,6 +16,7 @@ import {
 
 import {
   validateElectronShellManifest,
+  validateElectronShellAppearance,
   type ElectronRendererLease,
   type ElectronShellDefinition,
   type ElectronShellManifest,
@@ -181,6 +182,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
     throw new Error("Capsule cannot replace the established carrier identity or preflight");
   }
   context.log.write("capsule.definition.loaded", { pid: process.pid });
+  const appearance = validateElectronShellAppearance(definition.appearance);
   const warmupTopology = validateElectronRuntimeWarmupTopology(definition.warmup);
   const scope: StandaloneScope = { channel: manifest.channel, namespace: sessionNamespace };
   const attachment: StandaloneHandoffAttachment = { id: `electron-${process.pid}-${randomUUID()}`, shell: manifest.shell };
@@ -261,7 +263,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
       acknowledgement: createElectronRendererMountAcknowledgement({ attemptId, bindingDigest: binding.digest }),
       contentUpdater: rendererContentUpdater,
       shellUpdater: requireWarmupState(preparedRuntime, "a prepared Standalone runtime").updater,
-      manifest, preflight, presentation,
+      manifest, windowPolicy: appearance.window, preflight, presentation,
       runtime: Object.freeze({ attachment, binding, handle: requireWarmupState(runtimeHandle, "a Standalone runtime handle") }),
     },
     createWindow: (options) => {
@@ -356,10 +358,10 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
   await context.startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
   const splashStartedAt = Date.now();
   if (presentation === "interactive") {
-    splash = new BrowserWindow({ width: manifest.splash.width, height: manifest.splash.height, frame: false, resizable: false, show: true, backgroundColor: manifest.splash.backgroundColor, webPreferences: { sandbox: true } });
-    await context.startupQuit.guard(splash.loadURL(electronSplashHtml(manifest, definition.splashMedia)));
+    splash = new BrowserWindow({ width: appearance.splash.width, height: appearance.splash.height, frame: false, resizable: false, show: true, backgroundColor: appearance.splash.backgroundColor, webPreferences: { sandbox: true } });
+    await context.startupQuit.guard(splash.loadURL(electronSplashHtml({ productName: manifest.productName, splash: appearance.splash }, definition.splashMedia)));
   }
-  setSplashStage(splash, manifest.splash.initialLabel);
+  setSplashStage(splash, appearance.splash.initialLabel);
 
   warmup = runElectronWarmupTopology({
     topology: warmupTopology,
@@ -489,8 +491,8 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
   requireWarmupState(status as StandaloneRuntimeStatus | null, "Standalone readiness");
   const runtimeUpdaterRevisionAtStart = requireWarmupState(updaterRevisionAtStart as number | null, "the updater revision");
   const runtimeRendererLease = requireWarmupState(rendererLease as ElectronRendererLease | null, "a renderer lease");
-  setSplashStage(splash, manifest.splash.readyLabel);
-  const remaining = presentation === "headless" ? 0 : manifest.splash.minimumVisibleMs - (Date.now() - splashStartedAt);
+  setSplashStage(splash, appearance.splash.readyLabel);
+  const remaining = presentation === "headless" ? 0 : appearance.splash.minimumVisibleMs - (Date.now() - splashStartedAt);
   if (remaining > 0) await context.startupQuit.guard(new Promise((resolve) => setTimeout(resolve, remaining)));
   const pendingHandoffs = handoffs.drain();
   focusElectronWindow(

@@ -1,4 +1,5 @@
 import runtime from "../../config/runtime.json" with { type: "json" };
+import appearance from "../../config/appearance.json" with { type: "json" };
 import splashMedia from "../../config/splash-media.json" with { type: "json" };
 import standalone from "../../config/standalone.json" with { type: "json" };
 import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
@@ -6,6 +7,7 @@ import windowsLifecycle from "../../config/platforms/windows.json" with { type: 
 
 import type {
   ElectronRuntimeConfig,
+  ElectronShellAppearance,
   ElectronShellDefinition,
   ElectronShellManifest,
 } from "@open-design/electron-kit/runtime";
@@ -24,9 +26,16 @@ import { assertShellWarmupBindings } from "./warmup-bindings.js";
 export function createElectronShellDefinition(installedManifest: ElectronShellManifest): ElectronShellDefinition {
   const shellManifest = installedManifest;
   const runtimeConfig = runtime as ElectronRuntimeConfig;
-  const renderer = createElectronRendererAdapter(shellManifest.window.title);
+  const windowTitles: Readonly<Record<string, string>> = appearance.windowTitles;
+  const shellAppearance: ElectronShellAppearance = {
+    schemaVersion: 1,
+    window: { ...appearance.window, title: windowTitles[shellManifest.channel] ?? appearance.window.title },
+    splash: appearance.splash,
+  };
+  const renderer = createElectronRendererAdapter(shellAppearance.window.title);
   return Object.freeze({
     manifest: shellManifest,
+    appearance: shellAppearance,
     splashMedia: splashMedia as ElectronShellDefinition["splashMedia"],
     mac: macRuntime as ElectronMacRuntimePolicy,
     preflight: runtimeConfig.preflight,

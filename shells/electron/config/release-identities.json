@@ -5,22 +5,19 @@
       "appId": "io.open-design.betahyx",
       "executableName": "open-design-betahyx",
       "namespace": "release-betahyx",
-      "productName": "Open Design Betahyx",
-      "windowTitle": "Open Design Betahyx"
+      "productName": "Open Design Betahyx"
     },
     "prerelease": {
       "appId": "io.open-design.desktop.prerelease",
       "executableName": "open-design-prerelease",
       "namespace": "release-prerelease",
-      "productName": "Open Design Prerelease",
-      "windowTitle": "Open Design Prerelease"
+      "productName": "Open Design Prerelease"
     },
     "stable": {
       "appId": "io.open-design.desktop",
       "executableName": "open-design",
       "namespace": "release-stable",
-      "productName": "Open Design",
-      "windowTitle": "Open Design"
+      "productName": "Open Design"
     }
   }
 }

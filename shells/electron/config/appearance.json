@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "windowTitles": {
+    "betahyx": "Open Design Betahyx",
+    "prerelease": "Open Design Prerelease",
+    "stable": "Open Design"
+  },
+  "window": {
+    "width": 1040,
+    "height": 700,
+    "title": "Open Design"
+  },
+  "splash": {
+    "width": 1280,
+    "height": 900,
+    "minimumVisibleMs": 2000,
+    "backgroundColor": "#f2f4f5",
+    "foregroundColor": "#1f2529",
+    "mutedColor": "#7a838a",
+    "initialLabel": "Starting Open Design…",
+    "readyLabel": "Open Design is ready"
+  }
+}
