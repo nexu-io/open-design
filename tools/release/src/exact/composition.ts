@@ -18,6 +18,8 @@ async function localFile(root: string, name: unknown): Promise<string> {
 export async function prepareReleaseContent(input: Readonly<{
   policy: string; channel: string; releaseVersion: string; sourceCommit: string;
   sourceRoot: string; topology: string; scenesRoot: string; standaloneVersion: string;
+  closureArtifactFile?: string; standaloneArtifactFile?: string; resourceReceiptFile?: string;
+  capsulesRoot?: string;
   previousContentMetadataFile?: string; output: string; receipt: string;
 }>): Promise<void> {
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare", ...input });
@@ -46,7 +48,8 @@ export async function prepareReleaseContent(input: Readonly<{
   if (!Array.isArray(topology.active) || topology.active.length === 0) throw new Error("prepare requires active Shell topology");
   type Shell = { type: string; version: string; scenes: { target: string; sceneDirectory: string; sceneManifestSha256: string }[] };
   const shells = new Map<string, Shell>();
-  let closureArtifactFile: string | undefined, standaloneArtifactFile: string | undefined, resourceReceiptFile: string | undefined;
+  const capsuleProducts: Array<{ target: string; contentFile: string; archiveFile: string }> = [];
+  let { closureArtifactFile, standaloneArtifactFile, resourceReceiptFile } = input;
   for (const item of topology.active) {
     if (!["electron", "terminal"].includes(item.shell) || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(item.target)) throw new Error("unsupported prepare Shell topology");
     const artifact = join(input.scenesRoot, `exact-${item.shell}-scene-${item.target}-${input.sourceCommit}`);
@@ -61,6 +64,11 @@ export async function prepareReleaseContent(input: Readonly<{
     closureArtifactFile ??= await localFile(directory, scene.closure?.file);
     standaloneArtifactFile ??= await localFile(directory, scene.standalone?.entrypoint);
     if (item.shell === "electron") resourceReceiptFile ??= await localFile(directory, "closure-resources.json");
+    if (item.shell === "electron" && input.capsulesRoot != null) {
+      capsuleProducts.push({ target: item.target,
+        contentFile: await localFile(input.capsulesRoot, `${item.target}/capsule-content.json`),
+        archiveFile: await localFile(input.capsulesRoot, `${item.target}/capsule.zip`) });
+    }
   }
   if (closureArtifactFile == null || standaloneArtifactFile == null) throw new Error("prepare topology has no seeds");
   const { stdout } = await promisify(execFile)("git", ["show", "--no-patch", "--format=%cI", input.sourceCommit], { cwd: input.sourceRoot });
@@ -68,6 +76,7 @@ export async function prepareReleaseContent(input: Readonly<{
     channel: input.channel, releaseVersion: input.releaseVersion, sourceCommit: input.sourceCommit, publishedAt: stdout.trim(),
     standaloneVersion: input.standaloneVersion, artifactBaseUrl: `${policy.target.publicBaseUrl.replace(/\/$/u, "")}/${input.channel}/${input.releaseVersion}`,
     closureArtifactFile, standaloneArtifactFile, resourceReceiptFile, previousContentMetadataFile,
+    ...(input.capsulesRoot == null ? {} : { capsuleProducts }),
     shells: [...shells.values()].sort((a, b) => a.type.localeCompare(b.type)), outputDirectory: input.output,
   };
   await prepareContent(request, input.receipt);

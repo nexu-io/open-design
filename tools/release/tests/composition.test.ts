@@ -71,4 +71,41 @@ it("prepares and finalizes signed content within release ownership, with no requ
   expect(receipt).toMatchObject({ operation: "exact.pack", channel, releaseVersion });
   expect(receipt.requiredAcceptances.map((value: { shell: { type: string } }) => value.shell.type).sort()).toEqual(["electron", "terminal"]);
   expect(JSON.parse(await readFile(receipt.channelHeadFile, "utf8")).signatures).toHaveLength(1);
+
+  // A reused carrier keeps its original seeds while the release selects new
+  // independently produced content through the public command surface.
+  const currentClosure = join(root, "current-closure.mjs"), currentLauncher = join(root, "current-launcher.mjs");
+  await writeFile(currentClosure, "current closure"); await writeFile(currentLauncher, "current launcher");
+  const currentResources = join(root, "current-resources.json");
+  await json(currentResources, { schemaVersion: 1, operation: "closure.resources.build", resources: [] });
+  const independent = join(root, "independent"), independentReceipt = join(independent, "prepare-receipt.json");
+  const independentScenes = join(root, "independent-scenes");
+  const capsules = join(root, "capsules"), capsuleTarget = join(capsules, "darwin-arm64");
+  await mkdir(capsuleTarget, { recursive: true });
+  await writeFile(join(capsuleTarget, "capsule.zip"), "current capsule");
+  await json(join(capsuleTarget, "capsule-content.json"), { schemaVersion: 1, protocol: "electron-capsule-v5",
+    target: "darwin-arm64", entrypoint: "capsule.cjs", archive: { sha256: sha("current capsule"), size: 15, treeSha256: "b".repeat(64) } });
+  for (const item of active) await packSceneArtifact(join(root, `source-${item.shell}`),
+    join(independentScenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
+  await command([...prepare.map(value => value === prepared ? independent : value === prepareReceipt ? independentReceipt : value === scenes ? independentScenes : value),
+    "--closure-artifact", currentClosure, "--standalone-artifact", currentLauncher, "--resource-receipt", currentResources, "--capsules", capsules]);
+  const selected = JSON.parse(await readFile(independentReceipt, "utf8"));
+  expect(selected.closureArtifact.sha256).toBe(sha("current closure"));
+  expect(selected.standaloneArtifact.sha256).toBe(sha("current launcher"));
+  for (const shell of selected.shells) {
+    expect(shell.scenes[0].shellBuildHash).toBe(sha(shell.type));
+    const scene = JSON.parse(await readFile(join(shell.scenes[0].directory, "scene.json"), "utf8"));
+    expect(scene.closure.sha256).toBe(sha("closure"));
+    expect(scene.standalone.sha256).toBe(sha("launcher"));
+    if (shell.type === "electron") {
+      expect(scene.capsule.content.archive.sha256).toBe(sha("capsule"));
+      expect(shell.scenes[0].capsule.archive.sha256).toBe(sha("current capsule"));
+    }
+  }
+  const independentFinal = join(root, "independent-final");
+  await command(finalize.map(value => value === prepared ? independent : value === final ? independentFinal
+    : value === join(final, "pack-receipt.json") ? join(independentFinal, "pack-receipt.json") : value));
+  const composed = JSON.parse(await readFile(join(independentFinal, "documents/electron-metadata.json"), "utf8"));
+  expect(composed.document.distributions[0].artifact.sha256).toBe(sha("installer"));
+  expect(composed.document.distributions[0].capsule.archive.sha256).toBe(sha("current capsule"));
 });

@@ -127,6 +127,10 @@ export function registerExactCommands(cli: CAC): void {
     .option("--scenes <directory>", "Downloaded scene artifacts")
     .option("--standalone-version <version>", "Standalone runtime version")
     .option("--previous-content <file>", "Optional verified previous content envelope")
+    .option("--closure-artifact <file>", "Current Closure artifact; defaults to the scene seed")
+    .option("--standalone-artifact <file>", "Current Standalone launcher; defaults to the scene seed")
+    .option("--resource-receipt <file>", "Current complete Closure resource collection; defaults to the scene seed")
+    .option("--capsules <directory>", "Current Capsule products under <target>/; defaults to scene seeds")
     .option("--output <directory>", "Prepared content directory")
     .option("--receipt <file>", "Preparation receipt")
     .action(async (options: Options) => {
@@ -134,6 +138,10 @@ export function registerExactCommands(cli: CAC): void {
         releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit"), sourceRoot: required(options, "root"),
         topology: required(options, "topology"), scenesRoot: required(options, "scenes"), standaloneVersion: required(options, "standaloneVersion"),
         ...(options.previousContent == null ? {} : { previousContentMetadataFile: required(options, "previousContent") }),
+        ...(options.closureArtifact == null ? {} : { closureArtifactFile: required(options, "closureArtifact") }),
+        ...(options.standaloneArtifact == null ? {} : { standaloneArtifactFile: required(options, "standaloneArtifact") }),
+        ...(options.resourceReceipt == null ? {} : { resourceReceiptFile: required(options, "resourceReceipt") }),
+        ...(options.capsules == null ? {} : { capsulesRoot: required(options, "capsules") }),
         output: required(options, "output"), receipt: required(options, "receipt") });
     });
 

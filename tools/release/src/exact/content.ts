@@ -24,6 +24,7 @@ export type PrepareExactContentInput = Readonly<{
   closureArtifactFile: string;
   standaloneArtifactFile: string;
   resourceReceiptFile?: string;
+  capsuleProducts?: readonly Readonly<{ target: string; contentFile: string; archiveFile: string }>[];
   previousContentMetadataFile?: string;
   shells: readonly Readonly<{ type: string; version: string; scenes: readonly Readonly<{
     target: string; sceneDirectory: string; sceneManifestSha256: string;
@@ -114,8 +115,6 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   if (!Array.isArray(shells) || shells.length === 0) throw new Error("exact.prepare requires at least one Shell");
   const shellRecords: JsonObject[] = [];
   const shellTypes = new Set<string>();
-  let closureSceneDigest: string | undefined;
-  let standaloneSceneDigest: string | undefined;
   for (const rawShell of shells) {
     if (rawShell == null || typeof rawShell !== "object" || Array.isArray(rawShell)) throw new Error("invalid Shell descriptor");
     const shell = rawShell as JsonObject;
@@ -140,9 +139,8 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       const buildHash = String(manifest.shellBuildHash ?? "");
       const closureDigest = String(manifest.closure?.sha256 ?? ""), standaloneDigest = String(manifest.standalone?.sha256 ?? "");
       if (![buildHash, closureDigest, standaloneDigest].every((value) => DIGEST.test(value))) throw new Error(`${shellType} scene lacks a valid build, Closure, or Standalone binding: ${target}`);
-      if (closureSceneDigest != null && closureDigest !== closureSceneDigest) throw new Error("Shell scenes contain different Closure seeds");
-      if (standaloneSceneDigest != null && standaloneDigest !== standaloneSceneDigest) throw new Error("Shell scenes contain different Standalone launcher seeds");
-      closureSceneDigest = closureDigest; standaloneSceneDigest = standaloneDigest;
+      // Each carrier retains its own immutable installation seeds. They may
+      // differ from one another and from this release's content inputs.
       sceneRecords.push({ target, directory, sceneManifestSha256: binding, shellBuildHash: buildHash });
     }
     sceneRecords.sort((a, b) => String(a.target).localeCompare(String(b.target)));
@@ -150,15 +148,24 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
     shellRecords.push({ type: shellType, version: shellVersion, buildHash, scenes: sceneRecords });
   }
   shellRecords.sort((a, b) => String(a.type).localeCompare(String(b.type)));
+  const capsuleProducts = new Map<string, { contentFile: string; archiveFile: string }>();
+  const electronTargets = new Set<string>(shellRecords.filter(shell => shell.type === "electron")
+    .flatMap(shell => (shell.scenes as JsonObject[]).map(scene => String(scene.target))));
+  for (const product of request.capsuleProducts ?? []) {
+    if (!electronTargets.has(product.target) || capsuleProducts.has(product.target)) throw new Error("invalid or duplicate Capsule product target");
+    capsuleProducts.set(product.target, product);
+  }
+  if (request.capsuleProducts != null && capsuleProducts.size !== electronTargets.size) throw new Error("Capsule products do not cover Electron topology");
   const keys = await signingKeys();
   for (const shell of shellRecords) {
     if (shell.type !== "electron") continue;
     for (const scene of shell.scenes as JsonObject[]) {
       const neutral = await readObject(join(scene.directory, "scene.json"));
-      if (neutral.capsule?.archiveFile !== "capsule.zip") throw new Error("Electron scene lacks its independently built Capsule baseline");
-      const content = validateElectronCapsuleContent(neutral.capsule.content);
+      const product = capsuleProducts.get(String(scene.target));
+      if (product == null && neutral.capsule?.archiveFile !== "capsule.zip") throw new Error("Electron scene lacks its independently built Capsule baseline");
+      const content = validateElectronCapsuleContent(product == null ? neutral.capsule.content : await readObject(product.contentFile));
       if (content.target !== scene.target) throw new Error("Electron Capsule baseline target mismatch");
-      const archiveFile = join(scene.directory, "capsule.zip"), archive = await describeFile(archiveFile, "application/zip");
+      const archiveFile = product?.archiveFile ?? join(scene.directory, "capsule.zip"), archive = await describeFile(archiveFile, "application/zip");
       if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Electron Capsule baseline archive mismatch");
       scene.capabilityBuildHash = electronCompositeShellBuildHash(content, scene.shellBuildHash);
       const manifest = composeElectronCapsuleManifest({ content, version: String(shell.version),
@@ -167,8 +174,10 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       const archived = join(resolve(request.outputDirectory), "artifacts", `capsule-${scene.target}-${archive.sha256}.zip`);
       await mkdir(join(resolve(request.outputDirectory), "artifacts"), { recursive: true });
       await copyFile(archiveFile, archived);
+      const archivedDescription = await describeFile(archived, "application/zip");
+      if (archivedDescription.sha256 !== archive.sha256 || archivedDescription.size !== archive.size) throw new Error("Capsule source changed during copy");
       await writeObject(manifestFile, signed("document", manifest, keys));
-      scene.capsule = { manifest: await describeFile(manifestFile), archive: await describeFile(archived, "application/zip") };
+      scene.capsule = { manifest: await describeFile(manifestFile), archive: archivedDescription };
     }
     shell.buildHash = createHash("sha256").update(canonicalBytes((shell.scenes as JsonObject[])
       .map(({ target, capabilityBuildHash }) => ({ target, shellBuildHash: capabilityBuildHash })))).digest("hex");
@@ -183,16 +192,16 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   await mkdir(artifacts, { recursive: true });
   const closureSource = resolve(String(request.closureArtifactFile ?? ""));
   const closureSourceDescription = await describeFile(closureSource);
-  if (closureSourceDescription.sha256 !== closureSceneDigest) throw new Error("Closure promotion input differs from Shell scenes");
   const closureFile = join(artifacts, `closure-${closureSourceDescription.sha256}.mjs`);
   await copyFile(closureSource, closureFile);
   const closure = await describeFile(closureFile, "text/javascript");
+  if (closure.sha256 !== closureSourceDescription.sha256 || closure.size !== closureSourceDescription.size) throw new Error("Closure promotion source changed during copy");
   const standaloneSource = resolve(String(request.standaloneArtifactFile ?? ""));
   const standaloneSourceDescription = await describeFile(standaloneSource);
-  if (standaloneSourceDescription.sha256 !== standaloneSceneDigest) throw new Error("Standalone launcher promotion input differs from Shell scenes");
   const standaloneFile = join(artifacts, `standalone-launcher-${standaloneSourceDescription.sha256}.mjs`);
   await copyFile(standaloneSource, standaloneFile);
   const standalone = await describeFile(standaloneFile, "text/javascript");
+  if (standalone.sha256 !== standaloneSourceDescription.sha256 || standalone.size !== standaloneSourceDescription.size) throw new Error("Standalone launcher promotion source changed during copy");
   const closureResources: Array<{ blob: JsonObject; entrypoint: string; id: string; treeSha256: string }> = [];
   if (typeof request.resourceReceiptFile === "string") {
     const resourceReceiptPath = resolve(request.resourceReceiptFile), resourceReceipt = await readObject(resourceReceiptPath);

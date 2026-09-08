@@ -82,6 +82,32 @@ describe("exact release control", () => {
       await prepareContent({ ...prepareRequest, outputDirectory: replayOutput }, join(replayOutput, "prepare-receipt.json"));
       const replay = JSON.parse(await readFile(join(replayOutput, "prepare-receipt.json"), "utf8"));
       expect(await readFile(replay.contentMetadata.file)).toEqual(await readFile(prepared.contentMetadata.file));
+      // A retained carrier seed is immutable installation history, not the
+      // authority for this release's independently supplied Closure bytes.
+      const sceneBefore = await readFile(manifestPath);
+      const newClosure = join(root, "new-closure.mjs"), newLauncher = join(root, "new-launcher.mjs");
+      await writeFile(newClosure, "new independently built Closure");
+      await writeFile(newLauncher, "new independently built launcher");
+      const independentOutput = join(root, "independent-content");
+      await prepareContent({ ...prepareRequest, closureArtifactFile: newClosure, standaloneArtifactFile: newLauncher,
+        outputDirectory: independentOutput }, join(independentOutput, "prepare-receipt.json"));
+      const independent = JSON.parse(await readFile(join(independentOutput, "prepare-receipt.json"), "utf8"));
+      expect(independent.closureArtifact.sha256).toBe(digest(await readFile(newClosure)));
+      expect(independent.standaloneArtifact.sha256).toBe(digest(await readFile(newLauncher)));
+      expect(independent.shells[0].scenes[0].shellBuildHash).toBe(manifest.shellBuildHash);
+      expect(await readFile(manifestPath)).toEqual(sceneBefore);
+      if (shellType === "electron") {
+        const contentFile = join(root, "capsule-content.json"), archiveFile = join(root, "capsule.zip");
+        await writeFile(contentFile, JSON.stringify(manifest.capsule!.content));
+        await writeFile(archiveFile, "tampered");
+        const product = { target: "darwin-arm64", contentFile, archiveFile };
+        await expect(prepareContent({ ...prepareRequest, capsuleProducts: [] }, join(output, "rejected.json"))).rejects.toThrow("do not cover");
+        await expect(prepareContent({ ...prepareRequest, capsuleProducts: [product, product] }, join(output, "rejected.json"))).rejects.toThrow("duplicate Capsule");
+        await expect(prepareContent({ ...prepareRequest, capsuleProducts: [{ ...product, target: "darwin-x64" }] }, join(output, "rejected.json"))).rejects.toThrow("invalid or duplicate");
+        await expect(prepareContent({ ...prepareRequest, capsuleProducts: [product] }, join(output, "rejected.json"))).rejects.toThrow("archive mismatch");
+        await writeFile(contentFile, JSON.stringify({ ...manifest.capsule!.content, target: "darwin-x64" }));
+        await expect(prepareContent({ ...prepareRequest, capsuleProducts: [product] }, join(output, "rejected.json"))).rejects.toThrow("target mismatch");
+      }
       await expect(finalizeContent({
         prepareReceipt: join(output, "prepare-receipt.json"), contentMetadataFile: prepared.contentMetadata.file,
         closureArtifactFile: prepared.closureArtifact.file, standaloneArtifactFile: prepared.standaloneArtifact.file,

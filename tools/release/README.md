@@ -67,6 +67,16 @@ Final Electron metadata binds the published Capsule manifest and archive by
 URL, SHA-256 and size. Compatibility is declared once in the signed Capsule
 manifest; no separate Capsule latest pointer is published.
 
+`prepare --closure-artifact <file> --standalone-artifact <file>
+--resource-receipt <file> --capsules <directory>` can select current independent
+products without modifying retained carrier scenes. Capsule directories contain
+`<target>/capsule-content.json` and `<target>/capsule.zip` for every active
+Electron target. Missing, duplicate, mismatched or altered Capsule products
+fail closed. Omitted inputs use scene seeds for cold assembly. A resource receipt
+is a complete collection, not the single-resource build receipt. These inputs
+do not authorize a cache hit or skip installed acceptance; carrier installation
+seeds and current signed release content keep separate digest bindings.
+
 `build resource --resource-id <id> --root <workspace> --output <directory>
 --receipt <file>` invokes the Closure public producer for one declared data
 group. It needs no Shell, platform, channel or version and does not compile
