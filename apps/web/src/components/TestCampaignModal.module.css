@@ -2,5 +2,5 @@
 .control > label { display: inline-flex; align-items: center; gap: 8px; margin-left: 8px; padding: 8px 10px; border: 1px solid var(--border, #d4d4d8); border-radius: 8px; background: var(--surface, #fff); font-size: 12px; }
 .control select { min-width: 148px; }
 .control output { display: block; margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: var(--surface, #fff); font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.backdrop { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); z-index: 100; }
+.backdrop { position: fixed; inset: 0; display: grid; place-items: center; background: rgb(0 0 0 / 45%); z-index: 1000; }
 .modal { width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: var(--surface, #fff); }
