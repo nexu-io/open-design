@@ -12,7 +12,7 @@
     "description": "Official OpenDesign plugin registry seed. The generated public catalog is served from open-design.ai/marketplace.",
     "version": "0.1.0",
     "generatedFrom": "plugins/_official",
-    "bundledPreinstallCount": 414
+    "bundledPreinstallCount": 413
   },
   "plugins": [
     {

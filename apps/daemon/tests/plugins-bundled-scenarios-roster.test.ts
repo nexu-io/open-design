@@ -25,11 +25,33 @@ const officialMarketplacePath = path.join(
   'open-design-marketplace.json',
 );
 
+// `pipelineStages` pins the *declared* shape of each canonical scenario so it
+// cannot drift silently. It is a snapshot of a real manifest, not an
+// independent product rule — when a pipeline legitimately changes, this table
+// moves with it, and the reason belongs in the commit that moves it.
+//
+// 2026-09-08: `od-tune-collab` lost its leading `direction` stage. That stage's
+// only member was the `direction-picker` atom, deleted whole by product ruling
+// (see `e2e/tests/design-direction-picker-removed.test.ts` and
+// `specs/current/chat-panel-decisions-sheet.md`). Three options were on the
+// table and only this one holds up:
+//   · Give the stage a different atom — that would be inventing a product rule.
+//     No atom means "decide the refinement direction", and picking one would be
+//     deciding what tune-collab's first step should now do.
+//   · Keep the stage with an empty `atoms: []` — worse than deleting it. An
+//     atom's presence *is* its contribution ("an atom with no prompt fragment
+//     carries no body: its presence is the fact", `strategy-recipe.ts`), so a
+//     zero-atom stage is a step the agent walks that says nothing.
+//   · Drop the stage. Nothing else keys on the id: the only stage-id consumer
+//     is `pipeline-runner.ts`'s `surface.trigger?.stageId === stage.id`, and
+//     neither `od-tune-collab` nor `od-design-refine` declares any GenUI
+//     surface at all. The remaining `patch → critique → handoff` is exactly the
+//     flow their SKILL.md and useCase copy now describe.
 const CANONICAL = new Map<string, { taskKind: string; pipelineStages: string[] }>([
   ['od-new-generation',  { taskKind: 'new-generation',  pipelineStages: ['discovery', 'plan', 'generate', 'critique'] }],
   ['od-figma-migration', { taskKind: 'figma-migration', pipelineStages: ['extract', 'tokens', 'generate', 'critique'] }],
   ['od-code-migration',  { taskKind: 'code-migration',  pipelineStages: ['import', 'tokens', 'plan', 'verify', 'review', 'handoff'] }],
-  ['od-tune-collab',     { taskKind: 'tune-collab',     pipelineStages: ['direction', 'patch', 'critique', 'handoff'] }],
+  ['od-tune-collab',     { taskKind: 'tune-collab',     pipelineStages: ['patch', 'critique', 'handoff'] }],
 ]);
 
 // Non-canonical scenarios. These ride on a canonical taskKind but

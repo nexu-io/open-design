@@ -54,7 +54,26 @@ const readAsModelSees = (rel: string): string =>
 /** 行内代码的反引号也去掉,给「按短语找」的断言用。 */
 const readProse = (rel: string): string => readAsModelSees(rel).replace(/`/g, '');
 
-/** 曾经把 `direction-picker` 挂在某个阶段上的每一处接线。 */
+/**
+ * 每一处**把这个能力接出去**的地方。
+ *
+ * ⚠️ 判据是 `/direction[- ]pickers?/i` + 中文的「方向选择」,**不是**光找
+ * `direction-picker` 这个 id。第一版只找 id,于是漏掉了两类真实绑定点:
+ *
+ *  · `apps/daemon/src/plugins/scaffold.ts` —— `od plugin scaffold` 生成的
+ *    `SKILL.md` 正文里写着「Plan + direction picker.」(**空格**,不是连字符)。
+ *    这是活路径:每个新脚手架出来的插件都会带着这句话,教作者去用一个不存在的能力。
+ *  · `docs/plugins-spec{,.zh-CN}.md` —— **当前插件契约**(不是历史排期),
+ *    它向插件作者承诺 UI 会渲染 direction picker、并把「方向选择」列进
+ *    长程任务的标准阶段和 GenUI 的人机介入场景。
+ *
+ * 所以这份清单守的是「**这个能力还有没有被承诺出去**」,而不是「某个字符串还在不在」。
+ *
+ * ⚠️ 方向**库**用的词是 direction / directions,**不受这条正则影响** —— 只有
+ * 「picker / 选择」那层意思被禁。这是有意的:库是活的,选择器才是删掉的那个。
+ */
+const PICKER_PROMISE = /direction[- ]pickers?|direction picking|方向选择/i;
+
 const BINDING_SITES: { rel: string; what: string }[] = [
   { rel: 'plugins/_official/scenarios/od-default/open-design.json', what: 'plan 阶段' },
   { rel: 'plugins/_official/scenarios/od-new-generation/open-design.json', what: 'plan 阶段' },
@@ -66,8 +85,13 @@ const BINDING_SITES: { rel: string; what: string }[] = [
   { rel: 'plugins/_official/scenarios/od-tune-collab/SKILL.md', what: '流水线示例' },
   { rel: 'apps/daemon/src/plugins/atoms.ts', what: 'daemon atom 花名册' },
   { rel: 'apps/daemon/src/plugins/strategy-recipe.ts', what: 'OD Next 必需 atom 集' },
+  { rel: 'apps/daemon/src/plugins/scaffold.ts', what: '`od plugin scaffold` 生成的 SKILL.md 正文' },
   { rel: 'packages/contracts/src/prompts/od-next-strategy.ts', what: 'OD Next 阶段契约' },
   { rel: 'plugins/registry/official/open-design-marketplace.json', what: '官方 registry' },
+  { rel: 'docs/plugins-spec.md', what: '插件契约(当前,非历史)向作者承诺的公开面' },
+  { rel: 'docs/plugins-spec.zh-CN.md', what: '插件契约中文镜像' },
+  { rel: 'plugins/spec/SPEC.md', what: '面向贡献者的紧凑契约' },
+  { rel: 'plugins/spec/SPEC.zh-CN.md', what: '面向贡献者的紧凑契约中文镜像' },
 ];
 
 /** 提示词里**发问**那半边曾经出现的每一条路。 */
@@ -88,12 +112,37 @@ describe('设计风格选择整条路已删除', () => {
     ).toBe(false);
   });
 
-  it('没有任何场景 / 契约 / 花名册还挂着 direction-picker', () => {
+  it('没有任何场景 / 契约 / 花名册 / 脚手架 / 文档还承诺这个能力', () => {
     for (const { rel, what } of BINDING_SITES) {
       expect(existsSync(abs(rel)), `${rel} 不见了 —— 挪动位置要同时更新本测试`).toBe(true);
-      expect(read(rel), `${rel} 的${what}还挂着 direction-picker`).not.toMatch(
-        /direction-picker/,
-      );
+      expect(read(rel), `${rel} 的${what}还挂着 direction picker`).not.toMatch(PICKER_PROMISE);
+    }
+  });
+
+  it('这条判据真的分得出「选择器」和「方向库」', () => {
+    /*
+     * 防真空:上一条全绿也可能是因为正则根本匹配不上东西。这里拿两组静态样本
+     * 洗一遍 —— 该红的红、该放行的放行 —— 否则「都没匹配到」和「判据坏了」
+     * 从读数上分不开。
+     */
+    for (const banned of [
+      '2. Plan + direction picker.',
+      'the UI can show direction pickers',
+      'discovery → direction picking → generation',
+      '`direction-picker`',
+      'UI 可以展示 direction picker',
+      'discovery → 方向选择 → 生成',
+    ]) {
+      expect(PICKER_PROMISE.test(banned), `本该被拦住:${banned}`).toBe(true);
+    }
+    for (const allowed of [
+      'Direction library — infer and bind by default',
+      'choose the best match for the brief',
+      'od tools directions --id <id>',
+      'Preferred direction: shorter / sharper / more playful',
+      '方向库是 agent 自己推断之后绑定调色板的事实源',
+    ]) {
+      expect(PICKER_PROMISE.test(allowed), `本不该被拦住:${allowed}`).toBe(false);
     }
   });
 

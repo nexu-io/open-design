@@ -100,8 +100,8 @@
     ],
     "useCase": {
       "query": {
-        "en": "Tune the existing artifact: {{tuneInstruction}}. Pick a direction, apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream).",
-        "zh-CN": "使用这个插件完成以下任务：Tune the existing artifact: {{tuneInstruction}}. Pick a direction, apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream)."
+        "en": "Tune the existing artifact: {{tuneInstruction}}. Apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream).",
+        "zh-CN": "使用这个插件完成以下任务：Tune the existing artifact: {{tuneInstruction}}. Apply a small reviewable patch, critique until the score converges, then hand off as a patch (or deployable-app when build-test ran upstream)."
       },
       "exampleOutputs": [
         {

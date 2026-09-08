@@ -525,7 +525,9 @@ Do not ask + 渲染层原地留着当安全网**」。产品推翻的正是这�
 | 样式 / 文案 | `.qf-visual-*` / `.qf-preview-*` 约 810 行、`.answered .av`、`.answered.mod-visual-answer`;19 个 locale 的 6 个 `qf.visual*` 键 |
 | 埋点 | `visual_style_card` / `visual_style_refresh` 两个 element,以及 `style_id` / `style_context` / `interaction_source` 三个字段 |
 | 提示词 | `renderDirectionFormBody()`(两份镜像)、`findDirectionByLabel()`、三处「读 Host 表单答案」的散文 |
-| 文档 | `docs/atoms.md`、`docs/plugins-spec{,.zh-CN}.md` 的 §10 atom 表 / `choice` 产出方表 / 示例流水线 / taskKind atom 序列、`plugins/spec/SPEC{,.zh-CN}.md`、`create-image-campaign` 示例、`docs/screenshots/03-direction-picker.{png,svg}` |
+| 脚手架 | `apps/daemon/src/plugins/scaffold.ts` 生成的 `SKILL.md` 正文里那句 `2. Plan + direction picker.` → 改成 `2. Plan the work (TodoWrite-backed).` |
+| 文档 | `docs/atoms.md`、`docs/plugins-spec{,.zh-CN}.md` 的 §10 atom 表 / `choice` 产出方表 / 示例流水线 / taskKind atom 序列 / **公开面承诺**(UI 能展示 direction picker、长程任务标准阶段里的「方向选择」、GenUI 人机介入场景、UI↔CLI 双面表里那一行)、`plugins/spec/SPEC{,.zh-CN}.md`、`create-image-campaign` 示例、`docs/screenshots/03-direction-picker.{png,svg}` |
+| 场景文案 | `od-tune-collab` 的 `useCase.query`(en + zh-CN)不再写「Pick a direction, …」——它描述的就是被删掉的那个阶段。⚠️ 同名的**自由文本输入字段** `direction`(「Preferred direction: shorter / sharper / more playful」)是另一回事,**保留** |
 
 **删掉之后失去的正向职责(产品已知情并仍要求删)**
 
@@ -578,6 +580,24 @@ alone`。也就是说 1–3 在**默认设计会话**这条路上还在;失去�
 | `apps/daemon/tests/prompts/__snapshots__/system-prompt-matrix.test.ts.snap` | 更新 | **只有 `totalChars` 变了**,section 一个没增没减 |
 | `chat/mirror-gallery.test.tsx` 第 21 / 22 / 25 格 | 转成 `missing` 条目 | 见下 |
 
+**连带打红的两条 daemon 测试 —— 各自怎么判的**
+
+| 测试 | 判断 | 依据 |
+|---|---|---|
+| `plugins-bundled-scenarios-roster` · `od-tune-collab` 的 canonical pipeline shape | **改判据**(`['direction','patch','critique','handoff']` → `['patch','critique','handoff']`) | 这张表 pin 的是 canonical 场景**已声明的形状**,防它悄悄漂移,不是一条独立的产品规则 —— 流水线真的变了就跟着动,理由写进移动它的那次提交。三个选项只有这个站得住:①给 `direction` 阶段换个 atom = **自造产品规则**(没有任何 atom 的语义是「定这次微调的方向」);②留一个 `atoms: []` 空阶段比删掉更糟 —— atom 的**存在本身就是它的贡献**(`strategy-recipe.ts`:「an atom with no prompt fragment carries no body: its presence is the fact」),空阶段是 agent 走一遍却什么都不说的一步;③删掉:**没有任何东西 key 在这个阶段 id 上** —— 唯一的 stage-id 消费者是 `pipeline-runner.ts` 的 `surface.trigger?.stageId === stage.id`,而 `od-tune-collab` / `od-design-refine` **都没有声明任何 GenUI surface**。剩下的 `patch → critique → handoff` 正是它们 SKILL.md 和 useCase 文案现在描述的流程 |
+| `plugins-marketplaces` · registry populated | **改产物,不改判据** | `bundledPreinstallCount` 是**派生量**:运行时由 `marketplace-seed.ts` 取 `entries.length`。签进仓库的 registry 是那次生成的快照,我删了一个 plugin 条目却没同步这个派生字段。判据断言的正是「派生量和数组长度自洽」—— 它写得对,而且真的抓到了我引入的陈旧。改成 413。(它**没有**假设 atom 数量;`plugins.length > 100` 在 413 上照旧成立) |
+
+**反向红测漏过一个绑定点 —— 判据已加宽**
+
+第一版 `BINDING_SITES` 只找 `direction-picker` 这个 **id**,于是 `scaffold.ts` 里
+写成 `Plan + direction picker.`(**空格**)的那处溜过去了 —— 而它是**活路径**:
+`od plugin scaffold` 生成的每个新插件的 `SKILL.md` 都会带着它,教作者去用一个
+不存在的能力。判据因此从「找那个 id」改成「**这个能力还有没有被承诺出去**」:
+`/direction[- ]pickers?|direction picking|方向选择/i`,清单同时补进 `scaffold.ts`
+和四份契约文档。加宽后**先证明它在修复前会红**(scaffold 当场红),并配一条
+静态样本的防真空用例把「选择器」和「方向**库**」分开 —— 库用的 direction /
+directions / `od tools directions` 一律放行,那是活的。
+
 **这仍然是对交付稿的有意偏离 —— 而且更彻底**
 
 交付稿 `729fa43ce7` 的 `cmp-clarify` 第 21 / 22 格画的就是这张卡(第 22 格状态标签
@@ -601,4 +621,7 @@ T69 时代这三格还渲染得出来,只是不再被触发;**现在它们连渲
   `assistant.designSystemDirectionLocked` 那个 i18n 键因此也留着。
 - `docs/plans/plugins-implementation.md:293` 仍写着「`make-a-deck` 需要
   `direction-picker` + `oauth-prompt`」。那是一份**有日期的实施排期**,不是活契约,
-  按「不改历史」留着。
+  按「不改历史」留着。⚠️ 这条边界要和 `docs/plugins-spec{,.zh-CN}.md` 分清楚:
+  后者是**当前契约**,插件作者照着它设计,所以它里面的公开面承诺已经改掉了 ——
+  第一轮只改了 §10 atom 表和流水线示例,漏了 §1 / §5 / §10.3 / UI↔CLI 双面表
+  四处散文承诺,已补。

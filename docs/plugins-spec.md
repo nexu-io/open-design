@@ -18,7 +18,7 @@ The shortest mental model:
 2. **User or agent picks a workflow.** The selection can happen from the marketplace, inline in the home input, inside an existing project chat, from CLI, or from CI.
 3. **OD applies the plugin without making the plugin a UI process.** Apply returns a hydrated brief, typed context chips, assets, and capability requirements. It does not start a hidden plugin runtime.
 4. **Agent drives generation.** The daemon creates or updates a project, starts a run, streams events over SSE / CLI ND-JSON, and records artifacts.
-5. **UI is a collaboration surface.** The web/desktop UI can show forms, previews, direction pickers, critique panels, and live artifacts, but the same flow must work headlessly through `od`.
+5. **UI is a collaboration surface.** The web/desktop UI can show forms, previews, critique panels, and live artifacts, but the same flow must work headlessly through `od`.
 
 ### Figma-era vs agent-era boundary
 
@@ -69,14 +69,14 @@ The important product shift: **plugins are not local UI addons; they are reusabl
 
 ### One-click long-task delivery, atomic pipelines, and devloop
 
-OD's core unit is not "one prompt, one output" — it is a **long-running design agent task**: a single run typically spans discovery → direction picking → generation → critique → secondary refinement, sometimes lasting tens of minutes to hours. A plugin's job is to **slice that long-running task into a shippable unit** that a user, UI, CLI, or another agent can launch with one click.
+OD's core unit is not "one prompt, one output" — it is a **long-running design agent task**: a single run typically spans discovery → planning → generation → critique → secondary refinement, sometimes lasting tens of minutes to hours. A plugin's job is to **slice that long-running task into a shippable unit** that a user, UI, CLI, or another agent can launch with one click.
 
 Concretely, this spec promotes the existing "first-party atoms" from a flat capability list into an **atomic pipeline that plugins assemble**:
 
 - **Atom (§10):** a named capability exposed by the OD daemon and first-party tools (discovery-question-form, todo-write, file-read/write, research-search, media-image, live-artifact, critique-theater, etc.).
 - **Pipeline (§5 / §10.1):** the plugin uses `od.pipeline` to compose atoms into ordered stages. The spec ships a default reference pipeline of `discovery → plan → generate → critique`; plugins can add, reorder, or loop over any stage.
 - **Devloop (§10.2):** when a stage is marked `repeat: true` with an `until` termination condition (critique score, user confirmation, preview load success, etc.), the agent automatically iterates on the previous artifact until the condition holds or the user explicitly cancels.
-- **Generative UI (§10.3):** when a stage needs human-in-the-loop input (information, authorization, direction picking, optimization confirmation), the agent triggers a surface that the plugin **declares ahead of time** in its manifest's `od.genui.surfaces[]`. The daemon broadcasts the request through OD's native event stream, which can also be projected into AG-UI canonical events for external clients. Once the user answers, the daemon writes the answer back to the project; the surface's `persist` field decides whether the answer is remembered at run / conversation / project tier so that multi-turn chats do not pester the user with the same question twice.
+- **Generative UI (§10.3):** when a stage needs human-in-the-loop input (information, authorization, optimization confirmation), the agent triggers a surface that the plugin **declares ahead of time** in its manifest's `od.genui.surfaces[]`. The daemon broadcasts the request through OD's native event stream, which can also be projected into AG-UI canonical events for external clients. Once the user answers, the daemon writes the answer back to the project; the surface's `persist` field decides whether the answer is remembered at run / conversation / project tier so that multi-turn chats do not pester the user with the same question twice.
 
 In one sentence: **a plugin describes "what this long-running task's pipeline looks like and which GenUI surfaces it needs to collaborate with the user", the daemon supplies atoms and the surface bus, the agent runs a devloop on the pipeline, and artifacts carry provenance (§11.5) recording every plugin that touched the task.**
 
@@ -1238,7 +1238,7 @@ In practice this means:
 - **Marketplace browsing** — UI: grid + filters + previews. CLI: `od plugin list/info`, `od marketplace search`, `od plugin info <id> --json` returns the same manifest the UI renders.
 - **Plugin apply** — UI: click card, chips and inputs hydrate in place. CLI: `od plugin apply <id> --json` returns the identical `ApplyResult`.
 - **Run streaming** — UI: chat bubbles, todo list, progress chrome. CLI: `od run start --follow` emits ND-JSON events from the same `PersistedAgentEvent` discriminated union the UI consumes.
-- **Direction picker / question form** — UI: rendered as inline cards. CLI: emitted as structured events on stdout; agent or scripted wrapper picks an option by writing to stdin or via `od run respond <runId> --json '{...}'`.
+- **Question form** — UI: rendered as inline cards. CLI: emitted as structured events on stdout; agent or scripted wrapper picks an option by writing to stdin or via `od run respond <runId> --json '{...}'`.
 - **Live artifact preview** — UI: hot-reloading iframe. CLI: `od files watch <projectId> --path <relpath>` streams change events; user opens the file with their own tool of choice.
 - **Critique theater** — UI: 5-panel side-by-side. CLI: emitted as a structured `critique` event the agent or wrapper renders however it likes.
 

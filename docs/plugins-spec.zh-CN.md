@@ -18,7 +18,7 @@
 2. **用户或 agent 选择一个工作流。** 选择入口可以是 marketplace、首页输入框、已有 project chat、CLI，或者 CI。
 3. **OD apply 插件，但插件不是 UI 进程。** Apply 返回 hydrated brief、类型化 context chips、assets 和 capability requirements；它不会启动隐藏的插件 runtime。
 4. **agent 驱动生成。** daemon 创建或更新 project，启动 run，通过 SSE / CLI ND-JSON streaming events 输出过程，并记录 artifacts。
-5. **UI 是协作表面。** Web/desktop UI 可以展示表单、预览、direction picker、critique panel 和 live artifacts，但同一个流程必须可以通过 `od` headless 完成。
+5. **UI 是协作表面。** Web/desktop UI 可以展示表单、预览、critique panel 和 live artifacts，但同一个流程必须可以通过 `od` headless 完成。
 
 ### Figma 时代与 agent 时代的边界
 
@@ -69,14 +69,14 @@ sequenceDiagram
 
 ### 长程任务一键交付、原子管线与 devloop
 
-OD 的核心不是「一次 prompt 一次输出」，而是 **long-running design agent 任务**：单个 run 通常经过 discovery → 方向选择 → 生成 → critique → 二次调优等多步，可能跨越数十分钟到数小时。插件的本质是把这条长程任务**切成可发布的单元**，让用户、UI、CLI 或另一个 agent 一键启动。
+OD 的核心不是「一次 prompt 一次输出」，而是 **long-running design agent 任务**：单个 run 通常经过 discovery → 计划 → 生成 → critique → 二次调优等多步，可能跨越数十分钟到数小时。插件的本质是把这条长程任务**切成可发布的单元**，让用户、UI、CLI 或另一个 agent 一键启动。
 
 围绕这一点，spec 把已有的「一方 atoms」从扁平的 capability 列表升级为**可被插件组装的原子管线**：
 
 - **Atom（§10）**：OD daemon 与 first-party tools 暴露的具名能力（discovery-question-form、todo-write、file-read/write、research-search、media-image、live-artifact、critique-theater 等）。
 - **Pipeline（§5 / §10.1）**：插件通过 `od.pipeline` 把若干 atoms 组装成有序 stages；spec 默认提供一条「discovery → plan → generate → critique」的 reference pipeline，插件可以增删、重排或循环其中任何一步。
 - **Devloop（§10.2）**：当一条 stage 标记 `repeat: true` 并附带 `until` 终止条件（critique score、用户确认、preview 加载成功等）时，agent 基于上一轮 artifact 自动进入下一轮，直到条件满足或显式取消。
-- **Generative UI（§10.3）**：pipeline 的某个 stage 需要人类介入（提供信息、授权、方向选择、优化确认）时，agent 触发插件预先在 manifest `od.genui.surfaces[]` 中**声明**过的 surface；daemon 通过 OD 原生事件流广播给所有协作面（web / desktop / CLI / 其他 code agent），并可投影成 AG-UI canonical events 供外部 client 使用。用户回应后 daemon 把答案写回 project，run 继续。Surface 的 `persist` 字段决定答案在 run / conversation / project 三个层级中哪个层级被记住，让多轮对话不会反复打扰用户。
+- **Generative UI（§10.3）**：pipeline 的某个 stage 需要人类介入（提供信息、授权、优化确认）时，agent 触发插件预先在 manifest `od.genui.surfaces[]` 中**声明**过的 surface；daemon 通过 OD 原生事件流广播给所有协作面（web / desktop / CLI / 其他 code agent），并可投影成 AG-UI canonical events 供外部 client 使用。用户回应后 daemon 把答案写回 project，run 继续。Surface 的 `persist` 字段决定答案在 run / conversation / project 三个层级中哪个层级被记住，让多轮对话不会反复打扰用户。
 
 一句话：**插件描述「这次长程任务的 pipeline 该长什么样、需要哪些 GenUI surface 与用户协作」，daemon 提供 atoms 与 surface 总线，agent 在 pipeline 上跑 devloop，artifact 带 provenance（§11.5）记录这条长程任务跑过谁。**
 
@@ -1233,7 +1233,7 @@ OD 运行在三种 operating modes，它们共享**同一个** daemon、**同一
 - **Marketplace browsing**：UI 是 grid + filters + previews。CLI 是 `od plugin list/info`、`od marketplace search`、`od plugin info <id> --json`，返回 UI 渲染的同一份 manifest。
 - **Plugin apply**：UI 是点击卡片、chips 与 inputs 原地 hydrate。CLI 是 `od plugin apply <id> --json`，返回完全相同的 `ApplyResult`。
 - **Run streaming**：UI 是 chat bubbles、todo list、progress chrome。CLI 是 `od run start --follow`，从 UI 消费的同一 `PersistedAgentEvent` discriminated union 发出 ND-JSON events。
-- **Direction picker / question form**：UI 渲染为 inline cards。CLI 发出结构化事件到 stdout；agent 或 scripted wrapper 通过 stdin 或 `od run respond <runId> --json '{...}'` 选择选项。
+- **Question form**：UI 渲染为 inline cards。CLI 发出结构化事件到 stdout；agent 或 scripted wrapper 通过 stdin 或 `od run respond <runId> --json '{...}'` 选择选项。
 - **Live artifact preview**：UI 是 hot-reloading iframe。CLI 是 `od files watch <projectId> --path <relpath>`，stream change events；用户用自己的工具打开文件。
 - **Critique theater**：UI 是 5-panel side-by-side。CLI 发出结构化 `critique` event，由 agent 或 wrapper 自行渲染。
 

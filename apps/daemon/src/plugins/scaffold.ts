@@ -87,7 +87,7 @@ export async function scaffoldPlugin(input: ScaffoldInput): Promise<ScaffoldResu
     'Workflow steps:',
     '',
     '1. Discovery / clarifying questions.',
-    '2. Plan + direction picker.',
+    '2. Plan the work (TodoWrite-backed).',
     '3. Generate the artifact.',
     '4. Self-critique against the design system + craft rules.',
     '',
