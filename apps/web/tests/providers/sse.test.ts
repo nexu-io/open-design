@@ -2441,6 +2441,55 @@ describe('streamViaDaemon', () => {
     expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
   });
 
+  // The other half of the same rule. A gate the agent did not ask for leaves
+  // the agent's ordinary reply sitting next to the verdict — "sure, three
+  // pages, here is the plan" — and that prose is not an account of the stop.
+  // Suppressing on text alone would hide a real protocol failure behind a
+  // cheerful sentence, so the reason code is what decides.
+  it('still raises a run error when a gate blocked the task the agent did not', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-gated' });
+      if (url === '/api/runs/run-gated') return jsonResponse({ deliverableValid: false });
+      if (url === '/api/runs/run-gated/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-gated',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'clarification',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: null,
+            activeRunId: 'run-gated',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: ['od_next_protocol_runtime_state_missing'],
+              visibleText: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '深色，三页' }],
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+  });
+
   it('reattaches to an existing daemon run after the last stored event id', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()

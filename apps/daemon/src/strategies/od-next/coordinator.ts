@@ -4,6 +4,7 @@ import type {
 } from '@open-design/contracts';
 import {
   AppliedStrategyBindingV2Schema,
+  OD_NEXT_AGENT_DECLARED_BLOCK_REASON,
   OD_NEXT_RUNTIME_STATE_SCHEMA,
   composeOdNextStrategyContinuationV2,
 } from '@open-design/contracts';
@@ -121,19 +122,6 @@ function uniqueReasonCodes(values: ReadonlyArray<string>): string[] {
  * Agent's declaration when the turn comes back. Callers that already know the
  * route keep using `prepareStrategyRequest`.
  */
-/**
- * The reason a task carries when the agent itself declared the turn blocked and
- * raised no machine code of its own.
- *
- * The agent explains that kind of stop in prose ("no second clarification is
- * available, so this task is blocked"), not in codes. The task store drops a
- * blocked context whose reason set is empty — and it takes the agent's written
- * explanation down with it — so an unnamed verdict would persist as nothing at
- * all. Naming it keeps the attribution, and says something true: this block came
- * from the agent's own judgement rather than from a machine gate.
- */
-const AGENT_DECLARED_BLOCK_REASON = 'od_next_agent_declared_block';
-
 /**
  * The reason codes a blocked turn is attributed with: whatever the caller
  * established, plus any question-form marker violation the visible text
@@ -520,7 +508,7 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       parsed.visibleText,
       acceptedReasonCodes.length > 0
         ? acceptedReasonCodes
-        : [AGENT_DECLARED_BLOCK_REASON],
+        : [OD_NEXT_AGENT_DECLARED_BLOCK_REASON],
     ),
     ...(parsed.planContract ? { planContract: parsed.planContract } : {}),
     ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
