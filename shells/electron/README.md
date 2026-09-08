@@ -94,6 +94,11 @@ binding checks precede consumption; compatibility remains in the manifest.
 `checkFromHead` and the content updater's `prepareFromHead` accept the same
 caller-selected signed head. Both snapshot it before I/O and retain their
 existing verification gates; joint activation remains a separate integration.
+`prepareCapsule` verifies the fixed manifest and installed carrier compatibility
+before downloading its archive through Standalone's shared CAS/materializer.
+It verifies archive and tree bytes without executing code or arming an update.
+Capsule cache ownership is separate from Closure generation GC; sharing the
+acquisition primitives does not grant either lifecycle authority over the other.
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.

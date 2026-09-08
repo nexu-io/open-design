@@ -1,5 +1,5 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +9,7 @@ import {
   signStandaloneChannelHead,
   signStandaloneShellMetadata,
   signDocument,
+  sweepStandaloneStore,
   type StandaloneChannelHead,
   type StandaloneShellMetadata,
 } from "@open-design/standalone";
@@ -17,11 +18,12 @@ import { ElectronReleaseExactFeed, resolveElectronChannelHeadOverride } from "@/
 import { ElectronStandaloneHostUpdater } from "@/adapters/standalone/host-updater.js";
 import { ElectronStandaloneShellCandidateLedger } from "@/adapters/standalone/shell-updater-candidate.js";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
+import { writeCapsuleSeed } from "./fixtures/capsule.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: string; badSignature?: boolean; archiveSha256?: string; omitCapsule?: boolean } = {}) {
+async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: string; badSignature?: boolean; archiveSha256?: string; treeSha256?: string; minimumCarrierVersion?: string; omitCapsule?: boolean } = {}) {
   const cacheRoot = await mkdtemp(join(tmpdir(), "electron-release-feed-"));
   roots.push(cacheRoot);
   const keys = generateKeyPairSync("ed25519");
@@ -30,9 +32,15 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
   const metadataUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/electron-metadata.json";
   const artifactUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/electron.dmg";
   const capsuleUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/capsule.json";
+  const seed = await writeCapsuleSeed({ root: cacheRoot, privateKey: keys.privateKey, keyId: "release",
+    moduleSource: 'throw new Error("preparation must not execute Capsule"); export const createElectronCapsuleDefinition = () => {}; export const runElectronCapsule = () => {};',
+  });
+  const capsuleArchive = await readFile(seed.archiveFile);
+  const archive = seed.envelope.document.archive;
+  const capsuleArchiveUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/capsule.zip";
   const capsule = { schemaVersion: 1, protocol: "electron-capsule-v3", version: "0.2.0", target: options.target ?? "darwin-arm64", entrypoint: "capsule.cjs",
-    requires: { carrierVersion: "0.1.0" }, provides: { shellVersion: "0.2.0" },
-    archive: { sha256: options.archiveSha256 ?? "e".repeat(64), size: 100, treeSha256: "f".repeat(64) } };
+    requires: { carrierVersion: options.minimumCarrierVersion ?? "0.1.0" }, provides: { shellVersion: "0.2.0" },
+    archive: { ...archive, sha256: options.archiveSha256 ?? archive.sha256, treeSha256: options.treeSha256 ?? archive.treeSha256 } };
   const capsuleBytes = Buffer.from(canonicalJson(signDocument(capsule, [{ keyId: "release", privateKey: options.badSignature ? generateKeyPairSync("ed25519").privateKey : keys.privateKey }])));
   const document: StandaloneShellMetadata = {
     schemaVersion: 1,
@@ -48,7 +56,7 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
       updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
       ...(options.omitCapsule ? {} : { capsule: { schemaVersion: 1,
         manifest: { url: capsuleUrl, sha256: createHash("sha256").update(capsuleBytes).digest("hex"), size: capsuleBytes.byteLength },
-        archive: { url: "https://releases.invalid/betahyx/0.2.0-betahyx.2/capsule.zip", sha256: "e".repeat(64), size: 100 },
+        archive: { url: capsuleArchiveUrl, sha256: archive.sha256, size: archive.size },
       } }),
     }],
   };
@@ -65,6 +73,7 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
     [metadataUrl, metadata],
     [artifactUrl, artifact],
     [capsuleUrl, capsuleBytes],
+    [capsuleArchiveUrl, capsuleArchive],
   ]);
   const fetcher = vi.fn(async (input: string | URL | Request) => {
     const body = bodies.get(String(input));
@@ -80,10 +89,46 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
     target: "darwin-arm64",
     trustedKeys: new Map([["release", keys.publicKey]]),
   });
-  return { artifact, bodies, cacheRoot, feed, fetcher, metadataUrl, capsuleUrl, capsule };
+  return { artifact, bodies, cacheRoot, feed, fetcher, metadataUrl, capsuleUrl, capsuleArchiveUrl, capsuleArchive, capsule };
 }
 
 describe("Electron release-exact feed", () => {
+  it("prepares exact Capsule bytes through the shared cache without activating or rediscovering", async () => {
+    const { feed, bodies, fetcher, capsuleArchiveUrl, capsule, cacheRoot } = await fixture();
+    const candidate = (await feed.check())!;
+    const before = await readdir(cacheRoot);
+    bodies.delete("https://releases.invalid/betahyx/latest/channel-head.json");
+    const [prepared, concurrent] = await Promise.all([feed.prepareCapsule(candidate), feed.prepareCapsule(candidate)]);
+    expect(concurrent).toEqual(prepared);
+    expect(prepared.envelope.document).toEqual(capsule);
+    expect(await readdir(prepared.root)).toEqual(["capsule.cjs"]);
+    const module = await readFile(join(prepared.root, "capsule.cjs"), "utf8");
+    expect(module).toContain("createElectronCapsuleDefinition");
+    expect(await sweepStandaloneStore(cacheRoot)).toEqual({ discardedBlobs: 0, discardedMaterializations: 0 });
+    bodies.delete(capsuleArchiveUrl);
+    await writeFile(join(prepared.root, "capsule.cjs"), "corrupt materialization");
+    const repaired = await feed.prepareCapsule(candidate);
+    expect(repaired.root).toBe(prepared.root);
+    expect(await readFile(join(repaired.root, "capsule.cjs"), "utf8")).toBe(module);
+    expect(vi.mocked(fetcher).mock.calls.filter(([url]) => String(url) === capsuleArchiveUrl)).toHaveLength(1);
+    expect((await readdir(cacheRoot)).filter(name => !before.includes(name)).sort()).toEqual(["capsule", "locks"]);
+    expect((await readdir(join(cacheRoot, "capsule"))).sort()).toEqual(["blobs", "downloads", "locks", "materialized", "staging", "trash"]);
+  });
+
+  it.each([{ minimumCarrierVersion: "9.0.0" }, { badSignature: true }, { target: "win32-x64" }])("refuses Capsule before archive acquisition when trust or carrier compatibility fails %j", async options => {
+    const { feed, fetcher, capsuleArchiveUrl } = await fixture(undefined, options);
+    await expect(feed.prepareCapsule((await feed.check())!)).rejects.toThrow();
+    expect(vi.mocked(fetcher).mock.calls.some(([url]) => String(url) === capsuleArchiveUrl)).toBe(false);
+  });
+
+  it("rejects downloaded Capsule corruption and a signed but incorrect materialized tree", async () => {
+    const damaged = await fixture();
+    damaged.bodies.set(damaged.capsuleArchiveUrl, Buffer.alloc(damaged.capsuleArchive.length));
+    await expect(damaged.feed.prepareCapsule((await damaged.feed.check())!)).rejects.toThrow();
+    const wrongTree = await fixture(undefined, { treeSha256: "0".repeat(64) });
+    await expect(wrongTree.feed.prepareCapsule((await wrongTree.feed.check())!)).rejects.toThrow("tree failed verification");
+  });
+
   it("resolves Capsule from the fixed signed candidate without rereading latest", async () => {
     const { feed, bodies, fetcher, capsule } = await fixture();
     const head = await feed.readChannelHead("betahyx");

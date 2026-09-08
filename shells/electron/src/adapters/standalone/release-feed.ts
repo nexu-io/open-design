@@ -1,12 +1,15 @@
 import type { KeyObject } from "node:crypto";
+import { join } from "node:path";
 
 import {
   canonicalJson,
   ensureStandaloneBlob,
+  materializeStandaloneBlob,
   sha256Hex,
   verifyStandaloneChannelHead,
   verifyStandaloneShellMetadata,
   verifyDocument,
+  withStandaloneMaintenanceLock,
   type SignedDocument,
   type SignedStandaloneChannelHead,
   type SignedStandaloneShellMetadata,
@@ -14,7 +17,7 @@ import {
   type StandaloneShellIdentity,
   type StandaloneUpdateSource,
 } from "@open-design/standalone";
-import { assertElectronCapsuleReleaseManifest, validateElectronCapsuleRelease,
+import { assertElectronCapsuleCompatibility, assertElectronCapsuleReleaseManifest, validateElectronCapsuleRelease,
   type ElectronCapsuleManifest, type ElectronCapsuleRelease } from "@open-design/electron-kit/contracts";
 
 import type { ElectronStandaloneTarget } from "./installation.js";
@@ -158,6 +161,30 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
     verifyDocument(envelope, this.options.trustedKeys);
     assertElectronCapsuleReleaseManifest(binding, envelope.document, this.options.target);
     return structuredClone(envelope);
+  }
+
+  /** Preparation is shared CAS acquisition, never module execution or an arm.
+   * The installed carrier must satisfy the signed Capsule before fetching code. */
+  async prepareCapsule(candidate: ElectronReleaseExactCandidate): Promise<Readonly<{
+    envelope: SignedDocument<ElectronCapsuleManifest>;
+    root: string;
+  }>> {
+    const exact = this.validateCandidate(candidate);
+    const envelope = await this.readCapsule(exact), manifest = envelope.document;
+    assertElectronCapsuleCompatibility(manifest, { target: this.options.target, version: this.options.shell.version });
+    const archive = exact.distribution.capsule.archive;
+    const blob = { sha256: archive.sha256, size: archive.size, mediaType: "application/zip",
+      sources: [{ kind: "remote" as const, url: archive.url }] };
+    const options = { fetch: this.options.fetch, resourceId: "electron-capsule" };
+    // Closure's generation sweep has no authority over Capsule reachability.
+    // Reuse the same CAS primitives under the separate Capsule cache owner.
+    const cacheRoot = join(this.options.cacheRoot, "capsule");
+    return await withStandaloneMaintenanceLock(cacheRoot, async () => {
+      const acquired = await ensureStandaloneBlob(cacheRoot, blob, options);
+      const materialized = await materializeStandaloneBlob(cacheRoot, blob, acquired.path,
+        { type: "zip", entrypoint: manifest.entrypoint, treeSha256: manifest.archive.treeSha256 }, options);
+      return Object.freeze({ envelope, root: materialized.path });
+    });
   }
 
   async download(candidate: ElectronReleaseExactCandidate): Promise<Readonly<{ path: string; candidate: ElectronReleaseExactCandidate }>> {
