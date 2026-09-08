@@ -1,0 +1,47 @@
+{
+  "candidateId": "ab0c7fc4-bd16-4e9e-9a91-eabb2bbb0879",
+  "projectId": "79208616-2e51-4e2f-8a2f-e75f4448722e",
+  "runId": "e6f2ac06-a01a-477e-b946-928f1ec8be92",
+  "conversationId": "c83794b8-38f2-4a56-9a07-043de893c375",
+  "provenance": {
+    "summary": "Detected from context/source-context.md, README.md, SKILL.md, ui_kits/app/README.md, context/provenance.md after a successful run.",
+    "detectedAt": 1788493269967
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "context/source-context.md",
+      "label": "context/source-context.md",
+      "size": 2534,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 6671,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 4188,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "ui_kits/app/README.md",
+      "label": "ui_kits/app/README.md",
+      "size": 4654,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/provenance.md",
+      "label": "context/provenance.md",
+      "size": 2507,
+      "copied": true
+    }
+  ]
+}
