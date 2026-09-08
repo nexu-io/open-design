@@ -131,9 +131,3 @@ export async function resolveAutomaticContinuationEvidence(input: {
   };
 }
 
-/**
- * Machine-block delimiting failures the protocol stream could not resolve. The
- * stream suppresses these bodies rather than emitting them, so they are the
- * only codes that describe a machine-contract boundary failure rather than one
- * agent turn being non-compliant.
- */
