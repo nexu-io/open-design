@@ -129,7 +129,7 @@ describe('FileWorkspace side-chat file-link routing (host-level)', () => {
       '参考项目里只有一个文件：[deck-outline.md](/data/projects/other-project/deck-outline.md)。',
     );
 
-    const anchor = container.querySelector('.msg.assistant a.md-link, a.md-link');
+    const anchor = container.querySelector('[data-testid="assistant-flow"] a.md-link, a.md-link');
     expect(anchor).not.toBeNull();
 
     const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });

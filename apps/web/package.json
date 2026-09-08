@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.21.1",
+  "version": "0.21.6",
   "private": true,
   "type": "module",
   "exports": {
@@ -60,6 +60,7 @@
     "react-dom": "18.3.1",
     "shiki": "4.1.0",
     "sucrase": "3.35.1",
+    "thinking-orbs": "0.3.1",
     "three": "0.185.1"
   },
   "devDependencies": {

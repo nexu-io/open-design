@@ -2,7 +2,7 @@ name: notify-release-feishu
 
 # On every push to a release/** branch, build a full prerelease package by reusing
 # release-prerelease, then post a Feishu card with the download
-# links (macOS arm64 + Intel, Windows, and Linux when enabled) and the changelog
+# links (macOS arm64 and Windows always; macOS Intel and Linux when enabled) and the changelog
 # since the previously published prerelease. Consecutive pushes to the same branch
 # are throttled, not debounced: an in-flight build is allowed to finish (so a
 # busy release branch always produces a prerelease), while pushes that arrive
@@ -43,6 +43,26 @@ on:
         default: ""
       win_x64_smoke_mode:
         description: "Windows x64 packaged smoke coverage (skip/core/full). Empty uses core. Smoke failures are reported on the download card but do not block publication."
+        required: false
+        type: string
+        default: ""
+      enable_mac_x64:
+        description: "Also build the macOS Intel (x64) package. ON by default — stable ships Intel and is gated on validated prerelease artifacts, so an Intel-less prerelease cannot be promoted. Uncheck only when this run is explicitly not about Intel and you want the ~12 min back."
+        required: false
+        type: boolean
+        default: true
+      enable_smoke:
+        description: "Also run the packaged smoke suites (mac arm64, mac Intel, Windows). ON by default. They no longer run inside the build jobs: release-prerelease-smoke.yml re-downloads the published packages from R2 after they ship, so smoke costs this pipeline nothing."
+        required: false
+        type: boolean
+        default: true
+      enable_tests:
+        description: "Also dispatch the code test suites (P0 Functional E2E, E2E Vitest, daemon shards, verify) into release-prerelease-tests.yml. ON by default; they gate nothing and run in a workflow of their own."
+        required: false
+        type: boolean
+        default: true
+      mac_sign_mode:
+        description: "macOS signing depth: no / sign-only / notarize. Empty uses sign-only — codesigned (which the stable promotion gate requires) but not sent to Apple's notary service. Use notarize for the last prerelease before a stable promotion."
         required: false
         type: string
         default: ""
@@ -96,9 +116,40 @@ jobs:
       # job dies before the smoke starts. That is how release/v0.18.1's first
       # prerelease failed on its branch-cut commit.
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || 'core' }}
+      # macOS Intel builds on every prerelease, because stable ships Intel and
+      # stable's gate is a validated prerelease artifact.
+      #
+      # `|| true` would NOT express that. `inputs` is unset on push, so the
+      # obvious `${{ inputs.enable_mac_x64 || true }}` reads correctly there —
+      # but on a dispatch where the operator UNCHECKED the box, `false || true`
+      # is also true, and the switch would be unturnoffable. Test the event
+      # instead: push short-circuits to a real `true`, and a dispatch forwards
+      # the operator's own boolean.
+      enable_mac_x64: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_mac_x64 }}
+      # Same shape, same reason. Packaged smoke now runs in
+      # release-prerelease-smoke.yml against the artifacts re-downloaded from
+      # R2, so it costs the build nothing and defaults on.
+      enable_smoke: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_smoke }}
+      # Same shape. The code suites run in release-prerelease-tests.yml and gate
+      # nothing; the switch exists only to skip them outright.
+      enable_tests: ${{ github.event_name != 'workflow_dispatch' || inputs.enable_tests }}
+      # Same failure mode as win_x64_smoke_mode above: a `workflow_call`
+      # `default:` only applies to an OMITTED input, so the final arm must name
+      # a real mode, never ''. sign-only keeps platforms.mac.signed == true,
+      # which is what the stable promotion gate reads; it drops only the Apple
+      # notary round-trip, which no prerelease consumer needs.
+      mac_sign_mode: ${{ inputs.mac_sign_mode || 'sign-only' }}
 
   notify:
     name: Notify Feishu (release)
+    # TRANSITIONAL. The progressive card (release-prerelease-card.yml, posted by
+    # the Feishu application bot) supersedes this one-shot custom-bot webhook
+    # card: it appears as soon as the first platform publishes and is edited in
+    # place as the rest of the platforms, the code tests, and the packaged smoke
+    # report in. This job stays until the new card has carried a couple of real
+    # releases, because a gap in release notification is worse than a duplicate.
+    # Retiring it means deleting this job and the FEISHU_RELEASE_WEBHOOK /
+    # FEISHU_RELEASE_SIGN_SECRET secrets it reads.
     needs: build
     if: ${{ !cancelled() && needs.build.outputs.release_version != '' }}
     runs-on: ubuntu-latest
@@ -111,21 +162,73 @@ jobs:
           # can differ — anchoring on the built commit keeps the changelog range
           # (previous_commit..commit) correct for manual prerelease runs.
           ref: ${{ needs.build.outputs.commit }}
-          fetch-depth: 0
+          # Shallow on purpose. The only thing this job runs from the repository
+          # is tools/release/src/notifications/feishu.ts, which imports nothing
+          # but node builtins; the changelog range now comes from the compare
+          # API below instead of local history. A full clone of this repository
+          # is a 2.2 GiB pack and cost 4m09s of a 56m pipeline (run
+          # 34102146769) to serve exactly one `git log`.
 
       - name: Compute changelog since last prerelease
         id: changelog
         env:
+          GH_TOKEN: ${{ github.token }}
           PREV: ${{ needs.build.outputs.previous_commit }}
           CUR: ${{ needs.build.outputs.commit }}
         run: |
           set -euo pipefail
           file="$RUNNER_TEMP/changelog.txt"
           : > "$file"
-          if [ -n "$PREV" ] && git cat-file -e "${PREV}^{commit}" 2>/dev/null && git cat-file -e "${CUR}^{commit}" 2>/dev/null; then
-            git log --no-merges --pretty=format:'%s (%h)' "${PREV}..${CUR}" > "$file" || true
-          fi
+          # Set the output before any early return, so every path below still
+          # hands feishu.ts a real (possibly empty) file — the same contract the
+          # local-git version had: no baseline, or an unreachable commit, means
+          # an empty changelog, not a failed notification.
           echo "file=$file" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$PREV" ] || [ -z "$CUR" ]; then
+            echo "no comparable range (PREV='${PREV}' CUR='${CUR}'); changelog stays empty"
+            exit 0
+          fi
+
+          raw="$RUNNER_TEMP/changelog-compare.txt"
+          meta="$RUNNER_TEMP/changelog-compare-meta.txt"
+          : > "$raw"
+          : > "$meta"
+
+          # Reproduces `git log --no-merges --pretty=format:'%s (%h)' PREV..CUR`:
+          #   * `select((.parents | length) < 2)` is --no-merges.
+          #   * %s is the subject — the first paragraph, folded onto one line —
+          #     so split on the blank line, then collapse any interior newline.
+          #   * %h abbreviated to 10 characters, which is what git's automatic
+          #     abbreviation resolves to on this repository's object count.
+          # `--paginate` walks the compare endpoint's Link headers; both the page
+          # order and the order within a page are oldest-first, so a single `tac`
+          # at the end restores git log's newest-first order (which matters: the
+          # card renders only the first 30 lines).
+          subject='(.commit.message | split("\n\n")[0] | gsub("[\r\n]+"; " ") | sub("^\\s+"; "") | sub("\\s+$"; ""))'
+          if ! gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${CUR}?per_page=100" \
+              --jq ".commits[] | select((.parents | length) < 2) | \"\\(${subject}) (\\(.sha[0:10]))\"" \
+              > "$raw"; then
+            echo "::warning::compare ${PREV}...${CUR} failed (commit unreachable, history rewritten, or API error); posting the card without a changelog"
+            exit 0
+          fi
+
+          tac "$raw" > "$file"
+
+          # The compare endpoint caps at 250 commits. Pagination still returns
+          # the newest page last, so the newest 30 lines the card renders are
+          # exact either way; only the "共 N 条" total would under-report. Say so
+          # in the log rather than silently disagreeing with the real range.
+          if gh api "repos/${GITHUB_REPOSITORY}/compare/${PREV}...${CUR}?per_page=1" \
+              --jq '.total_commits' > "$meta" 2>/dev/null; then
+            total="$(tr -d '[:space:]' < "$meta")"
+            collected="$(wc -l < "$raw" | tr -d ' ')"
+            echo "compare ${PREV}...${CUR}: total_commits=${total} non-merge lines collected=${collected}"
+            if printf '%s' "$total" | grep -Eq '^[0-9]+$' && [ "$total" -gt 250 ]; then
+              echo "::warning::compare returned ${total} commits, above the endpoint's 250 cap; the card lists the newest commits correctly but its total under-reports"
+            fi
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -148,8 +251,17 @@ jobs:
           PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
           CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
           BUILD_STATE: ${{ needs.build.result }}
-          MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}
-          WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}
+          # The authoritative "did a package actually ship?" bit. `BUILD_STATE`
+          # is the reusable workflow's overall conclusion, which goes red for
+          # anything in the pipeline — a failed validation dispatch, an opt-in
+          # platform, a post-publish cleanup — even when the packages are
+          # already sitting in R2 and downloadable from the buttons on this very
+          # card. A non-empty version_metadata_url means publish wrote metadata.
+          VERSION_METADATA_URL: ${{ needs.build.outputs.version_metadata_url }}
+          # Packaged mac/Windows smoke moved to release-prerelease-smoke.yml and
+          # is no longer an output of the build, so this card carries no smoke
+          # annotation. The progressive card (release-prerelease-card.yml) is
+          # where smoke results land now.
           MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
           MAC_INTEL_URL: ${{ needs.build.outputs.mac_intel_url }}
           WIN_URL: ${{ needs.build.outputs.win_url }}

@@ -98,7 +98,12 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('`zh-CN` (Simplified Chinese)');
     expect(prompt).toContain('快速简报 — 30 秒');
     expect(prompt).toContain('目标用户');
-    expect(prompt).toContain('视觉调性');
+    /* 这里原本钉的是 `视觉调性` —— 调性题的中文文案。OPEND-2760 把设计风格
+       选择整题下线后,那一行连同它那串风格选项(`编辑 / 杂志感`、`现代极简`…)
+       一起从样例里撤走,否则 zh-CN 用户的提示词里等于还摆着一份风格菜单。
+       改钉 `品牌背景` —— 品牌题按裁决保留,同样能证明样例块确实注入了。 */
+    expect(prompt).toContain('品牌背景');
+    expect(prompt).not.toContain('视觉调性');
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
@@ -439,8 +444,10 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
       });
       expect(imagePrompt).toContain('reply exactly `图片已生成`');
-      expect(imagePrompt).toContain('MEDIA_DISPATCH_FAILED');
-      expect(imagePrompt).toContain('图片未生成：媒体生成调度失败，原因未分类');
+      expect(imagePrompt).toContain('`error.nextStep`');
+      expect(imagePrompt).toContain(
+        '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
+      );
       expect(imagePrompt).toContain('tool output and daemon logs');
       expect(imagePrompt).not.toContain('the filename, the model used');
       expect(imagePrompt).not.toContain('surface them verbatim to the user');
@@ -452,18 +459,20 @@ describe('composeSystemPrompt', () => {
         metadata: { kind: 'prototype' } as any,
       });
       expect(prototypePrompt).toContain('reply exactly `图片已生成`');
-      expect(prototypePrompt).toContain('MEDIA_DISPATCH_FAILED');
-      expect(prototypePrompt).toContain('图片未生成：媒体生成调度失败，原因未分类');
+      expect(prototypePrompt).toContain('`error.nextStep`');
+      expect(prototypePrompt).toContain(
+        '图片没生成出来,不是你的操作有误 —— 这次是 Open Design 自己的问题,我们已经记下了。重试一般能恢复;反复出现的话联系我们。',
+      );
       expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
       expect(prototypePrompt).not.toContain(
         'For the best fal image model use `--model flux-pro-ultra`',
       );
     });
 
-    // The provider-error branch has to reach the prompt the DAEMON composes,
-    // not just the copy in packages/contracts. Reclassifying a provider verdict
-    // as an outage hides the actionable code and message from the user.
-    it('preserves structured provider errors in both prompts', () => {
+    // The classified-failure branch has to reach the prompt the DAEMON
+    // composes, not just the copy in packages/contracts. Reclassifying a
+    // provider verdict from wording is what used to hide the real next step.
+    it('preserves the classified failure routing in both prompts', () => {
       for (const metadata of [
         { kind: 'image', imageModel: 'vela/gpt-image-2' },
         { kind: 'prototype' },
@@ -473,9 +482,9 @@ describe('composeSystemPrompt', () => {
           locale: 'zh-CN',
           metadata: metadata as any,
         });
-        expect(prompt).toContain('错误代码：`{code}`');
-        expect(prompt).toContain(
-          'public code and message without reclassifying either one from wording or HTTP',
+        expect(prompt).toContain('图片模型的额度用完了 —— 重试不会恢复,去充值或换一个图片模型。');
+        expect(prompt.replace(/\s+/g, ' ')).toContain(
+          'never re-derive a verdict from wording, HTTP status, a placeholder/stub',
         );
       }
     });
@@ -488,6 +497,19 @@ describe('composeSystemPrompt', () => {
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
       );
       expect(prompt).toContain('Do not stop after an introductory sentence such as "先确认一下方向："');
+    });
+
+    /**
+     * T69(2026-09-07):设计风格选择题从提示词整题下线,产品逐字「**不问了**」。
+     * 原用例守的是「裸 Ask 模式里也要保留 host 目录那条边界说明」——
+     * 那条说明本身就是在**教模型这个能力存在**,现在连它一起撤。
+     */
+    it('裸 Ask 模式里也不再提设计风格选择题', () => {
+      const prompt = composeSystemPrompt({ sessionMode: 'chat' });
+      // 防真空:那一整段结构化澄清的授权还在,不是因为整段没composed 才绿
+      expect(prompt).toContain('## Structured clarification on any turn');
+      expect(prompt).not.toContain('direction-cards');
+      expect(prompt).not.toContain('project-kind visual catalog');
     });
 
     it('pins filesystem artifact handoff for other CLI agents too', () => {
@@ -579,8 +601,8 @@ describe('composeSystemPrompt', () => {
         mediaExecution: { mode: 'disabled' },
       });
       expect(prompt).toContain('OpenDesign-owned media execution is **disabled for this run**');
-      expect(prompt).toContain('MEDIA_EXECUTION_DISABLED');
-      expect(prompt).toContain('本次任务未启用图片生成');
+      expect(prompt).toContain('use the fixed `unsupported` sentence');
+      expect(prompt).toContain('这次任务里不能生成图片 —— 需要图片的话,新建一个图片项目再试。');
       expect(prompt).not.toContain('describe the intended creative brief');
       expect(prompt).not.toContain('## Media generation contract');
       expect(prompt).not.toContain('External MCP servers — already authenticated');

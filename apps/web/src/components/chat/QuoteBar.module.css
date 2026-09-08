@@ -1,0 +1,46 @@
+/*
+ * 选区浮条(设计稿组件 23 · 第 65 / 66 格)。
+ *
+ * 稿子 `.selbar { position:absolute; left:50%; translate:-50% 0; bottom: calc(100% + 7px);
+ * z-index:6; white-space:nowrap; padding:3px; border-radius: var(--radius);
+ * background: var(--overlay-glass); border: 1px solid var(--overlay-glass-edge);
+ * backdrop-filter: blur(var(--glass-regular-blur)); box-shadow: var(--shadow-md) }`
+ *
+ * 稿子里它是**画在 `<mark class="sel">` 里面**的(静态稿只能这么摆);
+ * 真实选区没法包一层标签,所以这里按选区矩形定位 —— 位置一样,承载方式不同。
+ */
+.bar {
+  /* 根节点是 span(见 QuoteBar.tsx 的理由),所以得显式给 display —— 否则它是 inline,
+     padding 撑不开、绝对定位的盒子量出来也是行内框的高度。 */
+  display: block;
+  position: fixed;
+  z-index: 6;
+  white-space: nowrap;
+  padding: 3px;
+  border-radius: var(--chat-radius);
+  background: var(--chat-overlay-glass);
+  border: var(--chat-stroke) solid var(--chat-overlay-glass-edge);
+  -webkit-backdrop-filter: blur(var(--chat-glass-blur));
+  backdrop-filter: blur(var(--chat-glass-blur));
+  box-shadow: var(--chat-shadow-md);
+  /* 自己不吃选区:鼠标松开那一下如果落在浮条上,选区会被清掉 */
+  transform: translateX(-50%);
+}
+
+/* 稿子 `.selbar button { display:block; padding: 7px 12px; border-radius: var(--radius-sm);
+   font-size: var(--t-mini); font-weight: 500; color: var(--overlay-glass-text) }` */
+.action {
+  display: block;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--chat-radius-sm);
+  background: none;
+  font-family: inherit;
+  font-size: var(--chat-t-mini);
+  font-weight: 500;
+  color: var(--chat-overlay-glass-text);
+  cursor: pointer;
+}
+.action:hover {
+  background: var(--chat-overlay-glass-edge);
+}

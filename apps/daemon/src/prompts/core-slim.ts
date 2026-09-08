@@ -15,6 +15,13 @@
  * Protocol markers are stable API: `<question-form>`, the
  * `pick_direction` / `brand_spec` / `reference_match` values, `data-od-id`,
  * and the pinned React script versions.
+ *
+ * The keyed per-turn markers — `<od-done key="…"/>`, the `<od-next key="…">`
+ * follow-up block, and the `<od-focus key="…"/>` display marker — deliberately
+ * live OUTSIDE this document, in the per-turn instruction slice (`server.ts`).
+ * Their key is a fresh nonce every run, so putting them here would move the
+ * cached stable prefix on every turn of every conversation and guarantee a
+ * prompt-cache miss.
  */
 import type { ExecutionProfile } from '@open-design/contracts';
 
@@ -138,7 +145,7 @@ Use \`<question-form>\` only to fill gaps that would materially affect the desig
 
 - Wrap the form in \`<question-form id="..." title="...">...</question-form>\`.
 - The content inside the tags must be valid JSON, with no comments or trailing commas.
-- The top-level JSON object must contain a \`questions\` array and may also include \`description\` and \`submitLabel\`.
+- The top-level JSON object must contain a \`questions\` array and may also include \`lang\` and \`submitLabel\`. Do not emit a top-level \`description\`; put necessary context in the title or the individual question labels/help instead.
 - Every question must include at least a stable \`id\`, a user-visible \`label\`, and a supported \`type\`.
 - Output no more than one form per turn. Do not repeat the same questions outside the form.
 - Write all user-visible copy in the user's chat language. Keep \`id\`, \`type\`, and option \`value\` fields in English.
@@ -147,9 +154,9 @@ Use \`<question-form>\` only to fill gaps that would materially affect the desig
 
 - Ask only about information that has not yet been provided and whose answer would materially affect the design.
 - Ask 1–3 questions in most cases, with a maximum of 5 for complex tasks. Each question should resolve one decision only.
-- Prioritize, in order of impact: task type, target audience, primary goal, brand or visual style, target platform, content scale, and other constraints.
+- Prioritize, in order of impact: task type, target audience, primary goal, target platform, content scale, and other constraints.
 - Do not ask for information already supplied by the user, project metadata, Plugin inputs, the skill, the design system, or a reference source.
-- When a design system is active, treat the visual direction as locked. Do not ask about brand, style, theme, or color palette. If the design system also defines the mood, do not ask for \`tone\`.
+- When a design system is active, treat the visual direction as locked. Do not ask about brand, style, theme, or color palette.
 - If the user has provided brand guidelines, a reference URL, or a screenshot, parse that source directly instead of asking about visual direction.
 - Set \`required: true\` only when you cannot proceed without the answer.
 
@@ -160,26 +167,29 @@ Choose only from questions that remain unanswered and genuinely affect the desig
 - \`output\`: Single choice. Options may include slide deck / pitch deck, single-page web prototype / landing page, multi-page app prototype, dashboard / tool interface, editorial / marketing page, or other.
 - \`platform\`: Multiple choice. Offer no more than 4 brief-relevant options from responsive, desktop web, iOS, Android, tablet, desktop app, and fixed canvas.
 - \`audience\`: Short text identifying the target audience.
-- \`tone\`: Multiple choice, with no more than 2 selections from editorial, minimal, playful, tech, luxury, brutalist, and human.
 - \`brand\`: Single choice using the three fixed branch values \`pick_direction\`, \`brand_spec\`, and \`reference_match\`.
 - \`scale\`: Short text confirming the number of pages, screens, or the overall content scope.
 - \`constraints\`: Multiline text for must-use elements, things to avoid, and any other restrictions.
 
 #### 4. Control Types
 
-Supported \`type\` values are: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`, \`number\`, \`range\`, \`date\`, \`time\`, \`datetime-local\`, \`color\`, \`url\`, \`email\`, \`tel\`, \`file\`, \`switch\`, and \`direction-cards\`.
+Supported \`type\` values are: \`radio\`, \`checkbox\`, \`select\`, \`text\`, \`textarea\`, \`number\`, \`range\`, \`date\`, \`time\`, \`datetime-local\`, \`color\`, \`url\`, \`email\`, \`tel\`, \`file\`, and \`switch\`.
 
 Special rules:
+- At most 6-7 options per question; merge near-duplicates instead of listing more.
+- Choose \`radio\` vs \`select\` by option count, not importance: \`radio\` for a short list, \`select\` once it runs long (languages, timezones, voices). \`checkbox\` is always a plain list.
+- \`select\` options may carry \`group\` (first group expands, the rest collapse) and \`trailingLabel\` (a short end-of-row code such as \`ZH-CN\`). Both optional.
+- Label options in the user's words, not jargon: "Magazine-style layout", not "Editorial". Reword only \`label\`; never change a stable \`value\`.
+- Keep each \`label\` under ~40 characters; put anything longer in \`description\`.
 
 - Use \`maxSelections\` when a \`checkbox\` question needs a selection limit.
 - A \`file\` question may allow multiple files with \`multiple: true\`, but the answer returns filenames only, not file contents.
-- Use \`direction-cards\` only when the user explicitly asks to see visual directions.
 - For finite option sets, allow custom input by default: omit \`allowCustom\` or set it to \`true\`. Set it to \`false\` only when downstream systems require fixed machine IDs.
 - If the \`brand\` question is included, its \`id\` must be \`brand\`, and its option values must be \`pick_direction\`, \`brand_spec\`, and \`reference_match\`.
 
 #### 5. Recommended Answers
 
-- Based on the brief and known context, provide a sensible default for each question that is suitable for preselection.
+- Based on the brief and known context, provide a sensible default for each non-visual question that is suitable for preselection.
 - Use \`defaultValue\` to preselect an answer: provide one option \`value\` for a single-choice question and an array of \`value\` entries for a multiple-choice question.
 - You may append "(Recommended)" to the option \`label\` and briefly explain the recommendation in \`description\`.
 - \`defaultValue\` must match an option's \`value\`, not its localized label.
@@ -210,8 +220,7 @@ If the user selects \`brand_spec\` or \`reference_match\` without providing an a
 #### All Other Cases
 
 - **An active design system is available:** Bind its tokens directly and follow the design system strictly.
-- **No design system or brand source is available:** Choose the best-matching option from the runtime's direction library based on the brief's domain, audience, and overall tone, then bind its visual tokens. Do not ask the user again. If the runtime provides only an index of direction IDs and names, first run \`"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>\` to retrieve the full specification. Never infer colors or fonts from the name alone. If the runtime provides the complete direction library inline, use the inline specification directly.
-- Send \`direction-cards\` only when the user explicitly asks to see direction options. Never send them proactively.
+- **No design system or brand source is available:** Choose the best-matching option from the runtime's direction library based on the brief's domain, audience, and overall tone, then bind its visual tokens. Do not ask the user again. If a Host-owned direction-form answer supplies \`value\`, \`foundation\`, and \`guidance\`, resolve the library \`foundation\` (not the Host catalogue \`value\`) and apply \`guidance\` as the selected refinement. If the runtime provides only an index of direction IDs and names, first run \`"$OD_NODE_BIN" "$OD_BIN" tools directions --id <id>\` to retrieve the full specification. Never infer colors or fonts from the name alone. If the runtime provides the complete direction library inline, use the inline specification directly.
 
 ### 2. Plan
 
@@ -257,7 +266,7 @@ After completing the design and before delivery, perform one full check in the o
    - Render only when static code review cannot determine whether the layout overflows, elements collide, or similar visual issues are present.
    - Render at most once per task using \`"$OD_NODE_BIN" "$OD_BIN" export <file> --project "$OD_PROJECT_ID" --format image --out <output-path>\`. Do not launch your own browser, use Playwright, or use a headless browser—even if rendering fails.
    - Do not inspect help text or probe environment variables and paths before rendering. If the command fails, you may run at most one diagnostic. Retry only after correcting the cause.
-   - If rendering still does not succeed, state that clearly and deliver based on the static verification. An export explicitly requested by the user is a delivery action and does not count against this one-render budget.
+   - If rendering still does not succeed, deliver based on the static verification. This check is host infrastructure the user never asked for: keep its failure in the tool output and daemon logs and never narrate it in the visible reply — no renderer or service name, no "preview/screenshot could not be generated". Report the static checks you ran; that is your own work. An export explicitly requested by the user is a delivery action, not this internal check: report that one normally, and it does not count against the one-render budget.
 
 ## Artifact Refinement Phase
 

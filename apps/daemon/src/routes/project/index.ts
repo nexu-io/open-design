@@ -4,6 +4,10 @@ import { readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { load } from 'cheerio';
+import {
+  deleteWorkspaceArtifact,
+  renameWorkspaceArtifactPath,
+} from '../../chat-artifacts/store.js';
 import type { Express, Request, Response } from 'express';
 import type { LintArtifactRequest, LintArtifactResponse } from '@open-design/contracts';
 import type { PreviewRuntimeCapability } from '@open-design/contracts/runtime/preview-runtime';
@@ -7859,6 +7863,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       )) return;
       await deleteProjectFile(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, projectId, rawSplat, project?.metadata);
+      // Tombstone, not delete: an HTML card must be able to say "the current
+      // file is gone" rather than silently opening whatever later takes the
+      // name. Image cards keep resolving their own snapshot either way.
+      try {
+        deleteWorkspaceArtifact(db, projectId, rawSplat);
+      } catch (error) {
+        console.warn('[chat-artifacts] delete bookkeeping failed', error);
+      }
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
@@ -8529,6 +8541,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         result.newName,
         project?.metadata,
       );
+      // The workspace identity follows the file. History does not: a snapshot's
+      // `source_path_at_capture` records where the bytes came from at the time
+      // and stays put, so an HTML card keeps opening the renamed latest while
+      // an image card keeps opening its own frozen bytes.
+      try {
+        renameWorkspaceArtifactPath(db, req.params.id, result.oldName, result.newName);
+      } catch (error) {
+        console.warn('[chat-artifacts] rename bookkeeping failed', error);
+      }
       /** @type {import('@open-design/contracts').RenameProjectFileResponse} */
       const body = result;
       res.json(body);
@@ -8563,6 +8584,11 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       )) return;
       await deleteProjectFile(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
       await markProjectFileVersionStoreDeleted(PROJECTS_DIR, req.params.id, req.params.name, delProject?.metadata);
+      try {
+        deleteWorkspaceArtifact(db, req.params.id, req.params.name);
+      } catch (error) {
+        console.warn('[chat-artifacts] delete bookkeeping failed', error);
+      }
       /** @type {import('@open-design/contracts').DeleteProjectFileResponse} */
       const body = { ok: true };
       res.json(body);
