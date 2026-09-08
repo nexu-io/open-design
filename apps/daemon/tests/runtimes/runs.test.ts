@@ -505,6 +505,56 @@ describe('chat run service shutdown', () => {
     vi.useRealTimers();
   });
 
+  it('starts resumed terminal delivery from a fresh attempt-scoped lifecycle', () => {
+    const runs = createRuns();
+    const run = runs.create({
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      agentId: 'amr',
+    }) as any;
+    run.runtimeGenerationId = '0f2d4d9e-f034-4ed5-8330-314bd1d525cc';
+
+    runs.finish(run, 'failed', 1, null);
+    runs.beginAnalyticsDelivery(run);
+    runs.finalizeAnalyticsDelivery(run, {
+      status: 'queued',
+      acknowledgement: 'local_buffer',
+      errorType: null,
+    });
+    runs.finish(run, 'succeeded', 0, null);
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      posthogDelivery: { status: 'queued', attemptCount: 1 },
+      lateTerminalCount: 1,
+    });
+
+    runs.prepareRestart(run);
+    expect(run.runtimeGenerationId).toBeNull();
+    expect(runs.statusBody(run)).not.toHaveProperty('terminalLifecycle');
+
+    runs.finish(run, 'succeeded', 0, null);
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      runAttempt: 1,
+      runtimeGenerationId: null,
+      terminalIntegrity: 'canonical',
+      posthogDelivery: {
+        status: 'unknown',
+        acknowledgement: 'unknown',
+        attemptCount: 0,
+        errorType: null,
+      },
+      duplicateTerminalCount: 0,
+      lateTerminalCount: 0,
+    });
+
+    runs.beginAnalyticsDelivery(run);
+    expect(runs.statusBody(run).terminalLifecycle.posthogDelivery).toMatchObject({
+      status: 'in_flight',
+      acknowledgement: 'none',
+      attemptCount: 1,
+      errorType: null,
+    });
+  });
+
   it('keeps the first accepted plugin attribution immutable across request reuse', () => {
     const runs = createRuns();
     const request = {
@@ -560,6 +610,55 @@ describe('chat run service shutdown', () => {
     expect(run.events.filter((event: { event: string }) => event.event === 'end')).toHaveLength(1);
     await expect(wait).resolves.toMatchObject({ status: 'succeeded', exitCode: 0, signal: null });
   });
+
+  it('retains duplicate and late terminal claims while process-tree teardown is pending', async () => {
+    const childPid = 40_500;
+    const child = new FakeChildProcess({ closeOn: 'SIGTERM', pid: childPid });
+    let releaseInitialSnapshots: (
+      snapshots: Array<{ pid: number; ppid: number; command: string }>,
+    ) => void = () => undefined;
+    const initialSnapshots = new Promise<Array<{
+      pid: number;
+      ppid: number;
+      command: string;
+    }>>((resolve) => {
+      releaseInitialSnapshots = resolve;
+    });
+    platformMocks.listProcessSnapshots
+      .mockReturnValueOnce(initialSnapshots)
+      .mockResolvedValueOnce([{ pid: childPid, ppid: 1, command: 'agent' }])
+      .mockResolvedValueOnce([{ pid: process.pid, ppid: 1, command: 'vitest' }]);
+    platformMocks.stopProcesses.mockResolvedValue({
+      alreadyStopped: false,
+      forcedPids: [],
+      matchedPids: [childPid],
+      remainingPids: [],
+      stoppedPids: [childPid],
+    });
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'project-1', conversationId: 'conv-1' });
+    run.status = 'running';
+
+    const teardown = runs.terminateProcessTree(run, child, null);
+    runs.finish(run, 'failed', 1, null);
+    runs.finish(run, 'failed', 1, null);
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.status).toBe('running');
+    releaseInitialSnapshots([{ pid: childPid, ppid: 1, command: 'agent' }]);
+    await teardown;
+
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      terminalLifecycle: {
+        terminalIntegrity: 'late',
+        duplicateTerminalCount: 1,
+        lateTerminalCount: 1,
+      },
+    });
+  });
+
   it('filters active runs by conversation within the same project', () => {
     const runs = createRuns();
     const runA = runs.create({ projectId: 'project-1', conversationId: 'conv-a' });
@@ -1064,8 +1163,9 @@ describe('chat run service shutdown', () => {
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
       shutdownGraceMs: 10,
       ttlMs: 60_000,
-      beforeFinish: ((run: any, status: string) => {
+      beforeFinish: ((run: any, status: string, _code: unknown, _signal: unknown, terminalAt: number) => {
         observed.push(`before:${status}:${run.status}`);
+        observed.push(`terminal:${terminalAt}`);
         run.strategyTask = { outcome: 'canceled', terminal: true };
       }) as unknown as null,
     });
@@ -1074,7 +1174,10 @@ describe('chat run service shutdown', () => {
 
     await runs.shutdownActive({ graceMs: 10 });
 
-    expect(observed).toEqual(['before:canceled:running']);
+    expect(observed).toEqual([
+      'before:canceled:running',
+      `terminal:${run.terminalAt}`,
+    ]);
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
       data: {
@@ -1345,6 +1448,47 @@ describe('run event log persistence', () => {
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
   });
 
+  it('persists syntax evidence and emits it alongside the terminal failure verdict', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.deliverableSyntaxRepair = {
+      schema: 'open-design.deliverable-syntax-repair/v1',
+      attempt: 1,
+      maxAttempts: 3,
+      checker: 'web-syntax@1',
+      candidateHash: 'sha256:failed',
+    };
+    run.deliverableSyntaxValidation = {
+      schema: 'open-design.deliverable-syntax-tool/v1',
+      status: 'repairable',
+      checkedAt: 1_725_000_000_000,
+    };
+    runs.persistState(run);
+
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+      deliverableSyntaxValidation: { status: 'repairable' },
+    });
+    expect(runs.statusBody(run)).toMatchObject({
+      deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+      deliverableSyntaxValidation: { status: 'repairable' },
+    });
+    run.failureAction = 'none';
+    run.retryable = false;
+    runs.finish(run, 'failed', 1, null);
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: {
+        status: 'failed',
+        failureAction: 'none',
+        retryable: false,
+        deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+        deliverableSyntaxValidation: { status: 'repairable' },
+      },
+    });
+  });
+
   it('persists a restart-safe terminal state and telemetry checkpoints', () => {
     const runs = createRunsWithLog(tmpDir);
     const run = runs.create({
@@ -1356,6 +1500,7 @@ describe('run event log persistence', () => {
         schemaVersion: 1,
         projectId: 'p1',
         workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
         source: 'persisted_project_binding',
       },
     });
@@ -1370,6 +1515,7 @@ describe('run event log persistence', () => {
         schemaVersion: 1,
         projectId: 'p1',
         workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
         source: 'persisted_project_binding',
       },
     });
@@ -1423,6 +1569,225 @@ describe('run event log persistence', () => {
     });
     expect(failedDeliveryState).not.toHaveProperty('langfuseCompletedAt');
     expect(failedDeliveryState.telemetryDelivery).not.toHaveProperty('finalizedAt');
+  });
+
+  it('persists attempt-scoped terminal lifecycle facts before publishing the terminal event', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      agentId: 'amr',
+    });
+    Object.assign(run, {
+      retryAttemptCount: 1,
+      manualResumeAttemptCount: 1,
+      terminalTrigger: 'inactivity_watchdog',
+    });
+
+    runs.finish(run, 'failed', 130, 'SIGTERM');
+
+    const state = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(state.terminalLifecycle).toEqual({
+      version: 1,
+      runAttempt: 2,
+      runtimeGenerationId: null,
+      terminationOrigin: 'watchdog_cleanup',
+      terminalIntegrity: 'canonical',
+      terminalPersistence: {
+        status: 'acknowledged',
+        errorType: null,
+      },
+      posthogDelivery: {
+        status: 'unknown',
+        acknowledgement: 'unknown',
+        attemptCount: 0,
+        errorType: null,
+      },
+      unfinishedState: 'unknown',
+      duplicateTerminalCount: 0,
+      lateTerminalCount: 0,
+    });
+    expect(runs.statusBody(run).terminalLifecycle).toEqual(state.terminalLifecycle);
+  });
+
+  it('advances the durable terminal attempt after an automatic retry and manual resume', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({
+      projectId: 'p1',
+      conversationId: 'c1',
+      agentId: 'amr',
+    });
+    Object.assign(run, { retryAttemptCount: 1 });
+
+    runs.finish(run, 'failed', 1, null);
+    expect(runs.statusBody(run).terminalLifecycle?.runAttempt).toBe(1);
+
+    const runsAfterRestart = createRunsWithLog(tmpDir);
+    const runAfterRestart = runsAfterRestart.get(run.id);
+    expect(runAfterRestart).toMatchObject({ retryAttemptCount: 1 });
+
+    runsAfterRestart.prepareRestart(runAfterRestart);
+    const resumedState = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(resumedState).toMatchObject({
+      status: 'queued',
+      cumulativeRetryAttemptCount: 1,
+      manualResumeAttemptCount: 1,
+    });
+
+    runsAfterRestart.finish(runAfterRestart, 'succeeded', 0, null);
+    const terminalState = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(terminalState.terminalLifecycle.runAttempt).toBe(2);
+  });
+
+  it('retains a bounded terminal persistence failure when the durable terminal write fails', () => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: tmpDir as unknown as null,
+      writeDurableState: (_filePath: string, value: { status?: string }) =>
+        value.status === 'failed'
+          ? { ok: false, errorType: 'storage_full' }
+          : { ok: true },
+    });
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'failed', 1, null);
+
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      runAttempt: 0,
+      terminationOrigin: 'unknown',
+      terminalPersistence: {
+        status: 'failed',
+        errorType: 'storage_full',
+      },
+    });
+  });
+
+  it.each([
+    {
+      name: 'preserves acknowledgement when the metadata refresh fails',
+      terminalWrites: [
+        { ok: true as const },
+        { ok: false as const, errorType: 'storage_full' as const },
+      ],
+    },
+    {
+      name: 'promotes a failed first write when the metadata refresh succeeds',
+      terminalWrites: [
+        { ok: false as const, errorType: 'storage_full' as const },
+        { ok: true as const },
+      ],
+    },
+  ])('$name', ({ terminalWrites }) => {
+    let writeCount = 0;
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: tmpDir as unknown as null,
+      writeDurableState: () => {
+        writeCount += 1;
+        return writeCount === 1
+          ? { ok: true as const }
+          : terminalWrites[writeCount - 2] ?? { ok: true as const };
+      },
+    });
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'failed', 1, null);
+
+    expect(writeCount).toBe(3);
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      terminalPersistence: {
+        status: 'acknowledged',
+        errorType: null,
+      },
+    });
+  });
+
+  it('keeps terminal persistence unknown when durable run journals are disabled', () => {
+    const runs = createChatRunService({
+      createSseResponse: () => ({ send: vi.fn(() => true), end: vi.fn(), cleanup: vi.fn() }),
+      createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
+      shutdownGraceMs: 10,
+      ttlMs: 60_000,
+      runsLogDir: null,
+    });
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(runs.statusBody(run).terminalLifecycle).toMatchObject({
+      terminalPersistence: {
+        status: 'unknown',
+        errorType: null,
+      },
+      unfinishedState: 'unknown',
+    });
+  });
+
+  it('persists failed PostHog queueing as recoverable terminal delivery state', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+    runs.finish(run, 'failed', 1, null);
+
+    runs.beginAnalyticsDelivery(run);
+    runs.finalizeAnalyticsDelivery(run, {
+      status: 'failed',
+      acknowledgement: 'none',
+      errorType: 'enqueue_failed',
+    });
+
+    const state = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'),
+    );
+    expect(state.terminalLifecycle.posthogDelivery).toMatchObject({
+      status: 'failed',
+      acknowledgement: 'none',
+      attemptCount: 1,
+      errorType: 'enqueue_failed',
+    });
+    expect(state.terminalLifecycle.unfinishedState).toBe(
+      'terminal_persisted_posthog_failed',
+    );
+    expect(state.analyticsRecovery?.completedAt).toBeUndefined();
+  });
+
+  it('keeps the first terminal verdict and records duplicate or late terminal claims', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', agentId: 'amr' });
+
+    runs.finish(run, 'failed', 1, null);
+    runs.finish(run, 'failed', 1, null);
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      terminalLifecycle: {
+        terminalIntegrity: 'duplicate',
+        duplicateTerminalCount: 1,
+        lateTerminalCount: 0,
+      },
+    });
+
+    runs.finish(run, 'succeeded', 0, null);
+    expect(runs.statusBody(run)).toMatchObject({
+      status: 'failed',
+      exitCode: 1,
+      terminalLifecycle: {
+        terminalIntegrity: 'late',
+        duplicateTerminalCount: 1,
+        lateTerminalCount: 1,
+      },
+    });
   });
 
   it('restores the accepted plugin workflow binding from durable run state', () => {
@@ -1756,10 +2121,106 @@ describe('work completeness vs a settled OD Next verdict', () => {
     expect(run.endedWithUnfinishedWork).toBe(true);
   });
 
+  it('lets an authenticated done conclusion finish a succeeded non-strategy run with a stale plan', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: '简短总结新图', status: 'in_progress' }];
+    run.authenticatedDoneConclusion = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
+  it('does not let a done marker erase unfinished work from a failed run', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = [{ content: 'ship it', status: 'in_progress' }];
+    run.authenticatedDoneConclusion = true;
+
+    runs.finish(run, 'failed', 1, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  /*
+   * 「问完就交棒」的那一轮。
+   *
+   * 真机 run 441ff961-bd66-4c4a-91e7-812f1d489668(打包版 beta 0.21.1-beta.7):
+   * 清单刚写下(1 条 in_progress + 3 条 pending),正文以一个可渲染的
+   * `<question-form>` 收尾,进程 exit 0、无 signal、无 error。没有任何东西
+   * 停过它 —— 用户答完表单后的下一轮交付了 34 个产物。这个 flag 一旦被置上,
+   * 项目卡和 Pet 任务中心就把这一轮画成 `incomplete`。
+   */
+  const RENDERABLE_FORM = [
+    '开始之前先确认几件事。',
+    '<question-form id="brand-brief" title="Brand brief">',
+    '{"questions":[{"id":"brand_name","label":"Brand name","type":"text"}]}',
+    '</question-form>',
+  ].join('\n');
+
+  function clarificationPlan() {
+    return [
+      { content: 'Collect the brand brief', status: 'in_progress' },
+      { content: 'Decide the imagery strategy', status: 'pending' },
+      { content: 'Fill inputs.json', status: 'pending' },
+      { content: 'Render the landing page', status: 'pending' },
+    ];
+  }
+
+  it('does not report unfinished work when the turn ended by asking the user', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = RENDERABLE_FORM;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(false);
+  });
+
+  // 量法能看见缺陷:同一份清单,把表单换成只是被引用的裸标记就必须重新变红。
+  // 产物 HTML / 代码示例里出现这段文本的回合不许因此被静音。
+  it('still reports unfinished work when the markup was quoted, never rendered', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = '演示一下 <question-form> 这个标记怎么写。';
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  // 用户按了停 —— 它路过时问了什么不改变这件事,和 done marker 那一档同理。
+  it('does not let a rendered form erase unfinished work from a canceled run', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = RENDERABLE_FORM;
+
+    runs.finish(run, 'canceled', null, 'SIGTERM');
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
+  it('keeps a max_tokens truncation unfinished even under a rendered form', () => {
+    const runs = createRuns();
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.lastTodoSnapshot = clarificationPlan();
+    run.askUserScanText = RENDERABLE_FORM;
+    run.truncatedMidTurn = true;
+
+    runs.finish(run, 'succeeded', 0, null);
+
+    expect(run.endedWithUnfinishedWork).toBe(true);
+  });
+
   it('keeps a max_tokens truncation unfinished even under a completed verdict', () => {
     const runs = createRuns();
     const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
     run.truncatedMidTurn = true;
+    run.authenticatedDoneConclusion = true;
     run.strategyTask = completedStrategyTask();
     run.deliverableValid = true;
 

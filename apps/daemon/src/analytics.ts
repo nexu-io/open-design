@@ -197,6 +197,44 @@ export function readPublicConfigResponse(
   return { enabled: true, env: cfg.env, key: cfg.key, host: cfg.host };
 }
 
+export type AnalyticsCaptureErrorType =
+  | 'not_configured'
+  | 'metrics_consent_disabled'
+  | 'config_read_failed'
+  | 'enqueue_failed';
+
+export interface AnalyticsCaptureResult {
+  status: 'queued' | 'not_expected' | 'failed';
+  acknowledgement: 'local_buffer' | 'none';
+  errorType: AnalyticsCaptureErrorType | null;
+}
+
+export function normalizeAnalyticsCaptureResult(value: unknown): AnalyticsCaptureResult {
+  if (value && typeof value === 'object') {
+    const candidate = value as Partial<AnalyticsCaptureResult>;
+    if (
+      (candidate.status === 'queued'
+        || candidate.status === 'not_expected'
+        || candidate.status === 'failed')
+      && (candidate.acknowledgement === 'local_buffer'
+        || candidate.acknowledgement === 'none')
+    ) {
+      return {
+        status: candidate.status,
+        acknowledgement: candidate.acknowledgement,
+        errorType: candidate.errorType ?? null,
+      };
+    }
+  }
+  // Compatibility for injected/legacy capture implementations. A returned
+  // call proves only local queue admission, never remote PostHog ingestion.
+  return {
+    status: 'queued',
+    acknowledgement: 'local_buffer',
+    errorType: null,
+  };
+}
+
 export interface AnalyticsService {
   capture(args: {
     eventName: string;
@@ -204,7 +242,7 @@ export interface AnalyticsService {
     appVersion: string;
     properties: Record<string, unknown>;
     insertId: string;
-  }): Promise<void>;
+  }): Promise<AnalyticsCaptureResult>;
   /**
    * Safety / reliability events (renderer crashes, daemon uncaught errors,
    * SSE health, etc.) that intentionally BYPASS the user's analytics
@@ -244,7 +282,11 @@ export interface AnalyticsService {
 }
 
 const NOOP_SERVICE: AnalyticsService = {
-  capture: async () => undefined,
+  capture: async () => ({
+    status: 'not_expected',
+    acknowledgement: 'none',
+    errorType: 'not_configured',
+  }),
   captureSafety: async () => undefined,
   mergeAnonymousPerson: async () => undefined,
   identifyGroup: async () => undefined,
@@ -301,9 +343,24 @@ export function createAnalyticsService(args: {
       // mid-request would still let events through without this. Reading
       // app-config.json adds one small file read per event; the daemon is
       // not on a hot critical path here.
+      let appCfg;
       try {
-        const appCfg = await readAppConfig(args.dataDir);
-        if (appCfg.telemetry?.metrics !== true) return;
+        appCfg = await readAppConfig(args.dataDir);
+      } catch {
+        return {
+          status: 'failed',
+          acknowledgement: 'none',
+          errorType: 'config_read_failed',
+        };
+      }
+      if (appCfg.telemetry?.metrics !== true) {
+        return {
+          status: 'not_expected',
+          acknowledgement: 'none',
+          errorType: 'metrics_consent_disabled',
+        };
+      }
+      try {
         client.capture({
           distinctId: context.deviceId,
           event: eventName,
@@ -354,8 +411,20 @@ export function createAnalyticsService(args: {
             $insert_id: insertId,
           },
         });
+        // posthog-node exposes local queueing here, not a per-event remote
+        // ingestion acknowledgement. Keep that boundary explicit.
+        return {
+          status: 'queued',
+          acknowledgement: 'local_buffer',
+          errorType: null,
+        };
       } catch {
-        // Swallowed by design; capture failures must never propagate.
+        // Swallowed by design; capture failures must never affect the Run.
+        return {
+          status: 'failed',
+          acknowledgement: 'none',
+          errorType: 'enqueue_failed',
+        };
       }
     },
     captureSafety: async ({ eventName, distinctId, appVersion, properties, insertId }) => {

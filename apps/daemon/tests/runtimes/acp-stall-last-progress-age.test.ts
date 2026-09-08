@@ -58,6 +58,8 @@ type RunStatus = {
   id: string;
   status: string;
   errorCode: string | null;
+  /** The child's own exit status — how this spec proves the SIGTERM landed. */
+  exitCode: number | null;
   terminalTrigger: string | null;
   eventsLogPath: string;
 };
@@ -265,7 +267,14 @@ describe('ACP stall progress age', () => {
 
     // Non-vacuity guard: the child really did exit through its SIGTERM handler,
     // so its shutdown line really was written after the daemon's verdict.
-    expect(finished.error_code).toBe('AGENT_EXIT_143');
+    //
+    // Read off the child's exit status rather than off `error_code`. The
+    // watchdog now NAMES its own verdict on the error frame, so the run carries
+    // the failure's code (`AGENT_EXECUTION_FAILED`) instead of a code derived
+    // from the exit it caused — which never described this failure anyway. The
+    // fact this guard needs is unchanged and still first-hand: 143 is the
+    // child's SIGTERM handler running.
+    expect(run.exitCode).toBe(143);
 
     expect(finished.failure_category).toBe('timeout');
     expect(finished.failure_detail).toBe('timeout');

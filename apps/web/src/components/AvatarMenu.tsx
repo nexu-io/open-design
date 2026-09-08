@@ -20,6 +20,10 @@ import {
 import { KNOWN_PROVIDERS } from '../state/config';
 import { SUGGESTED_MODELS_BY_PROTOCOL } from '../state/apiProtocols';
 import { fetchProviderModels } from '../providers/provider-models';
+import {
+  canReachWorkspaceBillingEntrance,
+  workspaceBillingAuthorityContext,
+} from '@open-design/contracts';
 import type { AgentInfo, AppConfig, ExecMode, ProviderModelOption } from '../types';
 import {
   canUpgradeVelaPlan,
@@ -32,7 +36,7 @@ import { isMacPlatform } from '../utils/platform';
 import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
-  workspaceBillingSnapshotForContext,
+  workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import {
   projectWorkspaceContext,
@@ -58,6 +62,17 @@ interface Props {
   placement?: 'down' | 'up';
   /** Fired when the dropdown transitions from closed to open. */
   onOpen?: () => void;
+  /**
+   * A monotonically advancing counter that asks this popover to open.
+   *
+   * The error card's 'switch model' action has to reach in from outside — the
+   * delivered design says it "opens the model picker directly"
+   * (`error-ux-design.md:130`, S08). This is a one-way request, not control of
+   * the open state: the popover still opens and closes on its own the rest of
+   * the time, and a re-render that does not advance the counter does nothing,
+   * so a menu the user just dismissed does not spring back.
+   */
+  openSignal?: number;
   /**
    * Project detail supplies its daemon-authoritative persisted workspace
    * scope. Other surfaces omit it and continue using the ambient navigation
@@ -85,6 +100,7 @@ export function AvatarMenu({
   placement = 'down',
   onOpen,
   projectWorkspaceScope,
+  openSignal,
 }: Props) {
   const t = useT();
   const analytics = useAnalytics();
@@ -122,6 +138,21 @@ export function AvatarMenu({
       return !v;
     });
   }
+  /*
+   * Honour an outside open request. Keyed on the counter's value rather than
+   * its truthiness so that repeated requests all land, and guarded by the last
+   * value seen so an ordinary re-render never reopens a dismissed menu.
+   */
+  const lastOpenSignalRef = useRef(openSignal);
+  useEffect(() => {
+    if (openSignal === undefined) return;
+    if (lastOpenSignalRef.current === openSignal) return;
+    lastOpenSignalRef.current = openSignal;
+    setOpen((wasOpen) => {
+      if (!wasOpen) onOpen?.();
+      return true;
+    });
+  }, [openSignal, onOpen]);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -247,13 +278,43 @@ export function AvatarMenu({
       cancelled = true;
     };
   }, [open, amrAvailable]);
-  const exactWorkspaceSnapshot = workspaceBillingSnapshotForContext(
+  /*
+   * The plan tier of the workspace in scope, read through the ONE projection
+   * that is allowed to answer that question.
+   *
+   * This used to read the exact billing SNAPSHOT directly, which is the same
+   * source `workspaceBillingSummaryForContext` consults first — but only the
+   * first. The projection also carries a fallback that was approved and is
+   * load-bearing: when a TEAM workspace has no authorized snapshot, a
+   * team-namespaced account tier may stand in for it (a personal tier may not,
+   * because it describes the account's own subscription and cannot name a team
+   * workspace's plan). Reading the snapshot directly walked around that
+   * fallback, and there was no third source to catch the fall.
+   *
+   * The snapshot goes missing for reasons that have nothing to do with the
+   * viewer's entitlements: A answers the snapshot route 409
+   * `billing_workspace_snapshot_unsupported` while `/wallet/balance` still
+   * answers 200; a rolling deploy leaves an old API pod 404/405-ing the route
+   * for a few minutes; a local vela CLI predates `--workspace-id`. The daemon
+   * then omits the `workspaceSnapshot` key entirely. On this surface that
+   * turned into `scopedPlanId: null`, `canUpgradeVelaPlan(null) === false`, and
+   * a veto landing BEFORE `canReachWorkspaceBillingEntrance` ever got asked —
+   * so a team owner clicked a plan-gated model and nothing happened at all.
+   *
+   * Ordering is unchanged where it matters: the projection consults the
+   * snapshot FIRST, so a present snapshot still outranks the account tier.
+   *
+   * It is a pure function of the response this component already holds, so the
+   * corrected tier lands on the same render frame — there is no second async
+   * hop that would paint the wrong identity first and fix it later.
+   */
+  const scopedWorkspaceBilling = workspaceBillingSummaryForContext(
     workspaceBillingResponse,
     workspaceContext,
   );
   const scopedPlanId =
     workspaceContext?.workspaceType === 'team'
-      ? exactWorkspaceSnapshot?.billing.planId?.trim() || null
+      ? scopedWorkspaceBilling?.membershipTier?.trim() || null
       : workspaceContext?.workspaceType === 'personal'
         ? workspaceBillingResponse?.summary?.membershipTier?.trim() || null
         : null;
@@ -271,13 +332,39 @@ export function AvatarMenu({
     amrResolvedProfile,
     financialWorkspaceId,
   );
-  // Personal workspaces always resolve `canManageBilling` true (the user is
-  // their own owner), so this does not affect the personal-workspace upgrade
-  // path.
+  /*
+   * Whether the viewer may be shown a billing entrance at all.
+   *
+   * This asked `workspaceContext.permissions.canManageBilling` directly, and got
+   * both halves of the question wrong on a project page:
+   *
+   *  - It bypassed {@link canReachWorkspaceBillingEntrance}, whose FIRST line
+   *    exempts a non-team workspace. `canManageBilling` is `readable && isOwner`
+   *    — a TEAM question about spending money that is not only yours. A personal
+   *    workspace has no second member, so asking it there only deletes the
+   *    person's own way to pay. (The comment that used to sit here claimed
+   *    personal workspaces were unaffected. They were affected from the day it
+   *    landed, because of the second half.)
+   *  - On a project page `workspaceContext` is the project's SCOPE, and the
+   *    daemon's scope fast path publishes a placeholder `role: 'member'` for
+   *    every caller — see `resolveLocalProjectWorkspaceScope`. So
+   *    `canManageBilling` was false even for the workspace owner, and
+   *    `openAmrUpgrade` returned early: a plan-gated model kept its "upgrade to
+   *    use this" tooltip and did nothing at all when clicked.
+   *
+   * `workspaceBillingAuthorityContext` is the one sanctioned way to answer a
+   * money question from a scope context: it adopts the real role, and ONLY the
+   * role, from the shell's authority when that authority names the same
+   * principal — never a different workspace's, and never anything else about it.
+   */
+  const billingEntranceContext = projectWorkspaceScope
+    ? workspaceBillingAuthorityContext(workspaceContext, ambientWorkspaceContext)
+    : workspaceContext;
   const amrCanUpgrade =
     !!amrAccount?.loggedIn &&
     canUpgradeVelaPlan(amrPlanId?.replace(/^team[_-]/i, '')) &&
-    Boolean(workspaceContext?.permissions?.canManageBilling) &&
+    billingEntranceContext !== null &&
+    canReachWorkspaceBillingEntrance(billingEntranceContext) &&
     amrPlansUrl !== null;
   const openAmrTarget = (
     targetUrl: string | null,
@@ -445,6 +532,7 @@ export function AvatarMenu({
         ref={triggerRef}
         type="button"
         className="avatar-agent-trigger"
+        data-testid="avatar-agent-trigger"
         onClick={toggleOpen}
         aria-haspopup="menu"
         aria-expanded={open}

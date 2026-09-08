@@ -59,20 +59,25 @@ export const deepseekHarnessAgentDef = {
     // who followed our instructions land on an "untested version" warning the
     // week after we bumped the installer. Accept the release line; a version
     // off it still warns.
-    supportedVersions: ['0.1.0-rc.8', '0.1.1-rc.2'],
+    supportedVersions: ['0.1.0-rc.8', '0.1.1-rc.2', '0.1.2-rc.1'],
     // The line, not one point on it. Scoping this to `0.1.0-rc.N` was still a
     // pin: upstream shipped `0.1.1-rc.1` two days later and every user on it
-    // was told their CLI was untested.
+    // was told their CLI was untested. `0.1.2-rc.1` then became npm's `latest`,
+    // and the same warning came back for everyone who installed without naming
+    // a version — the widening has to happen per patch line, every time.
     //
     // Prerelease acceptance may never exceed what `packages/dsh-runtime`'s peer
     // ranges can install, or this suppresses the warning for a version whose
     // companion cannot resolve — a worse failure than the warning, and silent.
     // semver admits a prerelease only against a comparator sharing its exact
     // major.minor.patch AND carrying a prerelease, so the accepted release
-    // candidates are precisely the peers' tuples and floors: `0.1.0-rc.6+` and
-    // any `0.1.1-rc.N`. Stable releases on the line need no such comparator.
+    // candidates are precisely the peers' tuples and floors: `0.1.0-rc.6+`, any
+    // `0.1.1-rc.N`, any `0.1.2-rc.N`. One alternative per peer comparator, on
+    // purpose — a new upstream patch line needs an edit in both files or in
+    // neither. Stable releases on the line need no such comparator.
     // `e2e/tests/dsh-installer-version-policy.test.ts` holds the two together.
-    supportedVersionPattern: /^0\.1\.\d+$|^0\.1\.0-rc\.(?:[6-9]|[1-9]\d+)$|^0\.1\.1-rc\.\d+$/u,
+    supportedVersionPattern:
+      /^0\.1\.\d+$|^0\.1\.0-rc\.(?:[6-9]|[1-9]\d+)$|^0\.1\.1-rc\.\d+$|^0\.1\.2-rc\.\d+$/u,
     requireVersion: true,
     parse: parseDeepSeekHarnessVersion,
   },

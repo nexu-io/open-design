@@ -12,9 +12,14 @@ Each locale file must:
   strings; and
 - contain a non-empty Markdown body after the front matter.
 
-The `en` locale is required whenever a release-note directory is supplied.
-Stable releases additionally require `zh-CN`. Other channels may omit the
-version directory entirely.
+The `en` locale is required whenever a release-note directory is supplied,
+because every consumer falls back to it. Everything else is a recommendation,
+not a gate: any channel may omit the version directory entirely, and a stable
+release that is missing its notes — or missing `zh-CN` — still publishes. The
+gap is reported as a GitHub Actions warning and a job-summary entry on the
+release run rather than failing it, so an editorial omission never forces a new
+prerelease round trip. Stable releases are still expected to ship `en` and
+`zh-CN`; treat the warning as a to-do, not as permission to skip them.
 
 `tools-release` retains the front matter in the uploaded file and publishes it
 as an immutable object at

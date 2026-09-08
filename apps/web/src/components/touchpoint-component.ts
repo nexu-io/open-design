@@ -195,7 +195,15 @@ export async function verifyWebTouchpoint(touchpoint: WebTouchpointContent) {
 export const webTouchpointModuleCache =
 	new TouchpointModuleCache<ComponentModule>(32);
 
-export class OpenDesignTouchpointElement extends HTMLElement {
+// Keep modules that share the host adapter importable in Node-only tests and
+// SSR. The real browser global remains the base class whenever the DOM exists;
+// DOM methods are only used by the browser mount lifecycle below.
+const TouchpointElementBase: typeof HTMLElement =
+	typeof HTMLElement === "undefined"
+		? (class {} as typeof HTMLElement)
+		: HTMLElement;
+
+export class OpenDesignTouchpointElement extends TouchpointElementBase {
 	private generation = 0;
 	private disposed = true;
 	private disposing?: Promise<void>;

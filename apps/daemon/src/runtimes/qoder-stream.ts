@@ -6,6 +6,7 @@
  */
 
 import { Buffer } from 'node:buffer';
+import { StringDecoder } from 'node:string_decoder';
 
 type JsonRecord = Record<string, unknown>;
 type QoderEvent = Record<string, unknown>;
@@ -15,9 +16,20 @@ function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === 'object';
 }
 
-function stringifyContent(value: unknown): string {
+/**
+ * Decode one stdout chunk, given a decoder that carries state between chunks.
+ *
+ * The decoder is the whole point. A chunk boundary lands wherever the pipe
+ * decides, which for any non-ASCII output means it will eventually land in the
+ * middle of a multi-byte character — `Buffer.toString('utf8')` turns that
+ * half-character into U+FFFD on both sides and the character is gone for good.
+ * `StringDecoder` holds the incomplete bytes until the next chunk completes
+ * them, which is the same guarantee the other runtimes get for free from
+ * `child.stdout.setEncoding('utf8')`.
+ */
+function stringifyContent(value: unknown, decoder: StringDecoder): string {
   if (typeof value === 'string') return value;
-  if (Buffer.isBuffer(value)) return value.toString('utf8');
+  if (Buffer.isBuffer(value)) return decoder.write(value);
   if (value == null) return '';
   try {
     return JSON.stringify(value);
@@ -61,6 +73,12 @@ function messageFromResult(obj: JsonRecord): string {
 
 export function createQoderStreamHandler(onEvent: QoderEventSink) {
   let buffer = '';
+  /*
+   * Per-handler, never module-level: the decoder's whole job is to remember the
+   * trailing bytes of the previous chunk, so two concurrent runs sharing one
+   * would splice each other's characters together.
+   */
+  const decoder = new StringDecoder('utf8');
   let emittedThinkingStart = false;
 
   function handleObject(obj: unknown, rawLine: string) {
@@ -152,7 +170,7 @@ export function createQoderStreamHandler(onEvent: QoderEventSink) {
   }
 
   function feed(chunk: unknown) {
-    buffer += stringifyContent(chunk);
+    buffer += stringifyContent(chunk, decoder);
     let nl;
     while ((nl = buffer.indexOf('\n')) !== -1) {
       const line = buffer.slice(0, nl).trim();
@@ -163,7 +181,11 @@ export function createQoderStreamHandler(onEvent: QoderEventSink) {
   }
 
   function flush() {
-    const rem = buffer.trim();
+    // Stream over: `end()` releases any bytes the decoder was still holding.
+    // A truncated character at EOF is genuinely truncated and surfaces as
+    // U+FFFD, which is the honest outcome; what matters is that it cannot
+    // silently drop a line the parser would otherwise have seen.
+    const rem = (buffer + decoder.end()).trim();
     buffer = '';
     if (!rem) return;
     handleLine(rem);
