@@ -4156,7 +4156,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
    造出「溢出」;`text-overflow: ellipsis` 才有地方生效;`white-space: nowrap`
    保证它是一行 —— 换行的话两侧发丝线会错位。
    ⚠️ 别给它 `flex: none`:该被压缩的正是这一层,图标那一枚才是 `flex: none`。
-   守卫见 `tests/components/chat/fork-note-label-ellipsis.test.tsx`。 */
+   守卫见 `e2e/ui/fork-note-ellipsis.test.ts` —— 判据是真浏览器里**省略号有没有
+   画出来**,不是这几行声明写没写:声明写着而挂错盒子,正是 #7863 的原病灶。 */
 .fork-note-label {
   min-width: 0;
   overflow: hidden;
