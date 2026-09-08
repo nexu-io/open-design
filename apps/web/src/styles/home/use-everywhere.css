@@ -12,7 +12,7 @@
   position: fixed;
   inset: 0;
   z-index: 920;
-  background: rgba(28, 27, 26, 0.42);
+  background: var(--scrim-tint);
   -webkit-backdrop-filter: var(--scrim-backdrop);
   backdrop-filter: var(--scrim-backdrop);
   display: flex;
@@ -113,7 +113,7 @@
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   padding: 6px 12px 8px;
   margin-bottom: -1px;
   border-radius: 8px 8px 0 0;
@@ -210,7 +210,7 @@
   color: var(--text-muted);
 }
 .use-everywhere-snippet__label {
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text);
 }
 .use-everywhere-snippet__copy {
@@ -281,7 +281,7 @@
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   padding: 8px 14px;
   border-radius: var(--radius-sm, 6px);
   cursor: pointer;
@@ -322,7 +322,7 @@
   background: var(--bg-panel);
   color: var(--text);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   box-shadow: var(--shadow-xs);

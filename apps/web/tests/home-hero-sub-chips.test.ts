@@ -143,8 +143,10 @@ describe('prototypeSceneProjectMetadata', () => {
     const webClone = findChip('web-clone')!;
     expect(prototypeSceneProjectMetadata(webClone, prototypeSubChipForSlug('wireframe')))
       .toEqual({ kind: 'prototype', intent: 'web-clone', fidelity: 'wireframe' });
+    // Website clone stamps its own high-fidelity default, which a scene-less
+    // pick keeps verbatim.
     expect(prototypeSceneProjectMetadata(webClone, null))
-      .toEqual({ kind: 'prototype', intent: 'web-clone' });
+      .toEqual({ kind: 'prototype', intent: 'web-clone', fidelity: 'high-fidelity' });
   });
 });
 

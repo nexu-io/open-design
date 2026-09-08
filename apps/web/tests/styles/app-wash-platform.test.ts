@@ -11,7 +11,10 @@ describe('desktop app wash platform contract', () => {
     expect(appWashCss).toMatch(
       /html:has\(\.workspace-shell--desktop\[data-host-platform='win32'\]\)\s*{\s*--app-wash:\s*color-mix\(in srgb, var\(--bg-panel\) 50%, var\(--bg-subtle\)\);\s*}/,
     );
-    expect(appWashCss).toContain('radial-gradient(');
+    // The web ground is flat (per product, #7635): the pastel radial blobs no
+    // longer compose into the wash, so `none` is the only web-mode value.
+    expect(appWashCss).toMatch(/:root\s*{[^}]*--app-wash:\s*none;/);
+    expect(appWashCss).not.toMatch(/--app-wash:\s*\n?\s*radial-gradient\(/);
   });
 
   it('limits window-vibrancy material rules to macOS desktop hosts', () => {

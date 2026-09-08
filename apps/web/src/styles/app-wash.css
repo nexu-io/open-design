@@ -18,13 +18,18 @@
   --wash-pink: rgba(240, 197, 216, 0.45); /* pale rose */
   --wash-peach: rgba(247, 224, 196, 0.5); /* warm cream light */
   --wash-mist: rgba(213, 229, 248, 0.38); /* cool secondary blue */
-  /* Percent-sized ellipses scale with the viewport — no seams on resize. */
-  --app-wash:
-    radial-gradient(52% 44% at 12% -4%, var(--wash-blue) 0%, transparent 68%),
-    radial-gradient(44% 38% at 90% 6%, var(--wash-pink) 0%, transparent 66%),
-    radial-gradient(48% 42% at 82% 94%, var(--wash-peach) 0%, transparent 64%),
-    radial-gradient(56% 48% at 14% 102%, var(--wash-mist) 0%, transparent 70%),
-    linear-gradient(var(--wash-base), var(--wash-base));
+  /* Flat ground (per product): the pastel blobs are no longer composed into
+     the app wash. The blue and pink corners were the ones called out, but the
+     peach and mist ones are the same effect from the same palette — keeping
+     them would have left the page tinted and lopsided rather than clean — so
+     the whole composition steps aside and body's own --bg-app is the ground.
+     `none` is the same value the degradation blocks at the bottom of this file
+     already use, so the "wash off" path is one shape, not two.
+
+     The four colour tokens above stay defined: plugin-marketplace-demo.css
+     builds its own wash from them, and restoring this one is a one-line
+     revert. */
+  --app-wash: none;
 
   /* Veils: translucent stand-ins for the solid backgrounds of the page
      containers between body and the content surfaces. One token per
@@ -86,28 +91,24 @@ html:has(.workspace-shell--desktop[data-host-platform='win32']) {
    Craft look. The desktop and darwin markers come from the host bridge
    (App.tsx data-client-type/data-host-platform). */
 html:has(.workspace-shell--desktop[data-host-platform='darwin']) {
-  /* Focused window: a firm scrim so content sits on a mostly solid ground.
-     The unfocused state below thins this back to ~21% (0.34 × 62%), which
-     preserves the airy see-through look while the window is in the back. */
+  /* 20% (per product, down from 62%) — a thin scrim, so most of the real
+     wallpaper reads through the glass. One number for both focus states: the
+     window used to thin to 15% while unfocused, and the step was small enough
+     to read as the wallpaper shifting under the app rather than as a focus
+     cue, so the scrim now holds steady. */
   --app-wash: linear-gradient(
-    color-mix(in srgb, var(--wash-base) 62%, transparent),
-    color-mix(in srgb, var(--wash-base) 62%, transparent)
+    color-mix(in srgb, var(--wash-base) 20%, transparent),
+    color-mix(in srgb, var(--wash-base) 20%, transparent)
   );
   background: transparent;
 }
 html:has(.workspace-shell--desktop[data-host-platform='darwin']) body {
   background: transparent;
 }
-/* Focus response: while the window is unfocused (App.tsx toggles
-   .is-window-blurred on <html> in desktop mode) the scrim thins out so the
-   wallpaper reads clearly through the glass; regaining focus fades it back
-   to full strength. Browsers never get the class, so web mode is untouched. */
-html:has(.workspace-shell--desktop[data-host-platform='darwin']) body::before {
-  transition: opacity 240ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-html.is-window-blurred:has(.workspace-shell--desktop[data-host-platform='darwin']) body::before {
-  opacity: 0.34;
-}
+/* No focus response: the scrim is the same 20% focused and unfocused (per
+   product). `.is-window-blurred` is still toggled on <html> by App.tsx and is
+   still the hook to key off if a focus-dependent material ever comes back —
+   it just no longer moves this one. */
 /* The top project tab strip stays flush and seamless with the page below it:
    a transparent surface shows the exact same app wash as the content (one
    continuous color, pinned Home tab mask included) and takes NO

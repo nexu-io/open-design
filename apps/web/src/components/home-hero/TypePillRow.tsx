@@ -1,18 +1,17 @@
-// Capsule type row — the pill replacement for the fanned type carousel
-// (per product: all 10 top-level creation types use capsules). ONE line exactly as wide as the
-// composer card below it, EVERY gap identical (8px): the pills that fit
-// render inline, then the All button, and the remaining ordered suffix folds
-// into the 全部 popover. Fit is computed against an invisible
-// probe row that always lays out the full set at natural size, so showing /
-// hiding pills can never feed back into its own measurement. Selection
-// state stays with the caller via `onPick`.
+// Capsule type row — the pill replacement for the fanned type carousel.
+// ONE line exactly as wide as the composer card below it, EVERY gap identical
+// (8px). The row's membership is a fixed product decision rather than a width
+// computation (2026-08-31): `HOME_TYPE_ROW_IDS` render inline, the 更多 button
+// follows, and `HOME_TYPE_ROW_MORE_IDS` live in its popover. A narrow viewport
+// can still push inline pills into the popover — fit is computed against an
+// invisible probe row that always lays out the full inline set at natural
+// size, so showing / hiding pills can never feed back into its own
+// measurement. Selection state stays with the caller via `onPick`.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { HomeHeroChip } from './chips';
+import { HOME_TYPE_ROW_IDS, HOME_TYPE_ROW_MORE_IDS } from './chips';
 import { Icon } from '../Icon';
 import { useT } from '../../i18n';
-
-// Hard cap matching the fixed Home information architecture.
-const MAX_PILLS = 10;
 
 // Must match .home-hero__type-pills-wrap's CSS gap.
 const PILL_GAP = 8;
@@ -32,12 +31,18 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
   const probeRef = useRef<HTMLDivElement | null>(null);
   const tailRef = useRef<HTMLDivElement | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
-  const flowing = chips.slice(0, MAX_PILLS);
+  // Two fixed sets, ordered by the product lists rather than by catalog order.
+  const byId = (ids: readonly string[]) =>
+    ids
+      .map((id) => chips.find((chip) => chip.id === id))
+      .filter((chip): chip is HomeHeroChip => Boolean(chip));
+  const flowing = byId(HOME_TYPE_ROW_IDS);
+  const moreChips = byId(HOME_TYPE_ROW_MORE_IDS);
   const measurementSignature = [
     ...flowing.map((chip) => `${chip.id}:${labelFor(chip.id)}`),
-    `more:${t('common.all')}`,
+    `more:${t('homeHero.subTypeMore')}`,
   ].join('\0');
-  // How many flowing pills render inline; the rest go to the 全部 popover.
+  // How many inline pills fit; anything squeezed out joins the 更多 popover.
   const [fitCount, setFitCount] = useState(flowing.length);
 
   useLayoutEffect(() => {
@@ -52,8 +57,8 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
         setFitCount(flowing.length);
         return;
       }
-      // The tail (pinned pills + 全部 trigger) is part of the visible row, so
-      // its width — including its own leading gap — is reserved up front.
+      // The tail (the 更多 trigger) is part of the visible row, so its width —
+      // including its own leading gap — is reserved up front.
       const available = wrap.clientWidth - tail.offsetWidth - PILL_GAP;
       let used = 0;
       let count = 0;
@@ -95,10 +100,12 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
     };
   }, [moreOpen]);
 
-  if (flowing.length === 0) return null;
+  if (flowing.length === 0 && moreChips.length === 0) return null;
 
   const inlineChips = flowing.slice(0, fitCount);
-  const hiddenChips = flowing.slice(fitCount);
+  // 更多 always holds its own fixed set; pills squeezed out by a narrow
+  // viewport join them at the front so nothing becomes unreachable.
+  const popoverChips = [...flowing.slice(fitCount), ...moreChips];
 
   const pillButton = (chip: HomeHeroChip, inPopover: boolean) => {
     const isActive = chip.id === activeChipId;
@@ -131,10 +138,10 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
       data-testid="home-hero-type-pills"
     >
       {inlineChips.map((chip) => pillButton(chip, false))}
-      {/* Tail: the 全部 trigger is one measured unit so the fit computation
-          reserves its width. The trigger is ALWAYS mounted —
-          geometry that came and went with the overflow set would oscillate
-          the measurement at boundary widths. */}
+      {/* Tail: the 更多 trigger, one measured unit so the fit computation
+          reserves its width. The trigger is ALWAYS mounted — geometry that
+          came and went with the overflow set would oscillate the measurement
+          at boundary widths. */}
       <div className="home-hero__type-pills-tail" ref={tailRef}>
         <div className="home-hero__type-pills-more">
           <button
@@ -146,19 +153,17 @@ export function TypePillRow({ chips, activeChipId, disabled, labelFor, onPick }:
             data-testid="home-hero-type-pills-more"
             onClick={() => setMoreOpen((v) => !v)}
           >
-            <span>{t('common.all')}</span>
+            <span>{t('homeHero.subTypeMore')}</span>
             <Icon name="chevron-down" size={14} />
           </button>
           {moreOpen ? (
             <div
               className="home-hero__type-pills-popover"
               role="listbox"
-              aria-label={t('common.all')}
+              aria-label={t('homeHero.subTypeMore')}
               data-testid="home-hero-type-pills-popover"
             >
-              {(hiddenChips.length > 0 ? hiddenChips : flowing).map((chip) =>
-                pillButton(chip, true),
-              )}
+              {popoverChips.map((chip) => pillButton(chip, true))}
             </div>
           ) : null}
         </div>

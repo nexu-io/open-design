@@ -1318,10 +1318,10 @@
     0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
     0 0 0 1px color-mix(in srgb, var(--accent) 6%, transparent);
 }
-.composer.composer-readonly .composer-shell,
-.composer.composer-readonly .composer-input-wrap {
-  background: color-mix(in srgb, var(--bg-fill-tertiary) 86%, var(--bg-subtle));
-}
+/* Read-only (shared-project viewer) keeps the composer's normal two-tone
+   surfaces — white input sitting on the gray shell — so it still reads as a
+   composer. The disabled state is carried by the muted placeholder / caret
+   below, not by flattening both surfaces into one gray block. */
 .composer.composer-readonly .composer-input-wrap:focus-within {
   border-color: transparent;
 }
@@ -1440,17 +1440,31 @@
   font: inherit;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--text);
+  /* #353535 (per product), a notch darker than `--text`'s #494949. A literal
+     rather than a token change: `--text` is the app's default body ink and is
+     read app-wide — only what the user TYPES moves here. Dark mode keeps the
+     token; a near-black ink is unreadable on #202020. */
+  color: #353535;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
   caret-color: var(--accent);
   -webkit-user-modify: read-write-plaintext-only; /* paste-as-plain-text guard */
 }
+[data-theme="dark"] .composer-input-editor [contenteditable='true'],
+[data-theme="dark"] .composer-input-editor .composer-editable {
+  color: var(--text);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .composer-input-editor [contenteditable='true'],
+  html:not([data-theme]) .composer-input-editor .composer-editable {
+    color: var(--text);
+  }
+}
 .chat-composer-fixed-layer .composer-input-editor [contenteditable='true'],
 .chat-composer-fixed-layer .composer-input-editor .composer-editable {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 /* While the empty composer runs the placeholder typewriter carousel, the
    carousel draws its own decorative caret trailing the animated text. Suppress
@@ -1548,7 +1562,7 @@
   color: color-mix(in srgb, var(--m-hue) 72%, var(--text));
   font: inherit;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -1632,7 +1646,7 @@
 }
 .composer-ds-icon-trigger-label {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1678,14 +1692,6 @@
    `flex-shrink: 0` (from .composer-send) and is never squeezed. */
 .composer-row > * {
   min-width: 0;
-}
-/* Below ~500px the row can't hold the mode name + a full model chip + run
-   button on one line, so the selected mode pill collapses to icon + clear;
-   above it (wide chat / full-width composer) the name shows again. */
-@container (max-width: 500px) {
-  .composer-row .composer-mode__label {
-    display: none;
-  }
 }
 .composer-row .inline-switcher {
   min-width: 0;
@@ -1750,8 +1756,8 @@
   scrollbar-width: thin;
   animation: composer-toolbox-pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-/* Plugins variant of the standalone popover: sized like the "+" menu's
-   `.plus-menu__flyout--plugins` so the list + hover-preview pane fits. */
+/* Plugins variant of the standalone popover: wide enough that the
+   `.plus-menu__plugin-pane` list + hover-preview columns both fit. */
 .composer .composer-plugins-standalone-popup {
   width: 466px;
   max-width: calc(100vw - 24px);
@@ -1820,25 +1826,6 @@
 }
 .app .composer-row .session-mode-toggle__trigger {
   box-shadow: none;
-}
-/* #5517 composer mode picker: the project chat composer keeps every footer
-   control on one 28px baseline (our "one control system" fix), so the neutral
-   circular trigger and the selected green pill both drop from their default
-   32/34px to 28px here. Radius stays as authored (circle when neutral, pill
-   when selected). The home composer footer keeps the picker's larger native
-   sizing via its own `.home-hero__input-card` scope. */
-.app .composer-row .composer-mode__trigger,
-.chat-composer-fixed-layer .composer-row .composer-mode__trigger {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  box-shadow: none;
-}
-.app .composer-row .composer-mode.is-selected .composer-mode__trigger,
-.chat-composer-fixed-layer .composer-row .composer-mode.is-selected .composer-mode__trigger {
-  width: auto;
-  height: 28px;
-  min-width: 0;
 }
 /* Chat composer model chip mirrors the home icon-only chip: just the agent
    mark, no chevron or box (see .inline-switcher__chip--icon in the home hero). */
@@ -2140,58 +2127,95 @@
   box-shadow: var(--shadow-xs);
 }
 .composer-send:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
-/* Executing state: black pill at the same 36px height as Send, showing the
-   dot-matrix bloom animation followed by a "思考中" label. The button still
-   stops the run on click (tooltip: 停止). */
-.composer-send.stop {
-  width: auto;
-  min-width: 0;
-  padding: 0 14px 0 10px;
-  gap: var(--spacing-6);
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  color: var(--bg-panel);
-  font-size: 13px;
+/* Executing state: the SAME box as Send, minus the arrow — 底.svg's 32px
+   near-black squircle (rx 14, no rim) — with the green dot-matrix loader
+   running on it. It used to widen into a labelled pill (dot-matrix + 思考中,
+   swapping to 停止 on hover); 32px has no room for that copy, so 停止 moved to
+   the button's hover tooltip. viewer/routines.css loads later and owns the
+   shared geometry for both states; these are the base-layer values for hosts
+   that rule doesn't reach. */
+/* Typography ladder stand-in for the project composer — same reason as the
+   block at the top of home/home-hero.css: the app-wide 600 default ships with
+   the entry refresh, and the composer inherits it locally until then. */
+.composer,
+:where(.composer) button {
   font-weight: 600;
 }
-/* Exempt the executing pill from the narrow-pane collapse above (@container
-   max-width: 430px), which turns .composer-send icon-only: the label must
-   stay visible at every pane width. Same specificity, later in source. */
-.composer-row .composer-send.stop { width: auto; min-width: 0; padding: 0 14px 0 10px; gap: var(--spacing-6); }
-/* Resting label is 思考中; hovering (or keyboard focus) swaps it for 停止 so
-   the pill reads as the stop control it is. Both labels are stacked in the
-   same grid cell so the pill width is fixed at the widest label — hovering
-   never changes the button's size. Visibility (not display) does the swap.
-   The 3-class selectors also outrank the narrow-pane `span { display: none }`
-   collapse above. */
-.composer-send.stop .composer-run-labels { display: inline-grid; justify-items: center; }
-.composer-send.stop .composer-run-label,
-.composer-send.stop .composer-stop-label {
-  display: inline;
-  grid-area: 1 / 1;
-  white-space: nowrap;
+.composer-send.stop {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  gap: 0;
+  border: 0;
+  border-radius: 14px;
+  background: var(--send-ink);
+  color: var(--send-ground);
+  box-shadow: none;
 }
-.composer-send.stop .composer-stop-label { visibility: hidden; }
-.composer-send.stop:hover .composer-run-label,
-.composer-send.stop:focus-visible .composer-run-label { visibility: hidden; }
-.composer-send.stop:hover .composer-stop-label,
-.composer-send.stop:focus-visible .composer-stop-label { visibility: visible; }
-/* Same hover formula as the home send pill: lighten the ink ground 14%
-   instead of jumping to the lighter --text gray. */
-.composer-send.stop:hover {
-  background: color-mix(in srgb, var(--text-strong) 86%, #fff);
+/* Hover does NOT lift the ground the way the send disc's does: Group
+   2147224570.svg draws the hovered run button on the same #202020 as the
+   resting one, and the glyph swap below is the whole affordance. */
+.composer-send.stop:hover,
+.composer-send.stop:active {
+  background: var(--send-ink);
   border-color: transparent;
-  color: var(--bg-panel);
+  color: var(--send-ground);
+}
+/* Resting glyph = the orb; hover/focus swaps in the stop square. Both stay
+   mounted so the run never reflows, stacked in one grid cell so neither takes
+   layout from the other, and `opacity` — not `display` — does the swap:
+   ThinkingOrb writes `display: block` in an INLINE style, which no
+   non-!important stylesheet rule can beat (same trap the avatar chevron hit in
+   viewer/routines.css). Opacity is untouched by that inline style. */
+.composer-send.stop {
+  display: grid;
+  place-items: center;
+}
+.composer-send.stop > * {
+  grid-area: 1 / 1;
+}
+.composer-send.stop .composer-stop-glyph {
+  opacity: 0;
+}
+.composer-send.stop:hover .composer-run-glyph,
+.composer-send.stop:focus-visible .composer-run-glyph {
+  opacity: 0;
+}
+.composer-send.stop:hover .composer-stop-glyph,
+.composer-send.stop:focus-visible .composer-stop-glyph {
+  opacity: 1;
 }
 .composer-run-glyph {
-  display: block;
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
+  /* ThinkingOrb's own <canvas>; it sets display/width/height inline from its
+     `size` prop (20), so nothing here needs to size it. */
   pointer-events: none;
-  /* Self-animating matrix-loader SVG: show the whole square grid (no circular
-     crop) so the corner cells and their bloom aren't clipped. */
-  object-fit: contain;
+  /* The orb paints in greyscale only — it has no colour API — and the mark it
+     runs inside is a two-colour thing: #202020 ground, #00FF08 ink. This maps
+     the canvas's light ink onto that green while KEEPING its shading: each
+     output channel scales with the input's own value (the ink is grey, so G is
+     its luminance) rather than flattening to a constant, and alpha passes
+     through untouched so the soft dot edges survive.
+
+     G's coefficient normalises the state's peak ink to full: sweeping the rubik
+     draw (what `solving` resolves to) at size 20 over a full cycle, its ink
+     runs 97..255 and already tops out at 255, so the factor is exactly 1 and
+     the brightest dot lands on #00FF08 with nothing clamping. B is that same
+     factor times 8/255. sRGB interpolation is required — the default linearRGB
+     would lift the mid-tones and wash the depth out.
+     NOTE: the peak is per-state (braid tops out at 234, wave at 253), so
+     re-derive both coefficients whenever `state` changes.
+
+     Dropping this one declaration restores the component's stock look. */
+  filter: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='od-orb-green' color-interpolation-filters='sRGB'><feColorMatrix type='matrix' values='0 0 0 0 0  0 1 0 0 0  0 0.0314 0 0 0  0 0 0 1 0'/></filter></svg>#od-orb-green");
+}
+.composer-stop-glyph {
+  /* The file's own box: the square is drawn at 9..23 of a 32 viewBox, so the
+     glyph renders at the button's full 32px and insets itself. */
+  display: block;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
 }
 .composer-hint {
   font-size: 12px;

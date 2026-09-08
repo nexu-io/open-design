@@ -76,20 +76,20 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
 
 // #5517 removed the illustrated scenario-card rail from Home; scenarios are
 // picked from the composer footer's radial template picker instead.
-function openTemplatePicker() {
-  fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
+// Types are a horizontal pill row under the working-directory row (product,
+// 2026-08-21); anything that does not fit folds into its 全部 popover.
+function typePill(chipId: string): HTMLElement | null {
+  return (
+    screen.queryByTestId(`home-hero-type-pill-${chipId}`) ??
+    screen.queryByTestId(`home-hero-type-pill-${chipId}-more`)
+  );
 }
 
 describe('HomeHero scenario cards', () => {
   it('labels each create scenario in the composer template picker', () => {
     renderHero();
-    openTemplatePicker();
-    expect(
-      screen.getByTestId('home-hero-template-wedge-prototype').getAttribute('aria-label'),
-    ).toContain('Prototype');
-    expect(
-      screen.getByTestId('home-hero-template-wedge-deck').getAttribute('aria-label'),
-    ).toContain('Slide deck');
+    expect(typePill('prototype')?.textContent).toContain('Prototype');
+    expect(typePill('deck')?.textContent).toContain('Slide deck');
   });
 
   it('uses the fixed ten-item Home creation hierarchy in product order', () => {
@@ -98,14 +98,14 @@ describe('HomeHero scenario cards', () => {
     expect(ids).toEqual([
       'prototype',
       'deck',
-      'image',
       'document',
-      'hyperframes',
+      'image',
       'web-clone',
+      'hyperframes',
+      'webgl',
+      'live-artifact',
       'video',
       'audio',
-      'live-artifact',
-      'webgl',
     ]);
     expect(ids).not.toContain('wireframe');
     expect(ids).not.toContain('mobile');
@@ -113,10 +113,9 @@ describe('HomeHero scenario cards', () => {
 
   it('keeps nested prototype scenarios executable without giving them a chip of their own', () => {
     renderHero();
-    openTemplatePicker();
-    expect(screen.queryByTestId('home-hero-template-wedge-wireframe')).toBeNull();
-    expect(screen.queryByTestId('home-hero-template-wedge-mobile')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-wedge-document')).toBeTruthy();
+    expect(typePill('wireframe')).toBeNull();
+    expect(typePill('mobile')).toBeNull();
+    expect(typePill('document')).toBeTruthy();
     // They are scenes, so they have no catalog entry at all — what makes them
     // executable is the Prototype chip's action plus their own refinement.
     expect(findChip('wireframe')).toBeUndefined();

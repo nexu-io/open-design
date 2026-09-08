@@ -44,6 +44,33 @@
   --brand-weak: #d0ffb5;
   --brand-soft: #ebffde;
   --brand-text: #0d5400;
+  /* Selected-assist pair: deep brand ink on a whisper brand surface (the Home
+     composer's selected template pill / chip, the radial picker's hovered
+     wedge). Was hardcoded #2f781d / #f9fff4 at every call site, which meant the
+     light values also shipped to the dark theme. */
+  /* Per product 2026-08-26, read off the composer's selected 类型 pill:
+     #2f781d/#f9fff4 → #00D007/#D7FFD8 → #007106/#EAFFEB. Both moved on the
+     TOKENS rather than on the one rule that was inspected, so the pair stays
+     one object — the type list's active pill, the selected template pill, the
+     in-input skill chip and the radial picker's hovered wedge all paint from
+     here. The landing pair is also the readable one: the #00D007 step sat at
+     ~2.0:1 on its ground, under WCAG AA for the 13px/600 labels that wear it;
+     this one clears AA comfortably (the surface has since gone one step
+     lighter again, #EAFFEB → #F2FFF2, which only widens that margin). */
+  --brand-ink: #007106;
+  --brand-surface: #F2FFF2;
+  /* Composer send button: saturated green glyph on a near-black disc (the
+     supplied mark, 发送按钮.svg). Theme-independent — the pair is the mark
+     itself. */
+  --send-ground: #00ff08;
+  --send-ink: #202020;
+  /* Free-plan upgrade pill (entry top-right cluster): the same saturated green
+     as a GROUND, with near-black ink on it (per product #00FF08 / #121212).
+     Its own pair rather than borrowing --send-*: that one is the send mark's
+     glyph-on-disc and inverts the roles, and the inks differ. Theme-
+     independent — the pair carries its own contrast either way. */
+  --upgrade-ground: #00ff08;
+  --upgrade-ink: #121212;
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #00AA54;
@@ -61,6 +88,19 @@
   --amber: #FF7528;
   --amber-bg: color-mix(in srgb, #FFBA12 18%, #fafafa);
 
+  /* Project-kind tag hues (see `.design-card-tag.tag-*`). Each kind carries an
+     ink; the three whose tint is a lighter sibling of that ink also carry a
+     `-tint` the pill's fill/border are mixed from. `tag-brand` /
+     `tag-design-system` reuse --purple / --red and need no entry here. */
+  --tag-prototype-ink: #2348b8;
+  --tag-prototype-tint: #e8efff;
+  --tag-live-artifact-ink: #6d4ff5;
+  --tag-live-artifact-tint: #745cff;
+  --tag-web-clone-ink: #0a7ea4;
+  --tag-slide-ink: #b15e00;
+  --tag-slide-tint: #ff9f40;
+  --tag-media-ink: #1c8a73;
+
   --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
   --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
   --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
@@ -76,6 +116,7 @@
   --radius-medium: 4px;
   --radius-large: 8px;
   --radius-xlarge: 12px;
+  --radius-xxlarge: 16px;
   --radius-circular: 50%;
   --stroke-thin: 1px;
   --stroke-thick: 2px;
@@ -86,6 +127,7 @@
   --radius: var(--radius-large);
   --radius-md: var(--radius-large);
   --radius-lg: var(--radius-xlarge);
+  --radius-xl: var(--radius-xxlarge);
   --radius-pill: 999px;
 
   --duration-ultra-fast: 50ms;
@@ -164,6 +206,8 @@
   --brand-weak: #2f781d;
   --brand-soft: #164111;
   --brand-text: #adf788;
+  --brand-ink: #adf788;
+  --brand-surface: #164111;
 
   --green: #3BBF7D;
   --green-bg: #164111;
@@ -225,6 +269,8 @@
     --brand-weak: #2f781d;
     --brand-soft: #164111;
     --brand-text: #adf788;
+    --brand-ink: #adf788;
+    --brand-surface: #164111;
 
     --green: #3BBF7D;
     --green-bg: #164111;

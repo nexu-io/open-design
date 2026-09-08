@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useT } from '../i18n';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 import styles from './WorkingDirPicker.module.css';
 
 interface Props {
@@ -32,6 +32,26 @@ interface Props {
   placement?: 'down' | 'up';
   /** Fired when the panel opens, so the host can re-validate freshness. */
   onOpen?: () => void;
+  /**
+   * Attach another Open Design project as context. Optional: hosts that do not
+   * offer project references (or surface them elsewhere) omit it and the row
+   * does not render. Lives here rather than in the composer's + menu because
+   * it is the same question the folder rows answer — what does the agent get
+   * to read besides this conversation.
+   */
+  onReferenceProject?: () => void;
+  /** Attach a local code checkout as context. Optional, same reasoning. */
+  onLinkLocalCode?: () => void;
+  /**
+   * A non-directory selection to name on the trigger when no working directory
+   * is set — the project 引用其它项目 attached, or the checkout 关联本地代码
+   * linked. It behaves exactly like a chosen directory (per product: 工作目录会
+   * 换成后边的文件名，hover 的时候前边的 icon 会换成关闭的，和现在选择最近使用的
+   * 文件夹的逻辑一样): the trigger takes its name and its glyph, and the same
+   * hover × clears it. A directory wins when both exist — it is the row's
+   * primary answer, and the extra picks stay visible as chips beside it.
+   */
+  selection?: { label: string; icon: IconName; title?: string; onClear: () => void } | null;
 }
 
 function basename(dir: string): string {
@@ -57,6 +77,9 @@ export function WorkingDirPicker({
   placement = 'down',
   invalid = false,
   onOpen,
+  onReferenceProject,
+  onLinkLocalCode,
+  selection = null,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -83,6 +106,21 @@ export function WorkingDirPicker({
     };
   }, [open]);
 
+  /* One trigger, one current answer: the directory if there is one, otherwise
+     whatever the last two menu rows attached. Everything downstream (label,
+     glyph, tooltip, the hover ×) reads these three, so a non-directory pick
+     cannot drift into a different affordance. */
+  const activeLabel = workingDir ? basename(workingDir) : selection?.label ?? null;
+  const activeIcon: IconName = workingDir ? 'folder-2' : selection?.icon ?? 'folder-2';
+  const activeClear = workingDir ? onClear : selection?.onClear;
+  /* One slot, one answer (per product: 这个条件互斥，只能去掉一个才能选其他的
+     内容) — the × on the trigger is the way out, and the panel says so rather
+     than silently ignoring clicks. */
+  /* The single-slot rule (only the newest pick survives) lives in the HOST,
+     not here: this component is only handed `selection` when there is NO
+     working directory (see HomeHero's `workdirSelection`), so it can never see
+     the two occupying the slot together. HomeHero holds both and enforces it. */
+
   return (
     <div
       ref={wrapRef}
@@ -95,7 +133,11 @@ export function WorkingDirPicker({
           className={`${styles.trigger}${invalid ? ` ${styles.triggerInvalid}` : ''}`}
           data-testid="working-dir-trigger"
           aria-expanded={open}
-          title={invalid ? t('homeWorkingDir.missing') : (workingDir ?? t('homeWorkingDir.hint'))}
+          title={
+            invalid
+              ? t('homeWorkingDir.missing')
+              : (workingDir ?? selection?.title ?? selection?.label ?? t('homeWorkingDir.hint'))
+          }
           onClick={() =>
             setOpen((v) => {
               if (!v) onOpen?.();
@@ -103,12 +145,34 @@ export function WorkingDirPicker({
             })
           }
         >
-          <Icon name="folder" size={14} className={styles.triggerIcon} />
+          <Icon name={activeIcon} size={16} className={styles.triggerIcon} />
           <span className={styles.triggerLabel}>
-            {workingDir ? basename(workingDir) : (emptyLabel ?? t('homeWorkingDir.trigger'))}
+            {activeLabel ?? emptyLabel ?? t('homeWorkingDir.trigger')}
           </span>
-          <Icon name="chevron-down" size={14} className={styles.triggerChevron} />
+          <Icon name="chevron-down" size={16} className={styles.triggerChevron} />
         </button>
+        {/* Clear-the-directory control, overlaid on the trigger's leading
+            folder glyph: with a directory chosen, hovering the row swaps the
+            folder for this × (per product), and the panel's 移除工作目录 row is
+            gone with it. A SIBLING of the trigger, not a child — the trigger is
+            itself a <button> and buttons cannot nest — which also keeps the ×
+            a real focusable control rather than a hover-only target with no
+            keyboard path, now that the menu row no longer offers one. */}
+        {activeLabel && activeClear ? (
+          <button
+            type="button"
+            className={styles.triggerClear}
+            data-testid="working-dir-clear"
+            aria-label={t('homeWorkingDir.clear')}
+            title={t('homeWorkingDir.clear')}
+            onClick={() => {
+              activeClear();
+              setOpen(false);
+            }}
+          >
+            <Icon name="close" size={16} />
+          </button>
+        ) : null}
       </div>
 
       {open ? (
@@ -127,7 +191,7 @@ export function WorkingDirPicker({
               onPickDirectory();
             }}
           >
-            <Icon name="folder" size={14} className={styles.itemIcon} />
+            <Icon name="folder-2" size={14} className={styles.itemIcon} />
             <span>{workingDir ? t('homeWorkingDir.replace') : t('homeWorkingDir.pick')}</span>
           </button>
 
@@ -170,7 +234,7 @@ export function WorkingDirPicker({
                         setOpen(false);
                       }}
                     >
-                      <Icon name="folder" size={14} className={styles.itemIcon} />
+                      <Icon name="folder-2" size={14} className={styles.itemIcon} />
                       <span className={styles.recentName}>{basename(dir)}</span>
                       <span className={styles.recentPath}>{dir}</span>
                     </button>
@@ -180,19 +244,37 @@ export function WorkingDirPicker({
             ) : null}
           </div>
 
-          {workingDir && onClear ? (
+          {onReferenceProject || onLinkLocalCode ? (
+            <div className={styles.divider} role="separator" />
+          ) : null}
+          {onReferenceProject ? (
             <button
               type="button"
               role="menuitem"
               className={styles.item}
-              data-testid="working-dir-clear"
+              data-testid="working-dir-reference-project"
               onClick={() => {
-                onClear();
                 setOpen(false);
+                onReferenceProject();
               }}
             >
-              <Icon name="close" size={14} className={styles.itemIcon} />
-              <span>{t('homeWorkingDir.clear')}</span>
+              <Icon name="folder-transfer" size={14} className={styles.itemIcon} />
+              <span>{t('chat.plus.referenceProject')}</span>
+            </button>
+          ) : null}
+          {onLinkLocalCode ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.item}
+              data-testid="working-dir-local-code"
+              onClick={() => {
+                setOpen(false);
+                onLinkLocalCode();
+              }}
+            >
+              <Icon name="file-code" size={14} className={styles.itemIcon} />
+              <span>{t('chat.plus.linkLocalCode')}</span>
             </button>
           ) : null}
         </div>

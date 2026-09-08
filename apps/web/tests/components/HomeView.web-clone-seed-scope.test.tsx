@@ -126,8 +126,18 @@ function renderHome() {
 }
 
 async function pickTypePill(id: string) {
-  const pill = await screen.findByTestId(`home-hero-type-pill-${id}`);
-  fireEvent.click(pill);
+  // A picked type retires the row; clear first so the row is back.
+  const clear = screen.queryByTestId('home-hero-template-clear');
+  if (clear) fireEvent.click(clear);
+  await screen.findByTestId('home-hero-type-pills');
+  const inline = screen.queryByTestId(`home-hero-type-pill-${id}`);
+  if (inline) {
+    fireEvent.click(inline);
+    return;
+  }
+  // Website clone lives behind the row's 更多 popover.
+  fireEvent.click(screen.getByTestId('home-hero-type-pills-more'));
+  fireEvent.click(await screen.findByTestId(`home-hero-type-pill-${id}-more`));
 }
 
 function composerText(): string {

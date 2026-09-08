@@ -102,6 +102,30 @@ export function modelCompany(id: string): { key: string; name: string } {
   return { key, name };
 }
 
+/**
+ * Model name with the company token dropped — what the composer's model rows
+ * and chip show (`claude-fable-5` → `fable-5`, `deepseek-v4-pro` → `v4-pro`).
+ * The brand mark rendered beside the name already says which company it is, so
+ * repeating it in text only spends width on the shared half of every row.
+ *
+ * Only a recognised company token is dropped, and only when what remains still
+ * starts with a letter: ids whose leading token IS the model family (`gpt-5`,
+ * `o3`) would otherwise collapse to `5` / nothing. Anything else — BYOK
+ * `provider/model` ids, unknown vendors, prose labels — is returned untouched.
+ */
+export function modelVersionLabel(
+  id: string,
+  label?: string | null,
+): string {
+  const text = label ?? id;
+  const { key } = modelCompany(id);
+  if (!Object.prototype.hasOwnProperty.call(MODEL_COMPANY_NAMES, key)) return text;
+  const prefix = `${key}-`;
+  if (!text.toLowerCase().startsWith(prefix)) return text;
+  const rest = text.slice(prefix.length);
+  return /^[A-Za-z]/.test(rest) ? rest : text;
+}
+
 interface ModelCompanyGroup {
   key: string;
   name: string;
@@ -461,7 +485,9 @@ export const SearchableModelSelect = forwardRef<
         ) : null}
         <span className="model-select-searchable__option-copy">
           <span className="model-select-searchable__option-label">
-            <span id={optionLabelId}>{option.label}</span>
+            <span id={optionLabelId}>
+              {groupByCompany ? modelVersionLabel(option.id, option.label) : option.label}
+            </span>
           </span>
           {costLabel ? (
             <span className="model-select-searchable__option-meta" id={optionCostId}>
@@ -570,7 +596,15 @@ export const SearchableModelSelect = forwardRef<
       >
         <span className="model-select-searchable__value">
           <span className="model-select-searchable__value-label">
-            {selectedOption?.label ?? ''}
+            {/* Same name the option rows show, so the readout cannot say
+                `deepseek-v4-pro` about a row that called itself `v4-pro`.
+                Outside the company-grouped catalog the label IS the id the
+                request will carry (BYOK), so it stays verbatim. */}
+            {selectedOption
+              ? groupByCompany
+                ? modelVersionLabel(selectedOption.id, selectedOption.label)
+                : selectedOption.label
+              : ''}
           </span>
           {selectedTagLabel ? (
             <span

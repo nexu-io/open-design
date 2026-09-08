@@ -300,7 +300,8 @@ test('[P2] captures the home plugin use staged surface', async ({ page }) => {
   const usePlugin = page.getByTestId('plugin-detail-use');
   await expect(usePlugin).toBeVisible();
   await usePlugin.click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototype Starter');
+  // The lead chip cuts the title to eight code points (#7635).
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Prototyp…');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-staged');
@@ -314,7 +315,7 @@ test('[P2] captures the home plugin use with query surface', async ({ page }) =>
   const card = pluginMarketplaceCard(plugins, 'Deck Writer');
   await expect(card).toBeVisible();
   await card.getByRole('button', { name: 'Try it' }).click();
-  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Writer');
+  await expect(page.getByTestId('home-hero-active-plugin')).toContainText('Deck Wri…');
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
 
   await captureVisual(page, 'visual-home-plugin-use-with-query');

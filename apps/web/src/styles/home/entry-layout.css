@@ -64,6 +64,13 @@
    track is 0-wide so the rail is clipped away, expanded it occupies the rail
    width. */
 .entry-nav-rail {
+  /* The ink the 最近浏览过 heading and the project rows under it share (per
+     product: 未选中的颜色和「最近浏览过」这一档一样). #5c5c5c (per product), a
+     flat opaque grey rather than an alpha: the rail is a frosted panel, so a
+     translucent ink took its tone from whatever scrolled under it and read
+     washed-out over the pale page. Dark mode keeps the alpha below; #5c5c5c is
+     far too dark on that ground. */
+  --rail-ink-quiet: #5c5c5c;
   /* Fill the grid track (0 collapsed → rail width expanded) rather than a
      fixed width, so a 0-wide track truly hides the rail instead of letting a
      56px rail overflow it. The rail box itself is a transparent container; the
@@ -81,6 +88,16 @@
      the overflow clip below — no opacity fade, which previously crossed with
      the topbar toggle's fade-out and caused a flash on expand. */
   pointer-events: none;
+}
+/* Dark mode keeps a derived alpha: over the dark panel a mix off --text
+   (#ededed) lands where it should. Only the light theme pins a literal. */
+[data-theme="dark"] .entry-nav-rail {
+  --rail-ink-quiet: color-mix(in srgb, var(--text) 52%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .entry-nav-rail {
+    --rail-ink-quiet: color-mix(in srgb, var(--text) 52%, transparent);
+  }
 }
 /* The whole sidebar reads as one floating layer: the content sits in a panel
    inset from the grid-track edges (margin) with rounded corners + elevation,
@@ -780,6 +797,368 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── 最近浏览过 (rail section under 插件) ─────────────────────────────────
+   A disclosure, not a destination: the head row toggles, the rows below open
+   projects. It borrows the nav row's geometry so the section reads as part of
+   the same list rather than a panel dropped into it. */
+.entry-nav-rail__recent {
+  display: flex;
+  flex-direction: column;
+  /* 16px between 插件 and this heading (per product, down from 24). The group
+     above already puts 2px between its children (`.entry-nav-rail__group`'s
+     gap), so the margin carries the remainder — written as the subtraction so
+     the total stays 16 if that gap ever moves. */
+  margin-top: calc(16px - 2px);
+}
+.entry-nav-rail__recent-head {
+  appearance: none;
+  width: 100%;
+  /* Same leading inset as a destination row (per product: 左边对齐和首页的
+     选项) — the heading starts on 插件's icon column, not indented under its
+     label. The chevron is no longer in that column either; it moved to the
+     row's trailing edge. */
+  height: auto;
+  /* 38 tall, the destinations' own row height (per product: 整个的高度都是 38).
+     A min-height rather than a fixed one: the box is a flex row that centres
+     its contents, so it grows rather than clipping if the title ever wraps. */
+  min-height: 38px;
+  padding: 8px 10px 8px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  /* Title left, chevron hard right. */
+  justify-content: space-between;
+  gap: 9px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  /* The rail's shared quiet ink — this heading is where that tone came from
+     (per product), and the unselected rows above and below now match it. */
+  color: var(--rail-ink-quiet);
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.entry-nav-rail__recent-head:hover:not(:disabled) {
+  /* The same fill 首页 wears when it is the selected destination (per product):
+     the ink at 10%, not --bg-subtle. See `.entry-nav-rail__btn.is-active`. */
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
+}
+.entry-nav-rail__recent-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+}
+.entry-nav-rail__recent-title {
+  /* 13/500 (per product) — the destinations above read 13/600, so this sits on
+     the same size and one weight lighter: a heading for the rows under it, not
+     another place to go. */
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 0;
+  display: flex;
+  flex-direction: column;
+  /* 2px between the rows (per product) — the same rhythm the destinations
+     above keep. */
+  gap: 2px;
+}
+/* One recent row: the name button, the ⋮ trigger that overlays its trailing
+   edge, and the hover preview that escapes the rail. `position: relative` is
+   what the last two anchor to. */
+.entry-nav-rail__recent-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+/* ⋮ appears on hover / while its own menu is open. It OVERLAYS the name rather
+   than taking a column, so a row's text keeps the full width when the pointer
+   is elsewhere — the names are long and already ellipsized. */
+.entry-nav-rail__recent-more {
+  position: absolute;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms var(--ease-out), visibility 0s linear 120ms;
+}
+.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-more,
+.entry-nav-rail__recent-more:focus-visible,
+.entry-nav-rail__recent-more[aria-expanded='true'] {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+}
+/* The ⋮ clears its own space by SHORTENING the name (per product: 为最右侧的
+   按钮预留位置), so the name simply ellipsizes earlier while the row is hovered
+   or its menu is open. This replaced a right-to-left mask ramp: a mask applies
+   to the whole button, which faded the row's own hover fill out with the text
+   and made the pill look cut short — the fill has to stay whole, and the ink
+   that remains has to stay at full strength. */
+.entry-nav-rail__recent-row:hover .entry-nav-rail__recent-item,
+.entry-nav-rail__recent-row:focus-within .entry-nav-rail__recent-item {
+  /* 6 (the ⋮'s own inset) + 24 (its box) + 6 of air. */
+  padding-right: 36px;
+}
+.entry-nav-rail__recent-more:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text-strong);
+}
+/* Inline rename: the input stands in the row's own box so committing does not
+   shift the list. */
+.entry-nav-rail__recent-rename {
+  width: 100%;
+  height: 38px;
+  padding: 10px 10px 10px 16px;
+  /* #DBDBDB (per product) — written as `--border`, the token that already holds
+     exactly that value, rather than as a literal. */
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  /* No fill of its own (per product: 修改名称的时候不要下边的白底) — the rail's
+     frosted panel shows through and the ring alone marks the field. --bg-app is
+     opaque white, which cut a solid card into a translucent column. */
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  outline: none;
+}
+/* The ring you actually SEE, because this field is autofocused the moment it
+   opens — and primitives.css carries a blanket `input:focus { border-color:
+   var(--selected) }` (#353535), which at (0,1,1) out-ranks the (0,1,0) class
+   rule above. That near-black is what made the field read as a black-outlined
+   box; the rule above was never the one on screen. `.class:focus` is (0,2,0)
+   and takes it back. Same token as the resting state — the field marks itself
+   by being a field, not by darkening on focus. */
+.entry-nav-rail__recent-rename:focus {
+  border-color: var(--border);
+}
+/* Opens in the hover preview's slot — beside the row, over the content column
+   (per product: 弹窗的位置就是预览图的位置). Fixed + portalled to <body>, with
+   `top`/`left` measured off the row when the ⋮ is pressed, exactly like the
+   preview it replaces. */
+.entry-nav-rail__recent-menu {
+  position: fixed;
+  transform: translateY(-50%);
+  z-index: 1200;
+  min-width: 140px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1px solid var(--material-separator);
+  /* 12px (per product) — `--radius-lg`, the same corner the hover preview that
+     shares this slot takes, so the two popups cannot read as different
+     surfaces. It was `--radius` (8). */
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated, var(--bg-panel));
+  box-shadow: var(--shadow-md);
+}
+.entry-nav-rail__recent-menu button {
+  display: flex;
+  align-items: center;
+  /* primitives.css centres every button's content; a menu row reads as a list,
+     so it starts at the leading edge instead. */
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+  height: auto;
+  padding: 7px 8px;
+  border: 0;
+  /* The hover fill takes the CARD's corner, not a tighter one of its own (per
+     product: hover 的按钮圆角和外边白色框一致) — same token as the menu above,
+     so the two can never drift apart. */
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  /* 13 (per product, was 12). The marks beside it are already 14 — see
+     `RenameMark` / `DeleteMark` / the export glyph in RailRecentRow.tsx, all
+     drawn at that size — so the row now reads label-and-mark at one weight
+     instead of a 14px glyph over a 12px word. */
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.entry-nav-rail__recent-menu button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
+}
+/* Armed delete: the second click is the destructive one, so it says so. */
+.entry-nav-rail__recent-menu button.is-danger,
+.entry-nav-rail__recent-menu button.is-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--red, #f04142) 12%, transparent);
+  color: var(--red, #f04142);
+}
+/* The preview floats OUT of the rail, over the content column: the rail panel
+   is only ~212px wide and a legible cover needs more than that. `left: 100%`
+   anchors it to the row's trailing edge; the panel above it does not clip
+   (the rail's overflow is only clamped while collapsed, and a collapsed rail
+   has no rows to hover). */
+.entry-nav-rail__recent-preview {
+  /* Fixed + portalled to <body>: `top`/`left` come from the row's own rect at
+     hover time (see RailRecentRow). Absolute inside the rail put it behind the
+     content column whatever its z-index. */
+  position: fixed;
+  transform: translateY(-50%);
+  z-index: 1200;
+  /* 216 — 180 + 20% (per product), 180 itself having come down from 232. */
+  width: 216px;
+  /* A card again, because it has something to say now (per product: 和这个一样
+     样式): the row's ellipsized name wraps in here with the last-touched time
+     under it, which is what the removed OS tooltip used to answer. It spent a
+     round as a bare plate — right while the popup was only a picture. Radius
+     16 outside / 8 inside with 8px of padding keeps the two concentric. */
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-xxlarge);
+  background: var(--bg-elevated, var(--bg-panel));
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+}
+.entry-nav-rail__recent-preview-plate {
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  /* Inside the card again: no edge or lift of its own (the card carries both),
+     and the inner half of the concentric pair — 8 + the card's 8px padding =
+     the card's 16. */
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  display: grid;
+  place-items: center;
+}
+.entry-nav-rail__recent-preview-plate img,
+.entry-nav-rail__recent-preview-plate video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  display: block;
+}
+.entry-nav-rail__recent-preview-glyph {
+  color: var(--text-faint);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+}
+/* Up to TWO lines of the full name, then an ellipsis (per product: 最多两行
+   名称). Long names are the reason this card exists at all — the row can only
+   ever show a prefix — but a card that grew without bound would cover the
+   column it floats over, and with the timestamp line gone the name is the
+   card's whole text. */
+.entry-nav-rail__recent-preview-name {
+  margin: 0;
+  /* 4px in from the plate's edges on both sides (per product: 文本向内收 4px
+     和预览图比). The plate is a filled rectangle and the text is loose ink —
+     sharing an edge, the ink reads as if it were sticking out. */
+  padding: 0 4px;
+  /* #848484 (per product) — written as the token that already IS that value
+     (tokens.css `--text-soft`), not as a literal, so the one definition keeps
+     carrying it. Two steps down from --text-strong: the card is a read-out of
+     a name the row had to clip, not a heading. */
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  /* Project names are often one unbroken token (a slug, a path); without this
+     they would overflow the clamp instead of wrapping inside it. */
+  overflow-wrap: anywhere;
+}
+.entry-nav-rail__recent-item {
+  appearance: none;
+  width: 100%;
+  /* A LEFT-ALIGNED flex row (glyph + name), spelled out rather than inherited:
+     primitives.css sets every button to `inline-flex` + `justify-content:
+     center`, which would centre the pair in the row. The name's truncation
+     moved onto `__recent-name` with it — a flex item has no line box of its
+     own to ellipsize, so the rule has to sit on the span that holds the text. */
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  /* The destinations' icon→label gap, so a project name lands on the same
+     column as 插件's label. */
+  gap: 9px;
+  height: auto;
+  /* Flush with the destinations' own leading inset (per product: 左边对齐和
+     首页的选项), so the row's GLYPH starts on the same column as 插件's puzzle
+     mark — and, since the glyph slot repeats the destinations' 18 + 9, the name
+     behind it lands on the labels' column. One left edge either way. */
+  /* 38 tall, matching the destinations and the heading above (per product).
+     This row is `display: block` (see above), so the height comes from an
+     explicit line box plus symmetric padding — 10 + 18 + 10 — rather than from
+     a flex centre it cannot use. */
+  padding: 10px 10px 10px 16px;
+  line-height: 18px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  /* Same ink as the UNSELECTED destinations above (per product: 未选中的和最近
+     浏览过的颜色一致) — one quiet column from 首页 down to the last project;
+     only `.entry-nav-rail__btn.is-active` sits darker than it. */
+  color: var(--rail-ink-quiet);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  overflow: hidden;
+  transition: background-color 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+/* The leading glyph's slot: the chat mark, or this project's run status when it
+   has one (RailRecentRow). Same 18px box the destinations' icons occupy
+   (`.entry-nav-rail__btn-icon`) — that is what puts both columns of glyphs, and
+   therefore both columns of text, on one edge. Fixed width so a 14px status orb
+   and a 16px chat mark never shift the name sideways as a run starts. */
+.entry-nav-rail__recent-icon {
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Tracks the row's ink, hover included. */
+  color: inherit;
+}
+.entry-nav-rail__recent-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry-nav-rail__recent-item:hover:not(:disabled) {
+  /* Same fill as the section heading above it and as 首页 when it is the
+     selected destination (per product): the ink at 10%, not --bg-subtle. See
+     `.entry-nav-rail__btn.is-active`. */
+  background: color-mix(in srgb, var(--text-strong) 10%, transparent);
+  color: var(--text-strong);
 }
 .entry-nav-rail__btn.is-active .entry-nav-rail__btn-icon {
   color: var(--selected);
@@ -1685,6 +2064,15 @@
   flex: 0 0 20px;
   object-fit: contain;
 }
+/* The model brand mark sits in the same 20px slot the agent logo uses, so the
+   chip keeps its width whichever of the two it happens to be showing. */
+.inline-switcher__chip-model-logo {
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  object-fit: contain;
+}
 .inline-switcher__chip-icon .agent-icon-mono,
 .inline-switcher__agent .agent-icon-mono {
   display: inline-block;
@@ -1718,17 +2106,6 @@
 }
 .inline-switcher__chip-sep {
   color: var(--text-faint);
-}
-/* Hairline splitting the agent (logo + status dot) from the model name, so the
-   compact chip reads as two groups rather than one run. Same treatment as
-   `.home-hero__workdir-divider` in the composer row beside it; the chip's own
-   gap does the spacing. */
-.inline-switcher__chip-divider {
-  flex: 0 0 auto;
-  width: 1px;
-  height: 16px;
-  background: var(--border);
-  opacity: 0.7;
 }
 .inline-switcher__chip-primary {
   min-width: 0;
@@ -1764,11 +2141,6 @@
     0 0 0 4px color-mix(in srgb, var(--danger, #dc2626) 12%, transparent);
   pointer-events: none;
 }
-.inline-switcher__amr-reminder-dot--chip {
-  top: -2px;
-  right: -2px;
-}
-
 /* Popover */
 .inline-switcher__popover {
   position: absolute;
@@ -1933,6 +2305,20 @@
   height: 16px;
   object-fit: contain;
   display: block;
+}
+/* A row with no model-specific brand mark falls back to `<AgentIcon>`, which
+   carries `.agent-icon` — and the chip's own rule above
+   (`.inline-switcher__agent .agent-icon`) pins that class to 20px. Two class
+   selectors beat the one-class-plus-element pair above, so those rows rendered
+   a 20px mark beside the 16px provider marks and the column looked ragged.
+   AgentIcon's `width`/`height` are HTML attributes (presentational hints), so
+   they lose to any rule at all and cannot settle this either.
+   Named explicitly at three classes so this wins on specificity rather than on
+   source order. */
+.inline-switcher__agent .inline-switcher__agent-logo .agent-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
 }
 .inline-switcher--compact .inline-switcher__agent:hover:not(:disabled) {
   border: none;
@@ -2371,7 +2757,6 @@
   bottom: -12px;
   z-index: 1;
   background: var(--bg-elevated);
-  border-top: 1px solid var(--border-soft);
   margin-top: 2px;
   padding: 8px 4px;
   display: inline-flex;
@@ -2383,6 +2768,24 @@
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
+}
+/* The divider above this row is a pseudo-element, NOT the button's own
+   `border-top` (per product: 分割线不要用按钮的描边). A border belongs to the
+   control's box, so it read as the button being outlined rather than as the
+   popover being divided.
+   It is inset rather than full-bleed (per product: 不要贯穿): the line sits
+   4px inside the button's own edges, so it reads as a rule between two groups
+   of rows and never touches the popover's wall. Because it rides the sticky
+   button, it stays pinned to the bottom while the model list scrolls under. */
+.inline-switcher__more::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 4px;
+  right: 4px;
+  height: 1px;
+  background: var(--border-soft);
+  pointer-events: none;
 }
 .inline-switcher__more:hover {
   color: var(--text-strong);
