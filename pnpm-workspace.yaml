@@ -18,6 +18,10 @@ overrides:
   yaml: 2.9.0
 
 onlyBuiltDependencies:
+  # Local AMR matrix acceptance: DSH native bindings and its spawn-helper setup.
+  - "@deepseek-ai/dsh-subprocess-local"
+  - koffi
+  - node-pty
   - better-sqlite3
   - core-js
   - electron
