@@ -20,11 +20,14 @@ describe('PreviewRuntimeController', () => {
     };
 
     controller.handleMessage({ source: target, data: hello });
+    // The revision is what lets the reply be matched to this exact command,
+    // so it is asserted rather than allowed through a looser matcher.
     expect(target.postMessage).toHaveBeenCalledWith({
       type: 'od:preview:set-capabilities',
       protocolVersion: 1,
       ...identity,
       enabledCapabilities: ['snapshot', 'deck'],
+      revision: 1,
     }, '*');
 
     controller.setEnabledCapabilities(['deck', 'snapshot']);
@@ -33,6 +36,9 @@ describe('PreviewRuntimeController', () => {
     expect(target.postMessage).toHaveBeenCalledTimes(2);
     expect(target.postMessage.mock.calls.at(-1)?.[0]).toMatchObject({
       enabledCapabilities: ['snapshot'],
+      // A new command, so a new revision: the previous command's reply must no
+      // longer be accepted as an answer to this one.
+      revision: 2,
     });
   });
 

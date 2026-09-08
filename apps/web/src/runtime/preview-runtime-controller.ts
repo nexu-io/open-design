@@ -41,6 +41,8 @@ export class PreviewRuntimeController {
   #available: PreviewRuntimeCapability[] | null = null;
   #desired: PreviewRuntimeCapability[];
   #lastCommandKey: string | null = null;
+  #nextCapabilityRevision = 1;
+  #pendingCapabilityRevision: number | null = null;
   #nextPresentationRevision = 1;
   #pendingPresentationRevision: number | null = null;
 
@@ -76,11 +78,20 @@ export class PreviewRuntimeController {
       case 'od:preview:hello':
         this.#available = message.availableCapabilities;
         this.#lastCommandKey = null;
+        this.#pendingCapabilityRevision = null;
         this.#pendingPresentationRevision = null;
         this.#sendCapabilityCommand();
         break;
       case 'od:preview:capabilities-applied':
-        if (message.enabledCapabilities.join('\0') === this.#lastCommandKey) {
+        // Answered-ness is decided by WHICH command the document replied to,
+        // not by what it managed to turn on. A module whose `enable()` throws
+        // is honestly left out of the reply, and matching on contents read that
+        // honest answer as noise: nothing fired, no barrier was sent, a standby
+        // waiting on the acknowledgement was never promoted, and nothing
+        // retried or reported. Documents served before the revision existed
+        // echo none, and keep the contents match they were built against.
+        if (this.#capabilitiesAppliedAnswersOutstandingCommand(message)) {
+          this.#pendingCapabilityRevision = null;
           this.#callbacks.onCapabilitiesApplied?.(message.enabledCapabilities);
           const revision = this.#nextPresentationRevision;
           this.#nextPresentationRevision = revision >= Number.MAX_SAFE_INTEGER ? 1 : revision + 1;
@@ -113,6 +124,21 @@ export class PreviewRuntimeController {
     return message;
   }
 
+  /**
+   * Whether this reply answers the command still outstanding.
+   *
+   * The revision is the fence. It survives a document that applied less than it
+   * was asked for, which the capability list cannot: comparing lists makes a
+   * partial apply indistinguishable from a reply to a superseded command, and
+   * the host chose to ignore both.
+   */
+  #capabilitiesAppliedAnswersOutstandingCommand(
+    message: Extract<PreviewRuntimeMessage, { type: 'od:preview:capabilities-applied' }>,
+  ): boolean {
+    if (message.revision !== undefined) return message.revision === this.#pendingCapabilityRevision;
+    return message.enabledCapabilities.join('\0') === this.#lastCommandKey;
+  }
+
   #sendCapabilityCommand(): boolean {
     if (this.#available === null) return false;
     const desired = new Set(this.#desired);
@@ -120,10 +146,14 @@ export class PreviewRuntimeController {
     const commandKey = enabledCapabilities.join('\0');
     if (commandKey === this.#lastCommandKey) return false;
     this.#lastCommandKey = commandKey;
+    const revision = this.#nextCapabilityRevision;
+    this.#nextCapabilityRevision = revision >= Number.MAX_SAFE_INTEGER ? 1 : revision + 1;
+    this.#pendingCapabilityRevision = revision;
     this.#pendingPresentationRevision = null;
     this.#target.postMessage(createPreviewRuntimeSetCapabilitiesMessage({
       ...this.#identity,
       enabledCapabilities,
+      revision,
     }), '*');
     return true;
   }

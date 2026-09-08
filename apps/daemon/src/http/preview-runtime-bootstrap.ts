@@ -105,8 +105,12 @@ function applyCapabilities(input){
     var isEnabled=activeSet.has(capability);
     if(shouldEnable===isEnabled)return;
     var hooks=modules[capability];
+    // A capability is reported as on only once something has actually turned it
+    // on. Advertising one whose module never registered, or whose enable threw,
+    // tells the host to drive a document that will never answer.
+    if(shouldEnable&&!hooks)return;
     try {
-      if(hooks){if(shouldEnable)hooks.enable();else hooks.disable();}
+      if(shouldEnable)hooks.enable();else if(hooks)hooks.disable();
       if(shouldEnable)activeSet.add(capability);else activeSet.delete(capability);
     } catch (_) {}
   });
@@ -129,7 +133,14 @@ window.addEventListener('message',function(event){
     return;
   }
   if(!data||data.type!=='od:preview:set-capabilities'||data.protocolVersion!==identity.protocolVersion||data.sessionId!==identity.sessionId||data.documentVersion!==identity.documentVersion)return;
-  send('od:preview:capabilities-applied',{enabledCapabilities:applyCapabilities(data.enabledCapabilities)});
+  var capabilityRevision=Number.isSafeInteger(data.revision)&&data.revision>0?data.revision:null;
+  var appliedCapabilities=applyCapabilities(data.enabledCapabilities);
+  // Echo the command's revision so the host can tell this reply from a
+  // superseded one WITHOUT comparing capability lists -- the applied list is
+  // legitimately shorter than the request whenever a module could not start.
+  send('od:preview:capabilities-applied',capabilityRevision===null
+    ?{enabledCapabilities:appliedCapabilities}
+    :{enabledCapabilities:appliedCapabilities,revision:capabilityRevision});
 });
 announce();
 function ready(){

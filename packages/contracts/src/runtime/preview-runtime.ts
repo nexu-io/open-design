@@ -64,11 +64,25 @@ export interface PreviewRuntimeHelloMessage extends PreviewRuntimeMessageBase {
 export interface PreviewRuntimeSetCapabilitiesMessage extends PreviewRuntimeMessageBase {
   type: 'od:preview:set-capabilities';
   enabledCapabilities: PreviewRuntimeCapability[];
+  /** Which command this is, so its reply can be told from a superseded one. */
+  revision: number;
 }
 
 export interface PreviewRuntimeCapabilitiesAppliedMessage extends PreviewRuntimeMessageBase {
   type: 'od:preview:capabilities-applied';
+  /**
+   * What the document actually turned on, which may be LESS than it was asked
+   * for: a module whose `enable()` throws is left out. The host must read this
+   * as the answer rather than comparing it to the request — see
+   * PreviewRuntimeController.
+   */
   enabledCapabilities: PreviewRuntimeCapability[];
+  /**
+   * Echo of the command's revision. Absent from documents served before the
+   * revision existed; the host falls back to matching on contents for those,
+   * which is the behaviour they were built against.
+   */
+  revision?: number;
 }
 
 export interface PreviewRuntimePresentationStateBarrierMessage extends PreviewRuntimeMessageBase {
@@ -173,11 +187,24 @@ export function parsePreviewRuntimeMessage(value: unknown): PreviewRuntimeMessag
       if (availableCapabilities === null) return null;
       return { type: messageType, ...base, availableCapabilities };
     }
-    case 'od:preview:set-capabilities':
+    case 'od:preview:set-capabilities': {
+      const enabledCapabilities = parseCapabilities(value.enabledCapabilities);
+      const revision = parseRevision(value.revision);
+      if (enabledCapabilities === null || revision === null) return null;
+      return { type: messageType, ...base, enabledCapabilities, revision };
+    }
     case 'od:preview:capabilities-applied': {
       const enabledCapabilities = parseCapabilities(value.enabledCapabilities);
       if (enabledCapabilities === null) return null;
-      return { type: messageType, ...base, enabledCapabilities };
+      // Optional: a document served before the revision existed echoes none.
+      const revision = value.revision === undefined ? null : parseRevision(value.revision);
+      if (value.revision !== undefined && revision === null) return null;
+      return {
+        type: messageType,
+        ...base,
+        enabledCapabilities,
+        ...(revision === null ? {} : { revision }),
+      };
     }
     case 'od:preview:presentation-state-barrier':
     case 'od:preview:presentation-state-applied': {
@@ -217,10 +244,15 @@ export function createPreviewRuntimeProbeMessage(
 export function createPreviewRuntimeSetCapabilitiesMessage(
   input: PreviewRuntimeDocumentIdentity & {
     enabledCapabilities: readonly PreviewRuntimeCapability[];
+    revision: number;
   },
 ): PreviewRuntimeSetCapabilitiesMessage {
   if (!isBoundedIdentity(input.sessionId) || !isBoundedIdentity(input.documentVersion)) {
     throw new TypeError('preview runtime document identity must be a non-empty bounded string');
+  }
+  const revision = parseRevision(input.revision);
+  if (revision === null) {
+    throw new TypeError('preview runtime capability revision must be a positive safe integer');
   }
   return {
     type: 'od:preview:set-capabilities',
@@ -228,6 +260,7 @@ export function createPreviewRuntimeSetCapabilitiesMessage(
     sessionId: input.sessionId,
     documentVersion: input.documentVersion,
     enabledCapabilities: normalizePreviewRuntimeCapabilities(input.enabledCapabilities),
+    revision,
   };
 }
 

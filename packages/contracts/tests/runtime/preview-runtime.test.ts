@@ -93,11 +93,13 @@ describe('preview runtime protocol', () => {
     expect(createPreviewRuntimeSetCapabilitiesMessage({
       ...identity,
       enabledCapabilities: ['edit', 'selection', 'edit'],
+      revision: 3,
     })).toEqual({
       type: 'od:preview:set-capabilities',
       protocolVersion: 1,
       ...identity,
       enabledCapabilities: ['selection', 'edit'],
+      revision: 3,
     });
     expect(createPreviewRuntimePresentationStateBarrierMessage({
       ...identity,
