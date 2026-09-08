@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { OfficialNodeTarget } from "../contracts/index.js";
+import type { OfficialNodeTarget } from "./runtime.js";
 
 export type OfficialNodeLock = Readonly<{
   schemaVersion: 1;

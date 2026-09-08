@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } f
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { bindElectronPlatform } from "@/runtime/startup/platform.js";
+import { bindNodePlatform } from "@/packages/runtime.js";
 
 const execute = vi.hoisted(() => vi.fn());
 vi.mock("node:child_process", () => ({ execFile: (...args: unknown[]) => {
@@ -36,7 +36,7 @@ describe.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process
   it("checks native identity and the bound product probe, preserving post-sign executable bytes", async () => {
     const input = await fixture();
     const before = await readdir(input.root, { recursive: true });
-    const binding = await bindElectronPlatform(input.root);
+    const binding = await bindNodePlatform(input.root);
     expect(binding.command).toBe(input.command);
     expect(binding.env).toMatchObject({ NODE_PATH: join(input.root, "node_modules"), NODE_OPTIONS: "", ELECTRON_RUN_AS_NODE: "" });
     expect(execute).toHaveBeenCalledTimes(2);
@@ -47,19 +47,19 @@ describe.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process
   it.each(["package.json", "package-lock.json", "platform-check.cjs"])("rejects damaged %s before executing anything", async name => {
     const input = await fixture();
     await writeFile(join(input.root, name), "damaged");
-    await expect(bindElectronPlatform(input.root)).rejects.toThrow(/install the latest physical Shell/u);
+    await expect(bindNodePlatform(input.root)).rejects.toThrow(/install the latest physical Shell/u);
     expect(execute).not.toHaveBeenCalled();
   });
   it.each(["abi", "version", "target", "electron"])("rejects mismatched %s before the product probe", async key => {
     const input = await fixture();
     execute.mockResolvedValue({ stdout: JSON.stringify({ ...input.identity, [key]: "wrong" }) });
-    await expect(bindElectronPlatform(input.root)).rejects.toThrow(/physical Electron platform is unavailable/u);
+    await expect(bindNodePlatform(input.root)).rejects.toThrow(/physical Node platform is unavailable/u);
     expect(execute).toHaveBeenCalledTimes(1);
   });
   it("refuses missing Node and does not recreate it", async () => {
     const input = await fixture();
     await rm(input.command);
-    await expect(bindElectronPlatform(input.root)).rejects.toThrow(/physical Electron platform is unavailable/u);
+    await expect(bindNodePlatform(input.root)).rejects.toThrow(/physical Node platform is unavailable/u);
     await expect(readFile(input.command)).rejects.toThrow(/ENOENT/u);
     expect(execute).not.toHaveBeenCalled();
   });
@@ -67,14 +67,14 @@ describe.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process
     const input = await fixture();
     const before = await readFile(join(input.root, "platform.json"));
     execute.mockResolvedValueOnce({ stdout: JSON.stringify(input.identity) }).mockRejectedValueOnce(new Error("native addon ABI mismatch"));
-    await expect(bindElectronPlatform(input.root)).rejects.toThrow(/install the latest physical Shell/u);
+    await expect(bindNodePlatform(input.root)).rejects.toThrow(/install the latest physical Shell/u);
     expect(await readFile(join(input.root, "platform.json"))).toEqual(before);
   });
   it.skipIf(process.platform === "win32")("refuses a Node symlink outside the physical installation", async () => {
     const input = await fixture();
     await rm(input.command);
     await symlink(process.execPath, input.command);
-    await expect(bindElectronPlatform(input.root)).rejects.toThrow(/physical Electron platform is unavailable/u);
+    await expect(bindNodePlatform(input.root)).rejects.toThrow(/physical Node platform is unavailable/u);
     expect(execute).not.toHaveBeenCalled();
   });
 });

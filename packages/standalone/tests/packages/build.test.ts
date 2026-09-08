@@ -2,7 +2,7 @@ import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildElectronPlatform } from "@/distribution/platform.js";
+import { buildNodePlatform } from "@/packages/build.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -16,7 +16,7 @@ describe("physical platform dependency boundary", () => {
     await writeFile(join(root, "package.json"), JSON.stringify({ private: true, dependencies }));
     await writeFile(join(root, "package-lock.json"), JSON.stringify({ lockfileVersion: 3, packages: { "": { dependencies: locked } } }));
     const outputRoot = join(root, "output");
-    await expect(buildElectronPlatform({ dependenciesRoot: root, outputRoot, target: "darwin-arm64",
+    await expect(buildNodePlatform({ dependenciesRoot: root, outputRoot, target: "darwin-arm64",
       archivePath: join(root, "unused.tar.gz"), lockPath: join(root, "unused.json"),
       verificationEntryPath: join(root, "verify.ts"), preparationEntryPath: join(root, "prepare.ts") })).rejects.toThrow(/matching private package/u);
     await expect(readdir(outputRoot)).rejects.toThrow(/ENOENT/u);

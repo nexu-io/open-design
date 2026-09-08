@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join, relative } from "node:path";
 import { promisify } from "node:util";
-import type { NodeRuntimeBinding } from "@open-design/standalone";
-import type { OfficialNodeTarget } from "../../contracts/index.js";
+import type { NodeRuntimeBinding } from "../node-runtime.js";
+export type OfficialNodeTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
 
 export function currentOfficialNodeTarget(platform = process.platform, architecture = process.arch): OfficialNodeTarget {
   const target = `${platform}-${architecture}`;
@@ -16,7 +16,7 @@ const execute = promisify(execFile);
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /** Read-only physical preflight. Never acquire, repair, or consume upgrade state. */
-export async function bindElectronPlatform(root: string): Promise<NodeRuntimeBinding> {
+export async function bindNodePlatform(root: string): Promise<NodeRuntimeBinding> {
   try {
     if (!isAbsolute(root)) throw new Error("physical platform root must be absolute");
     const target = currentOfficialNodeTarget();
@@ -53,6 +53,6 @@ export async function bindElectronPlatform(root: string): Promise<NodeRuntimeBin
     await execute(command, [await local("platform-check.cjs")], options);
     return Object.freeze({ command, env });
   } catch (cause) {
-    throw new Error("physical Electron platform is unavailable; install the latest physical Shell", { cause });
+    throw new Error("physical Node platform is unavailable; install the latest physical Shell", { cause });
   }
 }

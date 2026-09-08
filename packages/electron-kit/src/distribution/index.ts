@@ -1,9 +1,5 @@
 export type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
 export * from "./capsule.js";
-export { stageElectronNode, type StageElectronNodeInput } from "./node.js";
-export { readOfficialNodeLock } from "./node-lock.js";
-export { currentOfficialNodeTarget } from "../runtime/startup/platform.js";
-export { buildElectronPlatform, type BuildElectronPlatformInput } from "./platform.js";
 export { buildElectronDistribution, type BuildElectronDistributionInput } from "./distribution.js";
 export * from "./distribution-policy.js";
 export * from "./projection/index.js";

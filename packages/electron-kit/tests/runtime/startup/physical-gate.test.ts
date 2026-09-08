@@ -7,7 +7,7 @@ vi.mock("electron", () => ({
   app: { on: vi.fn(), isPackaged: false, getAppPath: () => "/physical", exit: mock.exit },
   BrowserWindow: { getAllWindows: () => [] }, protocol: {}, dialog: {}, ipcMain: {}, nativeImage: {},
 }));
-vi.mock("@/runtime/startup/platform.js", () => ({ bindElectronPlatform: mock.bind }));
+vi.mock("@open-design/standalone/packages", () => ({ bindNodePlatform: mock.bind }));
 vi.mock("@/runtime/startup/identity.js", () => ({
   prepareElectronCarrierIdentity: async () => ({ paths: { runtimeRoot: "/runtime" }, preflight: {} }),
   loadElectronCarrierCapsule: async (_app: unknown, load: () => Promise<unknown>) => load(),

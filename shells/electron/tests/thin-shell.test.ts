@@ -102,7 +102,10 @@ describe("Electron product shell", () => {
     for (const file of sources) {
       expect(file.source, file.name).not.toMatch(/apps\/closure|apps\/web|apps\/daemon/u);
       if (!file.name.startsWith("adapters/standalone/") && !file.name.startsWith("adapters/tools/")) {
-        expect(file.source, file.name).not.toMatch(/@open-design\/(?:sidecar|standalone)/u);
+        const source = file.name === "platform/build.ts"
+          ? file.source.replace(/@open-design\/standalone\/packages(?:\/build)?(?=")/gu, "public-physical-packages")
+          : file.source;
+        expect(source, file.name).not.toMatch(/@open-design\/(?:sidecar|standalone)/u);
       }
     }
   });

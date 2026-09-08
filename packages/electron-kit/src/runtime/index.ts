@@ -44,7 +44,7 @@ import {
 } from "./session/single-instance.js";
 import { observeElectronInstallerHandoff, resolveElectronInstallerRecovery } from "./session/update-handoff.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
-import { bindElectronPlatform } from "./startup/platform.js";
+import { bindNodePlatform } from "@open-design/standalone/packages";
 import {
   ELECTRON_WARMUP_ATOMS,
   runElectronWarmupTopology,
@@ -173,7 +173,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
   // Physical integrity precedes Capsule code and any generation/installer handoff.
   // A damaged platform is repaired only by replacing the physical Shell.
   const { nodeRuntime, definition } = await loadElectronCarrierCapsule(app, async () => {
-    const nodeRuntime = await bindElectronPlatform(join(resourceRoot, "platform"));
+    const nodeRuntime = await bindNodePlatform(join(resourceRoot, "platform"));
     context.log?.write("platform.verified", { command: nodeRuntime.command });
     return { nodeRuntime, definition: await input.loadCapsule(manifest) };
   });

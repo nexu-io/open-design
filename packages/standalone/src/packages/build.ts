@@ -4,19 +4,19 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { delimiter, dirname, isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 import { build } from "esbuild";
-import { withStagedElectronNode, type StageElectronNodeInput } from "./node.js";
+import { withStagedNodeRuntime, type StageNodeRuntimeInput } from "./node.js";
 
 const execute = promisify(execFile);
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-export type BuildElectronPlatformInput = StageElectronNodeInput & Readonly<{
+export type BuildNodePlatformInput = StageNodeRuntimeInput & Readonly<{
   dependenciesRoot: string;
   verificationEntryPath: string;
   preparationEntryPath: string;
 }>;
 
 /** Product owns dependencies/probes; this atom installs them under the locked official Node. */
-export async function buildElectronPlatform(input: BuildElectronPlatformInput) {
+export async function buildNodePlatform(input: BuildNodePlatformInput) {
   if (![input.dependenciesRoot, input.verificationEntryPath, input.preparationEntryPath].every(isAbsolute)) throw new Error("platform build paths must be absolute");
   const packagePath = join(input.dependenciesRoot, "package.json");
   const lockPath = join(input.dependenciesRoot, "package-lock.json");
@@ -29,7 +29,7 @@ export async function buildElectronPlatform(input: BuildElectronPlatformInput) {
     || JSON.stringify(Object.entries(declaration.dependencies).sort()) !== JSON.stringify(Object.entries(lock.packages?.[""]?.dependencies ?? {}).sort())) {
     throw new Error("platform dependencies require a matching private package and npm lock v3");
   }
-  return withStagedElectronNode(input, async (node, archiveRoot) => {
+  return withStagedNodeRuntime(input, async (node, archiveRoot) => {
   await writeFile(join(input.outputRoot, "package.json"), packageBytes, { flag: "wx" });
   await writeFile(join(input.outputRoot, "package-lock.json"), lockBytes, { flag: "wx" });
   const env = { ...process.env, PATH: `${dirname(node.executablePath)}${delimiter}${process.env.PATH ?? ""}`,

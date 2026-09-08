@@ -4,14 +4,14 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 
 import { isAbsolute, join } from "node:path";
 import { promisify } from "node:util";
 
-import { currentOfficialNodeTarget } from "../runtime/startup/platform.js";
-import { readOfficialNodeLock } from "./node-lock.js";
-import type { OfficialNodeTarget } from "../contracts/index.js";
+import { currentOfficialNodeTarget } from "./runtime.js";
+import { readOfficialNodeLock } from "./lock.js";
+import type { OfficialNodeTarget } from "./runtime.js";
 
 const execute = promisify(execFile);
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
-export type StageElectronNodeInput = Readonly<{
+export type StageNodeRuntimeInput = Readonly<{
   lockPath: string;
   archivePath: string;
   outputRoot: string;
@@ -25,12 +25,12 @@ type StagedNode = Readonly<{
 }>;
 
 /** Build-only, fresh output. Acquisition and persistent reuse belong to the caller. */
-export async function stageElectronNode(input: StageElectronNodeInput) {
-  return withStagedElectronNode(input, async node => node);
+export async function stageNodeRuntime(input: StageNodeRuntimeInput) {
+  return withStagedNodeRuntime(input, async node => node);
 }
 
 /** Borrow verified archive tooling only while the private extraction exists. */
-export async function withStagedElectronNode<T>(input: StageElectronNodeInput, consume: (node: StagedNode, archiveRoot: string) => Promise<T>): Promise<T> {
+export async function withStagedNodeRuntime<T>(input: StageNodeRuntimeInput, consume: (node: StagedNode, archiveRoot: string) => Promise<T>): Promise<T> {
   if (![input.lockPath, input.archivePath, input.outputRoot].every(isAbsolute)) throw new Error("Node staging paths must be absolute");
   if (input.target !== currentOfficialNodeTarget()) throw new Error("Node staging requires the matching native build host");
   const lock = await readOfficialNodeLock(input.lockPath);

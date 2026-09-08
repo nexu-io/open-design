@@ -46,6 +46,8 @@
         "packages/sidecar/esbuild.config.mjs",
         "packages/sidecar/src",
         "packages/standalone/package.json",
+        "packages/standalone/esbuild.config.ts",
+        "packages/standalone/tsconfig.json",
         "packages/standalone/src",
         "shells/electron/package.json",
         "shells/electron/tsconfig.json",
@@ -64,6 +66,9 @@
         "packages/electron-kit/tests",
         "packages/electron-kit/tsconfig.tests.json",
         "packages/electron-kit/vitest.config.ts",
+        "packages/standalone/tests/packages",
+        "packages/standalone/tsconfig.tests.json",
+        "packages/standalone/vitest.config.ts",
         "shells/electron/tests",
         "shells/electron/tsconfig.tests.json",
         "shells/electron/vitest.config.ts"

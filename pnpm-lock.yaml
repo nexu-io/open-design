@@ -715,6 +715,9 @@ importers:
       '@open-design/download':
         specifier: workspace:*
         version: link:../download
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
       jszip:
         specifier: 3.10.1
         version: 3.10.1
@@ -722,9 +725,6 @@ importers:
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
-      esbuild:
-        specifier: 0.28.0
-        version: 0.28.0
       tsx:
         specifier: 4.22.3
         version: 4.22.3

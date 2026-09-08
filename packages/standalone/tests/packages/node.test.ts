@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { stageElectronNode, withStagedElectronNode } from "@/distribution/node.js";
+import { stageNodeRuntime, withStagedNodeRuntime } from "@/packages/node.js";
 
 const probe = vi.hoisted(() => ({ abi: "137", target: `${process.platform}-${process.arch}`, electron: null as string | null }));
 vi.mock("node:child_process", async (original) => {
@@ -50,13 +50,13 @@ async function fixture(license = true) {
 describe.skipIf(process.platform !== "darwin")("build-time official Node staging", () => {
   it("borrows tooling from the verified archive and cleans it on success or consumer failure", async () => {
     const input = await fixture(); let borrowed = "";
-    await withStagedElectronNode(input, async (node, archiveRoot) => {
+    await withStagedNodeRuntime(input, async (node, archiveRoot) => {
       borrowed = archiveRoot;
       expect(node.executablePath).toBe(join(input.outputRoot, "bin/node"));
       expect(await readFile(join(archiveRoot, "lib/node_modules/npm/bin/npm-cli.js"), "utf8")).toBe("locked archive npm");
     });
     await expect(readdir(borrowed)).rejects.toThrow(/ENOENT/u);
-    await expect(withStagedElectronNode({ ...input, outputRoot: join(input.root, "failed") }, async (_node, archiveRoot) => {
+    await expect(withStagedNodeRuntime({ ...input, outputRoot: join(input.root, "failed") }, async (_node, archiveRoot) => {
       borrowed = archiveRoot; throw new Error("consumer failed");
     })).rejects.toThrow("consumer failed");
     await expect(readdir(borrowed)).rejects.toThrow(/ENOENT/u);
@@ -64,30 +64,30 @@ describe.skipIf(process.platform !== "darwin")("build-time official Node staging
 
   it("stages only locked Node and license with a path-neutral byte-bound receipt, without overwriting", async () => {
     const input = await fixture();
-    const built = await stageElectronNode(input);
+    const built = await stageNodeRuntime(input);
     expect(await readdir(input.outputRoot)).toEqual(["NODE-LICENSE", "bin", "node.json"]);
     expect(built.receipt).toMatchObject({ target: input.target, version: "24.18.0", abi: "137", executable: { path: "bin/node" }, license: { path: "NODE-LICENSE" } });
     expect(built.receipt.executable.sha256).toBe(createHash("sha256").update("fixture node bytes").digest("hex"));
     expect(JSON.stringify(built.receipt)).not.toContain(input.root);
-    await expect(stageElectronNode(input)).rejects.toThrow(/EEXIST/u);
+    await expect(stageNodeRuntime(input)).rejects.toThrow(/EEXIST/u);
     expect(await readFile(built.executablePath, "utf8")).toBe("fixture node bytes");
   });
   it("rejects archive tampering before creating output", async () => {
     const input = await fixture();
     await writeFile(input.archivePath, "tampered");
-    await expect(stageElectronNode(input)).rejects.toThrow(/digest mismatch/u);
+    await expect(stageNodeRuntime(input)).rejects.toThrow(/digest mismatch/u);
     await expect(readdir(input.outputRoot)).rejects.toThrow(/ENOENT/u);
   });
   it("requires the license and leaves no extraction scratch on failure", async () => {
     const input = await fixture(false);
-    await expect(stageElectronNode(input)).rejects.toThrow(/ENOENT/u);
+    await expect(stageNodeRuntime(input)).rejects.toThrow(/ENOENT/u);
     expect(await readdir(input.outputRoot)).toEqual([]);
   });
   it("rejects a mismatched native target and Electron-as-Node", async () => {
     const input = await fixture();
     probe.target = "linux-x64";
-    await expect(stageElectronNode(input)).rejects.toThrow(/identity mismatch/u);
+    await expect(stageNodeRuntime(input)).rejects.toThrow(/identity mismatch/u);
     probe.target = `${process.platform}-${process.arch}`; probe.electron = "41.3.0";
-    await expect(stageElectronNode({ ...input, outputRoot: join(input.root, "second") })).rejects.toThrow(/identity mismatch/u);
+    await expect(stageNodeRuntime({ ...input, outputRoot: join(input.root, "second") })).rejects.toThrow(/identity mismatch/u);
   });
 });

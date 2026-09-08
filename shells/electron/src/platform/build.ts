@@ -2,7 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildElectronPlatform, readOfficialNodeLock, currentOfficialNodeTarget } from "@open-design/electron-kit/distribution";
+import { readOfficialNodeLock, currentOfficialNodeTarget } from "@open-design/standalone/packages";
+import { buildNodePlatform } from "@open-design/standalone/packages/build";
 import type { ElectronExactTarget } from "../adapters/tools/exact-contract.ts";
 
 const root = dirname(fileURLToPath(import.meta.resolve("@open-design/shell-electron/package.json")));
@@ -18,7 +19,7 @@ export async function readElectronNodeArchive(target: ElectronExactTarget = curr
 export async function withElectronPhysicalPlatform<T>(input: Readonly<{ archivePath: string; target: ElectronExactTarget }>, consume: (platformRoot: string) => Promise<T>): Promise<T> {
   const scratch = await mkdtemp(join(tmpdir(), "electron-physical-platform-"));
   try {
-    const platform = await buildElectronPlatform({ lockPath, archivePath: input.archivePath, target: input.target, outputRoot: join(scratch, "platform"),
+    const platform = await buildNodePlatform({ lockPath, archivePath: input.archivePath, target: input.target, outputRoot: join(scratch, "platform"),
       dependenciesRoot: join(root, "resources/platform"), verificationEntryPath: join(root, "src/platform/verify.ts"), preparationEntryPath: join(root, "src/platform/prepare.ts") });
     return await consume(platform.root);
   } finally { await rm(scratch, { recursive: true, force: true }); }
