@@ -260,7 +260,7 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
     const path = await checkedFile(contribution.artifact, `${key} distribution`, descriptor.archiveFile);
     const mediaType = String(contribution.artifact.mediaType ?? "application/octet-stream"), artifact = await describeFile(path, mediaType);
     artifacts.push(artifact);
-    if (contribution.updater != null && (contribution.updater.protocol !== "standalone-shell-updater-v3"
+    if (contribution.updater != null && (contribution.updater.protocol !== "standalone-shell-updater-v4"
       || contribution.updater.interaction !== "restart-and-install" || typeof contribution.updater.handler !== "string" || !IDENTIFIER.test(contribution.updater.handler))) {
       throw new Error(`Shell contribution has an invalid updater contract: ${key}`);
     }

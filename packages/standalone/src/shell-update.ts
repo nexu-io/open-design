@@ -1,9 +1,9 @@
-import { compareVersions, type StandaloneShellIdentity, type StandaloneShellRequirement } from "./protocol.js";
+import { canonicalJson, compareVersions, validateShellIdentity, type StandaloneShellIdentity, type StandaloneShellRequirement } from "./protocol.js";
 import type { GenerationRecord } from "./store.js";
 import type { LifecycleAttachment, LifecycleStatus } from "./launcher.js";
 import type { StandaloneGenerationBinding } from "./bootloader-handoff.js";
 
-export const STANDALONE_SHELL_UPDATER_SCHEMA = 3 as const;
+export const STANDALONE_SHELL_UPDATER_SCHEMA = 4 as const;
 
 export type StandaloneLifecycleOccupant = Readonly<{
   attachmentId: string;
@@ -53,7 +53,7 @@ export type StandaloneShellUpdaterState =
   | "failed";
 
 export type StandaloneShellUpdaterAction = Readonly<{
-  id: "check" | "download" | "install" | "later" | "force-stop-and-install" | "abandon";
+  id: "check" | "download" | "install" | "restart" | "later" | "force-stop-and-install" | "force-stop-and-restart" | "abandon";
   emphasis: "primary" | "secondary" | "danger";
 }>;
 
@@ -67,29 +67,46 @@ export type StandaloneShellUpdaterSnapshot = Readonly<{
   progress?: Readonly<{ completed: number; total: number }>;
   actions: readonly StandaloneShellUpdaterAction[];
   blockedBy: readonly StandaloneLifecycleOccupant[];
-  handoff?: Readonly<{
-    interaction: "restart-and-install";
-    releaseVersion: string;
-    target: string;
-    artifact: Readonly<{
-      path: string;
-      sha256: string;
-      size: number;
-      mediaType: string;
-      /** Present only after a Shell authority has staged a local immutable artifact. */
-      device?: string;
-      inode?: string;
-    }>;
-    shell: Readonly<{ type: string; version: string; buildHash: string }>;
-    platformTrust?: Readonly<{
-      platform: "macos";
-      mode: "formal" | "verify-only";
-      designatedRequirement: string;
-      teamIdentifier: string;
-    }>;
-  }>;
+  handoff?: StandaloneShellUpdateHandoff;
   error?: Readonly<{ code: string; message: string }>;
 }>;
+
+/** Physical replacement is the only handoff that can carry installer authority. */
+export type StandaloneShellInstallHandoff = Readonly<{
+  interaction: "restart-and-install";
+  releaseVersion: string;
+  target: string;
+  artifact: Readonly<{
+    path: string;
+    sha256: string;
+    size: number;
+    mediaType: string;
+    /** Present only after a Shell authority has staged a local immutable artifact. */
+    device?: string;
+    inode?: string;
+  }>;
+  shell: Readonly<{ type: string; version: string; buildHash: string }>;
+  platformTrust?: Readonly<{
+    platform: "macos";
+    mode: "formal" | "verify-only";
+    designatedRequirement: string;
+    teamIdentifier: string;
+  }>;
+}>;
+
+/** Shell-owned exact activation; no executable path or platform installation proof. */
+export type StandaloneShellRestartHandoff = Readonly<{
+  interaction: "restart-and-activate";
+  releaseVersion: string;
+  target: string;
+  shell: StandaloneShellIdentity;
+  activation: Readonly<{
+    targetDigest: string;
+    generationId: string;
+  }>;
+}>;
+
+export type StandaloneShellUpdateHandoff = StandaloneShellInstallHandoff | StandaloneShellRestartHandoff;
 
 export type StandaloneShellUpdaterCommand = Readonly<{
   expectedRevision: number;
@@ -108,9 +125,10 @@ function shellUpdaterActions(snapshot: Omit<StandaloneShellUpdaterSnapshot, "act
   if (snapshot.state === "idle" || snapshot.state === "failed") return [{ id: "check", emphasis: "primary" }];
   if (snapshot.state === "available") return [{ id: "download", emphasis: "primary" }];
   if (snapshot.state === "ready") {
+    const restart = snapshot.handoff?.interaction === "restart-and-activate";
     return snapshot.blockedBy.length > 0
-      ? [{ id: "later", emphasis: "secondary" }, { id: "force-stop-and-install", emphasis: "danger" }]
-      : [{ id: "install", emphasis: "primary" }, { id: "later", emphasis: "secondary" }];
+      ? [{ id: "later", emphasis: "secondary" }, { id: restart ? "force-stop-and-restart" : "force-stop-and-install", emphasis: "danger" }]
+      : [{ id: restart ? "restart" : "install", emphasis: "primary" }, { id: "later", emphasis: "secondary" }];
   }
   if (snapshot.state === "handed-off") return [{ id: "abandon", emphasis: "danger" }];
   return [];
@@ -132,11 +150,30 @@ export function validateShellUpdaterSnapshot(value: unknown): StandaloneShellUpd
   if (["applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.installAttemptId == null) throw new Error("Shell updater phase lacks an install attempt identity");
   if (["ready", "applying", "handed-off", "installed"].includes(snapshot.state) && snapshot.handoff == null) throw new Error("Shell updater phase lacks an exact handoff");
   if (snapshot.handoff != null) {
-    const artifact = snapshot.handoff.artifact;
-    const hasDevice = artifact.device != null;
-    const hasInode = artifact.inode != null;
-    if (hasDevice !== hasInode || (hasDevice && (!/^\d+$/u.test(artifact.device!) || !/^\d+$/u.test(artifact.inode!)))) {
-      throw new Error("Shell updater staged artifact identity is incomplete");
+    const handoff = snapshot.handoff;
+    if (typeof handoff.releaseVersion !== "string" || handoff.releaseVersion.length === 0
+      || typeof handoff.target !== "string" || handoff.target.length === 0
+      || handoff.shell?.type !== snapshot.shellType) throw new Error("invalid Shell updater handoff identity");
+    if (handoff.interaction === "restart-and-activate") {
+      if (Object.keys(handoff).some(key => !["interaction", "releaseVersion", "target", "shell", "activation"].includes(key))
+        || handoff.activation == null
+        || Object.keys(handoff.activation).sort().join(",") !== "generationId,targetDigest"
+        || !/^[a-f0-9]{64}$/.test(handoff.activation.targetDigest)
+        || !/^[a-f0-9]{64}$/.test(handoff.activation.generationId)
+        || !/^[a-f0-9]{64}$/.test(handoff.shell?.digest)) {
+        throw new Error("invalid Shell restart activation handoff");
+      }
+      validateShellIdentity(handoff.shell);
+    } else if (handoff.interaction !== "restart-and-install") {
+      throw new Error("unsupported Shell updater handoff interaction");
+    } else {
+      if ("activation" in handoff || handoff.artifact == null) throw new Error("invalid Shell physical install handoff");
+      const artifact = handoff.artifact;
+      const hasDevice = artifact.device != null;
+      const hasInode = artifact.inode != null;
+      if (hasDevice !== hasInode || (hasDevice && (!/^\d+$/u.test(artifact.device!) || !/^\d+$/u.test(artifact.inode!)))) {
+        throw new Error("Shell updater staged artifact identity is incomplete");
+      }
     }
   }
   const expectedActions = shellUpdaterActions(snapshot);
@@ -170,6 +207,8 @@ export function reduceShellUpdaterSnapshot(
   const candidateId = checking ? undefined : command.candidateId ?? snapshot.candidateId;
   const installAttemptId = checking ? undefined : command.installAttemptId ?? snapshot.installAttemptId;
   const handoff = command.handoff ?? (checking ? undefined : snapshot.handoff);
+  if (!checking && snapshot.handoff != null && command.handoff != null
+    && canonicalJson(snapshot.handoff) !== canonicalJson(command.handoff)) throw new Error("Shell updater exact handoff changed concurrently");
   if (!checking && snapshot.candidateId != null && command.candidateId != null && snapshot.candidateId !== command.candidateId) throw new Error("Shell updater candidate changed concurrently");
   if (!checking && snapshot.installAttemptId != null && command.installAttemptId != null && snapshot.installAttemptId !== command.installAttemptId) throw new Error("Shell install attempt changed concurrently");
   const core = {

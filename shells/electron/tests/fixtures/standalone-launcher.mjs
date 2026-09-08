@@ -6,7 +6,7 @@ export async function standaloneGenerationHandoff(request) {
       requestId: "closure-shell-updater-read",
       attachmentId: request.attachment.id,
       bindingDigest: request.binding.digest,
-      capability: "standalone-shell-updater-v3",
+      capability: "standalone-shell-updater-v4",
       input: { schemaVersion: 1, operation: "read", shellType: request.attachment.shell.type },
     });
     if (

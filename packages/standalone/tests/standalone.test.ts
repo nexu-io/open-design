@@ -606,7 +606,7 @@ describe("standalone exact lifecycle", () => {
         shell: { type: "terminal", version: "0.1.0", buildHash: "b".repeat(64) },
         target: "darwin-arm64",
         artifact: { url: "https://fixtures.invalid/terminal.tar.gz", sha256: "c".repeat(64), size: 1024, mediaType: "application/gzip" },
-        updater: { protocol: "standalone-shell-updater-v3", handler: "fixture-v3", interaction: "restart-and-install" },
+        updater: { protocol: "standalone-shell-updater-v4", handler: "fixture-v3", interaction: "restart-and-install" },
       }],
     }, [{ keyId: "terminal", privateKey: keys.privateKey }]);
     expect(verifyStandaloneShellMetadata(envelope, new Map([["terminal", keys.publicKey]]))).toBe("terminal");

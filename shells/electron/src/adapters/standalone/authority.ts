@@ -390,7 +390,7 @@ export function createElectronStandaloneAuthorityFactory(
             }
             const snapshot = await updaterLedger.read();
             if ((snapshot.state !== "applying" && snapshot.state !== "handed-off" && snapshot.state !== "installed")
-              || snapshot.installAttemptId !== claim.installAttemptId || snapshot.handoff == null
+              || snapshot.installAttemptId !== claim.installAttemptId || snapshot.handoff?.interaction !== "restart-and-install"
               || electronInstallerHandoffDigest({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId }) !== claim.handoffDigest) {
               throw new Error("Electron replacement confirmation differs from the durable updater transition");
             }
@@ -601,7 +601,7 @@ export function createElectronStandaloneAuthorityFactory(
             const updaterContinuesRestoration = claim.restoration != null && snapshot.state === "failed"
               && snapshot.error?.code === "electron-installer-abandoned";
             if ((!updaterContinuesRestoration && snapshot.state !== "applying" && snapshot.state !== "handed-off")
-              || snapshot.installAttemptId !== claim.installAttemptId || snapshot.handoff == null
+              || snapshot.installAttemptId !== claim.installAttemptId || snapshot.handoff?.interaction !== "restart-and-install"
               || electronInstallerHandoffDigest({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId }) !== claim.handoffDigest) {
               throw new Error("Electron installer recovery differs from the durable updater transition");
             }

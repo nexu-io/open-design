@@ -6,6 +6,7 @@ import {
   projectSharedLifecycleStatus,
   reduceSharedLifecycleState,
   reduceShellUpdaterSnapshot,
+  validateShellUpdaterSnapshot,
   type SharedLifecycleState,
   type StandaloneShellUpdaterSnapshot,
 } from "../src/index.js";
@@ -41,6 +42,27 @@ function handoff(): StandaloneShellUpdaterSnapshot["handoff"] {
 }
 
 describe("orthogonal Standalone lifecycle models", () => {
+  it("binds restart activation without borrowing installer authority", () => {
+    let state = initialShellUpdaterSnapshot("terminal");
+    expect(state.schemaVersion).toBe(4);
+    expect(() => validateShellUpdaterSnapshot({ ...state, schemaVersion: 3 })).toThrow("unsupported");
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "checking" });
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "available", candidateId: "candidate-a" });
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "downloading" });
+    const restart = { interaction: "restart-and-activate" as const, releaseVersion: "0.2.0-somechan.1",
+      target: "darwin-arm64", shell, activation: { targetDigest: "d".repeat(64), generationId: generation } };
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "ready", handoff: restart });
+    expect(state.actions.map(action => action.id)).toEqual(["restart", "later"]);
+    expect(() => validateShellUpdaterSnapshot({ ...state, handoff: { ...restart, artifact: handoff()!.interaction } }))
+      .toThrow("invalid Shell restart activation handoff");
+    expect(() => reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "applying", installAttemptId: "a", handoff: handoff() }))
+      .toThrow("handoff changed concurrently");
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "ready", blockedBy: [{ attachmentId: "other", generationId: generation, shell }] });
+    expect(state.actions.map(action => action.id)).toEqual(["later", "force-stop-and-restart"]);
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "applying", installAttemptId: "activation-a" });
+    state = reduceShellUpdaterSnapshot(state, { expectedRevision: state.revision, state: "installed" });
+    expect(state.handoff).toEqual(restart);
+  });
   it("keeps attachments inside one instance aggregate without changing generation health", () => {
     let state = running();
     state = reduceSharedLifecycleState(state, {

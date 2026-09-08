@@ -68,7 +68,7 @@ export type StandaloneShellDistribution = Readonly<{
     teamIdentifier: string;
   }>;
   updater?: Readonly<{
-    protocol: "standalone-shell-updater-v3";
+    protocol: "standalone-shell-updater-v4";
     handler: string;
     interaction: "restart-and-install";
   }>;
@@ -352,7 +352,7 @@ export function validateStandaloneShellMetadata(metadata: StandaloneShellMetadat
     validateArtifact(distribution.artifact, `${identity} distribution`);
     if (!/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/i.test(distribution.artifact.mediaType)) throw new Error(`invalid Shell distribution media type: ${identity}`);
     if (distribution.updater != null) {
-      if (distribution.updater.protocol !== "standalone-shell-updater-v3" || distribution.updater.interaction !== "restart-and-install") {
+      if (distribution.updater.protocol !== "standalone-shell-updater-v4" || distribution.updater.interaction !== "restart-and-install") {
         throw new Error(`unsupported Shell updater contract: ${identity}`);
       }
       validateToken(distribution.updater.handler, `${identity} updater handler`);

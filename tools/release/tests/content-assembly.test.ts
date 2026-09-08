@@ -122,7 +122,7 @@ describe("exact release control", () => {
       await writeFile(contributionFile, JSON.stringify(contribution));
       if (shellType === "electron") {
         await expect(finalize()).rejects.toThrow("lacks updater contract");
-        await writeFile(contributionFile, JSON.stringify({ ...contribution, updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" } }));
+        await writeFile(contributionFile, JSON.stringify({ ...contribution, updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" } }));
       }
       await finalize();
       const metadata = JSON.parse(await readFile(join(finalDirectory, `documents/${shellType}-metadata.json`), "utf8"));

@@ -262,7 +262,7 @@ export function validateStandaloneHostControlRequest(
   if (value.operation === "updater.invoke") {
     exactKeys(value, ["action", "operation", "schemaVersion", "scope", "shellType"], "Standalone host updater.invoke request");
     if (typeof value.shellType !== "string" || !shellTypePattern.test(value.shellType)) throw new Error("Standalone host updater Shell type is invalid");
-    if (!["abandon", "check", "download", "force-stop-and-install", "install", "later"].includes(value.action as string)) throw new Error("Standalone host updater action is invalid");
+    if (!["abandon", "check", "download", "force-stop-and-install", "force-stop-and-restart", "install", "restart", "later"].includes(value.action as string)) throw new Error("Standalone host updater action is invalid");
     return Object.freeze({ ...base, operation: value.operation, shellType: value.shellType, action: value.action as StandaloneShellUpdaterAction["id"] });
   }
   if (value.operation === "updater.confirm-installed") {

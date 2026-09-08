@@ -19,6 +19,7 @@ import type {
 } from "@open-design/electron-contract";
 import { DIAGNOSTICS_EXPORT_PATH, DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } from "@open-design/diagnostics";
 import type { ElectronStandaloneContentUpdaterPort, ElectronStandaloneRuntimeAccess } from "@open-design/electron-kit/runtime";
+import type { StandaloneShellUpdaterAction, StandaloneShellUpdaterSnapshot } from "@open-design/standalone";
 
 import { ELECTRON_DESIGN_BROWSER_PARTITION, isHttpUrl } from "./security.js";
 import { ELECTRON_RENDERER_IPC } from "../../contracts/renderer-ipc.js";
@@ -28,16 +29,15 @@ const IMPORT_TOKEN_TTL_MS = 60_000;
 const PROJECT_ID = /^[A-Za-z0-9._-]{1,128}$/u;
 
 type ShellUpdaterSnapshot = Readonly<{
-  actions: readonly Readonly<{ id: "check" | "download" | "install" | "later" | "force-stop-and-install" | "abandon" }>[];
+  actions: readonly Pick<StandaloneShellUpdaterAction, "id">[];
   blockedBy: readonly Readonly<{ attachmentId: string; generationId: string }>[];
   error?: Readonly<{ code: string; message: string }>;
   handoff?: Readonly<{
-    artifact: Readonly<{ path: string }>;
     releaseVersion: string;
   }>;
   progress?: Readonly<{ completed: number; total: number }>;
   revision: number;
-  state: "idle" | "checking" | "available" | "downloading" | "ready" | "applying" | "handed-off" | "installed" | "failed";
+  state: StandaloneShellUpdaterSnapshot["state"];
 }>;
 
 type ShellUpdaterPort = Readonly<{
@@ -159,7 +159,7 @@ function updaterStatus(
     : shellSnapshot.state === "failed" ? "error"
     : shellSnapshot.state;
   const shellActions = shellSnapshot.actions.flatMap(({ id }) =>
-    id === "install" || id === "force-stop-and-install" ? ["apply" as const]
+    id === "install" || id === "force-stop-and-install" || id === "restart" || id === "force-stop-and-restart" ? ["apply" as const]
       : id === "abandon" ? []
       : [id]);
   const closureState = closureError != null ? "blocked"
@@ -374,7 +374,10 @@ export async function installElectronProductHandlers(context: HandlerContext): P
     if (target === "shell") {
       const snapshot = await context.shellUpdater.readSnapshot();
       if (snapshot.state !== "ready") return await publishUpdater();
-      await context.shellUpdater.invoke(force ? "force-stop-and-install" : "install");
+      const action = snapshot.actions.find(({ id }) => force
+        ? id === "force-stop-and-install" || id === "force-stop-and-restart"
+        : id === "install" || id === "restart");
+      if (action != null) await context.shellUpdater.invoke(action.id);
     } else if (target === "closure" && content?.status === "prepared") {
       const applied = await context.contentUpdater.applyNow({ force });
       if (applied.status === "blocked") {

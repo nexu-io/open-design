@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createStandaloneGenerationBinding,
   createStandaloneRuntimeLayoutCapabilityHandler,
+  STANDALONE_SHELL_UPDATER_SCHEMA,
   type GenerationRecord,
 } from "@open-design/standalone";
 
@@ -125,14 +126,14 @@ describe("Closure generation runtime", () => {
     const snapshots: string[] = [];
     const updater = {
       shellType: "electron",
-      readSnapshot: async () => ({ schemaVersion: 3 as const, revision, shellType: "electron", state, actions: [], blockedBy: [] }),
-      waitForChange: async () => ({ schemaVersion: 3 as const, revision, shellType: "electron", state, actions: [], blockedBy: [] }),
+      readSnapshot: async () => ({ schemaVersion: STANDALONE_SHELL_UPDATER_SCHEMA, revision, shellType: "electron", state, actions: [], blockedBy: [] }),
+      waitForChange: async () => ({ schemaVersion: STANDALONE_SHELL_UPDATER_SCHEMA, revision, shellType: "electron", state, actions: [], blockedBy: [] }),
       invoke: async (action: string) => {
         revision += 1;
         state = action === "check" ? "available" : "ready";
-        return { outcome: "accepted" as const, snapshot: { schemaVersion: 3 as const, revision, shellType: "electron", state, actions: [], blockedBy: [], ...(state === "ready" ? { progress: { completed: 2, total: 2 } } : {}) } };
+        return { outcome: "accepted" as const, snapshot: { schemaVersion: STANDALONE_SHELL_UPDATER_SCHEMA, revision, shellType: "electron", state, actions: [], blockedBy: [], ...(state === "ready" ? { progress: { completed: 2, total: 2 } } : {}) } };
       },
-      confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: { schemaVersion: 3 as const, revision, shellType: "electron", state, actions: [], blockedBy: [] } }),
+      confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: { schemaVersion: STANDALONE_SHELL_UPDATER_SCHEMA, revision, shellType: "electron", state, actions: [], blockedBy: [] } }),
     };
     await expect(prepareClosureShellUpdate({
       requirement: { version: { min: "2.0.0" }, buildHash: "b".repeat(64) },

@@ -131,7 +131,7 @@ return Object.freeze({
   },
   artifact: { ...artifact, mediaType: input.target.startsWith("darwin-") ? "application/x-apple-diskimage" : "application/vnd.microsoft.portable-executable" },
   ...(platformTrust == null ? {} : { platformTrust }),
-  updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
+  updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" },
 });
 });
 }

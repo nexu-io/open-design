@@ -52,7 +52,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
       artifact: { file: "/old-job/installer.bin", sha256: sha("installer"), size: 9, mediaType: "application/octet-stream" },
       ...(item.shell === "terminal" ? {} : { installIdentity: { appId: "example.test", executableName: "test", namespace: "test", productName: "Test" },
         platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: "adhoc", teamIdentifier: "adhoc" },
-        updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" } }) });
+        updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" } }) });
   }
   const prepared = join(root, "prepared"), final = join(root, "final"), prepareReceipt = join(prepared, "prepare-receipt.json");
   const prepare = ["prepare", "--policy", policy, "--channel", channel, "--release-version", releaseVersion, "--source-commit", sourceCommit,

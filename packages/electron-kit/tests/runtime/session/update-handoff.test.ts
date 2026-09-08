@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { observeElectronInstallerHandoff, resolveElectronInstallerRecovery } from "@/runtime/session/update-handoff.js";
 
 const handedOff = {
-  schemaVersion: 3 as const,
+  schemaVersion: 4 as const,
   revision: 6,
   shellType: "electron",
   state: "handed-off" as const,
@@ -26,6 +26,22 @@ const handedOff = {
 };
 
 describe("Electron installer handoff observation", () => {
+  it("never projects restart activation as physical replacement confirmation", async () => {
+    const shell = { ...handedOff.handoff.shell, digest: "d".repeat(64) };
+    const snapshot = { ...handedOff, handoff: {
+      interaction: "restart-and-activate" as const,
+      releaseVersion: "99.0.0", target: "darwin-arm64", shell,
+      activation: { targetDigest: "a".repeat(64), generationId: "b".repeat(64) },
+    } };
+    await expect(resolveElectronInstallerRecovery({ shell, updater: { readSnapshot: async () => snapshot } }))
+      .resolves.toMatchObject({ state: "continue", snapshot });
+    let closing = false;
+    const onHandoff = vi.fn();
+    await observeElectronInstallerHandoff({ afterRevision: 0, isClosing: () => closing, onHandoff,
+      updater: { readSnapshot: async () => snapshot, waitForChange: async () => { closing = true; return snapshot; } },
+    });
+    expect(onHandoff).not.toHaveBeenCalled();
+  });
   it("fails sealed instead of replaying installer arming when the current Shell is still the old identity", async () => {
     await expect(resolveElectronInstallerRecovery({
       shell: { type: "electron", version: "0.0.9", buildHash: "c".repeat(64), digest: "d".repeat(64) },

@@ -58,7 +58,7 @@ export class ElectronStandaloneHostUpdater {
       if (action === "download" && this.release != null && snapshot.state === "available") {
         return await this.#download(snapshot);
       }
-      if ((action !== "install" && action !== "force-stop-and-install") || snapshot.state !== "ready" || snapshot.handoff == null) {
+      if ((action !== "install" && action !== "force-stop-and-install") || snapshot.state !== "ready" || snapshot.handoff?.interaction !== "restart-and-install") {
         return result("unsupported", snapshot);
       }
       const installAttemptId = randomUUID();

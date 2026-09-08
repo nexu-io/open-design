@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://nexu.io/contracts/terminal/shell-updater-v3.schema.json",
-  "title": "Shell updater snapshot v3",
+  "$id": "https://nexu.io/contracts/terminal/shell-updater-v4.schema.json",
+  "title": "Shell updater snapshot v4",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "revision", "shellType", "state", "actions", "blockedBy"],
   "properties": {
-    "schemaVersion": {"const": 3},
+    "schemaVersion": {"const": 4},
     "revision": {"type": "integer", "minimum": 0},
     "shellType": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,63}$"},
     "candidateId": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,128}$"},
@@ -25,13 +25,54 @@
         "additionalProperties": false,
         "required": ["id", "emphasis"],
         "properties": {
-          "id": {"enum": ["check", "download", "install", "later", "force-stop-and-install", "abandon"]},
+          "id": {"enum": ["check", "download", "install", "restart", "later", "force-stop-and-install", "force-stop-and-restart", "abandon"]},
           "emphasis": {"enum": ["primary", "secondary", "danger"]}
         }
       }
     },
     "blockedBy": {"type": "array"},
     "handoff": {
+      "oneOf": [
+        {"$ref": "#/$defs/installHandoff"},
+        {"$ref": "#/$defs/restartHandoff"}
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {"code": {"type": "string"}, "message": {"type": "string"}}
+    }
+  },
+  "$defs": {
+    "restartHandoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interaction", "releaseVersion", "target", "shell", "activation"],
+      "properties": {
+        "interaction": {"const": "restart-and-activate"},
+        "releaseVersion": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "shell": {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "version", "buildHash", "digest"],
+          "properties": {
+            "type": {"type": "string"}, "version": {"type": "string"},
+            "buildHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
+        "activation": {
+          "type": "object", "additionalProperties": false,
+          "required": ["targetDigest", "generationId"],
+          "properties": {
+            "targetDigest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "generationId": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        }
+      }
+    },
+    "installHandoff": {
       "type": "object",
       "additionalProperties": false,
       "required": ["interaction", "releaseVersion", "target", "artifact", "shell"],
@@ -57,16 +98,23 @@
             "path": {"type": "string"},
             "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
             "size": {"type": "integer", "minimum": 1},
-            "mediaType": {"type": "string"}
+            "mediaType": {"type": "string"},
+            "device": {"type": "string", "pattern": "^[0-9]+$"},
+            "inode": {"type": "string", "pattern": "^[0-9]+$"}
+          },
+          "dependentRequired": {"device": ["inode"], "inode": ["device"]}
+        },
+        "platformTrust": {
+          "type": "object", "additionalProperties": false,
+          "required": ["platform", "mode", "designatedRequirement", "teamIdentifier"],
+          "properties": {
+            "platform": {"const": "macos"},
+            "mode": {"enum": ["formal", "verify-only"]},
+            "designatedRequirement": {"type": "string"},
+            "teamIdentifier": {"type": "string"}
           }
         }
       }
-    },
-    "error": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["code", "message"],
-      "properties": {"code": {"type": "string"}, "message": {"type": "string"}}
     }
   },
   "allOf": [

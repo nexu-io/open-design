@@ -8,6 +8,7 @@ import {
   type StandaloneShellCapabilityPort,
   type StandaloneShellIdentity,
   type StandaloneShellUpdaterPort,
+  type StandaloneShellUpdaterAction,
 } from "../src/index.js";
 
 const bindingDigest = "a".repeat(64);
@@ -26,7 +27,7 @@ function updater(): StandaloneShellUpdaterPort & Readonly<{ calls: ReturnType<ty
     calls,
     async readSnapshot() { calls("read"); return snapshot; },
     async waitForChange(afterRevision: number, timeoutMs: number) { calls("wait", afterRevision, timeoutMs); return snapshot; },
-    async invoke(action: "check" | "download" | "install" | "later" | "force-stop-and-install" | "abandon") { calls("invoke", action); return { outcome: "accepted" as const, snapshot }; },
+    async invoke(action: StandaloneShellUpdaterAction["id"]) { calls("invoke", action); return { outcome: "accepted" as const, snapshot }; },
     async confirmInstalled(proof: StandaloneShellIdentity) { calls("confirm-installed", proof); return { outcome: "blocked" as const, snapshot }; },
   });
 }
@@ -43,6 +44,14 @@ function client(capabilities: StandaloneShellCapabilityPort) {
 }
 
 describe("Standalone Shell updater capability", () => {
+  it("routes both restart actions through the versioned public capability", async () => {
+    expect(STANDALONE_SHELL_UPDATER_CAPABILITY).toBe("standalone-shell-updater-v4");
+    const concrete = updater();
+    const typed = client(createStandaloneShellUpdaterCapabilityHandler(concrete));
+    await typed.invoke("restart");
+    await typed.invoke("force-stop-and-restart");
+    expect(concrete.calls.mock.calls).toEqual([["invoke", "restart"], ["invoke", "force-stop-and-restart"]]);
+  });
   it("round-trips the complete typed updater over one versioned capability", async () => {
     const concrete = updater();
     const typed = client(createStandaloneShellUpdaterCapabilityHandler(concrete));

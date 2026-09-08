@@ -12,7 +12,7 @@ import type {
   StandaloneShellCapabilityResult,
 } from "./bootloader-handoff.js";
 
-export const STANDALONE_SHELL_UPDATER_CAPABILITY = "standalone-shell-updater-v3" as const;
+export const STANDALONE_SHELL_UPDATER_CAPABILITY = "standalone-shell-updater-v4" as const;
 export const STANDALONE_SHELL_UPDATER_CAPABILITY_SCHEMA = 1 as const;
 
 type CapabilityInput =
@@ -26,7 +26,7 @@ type CapabilityOutput =
   | Readonly<{ schemaVersion: 1; operation: "invoke" | "confirm-installed"; result: StandaloneShellUpdaterActionResult }>;
 
 const shellTypePattern = /^[a-z][a-z0-9-]{0,63}$/;
-const actions = new Set<StandaloneShellUpdaterAction["id"]>(["abandon", "check", "download", "force-stop-and-install", "install", "later"]);
+const actions = new Set<StandaloneShellUpdaterAction["id"]>(["abandon", "check", "download", "force-stop-and-install", "force-stop-and-restart", "install", "restart", "later"]);
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} is invalid`);

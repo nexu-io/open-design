@@ -45,17 +45,17 @@ function runtimeAccess() {
 }
 
 describe("Electron renderer content updater binding", () => {
-  it("projects and applies independent Shell and Closure updater lines", async () => {
+  it.each(["install", "restart"] as const)("projects and applies independent Shell and Closure updater lines (%s)", async (action) => {
     electron.handlers.clear();
     electron.ipcListeners.clear();
     const webContents = { send: vi.fn() };
     const shellSnapshot = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       revision: 4,
       shellType: "electron",
       state: "ready" as const,
       candidateId: "candidate-1",
-      actions: [{ id: "install" as const }],
+      actions: [{ id: action }],
       blockedBy: [],
       handoff: { releaseVersion: "betahyx-2", artifact: { path: "/private/update.dmg" } },
     };
@@ -93,7 +93,7 @@ describe("Electron renderer content updater binding", () => {
     await electron.handlers.get(ELECTRON_RENDERER_IPC.updaterApply)!(event, "closure", { force: true });
     expect(applyNow).toHaveBeenCalledWith({ force: true });
     await electron.handlers.get(ELECTRON_RENDERER_IPC.updaterApply)!(event, "shell", { force: false });
-    expect(shellInvoke).toHaveBeenCalledWith("install");
+    expect(shellInvoke).toHaveBeenCalledWith(action);
 
     lease.dispose();
   });

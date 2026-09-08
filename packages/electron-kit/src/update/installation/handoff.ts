@@ -58,6 +58,7 @@ const verifyArtifact = async () => {
 `;
 
 export async function scheduleElectronInstallerHandoff(input: ElectronInstallerHandoffRequest): Promise<ElectronInstallerHandoffReceipt> {
+  if (input.handoff.interaction !== "restart-and-install") throw new Error("installer handoff requires physical replacement");
   if (!Number.isSafeInteger(input.parentPid) || input.parentPid <= 0) throw new Error("invalid installer handoff parent pid");
   if (!/^[0-9a-f-]{36}$/iu.test(input.installAttemptId)) throw new Error("invalid installer handoff attempt id");
   if (input.artifactIdentity == null) throw new Error("installer handoff requires a staged artifact identity");

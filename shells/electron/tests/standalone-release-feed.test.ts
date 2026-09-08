@@ -55,7 +55,7 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { channel?: 
       target: "darwin-arm64",
       artifact: { url: artifactUrl, sha256: artifactSha256, size: artifact.byteLength, mediaType: "application/x-apple-diskimage" },
       platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: 'identifier "io.open-design.test"', teamIdentifier: "adhoc" },
-      updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
+      updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" },
       ...(options.omitCapsule ? {} : { capsule: { schemaVersion: 1,
         manifest: { url: capsuleUrl, sha256: createHash("sha256").update(capsuleBytes).digest("hex"), size: capsuleBytes.byteLength },
         archive: { url: capsuleArchiveUrl, sha256: archive.sha256, size: archive.size },
@@ -221,7 +221,9 @@ describe("Electron release-exact feed", () => {
         handoff: { releaseVersion: "0.2.0-betahyx.2", target: "darwin-arm64", shell: { version: "0.2.0" } },
       },
     });
-    expect(downloaded.snapshot.handoff?.artifact.path).toContain("/installer/artifacts/sha256/");
-    expect(downloaded.snapshot.handoff?.artifact.path).not.toContain("/blobs/");
+    const handoff = downloaded.snapshot.handoff;
+    if (handoff?.interaction !== "restart-and-install") throw new Error("expected physical installer handoff");
+    expect(handoff.artifact.path).toContain("/installer/artifacts/sha256/");
+    expect(handoff.artifact.path).not.toContain("/blobs/");
   });
 });

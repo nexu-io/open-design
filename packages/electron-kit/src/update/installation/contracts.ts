@@ -1,6 +1,6 @@
-import type { StandaloneShellUpdaterSnapshot } from "@open-design/standalone";
+import type { StandaloneShellInstallHandoff } from "@open-design/standalone";
 
-export type ElectronInstallerHandoff = NonNullable<StandaloneShellUpdaterSnapshot["handoff"]>;
+export type ElectronInstallerHandoff = StandaloneShellInstallHandoff;
 
 export type ElectronInstallerHandoffRequest = Readonly<{
   handoff: ElectronInstallerHandoff;

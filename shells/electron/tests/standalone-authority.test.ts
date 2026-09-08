@@ -422,7 +422,7 @@ describe("Electron production Standalone authority", () => {
           target,
           artifact: { url: shellArtifactUrl, sha256: createHash("sha256").update(shellArtifact).digest("hex"), size: shellArtifact.byteLength, mediaType: "application/x-apple-diskimage" },
           platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: 'identifier "io.nexu.electron-foundation"', teamIdentifier: "adhoc" },
-          updater: { protocol: "standalone-shell-updater-v3", handler: "sidecar-v1", interaction: "restart-and-install" },
+          updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" },
           ...{ capsule: { schemaVersion: 1,
             manifest: { url: capsuleManifestUrl, sha256: createHash("sha256").update(capsuleManifest).digest("hex"), size: capsuleManifest.byteLength },
             archive: { url: capsuleArchiveUrl, sha256: createHash("sha256").update(capsuleArchive).digest("hex"), size: capsuleArchive.byteLength },
@@ -447,6 +447,7 @@ describe("Electron production Standalone authority", () => {
       const downloadedShell = await prepared.updater.invoke("download");
       expect(downloadedShell).toMatchObject({ outcome: "accepted", snapshot: { state: "ready", handoff: { releaseVersion: shellDocument.releaseVersion, target } } });
       const handoff = downloadedShell.snapshot.handoff!;
+      if (handoff.interaction !== "restart-and-install") throw new Error("expected physical installer handoff");
       expect(await prepared.updater.invoke("install")).toMatchObject({ outcome: "blocked", snapshot: { state: "ready", blockedBy: [{ attachmentId: "electron-test" }] } });
       const applying = await prepared.updater.invoke("force-stop-and-install");
       expect(applying).toMatchObject({ outcome: "accepted", snapshot: { state: "applying" } });

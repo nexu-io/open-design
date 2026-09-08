@@ -25,7 +25,7 @@ export async function resolveElectronInstallerRecovery(input: Readonly<{
   updater: Pick<StandaloneShellUpdaterPort, "readSnapshot">;
 }>): Promise<ElectronInstallerRecovery> {
   const snapshot = await input.updater.readSnapshot();
-  if ((snapshot.state === "applying" || snapshot.state === "handed-off") && snapshot.handoff != null && snapshot.installAttemptId != null) {
+  if ((snapshot.state === "applying" || snapshot.state === "handed-off") && snapshot.handoff?.interaction === "restart-and-install" && snapshot.installAttemptId != null) {
     const expected = snapshot.handoff.shell;
     const replacement = input.shell.type === expected.type && input.shell.version === expected.version && input.shell.buildHash === expected.buildHash;
     return Object.freeze({
@@ -50,7 +50,7 @@ export async function observeElectronInstallerHandoff(input: Readonly<{
       snapshot ??= await input.updater.readSnapshot();
       if (snapshot.revision > input.afterRevision
         && (snapshot.state === "applying" || snapshot.state === "handed-off")
-        && snapshot.handoff != null
+        && snapshot.handoff?.interaction === "restart-and-install"
         && snapshot.installAttemptId != null) {
         await input.onHandoff({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId });
         return;
