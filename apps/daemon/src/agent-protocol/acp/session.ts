@@ -474,7 +474,30 @@ export function attachAcpSession({
     // session immediately.
     if (stageWatchdogDisabled) return;
     stageTimer = setTimeout(() => {
-      fail(`ACP ${label} timed out after ${stageTimeoutMs}ms`);
+      // This is the DAEMON's own verdict, not the agent's: nobody reported a
+      // failure, we decided the stage was over and killed the child. Say so in
+      // structured form.
+      //
+      // Emitted bare (`{ message }`), the only thing that could still recover
+      // "this run timed out" was a regex over the English sentence below
+      // (`isTimeoutText` in run-failure-classification.ts). Every path that
+      // rewrites, wraps, localizes or drops an ACP error message therefore
+      // silently downgraded the run to `process_exit / exit_code` — which is
+      // `retryable: false` / `user_action: 'none'`, i.e. the generic failure
+      // card with no Retry, for a failure whose whole remedy IS a retry.
+      //
+      // `details.kind` is the same discriminator the other named ACP failures
+      // already carry (`acp_child_exit`, `acp_no_visible_output`, `amr_model`),
+      // so the classifier can read the verdict instead of re-deriving it.
+      fail(`ACP ${label} timed out after ${stageTimeoutMs}ms`, {
+        retryable: true,
+        details: {
+          kind: 'timeout',
+          action: 'retry',
+          phase: label,
+          timeout_ms: stageTimeoutMs,
+        },
+      });
     }, stageTimeoutMs);
   };
 

@@ -30,6 +30,10 @@
  *                                          cannot open a session at all.
  *   FAKE_ACP_PROMPT_ERROR_RETRYABLE      – when '1', that prompt error carries
  *                                          `data.retryable = true`
+ *   FAKE_ACP_PROMPT_STALL                – when '1', the handshake SUCCEEDS and
+ *                                          `session/prompt` is never answered at
+ *                                          all, so only the ACP stage watchdog
+ *                                          ends the turn.
  *   FAKE_ACP_INVOCATION_LOG              – append one JSON line per handshake
  *                                          request, tagged with the caller's
  *                                          `clientInfo.name`. `attachAcpSession`
@@ -49,6 +53,7 @@ const SESSION_NEW_ERROR_MESSAGE =
   env.FAKE_ACP_SESSION_NEW_ERROR_MESSAGE || 'Internal error';
 const SESSION_NEW_ERROR_RETRYABLE = env.FAKE_ACP_SESSION_NEW_ERROR_RETRYABLE === '1';
 const PROMPT_ERROR_MESSAGE = env.FAKE_ACP_PROMPT_ERROR_MESSAGE || '';
+const PROMPT_STALL = env.FAKE_ACP_PROMPT_STALL === '1';
 const PROMPT_ERROR_RETRYABLE = env.FAKE_ACP_PROMPT_ERROR_RETRYABLE === '1';
 const INVOCATION_LOG = env.FAKE_ACP_INVOCATION_LOG || '';
 
@@ -119,7 +124,7 @@ function handleLine(line) {
 
   if (message.method === 'session/new' || message.method === 'session/load') {
     logInvocation({ method: message.method, client: clientName, at: Date.now() });
-    if (PROMPT_ERROR_MESSAGE) {
+    if (PROMPT_ERROR_MESSAGE || PROMPT_STALL) {
       // Post-session mode: this build opens a session fine. Whatever goes wrong
       // goes wrong afterwards, on the prompt.
       write({
@@ -143,6 +148,13 @@ function handleLine(line) {
         ...(SESSION_NEW_ERROR_RETRYABLE ? { data: { retryable: true } } : {}),
       },
     });
+    return;
+  }
+
+  if (message.method === 'session/prompt' && PROMPT_STALL) {
+    logInvocation({ method: message.method, client: clientName, at: Date.now() });
+    // Never answers. Models the real 2026 report: a `Write` tool call that sat
+    // for 1800s producing zero bytes until the ACP stage watchdog gave up.
     return;
   }
 
