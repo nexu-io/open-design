@@ -174,6 +174,9 @@ process.stdin.setEncoding('utf8');
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
   prompt += chunk;
+  // OpenCode uses text stdin and receives EOF. A quiet interval is not the
+  // end of a large prompt; its user request may be in a later pipe chunk.
+  if (agentId === 'opencode') return;
   if (emitted) return;
   if (emitTimer) clearTimeout(emitTimer);
   emitTimer = setTimeout(() => {
