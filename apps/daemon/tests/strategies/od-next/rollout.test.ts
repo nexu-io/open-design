@@ -84,12 +84,24 @@ describe('OD Next controlled rollout', () => {
       )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'env' });
     });
 
-    it('falls back to the default for a saved value that is not a mode', () => {
-      // Reading a corrupted value as unconfigured now means running OD Next
-      // rather than staying off it, so this path can revoke an opt-out. That is
-      // why `assertWritableControlValues` refuses a non-mode on the way in
-      // instead of letting one reach the file and be dropped on the way out.
-      for (const saved of ['acive', '', 'true', 1, null, undefined, {}] as unknown[]) {
+    it('treats an absent preference, and only an absent one, as unconfigured', () => {
+      // `null` and `undefined` are the two shapes of "nobody has chosen", and
+      // they reach the default.
+      for (const saved of [null, undefined] as unknown[]) {
+        expect(readOdNextRolloutPolicy(
+          {},
+          { odNextStrategyMode: saved as never },
+        )).toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
+      }
+
+      // A value that is not a mode never arrives here in production: the read
+      // path in `app-config.ts` resolves an unreadable config to `off` before
+      // this function sees it, because unconfigured now means `active` and
+      // "we could not read your choice" must not become "you chose OD Next".
+      // The end-to-end guarantee is asserted across that join in
+      // `tests/app-config.test.ts`; this function stays a pure reader of what
+      // it is handed.
+      for (const saved of ['acive', '', 'true', 1, {}] as unknown[]) {
         expect(readOdNextRolloutPolicy(
           {},
           { odNextStrategyMode: saved as never },

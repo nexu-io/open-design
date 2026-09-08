@@ -656,16 +656,19 @@ function applyConfigValue(
     return;
   }
   if (key === 'odNextStrategyMode') {
-    // Reached with a non-mode value only on the READ path, where a corrupted or
-    // hand-edited file must not take the daemon down: drop it and let the
-    // installation read as unconfigured, which resolves to `active`. That makes
-    // dropping the value the opposite of harmless — it revokes an opt-out — so
-    // the WRITE path never reaches here with a bad value:
+    // Reached with a non-mode value only on the READ path — a truncated file, a
+    // hand edit, a value written by some other version. It must not take the
+    // daemon down, and it must not read as unconfigured either: see
+    // OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE. `null` is different and stays a
+    // delete, because clearing the key IS the deliberate way back to the
+    // default. The WRITE path never reaches here with a bad value —
     // `assertWritableControlValues` refuses it first.
     if (value === 'off' || value === 'observe' || value === 'active') {
       target[key] = value;
-    } else {
+    } else if (value === null || value === undefined) {
       delete target[key];
+    } else {
+      target[key] = OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE;
     }
     return;
   }
@@ -693,6 +696,38 @@ function applyConfigValue(
     return;
   }
 }
+
+/**
+ * What this installation's OD Next preference reads as when the saved config is
+ * present but cannot be believed.
+ *
+ * Three states have to stay apart, and only the first two used to matter:
+ *
+ * - **No config at all** (no file). Nobody has chosen; the default decides, and
+ *   the default is now `active`.
+ * - **A readable choice.** That choice decides.
+ * - **A config that exists but cannot be read** — malformed JSON, a non-object
+ *   body, or an `odNextStrategyMode` that is not one of the modes. We do not
+ *   know what this installation chose.
+ *
+ * The third case used to be harmless: dropping it read as unconfigured, and
+ * unconfigured was `off`, which is what an opt-out looks like anyway. Flipping
+ * the default inverted that. Unconfigured is now `active`, so the same drop
+ * turns "we cannot read your choice" into "you chose OD Next" — and it does so
+ * to precisely the installations most likely to have opted out, silently, with
+ * the switch still reading on.
+ *
+ * So the third case resolves to `off`. It is the only answer that cannot
+ * override a decision the user actually made, and it is the recoverable one:
+ * a user who never opted out sees the switch off and can turn it back on, which
+ * rewrites the field correctly. The reverse mistake is not recoverable, because
+ * nothing tells the user it happened.
+ *
+ * This is a claim about the file, not about the user, so it is deliberately not
+ * reported as a distinct mode source: `readOdNextRolloutPolicy` sees a saved
+ * `off` and says `app_config`, which is true — a config is what decided.
+ */
+const OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE = 'off' as const;
 
 function filterAllowedKeys(obj: Record<string, unknown>): AppConfigPrefs {
   const result: Record<string, unknown> = Object.create(null);
@@ -786,11 +821,14 @@ function readAppConfigFileOnlySync(dataDir: string): AppConfigPrefs {
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
       return filterAllowedKeys(parsed as Record<string, unknown>);
     }
-    return {};
+    return { odNextStrategyMode: OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE };
   } catch (err: unknown) {
     const e = err as { code?: string; name?: string };
+    // No file is the one state that genuinely means "nobody has chosen".
     if (e.code === 'ENOENT') return {};
-    if (e.name === 'SyntaxError') return {};
+    if (e.name === 'SyntaxError') {
+      return { odNextStrategyMode: OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE };
+    }
     throw err;
   }
 }
@@ -803,13 +841,14 @@ async function readAppConfigFileOnly(dataDir: string): Promise<AppConfigPrefs> {
       return filterAllowedKeys(parsed as Record<string, unknown>);
     }
     console.warn('[app-config] Invalid shape in config file, returning empty');
-    return {};
+    return { odNextStrategyMode: OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE };
   } catch (err: unknown) {
     const e = err as { code?: string; name?: string; message?: string };
+    // No file is the one state that genuinely means "nobody has chosen".
     if (e.code === 'ENOENT') return {};
     if (e.name === 'SyntaxError') {
       console.error('[app-config] Corrupted JSON, returning empty:', e.message);
-      return {};
+      return { odNextStrategyMode: OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE };
     }
     throw err;
   }

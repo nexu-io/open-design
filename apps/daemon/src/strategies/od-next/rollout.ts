@@ -77,11 +77,18 @@ function configuredMode(value: unknown): OdNextRolloutMode | null {
  * mode is switched back on. So the invariant this function has to keep is:
  * an installation that opted out reads `off` through every later release.
  *
- * That rests on opting out being stored rather than erased. `off` is a value
- * the config carries — `applyConfigValue` drops the key only for a value it
- * cannot store, and `assertWritableControlValues` refuses those on the way in.
- * Rewriting an opt-out as a deleted key would read as unconfigured here and
- * silently return every opted-out installation to OD Next.
+ * That rests on the config never reading as unconfigured unless it genuinely
+ * is. `off` is a value the config carries, and the read path in `app-config.ts`
+ * keeps three states apart rather than two: no file at all is the only one that
+ * reaches the default below. A file that exists but cannot be believed —
+ * malformed JSON, a non-object body, a mode this build does not recognise —
+ * resolves to `off` before it gets here, because "we cannot read your choice"
+ * must not become "you chose OD Next". See
+ * `OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE`.
+ *
+ * `assertWritableControlValues` covers the write path for the same reason, but
+ * only the write path: it cannot do anything about a file that was already bad
+ * on disk, hand-edited, or written by another version.
  *
  * `OD_NEXT_STRATEGY_ROLLOUT` outranks the saved `odNextStrategyMode` so that a
  * pinned process stays pinned: an operator debugging one daemon, a packaged

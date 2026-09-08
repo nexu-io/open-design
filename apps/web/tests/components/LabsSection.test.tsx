@@ -625,4 +625,39 @@ describe('LabsSection', () => {
     expect(writes).toEqual([]);
     expect(switchEl().getAttribute('aria-checked')).toBe('false');
   });
+
+  it('lets a failed status read be retried from the switch itself', async () => {
+    // The state this guards against: the read fails once, the row renders
+    // locked, and nothing the user can do inside Settings clears it. That is
+    // only survivable while some other control exists, and for a packaged
+    // install this switch is the only one.
+    let attempt = 0;
+    const status = {
+      strategyId: 'od-next-strategy' as const,
+      scope: 'daemon_instance' as const,
+      requestedMode: 'active' as const,
+      requestedModeSource: 'default' as const,
+      effectiveMode: 'active' as const,
+    };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).includes('/api/strategies/od-next/rollout')) {
+        attempt += 1;
+        if (attempt === 1) return new Response('nope', { status: 500 });
+        return new Response(JSON.stringify({ status }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200 });
+    }));
+
+    render(<I18nProvider><LabsSection /></I18nProvider>);
+    const control = await screen.findByRole('switch');
+    await waitFor(() => expect(control).toHaveAttribute('aria-disabled', 'true'));
+
+    fireEvent.click(control);
+
+    await waitFor(() => expect(control).toHaveAttribute('aria-disabled', 'false'));
+    expect(attempt).toBe(2);
+  });
 });

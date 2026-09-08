@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
@@ -14,6 +14,7 @@ import {
 } from 'vitest';
 
 import { agentCliEnvForAgent, readAppConfig, writeAppConfig } from '../src/app-config.js';
+import { readOdNextRolloutPolicy } from '../src/strategies/od-next/rollout.js';
 import { isLocalSameOrigin } from '../src/origin-validation.js';
 
 // Default telemetry preference applied when an existing config has no
@@ -58,19 +59,68 @@ describe('app-config', () => {
     it('returns default telemetry for corrupted JSON without crashing', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '{not valid');
       const cfg = await readAppConfig(dataDir);
-      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
+      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY, odNextStrategyMode: 'off' });
     });
 
     it('returns default telemetry when file contains a JSON array', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '[1,2,3]');
       const cfg = await readAppConfig(dataDir);
-      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
+      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY, odNextStrategyMode: 'off' });
     });
 
     it('returns default telemetry when file contains a JSON primitive', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '"hello"');
       const cfg = await readAppConfig(dataDir);
-      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
+      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY, odNextStrategyMode: 'off' });
+    });
+
+    // The three cases above now also carry `odNextStrategyMode: 'off'`, and that
+    // is the point rather than a detail. Every other preference can be dropped
+    // when the file cannot be read, because the cost is one setting falling back
+    // to its default. This one decides whether OD Next runs, and its default is
+    // now `active` — so dropping it turns "your config is unreadable" into "you
+    // asked for OD Next", against the installations most likely to have asked
+    // for the opposite. See `OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE`.
+    describe('OD Next opt-out against an unreadable config', () => {
+      const cases: Array<[string, string]> = [
+        ['truncated JSON', '{"odNextStrategyMode": "of'],
+        ['a JSON array', '[1,2,3]'],
+        ['a JSON primitive', '"hello"'],
+        ['a mode this build does not recognise', JSON.stringify({ odNextStrategyMode: 'Off' })],
+        ['a mode with a typo', JSON.stringify({ odNextStrategyMode: 'acive' })],
+        ['a non-string mode', JSON.stringify({ odNextStrategyMode: 1 })],
+      ];
+      for (const [label, body] of cases) {
+        it(`reads off, not the default, for ${label}`, async () => {
+          await writeFile(path.join(dataDir, 'app-config.json'), body);
+          expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe('off');
+        });
+      }
+
+      it('still reads as unconfigured when there is genuinely no config', async () => {
+        // The negative control. Failing closed is only correct for a config we
+        // cannot believe; a fresh install has made no choice, and turning that
+        // into an opt-out would cancel the rollout instead of protecting it.
+        expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+      });
+
+      it('leaves an explicit null as the deliberate way back to the default', async () => {
+        await writeFile(
+          path.join(dataDir, 'app-config.json'),
+          JSON.stringify({ odNextStrategyMode: null }),
+        );
+        expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+      });
+
+      it('keeps every readable mode exactly as saved', async () => {
+        for (const mode of ['off', 'observe', 'active'] as const) {
+          await writeFile(
+            path.join(dataDir, 'app-config.json'),
+            JSON.stringify({ odNextStrategyMode: mode }),
+          );
+          expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe(mode);
+        }
+      });
     });
 
     it('filters out unknown keys from stored file', async () => {
@@ -1251,17 +1301,53 @@ describe('app-config odNextStrategyMode', () => {
     await expect(readAppConfig(dataDir)).rejects.toThrow();
   });
 
-  it('reads a corrupted stored value as unconfigured rather than throwing', async () => {
-    // The read path stays fail-soft: a hand-edited or truncated file must not
-    // take the daemon down, and unconfigured is the safe answer (`off`).
+  it('reads a corrupted stored value as off rather than throwing', async () => {
+    // The read path stays fail-soft — a hand-edited or truncated file must not
+    // take the daemon down, and the rest of the config still comes through.
+    //
+    // What changed is which answer is safe. This assertion used to read
+    // `toBeUndefined()`, on the reasoning that "unconfigured is the safe answer
+    // (`off`)". That reasoning was true only while the default was `off`. With
+    // the default flipped, unconfigured is `active`, so the same fail-soft drop
+    // would hand OD Next to an installation whose stored choice we just failed
+    // to read. The mode now fails closed on its own; every other key keeps the
+    // ordinary fail-soft behaviour.
     await writeFile(
       path.join(dataDir, 'app-config.json'),
       JSON.stringify({ agentId: 'codex', odNextStrategyMode: 'acive' }),
       'utf8',
     );
     const cfg = await readAppConfig(dataDir);
-    expect(cfg.odNextStrategyMode).toBeUndefined();
+    expect(cfg.odNextStrategyMode).toBe('off');
     expect(cfg.agentId).toBe('codex');
+  });
+
+  it('keeps an opt-out through the whole chain when the file is later corrupted', async () => {
+    // The join is where this guarantee actually lives, so assert it across the
+    // join rather than in either half. `readAppConfig` reads the file and
+    // `readOdNextRolloutPolicy` decides the mode; a corrupted file that read as
+    // unconfigured in the first would resolve to `active` in the second, and
+    // nothing in between would notice.
+    await writeAppConfig(dataDir, { odNextStrategyMode: 'off' });
+    expect(readOdNextRolloutPolicy({}, await readAppConfig(dataDir)))
+      .toMatchObject({ requestedMode: 'off', requestedModeSource: 'app_config' });
+
+    // Same installation, same user, file truncated by whatever truncates files.
+    const saved = await readFile(path.join(dataDir, 'app-config.json'), 'utf8');
+    await writeFile(path.join(dataDir, 'app-config.json'), saved.slice(0, 20), 'utf8');
+    expect(readOdNextRolloutPolicy({}, await readAppConfig(dataDir)))
+      .toMatchObject({ requestedMode: 'off' });
+
+    // And the negative control on the same chain: a fresh installation with no
+    // file must still reach the new default, or this guard has swallowed the
+    // rollout it was meant to protect.
+    const fresh = await mkdtemp(path.join(tmpdir(), 'od-appconfig-fresh-'));
+    try {
+      expect(readOdNextRolloutPolicy({}, await readAppConfig(fresh)))
+        .toMatchObject({ requestedMode: 'active', requestedModeSource: 'default' });
+    } finally {
+      await rm(fresh, { recursive: true, force: true });
+    }
   });
 
   it('opts back out when the key is cleared', async () => {

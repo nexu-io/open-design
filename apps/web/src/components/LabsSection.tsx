@@ -285,28 +285,37 @@ export function LabsSection({ autosave }: LabsSectionProps) {
     settleAutosave(autosaveClaimRef.current, 'idle');
   }, [settleAutosave]);
 
+  /**
+   * Read the mode this daemon is in.
+   *
+   * Split out of the mount effect so a failed read is not permanent. An
+   * unreachable daemon must not blank the page, so the row renders locked with
+   * the reason spelled out — but a lock that only lifts on remount means a
+   * transient failure leaves the user staring at a switch that does nothing,
+   * and this switch is the only control a packaged install has over OD Next.
+   * `toggle` calls this again instead of ignoring the click, so the dead state
+   * becomes its own retry.
+   */
+  const readStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/strategies/od-next/rollout');
+      if (!response.ok) throw new Error(`rollout status failed (${response.status})`);
+      const body = (await response.json()) as OdNextRolloutControlResponse;
+      if (!mountedRef.current) return;
+      setState(harnessStateFromStatus(body.status));
+    } catch {
+      if (!mountedRef.current) return;
+      setState({ on: false, lock: 'unreadable' });
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const response = await fetch('/api/strategies/od-next/rollout');
-        if (!response.ok) throw new Error(`rollout status failed (${response.status})`);
-        const body = (await response.json()) as OdNextRolloutControlResponse;
-        if (cancelled) return;
-        setState(harnessStateFromStatus(body.status));
-      } catch {
-        if (cancelled) return;
-        // An unreachable daemon must not blank the page: show the row, locked,
-        // with the reason spelled out.
-        setState({ on: false, lock: 'unreadable' });
-      }
-    })();
+    void readStatus();
     return () => {
-      cancelled = true;
       mountedRef.current = false;
     };
-  }, []);
+  }, [readStatus]);
 
   const answerOptOut = useCallback(
     (answer: { reason: TrackingLabsOptOutReason[]; customReason?: string }) => {
@@ -337,7 +346,17 @@ export function LabsSection({ autosave }: LabsSectionProps) {
   }, [answerOptOut]);
 
   const toggle = useCallback(() => {
-    if (!state || state.lock || writeInFlightRef.current) return;
+    if (writeInFlightRef.current) return;
+    // A read that failed is the one lock the user can do something about, so
+    // spend the click on trying again rather than swallowing it. The
+    // environment lock stays inert on purpose: the daemon would ignore the
+    // write, and pretending otherwise is worse than doing nothing.
+    if (state?.lock === 'unreadable') {
+      setState(LOADING);
+      void readStatus();
+      return;
+    }
+    if (!state || state.lock) return;
     const next = !state.on;
     const previous = state.on;
     const token = ++writeTokenRef.current;
@@ -405,7 +424,7 @@ export function LabsSection({ autosave }: LabsSectionProps) {
         }
       }
     })();
-  }, [analytics.track, answerOptOut, reportSaved, settleAutosave, state]);
+  }, [analytics.track, answerOptOut, readStatus, reportSaved, settleAutosave, state]);
 
   const lockNoticeKey = state?.lock === 'env'
     ? 'labs.envOverrideNotice'
