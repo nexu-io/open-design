@@ -140,8 +140,8 @@ async function main(): Promise<void> {
     // The healthy path, and the one that matters most: the card did its job, so
     // this step must leave the channel alone.
     console.log("[fallback] the prerelease card lane reported in; nothing to post");
-    setOutput("alert", "false");
     setOutput("reason", "card-lane-healthy");
+    setOutput("alert", "false");
     return;
   }
 
@@ -169,12 +169,17 @@ async function main(): Promise<void> {
   });
 
   console.warn(`::warning::prerelease card lane silent (${silence}); posting the webhook fallback notice`);
-  setOutput("alert", "true");
+  // `alert` goes LAST, after every field a poster reads. It is the one output
+  // the workflow branches on, so writing it first would let a crash between two
+  // appends leave `alert=true` beside an empty body — and feishu-notice.ts would
+  // then die on a required env instead of delivering. Written last, `alert=true`
+  // means the whole notice is on disk.
   setOutput("reason", silence);
   setOutput("title", notice.title);
   setOutput("template", notice.template);
   setOutput("body", notice.body);
   setOutput("run_url", notice.runUrl);
+  setOutput("alert", "true");
 }
 
 await main();

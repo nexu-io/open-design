@@ -417,12 +417,24 @@ jobs:
         # red job is the only channel left to say so. Only reachable on this
         # repository: the composer above is scoped to it, so a fork — which has
         # neither bot — leaves `alert` empty and never goes red for this.
-        if: ${{ steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK == '' }}
+        # `always()` because the whole point is to speak after something
+        # broke — without it GitHub's implicit success() skips this step in
+        # every run where an earlier step already failed. The outcome check
+        # is the other half: never act on a composer that did not finish.
+        if: >-
+          ${{
+            always() && steps.notice.outcome == 'success' &&
+            steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK == ''
+          }}
         run: |
           echo "::error::the prerelease card was never dispatched and FEISHU_RELEASE_WEBHOOK is unset, so no fallback notice could be delivered"
           exit 1
       - name: Post the fallback notice
-        if: ${{ steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK != '' }}
+        if: >-
+          ${{
+            always() && steps.notice.outcome == 'success' &&
+            steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK != ''
+          }}
         env:
           NOTICE_BODY: ${{ steps.notice.outputs.body }}
           NOTICE_TEMPLATE: ${{ steps.notice.outputs.template }}
