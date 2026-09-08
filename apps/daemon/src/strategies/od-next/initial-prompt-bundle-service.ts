@@ -5,6 +5,7 @@ import {
   OdNextRuntimeCapabilitySnapshotV1Schema,
   detectOdNextDevicePlatformFromText,
   executionProfileFromStreamFormat,
+  renderChatTurnHostProtocolInstructions,
   type OdNextPromptBundleHeadV2,
   type OdNextPromptBundleRecipeIdentityV2,
   type OdNextStrategyRequestRecipeV2,
@@ -73,6 +74,7 @@ type ResearchInput = {
 
 export interface OdNextInitialPromptMeta {
   agentId: string;
+  doneKey?: unknown;
   message?: unknown;
   currentPrompt?: unknown;
   priorTranscript?: unknown;
@@ -436,7 +438,13 @@ export function createOdNextInitialPromptBundleService(
       connectedExternalMcpReference: renderConnectedExternalMcpDirective(connectedExternalMcp),
       browserUnavailableGuard: renderBrowserUseUnavailablePrompt(browserUse),
       titleGenerationDirective,
-      clientSystemPrompt: typeof systemPrompt === 'string' ? systemPrompt : '',
+      clientSystemPrompt: [
+        renderChatTurnHostProtocolInstructions(
+          stringValue(meta.doneKey) ?? '',
+          'od_next_request',
+        ).text,
+        typeof systemPrompt === 'string' ? systemPrompt : '',
+      ].filter(Boolean).join('\n\n---\n\n'),
       cwdReference: '',
       linkedDirectoryReferences: '',
       echoGuard: OD_NEXT_BUNDLE_ECHO_GUARD_V2,

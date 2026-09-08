@@ -283,7 +283,6 @@ export async function listSkills(
         // rest of the frontmatter to keep the shadowed-skill path cheap.
         if (seenIds.has(parentId)) continue;
         seenIds.add(parentId);
-        const hasAttachments = await dirHasAttachments(dir);
         const mode = normalizeMode(data.od?.mode, body, data.description);
         const surface = normalizeSurface(data.od?.surface, mode);
         const platform = normalizePlatform(
@@ -316,9 +315,7 @@ export async function listSkills(
           data.zh_description,
         );
         const examplePromptI18n = localizedMapFromRecord(data.od?.example_prompt_i18n);
-        const parentBody = hasAttachments
-          ? withSkillRootPreamble(body, dir)
-          : body;
+        const parentBody = await skillBodyWithRootPreamble(body, dir);
         // Pre-compute derived examples so the parent entry can advertise
         // `aggregatesExamples` in the same push. The frontend uses that
         // flag to hide the parent card from the gallery (its preview would
@@ -589,6 +586,18 @@ function withSkillRootPreamble(body: string, dir: string): string {
     "",
   ].join("\n");
   return preamble + body;
+}
+
+/**
+ * Add the same staged-root contract to every file-backed skill source.
+ *
+ * Global skills already flow through this helper while the registry is
+ * scanned. Plugin-local SKILL.md files are loaded through a separate path, so
+ * that loader calls this export too; otherwise their companion files are
+ * staged correctly but the model is never told where the staged copy lives.
+ */
+export async function skillBodyWithRootPreamble(body: string, dir: string): Promise<string> {
+  return await dirHasAttachments(dir) ? withSkillRootPreamble(body, dir) : body;
 }
 
 function collectReferencedSideFiles(body: string): string[] {

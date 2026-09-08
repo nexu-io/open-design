@@ -234,7 +234,7 @@ describe('InlineModelSwitcher AMR row', () => {
     resetWorkspaceContextCache();
   });
 
-  it('keeps the AMR reminder inside the picker without marking the chip', async () => {
+  it('shows the AMR reminder dot once when another CLI is selected', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -257,7 +257,7 @@ describe('InlineModelSwitcher AMR row', () => {
       [amrAgent, codexAgent],
     );
 
-    expect(screen.queryByTestId('inline-model-switcher-amr-reminder')).toBeNull();
+    expect(screen.getByTestId('inline-model-switcher-amr-reminder')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
 
@@ -661,9 +661,12 @@ describe('InlineModelSwitcher AMR row', () => {
 
     const [url, target, features] = openSpy.mock.calls[0] ?? [];
     const parsed = new URL(String(url));
-    expect(parsed.origin).toBe('https://open-design.ai');
-    expect(parsed.pathname).toBe('/pricing/');
-    expect(parsed.searchParams.get('billing')).toBeNull();
+    // The point of this case is the PROFILE: a signed-in test-profile account
+    // must not be handed a production upgrade link. While the plans URL ignored
+    // its profile argument this assertion read the prod host (T54).
+    expect(parsed.origin).toBe('https://open-design.powerformer.net');
+    expect(parsed.pathname).toBe('/cloud/dashboard');
+    expect(parsed.searchParams.get('billing')).toBe('plan');
     expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
     expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
     expect(target).toBe('_blank');

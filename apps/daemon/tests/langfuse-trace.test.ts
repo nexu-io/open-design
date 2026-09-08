@@ -516,6 +516,72 @@ describe('buildTracePayload', () => {
     });
   });
 
+  it('exports content-free deliverable syntax timing and value counters as flat metadata', () => {
+    const trace = (buildTracePayload(makeCtx({
+      deliverableSyntax: {
+        schemaVersion: 'deliverable-syntax-telemetry-v1',
+        applicable: true,
+        status: 'pass',
+        source: 'run_finalizer',
+        checker: 'web-syntax@1',
+        checkedFileCount: 1,
+        checkCount: 3,
+        checkerDurationMs: 16,
+        repairWindowDurationMs: 650,
+        repairToDeliveryDurationMs: 900,
+        repairToTerminalDurationMs: 900,
+        terminalRunStatus: 'succeeded',
+        finalization: {
+          action: 'allow', summaryVersion: 1, initialStatus: 'repairable',
+          repairEngine: 'host-safe-fixer@2', stagedPatchCount: 2, committedPatchCount: 2,
+          committedRepairRules: ['normalize_mismatched_string_quote', 'normalize_html_attribute_quotes'],
+        },
+        safeFixProposalCount: 2,
+        safeFixProposalDurationMs: 6,
+        repairExecutor: 'host_safe_fixer',
+        repairDurationMs: 8,
+        appliedRepairRules: ['insert_missing_closing_delimiter'],
+        repairableCheckCount: 2,
+        initialDiagnosticCount: 1,
+        latestDiagnosticCount: 0,
+        repairTriggered: true,
+        repairAttempts: 2,
+        maxRepairAttempts: 3,
+        repairOutcome: 'repaired',
+        recoveredDeliveryCount: 1,
+        blockedBrokenDeliveryCount: 0,
+      },
+    }))[0] as any).body;
+
+    expect(trace.metadata).toMatchObject({
+      deliverable_syntax_schema_version: 'deliverable-syntax-telemetry-v1',
+      deliverable_syntax_applicable: true,
+      deliverable_syntax_status: 'pass',
+      deliverable_syntax_checker_duration_ms: 16,
+      deliverable_syntax_repair_window_duration_ms: 650,
+      deliverable_syntax_repair_to_delivery_duration_ms: 900,
+      deliverable_syntax_repair_to_terminal_duration_ms: 900,
+      deliverable_syntax_terminal_run_status: 'succeeded',
+      deliverable_syntax_finalization_action: 'allow',
+      deliverable_syntax_summary_version: 1,
+      deliverable_syntax_initial_status: 'repairable',
+      deliverable_syntax_repair_engine: 'host-safe-fixer@2',
+      deliverable_syntax_staged_patch_count: 2,
+      deliverable_syntax_committed_patch_count: 2,
+      deliverable_syntax_committed_repair_rules: 'normalize_mismatched_string_quote,normalize_html_attribute_quotes',
+      deliverable_syntax_safe_fix_proposal_count: 2,
+      deliverable_syntax_safe_fix_proposal_duration_ms: 6,
+      deliverable_syntax_repair_executor: 'host_safe_fixer',
+      deliverable_syntax_repair_duration_ms: 8,
+      deliverable_syntax_applied_repair_rules: 'insert_missing_closing_delimiter',
+      deliverable_syntax_check_count: 3,
+      deliverable_syntax_repair_outcome: 'repaired',
+      deliverable_syntax_recovered_delivery_count: 1,
+      deliverable_syntax_blocked_broken_delivery_count: 0,
+    });
+    expect(JSON.stringify(trace.metadata)).not.toContain('index.html');
+  });
+
   it('omits prompt + output when content gate is off', () => {
     const batch = buildTracePayload(makeCtx());
     const trace = (batch[0] as any).body;

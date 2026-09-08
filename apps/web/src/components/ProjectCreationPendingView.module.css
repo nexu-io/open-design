@@ -21,21 +21,7 @@
   color: var(--text-muted);
 }
 
-.workspaceBody {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 18px;
-  padding: 28px 24px;
-}
-
-.workspaceTitle {
-  color: var(--text-strong);
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.workspaceEmpty {
-  color: var(--text-faint);
-  font-size: 13px;
-}
+/* The design-files column now renders DesignFilesPanel's own `.df-panel` /
+   `.df-empty` shell (global styles) so the empty pill sits in the same place
+   before and after the hand-off. The local body/title/empty rules that used to
+   draw a top-left caption here are gone with it. */

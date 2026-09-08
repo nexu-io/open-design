@@ -108,71 +108,106 @@
 
 /* ----- memory-applied: one-line chip with type-dotted refs --------------- */
 
+/*
+ * 记忆卡 = 最新 PR 交付稿里的通用折叠行 `.fold`,并应用它为记忆态新增的
+ * 16px 外壳 / summary 轮廓。其它 spacing、字号和颜色仍逐条映射:
+ *   .fold           { border: 0; background: var(--bg-panel); }
+ *   .fold > summary { display:flex; align-items:center; gap:7px; padding:8px 11px;
+ *                     font-size: var(--t-mini); color: var(--text-strong);
+ *                     list-style:none; cursor:pointer; }
+ *   .fold:has(> summary > .memo-ic),
+ *   .fold > summary:has(> .memo-ic) { border-radius: 16px; }
+ *   .fold .body     { padding: 0 11px 11px; font-size: var(--t-mini);
+ *                     line-height: var(--lh-body); color: var(--text-muted); }
+ *
+ * 之前这里是自建的一套:没底色、没圆角、summary 字号跟着外面继承(13px 而不是 12px)、
+ * 标题显式写死 font-weight:500、箭头用 --text-soft。最新独立稿的 500 来自全页字体基线,
+ * 产品字体 face 校验之前不在这个组件内补写,避免局部伪对齐。
+ * `.card` 那 6px 上下外边距也要按稿子归零 —— 稿实体上是 0。
+ */
 .appliedCard {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-2xl);
+  background: var(--bg-panel);
+}
+.appliedCard > summary {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 6px 10px;
-  border: 1px solid var(--border-soft, var(--border));
-  border-radius: var(--radius-md, 8px);
-  background: var(--bg-subtle);
+  gap: 7px;
+  padding: 8px 11px;
+  list-style: none;
+  cursor: pointer;
+  /* 稿子写的是 var(--t-mini),而 --t-mini 是稿子自己的别名(= var(--font-size-12));
+     我们这边没有这个别名,照抄会**静默失效**、字号退回继承的 13px。所以映射到我们的 token。 */
+  font-size: var(--font-size-12);
+  color: var(--text-strong);
+  border-radius: var(--radius-2xl);
+}
+/* 稿子 `.fold > summary:hover { background: var(--bg-fill-tertiary) }`
+   (`361b78253e:docs/design/chat-panel/src/components.css:908`,与交付稿
+   `8015870095` 同一行同一值)。标题行是可点的 —— 手型给了、点了会展开,
+   唯独没有悬停反馈,是这一行原来漏搬的那一条。 */
+.appliedCard > summary:hover { background: var(--bg-fill-tertiary); }
+.appliedCard > summary::-webkit-details-marker { display: none; }
+.appliedCard > summary::marker { content: ''; }
+/* 没有条目时点开是空的,索性不给手型也不给箭头 */
+.appliedCard:not(:has(.appliedBody)) > summary { cursor: default; }
+/* 箭头不另设颜色 —— 稿子的 `.chev` 没有 color 规则,跟着 summary 的 --text-strong 走 */
+.appliedChev {
+  display: inline-flex;
+  margin-inline-start: auto;
+  transition: transform 140ms var(--ease-out);
+}
+.appliedCard[open] > summary .appliedChev { transform: rotate(180deg); }
+.appliedBody {
+  /* 稿子的 `.fold .body` 是普通块级 —— 条目之间靠 <br> 断行,不是 flex 列表。
+     原来这里是 flex/column/gap:3px,连带把 <br> 变成了块级元素。 */
+  display: block;
+  /* 稿子:padding: 0 11px 11px。原来左边缩进 30px 是给类型色点让位的,色点已按稿子去掉 */
+  padding: 0 11px 11px;
+  /* 稿子写的是 --t-mini / --lh-body,那是它自己的别名,值分别是 font-size-12 与 1.7 */
+  font-size: var(--font-size-12);
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+/* 稿子还有一条:`.fold[open] > summary + .body { padding-top: 4px }` ——
+   展开之后正文和标题之间留 4px,不是紧贴。漏这一条会让展开态挤在一起。 */
+.appliedCard[open] > summary + .appliedBody {
+  padding-top: 4px;
 }
 
+/*
+ * 只染图标不染文字(交付稿注释原话)。色号 `#00ff04` 是产品指定的那一支,
+ * 和绿勾底片同源 —— 这两处说的本来就是同一类事(存下了 / 过了)。
+ * 稿子也说明了为什么不用 `--brand-text` 那档深绿:一枚 15px 的实心块面靠形状识别,
+ * 不靠笔画,而它右边紧跟着深色的那句话,信息本身不依赖这枚图标读得清。
+ */
 .appliedIcon {
   display: inline-flex;
-  color: var(--accent);
+  color: #00ff04;
 }
 
+/* 稿子的 summary 没有 font-weight,也就是 400 —— 原来这里写了 500,标题比稿子粗一档 */
 .appliedSummary {
-  font-weight: 500;
+  min-width: 0;
 }
 
-.appliedRefs {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-}
 
+/* 字号和颜色由 .appliedBody 给(同稿子的 .fold .body),这里只管排布 */
 .appliedRef {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
-  color: var(--text-muted);
 }
 
-.refDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-  background: var(--text-faint);
-}
 
 .refName {
   white-space: nowrap;
 }
 
-/* Category dots — quiet, distinguishable hues for each memory bucket. */
-.dotProfile {
-  background: var(--purple);
-}
-.dotUser {
-  background: var(--blue);
-}
-.dotFeedback {
-  background: var(--amber);
-}
-.dotProject {
-  background: var(--green);
-}
-.dotReference {
-  background: var(--text-soft);
-}
-.dotRule {
-  background: var(--accent);
-}
+
 
 /* ----- verify-scorecard: status header over rubric rows ------------------ */
 

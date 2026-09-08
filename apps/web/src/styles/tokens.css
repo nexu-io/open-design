@@ -2,6 +2,11 @@
    OpenDesign — neutral product workspace
    ============================================================ */
 :root {
+  /* 选中记号:盘底 + 挖空的勾,两枚同大的圆叠出来(底圆 r=9,不然边缘透深色)。
+     执行记录的完成勾和意图澄清的选项勾是同一张,所以放全局。 */
+  --tick-img: url("data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBmaWxsPSIjMjAyMDIwIi8+PHBhdGggZD0iTTEyIDIyQzE3LjUyMjggMjIgMjIgMTcuNTIyOCAyMiAxMkMyMiA2LjQ3NzE1IDE3LjUyMjggMiAxMiAyQzYuNDc3MTUgMiAyIDYuNDc3MTUgMiAxMkMyIDE3LjUyMjggNi40NzcxNSAyMiAxMiAyMlpNMTcuNDU3MSA5LjQ1NzExTDExIDE1LjkxNDJMNi43OTI4OSAxMS43MDcxTDguMjA3MTEgMTAuMjkyOUwxMSAxMy4wODU4TDE2LjA0MjkgOC4wNDI4OUwxNy40NTcxIDkuNDU3MTFaIiBmaWxsPSIjMDBGRjA4Ii8+PC9zdmc+");
+  /* 选中项的字色 —— 比正文重一档,产品指定的色号 */
+  --select-ink: #353535;
   /* OpenDesign system palette. Neutrals carry the interface; brand green is
      reserved for sparse feedback, selected assists, and brand emphasis. */
   --bg: #fff;
@@ -44,33 +49,21 @@
   --brand-weak: #d0ffb5;
   --brand-soft: #ebffde;
   --brand-text: #0d5400;
-  /* Selected-assist pair: deep brand ink on a whisper brand surface (the Home
-     composer's selected template pill / chip, the radial picker's hovered
-     wedge). Was hardcoded #2f781d / #f9fff4 at every call site, which meant the
-     light values also shipped to the dark theme. */
-  /* Per product 2026-08-26, read off the composer's selected 类型 pill:
-     #2f781d/#f9fff4 → #00D007/#D7FFD8 → #007106/#EAFFEB. Both moved on the
-     TOKENS rather than on the one rule that was inspected, so the pair stays
-     one object — the type list's active pill, the selected template pill, the
-     in-input skill chip and the radial picker's hovered wedge all paint from
-     here. The landing pair is also the readable one: the #00D007 step sat at
-     ~2.0:1 on its ground, under WCAG AA for the 13px/600 labels that wear it;
-     this one clears AA comfortably (the surface has since gone one step
-     lighter again, #EAFFEB → #F2FFF2, which only widens that margin). */
-  --brand-ink: #007106;
-  --brand-surface: #F2FFF2;
+
   /* Composer send button: saturated green glyph on a near-black disc (the
-     supplied mark, 发送按钮.svg). Theme-independent — the pair is the mark
-     itself. */
+     supplied mark, 发送按钮.svg / Group 2147224569.svg). Theme-independent —
+     the pair IS the mark, so it does not swap in dark mode.
+
+     ⚠️ 合并 main 的 revert(#7843)时,main 侧把这一对连同它自己的使用者一起
+     撤掉了,但**聊天面板仍在用**:`chat.css` 的 `.composer-send.stop
+     .admission-pending` 和 `viewer/routines.css` 的 `.app / .chat-skin /
+     .chat-composer-fixed-layer .composer-send` 一共四处。CSS 对未定义变量不
+     报错、只会静默画错(`background: var(--send-ink)` 整条声明作废,按钮退回
+     继承色),所以这一对必须留在这里 —— 它不是首页遗留,是发送键的字面配色。
+     四处引用都跨 `.app` / `.chat-skin` / `.chat-composer-fixed-layer` 三个不
+     同的根,没有共同祖先能挂,所以留在 `:root` 而不是收进面板作用域。 */
   --send-ground: #00ff08;
   --send-ink: #202020;
-  /* Free-plan upgrade pill (entry top-right cluster): the same saturated green
-     as a GROUND, with near-black ink on it (per product #00FF08 / #121212).
-     Its own pair rather than borrowing --send-*: that one is the send mark's
-     glyph-on-disc and inverts the roles, and the inks differ. Theme-
-     independent — the pair carries its own contrast either way. */
-  --upgrade-ground: #00ff08;
-  --upgrade-ink: #121212;
 
   /* Semantic accent tints used by tool / status pills. */
   --green: #00AA54;
@@ -88,23 +81,34 @@
   --amber: #FF7528;
   --amber-bg: color-mix(in srgb, #FFBA12 18%, #fafafa);
 
-  /* Project-kind tag hues (see `.design-card-tag.tag-*`). Each kind carries an
-     ink; the three whose tint is a lighter sibling of that ink also carry a
-     `-tint` the pill's fill/border are mixed from. `tag-brand` /
-     `tag-design-system` reuse --purple / --red and need no entry here. */
-  --tag-prototype-ink: #2348b8;
-  --tag-prototype-tint: #e8efff;
-  --tag-live-artifact-ink: #6d4ff5;
-  --tag-live-artifact-tint: #745cff;
-  --tag-web-clone-ink: #0a7ea4;
-  --tag-slide-ink: #b15e00;
-  --tag-slide-tint: #ff9f40;
-  --tag-media-ink: #1c8a73;
-
   --shadow-xs: 0 1px 0 rgba(28, 27, 26, 0.04);
   --shadow-sm: 0 1px 2px rgba(28, 27, 26, 0.05), 0 1px 3px rgba(28, 27, 26, 0.04);
   --shadow-md: 0 6px 24px rgba(28, 27, 26, 0.07), 0 2px 6px rgba(28, 27, 26, 0.04);
   --shadow-lg: 0 24px 60px rgba(28, 27, 26, 0.16), 0 8px 16px rgba(28, 27, 26, 0.07);
+
+  /* Floating-layer ladder — the two tiers that already exist in
+     `primitives.css`, named so a new floating surface can be placed by
+     MEANING instead of by picking a number that happens to clear whatever it
+     collided with today.
+
+       --z-hint  a transient hint about something else on screen. Nobody
+                 opened it, `pointer-events: none`, it goes away on its own.
+                 `.od-tooltip-layer` is the only member.
+       --z-menu  a surface the user deliberately opened from a trigger and
+                 must be able to read and click. `.od-select-menu` has been
+                 here since it was written, and the artifact card's
+                 publish / export popovers join it.
+
+     menu ABOVE hint is the point, not an accident: a hint that paints over
+     the menu you just opened is never what you wanted — reported 2026-08-27
+     with a tooltip covering the lower half of the export menu.
+
+     These two do NOT describe the whole app. Roughly forty other z-index
+     literals (chrome 150, viewer popovers 220, dialogs 1500…) are still
+     ad-hoc; naming them is a separate job. Do not invent a third token here
+     without deciding what tier it means. */
+  --z-hint: 4000;
+  --z-menu: 9000;
 
   /* Corner-radius scale — the only radii UI should reach for (Shape
      Consistency Lock). xs for inline code / micro-chips, sm for controls,
@@ -116,7 +120,13 @@
   --radius-medium: 4px;
   --radius-large: 8px;
   --radius-xlarge: 12px;
-  --radius-xxlarge: 16px;
+  --radius-2xlarge: 16px;
+  /* 上一次合并 main 时,同一个 16px 档两边起了不同的名字(我们
+     `--radius-2xlarge`,main `--radius-xxlarge`),双方都有使用者,所以两个都
+     留着互为别名。这次合并 main 的 revert(#7843)把 main 那一侧的使用者连同
+     `--radius-xxlarge` 一起撤掉了,全仓再没有第二处引用它,别名就此收掉;
+     16px 这一档由 `--radius-2xlarge` 独家承担,聊天面板的接缝层
+     (`--chat-radius-2xl`)和 `chat-seam-radius-tokens.test.ts` 都指着它。 */
   --radius-circular: 50%;
   --stroke-thin: 1px;
   --stroke-thick: 2px;
@@ -127,7 +137,8 @@
   --radius: var(--radius-large);
   --radius-md: var(--radius-large);
   --radius-lg: var(--radius-xlarge);
-  --radius-xl: var(--radius-xxlarge);
+  --radius-2xl: var(--radius-2xlarge);
+  --radius-xl: var(--radius-2xlarge);
   --radius-pill: 999px;
 
   --duration-ultra-fast: 50ms;
@@ -206,8 +217,6 @@
   --brand-weak: #2f781d;
   --brand-soft: #164111;
   --brand-text: #adf788;
-  --brand-ink: #adf788;
-  --brand-surface: #164111;
 
   --green: #3BBF7D;
   --green-bg: #164111;
@@ -269,8 +278,6 @@
     --brand-weak: #2f781d;
     --brand-soft: #164111;
     --brand-text: #adf788;
-    --brand-ink: #adf788;
-    --brand-surface: #164111;
 
     --green: #3BBF7D;
     --green-bg: #164111;

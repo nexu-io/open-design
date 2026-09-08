@@ -345,15 +345,11 @@ describe('community template Use lands a sendable composer', () => {
 
     // The brief really is in the composer, so the send has content.
     expect(screen.getByTestId('home-hero-active-plugin').textContent).toContain(
-      // The lead chip cuts the title to eight code points, then an ellipsis.
-      'Write a…',
+      'Write a Demo Day Pitch',
     );
     expect(submit.disabled).toBe(false);
-    // The composer dropped its send tooltip (the 运行 bubble landed on the
-    // prompt text right above the arrow), so `aria-label` is the button's only
-    // readout now — "Run" rather than the sending state.
-    expect(submit.getAttribute('data-tooltip')).toBeNull();
-    expect(submit.getAttribute('aria-label')).toBe('Run');
+    expect(submit.getAttribute('data-tooltip')).not.toBe('Type something to run');
+    expect(submit.getAttribute('data-tooltip')).toBe('Run');
   });
 
   it('stays sendable across two Use clicks with different templates', async () => {
@@ -377,7 +373,7 @@ describe('community template Use lands a sendable composer', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-active-plugin').textContent).toContain(
-        'Write a…',
+        'Write a Design Brief',
       );
     });
     await settle();

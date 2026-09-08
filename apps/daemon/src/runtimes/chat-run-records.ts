@@ -153,6 +153,11 @@ export interface ChatRun {
   error?: string | null;
   errorCode?: string | null;
   failureAction?: string | null;
+  /** The classifier's `retryable` verdict for this run's failure. Independent of
+   *  `failureAction`: a failure can be non-retryable and still carry an action
+   *  other than `'none'`. `null` when the run has not failed / was not
+   *  classified. */
+  retryable?: boolean | null;
   projectMetadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
@@ -180,6 +185,8 @@ export interface ChatRun {
   deliverableValidation?: ChatRunStatusResponse['deliverableValidation'];
   deliverableEntryFile?: string;
   deliverableArtifactKind?: ChatRunStatusResponse['deliverableArtifactKind'];
+  deliverableSyntaxRepair?: ChatRunStatusResponse['deliverableSyntaxRepair'];
+  deliverableSyntaxValidation?: ChatRunStatusResponse['deliverableSyntaxValidation'];
   /** Shells staged for an OD Next prototype run, project-relative. */
   odNextStagedDeviceFrames?: string[];
   /** Run-finish observation: did the delivered entry carry the staged handset shell? */

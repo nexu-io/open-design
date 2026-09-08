@@ -3,8 +3,13 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { WorkspaceCollabContext } from '@open-design/contracts';
+import {
+  buildWorkspacePermissions,
+  type WorkspaceBillingResponse,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
+import { workspaceBillingSummaryForContext } from '../../src/collab/useWorkspaceContext';
 import { AvatarMenu } from '../../src/components/AvatarMenu';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import type { ProjectWorkspaceScopeState } from '../../src/collab/useProjectWorkspaceScope';
@@ -606,7 +611,42 @@ describe('AvatarMenu', () => {
     expect(screen.queryByRole('dialog', { name: 'avatar.title' })).toBeNull();
   });
 
-  it('routes a locked model only when the exact project member can upgrade', async () => {
+  /*
+   * The daemon's project scope route (`GET /api/projects/:id/workspace-scope`)
+   * has exactly one branch, and it hardcodes `role: 'member'` for every caller —
+   * that placeholder IS the read-only implementation and it is deliberately
+   * resolved without the membership directory. So a project-page context can
+   * never carry the real role, and asking IT whether the viewer may reach a
+   * billing entrance demotes a workspace owner to a member.
+   *
+   * Consequence for this surface: `openAmrUpgrade` returned early, so a
+   * plan-gated model still rendered its "upgrade to use this" tooltip and did
+   * absolutely nothing when clicked. Only owners/admins ever saw it.
+   */
+  function projectScopeContext(
+    overrides: Partial<WorkspaceCollabContext> = {},
+  ): WorkspaceCollabContext {
+    return {
+      ...teamMemberWorkspaceContext({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      }),
+      // Whatever the caller's real role is, this is what the daemon answers.
+      role: 'member',
+      permissions: buildWorkspacePermissions({
+        role: 'member',
+        lifecycleState: 'active',
+        memberStatus: 'active',
+      }),
+      ...overrides,
+    } as WorkspaceCollabContext;
+  }
+
+  function stubLockedModelFetch(options: {
+    ambientContext?: WorkspaceCollabContext | null;
+    workspaceId: string;
+    personalMembershipTier?: string;
+  }) {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -617,47 +657,54 @@ describe('AvatarMenu', () => {
           user: { id: 'u1', email: 'a@b.c' },
           account: { plan: 'max', balanceUsd: '9.12' },
           configPath: '/Users/test/.amr/config.json',
-        }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
-      if (url === '/api/workspace/billing?scope=workspace&workspaceId=workspace-a') {
+      if (url === '/api/workspace/directory') {
+        // The ambient context is only resolved for a workspace this account is
+        // actually a member of, so the directory has to name it first.
+        const ambient = options.ambientContext;
         return new Response(JSON.stringify({
-          summary: null,
+          items: ambient
+            ? [{
+                workspaceId: ambient.workspaceId,
+                workspaceName: ambient.workspaceId,
+                workspaceType: ambient.workspaceType,
+                workspaceMemberId: ambient.workspaceMemberId,
+                role: ambient.role,
+                memberStatus: ambient.memberStatus,
+                lifecycleState: ambient.lifecycleState,
+              }]
+            : [],
+          activeWorkspaceId: ambient?.workspaceId ?? null,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(options.ambientContext ?? null);
+      }
+      if (url === `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}`) {
+        return new Response(JSON.stringify({
+          summary: options.personalMembershipTier
+            ? { membershipTier: options.personalMembershipTier }
+            : null,
           workspaceBalance: {
             billingScopeVersion: 2,
-            workspaceId: 'workspace-a',
+            workspaceId: options.workspaceId,
             workspaceMemberId: 'member-a',
             balanceUsd: '9.12',
             expiresAt: null,
             updatedAt: '2026-07-27T00:00:00.000Z',
           },
-          workspaceSnapshot: workspaceSnapshot(
-            'workspace-a',
-            'member-a',
-            'team_pro',
-            '9.12',
-          ),
-        }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
+          workspaceSnapshot: options.personalMembershipTier
+            ? null
+            : workspaceSnapshot(options.workspaceId, 'member-a', 'team_pro', '9.12'),
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
       }
       return new Response('{}', { status: 202 });
     }));
-    openExternalUrlMock.mockResolvedValue(true);
-    const projectContext = teamMemberWorkspaceContext({
-      workspaceId: 'workspace-a',
-      workspaceMemberId: 'member-a',
-      role: 'owner',
-      permissions: {
-        ...teamMemberWorkspaceContext().permissions,
-        canManageBilling: true,
-      },
-    }) as WorkspaceCollabContext & { workspaceType: 'team' };
+  }
 
-    const { onAgentModelChange } = renderMenu({
+  function renderLockedModelMenu(scopeContext: WorkspaceCollabContext) {
+    return renderMenu({
       config: {
         ...baseConfig,
         agentId: 'amr',
@@ -666,12 +713,12 @@ describe('AvatarMenu', () => {
       projectWorkspaceScope: {
         loading: false,
         scope: {
-          kind: 'team',
+          kind: scopeContext.workspaceType === 'team' ? 'team' : 'personal',
           projectId: 'project-a',
-          workspaceId: 'workspace-a',
+          workspaceId: scopeContext.workspaceId,
           visibility: 'personal',
-          context: projectContext,
-        },
+          context: scopeContext,
+        } as ProjectWorkspaceScopeState['scope'],
       },
       agents: [{
         id: 'amr',
@@ -681,6 +728,27 @@ describe('AvatarMenu', () => {
         models: [{ id: 'paid-model', label: 'Paid model', enabled: false }],
       }],
     });
+  }
+
+  it('routes a locked model for the team owner the project scope reports as a member', async () => {
+    stubLockedModelFetch({
+      workspaceId: 'workspace-a',
+      // The shell's authority for the very same workspace + member, which is the
+      // only place the real role exists.
+      ambientContext: teamMemberWorkspaceContext({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+        role: 'owner',
+        permissions: buildWorkspacePermissions({
+          role: 'owner',
+          lifecycleState: 'active',
+          memberStatus: 'active',
+        }),
+      }),
+    });
+    openExternalUrlMock.mockResolvedValue(true);
+
+    const { onAgentModelChange } = renderLockedModelMenu(projectScopeContext());
 
     openMenu();
     // The popover no longer renders an upgrade link (the account row is
@@ -694,9 +762,334 @@ describe('AvatarMenu', () => {
 
     expect(onAgentModelChange).not.toHaveBeenCalled();
     const target = new URL(openExternalUrlMock.mock.calls[0]![0]);
-    expect(target.origin + target.pathname).toBe('https://open-design.ai/pricing/');
-    expect(target.searchParams.get('workspaceId')).toBeNull();
-    expect(target.searchParams.get('billing')).toBeNull();
+    // T54: the account-menu upgrade lands on the console plan surface, pinned
+    // to the workspace whose model was locked. The pin matters — vela reads
+    // `workspaceId` off the query (`apps/web/src/lib/workspace-selector.ts`),
+    // so without it the plan dialog would open against whichever workspace
+    // vela's account-level "active workspace" happens to be.
+    expect(target.origin + target.pathname).toBe(
+      'https://open-design.ai/amr/dashboard',
+    );
+    expect(target.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(target.searchParams.get('billing')).toBe('plan');
+  });
+
+  // The gate that must NOT be relaxed: a plain team member still cannot spend
+  // the team's money, and the shell says so.
+  it('leaves a locked model inert for a plain team member', async () => {
+    stubLockedModelFetch({
+      workspaceId: 'workspace-a',
+      ambientContext: teamMemberWorkspaceContext({
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+      }),
+    });
+    openExternalUrlMock.mockResolvedValue(true);
+
+    const { onAgentModelChange } = renderLockedModelMenu(projectScopeContext());
+
+    openMenu();
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: /Paid model/i })).toBeTruthy());
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.click(screen.getByRole('radio', { name: /Paid model/i }));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(onAgentModelChange).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).not.toHaveBeenCalled();
+  });
+
+  /*
+   * `canManageBilling` is a TEAM question — who may spend money that is not only
+   * theirs. A personal workspace has no second member, so the answer must always
+   * be "you may". This surface asked `canManageBilling` directly instead of
+   * `canReachWorkspaceBillingEntrance`, and the comment above the line claimed
+   * personal workspaces were unaffected. They were affected from the day it
+   * landed: on a project page the scope placeholder makes `canManageBilling`
+   * false for a personal workspace too.
+   */
+  it('routes a locked model on a personal-workspace project', async () => {
+    stubLockedModelFetch({
+      workspaceId: 'workspace-a',
+      personalMembershipTier: 'plus',
+      // No shell authority at all — a personal workspace must not need one.
+      ambientContext: null,
+    });
+    openExternalUrlMock.mockResolvedValue(true);
+
+    const { onAgentModelChange } = renderLockedModelMenu(projectScopeContext({
+      workspaceType: 'personal',
+      teamId: undefined,
+      teamName: undefined,
+    }));
+
+    openMenu();
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole('radio', { name: /Paid model/i }));
+      expect(openExternalUrlMock).toHaveBeenCalled();
+    });
+    expect(onAgentModelChange).not.toHaveBeenCalled();
+    expect(new URL(openExternalUrlMock.mock.calls[0]![0]).searchParams.get('workspaceId'))
+      .toBe('workspace-a');
+  });
+
+  /*
+   * A team workspace whose exact billing SNAPSHOT is missing.
+   *
+   * The daemon spreads `workspaceSnapshot` into the response only when it can
+   * authorize one for the requested workspace + member
+   * (`apps/daemon/src/routes/collab-context.ts`), so production omits the KEY —
+   * it never sends `workspaceSnapshot: null`. Three real paths reach that shape:
+   * A answering 409 `billing_workspace_snapshot_unsupported` while
+   * `/wallet/balance` still answers 200; a rolling deploy leaving an old API pod
+   * that 404/405s the snapshot route; and a local vela CLI old enough to reject
+   * `--workspace-id`. Fixtures that hand this surface a snapshot cannot see any
+   * of them, which is why this one omits the key.
+   */
+  function teamBillingResponseBody(options: {
+    workspaceId: string;
+    accountMembershipTier: string;
+    /**
+     * Omit to model the missing-snapshot shape. `planId: null` +
+     * `billingState: 'free'` is how B reports a team workspace nobody has
+     * subscribed yet.
+     */
+    snapshot?: { planId: string | null; billingState: 'active' | 'free' };
+  }) {
+    return {
+      // ACCOUNT-scoped read: the contract pins its workspaceId to null.
+      summary: { membershipTier: options.accountMembershipTier },
+      workspaceBalance: {
+        billingScopeVersion: 2,
+        workspaceId: options.workspaceId,
+        workspaceMemberId: 'member-a',
+        balanceUsd: '9.12',
+        expiresAt: null,
+        updatedAt: '2026-07-27T00:00:00.000Z',
+      },
+      ...(options.snapshot
+        ? {
+            workspaceSnapshot: {
+              ...workspaceSnapshot(
+                options.workspaceId,
+                'member-a',
+                options.snapshot.planId ?? '',
+                '9.12',
+              ),
+              billing: options.snapshot,
+            },
+          }
+        : {}),
+    };
+  }
+
+  function stubTeamPlanFetch(options: {
+    workspaceId: string;
+    ambientContext: WorkspaceCollabContext;
+    accountMembershipTier: string;
+    snapshot?: { planId: string | null; billingState: 'active' | 'free' };
+  }) {
+    const urls: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      urls.push(url);
+      if (url === '/api/integrations/vela/status') {
+        return new Response(JSON.stringify({
+          loggedIn: true,
+          loginInFlight: false,
+          profile: 'feature-test',
+          user: { id: 'u1', email: 'a@b.c' },
+          account: { plan: 'max', balanceUsd: '9.12' },
+          configPath: '/Users/test/.amr/config.json',
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/workspace/directory') {
+        const ambient = options.ambientContext;
+        return new Response(JSON.stringify({
+          items: [{
+            workspaceId: ambient.workspaceId,
+            workspaceName: ambient.workspaceId,
+            workspaceType: ambient.workspaceType,
+            workspaceMemberId: ambient.workspaceMemberId,
+            role: ambient.role,
+            memberStatus: ambient.memberStatus,
+            lifecycleState: ambient.lifecycleState,
+          }],
+          activeWorkspaceId: ambient.workspaceId,
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(options.ambientContext);
+      }
+      if (url === `/api/workspace/billing?scope=workspace&workspaceId=${options.workspaceId}`) {
+        return new Response(JSON.stringify(teamBillingResponseBody(options)), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 202 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return { fetchMock, urls };
+  }
+
+  function teamOwnerAmbientContext() {
+    return teamMemberWorkspaceContext({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+      role: 'owner',
+      permissions: buildWorkspacePermissions({
+        role: 'owner',
+        lifecycleState: 'active',
+        memberStatus: 'active',
+      }),
+    });
+  }
+
+  /*
+   * Static control against a blanket rewrite.
+   *
+   * The two tiers deliberately disagree AND point opposite ways: the
+   * snapshot says `team_max` (the top tier — nothing left to upgrade to,
+   * so the entry must stay closed) while the account says `team_pro`
+   * (upgradeable, so the entry would open). Whatever the tier is read
+   * through, the snapshot must keep outranking the account fallback; a
+   * change that let the account tier win anywhere turns this green case red.
+   */
+  it('keeps the exact snapshot outranking the account tier when the snapshot is present', async () => {
+    stubTeamPlanFetch({
+      workspaceId: 'workspace-a',
+      ambientContext: teamOwnerAmbientContext(),
+      accountMembershipTier: 'team_pro',
+      snapshot: { planId: 'team_max', billingState: 'active' },
+    });
+    openExternalUrlMock.mockResolvedValue(true);
+
+    const { onAgentModelChange } = renderLockedModelMenu(projectScopeContext());
+
+    openMenu();
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: /Paid model/i })).toBeTruthy());
+    for (let i = 0; i < 8; i += 1) {
+      await act(async () => { await Promise.resolve(); });
+    }
+    fireEvent.click(screen.getByRole('radio', { name: /Paid model/i }));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(onAgentModelChange).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).not.toHaveBeenCalled();
+  });
+
+  /*
+   * The same defect, reached from the other side, and the one BEHAVIOUR CHANGE
+   * this fix makes while the snapshot is present.
+   *
+   * B reports a team workspace nobody has subscribed as `billingState: 'free'`
+   * with a null `planId`. Reading `planId` raw turned that positive "free" into
+   * `null` — an UNKNOWN tier — and `canUpgradeVelaPlan(null)` is false, so the
+   * owner of a free team could not reach the plans page from a locked model
+   * either. The projection normalizes that state to the tier `'free'`, which is
+   * both known and upgradeable, so the entry opens.
+   */
+  it('opens the upgrade entry for an unsubscribed team the snapshot reports as free', async () => {
+    stubTeamPlanFetch({
+      workspaceId: 'workspace-a',
+      ambientContext: teamOwnerAmbientContext(),
+      accountMembershipTier: '',
+      snapshot: { planId: null, billingState: 'free' },
+    });
+    openExternalUrlMock.mockResolvedValue(true);
+
+    renderLockedModelMenu(projectScopeContext());
+
+    openMenu();
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole('radio', { name: /Paid model/i }));
+      expect(openExternalUrlMock).toHaveBeenCalled();
+    });
+    expect(new URL(openExternalUrlMock.mock.calls[0]![0]).searchParams.get('workspaceId'))
+      .toBe('workspace-a');
+  });
+
+  /*
+   * The defect. A team OWNER on a paid team, whose snapshot did not come back,
+   * clicks a plan-gated model and nothing happens at all — the tier resolved to
+   * null, `canUpgradeVelaPlan(null)` is false, and that veto lands BEFORE the
+   * billing-entrance check that would have said yes.
+   *
+   * `workspaceBillingSummaryForContext` already carries the approved fallback
+   * for exactly this shape (a TEAM-namespaced account tier may stand in for a
+   * missing team snapshot; a personal tier may not). Reading the raw snapshot
+   * here walked around it.
+   */
+  it('falls back to the team-namespaced account tier when the snapshot is missing', async () => {
+    const { urls } = stubTeamPlanFetch({
+      workspaceId: 'workspace-a',
+      ambientContext: teamOwnerAmbientContext(),
+      accountMembershipTier: 'team_pro',
+    });
+    openExternalUrlMock.mockResolvedValue(true);
+
+    const { onAgentModelChange } = renderLockedModelMenu(projectScopeContext());
+
+    openMenu();
+    await waitFor(() => {
+      fireEvent.click(screen.getByRole('radio', { name: /Paid model/i }));
+      expect(openExternalUrlMock).toHaveBeenCalled();
+    });
+
+    expect(onAgentModelChange).not.toHaveBeenCalled();
+    const target = new URL(openExternalUrlMock.mock.calls[0]![0]);
+    expect(target.origin + target.pathname).toBe('https://open-design.ai/amr/dashboard');
+    expect(target.searchParams.get('workspaceId')).toBe('workspace-a');
+    expect(target.searchParams.get('billing')).toBe('plan');
+
+    // The tier now comes from data this popover already fetched. Reading it
+    // must not have added a request of its own — the endpoints below are
+    // exactly the ones the popover already talked to. (The billing-interest
+    // registration carries a per-mount id, so it is normalized before the
+    // comparison; everything else is compared literally, on purpose, so a new
+    // network dependency on this path cannot slip in unremarked.)
+    const requested = [...new Set(urls.map((url) =>
+      url.replace(/\/api\/workspace\/billing\/interests\/[^/?]+$/, '/api/workspace/billing/interests/:id'),
+    ))].sort();
+    expect(requested).toEqual([
+      '/api/integrations/vela/status',
+      '/api/workspace/billing/interests/:id',
+      '/api/workspace/billing?scope=workspace&workspaceId=workspace-a',
+      '/api/workspace/context',
+      '/api/workspace/directory',
+    ]);
+  });
+
+  /*
+   * The property the user asked for by name: the corrected identity must be the
+   * FIRST thing painted, not a late correction of a wrong one. So the tier
+   * projection may not be an async hop.
+   *
+   * Instrument: a `fetch` that throws if it is touched at all. The projection
+   * still answers, on the calling frame, from the response the component
+   * already holds — no request, no await, nothing to wait out.
+   */
+  it('resolves the fallback tier synchronously, without touching the network', () => {
+    const throwingFetch = vi.fn(() => {
+      throw new Error('resolving the workspace plan tier must not fetch');
+    });
+    vi.stubGlobal('fetch', throwingFetch);
+
+    const response = teamBillingResponseBody({
+      workspaceId: 'workspace-a',
+      accountMembershipTier: 'team_pro',
+    }) as unknown as WorkspaceBillingResponse;
+    expect('workspaceSnapshot' in response).toBe(false);
+
+    const summary = workspaceBillingSummaryForContext(
+      response,
+      teamOwnerAmbientContext(),
+    );
+
+    expect(summary?.membershipTier).toBe('team_pro');
+    expect(throwingFetch).not.toHaveBeenCalled();
   });
 
 });
