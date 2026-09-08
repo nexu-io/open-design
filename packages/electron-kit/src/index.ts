@@ -11,3 +11,5 @@ export { resolveElectronRuntimeLogPath } from "./runtime/session/logging.js";
 export { acquireElectronSessionLease } from "./runtime/session/lease.js";
 export { recoverElectronStartup, readElectronRecoveryIntent, ElectronRecoveryRequiredError, type ElectronRecoveryTarget } from "./runtime/session/recovery.js";
 export { inspectElectronStartup } from "./runtime/session/activation.js";
+export { armElectronCapsuleSelection, readElectronCapsuleSelection,
+  type ElectronCapsuleSelection, type ElectronCapsuleSelectionState } from "./runtime/session/capsule-selection.js";

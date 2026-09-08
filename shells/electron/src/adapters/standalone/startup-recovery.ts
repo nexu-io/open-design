@@ -1,17 +1,20 @@
 import { lstat, readFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { recoverElectronStartup, resolveElectronNamespacePaths, resolveElectronSessionNamespace,
+  armElectronCapsuleSelection, readElectronCapsuleSelection,
   type ElectronRecoveryTarget } from "@open-design/electron-kit";
 import { inspectElectronCapsule } from "@open-design/electron-kit/capsule-loader";
 import { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
-import { validateElectronShellManifest, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
+import { validateElectronShellManifest, resolveElectronCompositeShellIdentity, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 import { bindNodePlatform } from "@open-design/standalone/packages";
-import { canonicalJson, materializeStandaloneBlob, sha256Hex, StandaloneStore } from "@open-design/standalone";
+import { canonicalJson, ensureStandaloneBlob, materializeStandaloneBlob, sha256Hex, StandaloneStore, verifyDocument } from "@open-design/standalone";
 import declaration from "../../../config/standalone.json" with { type: "json" };
 import { loadElectronInstalledCapsuleSeed, loadElectronStandaloneInstallation, resolveElectronStandaloneTarget } from "./installation.js";
 import { validateElectronPhysicalResourceSet } from "./physical-resources.js";
 import { withElectronStoppedResourceSet } from "./guarded-lifecycle.js";
 import { resolveElectronStandaloneStoreRoot } from "./store-root.js";
+import { ElectronReleaseExactFeed } from "./release-feed.js";
+import { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
 
 export type ElectronStartupRecoveryRequest = Readonly<{
   schemaVersion: 1;
@@ -55,23 +58,62 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
     return recoverElectronStartup({ runtimeRoot: paths.runtimeRoot, target: request.target,
       async selectTarget() {
         const state = await store.readState();
-        const closureGenerationId = state.activationIntent?.generationId ?? state.active
+        const capsules = await readElectronCapsuleSelection(paths.runtimeRoot);
+        if (capsules.pending != null && state.activationIntent != null
+          && capsules.pending.closureGenerationId !== state.activationIntent.generationId) throw new Error("pending Capsule and Closure selections disagree; supply an explicit exact target");
+        const closureGenerationId = capsules.pending?.closureGenerationId ?? state.activationIntent?.generationId ?? state.active
           ?? (state.revision === 0 ? installedGenerationId : null);
         if (closureGenerationId == null) throw new Error("Electron recovery has no selected Closure; supply an explicit exact target");
-        return { capsuleManifestSha256, closureGenerationId };
+        const selected = capsules.pending ?? capsules.current;
+        return { capsuleManifestSha256: selected == null ? capsuleManifestSha256 : sha256Hex(canonicalJson(selected.envelope)), closureGenerationId };
       },
       async repair(target) {
-        // Until online Capsule selection is installed, only the actual signed
-        // installation baseline is selectable; never silently substitute it.
-        if (target.capsuleManifestSha256 !== capsuleManifestSha256) throw new Error("selected Capsule is not available in this installation");
+        const capsuleState = await readElectronCapsuleSelection(paths.runtimeRoot);
+        const selected = [capsuleState.pending, capsuleState.current].find(value => value != null
+          && sha256Hex(canonicalJson(value.envelope)) === target.capsuleManifestSha256);
+        if (target.capsuleManifestSha256 !== capsuleManifestSha256 && selected == null) throw new Error("selected Capsule is not available in this installation");
+        const capsuleEnvelope = target.capsuleManifestSha256 === capsuleManifestSha256 ? seed.envelope : selected!.envelope;
+        verifyDocument(capsuleEnvelope, seed.trustedKeys);
+        resolveElectronCompositeShellIdentity(capsuleEnvelope.document, { target: platformTarget, shell: manifest.shell });
         const envelope = target.closureGenerationId === installedGenerationId ? installation.envelope
           : await store.readGenerationMetadata(target.closureGenerationId, seed.trustedKeys);
-        const capsule = seed.envelope.document;
-        const materialized = await materializeStandaloneBlob(join(paths.runtimeRoot, "capsule"),
-          { ...capsule.archive, mediaType: "application/zip", sources: [] }, seed.archivePath,
-          { type: "zip", entrypoint: capsule.entrypoint, treeSha256: capsule.archive.treeSha256 });
-        const verified = await inspectElectronCapsule({ envelope: seed.envelope, trustedKeys: seed.trustedKeys,
-          root: materialized.path, carrier: { target: platformTarget, shell: manifest.shell } });
+        const capsule = capsuleEnvelope.document;
+        const descriptor = { ...capsule.archive, mediaType: "application/zip", sources: [] };
+        const recipe = { type: "zip" as const, entrypoint: capsule.entrypoint, treeSha256: capsule.archive.treeSha256 };
+        let capsuleRoot: string;
+        if (target.capsuleManifestSha256 === capsuleManifestSha256) {
+          capsuleRoot = (await materializeStandaloneBlob(join(paths.runtimeRoot, "capsule"), descriptor, seed.archivePath, recipe)).path;
+        } else {
+          capsuleRoot = selected!.root;
+          try { await inspectElectronCapsule({ envelope: capsuleEnvelope, trustedKeys: seed.trustedKeys,
+            root: capsuleRoot, carrier: { target: platformTarget, shell: manifest.shell } }); }
+          catch {
+            // Recover the selected archive from its existing content-addressed
+            // owner, never replace a missing selection with installed/latest.
+            const cacheRoot = join(store.root, "capsule");
+            try {
+              const archive = await ensureStandaloneBlob(cacheRoot, descriptor);
+              capsuleRoot = (await materializeStandaloneBlob(cacheRoot, descriptor, archive.path, recipe)).path;
+            } catch (cause) {
+              if (request.allowNetwork !== true) throw new Error("exact Capsule recovery bytes are missing locally; online reacquisition was not authorized", { cause });
+              const feed = new ElectronReleaseExactFeed({ cacheRoot: store.root, channel: scope.channel,
+                channelHeadUrl: installation.declaration.update.channelHeadUrl,
+                currentReleaseVersion: installation.declaration.releaseVersion, shell: manifest.shell,
+                target: platformTarget, trustedKeys: seed.trustedKeys });
+              const candidate = await new ElectronStandaloneShellCandidateLedger(store.root, scope, feed).read();
+              if (candidate == null) throw new Error("exact Capsule recovery has no retained signed release source", { cause });
+              // Authenticate the retained lane before acquiring code. A newer
+              // candidate cannot silently replace the pinned recovery target.
+              const exactEnvelope = await feed.readCapsule(candidate);
+              if (sha256Hex(canonicalJson(exactEnvelope)) !== target.capsuleManifestSha256) {
+                throw new Error("retained release source differs from the exact Capsule recovery target");
+              }
+              capsuleRoot = (await feed.prepareCapsule(candidate)).root;
+            }
+          }
+        }
+        const verified = await inspectElectronCapsule({ envelope: capsuleEnvelope, trustedKeys: seed.trustedKeys,
+          root: capsuleRoot, carrier: { target: platformTarget, shell: manifest.shell } });
         const state = await store.readState();
         await store.recoverGeneration({ envelope, trustedKeys: seed.trustedKeys, shell: verified.shell,
           expectedGenerationId: target.closureGenerationId, expectedRevision: state.revision }, {
@@ -80,6 +122,10 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
             fetch: async () => { throw new Error("exact recovery resource is missing locally; online reacquisition was not authorized"); },
           }),
         });
+        await armElectronCapsuleSelection({ runtimeRoot: paths.runtimeRoot, expectedRevision: capsuleState.revision,
+          closureGenerationId: target.closureGenerationId, recovery: true,
+          capsule: { envelope: capsuleEnvelope, trustedKeys: seed.trustedKeys, root: capsuleRoot,
+            carrier: { target: platformTarget, shell: manifest.shell } } });
       },
     });
   });

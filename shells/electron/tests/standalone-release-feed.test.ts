@@ -95,6 +95,22 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { channel?: 
 }
 
 describe("Electron release-exact feed", () => {
+  it("retains the exact selected head across provider replacement and rejects a spliced lane", async () => {
+    const { feed, cacheRoot, bodies, fetcher } = await fixture();
+    const candidate = (await feed.check())!;
+    const scope = { channel: "betahyx", namespace: "selected-head" };
+    const ledger = new ElectronStandaloneShellCandidateLedger(cacheRoot, scope, feed);
+    await ledger.write(candidate);
+    bodies.delete("https://releases.invalid/betahyx/latest/channel-head.json");
+    const callsBeforeRead = vi.mocked(fetcher).mock.calls.length;
+    const retained = await new ElectronStandaloneShellCandidateLedger(cacheRoot, scope, feed).read();
+    expect(retained?.head).toEqual(candidate.head);
+    expect(vi.mocked(fetcher).mock.calls.length).toBe(callsBeforeRead);
+    const mutated = structuredClone(candidate);
+    mutated.head.head.lanes.electron!.releaseVersion = "0.2.0-betahyx.999";
+    expect(() => feed.validateCandidate(mutated)).toThrow();
+    expect(() => feed.validateCandidate({ ...candidate, head: undefined })).toThrow("candidate is invalid");
+  });
   it("consumes stable bare versions and rejects a stable downgrade through the same signed feed", async () => {
     const current = await fixture("0.2.0", { channel: "stable" });
     expect(await current.feed.check()).toMatchObject({ candidateId: "0.2.0" });

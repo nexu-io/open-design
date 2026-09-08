@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { BrowserWindow, app, nativeImage, protocol } from "electron";
-import { canonicalJson, validateShellIdentity } from "@open-design/standalone";
+import { canonicalJson, validateShellIdentity, withStandaloneMaintenanceLock } from "@open-design/standalone";
 import { bindNodePlatform } from "@open-design/standalone/packages";
 import {
   validateElectronShellManifest, validateElectronShellAppearance,
@@ -9,6 +9,7 @@ import {
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
 import { acquireElectronSessionLease } from "./session/lease.js";
+import { commitElectronCapsuleSelection } from "./session/capsule-selection.js";
 import { installElectronLaunchIngress } from "./session/launch-ingress.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
 import { resolveElectronPresentationMode } from "./window/presentation.js";
@@ -126,14 +127,20 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
     observeFailure(error) { log.write("startup.cancellation.failed", { error }); },
   });
   context.startupQuit = startupQuit;
-  activationAcquisition = ElectronActivationAttempt.begin(paths.runtimeRoot);
-  const activation = await startupQuit.guard(activationAcquisition);
-  context.activation = activation;
-  const startup = new ElectronStartupAttemptFence(activation.attemptId);
-  context.startup = startup;
-
-  // The physical quit/activation barrier already exists when Capsule code runs.
-  const capsule = await startupQuit.guard(input.loadCapsule(manifest, Object.freeze({ resourceRoot, runtimeRoot: paths.runtimeRoot })));
+  // Serialize activation creation and selection with online arm. After this
+  // short boundary, the durable starting record rejects new update arms until
+  // the fixed carrier completes every startup commit.
+  const selected = await startupQuit.guard(withStandaloneMaintenanceLock(paths.runtimeRoot, async () => {
+    await startupQuit.guard(Promise.resolve());
+    activationAcquisition = ElectronActivationAttempt.begin(paths.runtimeRoot);
+    const activation = await startupQuit.guard(activationAcquisition);
+    context.activation = activation;
+    const startup = new ElectronStartupAttemptFence(activation.attemptId);
+    context.startup = startup;
+    const capsule = await startupQuit.guard(input.loadCapsule(manifest, Object.freeze({ resourceRoot, runtimeRoot: paths.runtimeRoot })));
+    return { activation, startup, capsule };
+  }));
+  const { activation, startup, capsule } = selected;
   const shell = Object.freeze({ ...capsule.shell });
   validateShellIdentity(shell);
   if (shell.type !== manifest.shell.type) throw new Error("Capsule capability escaped its physical Shell type");
@@ -187,7 +194,10 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   // fixed carrier can close the complete startup window and transfer quit.
   log.write("capsule.startup.ready", { activationAttemptId: activation.attemptId,
     generationId: ready.generationId, bindingDigest: ready.signal.bindingDigest });
-  activationCommit = activation.commit();
+  activationCommit = (async () => {
+    await commitElectronCapsuleSelection(paths.runtimeRoot, capsule.selection, ready.generationId);
+    await activation.commit();
+  })();
   await startupQuit.guard(activationCommit);
   startup.advance(ready.signal, "committed");
   startupQuit.commit();

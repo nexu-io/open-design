@@ -18,8 +18,7 @@ import type {
   OpenDesignElectronUpdaterTarget,
 } from "@open-design/electron-contract";
 import { DIAGNOSTICS_EXPORT_PATH, DIAGNOSTICS_FILENAME_PREFIX, diagnosticsFileName } from "@open-design/diagnostics";
-import type { ElectronStandaloneContentUpdaterPort, ElectronStandaloneRuntimeAccess } from "@open-design/electron-kit/runtime";
-import type { StandaloneShellUpdaterAction, StandaloneShellUpdaterSnapshot } from "@open-design/standalone";
+import type { ElectronStandaloneContentUpdaterPort, ElectronStandalonePreparedRuntime, ElectronStandaloneRuntimeAccess } from "@open-design/electron-kit/runtime";
 
 import { ELECTRON_DESIGN_BROWSER_PARTITION, isHttpUrl } from "./security.js";
 import { ELECTRON_RENDERER_IPC } from "../../contracts/renderer-ipc.js";
@@ -28,8 +27,10 @@ const IMPORT_TOKEN_HEADER = "x-od-desktop-import-token";
 const IMPORT_TOKEN_TTL_MS = 60_000;
 const PROJECT_ID = /^[A-Za-z0-9._-]{1,128}$/u;
 
+type RuntimeShellSnapshot = Awaited<ReturnType<ElectronStandalonePreparedRuntime["updater"]["readSnapshot"]>>;
+
 type ShellUpdaterSnapshot = Readonly<{
-  actions: readonly Pick<StandaloneShellUpdaterAction, "id">[];
+  actions: readonly Pick<RuntimeShellSnapshot["actions"][number], "id">[];
   blockedBy: readonly Readonly<{ attachmentId: string; generationId: string }>[];
   error?: Readonly<{ code: string; message: string }>;
   handoff?: Readonly<{
@@ -37,7 +38,7 @@ type ShellUpdaterSnapshot = Readonly<{
   }>;
   progress?: Readonly<{ completed: number; total: number }>;
   revision: number;
-  state: StandaloneShellUpdaterSnapshot["state"];
+  state: RuntimeShellSnapshot["state"];
 }>;
 
 type ShellUpdaterPort = Readonly<{

@@ -8,6 +8,8 @@ vi.mock("electron", () => ({
   BrowserWindow: { getAllWindows: () => [] }, protocol: {}, dialog: {}, ipcMain: {}, nativeImage: {},
 }));
 vi.mock("@open-design/standalone/packages", () => ({ bindNodePlatform: mock.bind }));
+vi.mock("@open-design/standalone", async original => ({ ...await original<typeof import("@open-design/standalone")>(),
+  withStandaloneMaintenanceLock: async (_root: string, operation: () => Promise<unknown>) => operation() }));
 vi.mock("@/runtime/session/lease.js", () => ({ acquireElectronSessionLease: async () => ({ async release() {} }) }));
 vi.mock("@/runtime/startup/identity.js", () => ({
   prepareElectronCarrierIdentity: async () => ({ paths: { runtimeRoot: "/runtime" }, preflight: {} }),

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { findSidecarProcesses, getSidecarStatus, stopSidecars } from "@open-design/sidecar/authority";
 import {
   canonicalJson,
+  StandaloneStore,
   signStandaloneChannelHead,
   signStandaloneMetadata,
   signStandaloneShellMetadata,
@@ -274,6 +275,8 @@ describe("Electron production Standalone authority", () => {
       });
       await expect(incompatible.prepare({ correlationId: "incompatible-host", scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell }))
         .rejects.toThrow("occupied incompatible Standalone host");
+      expect(await new StandaloneStore(join(runtimeRoot, "other-runtime", "standalone-store"),
+        { channel: manifest.channel, namespace: manifest.namespace }).readState()).toMatchObject({ active: null, activationAttempt: null });
       expect(await handle.readStatus()).toMatchObject({ state: "running", references: 1 });
 
       const nextClosure = Buffer.from("export const closure = 'next';\n");

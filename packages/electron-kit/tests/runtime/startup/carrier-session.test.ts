@@ -5,7 +5,7 @@ import type { ElectronCapsuleModule, LoadedElectronCapsule } from "@/runtime/sta
 import type { ElectronShellManifest } from "@/contracts/index.js";
 
 const mock = vi.hoisted(() => ({
-  bind: vi.fn(), begin: vi.fn(), commit: vi.fn(), fail: vi.fn(), exit: vi.fn(), quit: vi.fn(), dispose: vi.fn(), log: vi.fn(), lease: vi.fn(),
+  bind: vi.fn(), begin: vi.fn(), commit: vi.fn(), capsuleCommit: vi.fn(), fail: vi.fn(), exit: vi.fn(), quit: vi.fn(), dispose: vi.fn(), log: vi.fn(), lease: vi.fn(),
 }));
 vi.mock("electron", async () => {
   const { EventEmitter } = await import("node:events");
@@ -16,6 +16,9 @@ vi.mock("electron", async () => {
   };
 });
 vi.mock("@open-design/standalone/packages", () => ({ bindNodePlatform: mock.bind }));
+vi.mock("@open-design/standalone", async original => ({ ...await original<typeof import("@open-design/standalone")>(),
+  withStandaloneMaintenanceLock: async (_root: string, operation: () => Promise<unknown>) => operation() }));
+vi.mock("@/runtime/session/capsule-selection.js", () => ({ commitElectronCapsuleSelection: mock.capsuleCommit }));
 vi.mock("@/runtime/startup/identity.js", () => ({
   prepareElectronCarrierIdentity: async () => ({ paths: { runtimeRoot: "/runtime", namespaceRoot: "/namespace" }, preflight: {} }),
   loadElectronCarrierCapsule: async (_app: unknown, load: () => Promise<unknown>) => load(),
@@ -36,6 +39,7 @@ const shell = { type: "electron", version: "0.2.0", buildHash: "c".repeat(64), d
 function capsule() {
   return {
     shell,
+    selection: {} as LoadedElectronCapsule["selection"],
     createElectronCapsuleDefinition: vi.fn(() => ({ manifest,
       appearance: { schemaVersion: 1, window: { width: 1040, height: 700, title: "Test" },
         splash: { width: 1280, height: 900, minimumVisibleMs: 0, backgroundColor: "#000000", foregroundColor: "#ffffff",
@@ -75,6 +79,8 @@ it("establishes physical integrity and activation before loading one Capsule in-
   expect(mock.log).toHaveBeenCalledWith("capsule.definition.loaded", { pid: process.pid, carrier: manifest.shell, shell });
   expect(mock.exit).not.toHaveBeenCalled();
   expect(mock.commit).toHaveBeenCalledOnce();
+  expect(mock.capsuleCommit).toHaveBeenCalledExactlyOnceWith("/runtime", module.selection, "f".repeat(64));
+  expect(mock.capsuleCommit.mock.invocationCallOrder[0]).toBeLessThan(mock.commit.mock.invocationCallOrder[0]!);
   expect(mock.log).toHaveBeenCalledWith("capsule.startup.ready", {
     activationAttemptId: "test-attempt", generationId: "f".repeat(64), bindingDigest: "e".repeat(64),
   });
@@ -149,6 +155,18 @@ it("joins a pending durable commit before recording startup cancellation", async
   expect(mock.fail).toHaveBeenCalledOnce();
   expect(mock.log.mock.calls.some(([event]) => event === "startup.committed")).toBe(false);
   expect(mock.quit).toHaveBeenCalledOnce();
+});
+
+it.each(["capsule", "outer"])("keeps the startup blockade when the %s commit fails", async phase => {
+  const failure = new Error(`${phase} commit interrupted`);
+  (phase === "capsule" ? mock.capsuleCommit : mock.commit).mockRejectedValueOnce(failure);
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => capsule() });
+  expect(mock.capsuleCommit).toHaveBeenCalledOnce();
+  if (phase === "capsule") expect(mock.commit).not.toHaveBeenCalled();
+  else expect(mock.commit).toHaveBeenCalledOnce();
+  expect(mock.fail).toHaveBeenCalledExactlyOnceWith(failure);
+  expect(mock.exit).toHaveBeenCalledWith(1);
+  expect(mock.log.mock.calls.some(([event]) => event === "startup.committed")).toBe(false);
 });
 
 it("rejects a Capsule trying to advance the carrier's final commit phase", async () => {

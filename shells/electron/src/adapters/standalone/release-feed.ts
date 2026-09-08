@@ -39,6 +39,7 @@ export function resolveElectronChannelHeadOverride(argv: readonly string[] = pro
 
 export type ElectronReleaseExactCandidate = Readonly<{
   candidateId: string;
+  head: SignedStandaloneChannelHead;
   distribution: StandaloneShellDistribution & Readonly<{ capsule: ElectronCapsuleRelease }>;
   metadata: SignedStandaloneShellMetadata;
 }>;
@@ -105,7 +106,7 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
     if (metadata.document.channel !== this.options.channel || metadata.document.releaseVersion !== lane.releaseVersion) {
       throw new Error("Electron Shell metadata escaped its signed lane identity");
     }
-    const candidate = this.validateCandidate({ candidateId: lane.releaseVersion, distribution: metadata.document.distributions.find(({ shell, target }) => shell.type === "electron" && target === this.options.target), metadata });
+    const candidate = this.validateCandidate({ candidateId: lane.releaseVersion, head: envelope, distribution: metadata.document.distributions.find(({ shell, target }) => shell.type === "electron" && target === this.options.target), metadata });
     const distribution = candidate.distribution;
     if (order === 0) {
       if (distribution.shell.version === this.options.shell.version && distribution.shell.buildHash === this.options.shell.buildHash) return null;
@@ -117,7 +118,14 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
   validateCandidate(value: unknown): ElectronReleaseExactCandidate {
     if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("persisted Electron release candidate is invalid");
     const candidate = value as Partial<ElectronReleaseExactCandidate>;
-    if (typeof candidate.candidateId !== "string" || candidate.metadata == null) throw new Error("persisted Electron release candidate is invalid");
+    if (typeof candidate.candidateId !== "string" || candidate.metadata == null || candidate.head == null) throw new Error("persisted Electron release candidate is invalid");
+    verifyStandaloneChannelHead(candidate.head, this.options.trustedKeys);
+    const lane = candidate.head.head.lanes.electron;
+    const metadataBytes = Buffer.from(canonicalJson(candidate.metadata));
+    if (candidate.head.head.channel !== this.options.channel || lane?.releaseVersion !== candidate.candidateId
+      || lane.sha256 !== sha256Hex(metadataBytes) || lane.size !== metadataBytes.byteLength) {
+      throw new Error("persisted Electron release candidate escaped its selected head");
+    }
     verifyStandaloneShellMetadata(candidate.metadata, this.options.trustedKeys);
     const document = candidate.metadata.document;
     if (document.channel !== this.options.channel || document.releaseVersion !== candidate.candidateId) throw new Error("persisted Electron release candidate escaped its signed identity");
@@ -136,7 +144,7 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
       throw new Error("persisted Electron immutable exact release collides with the installed Shell identity");
     }
     const capsule = validateElectronCapsuleRelease((distribution as StandaloneShellDistribution & { capsule?: unknown }).capsule);
-    return Object.freeze({ candidateId: candidate.candidateId, distribution: { ...structuredClone(distribution), capsule }, metadata: structuredClone(candidate.metadata) });
+    return Object.freeze({ candidateId: candidate.candidateId, head: structuredClone(candidate.head), distribution: { ...structuredClone(distribution), capsule }, metadata: structuredClone(candidate.metadata) });
   }
 
   /** Resolve the already selected lane, not latest again. Compatibility and

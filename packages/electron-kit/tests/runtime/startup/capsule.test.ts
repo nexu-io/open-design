@@ -22,6 +22,15 @@ async function fixture(source = 'module.exports.createElectronCapsuleDefinition 
     carrier: { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "b".repeat(64), digest: "c".repeat(64) } } };
 }
 describe("verified Capsule loading", () => {
+  it("binds the loaded selection to the authenticated input snapshot", async () => {
+    const fixtureInput = await fixture();
+    const input = { ...fixtureInput, envelope: structuredClone(fixtureInput.envelope), selectionRevision: 7 };
+    const loading = createElectronCapsuleLoader()(input);
+    input.envelope.document = { ...input.envelope.document, version: "99.0.0" };
+    input.selectionRevision = 8;
+    const loaded = await loading;
+    expect(loaded.selection).toEqual({ envelope: fixtureInput.envelope, root: fixtureInput.root, revision: 7 });
+  });
   it("loads the public verification leaf under plain Node without an Electron host", () => {
     expect(() => execFileSync(process.execPath, ["--input-type=module", "-e", `
       import assert from "node:assert/strict";

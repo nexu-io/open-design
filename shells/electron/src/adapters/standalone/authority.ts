@@ -33,6 +33,8 @@ import {
   type UpdateActivationPolicy,
   type SignedStandaloneChannelHead,
 } from "@open-design/standalone";
+import { readElectronCapsuleSelection } from "@open-design/electron-kit";
+import { assertElectronPendingCapsule } from "./capsule.js";
 import type {
   ElectronInstallerConfirmationReceipt,
   ElectronInstallerArtifactIdentity,
@@ -220,7 +222,13 @@ export function createElectronStandaloneAuthorityFactory(
       if (state.activationAttempt != null && state.activationAttempt.launchCount > 0) {
         throw new Error("Electron Closure activation is incomplete; explicit exact recovery required");
       }
-      if (state.active == null) {
+      const capsuleSelection = await readElectronCapsuleSelection(runtimeRoot);
+      const pendingCapsule = capsuleSelection.pending;
+      if (pendingCapsule != null) {
+        assertElectronPendingCapsule({ pending: pendingCapsule, state, shell: request.shell,
+          carrier: { target: resolveElectronStandaloneTarget(), shell: manifest.shell }, trustedKeys: installation.trustedKeys });
+      }
+      if (state.active == null && pendingCapsule == null) {
         if (state.prepared == null) {
           await store.prepare(installation.envelope, installation.trustedKeys, { candidates: installation.candidates, feedback: observeFeedback });
           state = await store.readState();
@@ -230,9 +238,10 @@ export function createElectronStandaloneAuthorityFactory(
           await store.authorizePrepared(state.prepared, "silent", "installed-seed", state.revision);
           state = await store.readState();
         }
-        await store.activatePrepared(state.prepared!, request.shell, state.revision, { failurePolicy: "explicit-recovery" });
       }
-      const generation = await store.activeGeneration();
+      const activationTarget = pendingCapsule?.closureGenerationId ?? (state.active == null ? state.prepared : null);
+      const needsActivation = activationTarget != null && state.active !== activationTarget;
+      const generation = needsActivation ? await store.readGeneration(activationTarget) : await store.activeGeneration();
       const binding = createStandaloneGenerationBinding(generation, request.scope);
       const hostExpected = Object.freeze({
         hostSha256: installation.declaration.host.sha256,
@@ -325,6 +334,7 @@ export function createElectronStandaloneAuthorityFactory(
         if (existing != null) {
           const idle = hostHasNoLogicalReferences(existing);
           if (!idle) {
+            if (needsActivation) throw new Error("occupied incompatible Standalone host blocks the selected Capsule/Closure activation");
             try {
               reuse = compatibleHost(existing);
             } catch (cause) {
@@ -334,6 +344,9 @@ export function createElectronStandaloneAuthorityFactory(
           if (idle) await guard.retire();
         } else if (!await retireElectronOrphanedRuntime({ stamp: initialStamp, scope: request.scope, ledger: lifecycleLedger, guard })) {
           throw new Error("unresponsive Standalone host still has physical processes; cold start cannot replace it");
+        }
+        if (needsActivation) {
+          await store.activatePrepared(activationTarget, request.shell, state.revision, { failurePolicy: "explicit-recovery" });
         }
         activeHost = await launchHost(binding, reuse);
       });

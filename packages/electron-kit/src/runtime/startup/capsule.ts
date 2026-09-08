@@ -12,12 +12,16 @@ export type ElectronCapsuleModule = Readonly<{
   createElectronCapsuleDefinition(manifest: ElectronShellManifest, shell: Readonly<StandaloneShellIdentity>): ElectronShellDefinition;
   runElectronCapsule(definition: ElectronShellDefinition, session: ElectronCapsuleSession): Promise<ElectronCapsuleReady>;
 }>;
-export type LoadedElectronCapsule = ElectronCapsuleModule & Readonly<{ shell: Readonly<StandaloneShellIdentity> }>;
+export type LoadedElectronCapsule = ElectronCapsuleModule & Readonly<{
+  shell: Readonly<StandaloneShellIdentity>;
+  selection: Readonly<{ envelope: SignedDocument<ElectronCapsuleManifest>; root: string; revision: number }>;
+}>;
 export type LoadElectronCapsuleInput = Readonly<{
   envelope: SignedDocument<ElectronCapsuleManifest>;
   trustedKeys: StandaloneTrustedKeyRing;
   root: string;
   carrier: Readonly<{ target: ElectronCapsuleTarget; shell: StandaloneShellIdentity }>;
+  selectionRevision?: number;
 }>;
 
 function selectCapsule(input: LoadElectronCapsuleInput) {
@@ -57,8 +61,10 @@ export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput)
   let selected: string | null = null;
   let loading: Promise<LoadedElectronCapsule> | null = null;
   return async input => {
-    const candidate = selectCapsule(input);
-    const selection = canonicalJson(candidate);
+    const snapshot = { ...input, envelope: structuredClone(input.envelope), carrier: structuredClone(input.carrier) };
+    if (!Number.isSafeInteger(snapshot.selectionRevision ?? 0) || (snapshot.selectionRevision ?? 0) < 0) throw new Error("invalid Capsule selection revision");
+    const candidate = selectCapsule(snapshot);
+    const selection = canonicalJson({ ...candidate, envelope: snapshot.envelope, revision: snapshot.selectionRevision ?? 0 });
     if (selected != null && selected !== selection) throw new Error("Capsule replacement requires a new carrier process");
     if (loading != null) return loading;
     selected = selection;
@@ -73,7 +79,8 @@ export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput)
       evaluate(module.exports, createRequire(entrypoint), module, entrypoint, root);
       if (typeof module.exports.createElectronCapsuleDefinition !== "function") throw new Error("Capsule module lacks its definition factory");
       if (typeof module.exports.runElectronCapsule !== "function") throw new Error("Capsule module lacks its startup entry");
-      return Object.freeze({ shell, createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition,
+      return Object.freeze({ shell, selection: Object.freeze({ envelope: snapshot.envelope, root: snapshot.root, revision: snapshot.selectionRevision ?? 0 }),
+        createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition,
         runElectronCapsule: module.exports.runElectronCapsule });
     })();
     return loading;
