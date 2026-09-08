@@ -156,7 +156,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-    "totalChars": 76278,
+    "totalChars": 76265,
   },
   "design-minimal": {
     "sections": [
@@ -345,7 +345,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "role-marker-guard",
     ],
-    "totalChars": 51365,
+    "totalChars": 51347,
   },
   "slim-freeform-no-deck-signal": {
     "sections": [
@@ -356,7 +356,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "skill-write-boundary",
       "role-marker-guard",
     ],
-    "totalChars": 42305,
+    "totalChars": 42300,
   },
 }
 `;

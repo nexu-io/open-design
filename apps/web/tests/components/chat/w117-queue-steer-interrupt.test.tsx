@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
- * 红测(OPEND-2602 · 呈现那一半):**队列行第三颗按钮按下去会中断当前运行。**
+ * OPEND-2602 · 呈现那一半:**队列行领头那颗按下去会中断当前运行。**
  *
- * ## 为什么改
+ * ## 为什么这颗是这样的
  *
- * 这颗原来走的是「把消息写进 agent 子进程还开着的 stdin」(`steerChatRun`)。
+ * 它原来走的是「把消息写进 agent 子进程还开着的 stdin」(`steerChatRun`)。
  * 两件实测事实把这条路判了死刑:
  *   1. 27 个 runtime 里只有 `claude` / `codebuddy` 的 `promptInputFormat` 是
  *      `stream-json`,其余 25 个这颗按钮压根不出现;
@@ -12,25 +12,26 @@
  *      CLI 完全没处理(等 180s 进程活着不动),同一条在 `result` 帧之后写进去
  *      才正常起第二轮 —— 而 daemon 恰恰在 `usage` 时就关 stdin。
  *
- * 产品裁决(2026-09-03):这颗改成**中断当前运行 + 立刻发出这条**,
- * hover 文案要说出「会中断」这件事。
+ * 产品裁决(2026-09-03):这颗改成**中断当前运行 + 立刻发出这条**。
  *
- * ## 这一页守什么
+ * ## 这一页今天还守什么
  *
- * · **可见文字**仍是「引导对话」(`chat.queuedSteer`)—— 产品只说改 hover。
- * · **hover 三处**(`title` / `data-tooltip` / `aria-label`)统一换成新键,
- *   而且那句话真的在说「会中断」,不是随便换了个字符串。
- * · **带附件那一行也出现这颗** —— 原来的排除理由是「引导只送得动一帧纯文本,
- *   附件根本过不去」;现在这颗走的是中断 + 重发,附件原样跟着走,理由已经不成立。
- * · 反向对照:没有在跑的一轮时(主人不给 `onSteer`),这颗退回纯图标的
- *   「发送」,名字、行为一个字都不变。
+ * 只剩一条,但它是这一族里别处没有的:**带附件 / 带批注那一行也拿到这颗**。
+ * 原来的排除理由是「引导只送得动一帧纯文本,附件根本过不去」;改走中断 + 重发
+ * 之后走的是完整发送路径,附件和批注原样跟着走,那条理由不成立了。
  *
- * ## 防假绿
+ * 原先这一页还钉着两件事,都已经作废:
+ *   · hover 三处说「会中断当前运行」(`chat.queuedSteerInterrupts`)——
+ *     那句是稿子之外后加的。交付稿
+ *     (`729fa43ce7:docs/design/chat-panel-next.html` 组件 17「Queue」)写的是
+ *     `aria-label="引导对话" data-tip="引导对话"`,2026-09-08 收敛回稿子。
+ *     三处名字现由 `queue-steer-single-button.test.tsx` 逐字钉。
+ *   · 「没有在跑的一轮时退回纯图标的『发送』」—— 那副退回态整个撤了
+ *     (同一次裁决:「引导对话就是原本的立即发送」),稿子里也从来没有它。
  *
- * 断言钉的是 **en 词典里那条真实字符串**,不是「和 label 不同」这种真空条件:
- * 键不存在时 `en['chat.queuedSteerInterrupts']` 是 `undefined`,而
- * `getAttribute` 拿回的是当前实现的 `'Steer this turn'` —— 两边都不是
- * `undefined`,断言照得出来。为保险再先钉一次「这条文案本身非空」。
+ * `chat.queuedSteerInterrupts` 这条文案本身没有删(和它同族的
+ * `Unsupported` / `Closed` / `Failed` / `TextOnly` 一样是**休眠件**),
+ * 中英措辞由 `tests/i18n/queue-steer-terminology.test.ts` 继续钉着。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -40,7 +41,6 @@ import type { ChatCommentAttachment } from '@open-design/contracts';
 import { I18nProvider } from '../../../src/i18n';
 import { QueuedSendStrip } from '../../../src/components/ChatPane';
 import { en } from '../../../src/i18n/locales/en';
-import { zhCN } from '../../../src/i18n/locales/zh-CN';
 
 type StripProps = Parameters<typeof QueuedSendStrip>[0];
 
@@ -61,7 +61,6 @@ function commentAttachment(id: string): ChatCommentAttachment {
 }
 
 const STEER_LABEL = en['chat.queuedSteer'];
-const STEER_TOOLTIP = en['chat.queuedSteerInterrupts'];
 
 function renderStrip(overrides: Partial<StripProps> = {}) {
   const props: StripProps = {
@@ -82,40 +81,16 @@ function renderStrip(overrides: Partial<StripProps> = {}) {
 // 这个配置没开自动 cleanup(见 ChatPane.streaming.test.tsx 也是手动 cleanup)。
 afterEach(cleanup);
 
-describe('OPEND-2602:队列行第三颗按下去中断当前运行', () => {
-  it('新文案本身立得住:非空,且和按钮上那行可见文字不是同一句', () => {
-    // 先把「量法看得见」证明掉 —— 后面几条断言都拿 STEER_TOOLTIP 当标尺,
-    // 标尺是 undefined 的话它们会变成看不出问题的空断言。
-    expect(typeof STEER_TOOLTIP).toBe('string');
-    expect((STEER_TOOLTIP ?? '').length).toBeGreaterThan(0);
-    expect(STEER_TOOLTIP).not.toBe(STEER_LABEL);
+describe('OPEND-2602:队列行领头那颗按下去中断当前运行', () => {
+  it('先证明这把尺子够得着 —— 按钮上那行可见文字在词典里非空', () => {
+    // 标尺是 undefined 的话,下面那条 `toBe(STEER_LABEL)` 会变成空断言。
+    expect(typeof STEER_LABEL).toBe('string');
+    expect((STEER_LABEL ?? '').length).toBeGreaterThan(0);
   });
 
-  it('文案说的真的是「会中断当前运行」,不是换了个说法的同义词', () => {
-    // 产品口述的两种语言各钉一次内容,免得「新键存在」被当成「文案对」。
-    expect(STEER_TOOLTIP).toMatch(/interrupt|stop/i);
-    expect(zhCN['chat.queuedSteerInterrupts']).toContain('中断');
-  });
-
-  it('按钮上可见的那行字仍是「引导对话」', () => {
-    renderStrip({ onSteer: () => {} });
-    const steer = screen.getByTestId('chat-queued-send-steer');
-    expect(steer.textContent?.trim()).toBe(STEER_LABEL);
-  });
-
-  it('hover 三处统一说「会中断当前运行」', () => {
-    renderStrip({ onSteer: () => {} });
-    const steer = screen.getByTestId('chat-queued-send-steer');
-    expect(steer.getAttribute('title')).toBe(STEER_TOOLTIP);
-    expect(steer.getAttribute('data-tooltip')).toBe(STEER_TOOLTIP);
-    expect(steer.getAttribute('aria-label')).toBe(STEER_TOOLTIP);
-  });
-
-  it('带附件那一行也拿到这颗 —— 中断 + 重发把附件原样带走', () => {
-    const onSteer = vi.fn();
+  it('带附件 / 带批注那一行也拿到这颗 —— 中断 + 重发把附件原样带走', () => {
     const onSendNow = vi.fn();
     renderStrip({
-      onSteer,
       onSendNow,
       items: [
         { id: 'text-only', prompt: '再紧凑一点' },
@@ -132,34 +107,18 @@ describe('OPEND-2602:队列行第三颗按下去中断当前运行', () => {
       ],
     });
 
-    // 三行全是引导态,一个退回态都不剩。
-    expect(screen.getAllByTestId('chat-queued-send-steer')).toHaveLength(3);
+    // 三行一模一样:同一颗按钮、同一个名字,没有哪一行被降级。
+    const steers = screen.getAllByTestId('chat-queued-send-steer');
+    expect(steers).toHaveLength(3);
+    for (const steer of steers) {
+      expect(steer.textContent?.trim()).toBe(STEER_LABEL);
+    }
+    // 退回态那颗无标签图标键已经撤了,一个都不许剩。
     expect(screen.queryAllByTestId('chat-queued-send-now')).toHaveLength(0);
 
-    // 而且点下去走的确实是这条路,不是名字变了、行为还留在「立即发送」上。
-    fireEvent.click(screen.getAllByTestId('chat-queued-send-steer')[1]!);
-    expect(onSteer).toHaveBeenCalledTimes(1);
-    expect(onSteer.mock.calls[0]?.[0]).toMatchObject({ id: 'with-attachment' });
-    expect(onSendNow).not.toHaveBeenCalled();
-  });
-
-  // ——— 反向对照:没有在跑的一轮 ———
-
-  it('没有在跑的一轮时,这颗退回纯图标的「发送」,名字和行为都不变', () => {
-    const onSendNow = vi.fn();
-    renderStrip({ onSendNow });
-
-    expect(screen.queryByTestId('chat-queued-send-steer')).toBeNull();
-    const sendNow = screen.getByTestId('chat-queued-send-now');
-    // 退回态没有可见文字,tooltip 就是它唯一的名字 —— 那一格只写它按下去干的事。
-    expect(sendNow.textContent?.trim()).toBe('');
-    expect(sendNow.getAttribute('title')).toBe(en['chat.send']);
-    expect(sendNow.getAttribute('data-tooltip')).toBe(en['chat.send']);
-    expect(sendNow.getAttribute('aria-label')).toBe(en['chat.send']);
-    // 「会中断当前运行」是引导态的话,不许漏到这一颗上。
-    expect(sendNow.getAttribute('title')).not.toBe(STEER_TOOLTIP);
-
-    fireEvent.click(sendNow);
-    expect(onSendNow).toHaveBeenCalledWith('q1');
+    // 而且带附件那一行点下去真的把**它自己**发出去,不是发了第一条。
+    fireEvent.click(steers[1]!);
+    expect(onSendNow).toHaveBeenCalledTimes(1);
+    expect(onSendNow).toHaveBeenCalledWith('with-attachment');
   });
 });

@@ -1,19 +1,17 @@
 // @vitest-environment jsdom
 /**
- * 队列行第三颗按钮的**可辨识度**(稿子 `.qops button.mod-steer`)。
+ * 队列行领头那颗按钮的**可辨识度**(稿子 `.qops button.mod-steer`)。
  *
  * ## 缺的是什么
  *
- * 第三颗按钮有两副面孔:能引导当前回合时它是「引导对话」(消息塞进正在跑的那一轮,
- * 一个字都不打断),不能引导时它退回「立即发送」(先停掉在跑的那一轮再发)。
- * 两条路在 `ProjectView` 里是**完全不同的两件事** —— 一条走 `steerChatRun`,
- * 一条走 `handleStop()` + 重排队列。
+ * 这颗曾经和编辑 / 移除长得**一模一样**:同一个 `arrow-up` 图标、同样的
+ * 22×22 命中框,自己叫什么只藏在 tooltip 里。稿子给「引导对话」配了
+ * **文字标签**(`<svg/><span>引导对话</span>`),正是为了让这一行把它说出来。
  *
- * 而这两副面孔在屏幕上曾经**一模一样**:同一个 `arrow-up` 图标、同样的 22×22 命中框,
- * 差别只藏在 tooltip 里。更糟的是这两颗**永不同时出现**(三元式二选一),
- * 所以用户连「和旁边那颗比一比」的机会都没有 —— 他没有任何办法知道按下去是
- * 「插一句」还是「掐掉重来」。稿子给「引导对话」配了**文字标签**,
- * 正是为了让这一行自己说出它现在是哪一副面孔。
+ * 这一页原来还量「两副面孔在屏幕上不再是同一个东西」—— 那个分叉
+ * (有一轮可中断画「引导对话」,没有则退回无标签的「立即发送」)已经在
+ * 2026-09-08 被产品裁掉,两边喂的本来就是同一个回调。剩下的量法不变:
+ * 带标签那一颗的宽度必须放开,其余动作键仍是 22px。
  *
  * ## 为什么量最终计算样式
  *
@@ -64,52 +62,47 @@ function renderStrip(overrides: Partial<Parameters<typeof QueuedSendStrip>[0]> =
 }
 
 describe('队列行的「引导对话」可供性', () => {
-  it('引导态自己说出名字:按钮里有可见文字,退回态没有', () => {
-    renderStrip({ onSteer: () => {} });
+  it('它自己说出名字:按钮里有可见文字,编辑 / 移除仍旧只有图标', () => {
+    renderStrip();
     const steer = screen.getByTestId('chat-queued-send-steer');
     // 稿子 `<svg/><span>引导对话</span>` —— 图标之外还有一段**可见**文字。
     // 钉的是「屏幕上写着它的名字」,所以只认非空(语言由 locale 决定,
     // 写死某一种语言的字面量只会在换语言时假红)。
     const label = steer.textContent?.trim() ?? '';
     expect(label.length).toBeGreaterThan(0);
-    // OPEND-2602 之后无障碍名换成了 hover 那句「会中断当前运行」,不再和可见
-    // 文字逐字相等。但它必须**以可见文字起手** —— 屏幕上写着「引导对话」、
-    // 读屏念出来的却完全是另一句话,是 WCAG 2.5.3(Label in Name)那一条。
-    const accessibleName = steer.getAttribute('aria-label') ?? '';
-    expect(accessibleName.startsWith(label)).toBe(true);
-    expect(accessibleName.length).toBeGreaterThan(label.length);
+    // 无障碍名和屏幕上那行字**逐字相同**(稿子 `aria-label="引导对话"
+    // data-tip="引导对话"`)。屏幕写一句、读屏念另一句是 WCAG 2.5.3
+    // (Label in Name)那一条;这里连「以它起手」都不够,要求相等。
+    expect(steer.getAttribute('aria-label')).toBe(label);
 
-    cleanup();
-    renderStrip();
-    // 退回态是普通的「立即发送」,稿子里它和编辑 / 移除一样只有图标。
-    const sendNow = screen.getByTestId('chat-queued-send-now');
-    expect(sendNow.textContent?.trim()).toBe('');
-  });
-
-  it('两副面孔在屏幕上不再是同一个东西', () => {
-    renderStrip({ onSteer: () => {} });
-    const steerLabel = screen.getByTestId('chat-queued-send-steer').textContent?.trim() ?? '';
-    cleanup();
-    renderStrip();
-    const sendNowLabel = screen.getByTestId('chat-queued-send-now').textContent?.trim() ?? '';
-    expect(steerLabel).not.toBe(sendNowLabel);
+    // 反向对照:同一行里另外两颗按钮一个字都没有,所以「有文字」确实是
+    // 这一颗独有的可供性,不是队列行里人人都有。
+    const others = [...document.querySelectorAll('.chat-queued-send-action')].filter(
+      (el) => el !== steer,
+    );
+    expect(others.length).toBe(2);
+    for (const el of others) {
+      expect(el.textContent?.trim()).toBe('');
+    }
   });
 
   it('带标签的那一颗拿到自己的类名', () => {
-    renderStrip({ onSteer: () => {} });
+    renderStrip();
     const steer = screen.getByTestId('chat-queued-send-steer');
     expect(steer.classList.contains('chat-queued-send-action')).toBe(true);
     expect(steer.classList.contains('chat-queued-send-action-steer')).toBe(true);
 
-    cleanup();
-    renderStrip();
-    expect(
-      screen.getByTestId('chat-queued-send-now').classList.contains('chat-queued-send-action-steer'),
-    ).toBe(false);
+    // 这个类名是**独占**的:编辑 / 移除拿到它就会跟着变成宽度放开的形态。
+    const others = [...document.querySelectorAll('.chat-queued-send-action')].filter(
+      (el) => el !== steer,
+    );
+    for (const el of others) {
+      expect(el.classList.contains('chat-queued-send-action-steer')).toBe(false);
+    }
   });
 
   it('层叠走完:带标签的那一颗宽度放开,其余动作键仍是 22px', () => {
-    renderStrip({ onSteer: () => {} });
+    renderStrip();
     const steer = screen.getByTestId('chat-queued-send-steer');
     const steerStyle = getComputedStyle(steer);
     // 稿子 `.qops button.mod-steer { width: auto; padding: 0 4px }` —— 覆盖层
@@ -140,16 +133,8 @@ describe('队列行的「引导对话」可供性', () => {
     }
   });
 
-  it('退回态的那一颗完全没被新规则碰到', () => {
-    renderStrip();
-    const sendNow = screen.getByTestId('chat-queued-send-now');
-    const style = getComputedStyle(sendNow);
-    expect(style.width).toBe('22px');
-    expect(style.height).toBe('22px');
-  });
-
   it('图标仍在,而且仍是 14px —— 标签是加出来的,不是换掉图标', () => {
-    renderStrip({ onSteer: () => {} });
+    renderStrip();
     const icon = screen.getByTestId('chat-queued-send-steer').querySelector('svg');
     expect(icon).not.toBeNull();
     const style = getComputedStyle(icon!);

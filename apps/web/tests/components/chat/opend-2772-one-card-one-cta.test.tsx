@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * OPEND-2772 · 一次失败只出一张卡,主按钮一律是〔切换到 OpenDesign Cloud〕。
+ * OPEND-2772 · 一次失败只出一张卡,主按钮一律是〔切换到 Cloud〕。
  *
  * **工单看到的**(截图,Claude 本地 CLI 登录过期):红框圈住的是**上下两张卡
  * 同时出现** —— 上面 `RunErrorCard`(「需要登录 / Claude 尚未登录…」,三颗动作),
@@ -20,8 +20,9 @@
  *   ③ **AMR 自己不出这颗 CTA** —— 不能对着已经在 Cloud 上的人劝他买 Cloud
  *      (`withoutCloudSelfPromotion` 的反向用例)。
  *
- * ⚠️ 文案一个字都没动:这颗 CTA 复用今天切换卡上那一句
- * `chat.amrCard.switchCta`「切换到 OpenDesign Cloud 并重试」。
+ * ⚠️ 这颗 CTA 复用切换卡上那一句 `chat.amrCard.switchCta`,**键没换**;它的值
+ * 2026-09-08 按交付稿第 79 格对齐成「切换到 Cloud」(产品原话「切换到 cloud 就行
+ * 了」),报错卡自己的标题 / 正文按同一次裁决**不对齐**。
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -97,7 +98,7 @@ afterEach(() => {
 });
 
 /** 产品文案逐字 —— `chat.amrCard.switchCta` */
-const CLOUD_CTA = '切换到 OpenDesign Cloud 并重试';
+const CLOUD_CTA = '切换到 Cloud';
 
 function failedMessage(opts: { agentId: string; code: string; detail?: string }): ChatMessage {
   return {
@@ -191,6 +192,23 @@ describe('OPEND-2772 · 一次失败只出一张卡', () => {
 });
 
 describe('OPEND-2772 · 主按钮一律是切换到 Cloud', () => {
+  /*
+   * 交付稿第 79 格(`docs/design/chat-panel-next.html` 特殊错误 · CLI / BYOK)
+   * 那颗主按钮逐字写的是「切换到 Cloud」,不是「切换到 OpenDesign Cloud 并重试」。
+   *
+   * 产品 2026-09-08 当面裁决:「切换到 cloud 就行了,你怎么写那么长的文案『切换到
+   * Cloud 并重试』」「具体的报错文案不一定跟设计稿对齐,**按钮文案对齐先**」——
+   * 所以对齐的只有按钮这一颗;标题 / 正文各按各自的产品文案走,不动。
+   *
+   * 判据钉在用户读到的那行字上(经稳定的 `data-testid` 取元素),不钉键名、不钉样式。
+   */
+  it('按钮读到的就是交付稿那句「切换到 Cloud」', () => {
+    renderFailure({ agentId: 'claude', code: 'AGENT_AUTH_REQUIRED' });
+
+    const cta = screen.getByTestId('chat-error-switch-to-cloud');
+    expect((cta.textContent ?? '').trim()).toBe('切换到 Cloud');
+  });
+
   it('主按钮就是那颗 CTA,而且整张卡只有一颗主按钮', () => {
     const { container } = renderFailure({ agentId: 'claude', code: 'AGENT_AUTH_REQUIRED' });
 

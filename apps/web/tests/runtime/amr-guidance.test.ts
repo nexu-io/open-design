@@ -324,7 +324,13 @@ describe('resolveRunFailureUi', () => {
   // "retryable: no"). Its own assertion lives in run-error-ladder.test.ts.
   it('maps agent-agnostic root-cause codes to a named type + guidance for any agent', () => {
     const cases: Array<[string, string, string | null]> = [
-      ['ARTIFACT_NOT_FOUND', 'chat.runError.title.artifactMissing', null],
+      // S23 的正文以前是 null,卡面因此落到兜底那句「这次没能顺利完成」——
+      // 一次**正常结束**的任务被说成失败。产品文档 S23 有终稿,现在补上了。
+      [
+        'ARTIFACT_NOT_FOUND',
+        'chat.runError.title.artifactMissing',
+        'chat.runError.artifactMissingMessage',
+      ],
       ['AGENT_UNAVAILABLE', 'chat.runError.title.cliMissing', 'chat.runError.cliMissingMessage'],
       ['AGENT_PROMPT_TOO_LARGE', 'chat.runError.title.promptTooLarge', 'chat.runError.promptTooLargeMessage'],
       ['TOOL_LOOP_DETECTED', 'chat.runError.title.toolLoop', 'chat.runError.toolLoopMessage'],

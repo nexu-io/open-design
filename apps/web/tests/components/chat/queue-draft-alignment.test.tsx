@@ -258,7 +258,11 @@ function stage(onReorder?: (ids: string[]) => void): Stage {
 describe('队列 · 两把尺子先各自证明看得见东西', () => {
   it('小尺子和共享量尺在重叠属性上读数一致', () => {
     const s = stage();
-    const action = s.actions(s.rows[0]!)[0]!;
+    // 领头那颗是「引导对话」,带可见文字,稿子 `.qops button.mod-steer` 专门把
+    // 它的宽度放开(`width: auto`)—— 这里要的是**方形命中框**那一类,所以跳过它。
+    const action = s
+      .actions(s.rows[0]!)
+      .find((el) => !el.classList.contains('chat-queued-send-action-steer'))!;
     const grip = s.grip(s.rows[0]!);
     // `.chat-queued-send-action { width: 16px }`(前块)与 `{ width: 22px }`(后块)
     // 同为 (0,1,0),后置的赢。两把尺子都得读回 22px,不然它们的层叠规矩不是一套。

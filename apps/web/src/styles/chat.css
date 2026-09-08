@@ -4095,17 +4095,26 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
   background: linear-gradient(to left, transparent, var(--border-strong));
 }
 /* 线中间那一格 —— 这条规则只管**这一格在线里怎么占位**:不参与两侧线的伸缩,
-   最多占 62%,过长截断不换行(换行两侧的线会错位;这行字要过 19 个语言,
+   最多占 62%,过长不换行(换行两侧的线会错位;这行字要过 19 个语言,
    有些语种比英文长得多)。
    ⚠️ 只写这些。字号、颜色、图标和字怎么并排,都是**脚注自己**的事,写在
    `.fork-note` 上 —— 那个类名今天仍然挂在这个元素上。写到这里来会赢过
-   `.fork-note`(`.fork-sep span` 是 0-1-1,`.fork-note` 是 0-1-0),
-   于是脚注自己的声明永远生效不了,而裸渲染的 `.fork-note` 又什么都拿不到。 */
-.fork-sep span {
+   `.fork-note`(`.fork-sep > span` 是 0-1-1,`.fork-note` 是 0-1-0),
+   于是脚注自己的声明永远生效不了,而裸渲染的 `.fork-note` 又什么都拿不到。
+
+   ⚠️ **子组合符是承重的,别改回后代选择器**:线里那一格现在自己也套着一层
+   `.fork-note-label`(见下)。写成后代 `.fork-sep span` 会连内层一起命中,
+   把它按成 `flex: none` —— 不可收缩的 flex item 宽度恒等于内容宽度,
+   永远溢不出去,省略号也就永远轮不到。
+
+   ⚠️ 这里**没有** `text-overflow`:这一格是 `display: flex`,而
+   `text-overflow` 只作用于块容器直接排出的行盒,写在 flex 容器上是一句死码
+   (#7863 的形态就栽在这上面)。省略号归内层的 `.fork-note-label`。
+   `overflow: hidden` 留着:它是这一格自己的兜底裁剪。 */
+.fork-sep > span {
   flex: none;
   max-width: 62%;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* 分界脚注(同一格):OPEND-2714 之后它住在线中间,而不是线下面自己占一行。
@@ -4133,6 +4142,27 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
   flex: none;
   width: 12px;
   height: 12px;
+}
+/* 文案自己那一层(OPEND-2714 收尾)。
+   ------------------------------------------------------------
+   `.fork-note` 是 flex 容器,裸文本会被包进一个**匿名 flex item**;
+   `text-overflow` 是非继承属性,匿名盒拿不到 `ellipsis`,取初始值 `clip` ——
+   于是 62% 那一刀照旧裁,却是**齐口切断**,没有那三个点。英文
+   `Continued from chat` 只有 19 字符多半碰不着上限,德语 / 俄语 / 法语的译文
+   是它的三倍,现网可见。所以文案得住进一个自己的元素里,截断落在这一层。
+
+   四条缺一不可:`min-width: 0` 解开 flex item 默认的 `min-width: auto`
+   (不解开就压不到内容宽度以下,压不下去就不会溢出);`overflow: hidden`
+   造出「溢出」;`text-overflow: ellipsis` 才有地方生效;`white-space: nowrap`
+   保证它是一行 —— 换行的话两侧发丝线会错位。
+   ⚠️ 别给它 `flex: none`:该被压缩的正是这一层,图标那一枚才是 `flex: none`。
+   守卫见 `e2e/ui/fork-note-ellipsis.test.ts` —— 判据是真浏览器里**省略号有没有
+   画出来**,不是这几行声明写没写:声明写着而挂错盒子,正是 #7863 的原病灶。 */
+.fork-note-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* 点出来的那两块要「落」一下(同一格)。静态地摆在那儿,分不出它是刚才那一下
    带来的;落这一下(上方 4px + 淡入)说的就是「这是你刚点的那一下」。

@@ -1823,6 +1823,10 @@ process.stdin.on("end", () => {
     ]);
     expect(uiP0Groups["project-workspace"].files).toEqual([
       "ui/app.test.ts",
+      // Enrolled 2026-09-08: the fork divider's ellipsis is only observable in
+      // a real browser at a constrained width, so an unenrolled P1 would ship
+      // a witness nothing on the merge path ever executes.
+      "ui/fork-note-ellipsis.test.ts",
       "ui/project-management-flows.test.ts",
       "ui/workspace-keyboard-flows.test.ts",
     ]);

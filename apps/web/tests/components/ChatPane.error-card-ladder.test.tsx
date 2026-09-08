@@ -11,6 +11,7 @@
 //   - 〔联系支持〕永远是 `variant="secondary"`,没有「提为主」这条路 → 第二个用例红。
 import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatPane } from '../../src/components/ChatPane';
@@ -87,7 +88,10 @@ function failedMessage(
   } as ChatMessage;
 }
 
-function renderChat(message: ChatMessage) {
+function renderChat(
+  message: ChatMessage,
+  extraProps: Partial<ComponentProps<typeof ChatPane>> = {},
+) {
   return render(
     <ChatPane
       messages={[message]}
@@ -106,6 +110,7 @@ function renderChat(message: ChatMessage) {
       onSelectConversation={vi.fn()}
       onDeleteConversation={vi.fn()}
       config={{ agentId: 'claude', agentCliEnv: {} } as unknown as AppConfig}
+      {...extraProps}
     />,
   );
 }
@@ -149,7 +154,7 @@ describe('第 4 档:联系支持提为主(E6)', () => {
    *
    * 第 4 档的意思一直是「这张卡不能是死路」——上面三档都没答案时,把常驻次级的
    * 〔联系支持〕提上来。产品 2026-09-07 推翻 §6.Z 的阶梯之后,**非 Cloud 的卡主位
-   * 归那颗〔切换到 OpenDesign Cloud 并重试〕**,那本身就是一条活路,所以这一档不再
+   * 归那颗〔切换到 Cloud〕**,那本身就是一条活路,所以这一档不再
    * 需要在 BYOK 上提〔联系支持〕。
    *
    * 提为主的场景**仍然存在**,而且正是最该有的那个:已经跑在 Cloud 上的 run
@@ -198,21 +203,74 @@ describe('R9 断线:报错卡让位给流水最后一行的重连行', () => {
     manualRetry: false,
   };
 
-  it('持久化的断线行不出报错卡', () => {
+  /*
+   * ⚠️ 这两条原来是**不带 `reconnect`** 渲染的,断言仍然是「不出卡」——
+   * 那钉住的是 bug,不是不变量:接手方不在场时让位,等于两边都不说话。
+   * 现在两条都把接手方摆在场,钉的才是它们本来要钉的那件事:**认出**这条失败的
+   * 两条线索(结构化 code / 老行只有 detail)各自都能触发交接。
+   * 「接手方不在场」那一侧由下面两条负责。
+   */
+  it('持久化的断线行,重连行在场时不出报错卡', () => {
     const { container } = renderChat(
       failedMessage({}, {
         code: GENERIC_DAEMON_DISCONNECT_CODE,
         detail: GENERIC_DAEMON_DISCONNECT_MESSAGE,
       }),
+      { reconnect: reconnectExhausted, onManualReconnect: vi.fn() },
     );
+    expect(screen.getByTestId('chat-reconnect')).toBeTruthy();
     expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeNull();
   });
 
-  it('这条码引入之前落库的行(只有 detail、没有 code)同样不出卡', () => {
+  it('这条码引入之前落库的行(只有 detail、没有 code)同样交给在场的重连行', () => {
     const { container } = renderChat(
       failedMessage({}, { code: undefined, detail: GENERIC_DAEMON_DISCONNECT_MESSAGE }),
+      { reconnect: reconnectExhausted, onManualReconnect: vi.fn() },
     );
+    expect(screen.getByTestId('chat-reconnect')).toBeTruthy();
     expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeNull();
+  });
+
+  /*
+   * 交接只在接手方真的在场时成立 —— 这是余额那一档
+   * (`balanceCardCannotTakeTheHandoff`)早就写死的同一条不变量,断线这一档漏了半边。
+   *
+   * 现场:一轮因断流失败,用户退出项目再进来。`ProjectView` 有一条专门的卸载
+   * effect 把 `reconnectView` 清空(「换项目 / 离开这一屏,本地就不再跟着那条流了」),
+   * 于是重连行不在场;而报错卡这边仍然无条件让位。两边都不说话,那一轮在屏幕上
+   * 一个字都没有 —— 既没有失败的说明,也没有任何恢复入口。
+   */
+  it('重连行不在场时(退出项目再进来),断线那一轮必须由报错卡接住', () => {
+    const { container } = renderChat(
+      failedMessage({}, {
+        code: GENERIC_DAEMON_DISCONNECT_CODE,
+        detail: GENERIC_DAEMON_DISCONNECT_MESSAGE,
+      }),
+      { reconnect: null },
+    );
+    // 接手方不在场。
+    expect(screen.queryByTestId('chat-reconnect')).toBeNull();
+    // 所以这张卡不能再让位。
+    const card = container.querySelector('[data-user-action-card="run-recovery"]');
+    expect(card).toBeTruthy();
+    // 说的是断线这件事本身,不是兜底那句。
+    const description = card!.querySelector(
+      '[data-testid="chat-run-error-description"]',
+    )!.textContent;
+    expect(description).toContain('chat.connectionDropped');
+    expect(description).not.toContain('chat.runError.fallbackMessage');
+    // 而且带得出恢复动作 —— 屏幕上什么都不剩才是这条 bug 的形状。
+    expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
+  });
+
+  it('重连行不在场时,老行(只有 detail、没有 code)同样由报错卡接住', () => {
+    const { container } = renderChat(
+      failedMessage({}, { code: undefined, detail: GENERIC_DAEMON_DISCONNECT_MESSAGE }),
+      { reconnect: null },
+    );
+    expect(screen.queryByTestId('chat-reconnect')).toBeNull();
+    expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
+    expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
   });
 
   it('重连行在场时,屏幕上只有它一块 UI', () => {
