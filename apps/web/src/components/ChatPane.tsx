@@ -1560,15 +1560,28 @@ export function ChatPane({
     clientHeight: 0,
   });
   /**
-   * 上一次 scroll 事件之后收到的滚轮格数,按方向分开数。
+   * 「就在这个位置上,用户的滚轮在朝下要」——一张**只解释一次位移**的证词。
    *
    * 唯一的用途是给 `nextFollowIntent` 一个否决权:朝下的滚轮配上朝上的位移不是
    * 用户上滑(见 `stick-to-bottom.ts` 的 `isCompositorSnapBack`)。
    *
-   * ⚠️ 它是**一次性**的,而且只由输入清空 —— 见 `resetWheelWitness` 的调用点。
-   * 这个见证留得越久,越可能替一次真正的用户上滑背书。
+   * ## ⚠️ 生命周期是这张条子的安全性所在
+   *
+   * 一张能解释任意后续位移的条子会把跟随焊死 —— 那比它要修的 bug 更糟。三条边界
+   * 各自堵一个别的堵不住的洞,缺一不可:
+   *
+   *  1. **用掉就清**(`onScroll`)—— 一次位移一张条子,不许连用。
+   *  2. **上下文换了就清**(切会话、日志节点换掉、面板卸载,以及滚轮之外的输入)
+   *     —— 结构性的那一半;`atScrollTop` 在判据里再兜一层。
+   *  3. **过一帧就过期**(`armWheelWitnessExpiry`)—— 唯一能堵住「一格朝下的滚轮
+   *     落在已经到底的日志上,位置不动、连 scroll 事件都不发」的洞:那张条子
+   *     没人来用掉,得自己死。
+   *
+   * `null` = 没有见证 = 判据退回「方向 + 几何」,也就是这套东西出现之前的行为。
    */
-  const wheelWitnessRef = useRef<WheelWitness>({ downwardEvents: 0, upwardEvents: 0 });
+  const wheelWitnessRef = useRef<WheelWitness | null>(null);
+  /** (3) 的那一帧。挂着的时候说明有一张条子在等着过期。 */
+  const wheelWitnessFrameRef = useRef<number | null>(null);
   const scrolledToFormRef = useRef<Set<string>>(new Set());
   const refreshInlineAmrLoginStatus = useCallback(async (options: { refresh?: boolean } = {}) => {
     const next = await fetchVelaLoginStatus(options).catch(() => null);
@@ -2629,6 +2642,25 @@ export function ChatPane({
      */
     armFollow();
     lastScrollSampleRef.current = { scrollTop: 0, scrollHeight: 0, clientHeight: 0 };
+    /*
+     * 滚轮见证是**这条会话这个位置**上的证词,跟着基线和跟随意图一起归位。
+     *
+     * 漏掉它会漏出一条完整的路(nettee 在 #7898 上点名的):用户已经在底部,
+     * 再往下拨一格 —— 位置不动,不发 scroll 事件,条子没人用掉;从历史记录切换
+     * 会话的那次点击发生在**日志元素之外**,一个 pointerdown 都收不到;新会话
+     * 定位好之后一次页内查找跳到前面,就撞上那张旧条子,被判成夹取,跟随不释放。
+     *
+     * ⚠️ 【实测交待】这一行**单独撤掉,现有测试不会变红**,原因清楚:换会话必然
+     * 会排一帧(初次定位那条 effect 会 `armFollow()` 并贴底),那一帧一跑,过期
+     * 边界就已经把条子杀了;就算帧没跑,基线也就没被刷新,判据里的 `atScrollTop`
+     * 同样对不上。也就是说评审点的这个洞今天是被那两条堵住的。
+     *
+     * 留着它不是保险起见,是**作用域声明**:见证属于「这条会话的这个位置」,
+     * 上下文边界该由上下文自己划。那两条一条是时间的、一条是判据时刻的,谁先
+     * 松一点(比如哪天给 `atScrollTop` 加个亚像素容差 —— 这个仓库到处是 8px 容差)
+     * 这一行就是唯一还站着的。
+     */
+    resetWheelWitness();
   }, [activeConversationId]);
 
   // ChatComposer's internal `seededRef` latches after the first
@@ -3035,8 +3067,7 @@ export function ChatPane({
        * 位置被甩到 91」(`observability/chat-scroll-freeze-detector.ts` 的抬头)。
        * 记漏了,随之而来的那次「位置变小」就还是会被读成用户上滑。
        */
-      if (event.deltaY > 0) wheelWitnessRef.current.downwardEvents += 1;
-      else if (event.deltaY < 0) wheelWitnessRef.current.upwardEvents += 1;
+      recordWheelWitness(target, event.deltaY);
       if (event.deltaY >= 0) return;
       /*
        * 判据是**这一格有没有可能真的离开底部**,不是「有没有发生一次滚轮手势」。
@@ -3105,6 +3136,17 @@ export function ChatPane({
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('pointerdown', onOtherInput);
       el.removeEventListener('keydown', onOtherInput);
+      /*
+       * 这个节点不再是我们监听的那个了(面板卸载、日志被换掉)。挂在它身上的
+       * 证词跟着走,连同那一帧过期。
+       *
+       * ⚠️ 【实测交待】这一行单独撤掉现有测试也不会红:`setTab` 今天没有任何调用点,
+       * 所以这条 effect 的清理只在卸载时跑,跑完 ref 也跟着组件一起没了。
+       * 它防的是重挂之后的一个真实死法 —— `armWheelWitnessExpiry` 见到
+       * `wheelWitnessFrameRef` 非空就不再排帧,于是一个既没跑也没被取消的旧帧号
+       * 会让过期这条边界**永久失效**。这一天在 `tab` 真的会变的时候就会到。
+       */
+      resetWheelWitness();
     };
   }, [tab]);
 
@@ -3368,17 +3410,78 @@ export function ChatPane({
   }
 
   /**
-   * 把滚轮见证清空。
+   * 把滚轮见证撕掉,连同它那一帧过期定时。
    *
-   * 清空点只有两个,而且都是**输入**:scroll 事件把它用掉,别的输入通道
-   * (拖滚动条 / 键盘)一动就把它作废。见证越短命越安全。
+   * 每一个调用点都是一条**边界**,不是保险起见:用掉了(`onScroll`)、滚轮之外的
+   * 输入来了(`onOtherInput`)、上下文换了(切会话、面板卸载)。
    *
    * 特意**不**挂在 `rememberScrollSample` 上:我们自己写 `scrollTop` 在流式期间
    * 随时可能插进「用户滚轮」和「随之而来的 scroll 事件」中间,把见证擦掉,
-   * 那一格夹取就又变回一次「用户上滑」。基线归位和见证归位是两件事。
+   * 那一格夹取就又变回一次「用户上滑」。基线挪走这件事由判据里的 `atScrollTop`
+   * 处理 —— 它作废的是「对不上号的条子」,不是「所有条子」。
    */
   function resetWheelWitness() {
-    wheelWitnessRef.current = { downwardEvents: 0, upwardEvents: 0 };
+    wheelWitnessRef.current = null;
+    const frame = wheelWitnessFrameRef.current;
+    wheelWitnessFrameRef.current = null;
+    if (frame === null) return;
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame);
+  }
+
+  /**
+   * 让这张条子最多活到下一帧。
+   *
+   * ## 为什么必须有这一条
+   *
+   * 用户已经在底部,再往下拨一格 —— 位置一个像素都不动,**连 scroll 事件都不发**。
+   * 那张条子于是没人来用掉。它要是能一直留着,后面任何一次**非滚轮**的位置变化
+   * (页内查找、焦点驱动的滚动)都会撞上它,被判成夹取 —— 跟随焊死。
+   *
+   * ## 为什么界限是「一帧」而不是一个毫秒数
+   *
+   * 夹取是**紧跟着**那一格滚轮的:合成器接管输入、把越界位置夹回、在同一次渲染
+   * 更新里把 scroll 事件发出来。按 HTML 规范的 update-the-rendering,scroll 事件
+   * 排在这一帧的 animation frame 回调**之前**,所以「这一格滚轮引起的 scroll」
+   * 一定在下一个 rAF 回调跑到之前就已经到了。一帧因此不是调出来的数,是那条因果
+   * 链本身的长度。
+   *
+   * ⚠️ 别把这个数和诊断包里的 3.8 秒搞混:那 3.8 秒是**点击写入**和夹取之间的
+   * 间隔(期间零条 JS 写入),不是滚轮和夹取之间的间隔。
+   *
+   * 后台标签页不发 rAF,所以这一条**不能**独自承担全部生命周期 —— 切会话那条
+   * 结构性的清理必须自己存在,不能指望这一帧替它兜底。
+   */
+  /**
+   * 把这一格滚轮记进见证。
+   *
+   * 条子是**按位置**攒的:位置一变就是新的一张。滚轮把日志真滚动了,那次位移
+   * 自己会带一个 scroll 事件来把旧条子用掉;而合成器卡住的那一档里位置纹丝不动,
+   * 同一张条子于是能把一次轻扫里的十几格(包括中途掉头的那几格)攒全。
+   *
+   * 没有 rAF 就**不记**:那样过期这条边界不存在,而一张不会过期的条子迟早会替
+   * 一次真正的用户上滑背书。没有见证只是回到这套东西出现之前的行为,是安全的那边。
+   */
+  function recordWheelWitness(el: HTMLDivElement, deltaY: number) {
+    if (deltaY === 0) return;
+    if (typeof requestAnimationFrame !== 'function') return;
+    const atScrollTop = el.scrollTop;
+    const current = wheelWitnessRef.current;
+    const witness =
+      current !== null && current.atScrollTop === atScrollTop
+        ? current
+        : { downwardEvents: 0, upwardEvents: 0, atScrollTop };
+    if (deltaY > 0) witness.downwardEvents += 1;
+    else witness.upwardEvents += 1;
+    wheelWitnessRef.current = witness;
+    armWheelWitnessExpiry();
+  }
+
+  function armWheelWitnessExpiry() {
+    if (wheelWitnessFrameRef.current !== null) return;
+    wheelWitnessFrameRef.current = requestAnimationFrame(() => {
+      wheelWitnessFrameRef.current = null;
+      wheelWitnessRef.current = null;
+    });
   }
 
   /** 唯一的 `scrollTop` 写入口:写完就记基线。 */

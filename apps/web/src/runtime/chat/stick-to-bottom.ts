@@ -180,12 +180,29 @@ export function upwardGestureCanEscapeBottom(sample: ScrollSample): boolean {
  * 计数而不是存最后一格的方向:一次触控板轻扫在两个 scroll 事件之间能吐十几格,
  * 中途还可能掉头。只记最后一格会把「净上滚的一串里最后碰巧朝下的那一格」
  * 读成朝下。
+ *
+ * ## 一张条子只解释一次位移
+ *
+ * 见证是**证词**,不是状态:它说的是「就在这个位置上,用户的滚轮在朝下要」。
+ * 一张能解释任意后续位移的条子会把跟随焊死,而那比它要修的 bug 更糟。
+ * 所以它带着 `atScrollTop` —— 位移的起点必须就是记录它时的那个位置。
+ *
+ * 这一条是**结构性**的,不是时间窗:会话切换、我们自己写 `scrollTop`、日志节点
+ * 被换掉,都会把基线挪走,于是旧条子对不上号,自动作废。调用方还要另外管两件
+ * 时间上的事(用掉就清、过一帧就过期),见 `ChatPane` 的 `resetWheelWitness`。
  */
 export interface WheelWitness {
   /** 朝底部(`deltaY > 0`)的格数。 */
   downwardEvents: number;
   /** 朝上(`deltaY < 0`)的格数。 */
   upwardEvents: number;
+  /**
+   * 记录这张条子时滚动条所在的位置。
+   *
+   * 位移的起点(`previous.scrollTop`)必须**正好**是它。差一点都作废 —— 对不上
+   * 就说明中间还有别的东西动过这个滚动条,那这张条子解释的已经不是眼前这一段。
+   */
+  atScrollTop: number;
 }
 
 /**
@@ -225,6 +242,17 @@ export interface WheelWitness {
  *  · **紧邻一次 JS 写入** —— 被诊断包本身证伪:夹取发生在写入之后 **3.8 秒**,
  *    期间零条 JS 写入记录。能盖住 3.8 秒的时间窗会连正常上滑一起吞掉。
  *
+ * ## 见证必须**紧贴**它解释的那一段位移
+ *
+ * 一格朝下的滚轮如果落在**已经到底**的日志上,位置一个像素都不动,于是连 scroll
+ * 事件都不发 —— 那张条子就没人来用掉。它要是还留着,后面任何一次**非滚轮**的
+ * 位置变化(页内查找、焦点驱动的滚动、换会话之后的重新定位)都会撞上它,被判成
+ * 夹取,跟随不释放。那正是「把跟随焊死」,方向和这个 bug 反过来,但更糟
+ * (nettee 在 #7898 上点名的就是这条)。
+ *
+ * `atScrollTop` 挡住其中**结构性**的那一半:基线因为别的原因挪过,条子就对不上。
+ * 剩下「基线没挪、但那一格滚轮已经是很久以前的事」由调用方的过期负责。
+ *
  * ⚠️ 这里只回答「**不是**用户上滑」,不回答「合成器一定坏了」。判据宁可漏
  * (没有滚轮见证的夹取照旧被当成上滑)也不许多:多判一次就是把跟随焊死,
  * 那比现在这个 bug 更糟。
@@ -242,6 +270,8 @@ export function isCompositorSnapBack(
   // 一格朝上就作废:那一格本身就是用户在要求上滑。
   if (wheel.upwardEvents > 0) return false;
   if (wheel.downwardEvents <= 0) return false;
+  // 这张条子记的不是眼前这一段位移的起点 —— 中间有别的东西动过滚动条,作废。
+  if (wheel.atScrollTop !== previous.scrollTop) return false;
   // 内容动过就不是这个现象 —— 那种位移由 `layoutStable` 那条负责。
   if (next.scrollHeight !== previous.scrollHeight) return false;
   if (next.clientHeight !== previous.clientHeight) return false;

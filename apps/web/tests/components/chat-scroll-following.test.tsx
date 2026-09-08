@@ -328,6 +328,7 @@ function chatPaneEl(
     streaming?: boolean;
     queuedItems?: Array<{ id: string; prompt: string }>;
     onUpdateQueuedSend?: Parameters<typeof ChatPane>[0]['onUpdateQueuedSend'];
+    activeConversationId?: string;
   } = {},
 ) {
   return (
@@ -343,7 +344,7 @@ function chatPaneEl(
       onSend={() => {}}
       onStop={() => {}}
       conversations={[]}
-      activeConversationId="conv-1"
+      activeConversationId={overrides.activeConversationId ?? 'conv-1'}
       onSelectConversation={() => {}}
       onDeleteConversation={() => {}}
     />
@@ -1427,32 +1428,202 @@ describe('合成器夹取不许关掉自动跟随', () => {
     expect(geom.scrollTop).toBe(900);
   });
 
-  it('【反向】这段窗口里出现过朝上的滚轮 —— 哪怕后面又朝下拨,也归用户', async () => {
+});
+
+/*
+ * ── 见证的生命周期(nettee 在 #7898 上点名的过度抑制) ────────────────
+ *
+ * 上一版的见证**没有生命周期边界**。评审给的那条路是完整的:
+ *
+ *   1. 用户已经在底部,再往下拨一格 —— 位置一个像素都不动,**不发 scroll 事件**,
+ *      那张「滚轮在朝下要」的条子没人来用掉;
+ *   2. 从历史记录切换会话 —— 那次点击发生在**日志元素之外**,连 pointerdown 都
+ *      收不到;重置基线和跟随意图的那个 effect 当时不碰这个 ref;
+ *   3. 之后一次**非滚轮**的位置变化(页内查找、焦点驱动的滚动)撞上那张旧条子
+ *      → 被判成夹取 → **跟随不释放**。
+ *
+ * 方向和原 bug 反过来,而且更糟:原 bug 只在合成器真卡住时发作,这个在完全正常
+ * 的使用里就会发作。三条边界各堵一个洞,下面逐条钉死;每一条都配着本文件里
+ * 「真夹取仍然不释放跟随」那一条一起读 —— 收窄抑制最容易弄坏的就是那一半。
+ */
+describe('滚轮见证的生命周期', () => {
+  async function wheel(deltaY: number) {
+    await act(async () => {
+      fireEvent.wheel(chatLog(), { deltaY });
+      await Promise.resolve();
+    });
+  }
+
+  /** 不经过 `scrollTop` setter 的位移 —— 合成器干的,不是 JS 写的。 */
+  async function compositorClampTo(top: number) {
+    await act(async () => {
+      geom.scrollTop = top;
+      fireEvent.scroll(chatLog());
+      await Promise.resolve();
+    });
+  }
+
+  /**
+   * 模型又吐了一块。
+   *
+   * ⚠️ `conversationId` 必须原样带着:漏了它,这次 rerender 就是一次**会话切换**,
+   * `armFollow()` 会把刚刚判出来的挣脱又抹掉,用例于是量的是自己的夹具。
+   */
+  async function streamOneChunk(
+    rerender: (ui: ReactElement) => void,
+    text: string,
+    conversationId = 'conv-1',
+  ) {
+    geom.contentHeight += 120;
+    await act(async () => {
+      rerender(
+        chatPaneEl(longConversation(text), {
+          streaming: true,
+          activeConversationId: conversationId,
+        }),
+      );
+    });
+    await triggerResize();
+    await flushFrames();
+  }
+
+  it('① 到底之后再往下拨一格(不发 scroll 事件),那张条子活不过这一帧', async () => {
     /*
-     * 用户 2026-09-07 那一档的形状:会话短到滚不动,往上拨几格屏幕纹丝不动
-     * (`upwardGestureCanEscapeBottom` 在那儿挡住了松手,是对的);内容长起来之后
-     * 他又往下拨了一格。见证必须**如实**记下那几格朝上的 —— 记漏了,随后的位移
-     * 就会被当成夹取,一次真正的上滑被吞掉。
+     * 评审场景的第一段。位置纹丝不动 = 没有 scroll 事件来消费见证,所以它必须
+     * 自己过期 —— 否则后面第一次非滚轮的位置变化就会被它解释掉。
      *
-     * 这条同时说明了见证的偏置:拿不准就松手,不拿不准就焊死。
+     * 界限取「一帧」不是调出来的:夹取是紧跟着那一格滚轮的,scroll 事件按规范
+     * 排在同一帧的 rAF 回调**之前**。所以一帧之后还没来的位移,不是那一格的事。
      */
-    geom = { contentHeight: 200, clientHeight: 400, scrollTop: 0 };
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
     const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
     await flushFrames();
-    expect(maxScrollTop()).toBe(0);
+    expect(geom.scrollTop).toBe(4600);
 
-    // 一屏装得下,往上拨一格 —— 位置一个像素都没动,也没有 scroll 事件。
-    await wheel(-40);
-    expect(geom.scrollTop).toBe(0);
+    // 已经在底部,再往下拨一格 —— 一个像素都不动,一个 scroll 事件都没有。
+    await wheel(40);
+    expect(geom.scrollTop).toBe(4600);
 
-    // 内容长过视口,跟随把他带到底部。
-    await streamOneChunk(rerender, 'chunk 2', 4800);
+    // 一帧过去(rAF 跑了)。
+    await flushFrames();
+
+    // 页内查找跳到前面的内容:没有滚轮,没有 pointerdown,只有一次位置变化。
+    await userScrollTo(1200);
+
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(1200);
+  });
+
+  it('② 切换会话之后,上一条会话攒下的条子不再作数', async () => {
+    /*
+     * 评审场景的第二段,而且**不能**指望那一帧过期兜底:后台标签页压根不发 rAF。
+     * 用户拨完滚轮切出去、切回来、换个会话,条子原样还在。所以这里刻意不跑帧,
+     * 只让上下文变化本身来划这条边界。
+     *
+     * 两条会话的几何一样(`atScrollTop` 因此对得上),把「位置对不上号」那层兜底
+     * 也让开 —— 剩下的只有 effect 里那一次显式清理。
+     */
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+    expect(geom.scrollTop).toBe(4600);
+
+    // 到底了还往下拨 —— 条子留下,没有 scroll 事件来用掉它。
+    await wheel(40);
+
+    /*
+     * 从历史记录换一条会话。那次点击在日志元素之外,收不到任何输入事件。
+     * 新会话内容更长,所以 `syncFollowState` 会**同步**把日志写到新的底部 ——
+     * 基线就是在这一步被刷成真实几何的,一帧都不用跑。评审描述的正是这个时序。
+     */
+    geom.contentHeight = 6000;
+    await act(async () => {
+      rerender(
+        chatPaneEl(longConversation('other'), {
+          streaming: true,
+          activeConversationId: 'conv-2',
+        }),
+      );
+    });
+    /*
+     * 换会话本来就会排一帧(初次定位那条 effect 会 `armFollow()` 并贴底),用户
+     * 在那一帧落地之前根本插不进手。所以这里必须把它跑完 —— 不跑完量到的是一个
+     * 真实浏览器里不存在的时序。
+     */
+    await flushFrames();
     expect(geom.scrollTop).toBe(maxScrollTop());
 
-    // 再往下拨一格,然后位置反而往上跑。见证里有朝上的那一格,不算夹取。
+    // 新会话里一次非滚轮的位置变化。必须归用户。
+    await userScrollTo(1200);
+
+    await streamOneChunk(rerender, 'other more', 'conv-2');
+    expect(geom.scrollTop).toBe(1200);
+  });
+
+  it('③ 一张条子只解释一次位移,不许解释第二次', async () => {
+    /*
+     * 第一次位移(真夹取)用掉见证;紧接着的第二次位移是另一件事,这时**没有**
+     * 新的滚轮,必须归用户。
+     */
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+
     await wheel(40);
     await compositorClampTo(1200);
-    await streamOneChunk(rerender, 'chunk 3');
+    // 第一段:跟随保住(正向那一条钉的就是它)。
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(maxScrollTop());
+
+    // 第二段:没有新滚轮。必须松手。
+    await userScrollTo(900);
+    await streamOneChunk(rerender, 'chunk more more');
+    expect(geom.scrollTop).toBe(900);
+  });
+
+  it('③b 位移为 0 的那次 scroll 事件也算用掉 —— 条子不许跨过它', async () => {
+    /*
+     * 「用掉就清」和「位置对不上就作废」是**两条**边界,这一条把它们分开量。
+     *
+     * 一次一个像素都没挪的 scroll 事件(滚动被夹住、动画落定)照样是一次
+     * 「这张条子已经交待过了」。它之后位置**从同一个起点**再往上跑,那就是新的
+     * 一段,没有新滚轮就归用户 —— 位置检查在这儿帮不上忙,因为起点一模一样。
+     */
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+    expect(geom.scrollTop).toBe(4600);
+
+    await wheel(40);
+    // 位置纹丝不动的一次 scroll 事件。
+    await act(async () => {
+      fireEvent.scroll(chatLog());
+      await Promise.resolve();
+    });
+
+    // 同一个起点,这次真的往上跑了。没有新滚轮 —— 归用户。
+    await compositorClampTo(1200);
+    await streamOneChunk(rerender, 'chunk more');
     expect(geom.scrollTop).toBe(1200);
+  });
+
+  it('【正向仍要成立】真夹取:滚轮那一格紧跟着的位移,跟随照旧不许关', async () => {
+    /*
+     * 这一条是上面三条的**代价检查**,单独钉死。收窄抑制最容易弄坏的就是这一半:
+     * 边界收得太紧,真夹取也被放行,原 bug 原样回来。
+     *
+     * 真机形状:滚轮那一格和夹取之间**没有插进任何一帧** —— 合成器在同一次渲染
+     * 更新里就把 scroll 事件发出来了。
+     */
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+    expect(geom.scrollTop).toBe(4600);
+
+    await wheel(40);
+    await compositorClampTo(1200);
+
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(maxScrollTop());
   });
 });

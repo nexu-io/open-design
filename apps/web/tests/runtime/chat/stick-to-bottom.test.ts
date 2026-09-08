@@ -237,6 +237,7 @@ describe('合成器夹取 vs 用户上滑', () => {
       nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
         downwardEvents: 1,
         upwardEvents: 0,
+        atScrollTop: 718.5,
       }),
     ).toEqual(following);
   });
@@ -250,6 +251,7 @@ describe('合成器夹取 vs 用户上滑', () => {
       nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
         downwardEvents: 0,
         upwardEvents: 1,
+        atScrollTop: 718.5,
       }),
     ).toEqual(escaped);
   });
@@ -259,6 +261,7 @@ describe('合成器夹取 vs 用户上滑', () => {
       nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
         downwardEvents: 0,
         upwardEvents: 0,
+        atScrollTop: 718.5,
       }),
     ).toEqual(escaped);
     // 调用方压根不传见证时,行为和这个参数出现之前一模一样。
@@ -277,6 +280,7 @@ describe('合成器夹取 vs 用户上滑', () => {
       nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
         downwardEvents: 9,
         upwardEvents: 1,
+        atScrollTop: 718.5,
       }),
     ).toEqual(escaped);
   });
@@ -284,7 +288,11 @@ describe('合成器夹取 vs 用户上滑', () => {
   it('【反向】朝下的滚轮把位置往下带 —— 恢复跟随这条路一格都没挡', () => {
     const away = { scrollTop: 200, scrollHeight: 1307, clientHeight: 589 };
     expect(
-      nextFollowIntent(escaped, away, atLayoutBottom, { downwardEvents: 3, upwardEvents: 0 }),
+      nextFollowIntent(escaped, away, atLayoutBottom, {
+        downwardEvents: 3,
+        upwardEvents: 0,
+        atScrollTop: 200,
+      }),
     ).toEqual(following);
   });
 });
@@ -292,7 +300,7 @@ describe('合成器夹取 vs 用户上滑', () => {
 describe('isCompositorSnapBack', () => {
   const previous = { scrollTop: 718.5, scrollHeight: 1307, clientHeight: 589 };
   const clamped = { scrollTop: 245.5, scrollHeight: 1307, clientHeight: 589 };
-  const downOnly = { downwardEvents: 1, upwardEvents: 0 };
+  const downOnly = { downwardEvents: 1, upwardEvents: 0, atScrollTop: 718.5 };
 
   it('朝下的滚轮 + 位置反而往上跑 + 布局没动 = 夹取', () => {
     expect(isCompositorSnapBack(previous, clamped, downOnly)).toBe(true);
@@ -301,12 +309,20 @@ describe('isCompositorSnapBack', () => {
   it('没有见证 / 见证里有朝上的一格 / 一格朝下的都没有 —— 都不是', () => {
     expect(isCompositorSnapBack(previous, clamped, null)).toBe(false);
     expect(isCompositorSnapBack(previous, clamped, undefined)).toBe(false);
-    expect(isCompositorSnapBack(previous, clamped, { downwardEvents: 1, upwardEvents: 1 })).toBe(
-      false,
-    );
-    expect(isCompositorSnapBack(previous, clamped, { downwardEvents: 0, upwardEvents: 0 })).toBe(
-      false,
-    );
+    expect(
+      isCompositorSnapBack(previous, clamped, {
+        downwardEvents: 1,
+        upwardEvents: 1,
+        atScrollTop: 718.5,
+      }),
+    ).toBe(false);
+    expect(
+      isCompositorSnapBack(previous, clamped, {
+        downwardEvents: 0,
+        upwardEvents: 0,
+        atScrollTop: 718.5,
+      }),
+    ).toBe(false);
   });
 
   it('内容动过就不是这个现象 —— 那种位移归 layoutStable 管', () => {
@@ -319,7 +335,11 @@ describe('isCompositorSnapBack', () => {
   });
 
   it('位移方向朝下、或小到落在贴底容差里 —— 都不是', () => {
-    expect(isCompositorSnapBack(clamped, previous, downOnly)).toBe(false);
+    // 起点换成 245.5,条子也跟着换 —— 否则这一条会因为「位置对不上」而通过,
+    // 量到的就不是方向那一条判据了。
+    expect(
+      isCompositorSnapBack(clamped, previous, { ...downOnly, atScrollTop: 245.5 }),
+    ).toBe(false);
     // 8px 是容差本身,要**超过**才算。高 DPI / 分数缩放下的亚像素抖动全在这以内。
     expect(
       isCompositorSnapBack(previous, { ...previous, scrollTop: 710.5 }, downOnly),
@@ -327,5 +347,25 @@ describe('isCompositorSnapBack', () => {
     expect(
       isCompositorSnapBack(previous, { ...previous, scrollTop: 710.4 }, downOnly),
     ).toBe(true);
+  });
+  /*
+   * ── 条子只解释它记下的那一段 ──────────────────────────────────────
+   *
+   * nettee 在 #7898 上点名的过度抑制,结构性的那一半就堵在这里:一格朝下的滚轮
+   * 落在已经到底的日志上,位置不动、不发 scroll 事件,条子没人用掉;等基线被别的
+   * 东西挪走之后(切会话、我们自己写 `scrollTop`),它还留着,就会去解释一段和它
+   * 毫无关系的位移 —— 一次真实的用户位置变化被判成夹取,跟随焊死。
+   */
+  it('条子记的位置不是这一段位移的起点 —— 一律不算夹取', () => {
+    // 差 0.5px 都不行:对不上就说明中间有别的东西动过这个滚动条。
+    for (const atScrollTop of [718, 719, 0, 245.5, 1307]) {
+      expect(
+        isCompositorSnapBack(previous, clamped, { ...downOnly, atScrollTop }),
+      ).toBe(false);
+    }
+    // 对得上才算 —— 正向那一半不许被这条顺手废掉。
+    expect(isCompositorSnapBack(previous, clamped, { ...downOnly, atScrollTop: 718.5 })).toBe(
+      true,
+    );
   });
 });
