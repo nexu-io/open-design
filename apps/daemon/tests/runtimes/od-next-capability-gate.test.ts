@@ -18,6 +18,8 @@ import {
   OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
   OD_NEXT_RUNTIME_PATH_DESCRIPTORS,
   VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
+  VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
+  evaluateOdNextAdmissionEligibility,
   evaluateOdNextExecutionEligibility,
   hashRuntimeCapabilityFixtureManifestV1,
   resolveBundledOdNextRuntimeCapability,
@@ -116,7 +118,46 @@ function syntheticEntry(
 }
 
 describe('OD Next runtime capability gate', () => {
-  it.each(['pi', 'codex', 'dsh', 'none'] as const)('never reuses OpenCode native-child evidence for AMR %s', (runtime) => {
+  it('admits Pi continuation for simple work without borrowing OpenCode child evidence', () => {
+    const capability = resolveBundledOdNextRuntimeCapability({
+      agentId: 'amr', amrRuntime: 'pi', agentCliVersion: '0.0.1-test.pi.98057bb',
+      // The existing generic Vela version probe reports its bundled OpenCode.
+      runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
+    });
+    expect(capability.reason).toBe('capability_resolved');
+    expect(capability.snapshot).toMatchObject({
+      runtimePath: 'vela-pi',
+      recordedRuntimeCompanionName: 'pi', recordedRuntimeCompanionVersion: '0.85.1',
+      nativeSessionContinuation: { support: 'verified' },
+      nativeSubagents: { support: 'unknown' },
+    });
+    expect(capability.snapshot?.runtimeCompanionName).toBeUndefined();
+    expect(evaluateOdNextAdmissionEligibility(capability.snapshot!).eligible).toBe(true);
+    expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'simple').eligible).toBe(true);
+    expect(evaluateOdNextExecutionEligibility(capability.snapshot!, 'complex')).toEqual({
+      eligible: false, reason: 'native_subagents_not_verified',
+    });
+  });
+
+  it('keeps Pi admission evidence tied to the real adapter replay and its unavailable child cases', () => {
+    const seed = JSON.parse(readFileSync(
+      join(fixtureDir, 'vela-pi-0.85.1.sanitized-real-seed.json'), 'utf8',
+    )) as { recordingDigest: string; cases: Array<{ caseId: string; outcome: string }> };
+    const digest = `sha256:${createHash('sha256').update(JSON.stringify(seed.cases)).digest('hex')}`;
+    expect(seed.recordingDigest).toBe(digest);
+    expect(VELA_PI_LOCAL_BEST_EFFORT_MANIFEST.provenance).toMatchObject({
+      kind: 'sanitized_real', recordingDigest: digest,
+    });
+    expect(seed.cases.map(({ caseId }) => caseId)).toEqual(
+      VELA_PI_LOCAL_BEST_EFFORT_MANIFEST.cases.map(({ id }) => id),
+    );
+    const entry = OD_NEXT_RUNTIME_CAPABILITY_REGISTRY.find(({ runtimePath }) => runtimePath === 'vela-pi')!;
+    expect(entry.evidence.caseResults).toEqual(seed.cases.map(({ caseId, outcome }) => ({ id: caseId, outcome })));
+    expect(seed.cases.filter(({ outcome }) => outcome === 'unavailable').map(({ caseId }) => caseId)).toEqual([
+      'child_success', 'child_failure_parent_recovers',
+    ]);
+  });
+  it.each(['codex', 'dsh', 'none'] as const)('never reuses OpenCode native-child evidence for AMR %s', (runtime) => {
     const capability = resolveBundledOdNextRuntimeCapability({
       agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-od-next-local',
       runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
@@ -131,16 +172,17 @@ describe('OD Next runtime capability gate', () => {
   });
 
   it('registers every reviewed tuple, Vela included', () => {
-    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(4);
+    expect(OD_NEXT_RUNTIME_CAPABILITY_REGISTRY).toHaveLength(5);
     expect(OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS).toEqual([
       CODEX_0_147_0_BEST_EFFORT_MANIFEST,
       CLAUDE_2_1_233_BEST_EFFORT_MANIFEST,
       OPENCODE_1_18_18_BEST_EFFORT_MANIFEST,
       VELA_OPENCODE_LOCAL_BEST_EFFORT_MANIFEST,
+      VELA_PI_LOCAL_BEST_EFFORT_MANIFEST,
     ]);
     const manifests = fixtureFiles.map(readFixture);
     expect(manifests.map((manifest) => manifest.runtimePath)).toEqual(
-      OD_NEXT_RUNTIME_PATH_DESCRIPTORS.map((descriptor) => descriptor.runtimePath),
+      OD_NEXT_RUNTIME_PATH_DESCRIPTORS.filter(descriptor => descriptor.runtimePath !== 'vela-pi').map((descriptor) => descriptor.runtimePath),
     );
 
     for (const manifest of manifests) {
@@ -538,7 +580,7 @@ describe('OD Next runtime capability gate', () => {
     });
   });
 
-  it('requires continuation and structured native child lifecycle for every OD Next mode', () => {
+  it('requires continuation for simple work and structured children for complex work', () => {
     for (const support of ['unsupported', 'unknown', 'advertised'] as const) {
       expect(evaluateOdNextExecutionEligibility({
         nativeSessionContinuation: { support },
@@ -555,8 +597,7 @@ describe('OD Next runtime capability gate', () => {
         nativeSubagents: { support, evidenceLevel: 'L1' as const },
       };
       expect(evaluateOdNextExecutionEligibility(capabilities, 'simple')).toEqual({
-        eligible: false,
-        reason: 'native_subagents_not_verified',
+        eligible: true, reason: 'eligible',
       });
       expect(evaluateOdNextExecutionEligibility(capabilities, 'complex')).toEqual({
         eligible: false,
