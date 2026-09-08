@@ -139,7 +139,7 @@ describe("accepted Electron baseline promotion", () => {
     expect(await readFile(input.publishReceipt)).toEqual(originalPublication);
     const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
     expect(receipt).toMatchObject({ operation: "exact.baseline.promote", target: "darwin-arm64", snapshot: { replayed: false }, pointer: { replayed: false } });
-    expect(receipt.acceptedIdentities).toHaveLength(8);
+    expect(receipt.acceptedIdentities).toHaveLength(3);
     const pointerStorageUrl = `${storageBase}/betahyx/accepted/electron/darwin-arm64/latest.json`;
     const pointer = JSON.parse(objects.get(pointerStorageUrl)!.body.toString("utf8"));
     expect(pointer).toMatchObject({ releaseVersion, sourceCommit, receipt: { url: expect.stringContaining(`${publicBase}/betahyx/accepted/electron/darwin-arm64/`) } });
@@ -157,14 +157,30 @@ describe("accepted Electron baseline promotion", () => {
       availableIdentities: new Set(), channel: "betahyx", registryPath: input.registry, root: input.repository, target: "darwin-arm64",
     });
     expect(releasePlan.actions.map(({ id }) => id)).toContain("closure.acceptance.hot");
+    expect(releasePlan.actions.map(({ id }) => id)).toEqual(expect.arrayContaining([
+      "electron.contract.build", "electron.contract.test", "electron.shell.test", "closure.build", "closure.test",
+    ]));
+    for (const id of ["electron.contract.test", "electron.shell.test", "closure.test"] as const) {
+      expect(receipt.acceptedIdentities).not.toContain(releasePlan.plan.nodes[id].identity);
+    }
     const releasePlanPath = join(input.root, "release-plan.json");
     await writeFile(releasePlanPath, JSON.stringify(releasePlan));
     const stagedDirectory = join(input.root, "staged"), stagedReceipt = join(stagedDirectory, "shell-contribution.json");
-    await executeExactReleaseControl({
+    const stageRequest = {
       schemaVersion: 1, operation: "exact.baseline.stage", policyReceipt: input.policyReceipt, releasePlan: releasePlanPath,
       registry: input.registry, root: input.repository, channel: "betahyx", releaseVersion, sourceCommit, target: "darwin-arm64",
       outputDirectory: stagedDirectory,
-    }, stagedReceipt);
+    };
+    await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires a fresh Electron distribution");
+    // A separately supplied test result can satisfy the existing test gate;
+    // installed acceptance alone must not manufacture that result.
+    const testedPlan = await createExactReleasePlanFromRegistryFile({
+      acceptedReceipt: { bytes: objects.get(snapshotStorageUrl)!.body, sha256: pointer.receipt.sha256 },
+      availableIdentities: new Set([releasePlan.plan.nodes["electron.shell.test"].identity]),
+      channel: "betahyx", registryPath: input.registry, root: input.repository, target: "darwin-arm64",
+    });
+    await writeFile(releasePlanPath, JSON.stringify(testedPlan));
+    await executeExactReleaseControl(stageRequest, stagedReceipt);
     const staged = JSON.parse(await readFile(stagedReceipt, "utf8"));
     expect(staged).toMatchObject({ operation: "shell.distribution.contribute", artifact: { sha256: snapshot.acceptance.artifact.sha256 } });
     expect(await readFile(staged.artifact.file)).toEqual(input.artifactBody);

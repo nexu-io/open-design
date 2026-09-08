@@ -100,6 +100,11 @@ runner configuration; it does not enable deferred targets or create cache hits.
 `activate` and `baseline promote` accept `--channel-head` for a relocated local
 file. Its bytes must match the original publication receipt: relocation never
 rewrites that receipt or changes its authority.
+Baseline promotion records only the carrier build, distribution and installed
+acceptance identities (plus hot acceptance when explicitly proved). It does not
+mark contract/Closure builds or any unit-test node as executed. Those results
+must come from their own verified convergence records; an installed artifact is
+not evidence that the current checkout's test suite ran.
 
 `prepare` and `finalize` authorize the bound policy and execute release-owned
 content assembly and signing in-process. Cross-job collection and relocation

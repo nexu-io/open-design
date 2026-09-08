@@ -304,9 +304,13 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
     throw new Error("accepted Electron Shell build differs from its exact plan identity");
   }
   const hotAccepted = credential.installed?.proof?.hotUpdate?.releaseVersion === releaseVersion;
-  const snapshot = createAcceptedShellBaselineReceipt(credential, Object.entries(plan.nodes)
-    .filter(([id]) => id !== "closure.acceptance.hot" || hotAccepted)
-    .map(([, { identity }]) => identity));
+  // Installed acceptance proves this carrier artifact and its installed recipe,
+  // not that every source/test node in the current checkout was executed.
+  // Independent build/test cache results retain their own convergence authority.
+  const acceptedIdentities = [plan.nodes["electron.shell.build"].identity,
+    plan.nodes["electron.distribution"].identity, plan.nodes["electron.acceptance.full"].identity];
+  if (hotAccepted) acceptedIdentities.push(plan.nodes["closure.acceptance.hot"].identity);
+  const snapshot = createAcceptedShellBaselineReceipt(credential, acceptedIdentities);
   const snapshotBody = canonicalBytes(snapshot), snapshotDigest = createHash("sha256").update(snapshotBody).digest("hex");
   const storageBase = `${policy.target.endpointUrl}/${policy.target.bucket}`;
   const publicBase = policy.target.publicBaseUrl;
