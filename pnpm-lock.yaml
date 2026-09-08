@@ -50,6 +50,9 @@ importers:
       typescript:
         specifier: 5.9.3
         version: 5.9.3
+      yaml:
+        specifier: 2.9.0
+        version: 2.9.0
 
   apps/closure:
     dependencies:
