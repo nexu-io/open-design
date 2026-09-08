@@ -130,6 +130,32 @@ export interface FormQuestion {
   options?: FormOption[];
   placeholder?: string;
   required?: boolean;
+  /**
+   * **休眠件** —— 解析进来,但**没有任何人再读它**。
+   *
+   * 每题副标题。曾经渲染在题目和控件之间。
+   *
+   * 什么时候、因为什么停用:
+   *  · 2026-09-07(OPEND-2707 ①,已合并):`QuestionForm.tsx` 停止渲染它,
+   *    `styles/viewer/composio.css` 的 `.qf-help` 规则一并删除。一道题就是
+   *    「题目 + 必填标识 + 控件」,副标题夹在中间读起来像卡片自己的旁白,
+   *    还占着一整行的行盒。
+   *  · 2026-09-08(OPEND-2707 ②,用户拍板「改彻底,提示词也改」):
+   *    提示词不再要求模型写这个字段,宿主自己写的唯一一条(ElevenLabs 选音色题)
+   *    并进了那道题的 `label`。全仓自此**没有生产者**。
+   *
+   * 为什么字段还留着:删掉它会让 `tests/components/QuestionForm.no-question-subtitle.test.tsx`
+   * 和 `tests/components/QuestionForm.test.tsx` 编译不过 —— 前者正是「副标题不再
+   * 渲染」这条不变量的唯一正面证据。同时,缓存的旧提示词 / 旧客户端 / 模型记住的
+   * 旧格式仍可能发来带这个键的表单,解析器继续容忍它,这类输入的解析形状才不会变。
+   * 参照 `specs/current/chat-panel-decisions-sheet.md`「六个 qf.visual* 键一个不删」。
+   *
+   * 怎么找回:渲染那一半的原文在 `4c5873c7cc`(#7863)的 parent 里 ——
+   * `git show 4c5873c7cc^:apps/web/src/components/QuestionForm.tsx` 拿渲染分支,
+   * `git show 4c5873c7cc^:apps/web/src/styles/viewer/composio.css` 拿 `.qf-help` 规则。
+   * 提示词那一半要同时撤掉 `e2e/tests/question-form-help-retired.test.ts` 的守卫,
+   * 那需要一次新的产品裁决。
+   */
   help?: string;
   defaultValue?: string | string[];
   /** Only applies when `type === 'checkbox'`. Caps the number of selected options. */
