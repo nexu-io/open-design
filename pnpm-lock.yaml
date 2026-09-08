@@ -896,6 +896,9 @@ importers:
       '@open-design/shell-electron':
         specifier: workspace:*
         version: link:../../shells/electron
+      '@open-design/standalone':
+        specifier: workspace:*
+        version: link:../../packages/standalone
       '@open-design/tools-pack':
         specifier: workspace:*
         version: link:../pack

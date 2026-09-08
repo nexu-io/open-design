@@ -54,3 +54,14 @@ it("binds native distribution to authorized prepared content, trust and scene", 
   await writeFile(trust, "trust"); await writeFile(join(scene, "scene.json"), JSON.stringify({ target: f.target, extra: true }));
   await expect(buildReleaseDistribution(input)).rejects.toThrow("prepared scene binding mismatch");
 });
+
+it.skipIf(process.platform !== "darwin")("rejects an invalid Terminal source lock before acquiring archives or starting native assembly", async () => {
+  const f = await fixture();
+  const terminal = join(f.root, "shells/terminal");
+  await mkdir(terminal, { recursive: true });
+  await json(join(terminal, "node-lock.json"), { schemaVersion: 1, version: "24.18.0", targets: {
+    "darwin-arm64": { archive: "node-v24.18.0-darwin-arm64.tar.gz", mediaType: "application/gzip",
+      sha256: "a".repeat(64), url: "https://untrusted.example/node.tar.gz" },
+  } });
+  await expect(buildReleaseScene({ ...f, shell: "terminal" })).rejects.toThrow("invalid official Node source");
+});

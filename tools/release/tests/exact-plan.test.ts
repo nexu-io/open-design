@@ -130,6 +130,17 @@ describe("exact release plan", () => {
     const mixed = await createExactPlan(input);
     expect(mixed.nodes["electron.shell.build"].identity).not.toBe(platformChange.nodes["electron.shell.build"].identity);
     expect(selectExactPlanActions(mixed, identities(platformChange)).map(action => action.id)).toContain("electron.distribution");
+    const packageSource = join(root, "packages/standalone/src/packages/runtime.ts");
+    await mkdir(dirname(packageSource), { recursive: true });
+    await writeFile(packageSource, "physical package binding change\n");
+    const physical = await createExactPlan(input);
+    expect(physical.nodes["electron.shell.build"].identity).not.toBe(mixed.nodes["electron.shell.build"].identity);
+    expect(physical.nodes["closure.build"].identity).toBe(mixed.nodes["closure.build"].identity);
+    await writeFile(join(root, "packages/standalone/tests/packages/fixture.ts"), "physical binding test change\n");
+    const physicalTest = await createExactPlan(input);
+    expect(physicalTest.nodes["electron.shell.build"].identity).toBe(physical.nodes["electron.shell.build"].identity);
+    expect(physicalTest.nodes["electron.shell.test"].identity).not.toBe(physical.nodes["electron.shell.test"].identity);
+    expect(selectExactPlanActions(physicalTest, identities(physical)).map(action => action.id)).toContain("electron.acceptance.full");
   });
 
   it("uses hot acceptance for a Closure-only change while reusing the accepted Shell", async () => {

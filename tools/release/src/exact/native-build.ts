@@ -2,11 +2,12 @@ import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
-import { basename, dirname, join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import type { ElectronExactSceneRequest } from "@open-design/shell-electron/build";
 import { acquireBuildArchive } from "@open-design/tools-pack/build";
+import { readOfficialNodeLock } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 
@@ -56,8 +57,8 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
     await writeObject(input.receipt, result);
     return result;
   }
-  const lock = await readObject(join(root, "shells/terminal/node-lock.json")), node = lock.targets?.[buildTarget];
-  if (typeof lock.version !== "string" || typeof node?.archive !== "string" || basename(node.archive) !== node.archive || !/^[a-f0-9]{64}$/u.test(node?.sha256 ?? "")) throw new Error("invalid official Node lock");
+  const lock = await readOfficialNodeLock(join(root, "shells/terminal/node-lock.json")), node = lock.targets[buildTarget];
+  if (node == null) throw new Error("Terminal platform target is not declared");
     const archive = input.nodeArchive ? resolve(input.nodeArchive) : (await acquireBuildArchive({
       cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: node.archive, url: node.url, sha256: node.sha256 })).path;
     if ((await describeFile(archive)).sha256 !== node.sha256) throw new Error("official Node archive digest mismatch");

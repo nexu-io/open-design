@@ -60,15 +60,19 @@
         }
       ]
     },
+    "shell.packages.test": {
+      "paths": [
+        "packages/standalone/tests/packages",
+        "packages/standalone/tsconfig.tests.json",
+        "packages/standalone/vitest.config.ts"
+      ]
+    },
     "electron.shell.test": {
-      "inherits": ["electron.lifecycle.control"],
+      "inherits": ["electron.lifecycle.control", "shell.packages.test"],
       "paths": [
         "packages/electron-kit/tests",
         "packages/electron-kit/tsconfig.tests.json",
         "packages/electron-kit/vitest.config.ts",
-        "packages/standalone/tests/packages",
-        "packages/standalone/tsconfig.tests.json",
-        "packages/standalone/vitest.config.ts",
         "shells/electron/tests",
         "shells/electron/tsconfig.tests.json",
         "shells/electron/vitest.config.ts"
@@ -120,7 +124,10 @@
         "packages/sidecar-proto/package.json",
         "packages/sidecar-proto/src",
         "packages/standalone/package.json",
-        "packages/standalone/src"
+        {
+          "path": "packages/standalone/src",
+          "excludePaths": ["packages"]
+        }
       ]
     },
     "closure.data": {
@@ -152,7 +159,7 @@
       ]
     },
     "electron.acceptance.full": {
-      "inherits": ["electron.cdp.control", "electron.lifecycle.control", "release.acceptance.control"],
+      "inherits": ["electron.cdp.control", "electron.lifecycle.control", "release.acceptance.control", "shell.packages.test"],
       "paths": [
         ".github/workflows/release-exact.yml",
         "e2e/tests/scripts/exact-release.test.ts",

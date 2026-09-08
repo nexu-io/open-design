@@ -15,3 +15,11 @@ it("keeps the public physical runtime entry independent of builders and product 
   const imports = Object.values(result.metafile.outputs).flatMap(output => output.imports);
   expect(imports.every(item => item.external && builtinModules.includes(item.path.replace(/^node:/u, "")))).toBe(true);
 });
+
+it("keeps physical package methods outside the Closure-consumed root entry", async () => {
+  const result = await build({
+    entryPoints: [fileURLToPath(new URL("../../src/index.ts", import.meta.url))],
+    bundle: true, write: false, metafile: true, platform: "node", format: "esm", target: "node24",
+  });
+  expect(Object.keys(result.metafile.inputs).some(path => /src\/packages\//u.test(path))).toBe(false);
+});

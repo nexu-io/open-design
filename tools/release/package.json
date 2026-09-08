@@ -16,6 +16,7 @@
     "@open-design/metatool": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/shell-electron": "workspace:*",
+    "@open-design/standalone": "workspace:*",
     "@open-design/tools-pack": "workspace:*",
     "cac": "6.7.14",
     "jszip": "3.10.1",
