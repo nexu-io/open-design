@@ -73,7 +73,7 @@ OD 的核心不是「一次 prompt 一次输出」，而是 **long-running desig
 
 围绕这一点，spec 把已有的「一方 atoms」从扁平的 capability 列表升级为**可被插件组装的原子管线**：
 
-- **Atom（§10）**：OD daemon 与 first-party tools 暴露的具名能力（discovery-question-form、direction-picker、todo-write、file-read/write、research-search、media-image、live-artifact、critique-theater 等）。
+- **Atom（§10）**：OD daemon 与 first-party tools 暴露的具名能力（discovery-question-form、todo-write、file-read/write、research-search、media-image、live-artifact、critique-theater 等）。
 - **Pipeline（§5 / §10.1）**：插件通过 `od.pipeline` 把若干 atoms 组装成有序 stages；spec 默认提供一条「discovery → plan → generate → critique」的 reference pipeline，插件可以增删、重排或循环其中任何一步。
 - **Devloop（§10.2）**：当一条 stage 标记 `repeat: true` 并附带 `until` 终止条件（critique score、用户确认、preview 加载成功等）时，agent 基于上一轮 artifact 自动进入下一轮，直到条件满足或显式取消。
 - **Generative UI（§10.3）**：pipeline 的某个 stage 需要人类介入（提供信息、授权、方向选择、优化确认）时，agent 触发插件预先在 manifest `od.genui.surfaces[]` 中**声明**过的 surface；daemon 通过 OD 原生事件流广播给所有协作面（web / desktop / CLI / 其他 code agent），并可投影成 AG-UI canonical events 供外部 client 使用。用户回应后 daemon 把答案写回 project，run 继续。Surface 的 `persist` 字段决定答案在 run / conversation / project 三个层级中哪个层级被记住，让多轮对话不会反复打扰用户。
@@ -86,10 +86,10 @@ OD 的核心不是「一次 prompt 一次输出」，而是 **long-running desig
 
 | 场景 (`od.taskKind`) | 用户起点 | 插件贡献 | 典型 atom 序列 |
 | --- | --- | --- | --- |
-| `new-generation` | 一句话 brief 或 marketplace 选品 | 流程 + design system 推荐 + craft + starter assets | discovery → direction-picker → generate → critique |
+| `new-generation` | 一句话 brief 或 marketplace 选品 | 流程 + design system 推荐 + craft + starter assets | discovery → plan → generate → critique |
 | `code-migration` | 已有 repo / 本地路径 | 源代码摄取 atom + design tokens 抽取 + 重写策略 + diff preview | code-import → design-extract → rewrite-plan → generate → diff-review |
 | `figma-migration` | Figma file URL / 截图 | figma-extract atom + token 映射 + 高保真 web 实现策略 | figma-extract → token-map → generate → critique |
-| `tune-collab` | 已有 OD project 与 artifact | 在已有 artifact 上做 critique-tune、品牌切换、A/B、stakeholder review | direction-picker → patch-edit → critique → handoff |
+| `tune-collab` | 已有 OD project 与 artifact | 在已有 artifact 上做 critique-tune、品牌切换、A/B、stakeholder review | patch-edit → critique → handoff |
 
 四类场景共享同一份 ApplyResult、同一 run pipeline、同一 artifact provenance 契约（§11.5）；区别只在 inputs 形态、initial assets 与 pipeline 起点。
 
@@ -145,7 +145,7 @@ OpenDesign 变成一套 **server + CLI + atomic core engine + plugin/marketplace
 
 同一愿景的第二条轴线：**CLI 是 OpenDesign 面向 agent 的 canonical API。** 代码 agent（Claude Code、Cursor、Codex、OpenClaw、Hermes、企业内部 orchestrator）通过 shell 调用 `od …` 驱动 OD，而不是直接请求 `/api/*`。CLI 用稳定的子命令 contract 包装所有 server 能力：project 创建、conversation/run 生命周期、plugin apply、project 文件系统操作、design library introspection、daemon control。HTTP server 是 desktop UI 与 CLI 自身的实现细节；agent 如果直接访问 HTTP，就绕过了 contract。
 
-第三条轴线来自第二条：**OD 可以完全 headless 运行；UI 是效率层，而不是运行时依赖。** 用户只有 Claude Code（或 Cursor、Codex、Gemini CLI）和已安装的 `od`，也能浏览 marketplace、安装插件、创建 project、拉起任务、消费产物，全流程不需要启动 desktop app。OD desktop UI 的价值类似 Cursor IDE 相对于 `cursor-agent` CLI：更快发现、实时 artifact preview、chat/canvas 并排、marketplace 浏览、direction-picker GUI、critique-theater 面板。这些都是同一批 primitives 之上的体验增强。每个 UI 功能都必须先能表达为 CLI 子命令或 streaming event；UI 消费这些 primitives 并添加呈现层。这个解耦由架构规则强制（§11.7）。
+第三条轴线来自第二条：**OD 可以完全 headless 运行；UI 是效率层，而不是运行时依赖。** 用户只有 Claude Code（或 Cursor、Codex、Gemini CLI）和已安装的 `od`，也能浏览 marketplace、安装插件、创建 project、拉起任务、消费产物，全流程不需要启动 desktop app。OD desktop UI 的价值类似 Cursor IDE 相对于 `cursor-agent` CLI：更快发现、实时 artifact preview、chat/canvas 并排、marketplace 浏览、critique-theater 面板。这些都是同一批 primitives 之上的体验增强。每个 UI 功能都必须先能表达为 CLI 子命令或 streaming event；UI 消费这些 primitives 并添加呈现层。这个解耦由架构规则强制（§11.7）。
 
 第四条轴线是生态覆盖与商业价值的基础：**OD 是一个 Docker image，可以部署到任意云。** 因为第三条轴线里的 headless mode 没有 electron、没有 GUI 依赖，一个 multi-arch container image（`linux/amd64` + `linux/arm64`）就能在 AWS、Google Cloud、Azure、阿里云、腾讯云、华为云，或任何自托管 Kubernetes / docker-compose / k3s 环境里启动完整 daemon + CLI + web UI，不需要针对云厂商重写。自托管企业可以运行私有 marketplace；合作伙伴可以把 OD 嵌入自己的 stack；CI pipeline 可以拉起临时 OD container 来完成「为日报生成 slides」这类任务。技术 contract 见 §15。
 
@@ -284,7 +284,7 @@ my-plugin/
     "pipeline": {
       "stages": [
         { "id": "discovery",  "atoms": ["discovery-question-form"] },
-        { "id": "plan",       "atoms": ["direction-picker", "todo-write"] },
+        { "id": "plan",       "atoms": ["todo-write"] },
         { "id": "generate",   "atoms": ["file-write", "live-artifact"] },
         { "id": "critique",   "atoms": ["critique-theater"], "repeat": true,
           "until": "critique.score>=4 || iterations>=3" }
@@ -308,14 +308,16 @@ my-plugin/
           }
         },
         {
-          "id": "direction-pick",
+          "id": "critique-verdict",
           "kind": "choice",
           "persist": "conversation",
-          "trigger": { "stageId": "plan", "atom": "direction-picker" },
+          "trigger": { "stageId": "critique", "atom": "critique-theater" },
           "schema": {
             "type": "object",
-            "required": ["direction"],
-            "properties": { "direction": { "type": "string" } }
+            "required": ["verdict"],
+            "properties": {
+              "verdict": { "type": "string", "enum": ["ship", "iterate"] }
+            }
           }
         },
         {
@@ -753,7 +755,6 @@ UI 上的 capability gate 是 modal + checklist；headless / CI / 第三方 code
 | Atom id | 当前来源 | 作用 | taskKind 适用 |
 | --- | --- | --- | --- |
 | `discovery-question-form` | `system.ts` 中的 `DISCOVERY_AND_PHILOSOPHY` | 面向模糊 brief 的首轮 question form | new-generation, tune-collab |
-| `direction-picker` | 同上 | final 前的 3–5 个方向选择 | new-generation, tune-collab |
 | `todo-write` | 同上 | TodoWrite 驱动的计划 | all |
 | `file-read` / `file-write` / `file-edit` | code-agent native | 文件操作 | all |
 | `research-search` | `od research search`（[`apps/daemon/src/cli.ts`](../apps/daemon/src/cli.ts)） | Tavily web research | new-generation |
@@ -826,7 +827,7 @@ OD 接受 [CopilotKit / AG-UI 协议](https://github.com/CopilotKit/CopilotKit) 
 | `kind` | 用途 | 默认渲染 | 触发方 atom（可选） | 默认 `persist` |
 | --- | --- | --- | --- | --- |
 | `form` | 收集结构化信息（受众、品牌、目标、分辨率等） | 用 `schema` 渲染 JSON-Schema 驱动的表单 | `discovery-question-form`、`media-image` 等需要参数的 atom | `conversation` |
-| `choice` | 让用户在 N 个选项里挑一个（方向、命题、版本） | 卡片网格或单选列表 | `direction-picker`、`critique-theater` | `conversation` |
+| `choice` | 让用户在 N 个选项里挑一个（命题、版本） | 卡片网格或单选列表 | `critique-theater` | `conversation` |
 | `confirmation` | 二选一确认（继续 / 取消、批准 / 拒绝） | 行内 Yes/No 按钮 | 任何高代价 atom，例如 `media-image`、`subprocess` 类 hook | `run` |
 | `oauth-prompt` | 拉起第三方 OAuth（Figma、Notion、Slack 等） | 弹窗 + 引导文案 | connector / MCP 的鉴权需要 | `project` |
 
@@ -2020,7 +2021,7 @@ runtime 现在只会在 diff review 接受、build 与 tests 都通过、并且�
 | --- | --- | --- | --- | --- | --- |
 | 1 | Figma 迁移 | `figma-migration` | 是（§1、§10） | **v1 后已交付** —— `figma-extract`、`token-map` 与 bundled `od-figma-migration` scenario 均已实现 | 客观 visual-diff 保真仍是可选后续工作 |
 | 2 | 存量代码库刷新 | `code-migration` | 是（§1、§10、§20.3） | **v1 后已交付** —— Phase 7 atom 链、build/test 收敛信号与 bundled `od-code-migration` scenario 均已实现 | 任意 repo 仍需明确 target/build inputs；客观视觉回归仍是后续工作 |
-| 3 | 0→1 设计（原型 / PPT / 交互式视频） | `new-generation` | 是（§1 默认 reference pipeline） | **v1 已交付** —— 所需的 `discovery-question-form`、`direction-picker`、`todo-write`、`live-artifact`、`media-image/video/audio`、`critique-theater` 全部 implemented | 可选：把 §20.2 的 `visual-diff` / `brand-consistency-check` 提前到 Phase 2，让 critique 有客观信号 |
+| 3 | 0→1 设计（原型 / PPT / 交互式视频） | `new-generation` | 是（§1 默认 reference pipeline） | **v1 已交付** —— 所需的 `discovery-question-form`、`todo-write`、`live-artifact`、`media-image/video/audio`、`critique-theater` 全部 implemented | 可选：把 §20.2 的 `visual-diff` / `brand-consistency-check` 提前到 Phase 2，让 critique 有客观信号 |
 | 4 | 设计 → 可交付业务代码 | `tune-collab`（handoff 侧） | handoff 契约已覆盖（§20.3） | **v1 后部分交付** —— native diff-review 决定与 `deployable-app` promotion 已有 entry slice | 通用的一键 export/deploy 仍依赖具体 CLI 或 Docker export target |
 
 阅读规则：**在最初 v1 baseline 中，只有场景 3 完全 native 命中**。场景 1、2 后来通过 Phase 6、7 成为 native reference pipeline。场景 4 已有 Phase 8 review/handoff entry slice，但通用一键交付仍未完成。
@@ -2094,7 +2095,7 @@ runtime 现在只会在 diff review 接受、build 与 tests 都通过、并且�
 
 **v1 已经免费给到的（这是 v1 native 命中的场景）：**
 
-- 所有依赖 atom 已 implemented：`discovery-question-form`、`direction-picker`、`todo-write`、`live-artifact`、`media-image` / `media-video` / `media-audio`、`critique-theater`。见 §10 atom 表。
+- 所有依赖 atom 已 implemented：`discovery-question-form`、`todo-write`、`live-artifact`、`media-image` / `media-video` / `media-audio`、`critique-theater`。见 §10 atom 表。
 - 默认 reference pipeline `discovery → plan → generate → critique` 与典型 `new-generation` 流程一致；plugin 不需要声明 `od.pipeline` 也能拿到一条工作 pipeline。
 - 四个 GenUI 内置 surface kind（`form` / `choice` / `confirmation` / `oauth-prompt`）都直接服务这个场景。
 - `live-artifact` 的 live preview 与 `od files watch`（§12）合在一起，让 hot reload 和 CLI co-watch 在 v1 都能跑通。

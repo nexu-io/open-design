@@ -73,7 +73,7 @@ OD's core unit is not "one prompt, one output" — it is a **long-running design
 
 Concretely, this spec promotes the existing "first-party atoms" from a flat capability list into an **atomic pipeline that plugins assemble**:
 
-- **Atom (§10):** a named capability exposed by the OD daemon and first-party tools (discovery-question-form, direction-picker, todo-write, file-read/write, research-search, media-image, live-artifact, critique-theater, etc.).
+- **Atom (§10):** a named capability exposed by the OD daemon and first-party tools (discovery-question-form, todo-write, file-read/write, research-search, media-image, live-artifact, critique-theater, etc.).
 - **Pipeline (§5 / §10.1):** the plugin uses `od.pipeline` to compose atoms into ordered stages. The spec ships a default reference pipeline of `discovery → plan → generate → critique`; plugins can add, reorder, or loop over any stage.
 - **Devloop (§10.2):** when a stage is marked `repeat: true` with an `until` termination condition (critique score, user confirmation, preview load success, etc.), the agent automatically iterates on the previous artifact until the condition holds or the user explicitly cancels.
 - **Generative UI (§10.3):** when a stage needs human-in-the-loop input (information, authorization, direction picking, optimization confirmation), the agent triggers a surface that the plugin **declares ahead of time** in its manifest's `od.genui.surfaces[]`. The daemon broadcasts the request through OD's native event stream, which can also be projected into AG-UI canonical events for external clients. Once the user answers, the daemon writes the answer back to the project; the surface's `persist` field decides whether the answer is remembered at run / conversation / project tier so that multi-turn chats do not pester the user with the same question twice.
@@ -86,10 +86,10 @@ In one sentence: **a plugin describes "what this long-running task's pipeline lo
 
 | Scenario (`od.taskKind`) | User entry point | Plugin contribution | Typical atom sequence |
 | --- | --- | --- | --- |
-| `new-generation` | A one-line brief or a marketplace pick | Workflow + design-system suggestion + craft + starter assets | discovery → direction-picker → generate → critique |
+| `new-generation` | A one-line brief or a marketplace pick | Workflow + design-system suggestion + craft + starter assets | discovery → plan → generate → critique |
 | `code-migration` | An existing repo / local path | Source-code ingest atom + design-token extraction + rewrite plan + diff preview | code-import → design-extract → rewrite-plan → generate → diff-review |
 | `figma-migration` | Figma file URL / screenshots | figma-extract atom + token mapping + high-fidelity web implementation strategy | figma-extract → token-map → generate → critique |
-| `tune-collab` | An existing OD project + artifact | Critique-tune, brand swap, A/B variants, stakeholder review on top of an existing artifact | direction-picker → patch-edit → critique → handoff |
+| `tune-collab` | An existing OD project + artifact | Critique-tune, brand swap, A/B variants, stakeholder review on top of an existing artifact | patch-edit → critique → handoff |
 
 All four scenarios share the same `ApplyResult`, the same run pipeline, and the same artifact provenance contract (§11.5); only the inputs shape, the initial assets, and the pipeline starting point differ.
 
@@ -145,7 +145,7 @@ Each catalog needs a different listing format, but all of them index `SKILL.md`-
 
 A second axis of the same vision: **the CLI is the canonical agent-facing API for OpenDesign.** Code agents (Claude Code, Cursor, Codex, OpenClaw, Hermes, in-house orchestrators) drive OD by shelling out `od …`, not by hitting `/api/*` directly. The CLI wraps every server capability — project creation, conversation/run lifecycle, plugin apply, file system operations on a project, design library introspection, daemon control — behind a stable subcommand contract. The HTTP server is an implementation detail that backs the desktop UI and the CLI itself; agents that talk HTTP are bypassing the contract.
 
-A third axis, derived from the second: **OD runs fully headless; the UI is a productivity layer, not a runtime dependency.** A user with nothing but Claude Code (or Cursor, Codex, Gemini CLI) and `od` installed can browse the marketplace, install a plugin, create a project, run a task, and consume the produced artifacts end-to-end without ever launching the desktop app. The desktop UI is exactly the same value-add Cursor's IDE adds on top of `cursor-agent` CLI: faster discovery, live artifact preview, chat/canvas side-by-side, marketplace browsing, direction-picker GUI, critique-theater panel — all sugar on the same primitives. Every UI feature is implementable as a CLI subcommand or a streaming event first; the UI consumes those primitives and adds presentation. The decoupling is enforced architecturally (§11.7).
+A third axis, derived from the second: **OD runs fully headless; the UI is a productivity layer, not a runtime dependency.** A user with nothing but Claude Code (or Cursor, Codex, Gemini CLI) and `od` installed can browse the marketplace, install a plugin, create a project, run a task, and consume the produced artifacts end-to-end without ever launching the desktop app. The desktop UI is exactly the same value-add Cursor's IDE adds on top of `cursor-agent` CLI: faster discovery, live artifact preview, chat/canvas side-by-side, marketplace browsing, critique-theater panel — all sugar on the same primitives. Every UI feature is implementable as a CLI subcommand or a streaming event first; the UI consumes those primitives and adds presentation. The decoupling is enforced architecturally (§11.7).
 
 A fourth axis, the foundation for ecosystem reach and commercial viability: **OD is one Docker image, deployable to any cloud.** Because the headless mode of (3) has no electron and no GUI dependencies, a single multi-arch container image (`linux/amd64` + `linux/arm64`) brings up the full daemon + CLI + web UI on AWS, Google Cloud, Azure, Alibaba, Tencent, Huawei, or any self-hosted Kubernetes / docker-compose / k3s setup, with no per-cloud rewrite. Self-hosted enterprises can run a private marketplace; partners can embed OD inside their stack; CI pipelines can spin up ephemeral OD containers for "generate slides for the daily report"-shaped tasks. The technical contract is in §15.
 
@@ -285,7 +285,7 @@ Rules of authorship:
     "pipeline": {
       "stages": [
         { "id": "discovery",  "atoms": ["discovery-question-form"] },
-        { "id": "plan",       "atoms": ["direction-picker", "todo-write"] },
+        { "id": "plan",       "atoms": ["todo-write"] },
         { "id": "generate",   "atoms": ["file-write", "live-artifact"] },
         { "id": "critique",   "atoms": ["critique-theater"], "repeat": true,
           "until": "critique.score>=4 || iterations>=3" }
@@ -309,14 +309,16 @@ Rules of authorship:
           }
         },
         {
-          "id": "direction-pick",
+          "id": "critique-verdict",
           "kind": "choice",
           "persist": "conversation",
-          "trigger": { "stageId": "plan", "atom": "direction-picker" },
+          "trigger": { "stageId": "critique", "atom": "critique-theater" },
           "schema": {
             "type": "object",
-            "required": ["direction"],
-            "properties": { "direction": { "type": "string" } }
+            "required": ["verdict"],
+            "properties": {
+              "verdict": { "type": "string", "enum": ["ship", "iterate"] }
+            }
           }
         },
         {
@@ -757,7 +759,6 @@ Promote what already exists in [`apps/daemon/src/prompts/system.ts`](../apps/dae
 | Atom id | Source today | What it does | taskKind fit |
 | --- | --- | --- | --- |
 | `discovery-question-form` | `DISCOVERY_AND_PHILOSOPHY` in `system.ts` | Structured clarification protocol for unresolved material requirements on any turn | new-generation, tune-collab |
-| `direction-picker` | same | Optional 3–5 direction comparison only when the user explicitly requests alternatives | new-generation, tune-collab |
 | `todo-write` | same | TodoWrite-driven plan | all |
 | `file-read` / `file-write` / `file-edit` | code-agent native | File ops | all |
 | `research-search` | `od research search` ([`apps/daemon/src/cli.ts`](../apps/daemon/src/cli.ts)) | Tavily web research | new-generation |
@@ -830,7 +831,7 @@ The product rule is: **agent/plugin output is data; OD owns the renderer.** A pl
 | `kind` | Purpose | Default render | Likely trigger atom | Default `persist` |
 | --- | --- | --- | --- | --- |
 | `form` | Collect structured info (audience, brand, target, resolution, etc.) | JSON-Schema–driven form rendered from `schema` | `discovery-question-form`, `media-image`, any atom needing parameters | `conversation` |
-| `choice` | Pick one of N options (direction, headline, version) | Card grid or radio list | `direction-picker`, `critique-theater` | `conversation` |
+| `choice` | Pick one of N options (headline, version) | Card grid or radio list | `critique-theater` | `conversation` |
 | `confirmation` | Two-way confirm (continue / cancel, approve / reject) | Inline Yes/No buttons | High-cost atoms such as `media-image` or `subprocess`-class hooks | `run` |
 | `oauth-prompt` | Launch third-party OAuth (Figma, Notion, Slack, etc.) | Modal + guidance copy | Connector / MCP authorization | `project` |
 
@@ -2033,7 +2034,7 @@ The four "core agent-native design problems" the OD product targets, restated to
 | --- | --- | --- | --- | --- | --- |
 | 1 | Figma migration | `figma-migration` | yes (§1, §10) | **shipped after v1** — `figma-extract`, `token-map`, and the bundled `od-figma-migration` scenario are implemented | Objective visual-diff fidelity remains optional follow-up work |
 | 2 | Existing-codebase refresh | `code-migration` | yes (§1, §10, §20.3) | **shipped after v1** — the Phase 7 atom chain, build/test convergence signals, and bundled `od-code-migration` scenario are implemented | Arbitrary repositories still require explicit target/build inputs; objective visual regression remains follow-up work |
-| 3 | 0→1 design (prototype, deck, interactive video) | `new-generation` | yes (§1 default reference pipeline) | **shipped in v1** — every required atom (`discovery-question-form`, `direction-picker`, `todo-write`, `live-artifact`, `media-image/video/audio`, `critique-theater`) is already implemented | Optional: lift §20.2 `visual-diff` / `brand-consistency-check` into Phase 2 so critique gains an objective signal |
+| 3 | 0→1 design (prototype, deck, interactive video) | `new-generation` | yes (§1 default reference pipeline) | **shipped in v1** — every required atom (`discovery-question-form`, `todo-write`, `live-artifact`, `media-image/video/audio`, `critique-theater`) is already implemented | Optional: lift §20.2 `visual-diff` / `brand-consistency-check` into Phase 2 so critique gains an objective signal |
 | 4 | Design → deliverable production code | `tune-collab` (handoff side) | yes for the handoff contract (§20.3) | **partial after v1** — native diff-review decisions and `deployable-app` promotion have entry slices | Generic one-click export/deploy integration still depends on a concrete CLI or Docker export target |
 
 Reading rule: **scenario 3 was the only scenario fully native in the original v1 baseline**. Scenarios 1 and 2 became native reference pipelines in the later Phase 6 and 7 slices. Scenario 4 has a Phase 8 review/handoff entry slice, while generic one-click delivery remains incomplete.
@@ -2107,7 +2108,7 @@ Original v1 gaps and their current disposition:
 
 **What v1 already gives you for free (this is the v1 native scenario):**
 
-- All required atoms are already implemented: `discovery-question-form`, `direction-picker`, `todo-write`, `live-artifact`, `media-image` / `media-video` / `media-audio`, `critique-theater`. See §10 atom table.
+- All required atoms are already implemented: `discovery-question-form`, `todo-write`, `live-artifact`, `media-image` / `media-video` / `media-audio`, `critique-theater`. See §10 atom table.
 - The default reference pipeline `discovery → plan → generate → critique` matches the typical `new-generation` flow; plugins do not have to declare `od.pipeline` to get a working pipeline.
 - All four GenUI built-in surface kinds (`form` / `choice` / `confirmation` / `oauth-prompt`) target this scenario directly.
 - Live preview through `live-artifact` and the `od files watch` CLI primitive (§12) means hot reloading and CLI co-watching both work in v1.

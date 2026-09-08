@@ -66,7 +66,7 @@ my-plugin/
     "pipeline": {
       "stages": [
         { "id": "discovery", "atoms": ["discovery-question-form"] },
-        { "id": "plan", "atoms": ["direction-picker", "todo-write"] },
+        { "id": "plan", "atoms": ["todo-write"] },
         { "id": "generate", "atoms": ["file-write", "live-artifact"] },
         {
           "id": "critique",
@@ -92,7 +92,7 @@ my-plugin/
 | 主类 | 适用场景 | 常见 `taskKind` | 常用 atoms |
 | --- | --- | --- | --- |
 | `import` | 把外部来源带入 OD | `figma-migration` 或 `code-migration` | `figma-extract`, `code-import`, `design-extract`, `token-map`, `rewrite-plan` |
-| `create` | 生成新 artifact | `new-generation` | `discovery-question-form`, `direction-picker`, `todo-write`, `file-write`, `live-artifact`, `media-image`, `media-video`, `media-audio`, `critique-theater` |
+| `create` | 生成新 artifact | `new-generation` | `discovery-question-form`, `todo-write`, `file-write`, `live-artifact`, `media-image`, `media-video`, `media-audio`, `critique-theater` |
 | `export` | 把已接受 artifact 转换为下游格式 | `tune-collab` 或 `code-migration` | `file-read`, `file-write`, `handoff`, `diff-review` |
 | `share` | 发布或发送 artifact 给协作者 | `tune-collab` | `file-read`, `handoff`, `connector` |
 | `deploy` | 把 artifact 部署到托管基础设施 | `code-migration` 或 `tune-collab` | `file-read`, `build-test`, `handoff`, `connector` |

@@ -22,7 +22,6 @@ const atomsRoot = path.join(repoRoot, 'plugins', '_official', 'atoms');
 // Per spec §10 and §21 — implemented atoms (Phase 4 default)
 const PHASE_4_ATOMS = [
   'discovery-question-form',
-  'direction-picker',
   'todo-write',
   'critique-theater',
 ];

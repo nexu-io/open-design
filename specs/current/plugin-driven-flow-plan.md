@@ -107,7 +107,7 @@ As shipped (MVP):
 
 Deferred to a follow-up:
 
-- Real watchers for `file-write`, `live-artifact`, `direction-picker`, `discovery-question-form`, `todo-write`, etc. These require either an agent-write protocol that touches DB rows the daemon can observe, or a side-channel (artifacts table / genui surface responses) wired into worker reads. The registry shape is ready; only the workers themselves remain.
+- Real watchers for `file-write`, `live-artifact`, `discovery-question-form`, `todo-write`, etc. These require either an agent-write protocol that touches DB rows the daemon can observe, or a side-channel (artifacts table / genui surface responses) wired into worker reads. The registry shape is ready; only the workers themselves remain.
 - Strengthen `## Active stage` block so the agent has to acknowledge each atom's outputs. (Today the contracts-side `renderActiveStageBlock` already exists; we still need to gate stage progression on the agent's structured acknowledgement.)
 
 ### Stage E — Verification gate

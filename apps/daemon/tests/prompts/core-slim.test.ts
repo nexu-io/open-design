@@ -376,59 +376,6 @@ describe('composeSystemPrompt — promptCoreVariant switch', () => {
     }
   });
 
-  /**
-   * T69(2026-09-07):`direction-picker` atom 不再提供选择器,改成**自己定方向**。
-   *
-   * 这个 atom 是这次下线里最容易漏的一处 —— 它不在
-   * `e2e/tests/question-form-type-parity.test.ts` 那份六条路清单里,却被
-   * `od-default`(默认设计路由)等五个官方场景挂在 `plan` 阶段整段拼进系统提示词,
-   * 正是本用例在证明的那件事。只改那六条、留着它,默认路由照旧会教模型出方向卡。
-   *
-   * 原用例守的是「这个 atom 只在用户明确要求时才弹选择器」;产品裁决之后
-   * **连"明确要求"这一档也没有了**,所以断言换成:它教的是怎么定方向,不是怎么问。
-   */
-  it('注入的 direction-picker atom 自己定方向,不再问用户', () => {
-    const directionAtom = readFileSync(
-      path.join(repoRoot, 'plugins/_official/atoms/direction-picker/SKILL.md'),
-      'utf8',
-    ).replace(/^---[\s\S]*?\n---\r?\n/, '').trim();
-    const stageBlock = renderActiveStageBlock({
-      stageId: 'plan',
-      bodies: [{
-        atomId: 'direction-picker',
-        body: directionAtom,
-      }],
-    });
-    const out = composeSystemPrompt({
-      ...base,
-      promptCoreVariant: 'slim',
-      activeStageBlocks: [stageBlock],
-    });
-
-    // 防真空:atom 的正文确实拼进来了,否则底下那几条 `not.toContain` 会因为
-    // 「整段根本没出现」而集体假绿
-    expect(out).toContain('# Direction picker');
-    expect(out).toContain('**Do not ask the user to choose a visual direction.**');
-    expect(out).toContain(
-      'Asking the user to pick, compare, or confirm a visual direction.',
-    );
-    // 三条解析顺序还在:设计系统 → 用户给的品牌源 → 自己推断
-    expect(out).toContain('An active design system');
-    expect(out).toContain('infer the best-matching direction yourself');
-
-    /* 否定断言只对着 **atom 正文**,不是整份系统提示词 —— 后者当然还会讲
-       `question-form`(那是别的题型的合法用法),对着 `out` 断言会永远红。
-
-       只钉 `direction-cards` 这一个名字。atom 里那句「不要用 question-form 问方向」
-       **是要留的**:`<question-form>` 本来就是模型在别处学过的通用能力,
-       这里点它的名是在**划范围**,不是在泄露一个本该藏起来的能力 ——
-       和 `direction-cards` 不同,后者除了问设计风格没有第二种用途。 */
-    expect(directionAtom).not.toContain('direction-cards');
-    expect(directionAtom).not.toContain(
-      'The direction-picker atom asks the agent to draft',
-    );
-  });
-
   it('slim keeps the dynamic sections (DS, skill, deck framework, media hint) composing as before', () => {
     const out = composeSystemPrompt({
       metadata: { kind: 'deck' as const },

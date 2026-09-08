@@ -100,14 +100,10 @@ const PROMPT_PATHS: { rel: string; reachable: string }[] = [
   { rel: 'apps/daemon/src/prompts/discovery.ts', reachable: '仅 OD_PROMPT_CORE=classic' },
   { rel: 'packages/contracts/src/prompts/system.ts', reachable: '当前无运行时消费者(镜像)' },
   { rel: 'packages/contracts/src/prompts/discovery.ts', reachable: '当前无运行时消费者(镜像)' },
-  {
-    rel: 'plugins/_official/atoms/direction-picker/SKILL.md',
-    reachable: 'od-default / od-next-strategy / od-new-generation / od-tune-collab / od-plugin-authoring 的 plan 阶段',
-  },
 ];
 
 describe('设计风格选择题已从提示词整题下线', () => {
-  it('七条路径都还在,没有被悄悄挪走', () => {
+  it('六条路径都还在,没有被悄悄挪走', () => {
     for (const { rel } of PROMPT_PATHS) {
       expect(() => read(rel), `${rel} 不见了 —— 挪动位置要同时更新本测试`).not.toThrow();
     }

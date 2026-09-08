@@ -66,7 +66,7 @@ my-plugin/
     "pipeline": {
       "stages": [
         { "id": "discovery", "atoms": ["discovery-question-form"] },
-        { "id": "plan", "atoms": ["direction-picker", "todo-write"] },
+        { "id": "plan", "atoms": ["todo-write"] },
         { "id": "generate", "atoms": ["file-write", "live-artifact"] },
         {
           "id": "critique",
@@ -92,7 +92,7 @@ Use one primary lane. Put the lane in `tags`, `od.scenario`, or `od.mode` so sea
 | Lane | Use when | Typical `taskKind` | Useful atoms |
 | --- | --- | --- | --- |
 | `import` | Bring external sources into OD | `figma-migration` or `code-migration` | `figma-extract`, `code-import`, `design-extract`, `token-map`, `rewrite-plan` |
-| `create` | Generate a new artifact | `new-generation` | `discovery-question-form`, `direction-picker`, `todo-write`, `file-write`, `live-artifact`, `media-image`, `media-video`, `media-audio`, `critique-theater` |
+| `create` | Generate a new artifact | `new-generation` | `discovery-question-form`, `todo-write`, `file-write`, `live-artifact`, `media-image`, `media-video`, `media-audio`, `critique-theater` |
 | `export` | Convert an accepted artifact to a downstream format | `tune-collab` or `code-migration` | `file-read`, `file-write`, `handoff`, `diff-review` |
 | `share` | Publish or send an artifact to collaborators | `tune-collab` | `file-read`, `handoff`, `connector` |
 | `deploy` | Ship an artifact to hosted infrastructure | `code-migration` or `tune-collab` | `file-read`, `build-test`, `handoff`, `connector` |
