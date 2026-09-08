@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "skill-plugin-mtt0o8r6",
+  "title": "Skill plugin",
+  "version": "0.1.0",
+  "description": "--- name: snap-design description: Gera interfaces e artefatos HTML com a identidade Snap (Vidro Slate) — dashboards de CCO, mocks, decks e protótipos — usando o contrato tokens.css deste pacote. user-invocable: true ---",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

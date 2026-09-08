@@ -1,0 +1,47 @@
+{
+  "candidateId": "b744d55e-9b2d-4b30-85bc-52f34bba9297",
+  "projectId": "brand-snap-5d8b30",
+  "runId": "98360e2b-9145-4018-a46e-de9677df0d9f",
+  "conversationId": "e079e929-319e-4c76-a1d9-6a4fe4b7e7a1",
+  "provenance": {
+    "summary": "Detected from SKILL.md, DESIGN.md, README.md, context/provenance.md, context/input-DESIGN.md after a successful run.",
+    "detectedAt": 1788892919317
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 4386,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "DESIGN.md",
+      "label": "DESIGN.md",
+      "size": 9353,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 3693,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/provenance.md",
+      "label": "context/provenance.md",
+      "size": 2848,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "context/input-DESIGN.md",
+      "label": "context/input-DESIGN.md",
+      "size": 14191,
+      "copied": true
+    }
+  ]
+}
