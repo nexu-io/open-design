@@ -47,7 +47,7 @@ const receipt = await withElectronPhysicalPlatform({ archivePath: input.platform
   manifest,
   outputRoot: input.sceneDirectory,
   rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
-  runtimeConfigPath: fileURLToPath(new URL("../../../config/runtime.json", import.meta.url)),
+  carrierConfigPath: fileURLToPath(new URL("../../../config/carrier.json", import.meta.url)),
   standaloneBinding: {
     target: input.target,
     closureResourceName: "closure.mjs",

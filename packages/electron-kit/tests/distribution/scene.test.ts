@@ -44,7 +44,7 @@ describe("Electron scene", () => {
       rendererPreloadEntryPath: join(root, "renderer-preload.ts"),
       manifestPath: join(root, "shell.json"),
       outputRoot: join(root, "build", "scene"),
-      runtimeConfigPath: join(root, "runtime.json"),
+      carrierConfigPath: join(root, "carrier.json"),
     };
     await Promise.all([
       writeFile(paths.entryPath, "export const foundation = true;\n", "utf8"),
@@ -64,17 +64,11 @@ describe("Electron scene", () => {
         protocol: "example",
         shell: { type: "electron", version: "1.2.3", buildHash: "a".repeat(64), digest: "b".repeat(64) },
       })}\n`, "utf8"),
-      writeFile(paths.runtimeConfigPath, `${JSON.stringify({
+      writeFile(paths.carrierConfigPath, `${JSON.stringify({
         schemaVersion: 1,
         preflight: { schemaVersion: 1, atoms: [{ id: "language", executor: "electron.preferred-language" }] },
-        warmup: {
-          schemaVersion: 1,
-          nodes: [
-            { id: "resolve", executor: "standalone.resolve", dependsOn: [], blocking: true },
-            { id: "ready", executor: "standalone.await-ready", dependsOn: ["resolve"], blocking: true },
-            { id: "renderer", executor: "electron.mount-renderer", dependsOn: ["ready"], blocking: true },
-          ],
-        },
+        startupTimeoutMs: 360000,
+        shutdownTimeoutMs: 75000,
       })}\n`, "utf8"),
     ]);
 
@@ -83,7 +77,7 @@ describe("Electron scene", () => {
     const capsulePath = join(root, "capsule.zip");
     await writeFile(capsulePath, capsuleBytes);
     const capsuleContent = {
-      schemaVersion: 1 as const, protocol: "electron-capsule-v2" as const,
+      schemaVersion: 1 as const, protocol: "electron-capsule-v3" as const,
       target: "darwin-arm64" as const, entrypoint: "capsule.cjs" as const,
       archive: { sha256: createHash("sha256").update(capsuleBytes).digest("hex"),
         size: capsuleBytes.length, treeSha256: "c".repeat(64) },
@@ -125,7 +119,7 @@ describe("Electron scene", () => {
       standalone: { entrypoint: "standalone-launcher.mjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) },
       products: expect.arrayContaining([
         expect.objectContaining({ name: "renderer-mount-preload.cjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
-        expect.objectContaining({ name: "runtime.json", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
+        expect.objectContaining({ name: "carrier.json", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
         expect.objectContaining({ name: "shell.json", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) }),
       ]),
     });
@@ -177,7 +171,7 @@ describe("Electron scene", () => {
     const outputRoot = relationship === "output-inside" ? join(root, "output") : root;
     const path = relationship === "input-inside" ? join(root, "sentinel") : root;
     await expect(assembleElectronScene({ authorityResources: [{ name: "platform", path }], manifest: {} as ElectronShellManifest,
-      outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", runtimeConfigPath: "/unused" }))
+      outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", carrierConfigPath: "/unused" }))
       .rejects.toThrow(/cannot overlap/u);
     expect(await readFile(join(root, "sentinel"), "utf8")).toBe("untouched");
   });
@@ -189,7 +183,7 @@ describe("Electron scene", () => {
     await writeFile(join(outputRoot, "sentinel"), "untouched");
     await symlink(process.execPath, join(tree, "node"));
     await expect(assembleElectronScene({ authorityResources: [{ name: "platform", path: tree }],
-      manifest: {} as ElectronShellManifest, outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", runtimeConfigPath: "/unused" }))
+      manifest: {} as ElectronShellManifest, outputRoot, entryPath: "/unused", rendererPreloadEntryPath: "/unused", carrierConfigPath: "/unused" }))
       .rejects.toThrow(/link or special file/u);
     expect(await readFile(join(outputRoot, "sentinel"), "utf8")).toBe("untouched");
   });
@@ -201,7 +195,7 @@ describe("Electron scene", () => {
       manifest: {} as ElectronShellManifest,
       outputRoot: "/unused/scene",
       rendererPreloadEntryPath: "/unused/preload.ts",
-      runtimeConfigPath: "/unused/runtime.json",
+      carrierConfigPath: "/unused/carrier.json",
     };
     for (const name of ["../host.cjs", "nested/host.cjs", "main.cjs"]) {
       await expect(assembleElectronScene({ ...input, authorityResources: [{ name, path: "/unused/source" }] }))

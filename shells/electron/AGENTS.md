@@ -33,6 +33,11 @@ Shell and the typed adapter boundary consumed by repository tools.
 - `config/appearance.json` owns Capsule window/loading declarations and channel
   title overrides. Physical manifest schema 2 excludes these presentation fields;
   keep OS product identity, icons and installer endpoints physical.
+- `config/carrier.json` owns fixed preflight and physical lifecycle budgets;
+  it is the only runtime policy file copied into the physical scene. Capsule
+  owns `config/runtime.json` warmup/recovery policy and must not redeclare preflight.
+  Capsule protocol v3 expresses this boundary; regenerate local v1/v2 experiment
+  artifacts instead of adding compatibility aliases for their definition shape.
 - Compose the public electron-capsule startup presentation with product media;
   do not put loading HTML or DOM mechanics back into Shell adapters or kit.
 - The Capsule entry exports the product definition factory and the public

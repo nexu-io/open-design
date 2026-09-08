@@ -4,7 +4,7 @@ import { canonicalJson } from "@open-design/standalone";
 import { bindNodePlatform } from "@open-design/standalone/packages";
 import {
   validateElectronShellManifest, validateElectronShellAppearance,
-  type ElectronShellDefinition, type ElectronShellManifest,
+  type ElectronShellManifest,
 } from "../contracts/index.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
@@ -21,6 +21,7 @@ import {
 } from "./startup/cancellation.js";
 import type { ElectronCapsuleModule } from "./startup/capsule.js";
 import type { ElectronCapsuleCleanup } from "./startup/capsule-session.js";
+import type { ElectronPreflightTopology } from "./startup/preflight/index.js";
 
 export * from "./session/logging.js";
 export * from "./session/cdp.js";
@@ -51,7 +52,7 @@ type ElectronRuntimeContext = {
 
 export type ElectronCarrierDefinition = Readonly<{
   manifest: ElectronShellManifest;
-  preflight: ElectronShellDefinition["preflight"];
+  preflight: ElectronPreflightTopology;
   headless?: boolean;
   loadCapsule(manifest: ElectronShellManifest, installation: Readonly<{
     resourceRoot: string;
@@ -124,8 +125,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   // The physical quit/activation barrier already exists when Capsule code runs.
   const capsule = await startupQuit.guard(input.loadCapsule(manifest, Object.freeze({ resourceRoot, runtimeRoot: paths.runtimeRoot })));
   const definition = capsule.createElectronCapsuleDefinition(manifest);
-  if (canonicalJson(definition.manifest) !== canonicalJson(manifest)
-    || canonicalJson(definition.preflight) !== canonicalJson(input.preflight)) {
+  if (canonicalJson(definition.manifest) !== canonicalJson(manifest) || "preflight" in definition) {
     throw new Error("Capsule cannot replace the established carrier identity or preflight");
   }
   validateElectronShellAppearance(definition.appearance);

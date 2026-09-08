@@ -1,6 +1,5 @@
 import { dirname, join } from "node:path";
 import { BrowserWindow, app } from "electron";
-import runtimeConfig from "../../../config/runtime.json" with { type: "json" };
 import { inspectElectronCdp } from "@open-design/electron-kit/runtime";
 
 import { APP_KEYS } from "@open-design/sidecar-proto";
@@ -29,7 +28,8 @@ function resources(): Readonly<Pick<SidecarResources, "dataRoot" | "ownerPid" | 
   return Object.freeze({ dataRoot: null, ownerPid: candidate.ownerPid as number | null, port: 0, runtimeRoot: candidate.runtimeRoot });
 }
 
-export async function runControlledElectronShell(run: () => Promise<void>): Promise<void> {
+export async function runControlledElectronShell(run: () => Promise<void>, startupTimeoutMs: number): Promise<void> {
+  if (!Number.isSafeInteger(startupTimeoutMs) || startupTimeoutMs <= 0 || startupTimeoutMs > 3_600_000) throw new Error("invalid Electron carrier startup timeout");
   const stamp = readOptionalCurrentSidecarStamp();
   if (stamp == null) return await run();
   if (stamp.app !== APP_KEYS.ELECTRON) throw new Error(`Electron Shell cannot run Sidecar app ${stamp.app}`);
@@ -44,7 +44,7 @@ export async function runControlledElectronShell(run: () => Promise<void>): Prom
   // generation: Shell preflight must execute before Chromium reports ready.
   registerSidecarProcess(stamp, controlResources);
   let state: "starting" | "running" | "failed" | "stopping" = "starting";
-  const startupDeadline = new Date(Date.now() + runtimeConfig.warmup.totalTimeoutMs).toISOString();
+  const startupDeadline = new Date(Date.now() + startupTimeoutMs).toISOString();
   // Start preflight synchronously, but do not gate observability on product
   // readiness: physical verification and content preparation remain inspectable/stoppable.
   const running = run().then(() => {

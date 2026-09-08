@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "startupTimeoutMs": 360000,
+  "shutdownTimeoutMs": 75000,
+  "preflight": {
+    "schemaVersion": 1,
+    "atoms": [
+      { "id": "os-language", "executor": "electron.preferred-language" },
+      {
+        "id": "local-service-connections",
+        "executor": "electron.connection-limit-exemptions",
+        "hosts": ["127.0.0.1", "localhost"]
+      }
+    ]
+  }
+}

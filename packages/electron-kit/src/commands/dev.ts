@@ -19,7 +19,7 @@ export type PrepareElectronDevShellInput = Readonly<{
   manifest: ElectronShellManifest;
   projectRoot: string;
   rendererPreloadEntryPath: string;
-  runtimeConfigPath: string;
+  carrierConfigPath: string;
   argv?: readonly string[];
 }>;
 
@@ -38,7 +38,7 @@ export async function prepareElectronDevShell(input: PrepareElectronDevShellInpu
     manifest,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
-    runtimeConfigPath: input.runtimeConfigPath,
+    carrierConfigPath: input.carrierConfigPath,
   });
   return Object.freeze({ electronPath: electronPath as unknown as string, manifest, scene });
 }

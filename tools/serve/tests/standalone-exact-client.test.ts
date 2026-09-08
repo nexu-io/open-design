@@ -17,7 +17,7 @@ it("acquires fixture bytes through the download primitive and disposes only its 
   const capsule = { contentFile: join(root, "capsule-content.json"), archiveFile: join(root, "capsule.zip") };
   const capsuleBytes = Buffer.from("Capsule fixture bytes");
   await writeFile(capsule.archiveFile, capsuleBytes);
-  await writeFile(capsule.contentFile, JSON.stringify({ schemaVersion: 1, protocol: "electron-capsule-v2", target: "darwin-arm64", entrypoint: "capsule.cjs",
+  await writeFile(capsule.contentFile, JSON.stringify({ schemaVersion: 1, protocol: "electron-capsule-v3", target: "darwin-arm64", entrypoint: "capsule.cjs",
     archive: { sha256: createHash("sha256").update(capsuleBytes).digest("hex"), size: capsuleBytes.byteLength, treeSha256: "b".repeat(64) } }));
   const server = await startStandaloneExactFixtureServer({ channel: "dev", releaseVersion: "0.1.0-dev.1", launcherPath, closurePath,
     capsule,
@@ -37,7 +37,7 @@ it("acquires fixture bytes through the download primitive and disposes only its 
       const ring = new Map<string, ReturnType<typeof createPublicKey>>(trust.keys.map((key: { keyId: string; publicKey: string }) => [key.keyId, createPublicKey(key.publicKey)]));
       const manifest = JSON.parse(await readFile(files.capsule!.manifestFile, "utf8"));
       expect(verifyDocument(manifest, ring)).toBe("local-exact");
-      expect(manifest.document).toMatchObject({ protocol: "electron-capsule-v2", provides: { shellVersion: "0.1.0" } });
+      expect(manifest.document).toMatchObject({ protocol: "electron-capsule-v3", provides: { shellVersion: "0.1.0" } });
       await withStandaloneExactFixture(input, async second => {
         expect(second.contentFile).not.toBe(first);
         expect(await readFile(first, "utf8")).not.toBe("");

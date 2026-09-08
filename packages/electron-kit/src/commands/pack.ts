@@ -11,7 +11,7 @@ export async function packElectronShell(input: Readonly<{
   entryPath: string;
   manifest: ElectronShellManifest;
   distributionPath: string;
-  runtimeConfigPath: string;
+  carrierConfigPath: string;
   windowsLifecyclePath: string;
   outputRoot: string;
   projectRoot: string;
@@ -30,7 +30,7 @@ export async function packElectronShell(input: Readonly<{
     manifest,
     outputRoot: join(input.projectRoot, ".tmp", "electron-kit", manifest.namespace, "scene"),
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
-    runtimeConfigPath: input.runtimeConfigPath,
+    carrierConfigPath: input.carrierConfigPath,
   });
   return await buildElectronDistribution({ scene, manifest, policy, windowsLifecycle, outputRoot: input.outputRoot });
 }

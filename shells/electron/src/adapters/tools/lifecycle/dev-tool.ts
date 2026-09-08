@@ -94,7 +94,7 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
     manifest: { ...baseManifest, namespace: request.namespace },
     projectRoot: electronShellRoot,
     rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),
-    runtimeConfigPath: join(electronShellRoot, "config/runtime.json"),
+    carrierConfigPath: join(electronShellRoot, "config/carrier.json"),
   }));
   });
   const resources = Object.freeze({ dataRoot: null, ownerPid: request.ownerPid, port: 0, runtimeRoot: request.controlRuntimeRoot });

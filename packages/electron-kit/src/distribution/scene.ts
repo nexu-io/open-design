@@ -6,7 +6,7 @@ import { build as bundle } from "esbuild";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
 import { validateElectronCapsuleContent, type ElectronCapsuleContent } from "../contracts/capsule.js";
-import { validateElectronRuntimeConfig, type ElectronRuntimeConfig } from "../runtime/startup/config.js";
+import { validateElectronCarrierConfig, type ElectronCarrierConfig } from "../runtime/startup/config.js";
 import type { ElectronSceneReceipt } from "./contracts.js";
 
 export type AssembleElectronSceneInput = Readonly<{
@@ -16,7 +16,7 @@ export type AssembleElectronSceneInput = Readonly<{
   manifest: ElectronShellManifest;
   outputRoot: string;
   rendererPreloadEntryPath: string;
-  runtimeConfigPath: string;
+  carrierConfigPath: string;
   standaloneBinding?: Readonly<{
     target: string;
     closureResourceName: string;
@@ -29,7 +29,7 @@ const reservedSceneProducts = new Set([
   "main.cjs",
   "package.json",
   "renderer-mount-preload.cjs",
-  "runtime.json",
+  "carrier.json",
   "scene.json",
   "shell.json",
 ]);
@@ -88,15 +88,15 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     return describeSceneProduct(dirname(resource.path), basename(resource.path));
   }));
   const manifest = validateElectronShellManifest(input.manifest);
-  const runtimeConfig = validateElectronRuntimeConfig(
-    JSON.parse(await readFile(input.runtimeConfigPath, "utf8")) as ElectronRuntimeConfig,
+  const carrierConfig = validateElectronCarrierConfig(
+    JSON.parse(await readFile(input.carrierConfigPath, "utf8")) as ElectronCarrierConfig,
   );
 
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
   const mainPath = join(input.outputRoot, "main.cjs");
   const rendererPreloadPath = join(input.outputRoot, "renderer-mount-preload.cjs");
-  const runtimeConfigPath = join(input.outputRoot, "runtime.json");
+  const carrierConfigPath = join(input.outputRoot, "carrier.json");
   await bundle({
     bundle: true,
     entryPoints: [input.entryPath],
@@ -122,7 +122,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     platform: "node",
     target: "node24",
   });
-  await writeFile(runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, "utf8");
+  await writeFile(carrierConfigPath, `${JSON.stringify(carrierConfig, null, 2)}\n`, "utf8");
 
   const packagedManifestPath = join(input.outputRoot, "shell.json");
   await writeFile(packagedManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
@@ -139,7 +139,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const productNames = [
     "main.cjs",
     "renderer-mount-preload.cjs",
-    "runtime.json",
+    "carrier.json",
     "shell.json",
     "package.json",
     ...authorityResourceNames,
@@ -195,7 +195,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     mainPath,
     rendererPreloadPath,
     shellManifestPath: packagedManifestPath,
-    runtimeConfigPath,
+    carrierConfigPath,
     authorityResources: Object.freeze(authorityResources),
   };
   await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
@@ -244,7 +244,7 @@ export async function loadElectronScene(sceneRootInput: string, expectedManifest
     mainPath: product("main.cjs"),
     rendererPreloadPath: product("renderer-mount-preload.cjs"),
     shellManifestPath: product("shell.json"),
-    runtimeConfigPath: product("runtime.json"),
+    carrierConfigPath: product("carrier.json"),
     authorityResources: Object.freeze(authorityNames.map((name) => Object.freeze({ ...products.get(name)!, path: join(sceneRoot, name) }))),
   });
 }

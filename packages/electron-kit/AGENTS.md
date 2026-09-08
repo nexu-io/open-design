@@ -19,6 +19,9 @@ Follow the root and `packages/AGENTS.md` guidance first.
   to electron-capsule. Establish presentation permission, physical integrity and
   activation/quit protection before invoking its versioned startup entry. Native
   launch ingress is registered before loading and delivers only typed events.
+- Physical scenes carry only validated carrier preflight/lifecycle configuration,
+  never the Capsule warmup graph or renderer recovery policy. Reject Capsule
+  preflight declarations after the fixed carrier has established OS identity.
 - Sidecar owns private IPC, transport, process/generation identity, physical resource-set guards, retirement, and terminal stop. electron-kit must not wrap or republish that transport. The product Shell may compose only the frozen public Standalone handoff and Sidecar runtime-handle contracts when they are available.
 - Global shortcuts use the same finite ownership rule: electron-kit owns registration, rollback, observation and teardown; Shell owns every accelerator declaration and action binding. Do not add inert placeholder shortcuts or product menu actions here.
 - Import only public `@open-design/standalone` contracts. Never import `apps/closure`, another Shell, or product Web/daemon implementation.

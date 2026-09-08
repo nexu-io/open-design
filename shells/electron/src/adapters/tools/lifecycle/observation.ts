@@ -4,7 +4,7 @@ import { isAbsolute, join } from "node:path";
 import { findSidecarProcesses, getSidecarStatus, stopSidecar, type SidecarStamp } from "@open-design/sidecar";
 import { standaloneHostControlRequestTimeoutMs } from "@open-design/standalone";
 import { resolveElectronSessionNamespace } from "@open-design/electron-kit";
-import runtime from "../../../../config/runtime.json" with { type: "json" };
+import carrier from "../../../../config/carrier.json" with { type: "json" };
 import resourceDeclaration from "../../../../config/standalone.json" with { type: "json" };
 import { validateElectronPhysicalResourceSet } from "../../standalone/physical-resources.ts";
 
@@ -36,7 +36,7 @@ export async function waitForElectronProductReady(input: Readonly<{
 }
 
 // The outer process must outlive its bounded host release and physical cleanup.
-const termGraceMs = runtime.shutdown.gracefulTimeoutMs;
+const termGraceMs = carrier.shutdownTimeoutMs;
 if (!Number.isSafeInteger(termGraceMs) || termGraceMs <= standaloneHostControlRequestTimeoutMs({ operation: "lifecycle.release" })) {
   throw new Error("Electron graceful shutdown budget must exceed its host release budget");
 }

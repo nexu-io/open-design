@@ -33,7 +33,7 @@ const manifest: ElectronShellManifest = {
 const preflight = { schemaVersion: 1 as const, atoms: [] };
 function capsule() {
   return {
-    createElectronCapsuleDefinition: vi.fn(() => ({ manifest, preflight,
+    createElectronCapsuleDefinition: vi.fn(() => ({ manifest,
       appearance: { schemaVersion: 1, window: { width: 1040, height: 700, title: "Test" },
         splash: { width: 1280, height: 900, minimumVisibleMs: 0, backgroundColor: "#000000", foregroundColor: "#ffffff",
           mutedColor: "#888888", initialLabel: "Starting", readyLabel: "Ready" } },
@@ -95,6 +95,15 @@ it.each(["channel", "shell"])("does not let Capsule mutate established %s throug
     else Object.assign(installed.shell, { version: "99.0.0" });
     return { ...definition, manifest: installed };
   };
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
+  expect(module.runElectronCapsule).not.toHaveBeenCalled();
+  expect(mock.exit).toHaveBeenCalledWith(1);
+  expect(mock.fail).toHaveBeenCalledOnce();
+});
+
+it("rejects Capsule attempts to redeclare fixed preflight", async () => {
+  const module = capsule(), original = module.createElectronCapsuleDefinition;
+  module.createElectronCapsuleDefinition = installed => ({ ...original(installed), preflight });
   await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
   expect(module.runElectronCapsule).not.toHaveBeenCalled();
   expect(mock.exit).toHaveBeenCalledWith(1);

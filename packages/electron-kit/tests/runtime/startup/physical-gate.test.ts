@@ -42,7 +42,7 @@ it("rejects invalid Capsule appearance before opening windows or reaching upgrad
   mock.bind.mockResolvedValue({ command: "/physical/platform/bin/node", env: {} });
   const preflight = { schemaVersion: 1 as const, atoms: [] }, authority = vi.fn();
   const loadCapsule = vi.fn().mockResolvedValue({
-    createElectronCapsuleDefinition: () => ({ manifest, preflight, appearance: { schemaVersion: 1 }, createStandaloneAuthority: authority }),
+    createElectronCapsuleDefinition: () => ({ manifest, appearance: { schemaVersion: 1 }, createStandaloneAuthority: authority }),
     runElectronCapsule: vi.fn(),
   });
   await runElectronCarrier({ manifest, headless: true, preflight, loadCapsule });

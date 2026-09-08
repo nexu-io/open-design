@@ -15,7 +15,7 @@ import type {
   LifecycleStatus,
 } from "@open-design/standalone";
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
-import type { ElectronPreflightResult, ElectronPreflightTopology } from "../runtime/startup/preflight/index.js";
+import type { ElectronPreflightResult } from "../runtime/startup/preflight/index.js";
 import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../runtime/startup/warmup/index.js";
 import type { ElectronInstallerClaimSnapshot, ElectronInstallerConfirmationReceipt, ElectronInstallerConfirmationRequest, ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest, ElectronInstallerRecoveryIntent, ElectronInstallerRecoveryReceipt, ElectronInstallerRecoveryRequest } from "../update/installation/contracts.js";
 export type { ElectronInstallerClaimIdentity, ElectronInstallerClaimSnapshot, ElectronInstallerConfirmationReceipt, ElectronInstallerConfirmationRequest, ElectronInstallerHandoffReceipt, ElectronInstallerHandoffRequest, ElectronInstallerRecoveryIntent, ElectronInstallerRecoveryReceipt, ElectronInstallerRecoveryRequest } from "../update/installation/contracts.js";
@@ -180,7 +180,6 @@ export type ElectronShellDefinition = Readonly<{
   appearance: ElectronShellAppearance;
   createStartupPresentation(): Promise<ElectronStartupPresentation>;
   mac: ElectronMacRuntimePolicy;
-  preflight: ElectronPreflightTopology;
   warmup: ElectronWarmupTopology;
   headless?: boolean;
   actions?: ElectronShellActions;

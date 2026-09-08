@@ -42,10 +42,13 @@ it("loads product Capsule bytes independently of the physical main bundle", asyn
   });
   const inputs = Object.keys(result.metafile.inputs);
   expect(inputs.some(path => /(?:^|\/)src\/capsule\.ts$/u.test(path))).toBe(false);
+  expect(inputs.some(path => /(?:^|\/)config\/runtime\.json$/u.test(path))).toBe(false);
   const code = result.outputFiles[0]!.text;
   expect(code.includes("platform.verified")).toBe(true);
   expect(code.includes("renderer.recovery.committed")).toBe(false);
   expect(code.includes("@keyframes slide")).toBe(false);
+  expect(code.includes("Resolving the Standalone generation")).toBe(false);
+  expect(code.includes("OpenDesign renderer recovery")).toBe(false);
 });
 
 it("bundles artifact contracts without visiting native build implementation", async () => {
@@ -74,6 +77,25 @@ it("builds loading changes from Capsule-owned appearance without editing carrier
     });
   } }] });
   expect(after.outputFiles[0]!.contents).not.toEqual(before.outputFiles[0]!.contents);
+});
+
+it.each(["warmup", "rendererRecovery"])("keeps %s changes out of physical main bytes", async policy => {
+  for (const entry of ["main.ts", "capsule.ts"]) {
+    const options = { entryPoints: [fileURLToPath(new URL(`../src/${entry}`, import.meta.url))],
+      bundle: true, external: ["electron"], format: "cjs" as const, platform: "node" as const,
+      target: "node24", write: false as const };
+    const before = await build(options);
+    const after = await build({ ...options, plugins: [{ name: "change-capsule-runtime-policy", setup(builder) {
+      builder.onLoad({ filter: /config\/runtime\.json$/ }, async ({ path }) => {
+        const runtime = JSON.parse(await readFile(path, "utf8"));
+        if (policy === "warmup") runtime.warmup.nodes[0].label = "Updated Capsule warmup label";
+        else runtime.rendererRecovery.prompt.title = "Updated Capsule recovery title";
+        return { contents: JSON.stringify(runtime), loader: "json" };
+      });
+    } }] });
+    if (entry === "main.ts") expect(after.outputFiles[0]!.contents).toEqual(before.outputFiles[0]!.contents);
+    else expect(after.outputFiles[0]!.contents).not.toEqual(before.outputFiles[0]!.contents);
+  }
 });
 
 it("keeps tool lifecycle code out of every physical Shell bundle", async () => {

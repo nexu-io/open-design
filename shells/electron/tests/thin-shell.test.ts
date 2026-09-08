@@ -92,7 +92,7 @@ describe("Electron product shell", () => {
     expect(sources.find(({ name }) => name === "capsule.ts")!.source).toContain('from "./composition/definition.js"');
     expect(main).toContain('from "./adapters/standalone/electron-control.js"');
     expect(main).toContain('readFileSync(join(__dirname, "shell.json"');
-    expect(main).toContain('readFileSync(join(__dirname, "runtime.json"');
+    expect(main).toContain('readFileSync(join(__dirname, "carrier.json"');
     expect(main).not.toMatch(/config\/|ElectronFixture|scheduleElectronInstallerHandoff/u);
     expect(definition).toContain("createElectronStandaloneAuthorityFactory");
     expect(definition).not.toContain("createElectronFixtureStandaloneAuthorityFactory");
@@ -112,15 +112,15 @@ describe("Electron product shell", () => {
   });
 
   it("owns concrete preflight, warmup topology and renderer readiness outside electron-kit", async () => {
-    const [runtimeSource, rendererSource, preloadSource, kitRuntimeSource, kitPreflightSource] = await Promise.all([
+    const [runtimeSource, rendererSource, preloadSource, kitRuntimeSource, kitPreflightSource, carrierSource] = await Promise.all([
       readFile(new URL("../config/runtime.json", import.meta.url), "utf8"),
       readFile(new URL("../src/adapters/renderer/renderer.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/adapters/renderer/preload.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/index.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../packages/electron-kit/src/runtime/startup/preflight/apply.ts", import.meta.url), "utf8"),
+      readFile(new URL("../config/carrier.json", import.meta.url), "utf8"),
     ]);
     const runtime = JSON.parse(runtimeSource) as {
-      preflight: { atoms: Array<{ hosts?: string[] }> };
       warmup: { nodes: Array<{ executor: string }> };
     };
     expect(runtime.warmup.nodes.map((node) => node.executor)).toEqual([
@@ -146,7 +146,10 @@ describe("Electron product shell", () => {
     expect(rendererSource).toContain("sender === window.webContents");
     expect(kitRuntimeSource).not.toMatch(/Electron Shell Foundation|electronShellMounted|electronKitMounted/u);
     expect(kitRuntimeSource).not.toMatch(/lifecycle\.(?:heartbeat|release|status|stop)/u);
-    expect(runtime.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
+    const carrier = JSON.parse(carrierSource) as { preflight: { atoms: Array<{ hosts?: string[] }> } };
+    expect(carrier.preflight.atoms.flatMap((atom) => atom.hosts ?? [])).toEqual(["127.0.0.1", "localhost"]);
+    expect(runtime).not.toHaveProperty("preflight");
+    expect(runtime).not.toHaveProperty("shutdown");
     expect(kitPreflightSource).not.toMatch(/127\.0\.0\.1|localhost/u);
   });
 
@@ -173,8 +176,8 @@ describe("Electron product shell", () => {
     ]);
     expect(dev).toContain("withElectronPhysicalPlatform");
     expect(pack).toContain("withElectronPhysicalPlatform");
-    expect(dev).toContain('join(electronShellRoot, "config/runtime.json"');
-    expect(pack).toContain('new URL("../../../config/runtime.json"');
+    expect(dev).toContain('join(electronShellRoot, "config/carrier.json"');
+    expect(pack).toContain('new URL("../../../config/carrier.json"');
     expect(dev).not.toMatch(/node-v\d/u);
     expect(pack).not.toMatch(/node-v\d/u);
     expect(JSON.parse(electronLock)).toEqual(JSON.parse(terminalLock));

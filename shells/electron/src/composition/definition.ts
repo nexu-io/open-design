@@ -6,7 +6,7 @@ import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
 import windowsLifecycle from "../../config/platforms/windows.json" with { type: "json" };
 
 import type {
-  ElectronRuntimeConfig,
+  ElectronWarmupTopology,
   ElectronShellAppearance,
   ElectronShellDefinition,
   ElectronShellManifest,
@@ -26,7 +26,7 @@ import { assertShellWarmupBindings } from "./warmup-bindings.js";
 
 export function createElectronShellDefinition(installedManifest: ElectronShellManifest): ElectronShellDefinition {
   const shellManifest = installedManifest;
-  const runtimeConfig = runtime as ElectronRuntimeConfig;
+  const warmup = runtime.warmup as ElectronWarmupTopology;
   const windowTitles: Readonly<Record<string, string>> = appearance.windowTitles;
   const shellAppearance: ElectronShellAppearance = {
     schemaVersion: 1,
@@ -42,9 +42,8 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
       media: splashMedia as Readonly<{ mimeType: "video/webm"; base64: string }>,
     }),
     mac: macRuntime as ElectronMacRuntimePolicy,
-    preflight: runtimeConfig.preflight,
-    warmup: runtimeConfig.warmup,
-    warmupExecutors: assertShellWarmupBindings(runtimeConfig.warmup, renderer.warmupExecutors),
+    warmup,
+    warmupExecutors: assertShellWarmupBindings(warmup, renderer.warmupExecutors),
     renderer: renderer.renderer,
     rendererRecovery: runtime.rendererRecovery,
     actions: Object.freeze({

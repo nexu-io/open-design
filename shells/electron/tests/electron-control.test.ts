@@ -41,7 +41,7 @@ describe("Electron control during product startup", () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
     const ready = Promise.withResolvers<void>();
     const run = vi.fn(() => { expect(control.register).toHaveBeenCalledOnce(); return ready.promise; });
-    const pending = runControlledElectronShell(run);
+    const pending = runControlledElectronShell(run, 360000);
     expect(run).toHaveBeenCalledOnce();
     await Promise.resolve();
     expect(await control.lifecycle!.status(control.runtime!)).toMatchObject({
@@ -56,7 +56,7 @@ describe("Electron control during product startup", () => {
   it("can stop during startup even when quit emits synchronously", async () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
     const ready = Promise.withResolvers<void>();
-    const pending = runControlledElectronShell(() => ready.promise);
+    const pending = runControlledElectronShell(() => ready.promise, 360000);
     await Promise.resolve();
     await control.lifecycle!.stop(control.runtime!);
     expect(app.quit).toHaveBeenCalledOnce();
@@ -68,7 +68,7 @@ describe("Electron control during product startup", () => {
   it("does not turn a rejected startup into running", async () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");
     const failure = new Error("carrier failed");
-    await expect(runControlledElectronShell(() => Promise.reject(failure))).rejects.toBe(failure);
+    await expect(runControlledElectronShell(() => Promise.reject(failure), 360000)).rejects.toBe(failure);
     expect(await control.lifecycle!.status(control.runtime!)).toMatchObject({ state: "failed" });
   });
 });
