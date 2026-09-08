@@ -151,6 +151,7 @@ export async function runElectronCapsule(
   });
   const rendererContentUpdater: ElectronStandaloneContentUpdaterPort = Object.freeze({
     prepareLatest: (policy: Parameters<ElectronStandaloneContentUpdaterPort["prepareLatest"]>[0]) => requireWarmupState(preparedRuntime, "a prepared Standalone runtime").contentUpdater.prepareLatest(policy),
+    prepareFromHead: (...args: Parameters<ElectronStandaloneContentUpdaterPort["prepareFromHead"]>) => requireWarmupState(preparedRuntime, "a prepared Standalone runtime").contentUpdater.prepareFromHead(...args),
     async applyNow(options: Parameters<ElectronStandaloneContentUpdaterPort["applyNow"]>[0]) {
       if (context.startup?.phase !== "committed" || rendererShutdown.signal.aborted || rendererReplacement != null) {
         throw new Error("Electron renderer is not available for a content update");

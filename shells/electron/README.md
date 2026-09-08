@@ -91,6 +91,9 @@ Electron release metadata also signs exact Capsule manifest/archive references.
 The feed validates those references and resolves the manifest from the already
 selected candidate, without rereading latest. Signature, target and archive
 binding checks precede consumption; compatibility remains in the manifest.
+`checkFromHead` and the content updater's `prepareFromHead` accept the same
+caller-selected signed head. Both snapshot it before I/O and retain their
+existing verification gates; joint activation remains a separate integration.
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.

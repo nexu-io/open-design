@@ -11,6 +11,7 @@ import type {
   StandaloneShellUpdaterPort,
   UpdateActivationPolicy,
   UpdatePreparation,
+  SignedStandaloneChannelHead,
   StandaloneLifecycleOccupant,
   LifecycleStatus,
 } from "@open-design/standalone";
@@ -108,6 +109,7 @@ export type ElectronStandaloneContentUpdateApplication =
 
 export interface ElectronStandaloneContentUpdaterPort {
   prepareLatest(activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation>;
+  prepareFromHead(head: SignedStandaloneChannelHead, activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation>;
   applyNow(options?: Readonly<{ force?: boolean }>): Promise<ElectronStandaloneContentUpdateApplication>;
 }
 

@@ -71,7 +71,7 @@ describe("Electron renderer content updater binding", () => {
     }));
     const lease = await installElectronProductHandlers({
       daemonUrl: "http://127.0.0.1:17578",
-      contentUpdater: { prepareLatest, applyNow },
+      contentUpdater: { prepareLatest, prepareFromHead: vi.fn(), applyNow },
       shellUpdater: { readSnapshot: async () => shellSnapshot, invoke: shellInvoke },
       runtime: {
         attachment: { id: "attachment", shell: { version: "betahyx-1" } },
@@ -113,7 +113,7 @@ describe("Electron renderer content updater binding", () => {
     const adapter = createElectronRendererAdapter("Electron");
     const lease = await adapter.renderer.mount({
       acknowledgement: { attemptId: "attempt", bindingDigest: "b".repeat(64), channel: "od:mounted", nonce: "nonce" },
-      contentUpdater: { prepareLatest, applyNow },
+      contentUpdater: { prepareLatest, prepareFromHead: vi.fn(), applyNow },
       manifest: { protocol: "od" },
       preflight: {},
       presentation: "interactive",
@@ -149,7 +149,7 @@ describe("Electron renderer content updater binding", () => {
     const adapter = createElectronRendererAdapter("Electron");
     await expect(adapter.renderer.mount({
       acknowledgement: { attemptId: "attempt", bindingDigest: "b".repeat(64), channel: "od:mounted", nonce: "nonce" },
-      contentUpdater: { prepareLatest: vi.fn(), applyNow: vi.fn() },
+      contentUpdater: { prepareLatest: vi.fn(), prepareFromHead: vi.fn(), applyNow: vi.fn() },
       manifest: { protocol: "od" },
       preflight: {},
       presentation: "interactive",

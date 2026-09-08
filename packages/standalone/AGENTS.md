@@ -10,6 +10,9 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
 - Verify signatures before fetching or materializing components.
 - Address immutable blobs by SHA-256 and fail closed on size or digest mismatch.
 - Keep generation preparation separate from activation and successful-start acknowledgement.
+- `StandaloneUpdater.prepareFromHead` consumes a caller-selected signed head,
+  snapshots it before I/O and keeps the same trust, compatibility, monotonicity
+  and activation-policy checks as `prepareLatest`; it never rereads latest.
 - Own Shell-neutral package methods through `/packages` (source locks, physical
   verification and Node runtime binding) and `/packages/build` (locked Node and
   native package assembly). The runtime entry must not load build dependencies.

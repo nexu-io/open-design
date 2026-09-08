@@ -96,8 +96,14 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
   }
 
   async check(): Promise<ElectronReleaseExactCandidate | null> {
+    return await this.checkFromHead(await this.readChannelHead(this.options.channel));
+  }
+
+  /** Share one selected head with Closure preparation; never discover a newer
+   * lane while resolving the Electron side of that release. */
+  async checkFromHead(input: SignedStandaloneChannelHead): Promise<ElectronReleaseExactCandidate | null> {
     const fetcher = this.options.fetch ?? globalThis.fetch;
-    const envelope = await this.readChannelHead(this.options.channel);
+    const envelope = structuredClone(input);
     verifyStandaloneChannelHead(envelope, this.options.trustedKeys);
     if (envelope.head.channel !== this.options.channel) throw new Error("Electron channel head escaped its installed channel");
     const lane = envelope.head.lanes.electron;

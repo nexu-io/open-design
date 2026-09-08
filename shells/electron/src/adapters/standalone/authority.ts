@@ -31,6 +31,7 @@ import {
   type StandaloneShellIdentity,
   type StandaloneShellUpdaterAction,
   type UpdateActivationPolicy,
+  type SignedStandaloneChannelHead,
 } from "@open-design/standalone";
 import type {
   ElectronInstallerConfirmationReceipt,
@@ -788,6 +789,7 @@ export function createElectronStandaloneAuthorityFactory(
         },
         contentUpdater: Object.freeze({
           prepareLatest: (activationPolicy: UpdateActivationPolicy) => content.prepareLatest(activationPolicy),
+          prepareFromHead: (head: SignedStandaloneChannelHead, activationPolicy: UpdateActivationPolicy) => content.prepareFromHead(head, activationPolicy),
           async applyNow(options = {}) {
             const attachment = activeAttachment;
             if (attachment == null) throw new Error("Electron content update requires an active runtime attachment");

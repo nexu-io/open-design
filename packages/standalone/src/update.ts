@@ -94,7 +94,13 @@ export class StandaloneUpdater {
   ) {}
 
   async prepareLatest(activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation> {
-    const signedHead = await this.source.readChannelHead(this.channel);
+    return await this.prepareFromHead(await this.source.readChannelHead(this.channel), activationPolicy);
+  }
+
+  /** Prepare the caller's already selected release without a second discovery.
+   * Snapshot before I/O; this does not grant activation or bypass verification. */
+  async prepareFromHead(input: SignedStandaloneChannelHead, activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation> {
+    const signedHead = structuredClone(input);
     verifyStandaloneChannelHead(signedHead, this.trustedKeys);
     const head = signedHead.head;
     if (head.channel !== this.channel) throw new Error("channel head escaped updater namespace");

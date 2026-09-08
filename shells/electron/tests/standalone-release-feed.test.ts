@@ -86,8 +86,11 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
 describe("Electron release-exact feed", () => {
   it("resolves Capsule from the fixed signed candidate without rereading latest", async () => {
     const { feed, bodies, fetcher, capsule } = await fixture();
-    const candidate = await feed.check();
+    const head = await feed.readChannelHead("betahyx");
     bodies.set("https://releases.invalid/betahyx/latest/channel-head.json", Buffer.from("changed latest"));
+    const checking = feed.checkFromHead(head);
+    head.head.lanes.electron!.releaseVersion = "0.2.0-betahyx.999";
+    const candidate = await checking;
     expect((await feed.readCapsule(candidate!)).document).toEqual(capsule);
     expect(fetcher).toHaveBeenCalledTimes(3);
   });

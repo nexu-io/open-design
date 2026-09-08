@@ -413,6 +413,39 @@ describe("standalone exact lifecycle", () => {
     await expect(updaterFor(collision).prepareLatest("observe")).rejects.toThrow("immutable release metadata collision");
   });
 
+  it("prepares a fixed signed head without rediscovery or caller mutation changing its binding", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-fixed-head-")); roots.push(root);
+    const keys = generateKeyPairSync("ed25519"), trusted = { release: keys.publicKey };
+    const artifact = Buffer.from("fixed head update");
+    const envelope = signStandaloneMetadata(metadata(artifact), "release", keys.privateKey);
+    const metadataBytes = Buffer.from(canonicalJson(envelope));
+    const head = signStandaloneChannelHead({ schemaVersion: 1, channel: "somechan", publishedAt: "2026-08-24T00:00:00Z",
+      lanes: { content: { releaseVersion: envelope.metadata.releaseVersion, url: "https://fixtures.invalid/fixed.json", sha256: sha256Hex(metadataBytes), size: metadataBytes.length } },
+    }, [{ keyId: "release", privateKey: keys.privateKey }]);
+    const original = structuredClone(head), store = new StandaloneStore(root, { channel: "somechan", namespace: "fixed-head" });
+    let documentReads = 0, returnedBytes = metadataBytes;
+    const updater = new StandaloneUpdater("somechan", "content", terminal, trusted, store, {
+      async readChannelHead() { throw new Error("fixed preparation must not read latest"); },
+      async readDocument(url) {
+        documentReads += 1;
+        expect(url).toBe("https://fixtures.invalid/fixed.json");
+        head.head.lanes.content!.releaseVersion = "0.1.0-somechan.999";
+        return returnedBytes;
+      },
+      prepare: await blobOptions(root, artifact),
+    });
+    const invalid = structuredClone(head); invalid.signatures[0]!.value = "AA==";
+    await expect(updater.prepareFromHead(invalid, "observe")).rejects.toThrow("signature");
+    expect(documentReads).toBe(0);
+    await expect(updater.prepareFromHead(head, "observe")).resolves.toMatchObject({ status: "prepared", authorized: false, generation: { releaseVersion: "0.1.0-somechan.1" } });
+    expect(documentReads).toBe(1);
+    const prepared = await store.readState();
+    expect(prepared.activationIntent).toBeNull();
+    returnedBytes = Buffer.from("{}");
+    await expect(updater.prepareFromHead(original, "authorize-silent")).rejects.toThrow("binding verification");
+    expect(await store.readState()).toEqual(prepared);
+  });
+
   it("binds optional Shell updater sidecars to immutable target distributions", () => {
     const keys = generateKeyPairSync("ed25519");
     const envelope = signStandaloneShellMetadata({

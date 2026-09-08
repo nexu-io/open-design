@@ -313,8 +313,10 @@ describe("Electron production Standalone authority", () => {
         const body = releases.get(url);
         return body == null ? new Response(null, { status: 404 }) : new Response(Buffer.from(body), { status: 200 });
       });
-      await expect(prepared.contentUpdater.prepareLatest("observe"))
+      releases.delete(installation.update.channelHeadUrl);
+      await expect(prepared.contentUpdater.prepareFromHead(JSON.parse(channelHead.toString()), "observe"))
         .resolves.toMatchObject({ status: "prepared", generation: { releaseVersion: nextMetadata.releaseVersion }, authorized: false });
+      releases.set(installation.update.channelHeadUrl, channelHead);
       const competingLifecycle = new StandaloneHostControlClient(
         { channel: manifest.channel, namespace: manifest.namespace },
         createStandaloneHostControlTransport(stamp),
