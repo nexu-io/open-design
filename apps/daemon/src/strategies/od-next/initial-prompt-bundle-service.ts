@@ -73,6 +73,7 @@ type ResearchInput = {
 
 export interface OdNextInitialPromptMeta {
   agentId: string;
+  amrRuntime?: import('@open-design/contracts').AmrRuntime;
   message?: unknown;
   currentPrompt?: unknown;
   priorTranscript?: unknown;
@@ -160,6 +161,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
   bundledPluginsDir: string;
   appliedPluginSnapshotId: unknown;
   agentId: string;
+  amrRuntime?: import('@open-design/contracts').AmrRuntime;
   streamFormat: string;
   atomPromptsEnabled: boolean;
   syntheticCanary: boolean;
@@ -195,7 +197,8 @@ export async function resolveOdNextPromptRecipeForRun(input: {
     if (!parsed.success) {
       throw new Error('OD Next runtime planning facts unavailable: frozen_snapshot_invalid');
     }
-    if (parsed.data.agentId !== input.agentId) {
+    if (parsed.data.agentId !== input.agentId
+      || (input.agentId === 'amr' && input.amrRuntime && input.amrRuntime !== 'opencode' && parsed.data.runtimePath !== `vela-${input.amrRuntime}`)) {
       throw new Error('OD Next runtime planning facts unavailable: frozen_snapshot_runtime_mismatch');
     }
     const { snapshotHash, ...withoutHash } = parsed.data;
@@ -215,6 +218,7 @@ export async function resolveOdNextPromptRecipeForRun(input: {
     }
     const capability = resolveBundledOdNextRuntimeCapability({
       agentId: input.agentId,
+      ...(input.amrRuntime ? { amrRuntime: input.amrRuntime } : {}),
       ...(versions.agentCliVersion
         ? { agentCliVersion: versions.agentCliVersion }
         : {}),
@@ -329,6 +333,7 @@ export function createOdNextInitialPromptBundleService(
       odNextStableContextPrompt,
     } = await deps.composeDaemonSystemPrompt({
       agentId,
+      amrRuntime: meta.amrRuntime,
       projectId,
       skillId,
       skillIds,

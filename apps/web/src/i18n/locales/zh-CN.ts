@@ -1,6 +1,7 @@
 import type { Dict } from "../types";
 
 export const zhCN: Dict = {
+  'amr.harness.none': "无（直接调用模型）",
   'invite.header.eyebrow': "团队邀请",
   'invite.loading': "正在加载邀请…",
   'invite.landing.title': "加入团队",

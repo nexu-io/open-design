@@ -1,4 +1,5 @@
 import type { ProjectFile, ProjectFileKind } from './files';
+import type { AmrRuntime, AmrRuntimeEvidence } from './amr-runtime.js';
 import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
 import type {
   PreviewCommentAttachment,
@@ -79,6 +80,8 @@ export interface ByokMediaDefaults {
 
 export interface ChatRequest {
   agentId: string;
+  /** Per-run AMR harness selection. Omission retains OpenCode. */
+  amrRuntime?: AmrRuntime;
   message: string;
   /**
    * Explicit daemon-issued OD Next continuation handle. Omit for an ordinary
@@ -357,6 +360,7 @@ export interface ChatRunCreateRequest extends ChatRequest {
  */
 export interface McpRunCreateRequest {
   projectId: string;
+  amrRuntime?: AmrRuntime;
   /** Optional bound conversation; when set without assistantMessageId the daemon mints a pin. */
   conversationId?: string;
   /** Optional client pin; omit to let the daemon mint when a conversation is bound. */
@@ -646,6 +650,10 @@ export interface ChatRunExecutionDiagnostics {
 }
 
 export interface ChatRunStatusResponse {
+  amrRuntime?: AmrRuntime;
+  amrRuntimeEvidence?: AmrRuntimeEvidence;
+  /** Model selected for this run; retained for explicit continuation. */
+  model?: string | null;
   id: string;
   projectId: string | null;
   conversationId: string | null;

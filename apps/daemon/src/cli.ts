@@ -247,7 +247,7 @@ const PROJECT_STRING_FLAGS = new Set([
   'pending-prompt', 'project', 'conversation', 'message', 'prompt',
   'prompt-file', 'task-execution', 'path', 'dir', 'as', 'url',
   'client-request-id',
-  'agent', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
+  'agent', 'amr-runtime', 'model', 'service-tier', 'snapshot-id', 'inputs', 'grant-caps', 'editor',
   'title', 'label', 'against', 'seed-from', 'fork-after', 'mode',
   'source',
 ]);
@@ -7659,10 +7659,12 @@ async function runRun(args) {
                [--prompt-file <path|->] [--task-execution <id>]
                [--client-request-id <id>]
                [--skill <id>[,<id>]] [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
+               [--agent claude|codex|opencode|amr] [--amr-runtime opencode|pi|codex|dsh|none]
+               [--model <id>] [--service-tier <id>]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
-               [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
+               [--agent <id>] [--amr-runtime opencode|pi|codex|dsh|none]
+               [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
   od run cancel <runId>                     Request cancellation.
   od run continue <runId> [--follow]        Continue a resumable failed run.
@@ -7805,6 +7807,8 @@ Common options:
         message,
         analyticsHints: { entryFrom: 'resume_continue' },
         ...(status.agentId ? { agentId: status.agentId } : {}),
+        ...(status.amrRuntime ? { amrRuntime: status.amrRuntime } : {}),
+        ...(status.amrRuntime && status.amrRuntime !== 'opencode' && status.model ? { model: status.model } : {}),
       };
       const data = await postJsonToDaemon(base, '/api/runs', body, workspaceHeaders);
       if (flags.json && !flags.follow) {
@@ -7870,6 +7874,7 @@ Common options:
         designSystemId,
         ...(flags.agent ? { agentId: flags.agent } : {}),
         ...(flags.model ? { model: flags.model } : {}),
+        ...(flags['amr-runtime'] ? { amrRuntime: flags['amr-runtime'] } : {}),
         ...(flags['service-tier'] ? { serviceTier: flags['service-tier'] } : {}),
       };
       const data = await postJsonToDaemon(base, '/api/runs', body, workspaceHeaders);
@@ -7904,6 +7909,7 @@ Common options:
       }
       if (flags['design-system']) body.designSystemId = flags['design-system'];
       if (flags.agent) body.agentId = flags.agent;
+      if (flags['amr-runtime']) body.amrRuntime = flags['amr-runtime'];
       if (flags.model) body.model = flags.model;
       if (flags['service-tier']) body.serviceTier = flags['service-tier'];
       if (flags.inputs) {

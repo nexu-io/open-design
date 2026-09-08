@@ -1,3 +1,4 @@
+import type { AmrRuntime, AmrRuntimeEvidence } from '@open-design/contracts';
 // Shapes and narrowing guards for the loosely-typed rows the run routes and
 // the run analytics lifecycle both read.
 //
@@ -126,6 +127,8 @@ export interface SseClient {
 }
 
 export interface ChatRun {
+  amrRuntime?: AmrRuntime;
+  amrRuntimeEvidence?: AmrRuntimeEvidence;
   id: string;
   projectId: string | null;
   conversationId: string | null;

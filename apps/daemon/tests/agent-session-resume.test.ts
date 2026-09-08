@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { agentSessionStorageKey } from '../src/runtimes/amr-session-key.js';
 
 import {
   closeDatabase,
@@ -87,6 +88,33 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.resumeSessionId).toBeNull();
     expect(ctx.newSessionId).toMatch(UUID_RE);
     expect(ctx.invalidationReason).toBeNull();
+  });
+
+  it('isolates Pi handles and cleanup from the legacy AMR OpenCode session', () => {
+    const db = seed();
+    seedMessage(db, 'asst-1', 'assistant');
+    const opencodeKey = agentSessionStorageKey('amr', 'opencode');
+    const piKey = agentSessionStorageKey('amr', 'pi');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1', agentId: opencodeKey, sessionId: 'opencode-session',
+      lastMessageId: 'asst-1', model: 'gpt-6-astra', cwd: null,
+    });
+    expect(resolveAgentResumeContext(db, {
+      conversationId: 'conv-1', agentId: piKey, currentModel: 'gpt-6-astra',
+    }).resumeSessionId).toBeNull();
+    upsertAgentSession(db, {
+      conversationId: 'conv-1', agentId: piKey, sessionId: `pi-${'a'.repeat(32)}`,
+      lastMessageId: 'asst-1', model: 'gpt-6-astra', cwd: null,
+    });
+    expect(resolveAgentResumeContext(db, {
+      conversationId: 'conv-1', agentId: piKey, currentModel: 'gpt-6-astra',
+    }).resumeSessionId).toBe(`pi-${'a'.repeat(32)}`);
+    persistCapturedAgentSession(db, {
+      conversationId: 'conv-1', agentId: piKey, sessionId: null,
+      stablePromptHash: null, model: 'gpt-6-astra', cwd: null, lastMessageId: 'asst-1',
+    });
+    expect(getAgentSessionRecord(db, 'conv-1', piKey)).toBeNull();
+    expect(getAgentSessionRecord(db, 'conv-1', opencodeKey)?.sessionId).toBe('opencode-session');
   });
 
   it('resumes the stored session when the identity still matches', () => {

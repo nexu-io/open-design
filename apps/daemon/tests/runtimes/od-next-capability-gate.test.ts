@@ -116,6 +116,14 @@ function syntheticEntry(
 }
 
 describe('OD Next runtime capability gate', () => {
+  it.each(['pi', 'codex', 'dsh', 'none'] as const)('never reuses OpenCode native-child evidence for AMR %s', (runtime) => {
+    const capability = resolveBundledOdNextRuntimeCapability({
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-od-next-local',
+      runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
+    });
+    expect(capability.reason).toBe('runtime_out_of_scope');
+    expect(capability.snapshot).toBeNull();
+  });
   it('binds initial path descriptors to existing runtime definitions without changing detection', () => {
     for (const descriptor of OD_NEXT_RUNTIME_PATH_DESCRIPTORS) {
       expect(getAgentDef(descriptor.agentId)?.id).toBe(descriptor.agentId);

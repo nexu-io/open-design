@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execAgentFile } from './shared.js';
 import type { ModelCapability, ModelCost, ModelMetadata } from '@open-design/contracts';
-import type { RuntimeAgentDef, RuntimeModelOption } from '../types.js';
+import type { RuntimeAgentDef, RuntimeBuildOptions, RuntimeModelOption } from '../types.js';
 
 const AMR_MODELS_TIMEOUT_MS = 10_000;
 const AMR_MODELS_RETRY_DELAYS_MS = [250, 750] as const;
@@ -650,7 +650,8 @@ export const amrAgentDef = {
   // Fail closed when Vela's live catalog is unavailable. Stale static
   // fallbacks let users select models that link/opencode no longer accepts.
   fallbackModels: [] as RuntimeModelOption[],
-  buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
+  buildArgs: (_prompt = '', _images: string[] = [], _dirs?: string[], options?: RuntimeBuildOptions) =>
+    ['agent', 'run', '--runtime', options?.amrRuntime ?? 'opencode'],
   streamFormat: 'acp-json-rpc',
   // vela resumes the upstream OpenCode session via ACP session/load across
   // turns (the OpenCode session store persists per conversation), so the daemon

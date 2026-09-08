@@ -43,6 +43,8 @@ type RunStatus = {
   error: string | null;
   errorCode: string | null;
   eventsLogPath: string;
+  amrRuntime?: string;
+  amrRuntimeEvidence?: { actualRuntime: string; runtimeVersion: string; modelId: string };
 };
 type RunEvent = { event: string; data: unknown };
 
@@ -63,6 +65,37 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     if (binDir) await removeTempDir(binDir);
     binDir = null;
     restoreEnv(originalEnv);
+  });
+
+  it.each(['pi', 'codex', 'dsh', 'none'] as const)('resumes %s turns and safely reseeds after a different harness advances the conversation', async (selectedRuntime) => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-pi-resume-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-pi', { logPath });
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr', agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: false, content: false, artifactManifest: false }, privacyDecisionAt: Date.now(),
+    });
+    const conversation = await createConversation(started.url);
+    for (const runtime of ['opencode', selectedRuntime, selectedRuntime, 'opencode', 'opencode', selectedRuntime, selectedRuntime] as const) {
+      const run = await sendRunAndWait(started.url, conversation, `request for ${runtime}`, 'deepseek-v4-flash', runtime);
+      expect(run.status, `${runtime}: ${run.error}`).toBe('succeeded');
+      expect(run.amrRuntime).toBe(runtime);
+      if (runtime === selectedRuntime) {
+        expect(run.amrRuntimeEvidence).toMatchObject({
+          actualRuntime: selectedRuntime, runtimeVersion: '0.85.1', modelId: 'deepseek-v4-flash',
+        });
+      }
+    }
+    const calls = (await readFile(logPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    expect(calls.map(({ method, runtime }) => [method, runtime])).toEqual([
+      ['new', 'opencode'], ['new', selectedRuntime], ['load', selectedRuntime],
+      ['new', 'opencode'], ['load', 'opencode'], ['new', selectedRuntime], ['load', selectedRuntime],
+    ]);
+    expect(calls[4].sessionId).toBe('oc-fake-1');
+    expect(calls[2].sessionId).toBe(`${selectedRuntime}-0123456789abcdef0123456789abcdef`);
+    expect(calls[6].sessionId).toBe(calls[2].sessionId);
   });
 
   it('captures the durable handle on turn 1 and resumes it via session/load on turn 2', async () => {
@@ -395,6 +428,47 @@ describe('AMR (vela) ACP session resume — full server cycle', () => {
     expect(await readInvocations(logPath)).toEqual([]);
   });
 
+  it('keeps a direct-model run alive after actual model bytes while deliverable text is buffered', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-buffered-output-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-buffered-output', { logPath, bufferedOutputDelayMs: 2_000 });
+    clearTelemetryEnv();
+    process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS = '500';
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr', agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: false, content: false, artifactManifest: false }, privacyDecisionAt: Date.now(),
+    });
+    const conversationId = await createConversation(started.url);
+    const run = await sendRunAndWait(started.url, conversationId, 'Build a page', 'deepseek-v4-flash', 'none');
+    expect(run.status, run.error ?? '').toBe('succeeded');
+    expect(await readInvocations(logPath)).toEqual(['new']);
+    const events = (await readFile(run.eventsLogPath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+    const progressIndex = events.findIndex((entry) => entry.data?.name === 'amr_direct_model_output_started');
+    const textIndex = events.findIndex((entry) => entry.data?.type === 'text_delta');
+    expect(progressIndex).toBeGreaterThanOrEqual(0);
+    expect(textIndex).toBeGreaterThan(progressIndex);
+    expect(events.slice(0, textIndex).some((entry) => entry.data?.type === 'thinking_delta')).toBe(false);
+  });
+
+  it('does not automatically repeat a direct-model request after an upstream failure', async () => {
+    binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-direct-no-retry-'));
+    const logPath = path.join(binDir, 'invocations.jsonl');
+    const bin = await writeVelaWrapper(binDir, 'vela-direct-error', { logPath, promptError: 'direct AMR model request failed with HTTP 503' });
+    clearTelemetryEnv();
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'amr', agentCliEnv: { amr: { VELA_BIN: bin } },
+      telemetry: { metrics: false, content: false, artifactManifest: false }, privacyDecisionAt: Date.now(),
+    });
+    const conversationId = await createConversation(started.url);
+    const run = await sendRunAndWait(started.url, conversationId, 'Build a page', 'deepseek-v4-flash', 'none');
+    expect(run.status).toBe('failed');
+    expect(await readInvocations(logPath)).toEqual(['new']);
+    const events = await readRunEvents(run.eventsLogPath);
+    expect(events.some((entry) => entry.event === 'run_retry_attempted')).toBe(false);
+  });
+
   it('reseeds a fresh session (no resume) when the model changes between turns', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-amr-modelchange-bin-'));
     const logPath = path.join(binDir, 'invocations.jsonl');
@@ -437,10 +511,12 @@ async function writeVelaWrapper(
     resumeFailed?: boolean;
     omitHandle?: boolean;
     promptErrorOnLoad?: string;
+    promptError?: string;
     logSetModel?: boolean;
     requireSetModel?: boolean;
     modelPresetJson?: string;
     modelListJson?: string;
+    bufferedOutputDelayMs?: number;
   },
 ): Promise<string> {
   const bin = path.join(dir, name);
@@ -459,6 +535,8 @@ async function writeVelaWrapper(
     lines.push(`export FAKE_VELA_PROMPT_ERROR_ON_LOAD=${JSON.stringify(opts.promptErrorOnLoad)}`);
   }
   if (opts.logSetModel) lines.push('export FAKE_VELA_LOG_SET_MODEL=1');
+  if (opts.promptError) lines.push(`export FAKE_VELA_PROMPT_ERROR=${JSON.stringify(opts.promptError)}`);
+  if (opts.bufferedOutputDelayMs) lines.push(`export FAKE_VELA_BUFFERED_OUTPUT_DELAY_MS=${opts.bufferedOutputDelayMs}`);
   if (opts.modelPresetJson) {
     lines.push(`export FAKE_VELA_MODEL_PRESET_JSON=${JSON.stringify(opts.modelPresetJson)}`);
   }
@@ -520,6 +598,7 @@ function snapshotEnv(): Record<string, string | undefined> {
     OPEN_DESIGN_TELEMETRY_RELAY_URL: process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL,
     POSTHOG_KEY: process.env.POSTHOG_KEY,
     POSTHOG_HOST: process.env.POSTHOG_HOST,
+    OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS: process.env.OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS,
   };
 }
 
@@ -604,6 +683,7 @@ async function sendRunAndWait(
   encoded: string,
   message: string,
   model?: string,
+  amrRuntime?: 'opencode' | 'pi' | 'codex' | 'dsh' | 'none',
 ): Promise<RunStatus> {
   const [projectId, conversationId, workspaceId, workspaceMemberId] =
     encoded.split('::');
@@ -632,6 +712,7 @@ async function sendRunAndWait(
       message,
       currentPrompt: message,
       ...(model ? { model } : {}),
+      ...(amrRuntime ? { amrRuntime } : {}),
     }),
   });
   const body = (await runResponse.json()) as {

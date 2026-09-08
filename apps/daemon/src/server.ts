@@ -24,9 +24,12 @@ import {
   odNextStrategyRecipeIdentityV2,
   renderOdNextRuntimeFactsV2,
   composeOdNextStrategyStableRequestContextV2,
-  executionProfileFromStreamFormat,
+  executionProfileForRuntime,
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
+  resolveAmrRuntime,
+  AMR_RUNTIMES,
 } from '@open-design/contracts';
+import { agentSessionStorageKey } from './runtimes/amr-session-key.js';
 import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
 import type {
   CollabCloudMemberDirectoryEntry,
@@ -7762,6 +7765,7 @@ export async function startServer({
         terminalFailed,
         oldestPendingAgeMs,
       },
+      amrRuntimeSelection: { version: 1, runtimes: [...AMR_RUNTIMES] },
     });
   });
 
@@ -9296,6 +9300,7 @@ export async function startServer({
 
   const composeDaemonSystemPrompt = async ({
     agentId,
+    amrRuntime = undefined,
     projectId,
     skillId,
     skillIds,
@@ -9972,6 +9977,7 @@ export async function startServer({
       bundledPluginsDir: BUNDLED_PLUGINS_DIR,
       appliedPluginSnapshotId,
       agentId,
+      amrRuntime,
       streamFormat,
       atomPromptsEnabled: bundledAtomPromptsEnabled,
       syntheticCanary: odNextSyntheticCanary,
@@ -10026,7 +10032,7 @@ export async function startServer({
       mediaExecution,
       byokMediaDefaults,
       streamFormat,
-      executionProfile: executionProfileFromStreamFormat(streamFormat),
+      executionProfile: executionProfileForRuntime(agentId, streamFormat, amrRuntime),
       ...(pluginBlock ? { pluginBlock } : {}),
       ...(activeStageBlocks ? { activeStageBlocks } : {}),
       userInstructions,
@@ -10091,7 +10097,7 @@ export async function startServer({
       ? {
           agentId,
           streamFormat,
-          executionProfile: executionProfileFromStreamFormat(streamFormat),
+          executionProfile: executionProfileForRuntime(agentId, streamFormat, amrRuntime),
           metadata,
           template,
           exampleReference: odNextExampleReference,
@@ -10483,6 +10489,14 @@ export async function startServer({
       );
     if (!def.bin)
       return failRun('AGENT_UNAVAILABLE', 'agent has no binary');
+    let selectedAmrRuntime;
+    try {
+      selectedAmrRuntime = resolveAmrRuntime(def.id, chatBody.amrRuntime);
+    } catch (error) {
+      return failRun('VALIDATION_FAILED', error.message);
+    }
+    const sessionStorageAgentId = agentSessionStorageKey(def.id, selectedAmrRuntime);
+    if (selectedAmrRuntime) run.amrRuntime = selectedAmrRuntime;
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
           byokProvider,
@@ -10886,6 +10900,7 @@ export async function startServer({
         }
       : await composeDaemonSystemPrompt({
         agentId,
+        amrRuntime: selectedAmrRuntime,
         projectId,
         skillId,
         skillIds,
@@ -11260,6 +11275,7 @@ export async function startServer({
         ? serviceTier
         : null;
     const agentOptions = {
+      ...(chatBody.amrRuntime !== undefined ? { amrRuntime: selectedAmrRuntime } : {}),
       model: safeModel,
       reasoning: safeReasoning,
       serviceTier: safeServiceTier,
@@ -11307,7 +11323,7 @@ export async function startServer({
       agentSupportsSessionResume && run.conversationId
         ? resolveAgentResumeContext(db, {
             conversationId: run.conversationId,
-            agentId: def.id,
+            agentId: sessionStorageAgentId,
             currentModel: safeModel ?? null,
             currentCwd: effectiveCwd,
             currentAssistantMessageId: run.assistantMessageId ?? null,
@@ -11539,7 +11555,7 @@ export async function startServer({
           reasoning,
           serviceTier,
           mediaExecution: run.mediaExecution,
-          executionProfile: executionProfileFromStreamFormat(def.streamFormat),
+          executionProfile: executionProfileForRuntime(def.id, def.streamFormat, selectedAmrRuntime),
         },
         run_context_selection: context,
         project_attachment_selection: safeAttachments,
@@ -11615,7 +11631,7 @@ export async function startServer({
     lifecycle.mark('prompt_build_end');
     lifecycle.mark('launch_preflight_start');
     // (model resolution + AMR concretization hoisted above the resume guard)
-    const executionProfile = executionProfileFromStreamFormat(def.streamFormat);
+    const executionProfile = executionProfileForRuntime(def.id, def.streamFormat, selectedAmrRuntime);
     // Accumulates the agent's visible text this run so the close handler can
     // tell whether the turn ended on a clarifying question form. The
     // `od-plugin-authoring` plugin's turn-1 flow is to emit a
@@ -12085,7 +12101,7 @@ export async function startServer({
         agentResumeCtx.resumeSessionId &&
         run.conversationId
       ) {
-        clearAgentSession(db, run.conversationId, def.id);
+        clearAgentSession(db, run.conversationId, sessionStorageAgentId);
         design.runs.emit(run, 'diagnostic', {
           type: 'agent_session_cleared_after_prompt_too_large',
           agent_id: def.id,
@@ -12132,7 +12148,7 @@ export async function startServer({
         run.retrySuppressedReason = undefined;
         upsertAgentSession(db, {
           conversationId: run.conversationId,
-          agentId: def.id,
+          agentId: sessionStorageAgentId,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,
@@ -12170,6 +12186,9 @@ export async function startServer({
         failure,
         attemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
+        // AMR direct-model evaluation is one request per user turn. A host
+        // retry would silently turn that baseline into a second model call.
+        ...(def.id === 'amr' && selectedAmrRuntime === 'none' ? { maxAttempts: 0 } : {}),
       });
       if (allowRetry && decision.shouldRetry && !design.runs.isTerminal(run.status)) {
         run.retryOriginalFailure ??= failure ?? undefined;
@@ -12242,7 +12261,7 @@ export async function startServer({
       if (resumableFailure) {
         upsertAgentSession(db, {
           conversationId: run.conversationId,
-          agentId: def.id,
+          agentId: sessionStorageAgentId,
           sessionId: liveSessionId,
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,
@@ -12874,7 +12893,7 @@ export async function startServer({
         if (!agentResumeCtx.isResuming && createTurnSessionId) {
           upsertAgentSession(db, {
             conversationId: run.conversationId,
-            agentId: def.id,
+            agentId: sessionStorageAgentId,
             sessionId: createTurnSessionId,
             stablePromptHash: currentStableHash,
             stablePromptSections: currentStableSectionsJson,
@@ -12901,7 +12920,7 @@ export async function startServer({
           // refresh the stable hash to what the session now holds.
           upsertAgentSession(db, {
             conversationId: run.conversationId,
-            agentId: def.id,
+            agentId: sessionStorageAgentId,
             sessionId: agentResumeCtx.resumeSessionId,
             stablePromptHash: currentStableHash,
             stablePromptSections: currentStableSectionsJson,
@@ -14488,7 +14507,7 @@ export async function startServer({
               run.errorCode = piErrorCode;
             }
             if (piErrorCode === 'PI_PARENT_SESSION_FAILED' && run.conversationId) {
-              clearAgentSession(db, run.conversationId, def.id);
+              clearAgentSession(db, run.conversationId, sessionStorageAgentId);
             }
             clearInactivityWatchdog();
             send('error', createSseErrorPayload(
@@ -14522,6 +14541,13 @@ export async function startServer({
         executionProfile,
         completePromptOnTurnEnd: def.acpTurnEndCompletesPrompt === true,
         ...(def.id === 'amr' ? { modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE' } : {}),
+        ...(selectedAmrRuntime && selectedAmrRuntime !== 'opencode' ? {
+          expectedAmrRuntime: selectedAmrRuntime,
+          onAmrRuntimeEvidence: (evidence) => {
+            run.amrRuntimeEvidence = evidence;
+            design.runs.persistState(run);
+          },
+        } : {}),
         // Resume the prior upstream session (drives `session/load`) when the
         // resume-identity guard says it is safe; otherwise a fresh session/new.
         ...(def.resumesSessionViaAcpLoad === true && agentResumePromptPolicy.resumeSessionId
@@ -14530,6 +14556,19 @@ export async function startServer({
         onCliReady: () => noteCliReadyAt(),
         onSessionInit: () => noteSessionInitDoneAt(),
         onPromptComplete: () => clearFirstOutputWatchdog(),
+        onAmrModelOutputProgress: (contentBytes) => {
+          // Only identity-checked, growing real provider content reaches this
+          // callback. Artifact bytes remain private until Vela validates them.
+          // Keep first_visible_output owned by the final text emission.
+          if (progressClockFrozen) return;
+          if (!firstOutputSeen) {
+            send('agent', { type: 'diagnostic', name: 'amr_direct_model_output_started', contentBytes });
+          }
+          firstOutputSeen = true;
+          clearFirstOutputWatchdog();
+          noteAgentActivity();
+          noteFirstTokenAt();
+        },
         onTerminal: (kind) => beginAcpAttemptTermination(
           `acp_${kind}`,
           { gracefulWaitMs: kind === 'completed' ? 500 : 0 },
@@ -15001,7 +15040,7 @@ export async function startServer({
         // the session row is now cleared, the re-spawn resolves isResuming=false
         // (fresh session, full transcript), so it CANNOT resume-fail again — the
         // `resumeAutoReseeded` guard is belt-and-suspenders against any loop.
-        clearAgentSession(db, run.conversationId, def.id);
+        clearAgentSession(db, run.conversationId, sessionStorageAgentId);
         if (!run.resumeAutoReseeded) {
           run.resumeAutoReseeded = true;
           run.resumeAutoReseededFrom = agentResumePromptPolicy.resumeSessionId ?? null;
@@ -15448,7 +15487,7 @@ export async function startServer({
         if (status === 'succeeded' && def.streamFormat === 'pi-rpc') {
           persistCapturedAgentSession(db, {
             conversationId: run.conversationId,
-            agentId: def.id,
+            agentId: sessionStorageAgentId,
             sessionId: sessionPath,
             stablePromptHash: currentStableHash,
             stablePromptSections: currentStableSectionsJson,
@@ -15478,7 +15517,7 @@ export async function startServer({
       ) {
         persistCapturedAgentSession(db, {
           conversationId: run.conversationId,
-          agentId: def.id,
+          agentId: sessionStorageAgentId,
           sessionId: acpSession.getDurableSessionId(),
           stablePromptHash: currentStableHash,
           stablePromptSections: currentStableSectionsJson,

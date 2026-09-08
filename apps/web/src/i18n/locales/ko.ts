@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const ko: Dict = {
+  'amr.harness.none': "없음 (모델 직접 호출)",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

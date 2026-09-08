@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-import { reattachDaemonRun } from '../../src/providers/daemon';
+import { reattachDaemonRun, streamViaDaemon } from '../../src/providers/daemon';
 
 // ---------------------------------------------------------------------------
 // Helpers: build a fake SSE Response with a mock reader.
@@ -89,6 +89,33 @@ describe('reattachDaemonRun SSE reader reconnection', () => {
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+  });
+
+  it('forwards Pi in the run request without changing a subsequent legacy request', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const value = String(url);
+      if (value === '/api/runs' && init?.method === 'POST') {
+        bodies.push(JSON.parse(String(init.body)));
+        return jsonResponse({ runId: 'test-pi-run' }, 202);
+      }
+      if (value.includes('/events')) {
+        return streamResponse(makeFiniteReader([
+          enc(sseEvent(1, 'end', { status: 'succeeded', code: 0 })),
+        ]));
+      }
+      return jsonResponse({ id: 'test-pi-run', status: 'succeeded', exitCode: 0 });
+    }) as typeof globalThis.fetch;
+    const onError = vi.fn();
+    const options = {
+      agentId: 'amr', model: 'gpt-6-astra', history: [], signal: new AbortController().signal,
+      handlers: { onDelta: vi.fn(), onDone: vi.fn(), onError, onAgentEvent: vi.fn() },
+    };
+    await streamViaDaemon({ ...options, amrRuntime: 'pi' });
+    await streamViaDaemon(options);
+    expect(onError).not.toHaveBeenCalled();
+    expect(bodies[0]).toMatchObject({ agentId: 'amr', amrRuntime: 'pi', model: 'gpt-6-astra' });
+    expect(bodies[1]).not.toHaveProperty('amrRuntime');
   });
 
   it('reconnects and resumes when reader.read() rejects mid-stream', async () => {

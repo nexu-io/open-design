@@ -1,5 +1,5 @@
 import type { ExecFileOptions } from 'node:child_process';
-import type { AgentDiagnostic, ModelMetadata } from '@open-design/contracts';
+import type { AgentDiagnostic, AmrRuntime, ModelMetadata } from '@open-design/contracts';
 
 export type { AgentDiagnostic } from '@open-design/contracts';
 
@@ -23,6 +23,7 @@ export type RuntimeModelSource = 'live' | 'fallback';
 export type RuntimeReasoningOption = RuntimeModelOption;
 
 export type RuntimeBuildOptions = {
+  amrRuntime?: AmrRuntime;
   model?: string | null;
   reasoning?: string | null;
   serviceTier?: string | null;

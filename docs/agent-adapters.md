@@ -108,6 +108,50 @@ for (const def of AGENT_DEFS) {
 
 ## 2. Detection strategy
 
+### AMR harness selection
+
+AMR remains the outer agent (`agentId: "amr"`). Each run may set
+`amrRuntime: "opencode" | "pi" | "codex" | "dsh" | "none"`; omission preserves
+the existing OpenCode path. Explicit `none` means AMR calls the model without a
+harness; it does not select BYOK or a separate connection.
+In the project composer, select **AMR Harness**. The equivalent CLI entry is
+`od run start --agent amr --amr-runtime pi --model <exact-model-id> --prompt-file <path>`.
+The same field is available on the shared run request; it is not a global app setting.
+Retry and Continue retain the source non-OpenCode runtime and model.
+
+Each added harness requires a Vela build with that adapter and its pinned dependency. The
+evaluation runner resolves both from the selected Open Design checkout's Vela
+package, so installing an unrelated global CLI does not satisfy that contract.
+The daemon passes `--runtime <selection>` and verifies the ACP-reported runtime,
+version, selected model, and runtime-specific durable session namespace for
+Pi, Codex, DSH, and direct-model runs. Run status exposes `amrRuntimeEvidence`;
+absent evidence is unknown. Each runtime has separate session handles, while the
+normal conversation-history cursor still invalidates stale handles. Historical
+OpenCode handles remain compatible.
+
+AMR `none` uses the existing `text_artifact` execution profile for legacy prompt
+composition while retaining ACP transport. Its Vela adapter makes one model
+request per turn without a tool or repair loop, then mechanically persists
+validated explicit artifact blocks. The daemon's plain-stream persistence does
+not run for ACP. Validated response text is delivered after the write, so a Web
+recovery cannot save an artifact from a rejected model response. Its context and
+delivery profile differ from the filesystem harnesses and must be recorded when
+comparing results; answer latency is not provider first-token latency.
+The adapter reports `amr_model_output_progress` ACP updates only after receiving
+nonempty provider content, with the actual model and monotonically increasing
+`contentBytes`. The host validates the session/runtime/model before using that
+signal to retire its first-output watchdog and record the first provider token.
+It carries no artifact body and does not mark visible output or success. Real
+reasoning remains streamed as reasoning. Automatic same-run retries are disabled
+for AMR `none`; an explicit user Retry is a separate request.
+
+This initial Pi adapter accepts text and native file/shell tools. Image inputs
+and host MCP are rejected explicitly. Pi, Codex, DSH, and direct-model AMR paths have no validated OD Next native-child
+capability record in this adapter; they cannot reuse OpenCode's admission evidence. Explicit OD
+Next requirements therefore remain subject to the normal capability gate.
+Daemon-owned data continues to follow the root
+[`AGENTS.md` data-directory contract](../AGENTS.md#daemon-data-directory-contract).
+
 `detectAgents()` and `detectAgentsStream()` probe all registered definitions in
 parallel whenever they are invoked. The daemon warms detection at startup, and
 agent-list/run paths invoke it again when they need fresh availability or model

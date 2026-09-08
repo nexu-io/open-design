@@ -95,6 +95,10 @@ import { dirname, join } from 'node:path';
 import { argv, stdin, stdout, stderr, env, exit } from 'node:process';
 
 const SESSION_ID = env.FAKE_VELA_SESSION_ID || 'fake-vela-session-1';
+const AMR_RUNTIME = argv.includes('--runtime') ? argv[argv.indexOf('--runtime') + 1] : 'opencode';
+const NON_OPENCODE_RUNTIME = AMR_RUNTIME !== 'opencode';
+const RUNTIME_SESSION_ID = `${AMR_RUNTIME}-0123456789abcdef0123456789abcdef`;
+const RUNTIME_EVIDENCE = { runtime: AMR_RUNTIME, runtimeVersion: '0.85.1' };
 // Durable upstream (OpenCode) session handle reported on session/new and
 // session/load — the value the daemon captures and replays to resume.
 const OPENCODE_SESSION_ID = env.FAKE_VELA_OPENCODE_SESSION_ID || 'oc-fake-1';
@@ -105,6 +109,7 @@ const ASSISTANT_TEXT = Object.prototype.hasOwnProperty.call(env, 'FAKE_VELA_TEXT
   ? env.FAKE_VELA_TEXT
   : 'Hello from fake vela.';
 const THOUGHT_TEXT = env.FAKE_VELA_THOUGHT || '';
+const BUFFERED_OUTPUT_DELAY_MS = Number(env.FAKE_VELA_BUFFERED_OUTPUT_DELAY_MS) || 0;
 const SESSION_NEW_ERROR = env.FAKE_VELA_SESSION_NEW_ERROR || '';
 const SET_MODEL_ERROR = env.FAKE_VELA_SET_MODEL_ERROR || '';
 const PROMPT_ERROR = env.FAKE_VELA_PROMPT_ERROR || '';
@@ -238,11 +243,11 @@ if (STDERR_ON_SIGTERM || IGNORE_SIGTERM) {
 // Append one line per session-bind method (`new` / `load`) to the file named by
 // FAKE_VELA_INVOCATION_LOG, so a multi-turn server test can assert the resume
 // sequence across the separate per-turn vela processes (e.g. ['new','load','new']).
-function logInvocation(method) {
+function logInvocation(method, sessionId = NON_OPENCODE_RUNTIME ? RUNTIME_SESSION_ID : OPENCODE_SESSION_ID) {
   const file = env.FAKE_VELA_INVOCATION_LOG;
   if (!file) return;
   try {
-    appendFileSync(file, `${JSON.stringify({ method })}\n`);
+    appendFileSync(file, `${JSON.stringify({ method, runtime: AMR_RUNTIME, sessionId })}\n`);
   } catch {
     /* best-effort diagnostics only */
   }
@@ -296,7 +301,8 @@ function handleMessage(msg) {
         // that never surfaced the durable handle): the daemon captures a null
         // handle, which must CLEAR the row so the next turn opens a fresh session
         // instead of resuming a non-existent one.
-        ...(env.FAKE_VELA_OMIT_OPENCODE_SESSION_ID ? {} : { openCodeSessionId: OPENCODE_SESSION_ID }),
+        ...(NON_OPENCODE_RUNTIME || env.FAKE_VELA_OMIT_OPENCODE_SESSION_ID ? {} : { openCodeSessionId: OPENCODE_SESSION_ID }),
+        ...(NON_OPENCODE_RUNTIME ? { ...RUNTIME_EVIDENCE, durableSessionId: RUNTIME_SESSION_ID } : {}),
         models: {
           currentModelId,
           availableModels: AVAILABLE_MODELS,
@@ -308,9 +314,12 @@ function handleMessage(msg) {
       // handle. (vela validates existence before the first prompt, so a missing
       // session surfaces as resume_failed on session/prompt, not here.)
       const durable = typeof params?.sessionId === 'string' ? params.sessionId : OPENCODE_SESSION_ID;
-      logInvocation('load');
+      logInvocation('load', durable);
       didLoad = true;
-      writeResult(id, { sessionId: SESSION_ID, openCodeSessionId: durable });
+      writeResult(id, {
+        sessionId: SESSION_ID,
+        ...(NON_OPENCODE_RUNTIME ? { ...RUNTIME_EVIDENCE, durableSessionId: durable } : { openCodeSessionId: durable }),
+      });
       return;
     }
     case 'session/set_model': {
@@ -325,7 +334,7 @@ function handleMessage(msg) {
         logInvocation(`set_model:${next || '<empty>'}`);
       }
       sessionsWithModel.add(sessionId);
-      writeResult(id, {});
+      writeResult(id, NON_OPENCODE_RUNTIME ? { models: { currentModelId } } : {});
       return;
     }
     case 'session/set_config_option': {
@@ -418,10 +427,22 @@ setInterval(tick, 25);`,
         }
         return;
       }
+      if (BUFFERED_OUTPUT_DELAY_MS > 0) {
+        writeNotification('session/update', { sessionId, update: {
+          sessionUpdate: 'amr_model_output_progress', runtime: AMR_RUNTIME, modelId: currentModelId, contentBytes: 12,
+        } });
+        setTimeout(() => {
+          emitSessionUpdates(sessionId);
+          writeResult(id, { stopReason: 'end_turn', ...RUNTIME_EVIDENCE, modelId: currentModelId,
+            usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 } });
+        }, BUFFERED_OUTPUT_DELAY_MS);
+        return;
+      }
       emitSessionUpdates(sessionId);
       const finishPrompt = () => {
         writeResult(id, {
           stopReason: 'end_turn',
+          ...(NON_OPENCODE_RUNTIME ? { ...RUNTIME_EVIDENCE, modelId: env.FAKE_VELA_PI_TERMINAL_MODEL || currentModelId } : {}),
           ...(OMIT_PROMPT_USAGE
             ? {}
             : { usage: { inputTokens: 12, outputTokens: 7, totalTokens: 19 } }),
