@@ -70,6 +70,8 @@ export function registerExactCommands(cli: CAC): void {
     .option("--plan <file>", "Electron plan (scene)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (scene)")
+    .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
+    .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
     .option("--scene <directory>", "Verified scene (distribution)")
     .option("--prepared <directory>", "Prepared signed content (distribution)")
     .option("--policy <file>", "Release policy (distribution)")
@@ -78,7 +80,10 @@ export function registerExactCommands(cli: CAC): void {
     .option("--source-commit <sha>", "Exact source commit (distribution)")
     .action(async (operation: string, options: Options) => {
       const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
+      if (operation !== "scene" && (options.capsuleContent != null || options.capsuleArchive != null)) throw new Error("prebuilt Capsule inputs are only supported by build scene");
       if (operation === "scene") await buildReleaseScene({ ...common,
+        ...(options.capsuleContent == null ? {} : { capsuleContent: required(options, "capsuleContent") }),
+        ...(options.capsuleArchive == null ? {} : { capsuleArchive: required(options, "capsuleArchive") }),
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });

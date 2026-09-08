@@ -49,6 +49,13 @@ workflows must not construct transient JSON requests for these operations.
 The relocatable build runs with Node 24 without a workspace install. Credentials
 remain environment inputs, never command-line arguments or receipt fields.
 
+`build capsule` produces release-neutral content separately. `build scene` may
+consume `--capsule-content` and `--capsule-archive` together to avoid recompiling
+that input; the public Shell builder still verifies its target, digest and size.
+Without these inputs the cold scene path builds its baseline Capsule locally.
+This input path does not itself establish a cache hit or authorize reuse: the
+planner and convergence cache must bind the source recipe to verified artifacts.
+
 Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
 artifact / convergence ZIP. It preserves native executable permissions,
 read-only files and hidden inputs, while convergence retains ownership of

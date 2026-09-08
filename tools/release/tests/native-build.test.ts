@@ -42,6 +42,26 @@ it("builds neutral Capsule content without Node archives, Closure inputs or vers
   await expect(buildReleaseCapsule({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
 });
 
+it("consumes a prebuilt Capsule without invoking its compiler or deleting caller inputs", async () => {
+  const f = await fixture(), capsuleContent = join(f.root, "capsule-content.json"), capsuleArchive = join(f.root, "capsule.zip");
+  await writeFile(capsuleContent, "content"); await writeFile(capsuleArchive, "archive");
+  await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
+    "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronCapsuleContent() { throw Error('Capsule must not be recompiled'); }\n");
+  await buildReleaseScene({ ...f, capsuleContent, capsuleArchive });
+  expect(JSON.parse(await readFile(f.receipt, "utf8")).request).toMatchObject({ capsuleContentFile: capsuleContent, capsuleArchiveFile: capsuleArchive });
+  expect(await readFile(capsuleContent, "utf8")).toBe("content");
+  expect(await readFile(capsuleArchive, "utf8")).toBe("archive");
+});
+
+it("rejects incomplete or non-Electron Capsule inputs before native work", async () => {
+  const f = await fixture();
+  for (const input of [
+    { ...f, capsuleContent: "content" },
+    { ...f, capsuleArchive: "archive" },
+    { ...f, shell: "terminal", capsuleContent: "content", capsuleArchive: "archive" },
+  ]) await expect(buildReleaseScene(input)).rejects.toThrow("Capsule inputs require electron and both");
+});
+
 it("binds native distribution to authorized prepared content, trust and scene", async () => {
   const f = await fixture(), prepared = join(f.root, "prepared"), scene = join(f.root, "scene"), policy = join(f.root, "policy.json");
   await mkdir(join(prepared, "documents"), { recursive: true }); await mkdir(join(prepared, "trust")); await mkdir(scene);

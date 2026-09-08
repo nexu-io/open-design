@@ -42,11 +42,19 @@ async function terminalBuild(input: BuildInput, operation: "scene" | "distributi
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
-export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: string; resources?: string; nodeArchive?: string }>) {
+export async function buildReleaseScene(input: BuildInput & Readonly<{
+  plan?: string; resources?: string; nodeArchive?: string;
+  capsuleContent?: string; capsuleArchive?: string;
+}>) {
+  if ((input.capsuleContent != null || input.capsuleArchive != null)
+    && (input.shell !== "electron" || !input.capsuleContent || !input.capsuleArchive)) {
+    throw new Error("Capsule inputs require electron and both --capsule-content and --capsule-archive");
+  }
   const buildTarget = target(input), root = resolve(input.root);
   const closure = join(root, "apps/closure/dist/index.mjs"), launcher = join(root, "apps/closure/dist/launcher.mjs");
   if (input.shell === "electron") {
     if (!input.plan || !input.resources) throw new Error("Electron scene requires --plan and --resources");
+    const resourceReceiptFile = resolve(input.resources);
     const plan = await readObject(input.plan), identity = plan.plan?.nodes?.["electron.shell.build"]?.identity;
     if (plan.plan?.target !== buildTarget || typeof identity !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(identity)) throw new Error("Electron Shell plan identity is invalid");
     // Build dependencies load only when the native build command is executed.
@@ -55,15 +63,22 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
       const source = await resolveElectronNodeArchive(buildTarget);
       return (await acquireBuildArchive({ cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: source.archive, url: source.url, sha256: source.sha256 })).path;
     })();
-    const capsuleStage = await mkdtemp(join(tmpdir(), "release-capsule-baseline-"));
-    try {
-      const capsule = await buildElectronCapsuleContent({ target: buildTarget, outputRoot: join(capsuleStage, "content") });
+    const assemble = async (capsule: Readonly<{ contentPath: string; archivePath: string }>) => {
       const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: buildTarget,
         capsuleContentFile: capsule.contentPath, capsuleArchiveFile: capsule.archivePath,
         buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher, platformArchivePath,
-        resourceReceiptFile: resolve(input.resources), sceneDirectory: resolve(input.output) });
+        resourceReceiptFile, sceneDirectory: resolve(input.output) });
       await writeObject(input.receipt, result);
       return result;
+    };
+    // Acquisition and cache identity remain the caller/planner's responsibility.
+    // Shell scene assembly verifies target and actual archive bytes in either path.
+    if (input.capsuleContent != null && input.capsuleArchive != null) {
+      return assemble({ contentPath: resolve(input.capsuleContent), archivePath: resolve(input.capsuleArchive) });
+    }
+    const capsuleStage = await mkdtemp(join(tmpdir(), "release-capsule-baseline-"));
+    try {
+      return await assemble(await buildElectronCapsuleContent({ target: buildTarget, outputRoot: join(capsuleStage, "content") }));
     } finally { await rm(capsuleStage, { recursive: true, force: true }); }
   }
   const lock = await readOfficialNodeLock(join(root, "shells/terminal/node-lock.json")), node = lock.targets[buildTarget];
