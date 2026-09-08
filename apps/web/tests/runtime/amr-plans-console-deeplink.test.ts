@@ -35,7 +35,7 @@ describe('升级按钮的落点:console 的套餐页', () => {
 
   it('test profile 落在 test console,不再落在生产 Pricing', () => {
     expect(amrPlansUrlForProfile('test')).toBe(
-      'https://vela.powerformer.net/dashboard?source=open_design&billing=plan',
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design&billing=plan',
     );
   });
 
