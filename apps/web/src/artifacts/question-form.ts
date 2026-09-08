@@ -1138,6 +1138,43 @@ export function formatFormAnswers(
   return lines.join('\n');
 }
 
+/**
+ * `[form answers — <id>]` —— {@link formatFormAnswers} 顶上那一行**机器载荷**。
+ *
+ * 它是写给 agent 的路由头,不是写给人的。id 后面允许任意文字是因为
+ * `QuestionForm.parseSubmittedAnswers` 也只认「以 `[form answers` 开头」,
+ * agent 复述时可以改写这一行。
+ */
+const FORM_ANSWERS_HEADER_LINE = /^\[form answers\b[^\n]*\n?/i;
+
+/**
+ * 这条用户消息是不是一份表单答案。
+ *
+ * 判据和 `QuestionForm.parseSubmittedAnswers` 同源:只认 `[form answers` 开头,
+ * 用户随口说的话不会被误判。
+ */
+export function isFormAnswersMessage(content: string): boolean {
+  return /^\[form answers\b/i.test(content.trim());
+}
+
+/**
+ * 一份表单答案里**给人看的**那一半。
+ *
+ * 交付成功的答案根本不画用户气泡(#5496:摘要已经长在上一条助手消息上)。
+ * 但发送失败的那一条必须留在流水里 —— 它是「这一轮为什么没了」的唯一凭据,
+ * 也挂着唯一的复原入口(那颗「重试」)。放它出来的同时不能把
+ * `[form answers — <id>]` 这行机器载荷摆到用户脸上,所以这里只去掉头一行,
+ * 底下那几条 `- 问题: 回答` 本来就是人话。
+ *
+ * 去掉之后什么都不剩(agent 只复述了个头)时原样返回,宁可露出机器载荷也
+ * 不给一个空气泡 —— 空气泡等于这一轮又消失了一次。
+ */
+export function formAnswersDisplayBody(content: string): string {
+  if (!isFormAnswersMessage(content)) return content;
+  const body = content.trim().replace(FORM_ANSWERS_HEADER_LINE, '').trim();
+  return body.length > 0 ? body : content;
+}
+
 function formOptionDisplayForValue(
   question: Pick<FormQuestion, 'options' | 'type'>,
   value: string,

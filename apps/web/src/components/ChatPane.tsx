@@ -87,7 +87,11 @@ import { fetchProjectMediaTasks, projectRawUrl } from '../providers/registry';
 import { appendResourceQuery } from '../collab/workspace-identity';
 import { useProjectCollabContext } from '../collab/collab-context';
 import { takeComposerSeedFor } from '../state/libraryHandoff';
-import { splitOnQuestionForms } from '../artifacts/question-form';
+import {
+  formAnswersDisplayBody,
+  isFormAnswersMessage,
+  splitOnQuestionForms,
+} from '../artifacts/question-form';
 import { stripArtifact } from '../artifacts/strip';
 import type { TodoItem } from '../runtime/todos';
 import type {
@@ -5669,12 +5673,31 @@ function VirtualChatRow({
  * 意图澄清表单的答案(`^[form answers`)。答案已经以摘要形式长在上一条助手消息
  * 上;再画一个用户气泡等于把同一个决定说两遍,还会把 `[form answers — <id>]`
  * 这种机器载荷摆到用户脸上(#5496)。这是产品取向,不是权宜之计。
+ *
+ * ## 【不变量】没送出去的那一份答案**不在**被收走的范围里
+ *
+ * 收走的前提是「答案已经以摘要形式长在上一条助手消息上」—— 那句话只有在这一轮
+ * **真的开出去了**的时候才成立。`POST /api/runs` 还没给回 runId 就失败时,
+ * `ProjectView` 的 `onError` 会按设计删掉那条乐观的 assistant 行(从没有过 agent
+ * 进程,留着它等于伪造一轮),只把用户那一行盖成 `sendFailed`,而且显式
+ * `setError(null)` 不出全局横幅。于是这一行就是「这一轮为什么没了」的**唯一凭据**,
+ * 它上面那颗常驻的「重试」是**唯一的复原入口**。
+ *
+ * 老写法把它也一起收走,结果就是 QA 报的那个形状:答完表单屏幕上确实新开了一轮,
+ * 过一会儿整轮凭空消失 —— 没有报错、没有卡片、没有重试,而表单自己已经落成
+ * 「已作答」锁死了(`handleSend` 在建流那一刻就返回 `true`)。
+ *
+ * 机器载荷那一半由 `formAnswersDisplayBody` 在气泡里摘掉,#5496 那条取向照旧成立。
  */
 function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
   const items: ChatRenderItem[] = [];
   for (let i = 0; i < messages.length; i += 1) {
     const message = messages[i]!;
-    if (message.role === 'user' && /^\[form answers\b/i.test(message.content.trim())) {
+    if (
+      message.role === 'user'
+      && message.sendFailed !== true
+      && isFormAnswersMessage(message.content)
+    ) {
       continue;
     }
     items.push({
@@ -6721,9 +6744,13 @@ const UserMessage = memo(UserMessageImpl);
 
      `displayContent` 仍留着:它是「复制」按钮真正会写进剪贴板的那一段,
      用户复制到的应该是卡面上看得见的标题,不是内部 prompt。 */
+  /* 表单答案只有在**没送出去**的时候才走到这里(`buildChatRenderItems` 收走的是
+     交付成功的那些)。这一条要留给用户看的是他自己填的答案,不是顶上那行
+     `[form answers — <id>]` 路由头 —— #5496 说的就是别把机器载荷摆到用户脸上。
+     重发走的是 `message.content`(`handleResendUserMessage`),头一行原样保留。 */
   const displayContent = isDesignSystemWorkspaceRequest
     ? t('chat.designSystemStatus.title')
-    : message.content;
+    : formAnswersDisplayBody(message.content);
 
   useEffect(() => {
     return () => {
