@@ -471,9 +471,9 @@ async function runStrategy(args) {
   const [area, action = 'status', ...rest] = args;
   // `reset` cleared the stop latch, and the latch is gone: nothing can disable
   // OD Next for an installation any more except that installation saving `off`.
-  // Named here rather than left to the usage dump, because it shipped in
-  // 0.21.0 and 0.21.1 and an operator who scripted it deserves to be told what
-  // happened rather than shown a list it is missing from.
+  // Named here rather than left to the usage dump, because it has shipped in
+  // every release since 0.21.0 and an operator who scripted it deserves to be
+  // told what happened rather than shown a list it is missing from.
   //
   // It fails instead of succeeding as a no-op. The command meant "recover this
   // machine's rollout"; reporting success for a recovery that neither happened
