@@ -3,7 +3,7 @@
   "specVersion": "1.0.0",
   "name": "od-next-strategy",
   "title": "OD Next Strategy V2",
-  "version": "2.0.3",
+  "version": "2.0.5",
   "publishedAt": "2026-08-14T10:44:00Z",
   "description": "Bundled, inactive OD Next planning and Build strategy content.",
   "license": "MIT",
@@ -47,14 +47,14 @@
           {
             "taskType": "prototype",
             "path": "./assets/task-profiles/prototype.md",
-            "version": "2.2.0",
+            "version": "2.2.2",
             "rollout": "active",
             "projectKinds": ["prototype"],
             "resources": [
               { "path": "./assets/task-profiles/prototype/device-frames/iphone.html", "version": "1.0.0" },
               { "path": "./assets/task-profiles/prototype/device-frames/android.html", "version": "1.0.0" },
               { "path": "./assets/task-profiles/prototype/device-frames/neutral.html", "version": "1.0.0" },
-              { "path": "./assets/task-profiles/prototype/layout.css", "version": "1.0.0" }
+              { "path": "./assets/task-profiles/prototype/layout.css", "version": "1.0.1" }
             ]
           },
           {
