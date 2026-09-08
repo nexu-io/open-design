@@ -121,6 +121,7 @@ export class VersionedLauncher {
       this.feedback.emit({ phase: "closure-ready", state: "complete", generationId: attempt.generation.id });
       return status;
     } catch (error) {
+      if (attempt.failurePolicy === "explicit-recovery") throw error;
       if (!attempt.attempted) throw error;
       if (attempt.proof == null) throw error;
       const fallback = await this.store.rollbackFailedAttempt(attempt.proof);

@@ -7,6 +7,11 @@ Follow the root and `packages/AGENTS.md` guidance first.
   atomic mechanics. Updatable session/warmup/renderer orchestration belongs to
   electron-capsule; concrete graphs, product Sidecar messages, Web readiness,
   routes, handlers, labels and resource identities stay in shells/electron.
+- Normal carrier startup and explicit recovery share the canonical runtime-root
+  session lease, acquired before platform/activation/Capsule work. The running
+  carrier retains it until process death. Use Platform kernel ownership, not a
+  copied transport/port-lock implementation or stale-file deletion; this lease
+  never replaces Sidecar resource retirement or Standalone state authority.
 - Treat Shell JSON as the authority for concrete topology and policy values, including warmup nodes and preflight host exemptions. Validate and execute finite atoms without turning JSON into an executable language or teaching electron-kit what a declared product value means.
 - Warmup owns bounded concurrency, dependency ordering, required/best-effort failure semantics, timeout/cancellation, receipts, and disposal. Shell owns concrete resource ids, labels, executor bindings, and warmed values; renderer/Web adapters consume those values without exposing them to Closure.
 - Keep concrete macOS/Windows distribution and installer policy in Shell JSON. electron-kit may validate a finite supported matrix and translate it to builder configuration; distribution policy must not leak into the release-neutral scene.

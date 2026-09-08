@@ -14,6 +14,16 @@ import {
 
 const CONTROL_RESOURCES_ENV = "OD_ELECTRON_CONTROL_RESOURCES";
 
+/** The outer launcher can fail before carrier handlers exist. Its process
+ * boundary must close on failure, not leave an unhandled rejection alive. */
+export async function runElectronShellEntry(entry: () => Promise<void>): Promise<void> {
+  try { await entry(); }
+  catch (error) {
+    console.error("Electron Shell startup failed", error);
+    app.exit(1);
+  }
+}
+
 function resources(): Readonly<Pick<SidecarResources, "dataRoot" | "ownerPid" | "port" | "runtimeRoot">> {
   const serialized = process.env[CONTROL_RESOURCES_ENV];
   if (serialized == null) throw new Error(`${CONTROL_RESOURCES_ENV} is required for a supervised Electron Shell`);

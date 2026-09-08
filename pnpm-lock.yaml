@@ -578,6 +578,9 @@ importers:
       '@open-design/electron-contract':
         specifier: workspace:*
         version: link:../electron-contract
+      '@open-design/platform':
+        specifier: workspace:*
+        version: link:../platform
       '@open-design/standalone':
         specifier: workspace:*
         version: link:../standalone

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { readElectronInstalledManifest } from "@open-design/shell-electron/lifecycle/inspection";
+import { validateGenerationState } from "@open-design/standalone";
 
 import { readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { canonicalBytes, readObject, type JsonObject } from "./control-common.ts";
@@ -57,9 +58,9 @@ async function hotProof(input: JsonObject, published: JsonObject): Promise<JsonO
   if (!nonempty(input.standaloneState) || !nonempty(input.standaloneGenerationsRoot)) {
     throw new Error("Electron hot acceptance requires Standalone generation state");
   }
-  const state = await readObject(input.standaloneState);
+  const state = validateGenerationState(await readObject(input.standaloneState));
   const id = state.active;
-  if (state.schemaVersion !== 4 || typeof id !== "string" || !/^[a-f0-9]{64}$/u.test(id)
+  if (typeof id !== "string" || !/^[a-f0-9]{64}$/u.test(id)
     || state.lastHealthy !== id || state.prepared != null || state.activationIntent != null || state.activationAttempt != null) {
     throw new Error("Electron hot acceptance found an unsettled Standalone generation");
   }

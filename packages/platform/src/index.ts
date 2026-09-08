@@ -11,8 +11,7 @@
  * - `http`       — HTTP readiness polling.
  * - `toolchain`  — user-level toolchain bin discovery.
  *
- * The set of names exported here is intentionally identical to the pre-split
- * public surface; importers see no change.
+ * - `kernel-lease` — exclusive ephemeral OS ownership, without domain identity.
  */
 
 export type { CommandInvocation, CommandInvocationRequest } from "./command.js";
@@ -73,3 +72,6 @@ export { waitForHttpOk } from "./http.js";
 
 export type { WellKnownUserToolchainOptions } from "./toolchain.js";
 export { wellKnownUserToolchainBins } from "./toolchain.js";
+
+export type { KernelLease, KernelLeaseEndpoint } from "./kernel-lease.js";
+export { tryAcquireKernelLease } from "./kernel-lease.js";

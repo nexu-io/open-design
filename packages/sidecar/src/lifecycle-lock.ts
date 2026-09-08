@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
-import { createServer, type Server } from "node:net";
 import { userInfo } from "node:os";
+import { tryAcquireKernelLease, type KernelLease, type KernelLeaseEndpoint } from "@open-design/platform";
 
 import { normalizeSidecarStamp, sidecarStampKey, type SidecarStamp } from "./stamp.js";
 
 export type SidecarLifecycleLockOptions = Readonly<{
   timeoutMs?: number;
 }>;
-
-type SidecarLifecycleLockEndpoint = string | Readonly<{ host: string; port: number }>;
 
 /**
  * Serialize one lifecycle resource set across independent clients.
@@ -28,10 +26,10 @@ export async function withSidecarLifecycleLock<T>(
   const endpoint = resolveLifecycleLockEndpoint(stampInputs);
   const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
   const deadline = Date.now() + timeoutMs;
-  let server: Server | null = null;
-  while (server == null) {
-    server = await tryListen(endpoint);
-    if (server != null) break;
+  let lease: KernelLease | null = null;
+  while (lease == null) {
+    lease = await tryAcquireKernelLease(endpoint);
+    if (lease != null) break;
     if (Date.now() >= deadline) {
       throw new Error(`timed out waiting for sidecar lifecycle lock after ${timeoutMs}ms`);
     }
@@ -41,11 +39,11 @@ export async function withSidecarLifecycleLock<T>(
   try {
     return await operation();
   } finally {
-    await closeServer(server);
+    await lease.release();
   }
 }
 
-function resolveLifecycleLockEndpoint(stampInputs: readonly SidecarStamp[]): SidecarLifecycleLockEndpoint {
+function resolveLifecycleLockEndpoint(stampInputs: readonly SidecarStamp[]): KernelLeaseEndpoint {
   const principal = (() => {
     try { return userInfo().username; } catch { return process.env.USERNAME ?? "unknown"; }
   })();
@@ -59,31 +57,6 @@ function resolveLifecycleLockEndpoint(stampInputs: readonly SidecarStamp[]): Sid
   return Object.freeze({
     host: "127.0.0.1",
     port: 49_152 + digest.readUInt16BE(0) % 16_384,
-  });
-}
-
-async function tryListen(endpoint: SidecarLifecycleLockEndpoint): Promise<Server | null> {
-  const server = createServer((socket) => socket.destroy());
-  return await new Promise<Server | null>((resolve, reject) => {
-    const onError = (error: NodeJS.ErrnoException): void => {
-      server.removeListener("listening", onListening);
-      if (error.code === "EADDRINUSE") resolve(null);
-      else reject(error);
-    };
-    const onListening = (): void => {
-      server.removeListener("error", onError);
-      resolve(server);
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    if (typeof endpoint === "string") server.listen({ exclusive: true, path: endpoint });
-    else server.listen({ exclusive: true, host: endpoint.host, port: endpoint.port });
-  });
-}
-
-async function closeServer(server: Server): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    server.close((error) => error == null ? resolve() : reject(error));
   });
 }
 

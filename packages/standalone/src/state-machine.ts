@@ -1,4 +1,5 @@
-export const STANDALONE_GENERATION_STATE_SCHEMA = 4 as const;
+export const STANDALONE_GENERATION_STATE_SCHEMA = 5 as const;
+export type ActivationFailurePolicy = "rollback" | "explicit-recovery";
 
 export class StandaloneStateConflictError extends Error {
   constructor(readonly code: "revision-conflict" | "identity-conflict", message: string) {
@@ -17,6 +18,7 @@ export type ActivationIntent = Readonly<{
   authorizedAt: string;
 }>;
 export type ActivationAttempt = Readonly<{
+  failurePolicy: ActivationFailurePolicy;
   attemptId: string;
   generationId: string;
   launchId: string | null;
@@ -44,7 +46,8 @@ export type GenerationStateCommand =
       authorizedAt: string;
     }>
   | Readonly<{ type: "revoke-silent"; expectedRevision: number; generationId: string }>
-  | Readonly<{ type: "activate"; expectedRevision: number; generationId: string; attemptId: string }>
+  | Readonly<{ type: "activate"; expectedRevision: number; generationId: string; attemptId: string; failurePolicy?: ActivationFailurePolicy }>
+  | Readonly<{ type: "recover"; expectedRevision: number; generationId: string; attemptId: string }>
   | Readonly<{ type: "begin-launch"; expectedRevision: number; attemptId: string; launchId: string }>
   | Readonly<{ type: "confirm-launch"; expectedRevision: number; proof: ActivationLaunchProof }>
   | Readonly<{ type: "rollback"; expectedRevision: number; attemptId?: string }>;
@@ -86,12 +89,14 @@ function activationAttempt(value: unknown): ActivationAttempt | null {
   if (value == null) return null;
   if (typeof value !== "object" || Array.isArray(value)) throw new Error("invalid activation attempt");
   const input = value as Record<string, unknown>;
-  if (Object.keys(input).sort().join(",") !== "attemptId,generationId,launchCount,launchId") throw new Error("invalid activation attempt");
+  if (Object.keys(input).sort().join(",") !== "attemptId,failurePolicy,generationId,launchCount,launchId") throw new Error("invalid activation attempt");
+  if (input.failurePolicy !== "rollback" && input.failurePolicy !== "explicit-recovery") throw new Error("invalid activation failure policy");
   assertToken(input.attemptId, "activation attempt id");
   assertGenerationId(input.generationId, "activation attempt generation");
   if (input.launchId != null) assertToken(input.launchId, "activation launch id");
   if (!Number.isSafeInteger(input.launchCount) || (input.launchCount as number) < 0 || (input.launchCount as number) > 2) throw new Error("invalid activation launch count");
   if (((input.launchCount as number) === 0) !== (input.launchId == null)) throw new Error("activation launch id is not bound to its count");
+  if (input.failurePolicy === "explicit-recovery" && (input.launchCount as number) > 1) throw new Error("explicit recovery activation cannot retry");
   return input as unknown as ActivationAttempt;
 }
 
@@ -165,8 +170,17 @@ export function reduceGenerationState(stateInput: GenerationState, command: Gene
     return next(state, {
       prepared: null,
       activationIntent: null,
-      activationAttempt: { attemptId: command.attemptId, generationId: command.generationId, launchId: null, launchCount: 0 },
+      activationAttempt: { failurePolicy: command.failurePolicy ?? "rollback", attemptId: command.attemptId, generationId: command.generationId, launchId: null, launchCount: 0 },
       active: command.generationId,
+    });
+  }
+  if (command.type === "recover") {
+    assertGenerationId(command.generationId, "recovery generation");
+    assertToken(command.attemptId, "recovery attempt id");
+    if (command.attemptId === state.activationAttempt?.attemptId) throw new Error("recovery requires a fresh activation attempt");
+    return next(state, {
+      active: command.generationId, prepared: null, activationIntent: null,
+      activationAttempt: { failurePolicy: "explicit-recovery", attemptId: command.attemptId, generationId: command.generationId, launchId: null, launchCount: 0 },
     });
   }
   if (command.type === "begin-launch") {
@@ -174,6 +188,7 @@ export function reduceGenerationState(stateInput: GenerationState, command: Gene
     assertToken(command.launchId, "activation launch id");
     const attempt = state.activationAttempt;
     if (attempt == null || attempt.attemptId !== command.attemptId || attempt.generationId !== state.active) throw new StandaloneStateConflictError("identity-conflict", "activation attempt changed concurrently");
+    if (attempt.failurePolicy === "explicit-recovery" && attempt.launchCount > 0) throw new Error("activation is incomplete; explicit exact recovery required");
     if (attempt.launchCount >= 2) throw new Error("activation attempt retry budget is exhausted");
     return next(state, { activationAttempt: { ...attempt, launchId: command.launchId, launchCount: attempt.launchCount + 1 } });
   }
@@ -190,6 +205,7 @@ export function reduceGenerationState(stateInput: GenerationState, command: Gene
   }
   if (command.attemptId != null && state.activationAttempt?.attemptId !== command.attemptId) throw new StandaloneStateConflictError("identity-conflict", "activation attempt changed concurrently");
   if (state.activationAttempt == null) return state;
+  if (state.activationAttempt.failurePolicy === "explicit-recovery") throw new Error("activation is incomplete; explicit exact recovery required");
   return next(state, { active: state.lastHealthy, activationAttempt: null, prepared: null, activationIntent: null });
 }
 

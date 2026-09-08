@@ -5,7 +5,12 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
 - Keep metadata and receipt schemas versioned and deterministic.
 - Content metadata schema 5 declares `shell.<type>.version.min` and its build
   identity. Do not accept the former requirement array or mixed field shapes.
-  Generation/state schema versions remain independent of metadata versions.
+  Generation records remain schema 4; namespace state is schema 5. State retains
+  each activation's rollback or explicit-recovery policy across consumers.
+  Electron whole-startup candidates use explicit recovery: neither another
+  launcher nor automatic interrupted-attempt handling may retry or roll them back.
+  Independent healthy Closure hot-update and Terminal policies remain explicit
+  at their activation call sites; do not infer policy from a Shell type string.
 - Stable lifecycle versions use `X.Y.Z`; counted channels use
   `X.Y.Z-<channel>.N`. Channel scope is explicit, not inferred from a suffix.
   Compare releases through `compareChannelReleaseVersions`; publication gates
@@ -17,6 +22,11 @@ This package is the shell-neutral trust and lifecycle boundary for exact distrib
 - Verify signatures before fetching or materializing components.
 - Address immutable blobs by SHA-256 and fail closed on size or digest mismatch.
 - Keep generation preparation separate from activation and successful-start acknowledgement.
+- Explicit `recoverGeneration` authenticates and materializes a pinned signed
+  target, then replaces the activation attempt under the expected state revision.
+  It never selects latest, rolls back, starts code, or marks the target healthy.
+  The caller must retain its repair blockade and own physical resource retirement;
+  normal `prepare` still refuses an unfinished activation attempt.
 - `StandaloneUpdater.prepareFromHead` consumes a caller-selected signed head,
   snapshots it before I/O and keeps the same trust, compatibility, monotonicity
   and activation-policy checks as `prepareLatest`; it never rereads latest.

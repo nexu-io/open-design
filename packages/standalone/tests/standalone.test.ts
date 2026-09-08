@@ -8,6 +8,7 @@ import {
   FossilBootloader,
   StandaloneBootstrapError,
   StandaloneStore,
+  STANDALONE_GENERATION_STATE_SCHEMA,
   StandaloneUpdater,
   VersionedLauncher,
   canonicalJson,
@@ -69,6 +70,83 @@ async function blobOptions(root: string, bytes: Uint8Array) {
   await writeFile(path, bytes);
   return { candidates: { [digest]: [{ path, source: "seed" as const }] } };
 }
+
+describe("explicit exact generation recovery", () => {
+  it("revalidates and rearms the selected generation without claiming it healthy", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-exact-recovery-")); roots.push(root);
+    const keys = generateKeyPairSync("ed25519"), trusted = { release: keys.publicKey };
+    const store = new StandaloneStore(root, { channel: "somechan", namespace: "recovery" });
+    const firstBytes = Buffer.from("original"), targetBytes = Buffer.from("exact replacement");
+    const first = await store.prepare(signStandaloneMetadata(metadata(firstBytes), "release", keys.privateKey), trusted, await blobOptions(root, firstBytes));
+    await store.authorizePrepared(first.id, "user", "user-interaction", (await store.readState()).revision);
+    await store.activatePrepared(first.id, terminal, (await store.readState()).revision);
+    const interrupted = await store.beginActiveAttempt(terminal);
+    const before = await store.readState();
+    const envelope = signStandaloneMetadata(metadata(targetBytes, "0.1.0-somechan.2"), "release", keys.privateKey);
+    const generationId = sha256Hex(canonicalJson(envelope.metadata));
+    const target = await store.recoverGeneration({ envelope, trustedKeys: trusted, shell: terminal,
+      expectedGenerationId: generationId, expectedRevision: before.revision }, await blobOptions(root, targetBytes));
+    expect(target.id).toBe(generationId);
+    expect(await store.readGenerationMetadata(generationId, trusted)).toEqual(envelope);
+    await expect(store.readGenerationMetadata(generationId, {})).rejects.toThrow();
+    await expect(store.readGenerationMetadata("../escape", trusted)).rejects.toThrow("invalid generation metadata identity");
+    expect(await store.readState()).toMatchObject({ active: generationId, lastHealthy: null, prepared: null,
+      activationIntent: null, activationAttempt: { generationId, launchCount: 0, launchId: null } });
+    await expect(store.confirmAttempt(interrupted.proof!)).rejects.toThrow("activation launch proof is stale");
+    const launched = await store.beginActiveAttempt(terminal);
+    await store.confirmAttempt(launched.proof!);
+    expect(await store.readState()).toMatchObject({ active: generationId, lastHealthy: generationId, activationAttempt: null });
+  });
+
+  it("preserves namespace state on wrong identity, incompatible Shell, bad signature, missing bytes or stale revision", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-exact-recovery-")); roots.push(root);
+    const keys = generateKeyPairSync("ed25519"), trusted = { release: keys.publicKey };
+    const store = new StandaloneStore(root, { channel: "somechan", namespace: "recovery" });
+    const bytes = Buffer.from("signed recovery target");
+    const envelope = signStandaloneMetadata(metadata(bytes), "release", keys.privateKey);
+    const generation = await store.prepare(envelope, trusted, await blobOptions(root, bytes));
+    await store.authorizePrepared(generation.id, "user", "user-interaction", (await store.readState()).revision);
+    await store.activatePrepared(generation.id, terminal, (await store.readState()).revision);
+    await store.beginActiveAttempt(terminal);
+    const state = await store.readState(), stateBytes = await readFile(store.diagnosticPaths.stateFile, "utf8");
+    const request = { envelope, trustedKeys: trusted, shell: terminal,
+      expectedGenerationId: generation.id, expectedRevision: state.revision };
+    await expect(store.recoverGeneration({ ...request, expectedGenerationId: "f".repeat(64) })).rejects.toThrow("recovery generation identity");
+    await expect(store.recoverGeneration({ ...request, shell: { ...terminal, version: "0.0.1" } })).rejects.toThrow("incompatible");
+    await expect(store.recoverGeneration({ ...request, trustedKeys: {} })).rejects.toThrow();
+    await expect(store.recoverGeneration({ ...request, expectedRevision: state.revision - 1 })).rejects.toThrow("stale generation state revision");
+    const missing = signStandaloneMetadata(metadata(Buffer.from("unavailable exact bytes"), "0.1.0-somechan.2"), "release", keys.privateKey);
+    await expect(store.recoverGeneration({ ...request, envelope: missing, expectedGenerationId: sha256Hex(canonicalJson(missing.metadata)) }, {
+      fetch: async () => { throw new Error("offline exact target missing"); },
+    })).rejects.toThrow();
+    expect(await readFile(store.diagnosticPaths.stateFile, "utf8")).toBe(stateBytes);
+  });
+
+  it("does not overwrite a concurrent launch while exact bytes are being acquired", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-exact-recovery-")); roots.push(root);
+    const keys = generateKeyPairSync("ed25519"), trusted = { release: keys.publicKey };
+    const store = new StandaloneStore(root, { channel: "somechan", namespace: "recovery" });
+    const original = Buffer.from("original"), replacement = Buffer.from("downloaded replacement");
+    const first = await store.prepare(signStandaloneMetadata(metadata(original), "release", keys.privateKey), trusted, await blobOptions(root, original));
+    await store.authorizePrepared(first.id, "user", "user-interaction", (await store.readState()).revision);
+    await store.activatePrepared(first.id, terminal, (await store.readState()).revision);
+    const entered = Promise.withResolvers<void>(), resume = Promise.withResolvers<void>();
+    const envelope = signStandaloneMetadata(metadata(replacement, "0.1.0-somechan.2"), "release", keys.privateKey);
+    const pending = store.recoverGeneration({ envelope, trustedKeys: trusted, shell: terminal,
+      expectedGenerationId: sha256Hex(canonicalJson(envelope.metadata)), expectedRevision: (await store.readState()).revision }, {
+      fetch: async () => { entered.resolve(); await resume.promise; return new Response(replacement); },
+    });
+    const rejected = expect(pending).rejects.toThrow("stale generation state revision");
+    try {
+      await entered.promise;
+      await store.beginActiveAttempt(terminal);
+      const concurrent = await store.readState();
+      resume.resolve();
+      await rejected;
+      expect(await store.readState()).toEqual(concurrent);
+    } finally { resume.resolve(); await pending.catch(() => undefined); }
+  });
+});
 
 describe("versioned composite Shell requirements", () => {
   it("uses shell.<type>.version.min and rejects mixed or malformed capability declarations", () => {
@@ -241,6 +319,21 @@ async function activate(store: StandaloneStore, shell: StandaloneShellIdentity) 
 }
 
 describe("standalone exact lifecycle", () => {
+  it("retains an explicit-recovery failure and refuses automatic recovery from a second consumer", async () => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-explicit-failure-")); roots.push(root);
+    const { store, generation } = await fixtureStore(root, Buffer.from("explicit startup failure"));
+    await authorize(store, "initial-bootstrap");
+    await store.activatePrepared(generation.id, terminal, (await store.readState()).revision, { failurePolicy: "explicit-recovery" });
+    const lifecycle = new FixturePort(); lifecycle.failGenerationId = generation.id;
+    await expect(new VersionedLauncher(store, lifecycle, terminal, "first").start()).rejects.toThrow("activation failed");
+    const interrupted = await store.readState();
+    expect(interrupted).toMatchObject({ active: generation.id, lastHealthy: null,
+      activationAttempt: { generationId: generation.id, launchCount: 1, failurePolicy: "explicit-recovery" } });
+    lifecycle.failGenerationId = null;
+    await expect(new VersionedLauncher(store, lifecycle, terminal, "second").start()).rejects.toThrow("explicit exact recovery required");
+    await expect(store.recoverInterruptedAttempt()).rejects.toThrow("explicit exact recovery required");
+    expect(await store.readState()).toEqual(interrupted);
+  });
   it("reports diagnostic locations without creating or changing Store state", async () => {
     const root = await mkdtemp(join(tmpdir(), "standalone-diagnostics-")); roots.push(root);
     const store = new StandaloneStore(root, { channel: "somechan", namespace: "inspection" });
@@ -261,7 +354,7 @@ describe("standalone exact lifecycle", () => {
     const root = await mkdtemp(join(tmpdir(), "standalone-store-")); roots.push(root);
     const bytes = Buffer.from("export default 'fixture';\n");
     const { generation, store } = await fixtureStore(root, bytes);
-    expect(await store.readState()).toEqual({ schemaVersion: 4, revision: 1, prepared: generation.id, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
+    expect(await store.readState()).toEqual({ schemaVersion: STANDALONE_GENERATION_STATE_SCHEMA, revision: 1, prepared: generation.id, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
     await authorize(store, "initial-bootstrap");
     const lifecycle = new FixturePort();
     const handoffs: string[] = [];
@@ -282,7 +375,7 @@ describe("standalone exact lifecycle", () => {
     await expect(fossil.start()).resolves.toMatchObject({ state: "running", generationId: generation.id, references: 1 });
     expect(handoffs).toHaveLength(1);
     expect(selectedBindings).toEqual(handoffs);
-    expect(await store.readState()).toMatchObject({ schemaVersion: 4, revision: 5, prepared: null, activationIntent: null, activationAttempt: null, active: generation.id, lastHealthy: generation.id });
+    expect(await store.readState()).toMatchObject({ schemaVersion: STANDALONE_GENERATION_STATE_SCHEMA, revision: 5, prepared: null, activationIntent: null, activationAttempt: null, active: generation.id, lastHealthy: generation.id });
     expect(await readFile(generation.resources.fixture!.path, "utf8")).toContain("fixture");
   });
 
@@ -294,7 +387,7 @@ describe("standalone exact lifecycle", () => {
     envelope.metadata.releaseVersion = "0.1.0-somechan.2";
     const store = new StandaloneStore(root, { channel: "somechan", namespace: "shared" });
     await expect(store.prepare(envelope, new Map([["test", keys.publicKey]]), await blobOptions(root, bytes))).rejects.toThrow("signature verification failed");
-    expect(await store.readState()).toEqual({ schemaVersion: 4, revision: 0, prepared: null, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
+    expect(await store.readState()).toEqual({ schemaVersion: STANDALONE_GENERATION_STATE_SCHEMA, revision: 0, prepared: null, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
   });
 
   it("requires exactly one typed standalone.launcher in every signed content graph", () => {
@@ -334,7 +427,7 @@ describe("standalone exact lifecycle", () => {
     lifecycle.failGenerationId = generation.id;
     const launcher = new VersionedLauncher(store, lifecycle, terminal, "terminal");
     await expect(new FossilBootloader(store, terminal, async () => launcher).start()).rejects.toThrow("activation failed");
-    expect(await store.readState()).toMatchObject({ schemaVersion: 4, prepared: null, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
+    expect(await store.readState()).toMatchObject({ schemaVersion: STANDALONE_GENERATION_STATE_SCHEMA, prepared: null, activationIntent: null, activationAttempt: null, active: null, lastHealthy: null });
   });
 
   it("attaches a new Shell identity without reopening healthy generation state", async () => {

@@ -6,12 +6,13 @@ import {
   inspectPackedMacApp,
   packMac,
   readPackedMacLogs,
+  recoverPackedMacApp,
   startPackedMacApp,
   stopPackedMacApp,
   uninstallPackedMacApp,
 } from "./mac/index.js";
 
-type CliOptions = ToolPackCliOptions;
+type CliOptions = ToolPackCliOptions & { userDataRoot?: string; presentation?: "headless" | "interactive"; capsuleManifestSha256?: string; closureGenerationId?: string; online?: boolean };
 
 function printJson(payload: unknown): void {
   process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
@@ -31,7 +32,12 @@ function printLogs(result: { logs: Record<string, { lines: string[]; logPath: st
 
 const cli = cac("tools-pack");
 
-const mac = cli.command("mac <action>", "Mac Electron Shell commands: build|install|start|stop|logs|uninstall|cleanup|inspect")
+const mac = cli.command("mac <action>", "Mac Electron Shell commands: build|install|start|stop|recover|logs|uninstall|cleanup|inspect")
+    .option("--user-data-root <path>", "Electron base userData root for explicit recovery")
+    .option("--presentation <mode>", "recovery session: headless or interactive", { default: "headless" })
+    .option("--capsule-manifest-sha256 <digest>", "explicit exact Capsule manifest identity")
+    .option("--closure-generation-id <digest>", "explicit exact Closure generation identity")
+    .option("--online", "allow exact signed resource reacquisition during recovery")
     .option("--cache-dir <path>", "advanced escape hatch for relocating tools-pack cache")
     .option("--dir <path>", "tools-pack output/runtime root directory")
     .option("--json", "print JSON")
@@ -54,6 +60,9 @@ mac.action(
         return;
       case "stop":
         printJson(await stopPackedMacApp(config));
+        return;
+      case "recover":
+        printJson(await recoverPackedMacApp(config, options));
         return;
       case "logs":
         printLogs(await readPackedMacLogs(config), options);

@@ -4,6 +4,7 @@ export {
   installPackedMacDmg,
   inspectPackedMacApp,
   readPackedMacLogs,
+  recoverPackedMacApp,
   startPackedMacApp,
   stopPackedMacApp,
   uninstallPackedMacApp,

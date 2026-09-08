@@ -217,9 +217,8 @@ export function createElectronStandaloneAuthorityFactory(
       const feedback = new StandaloneFeedbackEmitter(request.correlationId, request.scope, observeFeedback);
       const installedGenerationId = sha256Hex(canonicalJson(installation.envelope.metadata));
       let state = await store.readState();
-      if (state.activationAttempt != null) {
-        await store.recoverInterruptedAttempt();
-        state = await store.readState();
+      if (state.activationAttempt != null && state.activationAttempt.launchCount > 0) {
+        throw new Error("Electron Closure activation is incomplete; explicit exact recovery required");
       }
       if (state.active == null) {
         if (state.prepared == null) {
@@ -231,7 +230,7 @@ export function createElectronStandaloneAuthorityFactory(
           await store.authorizePrepared(state.prepared, "silent", "installed-seed", state.revision);
           state = await store.readState();
         }
-        await store.activatePrepared(state.prepared!, request.shell, state.revision);
+        await store.activatePrepared(state.prepared!, request.shell, state.revision, { failurePolicy: "explicit-recovery" });
       }
       const generation = await store.activeGeneration();
       const binding = createStandaloneGenerationBinding(generation, request.scope);

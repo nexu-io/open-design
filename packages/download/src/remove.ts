@@ -3,16 +3,13 @@
  *
  * Inspection and removal of a managed download by bucket/file name. `inspect`
  * reports completion and manifest state without mutating anything; `remove`
- * deletes the final file plus its scratch state and prunes an emptied bucket,
+ * deletes the final file plus its scratch state while retaining the bucket,
  * refusing to remove a target that is currently active. Both synthesize a
  * placeholder payload since only the target identity (not the URL/checksum)
  * matters here. Depends on the target resolver, the store base guard, the
  * manifest reader, an fs-io probe, the coordination registry, errors, public
  * types, and the platform best-effort remover.
  */
-
-import { rmdir } from "node:fs/promises";
-import { join } from "node:path";
 
 import { removePathBestEffort } from "@open-design/platform";
 
@@ -51,7 +48,7 @@ export async function inspectManagedDownload(options: RemoveManagedDownloadOptio
 
 /**
  * Remove a managed download: the final file, its manifest/partial/lock scratch
- * state, and an emptied bucket directory. Throws `TARGET_LOCKED` if the target is
+ * state, retaining the shared bucket directory. Throws `TARGET_LOCKED` if the target is
  * currently active.
  * @returns `{ removed: true }` once removal completes.
  */
@@ -73,9 +70,7 @@ export async function removeManagedDownload(options: RemoveManagedDownloadOption
     removePathBestEffort(target.manifestPath, { recursive: false }),
     removePathBestEffort(target.lockPath, { recursive: false }),
   ]);
-  const bucketPath = join(target.basePath, target.bucket);
-  // Atomic empty-directory removal: another target may publish into this bucket
-  // at any time. Never recursively remove a directory observed empty earlier.
-  await rmdir(bucketPath).catch(() => undefined);
+  // Even atomic rmdir races another target between mkdir and final rename.
+  // Bucket directories belong to the managed base, not individual downloads.
   return { removed: true };
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { ElectronRecoveryRequiredError, readElectronRecoveryIntent } from "./recovery.js";
 
 export type ElectronActivationState = "failed" | "running" | "starting" | "stopped";
 
@@ -48,18 +49,42 @@ async function writeRecord(path: string, record: ElectronActivationRecord): Prom
   }
 }
 
+async function readActivation(runtimeRoot: string): Promise<ElectronActivationRecord | null> {
+  const bytes = await readFile(join(runtimeRoot, "activation.json"), "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  return bytes == null ? null : validateRecord(JSON.parse(bytes));
+}
+
+/** Read-only diagnostics remain available when normal startup is blocked.
+ * A projection is not proof that repair may clear any durable record. */
+export async function inspectElectronStartup(runtimeRoot: string, observation: Readonly<{ live?: boolean }> = {}) {
+  try {
+    const [activation, recovery] = await Promise.all([readActivation(runtimeRoot), readElectronRecoveryIntent(runtimeRoot)]);
+    const incomplete = activation?.state === "failed" || (activation?.state === "starting" && observation.live !== true);
+    return Object.freeze({ activation, recovery, required: recovery != null || incomplete,
+      reason: recovery != null ? "recovery-unfinished" : incomplete ? "startup-incomplete" : null });
+  } catch (error) {
+    return Object.freeze({ activation: null, recovery: null, required: true, reason: "metadata-invalid",
+      error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 export class ElectronActivationAttempt {
   private constructor(private readonly path: string, private record: ElectronActivationRecord) {}
 
   static async begin(runtimeRoot: string): Promise<ElectronActivationAttempt> {
+    if (await readElectronRecoveryIntent(runtimeRoot) != null) {
+      throw new ElectronRecoveryRequiredError("Electron startup recovery is unfinished; resume its exact target explicitly");
+    }
     const path = join(runtimeRoot, "activation.json");
-    const bytes = await readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
     // Corruption or unreadable state is not a first launch. Preserve the exact
     // record for explicit repair instead of silently replacing the evidence.
-    const previous = bytes == null ? null : validateRecord(JSON.parse(bytes));
+    const previous = await readActivation(runtimeRoot);
+    if (previous?.state === "starting" || previous?.state === "failed") {
+      throw new ElectronRecoveryRequiredError(`Electron startup ${previous.attemptId} is incomplete; explicit exact recovery required`);
+    }
     const record: ElectronActivationRecord = {
       schemaVersion: 1,
       attemptId: randomUUID(),

@@ -44,6 +44,9 @@ describe("tools-dev CLI argument rewriting", () => {
   });
 
   it("preserves explicit commands", () => {
+    for (const args of [["recover", "desktop", "--help"], ["--user-data-root", "/explicit-root", "recover", "desktop"]]) {
+      assert.deepEqual(rewriteCliArgsForDefaultStart(args), args);
+    }
     assert.deepEqual(rewriteCliArgsForDefaultStart(["prepare", "closure", "--output", "/tmp/resources"]), ["prepare", "closure", "--output", "/tmp/resources"]);
     assert.deepEqual(rewriteCliArgsForDefaultStart(["status", "--json"]), ["status", "--json"]);
     assert.deepEqual(rewriteCliArgsForDefaultStart(["--namespace", "demo", "logs"]), ["--namespace", "demo", "logs"]);

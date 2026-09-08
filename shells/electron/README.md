@@ -115,6 +115,33 @@ The Node-safe `electron-kit/capsule-loader` entry can verify candidates without
 executing them. Capsule protocol v5 returns exact readiness after runtime setup;
 only the carrier closes the full startup window. `capsule.startup.ready` precedes
 the durable activation commit and `startup.committed`; it is not a success receipt.
+An interrupted or failed startup stays blocked until explicit exact recovery.
+Standalone namespace state schema 5 retains the activation failure policy across
+consumers: an Electron cold-start attempt cannot be silently retried or rolled
+back by another launcher. Generation records remain schema 4. Regenerate local
+experimental state rather than editing it into the new shape.
+
+`tools-dev recover desktop` accepts `--resource-root` for the existing development
+scene and `--user-data-root` for that Electron session's base userData location.
+`tools-pack mac recover` selects the existing installed/built app through its pack
+receipt and also requires `--user-data-root`. Both accept `--presentation`
+(`headless` by default), and optional paired `--capsule-manifest-sha256` /
+`--closure-generation-id` for an explicit exact target. The Capsule identity is
+the SHA-256 of its canonical signed envelope. Do not substitute daemon data roots;
+daemon data ownership remains defined by the root `AGENTS.md` contract.
+
+Recovery holds the same carrier session lease and the shared Sidecar resource-set
+guard, refuses live consumers/orphans, verifies physical packages and signed code
+without executing Capsule/Web/daemon, and rearms through Standalone. It clears
+the persistent recovery blockade last and never launches the product or claims
+the target healthy. Retry retains the pinned target. Offline recovery is default;
+`--online` permits only exact signed resource reacquisition, never latest selection.
+The current adapter accepts the actual installed Capsule baseline and retained
+signed Closure metadata; arbitrary online Capsule selection is not yet integrated.
+`inspect` retains recovery-required information after process exit, independently
+of native CDP availability. Malformed records remain blocked for explicit metadata
+repair; business data is never cleared by recovery.
+
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.

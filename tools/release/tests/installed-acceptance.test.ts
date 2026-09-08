@@ -183,7 +183,8 @@ it("requires a mounted hot renderer followed by a separate cold start of the sam
       { lines: { shell: { currentVersion: "1.2.3" } } },
     ],
   });
-  const standaloneState = await f.save("state.json", { schemaVersion: 4, active: id, lastHealthy: id });
+  const standaloneState = await f.save("state.json", { schemaVersion: 5, revision: 7, active: id, lastHealthy: id,
+    prepared: null, activationIntent: null, activationAttempt: null });
   await f.save(`${id}.json`, { schemaVersion: 4, id, channel: f.published.channel, releaseVersion: f.published.releaseVersion });
   const input = { ...f.input, hotAcceptanceReceipt, standaloneState, standaloneGenerationsRoot: f.root };
   const hot = [

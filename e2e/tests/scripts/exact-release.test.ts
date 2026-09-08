@@ -286,7 +286,7 @@ describe("exact Electron release topology", () => {
     const standaloneState = join(store, "namespaces/acceptance-headless/state.json"), standaloneGenerations = join(store, "generations");
     await mkdir(standaloneGenerations, { recursive: true }); await mkdir(dirname(standaloneState), { recursive: true });
     await writeFile(standaloneState, JSON.stringify({
-      schemaVersion: 4, active: generationId, lastHealthy: generationId, prepared: null,
+      schemaVersion: 5, active: generationId, lastHealthy: generationId, prepared: null,
       activationIntent: null, activationAttempt: null, revision: 7,
     }));
     await writeFile(join(standaloneGenerations, `${generationId}.json`), JSON.stringify({

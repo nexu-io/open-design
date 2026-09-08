@@ -22,6 +22,7 @@ import {
   reduceGenerationState,
   validateGenerationState,
   type ActivationAuthority,
+  type ActivationFailurePolicy,
   type ActivationCause,
   type ActivationIntent,
   type ActivationLaunchProof,
@@ -113,6 +114,10 @@ export class StandaloneStore {
   private get stateLockPath(): string { return join(this.namespaceRoot, "state.lock"); }
   private get generationsRoot(): string { return join(this.root, "channels", this.channel, "generations"); }
   private generationPath(id: string): string { return join(this.generationsRoot, `${id}.json`); }
+  private generationMetadataPath(id: string): string {
+    if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("invalid generation metadata identity");
+    return join(this.root, "channels", this.channel, "metadata", `${id}.json`);
+  }
 
   /** Read-only diagnostic locations, not authorization to mutate Store state. */
   get diagnosticPaths(): Readonly<{ stateFile: string; generationsRoot: string }> {
@@ -173,15 +178,68 @@ export class StandaloneStore {
     return generation;
   }
 
-  async prepare(envelope: SignedStandaloneMetadata, trustedKeys: StandaloneTrustedKeyRing, options: StandalonePrepareOptions = {}): Promise<GenerationRecord> {
+  /** Retained signed inputs allow exact offline verification and repair. The
+   * local generation projection alone is never a replacement for its signature. */
+  async readGenerationMetadata(id: string, trustedKeys: StandaloneTrustedKeyRing): Promise<SignedStandaloneMetadata> {
+    const envelope = await readJson<SignedStandaloneMetadata>(this.generationMetadataPath(id));
     verifyStandaloneMetadata(envelope, trustedKeys);
-    if (envelope.metadata.channel !== this.channel) throw new Error(`metadata channel ${envelope.metadata.channel} escaped Store channel ${this.channel}`);
-    return withStandaloneMaintenanceLock(this.root, () => this.prepareVerified(envelope, options));
+    if (envelope.metadata.channel !== this.channel || createHash("sha256").update(canonicalJson(envelope.metadata)).digest("hex") !== id) {
+      throw new Error("retained generation metadata identity mismatch");
+    }
+    return envelope;
   }
 
-  private async prepareVerified(envelope: SignedStandaloneMetadata, options: StandalonePrepareOptions): Promise<GenerationRecord> {
+  async prepare(envelope: SignedStandaloneMetadata, trustedKeys: StandaloneTrustedKeyRing, options: StandalonePrepareOptions = {}): Promise<GenerationRecord> {
+    envelope = structuredClone(envelope);
+    verifyStandaloneMetadata(envelope, trustedKeys);
+    if (envelope.metadata.channel !== this.channel) throw new Error(`metadata channel ${envelope.metadata.channel} escaped Store channel ${this.channel}`);
+    return withStandaloneMaintenanceLock(this.root, async () => {
+      const feedback = new StandaloneFeedbackEmitter(randomUUID(), { channel: this.channel, namespace: this.namespace }, options.feedback);
+      const generation = await this.materializeVerified(envelope, options, feedback);
+      await this.withStateTransaction(async () => {
+        const state = await this.readState();
+        await this.applyStateCommand({ type: "prepare", expectedRevision: state.revision, generationId: generation.id });
+      });
+      feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
+      return generation;
+    });
+  }
+
+  /** Explicit repair only: the caller owns physical retirement and its durable
+   * repair blockade. Authenticate/materialize the exact target before a fenced
+   * state replacement; never select latest, fall back, launch, or mark healthy. */
+  async recoverGeneration(input: Readonly<{
+    envelope: SignedStandaloneMetadata;
+    trustedKeys: StandaloneTrustedKeyRing;
+    shell: StandaloneShellIdentity;
+    expectedGenerationId: string;
+    expectedRevision: number;
+  }>, options: StandalonePrepareOptions = {}): Promise<GenerationRecord> {
+    const envelope = structuredClone(input.envelope), shell = structuredClone(input.shell);
+    const { expectedGenerationId, expectedRevision } = input;
+    verifyStandaloneMetadata(envelope, input.trustedKeys);
+    validateShellIdentity(shell);
+    if (envelope.metadata.channel !== this.channel) throw new Error("recovery metadata escaped Store channel");
+    if (createHash("sha256").update(canonicalJson(envelope.metadata)).digest("hex") !== expectedGenerationId) throw new Error("recovery generation identity differs from signed metadata");
+    const minimum = envelope.metadata.shell[shell.type]?.version.min;
+    if (minimum == null || compareVersions(shell.version, minimum) < 0) throw new Error("Shell is incompatible with recovery generation");
+    const assertRevision = async () => {
+      const state = await this.readState();
+      if (state.revision !== expectedRevision) throw new StandaloneStateConflictError("revision-conflict", `stale generation state revision: expected ${expectedRevision}, current ${state.revision}`);
+    };
+    return withStandaloneMaintenanceLock(this.root, async () => {
+      await assertRevision();
+      const generation = await this.materializeVerified(envelope, options);
+      await this.withStateTransaction(() => this.applyStateCommand({ type: "recover", expectedRevision,
+        generationId: generation.id, attemptId: randomUUID() }));
+      return generation;
+    });
+  }
+
+  private async materializeVerified(envelope: SignedStandaloneMetadata, options: StandalonePrepareOptions,
+    feedback = new StandaloneFeedbackEmitter(randomUUID(), { channel: this.channel, namespace: this.namespace }, options.feedback),
+  ): Promise<GenerationRecord> {
     const id = createHash("sha256").update(canonicalJson(envelope.metadata)).digest("hex");
-    const feedback = new StandaloneFeedbackEmitter(randomUUID(), { channel: this.channel, namespace: this.namespace }, options.feedback);
     const syncBlobs = new Set(envelope.metadata.resources.map((resource) => resource.blob));
     feedback.emit({ phase: "sync-planning", state: "complete", generationId: id, totalBytes: [...syncBlobs].reduce((total, digest) => total + envelope.metadata.blobs[digest]!.size, 0) });
     const resources: GenerationRecord["resources"] = {};
@@ -227,12 +285,8 @@ export class StandaloneStore {
       },
       resources,
     };
+    await writeJsonAtomic(this.generationMetadataPath(id), envelope);
     await writeJsonAtomic(this.generationPath(id), generation);
-    await this.withStateTransaction(async () => {
-      const state = await this.readState();
-      await this.applyStateCommand({ type: "prepare", expectedRevision: state.revision, generationId: id });
-    });
-    feedback.emit({ phase: "generation-prepared", state: "complete", generationId: id });
     return generation;
   }
 
@@ -265,23 +319,29 @@ export class StandaloneStore {
     }));
   }
 
-  async activatePrepared(expectedGenerationId: string, shell: StandaloneShellIdentity, expectedRevision: number): Promise<GenerationRecord> {
+  async activatePrepared(expectedGenerationId: string, shell: StandaloneShellIdentity, expectedRevision: number,
+    options: Readonly<{ failurePolicy?: ActivationFailurePolicy }> = {},
+  ): Promise<GenerationRecord> {
     validateShellIdentity(shell);
+    const failurePolicy = options.failurePolicy ?? "rollback";
     return this.withStateTransaction(async () => {
       const state = await this.readState();
       if (state.revision !== expectedRevision) throw new StandaloneStateConflictError("revision-conflict", `stale generation state revision: expected ${expectedRevision}, current ${state.revision}`);
       const generation = await this.readGeneration(expectedGenerationId);
       const minimum = generation.minimumShellVersions[shell.type];
       if (minimum == null || compareVersions(shell.version, minimum) < 0) throw new Error(`Shell ${shell.type} ${shell.version} is incompatible with prepared generation`);
-      await this.applyStateCommand({ type: "activate", expectedRevision, generationId: expectedGenerationId, attemptId: randomUUID() });
+      await this.applyStateCommand({ type: "activate", expectedRevision, generationId: expectedGenerationId, attemptId: randomUUID(), failurePolicy });
       return generation;
     });
   }
 
-  async beginActiveAttempt(shell: StandaloneShellIdentity): Promise<{ proof: ActivationLaunchProof | null; generation: GenerationRecord; attempted: boolean }> {
+  async beginActiveAttempt(shell: StandaloneShellIdentity): Promise<{ proof: ActivationLaunchProof | null; generation: GenerationRecord; attempted: boolean; failurePolicy: ActivationFailurePolicy }> {
     validateShellIdentity(shell);
     return this.withStateTransaction(async () => {
       let state = await this.readState();
+      if (state.activationAttempt?.failurePolicy === "explicit-recovery" && state.activationAttempt.launchCount > 0) {
+        throw new Error("activation is incomplete; explicit exact recovery required");
+      }
       if (state.activationAttempt != null && state.activationAttempt.launchCount >= 2) {
         state = await this.applyStateCommand({ type: "rollback", expectedRevision: state.revision, attemptId: state.activationAttempt.attemptId });
       }
@@ -298,9 +358,9 @@ export class StandaloneStore {
           launchId,
         });
         const attempt = next.activationAttempt!;
-        return { proof: { attemptId: attempt.attemptId, generationId: attempt.generationId, launchId }, generation, attempted: true };
+        return { proof: { attemptId: attempt.attemptId, generationId: attempt.generationId, launchId }, generation, attempted: true, failurePolicy: attempt.failurePolicy };
       }
-      return { proof: null, generation, attempted: false };
+      return { proof: null, generation, attempted: false, failurePolicy: "rollback" };
     });
   }
 

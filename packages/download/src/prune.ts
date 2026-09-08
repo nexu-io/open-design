@@ -8,7 +8,7 @@
  * types, and the platform best-effort remover.
  */
 
-import { readdir, rmdir, stat } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { removePathBestEffort } from "@open-design/platform";
@@ -61,7 +61,8 @@ export async function pruneManagedDownloads(options: PruneManagedDownloadsOption
     const result = await removeEntriesOlderThan(join(basePath, entry.name), olderThan);
     removed += result.removed;
     warnings.push(...result.warnings);
-    await rmdir(join(basePath, entry.name)).catch(() => undefined);
+    // Retain the shared destination directory even when empty: an in-flight
+    // target may already have ensured it and be about to atomically publish.
   }
   return { removed, warnings };
 }

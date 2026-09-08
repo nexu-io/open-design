@@ -8,6 +8,7 @@ import {
 } from "../contracts/index.js";
 import { applyElectronMacRuntimePolicy } from "../platform/macos/index.js";
 import { ElectronActivationAttempt } from "./session/activation.js";
+import { acquireElectronSessionLease } from "./session/lease.js";
 import { installElectronLaunchIngress } from "./session/launch-ingress.js";
 import { ElectronRuntimeLog } from "./session/logging.js";
 import { resolveElectronPresentationMode } from "./window/presentation.js";
@@ -42,6 +43,9 @@ export * from "./window/renderer-mount.js";
 export * from "./window/crash-recovery.js";
 
 type ElectronRuntimeContext = {
+  // Retained across complete startup and shutdown. Only process death releases
+  // normal carrier ownership; releasing at Capsule commit/quit request is early.
+  sessionLease: Awaited<ReturnType<typeof acquireElectronSessionLease>> | null;
   activation: ElectronActivationAttempt | null;
   log: ElectronRuntimeLog | null;
   startup: ElectronStartupAttemptFence | null;
@@ -83,6 +87,8 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   context.processErrors = processErrors;
   log.write("preflight.complete", { namespace, pid: process.pid, platform: process.platform,
     presentation, runtimeRoot: paths.runtimeRoot, preflight });
+  context.sessionLease = await loadElectronCarrierCapsule(app, () => acquireElectronSessionLease(paths.runtimeRoot));
+  log.write("session.owned", { runtimeRoot: paths.runtimeRoot });
   const resourceRoot = app.isPackaged ? process.resourcesPath : app.getAppPath();
   // Platform damage cannot consume generation or installer handoff state.
   const nodeRuntime = await loadElectronCarrierCapsule(app, async () => {
@@ -192,7 +198,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
 }
 
 export async function runElectronCarrier(definition: ElectronCarrierDefinition): Promise<void> {
-  const context: ElectronRuntimeContext = { activation: null, log: null, startup: null, startupQuit: null,
+  const context: ElectronRuntimeContext = { sessionLease: null, activation: null, log: null, startup: null, startupQuit: null,
     ingress: null, processErrors: null };
   try { await runElectronCarrierSession(definition, context); }
   catch (error) {

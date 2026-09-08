@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 import { findSidecarProcesses, getSidecarStatus, stopSidecar, type SidecarStamp } from "@open-design/sidecar";
 import { standaloneHostControlRequestTimeoutMs } from "@open-design/standalone";
-import { resolveElectronSessionNamespace } from "@open-design/electron-kit";
+import { inspectElectronStartup, resolveElectronSessionNamespace } from "@open-design/electron-kit";
 import carrier from "../../../../config/carrier.json" with { type: "json" };
 import resourceDeclaration from "../../../../config/standalone.json" with { type: "json" };
 import { validateElectronPhysicalResourceSet } from "../../standalone/physical-resources.ts";
@@ -100,8 +100,12 @@ export async function observeElectronDiagnostics(controlRuntimeRoot: string, sta
       // treated as unavailable diagnostics, never as lifecycle authority.
       await writeFile(path, JSON.stringify(roots), "utf8");
     }
-    return status;
+    const startupRoot = roots.find(root => root.scope === "shell");
+    return status != null && typeof status === "object" && startupRoot != null
+      ? Object.freeze({ ...status, startup: await inspectElectronStartup(dirname(startupRoot.path), { live: true }) }) : status;
   }
   const roots = await readFile(path, "utf8").then((text) => logRoots(JSON.parse(text))).catch(() => []);
-  return Object.freeze({ state: "idle", logRoots: roots });
+  const startupRoot = roots.find(root => root.scope === "shell");
+  return Object.freeze({ state: "idle", logRoots: roots,
+    ...(startupRoot == null ? {} : { startup: await inspectElectronStartup(dirname(startupRoot.path)) }) });
 }

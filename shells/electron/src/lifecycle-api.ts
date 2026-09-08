@@ -2,6 +2,12 @@ import type { ElectronDevLifecycleRequest } from "./adapters/tools/lifecycle/dev
 import type { ElectronRuntimeLifecycleRequest } from "./adapters/tools/lifecycle/runtime-tool.ts";
 
 export type { ElectronDevLifecycleRequest, ElectronRuntimeLifecycleRequest };
+export type { ElectronStartupRecoveryRequest } from "./adapters/standalone/startup-recovery.js";
+
+export async function recoverElectronStartup(request: import("./adapters/standalone/startup-recovery.js").ElectronStartupRecoveryRequest) {
+  const { recoverElectronProductStartup } = await import("./adapters/standalone/startup-recovery.js");
+  return recoverElectronProductStartup(request);
+}
 export { describeElectronRuntimeDiagnostics, updateElectronClosureThroughCdp, type ElectronDiagnosticSession } from "./adapters/tools/lifecycle/inspection.ts";
 
 /** Caller owns the log descriptor; only start loads the build-time dependency closure. */

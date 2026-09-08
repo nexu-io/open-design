@@ -23,6 +23,9 @@ function key(state: GenerationState): string {
 
 function commands(state: GenerationState): GenerationStateCommand[] {
   const result: GenerationStateCommand[] = generations.map((generationId) => ({ type: "prepare", expectedRevision: state.revision, generationId }));
+  for (const generationId of generations) {
+    for (const attemptId of attemptIds) result.push({ type: "recover", expectedRevision: state.revision, generationId, attemptId });
+  }
   if (state.prepared != null) {
     for (const [authority, cause] of [
       ["silent", "installed-seed"],
@@ -152,5 +155,16 @@ describe("Standalone generation state algebra", () => {
       .toThrow("activation attempt retry budget is exhausted");
     state = reduceGenerationState(state, { type: "rollback", expectedRevision: state.revision, attemptId: attemptIds[0] });
     expect(state).toMatchObject({ active: null, lastHealthy: null, activationAttempt: null });
+  });
+
+  it("persists explicit recovery across consumers and cannot silently retry or roll back", () => {
+    let state = activated();
+    state = reduceGenerationState(state, { type: "recover", expectedRevision: state.revision, generationId: generations[1], attemptId: attemptIds[1] });
+    state = reduceGenerationState(state, { type: "begin-launch", expectedRevision: state.revision, attemptId: attemptIds[1], launchId: launchIds[0] });
+    expect(state.activationAttempt).toMatchObject({ failurePolicy: "explicit-recovery", launchCount: 1 });
+    expect(() => reduceGenerationState(state, { type: "begin-launch", expectedRevision: state.revision, attemptId: attemptIds[1], launchId: launchIds[1] })).toThrow("explicit exact recovery required");
+    expect(() => reduceGenerationState(state, { type: "rollback", expectedRevision: state.revision, attemptId: attemptIds[1] })).toThrow("explicit exact recovery required");
+    expect(reduceGenerationState(state, { type: "recover", expectedRevision: state.revision, generationId: generations[1], attemptId: attemptIds[0] }).activationAttempt)
+      .toMatchObject({ failurePolicy: "explicit-recovery", launchCount: 0 });
   });
 });

@@ -8,3 +8,6 @@ export * from "./runtime/startup/preflight/index.js";
 export * from "./runtime/startup/warmup/index.js";
 export { resolveElectronSessionNamespace, resolveElectronNamespacePaths } from "./runtime/session/namespace-paths.js";
 export { resolveElectronRuntimeLogPath } from "./runtime/session/logging.js";
+export { acquireElectronSessionLease } from "./runtime/session/lease.js";
+export { recoverElectronStartup, readElectronRecoveryIntent, ElectronRecoveryRequiredError, type ElectronRecoveryTarget } from "./runtime/session/recovery.js";
+export { inspectElectronStartup } from "./runtime/session/activation.js";

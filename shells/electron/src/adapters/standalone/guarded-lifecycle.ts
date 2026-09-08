@@ -1,12 +1,29 @@
 import {
   stopSidecars,
+  findSidecarProcesses,
   withSidecarLifecycleLock,
   type SidecarLifecycleLockOptions,
   type SidecarStopOptions,
   type SidecarStopResult,
 } from "@open-design/sidecar/authority";
 
-import type { ElectronBoundPhysicalResourceSet } from "./physical-resources.js";
+import { validateElectronPhysicalResourceSet, type ElectronPhysicalResourceSetDeclaration, type ElectronBoundPhysicalResourceSet } from "./physical-resources.js";
+
+/** Offline repair may mutate selection only while every shared resource is
+ * physically absent under the existing resource-set lock. Never retire a live
+ * consumer just to satisfy this precondition. */
+export async function withElectronStoppedResourceSet<T>(
+  declaration: ElectronPhysicalResourceSetDeclaration,
+  scope: Readonly<{ channel: string; namespace: string }>,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const stamps = validateElectronPhysicalResourceSet(declaration).resources.map(({ stamp }) => ({ ...stamp, ...scope }));
+  return withSidecarLifecycleLock(stamps, async () => {
+    const survivors = (await Promise.all(stamps.map(stamp => findSidecarProcesses(stamp)))).flat();
+    if (survivors.length !== 0) throw new Error("Electron recovery requires the shared resource set to be stopped; another consumer or orphan is still present");
+    return operation();
+  });
+}
 
 export const ELECTRON_PHYSICAL_RETIREMENT_SCHEMA_VERSION = 1 as const;
 

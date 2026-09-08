@@ -4,7 +4,7 @@
 
 It calls the public `@open-design/shell-electron/build` and `/lifecycle`
 APIs, consumes their typed results, and presents build,
-install, start, stop, logs, uninstall, cleanup, and CDP-backed inspect commands.
+install, start, stop, recover, logs, uninstall, cleanup, and CDP-backed inspect commands.
 It does not import `electron-kit`, assemble Electron applications, define
 product handlers, own a second process model, or publish releases.
 
@@ -24,6 +24,11 @@ pnpm tools-pack mac cleanup --namespace release-betahyx
 Channel version and Shell compatibility version are independent values. The
 release version may include its channel as a defensive naming convention;
 Shell compatibility remains declared by `shells/electron/config/shell.json`.
+
+Explicit stopped-session recovery uses `mac recover --user-data-root` with the
+Electron session's base userData location. See the [Shell recovery contract](../../shells/electron/README.md)
+for presentation, exact target, offline/online behavior and current limitations.
+Recovery is not cleanup, a reinstall, or an automatic relaunch.
 
 Windows distribution remains implemented and tested at the
 `electron-kit`/Electron Shell boundary, but tools-pack does not expose a

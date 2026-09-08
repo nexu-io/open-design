@@ -4,6 +4,7 @@ import { basename, join } from "node:path";
 import { discardStandaloneStoreEntry } from "./blob.js";
 import type { GenerationRecord, GenerationState } from "./store.js";
 import { withStandaloneMaintenanceLock } from "./maintenance.js";
+import { validateGenerationState } from "./state-machine.js";
 
 export type StandaloneGarbageSweepResult = Readonly<{
   discardedBlobs: number;
@@ -25,12 +26,11 @@ async function liveStoreReferences(root: string): Promise<Readonly<{ blobs: Set<
     for (const namespace of await readdir(namespacesRoot, { withFileTypes: true }).catch(() => [])) {
       if (!namespace.isDirectory() || namespace.isSymbolicLink()) continue;
       const statePath = join(namespacesRoot, namespace.name, "state.json");
-      const state = await readJson<GenerationState>(statePath).catch((error: NodeJS.ErrnoException) => {
+      const state = await readJson<GenerationState>(statePath).then(validateGenerationState).catch((error: NodeJS.ErrnoException) => {
         if (error.code === "ENOENT") return null;
         throw error;
       });
       if (state == null) continue;
-      if (state.schemaVersion !== 4) throw new Error(`unsupported generation state while sweeping: ${channel.name}/${namespace.name}`);
       const ids = new Set([
         state.prepared,
         state.activationAttempt?.generationId,

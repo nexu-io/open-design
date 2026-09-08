@@ -15,6 +15,7 @@ describe("built tools-pack CLI", () => {
 
     const help = await execFileAsync(process.execPath, ["dist/index.mjs", "--help"], { cwd: toolPackRoot });
     expect(help.stdout).not.toContain("exact-control");
+    expect(help.stdout).toContain("recover");
     const products = await readdir(resolve(toolPackRoot, "dist"));
     expect(products).not.toContain("exact-control.mjs");
     expect(products).not.toContain("exact-api.mjs");
@@ -33,5 +34,7 @@ describe("built tools-pack CLI", () => {
     await expect(invocation).rejects.toMatchObject({
       stderr: expect.stringContaining("unsupported mac action: unsupported-built-smoke"),
     });
+    await expect(execFileAsync(process.execPath, ["dist/index.mjs", "mac", "recover"], { cwd: toolPackRoot }))
+      .rejects.toMatchObject({ stderr: expect.stringContaining("recovery requires --user-data-root") });
   });
 });

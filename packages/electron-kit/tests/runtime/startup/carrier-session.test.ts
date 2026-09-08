@@ -5,7 +5,7 @@ import type { ElectronCapsuleModule, LoadedElectronCapsule } from "@/runtime/sta
 import type { ElectronShellManifest } from "@/contracts/index.js";
 
 const mock = vi.hoisted(() => ({
-  bind: vi.fn(), begin: vi.fn(), commit: vi.fn(), fail: vi.fn(), exit: vi.fn(), quit: vi.fn(), dispose: vi.fn(), log: vi.fn(),
+  bind: vi.fn(), begin: vi.fn(), commit: vi.fn(), fail: vi.fn(), exit: vi.fn(), quit: vi.fn(), dispose: vi.fn(), log: vi.fn(), lease: vi.fn(),
 }));
 vi.mock("electron", async () => {
   const { EventEmitter } = await import("node:events");
@@ -21,6 +21,7 @@ vi.mock("@/runtime/startup/identity.js", () => ({
   loadElectronCarrierCapsule: async (_app: unknown, load: () => Promise<unknown>) => load(),
 }));
 vi.mock("@/runtime/session/activation.js", () => ({ ElectronActivationAttempt: { begin: mock.begin } }));
+vi.mock("@/runtime/session/lease.js", () => ({ acquireElectronSessionLease: mock.lease }));
 vi.mock("@/runtime/session/logging.js", () => ({ ElectronRuntimeLog: class { write = mock.log; async flush() {} } }));
 vi.mock("@/runtime/session/process-errors.js", () => ({ attachElectronProcessErrorHandlers: () => ({ dispose: mock.dispose }) }));
 vi.mock("@/platform/macos/index.js", () => ({ applyElectronMacRuntimePolicy: async () => undefined }));
@@ -50,6 +51,7 @@ function capsule() {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mock.lease.mockResolvedValue({ release: vi.fn() });
   mock.bind.mockResolvedValue({ command: "/physical/platform/bin/node", env: {} });
   mock.commit.mockResolvedValue(undefined);
   mock.begin.mockResolvedValue({ attemptId: "test-attempt", fail: mock.fail, commit: mock.commit });
@@ -61,6 +63,8 @@ it("establishes physical integrity and activation before loading one Capsule in-
   const module = capsule();
   const loadCapsule = vi.fn(async () => module);
   await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule });
+  expect(mock.lease).toHaveBeenCalledWith("/runtime");
+  expect(mock.lease.mock.invocationCallOrder[0]).toBeLessThan(mock.bind.mock.invocationCallOrder[0]!);
   expect(mock.bind.mock.invocationCallOrder[0]).toBeLessThan(mock.begin.mock.invocationCallOrder[0]!);
   expect(mock.begin.mock.invocationCallOrder[0]).toBeLessThan(loadCapsule.mock.invocationCallOrder[0]!);
   expect(module.runElectronCapsule).toHaveBeenCalledExactlyOnceWith(expect.any(Object), expect.objectContaining({
@@ -75,6 +79,16 @@ it("establishes physical integrity and activation before loading one Capsule in-
     activationAttemptId: "test-attempt", generationId: "f".repeat(64), bindingDigest: "e".repeat(64),
   });
   expect(mock.log).toHaveBeenCalledWith("startup.committed", { generationId: "f".repeat(64), presentation: "headless" });
+});
+
+it("refuses a recovery-owned session before platform, activation or Capsule work", async () => {
+  mock.lease.mockRejectedValue(new Error("Electron session is owned"));
+  const loadCapsule = vi.fn(async () => capsule());
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule });
+  expect(mock.bind).not.toHaveBeenCalled();
+  expect(mock.begin).not.toHaveBeenCalled();
+  expect(loadCapsule).not.toHaveBeenCalled();
+  expect(mock.exit).toHaveBeenCalledWith(1);
 });
 
 it("does not commit a partial Capsule startup or expose commit authority to it", async () => {
