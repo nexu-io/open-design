@@ -107,6 +107,24 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
+  /**
+   * OPEND-2707。本地化清单是每题副标题的**第三个入口**:它既不点 `help` 的名,
+   * 也不摆一个键位,只是在「这些控件文案都要翻译」的枚举里夹了一项 "helper text"
+   * —— 而那正是在告诉模型「一道题是有一段 helper text 的」。题面撤了、这一项
+   * 还留着,模型照样会造一段出来,然后写完丢掉。
+   *
+   * 保留的枚举项(titles / question labels / placeholders / option labels)全部
+   * 仍然会渲染,一个都不能顺手删掉 —— 这条用例同时守住那一边。
+   */
+  it('本地化清单不再把每题副标题列成一种要翻译的控件文案', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).not.toContain('helper text');
+    expect(prompt).toContain(
+      '`<question-form>` titles, question labels, placeholders, and option labels',
+    );
+  });
+
   it('keeps Plan mode tied to the real Todo card in filesystem runs', () => {
     const prompt = composeSystemPrompt({ sessionMode: 'plan' });
 

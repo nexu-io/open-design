@@ -10399,31 +10399,31 @@ export function ProjectView({
   }, [armSlideNavForQueuedSend, commitPreviewComments, currentConversationBusy, handleSend, handleStop, prioritizeQueuedChatSend, project.id, removeQueuedChatSend, projectRunWorkspaceContext]);
 
   /*
-   * B11 「引导对话」 —— 队列行第三颗按钮什么时候露面(OPEND-2602)。
+   * B11 「引导对话」 —— 队列行领头那颗按钮走的就是上面的
+   * `sendQueuedChatSendNow`(OPEND-2602)。
    *
    * 它原来走的是「一个字都不打断,把消息写进 agent 子进程还开着的 stdin」
    * (`steerChatRun`)。产品 2026-09-03 裁决把这条路整个撤了,两件实测事实:
    *   · 27 个 runtime 里只有 `claude` / `codebuddy` 的 `promptInputFormat` 是
-   *     `stream-json`,其余 25 个这颗按钮压根不出现,退回成「发送」;
+   *     `stream-json`;
    *   · 拿装机的真 claude 2.1.259 做对照:轮次跑到一半写进 stdin 的 user 帧
    *     CLI 完全没处理(等 180s 进程活着不动),同一条在 `result` 帧之后写进去
    *     才正常起第二轮 —— 而 daemon 恰恰在 `usage` 那一档就关了 stdin。
    *
    * 现在它按下去干的事是**中断当前这一轮,然后立刻发出这条**,也就是
-   * 上面 `sendQueuedChatSendNow` 在会话 busy 时走的那条路 —— 复用它,而不是
+   * `sendQueuedChatSendNow` 在会话 busy 时走的那条路 —— 复用它,而不是
    * 另起一条:那条已经处理好三件难的事(把被顶掉的 run 记进 `supersededRunsRef`,
    * 免得 daemon 迟到的终止回调污染新一轮;把卡在 `applying` 的预览批注复位;
-   * 靠自动启动效应避免两轮重叠)。
+   * 靠自动启动效应避免两轮重叠)。会话没在跑时它就是直接发,同一个函数的
+   * 另一条分支。
    *
-   * 判据只剩「此刻有没有一轮可中断」:中断对所有 27 个 agent 都成立,不存在
-   * 「这个 agent 不支持」。而且这里用的谓词和 `sendQueuedChatSendNow` 内部
-   * 分支用的是**同一个** `currentConversationBusy` —— 按钮的脸和它按下去
-   * 干的事因此不可能对不上(旧代码用的是从 `messages` 推出来的 runId,
-   * 那份读数会比 busy 慢一拍)。
+   * 这里曾经还有一道 `canSteerCurrentTurn` 门,用来决定按钮画「引导对话」
+   * 还是退回一颗无标签的「立即发送」。产品 2026-09-08 当面把它裁掉了 ——
+   * 「引导对话就是原本的立即发送啊,只不过我们换了个名字跟 codex 客户端
+   * 对齐了下」。门两边喂的本来就是同一个 `sendQueuedChatSendNow`,所以门一撤
+   * 按钮行为一个字没变,变的只是它不再改名。交付稿里也只有「引导对话」
+   * 那一颗(`729fa43ce7:docs/design/chat-panel-next.html` 组件 17)。
    */
-  const canSteerCurrentTurn = Boolean(
-    currentConversationBusy && !currentConversationQueueDisabled,
-  );
 
   useEffect(() => {
     if (currentConversationBusy) {
@@ -11426,7 +11426,7 @@ export function ProjectView({
          *
          * 这里原来给源会话那条助手消息盖 `forkedInto`,理由是「分支要留在它被拉出来
          * 的地方」。但点完分叉页面就**跳到新会话**,人此刻站在那边 —— 源会话上的那条线
-         * 除非专门翻回去否则永远看不到;而那行脚注「上文已带过来,接着说就行」
+         * 除非专门翻回去否则永远看不到;而那行脚注「从上一个会话继续」
          * 对着原地没动的源会话说也不成立。
          *
          * 标记改由 daemon 在建新会话时盖在**带过来的最后一条**上,见
@@ -11636,17 +11636,15 @@ export function ProjectView({
             onRemoveQueuedSend: removeQueuedChatSend,
             onUpdateQueuedSend: updateQueuedChatSend,
             onReorderQueuedSends: reorderCurrentConversationQueuedChatSends,
+            // B11 「引导对话」: one button, always offered. The handler already
+            // branches on `currentConversationBusy` into stop-then-resend, so
+            // there is nothing left for a visibility gate to decide.
             onSendQueuedNow: sendQueuedChatSendNow,
-            // B11: handed over only while there is a turn to interrupt. Same
-            // handler as「立即发送」on purpose — it already branches on
-            // `currentConversationBusy` into stop-then-resend.
-            onSteerQueuedSend: canSteerCurrentTurn ? sendQueuedChatSendNow : undefined,
             onAssistantFeedback: handleAssistantFeedback,
           }
         : undefined,
     [
       activeConversationId,
-      canSteerCurrentTurn,
       conversationLoadError,
       currentConversationActionDisabled,
 	      currentConversationQueuedItems,
@@ -13255,7 +13253,6 @@ export function ProjectView({
               onUpdateQueuedSend={updateQueuedChatSend}
               onReorderQueuedSends={reorderCurrentConversationQueuedChatSends}
               onSendQueuedNow={sendQueuedChatSendNow}
-              onSteerQueuedSend={canSteerCurrentTurn ? sendQueuedChatSendNow : undefined}
               onRequestOpenFile={requestOpenFile}
               onRequestPluginDetails={handleOpenContextPluginDetails}
               onRequestDesignSystemDetails={handleOpenContextDesignSystemDetails}

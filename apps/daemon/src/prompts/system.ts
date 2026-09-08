@@ -97,7 +97,7 @@ function renderUiLocalePrompt(
   const lines = [
     '# UI locale override',
     '',
-    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, question labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, question labels, placeholders, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
     `The artifacts you generate must also be in ${languageName}: every piece of user-visible copy in the HTML/React/page/deck you produce — headings, body text, navigation, button and link labels, captions, alt text, and form fields — is written in this language by default. This holds even when a chosen template, plugin, or design system ships its reference/example content in another language: treat that copy as a layout and style reference and translate/adapt it into ${languageName}, do not ship its wording verbatim. Keep brand names, code, and technical identifiers as-is, and honor an explicit user request for a different output language.`,
   ];
   // The worked zh-CN quick-brief copy below matches the CLASSIC default
@@ -2151,6 +2151,20 @@ function shouldRenderElevenLabsVoiceOptions(
     && audioVoiceOptions.length > 0;
 }
 
+/**
+ * OPEND-2707. 这道题曾经把「交上去的是 voice_id,不是你看到的那行描述」写在
+ * 每题副标题(help 字段)里 —— 全仓唯一由仓库自己写出这个字段的地方。澄清卡不再
+ * 渲染副标题之后,那句话写了就丢,所以它并进了 `label`。
+ *
+ * 为什么是 `label` 而不是别处:`FormQuestion` 没有题级 `description`(只有选项有),
+ * `placeholder` 归 "Choose a voice" 占着 —— `label` 是唯一还会渲染、又属于这道题
+ * 本身的位置。信息不能删:选项的可见文字是音色描述,不说一声用户看不出交上去的是 id。
+ *
+ * 这份 JSON 会被整段 `JSON.stringify` 进系统提示词,所以它同时是模型看到的
+ * 「一道题可以长这样」的范例 —— 留一个 help 键在这里,撤发问就撤了个寂寞。
+ * 钉在 `apps/daemon/tests/system-prompt-template.test.ts`,镜像那份钉在
+ * `packages/contracts/tests/system-prompt-audio-voices.test.ts`。
+ */
 function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
   questions: Array<{
     id: string;
@@ -2159,7 +2173,6 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     required: boolean;
     allowCustom: false;
     placeholder: string;
-    help: string;
     options: Array<{ label: string; value: string }>;
   }>;
   submitLabel: string;
@@ -2172,12 +2185,11 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     questions: [
       {
         id: 'voice',
-        label: 'Voice',
+        label: 'Voice — the answer submits the matching Voice ID',
         type: 'select',
         required: true,
         allowCustom: false,
         placeholder: 'Choose a voice',
-        help: 'Select a voice description; the answer submits the matching Voice ID.',
         options,
       },
     ],

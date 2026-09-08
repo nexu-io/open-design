@@ -114,6 +114,12 @@ describe('S30 · daemon 判定不可重试的环境失败,卡片不能给〔重�
     }
   });
 
+  /**
+   * ⚠️ 这一格**没有**换成产品文档 S30 的润色列,判据写在
+   * `amr-guidance.ts` 的 `clientEnvironmentCard` 文档注释里:S30 唯一那行润色格
+   * 只适用于「地区不支持」,而这五格一个都不是地区拦截。所以正文继续钉旧文案 ——
+   * 「宁可留旧的,也不许自拟」。
+   */
   it('S30 的中文正文逐字照设计稿,并且不承诺「配好证书就能用」', () => {
     expect(zhCN['chat.runError.title.clientEnvironment']).toBe('网络环境不对');
     expect(zhCN['chat.runError.clientEnvironmentMessage']).toBe(

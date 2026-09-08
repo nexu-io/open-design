@@ -17,6 +17,13 @@ name: release-prerelease-card
 # It is dispatched by release-prerelease.yml's `dispatch_validation` job at the
 # moment the build commit is resolved — before any package exists — and it holds
 # a concurrency group of its own, so its long watch cannot delay a build.
+#
+# Being the ONLY prerelease notification makes every way this workflow can break
+# a silent one: the pipeline stays green, the packages ship, and the channel
+# hears nothing. `fallback_notice` below is the answer — it fires only when the
+# card did not reach the group, and it delivers through the custom-bot webhook,
+# a different bot with a different secret, so an expired application credential
+# cannot take the alert down with the card.
 
 on:
   workflow_dispatch:
@@ -76,6 +83,14 @@ jobs:
     # watcher's own budget set below it so the card gets a final "timed out"
     # update instead of being killed mid-poll.
     timeout-minutes: 150
+    outputs:
+      # "The card's FINAL state is in the chat", written by the watcher itself.
+      # Deliberately not derivable from this job's result: the watcher catches
+      # every Feishu error on purpose (one hiccup must not end a two-hour watch)
+      # and exits 0 regardless, so an application bot whose credentials expired
+      # produces a green job and an empty channel. The fallback job below keys
+      # on this, not on `result`.
+      delivered: ${{ steps.track.outputs.card_delivered }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -150,6 +165,7 @@ jobs:
           fi
 
       - name: Track the prerelease on one card
+        id: track
         env:
           BRANCH: ${{ inputs.branch }}
           CARD_TIMEOUT_MS: "8400000"
@@ -168,3 +184,107 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           VERSION: ${{ inputs.version }}
         run: node --experimental-strip-types tools/release/src/notifications/prerelease-progress-card.ts
+
+  fallback_notice:
+    name: Alert when the card never reached the group
+    needs: card
+    # `always() && !cancelled()` is load-bearing, not decoration. GitHub applies
+    # an implicit `success()` to a job with `needs`, which would skip this one in
+    # exactly the case it exists for — a card job that died — without ever
+    # evaluating the conditions below. (The same trap skipped
+    # release-prerelease.yml's `dispatch_smoke` for N runs.) `card` is this
+    # workflow's only other job and sits downstream of nothing, so that break is
+    # the whole reachability story here: the permanently-skipped `build_linux`
+    # chain that poisons release-prerelease.yml's graph does not exist in this
+    # two-job workflow.
+    #
+    # The last clause is the "never fire on a healthy release" rule. A green
+    # watcher that ALSO reports a delivered card is the normal outcome and must
+    # skip this job; a green watcher without that report is the silent failure.
+    # Reading `needs.card.result` alone would miss every credential failure.
+    #
+    # The repository guard mirrors `card`'s own: a fork has neither bot's
+    # credentials, and must not be told its card lane is broken.
+    if: >-
+      ${{
+        always() && !cancelled() &&
+        github.repository == 'nexu-io/open-design' &&
+        !(needs.card.result == 'success' && needs.card.outputs.delivered == 'true')
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # The OTHER bot, on purpose. The card posts through the Feishu application
+      # bot (FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_RELEASE_CHAT_ID); this
+      # posts through the custom-bot webhook that the retired one-shot card used.
+      # A fallback sharing the primary's credentials would cover nothing —
+      # "the application bot expired or was removed from the chat" is one of the
+      # ways the card goes silent, and it must not take the alert down too.
+      FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+      FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
+    steps:
+      - name: Checkout notifier
+        uses: actions/checkout@v6.0.2
+        with:
+          # Both scripts below import nothing but node builtins, so this job
+          # needs no dependency install — which is the point: the last-resort
+          # path should have as little between it and the POST as possible.
+          fetch-depth: 1
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Compose the fallback notice
+        id: notice
+        env:
+          BRANCH: ${{ inputs.branch }}
+          CARD_DELIVERED: ${{ needs.card.outputs.delivered }}
+          CARD_JOB_RESULT: ${{ needs.card.result }}
+          CARD_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          CHANNEL_LABEL: Prerelease
+          COMMIT: ${{ inputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          LANE_SUMMARY: "card job=${{ needs.card.result }} · delivered=${{ needs.card.outputs.delivered || 'false' }}"
+          # The card is dispatched before any package exists, so unlike
+          # release-prerelease.yml this caller holds no version_metadata_url.
+          # It reconstructs the same R2 object and HEADs it, which is the same
+          # authority by a different route, and asks the origin run whether the
+          # pipeline is still going — that is what tells "never shipped" apart
+          # from "has not shipped yet" when the card dies early.
+          ORIGIN_RUN_ID: ${{ inputs.origin_run_id }}
+          ORIGIN_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ inputs.origin_run_id }}
+          RELEASE_CHANNEL: prerelease
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          STAGE: watch
+          VERSION: ${{ inputs.version }}
+        run: node --experimental-strip-types tools/release/src/notifications/prerelease-fallback-notice.ts
+
+      - name: Fail loudly when the fallback bot is itself unconfigured
+        # Both notification paths being down at once is an incident of its own,
+        # and a red job in the Actions list is the only channel left to say so.
+        # `always()` because the whole point is to speak after something
+        # broke — without it GitHub's implicit success() skips this step in
+        # every run where an earlier step already failed. The outcome check
+        # is the other half: never act on a composer that did not finish.
+        if: >-
+          ${{
+            always() && steps.notice.outcome == 'success' &&
+            steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK == ''
+          }}
+        run: |
+          echo "::error::the prerelease card lane went silent and FEISHU_RELEASE_WEBHOOK is unset, so no fallback notice could be delivered"
+          exit 1
+
+      - name: Post the fallback notice
+        if: >-
+          ${{
+            always() && steps.notice.outcome == 'success' &&
+            steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK != ''
+          }}
+        env:
+          NOTICE_BODY: ${{ steps.notice.outputs.body }}
+          NOTICE_TEMPLATE: ${{ steps.notice.outputs.template }}
+          NOTICE_TITLE: ${{ steps.notice.outputs.title }}
+          RUN_URL: ${{ steps.notice.outputs.run_url }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts

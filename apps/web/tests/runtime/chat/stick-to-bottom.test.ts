@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isCompositorSnapBack,
   nextFollowIntent,
   upwardGestureCanEscapeBottom,
 } from '../../../src/runtime/chat/stick-to-bottom';
@@ -201,5 +202,170 @@ describe('往上的手势有没有可能挣脱', () => {
     expect(
       upwardGestureCanEscapeBottom({ scrollTop: 1600, scrollHeight: 2000, clientHeight: 400 }),
     ).toBe(true);
+  });
+});
+
+/*
+ * ── 合成器夹取不是用户上滑 ────────────────────────────────────────────
+ *
+ * 真机诊断包(Electron 41 / Chromium 146,用户客户端):
+ *
+ *   scrollTop 245.5   layoutMax 718   scrollHeight 1307   unreachablePx 472.5
+ *
+ * 点【滚动到最新】→ `scrollTo({top:1307})` → 位置落在 718.5(布局的真底部);
+ * 用户碰一下滚轮,合成器把它甩回自己那份陈旧上限 245.5。`__chatScrollFreeze`
+ * 的写入拦截全程武装、零丢弃、覆盖 `scrollTop`/`scrollTo`/`scrollBy`/
+ * `scrollIntoView` 四个 API,而这 3.8 秒里**零条 JS 写入记录** —— 没有任何 JS
+ * 移过它,是合成器干的。
+ *
+ * 这一段位移「位置变小 + `scrollHeight` 没变」两条同时成立,正好命中判据里
+ * 「用户上滑」的定义,于是每一次夹取都把自动跟随静默关掉。
+ *
+ * ⚠️ 下面**反向那几条比正向这条更重要**:修法只要多判一次,就是把跟随焊死。
+ * 判据只由「这段窗口里的滚轮只朝下」授权,别的一律照旧当成用户上滑。
+ */
+describe('合成器夹取 vs 用户上滑', () => {
+  const following = { following: true, escaped: false } as const;
+  const escaped = { following: false, escaped: true };
+
+  // 真机那一组数:clientHeight = 1307 − 718 = 589,布局能滚到 718。
+  const atLayoutBottom = { scrollTop: 718.5, scrollHeight: 1307, clientHeight: 589 };
+  const clampedToStaleCeiling = { scrollTop: 245.5, scrollHeight: 1307, clientHeight: 589 };
+
+  it('朝下的滚轮把位置甩到上面去 —— 跟随不许关', () => {
+    expect(
+      nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
+        downwardEvents: 1,
+        upwardEvents: 0,
+        atScrollTop: 718.5,
+      }),
+    ).toEqual(following);
+  });
+
+  /*
+   * ── 反向锚点 ───────────────────────────────────────────────────────
+   * 一模一样的两份几何,只换滚轮方向。用户上滑必须照旧松手。
+   */
+  it('【反向】同样的位移,滚轮朝上 —— 必须松手', () => {
+    expect(
+      nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
+        downwardEvents: 0,
+        upwardEvents: 1,
+        atScrollTop: 718.5,
+      }),
+    ).toEqual(escaped);
+  });
+
+  it('【反向】根本没有滚轮(拖滚动条 / 键盘 / 触摸)—— 必须松手', () => {
+    expect(
+      nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
+        downwardEvents: 0,
+        upwardEvents: 0,
+        atScrollTop: 718.5,
+      }),
+    ).toEqual(escaped);
+    // 调用方压根不传见证时,行为和这个参数出现之前一模一样。
+    expect(nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling)).toEqual(escaped);
+    expect(nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, null)).toEqual(
+      escaped,
+    );
+  });
+
+  it('【反向】一次轻扫里掉过头:有一格朝上就作废 —— 必须松手', () => {
+    /*
+     * 触控板一次轻扫在两个 scroll 事件之间能吐十几格,中途完全可能上下都有。
+     * 净方向朝下也不行:只要用户要过一次上滑,这一段就归他。
+     */
+    expect(
+      nextFollowIntent(following, atLayoutBottom, clampedToStaleCeiling, {
+        downwardEvents: 9,
+        upwardEvents: 1,
+        atScrollTop: 718.5,
+      }),
+    ).toEqual(escaped);
+  });
+
+  it('【反向】朝下的滚轮把位置往下带 —— 恢复跟随这条路一格都没挡', () => {
+    const away = { scrollTop: 200, scrollHeight: 1307, clientHeight: 589 };
+    expect(
+      nextFollowIntent(escaped, away, atLayoutBottom, {
+        downwardEvents: 3,
+        upwardEvents: 0,
+        atScrollTop: 200,
+      }),
+    ).toEqual(following);
+  });
+});
+
+describe('isCompositorSnapBack', () => {
+  const previous = { scrollTop: 718.5, scrollHeight: 1307, clientHeight: 589 };
+  const clamped = { scrollTop: 245.5, scrollHeight: 1307, clientHeight: 589 };
+  const downOnly = { downwardEvents: 1, upwardEvents: 0, atScrollTop: 718.5 };
+
+  it('朝下的滚轮 + 位置反而往上跑 + 布局没动 = 夹取', () => {
+    expect(isCompositorSnapBack(previous, clamped, downOnly)).toBe(true);
+  });
+
+  it('没有见证 / 见证里有朝上的一格 / 一格朝下的都没有 —— 都不是', () => {
+    expect(isCompositorSnapBack(previous, clamped, null)).toBe(false);
+    expect(isCompositorSnapBack(previous, clamped, undefined)).toBe(false);
+    expect(
+      isCompositorSnapBack(previous, clamped, {
+        downwardEvents: 1,
+        upwardEvents: 1,
+        atScrollTop: 718.5,
+      }),
+    ).toBe(false);
+    expect(
+      isCompositorSnapBack(previous, clamped, {
+        downwardEvents: 0,
+        upwardEvents: 0,
+        atScrollTop: 718.5,
+      }),
+    ).toBe(false);
+  });
+
+  it('内容动过就不是这个现象 —— 那种位移归 layoutStable 管', () => {
+    expect(
+      isCompositorSnapBack(previous, { ...clamped, scrollHeight: 1400 }, downOnly),
+    ).toBe(false);
+    expect(isCompositorSnapBack(previous, { ...clamped, clientHeight: 600 }, downOnly)).toBe(
+      false,
+    );
+  });
+
+  it('位移方向朝下、或小到落在贴底容差里 —— 都不是', () => {
+    // 起点换成 245.5,条子也跟着换 —— 否则这一条会因为「位置对不上」而通过,
+    // 量到的就不是方向那一条判据了。
+    expect(
+      isCompositorSnapBack(clamped, previous, { ...downOnly, atScrollTop: 245.5 }),
+    ).toBe(false);
+    // 8px 是容差本身,要**超过**才算。高 DPI / 分数缩放下的亚像素抖动全在这以内。
+    expect(
+      isCompositorSnapBack(previous, { ...previous, scrollTop: 710.5 }, downOnly),
+    ).toBe(false);
+    expect(
+      isCompositorSnapBack(previous, { ...previous, scrollTop: 710.4 }, downOnly),
+    ).toBe(true);
+  });
+  /*
+   * ── 条子只解释它记下的那一段 ──────────────────────────────────────
+   *
+   * nettee 在 #7898 上点名的过度抑制,结构性的那一半就堵在这里:一格朝下的滚轮
+   * 落在已经到底的日志上,位置不动、不发 scroll 事件,条子没人用掉;等基线被别的
+   * 东西挪走之后(切会话、我们自己写 `scrollTop`),它还留着,就会去解释一段和它
+   * 毫无关系的位移 —— 一次真实的用户位置变化被判成夹取,跟随焊死。
+   */
+  it('条子记的位置不是这一段位移的起点 —— 一律不算夹取', () => {
+    // 差 0.5px 都不行:对不上就说明中间有别的东西动过这个滚动条。
+    for (const atScrollTop of [718, 719, 0, 245.5, 1307]) {
+      expect(
+        isCompositorSnapBack(previous, clamped, { ...downOnly, atScrollTop }),
+      ).toBe(false);
+    }
+    // 对得上才算 —— 正向那一半不许被这条顺手废掉。
+    expect(isCompositorSnapBack(previous, clamped, { ...downOnly, atScrollTop: 718.5 })).toBe(
+      true,
+    );
   });
 });

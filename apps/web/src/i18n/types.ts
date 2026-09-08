@@ -2857,10 +2857,27 @@ export interface Dict {
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;
   'chat.runError.title.modelUnavailable': string;
+  /**
+   * S13 ·「模型能力不支持」。和 `title.modelUnavailable`(S07「当前模型不可用」)
+   * 是产品文档里的两行,不是一句话的两种说法 —— 一个说「用不了」,一个说「做不了」。
+   */
+  'chat.runError.title.modelCapabilityUnsupported': string;
   'chat.runError.title.upstreamUnavailable': string;
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;
   'chat.runError.title.runtimeConfig': string;
+  /**
+   * S05 · 自带 API key 没配好(daemon `failure_detail: invalid_api_key`)。
+   *
+   * 主语固定,没有插值槽 —— 说的是「你填的那把 key」,不是「哪一个 agent」,
+   * 所以它和 S02 的 `title.signInRequired.other` 不是同一句话:那边要点名是哪个
+   * 本地 agent 还没登录,这边说的是 key 本身填错了。
+   *
+   * 只给 BYOK / API 提供商那一档用(判据 `byokApiKeyIsEditableInSettings`,
+   * `utils/byokProvider.ts`)。本机 CLI 报同一条 detail 时留在 S02 —— 它们的登录
+   * 在用户自己的终端里,详见 `runtime/amr-guidance.ts` 的 `apiKeyInvalidCardFor`。
+   */
+  'chat.runError.title.apiKeyInvalid': string;
   'chat.runError.title.quotaExhausted': string;
   'chat.runError.title.timedOut': string;
   'chat.runError.title.emptyOutput': string;
@@ -2881,6 +2898,9 @@ export interface Dict {
   'chat.runError.cliMissingMessage': string;
   'chat.runError.promptTooLargeMessage': string;
   'chat.runError.modelUnavailableMessage': string;
+  'chat.runError.modelCapabilityUnsupportedMessage': string;
+  /** S23 · 以前这一格没有正文,报错卡因此落到兜底句上。 */
+  'chat.runError.artifactMissingMessage': string;
   'chat.runError.rateLimitedMessage': string;
   'chat.runError.modelWindowLimitMessage': string;
   'chat.runError.modelWindowLimitMessageNoTime': string;
@@ -2890,6 +2910,8 @@ export interface Dict {
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
   'chat.runError.runtimeConfigMessage': string;
+  /** S05 的正文。同样没有插值槽。 */
+  'chat.runError.apiKeyInvalidMessage': string;
   'chat.runError.quotaExhaustedMessage': string;
   'chat.runError.workspaceCreditsMessage': string;
   'chat.runError.timedOutMessage': string;

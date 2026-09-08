@@ -49,6 +49,22 @@ const recipe: OdNextStrategyRequestRecipeV2 = {
 };
 
 describe('OD Next V2 prompt recipe', () => {
+  // OPEND-2589. The strategy admits a turn on the project's task type, not on
+  // what this turn said, so a greeting or a stray keystroke enters the same
+  // Full Plan route as a real brief. The prompt taught only three outcomes —
+  // ask once, freeze a plan, deliver — and never named `blocked`, so an agent
+  // left with nothing to design had no taught way to say so and invented a
+  // subject instead ("111" became a prototype about 111). Teach the refusal.
+  it('tells the agent to answer and block instead of inventing a subject', () => {
+    const prompt = composeOdNextStrategyRequestPromptV2(recipe);
+
+    expect(prompt).toContain('outcome: blocked');
+    expect(prompt.toLowerCase()).toContain('do not invent');
+    // The outcome has to be spelled out where the contract shapes are, not
+    // only in prose: the agent copies its Runtime State from those examples.
+    expect(prompt).toMatch(/blocked[\s\S]{0,400}canceled|canceled[\s\S]{0,400}blocked/);
+  });
+
   it('pins the canonical Deck Protocol v1 framework into PPT requests only', () => {
     const pptRecipe: OdNextStrategyRequestRecipeV2 = {
       ...recipe,
@@ -609,7 +625,7 @@ describe('OD Next V2 prompt recipe', () => {
     expect(odNextPromptCacheIdentityV2({ ...recipe, taskProfileDigest: A })).not.toBe(baseline);
   });
 
-  it('emits native-session-only deltas and gives Production only a Plan Contract hash', () => {
+  it('emits native-session-only deltas and gives Production the frozen plan plus terminal state shape', () => {
     const clarification = composeOdNextStrategyContinuationV2({
       stage: 'clarification',
       nativeSessionResume: true,
@@ -639,6 +655,15 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).toMatch(/^<open_design_request_turn/);
     expect(production).toContain('task_execution_id="task-1"');
     expect(production).toContain('stage="production" task_run_index="1"');
+    expect(production).toContain('## Closing Runtime State');
+    expect(production).toContain('exactly one open-design-runtime-state block');
+    expect(production).toContain('schema open-design.strategy-state/v2');
+    expect(production).toContain('route full_plan');
+    expect(production).toContain('inputStage production');
+    expect(production).toContain('executionMode equal to the mode locked');
+    expect(production).toContain('outcome completed');
+    expect(production).toContain('reasonCodes []');
+    expect(production).toContain('no Plan Contract block');
     expect(production).not.toContain(recipe.coreStrategy);
     expect(production).not.toContain(recipe.generalOrchestration);
     expect(production).not.toContain(recipe.taskSkill);
@@ -647,6 +672,8 @@ describe('OD Next V2 prompt recipe', () => {
     expect(production).toContain('<od-done key="0123456789abcdef"/>');
     expect(production).toContain('<od-next key="0123456789abcdef" value="Add an orders list page"/>');
     expect(production).toContain('<od-focus key="0123456789abcdef"');
+    expect(production).toContain('Place the Closing Runtime State before any final follow-up markers');
+    expect(production).not.toContain('End this response with exactly one');
     expect(clarification).not.toContain('<od-done');
     expect(contractRepair).not.toContain('<od-done');
     const complexProduction = composeOdNextStrategyContinuationV2({
@@ -666,6 +693,9 @@ describe('OD Next V2 prompt recipe', () => {
       }],
     });
     expect(complexProduction).toContain('structured `subagent_type` handle');
+    expect(complexProduction).toContain('## Closing Runtime State');
+    expect(complexProduction).not.toContain('<od-done');
+    expect(complexProduction).not.toContain('Place the Closing Runtime State before any final follow-up markers');
     expect(complexProduction).toContain('od-build-1-0123456789abcdef');
     expect(complexProduction).toContain('"dependsOn":["shell"]');
     expect(() => composeOdNextStrategyContinuationV2({

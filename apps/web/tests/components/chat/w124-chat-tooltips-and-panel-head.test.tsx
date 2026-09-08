@@ -215,7 +215,11 @@ describe('① 报错卡 —— 稿子 body-scene.html:302 的 data-tip="联系�
     const support = screen.getByTestId('chat-error-contact-support');
 
     expect(classList(support)).toContain('od-tooltip');
-    expect(attr(support, 'data-tooltip')).toBe('联系支持');
+    /* ⚠️ 稿子 body-scene.html:302 的 `data-tip` 写的是「联系支持」,
+       OPEND-2807 把这颗按钮的文案改成「联系我们」(19 语齐),工单是较新的权威。
+       要守的是「挂了可见提示、且和按钮文字同源」,不是那四个字本身。 */
+    expect(attr(support, 'data-tooltip')).toBe('联系我们');
+    expect(support.textContent).toContain('联系我们');
   });
 });
 
@@ -325,9 +329,11 @@ describe('i18n —— 19 语一个都不能少', () => {
     expect(zhCN['chat.conversationsAria']).toBe('历史会话');
     expect(zhCN['chat.newSession']).toBe('新会话');
     expect(zhCN['chat.record.viewLarge']).toBe('查看大图');
-    /* 这两条今天就成立,留着当护栏:稿子 body-components.html:324 / body-scene.html:302 */
+    /* 稿子 body-components.html:324 */
     expect(zhCN['chat.edge.reconnectDetail']).toBe('查看详情');
-    expect(zhCN['chat.runError.contactSupportCta']).toBe('联系支持');
+    /* ⚠️ 稿子 body-scene.html:302 写的是「联系支持」,但 OPEND-2807 的工单
+       逐字给的是「联系我们」——工单较新,以它为准。 */
+    expect(zhCN['chat.runError.contactSupportCta']).toBe('联系我们');
   });
 
   it('zh-TW 跟着 zh-CN 走同一套词序', () => {

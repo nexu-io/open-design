@@ -14,6 +14,10 @@
 //    宿主自己会在一轮之后补发助手消息(`ProjectView` 的 brand-browser-assist 卡,
 //    `appendConversationMessage(...role: 'assistant'...)`,没有 `runStatus`),
 //    补上之后「最后一条」就不是那条失败了 → `runFailureUi` 为 null → 摊原文。
+//    ⚠️ 这条路后来被堵上了(队尾锚点对宿主卡透明,见
+//    `tests/components/chat/host-card-tail-keeps-retry-entry.test.tsx`)——
+//    但**本文件的判据不靠它**:下面几条要的是「原文按出处拦,不按分支落点拦」,
+//    宿主卡在不在场都必须成立。夹具照旧带着那张卡,断言照旧是兜底那一句。
 //
 //  · 面板槽里那段字来自**别的**助手(`setRunError(msg, 那条消息的 id)`,
 //    ProjectView 三处)。判据写的是「等于这一轮的 id」,不等就当成「跟这一轮无关的
@@ -279,9 +283,31 @@ describe('反向:已经对的行为一条都不许弄坏', () => {
     expect(container.querySelector('[data-testid="chat-error-retry"]')).toBeTruthy();
   });
 
-  it('〔重试〕的出现条件不变:失败轮不在最后时本来就没有,改完仍然没有', () => {
+  /*
+   * ⚠️ 这一条原来钉的是**缺陷现状**:「失败轮不在最后时本来就没有〔重试〕,改完仍然
+   * 没有」。当时那一版只管原文不上卡面,把「入口消失」留在了范围外 —— 但宿主补发的卡
+   * 落在失败轮后面本来就不该带走恢复入口,那是功能回退,不是「本来就没有」。
+   * 判据已经翻成不变量:队尾锚点对宿主卡透明(`retryableAssistantMessage` /
+   * `trailingMessageIgnoringHostCards`),完整覆盖在
+   * `tests/components/chat/host-card-tail-keeps-retry-entry.test.tsx`。
+   * 这里只留本文件真正关心的那一段:恢复入口的可见性没有被**原文那条修复**改动。
+   */
+  it('〔重试〕不因为宿主补发的卡而消失', () => {
     const { container } = renderChat({
       messages: [failedAssistant(RAW_JSON_RPC_ENVELOPE), HOST_APPENDED_CARD],
+      error: RAW_JSON_RPC_ENVELOPE,
+      errorSourceAssistantId: 'msg-failed',
+    });
+    expect(container.querySelector('[data-testid="chat-error-retry"]')).toBeTruthy();
+  });
+
+  it('〔重试〕的出现条件不变:用户已经走过去了就没有', () => {
+    const { container } = renderChat({
+      messages: [
+        failedAssistant(RAW_JSON_RPC_ENVELOPE),
+        HOST_APPENDED_CARD,
+        { id: 'msg-user-next', role: 'user', content: '算了,换个方向', createdAt: 3 } as unknown as ChatMessage,
+      ],
       error: RAW_JSON_RPC_ENVELOPE,
       errorSourceAssistantId: 'msg-failed',
     });

@@ -27,7 +27,13 @@ export interface DesignDirection {
   id: string;
   /** Short user-facing label, shown in the radio. ≤ 56 chars including the dash list. */
   label: string;
-  /** One-paragraph mood description shown to the user as `help`. */
+  /**
+   * One-paragraph mood description. Rendered as the `mood` blurb on a
+   * `direction-cards` option — NOT as a per-question help string: that field
+   * is dormant (OPEND-2707, see `FormQuestion.help` in
+   * `apps/web/src/artifacts/question-form.ts`), and this renderer has had no
+   * call site since the visual-style question was retired (OPEND-2760).
+   */
   mood: string;
   /** References / exemplars — real magazines, products, designers. */
   references: string[];

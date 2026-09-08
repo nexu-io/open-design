@@ -453,7 +453,7 @@ test('[P0] @critical non-AMR model failures stay recoverable while Cloud is sign
 
   await gotoProject(page, projectId);
 
-  const switchAndRetry = page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i }).first();
+  const switchAndRetry = page.getByRole('button', { name: /Switch to Cloud/i }).first();
   await expect(switchAndRetry).toBeVisible({ timeout: T.long });
   await switchAndRetry.click();
 
@@ -762,8 +762,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
 });
 
 /*
- * 上游过载(S10)这一档:重试留着,而主按钮位上多了那颗〔切换到 OpenDesign Cloud
- * 并重试〕。
+ * 上游过载(S10)这一档:重试留着,而主按钮位上多了那颗〔切换到 Cloud〕。
  *
  * ⚠️ **判据在 OPEND-2772 / 规格 T68 翻了面。** 产品 2026-09-07 原话「2772 的
  * 『统一』是『铺到所有报错』,主 cta 都是切换至 cloud」—— 切换卡整块删掉,这颗
@@ -849,7 +848,7 @@ test('[P0] upstream outages keep Retry available and offer the Cloud switch', as
     /Model service unavailable|current model is temporarily unavailable/i,
   );
   // T68:一张卡、一颗主按钮 —— 阶梯算出来的〔重试〕退到次级,主位归 Cloud CTA。
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Switch to Cloud/i })).toHaveCount(1);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
@@ -935,7 +934,7 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   // T68:codex 是本地 agent,主位归 Cloud CTA。**按钮名要用 zh-CN 那一份** ——
   // 这一格从前写的是英文名 + `toHaveCount(0)`,而这条用例整页跑在 zh-CN 下,
   // 英文名本来就永远匹配不到:判据翻面之前它就已经是一条恒真断言了。
-  await expect(page.getByRole('button', { name: '切换到 OpenDesign Cloud 并重试' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '切换到 Cloud' })).toHaveCount(1);
 
   // 卡上不再有「错误详情」折叠(用户 2026-08-27):既没有那颗〔查看详情〕,
   // 上游原文也不出现在卡上的任何地方。
@@ -945,7 +944,7 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
 
 /*
  * Antigravity 的限流:终端换模型那颗仍然在,只是按 T68 退到次级 —— 它**是**一个
- * 本地 agent,所以主位同样归〔切换到 OpenDesign Cloud 并重试〕(`runsOnALocalAgent`
+ * 本地 agent,所以主位同样归〔切换到 Cloud〕(`runsOnALocalAgent`
  * 是出口不变式两侧共用的那一个判据)。
  */
 test('[P0] antigravity rate limits keep terminal model switching alongside the Cloud switch', async ({ page }) => {
@@ -1029,7 +1028,7 @@ test('[P0] antigravity rate limits keep terminal model switching alongside the C
   const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
   await expect(launchTerminal).toBeVisible({ timeout: T.long });
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /Switch to Cloud/i })).toHaveCount(1);
 
   await launchTerminal.click();
 

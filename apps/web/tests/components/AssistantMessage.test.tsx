@@ -416,10 +416,10 @@ describe('AssistantMessage feedback gate', () => {
    * 新家」一起记着 —— 不在这里再写一份「断言它不可达」,那等于把回归钉死。
    */
 
-  it('lands a fork divider carrying the inherited title plus the "context came with you" note', () => {
+  it('lands a one-line fork divider reading "Continued from chat", with no inherited title', () => {
     // 设计稿第 38 格:Fork 不是跳走 —— 点完必须在这条回复下面**原地**留下痕迹,
-    // 否则人只会以为按钮没反应。分界线中间是承接过来的会话标题,
-    // 线下面那行脚注告诉人上文已经带过去了。
+    // 否则人只会以为按钮没反应。OPEND-2714 之后线中间就一样东西:
+    // 分支图标配一行「Continued from chat」,源会话标题不再上屏。
     render(
       <AssistantMessage
         message={baseMessage({
@@ -431,10 +431,10 @@ describe('AssistantMessage feedback gate', () => {
     );
 
     const divider = screen.getByTestId('assistant-fork-divider');
-    expect(divider.textContent).toContain('Storefront prototype');
-    expect(screen.getByTestId('assistant-fork-note').textContent).toContain(
-      'Context above came along',
-    );
+    expect(divider.textContent).not.toContain('Storefront prototype');
+    const note = screen.getByTestId('assistant-fork-note');
+    expect(note.textContent).toBe('Continued from chat');
+    expect(divider.contains(note)).toBe(true);
   });
 
   it('leaves the fork divider out of turns that were never forked', () => {

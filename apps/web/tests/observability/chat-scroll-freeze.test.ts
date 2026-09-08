@@ -496,19 +496,44 @@ describe('chat-scroll-freeze-detector — freeze decision', () => {
     expect(verdict.verdict.evidence.trigger).toBe('wheel_stall');
   });
 
-  it('goes quiet for good once it has reported', () => {
+  it('keeps its baseline and its streak current after calling a freeze', () => {
+    // The one-event-per-surface promise is real, and it is kept at the SINK —
+    // `freezeTelemetryAlreadySent` in `chat-scroll-freeze.ts`. It used to be
+    // kept here instead, by a `if (state.reported) return` on the first line
+    // of `observeWheelBatch`, and that did not throttle an event: it stopped
+    // the detector. The baseline froze at the reported position, the streak
+    // stopped counting, and `describeSnapBackRoute` — the one-notch route
+    // that exists FOR a stale compositor ceiling — had nothing current to
+    // describe on the very surface that had just proved the ceiling stale.
+    //
+    // A real machine measured what that costs: three diagnostic bundles
+    // exported 5.4 minutes apart carried the same `stallWheelCount` of 83 and
+    // a byte-identical ledger, while a tester drove a deterministic
+    // reproduction through the gap.
     let state = createScrollFreezeState();
-    let frozen = 0;
-    for (let i = 0; i < 40; i += 1) {
+    let firstFrozenRound: number | null = null;
+    for (let round = 0; round < 40; round += 1) {
       const result = observeWheelBatch(state, {
         geometry: FROZEN,
         requestedPx: 120,
         wheelCount: 1,
       });
       state = result.state;
-      if (result.verdict.kind === 'frozen') frozen += 1;
+      if (result.verdict.kind === 'frozen' && firstFrozenRound == null) {
+        firstFrozenRound = round;
+      }
     }
-    expect(frozen).toBe(1);
+    // Still calls it at the same round it always did — the thresholds are
+    // untouched.
+    expect(firstFrozenRound).toBe(FREEZE_WHEEL_COUNT - 1);
+    // …and thirty-six rounds later it is still counting, which is the whole
+    // point. A latch here would leave this at four.
+    expect(state.stallWheelCount).toBe(40);
+    expect(state.stallRequestedPx).toBe(40 * 120);
+    expect(state.lastScrollTop).toBe(FROZEN.scrollTop);
+    expect(state.lastScrollHeight).toBe(FROZEN.scrollHeight);
+    // The flag survives as a RECORD of what happened, for the audit to print.
+    expect(state.reported).toBe(true);
   });
 
   it('ignores upward wheels — they are not the symptom', () => {

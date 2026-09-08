@@ -6,7 +6,11 @@
  * 五个 detail 都解析成 `open-settings` + `secondaryRetry`。这一层钉的是卡面 ——
  * 主按钮真的画了〔去设置〕、点下去落到设置 → 本地 CLI(`execution` 那一节,
  * 「高级:代理与自定义路径」就折叠在里面),重试还在但不是主按钮,
- * 而且正文把 `{供应商}` 和那对括号里的成因都填上了。
+ * 而且正文点名了这一格自己的成因。
+ *
+ * ⚠️ 这张卡用的**不是**产品文档 S30 的润色列 —— 那一行只适用于「地区不支持」,
+ * 而这五个 detail 一个都不是地区拦截。判据在 `amr-guidance.ts` 的
+ * `clientEnvironmentCard` 文档注释里。
  *
  * 用真的 zh-CN 词典而不是「返回 key」的假 `t`:S30 要验的正是那句话本身,
  * 返回 key 的话插值有没有发生根本看不出来。
@@ -128,15 +132,21 @@ describe('S30 · 环境类报错卡的按钮', () => {
 });
 
 describe('S30 · 环境类报错卡的文案', () => {
+  /**
+   * ⚠️ 这张卡**没有**用产品文档 S30 的润色列。S30 那张润色表只写了一行,
+   * 「场景内的情况」写死是「地区不支持」;而这张卡服务的五个 detail 里没有一个
+   * 是地区拦截(真正的地区信号 `Country, region, or territory not supported`
+   * 落在 `upstream_client_error`)。判据全文在 `amr-guidance.ts` 的
+   * `clientEnvironmentCard` 文档注释里。所以这里钉的仍是旧文案。
+   */
   it('卡面就是 S30 那一句,{供应商} 和成因都填好了', () => {
     renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
 
     expect(screen.getByText('网络环境不对')).toBeTruthy();
     // 括号里是这一格自己的成因,不是五格一个说法。
-    expect(
-      screen.getByText(/看起来走了代理或公司网络，.+拒绝了请求（证书校验失败）。/),
-    ).toBeTruthy();
-    expect(screen.getByText(/换一个网络出口，或在设置里调整代理。/)).toBeTruthy();
+    const body = screen.getByTestId('chat-run-error-description').textContent ?? '';
+    expect(body).toMatch(/^看起来走了代理或公司网络，.+拒绝了请求（证书校验失败）。/);
+    expect(body).toMatch(/换一个网络出口，或在设置里调整代理。$/);
   });
 
   it('卡上不再出现「任务执行失败」这句什么都没说的兜底', () => {

@@ -17,7 +17,17 @@ import {
   type TrackingRunCancelOrigin,
   type TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
-import type { OdNextRolloutDecision, SafeRunQualityV1 } from '@open-design/contracts';
+import {
+  DELIVERABLE_SYNTAX_FINALIZATION_REASONS,
+  DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS,
+  DELIVERABLE_SYNTAX_SAFE_FIX_RULES,
+  type DeliverableSyntaxFinalization,
+  type DeliverableSyntaxSafeFixRule,
+  type DeliverableSyntaxRepairState,
+  type DeliverableSyntaxValidationEvidence,
+  type OdNextRolloutDecision,
+  type SafeRunQualityV1,
+} from '@open-design/contracts';
 
 import { agentCliEnvForAgent, readAppConfig, type TelemetryPrefs } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
@@ -34,6 +44,7 @@ import {
   type ArtifactSummary,
   type AttachmentManifestEntry,
   type EventsSummary,
+  type DeliverableSyntaxTelemetry,
   type FeedbackReportContext,
   type LangfuseDeliveryState,
   type InputTextSnapshotManifestEntry,
@@ -126,6 +137,8 @@ export interface DaemonRunRecord {
   retryOriginalFailure?: RunFailureClassification;
   promptBudgetDiagnostics?: Partial<RunDiagnosticsAnalytics> | null;
   strategyRolloutDecision?: OdNextRolloutDecision | null;
+  deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
+  deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
 }
 
 export interface BuildSafeRunQualityProjectionFromDaemonOpts {
@@ -160,6 +173,8 @@ export interface SafeRunQualityDaemonRunRecord {
   userPrompt?: string | undefined;
   projectAttachmentPaths?: string[] | undefined;
   projectMetadata?: Record<string, unknown> | null | undefined;
+  deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
+  deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
 }
 
 interface TraceSafeManifestResult {
@@ -247,6 +262,185 @@ function mergeTraceSafeManifests(
     artifactManifest,
     ...(inputTextSnapshotManifest ? { inputTextSnapshotManifest } : {}),
     completeness: deriveManifestCompleteness(entries, selectedFallbackUnavailable),
+  };
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function nonNegativeFinite(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function safeRepairRules(value: readonly DeliverableSyntaxSafeFixRule[]): DeliverableSyntaxSafeFixRule[] {
+  return [...new Set(value.filter((rule) => DELIVERABLE_SYNTAX_SAFE_FIX_RULES.includes(rule)))];
+}
+
+/** Never spread persisted objects into safe telemetry: no paths or diagnostic text. */
+function projectSyntaxFinalization(value: DeliverableSyntaxFinalization): DeliverableSyntaxFinalization | undefined {
+  if (value.action !== 'allow' && value.action !== 'fail') return undefined;
+  return {
+    action: value.action,
+    ...(value.reason && DELIVERABLE_SYNTAX_FINALIZATION_REASONS.includes(value.reason) ? { reason: value.reason } : {}),
+    ...(value.refusal && DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS.includes(value.refusal) ? { refusal: value.refusal } : {}),
+    ...(value.summaryVersion === 1 ? { summaryVersion: 1 } : {}),
+    ...(value.initialStatus && ['pass', 'repairable', 'incomplete', 'skipped'].includes(value.initialStatus)
+      ? { initialStatus: value.initialStatus } : {}),
+    ...(value.repairEngine === 'host-safe-fixer@2' ? { repairEngine: value.repairEngine } : {}),
+    ...(nonNegativeInteger(value.stagedPatchCount) !== undefined ? { stagedPatchCount: value.stagedPatchCount } : {}),
+    ...(nonNegativeInteger(value.committedPatchCount) !== undefined ? { committedPatchCount: value.committedPatchCount } : {}),
+    ...(Array.isArray(value.committedRepairRules) ? { committedRepairRules: safeRepairRules(value.committedRepairRules) } : {}),
+  };
+}
+
+/** Build the one safe syntax fact-sheet shared by evaluation and production telemetry. */
+export function projectDeliverableSyntaxTelemetry(
+  run: Pick<DaemonRunRecord, 'deliverableSyntaxRepair' | 'deliverableSyntaxValidation'>
+    & Partial<Pick<DaemonRunRecord, 'status'>>,
+): DeliverableSyntaxTelemetry | undefined {
+  const validation = run.deliverableSyntaxValidation;
+  if (!validation) return undefined;
+
+  const repairDirective = 'repair' in validation ? validation.repair : undefined;
+  const embeddedRepairState = 'repairState' in validation
+    ? validation.repairState
+    : undefined;
+  const repairState = run.deliverableSyntaxRepair ?? embeddedRepairState;
+  const finalization = validation.finalization
+    ? projectSyntaxFinalization(validation.finalization) : undefined;
+  // Any new field marks versioned evidence. A missing version must not turn
+  // an incomplete Host summary into legacy Agent recovery or a clean check.
+  const rawFinalization = validation.finalization;
+  const versionedSummary = rawFinalization !== null
+    && typeof rawFinalization === 'object' && !Array.isArray(rawFinalization) && [
+    'summaryVersion', 'initialStatus', 'repairEngine', 'stagedPatchCount',
+    'committedPatchCount', 'committedRepairRules',
+  ].some((field) => field in rawFinalization);
+  const hostSummary = finalization?.summaryVersion === 1;
+  const stagedPatchCount = finalization?.stagedPatchCount;
+  const committedPatchCount = finalization?.committedPatchCount;
+  const originalCommittedRules = validation.finalization?.committedRepairRules;
+  // Version alone is not commit proof. Partial or contradictory historical
+  // objects remain unknown, never confirmed successful/no-repair deliveries.
+  const completeHostSummary = hostSummary
+    && finalization.repairEngine === 'host-safe-fixer@2'
+    && finalization.initialStatus !== undefined
+    && stagedPatchCount !== undefined && stagedPatchCount <= 8
+    && committedPatchCount !== undefined && committedPatchCount <= stagedPatchCount
+    && Array.isArray(originalCommittedRules)
+    && originalCommittedRules.length <= DELIVERABLE_SYNTAX_SAFE_FIX_RULES.length
+    && originalCommittedRules.every((rule) => DELIVERABLE_SYNTAX_SAFE_FIX_RULES.includes(rule))
+    && (committedPatchCount > 0 ? originalCommittedRules.length > 0 : originalCommittedRules.length === 0);
+  const terminalRunStatus = run.status === 'succeeded' || run.status === 'failed' || run.status === 'canceled'
+    ? run.status : undefined;
+  const repairAttempts = hostSummary
+    ? nonNegativeInteger(finalization.stagedPatchCount) ?? 0
+    : nonNegativeInteger(repairState?.attempt)
+    ?? nonNegativeInteger(repairDirective?.attempt)
+    ?? 0;
+  const maxRepairAttempts = hostSummary ? 8 : nonNegativeInteger(repairState?.maxAttempts)
+    ?? nonNegativeInteger(repairDirective?.maxAttempts)
+    ?? null;
+  const metrics = validation.metrics;
+  const diagnostics = 'diagnostics' in validation ? validation.diagnostics : undefined;
+  const repairTriggered = hostSummary ? finalization.initialStatus === 'repairable' : repairAttempts > 0
+    || validation.status === 'repairable'
+    || validation.status === 'exhausted'
+    || (metrics?.repairableCheckCount ?? 0) > 0;
+  const exhausted = hostSummary
+    ? finalization.reason === 'attempt_limit_reached'
+    : validation.status === 'exhausted'
+    || (
+      validation.status === 'repairable'
+      && maxRepairAttempts !== null
+      && repairAttempts >= maxRepairAttempts
+    );
+  const hostEvidence = versionedSummary || validation.source === 'run_finalizer'
+    || metrics?.repairExecutor === 'host_safe_fixer' || repairState?.mode === 'host_safe_fixer';
+  const recoveredDelivery = hostSummary
+    ? completeHostSummary && finalization.initialStatus === 'repairable'
+      && (finalization.committedPatchCount ?? 0) > 0
+      && validation.status === 'pass' && finalization.action === 'allow'
+      && terminalRunStatus === 'succeeded'
+    : !hostEvidence && validation.status === 'pass' && repairTriggered
+      && finalization?.action !== 'fail' && terminalRunStatus === 'succeeded';
+  const repairOutcome: DeliverableSyntaxTelemetry['repairOutcome'] =
+    validation.status === 'skipped'
+      ? 'not_applicable'
+      : recoveredDelivery
+        ? 'repaired'
+        : validation.status === 'pass' && !repairTriggered && finalization?.action !== 'fail'
+          && (!versionedSummary || completeHostSummary)
+          ? 'not_needed'
+          : exhausted
+            ? 'exhausted'
+            : 'unresolved';
+  const checkedFiles = 'checkedFiles' in validation ? validation.checkedFiles : undefined;
+  const fallbackDiagnosticCount = diagnostics?.length ?? null;
+  const observedSyntaxError = hostSummary
+    ? finalization.initialStatus === 'repairable' || validation.status === 'repairable'
+    : validation.status === 'repairable' || validation.status === 'exhausted'
+      || (metrics?.repairableCheckCount ?? 0) > 0;
+
+  return {
+    schemaVersion: 'deliverable-syntax-telemetry-v1',
+    applicable: validation.status !== 'skipped',
+    status: validation.status,
+    source: validation.source,
+    checker: 'checker' in validation ? validation.checker : null,
+    checkedFileCount: checkedFiles?.length ?? 0,
+    checkCount: nonNegativeInteger(metrics?.checkCount)
+      ?? (validation.status === 'incomplete' && !('checker' in validation && validation.checker)
+        ? 0
+        : 1),
+    checkerDurationMs: nonNegativeFinite(metrics?.checkerDurationMs) ?? null,
+    repairWindowDurationMs:
+      nonNegativeFinite(metrics?.repairWindowDurationMs) ?? null,
+    repairToDeliveryDurationMs:
+      nonNegativeFinite(metrics?.repairToDeliveryDurationMs) ?? null,
+    ...(metrics?.repairToTerminalDurationMs !== undefined || metrics?.repairToDeliveryDurationMs !== undefined
+      ? { repairToTerminalDurationMs: nonNegativeFinite(metrics?.repairToTerminalDurationMs)
+        ?? nonNegativeFinite(metrics?.repairToDeliveryDurationMs) ?? null } : {}),
+    ...(terminalRunStatus ? { terminalRunStatus } : {}),
+    ...(finalization ? { finalization } : {}),
+    ...(hostSummary || metrics?.repairExecutor || repairState?.mode
+      ? {
+          repairExecutor:
+            (hostSummary ? 'host_safe_fixer' : metrics?.repairExecutor)
+            ?? (repairState?.mode === 'host_safe_fixer' ? 'host_safe_fixer' : 'agent'),
+        }
+      : {}),
+    ...(metrics?.repairDurationMs !== undefined
+      ? { repairDurationMs: nonNegativeFinite(metrics.repairDurationMs) ?? null }
+      : {}),
+    ...(Array.isArray(metrics?.appliedRepairRules)
+      ? { appliedRepairRules: safeRepairRules(metrics.appliedRepairRules) }
+      : {}),
+    ...(nonNegativeInteger(metrics?.safeFixProposalCount) !== undefined
+      ? { safeFixProposalCount: metrics!.safeFixProposalCount } : {}),
+    ...(metrics?.safeFixProposalDurationMs !== undefined
+      ? { safeFixProposalDurationMs: nonNegativeFinite(metrics.safeFixProposalDurationMs) ?? null } : {}),
+    repairableCheckCount: nonNegativeInteger(metrics?.repairableCheckCount)
+      ?? (validation.status === 'repairable' || validation.status === 'exhausted' ? 1 : 0),
+    initialDiagnosticCount: nonNegativeInteger(metrics?.initialDiagnosticCount)
+      ?? (validation.status === 'repairable' || validation.status === 'exhausted'
+        ? fallbackDiagnosticCount
+        : repairTriggered
+          ? null
+          : 0),
+    latestDiagnosticCount: nonNegativeInteger(metrics?.latestDiagnosticCount)
+      ?? fallbackDiagnosticCount,
+    repairTriggered,
+    repairAttempts,
+    maxRepairAttempts,
+    repairOutcome,
+    recoveredDeliveryCount: recoveredDelivery ? 1 : 0,
+    blockedBrokenDeliveryCount: finalization?.action === 'fail' && observedSyntaxError ? 1 : 0,
   };
 }
 
@@ -1155,6 +1349,7 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     cancelRequested: status === 'canceled',
     firstTokenSeen: Boolean(run.analyticsTelemetry?.firstTokenAt),
   });
+  const deliverableSyntax = projectDeliverableSyntaxTelemetry(run);
   return buildSafeRunQualityProjectionV1({
     prefs: opts.prefs,
     messageOutput: messageContent,
@@ -1168,6 +1363,7 @@ export async function buildSafeRunQualityProjectionFromDaemon(
     ...(stderr ? { stderr } : {}),
     ...(stdout ? { stdout } : {}),
     diagnostics,
+    ...(deliverableSyntax ? { deliverableSyntax } : {}),
     tools: collectToolCalls(run.events, run.createdAt, run.updatedAt),
     attachmentManifest: manifests.attachmentManifest,
     artifactManifest: manifests.artifactManifest,
@@ -1298,6 +1494,7 @@ export async function reportRunCompletedFromDaemon(
       attachmentsRaw,
       traceObjectFilesRaw,
     });
+    const deliverableSyntax = projectDeliverableSyntaxTelemetry(run);
     const objectManifestOptions = {
       installationId,
       projectId: run.projectId ?? '',
@@ -1375,6 +1572,7 @@ export async function reportRunCompletedFromDaemon(
         run.promptBudgetDiagnostics,
       ),
       eventsSummary: summarizeEvents(run.events, durationMs),
+      ...(deliverableSyntax ? { deliverableSyntax } : {}),
       prefs,
       ...(turn ? { turn } : {}),
       runtime,

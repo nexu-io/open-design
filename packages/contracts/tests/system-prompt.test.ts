@@ -229,6 +229,20 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Keep machine-readable ids and object option `value` fields exact and unlocalized');
   });
 
+  /**
+   * OPEND-2707,与 `apps/daemon/tests/prompts/system.test.ts` 同名用例逐条对应。
+   * 两份 locale override 是**手抄件**(daemon 一份、contracts/BYOK 一份);
+   * 只改一边,API 模式的用户就还会拿到一份要求写 helper text 的提示词。
+   */
+  it('本地化清单不再把每题副标题列成一种要翻译的控件文案', () => {
+    const prompt = composeSystemPrompt({ locale: 'zh-CN' });
+
+    expect(prompt).not.toContain('helper text');
+    expect(prompt).toContain(
+      '`<question-form>` titles, question labels, placeholders, and option labels',
+    );
+  });
+
   it('does not inject a task-type form through the zh-CN locale override', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 

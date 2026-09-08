@@ -13,6 +13,7 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.j
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
+import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { SidecarFactory } from '@open-design/sidecar';
@@ -867,6 +868,16 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
       process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
       process.exitCode = 1;
     });
+} else if (argv[0] === 'tools' && argv[1] === 'deliverable-syntax') {
+  runDeliverableSyntaxToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
 } else if (argv[0] === 'tools' && argv[1] === 'connectors') {
   runConnectorsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
@@ -967,6 +978,9 @@ function printRootHelp() {
 
   od tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.
+
+  od tools deliverable-syntax check [--json]
+      Check the current deliverable syntax through the daemon wrapper.
 
   od tools directions [--id <id> | --label <label>] [--json]
       List the built-in design directions, or print one direction's full
@@ -9627,14 +9641,14 @@ async function runLibraryList(name, args) {
   const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const apiPath = name === 'design-systems' ? '/api/design-systems' : `/api/${name}`;
-  const designSystemWorkspaceHeaders = name === 'design-systems'
+  const workspaceHeaders = name === 'design-systems' || name === 'skills'
     ? workspaceHeadersFromExplicitFlags(flags) ?? {}
     : undefined;
   switch (sub) {
     case 'list': {
       const resp = await fetch(`${base}${apiPath}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9654,8 +9668,8 @@ async function runLibraryList(name, args) {
         process.exit(2);
       }
       const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9678,8 +9692,8 @@ async function runSkills(args) {
   if (!args[0] || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od skill install <https://github.com/owner/repo|github:owner/repo|https://…tar.gz|https://…tgz> [--json]
-  od skill list
-  od skill show <id>
+  od skill list [--workspace <id> --workspace-member <id>]
+  od skill show <id> [--workspace <id> --workspace-member <id>]
   od skill uninstall <id>
 
 \`od skills …\` remains an alias for compatibility.`);

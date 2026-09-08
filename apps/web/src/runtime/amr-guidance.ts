@@ -9,6 +9,7 @@ import {
   readModelWindowResetAt,
 } from '@open-design/contracts';
 import type { RunFailureAction } from '@open-design/contracts';
+import { byokApiKeyIsEditableInSettings } from '../utils/byokProvider';
 
 // AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
@@ -78,9 +79,18 @@ export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
  */
 export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
 
+// The test entry moved off `vela.powerformer.net` onto
+// `open-design.powerformer.net/cloud` when vela cut the test Cloud domain over
+// (vela #1922 prepare, #1929 finalize). That host serves the test Landing page
+// at `/` and routes `/cloud*` to the AMR web origin; the legacy hostname is no
+// longer a mapped test route and must not be relied on for a redirect.
+//
+// feature-test has no row on purpose — see the note at the bottom of this file:
+// an internal hostname must not be a literal in a publicly shipped bundle, so
+// it arrives through the daemon's runtime console origin instead.
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
   prod: DEFAULT_AMR_RECHARGE_URL,
-  test: 'https://vela.powerformer.net/dashboard?source=open_design',
+  test: 'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
   local: 'http://localhost:5173/dashboard?source=open_design',
 };
 
@@ -284,6 +294,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.cliMissingMessage'
   | 'chat.runError.promptTooLargeMessage'
   | 'chat.runError.modelUnavailableMessage'
+  | 'chat.runError.modelCapabilityUnsupportedMessage'
+  | 'chat.runError.artifactMissingMessage'
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
   | 'chat.runError.modelWindowLimitMessageNoTime'
@@ -293,6 +305,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
   | 'chat.runError.runtimeConfigMessage'
+  | 'chat.runError.apiKeyInvalidMessage'
   | 'chat.runError.quotaExhaustedMessage'
   | 'chat.runError.workspaceCreditsMessage'
   | 'chat.runError.timedOutMessage'
@@ -395,16 +408,30 @@ export function resolveRunErrorCardDescription(input: {
   paneErrorCameFromARun: boolean;
   /** The failed run's own upstream string, off its persisted error event. */
   failedRunRawDetail: string | null;
+  /**
+   * This turn really did end in a terminal, user-facing failure — a failed run
+   * process, or a run whose result never got delivered — and no other surface
+   * is announcing it.
+   *
+   * It is the answer to "is there something to be silent ABOUT", which is a
+   * different question from every source above ("do we have words for it").
+   * When it holds and the three sources are all empty, the card still has to
+   * appear: it is the only thing on screen carrying 〔Retry〕〔Export logs〕
+   * 〔Contact support〕, and dropping it drops the whole recovery surface with
+   * the explanation. The shell header's "run failed" line is written on the
+   * assumption that this card is below it saying why.
+   */
+  turnEndedInTerminalFailure: boolean;
 }): RunErrorCardDescription {
   if (input.handedToAnotherSurface) return { render: 'none' };
   if (input.mappedMessageKey) {
     return { render: 'mapped', messageKey: input.mappedMessageKey };
   }
-  if (input.paneError != null) {
-    // An empty pane slot still SHADOWS the run's raw detail (it is the higher
-    // priority source), and an empty card says nothing — so no card, exactly as
-    // before. Whether that silence is right is a separate question from this one.
-    if (!input.paneError) return { render: 'none' };
+  // An empty pane slot is not a source — it used to SHADOW the run's own detail
+  // (being the higher-priority source) and take the card down with it, which is
+  // the same silence this function now refuses everywhere else. Only a slot
+  // with words in it decides anything.
+  if (input.paneError) {
     return input.paneErrorCameFromARun
       ? { render: 'fallback' }
       : { render: 'app-text', text: input.paneError };
@@ -412,7 +439,12 @@ export function resolveRunErrorCardDescription(input: {
   // Nothing in the pane slot, so the only text left is the run's own — raw by
   // definition, whether or not a `runFailureUi` was resolved for it.
   if (input.failedRunRawDetail) return { render: 'fallback' };
-  return { render: 'none' };
+  // Nothing to say, but something to say it ABOUT: a terminal failure always
+  // gets a card, so the turn keeps its explanation and its way out. Ordered
+  // last so every handoff and every more precise source still wins.
+  return input.turnEndedInTerminalFailure
+    ? { render: 'fallback' }
+    : { render: 'none' };
 }
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -435,10 +467,15 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.cliMissing'
   | 'chat.runError.title.promptTooLarge'
   | 'chat.runError.title.modelUnavailable'
+  // S13 · 「模型能力不支持」—— 和上面那格**不是**同一句话。文档 S13 表里
+  // 「模型不存在」与「模型能力不支持」分列两行,S07 的「模型不可用」又是第三行;
+  // 三句话不能共用一个键,否则谁改都盖到别人头上。
+  | 'chat.runError.title.modelCapabilityUnsupported'
   | 'chat.runError.title.upstreamUnavailable'
   | 'chat.runError.title.toolLoop'
   | 'chat.runError.title.outputInvalid'
   | 'chat.runError.title.runtimeConfig'
+  | 'chat.runError.title.apiKeyInvalid'
   | 'chat.runError.title.quotaExhausted'
   | 'chat.runError.title.timedOut'
   | 'chat.runError.title.emptyOutput'
@@ -473,7 +510,7 @@ export interface RunFailureUi {
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
   /**
-   * 报错卡主按钮位上那颗〔切换到 OpenDesign Cloud 并重试〕。
+   * 报错卡主按钮位上那颗〔切换到 Cloud〕。
    *
    * 这个字段以前叫 `showSwitchCard`,说的是「在报错卡**下面**另起一张推荐卡」。
    * OPEND-2772:产品看到上下两张卡同时出现,原话「**不能新旧一起出现吧??**」——
@@ -856,11 +893,34 @@ function switchModelWithGuidance(
  * and a retry here is a whole new run against the same rewritten TLS chain or
  * the same blocked route, i.e. the same answer.
  *
- * Copy is the design's, verbatim (`error-ux-design.md` S30): 「网络环境不对 ——
- * 看起来走了代理或公司网络,{供应商} 拒绝了请求({地区不支持 / 证书校验失败})。
- * 换一个网络出口,或在设置里调整代理。〔去设置 | 重试〕」 — note what it does NOT
- * say: nothing here promises that installing a certificate makes it work, because
- * upstream has measured builds where it does not.
+ * ⚠️ 待产品补格 —— 这张卡**没有**用产品文档 S30 的润色列,是故意的。
+ *
+ * S30 的场景名是「公司网络 / 代理 / 证书」,`原文时机` 列出三个成因(地区不支持 /
+ * 证书校验失败 / 代理不可达),但 `润色标题` + `润色正文` 那张表**只写了一行**,
+ * 而且那一行的「场景内的情况」写死是**「地区不支持」**:「当前地区暂不支持此服务」/
+ * 「暂不支持当前网络所在地区,请尝试切换网络后再试。」证书和代理那两个成因,
+ * 文档至今没有润色格。
+ *
+ * 而这张卡服务的五个 detail 里**没有一个是地区拦截**(判据见
+ * `clientEnvironmentFailureDetail`,`apps/daemon/src/run-failure-classification.ts`):
+ * `host_policy_block` 是 Windows AppLocker 拦住了二进制启动、`local_storage_failure`
+ * 是本机 SQLite/WAL 读写失败、`certificate_failure` 是 TLS 信任链被拒、
+ * `proxy_configuration` 是代理设置本身不对、`network_configuration` 是连接压根没建起来
+ * (ENOTFOUND / ECONNREFUSED / EHOSTUNREACH —— 该文件自己的注释就写着「a machine that
+ * just went offline fails at DNS」「nothing is wrong at the provider」)。
+ *
+ * 决定性的一条:daemon **有**地区拦截的判据,但它不在这五格里 —— 上游那句
+ * `Country, region, or territory not supported` 命中的是 `isUpstreamClientErrorText`,
+ * 落到 `failure_detail: 'upstream_client_error'`(同文件,并由
+ * `apps/daemon/tests/run-failure-classification.test.ts` 钉住)。
+ *
+ * 所以把 S30 的润色句接到这里,等于对着一次本机磁盘失败说「你所在的地区不支持,
+ * 换个网络」—— 既是错误诊断,给的处置也完全没用。文案宁可留旧的,也不自拟:
+ * 这五格保持原文案,等产品为「本机存储 / 系统策略 / 证书 / 代理」补格,
+ * 或等 `upstream_client_error` 拆出真正的地区拦截 detail 再接 S30。
+ *
+ * 旧文案同样没有承诺「装个证书就好了」—— 上游实测过装了也不行的构建。
+ * `messageCauseKey` 这条通路继续为正文的 `{cause}` 供值,五个成因各写各的。
  *
  * 〔重试〕 stays as the SECONDARY on purpose. The upstream sentence these
  * classify on ("unknown certificate verification error") covers two different
@@ -918,7 +978,7 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
 }
 
 /**
- * OPEND-2772 · 把〔切换到 OpenDesign Cloud 并重试〕铺到**每一张** BYOK /
+ * OPEND-2772 · 把〔切换到 Cloud〕铺到**每一张** BYOK /
  * 本地 CLI 的报错卡上。
  *
  * 产品 2026-09-07 逐字:「2772 的『统一』是『铺到所有报错』,主 cta 都是切换至
@@ -955,11 +1015,13 @@ function contactSupportOnly(
 // of that taxonomy — a human-readable type name plus a one-line instruction,
 // with the raw upstream string preserved in the card's collapsible source area.
 const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
-  // The run completed but did not leave a deliverable file. Name the actual
-  // missing outcome in the compact card and keep the raw reason in details.
+  // S23 · 跑完了但没生成文件。正文以前是 `null`,于是卡面落到兜底那一句
+  // (「这次没能顺利完成。反复出现的话,把日志发给我们。」)—— 用户面对的是一次
+  // **正常结束**的任务,兜底句却在说它失败了,而且什么都没解释。文档 S23 有终稿,
+  // 补上。
   ARTIFACT_NOT_FOUND: retryWithGuidance(
     'chat.runError.title.artifactMissing',
-    null,
+    'chat.runError.artifactMissingMessage',
   ),
   // CLI binary not found on PATH (user_action: install_cli).
   AGENT_UNAVAILABLE: retryWithGuidance(
@@ -1142,6 +1204,54 @@ const DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.cliMissingMessage',
   ),
 };
+
+/**
+ * S05 · 自带 API key 没配好 —— **只对那把 key 我们自己存着的一轮成立**。
+ *
+ * daemon 认得这一格,而且判得完全对:`authDetail` 的正则(「invalid api key」/
+ * 「api key … invalid」,`run-failure-classification.ts`)把它从 `auth_required`
+ * 里单独摘出来,category `auth`、user_action `login`、retryable false。web 这边
+ * 一直没有这一格,于是 BYOK 那一轮落到最后那张通用卡 —— 标题「任务执行失败」、
+ * 正文是兜底句、卡上唯一像出路的按钮是〔联系支持〕。API key 填错了把人支去联系
+ * 客服,是这张卡最不该做的事,而且卡上没有任何通往「改 key」的入口,尽管 daemon
+ * 说的就是 `login`。(实测:packaged BYOK `byok-opencode`,code
+ * AGENT_EXECUTION_FAILED + detail invalid_api_key。)
+ *
+ * ⚠️ 判据不是「这条 detail」,是「这把 key 在谁手上」。
+ *
+ * `authDetail()` 是从**任何** agent 拍平的 stderr 上读出来的,所以本机 CLI 一样
+ * 会报 `invalid_api_key` —— `claude` 那句 `Invalid API key · Please run /login`
+ * 同时命中 `AGENT_AUTH_FAILURE_RE`(→ code `AGENT_AUTH_REQUIRED`)和这条 detail。
+ * 而本机 CLI 的登录态在用户自己的终端里:把它们送去设置页,是把人送到一屏**改不了
+ * 那把 key** 的界面上(`opencode` / `kimi` / `qwen` 在那一屏连输入框都没有),
+ * 同时还吃掉了它们本来该看到的 S02「{agent} 尚未登录」+ 终端登录指引。
+ * 这条作用域就是 PR #7893 评审拦下来的那一条。
+ *
+ * 所以这一格按 `byokApiKeyIsEditableInSettings` 收窄到 BYOK / API 提供商那一档
+ * (`utils/byokProvider.ts`,和发送前那道 BYOK 闸门是同一条线);不在这一档的
+ * agent 一律**继续往下走**,落回它们原本的那条路 —— code `AGENT_AUTH_REQUIRED` /
+ * `UNAUTHORIZED` 的走 S02,其余的走原来的兜底。这一格一个字都不替它们改。
+ *
+ * 摆位:和它原来所在的 `DETAIL_FAILURE_UI` 同一个位置,在 AMR / Antigravity 的
+ * 分支**之后**(AMR 卡内一键登录 S04、Antigravity 去终端登录,两条都不该被抢走),
+ * 在码级分支**之前**(覆盖过粗的 `AGENT_AUTH_REQUIRED` 正是这一层存在的理由)。
+ *
+ * 主按钮〔去设置〕是阶梯第 1 档:落点是 `execution` 这一节,BYOK 的 key 输入框
+ * (`ByokKeyField`)就渲染在那一屏,也正是发送前那道 BYOK 闸门(`ProjectView` 的
+ * `requiresByokPreflight` → `onOpenSettings('execution')`)落的同一个地方 ——
+ * 不新造入口。
+ *
+ * 不带重试:文档 S05 那一排只有〔去设置〕,而且 key 没改之前重试必然同样结果
+ * (设计原则四)。
+ */
+function apiKeyInvalidCardFor(agentId: string | null | undefined): RunFailureUi | null {
+  if (!byokApiKeyIsEditableInSettings(agentId)) return null;
+  return failureCard(
+    { directFix: 'open-settings' },
+    'chat.runError.title.apiKeyInvalid',
+    'chat.runError.apiKeyInvalidMessage',
+  );
+}
 
 // Agent-agnostic failure causes keyed by the daemon's `failure_detail`, resolved
 // BEFORE the AMR/Antigravity agent branches (unlike DETAIL_FAILURE_UI above).
@@ -1374,6 +1484,12 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // serve the run), but its literal fix is "load a model in LM Studio", not
   // "pick another model here". Routing is right; the sentence may want its own
   // cell. Change the wording, not the row, when product writes one.
+  //
+  // ⚠️ 「模型不存在」这一半(`cli_version_incompatible` / `model_not_found`)
+  // **还留在 S07 那张卡上**,不是疏忽:文档 S13 给它的终稿标题是
+  // 「未找到 {模型名}」,而失败事件上没有模型名 —— `code` / `failureDetail` /
+  // 上游原文三样里都没有结构化的模型标识,报错卡也拿不到「这一轮跑的是哪个模型」。
+  // 硬把 `{模型名}` 摆到用户脸上比现在更糟,所以这一格等数据通路,不改文案。
   cli_version_incompatible: switchModelWithGuidance(
     'chat.runError.title.modelUnavailable',
     'chat.runError.modelUnavailableMessage',
@@ -1382,39 +1498,69 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.modelUnavailable',
     'chat.runError.modelUnavailableMessage',
   ),
+  // S13 的另一半:「模型能力不支持」。文档给了它自己的标题和正文,和
+  // S07「当前模型不可用」不是同一句话 —— 那句说的是「这个模型现在用不了」,
+  // 这句说的是「这个模型做不了这件事」。而且这一句**没有插值槽**,所以它是三格
+  // 里唯一能立刻按终稿落下去的。
   model_not_supported: switchModelWithGuidance(
-    'chat.runError.title.modelUnavailable',
-    'chat.runError.modelUnavailableMessage',
+    'chat.runError.title.modelCapabilityUnsupported',
+    'chat.runError.modelCapabilityUnsupportedMessage',
   ),
   model_disabled: switchModelWithGuidance(
-    'chat.runError.title.modelUnavailable',
-    'chat.runError.modelUnavailableMessage',
+    'chat.runError.title.modelCapabilityUnsupported',
+    'chat.runError.modelCapabilityUnsupportedMessage',
   ),
   local_model_not_loaded: switchModelWithGuidance(
-    'chat.runError.title.modelUnavailable',
-    'chat.runError.modelUnavailableMessage',
+    'chat.runError.title.modelCapabilityUnsupported',
+    'chat.runError.modelCapabilityUnsupportedMessage',
   ),
   // S30 · the five client-environment causes. Agent-agnostic on purpose and
   // resolved here, ahead of every agent branch: the proxy, the certificate
   // store, the route and the host policy belong to the user's machine, so the
   // card is the same one whichever agent happened to be running.
+  //
+  // ⚠️ 待拍板 — 这五格用的是**旧文案**,不是 S30 的润色列。S30 唯一那行润色格
+  // 的适用情况是「地区不支持」,而这五格一个都不是地区拦截(真正的地区信号落在
+  // `upstream_client_error`)。完整判据写在 `clientEnvironmentCard` 的文档注释里。
+  //
+  // ⚠️ 待拍板 — `certificate_failure` 是 TLS 信任链被拒(多半是公司中间盒),
+  // 不构成地区拦截。S30 的 `原文时机` 点了「证书校验失败」这个成因,但润色表里
+  // 没有给它写行,所以这一格没有可照抄的终稿。
   certificate_failure: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.certificate',
   ),
+  // ⚠️ 待拍板 — 代理**设置本身**不对(`unsupported proxy protocol` /
+  // `proxy configuration`)。处置是去改代理,不是换地区。S30 的 `原文时机` 点了
+  // 「代理不可达」,润色表同样没给它写行。
   proxy_configuration: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.proxy',
   ),
+  // ⚠️ 待拍板 — 连接压根没建起来(ENOTFOUND / ECONNREFUSED / EHOSTUNREACH /
+  // getaddrinfo)。这是**掉线**的第一形态,不是地区拦截 —— 对着一台刚断网的机器
+  // 说「你所在地区不支持」是错误诊断。文档里最接近的是 S11「当前网络中断」/
+  // S29「网络连接未能恢复」,但那两格的时机都是「跑到一半连接断了 / 重连失败」,
+  // 和「一次都没连上」不是同一件事,归属要产品拍板,不自行改路由。
   network_configuration: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.network',
   ),
+  // ⚠️ 待拍板 — Windows Application Control / AppLocker 拦住了二进制启动。
+  // 纯本机 OS 策略,整条链路上没有网络,更没有地区。文档 S01–S32 没有任何一格
+  // 讲系统策略拦截。
   host_policy_block: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.hostPolicy',
   ),
   // ⚠️ 待拍板 — this one is a local SQLite/WAL I/O failure, not a network path.
   // The design gives the environment family exactly one card (S30) and W28's
-  // brief lists all five under it, so it renders here with its own cause noun;
-  // but S30's opening clause (「看起来走了代理或公司网络」) does not describe this
-  // failure. Either it needs its own sentence or it needs its own scenario.
+  // brief lists all five under it, so it renders here.
+  //
+  // 文档里**没有**这一格:S19「进程崩了」的 `原文时机` 明写「能识别的原因
+  // (Windows 找不到 node、配置文件坏了、**磁盘读写出错**…)研发逐个识别后走对应
+  // 场景」—— 也就是说产品知道磁盘读写出错该有自己的场景,但 S01–S32 里始终没写。
+  // (S27 提到磁盘空间不足,时机是「客户端起不来」;S32 的「凭据保存失败」限定在
+  // 登录流程 —— 两格都不是运行中的本机存储失败。)
+  //
+  // 所以这一格没有可照抄的终稿,更不能套 S30 的「地区不支持 / 切换网络」:
+  // 那对一次磁盘 I/O 失败既诊断错了,给的处置也一点用没有。等产品补格。
   local_storage_failure: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.localStorage',
   ),
@@ -1647,6 +1793,13 @@ function resolveRunFailureUiIgnoringSelfPromotion(
         { secondaryRetry: true },
       );
     }
+  }
+  // S05 · key 填错了 —— 只在这把 key 归我们保管时才认。判据、摆位理由和它替谁
+  // 让路,全写在 `apiKeyInvalidCardFor` 的注释里。不在这一档的 agent 返回 null,
+  // 于是继续往下走它原本那条路(码是 AGENT_AUTH_REQUIRED / UNAUTHORIZED 的落 S02)。
+  if (detail === 'invalid_api_key') {
+    const apiKeyCard = apiKeyInvalidCardFor(agentId);
+    if (apiKeyCard) return apiKeyCard;
   }
   // Fine-grained daemon classification overrides a too-coarse code (e.g.
   // hard_quota vs a transient 429 both arriving as RATE_LIMITED). Placed after

@@ -1,0 +1,32 @@
+{
+  "fixtures": [
+    {
+      "id": "order-stress-r01",
+      "before": "order-stress-r01.sanitized.html",
+      "after": "order-stress-r01.sanitized-reference.html",
+      "action": "allow",
+      "attempts": 6,
+      "appliedRepairRules": [
+        "normalize_mismatched_string_quote",
+        "normalize_html_attribute_quotes"
+      ]
+    },
+    {
+      "id": "order-valid-unchanged",
+      "before": "order-stress-r01.sanitized-reference.html",
+      "after": "order-stress-r01.sanitized-reference.html",
+      "action": "allow",
+      "attempts": 0,
+      "appliedRepairRules": []
+    },
+    {
+      "id": "ambiguous-expression-blocked",
+      "before": "ambiguous-expression.html",
+      "action": "fail",
+      "attempts": 0,
+      "appliedRepairRules": [],
+      "finalizationReason": "no_safe_fix",
+      "refusal": "unsupported_syntax_error"
+    }
+  ]
+}

@@ -7,9 +7,12 @@ import {
   setExceptionTrackingContext,
 } from '../../src/analytics/error-tracking';
 import {
+  ACTIVITY_CAPACITY,
   FREEZE_REQUESTED_PX,
   FREEZE_WHEEL_COUNT,
+  LEDGER_CAPACITY,
   MIN_UNREACHABLE_PX,
+  SNAP_BACK_MIN_PX,
   createScrollFreezeState,
   observeScroll,
   observeWheelBatch,
@@ -668,6 +671,251 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     expect(snapshot.reportedThisSession).toBe(1);
     expect(snapshot.blockers.find((b) => b.id === 'surface_unreported')?.ok).toBe(false);
     expect(snapshot.verdict).toContain('surface_unreported');
+  });
+
+  /**
+   * What a report is allowed to switch off, and what it is not.
+   *
+   * These three specs exist because of a live capture. The operator clicked
+   * jump-to-bottom on a frozen chat, the scroller landed at 718.5 — the real
+   * layout bottom — and 3.8 seconds later it was back at 245.5, the ceiling
+   * the compositor still believed in, with zero JS writes in the interval and
+   * the write trace armed over all four scroll APIs the whole time. That is
+   * the cleanest evidence this probe has ever had, and it produced nothing,
+   * because the surface had already reported and the same flag that gated the
+   * event had also switched off the sampler:
+   *
+   *   verdict:  "blocked_by=surface_unreported"
+   *   snapBack: { armed: false, lastScrollTop: 245.5, layoutStable: false,
+   *               reportsAtOrBelowPx: null,
+   *               note: "already reported on this surface" }
+   *
+   * Three bundles pulled 5.4 minutes apart off that machine carried the same
+   * `stallWheelCount` of 83 and a byte-identical `steps` string.
+   */
+  it('keeps recording after the report, so a repro driven afterwards is captured', () => {
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, {
+      scrollTop: 91,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    const atReport = handle().snapshot().surface;
+    expect(atReport?.detector.reported).toBe(true);
+
+    // The reproduction a tester actually runs: the turn keeps streaming, the
+    // user keeps wheeling, and the ceiling keeps refusing.
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      geometry.setContent(2347 + (i + 1) * 40);
+      wheel(log, 120);
+    }
+
+    const after = handle().snapshot().surface;
+    // The streak the real machine had stuck at 83.
+    expect(after?.detector.stallWheelCount).toBeGreaterThan(
+      atReport?.detector.stallWheelCount ?? 0,
+    );
+    // The ledger the real machine exported byte-identical three times.
+    expect(after?.ledger.stepCount).toBeGreaterThan(atReport?.ledger.stepCount ?? 0);
+    expect(after?.ledger.probeCount).toBeGreaterThan(atReport?.ledger.probeCount ?? 0);
+    expect(after?.ledger.steps).not.toBe(atReport?.ledger.steps);
+    // Bounded, not merely alive: the rings are the ones this surface was
+    // always sized for, so "keep sampling" cannot become "keep growing".
+    expect((after?.ledger.steps ?? '').split(',').length).toBeLessThanOrEqual(
+      LEDGER_CAPACITY,
+    );
+    expect(after?.activity.size).toBeLessThanOrEqual(ACTIVITY_CAPACITY);
+    // And still exactly one event.
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+  });
+
+  it('leaves the one-notch snap-back route armed on a surface that has reported', () => {
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, {
+      scrollTop: 91,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+
+    // Jump-to-bottom. The write lands where layout says the bottom is, which
+    // is the setup for the snap-back the operator then watched happen.
+    geometry.setTop(1700);
+    advanceClock(400);
+    scrolled(log);
+
+    const route = handle().snapshot().snapBack;
+    // Not the stale ceiling the sampler used to be frozen at.
+    expect(route?.lastScrollTop).toBe(1700);
+    expect(route?.layoutStable).toBe(true);
+    expect(route?.armed).toBe(true);
+    expect(route?.reportsAtOrBelowPx).toBe(1700 - SNAP_BACK_MIN_PX);
+    expect(route?.note).not.toContain('already reported');
+  });
+
+  /**
+   * `.markdown-rendered pre { overflow: auto }` — the box every transcript is
+   * full of. Stated as the longhand because jsdom does not expand the
+   * `overflow` shorthand for `getComputedStyle`, and the longhand is what the
+   * gate reads.
+   */
+  function appendAbsorbingBox(log: HTMLElement): HTMLElement {
+    const inner = document.createElement('pre');
+    inner.style.overflowY = 'auto';
+    log.appendChild(inner);
+    stubGeometry(inner, { scrollTop: 0, scrollHeight: 900, clientHeight: 200 });
+    return inner;
+  }
+
+  it('keeps an absorbed wheel out of the stall streak after the surface reports', () => {
+    // A wheel a code block ate is not a wheel the chat log refused. The gate
+    // that tells those apart is ATTRIBUTION, so it runs on every frozen
+    // verdict, before any de-duplication — and its streak retraction is the
+    // only thing that takes the absorbed notch back out of `stallWheelCount`,
+    // which `observeWheelBatch` has already folded it into.
+    //
+    // Skipping that on a reported surface — which an earlier revision of this
+    // branch did, to save the ancestor walk — lets ordinary nested scrolling
+    // pile up a streak on a scroller nobody was scrolling. The snapshot then
+    // presents it as exactly the signal this probe exists to produce: "the
+    // chat log would not move, N notches running". A slower instrument is
+    // survivable; one that manufactures its own findings is not.
+    const log = buildChatLog();
+    stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+    const inner = appendAbsorbingBox(log);
+
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    // Wheels on the log itself: nothing absorbs them, so the surface reports.
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    const atReport = handle().snapshot().surface;
+    const streakAtReport = atReport?.detector.stallWheelCount ?? 0;
+    expect(streakAtReport).toBeGreaterThanOrEqual(FREEZE_WHEEL_COUNT);
+    expect(atReport?.innerScrollerSuppressions).toBe(0);
+
+    // Now the user scrolls a code block inside the transcript. Six notches,
+    // none of them aimed at the chat scroller.
+    for (let i = 0; i < 6; i += 1) {
+      advanceClock(16);
+      wheel(inner, 120);
+    }
+
+    const after = handle().snapshot().surface;
+    // The false streak this spec exists to forbid.
+    expect(after?.detector.stallWheelCount).not.toBe(streakAtReport + 6);
+    // Retracted every time it reaches the bar, so a reader of the snapshot
+    // never sees absorbed notches standing as a stall.
+    expect(after?.detector.stallWheelCount).toBeLessThan(FREEZE_WHEEL_COUNT);
+    // Nor in the ledger. Six notches aimed at a code block add no rounds of
+    // "the chat log would not go further" to the shortfall record.
+    expect(after?.ledger.probeCount).toBe(atReport?.ledger.probeCount);
+    expect(after?.ledger.probes).toBe(atReport?.ledger.probes);
+    // The counter keeps its meaning — "seen and NOT reported" — so it does not
+    // collect verdicts on a surface whose event has already gone.
+    expect(after?.innerScrollerSuppressions).toBe(0);
+    // The retraction takes back the verdict, not the history. An event went
+    // out on this surface, and `detector.reported` is the record of it, so a
+    // snapshot can never show it disagreeing with `surface.reported`.
+    expect(after?.detector.reported).toBe(true);
+    expect(handle().snapshot().blockers.find((b) => b.id === 'surface_unreported')?.ok)
+      .toBe(false);
+    // And moving the gate did not cost the de-duplication: `report()` owns it.
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+  });
+
+  it('counts a suppression while the surface can still report, and not after', () => {
+    // The control for the spec above. Before any event has gone out, an
+    // absorbed wheel is a decision the probe has to account for: it saw a
+    // frozen verdict and chose silence, and `innerScrollerSuppressions` is the
+    // only trace that decision leaves. The audit prints it as the reason a
+    // report did not happen, which is why it must not keep accruing on a
+    // surface where one did.
+    const log = buildChatLog();
+    stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+    const inner = appendAbsorbingBox(log);
+
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 6; i += 1) {
+      advanceClock(16);
+      wheel(inner, 120);
+    }
+
+    const surface = handle().snapshot().surface;
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(0);
+    expect(surface?.innerScrollerSuppressions).toBeGreaterThan(0);
+    // Same retraction, same bound, on a surface that has never reported: the
+    // gate's behaviour is not a function of whether an event went out.
+    expect(surface?.detector.stallWheelCount).toBeLessThan(FREEZE_WHEEL_COUNT);
+    // And the ledger stayed empty. This is the half that cannot be undone
+    // later: `ledger.first` is never evicted, so a single absorbed round would
+    // own `shortfall_first_*` — the field the whole report is read for — for
+    // the life of the surface, while looking arithmetically identical to a
+    // real one. The chat log did not move and it does have travel left; the
+    // user was simply scrolling something else.
+    expect(surface?.ledger.probeCount).toBe(0);
+    expect(surface?.ledger.first).toBeNull();
+    // The other side of the retraction: no event went out, so there is no
+    // history to keep and this surface must still be able to report a real
+    // freeze later.
+    expect(surface?.detector.reported).toBe(false);
+    expect(handle().snapshot().blockers.find((b) => b.id === 'surface_unreported')?.ok)
+      .toBe(true);
+  });
+
+  it('sends exactly one event per surface however long the freeze goes on', () => {
+    // The reverse anchor. Keeping the instrument sampling after a report must
+    // not turn one finding into a stream of duplicates: the detector now calls
+    // `frozen` on every batch that still qualifies, and every one of those
+    // after the first has to die at the sink.
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, {
+      scrollTop: 91,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+
+    // Sixty more notches of the four-notch route…
+    for (let i = 0; i < 60; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    // …and then a fresh snap-back, which needs only one notch and is the
+    // easiest way there is to a second event.
+    geometry.setTop(1700);
+    advanceClock(400);
+    scrolled(log);
+    geometry.setTop(91);
+    advanceClock(16);
+    wheel(log, 120);
+
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    expect(handle().snapshot().reportedThisSession).toBe(1);
   });
 
   it('is still attached and still ready after more reports than the old cap allowed', () => {
