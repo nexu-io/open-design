@@ -178,6 +178,7 @@ import {
   parseRunToolBundleForRequest,
   validateRunToolBundleForAgent,
 } from '../run-tool-bundle.js';
+import type { RunToolBundle } from '../run-tool-bundle.js';
 import type { DetectedAgent, RuntimeAgentDef } from '../runtimes/types.js';
 import {
   buildOpenCodeByokProviderConfig,
@@ -2105,10 +2106,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         resolvedSnapshot = resolved;
       }
     }
+    // Tracks the tool bundle actually attached to this run: the request's
+    // bundle, or that bundle merged with an applied plugin snapshot's MCP
+    // servers below. Kept as its own typed binding (rather than reading back
+    // through `meta.toolBundle`, which widens to `unknown`) so validation can
+    // be run against whichever one this run ends up with.
+    let effectiveToolBundle: RunToolBundle = toolBundle.bundle;
     const meta: RunCreateMeta = {
       ...withoutSensitiveRunInput(requestBody),
       mediaExecution: mediaExecution.policy,
-      toolBundle: toolBundle.bundle,
+      toolBundle: effectiveToolBundle,
       ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
       // Always replace any untrusted request field, including with null for an
       // unbound project.
@@ -2131,10 +2138,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // The plugin's own MCP servers are a default, not an override: fold
       // them in under whatever the caller already put in toolBundle so an
       // explicit run-scoped entry always wins on a name collision.
-      meta.toolBundle = mergeSnapshotMcpServersIntoToolBundle(
+      effectiveToolBundle = mergeSnapshotMcpServersIntoToolBundle(
         toolBundle.bundle,
         resolvedSnapshot.snapshot.mcpServers,
       );
+      meta.toolBundle = effectiveToolBundle;
     }
     if (clarificationContinuation) {
       applyClarificationContinuationMeta(meta, clarificationContinuation);
@@ -2195,7 +2203,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
     }
     const toolBundleSupport = validateRunToolBundleForAgent(
-      toolBundle.bundle,
+      effectiveToolBundle,
       typeof meta.agentId === 'string' ? getAgentDef(meta.agentId) : null,
       {
         deliveryTarget: runToolBundleDeliveryTargetForProject(

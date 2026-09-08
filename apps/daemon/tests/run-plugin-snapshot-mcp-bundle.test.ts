@@ -33,6 +33,7 @@ import type { McpServerSpec } from '@open-design/contracts';
 
 let server: http.Server | null = null;
 let tempDir: string | null = null;
+let externalProjectDir: string | null = null;
 let lastCreatedRun: any = null;
 
 afterEach(async () => {
@@ -44,10 +45,16 @@ afterEach(async () => {
   closeDatabase();
   if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });
   tempDir = null;
+  if (externalProjectDir) fs.rmSync(externalProjectDir, { recursive: true, force: true });
+  externalProjectDir = null;
   lastCreatedRun = null;
 });
 
 const PROJECT_ID = 'p-mcp-join';
+// A folder-imported project: `metadata.baseDir` points outside PROJECTS_DIR,
+// so `runToolBundleDeliveryTargetForProject` resolves it to 'external-project'
+// rather than 'managed-project' — the same shape `/api/import/folder` produces.
+const EXTERNAL_PROJECT_ID = 'p-mcp-join-external';
 
 function sendApiError(
   res: any,
@@ -59,10 +66,10 @@ function sendApiError(
   return res.status(status).json({ error: { code, message, ...details } });
 }
 
-function seedPluginSnapshot(mcpServers: McpServerSpec[]) {
+function seedPluginSnapshot(mcpServers: McpServerSpec[], projectId: string = PROJECT_ID) {
   const db = openDatabase(tempDir!);
   const snapshot = createSnapshot(db, {
-    projectId: PROJECT_ID,
+    projectId,
     conversationId: null,
     runId: null,
     pluginId: 'mcp-join-plugin',
@@ -85,7 +92,7 @@ function seedPluginSnapshot(mcpServers: McpServerSpec[]) {
     mcpServers,
     query: 'Use the fixture MCP server',
   });
-  linkSnapshotToProject(db, snapshot.snapshotId, PROJECT_ID);
+  linkSnapshotToProject(db, snapshot.snapshotId, projectId);
   return snapshot;
 }
 
@@ -142,9 +149,17 @@ function createRunsServiceStub() {
 
 async function startTestServer(): Promise<string> {
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-mcp-join-'));
+  externalProjectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'od-run-mcp-join-external-'));
   const db = openDatabase(tempDir);
   const now = Date.now();
   insertProject(db, { id: PROJECT_ID, name: PROJECT_ID, createdAt: now, updatedAt: now });
+  insertProject(db, {
+    id: EXTERNAL_PROJECT_ID,
+    name: EXTERNAL_PROJECT_ID,
+    metadata: { baseDir: externalProjectDir },
+    createdAt: now,
+    updatedAt: now,
+  });
   // Deliberately no workspace_projects row: this project is unbound, the
   // same "headerless local run" case `run-create-workspace-gate.test.ts`
   // asserts stays open, so POST /api/runs needs no x-od-workspace-* headers.
@@ -165,13 +180,25 @@ async function startTestServer(): Promise<string> {
     paths: { PROJECTS_DIR: tempDir, RUNTIME_DATA_DIR: tempDir },
     agents: {
       detectAgents: async () => [],
-      // 'acp-merge' accepts any stdio-transport run-scoped MCP server
-      // regardless of delivery target, so the stub doesn't need to model a
-      // daemon-managed project just to clear `validateRunToolBundleForAgent`.
-      getAgentDef: (agentId: string) =>
-        agentId === 'claude'
-          ? { id: 'claude', name: 'Claude Code', externalMcpInjection: 'acp-merge' }
-          : null,
+      getAgentDef: (agentId: string) => {
+        // 'acp-merge' accepts any stdio-transport run-scoped MCP server
+        // regardless of delivery target, so the stub doesn't need to model a
+        // daemon-managed project just to clear `validateRunToolBundleForAgent`.
+        if (agentId === 'claude') {
+          return { id: 'claude', name: 'Claude Code', externalMcpInjection: 'acp-merge' };
+        }
+        // 'claude-mcp-json' only receives run-scoped servers via project
+        // .mcp.json, which `validateRunToolBundleForAgent` gates on the run's
+        // delivery target being a daemon-managed project.
+        if (agentId === 'claude-mcp-json') {
+          return {
+            id: 'claude-mcp-json',
+            name: 'Claude Code (mcp.json)',
+            externalMcpInjection: 'claude-mcp-json',
+          };
+        }
+        return null;
+      },
     },
     chat: { startChatRun: async () => undefined },
     byokCredentials: { has: async () => false },
@@ -351,5 +378,44 @@ describe('POST /api/runs — applied plugin snapshot MCP servers', () => {
         args: ['override.js'],
       }),
     ]);
+  });
+});
+
+describe('POST /api/runs — snapshot-merged tool bundle is validated, not the pre-merge request bundle', () => {
+  // A run started with no explicit `toolBundle` has an empty PRE-merge bundle
+  // (zero enabled servers), which `validateRunToolBundleForAgent` always
+  // waves through regardless of agent or delivery target. If the route
+  // validated that pre-merge bundle instead of the one actually attached to
+  // the run, a plugin snapshot's MCP server would ride along unvalidated —
+  // for `claude-mcp-json`, silently reproducing the exact bug this whole
+  // snapshot-merge feature exists to fix, but only for imported-folder
+  // projects: the daemon has no way to deliver that server (no managed-project
+  // `.mcp.json` to write it into), so Claude Code simply never gets it, with
+  // no error surfaced anywhere.
+  it('rejects a snapshot MCP server for claude-mcp-json on an imported-folder project, even with no request-supplied toolBundle', async () => {
+    const baseUrl = await startTestServer();
+    const snapshot = seedPluginSnapshot(
+      [{ name: 'bookboost-twig', command: 'node', args: ['/srv/twig-mcp/server.js'] }],
+      EXTERNAL_PROJECT_ID,
+    );
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        projectId: EXTERNAL_PROJECT_ID,
+        agentId: 'claude-mcp-json',
+        appliedPluginSnapshotId: snapshot.snapshotId,
+        message: 'apply the plugin on an imported folder',
+        // No toolBundle at all: the pre-merge request bundle is empty.
+      }),
+    });
+
+    const responseText = await response.text();
+    expect(response.status, responseText).toBe(400);
+    const body = JSON.parse(responseText) as { error?: { message?: string } };
+    expect(body.error?.message).toContain('requires a daemon-managed project');
+    // The rejection must happen before a run is ever created.
+    expect(lastCreatedRun).toBeNull();
   });
 });
