@@ -166,9 +166,25 @@ describe('ChatPane — ACP CLI session refusal card', () => {
     expect(container.querySelector('.run-error__diagnostic')).toBeNull();
   });
 
-  it('offers Retry — the CLI build is the user\'s to change, then re-run', () => {
-    renderChat(refusedMessage());
-    expect(screen.getByRole('button', { name: 'promptTemplates.retry' })).toBeTruthy();
+  /*
+   * origin/main 这条钉的是〔重试〕—— 「CLI build 是用户自己能换的,换完再跑」。
+   *
+   * 用户 2026-09-08 裁决之后它不成立了:「有切换至 cloud 一律只显示切换至 cloud,
+   * 没有的情况下再显示那个重试」。这张卡跑在 ACP 本地 CLI(kimi)上,永远拿得到
+   * Cloud CTA,所以阶梯那一颗(含〔重试〕)整块不画。
+   *
+   * 保下来的是这条判据真正的那一半:**这张卡不能是死路**。它仍然给一颗能把这次
+   * 失败推进下去的按钮,只是那颗换成了 Cloud CTA。
+   */
+  it('这张卡不是死路 —— 动作位有一颗能推进下去的按钮', () => {
+    const { container } = renderChat(refusedMessage());
+
+    expect(screen.getByTestId('chat-error-switch-to-cloud')).toBeTruthy();
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    // 一张卡只有一颗主按钮(交付稿第 78 / 79 格)
+    expect(
+      container.querySelectorAll('[data-run-error-action="primary"]'),
+    ).toHaveLength(1);
   });
 
   // The daemon may ship extra structured facts on the same event (it already

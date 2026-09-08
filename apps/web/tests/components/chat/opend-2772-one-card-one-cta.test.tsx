@@ -199,11 +199,22 @@ describe('OPEND-2772 · 主按钮一律是切换到 Cloud', () => {
     expect((primaries[0]!.textContent ?? '').trim()).toBe(CLOUD_CTA);
   });
 
-  it('〔重试〕没有被删,只是让出了主位', () => {
+  /*
+   * ⚠️ 本轮实现取的是 §6.ZB 末尾的候选 A(阶梯那颗降为次级、留在卡上),
+   * 这条原本钉的是「〔重试〕没有被删,只是让出了主位」。
+   *
+   * 产品 2026-09-08 改选**候选 B**(用户转述同事,逐字):「同事说还有情况会出现
+   * **重试**和**切换至 cloud 并重试**,两个 CTA 按钮…**有切换至 cloud 一律只显示
+   * 切换至 cloud,没有的情况下再显示那个重试**」。所以这条改成钉新裁决:
+   * 有 Cloud CTA 时〔重试〕不再渲染,两颗常驻次级仍在。
+   *
+   * 两侧的完整矩阵(含「没有 Cloud CTA 时重试照旧点得动」)在
+   * `opend-2772b-cloud-cta-replaces-retry.test.tsx`。
+   */
+  it('有 Cloud CTA 时〔重试〕不再渲染,两颗常驻次级仍在', () => {
     const { container } = renderFailure({ agentId: 'claude', code: 'AGENT_AUTH_REQUIRED' });
 
-    const retry = screen.getByTestId('chat-error-retry');
-    expect(retry.getAttribute('data-run-error-action')).toBe('secondary');
+    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
     // 常驻两颗照旧在
     expect(container.querySelector('[data-testid="chat-error-contact-support"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="chat-error-export-logs"]')).toBeTruthy();

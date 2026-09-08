@@ -46,13 +46,17 @@ describe('失败卡三颗按钮同壳', () => {
   });
 
   /*
-   * ⚠️ OPEND-2772(T68)之后重试**不再写死 primary**:主按钮位归那颗
-   * 〔切换到 OpenDesign Cloud 并重试〕,阶梯自己那一档(重试也在内)统一让位
-   * 到次级。让位是由**同一个** `errorActionVariant` 决定的,所以这条判据从
+   * ⚠️ OPEND-2772(T68)之后重试**不再写死 primary**,所以这条判据从
    * 「它是不是 primary」改成「它的分量是不是跟旁边那几颗同源」—— 这才是这份
    * 文件真正要守的东西(同一副壳、同一套 radius/padding)。
    *
-   * 「一张卡只有一颗主按钮」由 `opend-2772-one-card-one-cta.test.tsx` 钉。
+   * 用户 2026-09-08 又把「让位」改成「**有 Cloud CTA 就不画**」,所以阶梯那一档
+   * 落到屏幕上时 `errorActionVariant` 恒为 `'primary'`。这里仍然认它,是因为
+   * 同一个变量还管着**通用本地 CLI 逃生口**〔使用本地〕的分量 —— 那一颗不属于
+   * 阶梯,Cloud CTA 在场时它照旧退成次级,所以两支都还活着。
+   *
+   * 「一张卡只有一颗主按钮」由 `opend-2772-one-card-one-cta.test.tsx` 钉;
+   * 「有 CTA 时阶梯那颗不画」由 `opend-2772b-cloud-cta-replaces-retry.test.tsx` 钉。
    */
   it('重试要走报错卡动作组件,分量跟旁边几颗同一个出口', () => {
     const src = readChatPane();

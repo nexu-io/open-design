@@ -762,16 +762,16 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
 });
 
 /*
- * 上游过载(S10)这一档:重试留着,而主按钮位上多了那颗〔切换到 OpenDesign Cloud
- * 并重试〕。
+ * 上游过载(S10)这一档:这一轮跑的是本地 claude,所以主位必然是那颗
+ * 〔切换到 OpenDesign Cloud 并重试〕。
  *
- * ⚠️ **判据在 OPEND-2772 / 规格 T68 翻了面。** 产品 2026-09-07 原话「2772 的
- * 『统一』是『铺到所有报错』,主 cta 都是切换至 cloud」—— 切换卡整块删掉,这颗
- * CTA 收进报错卡,铺到**所有** BYOK / 本地 CLI 的失败。`UPSTREAM_UNAVAILABLE`
- * 原本还在 `ChatPane` 里被单独否掉(映射表明写着它要出切换卡,否决没有任何出处),
- * 那条无理由的例外也一并撤掉。这一轮跑的是本地 claude,所以 CTA 必然在场。
+ * ⚠️ **判据翻过两次。** OPEND-2772 / 规格 T68(产品 2026-09-07)先把 CTA 铺到
+ * 所有 BYOK / 本地 CLI 的失败,〔重试〕退到次级仍留在卡上;用户 2026-09-08 再
+ * 改成「**有切换至 cloud 一律只显示切换至 cloud,没有的情况下再显示那个重试**」,
+ * 于是阶梯那一颗(含〔重试〕)在这张卡上整块不画。
+ * 反向那一侧照旧由 amr 的用例守着。
  */
-test('[P0] upstream outages keep Retry available and offer the Cloud switch', async ({ page }) => {
+test('[P0] upstream outages offer the Cloud switch as the card\'s only action', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   const root = join(tmpdir(), `open-design-upstream-ui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -844,12 +844,14 @@ test('[P0] upstream outages keep Retry available and offer the Cloud switch', as
 
   await gotoProject(page, projectId);
 
-  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible({ timeout: T.long });
+  await expect(
+    page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i }),
+  ).toHaveCount(1, { timeout: T.long });
   await expect(runErrorCard(page)).toContainText(
     /Model service unavailable|current model is temporarily unavailable/i,
   );
-  // T68:一张卡、一颗主按钮 —— 阶梯算出来的〔重试〕退到次级,主位归 Cloud CTA。
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
+  // 用户 2026-09-08:有 Cloud CTA 就不再同时给〔重试〕。
+  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
   await expect(page.getByText(/Model call failed/i)).toHaveCount(0);
 });
 
@@ -931,11 +933,12 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   const card = runErrorCard(page);
   await expect(card).toContainText('对话内容过长', { timeout: T.long });
   await expect(card).toContainText('当前对话和附件超过了 AI 可处理的长度');
-  await expect(page.getByRole('button', { name: /^重试$/ }).first()).toBeVisible();
   // T68:codex 是本地 agent,主位归 Cloud CTA。**按钮名要用 zh-CN 那一份** ——
   // 这一格从前写的是英文名 + `toHaveCount(0)`,而这条用例整页跑在 zh-CN 下,
   // 英文名本来就永远匹配不到:判据翻面之前它就已经是一条恒真断言了。
   await expect(page.getByRole('button', { name: '切换到 OpenDesign Cloud 并重试' })).toHaveCount(1);
+  // 用户 2026-09-08:有 Cloud CTA 就不再同时给〔重试〕。
+  await expect(page.getByRole('button', { name: /^重试$/ })).toHaveCount(0);
 
   // 卡上不再有「错误详情」折叠(用户 2026-08-27):既没有那颗〔查看详情〕,
   // 上游原文也不出现在卡上的任何地方。
@@ -944,11 +947,18 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
 });
 
 /*
- * Antigravity 的限流:终端换模型那颗仍然在,只是按 T68 退到次级 —— 它**是**一个
- * 本地 agent,所以主位同样归〔切换到 OpenDesign Cloud 并重试〕(`runsOnALocalAgent`
- * 是出口不变式两侧共用的那一个判据)。
+ * Antigravity 的限流。它**是**一个本地 agent,所以主位归〔切换到 OpenDesign Cloud
+ * 并重试〕(`runsOnALocalAgent` 是出口不变式两侧共用的那一个判据)。
+ *
+ * ⚠️ **这条用例被用户 2026-09-08 的裁决削掉了一半。** T68 时它钉的是「终端换模型
+ * 那颗仍然在,只是退到次级」;新规则「有切换至 cloud 一律只显示切换至 cloud」之后,
+ * 阶梯那一颗(这里是〔Switch model in terminal〕)整块不画,于是
+ * `POST /api/agents/antigravity/oauth-launch` **从报错卡上再也点不到**。
+ * 这是候选 B 的固有代价,不是实现漏了 —— 已记进
+ * `specs/current/chat-panel-decisions-sheet.md`,等产品看要不要给它留条路。
+ * 用例保留成「这张卡现在给什么」的凭据,并守住那颗按钮确实没了。
  */
-test('[P0] antigravity rate limits keep terminal model switching alongside the Cloud switch', async ({ page }) => {
+test('[P0] antigravity rate limits leave the Cloud switch as the card\'s only action', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   let oauthLaunchCalls = 0;
@@ -1026,14 +1036,13 @@ test('[P0] antigravity rate limits keep terminal model switching alongside the C
 
   await gotoProject(page, projectId);
 
-  const launchTerminal = page.getByRole('button', { name: /Switch model in terminal/i }).first();
-  await expect(launchTerminal).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i }).first()).toBeVisible();
+  await expect(runErrorCard(page)).toBeVisible({ timeout: T.long });
   await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
-
-  await launchTerminal.click();
-
-  await expect.poll(() => oauthLaunchCalls).toBe(1);
+  // 阶梯那一档整块让位:终端换模型和从头重试都不在这张卡上了。
+  await expect(page.getByRole('button', { name: /Switch model in terminal/i })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
+  // 按钮没了,那条 oauth 路由自然也不该被谁悄悄打一次。
+  expect(oauthLaunchCalls).toBe(0);
 });
 
 async function setupAmrWorkspace(

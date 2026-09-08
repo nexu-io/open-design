@@ -2350,12 +2350,27 @@ export function ChatPane({
   const showErrorActions = showByokRecoveryCta || runFailureHasAction;
   const showCloudSwitchCta = Boolean(cloudSwitchTracking);
   /**
+   * **有〔切换到 Cloud〕就不再给阶梯那一颗。**
+   *
+   * 用户 2026-09-08(转述同事)逐字:「同事说还有情况会出现**重试**和**切换至
+   * cloud 并重试**,两个 CTA 按钮…**有切换至 cloud 一律只显示切换至 cloud,
+   * 没有的情况下再显示那个重试**」—— 也就是 `run-error-catalog.md` §6.ZB 末尾
+   * 三个候选里的 **B**,推翻本轮先取的保守解 A(让位不删除)。
+   *
+   * 于是判据从「阶梯那颗画成什么分量」变成「阶梯那颗画不画」:
+   * `showLadderAction` 为假时,`RunErrorCardActionGroup` 整块不渲染 ——
+   * 〔重试〕〔更换模型〕〔去设置〕〔在终端登录〕〔继续运行〕一并让位。
+   *
+   * 反向仍然成立:已经跑在 Cloud 上的 run 拿不到 Cloud CTA
+   * (`withoutCloudSelfPromotion`),那一颗照旧是这张卡的主按钮。
+   */
+  const showLadderAction = !showCloudSwitchCta;
+  /**
    * 一张卡只有一颗主按钮。
    *
-   * OPEND-2772 之后主位归那颗〔切换到 OpenDesign Cloud 并重试〕,所以阶梯算出来的
-   * 那一颗(换个模型 / 去设置 / 在终端登录 / 重试 / 续跑 …)**退到次级**。
-   * ⚠️ 是让位,不是删除:重试对上游 5xx、网络抖动这类失败仍然是真正的自救路径,
-   * 一刀切掉会伤到它们(三个候选摆在 `run-error-catalog.md` §6.ZB 末尾,等产品挑)。
+   * 阶梯那一颗只在没有 Cloud CTA 时才画,所以它落在这里恒为 `'primary'`;
+   * 这个变量仍然分两支,是因为**通用的本地 CLI 逃生口**〔使用本地〕不属于阶梯
+   * (它指向的是相反方向:回到本地运行时),Cloud CTA 在场时它照旧要退成次级。
    */
   const errorActionVariant: 'primary' | 'secondary' =
     showCloudSwitchCta ? 'secondary' : 'primary';
@@ -2398,14 +2413,23 @@ export function ChatPane({
       'noopener,noreferrer',
     );
   }, [amrProfile, analytics.track, config?.installationId, config?.telemetry?.metrics]);
+  /**
+   * `run_recovery_action_surface_view` 的载荷:这张卡上**真的画出来**的那几颗。
+   *
+   * ⚠️ 名字里的 "visible" 是字面意思,不是「阶梯算出了什么」。阶梯那一档改成
+   * 有 Cloud CTA 就整块不画之后,这里必须跟着走同一个 `showLadderAction`,
+   * 否则曝光会报出一颗屏幕上根本不存在的〔重试〕,点击率被稀释成假的。
+   */
   const visibleRecoveryActionTypes = useMemo(() => {
     const actions: TrackingRunRecoveryActionType[] = [];
     if (!retryAssistant || !onRetry || !runFailureUi) return actions;
-    if (runFailureUi.primaryAction === 'authorize') actions.push('authorize_and_retry');
-    if (runFailureUi.primaryAction === 'switch-model') actions.push('switch_model_retry');
-    if (canResumeFailedRun) actions.push('resume_run');
-    else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
-      actions.push('manual_retry');
+    if (showLadderAction) {
+      if (runFailureUi.primaryAction === 'authorize') actions.push('authorize_and_retry');
+      if (runFailureUi.primaryAction === 'switch-model') actions.push('switch_model_retry');
+      if (canResumeFailedRun) actions.push('resume_run');
+      else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
+        actions.push('manual_retry');
+      }
     }
     if (showCloudSwitchCta && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
     return actions;
@@ -2416,6 +2440,7 @@ export function ChatPane({
     retryAssistant,
     runFailureUi,
     showCloudSwitchCta,
+    showLadderAction,
   ]);
   const recoveryAnalyticsProps = useCallback((
     assistantMessage: ChatMessage,
@@ -4278,7 +4303,14 @@ export function ChatPane({
                             {t('avatar.useLocal')}
                           </RunErrorCardAction>
                         ) : null}
-                        {retryAssistant && onRetry && runFailureUi ? (
+                        {/*
+                          * 阶梯算出来的那一颗(换个模型 / 去设置 / 在终端登录 /
+                          * 授权 / 重试 / 续跑 …)。**有 Cloud CTA 时整块不画** ——
+                          * 用户 2026-09-08:「有切换至 cloud 一律只显示切换至
+                          * cloud,没有的情况下再显示那个重试」。判据见
+                          * `showLadderAction`。
+                          */}
+                        {showLadderAction && retryAssistant && onRetry && runFailureUi ? (
                           <RunErrorCardActionGroup>
                             {runFailureUi.primaryAction === 'authorize' ? (
                               // Sign in to AMR inline — the pill drives vela login,

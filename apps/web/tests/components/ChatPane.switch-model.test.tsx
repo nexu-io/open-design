@@ -26,7 +26,15 @@ vi.mock('../../src/i18n', () => ({
 
 afterEach(() => cleanup());
 
-/** 模型下线 —— 这一档的主动作就是〔更换模型〕(`amr-guidance` 的 switch-model) */
+/**
+ * 模型下线 —— 这一档的动作就是〔更换模型〕(`amr-guidance` 的 switch-model)。
+ *
+ * ⚠️ 2026-09-08:`agentId` 从 `claude` 换成 `amr`,**这一节要钉的落点判据没改**。
+ * 用户裁决「有〔切换到 Cloud〕一律只显示切换至 Cloud」之后,阶梯那一颗在
+ * BYOK / 本地 CLI 的卡上整块不画;〔更换模型〕仍然存在,只是唯一能观察到它的
+ * 是**已经跑在 Cloud 上**的 run —— 而那恰恰也是「模型下线」最常出现的地方
+ * (`AMR_MODEL_UNAVAILABLE` 在 agent-agnostic 表里,两侧都命中同一张卡)。
+ */
 function modelGoneTurn(): ChatMessage[] {
   return [
     { id: 'user-1', role: 'user', content: 'Build it', createdAt: 0 },
@@ -38,7 +46,7 @@ function modelGoneTurn(): ChatMessage[] {
       endedAt: 2,
       runId: 'run-1',
       runStatus: 'failed',
-      agentId: 'claude',
+      agentId: 'amr',
       events: [
         {
           kind: 'status',

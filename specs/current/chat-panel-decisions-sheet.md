@@ -493,3 +493,57 @@ T4 / T6 是小的默认值问题,现状能跑,不急。
 - `.fork-sep span` 带着 `overflow: hidden; text-overflow: ellipsis`,但标签本身是 flex 容器,`text-overflow` 永远不生效;长译文会被切掉而不是省略号。自 #2714 落地起如此,修法要给标签加一层纯文本内层。
 - `docs/design/chat-mirror/mirror-exec.html` 是**生成产物**,仍停在两块式旧形态且写着旧文案。重建会产生约 776KB 的巨型 diff,单独一件事。
 - daemon 在源会话没有标题时整个压掉 `forkedInto` 戳(`routes/project/conversations.ts`「拿不到源标题就不盖」)。标题现在已经不渲染了,无标题的源会话理应仍然值得那条分界线。
+
+---
+
+## 报错卡动作排:有〔切换到 Cloud〕时不再给〔重试〕(2026-09-08 用户拍板,选候选 B)
+
+**背景**:OPEND-2772 把〔切换到 OpenDesign Cloud 并重试〕铺到所有 BYOK / 本地 CLI 的
+报错卡主按钮位之后,阶梯算出来的那一颗(换个模型 / 去设置 / 在终端登录 / 重试 / 续跑 …)
+按 `run-error-catalog.md` §6.ZB 的**保守解**留在卡上、降为次级。同事随后反馈一张卡上
+出现两颗 CTA。
+
+**用户逐字**(转述同事,2026-09-08):
+
+> 「同事说还有情况会出现**重试**和**切换至 cloud 并重试**,两个 CTA 按钮…
+> **有切换至 cloud 一律只显示切换至 cloud,没有的情况下再显示那个重试**」
+
+**裁决**:选 `run-error-catalog.md` §6.ZB 末尾三个候选里的 **B**。
+§6.ZB 那张候选表**原文不动**(它记录的是当时摆给产品的三个选项),本条是它的答案。
+
+**落地范围**
+
+1. 有 Cloud CTA 时,`ChatPane` 里那一组阶梯动作(`RunErrorCardActionGroup`)**整块不渲染** ——
+   〔重试〕〔更换模型〕〔去设置〕〔在终端登录〕〔授权并重试〕〔继续运行〕一并让位。
+   判据是具名的 `showLadderAction`(= `!showCloudSwitchCta`)。
+2. **反向不变式没变**:已经跑在 Cloud 上的 run 拿不到 Cloud CTA
+   (`amr-guidance.ts` 的 `withoutCloudSelfPromotion`),那一颗照旧是这张卡的主按钮、照旧点得动。
+3. 曝光埋点跟着走同一个判据:`visibleRecoveryActionTypes` 不再报出屏幕上不存在的动作。
+
+**没有做的那一半,以及为什么**
+
+候选 B 逐字读是「只留〔导出日志〕〔切换到 Cloud〕两枚」,也就是连〔联系支持〕一起去掉。
+**没做**,因为它和产品自己两句话直接冲突,而用户 2026-09-08 只点名了〔重试〕:
+
+- §6.Z:「**次级动作固定两颗且常驻**:〔联系支持〕、〔导出日志〕」;
+- §6.ZB 开头明写这一条**没有被推翻**:「「次级动作固定两颗且常驻」那一条仍然有效」;
+- 产品原话:「好多都应该得有导出日志这个按钮」——「那就不挑,**全给**」。
+
+代码形态也印证它不属于本次范围:这两颗渲染在阶梯动作组**之外**,和「这一档有没有恢复动作」
+无关 —— 恰恰是一颗恢复动作都没有的那几档(CPU 不支持、运行时定义非法)最需要它们。
+**要不要连〔联系支持〕一起去掉,交回产品拍板。**
+
+**一并记下候选 B 的代价**(执行时才看得全,§6.ZB 原文只点了「重试」和「联系支持」)。
+这两条都是候选 B 的固有代价,不是实现漏掉;要留就得回到候选 C(分档):
+
+1. **可续跑的失败丢了〔继续运行〕。** `resumable` 的失败在 BYOK / 本地 CLI 的卡上
+   拿不到那颗按钮了 —— 它的意义是**保住已经跑出来的半截活**,而 Cloud CTA 走的是
+   换运行时重跑。
+2. **Antigravity 限流丢了〔在终端换模型〕,`POST /api/agents/antigravity/oauth-launch`
+   从报错卡上再也点不到。** 它是阶梯的 `launch-terminal-switch-model` 那一档,而
+   antigravity 永远是本地 agent,所以这颗按钮不存在「没有 Cloud CTA」的那一侧 ——
+   跟〔重试〕不一样,它是**整个产品里唯一**的入口。e2e
+   `e2e/ui/amr-run-failure-recovery.test.ts` 那条用例已翻面守住现状。
+
+**红测**:`apps/web/tests/components/chat/opend-2772b-cloud-cta-replaces-retry.test.tsx`
+(两侧都钉:有 CTA 时阶梯那颗不渲染 / 没 CTA 时照旧出现且点得动)。

@@ -929,8 +929,13 @@ function runsOnALocalAgent(agentId: string | null | undefined): boolean {
  * CLI(S01)。
  *
  * 这里只动**主按钮位**。每一类失败自己的标题 / 正文一个字都没改,阶梯算出来的
- * 那颗动作(换个模型 / 去设置 / 在终端登录 / 重试 …)也一颗都没删 —— 它们让出
- * 主位,退到次级(见 `ChatPane` 的 `errorActionVariant`)。
+ * 那颗动作(换个模型 / 去设置 / 在终端登录 / 重试 …)在**映射层**同样一颗没删。
+ *
+ * ⚠️ 渲染层的处置改过一次:OPEND-2772 落地时那一颗是「让出主位、退到次级」,
+ * 用户 2026-09-08 改成「**有 Cloud CTA 就不画**」(逐字:「有切换至 cloud 一律
+ * 只显示切换至 cloud,没有的情况下再显示那个重试」)。判据在 `ChatPane` 的
+ * `showLadderAction`;这一层不知情 —— 映射照旧算出那一档,画不画是渲染层的事,
+ * 也正因如此「已经在 Cloud 上」那一侧不用改一个字。
  */
 function withCloudSwitchCta(ui: RunFailureUi): RunFailureUi {
   return ui.cloudSwitchCta ? ui : { ...ui, cloudSwitchCta: true };

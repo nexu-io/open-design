@@ -17,6 +17,13 @@ import type { AppConfig, ChatMessage } from '../../src/types';
 // "Continue the run" action that calls `onResumeRun` with that message —
 // distinct from the from-scratch Retry. On origin/main there is no `resumable`
 // field, no `onResumeRun` prop, and no such button, so this goes red there.
+//
+// ⚠️ 2026-09-08:这一族的夹具从 `claude` 换成了 `amr`,**行为判据一个字没改**。
+// 用户裁决「有〔切换到 Cloud〕一律只显示切换至 Cloud」之后,阶梯那一档
+// (〔继续运行〕也在内)在 BYOK / 本地 CLI 的卡上整块不渲染 —— Cloud CTA
+// 顶了主位。〔继续运行〕vs〔重试〕这条分岔本身没变,只是现在唯一能观察到它的
+// 地方是**已经跑在 Cloud 上**的 run(那种卡拿不到 Cloud CTA)。
+// 「BYOK 上这一档不再画」由 `chat/opend-2772b-cloud-cta-replaces-retry.test.tsx` 钉。
 
 const translate = (key: string, vars?: Record<string, string | number>) => {
   if (vars && Object.keys(vars).length > 0) {
@@ -65,7 +72,7 @@ function resumableFailedMessage(): ChatMessage {
     runId: 'run-upstream',
     runStatus: 'failed',
     resumable: true,
-    agentId: 'claude',
+    agentId: 'amr',
     events: [
       {
         kind: 'status',
@@ -101,7 +108,7 @@ function renderChat(opts: {
       activeConversationId="conv-1"
       onSelectConversation={vi.fn()}
       onDeleteConversation={vi.fn()}
-      config={{ agentId: opts.activeAgentId ?? 'claude', agentCliEnv: {} } as unknown as AppConfig}
+      config={{ agentId: opts.activeAgentId ?? 'amr', agentCliEnv: {} } as unknown as AppConfig}
     />,
   );
 }
@@ -110,7 +117,7 @@ describe('ChatPane resume-on-failure', () => {
   it('offers Continue (not from-scratch Retry) on a resumable failed run', () => {
     const onResumeRun = vi.fn();
     const onRetry = vi.fn();
-    const { container } = renderChat({ onResumeRun, onRetry, activeAgentId: 'claude' });
+    const { container } = renderChat({ onResumeRun, onRetry, activeAgentId: 'amr' });
 
     expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
     const continueBtn = screen.getByRole('button', { name: 'chat.resumeRunCta' });
@@ -130,7 +137,7 @@ describe('ChatPane resume-on-failure', () => {
       recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
       recovery_action_type: 'resume_run',
       source_run_id: 'run-upstream',
-      source_agent_provider_id: 'claude_code',
+      source_agent_provider_id: 'amr',
     });
 
     fireEvent.click(continueBtn);
@@ -152,7 +159,7 @@ describe('ChatPane resume-on-failure', () => {
     // resume via a plain send of the continue prompt (no original re-send).
     const onRetry = vi.fn();
     const onSend = vi.fn();
-    renderChat({ onRetry, onSend, activeAgentId: 'claude' });
+    renderChat({ onRetry, onSend, activeAgentId: 'amr' });
 
     const continueBtn = screen.getByRole('button', { name: 'chat.resumeRunCta' });
     expect(continueBtn).toBeTruthy();
@@ -165,9 +172,10 @@ describe('ChatPane resume-on-failure', () => {
   });
 
   it('falls back to Retry when the active agent no longer matches the failed run', () => {
-    // The failed message is from claude, but the user has since switched the
-    // active agent to opencode — the resumable session is keyed to claude, so
-    // Continue must NOT show (it would silently start fresh on the wrong agent).
+    // The failed message is from the Cloud agent, but the user has since
+    // switched the active agent to opencode — the resumable session is keyed to
+    // the original agent, so Continue must NOT show (it would silently start
+    // fresh on the wrong one).
     const onResumeRun = vi.fn();
     const onRetry = vi.fn();
     renderChat({ onResumeRun, onRetry, activeAgentId: 'opencode' });
