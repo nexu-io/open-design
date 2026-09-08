@@ -11,19 +11,19 @@ import {
 } from '../../src/analytics/events';
 import type { AppConfig, ChatMessage } from '../../src/types';
 
-// Red spec for the resume-on-failure affordance: a failed assistant message
-// flagged `resumable` (a transient upstream drop / inactivity timeout the
-// daemon can recover by resuming the agent's CLI session) must offer a
-// "Continue the run" action that calls `onResumeRun` with that message —
-// distinct from the from-scratch Retry. On origin/main there is no `resumable`
-// field, no `onResumeRun` prop, and no such button, so this goes red there.
+// ⚠️ **OPEND-2807 把〔继续运行〕从报错卡上撤掉了。**
 //
-// ⚠️ 2026-09-08:这一族的夹具从 `claude` 换成了 `amr`,**行为判据一个字没改**。
-// 用户裁决「有〔切换到 Cloud〕一律只显示切换至 Cloud」之后,阶梯那一档
-// (〔继续运行〕也在内)在 BYOK / 本地 CLI 的卡上整块不渲染 —— Cloud CTA
-// 顶了主位。〔继续运行〕vs〔重试〕这条分岔本身没变,只是现在唯一能观察到它的
-// 地方是**已经跑在 Cloud 上**的 run(那种卡拿不到 Cloud CTA)。
-// 「BYOK 上这一档不再画」由 `chat/opend-2772b-cloud-cta-replaces-retry.test.tsx` 钉。
+// 这份文件原本是 resume-on-failure 的红测:一条 `resumable` 的失败(上游瞬断 /
+// 空闲超时,daemon 能靠续跑同一个 CLI 会话捞回来)要给一颗〔继续运行〕,
+// 走 `onResumeRun`,和从头再跑的〔重试〕区分开。
+//
+// 工单「[ChatPanel] 错误卡片未还原设计样式,应该只有三个按钮」+ 用户「别分那么
+// 多情况了」之后,报错卡只剩 联系我们 / 导出日志 / 第三颗 CTA,〔继续运行〕
+// 不在其中。**代价**:BYOK 与 Cloud 两侧都拿不到「保住已经跑出来的半截活」
+// 那条路,`onResumeRun` 也随之没有调用点(prop 还在,ProjectView 仍然传)。
+// 已写进 PR 描述与决策表交产品定夺。
+//
+// 留下来的是「它确实不上卡了」这条守卫 —— 三颗按钮之外一颗都不许多。
 
 const translate = (key: string, vars?: Record<string, string | number>) => {
   if (vars && Object.keys(vars).length > 0) {
@@ -63,7 +63,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function resumableFailedMessage(): ChatMessage {
+function resumableFailedMessage(agentId = 'amr'): ChatMessage {
   return {
     id: 'msg-upstream',
     role: 'assistant',
@@ -72,7 +72,7 @@ function resumableFailedMessage(): ChatMessage {
     runId: 'run-upstream',
     runStatus: 'failed',
     resumable: true,
-    agentId: 'amr',
+    agentId,
     events: [
       {
         kind: 'status',
@@ -89,10 +89,11 @@ function renderChat(opts: {
   onRetry: (m: ChatMessage) => void;
   onSend?: (...args: unknown[]) => void;
   activeAgentId?: string;
+  failedAgentId?: string;
 }) {
   return render(
     <ChatPane
-      messages={[resumableFailedMessage()]}
+      messages={[resumableFailedMessage(opts.failedAgentId ?? 'amr')]}
       streaming={false}
       error={null}
       projectId="project-1"
@@ -102,6 +103,9 @@ function renderChat(opts: {
       onStop={vi.fn()}
       onRetry={opts.onRetry}
       onResumeRun={opts.onResumeRun}
+      // Cloud CTA 只在宿主真的接得住时才画(ChatPane 的
+      // `cloudSwitchHandoffAvailable`);ProjectView 是接得住的那一种。
+      onSwitchToAmrAndRetry={vi.fn()}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -114,79 +118,60 @@ function renderChat(opts: {
 }
 
 describe('ChatPane resume-on-failure', () => {
-  it('offers Continue (not from-scratch Retry) on a resumable failed run', () => {
+  it('OPEND-2807:Cloud 上可续跑的失败也只给三颗按钮,〔继续运行〕不上卡', () => {
     const onResumeRun = vi.fn();
     const onRetry = vi.fn();
     const { container } = renderChat({ onResumeRun, onRetry, activeAgentId: 'amr' });
 
     expect(container.querySelector('[data-user-action-card="run-recovery"]')).toBeTruthy();
-    const continueBtn = screen.getByRole('button', { name: 'chat.resumeRunCta' });
-    expect(continueBtn).toBeTruthy();
-    expect(continueBtn.textContent).toBe('chat.resumeRunCta');
-    // The from-scratch Retry must not be the offered action for a resumable run.
-    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'chat.resumeRunCta' })).toBeNull();
 
-    const footer = container.querySelector(
-      '[data-user-action-card="run-recovery"] [data-user-action-footer="true"]',
-    );
-    expect(footer?.contains(continueBtn)).toBe(true);
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer).toBeTruthy();
+    expect(
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
+
+    // 第三颗是从头再跑那一颗,不是续跑 —— 走 onRetry,不碰 onResumeRun。
+    fireEvent.click(screen.getByTestId('chat-error-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onResumeRun).not.toHaveBeenCalled();
+  });
+
+  it('OPEND-2807:BYOK 上可续跑的失败给的是〔切换到 Cloud〕,同样没有〔继续运行〕', () => {
+    const onResumeRun = vi.fn();
+    const { container } = renderChat({
+      onResumeRun,
+      onRetry: vi.fn(),
+      activeAgentId: 'claude',
+      failedAgentId: 'claude',
+    });
+
+    expect(screen.queryByRole('button', { name: 'chat.resumeRunCta' })).toBeNull();
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-switch-to-cloud',
+    ]);
+    expect(onResumeRun).not.toHaveBeenCalled();
+  });
+
+  it('曝光埋点只报卡上真有的那一颗', () => {
+    renderChat({ onResumeRun: vi.fn(), onRetry: vi.fn(), activeAgentId: 'amr' });
+
     expect(trackRunRecoveryActionSurfaceView).toHaveBeenCalledTimes(1);
     expect(vi.mocked(trackRunRecoveryActionSurfaceView).mock.calls[0]![1]).toMatchObject({
       element: 'run_recovery_action',
       task_execution_id: 'msg-upstream',
-      recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
-      recovery_action_type: 'resume_run',
+      recovery_action_type: 'manual_retry',
       source_run_id: 'run-upstream',
-      source_agent_provider_id: 'amr',
     });
-
-    fireEvent.click(continueBtn);
-    expect(trackRunRecoveryActionClick).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(trackRunRecoveryActionClick).mock.calls[0]![1]).toMatchObject({
-      task_execution_id: 'msg-upstream',
-      recovery_action_instance_id: 'recovery:msg-upstream:resume_run',
-      recovery_action_type: 'resume_run',
-    });
-    expect(onResumeRun).toHaveBeenCalledTimes(1);
-    expect(onResumeRun.mock.calls[0]![0]).toMatchObject({ id: 'msg-upstream' });
-    expect(onRetry).not.toHaveBeenCalled();
-  });
-
-  it('offers Continue via plain send on surfaces without a resume handler (not Retry)', () => {
-    // SideChatTab / design-system chat mount ChatPane without onResumeRun. The
-    // daemon has persisted the resumable session, so the re-sending Retry path
-    // would silently resume + repeat the work. Continue must still show and
-    // resume via a plain send of the continue prompt (no original re-send).
-    const onRetry = vi.fn();
-    const onSend = vi.fn();
-    renderChat({ onRetry, onSend, activeAgentId: 'amr' });
-
-    const continueBtn = screen.getByRole('button', { name: 'chat.resumeRunCta' });
-    expect(continueBtn).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
-
-    fireEvent.click(continueBtn);
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(String(onSend.mock.calls[0]![0])).toContain('interrupted by a transient failure');
-    expect(onRetry).not.toHaveBeenCalled();
-  });
-
-  it('falls back to Retry when the active agent no longer matches the failed run', () => {
-    // The failed message is from the Cloud agent, but the user has since
-    // switched the active agent to opencode — the resumable session is keyed to
-    // the original agent, so Continue must NOT show (it would silently start
-    // fresh on the wrong one).
-    const onResumeRun = vi.fn();
-    const onRetry = vi.fn();
-    renderChat({ onResumeRun, onRetry, activeAgentId: 'opencode' });
-
-    expect(screen.queryByRole('button', { name: 'chat.resumeRunCta' })).toBeNull();
-    const retryButton = screen.getByRole('button', { name: 'promptTemplates.retry' });
-    expect(retryButton).toBeTruthy();
-    /* 原来断言的是 `chat-error-action` —— 那是它当裸 `<button>` 时的手写类名。
-       2026-08-27 这颗改成走共享 `Button`(用户:「这个按钮圆角明显跟别的不一样」;
-       量到它 4px 圆角、旁边两颗 999px)。这里改成认 testid:要钉的是「回落到重试」
-       这条行为,不是它当年用哪个类名。 */
-    expect(retryButton.getAttribute('data-testid')).toBe('chat-error-retry');
   });
 });

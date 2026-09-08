@@ -1,12 +1,22 @@
 // @vitest-environment jsdom
 
 /**
- * The in-chat AMR auth surface. When an AMR run fails with AMR_AUTH_REQUIRED,
- * the error card must offer an INLINE sign-in (the AmrLoginPill, which drives
- * vela login + surfaces the activation URL/code) rather than bouncing the user
- * out to Settings. On a successful sign-in the failed run is retried exactly
- * once. The pill's own login + activation-block behaviour is covered by
- * AmrLoginPill.test.tsx; here we only assert ChatPane's wiring.
+ * The in-chat AMR auth continuation.
+ *
+ * ⚠️ **OPEND-2807 removed the inline sign-in pill from the error card.** The
+ * ticket ("错误卡片…应该只有三个按钮") leaves an AMR failure with exactly
+ * 联系我们 / 导出日志 / 重试, so there is no AmrLoginPill on the card any more
+ * and ChatPane no longer ARMS a continuation — that half now lives only in
+ * `ProjectView.handleSwitchToAmrAndRetry`.
+ *
+ * What survives here, and is still worth its weight, is the **consumption**
+ * half: an armed continuation must be redeemed exactly once, against the
+ * account identity of the exact status observation that redeems it. Those are
+ * the account-generation guards from the #7426 family, and they are unchanged.
+ *
+ * The driver changed with the pill: instead of poking the pill's
+ * `onStatusChange`, these tests now advance ChatPane's own 500ms auth poll
+ * (`fetchVelaLoginStatus`) — which is what production actually runs.
  */
 
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -74,6 +84,7 @@ vi.mock('../../src/components/AmrLoginPill', () => ({
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
   lastPillProps = null;
 });
 
@@ -85,6 +96,29 @@ beforeEach(() => {
     configPath: '',
   });
 });
+
+const signedOut: VelaLoginStatus = {
+  loggedIn: false,
+  profile: 'prod',
+  user: null,
+  configPath: '',
+};
+
+/**
+ * Feed ChatPane's auth poll ONE observation.
+ *
+ * The pane polls `fetchVelaLoginStatus` every 500ms while an AMR authorize
+ * failure is on screen and hands every reading to the continuation guard —
+ * the same seam the pill's `onStatusChange` used to drive. A sticky
+ * `mockResolvedValue` (not `…Once`) keeps this deterministic: two pollers
+ * start on mount, so a queue of one-shot values would be raced.
+ */
+async function observeStatus(status: VelaLoginStatus): Promise<void> {
+  fetchVelaLoginStatusMock.mockResolvedValue(status);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(500);
+  });
+}
 
 function amrAuthFailedMessage(): ChatMessage {
   return {
@@ -163,45 +197,38 @@ const signedIn: VelaLoginStatus = {
 };
 
 describe('ChatPane inline AMR auth', () => {
-  it('renders the inline sign-in pill (not a Settings bounce) on AMR_AUTH_REQUIRED', () => {
-    renderChat(vi.fn());
+  /*
+   * origin/main 这条钉的是「S04 给内联登录,不把人踢去设置」。
+   * OPEND-2807 之后卡上只有三颗按钮,内联登录不在其中 ——
+   * ⚠️ **这意味着 S04 的卡上没有登录入口**,只有一颗会再失败一次的〔重试〕。
+   * 这条代价已写进 PR 描述与决策表,交产品定夺;这里先把现状钉死,
+   * 免得它悄悄变回来或者悄悄再多一颗。
+   */
+  it('OPEND-2807:S04 卡上不再有内联登录,只剩三颗按钮', () => {
+    const { container } = renderChat(vi.fn());
 
-    expect(screen.getByTestId('amr-login-pill')).toBeTruthy();
-    expect(lastPillProps?.signInLabel).toBe('chat.amrError.authorizeCta');
-    expect(lastPillProps?.amrEntrySourceDetail).toBe('chat_error_authorize_retry');
-    expect(lastPillProps?.metricsConsent).toBe(true);
-    expect(lastPillProps?.installationId).toBe('install-123');
-    expect(lastPillProps?.showActivationDetails).toBe(true);
-    expect(screen.queryByText('promptTemplates.retry')).toBeNull();
+    expect(screen.queryByTestId('amr-login-pill')).toBeNull();
+    const footer = container.querySelector<HTMLElement>('[data-user-action-footer="true"]');
+    expect(footer).toBeTruthy();
+    expect(
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
   });
 
-  it('arms on the origin mount and retries once only after an exact fresh mount', () => {
+  /*
+   * ⚠️ 原用例的前半段是「在 origin mount 上**武装**」,由卡上那颗登录 pill 的
+   * `onSignInStarted` 驱动。OPEND-2807 拿掉了 pill,武装这一半随之搬到
+   * `ProjectView.handleSwitchToAmrAndRetry`,不再是 ChatPane 的职责。
+   * 留在这里的是仍归 ChatPane 的那一半:**在一个精确匹配的新 mount 上,
+   * 一次武装只能兑现一次**。
+   */
+  it('redeems an armed continuation exactly once on an exact fresh mount', async () => {
+    vi.useFakeTimers();
     const onRetry = vi.fn();
-    let pending: Parameters<NonNullable<ComponentProps<typeof ChatPane>['onArmAmrAuthRetryContinuation']>>[0] | null = null;
-    const onArm = vi.fn((next) => {
-      pending = next;
-    });
-    renderChat(onRetry, {
-      amrAuthRetryMountId: 'mount-origin',
-      amrAuthRetryWorkspaceIdentityKey:
-        'workspace-a:personal:member-a:owner:active:active:true:true',
-      onArmAmrAuthRetryContinuation: onArm,
-    });
-
-    lastPillProps?.onSignInStarted?.();
-    expect(onArm).toHaveBeenCalledTimes(1);
-    expect(pending).toMatchObject({
-      projectId: 'project-1',
-      conversationId: 'conv-1',
-      assistantId: 'msg-amr-auth',
-      originMountId: 'mount-origin',
-    });
-    // Even a fast signed-in event cannot let the origin authorization lifetime
-    // retry with its now-stale context.
-    lastPillProps?.onStatusChange?.(signedIn);
-    expect(onRetry).not.toHaveBeenCalled();
-
-    cleanup();
     let available = true;
     const onConsume = vi.fn(() => {
       if (!available) return false;
@@ -210,7 +237,12 @@ describe('ChatPane inline AMR auth', () => {
     });
     renderChat(onRetry, {
       amrAuthRetryContinuation: {
-        ...pending!,
+        projectId: 'project-1',
+        conversationId: 'conv-1',
+        assistantId: 'msg-amr-auth',
+        workspaceIdentityKey:
+          'workspace-a:personal:member-a:owner:active:active:true:true',
+        originMountId: 'mount-origin',
         accountIdAtArm: null,
         createdAtMs: Date.now(),
       },
@@ -220,17 +252,26 @@ describe('ChatPane inline AMR auth', () => {
       onConsumeAmrAuthRetryContinuation: onConsume,
     });
 
-    lastPillProps?.onStatusChange?.(signedIn);
-    lastPillProps?.onStatusChange?.(signedIn);
+    await observeStatus(signedIn);
+    await observeStatus(signedIn);
 
     expect(onRetry).toHaveBeenCalledTimes(1);
     expect(onRetry.mock.calls[0]![0]).toMatchObject({ id: 'msg-amr-auth' });
-    expect(onConsume).toHaveBeenCalledTimes(2);
+    // 第二次观测仍然会去问一次「还能兑现吗」,由 onConsume 说不,而不是靠 UI 记状态。
+    expect(onConsume.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('waits for the current signed-in status to carry an account id', () => {
+  it('waits for the current signed-in status to carry an account id', async () => {
+    vi.useFakeTimers();
     const onRetry = vi.fn();
-    const onConsume = vi.fn(() => true);
+    // 单发 —— App 那一侧的 `consumeAmrAuthRetryContinuation` 就是单发的:
+    // 一份武装只能兑现一次。写成恒真会让「兑现了几次」这条判据失去意义。
+    let available = true;
+    const onConsume = vi.fn(() => {
+      if (!available) return false;
+      available = false;
+      return true;
+    });
     renderChat(onRetry, {
       amrAuthRetryContinuation: {
         projectId: 'project-1',
@@ -248,18 +289,16 @@ describe('ChatPane inline AMR auth', () => {
       onConsumeAmrAuthRetryContinuation: onConsume,
     });
 
-    lastPillProps?.onStatusChange?.({
-      ...signedIn,
-      user: null,
-    });
+    await observeStatus({ ...signedIn, user: null });
 
     expect(onConsume).not.toHaveBeenCalled();
     expect(onRetry).not.toHaveBeenCalled();
 
-    lastPillProps?.onStatusChange?.(signedIn);
+    await observeStatus(signedIn);
 
-    expect(onConsume).toHaveBeenCalledTimes(1);
+    expect(onConsume.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry.mock.calls[0]![0]).toMatchObject({ id: 'msg-amr-auth' });
   });
 
   it('consumes a Settings handoff on a fresh exact mount even without an inline AMR failure', async () => {
@@ -294,17 +333,20 @@ describe('ChatPane inline AMR auth', () => {
     expect(onConsume).toHaveBeenCalledTimes(1);
   });
 
-  it('retries an unbound local project on the same mount only after signed-out -> signed-in', () => {
-    // Keep the component's background status reads pending so this test owns
-    // the exact auth observations under test. A resolved mock can otherwise
-    // race the direct callback below when the full CI shard yields between the
-    // rerender and assertion.
-    fetchVelaLoginStatusMock.mockImplementation(() => new Promise(() => {}));
+  it('retries an unbound local project on the same mount only after signed-out -> signed-in', async () => {
+    // 观测由 ChatPane 自己那条 500ms 轮询驱动(`observeStatus`),
+    // 这一条要照的正是「哪几种观测**不足以**证明这次授权换了身份」。
+    vi.useFakeTimers();
     const onRetry = vi.fn();
-    let armed: Parameters<NonNullable<ComponentProps<typeof ChatPane>['onArmAmrAuthRetryContinuation']>>[0] | null = null;
-    const onArm = vi.fn((next) => {
-      armed = next;
-    });
+    // ⚠️ 武装那一半已随 pill 搬到 ProjectView(见文件抬头),所以这里直接把
+    // 一份等价的 continuation 交给 pane,只测兑现侧的判据。
+    const armed = {
+      projectId: 'project-1',
+      conversationId: 'conv-1',
+      assistantId: 'msg-amr-auth',
+      workspaceIdentityKey: 'none' as const,
+      originMountId: 'mount-local',
+    };
     let available = true;
     const onConsume = vi.fn(() => {
       if (!available) return false;
@@ -314,15 +356,10 @@ describe('ChatPane inline AMR auth', () => {
     const baseProps: Partial<ComponentProps<typeof ChatPane>> = {
       amrAuthRetryMountId: 'mount-local',
       amrAuthRetryWorkspaceIdentityKey: 'none',
-      onArmAmrAuthRetryContinuation: onArm,
       onConsumeAmrAuthRetryContinuation: onConsume,
     };
     const view = renderChat(onRetry, baseProps);
 
-    act(() => {
-      lastPillProps?.onSignInStarted?.();
-    });
-    expect(armed).not.toBeNull();
     view.rerender(
       <ChatPane
         messages={[amrAuthFailedMessage()]}
@@ -358,7 +395,7 @@ describe('ChatPane inline AMR auth', () => {
           memberStatus: 'active',
         }}
         amrAuthRetryContinuation={{
-          ...armed!,
+          ...armed,
           accountIdAtArm: null,
           createdAtMs: Date.now(),
         }}
@@ -367,51 +404,32 @@ describe('ChatPane inline AMR auth', () => {
 
     // A signed-in poll by itself is not proof that this authorization attempt
     // changed identity, so it must not retry.
-    act(() => {
-      lastPillProps?.onStatusChange?.(signedIn);
-    });
+    await observeStatus(signedIn);
     expect(onRetry).not.toHaveBeenCalled();
 
     // A plain signed-out shell snapshot may predate this authorization attempt
     // and therefore cannot establish the transition either.
-    act(() => {
-      lastPillProps?.onStatusChange?.({
-        loggedIn: false,
-        profile: 'prod',
-        user: null,
-        configPath: '',
-      });
-      lastPillProps?.onStatusChange?.(signedIn);
-    });
+    await observeStatus(signedOut);
+    await observeStatus(signedIn);
     expect(onRetry).not.toHaveBeenCalled();
 
-    act(() => {
-      lastPillProps?.onStatusChange?.({
-        loggedIn: false,
-        loginInFlight: true,
-        profile: 'prod',
-        user: null,
-        configPath: '',
-      });
-      lastPillProps?.onStatusChange?.(signedIn);
-      lastPillProps?.onStatusChange?.(signedIn);
-    });
+    // Only a signed-out reading that this authorization attempt itself produced
+    // (`loginInFlight`) witnesses the transition.
+    await observeStatus({ ...signedOut, loginInFlight: true });
+    await observeStatus(signedIn);
+    await observeStatus(signedIn);
 
-    expect(onConsume).toHaveBeenCalledTimes(1);
+    expect(onConsume.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry.mock.calls[0]![0]).toMatchObject({ id: 'msg-amr-auth' });
   });
 
-  it('does not retry while still signed out', () => {
+  it('does not retry while still signed out', async () => {
+    vi.useFakeTimers();
     const onRetry = vi.fn();
     renderChat(onRetry);
 
-    lastPillProps?.onStatusChange?.({
-      loggedIn: false,
-      loginInFlight: true,
-      profile: 'prod',
-      user: null,
-      configPath: '',
-    });
+    await observeStatus({ ...signedOut, loginInFlight: true });
 
     expect(onRetry).not.toHaveBeenCalled();
   });
@@ -420,13 +438,13 @@ describe('ChatPane inline AMR auth', () => {
     // Loop guard: when /status reports signed-in from the start (no signed-out
     // -> signed-in transition), a run that keeps failing AMR_AUTH_REQUIRED must
     // NOT auto-retry — otherwise each retry spawns a new run that fails again.
-    fetchVelaLoginStatusMock.mockResolvedValue(signedIn);
+    vi.useFakeTimers();
     const onRetry = vi.fn();
     renderChat(onRetry);
 
-    // Let the shared poll + the pill's mount status callback settle.
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    lastPillProps?.onStatusChange?.(signedIn);
+    // Let the shared poll settle, then observe signed-in twice more.
+    await observeStatus(signedIn);
+    await observeStatus(signedIn);
 
     expect(onRetry).not.toHaveBeenCalled();
   });

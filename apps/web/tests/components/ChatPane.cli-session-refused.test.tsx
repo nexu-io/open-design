@@ -104,6 +104,9 @@ function renderChat(message: ChatMessage) {
       onSend={vi.fn()}
       onStop={vi.fn()}
       onRetry={vi.fn()}
+      // Cloud CTA 只在宿主真的接得住时才画(ChatPane 的
+      // `cloudSwitchHandoffAvailable`);ProjectView 是接得住的那一种。
+      onSwitchToAmrAndRetry={vi.fn()}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}

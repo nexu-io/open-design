@@ -161,8 +161,14 @@ describe('跑到一半余额不足:只有升级卡', () => {
 
     expect(screen.queryByTestId('chat-upgrade-card')).toBeNull();
     expect(genericErrorCard(container)).toBeTruthy();
-    // 主按钮是〔充值〕,次按钮是〔重试〕—— 充值落在带外,所以重试是手动的。
-    expect(screen.getByText('chat.amrError.rechargeCta')).toBeTruthy();
+    /*
+     * ⚠️ 这一条原来钉的是「充值入口和重试都必须还在」。
+     * OPEND-2807 把〔充值〕这类对症动作整块撤出报错卡,所以白卡上只剩三颗。
+     * **代价**:补查落空时,余额不足这一档在卡上没有充值入口了 ——
+     * 已列进 PR 描述交产品定夺。交接判据里真正扛事的那一半仍然成立:
+     * **升级卡接不住时,报错卡必须还回来,而且它不是死路**(有一颗 CTA)。
+     */
+    expect(screen.queryByText('chat.amrError.rechargeCta')).toBeNull();
     expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
   });
 

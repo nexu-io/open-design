@@ -123,13 +123,13 @@ async function seedBalanceFailure(page: Page, locale: 'en' | 'zh-CN') {
 async function expectActionsContained(
   card: Locator,
   primaryAction: Locator,
-  retryAction: Locator,
+  secondaryAction: Locator,
   options: { sameRow?: boolean } = {},
 ) {
   await expect(primaryAction).toBeVisible();
-  await expect(retryAction).toBeVisible();
+  await expect(secondaryAction).toBeVisible();
   await primaryAction.click({ trial: true });
-  await retryAction.click({ trial: true });
+  await secondaryAction.click({ trial: true });
 
   const layout = await card.evaluate((element) => {
     // `RunErrorCard` 把动作直接排在 `[data-user-action-footer]` 这一层。
@@ -172,9 +172,12 @@ async function expectActionsContained(
   expect(layout.actionScrollWidth).toBeLessThanOrEqual(layout.actionClientWidth);
   expect(layout.actionLeft).toBeGreaterThanOrEqual(layout.cardLeft);
   expect(layout.actionRight).toBeLessThanOrEqual(layout.cardRight);
-  // 四颗:常驻的〔联系支持〕〔导出日志〕+ 这一档的主动作 + 重试。
-  // 前两颗不挑失败类型(产品 2026-08-26 裁决),所以它们也在这条窄面板守卫里。
-  expect(layout.buttons).toHaveLength(4);
+  /*
+   * ⚠️ OPEND-2807:报错卡只有**三颗** —— 〔联系我们〕〔导出日志〕+ 第三颗 CTA。
+   * 这一族原来是四颗(多一颗按失败类型分档的〔充值〕),那一档已随工单撤掉。
+   * 窄面板守卫本身没变:三颗仍然要装得下、不许把卡撑出横向滚动。
+   */
+  expect(layout.buttons).toHaveLength(3);
   for (const button of layout.buttons) {
     expect(button.width).toBeGreaterThan(0);
     expect(button.height).toBeGreaterThan(0);
@@ -183,35 +186,43 @@ async function expectActionsContained(
   }
   if (options.sameRow) {
     // 按**这两颗具体的按钮**比,不按下标 —— 动作行会换行,下标不再等于「那一对」。
-    const [primaryBox, retryBox] = await Promise.all([
+    const [primaryBox, secondaryBox] = await Promise.all([
       primaryAction.boundingBox(),
-      retryAction.boundingBox(),
+      secondaryAction.boundingBox(),
     ]);
-    expect(primaryBox?.y).toBe(retryBox?.y);
+    expect(primaryBox?.y).toBe(secondaryBox?.y);
   }
 }
 
+/*
+ * ⚠️ OPEND-2807 之后这一族的按钮组成变了:〔充值〕不再上卡,第三颗是〔重试〕
+ * (这一轮跑在 Cloud 上)。这条用例守的从来是**窄面板下的排布**,不是「哪几颗」,
+ * 所以量的对象换成实际在卡上的那两颗:主动作〔重试〕+ 常驻的〔导出日志〕。
+ */
 test('[P1] zh-CN balance recovery actions stay inside a narrow ChatPane', async ({ page }) => {
   await seedBalanceFailure(page, 'zh-CN');
 
   const card = runErrorCard(page);
-  const recharge = card.getByRole('button', { name: '充值' });
-  const retry = card.getByRole('button', { name: '重试' });
-  await expectActionsContained(card, recharge, retry, { sameRow: true });
+  await expect(card.getByRole('button', { name: '充值' })).toHaveCount(0);
+  const retry = card.getByTestId('chat-error-retry');
+  const exportLogs = card.getByTestId('chat-error-export-logs');
+  await expectActionsContained(card, retry, exportLogs, { sameRow: true });
 });
 
+/*
+ * 长文案档:德/法/俄以及被展开的英文标签会把动作行撑宽。这里仍然人工把第三颗
+ * 的文字撑长,只是撑的对象从〔Top up〕换成了现在真的在卡上的〔Retry〕。
+ */
 test('[P1] expanded English balance actions stay inside a narrow ChatPane', async ({ page }) => {
   await seedBalanceFailure(page, 'en');
 
   const card = runErrorCard(page);
-  const recharge = card.getByRole('button', { name: 'Top up' });
-  await expect(recharge).toBeVisible({ timeout: T.long });
-  await recharge.evaluate((button) => {
-    button.textContent = 'Top up OpenDesign Cloud balance';
+  await expect(card.getByRole('button', { name: 'Top up' })).toHaveCount(0);
+  const retry = card.getByTestId('chat-error-retry');
+  await expect(retry).toBeVisible({ timeout: T.long });
+  await retry.evaluate((button) => {
+    button.textContent = 'Retry this run on OpenDesign Cloud';
   });
-  const expandedRecharge = card.getByRole('button', {
-    name: 'Top up OpenDesign Cloud balance',
-  });
-  const retry = card.getByRole('button', { name: 'Retry' });
-  await expectActionsContained(card, expandedRecharge, retry);
+  const exportLogs = card.getByTestId('chat-error-export-logs');
+  await expectActionsContained(card, retry, exportLogs);
 });

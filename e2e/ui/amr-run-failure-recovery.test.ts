@@ -453,7 +453,7 @@ test('[P0] @critical non-AMR model failures stay recoverable while Cloud is sign
 
   await gotoProject(page, projectId);
 
-  const switchAndRetry = page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i }).first();
+  const switchAndRetry = page.getByRole('button', { name: /Switch to OpenDesign Cloud/i }).first();
   await expect(switchAndRetry).toBeVisible({ timeout: T.long });
   await switchAndRetry.click();
 
@@ -763,7 +763,7 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
 
 /*
  * 上游过载(S10)这一档:这一轮跑的是本地 claude,所以主位必然是那颗
- * 〔切换到 OpenDesign Cloud 并重试〕。
+ * 〔切换到 OpenDesign Cloud〕。
  *
  * ⚠️ **判据翻过两次。** OPEND-2772 / 规格 T68(产品 2026-09-07)先把 CTA 铺到
  * 所有 BYOK / 本地 CLI 的失败,〔重试〕退到次级仍留在卡上;用户 2026-09-08 再
@@ -845,7 +845,7 @@ test('[P0] upstream outages offer the Cloud switch as the card\'s only action', 
   await gotoProject(page, projectId);
 
   await expect(
-    page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i }),
+    page.getByRole('button', { name: /^Switch to OpenDesign Cloud$/i }),
   ).toHaveCount(1, { timeout: T.long });
   await expect(runErrorCard(page)).toContainText(
     /Model service unavailable|current model is temporarily unavailable/i,
@@ -936,7 +936,7 @@ test('[P1] zh-CN run failure guidance shows actionable copy and expandable raw s
   // T68:codex 是本地 agent,主位归 Cloud CTA。**按钮名要用 zh-CN 那一份** ——
   // 这一格从前写的是英文名 + `toHaveCount(0)`,而这条用例整页跑在 zh-CN 下,
   // 英文名本来就永远匹配不到:判据翻面之前它就已经是一条恒真断言了。
-  await expect(page.getByRole('button', { name: '切换到 OpenDesign Cloud 并重试' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: '切换到 OpenDesign Cloud' })).toHaveCount(1);
   // 用户 2026-09-08:有 Cloud CTA 就不再同时给〔重试〕。
   await expect(page.getByRole('button', { name: /^重试$/ })).toHaveCount(0);
 
@@ -1037,7 +1037,7 @@ test('[P0] antigravity rate limits leave the Cloud switch as the card\'s only ac
   await gotoProject(page, projectId);
 
   await expect(runErrorCard(page)).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /^Switch to OpenDesign Cloud$/i })).toHaveCount(1);
   // 阶梯那一档整块让位:终端换模型和从头重试都不在这张卡上了。
   await expect(page.getByRole('button', { name: /Switch model in terminal/i })).toHaveCount(0);
   await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);

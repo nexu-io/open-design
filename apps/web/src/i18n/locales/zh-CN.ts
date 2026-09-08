@@ -68,7 +68,7 @@ export const zhCN: Dict = {
   "chat.amrCard.chipOfficial": "官方托管",
   "chat.amrCard.chipNoKey": "无需 API Key",
   "chat.amrCard.chipAutoRetry": "授权后自动重试",
-  "chat.amrCard.switchCta": "切换到 OpenDesign Cloud 并重试",
+  "chat.amrCard.switchCta": "切换到 OpenDesign Cloud",
   "chat.amrError.authMessage":
     "OpenDesign Cloud 账号尚未授权。完成授权后将自动重试当前任务。",
   "chat.amrError.balanceMessage":
@@ -3672,7 +3672,7 @@ export const zhCN: Dict = {
   "assistant.unfinishedMore": "还有 {n} 个",
   "assistant.continueRemaining": "继续剩余任务",
   "chat.resumeRunCta": "继续运行",
-  "chat.runError.contactSupportCta": "联系支持",
+  "chat.runError.contactSupportCta": "联系我们",
   "chat.runError.exportLogsCta": "导出日志",
   "chat.runError.switchModelCta": "换个模型",
   "chat.runError.openSettingsCta": "去设置",

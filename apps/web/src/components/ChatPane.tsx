@@ -127,7 +127,6 @@ import {
   DESIGN_SYSTEM_NEXT_STEP_ACTIONS,
   type NextStepActionsVariant,
 } from './NextStepActions';
-import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
@@ -135,7 +134,6 @@ import {
 } from './amrLoginPolling';
 import {
   amrPlansUrlForProfile,
-  amrRechargeUrlForProfile,
   daemonFailureVerdictFrom,
   failureCardHandedToAmrBalanceCard,
   formatModelWindowRetryAt,
@@ -149,7 +147,6 @@ import {
   fetchVelaLoginStatus,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   canConsumeAmrAuthRetryContinuation,
   type AmrAuthRetryContinuation,
@@ -171,7 +168,6 @@ import { UserActionCard, type UserActionCardTone } from './UserActionCard';
 import {
   RunErrorCard,
   RunErrorCardAction,
-  RunErrorCardActionGroup,
 } from './chat/RunErrorCard';
 import { UpgradeCard } from './chat/UpgradeCard';
 import { SupportDialog } from './chat/SupportDialog';
@@ -2347,50 +2343,70 @@ export function ChatPane({
   // door back to a local runtime was never part of that decision.
   const showByokRecoveryCta =
     showByokRecoveryAction && Boolean(onSwitchToLocalCli) && !runFailureHasAction;
-  const showErrorActions = showByokRecoveryCta || runFailureHasAction;
-  const showCloudSwitchCta = Boolean(cloudSwitchTracking);
   /**
-   * **有〔切换到 Cloud〕就不再给阶梯那一颗。**
+   * ⚠️ **接手方不在场就不能让位。**
    *
-   * 用户 2026-09-08(转述同事)逐字:「同事说还有情况会出现**重试**和**切换至
-   * cloud 并重试**,两个 CTA 按钮…**有切换至 cloud 一律只显示切换至 cloud,
-   * 没有的情况下再显示那个重试**」—— 也就是 `run-error-catalog.md` §6.ZB 末尾
-   * 三个候选里的 **B**,推翻本轮先取的保守解 A(让位不删除)。
+   * `cloudSwitchTracking` 只说「这一轮跑在非 Cloud 上,该给这颗 CTA」——
+   * 它证明不了**按下去有人接**。那颗 CTA 的动作是 `onSwitchToAmrAndRetry`,
+   * 宿主没接时回落 `onOpenAmrSettings`;**两个都没有**的宿主是真实存在的:
+   * `workspace/SideChatTab.tsx` 只传 `onRetry`(见评审
+   * PerishCode · `PRRT_kwDOSOgY8s6gG7NN`)。在那里画出 CTA 又压掉重试,
+   * 用户拿到的是一颗点了没反应的按钮 + 一张没有出路的卡。
    *
-   * 于是判据从「阶梯那颗画成什么分量」变成「阶梯那颗画不画」:
-   * `showLadderAction` 为假时,`RunErrorCardActionGroup` 整块不渲染 ——
-   * 〔重试〕〔更换模型〕〔去设置〕〔在终端登录〕〔继续运行〕一并让位。
+   * 这和 `balanceCardCannotTakeTheHandoff` / 重连行那两处是**同一个模式**:
+   * 交接只在接手方真的在场时成立。所以 CTA 的「在场」判据必须带上它自己的
+   * 处理函数,而不是只看分类器说该不该给。
    *
-   * 反向仍然成立:已经跑在 Cloud 上的 run 拿不到 Cloud CTA
-   * (`withoutCloudSelfPromotion`),那一颗照旧是这张卡的主按钮。
+   * ⚠️ 这**不是**把 OPEND-2807 砍掉的分支加回来:三颗按钮、两种情况一个没变,
+   * 变的只是「哪一种情况」的判据 —— 接不上 Cloud 的宿主就是本地那一种。
    */
-  const showLadderAction = !showCloudSwitchCta;
+  const cloudSwitchHandoffAvailable = Boolean(onSwitchToAmrAndRetry || onOpenAmrSettings);
+  const showCloudSwitchCta = Boolean(cloudSwitchTracking) && cloudSwitchHandoffAvailable;
   /**
-   * 一张卡只有一颗主按钮。
+   * **报错卡永远只有三颗按钮,只分两种情况**(OPEND-2807)。
    *
-   * 阶梯那一颗只在没有 Cloud CTA 时才画,所以它落在这里恒为 `'primary'`;
-   * 这个变量仍然分两支,是因为**通用的本地 CLI 逃生口**〔使用本地〕不属于阶梯
-   * (它指向的是相反方向:回到本地运行时),Cloud CTA 在场时它照旧要退成次级。
+   * 工单标题:「[ChatPanel] 错误卡片未还原设计样式,应该只有三个按钮」:
+   *   使用的 OpenDesign Cloud:  联系我们 / 导出日志 / **重试**
+   *   使用的 CLI/BYOK:          联系我们 / 导出日志 / **切换到 OpenDesign Cloud**
+   * 用户当面补充:「别分那么多情况了」「amr 只有这个 cta」。
+   *
+   * 所以第三颗是这两颗二选一,判据只有一条:**这一轮跑在不在 Cloud 上**。
+   * `showCloudSwitchCta` 由 `amr-guidance.ts` 的出口不变式给出
+   * (非 Cloud 一律 `withCloudSwitchCta`,Cloud 一律 `withoutCloudSelfPromotion`),
+   * 所以两颗天然互斥、且必有其一 —— 卡上永远正好三颗,不会多也不会少。
+   *
+   * ⚠️ 这推翻了 `run-error-catalog.md` §6.ZB 末尾那个「A / B / C 三候选」的框架:
+   * 那三条都还在讨论「阶梯算出来的那颗动作留不留、留成什么分量」,而工单的答案是
+   * **阶梯那一整套对症动作不再出现在报错卡上**,没有分档可言。
+   */
+  const showRetryCta = !showCloudSwitchCta;
+  /**
+   * 一张卡只有一颗主按钮(交付稿第 78 / 79 格都只画了一颗)。
+   *
+   * 三颗按钮里主位是第三颗(重试 / 切换到 Cloud),〔联系我们〕〔导出日志〕恒为次级。
+   *
+   * ⚠️ OPEND-2807 之后这个变量**只剩一个消费者**:通用的本地 CLI 逃生口
+   * 〔使用本地〕(`showByokRecoveryCta`,API 模式下 key/baseUrl/model 没配好时的
+   * 回到本地那条路)。它不在工单点名的那一组对症动作里,也不由失败类型决定,
+   * 所以这次没有一起撤 —— 见下面 `showByokRecoveryCta` 的说明。
    */
   const errorActionVariant: 'primary' | 'secondary' =
     showCloudSwitchCta ? 'secondary' : 'primary';
-  /**
-   * 阶梯第 4 档的唯一外显:常驻次级的〔联系支持〕升格成主按钮。
+  /*
+   * ⚠️ 阶梯第 4 档「〔联系支持〕升格成主按钮」已随 OPEND-2807 去掉。
    *
-   * ⚠️ 只在**没有** Cloud CTA 时升格 —— 有它的时候主位已经有主了,一张卡上不许
-   * 并排两颗主按钮(交付稿第 78 / 79 格都只画了一颗)。判据读的是**真的画没画出来**
-   * 的那个旗标,不是 `runFailureUi.cloudSwitchCta`:第 4 档存在的理由就是「卡不能是
-   * 死路」,万一哪天有一条路让分类器说了要 CTA 而这颗按钮没渲染,那张卡会一颗主
-   * 按钮都不剩 —— 正是这一档要防的那件事。
+   * 那一档存在的理由是「卡不能是死路」—— 上面三档都没答案时把常驻次级提上来。
+   * 工单之后**每一张卡都必有第三颗 CTA**(Cloud 上是〔重试〕,BYOK 上是
+   * 〔切换到 OpenDesign Cloud〕),死路在结构上已经不可能出现,这一档也就没有
+   * 触发条件了。若仍保留,S18 账号被封这类 `primary-action: contact-support`
+   * 的失败会在 Cloud 上同时给出两颗 primary(〔联系我们〕+〔重试〕),
+   * 违反「一张卡只有一颗主按钮」——〔联系我们〕〔导出日志〕从此恒为次级。
    */
-  const contactSupportIsPrimary =
-    runFailureUi?.primaryAction === 'contact-support' && !showCloudSwitchCta;
   /**
-   * 报错卡上那两颗**常驻**次级(交付稿第 78 格的前两颗)。
+   * 报错卡上那两颗**常驻**次级(OPEND-2807 三颗里的前两颗)。
    *
-   * 它们和 `showErrorActions` 无关 —— 那个旗标问的是「这一档有没有可用的恢复动作」,
-   * 而「联系支持」「导出日志」在任何一档都成立:恰恰是**没有恢复动作**的那几档
-   * (CPU 不支持、运行时定义非法)最需要它们,今天那些卡上一颗按钮都没有。
+   * 它们不看失败类型、也不看跑在哪个 agent 上 —— 产品原话「好多都应该得有导出
+   * 日志这个按钮」,那就不挑,全给。第三颗才是二选一(重试 / 切换到 Cloud)。
    */
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   /**
@@ -2398,7 +2414,9 @@ export function ChatPane({
    * 同样的 device id 传递规则(仅在同意指标上报时带)。入口来源分开记,
    * 这样漏斗能读出「卡」和「弹窗」各自带来多少升级。
    */
-  const openAmrPlans = useCallback((entrySource: 'chat_error_upgrade' | 'chat_upgrade_card') => {
+  // ⚠️ 入口来源只剩 `chat_upgrade_card`:`chat_error_upgrade` 是报错卡上那颗
+  // 〔升级套餐〕的来源,OPEND-2807 之后卡上不再有这颗按钮。
+  const openAmrPlans = useCallback((entrySource: 'chat_upgrade_card') => {
     const attribution = recordAmrEntry(analytics.track, entrySource, new Date(), {
       metricsConsent: config?.telemetry?.metrics === true,
     });
@@ -2416,31 +2434,24 @@ export function ChatPane({
   /**
    * `run_recovery_action_surface_view` 的载荷:这张卡上**真的画出来**的那几颗。
    *
-   * ⚠️ 名字里的 "visible" 是字面意思,不是「阶梯算出了什么」。阶梯那一档改成
-   * 有 Cloud CTA 就整块不画之后,这里必须跟着走同一个 `showLadderAction`,
-   * 否则曝光会报出一颗屏幕上根本不存在的〔重试〕,点击率被稀释成假的。
+   * ⚠️ 名字里的 "visible" 是字面意思。OPEND-2807 把卡收成三颗之后,这里的取值面
+   * 跟着收窄成**两个**:`manual_retry`(跑在 Cloud 上)和 `switch_runtime_retry`
+   * (跑在 CLI / BYOK 上),而且互斥。`authorize_and_retry` / `switch_model_retry` /
+   * `resume_run` 三个值**从此不再由报错卡产生** —— 它们的按钮不在卡上了。
+   * 埋点类型本身没删(`TrackingRunRecoveryActionType` 未动),别的入口若要用还在。
    */
   const visibleRecoveryActionTypes = useMemo(() => {
     const actions: TrackingRunRecoveryActionType[] = [];
     if (!retryAssistant || !onRetry || !runFailureUi) return actions;
-    if (showLadderAction) {
-      if (runFailureUi.primaryAction === 'authorize') actions.push('authorize_and_retry');
-      if (runFailureUi.primaryAction === 'switch-model') actions.push('switch_model_retry');
-      if (canResumeFailedRun) actions.push('resume_run');
-      else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
-        actions.push('manual_retry');
-      }
-    }
-    if (showCloudSwitchCta && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
+    if (showRetryCta) actions.push('manual_retry');
+    else if (onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
     return actions;
   }, [
-    canResumeFailedRun,
     onRetry,
     onSwitchToAmrAndRetry,
     retryAssistant,
     runFailureUi,
-    showCloudSwitchCta,
-    showLadderAction,
+    showRetryCta,
   ]);
   const recoveryAnalyticsProps = useCallback((
     assistantMessage: ChatMessage,
@@ -4259,35 +4270,27 @@ export function ChatPane({
                     actions={(
                       <>
                         {/*
-                          * 稿子第 78 格那一排是〔联系支持〕〔导出日志〕〔从失败处重试〕——
-                          * 前两颗次级、第三颗主。前两颗**不挑失败类型**(产品原话
-                          * 「好多都应该得有导出日志这个按钮」),所以它们排在
-                          * `showErrorActions` 之外:一张一颗按钮都没有的卡
-                          * (CPU 不支持、运行时定义非法)照样有这两条出路。
-                          */}
-                        {/*
-                          * 第 4 档(§6.Z):重试无效、我们也没别的出路时,这颗
-                          * **从次级提为主** —— 不是新增一颗按钮,是同一颗换个分量。
-                          * 位置不动:那一排在 274px 窄面板里的排布是量过的,
-                          * 重排会把 e2e 的溢出判据一起动掉。
-                          */}
-                        {/*
+                          * 三颗按钮那一排(OPEND-2807):〔联系我们〕〔导出日志〕+
+                          * 第三颗 CTA。前两颗**恒在、恒为次级**,不挑失败类型、也不挑
+                          * agent;顺序按稿子:次要在左,主动作在最右。
+                          *
                           * 可见提示按稿子 `729fa43ce7` 的 `src/body-scene.html:302`
                           * (`data-tip="联系支持"`)补上。
                           *
                           * ⚠️ 稿子这一颗**自相矛盾**:场景页是纯图标 + tip,组件全集页
                           * (`src/body-components.html:1452`)是图标 + 可见文字「联系」、
-                          * 一个 tip 都没有。这里只补 tip、**不动形态**(产品今天是
-                          * 图标 + 「联系支持」文字)——「要不要退回纯图标」是产品要拍的,
-                          * 不能顺手做掉。
+                          * 一个 tip 都没有。这里只补 tip、**不动形态**——「要不要退回
+                          * 纯图标」是产品要拍的,不能顺手做掉。
+                          * ⚠️ 文字本身已按 OPEND-2807 从「联系支持」改成「联系我们」
+                          * (19 语齐),所以 tip 和稿子的 `data-tip` 字面不再一致;
+                          * 工单是较新的权威。
                           */}
                         <RunErrorCardAction
                           type="button"
                           className="od-tooltip"
-                          variant={contactSupportIsPrimary ? 'primary' : 'secondary'}
+                          variant="secondary"
                           data-testid="chat-error-contact-support"
                           data-tooltip={t('chat.runError.contactSupportCta')}
-                          {...(contactSupportIsPrimary ? { 'data-primary': 'true' } : {})}
                           onClick={() => setSupportDialogOpen(true)}
                         >
                           <Icon name="headset" size={11} />
@@ -4304,237 +4307,37 @@ export function ChatPane({
                           </RunErrorCardAction>
                         ) : null}
                         {/*
-                          * 阶梯算出来的那一颗(换个模型 / 去设置 / 在终端登录 /
-                          * 授权 / 重试 / 续跑 …)。**有 Cloud CTA 时整块不画** ——
-                          * 用户 2026-09-08:「有切换至 cloud 一律只显示切换至
-                          * cloud,没有的情况下再显示那个重试」。判据见
-                          * `showLadderAction`。
+                          * 重试(OPEND-2807)。
+                          *
+                          * 工单:「[ChatPanel] 错误卡片未还原设计样式,**应该只有三个
+                          * 按钮**」——
+                          *   使用 OpenDesign Cloud:联系我们 / 导出日志 / **重试**
+                          *   使用 CLI / BYOK:      联系我们 / 导出日志 / **切换到 Cloud**
+                          * 用户当面补充:「别分那么多情况了」「amr 只有这个 cta」。
+                          *
+                          * 于是这里**不再按失败类型分档**:阶梯算出来的那一整套对症动作
+                          * (授权并重试 / 去设置 / 去充值 / 升级套餐 / 更换模型 /
+                          * 在终端登录 / 在终端换模型 / 继续运行)整块从卡上撤掉,
+                          * 只剩这一颗重试,而且只在**没有** Cloud CTA 时出现 ——
+                          * 也就是这一轮已经跑在 Cloud 上(`withoutCloudSelfPromotion`)。
+                          * 两颗按钮天然互斥,所以卡上永远正好三颗。
+                          *
+                          * 同一副壳(共享 `Button size="sm"`):稿子 3360-3377 那一排
+                          * 三颗都是 `.btn`,差别只在 primary / secondary。
                           */}
-                        {showLadderAction && retryAssistant && onRetry && runFailureUi ? (
-                          <RunErrorCardActionGroup>
-                            {runFailureUi.primaryAction === 'authorize' ? (
-                              // Sign in to AMR inline — the pill drives vela login,
-                              // surfaces the activation URL/code when the browser
-                              // doesn't auto-open, and on success we retry the run
-                              // without bouncing the user out to Settings.
-                              <AmrLoginPill
-                                className="chat-error-amr-login"
-                                signInLabel={t('chat.amrError.authorizeCta')}
-                                amrEntrySourceDetail="chat_error_authorize_retry"
-                                initialStatus={inlineAmrLoginStatus}
-                                skipInitialRefresh
-                                metricsConsent={config?.telemetry?.metrics === true}
-                                installationId={config?.installationId}
-                                showActivationDetails
-                                hideSignedOutStatus
-                                revealPendingCancelAction
-                                onSignInStarted={() => {
-                                  trackRecoveryClick(
-                                    retryAssistant,
-                                    'authorize_and_retry',
-                                  );
-                                  if (
-                                    projectId
-                                    && activeConversationId
-                                    && amrAuthRetryMountId
-                                    && amrAuthRetryWorkspaceIdentityKey
-                                    && onArmAmrAuthRetryContinuation
-                                  ) {
-                                    onArmAmrAuthRetryContinuation({
-                                      projectId,
-                                      conversationId: activeConversationId,
-                                      assistantId: retryAssistant.id,
-                                      workspaceIdentityKey: amrAuthRetryWorkspaceIdentityKey,
-                                      originMountId: amrAuthRetryMountId,
-                                    });
-                                  }
-                                }}
-                                onStatusChange={(loginStatus) => {
-                                  consumeAmrAuthRetryIfAuthorized(loginStatus);
-                                }}
-                              />
-                            ) : runFailureUi.primaryAction === 'launch-terminal-auth' ? (
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                onClick={() => {
-                                  onLaunchAntigravityOauth?.();
-                                }}
-                              >
-                                {t('chat.antigravityError.launchTerminalCta')}
-                              </RunErrorCardAction>
-                            ) : runFailureUi.primaryAction === 'launch-terminal-switch-model' ? (
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                onClick={() => {
-                                  onLaunchAntigravityOauth?.();
-                                }}
-                              >
-                                {t('chat.antigravityError.launchSwitchModelCta')}
-                              </RunErrorCardAction>
-                            ) : runFailureUi.primaryAction === 'switch-model' ? (
-                              /*
-                               * 模型下线 / 不在套餐里 —— 重试必然同样结果,所以这一档
-                               * 不给重试(设计原则四)。
-                               *
-                               * 落点按交付稿:「更换模型**直接打开模型选择器**,选完自动
-                               * 重跑」(`error-ux-design.md:130`)。宿主接了 `onSwitchModel`
-                               * 就开 composer 那颗触发器背后的内联列表;没接的回落设置面板。
-                               */
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                data-testid="chat-error-switch-model"
-                                onClick={() => {
-                                  trackRecoveryClick(retryAssistant, 'switch_model_retry');
-                                  if (onSwitchModel && retryAssistant) onSwitchModel(retryAssistant);
-                                  else onOpenSettings?.('execution');
-                                }}
-                              >
-                                {t('chat.runError.switchModelCta')}
-                              </RunErrorCardAction>
-                            ) : runFailureUi.primaryAction === 'open-settings' ? (
-                              /*
-                               * S30 环境类。落点是现成的那一条:设置 → 本地 CLI →
-                               * 「高级:代理与自定义路径」,也就是 `execution` 这一节 ——
-                               * 那个折叠块就渲染在 `activeSection === 'execution'` 里
-                               * (`SettingsDialog.tsx` 的 `agent-cli-env`),而它填的
-                               * `configuredEnv` 在 `runtimes/env.ts` 里优先级最高。
-                               *
-                               * 不新造入口,也不新增一档 recovery 埋点:这颗不起新 run,
-                               * 和〔联系支持〕〔切到 Cloud〕同类。这张卡的重试仍按
-                               * `secondaryRetry` 走 `manual_retry`。
-                               */
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                data-testid="chat-error-open-settings"
-                                onClick={() => {
-                                  onOpenSettings?.('execution');
-                                }}
-                              >
-                                {t('chat.runError.openSettingsCta')}
-                              </RunErrorCardAction>
-                            ) : runFailureUi.primaryAction === 'recharge' ? (
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                onClick={() => {
-                                  const attribution = recordAmrEntry(
-                                    analytics.track,
-                                    'chat_error_recharge',
-                                    new Date(),
-                                    {
-                                      metricsConsent:
-                                        config?.telemetry?.metrics === true,
-                                    },
-                                  );
-                                  // Forward the canonical telemetry device id to
-                                  // AMR only on metrics opt-in (see
-                                  // amrHandoffDeviceId). Sourced from the current
-                                  // config.installationId / resolved device id,
-                                  // not the mount-time bootstrap UUID, so the join
-                                  // key matches the telemetry identity even across
-                                  // a Delete-my-data rotation.
-                                  const deviceId = amrHandoffDeviceId({
-                                    metricsConsent:
-                                      config?.telemetry?.metrics === true,
-                                    resolvedDeviceId: getResolvedDeviceId(),
-                                    installationId: config?.installationId,
-                                  });
-                                  window.open(
-                                    attributedAmrUrl(
-                                      amrRechargeUrlForProfile(amrProfile),
-                                      attribution,
-                                      deviceId,
-                                    ),
-                                    '_blank',
-                                    'noopener,noreferrer',
-                                  );
-                                }}
-                              >
-                                {t('chat.amrError.rechargeCta')}
-                              </RunErrorCardAction>
-                            ) : runFailureUi.primaryAction === 'upgrade' ? (
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                onClick={() => {
-                                  const attribution = recordAmrEntry(
-                                    analytics.track,
-                                    'chat_error_upgrade',
-                                    new Date(),
-                                    {
-                                      metricsConsent:
-                                        config?.telemetry?.metrics === true,
-                                    },
-                                  );
-                                  const deviceId = amrHandoffDeviceId({
-                                    metricsConsent:
-                                      config?.telemetry?.metrics === true,
-                                    resolvedDeviceId: getResolvedDeviceId(),
-                                    installationId: config?.installationId,
-                                  });
-                                  window.open(
-                                    attributedAmrUrl(
-                                      amrPlansUrlForProfile(amrProfile),
-                                      attribution,
-                                      deviceId,
-                                    ),
-                                    '_blank',
-                                    'noopener,noreferrer',
-                                  );
-                                }}
-                              >
-                                {t('chat.amrBalanceGate.plansCta')}
-                              </RunErrorCardAction>
-                            ) : null}
-                            {canResumeFailedRun ? (
-                              // Resumable failure: continue the agent's existing
-                              // CLI session instead of restarting from scratch, so
-                              // partial work is kept. Replaces the from-scratch
-                              // Retry as the single primary recovery action. Use
-                              // the wired resume handler when present, otherwise a
-                              // plain send of the continue prompt — never the
-                              // re-sending Retry path, which would resume + repeat.
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                onClick={() =>
-                                  {
-                                    trackRecoveryClick(retryAssistant, 'resume_run');
-                                    if (onResumeRun) onResumeRun(retryAssistant);
-                                    else onSend(RESUME_CONTINUE_PROMPT, [], []);
-                                  }
-                                }
-                              >
-                                {t('chat.resumeRunCta')}
-                              </RunErrorCardAction>
-                            ) : runFailureUi.primaryAction === 'retry' ||
-                              runFailureUi.secondaryRetry ? (
-                              /*
-                               * 和旁边两颗**同一副壳**:稿子 3360-3377 那一排三颗都是
-                               * `.btn`,差别只在 primary / secondary。原来这颗是裸
-                               * `<button class="chat-error-action">`,自带 4px 圆角和
-                               * 6px 14px 内距,而旁边两颗走共享 Button 的 sm(999px /
-                               * 4px 11px)—— 排在一起圆角明显对不上(用户 2026-08-27)。
-                               * 图标也照稿子补上:那一排三颗都带图标。
-                               */
-                              <RunErrorCardAction
-                                type="button"
-                                variant={errorActionVariant}
-                                data-testid="chat-error-retry"
-                                onClick={() => {
-                                  trackRecoveryClick(retryAssistant, 'manual_retry');
-                                  onRetry(retryAssistant, 'manual_retry');
-                                }}
-                              >
-                                <Icon name="refresh" size={11} />
-                                {t('promptTemplates.retry')}
-                              </RunErrorCardAction>
-                            ) : null}
-                          </RunErrorCardActionGroup>
+                        {showRetryCta && retryAssistant && onRetry ? (
+                          <RunErrorCardAction
+                            type="button"
+                            variant="primary"
+                            data-testid="chat-error-retry"
+                            onClick={() => {
+                              trackRecoveryClick(retryAssistant, 'manual_retry');
+                              onRetry(retryAssistant, 'manual_retry');
+                            }}
+                          >
+                            <Icon name="refresh" size={11} />
+                            {t('promptTemplates.retry')}
+                          </RunErrorCardAction>
                         ) : null}
                         {/*
                           * 主按钮位:〔切换到 OpenDesign Cloud 并重试〕(OPEND-2772)。

@@ -46,27 +46,22 @@ describe('失败卡三颗按钮同壳', () => {
   });
 
   /*
-   * ⚠️ OPEND-2772(T68)之后重试**不再写死 primary**,所以这条判据从
-   * 「它是不是 primary」改成「它的分量是不是跟旁边那几颗同源」—— 这才是这份
-   * 文件真正要守的东西(同一副壳、同一套 radius/padding)。
+   * ⚠️ 这条判据翻过两次,但这份文件真正要守的东西没变:**同一副壳、同一套
+   * radius/padding**。
    *
-   * 用户 2026-09-08 又把「让位」改成「**有 Cloud CTA 就不画**」,所以阶梯那一档
-   * 落到屏幕上时 `errorActionVariant` 恒为 `'primary'`。这里仍然认它,是因为
-   * 同一个变量还管着**通用本地 CLI 逃生口**〔使用本地〕的分量 —— 那一颗不属于
-   * 阶梯,Cloud CTA 在场时它照旧退成次级,所以两支都还活着。
+   * OPEND-2772(T68)让重试不再写死 primary;OPEND-2807 把卡收成三颗之后,
+   * 第三颗只在**跑在 Cloud 上**时是重试(BYOK 那一侧是〔切换到 Cloud〕),
+   * 两者互斥,所以重试重新写死 `variant="primary"` —— 它就是这张卡的那颗 CTA。
    *
-   * 「一张卡只有一颗主按钮」由 `opend-2772-one-card-one-cta.test.tsx` 钉;
-   * 「有 CTA 时阶梯那颗不画」由 `opend-2772b-cloud-cta-replaces-retry.test.tsx` 钉。
+   * 「恰好三颗、且是哪三颗」由 `opend-2807-error-card-three-actions.test.tsx` 钉。
    */
-  it('重试要走报错卡动作组件,分量跟旁边几颗同一个出口', () => {
+  it('重试要走报错卡动作组件,而且是这张卡的那颗主按钮', () => {
     const src = readChatPane();
     const near = sliceAround(src, "promptTemplates.retry");
     expect(near).toMatch(/<RunErrorCardAction/);
-    expect(near).toMatch(/variant=\{errorActionVariant\}/);
-    // 没有 Cloud CTA 的那一档(已经跑在 Cloud 上)重试仍然是主按钮
-    expect(src).toMatch(
-      /errorActionVariant: 'primary' \| 'secondary' =\s*\n?\s*showCloudSwitchCta \? 'secondary' : 'primary';/,
-    );
+    expect(near).toMatch(/variant="primary"/);
+    // 三颗按钮的第三颗由「跑在不在 Cloud 上」二选一,别的判据一律不许再插进来
+    expect(src).toMatch(/const showRetryCta = !showCloudSwitchCta;/);
   });
 
   it('旁边两颗同样走报错卡动作组件 —— 尺寸不再由调用方各写一份', () => {

@@ -22,6 +22,7 @@ import {
 import {
   applyStandardMocks,
   failedRunEventBody,
+  routeAgents,
   routeMockAgents,
   routeRunSequence,
   routeSuccessfulRuns,
@@ -1290,8 +1291,54 @@ test('[P0] a successful retry after a failed send restores the workspace to a fr
   await expect(page.getByText('retry prompt that succeeds')).toBeVisible();
 });
 
+/**
+ * 把这一页切到 **Cloud(AMR)** 那一侧运行。
+ *
+ * OPEND-2807 之后报错卡只有三颗按钮,第三颗由「这一轮跑在不在 Cloud 上」二选一:
+ * Cloud 给〔重试〕,CLI / BYOK 给〔切换到 OpenDesign Cloud〕。要点〔重试〕的用例
+ * 因此必须是一轮 Cloud 的失败 —— 标准夹具的 `mock` agent 属于后者。
+ *
+ * 账号态不用另外造:suite fixture 把 `/api/integrations/vela/status` 路由成 503
+ * 「暂时读不出」,应用保持未决且**不跳登录页**,所以这里只换 agent、不碰登录门。
+ */
+async function useCloudAgentFixture(page: Page): Promise<void> {
+  const cloudAgent = {
+    id: 'amr',
+    name: 'OpenDesign Cloud',
+    bin: 'vela',
+    available: true,
+    version: 'test',
+    models: [{ id: 'default', label: 'Default' }],
+  };
+  const cloudConfig = {
+    mode: 'daemon',
+    apiKey: '',
+    baseUrl: 'https://api.anthropic.com',
+    model: 'claude-sonnet-4-5',
+    agentId: 'amr',
+    skillId: null,
+    designSystemId: null,
+    onboardingCompleted: true,
+    agentModels: {},
+    privacyDecisionAt: 1,
+    telemetry: { metrics: false, content: false, artifactManifest: false },
+  };
+  await page.addInitScript(
+    ({ key, value }: { key: string; value: string }) => window.localStorage.setItem(key, value),
+    { key: STORAGE_KEY, value: JSON.stringify(cloudConfig) },
+  );
+  await page.route('**/api/app-config', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({ json: { config: cloudConfig } });
+  });
+  await routeAgents(page, [cloudAgent]);
+}
+
 test('[P0] retrying a failed run does not duplicate the original user message', async ({ page }) => {
-  await routeMockAgents(page);
+  await useCloudAgentFixture(page);
 
   await routeRunSequence(page, {
     runIdPrefix: 'retry-run',
@@ -1311,7 +1358,8 @@ test('[P0] retrying a failed run does not duplicate the original user message', 
   const prompt = 'retry dedup prompt';
   await sendPrompt(page, prompt);
   await expectFriendlyGenericRunFailure(page);
-  const retryButton = runErrorCard(page).getByRole('button', { name: /^Retry$/i });
+  // OPEND-2807:第三颗 CTA。Cloud 那一侧是〔重试〕,按稳定 testid 认。
+  const retryButton = runErrorCard(page).getByTestId('chat-error-retry');
   await expect(retryButton).toBeVisible();
   await expect(page.locator('.msg.user', { hasText: prompt })).toHaveCount(1);
 

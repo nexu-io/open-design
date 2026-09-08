@@ -223,9 +223,18 @@ describe('ChatPane session switcher', () => {
   // 同上:这颗〔去充值〕原来钉在 `AMR_INSUFFICIENT_BALANCE` 上,现在那一档整张卡
   // 都不画了。深链本身(profile 作用域的控制台地址)仍然是产品行为,由另一条同样
   // 走「充值」主动作的失败来守 —— 工作区额度用尽。
-  it('opens the profile-scoped console from the AMR recharge action', () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    render(
+  /*
+   * ⚠️ 这里原来有两条:报错卡上的〔充值〕和〔升级套餐〕各自开出带归因的
+   * profile-scoped console URL。**OPEND-2807 把这两颗按钮从报错卡上撤掉了**
+   * (「错误卡片…应该只有三个按钮」+ 用户「别分那么多情况了」),
+   * 于是 `chat_error_recharge` / `chat_error_upgrade` 两个入口来源不再产生。
+   *
+   * URL 构造本身没删,升级卡那条路(`chat_upgrade_card`)还在用同一套
+   * `attributedAmrUrl` + profile 解析,归因判据由升级卡自己的用例守。
+   * 这里留一条钉「按钮确实不上卡了」,免得它悄悄回来变成第四颗。
+   */
+  it('OPEND-2807:余额 / 套餐类失败也只给三颗按钮,充值与升级不再上卡', () => {
+    const { container } = render(
       <ChatPane
         messages={[
           failedAssistantMessage({
@@ -251,71 +260,17 @@ describe('ChatPane session switcher', () => {
       />,
     );
 
-    const rechargeAction = screen.getByText('chat.amrError.rechargeCta');
-    const retryAction = screen.getByText('promptTemplates.retry');
-    expect(rechargeAction.parentElement).toBe(retryAction.parentElement);
+    expect(screen.queryByText('chat.amrError.rechargeCta')).toBeNull();
+    expect(screen.queryByText('chat.amrBalanceGate.plansCta')).toBeNull();
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer).toBeTruthy();
     expect(
-      rechargeAction.parentElement?.closest('[data-user-action-footer="true"]'),
-    ).toBeTruthy();
-
-    fireEvent.click(rechargeAction);
-
-    const [consoleUrl, target, features] = openSpy.mock.calls[0] ?? [];
-    expect(target).toBe('_blank');
-    expect(features).toBe('noopener,noreferrer');
-    const parsedConsoleUrl = new URL(String(consoleUrl));
-    // Top-up reports on the console dashboard now, not a wallet page.
-    expect(`${parsedConsoleUrl.origin}${parsedConsoleUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/dashboard',
-    );
-    // The plain top-up entry must NOT carry the upgrade intent — it opens the
-    // console to add credit, not the plan catalog.
-    expect(parsedConsoleUrl.searchParams.get('billing')).toBeNull();
-    expect(parsedConsoleUrl.searchParams.get('od_entry_source')).toBe('chat_error_recharge');
-  });
-
-  it('opens the profile console plan surface from the AMR tier upgrade action', () => {
-    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
-    render(
-      <ChatPane
-        messages={[
-          failedAssistantMessage({
-            id: 'msg-amr-upgrade',
-            runId: 'run-amr-upgrade',
-            code: 'AMR_TIER_UPGRADE_REQUIRED',
-            agentId: 'amr',
-          }),
-        ]}
-        streaming={false}
-        error={null}
-        projectId="project-1"
-        projectFiles={[]}
-        onEnsureProject={async () => 'project-1'}
-        onSend={vi.fn()}
-        onStop={vi.fn()}
-        onRetry={vi.fn()}
-        conversations={[conversation({ id: 'conv-1', title: 'Current' })]}
-        activeConversationId="conv-1"
-        onSelectConversation={vi.fn()}
-        onDeleteConversation={vi.fn()}
-        config={{ agentCliEnv: { amr: { OPEN_DESIGN_AMR_PROFILE: 'test' } } } as unknown as AppConfig}
-      />,
-    );
-
-    fireEvent.click(screen.getByText('chat.amrBalanceGate.plansCta'));
-
-    const [plansUrl, target, features] = openSpy.mock.calls[0] ?? [];
-    expect(target).toBe('_blank');
-    expect(features).toBe('noopener,noreferrer');
-    // The rendered profile is `test`, and T54 (2026-09-06) made the plans link
-    // honor it: this used to assert the PRODUCTION Pricing URL, which is how a
-    // non-prod build sent people to production checkout.
-    const parsedPlansUrl = new URL(String(plansUrl));
-    expect(`${parsedPlansUrl.origin}${parsedPlansUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/dashboard',
-    );
-    expect(parsedPlansUrl.searchParams.get('billing')).toBe('plan');
-    expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
   });
 });
 

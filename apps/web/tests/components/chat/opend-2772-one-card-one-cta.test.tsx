@@ -20,8 +20,8 @@
  *   ③ **AMR 自己不出这颗 CTA** —— 不能对着已经在 Cloud 上的人劝他买 Cloud
  *      (`withoutCloudSelfPromotion` 的反向用例)。
  *
- * ⚠️ 文案一个字都没动:这颗 CTA 复用今天切换卡上那一句
- * `chat.amrCard.switchCta`「切换到 OpenDesign Cloud 并重试」。
+ * ⚠️ 合并当时文案一个字没动;文案是**后来**由 OPEND-2807 改的 ——
+ * `chat.amrCard.switchCta` 现在是「切换到 OpenDesign Cloud」。
  */
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -96,8 +96,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-/** 产品文案逐字 —— `chat.amrCard.switchCta` */
-const CLOUD_CTA = '切换到 OpenDesign Cloud 并重试';
+/**
+ * 产品文案逐字 —— `chat.amrCard.switchCta`。
+ * ⚠️ OPEND-2807 把这句从「切换到 OpenDesign Cloud 并重试」缩成工单写的
+ * 「切换到 OpenDesign Cloud」(19 语齐)。
+ */
+const CLOUD_CTA = '切换到 OpenDesign Cloud';
 
 function failedMessage(opts: { agentId: string; code: string; detail?: string }): ChatMessage {
   return {

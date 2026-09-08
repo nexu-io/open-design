@@ -1,5 +1,17 @@
 // @vitest-environment jsdom
 /**
+ * ⚠️ **OPEND-2807 把〔更换模型〕从报错卡上撤掉了。**
+ *
+ * 工单「[ChatPanel] 错误卡片未还原设计样式,应该只有三个按钮」+ 用户
+ * 「别分那么多情况了」,按失败类型分档的对症动作整块不再上卡。
+ * **代价**:模型下线这一档从此只剩一颗会得到同样结果的〔重试〕(Cloud)或
+ * 〔切换到 Cloud〕(BYOK),与设计原则四直接冲突 —— 已写进 PR 描述与决策表。
+ *
+ * 下面第一节改成钉「它确实不上卡了」;第二节(文案不许和落点打架)保留 ——
+ * 那一条守的是字典里那句话,和按钮在不在无关。
+ *
+ * 以下是这份文件原本的红测意图,留作来历:
+ *
  * 红测(E3):〔更换模型〕要**直接打开模型选择器**,不是把人送进设置面板。
  *
  * 权威是交付稿自己的话(`docs/design/run-errors/error-ux-design.md:130`,S08):
@@ -81,28 +93,32 @@ function renderPane(extra: Record<string, unknown>) {
   );
 }
 
-describe('E3 · 〔更换模型〕的落点', () => {
-  it('opens the model picker instead of sending the user to Settings', () => {
+describe('OPEND-2807 · 〔更换模型〕不再上报错卡', () => {
+  it('模型下线的卡上没有〔更换模型〕,也不会去开选择器或设置', () => {
     const onSwitchModel = vi.fn();
     const onOpenSettings = vi.fn();
     const { container } = renderPane({ onSwitchModel, onOpenSettings, onRetry: vi.fn() });
 
-    const button = container.querySelector<HTMLButtonElement>('[data-testid="chat-error-switch-model"]');
-    expect(button, '这一档应该给一颗〔更换模型〕').toBeTruthy();
-    fireEvent.click(button!);
-
-    expect(onSwitchModel, '稿子要的是「直接打开模型选择器」').toHaveBeenCalledTimes(1);
-    // 带上是哪一轮 —— 选完模型要重跑的就是它(和 onRetry 同一副形状)
-    expect(onSwitchModel.mock.calls[0]?.[0]).toMatchObject({ id: 'assistant-1' });
-    expect(onOpenSettings, '不该再把人丢进设置面板').not.toHaveBeenCalled();
+    expect(
+      container.querySelector('[data-testid="chat-error-switch-model"]'),
+      'OPEND-2807 之后这一颗不该再上卡',
+    ).toBeNull();
+    expect(onSwitchModel).not.toHaveBeenCalled();
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
-  it('still falls back to Settings when no picker is wired', () => {
-    // 首页之类没有内联选择器的宿主:退回设置,总好过按了没反应。
-    const onOpenSettings = vi.fn();
-    const { container } = renderPane({ onOpenSettings, onRetry: vi.fn() });
-    fireEvent.click(container.querySelector<HTMLButtonElement>('[data-testid="chat-error-switch-model"]')!);
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+  it('卡上就是那三颗 —— 这一轮跑在 Cloud 上,所以第三颗是〔重试〕', () => {
+    const { container } = renderPane({ onSwitchModel: vi.fn(), onRetry: vi.fn() });
+
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer).toBeTruthy();
+    expect(
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
   });
 });
 
@@ -110,6 +126,10 @@ describe('E3 · 卡上的话不许和按钮的落点打架', () => {
   /**
    * 按钮改成就地开选择器之后,原来那句「请**在设置中**切换到其他可用模型后重试」
    * 就成了假话 —— 它指的路和按下去发生的事不是一回事。真机上先照出来的正是这个。
+   *
+   * ⚠️ OPEND-2807 之后按钮整个不上卡了,于是**又有了一处文案与落点的错配**:
+   * 正文仍写着「更换模型后重试」,而卡上已经没有换模型的入口。
+   * 卡片标题 / 正文归另一单(按产品文档逐格核对)统一处理,这里只记一笔,不动手。
    */
   it('no longer sends the reader to Settings in words', async () => {
     const { readFileSync } = await import('node:fs');

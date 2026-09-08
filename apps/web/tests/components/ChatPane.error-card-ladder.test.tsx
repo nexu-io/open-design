@@ -99,6 +99,9 @@ function renderChat(message: ChatMessage) {
       onSend={vi.fn()}
       onStop={vi.fn()}
       onRetry={vi.fn()}
+      // Cloud CTA 只在宿主真的接得住时才画(ChatPane 的
+      // `cloudSwitchHandoffAvailable`);ProjectView 是接得住的那一种。
+      onSwitchToAmrAndRetry={vi.fn()}
       conversations={[
         { projectId: 'project-1', id: 'conv-1', title: 'Current', createdAt: 1, updatedAt: 1 },
       ]}
@@ -143,37 +146,40 @@ describe('报错卡兜底文案(E2)', () => {
   });
 });
 
-describe('第 4 档:联系支持提为主(E6)', () => {
+describe('第 4 档「联系支持提为主」已随 OPEND-2807 退场(E6)', () => {
   /*
-   * ⚠️ OPEND-2772(T68)缩小了这一档的适用面,没有删掉它。
+   * 第 4 档的意思一直是「**这张卡不能是死路**」——上面三档都没答案时,把常驻次级的
+   * 〔联系我们〕提上来当主按钮。
    *
-   * 第 4 档的意思一直是「这张卡不能是死路」——上面三档都没答案时,把常驻次级的
-   * 〔联系支持〕提上来。产品 2026-09-07 推翻 §6.Z 的阶梯之后,**非 Cloud 的卡主位
-   * 归那颗〔切换到 OpenDesign Cloud 并重试〕**,那本身就是一条活路,所以这一档不再
-   * 需要在 BYOK 上提〔联系支持〕。
+   * OPEND-2807 之后每一张报错卡都必有第三颗 CTA(Cloud 上是〔重试〕,BYOK 上是
+   * 〔切换到 OpenDesign Cloud〕),死路在结构上已经不可能出现,这一档也就没有
+   * 触发条件了。若仍保留,S18 账号被封这类失败会在 Cloud 上同时给出两颗 primary。
    *
-   * 提为主的场景**仍然存在**,而且正是最该有的那个:已经跑在 Cloud 上的 run
-   * (它拿不到 Cloud CTA)。所以这一节改成两侧都钉,而不是把它删掉。
+   * 所以这一节从「提为主」翻成两侧都钉:**〔联系我们〕恒为次级,而主按钮永远
+   * 是第三颗** —— 这才是「卡不能是死路」今天的实现方式。
    */
-  it('BYOK 封号:主位归 Cloud CTA,〔联系支持〕退回常驻次级', () => {
+  it('BYOK 封号:主位归 Cloud CTA,〔联系我们〕是次级', () => {
     renderChat(failedMessage({}, { failureDetail: 'account_suspended' }));
     const support = screen.getByTestId('chat-error-contact-support');
     expect(support.dataset.primary).toBeUndefined();
+    expect(support.dataset.runErrorAction).toBe('secondary');
     expect(
       screen.getByTestId('chat-error-switch-to-cloud').dataset.runErrorAction,
     ).toBe('primary');
   });
 
-  it('已经在 Cloud 上的封号:没有 Cloud CTA,〔联系支持〕仍然提为主', () => {
+  it('已经在 Cloud 上的封号:主位归〔重试〕,〔联系我们〕同样是次级', () => {
     renderChat(
       failedMessage({ agentId: 'amr' }, { failureDetail: 'account_suspended' }),
     );
     expect(screen.queryByTestId('chat-error-switch-to-cloud')).toBeNull();
     const support = screen.getByTestId('chat-error-contact-support');
-    expect(support.dataset.primary).toBe('true');
+    expect(support.dataset.primary).toBeUndefined();
+    expect(support.dataset.runErrorAction).toBe('secondary');
+    expect(screen.getByTestId('chat-error-retry').dataset.runErrorAction).toBe('primary');
   });
 
-  it('普通可重试的卡上,〔联系支持〕仍是常驻次级', () => {
+  it('普通可重试的卡上,〔联系我们〕仍是常驻次级', () => {
     renderChat(failedMessage({}, { failureDetail: 'process_crashed' }));
     const support = screen.getByTestId('chat-error-contact-support');
     expect(support.dataset.primary).toBeUndefined();

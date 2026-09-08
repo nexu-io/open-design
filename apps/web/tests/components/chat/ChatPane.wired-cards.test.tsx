@@ -165,8 +165,13 @@ describe('ChatPane — 报错卡的常驻动作', () => {
 
     expect(screen.getByTestId('chat-error-contact-support')).toBeTruthy();
     expect(screen.getByTestId('chat-error-export-logs')).toBeTruthy();
-    // 这一档不该有重试 —— 重试必然同样结果。
-    expect(screen.queryByTestId('chat-error-retry')).toBeNull();
+    /*
+     * ⚠️ 原来这里钉的是「这一档不该有重试 —— 重试必然同样结果」(设计原则四)。
+     * OPEND-2807 之后卡上不再按失败类型分档,Cloud 上的第三颗恒为〔重试〕,
+     * 所以这一条不再成立。**原则四与工单的冲突已列进 PR 描述交产品定夺**;
+     * 这里钉现状,并守住「一颗都不多」。
+     */
+    expect(screen.getByTestId('chat-error-retry')).toBeTruthy();
   });
 
   it('只有面板级错误、没有可重试轮次时，两颗常驻动作仍共用描边次级壳', () => {
@@ -213,22 +218,31 @@ describe('ChatPane — 报错卡的常驻动作', () => {
 });
 
 describe('ChatPane — 模型不可用给「换个模型」而不是重试', () => {
-  it('AMR_MODEL_UNAVAILABLE 不给重试', () => {
-    renderChat({ messages: [failedMessage({ code: 'AMR_MODEL_UNAVAILABLE' })] });
-
-    expect(screen.queryByRole('button', { name: 'promptTemplates.retry' })).toBeNull();
-    expect(screen.getByTestId('chat-error-switch-model')).toBeTruthy();
-  });
-
-  it('点「换个模型」落到真实的模型切换面板(设置 · 执行)', () => {
+  /*
+   * ⚠️ 这两条钉的是〔更换模型〕:模型下线时不给重试、给一颗直接开模型选择器的按钮。
+   * OPEND-2807 把对症动作整块撤出报错卡,〔更换模型〕也在其中,所以这两条的
+   * 被测对象已经不存在。**代价**:模型下线这一档从此只剩「重试」,而重试必然
+   * 同样结果 —— 与设计原则四直接冲突,已列进 PR 描述交产品定夺。
+   *
+   * 这里改成钉「它确实不上卡了」+「卡上仍是那三颗」,把冲突留在测试里当凭据。
+   */
+  it('OPEND-2807:模型不可用也只给三颗按钮,〔更换模型〕不再上卡', () => {
     const onOpenSettings = vi.fn();
-    renderChat({
+    const { container } = renderChat({
       messages: [failedMessage({ code: 'AMR_MODEL_UNAVAILABLE' })],
       onOpenSettings,
     });
 
-    fireEvent.click(screen.getByTestId('chat-error-switch-model'));
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
+    expect(screen.queryByTestId('chat-error-switch-model')).toBeNull();
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 });
 

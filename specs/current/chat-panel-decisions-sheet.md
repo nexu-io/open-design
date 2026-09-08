@@ -495,55 +495,75 @@ T4 / T6 是小的默认值问题,现状能跑,不急。
 - daemon 在源会话没有标题时整个压掉 `forkedInto` 戳(`routes/project/conversations.ts`「拿不到源标题就不盖」)。标题现在已经不渲染了,无标题的源会话理应仍然值得那条分界线。
 
 ---
+## 报错卡只有三颗按钮,只分两种情况(OPEND-2807,2026-09-08 产品拍板)
 
-## 报错卡动作排:有〔切换到 Cloud〕时不再给〔重试〕(2026-09-08 用户拍板,选候选 B)
+**工单(权威)**:「[ChatPanel] 错误卡片未还原设计样式,**应该只有三个按钮**」
 
-**背景**:OPEND-2772 把〔切换到 OpenDesign Cloud 并重试〕铺到所有 BYOK / 本地 CLI 的
-报错卡主按钮位之后,阶梯算出来的那一颗(换个模型 / 去设置 / 在终端登录 / 重试 / 续跑 …)
-按 `run-error-catalog.md` §6.ZB 的**保守解**留在卡上、降为次级。同事随后反馈一张卡上
-出现两颗 CTA。
+| 运行环境 | 三颗 |
+|---|---|
+| AMR / OpenDesign Cloud | 联系我们 · 导出日志 · **重试** |
+| CLI / BYOK | 联系我们 · 导出日志 · **切换到 OpenDesign Cloud** |
 
-**用户逐字**(转述同事,2026-09-08):
+**用户当面补充(逐字)**:「**别分那么多情况了**」「**amr 只有这个 cta**」。
 
-> 「同事说还有情况会出现**重试**和**切换至 cloud 并重试**,两个 CTA 按钮…
-> **有切换至 cloud 一律只显示切换至 cloud,没有的情况下再显示那个重试**」
+**这推翻了 §6.ZB 末尾的 A / B / C 三候选框架。** 那三条都还在讨论「阶梯算出来的
+那颗动作留不留、留成什么分量」;工单的答案是**它压根不上卡**,也就没有分档可言。
+`run-error-catalog.md` §6.ZB 的候选表**原文不动**(它记录的是当时摆给产品的选项),
+本条是它的终局答案。当天更早两版口径(「整组不出」「只让重试/续跑与 Cloud CTA
+互斥」)同样作废,以本条为准。
 
-**裁决**:选 `run-error-catalog.md` §6.ZB 末尾三个候选里的 **B**。
-§6.ZB 那张候选表**原文不动**(它记录的是当时摆给产品的三个选项),本条是它的答案。
+**落地**
 
-**落地范围**
+1. `ChatPane` 的 `RunErrorCardActionGroup` 整块撤掉。随之不再上卡的对症动作:
+   〔授权并重试〕(内联 AmrLoginPill)〔去设置〕〔去充值〕〔升级套餐〕〔更换模型〕
+   〔在终端登录〕〔在终端换模型〕〔继续运行〕。
+2. 第三颗由一个具名判据 `showRetryCta = !showCloudSwitchCta` 二选一;两颗天然互斥
+   且必有其一(`amr-guidance.ts` 出口不变式两侧同源),所以卡上永远正好三颗。
+3. 〔联系我们〕〔导出日志〕恒在、**恒为次级**。阶梯第 4 档「〔联系支持〕升格成
+   主按钮」一并删除 —— 每张卡都必有第三颗 CTA,死路在结构上不可能出现;若保留,
+   S18 账号被封会在 Cloud 上同时给出两颗 primary。
+4. **接手方不在场就不让位**(评审 PerishCode · `PRRT_kwDOSOgY8s6gG7NN`):
+   `showCloudSwitchCta` 额外要求宿主真的接了 `onSwitchToAmrAndRetry` 或
+   `onOpenAmrSettings`。`workspace/SideChatTab.tsx` 只传 `onRetry`,在那里画出
+   CTA 又压掉重试会得到一颗点了没反应的按钮 + 一张没有出路的卡。三颗按钮、两种
+   情况一个没变,变的只是「哪一种情况」的判据。
 
-1. 有 Cloud CTA 时,`ChatPane` 里那一组阶梯动作(`RunErrorCardActionGroup`)**整块不渲染** ——
-   〔重试〕〔更换模型〕〔去设置〕〔在终端登录〕〔授权并重试〕〔继续运行〕一并让位。
-   判据是具名的 `showLadderAction`(= `!showCloudSwitchCta`)。
-2. **反向不变式没变**:已经跑在 Cloud 上的 run 拿不到 Cloud CTA
-   (`amr-guidance.ts` 的 `withoutCloudSelfPromotion`),那一颗照旧是这张卡的主按钮、照旧点得动。
-3. 曝光埋点跟着走同一个判据:`visibleRecoveryActionTypes` 不再报出屏幕上不存在的动作。
+**文案(19 语齐,`types.ts` 两个键都已存在,只改值)**
 
-**没有做的那一半,以及为什么**
+| key | 旧 | 新 | 理由 |
+|---|---|---|---|
+| `chat.runError.contactSupportCta` | 联系支持 | **联系我们** | 工单逐字 |
+| `chat.amrCard.switchCta` | 切换到 OpenDesign Cloud 并重试 | **切换到 OpenDesign Cloud** | 工单逐字 |
 
-候选 B 逐字读是「只留〔导出日志〕〔切换到 Cloud〕两枚」,也就是连〔联系支持〕一起去掉。
-**没做**,因为它和产品自己两句话直接冲突,而用户 2026-09-08 只点名了〔重试〕:
+`chat.runError.exportLogsCta`(导出日志)与 `promptTemplates.retry`(重试)现值已与
+工单一致,未动。⚠️ 稿子 `body-scene.html:302` 的 `data-tip` 写的是「联系支持」,
+与工单不一致 —— **工单较新,以工单为准**,稿子那处作为历史保留。
 
-- §6.Z:「**次级动作固定两颗且常驻**:〔联系支持〕、〔导出日志〕」;
-- §6.ZB 开头明写这一条**没有被推翻**:「「次级动作固定两颗且常驻」那一条仍然有效」;
-- 产品原话:「好多都应该得有导出日志这个按钮」——「那就不挑,**全给**」。
+**代价(执行时才看得全,请产品过目)**
 
-代码形态也印证它不属于本次范围:这两颗渲染在阶梯动作组**之外**,和「这一档有没有恢复动作」
-无关 —— 恰恰是一颗恢复动作都没有的那几档(CPU 不支持、运行时定义非法)最需要它们。
-**要不要连〔联系支持〕一起去掉,交回产品拍板。**
+1. **S04 Cloud 未登录的卡上没有登录入口了。** 内联 `AmrLoginPill` 随对症动作一起
+   撤下,卡上只剩一颗必然再失败一次的〔重试〕。
+2. **antigravity 的〔在终端换模型〕没了,`POST /api/agents/antigravity/oauth-launch`
+   从此在 web UI 里没有入口** —— 它此前只有报错卡这一个调用点,而 antigravity
+   永远是本地 agent,没有「另一侧」可以活。
+3. **可续跑的失败拿不到〔继续运行〕**,也就失去「保住已经跑出来的半截活」那条路。
+4. **S30 环境类(证书 / 代理)没有〔去设置〕**,S13 模型下线没有〔更换模型〕,
+   余额不足在白卡兜底那一档没有〔充值〕—— 这几档现在给的是一颗结果必然相同的
+   〔重试〕(Cloud)或换运行时的〔切换到 Cloud〕(BYOK),**与设计原则四
+   「重试只在有用时出现」直接冲突**。工单是较新的权威,冲突留在这里等产品定夺。
 
-**一并记下候选 B 的代价**(执行时才看得全,§6.ZB 原文只点了「重试」和「联系支持」)。
-这两条都是候选 B 的固有代价,不是实现漏掉;要留就得回到候选 C(分档):
+**埋点取值面收窄(未删类型,只是不再产生)**
 
-1. **可续跑的失败丢了〔继续运行〕。** `resumable` 的失败在 BYOK / 本地 CLI 的卡上
-   拿不到那颗按钮了 —— 它的意义是**保住已经跑出来的半截活**,而 Cloud CTA 走的是
-   换运行时重跑。
-2. **Antigravity 限流丢了〔在终端换模型〕,`POST /api/agents/antigravity/oauth-launch`
-   从报错卡上再也点不到。** 它是阶梯的 `launch-terminal-switch-model` 那一档,而
-   antigravity 永远是本地 agent,所以这颗按钮不存在「没有 Cloud CTA」的那一侧 ——
-   跟〔重试〕不一样,它是**整个产品里唯一**的入口。e2e
-   `e2e/ui/amr-run-failure-recovery.test.ts` 那条用例已翻面守住现状。
+`run_recovery_action_surface_view` / `run_recovery_action_click` 从报错卡出来的
+`recovery_action_type` 只剩 `manual_retry`(Cloud)与 `switch_runtime_retry`(BYOK),
+两者互斥。**不再由报错卡产生**:`authorize_and_retry`、`switch_model_retry`、
+`resume_run`。入口来源 `chat_error_recharge` / `chat_error_upgrade` 同样不再产生
+(升级卡的 `chat_upgrade_card` 照旧)。
 
-**红测**:`apps/web/tests/components/chat/opend-2772b-cloud-cta-replaces-retry.test.tsx`
-(两侧都钉:有 CTA 时阶梯那颗不渲染 / 没 CTA 时照旧出现且点得动)。
+**红测**:`apps/web/tests/components/chat/opend-2807-error-card-three-actions.test.tsx`
+(两种环境各钉「恰好三颗、且是这三颗」,一张 13 行失败矩阵扫「一颗都不多」,
+外加接手方缺席与 `withoutCloudSelfPromotion` 两组反向锚点)。
+
+**留给另一单**:卡片标题 / 正文按飞书产品文档「润色标题 + 润色正文」逐格核对,
+不在本单范围。本单执行中发现的一处文案错配已记下但**未动手**:S13 正文仍写着
+「更换模型后重试」,而卡上已无换模型入口。

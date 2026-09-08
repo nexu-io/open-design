@@ -84,41 +84,35 @@ function renderPane(extra: Record<string, unknown>) {
 }
 
 describe('S30 · 环境类报错卡的按钮', () => {
-  it('主按钮是〔去设置〕,落到设置 → 本地 CLI 那一节', () => {
+  /*
+   * ⚠️ origin/main 这两条钉的是〔去设置〕：主按钮是它、重试排在它右边。
+   *
+   * OPEND-2807(「错误卡片…应该只有三个按钮」+ 用户「别分那么多情况了」)
+   * 把按失败类型分档的对症动作整块撤出报错卡,〔去设置〕也在其中。
+   * 这一轮跑在 `amr` 上,所以第三颗是〔重试〕。
+   *
+   * ⚠️ **代价**:S30 从此在卡上没有「去设置改代理 / 证书」的入口,
+   * 那是这一类失败唯一真正能解决问题的动作。已写进 PR 描述与决策表。
+   * 这里把现状钉死,免得它悄悄变回来、也免得再多出第四颗。
+   */
+  it('OPEND-2807:三颗按钮,〔去设置〕不再上卡', () => {
     const onOpenSettings = vi.fn();
     const { container } = renderPane({ onOpenSettings, onRetry: vi.fn() });
 
-    const button = container.querySelector<HTMLButtonElement>(
-      '[data-testid="chat-error-open-settings"]',
-    );
-    expect(button, 'S30 要一颗〔去设置〕').toBeTruthy();
-    expect(button!.textContent).toContain('去设置');
-    // 「高级:代理与自定义路径」那个折叠块渲染在 activeSection === 'execution' 里,
-    // 它填的 configuredEnv 在 runtimes/env.ts 优先级最高 —— 这就是唯一的落点。
-    fireEvent.click(button!);
-    expect(onOpenSettings).toHaveBeenCalledWith('execution');
-  });
-
-  /**
-   * 重试**留着**,但它不是这张卡的主动作 —— 主动作是〔去设置〕。
-   *
-   * ⚠️ 已知差一步:`secondaryRetry` 这一家(S30 之外还有 S15 充值、S04 授权、
-   * S17)今天都把重试画成 `variant="primary"`,所以卡上会出现两颗 primary、
-   * 而且重试在最右。这是这四档共用的那一行的既有行为,不是 S30 引进的;
-   * 要真正「降为次按钮」得动那一行,超出这次的范围,单列待拍板。
-   * 这里只钉当下为真的部分:两颗都在,〔去设置〕在左。
-   */
-  it('重试还在,但主动作是〔去设置〕—— 上游那句话里混着一类真·网络抖动', () => {
-    const { container } = renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
-
-    const group = container.querySelector('[data-testid="chat-error-open-settings"]')
-      ?.parentElement;
-    expect(group, '两颗动作应该在同一组里').toBeTruthy();
-    const ids = Array.from(group!.querySelectorAll('button')).map((b) =>
-      b.getAttribute('data-testid'),
-    );
-    expect(ids, '设计是故意保留重试的').toContain('chat-error-retry');
-    expect(ids[0]).toBe('chat-error-open-settings');
+    expect(
+      container.querySelector('[data-testid="chat-error-open-settings"]'),
+      'OPEND-2807 之后卡上不该再有〔去设置〕',
+    ).toBeNull();
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    expect(footer).toBeTruthy();
+    expect(
+      Array.from(footer!.querySelectorAll('button')).map((b) => b.getAttribute('data-testid')),
+    ).toEqual([
+      'chat-error-contact-support',
+      'chat-error-export-logs',
+      'chat-error-retry',
+    ]);
+    expect(onOpenSettings).not.toHaveBeenCalled();
   });
 
   it('不推「切到 Open Design 智能体」—— 公司网络在那条路上一样在', () => {

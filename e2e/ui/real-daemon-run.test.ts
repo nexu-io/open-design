@@ -596,7 +596,13 @@ test('[P0] ACP handshake refusal is actionable, persists, and does not auto-retr
   await expect(card).toContainText('Agent version incompatible', { timeout: 15_000 });
   await expect(card).toContainText('Kimi CLI refused to start a session');
   await expect(card).not.toContainText(rawError);
-  await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
+  /*
+   * OPEND-2807:报错卡只有三颗按钮,第三颗由「跑在不在 Cloud 上」二选一。
+   * 这一轮跑的是本地 Kimi CLI,所以第三颗是〔切换到 OpenDesign Cloud〕,
+   * 不再是〔重试〕。这条用例要守的「actionable」因此改钉那一颗。
+   */
+  await expect(card.getByTestId('chat-error-switch-to-cloud')).toBeVisible();
+  await expect(card.getByTestId('chat-error-retry')).toHaveCount(0);
   await expect.poll(() => countAcpRunSessionStarts(fakeAcpHandshakeRuntime.invocationLog)).toBe(1);
 
   const { projectId, conversationId } = await currentProjectContext(page);
@@ -619,10 +625,10 @@ test('[P1] real daemon classifies a Claude prompt-too-long result and preserves 
   await expect(card).toContainText('Conversation too long', { timeout: 15_000 });
   await expect(card).toContainText('exceed what the AI can process');
   await expect(card.getByRole('button', { name: /^Retry$/ })).toBeVisible();
-  // OPEND-2772 / 规格 T68:切换卡整块删掉,那颗〔切换到 OpenDesign Cloud 并重试〕
+  // OPEND-2772 / 规格 T68:切换卡整块删掉,那颗〔切换到 OpenDesign Cloud〕
   // 收进报错卡,并铺到**所有** BYOK / 本地 CLI 的失败 —— 这一轮跑的是本地 claude,
   // 所以它在场,而〔重试〕退到次级(判据 `runsOnALocalAgent`)。
-  await expect(page.getByRole('button', { name: /Switch to OpenDesign Cloud & retry/i })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /^Switch to OpenDesign Cloud$/i })).toHaveCount(1);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
