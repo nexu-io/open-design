@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +10,11 @@ import {
   WHATS_NEW_DOCUMENT_PATH,
   checkWhatsNewDocument,
 } from "../../../scripts/check-whats-new-document.ts";
+import {
+  WHATS_NEW_WORKFLOW_PATH,
+  findWhatsNewWorkflowViolations,
+  parseWorkflowJobs,
+} from "../../../scripts/check-whats-new-publish-workflow.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -156,5 +161,152 @@ describe("what's new publisher", () => {
     });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("not valid JSON");
+  });
+});
+
+// The card reaches every installed client the moment it is published, so
+// "published" must imply "reviewed". Nothing written inside the workflow file
+// can enforce that on its own: `workflow_dispatch` runs the workflow from the
+// ref it is dispatched against, so every check in it is editable by whoever
+// triggers it. The control is the `whats-new-publish` environment — main-only
+// branch policy, R2 credentials as secrets on it — and that control only holds
+// while the workflow keeps a specific shape: the job that can reach the
+// credentials is the job that declares the environment, and it cannot start
+// unless validation succeeded.
+//
+// Moving `environment:` or a `secrets.*` expression onto the job that runs
+// from arbitrary refs reopens the hole with no visible symptom — the workflow
+// still publishes correctly from `main`. Each case below mutates the real
+// workflow into exactly one of those regressions and requires the checker to
+// name it, so the assertions cannot pass by never looking at anything.
+describe("what's new publish workflow trust boundary", () => {
+  let workflow: string;
+
+  beforeEach(async () => {
+    workflow = await readFile(path.join(repoRoot, WHATS_NEW_WORKFLOW_PATH), "utf8");
+  });
+
+  /**
+   * Apply one textual regression. Asserting the edit landed is the point: a
+   * mutation that silently no-ops would leave the "this goes red" case green
+   * for the wrong reason.
+   */
+  function mutate(source: string, find: string, replace: string): string {
+    expect(source).toContain(find);
+    const mutated = source.replace(find, replace);
+    expect(mutated).not.toBe(source);
+    return mutated;
+  }
+
+  test("the shipped workflow satisfies the boundary", () => {
+    expect(findWhatsNewWorkflowViolations(workflow)).toEqual([]);
+  });
+
+  test("the parser sees the two real jobs, so the assertions are not vacuous", () => {
+    expect(parseWorkflowJobs(workflow).map((job) => job.name)).toEqual(["validate", "publish"]);
+    const [validate, publish] = parseWorkflowJobs(workflow);
+    expect(validate?.body).toContain("scripts/check-whats-new-document.ts");
+    expect(publish?.body).toContain("publish_whats_new.py");
+  });
+
+  // The regression the reviewer named: the environment expression drifts off
+  // the credential-bearing job and onto the one that any ref can dispatch.
+  test("moving the environment onto the arbitrary-ref job is rejected", () => {
+    const lifted = mutate(workflow, "    environment: whats-new-publish\n", "");
+    const onValidate = mutate(
+      lifted,
+      "  validate:\n    name: validate document\n",
+      "  validate:\n    name: validate document\n    environment: whats-new-publish\n",
+    );
+    const reported = findWhatsNewWorkflowViolations(onValidate).join("\n");
+    expect(reported).toContain("job `validate` declares environment `whats-new-publish`");
+    expect(reported).toContain("job `publish` declares environment (none)");
+  });
+
+  test("a mistyped environment name is rejected", () => {
+    const mutated = mutate(workflow, "environment: whats-new-publish", "environment: whats-new-publish-2");
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("it must be exactly `whats-new-publish`");
+  });
+
+  test("dropping the environment entirely is rejected", () => {
+    const mutated = mutate(workflow, "    environment: whats-new-publish\n", "");
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("declares environment (none)");
+  });
+
+  test("unhooking publish from validate is rejected", () => {
+    const mutated = mutate(workflow, "    needs: validate\n", "");
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("must declare `needs: validate`");
+  });
+
+  test("publishing past a failed validate is rejected", () => {
+    const mutated = mutate(
+      workflow,
+      "    if: needs.validate.outputs.publish == 'true'",
+      "    if: always() && needs.validate.outputs.publish == 'true'",
+    );
+    const reported = findWhatsNewWorkflowViolations(mutated).join("\n");
+    expect(reported).toContain("references `always()`");
+  });
+
+  test("a dry run that can still publish is rejected", () => {
+    const mutated = mutate(workflow, "    if: needs.validate.outputs.publish == 'true'\n", "");
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain(
+      "must be gated on `if: needs.validate.outputs.publish == 'true'`",
+    );
+  });
+
+  test.each(["CLOUDFLARE_R2_WHATS_NEW_AK", "CLOUDFLARE_R2_WHATS_NEW_BUCKET"] as const)(
+    "reading %s from the arbitrary-ref job is rejected",
+    (secret) => {
+      const mutated = mutate(
+        workflow,
+        "      - name: Setup Node.js",
+        `      - name: Leak\n        env:\n          STOLEN: \${{ secrets.${secret} }}\n        run: env\n\n      - name: Setup Node.js`,
+      );
+      expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain(
+        `job \`validate\` reads \`secrets.${secret}\``,
+      );
+    },
+  );
+
+  test("any secret at all on the arbitrary-ref job is rejected, not just the R2 four", () => {
+    const mutated = mutate(
+      workflow,
+      "      - name: Setup Node.js",
+      "      - name: Leak\n        env:\n          STOLEN: ${{ secrets.GITHUB_TOKEN }}\n        run: env\n\n      - name: Setup Node.js",
+    );
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` reads `secrets.GITHUB_TOKEN`");
+  });
+
+  test("dropping one of the four credential bindings is rejected", () => {
+    const mutated = mutate(
+      workflow,
+      "          WHATS_NEW_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_BUCKET }}\n",
+      "",
+    );
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain(
+      "no longer reads `secrets.CLOUDFLARE_R2_WHATS_NEW_BUCKET`",
+    );
+  });
+
+  test("handing the whole secret store to a called workflow is rejected", () => {
+    const mutated = mutate(workflow, "    environment: whats-new-publish", "    secrets: inherit\n    environment: whats-new-publish");
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("`secrets: inherit`");
+  });
+
+  // The boundary has to be checked by something that actually runs. An edit to
+  // `.github/workflows/whats-new-publish.yml` selects neither
+  // `web_tests_required` nor `ui_p0_validation_required`, so the `e2e_vitest`
+  // workload holding this file does NOT run for it. `pnpm guard` does, from
+  // the unconditional preflight job — which is why the assertions above live
+  // in a guard check rather than only here.
+  test("the check is registered in the public guard entrypoint", () => {
+    const names = execFileSync("pnpm", ["--silent", "guard", "--list-checks"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n");
+    expect(names).toContain("what's new publish workflow");
   });
 });

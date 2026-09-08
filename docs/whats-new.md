@@ -135,5 +135,13 @@ then fails naming the variables it is missing.
 from any job on any branch, which would let anyone with write access publish
 unreviewed content by dispatching a modified workflow from their own branch.
 
+That shape is pinned by the `what's new publish workflow` check in `pnpm guard`
+(`scripts/check-whats-new-publish-workflow.ts`): the credential-bearing job is
+the one that declares the environment, it cannot start without a green
+`validate`, and no other job may hold an environment or read a secret. The
+check runs from CI's unconditional preflight job rather than a path-routed
+test lane, because an edit to the workflow alone selects no test workload —
+a lane-routed assertion would be skipped for exactly the edit it guards.
+
 The repository-wide `CLOUDFLARE_API_TOKEN` is a Pages-scoped token and cannot
 reach R2 at all; do not route this publish through it.

@@ -65,6 +65,15 @@ REQUIRED_STORAGE_VARS = (
     "WHATS_NEW_STORAGE_SECRET_ACCESS_KEY",
 )
 
+# The GitHub environment that holds the R2 credentials, named here because the
+# missing-credentials error is the one place an operator reads when the publish
+# fails — and following it to the wrong place reopens the trust boundary.
+# Repository secrets are readable from any job on any branch, so storing them
+# there would let a modified workflow dispatched from an unreviewed ref publish
+# to every installed client. The environment's deployment-branch policy allows
+# `main` only; see docs/whats-new.md.
+PUBLISH_ENVIRONMENT = "whats-new-publish"
+
 
 class PublishError(RuntimeError):
     pass
@@ -199,7 +208,10 @@ def main() -> int:
         raise PublishError(
             "missing R2 credentials: "
             + ", ".join(missing)
-            + ". These are repository secrets scoped to the What's New bucket; see docs/whats-new.md."
+            + f". These must be environment secrets on the `{PUBLISH_ENVIRONMENT}` GitHub"
+            " environment, which is restricted to `main`. Do NOT add them as repository"
+            " secrets: those are readable from any job on any branch and would let an"
+            " unreviewed ref publish to every installed client. See docs/whats-new.md."
         )
 
     client = R2Client(
