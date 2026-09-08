@@ -23,7 +23,7 @@ only for the runs that take that side.
 
 ## Which runs take which path
 
-OD Next is opt-in and gated. `evaluateOdNextRollout`
+OD Next is on by default and gated. `evaluateOdNextRollout`
 (`apps/daemon/src/strategies/od-next/rollout.ts:138`) is a nine-way AND, and
 three of its inputs vary run to run on one machine — which is why a divergence
 between the two sides surfaces as an **intermittent** bug rather than a

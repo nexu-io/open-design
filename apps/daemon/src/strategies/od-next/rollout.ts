@@ -70,9 +70,22 @@ function configuredMode(value: unknown): OdNextRolloutMode | null {
 /**
  * Which authority decides the requested mode, and what it decided.
  *
- * OD Next is opt-in. An installation that configured nothing runs `off` — the
- * ordinary strategy route — so shipping the strategy in a build never changes
- * how a run behaves until someone asks for it.
+ * OD Next is the default route. An installation that configured nothing runs
+ * `active`, so the strategy decides how a run behaves unless someone asked it
+ * not to.
+ *
+ * That inverts which case is load-bearing. While the strategy was opt-in, the
+ * question was whether anyone had asked for it, and an installation that lost
+ * its saved mode simply kept the behaviour it already had. Now the question is
+ * whether anyone asked against it, and an installation that loses its saved
+ * mode is switched back on. So the invariant this function has to keep is:
+ * an installation that opted out reads `off` through every later release.
+ *
+ * That rests on opting out being stored rather than erased. `off` is a value
+ * the config carries — `applyConfigValue` drops the key only for a value it
+ * cannot store, and `assertWritableControlValues` refuses those on the way in.
+ * Rewriting an opt-out as a deleted key would read as unconfigured here and
+ * silently return every opted-out installation to OD Next.
  *
  * `OD_NEXT_STRATEGY_ROLLOUT` outranks the saved `odNextStrategyMode` so that a
  * pinned process stays pinned: an operator debugging one daemon, a packaged
@@ -88,7 +101,7 @@ function resolveRequestedMode(
   if (fromEnv) return { mode: fromEnv, source: 'env' };
   const fromConfig = configuredMode(appConfig?.odNextStrategyMode);
   if (fromConfig) return { mode: fromConfig, source: 'app_config' };
-  return { mode: 'off', source: 'default' };
+  return { mode: 'active', source: 'default' };
 }
 
 export function readOdNextRolloutPolicy(

@@ -75,13 +75,27 @@ describe('GET /api/strategies/od-next/rollout', () => {
     });
   });
 
-  it('reports off/default when the installation genuinely configured nothing', async () => {
+  it('reports active/default when the installation genuinely configured nothing', async () => {
     await start(async () => ({}));
     const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout`);
     expect(response.status).toBe(200);
     expect((await response.json() as { status: unknown }).status).toMatchObject({
-      requestedMode: 'off',
+      requestedMode: 'active',
       requestedModeSource: 'default',
+    });
+  });
+
+  it('reports the saved off an installation opted into, not the default', async () => {
+    // `default` and a saved `off` now resolve to opposite modes, so the source
+    // is what tells an operator whether this daemon is on OD Next because
+    // nobody touched it or off it because somebody asked.
+    await start(async () => ({ odNextStrategyMode: 'off' }));
+    const response = await fetch(`${baseUrl}/api/strategies/od-next/rollout`);
+    expect(response.status).toBe(200);
+    expect((await response.json() as { status: unknown }).status).toMatchObject({
+      requestedMode: 'off',
+      requestedModeSource: 'app_config',
+      effectiveMode: 'off',
     });
   });
 

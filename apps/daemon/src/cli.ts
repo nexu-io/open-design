@@ -439,10 +439,10 @@ Inspect or reset the OD Next safety latch for this daemon instance. Reset is
 compare-and-swap protected; when --expected-revision is omitted the CLI first
 reads status and submits that exact revision.
 
-OD Next is opt-in and off until this installation asks for it:
+OD Next runs by default; this installation opts out of it here:
 
-  od config set odNextStrategyMode active    Opt in; takes effect next run.
-  od config set odNextStrategyMode off       Opt back out.
+  od config set odNextStrategyMode off       Opt out; takes effect next run.
+  od config set odNextStrategyMode active    Opt back in.
 
 The status subcommand reports which authority set the mode in effect (env /
 app_config / default), so you can confirm the configuration landed.

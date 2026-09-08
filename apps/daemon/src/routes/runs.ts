@@ -1824,8 +1824,8 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         || suppliedContextPluginWasNamed
       );
       // Read per request, not at boot: `odNextStrategyMode` is how a user opts
-      // this installation into OD Next, and "configure it and it takes effect"
-      // has to mean the next run, not the next daemon restart.
+      // this installation out of OD Next, and "configure it and it takes
+      // effect" has to mean the next run, not the next daemon restart.
       //
       // Deliberately uncaught. `readAppConfig` already answers `{}` for the
       // states that mean "nothing configured" — no file, unparseable file — and

@@ -125,9 +125,11 @@ export interface AppConfigPrefs {
   customInstructions?: string | null;
   projectLocations?: ProjectLocationPrefs[];
   defaultProjectLocationId?: string | null;
-  // Whether this installation opts into the OD Next design strategy. Absent
-  // and null both mean `off` — OD Next is opt-in. `OD_NEXT_STRATEGY_ROLLOUT`
-  // outranks this when set; see readOdNextRolloutPolicy.
+  // Whether this installation runs the OD Next design strategy. Absent and
+  // null both mean "unconfigured", which resolves to `active` — OD Next is the
+  // default route and this key is how an installation opts out of it.
+  // `OD_NEXT_STRATEGY_ROLLOUT` outranks this when set; see
+  // readOdNextRolloutPolicy.
   odNextStrategyMode?: OdNextRolloutMode | null;
   // Most-recently-used local working directories the user granted the agent
   // read access to from the Home composer. Become a project's
@@ -656,9 +658,10 @@ function applyConfigValue(
   if (key === 'odNextStrategyMode') {
     // Reached with a non-mode value only on the READ path, where a corrupted or
     // hand-edited file must not take the daemon down: drop it and let the
-    // installation read as unconfigured, which is `off`. A WRITE never gets
-    // here with a bad value — `assertWritableControlValues` refuses it first,
-    // so a typo cannot masquerade as an opt-out.
+    // installation read as unconfigured, which resolves to `active`. That makes
+    // dropping the value the opposite of harmless — it revokes an opt-out — so
+    // the WRITE path never reaches here with a bad value:
+    // `assertWritableControlValues` refuses it first.
     if (value === 'off' || value === 'observe' || value === 'active') {
       target[key] = value;
     } else {
@@ -847,14 +850,14 @@ export class InvalidAppConfigValueError extends Error {
  * Every other preference here is sanitized by dropping what it cannot store,
  * and that is the right trade for a preference: the cost of a bad value is one
  * setting falling back to its default. `odNextStrategyMode` is not a
- * preference — it decides whether OD Next runs at all, so dropping it is not a
- * neutral outcome. It reads as an opt-out, which means
- * `od config set odNextStrategyMode acive` would switch the installation off
- * while printing success, and the person who typed it would have no way to
- * tell that from the opt-out they never asked for.
+ * preference — it decides whether OD Next runs at all, and its default is
+ * `active`, so dropping it is not a neutral outcome. It revokes an opt-out,
+ * which means `od config set odNextStrategyMode of` would put the installation
+ * back on OD Next while printing success, and the person who typed it would go
+ * on believing they had opted out.
  *
  * So a typo fails loudly instead. `null` stays a legitimate value: clearing the
- * key IS the deliberate way to opt back out.
+ * key IS the deliberate way to return to the default.
  */
 function assertWritableControlValues(partial: Record<string, unknown>): void {
   if (!Object.prototype.hasOwnProperty.call(partial, 'odNextStrategyMode')) return;
