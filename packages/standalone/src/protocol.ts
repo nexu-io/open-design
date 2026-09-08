@@ -1,6 +1,6 @@
 import { createHash, sign, verify, type KeyLike } from "node:crypto";
 
-export const STANDALONE_METADATA_SCHEMA = 4 as const;
+export const STANDALONE_METADATA_SCHEMA = 5 as const;
 export const STANDALONE_SHELL_METADATA_SCHEMA = 1 as const;
 export const STANDALONE_CHANNEL_HEAD_SCHEMA = 1 as const;
 export const STANDALONE_SIGNATURE_ALGORITHM = "Ed25519" as const;
@@ -35,7 +35,7 @@ export type StandaloneResourceContribution = Readonly<{
   materialization: StandaloneMaterialization;
 }>;
 export type StandaloneShellCompatibilityIdentity = { type: string; version: string; buildHash: string };
-export type StandaloneShellRequirement = { type: string; minVersion: string; buildHash: string };
+export type StandaloneShellRequirement = { version: { min: string }; buildHash: string };
 export type StandaloneShellIdentity = StandaloneShellCompatibilityIdentity & { digest: string };
 export type StandaloneMetadata = {
   schemaVersion: typeof STANDALONE_METADATA_SCHEMA;
@@ -46,7 +46,7 @@ export type StandaloneMetadata = {
   publishedAt: string;
   blobs: Record<string, StandaloneBlob>;
   resources: StandaloneResource[];
-  shellRequirements: StandaloneShellRequirement[];
+  shell: Record<string, StandaloneShellRequirement>;
 };
 export type StandaloneSignature = {
   algorithm: typeof STANDALONE_SIGNATURE_ALGORITHM;
@@ -118,9 +118,17 @@ export function sha256Hex(value: string | Uint8Array): string {
 
 export function validateChannelRelease(channel: string, releaseVersion: string): void {
   if (!EXACT_CHANNEL_PATTERN.test(channel) || channel === "local") throw new Error(`invalid exact channel: ${channel}`);
-  if (!new RegExp(`^\\d+\\.\\d+\\.\\d+-${channel}\\.\\d+$`).test(releaseVersion)) {
+  const pattern = channel === "stable" ? /^\d+\.\d+\.\d+$/ : new RegExp(`^\\d+\\.\\d+\\.\\d+-${channel}\\.\\d+$`);
+  if (!pattern.test(releaseVersion)) {
     throw new Error(`releaseVersion does not belong to ${channel}`);
   }
+}
+
+/** Compare lifecycle versions only inside an explicitly bound channel. */
+export function compareChannelReleaseVersions(left: string, right: string, channel: string): number {
+  validateChannelRelease(channel, left);
+  validateChannelRelease(channel, right);
+  return compareVersions(left, right);
 }
 
 export function validateStandaloneScope(scope: StandaloneScope): StandaloneScope {
@@ -135,11 +143,11 @@ export function standaloneScopeKey(scope: StandaloneScope): string {
 }
 
 function validateVersion(value: string, label: string): void {
-  if (!/^\d+\.\d+\.\d+(?:-[0-9a-z]+(?:[.-][0-9a-z]+)*)?$/.test(value)) throw new Error(`invalid ${label}: ${value}`);
+  if (typeof value !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9a-z]+(?:[.-][0-9a-z]+)*)?$/.test(value)) throw new Error(`invalid ${label}: ${value}`);
 }
 
 function validateDigest(value: string, label: string): void {
-  if (!SHA256_PATTERN.test(value)) throw new Error(`invalid digest for ${label}`);
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) throw new Error(`invalid digest for ${label}`);
 }
 
 function validateToken(value: string, label: string): void {
@@ -196,7 +204,7 @@ export function compareVersions(left: string, right: string): number {
 }
 
 export function minimumShellVersion(metadata: StandaloneMetadata, shellType: string): string | null {
-  return metadata.shellRequirements.find(({ type }) => type === shellType)?.minVersion ?? null;
+  return Object.hasOwn(metadata.shell, shellType) ? metadata.shell[shellType]!.version.min : null;
 }
 
 /**
@@ -236,6 +244,7 @@ export function assertShellCompatibility(metadata: StandaloneMetadata, shell: St
 
 export function validateStandaloneMetadata(metadata: StandaloneMetadata): void {
   if (metadata.schemaVersion !== STANDALONE_METADATA_SCHEMA) throw new Error("unsupported standalone metadata schema");
+  exactRecord(metadata, ["schemaVersion", "channel", "releaseVersion", "standaloneVersion", "sourceCommit", "publishedAt", "blobs", "resources", "shell"], "metadata");
   validateChannelRelease(metadata.channel, metadata.releaseVersion);
   validateVersion(metadata.standaloneVersion, "standaloneVersion");
   if (!/^[a-f0-9]{40}$/.test(metadata.sourceCommit)) throw new Error("sourceCommit must be a full 40-character SHA");
@@ -275,14 +284,19 @@ export function validateStandaloneMetadata(metadata: StandaloneMetadata): void {
   for (const digest of Object.keys(metadata.blobs)) {
     if (!referenced.has(digest)) throw new Error(`metadata contains unused blob: ${digest}`);
   }
-  if (metadata.shellRequirements.length === 0) throw new Error("metadata must declare at least one Shell requirement");
-  const shellTypes = new Set<string>();
-  for (const requirement of metadata.shellRequirements) {
-    if (!/^[a-z][a-z0-9-]{0,63}$/.test(requirement.type) || shellTypes.has(requirement.type)) throw new Error(`invalid or duplicate Shell requirement: ${requirement.type}`);
-    shellTypes.add(requirement.type);
-    validateVersion(requirement.minVersion, `${requirement.type} min Shell version`);
-    validateDigest(requirement.buildHash, `${requirement.type} Shell build hash`);
+  if (metadata.shell == null || typeof metadata.shell !== "object" || Array.isArray(metadata.shell) || Object.keys(metadata.shell).length === 0) throw new Error("metadata must declare at least one Shell requirement");
+  for (const [type, requirement] of Object.entries(metadata.shell)) {
+    if (!/^[a-z][a-z0-9-]{0,63}$/.test(type)) throw new Error(`invalid Shell requirement: ${type}`);
+    exactRecord(requirement, ["version", "buildHash"], `${type} requirement`);
+    exactRecord(requirement.version, ["min"], `${type} version requirement`);
+    validateVersion(requirement.version.min, `${type} min Shell version`);
+    validateDigest(requirement.buildHash, `${type} Shell build hash`);
   }
+}
+
+function exactRecord(input: unknown, keys: readonly string[], label: string): void {
+  if (input == null || typeof input !== "object" || Array.isArray(input)
+    || Object.keys(input).sort().join(",") !== [...keys].sort().join(",")) throw new Error(`invalid ${label} fields`);
 }
 
 /** Merge app/target contributions into the canonical channel blob graph. */

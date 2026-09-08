@@ -135,7 +135,7 @@ describe("Closure generation runtime", () => {
       confirmInstalled: async () => ({ outcome: "unsupported" as const, snapshot: { schemaVersion: 3 as const, revision, shellType: "electron", state, actions: [], blockedBy: [] } }),
     };
     await expect(prepareClosureShellUpdate({
-      requirement: { type: "electron", minVersion: "2.0.0", buildHash: "b".repeat(64) },
+      requirement: { version: { min: "2.0.0" }, buildHash: "b".repeat(64) },
       shell: { type: "electron", version: "1.0.0", buildHash: "b".repeat(64), digest: "a".repeat(64) },
       updater,
       onSnapshot: (snapshot) => { snapshots.push(snapshot.state); },
@@ -152,7 +152,7 @@ describe("Closure generation runtime", () => {
       confirmInstalled: async () => { throw new Error("must not confirm a compatible Shell updater"); },
     };
     await expect(prepareClosureShellUpdate({
-      requirement: { type: "electron", minVersion: "1.2.0", buildHash: "b".repeat(64) },
+      requirement: { version: { min: "1.2.0" }, buildHash: "b".repeat(64) },
       shell: { type: "electron", version: "1.2.0", buildHash: "b".repeat(64), digest: "a".repeat(64) },
       updater,
     })).resolves.toEqual({ state: "compatible" });
@@ -168,7 +168,7 @@ describe("Closure generation runtime", () => {
       confirmInstalled: async () => { invoked = true; throw new Error("wrong updater must remain isolated"); },
     };
     await expect(prepareClosureShellUpdate({
-      requirement: { type: "electron", minVersion: "2.0.0", buildHash: "b".repeat(64) },
+      requirement: { version: { min: "2.0.0" }, buildHash: "b".repeat(64) },
       shell: { type: "electron", version: "1.0.0", buildHash: "b".repeat(64), digest: "a".repeat(64) },
       updater,
     })).resolves.toEqual({ state: "update-required", currentVersion: "1.0.0", minimumVersion: "2.0.0", snapshot: null });

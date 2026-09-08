@@ -217,7 +217,7 @@ export class StandaloneStore {
       releaseVersion: envelope.metadata.releaseVersion,
       standaloneVersion: envelope.metadata.standaloneVersion,
       sourceCommit: envelope.metadata.sourceCommit,
-      minimumShellVersions: Object.fromEntries(envelope.metadata.shellRequirements.map(({ type, minVersion }) => [type, minVersion])),
+      minimumShellVersions: Object.fromEntries(Object.entries(envelope.metadata.shell).map(([type, requirement]) => [type, requirement.version.min])),
       launcher: {
         protocol: "standalone-launcher-v1",
         resourceId: launcherResourceId,

@@ -99,6 +99,11 @@ before downloading its archive through Standalone's shared CAS/materializer.
 It verifies archive and tree bytes without executing code or arming an update.
 Capsule cache ownership is separate from Closure generation GC; sharing the
 acquisition primitives does not grant either lifecycle authority over the other.
+Content metadata schema 5 expresses the public requirement as
+`shell.electron.version.min` (and `shell.terminal.version.min` for Terminal).
+The requirement carries no Capsule selection; the Shell interprets whether its
+current composition, an updated Capsule, or a physical installation can satisfy it.
+Regenerate experimental schema-4 metadata; do not infer between both shapes.
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.

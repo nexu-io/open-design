@@ -40,7 +40,7 @@ async function installedFixture() {
   const launcherDigest = createHash("sha256").update(launcher).digest("hex");
   const closureDigest = createHash("sha256").update(closure).digest("hex");
   const metadata: StandaloneMetadata = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     channel: "betahyx",
     releaseVersion: "0.1.0-betahyx.1",
     standaloneVersion: "0.1.0",
@@ -54,7 +54,7 @@ async function installedFixture() {
       { id: "standalone-launcher", component: "standalone.launcher", blob: launcherDigest, sync: true, materialization: { type: "file", entrypoint: "launcher.mjs" } },
       { id: "closure", component: "standalone.resource", blob: closureDigest, sync: true, materialization: { type: "file", entrypoint: "closure.mjs" } },
     ],
-    shellRequirements: [{ type: "electron", minVersion: "0.1.0", buildHash: "a".repeat(64) }],
+    shell: { electron: { version: { min: "0.1.0" }, buildHash: "a".repeat(64) } },
   };
   const keys = generateKeyPairSync("ed25519");
   const capsule = await writeCapsuleSeed({ root, privateKey: keys.privateKey, keyId: "release" });

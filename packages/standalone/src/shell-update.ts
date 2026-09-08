@@ -222,14 +222,14 @@ export function resolveStandaloneShellCompatibility(input: Readonly<{
   shell: StandaloneShellIdentity;
   updater?: StandaloneShellUpdaterPort | null;
 }>): StandaloneShellCompatibilityResult {
-  if (input.requirement != null && compareVersions(input.shell.version, input.requirement.minVersion) >= 0) {
+  if (input.requirement != null && compareVersions(input.shell.version, input.requirement.version.min) >= 0) {
     return { state: "compatible" };
   }
   return {
     state: "update-required",
     shellType: input.shell.type,
     currentVersion: input.shell.version,
-    minimumVersion: input.requirement?.minVersion ?? null,
+    minimumVersion: input.requirement?.version.min ?? null,
     updater: input.updater ?? null,
   };
 }

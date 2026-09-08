@@ -20,6 +20,8 @@ import {
   verifyStandaloneChannelHead,
   validateStandaloneMetadata,
   verifyStandaloneShellMetadata,
+  minimumShellVersion,
+  validateChannelRelease,
   type GenerationRecord,
   type LifecycleAttachment,
   type LifecyclePort,
@@ -41,11 +43,11 @@ function metadata(
   releaseVersion = "0.1.0-somechan.1",
   minVersion = "0.1.0",
   channel = "somechan",
-  shellRequirements: StandaloneMetadata["shellRequirements"] = [{ type: "terminal", minVersion, buildHash: "b".repeat(64) }],
+  shell: StandaloneMetadata["shell"] = { terminal: { version: { min: minVersion }, buildHash: "b".repeat(64) } },
 ): StandaloneMetadata {
   const digest = sha256Hex(bytes);
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     channel,
     releaseVersion,
     standaloneVersion: "0.1.0",
@@ -56,7 +58,7 @@ function metadata(
       { id: "standalone-launcher", component: "standalone.launcher", blob: digest, sync: true, materialization: { type: "file", entrypoint: "fixture.mjs" } },
       { id: "fixture", component: "standalone.resource", blob: digest, sync: true, materialization: { type: "file", entrypoint: "fixture.mjs" } },
     ],
-    shellRequirements,
+    shell,
   };
 }
 
@@ -67,6 +69,59 @@ async function blobOptions(root: string, bytes: Uint8Array) {
   await writeFile(path, bytes);
   return { candidates: { [digest]: [{ path, source: "seed" as const }] } };
 }
+
+describe("versioned composite Shell requirements", () => {
+  it("uses shell.<type>.version.min and rejects mixed or malformed capability declarations", () => {
+    const base = metadata(Buffer.from("capability"));
+    const value = { ...base, schemaVersion: 5, shell: {
+      electron: { version: { min: "2.0.0" }, buildHash: "a".repeat(64) },
+      terminal: { version: { min: "0.1.0" }, buildHash: "b".repeat(64) },
+    } };
+    expect(() => validateStandaloneMetadata(value as never)).not.toThrow();
+    expect(minimumShellVersion(value as never, "electron")).toBe("2.0.0");
+    expect(minimumShellVersion(value as never, "constructor")).toBeNull();
+    for (const invalid of [{ ...value, schemaVersion: 4 }, { ...value, shellRequirements: [] },
+      ...[null, [], {}, { electron: { minVersion: "2.0.0", buildHash: "a".repeat(64) } },
+        { electron: { version: { min: ["2.0.0"] }, buildHash: "a".repeat(64) } },
+        { electron: { version: { min: "2.0.0" }, buildHash: ["a".repeat(64)] } },
+        { electron: { version: { min: "2.0.0", max: "3.0.0" }, buildHash: "a".repeat(64) } }].map(shell => ({ ...value, shell }))]) {
+      expect(() => validateStandaloneMetadata(invalid as never)).toThrow();
+    }
+  });
+
+  it("accepts the release authority's stable version convention without changing channel isolation", () => {
+    expect(() => validateChannelRelease("stable", "1.2.3")).not.toThrow();
+    expect(() => validateChannelRelease("stable", "1.2.3-stable.1")).toThrow();
+    expect(() => validateChannelRelease("betahyx", "1.2.3")).toThrow();
+    expect(() => validateChannelRelease("betahyx", "1.2.3-prerelease.1")).toThrow();
+    expect(() => validateChannelRelease("betahyx", "1.2.3-betahyx.1")).not.toThrow();
+  });
+
+  it.each([
+    { channel: "stable", first: "1.2.3", next: "1.2.4", older: "1.2.2" },
+    { channel: "betahyx", first: "1.2.3-betahyx.9", next: "1.2.3-betahyx.10", older: "1.2.3-betahyx.8" },
+  ])("prepares increasing versions and rejects downgrade in $channel", async ({ channel, first, next, older }) => {
+    const root = await mkdtemp(join(tmpdir(), "standalone-channel-order-")); roots.push(root);
+    const keys = generateKeyPairSync("ed25519"), trusted = { release: keys.publicKey }, artifact = Buffer.from("channel update");
+    const store = new StandaloneStore(root, { channel, namespace: "version-order" });
+    const options = await blobOptions(root, artifact);
+    const signed = (version: string) => signStandaloneMetadata(metadata(artifact, version, "0.1.0", channel), "release", keys.privateKey);
+    await store.prepare(signed(first), trusted, options);
+    let document = Buffer.from(canonicalJson(signed(next)));
+    const head = (version: string) => signStandaloneChannelHead({ schemaVersion: 1, channel, publishedAt: "2026-09-08T00:00:00Z",
+      lanes: { content: { releaseVersion: version, url: "https://fixtures.invalid/content.json", sha256: sha256Hex(document), size: document.length } },
+    }, [{ keyId: "release", privateKey: keys.privateKey }]);
+    const updater = new StandaloneUpdater(channel, "content", terminal, trusted, store, {
+      async readChannelHead() { throw new Error("fixed head must not rediscover"); },
+      async readDocument() { return document; }, prepare: options,
+    });
+    await expect(updater.prepareFromHead(head(next), "observe")).resolves.toMatchObject({ status: "prepared", generation: { releaseVersion: next }, authorized: false });
+    const prepared = await store.readState();
+    document = Buffer.from(canonicalJson(signed(older)));
+    await expect(updater.prepareFromHead(head(older), "observe")).rejects.toThrow("would downgrade");
+    expect(await store.readState()).toEqual(prepared);
+  });
+});
 
 class FixturePort implements LifecyclePort {
   private scope: LifecycleScope | null = null;
@@ -301,10 +356,10 @@ describe("standalone exact lifecycle", () => {
     const keys = generateKeyPairSync("ed25519");
     const store = new StandaloneStore(root, fixtureScope);
     await store.prepare(
-      signStandaloneMetadata(metadata(artifact, "0.1.0-somechan.1", "0.1.0", "somechan", [
-        { type: "terminal", minVersion: "0.1.0", buildHash: "b".repeat(64) },
-        { type: "electron", minVersion: "1.0.0", buildHash: "c".repeat(64) },
-      ]), "test", keys.privateKey),
+      signStandaloneMetadata(metadata(artifact, "0.1.0-somechan.1", "0.1.0", "somechan", {
+        terminal: { version: { min: "0.1.0" }, buildHash: "b".repeat(64) },
+        electron: { version: { min: "1.0.0" }, buildHash: "c".repeat(64) },
+      }), "test", keys.privateKey),
       new Map([["test", keys.publicKey]]),
       await blobOptions(root, artifact),
     );
@@ -340,10 +395,10 @@ describe("standalone exact lifecycle", () => {
     const bytes = Buffer.from("fixture");
     const keys = generateKeyPairSync("ed25519");
     const store = new StandaloneStore(root, fixtureScope);
-    const generation = await store.prepare(signStandaloneMetadata(metadata(bytes, "0.1.0-somechan.1", "0.2.0", "somechan", [
-      { type: "terminal", minVersion: "0.2.0", buildHash: "b".repeat(64) },
-      { type: "electron", minVersion: "1.0.0", buildHash: "c".repeat(64) },
-    ]), "test", keys.privateKey), new Map([["test", keys.publicKey]]), await blobOptions(root, bytes));
+    const generation = await store.prepare(signStandaloneMetadata(metadata(bytes, "0.1.0-somechan.1", "0.2.0", "somechan", {
+      terminal: { version: { min: "0.2.0" }, buildHash: "b".repeat(64) },
+      electron: { version: { min: "1.0.0" }, buildHash: "c".repeat(64) },
+    }), "test", keys.privateKey), new Map([["test", keys.publicKey]]), await blobOptions(root, bytes));
     await authorize(store, "initial-bootstrap");
     const lifecycle = new FixturePort();
     const occupiedGeneration = { ...generation, id: "d".repeat(64) };

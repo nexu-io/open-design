@@ -21,6 +21,9 @@ describe("built tools-pack CLI", () => {
     expect(products).not.toContain("exact-api.d.ts");
     expect(products).toContain("build-api.d.ts");
 
+    await expect(execFileAsync(process.execPath, ["dist/index.mjs", "exact-control", "--request", "/removed-request.json"], { cwd: toolPackRoot }))
+      .rejects.toMatchObject({ stderr: expect.stringContaining("Unknown command: exact-control") });
+
     const invocation = execFileAsync(
       process.execPath,
       ["dist/index.mjs", "mac", "unsupported-built-smoke"],

@@ -74,4 +74,5 @@ mac.action(
 );
 
 cli.help();
+cli.on("command:*", () => { throw new Error(`Unknown command: ${cli.args[0]}`); });
 cli.parse();

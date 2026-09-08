@@ -154,7 +154,7 @@ export async function startStandaloneExactFixtureServer(
       });
     }));
     const metadata: StandaloneMetadata = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       channel: options.channel,
       releaseVersion: options.releaseVersion,
       standaloneVersion,
@@ -176,7 +176,7 @@ export async function startStandaloneExactFixtureServer(
           materialization: { type: "zip" as const, entrypoint: resource.entrypoint, treeSha256: resource.treeSha256 },
         })),
       ],
-      shellRequirements: [{ type: options.shell.type, minVersion: options.shell.version, buildHash: options.shell.buildHash }],
+      shell: { [options.shell.type]: { version: { min: options.shell.version }, buildHash: options.shell.buildHash } },
     };
     const keys = generateKeyPairSync("ed25519");
     const signer = [{ keyId: "local-exact", privateKey: keys.privateKey }] as const;

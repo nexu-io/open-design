@@ -1,7 +1,8 @@
-import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto";
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { parseReleaseVersion } from "@open-design/release";
+import { STANDALONE_METADATA_SCHEMA, verifyStandaloneMetadata, type SignedStandaloneMetadata, type StandaloneShellRequirement } from "@open-design/standalone";
 import { composeElectronCapsuleManifest, validateElectronCapsuleContent, validateElectronCapsuleRelease, assertElectronCapsuleReleaseManifest } from "@open-design/shell-electron/build/contracts";
 
 import {
@@ -73,18 +74,6 @@ function signed(field: string, value: JsonObject, keys: readonly SigningKey[]): 
   return { [field]: value, signatures: signatures(value, keys) };
 }
 
-function validSignature(value: unknown, candidates: unknown, keys: readonly SigningKey[]): boolean {
-  if (!Array.isArray(candidates)) return false;
-  const body = canonicalBytes(value);
-  return candidates.some((candidate) => {
-    if (candidate == null || typeof candidate !== "object") return false;
-    const entry = candidate as JsonObject;
-    const key = keys.find(({ keyId }) => keyId === entry.keyId);
-    return key != null && entry.algorithm === "Ed25519" && typeof entry.value === "string"
-      && verify(null, body, key.publicKey, Buffer.from(entry.value, "base64"));
-  });
-}
-
 function requireRelease(request: JsonObject): void {
   const channel = String(request.channel ?? "");
   if (!IDENTIFIER.test(channel)) throw new Error("invalid release channel");
@@ -108,13 +97,14 @@ function publicObjectUrl(base: string, file: string): string {
   return `${base}/${encodeURIComponent(basename(file))}`;
 }
 
-async function previousRequirements(path: unknown, channel: string, keys: readonly SigningKey[]): Promise<Map<string, JsonObject>> {
+async function previousRequirements(path: unknown, channel: string, keys: readonly SigningKey[]): Promise<Map<string, StandaloneShellRequirement>> {
   if (typeof path !== "string") return new Map();
   try {
     const envelope = await readObject(path);
-    const metadata = envelope.metadata;
-    if (!validSignature(metadata, envelope.signatures, keys) || metadata?.schemaVersion !== 4 || metadata.channel !== channel || !Array.isArray(metadata.shellRequirements)) return new Map();
-    return new Map(metadata.shellRequirements.map((item: JsonObject) => [String(item.type), item]));
+    verifyStandaloneMetadata(envelope as SignedStandaloneMetadata, new Map(keys.map(({ keyId, publicKey }) => [keyId, publicKey])));
+    const metadata = (envelope as SignedStandaloneMetadata).metadata;
+    if (metadata.channel !== channel) return new Map();
+    return new Map(Object.entries(metadata.shell));
   } catch { return new Map(); }
 }
 
@@ -184,7 +174,7 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   for (const shell of shellRecords) {
     shell.minimumVersion = shell.version;
     const prior = old.get(String(shell.type));
-    if (prior != null && prior.buildHash === shell.buildHash && VERSION.test(String(prior.minVersion ?? "")) && compareCore(String(prior.minVersion), String(shell.version)) <= 0) shell.minimumVersion = prior.minVersion;
+    if (prior != null && prior.buildHash === shell.buildHash && compareCore(prior.version.min, String(shell.version)) <= 0) shell.minimumVersion = prior.version.min;
   }
   const output = resolve(String(request.outputDirectory ?? "")), artifacts = join(output, "artifacts"), documents = join(output, "documents"), trustFile = join(output, "trust/keys.json");
   await mkdir(artifacts, { recursive: true });
@@ -224,14 +214,14 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
     [standalone.sha256]: { sha256: standalone.sha256, size: standalone.size, mediaType: "text/javascript", sources: [{ kind: "remote", url: `${base}/${basename(standaloneFile)}` }] },
   };
   for (const resource of closureResources) blobs[resource.blob.sha256] = { sha256: resource.blob.sha256, size: resource.blob.size, mediaType: resource.blob.mediaType, sources: [{ kind: "remote", url: `${base}/${basename(resource.blob.file)}` }] };
-  const metadata = { schemaVersion: 4, channel: request.channel, releaseVersion: request.releaseVersion, standaloneVersion: request.standaloneVersion, sourceCommit: request.sourceCommit, publishedAt: request.publishedAt,
+  const metadata = { schemaVersion: STANDALONE_METADATA_SCHEMA, channel: request.channel, releaseVersion: request.releaseVersion, standaloneVersion: request.standaloneVersion, sourceCommit: request.sourceCommit, publishedAt: request.publishedAt,
     blobs,
     resources: [
       { id: "standalone-launcher", component: "standalone.launcher", blob: standalone.sha256, sync: true, materialization: { type: "file", entrypoint: "launcher.mjs" } },
       { id: "closure", component: "standalone.resource", blob: closure.sha256, sync: true, materialization: { type: "file", entrypoint: "closure.mjs" } },
       ...closureResources.map((resource) => ({ id: resource.id, component: "standalone.resource", blob: resource.blob.sha256, sync: true, materialization: { type: "zip", entrypoint: resource.entrypoint, treeSha256: resource.treeSha256 } })),
     ],
-    shellRequirements: shellRecords.map((shell) => ({ type: shell.type, minVersion: shell.minimumVersion, buildHash: shell.buildHash })),
+    shell: Object.fromEntries(shellRecords.map((shell) => [shell.type, { version: { min: shell.minimumVersion }, buildHash: shell.buildHash }])),
   };
   const contentFile = join(documents, "content-metadata.json");
   await writeObject(contentFile, signed("metadata", metadata, keys));

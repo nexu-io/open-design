@@ -71,7 +71,7 @@ describe("Standalone exact fixture server", () => {
         expect.objectContaining({ id: "open-design-daemon", materialization: { type: "zip", entrypoint: "sidecar.mjs", treeSha256: "c".repeat(64) } }),
         expect.objectContaining({ id: "open-design-web", materialization: { type: "zip", entrypoint: "sidecar.mjs", treeSha256: "d".repeat(64) } }),
       ]));
-      expect(content.metadata.shellRequirements).toEqual([{ buildHash: "a".repeat(64), minVersion: "0.1.0", type: "electron" }]);
+      expect(content.metadata.shell).toEqual({ electron: { buildHash: "a".repeat(64), version: { min: "0.1.0" } } });
 
       const head = await (await fetch(bootstrap.channelHeadUrl)).json() as SignedStandaloneChannelHead;
       expect(verifyStandaloneChannelHead(head, ring)).toBe("local-exact");

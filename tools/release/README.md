@@ -24,8 +24,16 @@ matching the release base version. Custom channels must match `^[a-z]{3,10}$`
 and may use any valid source branch with an exact source commit. The current
 `exact-validation` rollout permits only `betahyx`; it is not a main-only or
 local-only publishing path. Existing artifact trust, acceptance, and activation
-gates remain in force. Fossil metadata readers retain their decoding grammar;
+gates remain in force. Fossil channel-name readers retain their decoding grammar;
 reading an old channel name does not authorize a new publication.
+Stable versions are `X.Y.Z`; counted channels use `X.Y.Z-<channel>.N`.
+
+Content metadata schema 5 declares `shell.<type>.version.min` and the associated
+build identity. Producers and consumers switch together; regenerate experimental
+schema-4 metadata instead of accepting both requirement shapes. Retaining a
+previous compatibility floor requires a verified schema-5 envelope for the same
+channel and unchanged build identity. This does not change generation/state
+schema versions or give Closure a Capsule update protocol.
 
 `exact-control` accepts an `exact.acceptance` request with `schemaVersion: 1`,
 `policyReceipt`, `publishReceipt`, `shellType`, `target`, and `installedRoot`.

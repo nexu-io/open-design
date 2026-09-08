@@ -3,6 +3,13 @@
 This package is the shell-neutral trust and lifecycle boundary for exact distributions.
 
 - Keep metadata and receipt schemas versioned and deterministic.
+- Content metadata schema 5 declares `shell.<type>.version.min` and its build
+  identity. Do not accept the former requirement array or mixed field shapes.
+  Generation/state schema versions remain independent of metadata versions.
+- Stable lifecycle versions use `X.Y.Z`; counted channels use
+  `X.Y.Z-<channel>.N`. Channel scope is explicit, not inferred from a suffix.
+  Compare releases through `compareChannelReleaseVersions`; publication gates
+  remain in tools-release, not in the consumer's protocol grammar.
 - Own the Shell-neutral host control contract, transport-injected client, and
   logical host lifecycle, dispatcher, and shared lifecycle ledger. Shell adapters supply transport and a state port;
   shared code must not import Electron or Sidecar transport. A logical lifecycle

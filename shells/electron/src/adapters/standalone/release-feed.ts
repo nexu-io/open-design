@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import {
   canonicalJson,
+  compareChannelReleaseVersions,
   ensureStandaloneBlob,
   materializeStandaloneBlob,
   sha256Hex,
@@ -42,21 +43,6 @@ export type ElectronReleaseExactCandidate = Readonly<{
 }>;
 
 type Fetch = typeof globalThis.fetch;
-
-function releaseOrder(value: string, channel: string): readonly number[] {
-  const match = new RegExp(`^(\\d+)\\.(\\d+)\\.(\\d+)-${channel}\\.(\\d+)$`).exec(value);
-  if (match == null) throw new Error(`Electron release does not belong to exact channel ${channel}`);
-  return match.slice(1).map(Number);
-}
-
-function compareRelease(left: string, right: string, channel: string): number {
-  const a = releaseOrder(left, channel);
-  const b = releaseOrder(right, channel);
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return a[index]! - b[index]!;
-  }
-  return 0;
-}
 
 async function bytes(fetcher: Fetch, url: string, label: string, expected?: Readonly<{ sha256: string; size: number }>): Promise<Uint8Array> {
   const response = await fetcher(url, { redirect: "error" });
@@ -111,7 +97,7 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
     if (envelope.head.channel !== this.options.channel) throw new Error("Electron channel head escaped its installed channel");
     const lane = envelope.head.lanes.electron;
     if (lane == null) throw new Error("Electron channel head lacks the electron lane");
-    const order = compareRelease(lane.releaseVersion, this.options.currentReleaseVersion, this.options.channel);
+    const order = compareChannelReleaseVersions(lane.releaseVersion, this.options.currentReleaseVersion, this.options.channel);
     if (order < 0) throw new Error("Electron channel head would downgrade the installed exact release");
     const metadata = json<SignedStandaloneShellMetadata>(await bytes(fetcher, lane.url, "Electron Shell metadata", lane), "Electron Shell metadata");
     verifyStandaloneShellMetadata(metadata, this.options.trustedKeys);
@@ -134,7 +120,7 @@ export class ElectronReleaseExactFeed implements StandaloneUpdateSource {
     verifyStandaloneShellMetadata(candidate.metadata, this.options.trustedKeys);
     const document = candidate.metadata.document;
     if (document.channel !== this.options.channel || document.releaseVersion !== candidate.candidateId) throw new Error("persisted Electron release candidate escaped its signed identity");
-    const order = compareRelease(candidate.candidateId, this.options.currentReleaseVersion, this.options.channel);
+    const order = compareChannelReleaseVersions(candidate.candidateId, this.options.currentReleaseVersion, this.options.channel);
     if (order < 0) throw new Error("persisted Electron release candidate would downgrade the installed exact release");
     const distribution = document.distributions.find(({ shell, target }) => shell.type === "electron" && target === this.options.target);
     if (distribution == null || candidate.distribution == null || canonicalJson(distribution) !== canonicalJson(candidate.distribution)) throw new Error(`persisted Electron release candidate lacks target ${this.options.target}`);

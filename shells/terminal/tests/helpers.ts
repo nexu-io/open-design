@@ -139,7 +139,7 @@ function releaseDocuments(root: string, closure: Uint8Array, launcher: Uint8Arra
     writeFileSync(launcherFile, launcherBytes);
     const launcherSha256 = sha256Hex(launcherBytes);
     const metadata: StandaloneMetadata = {
-      schemaVersion: 4,
+      schemaVersion: 5,
       channel,
       releaseVersion,
       standaloneVersion: "0.1.0",
@@ -153,7 +153,7 @@ function releaseDocuments(root: string, closure: Uint8Array, launcher: Uint8Arra
         { id: "standalone-launcher", component: "standalone.launcher", blob: launcherSha256, sync: true, materialization: { type: "file", entrypoint: "launcher.mjs" } },
         { id: "closure-fixture", component: "standalone.resource", blob: artifactSha256, sync: true, materialization: { type: "file", entrypoint: "fixture.mjs" } },
       ],
-      shellRequirements: [{ type: "terminal", minVersion, buildHash: "b".repeat(64) }],
+      shell: { terminal: { version: { min: minVersion }, buildHash: "b".repeat(64) } },
     };
     const metadataBytes = Buffer.from(canonicalJson(signStandaloneMetadata(metadata, [signer])));
     const metadataFile = join(root, `${releaseVersion}-metadata.json`);

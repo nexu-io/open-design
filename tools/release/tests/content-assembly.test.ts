@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
-import { verifyDocument } from "@open-design/standalone";
+import { signStandaloneMetadata, verifyDocument, verifyStandaloneMetadata, verifyStandaloneShellMetadata } from "@open-design/standalone";
 
 import { prepareContent, finalizeContent } from "../src/exact/content.ts";
 
@@ -78,6 +78,31 @@ describe("exact release control", () => {
       await writeFile(resourceReceiptPath, JSON.stringify(resourceReceipt));
       await prepareContent(prepareRequest, join(output, "prepare-receipt.json"));
       const prepared = JSON.parse(await readFile(join(output, "prepare-receipt.json"), "utf8"));
+      const replayOutput = join(root, "replayed");
+      await prepareContent({ ...prepareRequest, outputDirectory: replayOutput }, join(replayOutput, "prepare-receipt.json"));
+      const replay = JSON.parse(await readFile(join(replayOutput, "prepare-receipt.json"), "utf8"));
+      expect(await readFile(replay.contentMetadata.file)).toEqual(await readFile(prepared.contentMetadata.file));
+      await expect(finalizeContent({
+        prepareReceipt: join(output, "prepare-receipt.json"), contentMetadataFile: prepared.contentMetadata.file,
+        closureArtifactFile: prepared.closureArtifact.file, standaloneArtifactFile: prepared.standaloneArtifact.file,
+        contributions: [], outputDirectory: join(root, "incomplete"),
+      }, join(root, "incomplete/pack-receipt.json"))).rejects.toThrow("requires Shell contributions");
+      const currentContent = JSON.parse(await readFile(prepared.contentMetadata.file, "utf8"));
+      const history = signStandaloneMetadata({ ...currentContent.metadata, shell: {
+        [shellType]: { ...currentContent.metadata.shell[shellType], version: { min: "0.0.9" } },
+      } }, "release-test", keys.privateKey);
+      const historyFile = join(root, "previous-content.json");
+      await writeFile(historyFile, JSON.stringify(history));
+      for (const [name, floor] of [["verified-history", "0.0.9"], ["tampered-history", "0.1.0"]]) {
+        if (name === "tampered-history") {
+          history.metadata.shell[shellType]!.version.min = "0.0.1";
+          await writeFile(historyFile, JSON.stringify(history));
+        }
+        const reused = join(root, name!);
+        await prepareContent({ ...prepareRequest, previousContentMetadataFile: historyFile, outputDirectory: reused }, join(reused, "prepare-receipt.json"));
+        const receipt = JSON.parse(await readFile(join(reused, "prepare-receipt.json"), "utf8"));
+        expect(receipt.shells[0].minimumVersion).toBe(floor);
+      }
       const contributionFile = join(root, "contribution.json"), finalDirectory = join(root, "final");
       const contribution = {
         schemaVersion: 1, operation: "shell.distribution.contribute", target: "darwin-arm64",
@@ -102,6 +127,7 @@ describe("exact release control", () => {
       await finalize();
       const metadata = JSON.parse(await readFile(join(finalDirectory, `documents/${shellType}-metadata.json`), "utf8"));
       const finalized = JSON.parse(await readFile(join(finalDirectory, "pack-receipt.json"), "utf8"));
+      expect(() => verifyStandaloneShellMetadata(metadata, { "release-test": keys.publicKey })).not.toThrow();
       expect(metadata.document.distributions[0].updater == null).toBe(shellType === "terminal");
       expect(finalized.requiredAcceptances[0].updater == null).toBe(shellType === "terminal");
       expect(finalized.documents.some((file: { file: string }) => file.file.endsWith("capsule-darwin-arm64.json"))).toBe(shellType === "electron");
@@ -122,7 +148,9 @@ describe("exact release control", () => {
       if (previous.keyId == null) delete process.env.OD_EXACT_SIGNING_KEY_ID; else process.env.OD_EXACT_SIGNING_KEY_ID = previous.keyId;
     }
     const envelope = JSON.parse(await readFile(join(output, "documents/content-metadata.json"), "utf8"));
-    expect(envelope.metadata).toMatchObject({ channel, releaseVersion });
+    expect(envelope.metadata).toMatchObject({ schemaVersion: 5, channel, releaseVersion, shell: { [shellType]: { version: { min: "0.1.0" } } } });
+    expect(envelope.metadata).not.toHaveProperty("shellRequirements");
+    expect(() => verifyStandaloneMetadata(envelope, { "release-test": keys.publicKey })).not.toThrow();
     expect(envelope.metadata.resources.some((resource: { id: string }) => resource.id.includes("capsule"))).toBe(false);
     expect(envelope.metadata.resources).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "standalone-launcher" }),

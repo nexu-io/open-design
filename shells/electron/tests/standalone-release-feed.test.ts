@@ -23,28 +23,30 @@ import { writeCapsuleSeed } from "./fixtures/capsule.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
 
-async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: string; badSignature?: boolean; archiveSha256?: string; treeSha256?: string; minimumCarrierVersion?: string; omitCapsule?: boolean } = {}) {
+async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { channel?: string; target?: string; badSignature?: boolean; archiveSha256?: string; treeSha256?: string; minimumCarrierVersion?: string; omitCapsule?: boolean } = {}) {
   const cacheRoot = await mkdtemp(join(tmpdir(), "electron-release-feed-"));
   roots.push(cacheRoot);
   const keys = generateKeyPairSync("ed25519");
   const artifact = Buffer.from("signed electron distribution");
   const artifactSha256 = createHash("sha256").update(artifact).digest("hex");
-  const metadataUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/electron-metadata.json";
-  const artifactUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/electron.dmg";
-  const capsuleUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/capsule.json";
+  const channel = options.channel ?? "betahyx", base = `https://releases.invalid/${channel}/${releaseVersion}`;
+  const channelHeadUrl = `https://releases.invalid/${channel}/latest/channel-head.json`;
+  const metadataUrl = `${base}/electron-metadata.json`;
+  const artifactUrl = `${base}/electron.dmg`;
+  const capsuleUrl = `${base}/capsule.json`;
   const seed = await writeCapsuleSeed({ root: cacheRoot, privateKey: keys.privateKey, keyId: "release",
     moduleSource: 'throw new Error("preparation must not execute Capsule"); export const createElectronCapsuleDefinition = () => {}; export const runElectronCapsule = () => {};',
   });
   const capsuleArchive = await readFile(seed.archiveFile);
   const archive = seed.envelope.document.archive;
-  const capsuleArchiveUrl = "https://releases.invalid/betahyx/0.2.0-betahyx.2/capsule.zip";
+  const capsuleArchiveUrl = `${base}/capsule.zip`;
   const capsule = { schemaVersion: 1, protocol: "electron-capsule-v3", version: "0.2.0", target: options.target ?? "darwin-arm64", entrypoint: "capsule.cjs",
     requires: { carrierVersion: options.minimumCarrierVersion ?? "0.1.0" }, provides: { shellVersion: "0.2.0" },
     archive: { ...archive, sha256: options.archiveSha256 ?? archive.sha256, treeSha256: options.treeSha256 ?? archive.treeSha256 } };
   const capsuleBytes = Buffer.from(canonicalJson(signDocument(capsule, [{ keyId: "release", privateKey: options.badSignature ? generateKeyPairSync("ed25519").privateKey : keys.privateKey }])));
   const document: StandaloneShellMetadata = {
     schemaVersion: 1,
-    channel: "betahyx",
+    channel,
     releaseVersion,
     sourceCommit: "a".repeat(40),
     publishedAt: "2026-09-04T00:00:00.000Z",
@@ -63,13 +65,13 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
   const metadata = Buffer.from(canonicalJson(signStandaloneShellMetadata(document, [{ keyId: "release", privateKey: keys.privateKey }])));
   const head: StandaloneChannelHead = {
     schemaVersion: 1,
-    channel: "betahyx",
+    channel,
     publishedAt: "2026-09-04T00:00:00.000Z",
     lanes: { electron: { releaseVersion, url: metadataUrl, sha256: createHash("sha256").update(metadata).digest("hex"), size: metadata.byteLength } },
   };
   const channelHead = Buffer.from(canonicalJson(signStandaloneChannelHead(head, [{ keyId: "release", privateKey: keys.privateKey }])));
   const bodies = new Map<string, Buffer>([
-    ["https://releases.invalid/betahyx/latest/channel-head.json", channelHead],
+    [channelHeadUrl, channelHead],
     [metadataUrl, metadata],
     [artifactUrl, artifact],
     [capsuleUrl, capsuleBytes],
@@ -81,9 +83,9 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
   }) as typeof fetch;
   const feed = new ElectronReleaseExactFeed({
     cacheRoot,
-    channel: "betahyx",
-    channelHeadUrl: "https://releases.invalid/betahyx/latest/channel-head.json",
-    currentReleaseVersion: "0.1.0-betahyx.1",
+    channel,
+    channelHeadUrl,
+    currentReleaseVersion: channel === "stable" ? "0.1.0" : `0.1.0-${channel}.1`,
     fetch: fetcher,
     shell: { type: "electron", version: "0.1.0", buildHash: "c".repeat(64), digest: "d".repeat(64) },
     target: "darwin-arm64",
@@ -93,6 +95,12 @@ async function fixture(releaseVersion = "0.2.0-betahyx.2", options: { target?: s
 }
 
 describe("Electron release-exact feed", () => {
+  it("consumes stable bare versions and rejects a stable downgrade through the same signed feed", async () => {
+    const current = await fixture("0.2.0", { channel: "stable" });
+    expect(await current.feed.check()).toMatchObject({ candidateId: "0.2.0" });
+    const downgrade = await fixture("0.0.9", { channel: "stable" });
+    await expect(downgrade.feed.check()).rejects.toThrow("would downgrade");
+  });
   it("prepares exact Capsule bytes through the shared cache without activating or rediscovering", async () => {
     const { feed, bodies, fetcher, capsuleArchiveUrl, capsule, cacheRoot } = await fixture();
     const candidate = (await feed.check())!;

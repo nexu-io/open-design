@@ -1,6 +1,7 @@
 import {
   assertShellCompatibility,
   canonicalJson,
+  compareChannelReleaseVersions,
   sha256Hex,
   verifyStandaloneChannelHead,
   verifyStandaloneMetadata,
@@ -67,21 +68,6 @@ function parseEnvelope(bytes: Uint8Array): SignedStandaloneMetadata {
   return JSON.parse(Buffer.from(bytes).toString("utf8")) as SignedStandaloneMetadata;
 }
 
-function versionOrder(value: string, channel: string): number[] {
-  const match = new RegExp(`^(\\d+)\\.(\\d+)\\.(\\d+)-${channel}\\.(\\d+)$`).exec(value);
-  if (match == null) throw new Error(`invalid ${channel} release version: ${value}`);
-  return match.slice(1).map(Number);
-}
-
-function compareReleaseVersions(left: string, right: string, channel: string): number {
-  const a = versionOrder(left, channel);
-  const b = versionOrder(right, channel);
-  for (let index = 0; index < a.length; index += 1) {
-    if (a[index] !== b[index]) return a[index]! - b[index]!;
-  }
-  return 0;
-}
-
 export class StandaloneUpdater {
   constructor(
     private readonly channel: string,
@@ -115,8 +101,8 @@ export class StandaloneUpdater {
       assertShellCompatibility(envelope.metadata, this.shell);
     } catch (error) {
       if (!(error instanceof Error) || (error as { code?: unknown }).code !== "installer-required") throw error;
-      const requirement = envelope.metadata.shellRequirements.find(({ type }) => type === this.shell.type) ?? null;
-      return { status: "shell-reinstall-required", releaseVersion: lane.releaseVersion, minimumVersion: requirement?.minVersion ?? null, requirement };
+      const requirement = Object.hasOwn(envelope.metadata.shell, this.shell.type) ? envelope.metadata.shell[this.shell.type]! : null;
+      return { status: "shell-reinstall-required", releaseVersion: lane.releaseVersion, minimumVersion: requirement?.version.min ?? null, requirement };
     }
     const id = sha256Hex(canonicalJson(envelope.metadata));
     const state = await this.store.readState();
@@ -128,7 +114,7 @@ export class StandaloneUpdater {
     const retainedIds = new Set([state.active, state.prepared].filter((value): value is string => value != null));
     for (const retainedId of retainedIds) {
       const retained = await this.store.readGeneration(retainedId);
-      const order = compareReleaseVersions(retained.releaseVersion, lane.releaseVersion, this.channel);
+      const order = compareChannelReleaseVersions(retained.releaseVersion, lane.releaseVersion, this.channel);
       if (order > 0) throw new Error(`channel head would downgrade ${retained.releaseVersion} to ${lane.releaseVersion}`);
       if (order === 0) {
         if (retained.id !== id) throw new Error(`immutable release metadata collision: ${lane.releaseVersion}`);

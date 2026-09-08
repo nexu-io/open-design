@@ -19,9 +19,8 @@ command surface. Keep it a thin adapter over the public
 - Namespace controls local output/install/runtime paths. Ports are transient
   transport details and never path identity.
 - Tests use the test-only `@/*` alias and live under `tests/`.
-- The public `/exact` API exposes the existing content prepare/finalize atoms
-  to tools-release. It does not acquire publication policy or own channel gates;
-  callers must authorize release operations before invoking content assembly.
+- Content prepare/finalize and signing belong to tools-release. Do not restore
+  tools-pack `/exact` or `exact-control`; unsupported commands must fail visibly.
 - The public `/build` API owns generic checksum-verified build-input download
   reuse. Shells declare locked inputs; callers choose the local cache root.
   It does not know Electron, assemble native dependencies, or publish artifacts.
