@@ -2271,12 +2271,37 @@ export function ChatPane({
   // 面板槽里那段字是不是某一轮跑出来的原文 —— 只看**有没有来源助手**,不看是不是
   // 「这一轮」的。别的助手留下的原文也一样是原文,不该因为「跟这一轮无关」就原样放行。
   const paneErrorCameFromARun = !!currentGlobalError && errorSourceAssistantId != null;
+  /**
+   * 空回复**不是**「说不出原因」,而是「原因已经有人在说」。
+   *
+   * API / BYOK 空回复把这一轮也写成 `runStatus:'failed'`
+   * (`ProjectView.tsx` 的 `emptyApiResponse` 分支同时补一条 `status(empty_response)`),
+   * 但它的状态词是「没有输出」、正文是 `assistant.emptyResponseMessage`,由
+   * `e2e/ui/api-empty-response.test.ts` 那条 P0 钉死。再压一张兜底白卡,就是
+   * 同一件事被两块 UI 各说一遍 —— 和交接判据要避免的是同一个问题。
+   *
+   * 判据和 `AssistantMessage.failedTurnIsAnnouncedByTheShell` 用的是同一条:
+   * 看这一轮身上有没有 `empty_response` 那一帧,不看文案长什么样。
+   */
+  const failedTurnIsAnEmptyResponse = (retryAssistant?.events ?? []).some(
+    (ev) => ev.kind === 'status' && ev.label === 'empty_response',
+  );
+  /**
+   * 这一轮**确实到了终态失败**。
+   *
+   * `retryAssistant` 本身就是这个判据:它走
+   * `isRetryableAssistantTerminalFailure`,既认进程级 `runStatus:'failed'`,
+   * 也认「进程成了、东西没交出来」的 `no_result` / `delivery_failed` ——
+   * 恢复入口这一族本来就共用它当锚点,兜底卡没有理由另立一套。
+   */
+  const turnEndedInTerminalFailure = !!retryAssistant && !failedTurnIsAnEmptyResponse;
   const cardDescription = resolveRunErrorCardDescription({
     handedToAnotherSurface: anotherSurfaceOwnsFailure,
     mappedMessageKey: runFailureUi?.messageKey ?? null,
     paneError: currentGlobalError,
     paneErrorCameFromARun,
     failedRunRawDetail: failedRunErrorEvent?.detail ?? null,
+    turnEndedInTerminalFailure,
   });
   const displayError =
     cardDescription.render === 'none'
