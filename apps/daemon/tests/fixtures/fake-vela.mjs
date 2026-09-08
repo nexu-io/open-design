@@ -22,7 +22,7 @@
  *   `vela models`                       → prints production-shaped public
  *                                         model ids from the Vela catalog.
  *
- *   `vela agent run --runtime opencode` → ACP stdio runtime. Speaks just
+ *   `vela agent run` → ACP stdio runtime. Speaks just
  *                                         enough of the protocol to drive
  *                                         OpenDesign's `detectAcpModels`
  *                                         and `attachAcpSession` through a
@@ -173,7 +173,7 @@ const DEFAULT_MODEL_LIST_JSON = JSON.stringify({
   ],
 });
 
-// Real `vela agent run --runtime opencode` rejects session/prompt until
+// Real `vela agent run` rejects session/prompt until
 // session/set_model has been called for the current session — see the
 // AMR runtime def docblock and the integration test for the negative case.
 // The stub mirrors that contract so a regression in attachAcpSession that

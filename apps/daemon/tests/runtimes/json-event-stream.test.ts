@@ -1584,6 +1584,176 @@ test('codex json stream emits command execution tool events', () => {
   ]);
 });
 
+/*
+ * The `file_change` fixtures below are copied verbatim out of recorded runs
+ * under `.od/runs/<id>/events.jsonl`, where they were passed through as
+ * `{"type":"raw",...}` because the parser had no branch for the item type.
+ * Do not "tidy" the field names — the whole point is that they are codex's.
+ */
+const CODEX_FILE_CHANGE_ADD_STARTED =
+  '{"type":"item.started","item":{"id":"item_3","type":"file_change","changes":[{"path":"/Users/elian/Documents/od-wt-chat-panel/.od/projects/c6893efa-5f78-43c8-82da-19a2b7acf65c/ai-design-judgment.html","kind":"add"},{"path":"/Users/elian/Documents/od-wt-chat-panel/.od/projects/c6893efa-5f78-43c8-82da-19a2b7acf65c/brand-spec.md","kind":"add"}],"status":"in_progress"}}';
+const CODEX_FILE_CHANGE_ADD_COMPLETED =
+  '{"type":"item.completed","item":{"id":"item_3","type":"file_change","changes":[{"path":"/Users/elian/Documents/od-wt-chat-panel/.od/projects/c6893efa-5f78-43c8-82da-19a2b7acf65c/ai-design-judgment.html","kind":"add"},{"path":"/Users/elian/Documents/od-wt-chat-panel/.od/projects/c6893efa-5f78-43c8-82da-19a2b7acf65c/brand-spec.md","kind":"add"}],"status":"completed"}}';
+const CODEX_FILE_CHANGE_UPDATE_STARTED =
+  '{"type":"item.started","item":{"id":"item_9","type":"file_change","changes":[{"path":"/Users/elian/Documents/od-wt-chat-panel/.od/projects/2ba97aa7-24ce-424a-8923-437cf4fcd5b5/trustworthy-design-one-pager.html","kind":"update"}],"status":"in_progress"}}';
+const CODEX_FILE_CHANGE_UPDATE_COMPLETED =
+  '{"type":"item.completed","item":{"id":"item_9","type":"file_change","changes":[{"path":"/Users/elian/Documents/od-wt-chat-panel/.od/projects/2ba97aa7-24ce-424a-8923-437cf4fcd5b5/trustworthy-design-one-pager.html","kind":"update"}],"status":"completed"}}';
+const ADDED_HTML =
+  '/Users/elian/Documents/od-wt-chat-panel/.od/projects/c6893efa-5f78-43c8-82da-19a2b7acf65c/ai-design-judgment.html';
+const ADDED_MD =
+  '/Users/elian/Documents/od-wt-chat-panel/.od/projects/c6893efa-5f78-43c8-82da-19a2b7acf65c/brand-spec.md';
+const UPDATED_HTML =
+  '/Users/elian/Documents/od-wt-chat-panel/.od/projects/2ba97aa7-24ce-424a-8923-437cf4fcd5b5/trustworthy-design-one-pager.html';
+
+test('codex json stream emits a Write tool row per added file (regression: codex file writes never appeared in the chat)', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_FILE_CHANGE_ADD_STARTED}\n${CODEX_FILE_CHANGE_ADD_COMPLETED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'item_3#0', name: 'Write', input: { file_path: ADDED_HTML } },
+    { type: 'tool_use', id: 'item_3#1', name: 'Write', input: { file_path: ADDED_MD } },
+    { type: 'tool_result', toolUseId: 'item_3#0', content: '', isError: false },
+    { type: 'tool_result', toolUseId: 'item_3#1', content: '', isError: false },
+  ]);
+});
+
+test('codex json stream emits an Edit tool row for an updated file', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_FILE_CHANGE_UPDATE_STARTED}\n${CODEX_FILE_CHANGE_UPDATE_COMPLETED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'item_9#0', name: 'Edit', input: { file_path: UPDATED_HTML } },
+    { type: 'tool_result', toolUseId: 'item_9#0', content: '', isError: false },
+  ]);
+});
+
+/*
+ * The `tool_use` must leave the parser at `item.started`, not be held back
+ * until `item.completed`. `tool-timing.ts` stamps `startedAt` at the single
+ * event exit, so a `tool_use` that arrives together with its `tool_result`
+ * gives the row a near-zero span the web reads as "unknown" rather than a
+ * duration. Feeding the started line alone is the only way to observe that,
+ * since a completed-only stream emits the same events in the same order.
+ */
+test('codex json stream emits the file_change tool_use at item.started, before the result exists', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_FILE_CHANGE_UPDATE_STARTED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'item_9#0', name: 'Edit', input: { file_path: UPDATED_HTML } },
+  ]);
+});
+
+/*
+ * A file_change ends the current assistant message the same way a
+ * command_execution does, so the next agent_message must not be glued to the
+ * previous one with a synthetic newline — the tool row already separates them.
+ */
+test('codex file_change clears the agent_message boundary state like command_execution does', () => {
+  const { events, handler } = collectEvents('codex');
+
+  const agentMessage = (id: string, text: string): string =>
+    JSON.stringify({ type: 'item.completed', item: { id, type: 'agent_message', text } });
+
+  handler.feed(
+    `${agentMessage('item_8', 'rewriting the page')}\n` +
+    `${CODEX_FILE_CHANGE_UPDATE_STARTED}\n` +
+    `${CODEX_FILE_CHANGE_UPDATE_COMPLETED}\n` +
+    `${agentMessage('item_10', 'done')}\n`,
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'rewriting the page' },
+    { type: 'tool_use', id: 'item_9#0', name: 'Edit', input: { file_path: UPDATED_HTML } },
+    { type: 'tool_result', toolUseId: 'item_9#0', content: '', isError: false },
+    { type: 'text_delta', delta: 'done' },
+  ]);
+});
+
+test('codex json stream still emits a file_change tool pair when only item.completed arrives', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_FILE_CHANGE_UPDATE_COMPLETED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'item_9#0', name: 'Edit', input: { file_path: UPDATED_HTML } },
+    { type: 'tool_result', toolUseId: 'item_9#0', content: '', isError: false },
+  ]);
+});
+
+test('codex json stream marks a failed file_change item as an errored tool result', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    `${JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_9',
+        type: 'file_change',
+        changes: [{ path: UPDATED_HTML, kind: 'update' }],
+        status: 'failed',
+      },
+    })}\n`,
+  );
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'item_9#0', name: 'Edit', input: { file_path: UPDATED_HTML } },
+    { type: 'tool_result', toolUseId: 'item_9#0', content: '', isError: true },
+  ]);
+});
+
+test('codex json stream leaves an unrecognized file_change kind as raw instead of guessing a verb', () => {
+  const { events, handler } = collectEvents('codex');
+
+  const line = JSON.stringify({
+    type: 'item.completed',
+    item: {
+      id: 'item_9',
+      type: 'file_change',
+      changes: [{ path: UPDATED_HTML, kind: 'delete' }],
+      status: 'completed',
+    },
+  });
+  handler.feed(`${line}\n`);
+
+  assert.deepEqual(events, [{ type: 'raw', line }]);
+});
+
+test('codex file_change handling leaves other json-event-stream runtimes untouched', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  handler.feed(`${CODEX_FILE_CHANGE_ADD_COMPLETED}\n`);
+
+  assert.deepEqual(events, [{ type: 'raw', line: CODEX_FILE_CHANGE_ADD_COMPLETED }]);
+});
+
+test('codex file_change rows do not disturb neighbouring reasoning and agent_message items', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    `${JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_2', type: 'reasoning', text: 'weighing the layout' },
+    })}\n` +
+    `${CODEX_FILE_CHANGE_UPDATE_STARTED}\n` +
+    `${CODEX_FILE_CHANGE_UPDATE_COMPLETED}\n` +
+    `${JSON.stringify({
+      type: 'item.completed',
+      item: { id: 'item_10', type: 'agent_message', text: 'done rewriting the page' },
+    })}\n`,
+  );
+
+  assert.deepEqual(events, [
+    { type: 'thinking_delta', delta: 'weighing the layout' },
+    { type: 'tool_use', id: 'item_9#0', name: 'Edit', input: { file_path: UPDATED_HTML } },
+    { type: 'tool_result', toolUseId: 'item_9#0', content: '', isError: false },
+    { type: 'text_delta', delta: 'done rewriting the page' },
+  ]);
+});
+
 test('codex json stream emits TodoWrite events from todo_list items', () => {
   const { events, handler } = collectEvents('codex');
 
@@ -1859,7 +2029,7 @@ test('codex json stream treats reconnect errors as status warnings not fatal (re
   assert.deepEqual(events, [
     { type: 'status', label: 'initializing', sessionId: 'thr-1' },
     { type: 'status', label: 'thinking' },
-    { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+    { type: 'status', label: 'agent_reconnecting', detail: '2/5' },
     { type: 'text_delta', delta: 'OK' },
     { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
   ]);
@@ -1882,10 +2052,7 @@ test('codex json stream treats stream disconnect reconnect errors as status warn
   assert.deepEqual(events, [
     { type: 'status', label: 'initializing', sessionId: 'thr-1' },
     { type: 'status', label: 'thinking' },
-    {
-      type: 'status',
-      label: 'Reconnecting... 2/5 (stream disconnected before completion: Connection reset by peer (os error 54))',
-    },
+    { type: 'status', label: 'agent_reconnecting', detail: '2/5' },
     { type: 'text_delta', delta: 'OK' },
     { type: 'usage', usage: { input_tokens: 5, output_tokens: 2, cached_read_tokens: 0 } },
   ]);
@@ -1900,7 +2067,7 @@ test('codex json stream still treats real errors as fatal after reconnect warnin
   );
 
   assert.deepEqual(events, [
-    { type: 'status', label: 'Reconnecting... 2/5 (timeout waiting for child process to exit)' },
+    { type: 'status', label: 'agent_reconnecting', detail: '2/5' },
     { type: 'error', message: 'Authentication failed: invalid API key' },
   ]);
 });
@@ -1920,5 +2087,293 @@ test('codex json stream does not downgrade non-reconnect errors that mention rec
       type: 'error',
       message: 'Authentication failed after Reconnecting... stream disconnected before completion',
     },
+  ]);
+});
+
+/*
+ * ── codex `mcp_tool_call` / `web_search` ────────────────────────────────
+ *
+ * Both fixtures below are copied VERBATIM out of live `codex exec --json`
+ * captures taken with the daemon's own flags (codex-cli 0.149.1). Do not
+ * normalise them — the oddities are codex's and the tests exist to pin them:
+ *
+ *  · `mcp_tool_call` carries `server` / `tool` / `arguments` already on
+ *    `item.started`, and reports failure through BOTH `status:"failed"` and a
+ *    populated `error` object.
+ *  · `web_search` serialises `id` TWICE in the same object — the item id first,
+ *    then an `exec-…` id. `JSON.parse` keeps the LAST one, so the tool id the
+ *    parser sees is the `exec-…` value, not `item_2`. It is stable across the
+ *    started/completed pair, so the pairing still holds.
+ *  · `web_search`'s started frame has an EMPTY `query` and `action.type:"other"`;
+ *    the real query only exists on `item.completed`.
+ *
+ * Both item types fell through to `{"type":"raw"}` before this family existed,
+ * and `build-turn-blocks.ts` skips `raw` outright — so a codex turn that
+ * searched the web or called a connected MCP server showed NO row at all.
+ */
+const CODEX_MCP_TOOL_CALL_STARTED =
+  '{"type":"item.started","item":{"id":"item_2","type":"mcp_tool_call","server":"echofacts","tool":"echo_fact","arguments":{"topic":"orbital-mechanics"},"result":null,"error":null,"status":"in_progress"}}';
+const CODEX_MCP_TOOL_CALL_FAILED =
+  '{"type":"item.completed","item":{"id":"item_2","type":"mcp_tool_call","server":"echofacts","tool":"echo_fact","arguments":{"topic":"orbital-mechanics"},"result":null,"error":{"message":"MCP tool call requires approval, but approval policy is never"},"status":"failed"}}';
+const CODEX_WEB_SEARCH_STARTED =
+  '{"type":"item.started","item":{"id":"item_2","type":"web_search","id":"exec-9fb8985e-4163-4af2-82a2-d499ab71d18b","query":"","action":{"type":"other"}}}';
+const CODEX_WEB_SEARCH_COMPLETED =
+  '{"type":"item.completed","item":{"id":"item_2","type":"web_search","id":"exec-9fb8985e-4163-4af2-82a2-d499ab71d18b","query":"OpenAI Codex CLI release notes","action":{"type":"search","query":"OpenAI Codex CLI release notes"}}}';
+/** Duplicate `id` key: `JSON.parse` keeps the last, so this is the tool id. */
+const CODEX_WEB_SEARCH_ID = 'exec-9fb8985e-4163-4af2-82a2-d499ab71d18b';
+const MCP_TOOL_NAME = 'mcp__echofacts__echo_fact';
+
+test('codex json stream emits a tool row for an mcp_tool_call (regression: connected MCP servers were invisible)', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_MCP_TOOL_CALL_STARTED}\n${CODEX_MCP_TOOL_CALL_FAILED}\n`);
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item_2',
+      name: MCP_TOOL_NAME,
+      input: { topic: 'orbital-mechanics' },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item_2',
+      content: 'MCP tool call requires approval, but approval policy is never',
+      isError: true,
+    },
+  ]);
+});
+
+/*
+ * The `tool_use` must leave the parser at `item.started` — every field the row
+ * needs (server, tool, arguments) is already there, so holding it back would
+ * cost the row its duration for nothing. Feeding the started line alone is the
+ * only way to observe that; it must also NOT produce a `tool_result`, because
+ * an unpaired `tool_use` is exactly what B8 relies on to keep the row off
+ * screen until the call returns (D3: no 「执行中」 state for tool rows).
+ */
+test('codex json stream emits the mcp_tool_call tool_use at item.started, with no result yet', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_MCP_TOOL_CALL_STARTED}\n`);
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item_2',
+      name: MCP_TOOL_NAME,
+      input: { topic: 'orbital-mechanics' },
+    },
+  ]);
+});
+
+test('codex json stream still emits an mcp_tool_call pair when only item.completed arrives', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_MCP_TOOL_CALL_FAILED}\n`);
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item_2',
+      name: MCP_TOOL_NAME,
+      input: { topic: 'orbital-mechanics' },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item_2',
+      content: 'MCP tool call requires approval, but approval policy is never',
+      isError: true,
+    },
+  ]);
+});
+
+test('codex mcp_tool_call clears the agent_message boundary state like command_execution does', () => {
+  const { events, handler } = collectEvents('codex');
+
+  const agentMessage = (id: string, text: string): string =>
+    JSON.stringify({ type: 'item.completed', item: { id, type: 'agent_message', text } });
+
+  handler.feed(
+    `${agentMessage('item_1', 'calling the tool')}\n` +
+    `${CODEX_MCP_TOOL_CALL_STARTED}\n` +
+    `${CODEX_MCP_TOOL_CALL_FAILED}\n` +
+    `${agentMessage('item_3', 'that is what it said')}\n`,
+  );
+
+  assert.deepEqual(events, [
+    { type: 'text_delta', delta: 'calling the tool' },
+    {
+      type: 'tool_use',
+      id: 'item_2',
+      name: MCP_TOOL_NAME,
+      input: { topic: 'orbital-mechanics' },
+    },
+    {
+      type: 'tool_result',
+      toolUseId: 'item_2',
+      content: 'MCP tool call requires approval, but approval policy is never',
+      isError: true,
+    },
+    { type: 'text_delta', delta: 'that is what it said' },
+  ]);
+});
+
+test('codex mcp_tool_call handling leaves other json-event-stream runtimes untouched', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  handler.feed(`${CODEX_MCP_TOOL_CALL_STARTED}\n${CODEX_MCP_TOOL_CALL_FAILED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'raw', line: CODEX_MCP_TOOL_CALL_STARTED },
+    { type: 'raw', line: CODEX_MCP_TOOL_CALL_FAILED },
+  ]);
+});
+
+test('codex json stream emits a search tool row for a completed web_search', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_WEB_SEARCH_STARTED}\n${CODEX_WEB_SEARCH_COMPLETED}\n`);
+
+  assert.deepEqual(events, [
+    // The early form, from `item.started` — see the note on the next test.
+    { type: 'tool_in_flight', id: CODEX_WEB_SEARCH_ID, name: 'web_search', input: {} },
+    {
+      type: 'tool_use',
+      id: CODEX_WEB_SEARCH_ID,
+      name: 'web_search',
+      input: { query: 'OpenAI Codex CLI release notes' },
+    },
+    { type: 'tool_result', toolUseId: CODEX_WEB_SEARCH_ID, content: '', isError: false },
+  ]);
+});
+
+/*
+ * ⚠️ This test used to assert the OPPOSITE — that `item.started` produces
+ * nothing at all. The product overruled that on 2026-09-03, verbatim: 「调用前
+ * (流式传输时)就要显示在界面上并开始计时,绝对不能调用完了才出现在界面上」.
+ *
+ * The old reasoning is worth keeping, because it names a trap this change had
+ * to get around rather than one it disproved:
+ *
+ *   `web_search`'s started frame carries `query:""`, and the query IS the row
+ *   (`toolTitle` and `searchPattern` both read it). Emitting the `tool_use`
+ *   there would lock in a blank 「搜索」 row — the `codexToolUses` guard would
+ *   then make `item.completed` a no-op and the real query would never arrive.
+ *
+ * All of that is still true, which is exactly why the early frame emits
+ * `tool_in_flight` and not `tool_use`. That event does not touch
+ * `codexToolUses`, so `item.completed` still emits the real pair with the real
+ * query (asserted above), and the client retires the early row into the settled
+ * one by shared id — one row, one clock, and the term fills itself in.
+ */
+test('codex web_search item.started emits the early row, so the clock starts when the call does', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(`${CODEX_WEB_SEARCH_STARTED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'tool_in_flight', id: CODEX_WEB_SEARCH_ID, name: 'web_search', input: {} },
+  ]);
+});
+
+/*
+ * codex's web_search `action` taxonomy has more members than `search` — the
+ * started frame above shows `other`. We have only ever captured `search`, so
+ * anything else must stay `raw` rather than be labelled 「搜索」: calling a page
+ * fetch a search is the same class of lie as calling a file deletion 「新建」
+ * (see the file_change `kind` fallback above).
+ */
+test('codex json stream leaves a non-search web_search action as raw instead of calling it a search', () => {
+  const { events, handler } = collectEvents('codex');
+
+  const line = JSON.stringify({
+    type: 'item.completed',
+    item: {
+      id: CODEX_WEB_SEARCH_ID,
+      type: 'web_search',
+      query: 'OpenAI Codex CLI release notes',
+      action: { type: 'other' },
+    },
+  });
+  handler.feed(`${line}\n`);
+
+  assert.deepEqual(events, [{ type: 'raw', line }]);
+});
+
+test('codex web_search handling leaves other json-event-stream runtimes untouched', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  handler.feed(`${CODEX_WEB_SEARCH_STARTED}\n${CODEX_WEB_SEARCH_COMPLETED}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'raw', line: CODEX_WEB_SEARCH_STARTED },
+    { type: 'raw', line: CODEX_WEB_SEARCH_COMPLETED },
+  ]);
+});
+
+/*
+ * A half-named MCP call must not become a row labelled `mcp____` — the same
+ * discipline the file_change `kind` fallback follows. The frame below is the
+ * verbatim capture minus its `tool` field; it pins OUR fallback, not codex's
+ * wording, and no captured frame has ever been missing one.
+ */
+test('codex json stream leaves a half-named mcp_tool_call as raw instead of naming it blank', () => {
+  const { events, handler } = collectEvents('codex');
+
+  const line = JSON.stringify({
+    type: 'item.completed',
+    item: {
+      id: 'item_2',
+      type: 'mcp_tool_call',
+      server: 'echofacts',
+      arguments: { topic: 'orbital-mechanics' },
+      result: null,
+      error: null,
+      status: 'completed',
+    },
+  });
+  handler.feed(`${line}\n`);
+
+  assert.deepEqual(events, [{ type: 'raw', line }]);
+});
+
+/*
+ * The success path. RECONSTRUCTED, not captured: `codex exec` runs with
+ * approval policy `never` and refuses every MCP call before it reaches the
+ * server, so no successful frame could be recorded. Every field value here is
+ * verbatim from the captured frames (`status:"completed"` is codex's own
+ * completion vocabulary, shared with command_execution and file_change;
+ * `result:null` appears in both captures), and the assertion is deliberately
+ * limited to what is structurally certain — a non-failed call is not an error.
+ * The payload shape of a populated `result` is NOT pinned here on purpose.
+ */
+test('codex json stream does not mark a non-failed mcp_tool_call as an error', () => {
+  const { events, handler } = collectEvents('codex');
+
+  handler.feed(
+    `${JSON.stringify({
+      type: 'item.completed',
+      item: {
+        id: 'item_2',
+        type: 'mcp_tool_call',
+        server: 'echofacts',
+        tool: 'echo_fact',
+        arguments: { topic: 'orbital-mechanics' },
+        result: null,
+        error: null,
+        status: 'completed',
+      },
+    })}\n`,
+  );
+
+  assert.deepEqual(events, [
+    {
+      type: 'tool_use',
+      id: 'item_2',
+      name: MCP_TOOL_NAME,
+      input: { topic: 'orbital-mechanics' },
+    },
+    { type: 'tool_result', toolUseId: 'item_2', content: '', isError: false },
   ]);
 });

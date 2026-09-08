@@ -1274,6 +1274,24 @@ async function wireOnboardingMocks(
     await fulfillAgentsRoute(route, agents);
   });
 
+  // Onboarding validates a settled runtime selection on its own, before
+  // Continue is ever pressed. Without a default handler that background pass
+  // reaches the live daemon and spawns whichever agent CLI the box happens to
+  // have. Cases that care about the verdict register their own handler after
+  // this one, which Playwright matches first.
+  await page.route('**/api/test/connection', async (route) => {
+    await route.fulfill({
+      json: {
+        ok: true,
+        kind: 'success',
+        latencyMs: 12,
+        model: 'default',
+        agentName: 'Codex CLI',
+        sample: 'Connected',
+      },
+    });
+  });
+
   await page.route('**/api/integrations/vela/status', async (route) => {
     statusCalls += 1;
     await page.evaluate((calls) => {

@@ -75,6 +75,14 @@ export type TrackingAmrEntrySource =
   | 'chat_error_recharge'
   | 'chat_error_upgrade'
   | 'chat_balance_gate_upgrade'
+  // 流水里的升级卡(交付稿第 75 / 76 格)。与 `chat_balance_gate_upgrade` 分开:
+  // 告警档现在**只出卡不弹窗**,两者是不同的出站面,合并会让漏斗读不出
+  // 「卡带来的升级」和「弹窗带来的升级」哪个在起作用。
+  | 'chat_upgrade_card'
+  // 同一张卡,但落点是 vela 的自动充值设置而不是 Pricing —— Max 档的所有者
+  // 没有更高的套餐可买,充值才是解法(规格 §6.V)。和上面分开记,否则漏斗会把
+  // 「卖套餐」和「劝充值」算成同一件事。
+  | 'chat_upgrade_card_auto_recharge'
   | 'home_balance_gate_upgrade'
   | 'chat_low_balance_warn_recharge'
   | 'home_low_balance_warn_recharge'
@@ -347,6 +355,11 @@ export type TrackingRunFailureDetail =
   | 'signal_killed'
   | 'process_crashed'
   | 'cpu_unsupported'
+  // Risk control suspended the account (vela returns JSON-RPC -32600 with
+  // `data.kind: "account_suspended"`, `retryable: false`). Named because
+  // retrying is guaranteed to fail the same way: without this it lands in
+  // `fatal_rpc_error` and the card offers a Retry the user can only burn on.
+  | 'account_suspended'
   | 'interrupted'
   | 'exit_code'
   | 'terminated_unknown'
@@ -428,11 +441,53 @@ export type TrackingRunAdmissionStatus =
   | 'unknown';
 export type TrackingRunTerminalIntegrity =
   | 'canonical'
+  | 'duplicate'
   | 'late'
   | 'reconciled'
   | 'overwritten'
   | 'permanently_missing'
   | 'post_terminal_activity';
+export type TrackingRunTerminationOrigin =
+  | 'user_cancel'
+  | 'project_cleanup'
+  | 'watchdog_cleanup'
+  | 'daemon_quit'
+  | 'update_apply'
+  | 'unknown';
+export type TrackingRunTerminalPersistenceStatus =
+  | 'acknowledged'
+  | 'failed'
+  | 'unknown';
+export type TrackingRunTerminalPersistenceErrorType =
+  | 'permission_denied'
+  | 'read_only_storage'
+  | 'storage_full'
+  | 'storage_unavailable'
+  | 'serialization_failed'
+  | 'unknown';
+export type TrackingRunPosthogDeliveryStatus =
+  | 'unknown'
+  | 'in_flight'
+  | 'queued'
+  | 'not_expected'
+  | 'failed';
+export type TrackingRunPosthogAcknowledgement =
+  | 'unknown'
+  | 'local_buffer'
+  | 'none';
+export type TrackingRunPosthogErrorType =
+  | 'not_configured'
+  | 'metrics_consent_disabled'
+  | 'config_read_failed'
+  | 'enqueue_failed';
+export type TrackingRunMatureUnfinishedState =
+  | 'still_running'
+  | 'terminated_persistence_missing'
+  | 'terminal_persisted_posthog_failed'
+  | 'recovery_pending'
+  | 'permanently_missing'
+  | 'unknown';
+export type TrackingRunReconciliationIntegrity = 'recovered';
 export type TrackingRunLifecyclePhase =
   | 'queued'
   | 'prompt_build'
@@ -599,6 +654,8 @@ export type TrackingFeedbackReasonCode =
   | 'followed_design_system'
   | 'missed_request'
   | 'weak_visual'
+  | 'could_not_run'
+  | 'too_slow'
   | 'incomplete_output'
   | 'hard_to_use'
   | 'missed_design_system'

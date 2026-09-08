@@ -23,7 +23,7 @@ const OPENCODE_MODEL_PRICE_PROVIDER_PRIORITY = [
   'openrouter',
 ] as const;
 
-// AMR is the vela CLI's ACP stdio mode. `vela agent run --runtime opencode`
+// AMR is the vela CLI's ACP stdio mode. `vela agent run`
 // starts a private OpenCode server and forwards stream-json over ACP JSON-RPC.
 // Required env (set on the daemon process or via Settings → CLI env):
 //   VELA_RUNTIME_KEY  — OpenRouter (or compatible) API key
@@ -673,7 +673,7 @@ export const amrAgentDef = {
   // Fail closed when Vela's live catalog is unavailable. Stale static
   // fallbacks let users select models that link/opencode no longer accepts.
   fallbackModels: [] as RuntimeModelOption[],
-  buildArgs: () => ['agent', 'run', '--runtime', 'opencode'],
+  buildArgs: () => ['agent', 'run'],
   streamFormat: 'acp-json-rpc',
   // vela resumes the upstream OpenCode session via ACP session/load across
   // turns (the OpenCode session store persists per conversation), so the daemon

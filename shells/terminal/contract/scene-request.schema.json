@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nexu.io/contracts/terminal/scene-request-v1.schema.json",
+  "title": "Terminal target scene request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "operation", "target", "shellVersion", "node", "closureArtifactFile", "standaloneDirectory", "sidecarDirectory", "platformDirectory", "sceneDirectory"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "operation": {"const": "terminal.scene.build"},
+    "target": {"enum": ["darwin-arm64", "darwin-x64", "win32-x64"]},
+    "shellVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "node": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "archiveFile", "archiveSha256"],
+      "properties": {
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "archiveFile": {"type": "string", "minLength": 1},
+        "archiveSha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "closureArtifactFile": {"type": "string", "minLength": 1},
+    "standaloneDirectory": {"type": "string", "minLength": 1},
+    "sidecarDirectory": {"type": "string", "minLength": 1},
+    "platformDirectory": {"type": "string", "minLength": 1},
+    "sceneDirectory": {"type": "string", "minLength": 1}
+  }
+}

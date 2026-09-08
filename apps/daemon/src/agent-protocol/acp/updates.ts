@@ -4,6 +4,7 @@
  * event-shape diagnostics. Depends on acp/types, acp/json, and the vela-errors
  * integration; consumed exclusively by acp/session.ts.
  */
+import { isTodoWriteToolName } from '@open-design/contracts';
 import { createHash } from 'node:crypto';
 import type { JsonObject } from './types.js';
 import { asObject, acpValueKind, objectKeys, extractAcpUpdateText } from './json.js';
@@ -287,18 +288,75 @@ export const ACP_PATH_RANK_TITLE = 1;
 
 export type AcpPathCandidate = { path: string; rank: number };
 
+/** Options for path extraction; `sessionCwd` is the run's working directory. */
+export type AcpPathOptions = { sessionCwd?: string | null };
+
+const stripTrailingSeparators = (value: string): string =>
+  value.length > 1 ? value.replace(/[\\/]+$/, '') : value;
+
+/**
+ * A tool's write target must be a FILE. This rejects the candidates that are
+ * provably a directory instead.
+ *
+ * The live hazard is opencode's shell fallback: when a `bash` call carries no
+ * `workdir`/`cwd` argument, its ACP bridge puts the *session working directory*
+ * into `locations` (`m()` → `_o()` in the bundled bridge), which is rank-1
+ * evidence here. vela does not forward `locations` today, so nothing reaches
+ * production — but the day it does, every shell command would render a file
+ * link pointing at a directory. Guard it at the source rather than teaching
+ * each consumer to distrust `file_path`.
+ *
+ * Three signals, cheapest first, none of them a filesystem probe (the path may
+ * not exist yet, and this runs per frame):
+ *  1. A trailing separator, or `.` / `..` — a directory by spelling.
+ *  2. Equality with the session cwd.
+ *  3. `locations` on an execute-family tool — the fallback described above.
+ *     Shell tools have no write target, so nothing legitimate is lost.
+ */
+function acpPathCandidateIsDirectory(
+  path: string,
+  source: number,
+  update: JsonObject,
+  options?: AcpPathOptions,
+): boolean {
+  if (/[\\/]$/.test(path)) return true;
+  if (path === '.' || path === '..') return true;
+  const sessionCwd = options?.sessionCwd;
+  if (
+    typeof sessionCwd === 'string' &&
+    sessionCwd.trim() &&
+    stripTrailingSeparators(path) === stripTrailingSeparators(sessionCwd.trim())
+  ) {
+    return true;
+  }
+  if (source === ACP_PATH_RANK_LOCATIONS) {
+    const kind = typeof update.kind === 'string' ? update.kind.trim().toLowerCase() : '';
+    if (kind === 'execute' || kind === 'bash' || kind === 'shell' || kind === 'terminal') {
+      return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Best-effort path extraction with a precedence rank so partial-frame merges
  * can upgrade a weak title path when locations/rawInput arrive later.
  */
-export function acpArtifactWritePathRanked(update: JsonObject): AcpPathCandidate | null {
+export function acpArtifactWritePathRanked(
+  update: JsonObject,
+  options?: AcpPathOptions,
+): AcpPathCandidate | null {
   // 1. ACP `locations: [{ path }]` and `content: [{ path }]` (diff entries).
   for (const field of [update.locations, update.content]) {
     if (!Array.isArray(field)) continue;
     for (const entry of field) {
       const path = asObject(entry)?.path;
       if (typeof path === 'string' && path.trim()) {
-        return { path: path.trim(), rank: ACP_PATH_RANK_LOCATIONS };
+        const trimmed = path.trim();
+        if (acpPathCandidateIsDirectory(trimmed, ACP_PATH_RANK_LOCATIONS, update, options)) {
+          continue;
+        }
+        return { path: trimmed, rank: ACP_PATH_RANK_LOCATIONS };
       }
     }
   }
@@ -307,7 +365,11 @@ export function acpArtifactWritePathRanked(update: JsonObject): AcpPathCandidate
   for (const key of ['path', 'file_path', 'filename', 'filePath']) {
     const value = rawInput?.[key];
     if (typeof value === 'string' && value.trim()) {
-      return { path: value.trim(), rank: ACP_PATH_RANK_RAW_INPUT };
+      const trimmed = value.trim();
+      if (acpPathCandidateIsDirectory(trimmed, ACP_PATH_RANK_RAW_INPUT, update, options)) {
+        continue;
+      }
+      return { path: trimmed, rank: ACP_PATH_RANK_RAW_INPUT };
     }
   }
   // 3. A path-like filename token in the human title (reject `Image.open`).
@@ -548,6 +610,27 @@ export function acpToolName(update: JsonObject): string {
   // "other" is a valid ACP kind for custom tools, not a canonical family.
   const kindIsCanonicalFamily = recognizedKind && kindToken !== 'other';
 
+  /*
+   * 清单快照**先认,不进启发式**。
+   *
+   * vela 的 ACP 桥从不发 `name`,只把原始 opencode 工具名塞进 `kind`
+   * (`acp_runtime.go` 的 `mapOpenCodeToolPart`)。`todowrite` 不在 canonical
+   * 家族白名单里,于是会掉到下面的 title 启发式 —— 而那里的 `/\bwrite\b/`
+   * 因为**词边界**匹配不到 `todowrite` 里的 write,最后走「首词 title-case」
+   * 兜底,发出 `Todowrite`;title 再带一句描述(`todowrite: 复刻列表页`)时
+   * 首词是 `Todowrite:`,带冒号被 `sanitizeAcpCustomToolName` 拒掉,退成 `Other`
+   * —— 清单在 AMR 上就此整个消失。
+   *
+   * 讽刺的是 AMR 跑的就是 opencode 本人:直连 BYOK-opencode 一切正常,
+   * 走 AMR 就没了,纯粹是传输层把名字改坏。九家 ACP runtime 同受影响。
+   *
+   * 归一成契约里的规范名,而不是靠下游宽容 —— 传输层保真是它自己的职责,
+   * 把坏账留给每个未来的消费者才是真的贵。判据只有一个出处:`isTodoWriteToolName`。
+   */
+  if (isTodoWriteToolName(kindRaw) || isTodoWriteToolName(update.name)) {
+    return 'TodoWrite';
+  }
+
   let name: string | null = null;
   if (kindIsCanonicalFamily && kindName) {
     // Canonical kind wins over explicit noncanonical names (read_file, etc.).
@@ -609,10 +692,13 @@ export function acpToolName(update: JsonObject): string {
  * Starts from `rawInput` when present, attaches `file_path` when a real path
  * is available, and never fabricates a path from `toolCallId`.
  */
-export function acpToolInput(update: JsonObject): Record<string, unknown> {
+export function acpToolInput(
+  update: JsonObject,
+  options?: AcpPathOptions,
+): Record<string, unknown> {
   const rawInput = asObject(update.rawInput);
   const input: Record<string, unknown> = rawInput ? { ...rawInput } : {};
-  const path = acpArtifactWritePath(update);
+  const path = acpArtifactWritePath(update, options);
   if (path) {
     input.file_path = path;
   }
@@ -725,6 +811,9 @@ export function acpSafeToolResultContent(toolName: string, content: string): str
  * @param update - A parsed ACP `session/update` params object.
  * @returns An absolute or relative file path string, or `null` when absent.
  */
-export function acpArtifactWritePath(update: JsonObject): string | null {
-  return acpArtifactWritePathRanked(update)?.path ?? null;
+export function acpArtifactWritePath(
+  update: JsonObject,
+  options?: AcpPathOptions,
+): string | null {
+  return acpArtifactWritePathRanked(update, options)?.path ?? null;
 }

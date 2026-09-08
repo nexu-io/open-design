@@ -111,7 +111,9 @@ describe('codex buildArgs session resume', () => {
       arg.startsWith('shell_environment_policy.include_only='),
     );
     expect(includeOnly).toContain('"PATH"');
+    expect(includeOnly).toContain('"ELECTRON_RUN_AS_NODE"');
     expect(includeOnly).toContain('"OD_NODE_BIN"');
+    expect(includeOnly).toContain('"ELECTRON_RUN_AS_NODE"');
     expect(includeOnly).toContain('"OD_HYPERFRAMES_BIN"');
     expect(includeOnly).toContain('"OD_BIN"');
     expect(includeOnly).toContain('"OD_DAEMON_URL"');

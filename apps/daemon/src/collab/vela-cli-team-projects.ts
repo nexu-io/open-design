@@ -62,6 +62,7 @@ type TeamProjectWire = {
   displayName?: unknown;
   syncState?: unknown;
   lastSyncedVersionId?: unknown;
+  publishedVersionId?: unknown;
   metadata?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -363,11 +364,11 @@ export function shouldUseVelaCliTeamProjectCatalog(env: NodeJS.ProcessEnv = proc
 function toTeamProject(input: unknown): TeamProject | null {
   if (!input || typeof input !== 'object') return null;
   const record = input as TeamProjectWire;
-  // A catalog row is discoverable only after project bytes are durable in the
-  // resource hub. Older local data may still contain pending rows from the
-  // previous fire-and-forget share flow; hide them so teammates do not open
-  // empty project shells.
-  if (typeof record.syncState === 'string' && record.syncState !== 'synced') {
+  // The published ref is the durable read boundary. A failed newer sync must
+  // not hide the last successfully published version. Older Vela responses do
+  // not carry this field, so retain their last known successful-version hint;
+  // a genuine first failure still has neither signal and remains hidden.
+  if (!hasReadablePublishedVersion(record)) {
     return null;
   }
   if (
@@ -437,6 +438,14 @@ function toVelaTeamProjectRecord(input: unknown): VelaTeamProjectRecord | null {
     displayName: typeof record.displayName === 'string' ? record.displayName : null,
     syncState: toVelaSyncState(record.syncState),
     lastSyncedVersionId: typeof record.lastSyncedVersionId === 'string' ? record.lastSyncedVersionId : null,
+    ...(Object.hasOwn(record, 'publishedVersionId')
+      ? {
+          publishedVersionId:
+            typeof record.publishedVersionId === 'string' && record.publishedVersionId.trim()
+              ? record.publishedVersionId.trim()
+              : null,
+        }
+      : {}),
     createdAt: record.createdAt,
     originProjectUpdatedAt:
       typeof originProjectUpdatedAt === 'number' && Number.isFinite(originProjectUpdatedAt)
@@ -450,6 +459,20 @@ function toVelaTeamProjectRecord(input: unknown): VelaTeamProjectRecord | null {
       frozen: access.frozen ?? false,
     },
   };
+}
+
+function hasReadablePublishedVersion(record: TeamProjectWire): boolean {
+  if (Object.hasOwn(record, 'publishedVersionId')) {
+    return typeof record.publishedVersionId === 'string'
+      && record.publishedVersionId.trim().length > 0;
+  }
+  // The original team-project response did not include publication fields or
+  // sync state. Preserve its established visibility until Vela explicitly
+  // supplies one of the newer publication signals.
+  if (typeof record.syncState !== 'string') return true;
+  return record.syncState === 'synced'
+    || (typeof record.lastSyncedVersionId === 'string'
+      && record.lastSyncedVersionId.trim().length > 0);
 }
 
 function toVelaSyncState(value: string): VelaTeamProjectSyncState {

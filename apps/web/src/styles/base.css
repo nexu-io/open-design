@@ -16,12 +16,28 @@
   font-weight: 100 900;
 }
 
+/*
+ * 描述符是 500,不是 400 —— 这是**声明这份字节是哪一档**,不是给它加粗。
+ *
+ * 文件只有一份静态字重(`JiduMonoPro-Regular.otf`),交付稿
+ * (PR #7170 @ `8015870`)把**同一份字节**(md5 `207e55ed70d71a2deb9c6516f75c2d4a`,
+ * 已核)的 `@font-face` 写成 `font-weight: 500`。
+ *
+ * 聊天面板的排版基线是 500(见 `components/chat/ChatRoot.module.css` 的接缝层),
+ * 而耗时 / 文件路径 / Hex / 改动量这些位置走 mono。描述符停在 400 的话,
+ * 面板里就是「请求 500、可用面只有 400」—— 各浏览器怎么折算并不一致
+ * (回退取面 vs 合成加粗),同一份字体在不同浏览器上粗细不同。
+ * 反过来面板外请求 400 时,CSS Fonts 4 的匹配规则会先往上找到这唯一的 500 面,
+ * 同样是原样取面、不合成,所以全站不受影响。
+ *
+ * 这一条和接缝那三条基线是**同一次改动**,不能只做一半。
+ */
 @font-face {
   font-family: "JiduMono Pro";
   src: url("/fonts/JiduMonoPro-Regular.otf") format("opentype");
   font-display: swap;
   font-style: normal;
-  font-weight: 400;
+  font-weight: 500;
 }
 
 html, body, #root { height: 100%; margin: 0; }

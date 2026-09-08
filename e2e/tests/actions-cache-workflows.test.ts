@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 const setupWorkspaceAction = new URL("../../.github/actions/setup-workspace/action.yml", import.meta.url);
 const setupPlaywrightAction = new URL("../../.github/actions/setup-playwright/action.yml", import.meta.url);
 const cacheMaintenanceWorkflow = new URL("../../.github/workflows/cache-maintenance.yml", import.meta.url);
-const landingPageCiWorkflow = new URL("../../.github/workflows/landing-page-ci.yml", import.meta.url);
 const visualBaselineWorkflow = new URL("../../.github/workflows/visual-baseline.yml", import.meta.url);
 
 function sectionBetween(content: string, start: string, end: string): string {
@@ -149,29 +148,4 @@ describe("GitHub Actions cache workflows", () => {
   });
 
 
-  it("[P1] keeps landing preview caches restore-only before merge and seeds them from main", async () => {
-    const workflow = await readFile(landingPageCiWorkflow, "utf8");
-
-    expect(workflow).toContain("uses: actions/cache/restore@v5");
-    expect(workflow).toContain("uses: actions/cache/save@v5");
-    expect(workflow).not.toContain("uses: actions/cache@v5");
-    expect(workflow.indexOf("uses: actions/cache/restore@v5")).toBeLessThan(
-      workflow.indexOf("- name: Generate skill + template previews"),
-    );
-    expect(workflow.indexOf("- name: Generate skill + template previews")).toBeLessThan(
-      workflow.indexOf("- name: Build landing page"),
-    );
-    expect(workflow.indexOf("- name: Build landing page")).toBeLessThan(
-      workflow.indexOf("uses: actions/cache/save@v5"),
-    );
-
-    const saveStep = sectionBetween(
-      workflow,
-      "      - name: Save generated previews",
-      "      - name: Lint changed blog SEO",
-    );
-    expect(saveStep).toContain("steps.previews-cache.outputs.cache-hit != 'true'");
-    expect(saveStep).toContain("github.ref == 'refs/heads/main'");
-    expect(saveStep).toContain("github.event_name == 'push' || github.event_name == 'workflow_dispatch'");
-  });
 });

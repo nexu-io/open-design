@@ -1401,36 +1401,26 @@ test('[P0] empty home composer submits the active prototype suggestion without e
   await expect(page).toHaveURL(/\/projects\//);
 });
 
-test('[P1] home session mode toggle switches Ask planning prompts away from design routing', async ({ page }) => {
+// This spec used to drive the Home mode chip: pick 「提问」, submit, and check
+// the request switched to `conversationMode: 'chat'` with no plugin. The chip
+// left the Home composer (2026-09-08, product — see the comment at its old slot
+// in `HomeHero.tsx`), so Home has no surface that can select Ask any more and
+// that half is unreachable from here rather than broken.
+//
+// What survives is the half that still describes Home: with no picker on
+// screen, every Home submission routes Design and carries a plugin. Ask/Plan
+// routing itself is untouched and still covered where it is still reachable —
+// the project side keeps its stored session mode (`project-management-flows`
+// "project detail turns carry the stored design session mode…").
+test('[P1] home composer routes every request as design with no mode picker on screen', async ({ page }) => {
   await routeProjectCreates(page);
   await routeRunsAccepted(page);
   await gotoEntryHome(page);
 
-  const modeTrigger = page.getByTestId('composer-mode-trigger');
-  // Design is the app default and is now represented as an explicit selection.
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Design');
-  await modeTrigger.click();
-  // Every mode description is always visible in the open menu (no hover card).
-  await expect(page.getByText(/planning, and discussion/i)).toBeVisible();
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveCount(0);
+  await expect(page.getByTestId('composer-mode-clear')).toHaveCount(0);
+  await expect(page.getByTestId('composer-mode-menu')).toHaveCount(0);
 
-  await page.getByTestId('composer-mode-menu-chat').click();
-  await expect(modeTrigger).toContainText('Ask');
-  await page.getByTestId('home-hero-input').fill('Help me plan the IA before designing screens.');
-
-  const askRequestPromise = page.waitForRequest((request) =>
-    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
-  );
-  await page.getByTestId('home-hero-submit').click();
-  const askBody = await askRequestPromise.then((request) => request.postDataJSON() as {
-    conversationMode?: string;
-    pluginId?: string | null;
-  });
-
-  expect(askBody.conversationMode).toBe('chat');
-  expect(askBody.pluginId ?? null).toBeNull();
-
-  await gotoEntryHome(page);
-  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
   await page.getByTestId('home-hero-input').fill('Design the screens from this brief.');
 
   const designRequestPromise = page.waitForRequest((request) =>

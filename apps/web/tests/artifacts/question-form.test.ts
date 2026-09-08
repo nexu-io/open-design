@@ -137,6 +137,65 @@ describe('form content language (lang)', () => {
 });
 
 describe('splitOnQuestionForms', () => {
+  it('renders the legacy child-tag form persisted by older conversations', () => {
+    const input = [
+      '<question-form id="audio-brief" title="Audio brief">',
+      '  <question-select id="format" label="Which format?" required="true">',
+      '    <option value="mp3">MP3</option>',
+      '    <option value="wav">WAV</option>',
+      '  </question-select>',
+      '  <question-text id="mood" label="Describe the mood" placeholder="Warm and concise" />',
+      '</question-form>',
+    ].join('\n');
+
+    expect(splitOnQuestionForms(input)).toEqual([
+      {
+        kind: 'form',
+        raw: input,
+        form: {
+          id: 'audio-brief',
+          title: 'Audio brief',
+          questions: [
+            {
+              id: 'format',
+              label: 'Which format?',
+              type: 'select',
+              required: true,
+              options: [
+                { label: 'MP3', value: 'mp3' },
+                { label: 'WAV', value: 'wav' },
+              ],
+            },
+            {
+              id: 'mood',
+              label: 'Describe the mood',
+              type: 'text',
+              placeholder: 'Warm and concise',
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('keeps a streamed legacy child-tag form hidden instead of leaking markup', () => {
+    const partial = [
+      'One quick check.\n',
+      '<question-form id="audio-brief" title="Audio brief">',
+      '<question-select id="format" label="Which format?">',
+      '<option value="mp3">MP3</option>',
+    ].join('');
+
+    expect(stripTrailingOpenQuestionForm(partial)).toEqual({
+      text: 'One quick check.\n',
+      hadOpenForm: true,
+    });
+    expect(parsePartialQuestionForm(partial)).toMatchObject({
+      id: 'audio-brief',
+      title: 'Audio brief',
+    });
+  });
+
   it('normalizes string and object question options', () => {
     const input = [
       '<question-form id="discovery" title="Quick brief">',
@@ -482,15 +541,15 @@ describe('parsePartialQuestionForm (true token-by-token streaming)', () => {
     ).toBe('discovery');
   });
 
-  it('does not let a nested question id/description masquerade as form metadata', () => {
+  it('does not let nested or legacy description data become form metadata', () => {
     // No form-level id on the tag or top-level body — only a question-level
     // id. The form id must stay the stable fallback, not adopt "platform"
     // (which would change the live panel's identity mid-stream).
     const f = parsePartialQuestionForm(
-      '<question-form>{"questions":[{"id":"platform","label":"Platform","description":"nested"',
+      '<question-form>{"description":"legacy","questions":[{"id":"platform","label":"Platform","description":"nested"',
     );
     expect(f?.id).toBe('discovery');
-    expect(f?.description).toBeUndefined();
+    expect(f).not.toHaveProperty('description');
     expect(f?.questions.map((q) => q.label)).toEqual(['Platform']);
   });
 

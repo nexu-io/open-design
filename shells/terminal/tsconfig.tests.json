@@ -1,5 +1,15 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {"emitDeclarationOnly": false, "noEmit": true, "rootDir": "."},
-  "include": ["src/**/*.ts", "tests/**/*.ts"]
+  "compilerOptions": {
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "lib": ["ES2024"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2024",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["runtime/**/*.d.mts", "tests/**/*.ts", "vitest.config.ts"]
 }

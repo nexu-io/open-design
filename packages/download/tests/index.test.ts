@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -480,5 +480,35 @@ describe("managed download package", () => {
       code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
     });
     expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+  });
+
+  it("does not claim a fresh managed base whose only entry is a directory named .DS_Store", async () => {
+    const root = tmpRoot("os-artifact-dir-not-file");
+    const basePath = join(root, "downloads");
+    mkdirSync(basePath, { recursive: true });
+    mkdirSync(join(basePath, ".DS_Store"));
+    writeFileSync(join(basePath, ".DS_Store", "hidden.txt"), "not actually OS litter");
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
+    expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+    expect(existsSync(join(basePath, ".DS_Store", "hidden.txt"))).toBe(true);
+  });
+
+  const symlinkOsArtifactIt = process.platform === "win32" ? it.skip : it;
+  symlinkOsArtifactIt("does not extend the OS-artifact allowance to a symlink named .DS_Store", async () => {
+    const root = tmpRoot("os-artifact-symlink-not-file");
+    const basePath = join(root, "downloads");
+    const outsideTarget = join(root, "outside.txt");
+    mkdirSync(basePath, { recursive: true });
+    writeFileSync(outsideTarget, "outside content");
+    symlinkSync(outsideTarget, join(basePath, ".DS_Store"));
+
+    await expect(pruneManagedDownloads({ basePath })).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.STORE_NOT_OWNED,
+    });
+    expect(existsSync(join(basePath, ".open-design-download-root.json"))).toBe(false);
+    expect(existsSync(outsideTarget)).toBe(true);
   });
 });

@@ -29,6 +29,7 @@ import type { RunEventForFailureClassification } from '../run-failure-classifica
 import type { RunWorkspaceScope } from './project-amr-trace-env.js';
 import type { OdNextRolloutDecision } from '../strategies/od-next/rollout.js';
 import type { OdNextTaskInputSnapshotDescriptor } from '../strategies/od-next/task-input-snapshot.js';
+import type { RunTerminalLifecycleV1 } from '../observability/run-terminal-lifecycle.js';
 
 import { getProject } from '../db.js';
 import {
@@ -145,11 +146,18 @@ export interface ChatRun {
   cancelRequested?: boolean;
   cancelOrigin?: ChatRunStatusResponse['cancelOrigin'];
   terminalTrigger?: ChatRunStatusResponse['terminalTrigger'];
+  terminalLifecycle?: RunTerminalLifecycleV1;
+  runtimeGenerationId?: string | null;
   exitCode?: number | null;
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
   failureAction?: string | null;
+  /** The classifier's `retryable` verdict for this run's failure. Independent of
+   *  `failureAction`: a failure can be non-retryable and still carry an action
+   *  other than `'none'`. `null` when the run has not failed / was not
+   *  classified. */
+  retryable?: boolean | null;
   projectMetadata?: ProjectMetadata;
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
@@ -163,6 +171,7 @@ export interface ChatRun {
   analyticsContext?: AnalyticsContext;
   analyticsRecovery?: { context?: AnalyticsContext } | null;
   externalPluginAnalytics?: Record<string, unknown> | null;
+  cumulativeRetryAttemptCount?: number;
   manualResumeAttemptCount?: number;
   rechargeWaitDurationMs?: number;
   artifactOriginStatus?:

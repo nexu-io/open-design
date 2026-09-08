@@ -1,0 +1,143 @@
+/*
+ * 报错卡(设计稿组件 19 · 第 78 / 79 格)。
+ *
+ * 稿子 `.errb`:白卡、380px 定宽,**红只留在标题那一行**,正文走 `--text-muted`,
+ * 动作靠右排成一行(`justify-content: flex-end`)。
+ *
+ * 这一层只管**长什么样**。「该出哪几颗按钮」是策略,留在 ChatPane ——
+ * 那里才知道这一轮是授权失败、余额不够、还是本地环境跑不动。
+ */
+.card {
+  /* The ChatPanel resizes independently from the viewport. Base the footer
+     transition on this card's actual content width instead of a window media
+     query so dragging the split produces one deterministic layout change. */
+  container-type: inline-size;
+  container-name: run-error-card;
+  width: 380px;
+  max-width: 100%;
+  padding: 10px 11px;
+  border: var(--chat-stroke) solid var(--chat-border);
+  /* 16px 那一档(PR #7170:`.errb` 从 `--radius-lg` 换到 `--radius-2xl`)。
+     稿子把升级卡、记忆卡、弹窗和这张报错卡一起拉到同一档 —— 这不是报错卡自己的
+     装饰,是这一屏上「大卡片」这一族共同的外形。
+     chat 组件按 `components/chat/AGENTS.md` §2 只消费 `--chat-*` 接缝层,可这一档
+     今天在 `ChatRoot.module.css` 里还没有别名(那个文件属于另一条工作线),
+     所以先落到产品 token 上;别名补上的当天这里自动接管。
+     两种写法都不是写死的 16px —— 形状刻度整体调整时,写死的那一处会静静地
+     留在旧档上,而旁边走 token 的卡全都跟着动了。 */
+  border-radius: var(--chat-radius-2xl, var(--radius-2xl));
+  background: var(--chat-bg);
+}
+
+/* 稿子 `.errb .t { display:flex; align-items:center; gap:7px; padding-bottom:8px;
+   border-bottom: 1px solid var(--border-soft); font-size: var(--t-head);
+   font-weight:600; color: var(--red) }` —— 红只在这一行 */
+.title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 8px;
+  border-bottom: var(--chat-stroke) solid var(--chat-border-soft);
+  font-size: var(--chat-t-head);
+  font-weight: 600;
+  color: var(--chat-red);
+}
+.title svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* 稿子 `.errb .d { margin-top: 8px; font-size: var(--t-mini);
+   line-height: var(--lh-body); color: var(--text-muted) }` */
+.description {
+  margin-top: 8px;
+  font-size: var(--chat-t-mini);
+  line-height: var(--chat-lh-body);
+  color: var(--chat-text-muted);
+}
+
+/* 稿子 `.errb .ops { display:flex; flex-wrap:wrap; justify-content:flex-end;
+   gap:6px; margin-top:9px }` —— 宽卡动作靠右；窄卡在下面显式切为单列，
+   不再让内容长度偶然决定出 2 + 1 的孤行。 */
+.ops {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.actionGroup {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+/* 稿子 `.errb .ops .btn.mod-sm`:这一排的每一颗动作都走同一副壳。
+   仍以共享 Button 为底层原语；这里把报错卡自己的固定尺寸和两种分量收口，
+   调用方不再分别依赖全局类、共享 CSS Module 或裸 button。 */
+.action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: auto;
+  padding: 4px 11px;
+  border: var(--chat-stroke) solid transparent;
+  border-radius: var(--chat-radius-pill);
+  font-family: inherit;
+  font-size: var(--chat-t-mini);
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+/* 20rem is below the normal 380px card's content width but above the minimum
+   ChatPanel card width. Using rem also makes increased default font sizes
+   enter the roomy stacked layout earlier. DOM order is unchanged, so pointer
+   targets, native button semantics and keyboard focus order stay intact. */
+@container run-error-card (max-width: 20rem) {
+  .ops {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .actionGroup {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .action {
+    width: 100%;
+    min-width: 0;
+    justify-content: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
+.secondaryAction {
+  border-color: var(--chat-border);
+  background: var(--chat-bg);
+  color: var(--chat-text);
+}
+
+.secondaryAction:hover:not(:disabled) {
+  border-color: var(--chat-border-strong);
+  background: var(--chat-bg);
+  color: var(--chat-text-strong);
+}
+
+.primaryAction {
+  border-color: var(--chat-text-strong);
+  background: var(--chat-text-strong);
+  color: var(--chat-bg);
+}
+
+.primaryAction:hover:not(:disabled) {
+  border-color: var(--chat-text);
+  background: var(--chat-text);
+  color: var(--chat-bg);
+}
