@@ -12,8 +12,7 @@ const installedRuntime = JSON.parse(readFileSync(join(__dirname, "runtime.json")
 void runControlledElectronShell(async () => await runElectronCarrier({
   manifest: installedManifest,
   preflight: installedRuntime.preflight,
-  async loadCapsule(manifest) {
-    const capsule = await import("./capsule.js");
-    return capsule.createElectronCapsuleDefinition(manifest);
+  async loadCapsule() {
+    return await import("./capsule.js");
   },
 }));

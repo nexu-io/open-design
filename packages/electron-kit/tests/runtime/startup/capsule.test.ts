@@ -9,17 +9,23 @@ import { validateElectronCapsuleManifest } from "@/contracts/capsule.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
-async function fixture(source = 'module.exports.createElectronCapsuleDefinition = () => ({ pid: process.pid });') {
+async function fixture(source = 'module.exports.createElectronCapsuleDefinition = () => ({ pid: process.pid });', startup = true) {
   const root = await mkdtemp(join(tmpdir(), "capsule-load-")); roots.push(root);
-  const body = Buffer.from(source), entrypoint = join(root, "capsule.cjs");
+  const body = Buffer.from(`${source}\n${startup ? 'module.exports.runElectronCapsule = async () => {};' : ''}`), entrypoint = join(root, "capsule.cjs");
   await writeFile(entrypoint, body);
-  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v1", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
+  const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v2", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
     requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 100, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength }]) } });
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   return { root, entrypoint, envelope: signDocument(manifest, [{ keyId: "test", privateKey }]), trustedKeys: { test: publicKey }, carrier: { target: "darwin-arm64" as const, version: "1.0.0" } };
 }
 describe("verified Capsule loading", () => {
+  it("requires the versioned startup entry and rejects the former definition-only protocol", async () => {
+    const input = await fixture('module.exports.createElectronCapsuleDefinition = () => ({});', false);
+    await expect(createElectronCapsuleLoader()(input)).rejects.toThrow("startup entry");
+    expect(() => validateElectronCapsuleManifest({ ...input.envelope.document, protocol: "electron-capsule-v1" }))
+      .toThrow("unsupported Capsule manifest");
+  });
   it("loads once in the current process and rejects in-process replacement", async () => {
     const input = await fixture(), load = createElectronCapsuleLoader();
     const [first, second] = await Promise.all([load(input), load(input)]);

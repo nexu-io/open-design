@@ -535,6 +535,9 @@ importers:
       '@open-design/electron-kit':
         specifier: workspace:*
         version: link:../electron-kit
+      '@open-design/standalone':
+        specifier: workspace:*
+        version: link:../standalone
     devDependencies:
       '@types/node':
         specifier: 24.12.2

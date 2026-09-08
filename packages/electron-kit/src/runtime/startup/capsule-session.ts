@@ -1,0 +1,33 @@
+import type { NodeRuntimeBinding } from "@open-design/standalone";
+import type { ElectronShellManifest } from "../../contracts/index.js";
+import type { ElectronActivationAttempt } from "../session/activation.js";
+import type { installElectronLaunchIngress } from "../session/launch-ingress.js";
+import type { ElectronRuntimeLog } from "../session/logging.js";
+import type { ElectronNamespacePaths } from "../session/namespace-paths.js";
+import type { ElectronProcessErrorLease } from "../session/process-errors.js";
+import type { ElectronStartupAttemptFence } from "./attempt.js";
+import type { ElectronStartupCancellationSteps, ElectronStartupQuitBarrier } from "./cancellation.js";
+import type { ElectronPreflightResult } from "./preflight/index.js";
+
+export type ElectronCapsuleCleanup = Pick<ElectronStartupCancellationSteps,
+  "disposeWarmup" | "settleRendererMount" | "releaseRendererIntegration" | "releaseStandaloneAttachment">;
+
+/** Established carrier authority, passed in-process to one verified Capsule.
+ * Capsule supplies cleanup for its owners; the carrier owns cancellation,
+ * activation bookkeeping and the final process/window teardown. */
+export type ElectronCapsuleSession = Readonly<{
+  manifest: ElectronShellManifest;
+  presentation: "headless" | "interactive";
+  namespace: string;
+  paths: ElectronNamespacePaths;
+  preflight: ElectronPreflightResult;
+  resourceRoot: string;
+  nodeRuntime: NodeRuntimeBinding;
+  log: ElectronRuntimeLog;
+  processErrors: ElectronProcessErrorLease;
+  ingress: ReturnType<typeof installElectronLaunchIngress>;
+  activation: ElectronActivationAttempt;
+  startup: ElectronStartupAttemptFence;
+  startupQuit: ElectronStartupQuitBarrier;
+  registerCleanup(steps: ElectronCapsuleCleanup): void;
+}>;

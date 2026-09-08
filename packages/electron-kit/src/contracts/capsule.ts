@@ -1,6 +1,6 @@
 import { compareVersions } from "@open-design/standalone";
 
-export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v1" as const;
+export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v2" as const;
 export type ElectronCapsuleTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
 export type ElectronCapsuleManifest = Readonly<{
   schemaVersion: 1;

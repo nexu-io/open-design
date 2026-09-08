@@ -6,9 +6,11 @@ import { Script, constants } from "node:vm";
 import { canonicalJson, standaloneTreeSha256, verifyDocument, type SignedDocument, type StandaloneTrustedKeyRing } from "@open-design/standalone";
 import { assertElectronCapsuleCompatibility, validateElectronCapsuleManifest, type ElectronCapsuleManifest, type ElectronCapsuleTarget } from "../../contracts/capsule.js";
 import type { ElectronShellDefinition, ElectronShellManifest } from "../../contracts/index.js";
+import type { ElectronCapsuleSession } from "./capsule-session.js";
 
 export type ElectronCapsuleModule = Readonly<{
   createElectronCapsuleDefinition(manifest: ElectronShellManifest): ElectronShellDefinition;
+  runElectronCapsule(definition: ElectronShellDefinition, session: ElectronCapsuleSession): Promise<void>;
 }>;
 export type LoadElectronCapsuleInput = Readonly<{
   envelope: SignedDocument<ElectronCapsuleManifest>;
@@ -48,7 +50,9 @@ export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput)
       }).runInThisContext();
       evaluate(module.exports, createRequire(entrypoint), module, entrypoint, root);
       if (typeof module.exports.createElectronCapsuleDefinition !== "function") throw new Error("Capsule module lacks its definition factory");
-      return Object.freeze({ createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition });
+      if (typeof module.exports.runElectronCapsule !== "function") throw new Error("Capsule module lacks its startup entry");
+      return Object.freeze({ createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition,
+        runElectronCapsule: module.exports.runElectronCapsule });
     })();
     return loading;
   };

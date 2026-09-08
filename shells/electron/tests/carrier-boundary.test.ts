@@ -15,6 +15,23 @@ it("keeps installed release identity out of the independent Capsule content", as
   expect(result.outputFiles[0]!.contents.byteLength).toBeGreaterThan(0);
   expect(result.outputFiles[0]!.text).toContain("@keyframes slide");
   expect(result.outputFiles[0]!.text).toContain("createElectronStartupPresentation");
+  expect(result.outputFiles[0]!.text).toContain("runElectronCapsule");
+  expect(result.outputFiles[0]!.text).toContain("renderer.recovery.committed");
+  expect(result.outputFiles[0]!.text).not.toContain("runElectronCarrierSession");
+});
+
+it("keeps Capsule session orchestration out of the reusable carrier entry", async () => {
+  const result = await build({
+    stdin: { contents: 'export { runElectronCarrier } from "@open-design/electron-kit/runtime";',
+      resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "ts" },
+    bundle: true, external: ["electron"], format: "cjs", platform: "node", target: "node24", write: false,
+  });
+  const code = result.outputFiles[0]!.text;
+  expect(code).toContain("platform.verified");
+  expect(code).toContain("startup.cancellation.failed");
+  expect(code).not.toContain("renderer.recovery.committed");
+  expect(code).not.toContain("warmup.ready");
+  expect(code).not.toContain("@keyframes slide");
 });
 
 it("builds loading changes from Capsule-owned appearance without editing carrier identity", async () => {

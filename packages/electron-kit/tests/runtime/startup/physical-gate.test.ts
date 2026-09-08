@@ -2,9 +2,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { ElectronShellManifest } from "@/contracts/index.js";
 import { runElectronCarrier } from "@/runtime/index.js";
 
-const mock = vi.hoisted(() => ({ bind: vi.fn(), exit: vi.fn(), log: vi.fn() }));
+const mock = vi.hoisted(() => ({ bind: vi.fn(), exit: vi.fn(), log: vi.fn(), fail: vi.fn() }));
 vi.mock("electron", () => ({
-  app: { on: vi.fn(), isPackaged: false, getAppPath: () => "/physical", exit: mock.exit },
+  app: { on: vi.fn(), removeListener: vi.fn(), isPackaged: false, getAppPath: () => "/physical", exit: mock.exit },
   BrowserWindow: { getAllWindows: () => [] }, protocol: {}, dialog: {}, ipcMain: {}, nativeImage: {},
 }));
 vi.mock("@open-design/standalone/packages", () => ({ bindNodePlatform: mock.bind }));
@@ -14,6 +14,9 @@ vi.mock("@/runtime/startup/identity.js", () => ({
 }));
 vi.mock("@/runtime/session/logging.js", () => ({ ElectronRuntimeLog: class { write = mock.log; async flush() {} } }));
 vi.mock("@/runtime/session/process-errors.js", () => ({ attachElectronProcessErrorHandlers: () => ({ dispose() {} }) }));
+vi.mock("@/runtime/session/activation.js", () => ({ ElectronActivationAttempt: {
+  begin: async () => ({ attemptId: "test-attempt", fail: mock.fail }),
+} }));
 
 afterEach(() => { vi.resetAllMocks(); vi.restoreAllMocks(); });
 
@@ -38,7 +41,10 @@ it("rejects invalid Capsule appearance before opening windows or reaching upgrad
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   mock.bind.mockResolvedValue({ command: "/physical/platform/bin/node", env: {} });
   const preflight = { schemaVersion: 1 as const, atoms: [] }, authority = vi.fn();
-  const loadCapsule = vi.fn().mockResolvedValue({ manifest, preflight, appearance: { schemaVersion: 1 }, createStandaloneAuthority: authority });
+  const loadCapsule = vi.fn().mockResolvedValue({
+    createElectronCapsuleDefinition: () => ({ manifest, preflight, appearance: { schemaVersion: 1 }, createStandaloneAuthority: authority }),
+    runElectronCapsule: vi.fn(),
+  });
   await runElectronCarrier({ manifest, headless: true, preflight, loadCapsule });
   expect(loadCapsule).toHaveBeenCalledOnce();
   expect(authority).not.toHaveBeenCalled();

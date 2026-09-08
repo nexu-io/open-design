@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { createElectronStartupPresentation } from "@/index.js";
+import { createElectronStartupPresentation } from "@/presentation.js";
 
 const mock = vi.hoisted(() => ({
   create: vi.fn(), load: vi.fn(), destroy: vi.fn(), destroyed: vi.fn(), execute: vi.fn(),

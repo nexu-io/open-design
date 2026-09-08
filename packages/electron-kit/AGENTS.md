@@ -3,7 +3,10 @@
 Follow the root and `packages/AGENTS.md` guidance first.
 
 - Own reusable Electron process, cold-start, window, fixture lifecycle, updater-provider, scene, and distribution mechanics.
-- Own only lifecycle, orchestration, and public atomic mechanics. Concrete warmup graphs, product Sidecar messages, Web preload/readiness, routes, DOM knowledge, handlers, labels, and resource identities belong to `shells/electron` declarations and adapters.
+- Own fixed carrier identity, platform integrity, startup/quit barriers and public
+  atomic mechanics. Updatable session/warmup/renderer orchestration belongs to
+  electron-capsule; concrete graphs, product Sidecar messages, Web readiness,
+  routes, handlers, labels and resource identities stay in shells/electron.
 - Treat Shell JSON as the authority for concrete topology and policy values, including warmup nodes and preflight host exemptions. Validate and execute finite atoms without turning JSON into an executable language or teaching electron-kit what a declared product value means.
 - Warmup owns bounded concurrency, dependency ordering, required/best-effort failure semantics, timeout/cancellation, receipts, and disposal. Shell owns concrete resource ids, labels, executor bindings, and warmed values; renderer/Web adapters consume those values without exposing them to Closure.
 - Keep concrete macOS/Windows distribution and installer policy in Shell JSON. electron-kit may validate a finite supported matrix and translate it to builder configuration; distribution policy must not leak into the release-neutral scene.
@@ -12,9 +15,10 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Capsule content builds emit release-neutral bytes and a content descriptor;
   public contracts compose version and compatibility metadata without loading a
   compiler. Keep build-cache policy and final signature authority in tools.
-- Loading documents, animation and their DOM updates belong to electron-capsule.
-  Invoke the Shell-composed presentation factory only in interactive mode; keep
-  headless suppression and physical identity enforcement in the carrier.
+- Loading documents, animation, DOM updates and startup/session sequencing belong
+  to electron-capsule. Establish presentation permission, physical integrity and
+  activation/quit protection before invoking its versioned startup entry. Native
+  launch ingress is registered before loading and delivers only typed events.
 - Sidecar owns private IPC, transport, process/generation identity, physical resource-set guards, retirement, and terminal stop. electron-kit must not wrap or republish that transport. The product Shell may compose only the frozen public Standalone handoff and Sidecar runtime-handle contracts when they are available.
 - Global shortcuts use the same finite ownership rule: electron-kit owns registration, rollback, observation and teardown; Shell owns every accelerator declaration and action binding. Do not add inert placeholder shortcuts or product menu actions here.
 - Import only public `@open-design/standalone` contracts. Never import `apps/closure`, another Shell, or product Web/daemon implementation.

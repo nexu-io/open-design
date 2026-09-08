@@ -29,6 +29,10 @@ Shell and the typed adapter boundary consumed by repository tools.
   keep OS product identity, icons and installer endpoints physical.
 - Compose the public electron-capsule startup presentation with product media;
   do not put loading HTML or DOM mechanics back into Shell adapters or kit.
+- The Capsule entry exports the product definition factory and the public
+  electron-capsule session runner. It receives established carrier identity and
+  startup authority; do not recreate OS listeners, platform discovery or quit
+  protection in product composition.
 
 `electron-kit` owns reusable Electron mechanics. `electron-contract` is the
 browser-safe declaration leaf in that build closure. App producers and web

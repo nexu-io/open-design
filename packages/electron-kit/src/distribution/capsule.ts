@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { build } from "esbuild";
 import JSZip from "jszip";
 import { canonicalJson, standaloneTreeSha256 } from "@open-design/standalone";
-import { validateElectronCapsuleContent, type ElectronCapsuleContent, type ElectronCapsuleTarget } from "../contracts/capsule.js";
+import { ELECTRON_CAPSULE_PROTOCOL, validateElectronCapsuleContent, type ElectronCapsuleContent, type ElectronCapsuleTarget } from "../contracts/capsule.js";
 
 const sha256 = (body: Uint8Array) => createHash("sha256").update(body).digest("hex");
 export type BuildElectronCapsuleContentInput = Readonly<{
@@ -26,7 +26,7 @@ export async function buildElectronCapsuleContent(input: BuildElectronCapsuleCon
   const zip = new JSZip();
   zip.file("capsule.cjs", module, { createFolders: false, date: new Date("1980-01-01T00:00:00Z"), unixPermissions: 0o100644 });
   const body = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 }, platform: "UNIX" });
-  const content = validateElectronCapsuleContent({ schemaVersion: 1, protocol: "electron-capsule-v1",
+  const content = validateElectronCapsuleContent({ schemaVersion: 1, protocol: ELECTRON_CAPSULE_PROTOCOL,
     target: input.target, entrypoint: "capsule.cjs",
     archive: { sha256: sha256(body), size: body.byteLength, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: sha256(module), size: module.byteLength }]) },
   });
