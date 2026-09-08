@@ -229,6 +229,7 @@ export type OdNextCapabilityResolutionReason =
 
 export interface ResolveOdNextRuntimeCapabilityInput {
   agentId: string;
+  amrRuntime?: import('@open-design/contracts').AmrRuntime;
   agentCliVersion?: string | null;
   runtimeCompanionName?: string | null;
   runtimeCompanionVersion?: string | null;
@@ -332,7 +333,10 @@ export function hashOdNextRuntimeCapabilitySnapshotV1(
   return sha256Canonical(snapshotHashInput(snapshot));
 }
 
-function descriptorForAgent(agentId: string): OdNextRuntimePathDescriptor | null {
+function descriptorForAgent(agentId: string, amrRuntime?: import('@open-design/contracts').AmrRuntime): OdNextRuntimePathDescriptor | null {
+  // Other AMR runtimes have different protocol/tool surfaces and no verified
+  // native-child fixtures here. Never admit them using Vela/OpenCode's evidence.
+  if (agentId === 'amr' && amrRuntime && amrRuntime !== 'opencode') return null;
   return OD_NEXT_RUNTIME_PATH_DESCRIPTORS.find((descriptor) => (
     descriptor.agentId === agentId
   )) ?? null;
@@ -479,7 +483,7 @@ function hasCompleteOdNextCapability(
 export function resolveOdNextRuntimeCapability(
   input: ResolveOdNextRuntimeCapabilityInput,
 ): OdNextRuntimeCapabilityResolution {
-  const descriptor = descriptorForAgent(input.agentId);
+  const descriptor = descriptorForAgent(input.agentId, input.amrRuntime);
   if (!descriptor) {
     return {
       includedInInitialRollout: false,
@@ -626,12 +630,13 @@ export function resolveOdNextRuntimeCapability(
 
 export function resolveBundledOdNextRuntimeCapability(input: {
   agentId: string;
+  amrRuntime?: import('@open-design/contracts').AmrRuntime;
   agentCliVersion?: string | null;
   runtimeCompanionName?: string | null;
   runtimeCompanionVersion?: string | null;
   capturedAt?: number;
 }): OdNextRuntimeCapabilityResolution {
-  const descriptor = descriptorForAgent(input.agentId);
+  const descriptor = descriptorForAgent(input.agentId, input.amrRuntime);
   const fixture = OD_NEXT_RUNTIME_CAPABILITY_FIXTURE_MANIFESTS.find((candidate) => (
     descriptor !== null
     && candidate.agentId === descriptor.agentId

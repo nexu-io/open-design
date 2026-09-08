@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const esES: Dict = {
+  'amr.harness.none': "Ninguno (llamada directa al modelo)",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

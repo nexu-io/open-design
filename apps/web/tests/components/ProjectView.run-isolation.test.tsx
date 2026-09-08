@@ -415,9 +415,12 @@ vi.mock('../../src/components/ChatPane', () => ({
     error,
     onRetry,
     onResendUserMessage,
+    onResumeRun,
     onSubmitQuestionForm,
+    composerFooterAccessory,
   }: {
     activeConversationId: string | null;
+    composerFooterAccessory?: ReactNode;
     conversations: Conversation[];
     streaming: boolean;
     sendDisabled?: boolean;
@@ -443,6 +446,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     onNewConversation: () => void;
     onRetry?: (message: ChatMessage) => void;
     onResendUserMessage?: (message: ChatMessage) => void;
+    onResumeRun?: (message: ChatMessage) => void;
     onSubmitQuestionForm?: (
       text: string,
       attachments?: unknown[],
@@ -465,6 +469,7 @@ vi.mock('../../src/components/ChatPane', () => ({
       );
     return (
       <section>
+        {composerFooterAccessory}
         <output data-testid="active-conversation">{activeConversationId}</output>
         <output data-testid="streaming-state">{streaming ? 'streaming' : 'idle'}</output>
         <output data-testid="chat-error">{error}</output>
@@ -528,6 +533,11 @@ vi.mock('../../src/components/ChatPane', () => ({
               resend
             </button>
           ))}
+        {retryTarget && onResumeRun ? (
+          <button type="button" data-testid="chat-resume" onClick={() => onResumeRun(retryTarget)}>
+            continue
+          </button>
+        ) : null}
         {queuedItems?.map((item, index) => (
           <div key={item.id}>
             <button
@@ -1171,6 +1181,44 @@ describe('ProjectView conversation run isolation', () => {
     available: true,
     models: [{ id: 'glm-5', label: 'GLM 5' }],
   }];
+
+  it.each(['pi', 'codex', 'dsh', 'none'] as const)('sends AMR %s per submission and resets it for another conversation', async (runtime) => {
+    conversationAMessages = [];
+    const amrConfig = { ...config, agentId: 'amr' };
+    const before = JSON.stringify(amrConfig);
+    renderProjectView(amrConfig, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    const picker = screen.getByRole('combobox', { name: 'AMR Harness' });
+    expect(picker).toHaveProperty('value', 'opencode');
+    fireEvent.change(picker, { target: { value: runtime } });
+    fireEvent.click(screen.getByTestId('send-message'));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({ agentId: 'amr', amrRuntime: runtime }));
+    expect(JSON.stringify(amrConfig)).toBe(before);
+    fireEvent.click(screen.getByTestId('conversation-select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-b'));
+    expect(screen.getByRole('combobox', { name: 'AMR Harness' })).toHaveProperty('value', 'opencode');
+  });
+
+  it.each(['pi', 'codex', 'dsh', 'none'].flatMap((runtime) => ['chat-retry', 'chat-resume'].map((action) => ({ runtime, action }))))('preserves AMR $runtime and model through $action', async ({ runtime, action }) => {
+    conversationAMessages = [
+      { id: 'pi-user', role: 'user', content: 'make a landing page', createdAt: 1 },
+      { id: 'pi-failed', role: 'assistant', content: 'partial page', createdAt: 2,
+        agentId: 'amr', runId: 'pi-source', runStatus: 'failed' },
+    ];
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'pi-source', status: 'failed', agentId: 'amr', amrRuntime: runtime, model: 'gpt-6-astra',
+    });
+    streamViaDaemon.mockImplementation(async () => {});
+    renderProjectView({ ...config, agentId: 'amr' }, project, amrAgents);
+    await waitFor(() => expect(screen.getByTestId(action)).toBeTruthy());
+    expect(screen.getByRole('combobox', { name: 'AMR Harness' })).toHaveProperty('value', 'opencode');
+    fireEvent.click(screen.getByTestId(action));
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'amr', amrRuntime: runtime, model: 'gpt-6-astra',
+    }));
+  });
 
   it.each([
     [

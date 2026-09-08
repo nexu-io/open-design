@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  resolveAmrRuntime,
   strategyTaskProvesDelivery,
   todoSnapshotHasUnfinishedWork,
   turnEndedByAskingUser,
@@ -567,6 +568,8 @@ function durableRunState(run) {
       ? { strategyRolloutDecision: run.strategyRolloutDecision }
       : {}),
     agentId: run.agentId,
+    ...(run.amrRuntime ? { amrRuntime: run.amrRuntime } : {}),
+    ...(run.amrRuntimeEvidence ? { amrRuntimeEvidence: run.amrRuntimeEvidence } : {}),
     ...(run.appVersionInfo ? { appVersionInfo: run.appVersionInfo } : {}),
     status: run.status,
     createdAt: run.createdAt,
@@ -907,6 +910,10 @@ export function createChatRunService({
           ? meta.strategyRolloutDecision
           : null,
       agentId: typeof meta.agentId === 'string' && meta.agentId ? meta.agentId : null,
+      ...(meta.agentId === 'amr'
+        ? { amrRuntime: resolveAmrRuntime('amr', meta.amrRuntime) }
+        : {}),
+      ...(typeof meta.model === 'string' ? { model: meta.model } : {}),
       appVersionInfo,
       projectMetadata:
         meta.projectMetadata && typeof meta.projectMetadata === 'object' && !Array.isArray(meta.projectMetadata)
@@ -1458,6 +1465,9 @@ export function createChatRunService({
     assistantMessageId: run.assistantMessageId,
     clientRequestId: run.clientRequestId ?? null,
     agentId: run.agentId,
+    ...(typeof run.model === 'string' ? { model: run.model } : {}),
+    ...(run.amrRuntime ? { amrRuntime: run.amrRuntime } : {}),
+    ...(run.amrRuntimeEvidence ? { amrRuntimeEvidence: run.amrRuntimeEvidence } : {}),
     designSystemId: run.designSystemId ?? null,
     designSystemRequestedId: run.designSystemRequestedId ?? null,
     designSystemSelectionSource: run.designSystemSelectionSource ?? null,

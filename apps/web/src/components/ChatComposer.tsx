@@ -496,6 +496,8 @@ export interface ChatComposerHandle {
 }
 
 export interface ChatSendMeta {
+  /** AMR harness for this submission, without changing shared agent settings. */
+  amrRuntime?: import('@open-design/contracts').AmrRuntime;
   /** Stable identity for one confirmed user submission. Queueing and the
    *  eventual daemon run reuse it so retries of the same UI action are
    *  idempotent without collapsing separate sends that share the same text. */

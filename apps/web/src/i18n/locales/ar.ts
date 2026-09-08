@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const ar: Dict = {
+  'amr.harness.none': "بلا (استدعاء النموذج مباشرة)",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

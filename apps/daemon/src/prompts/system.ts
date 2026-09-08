@@ -1003,6 +1003,9 @@ export function composeSystemPrompt({
     metadata?.kind === 'audio';
   const isSlimCharterHead = isSlimCore && !isAskModeEarly && !isMediaSurfaceEarly;
 
+  const resolvedExecutionProfile =
+    executionProfile ?? executionProfileFromStreamFormat(streamFormat);
+
   // Head ordering differs by variant, following prompt-caching prefix rules
   // (stable content first — see shared prompt-caching guidance):
   // - classic: injection resistance FIRST so no later section can override
@@ -1022,7 +1025,7 @@ export function composeSystemPrompt({
   // text_artifact charter variant and form their own prefix family anyway.
   const parts: string[] = isSlimCharterHead
     ? [
-        ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
+        ...(resolvedExecutionProfile === 'text_artifact' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
         renderSlimCoreCharter(
           executionProfile ?? executionProfileFromStreamFormat(streamFormat),
         ),
@@ -1033,7 +1036,7 @@ export function composeSystemPrompt({
           // Ask mode on a plain stream still leads with the API override so
           // its "overrides every rule below" scope covers the chat charter,
           // matching classic's authority order (API before CHAT).
-          ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
+          ...(resolvedExecutionProfile === 'text_artifact' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
           CHAT_MODE_OVERRIDE,
           '\n\n---\n\n',
           PROMPT_INJECTION_RESISTANCE,
@@ -1046,7 +1049,7 @@ export function composeSystemPrompt({
             // contradict the media-generation contract appended below as the
             // sole workflow authority. Keep classic's skeleton: API override
             // first on plain streams, then injection resistance.
-            ...(streamFormat === 'plain' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
+            ...(resolvedExecutionProfile === 'text_artifact' ? [API_MODE_OVERRIDE, '\n\n---\n\n'] : []),
             PROMPT_INJECTION_RESISTANCE,
             '\n\n---\n\n',
           ]
@@ -1055,7 +1058,7 @@ export function composeSystemPrompt({
   // tool, else a numbered list") because it is prepended to every slim run and
   // some runtimes genuinely have no such tool. The concrete tool NAME is added
   // here instead, per runtime, so only the runs that can act on it pay for it.
-  if (isSlimCharterHead) {
+  if (isSlimCharterHead && resolvedExecutionProfile !== 'text_artifact') {
     const planToolNote = planToolNoteForRuntime(agentId, streamFormat);
     if (planToolNote) parts.push(planToolNote, '\n\n---\n\n');
   }
@@ -1068,11 +1071,9 @@ export function composeSystemPrompt({
         : [],
   );
   const resolvedExclusiveSurface = resolveExclusiveSurface({ metadata, skillMode, skillModes });
-  const resolvedExecutionProfile =
-    executionProfile ?? executionProfileFromStreamFormat(streamFormat);
   const deckFrameworkDirective = renderDeckFrameworkDirective(resolvedExecutionProfile);
 
-  // API/BYOK mode (streamFormat === 'plain'): mirrors the same fix from
+  // Tool-free execution (plain API/BYOK or AMR direct-model ACP) mirrors
   // `@open-design/contracts`'s composer. The daemon hits this path for
   // any plain-stream adapter (e.g. DeepSeek), so without pinning the
   // override above DISCOVERY_AND_PHILOSOPHY here too, those daemon
@@ -1085,7 +1086,7 @@ export function composeSystemPrompt({
   // mid-conversation only invalidates the cached suffix, not the whole prompt.
   const slimTurnVariableParts: string[] = [];
 
-  if (streamFormat === 'plain' && !isSlimCore) {
+  if (resolvedExecutionProfile === 'text_artifact' && !isSlimCore) {
     // Slim runs (charter head AND ask head) already composed this first.
     parts.push(API_MODE_OVERRIDE);
     parts.push('\n\n---\n\n');

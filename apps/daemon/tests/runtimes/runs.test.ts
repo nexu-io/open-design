@@ -1843,6 +1843,25 @@ describe('run event log persistence', () => {
     });
   });
 
+  it.each(['pi', 'codex', 'dsh', 'none'] as const)('preserves %s selection while queued and execution evidence after restart', async (runtime) => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ agentId: 'amr', amrRuntime: runtime }) as any;
+    expect(runs.statusBody(run).amrRuntime).toBe(runtime);
+    const queuedState = JSON.parse(fs.readFileSync(path.join(tmpDir, run.id, 'state.json'), 'utf8'));
+    expect(queuedState.amrRuntime).toBe(runtime);
+    const evidence = {
+      requestedRuntime: runtime, actualRuntime: runtime, runtimeVersion: '0.85.1', modelId: 'amr/gpt-6-astra',
+    };
+    run.amrRuntimeEvidence = evidence;
+    await runs.cancel(run, 'user_stop');
+    const restarted = createRunsWithLog(tmpDir);
+    expect(restarted.statusBody(restarted.get(run.id))).toMatchObject({
+      amrRuntime: runtime, amrRuntimeEvidence: evidence, status: 'canceled',
+    });
+    const legacy = restarted.create({ agentId: 'amr' });
+    expect(restarted.statusBody(legacy).amrRuntime).toBe('opencode');
+  });
+
   it('reuses an interrupted durable request instead of starting it twice after restart', () => {
     const clientRequestId = '018f6f2e-6666-7666-8666-666666666666';
     const requestFingerprint = 'same-cloud-request';

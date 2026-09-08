@@ -1,6 +1,7 @@
 import type { Dict } from '../types';
 
 export const ja: Dict = {
+  'amr.harness.none': "なし（モデルを直接呼び出す）",
   'invite.header.eyebrow': "Team invitation",
   'invite.loading': "Loading invitation…",
   'invite.landing.title': "Join the team",

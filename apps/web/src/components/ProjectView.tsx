@@ -13,6 +13,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type SetStateAction,
 } from 'react';
+import { isAmrRuntime } from '@open-design/contracts';
 import { AnimatePresence } from 'motion/react';
 import { createHtmlArtifactManifest, inferLegacyManifest } from '../artifacts/manifest';
 import { resolveHtmlPointerArtifactTarget } from '../artifacts/pointer';
@@ -415,6 +416,8 @@ type ProjectChatSendMeta = ChatSendMeta & {
   assistantMessageId?: string;
   queueOnly?: boolean;
   retryOfAssistantId?: string;
+  /** Explicit recovery source; preserve its runtime independently of analytics. */
+  resumeOfRunId?: string;
   sessionMode?: ChatSessionMode;
   /** Overrides the run_created / run_finished `entry_from` analytics prop for
    *  this send (e.g. 'resume_continue' from the resumable-failure Continue
@@ -2589,6 +2592,10 @@ export function ProjectView({
     null,
   );
   const activeConversationIdRef = useRef(activeConversationId);
+  const [amrRuntime, setAmrRuntime] = useState<import('@open-design/contracts').AmrRuntime>('opencode');
+  useEffect(() => {
+    setAmrRuntime('opencode');
+  }, [project.id, activeConversationId]);
   activeConversationIdRef.current = activeConversationId;
   const [pendingEmptyConversationSeed, setPendingEmptyConversationSeed] =
     useState<{ projectId: string; authorityKey: string } | null>(null);
@@ -7998,6 +8005,7 @@ export function ProjectView({
       if (messagesConversationIdRef.current !== activeConversationId) return false;
       const clientRequestId = meta?.clientRequestId ?? randomUUID();
       meta = {
+        ...(config.mode === 'daemon' && config.agentId === 'amr' ? { amrRuntime } : {}),
         ...(meta ?? {}),
         clientRequestId,
       };
@@ -8006,6 +8014,20 @@ export function ProjectView({
         ? resolveRetryTarget(messages, meta.retryOfAssistantId)
         : null;
       if (meta?.retryOfAssistantId && !retryTarget) return false;
+      let recoveryAmrModel: string | undefined;
+      const recoveryRunId = retryTarget?.failedAssistant.agentId === 'amr'
+        ? retryTarget.failedAssistant.runId
+        : meta.resumeOfRunId;
+      if (config.agentId === 'amr' && recoveryRunId) {
+        const source = await fetchChatRunStatus(recoveryRunId, projectRunWorkspaceContext);
+        if (!source) {
+          setError(locale === 'zh-CN' ? '无法读取原运行配置，请稍后重试。' : 'Could not read the original run configuration. Please retry.');
+          return false;
+        }
+        if (messagesConversationIdRef.current !== activeConversationId) return false;
+        meta.amrRuntime = source.amrRuntime ?? 'opencode';
+        if (source.amrRuntime && source.amrRuntime !== 'opencode' && source.model) recoveryAmrModel = source.model;
+      }
       const blockedRequestKey = JSON.stringify([
         prompt,
         attachments.map((attachment) => [attachment.path, attachment.name]),
@@ -9732,6 +9754,7 @@ export function ProjectView({
         };
         void streamViaDaemon({
           agentId: config.agentId,
+          ...(config.agentId === 'amr' && meta?.amrRuntime ? { amrRuntime: meta.amrRuntime } : {}),
           history: nextHistory,
           signal: controller.signal,
           cancelSignal: cancelController.signal,
@@ -9753,7 +9776,7 @@ export function ProjectView({
             meta?.appliedPluginSnapshotId ?? meta?.appliedPluginSnapshot?.snapshotId ?? null,
           research: meta?.research,
           mediaExecution: mediaExecutionPolicyForProjectMetadata(project.metadata),
-          model: daemonByokOpenCode ? config.model : choice?.model ?? null,
+          model: daemonByokOpenCode ? config.model : recoveryAmrModel ?? choice?.model ?? null,
           reasoning: daemonByokOpenCode ? null : choice?.reasoning ?? null,
           serviceTier: daemonByokOpenCode ? null : choice?.serviceTier ?? null,
           ...(daemonByokOpenCode && byokOpenCodeProvider
@@ -10112,6 +10135,7 @@ export function ProjectView({
       attachedComments,
       activeConversationId,
       activeSessionMode,
+      amrRuntime,
       currentConversationBusy,
       queueChatSendForCurrentConversation,
       messages,
@@ -10239,6 +10263,7 @@ export function ProjectView({
       const clientRequestId = meta?.clientRequestId ?? randomUUID();
       const started = await handleSend(prompt, attachments, commentAttachments, {
         ...(meta ?? {}),
+        ...(config.mode === 'daemon' && config.agentId === 'amr' ? { amrRuntime } : {}),
         clientRequestId,
         // 这条路,而且只有这条路,的正文归输入框所有 —— 见
         // `ProjectChatSendMeta.composerOwnedDraft`。
@@ -10250,7 +10275,7 @@ export function ProjectView({
       amrGateBlockedRequestRef.current = null;
       return 'restore-draft';
     },
-    [activeConversationId, cloudModelSelected, handleSend, project.id],
+    [activeConversationId, cloudModelSelected, handleSend, project.id, config.mode, config.agentId, amrRuntime],
   );
 
   // Cancel every in-flight run for the current conversation (the user's own
@@ -10612,6 +10637,8 @@ export function ProjectView({
     (assistantMessage: ChatMessage) => {
       if (currentConversationActionDisabled) return;
       void handleSend(RESUME_CONTINUE_PROMPT, [], [], {
+        ...(assistantMessage.agentId === 'amr' && assistantMessage.runId
+          ? { resumeOfRunId: assistantMessage.runId } : {}),
         entryFrom: 'resume_continue',
         taskAnalytics: buildRecoveryTaskAnalytics(
           messages,
@@ -13192,6 +13219,25 @@ export function ProjectView({
         placement="up"
         projectWorkspaceScope={projectWorkspaceScopeState}
       />
+      {config.mode === 'daemon' && config.agentId === 'amr' && (
+        <label className="amr-runtime-picker">
+          <span>AMR Harness</span>
+          <select
+            aria-label="AMR Harness"
+            value={amrRuntime}
+            disabled={projectMutationReadOnly}
+            onChange={(event) => {
+              if (isAmrRuntime(event.target.value)) setAmrRuntime(event.target.value);
+            }}
+          >
+            <option value="opencode">OpenCode</option>
+            <option value="pi">Pi</option>
+            <option value="codex">Codex</option>
+            <option value="dsh">DSH</option>
+            <option value="none">{t('amr.harness.none')}</option>
+          </select>
+        </label>
+      )}
     </>
   );
 

@@ -7,7 +7,7 @@
  * connectionTest.ts and server.ts (via the acp/ barrel).
  */
 import path from 'node:path';
-import type { ExecutionProfile } from '@open-design/contracts';
+import type { AmrRuntime, AmrRuntimeEvidence, ExecutionProfile } from '@open-design/contracts';
 import {
   createDsmlArtifactTextSuppressor,
   createToolCallTextSuppressor,
@@ -129,6 +129,11 @@ export interface AttachAcpSessionOptions {
   stageTimeoutMs?: number;
   executionProfile?: ExecutionProfile;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
+  /** Non-default AMR runtimes require affirmative runtime/model evidence from Vela. */
+  expectedAmrRuntime?: AmrRuntime;
+  onAmrRuntimeEvidence?: (evidence: AmrRuntimeEvidence) => void;
+  /** Real model bytes received while direct-model artifact text awaits validation. */
+  onAmrModelOutputProgress?: (contentBytes: number) => void;
   // Some ACP adapters expose an explicit `turn_end` session update as their
   // terminal turn signal instead of returning the pending session/prompt RPC.
   // Keep this opt-in so standard ACP adapters still require the response.
@@ -199,6 +204,9 @@ export function attachAcpSession({
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   executionProfile = 'filesystem',
   modelUnavailableErrorCode,
+  expectedAmrRuntime,
+  onAmrRuntimeEvidence,
+  onAmrModelOutputProgress,
   completePromptOnTurnEnd = false,
   resumeSessionId,
   promptBudgetContext,
@@ -245,10 +253,12 @@ export function attachAcpSession({
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
   // The durable upstream session handle reported by the agent on session/new or
-  // session/load (vela's `openCodeSessionId`). The caller stores it per
+  // session/load (`durableSessionId`, or legacy `openCodeSessionId`). The caller stores it per
   // conversation to resume next turn. Distinct from `sessionId`, which is the
   // ACP wrapper id ("vela-opencode-1").
   let durableSessionId: string | null = null;
+  let amrRuntimeEvidence: AmrRuntimeEvidence | null = null;
+  let amrModelContentBytes = 0;
   let activeModel: string | null = null;
   let modelConfigId: string | null = null;
   let emittedThinkingStart = false;
@@ -1045,6 +1055,21 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      if (update.sessionUpdate === 'amr_model_output_progress') {
+        const progressModel = typeof update.modelId === 'string' ? update.modelId.replace(/^amr\//, '') : '';
+        if (expectedAmrRuntime === 'none' && amrRuntimeEvidence?.actualRuntime === 'none'
+          && params?.sessionId === sessionId && sessionId !== null && promptRequestId !== null
+          && update.runtime === 'none' && progressModel !== ''
+          && progressModel === amrRuntimeEvidence.modelId
+          && typeof update.contentBytes === 'number' && Number.isSafeInteger(update.contentBytes)
+          && update.contentBytes > amrModelContentBytes && update.contentBytes <= 8 * 1024 * 1024) {
+          amrModelContentBytes = update.contentBytes;
+          onAmrModelOutputProgress?.(amrModelContentBytes);
+        }
+        // No generic status/raw fallback: this transport-only signal must not
+        // become visible text, a tool, or a recoverable artifact.
+        return;
+      }
       if (modelUnavailableErrorCode) {
         const promotedPayload = promotedAmrRetryStatusPayload(update);
         if (promotedPayload) {
@@ -1347,10 +1372,33 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 2) {
+      if (expectedAmrRuntime && expectedAmrRuntime !== 'opencode') {
+        if (
+          result.runtime !== expectedAmrRuntime
+          || typeof result.runtimeVersion !== 'string'
+          || result.runtimeVersion.length > 64
+          || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+.][a-zA-Z0-9.-]+)?$/.test(result.runtimeVersion)
+          || typeof result.durableSessionId !== 'string'
+          || !new RegExp(`^${expectedAmrRuntime}-[a-f0-9]{32}$`).test(result.durableSessionId)
+          || (resumeSessionId && result.durableSessionId !== resumeSessionId)
+        ) {
+          fail(`The selected AMR ${expectedAmrRuntime} runtime did not report a valid session and version.`, {
+            retryable: false, details: { kind: 'amr_runtime_mismatch' },
+          });
+          return;
+        }
+        amrRuntimeEvidence = {
+          requestedRuntime: expectedAmrRuntime, actualRuntime: expectedAmrRuntime, runtimeVersion: result.runtimeVersion,
+        };
+        onAmrRuntimeEvidence?.(amrRuntimeEvidence);
+        send('agent', { type: 'diagnostic', name: 'amr_runtime', ...amrRuntimeEvidence });
+      }
       sessionId = typeof result.sessionId === 'string' ? result.sessionId : null;
       // The durable handle for resuming this session on the next turn.
       durableSessionId =
-        typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
+        typeof result.durableSessionId === 'string' && result.durableSessionId.trim()
+          ? result.durableSessionId
+          : typeof result.openCodeSessionId === 'string' ? result.openCodeSessionId : null;
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
       const modelConfig = findModelConfigOption(result.configOptions);
@@ -1383,6 +1431,26 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
+      if (expectedAmrRuntime && expectedAmrRuntime !== 'opencode') {
+        const actualModel = typeof result.modelId === 'string' ? result.modelId.trim().replace(/^amr\//, '') : null;
+        if (
+          result.runtime !== expectedAmrRuntime
+          || result.runtimeVersion !== amrRuntimeEvidence?.runtimeVersion
+          || !actualModel
+          || (model && model !== 'default' && actualModel !== model.replace(/^amr\//, ''))
+        ) {
+          emitUsageIfPresent(result.usage);
+          fail(`AMR ${expectedAmrRuntime} returned a different or unverified runtime/model.`, {
+            retryable: false, details: { kind: 'amr_runtime_model_mismatch' },
+          });
+          return;
+        }
+        if (amrRuntimeEvidence) {
+          amrRuntimeEvidence = { ...amrRuntimeEvidence, modelId: actualModel };
+          onAmrRuntimeEvidence?.(amrRuntimeEvidence);
+          send('agent', { type: 'diagnostic', name: 'amr_runtime', ...amrRuntimeEvidence });
+        }
+      }
       // Flush still-open tools before AMR no-output classification. A successful
       // session/prompt may omit a terminal tool_call_update; clean-closing those
       // pending non-think tools flips emittedConcreteToolEvent so we take
@@ -1420,6 +1488,21 @@ export function attachAcpSession({
       return;
     }
     if (sessionId && model && model !== 'default' && obj.id === expectedId) {
+      if (expectedAmrRuntime && expectedAmrRuntime !== 'opencode') {
+        const confirmedModel = typeof result.modelId === 'string' ? result.modelId.trim() : currentModelFromSessionResult(result);
+        const actualModel = confirmedModel?.replace(/^amr\//, '');
+        if (!actualModel || actualModel !== model.replace(/^amr\//, '')) {
+          fail(`AMR ${expectedAmrRuntime} did not confirm the selected model; the prompt was not sent.`, {
+            retryable: false, details: { kind: 'amr_model_mismatch' },
+          });
+          return;
+        }
+        if (amrRuntimeEvidence) {
+          amrRuntimeEvidence = { ...amrRuntimeEvidence, modelId: actualModel };
+          onAmrRuntimeEvidence?.(amrRuntimeEvidence);
+          send('agent', { type: 'diagnostic', name: 'amr_runtime', ...amrRuntimeEvidence });
+        }
+      }
       activeModel = currentModelFromSessionResult(result) ?? model;
       send('agent', { type: 'status', label: 'model', model: activeModel });
       sendPrompt();

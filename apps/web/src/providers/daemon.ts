@@ -534,6 +534,7 @@ function daemonAnsweredWithError(bodyText: string): boolean {
 
 export interface DaemonStreamOptions {
   agentId: string;
+  amrRuntime?: ChatRequest['amrRuntime'];
   history: ChatMessage[];
   /** Legacy field accepted by older tests/callers. Daemon-owned prompt composition ignores it. */
   systemPrompt?: string;
@@ -1047,6 +1048,7 @@ export async function streamViaDaemon({
   designSystemId,
   attachments,
   commentAttachments,
+  amrRuntime,
   model,
   reasoning,
   serviceTier,
@@ -1079,6 +1081,7 @@ export async function streamViaDaemon({
   const transcript = buildDaemonTranscript(history, agentId);
   const request: ChatRequest = {
     agentId,
+    ...(amrRuntime ? { amrRuntime } : {}),
     message: transcript,
     ...(taskExecutionId ? { taskExecutionId } : {}),
     currentPrompt: latestUserPromptFromHistory(history),
