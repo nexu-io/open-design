@@ -24,7 +24,7 @@ import styles from './LabsSection.module.css';
  * surface deletable in one piece when the experiment converges.
  */
 
-type SwitchLock = 'latched' | 'env' | 'unreadable';
+type SwitchLock = 'env' | 'unreadable';
 
 interface LabsHarnessState {
   on: boolean;
@@ -51,15 +51,16 @@ async function writeHarnessMode(mode: OdNextRolloutMode): Promise<void> {
  * and silently clearing it would break someone's debugging session. The user's
  * next deliberate toggle resolves it to `active` / `off` naturally.
  *
- * The lock order matters. A latch is the safety valve — it overrides the saved
- * mode in `readOdNextRolloutControlStatus` — so it wins over the environment
- * note, which in turn wins over a plain saved value.
+ * The environment is the only authority that locks the switch. A mode set
+ * through `OD_NEXT_STRATEGY_ROLLOUT` outranks the installation's saved value,
+ * so the single-field PUT this component makes would be written and then
+ * ignored — the lock is what stops the switch from claiming an edit the
+ * daemon will not act on. Every other status is a plain, operable value.
  */
 export function harnessStateFromStatus(
   status: OdNextRolloutControlResponse['status'],
 ): LabsHarnessState {
   const on = status.requestedMode === 'active';
-  if (status.latch) return { on, lock: 'latched' };
   if (status.requestedModeSource === 'env') return { on, lock: 'env' };
   return { on, lock: null };
 }
@@ -406,13 +407,11 @@ export function LabsSection({ autosave }: LabsSectionProps) {
     })();
   }, [analytics.track, answerOptOut, reportSaved, settleAutosave, state]);
 
-  const lockNoticeKey = state?.lock === 'latched'
-    ? 'labs.latchedNotice'
-    : state?.lock === 'env'
-      ? 'labs.envOverrideNotice'
-      : state?.lock === 'unreadable'
-        ? 'labs.loadFailedNotice'
-        : null;
+  const lockNoticeKey = state?.lock === 'env'
+    ? 'labs.envOverrideNotice'
+    : state?.lock === 'unreadable'
+      ? 'labs.loadFailedNotice'
+      : null;
 
   const on = state?.on ?? false;
   // A section that has not resolved yet is not operable either — treating the

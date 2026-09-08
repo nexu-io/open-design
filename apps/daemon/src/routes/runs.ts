@@ -118,7 +118,6 @@ import {
   evaluateOdNextRollout,
   odNextTaskTypeForProjectScenarioBinding,
   readOdNextRolloutPolicy,
-  readOdNextRolloutStop,
   type OdNextRolloutDecision,
 } from '../strategies/od-next/rollout.js';
 import { odNextRolloutAnalyticsProperties } from '../strategies/od-next/rollout-analytics.js';
@@ -1936,7 +1935,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         runtimeCapabilityReason: advertisedCapabilityReason
           ?? rolloutCapability?.reason
           ?? 'runtime_out_of_scope',
-        stoppedMode: readOdNextRolloutStop(db)?.mode ?? null,
         routeApplicability,
       });
       if (

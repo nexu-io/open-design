@@ -48,10 +48,6 @@ import {
 import { strategyTaskCreateIdentityFixture } from './strategies/strategy-task-test-fixtures.js';
 import { prepareStrategyRequest } from '../src/strategies/od-next/coordinator.js';
 import {
-  clearOdNextRolloutStop,
-  latchOdNextRolloutStop,
-} from '../src/strategies/od-next/rollout.js';
-import {
   hashOdNextRuntimeCapabilitySnapshotV1,
   resolveBundledOdNextRuntimeCapability,
 } from '../src/runtimes/od-next-capability-gate.js';
@@ -163,7 +159,6 @@ describe('OD Next automatic production through the real server', () => {
     else process.env.OD_CODEX_TRANSPORT = previousCodexTransport;
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     delete process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY;
-    delete process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS;
     uuidControl.forced.length = 0;
     pendingAutomaticFixtureIdentity = null;
     await stopServer(started);
@@ -289,7 +284,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('selected-example-upgrade', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
 
     const createAffectedProject = async (label: string) => {
       const project = await createProjectForScenario(
@@ -401,7 +395,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('stale-selected-example', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const exampleDir = path.join(binDir, 'stale-selected-example');
     await cp(CREATIVE_VOLTAGE_EXAMPLE_DIR, exampleDir, { recursive: true });
     const staleExamplePluginId = 'example-stale-creative-voltage';
@@ -514,7 +507,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('app-config-opt-out', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -597,7 +589,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('prestart-skill-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -631,7 +622,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('preclaim-task-fallback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const strategySnapshotCountAtStart = (database().prepare(`
@@ -686,7 +676,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('approved-profiles', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1020,7 +1009,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('legacy-scenario-compat', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const legacy = await createProjectForScenario(
@@ -1065,7 +1053,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
 
     const resolvedCapability = resolveBundledOdNextRuntimeCapability({
@@ -1103,62 +1090,85 @@ describe('OD Next automatic production through the real server', () => {
     expect(canceled.status).toBe(200);
   });
 
-  it('exposes the instance stop latch through the shared API and CLI CAS reset', async () => {
+  it('reports the deciding authority through the shared API and CLI, and offers no reset', async () => {
+    // This used to cover the instance stop latch and its compare-and-swap
+    // reset. Both are gone: nothing but the saved mode turns OD Next off, so
+    // there is no latch to inspect and no operator recovery to protect. What is
+    // still worth an endpoint is the authority — `default` and a saved `off`
+    // produce opposite routes, and the mode alone does not say which happened.
     const fixture = await createPublicRolloutFixture('rollout-control', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    latchOdNextRolloutStop(database(), {
-      mode: 'off',
-      reasonCode: 'route_mode_drift',
+    delete process.env.OD_NEXT_STRATEGY_ROLLOUT;
+    // Cases in this file share one data dir, and an earlier one leaves a saved
+    // `off` behind. Clearing the key is the deliberate way back to the default,
+    // and asserting it here is also what proves `null` still means that.
+    const cleared = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: null }),
     });
+    expect(cleared.status).toBe(200);
 
-    const beforeResult = await runOdCli([
+    const defaultResult = await runOdCli([
       'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(beforeResult.stderr).toBe('');
-    const before = JSON.parse(beforeResult.stdout) as {
-      status: { scope: string; revision: number; latch: { mode: string; reasonCode: string } | null };
-    };
-    expect(before.status).toMatchObject({
+    expect(defaultResult.stderr).toBe('');
+    expect((JSON.parse(defaultResult.stdout) as { status: unknown }).status).toEqual({
+      strategyId: 'od-next-strategy',
       scope: 'daemon_instance',
-      latch: { mode: 'off', reasonCode: 'route_mode_drift' },
+      requestedMode: 'active',
+      requestedModeSource: 'default',
+      effectiveMode: 'active',
     });
 
-    const resetResult = await runOdCli([
-      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    const optOut = await fetch(`${started.url}/api/app-config`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ odNextStrategyMode: 'off' }),
+    });
+    expect(optOut.status).toBe(200);
+
+    const savedResult = await runOdCli([
+      'strategy', 'rollout', 'status', '--daemon-url', started.url, '--json',
     ]);
-    expect(resetResult.stderr).toBe('');
-    const reset = JSON.parse(resetResult.stdout) as {
-      status: {
-        revision: number;
-        latch: null;
-        lastEvent: { action: string; reasonCode: string } | null;
-      };
-    };
-    expect(reset.status.revision).toBe(before.status.revision + 1);
-    expect(reset.status.latch).toBeNull();
-    expect(reset.status.lastEvent).toMatchObject({
-      action: 'cleared',
-      reasonCode: 'operator_reset',
+    expect(savedResult.stderr).toBe('');
+    expect((JSON.parse(savedResult.stdout) as { status: unknown }).status).toMatchObject({
+      requestedMode: 'off',
+      requestedModeSource: 'app_config',
+      effectiveMode: 'off',
     });
 
-    const staleReset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
+    // The reset endpoint and its CLI subcommand are both gone, and gone the
+    // same way — a daemon that still answered it would be a daemon that still
+    // had something to reset.
+    const reset = await fetch(`${started.url}/api/strategies/od-next/rollout/reset`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision: before.status.revision }),
+      body: JSON.stringify({ expectedRevision: 0 }),
     });
-    expect(staleReset.status).toBe(409);
-    await expect(staleReset.json()).resolves.toMatchObject({
-      error: { code: 'ROLLOUT_REVISION_CONFLICT' },
-      status: { revision: reset.status.revision },
-    });
+    expect(reset.status).toBe(404);
+    // `runOdCli` rejects on a non-zero exit, and an unknown subcommand is
+    // exactly that: usage, exit 2. Catching keeps the assertion on what the CLI
+    // told the operator rather than on the rejection itself.
+    const resetCli = await runOdCli([
+      'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
+    ]).then(
+      (ok) => ({ code: 0, stdout: ok.stdout }),
+      (error: { code?: number; stdout?: string }) => ({
+        code: error.code ?? -1,
+        stdout: error.stdout ?? '',
+      }),
+    );
+    expect(resetCli.code).toBe(2);
+    expect(resetCli.stdout).toContain('od strategy rollout status');
+    expect(resetCli.stdout).not.toContain('rollout reset');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {
     const fixture = await createPublicRolloutFixture('rollback', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     const strategyTaskCountAtStart = (
       database().prepare('SELECT COUNT(*) AS count FROM strategy_task_executions').get() as {
         count: number;
@@ -1202,10 +1212,10 @@ describe('OD Next automatic production through the real server', () => {
     ).get(fixture.projectId) as { snapshotId: string | null }).snapshotId)
       .toBeNull();
 
-    latchOdNextRolloutStop(database(), {
-      mode: 'observe',
-      reasonCode: 'threshold_exceeded',
-    });
+    // The rest of this case needs later runs on the ordinary route. Saying so
+    // through the mode is now the only way to say it: a run can no longer put
+    // this daemon on the legacy path for the runs that follow it.
+    process.env.OD_NEXT_STRATEGY_ROLLOUT = 'off';
     const replayed = await postRun(started!.url, activeBody);
     expect(replayed).toMatchObject({
       runId: active.runId,
@@ -1248,7 +1258,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('web-cli-skill-parity', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const dataDir = process.env.OD_DATA_DIR!;
@@ -1332,7 +1341,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('project-skill-row', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const skillDir = path.join(process.env.OD_DATA_DIR!, 'skills', 'home-picked-skill');
@@ -1388,7 +1396,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('context-plugin-authority', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const contextual = await createProjectForScenario(
@@ -1424,7 +1431,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('headless-conversation', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1455,7 +1461,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-tamper', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
 
@@ -1506,7 +1511,6 @@ describe('OD Next automatic production through the real server', () => {
     const fixture = await createPublicRolloutFixture('persisted-task-scope-drift', 'design');
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
     process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
     const body = publicRunRequest(
@@ -1542,7 +1546,6 @@ describe('OD Next automatic production through the real server', () => {
     );
     started = fixture.started;
     binDir = fixture.binDir;
-    clearOdNextRolloutStop(database());
     expect(fixture.projectMetadata?.scenarioBinding).toMatchObject({
       provenance: 'explicit_user',
       pluginId: 'example-web-prototype',
@@ -2426,7 +2429,6 @@ describe('OD Next automatic production through the real server', () => {
       const publicFixture = await createPublicRolloutFixture(`chain-${suffix}`, 'design');
       started = publicFixture.started;
       binDir = publicFixture.binDir;
-      clearOdNextRolloutStop(database());
       process.env.OD_NEXT_STRATEGY_ROLLOUT = 'active';
       process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY = '1';
       const template = await createStrategyTemplate();
