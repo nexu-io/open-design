@@ -59,48 +59,53 @@ describe('app-config', () => {
     it('returns default telemetry for corrupted JSON without crashing', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '{not valid');
       const cfg = await readAppConfig(dataDir);
-      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY, odNextStrategyMode: 'off' });
+      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
     });
 
     it('returns default telemetry when file contains a JSON array', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '[1,2,3]');
       const cfg = await readAppConfig(dataDir);
-      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY, odNextStrategyMode: 'off' });
+      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
     });
 
     it('returns default telemetry when file contains a JSON primitive', async () => {
       await writeFile(path.join(dataDir, 'app-config.json'), '"hello"');
       const cfg = await readAppConfig(dataDir);
-      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY, odNextStrategyMode: 'off' });
+      expect(cfg).toEqual({ telemetry: DEFAULT_TELEMETRY });
     });
 
-    // The three cases above now also carry `odNextStrategyMode: 'off'`, and that
-    // is the point rather than a detail. Every other preference can be dropped
-    // when the file cannot be read, because the cost is one setting falling back
-    // to its default. This one decides whether OD Next runs, and its default is
-    // now `active` — so dropping it turns "your config is unreadable" into "you
-    // asked for OD Next", against the installations most likely to have asked
-    // for the opposite. See `OD_NEXT_MODE_WHEN_CONFIG_UNREADABLE`.
-    describe('OD Next opt-out against an unreadable config', () => {
-      const cases: Array<[string, string]> = [
-        ['truncated JSON', '{"odNextStrategyMode": "of'],
-        ['a JSON array', '[1,2,3]'],
-        ['a JSON primitive', '"hello"'],
-        ['a mode this build does not recognise', JSON.stringify({ odNextStrategyMode: 'Off' })],
-        ['a mode with a typo', JSON.stringify({ odNextStrategyMode: 'acive' })],
-        ['a non-string mode', JSON.stringify({ odNextStrategyMode: 1 })],
+    // A file that cannot be parsed at all resets every preference, including
+    // this one, and that stays true. Singling out `odNextStrategyMode` to
+    // survive a broken file would opt installations out of a rollout they never
+    // declined — a broken file is evidence of a broken file, not of an opt-out.
+    // What does survive is a mode we can see and cannot read; see below.
+    describe('OD Next opt-out when the mode itself cannot be read', () => {
+      const cases: Array<[string, unknown]> = [
+        ['a mode this build does not recognise', 'Off'],
+        ['a mode with a typo', 'acive'],
+        ['a non-string mode', 1],
+        ['an object where a mode belongs', { mode: 'off' }],
       ];
-      for (const [label, body] of cases) {
+      for (const [label, value] of cases) {
         it(`reads off, not the default, for ${label}`, async () => {
-          await writeFile(path.join(dataDir, 'app-config.json'), body);
+          await writeFile(
+            path.join(dataDir, 'app-config.json'),
+            JSON.stringify({ odNextStrategyMode: value }),
+          );
           expect((await readAppConfig(dataDir)).odNextStrategyMode).toBe('off');
         });
       }
 
       it('still reads as unconfigured when there is genuinely no config', async () => {
-        // The negative control. Failing closed is only correct for a config we
-        // cannot believe; a fresh install has made no choice, and turning that
-        // into an opt-out would cancel the rollout instead of protecting it.
+        // The negative control that matters most for this rollout. Failing
+        // closed is only correct for a value we can see and cannot read; a
+        // fresh install has made no choice, and turning that into an opt-out
+        // would cancel the rollout instead of protecting it.
+        expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
+      });
+
+      it('still reads as unconfigured when the whole file is unparseable', async () => {
+        await writeFile(path.join(dataDir, 'app-config.json'), '{not valid');
         expect((await readAppConfig(dataDir)).odNextStrategyMode).toBeUndefined();
       });
 
@@ -1322,19 +1327,26 @@ describe('app-config odNextStrategyMode', () => {
     expect(cfg.agentId).toBe('codex');
   });
 
-  it('keeps an opt-out through the whole chain when the file is later corrupted', async () => {
+  it('keeps an opt-out through the whole chain when the saved mode goes unreadable', async () => {
     // The join is where this guarantee actually lives, so assert it across the
     // join rather than in either half. `readAppConfig` reads the file and
-    // `readOdNextRolloutPolicy` decides the mode; a corrupted file that read as
-    // unconfigured in the first would resolve to `active` in the second, and
-    // nothing in between would notice.
+    // `readOdNextRolloutPolicy` decides the mode; a mode that read as absent in
+    // the first would resolve to `active` in the second, and nothing in between
+    // would notice.
     await writeAppConfig(dataDir, { odNextStrategyMode: 'off' });
     expect(readOdNextRolloutPolicy({}, await readAppConfig(dataDir)))
       .toMatchObject({ requestedMode: 'off', requestedModeSource: 'app_config' });
 
-    // Same installation, same user, file truncated by whatever truncates files.
-    const saved = await readFile(path.join(dataDir, 'app-config.json'), 'utf8');
-    await writeFile(path.join(dataDir, 'app-config.json'), saved.slice(0, 20), 'utf8');
+    // Same installation, same user, the mode rewritten to something this build
+    // cannot read — a hand edit, or a value some other version writes.
+    const saved = JSON.parse(
+      await readFile(path.join(dataDir, 'app-config.json'), 'utf8'),
+    ) as Record<string, unknown>;
+    await writeFile(
+      path.join(dataDir, 'app-config.json'),
+      JSON.stringify({ ...saved, odNextStrategyMode: 'OFF' }),
+      'utf8',
+    );
     expect(readOdNextRolloutPolicy({}, await readAppConfig(dataDir)))
       .toMatchObject({ requestedMode: 'off' });
 
