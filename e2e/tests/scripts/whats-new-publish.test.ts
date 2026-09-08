@@ -14,6 +14,7 @@ import {
   WHATS_NEW_WORKFLOW_PATH,
   findWhatsNewWorkflowViolations,
   parseWorkflowJobs,
+  workflowJobNames,
 } from "../../../scripts/check-whats-new-publish-workflow.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -203,10 +204,11 @@ describe("what's new publish workflow trust boundary", () => {
   });
 
   test("the parser sees the two real jobs, so the assertions are not vacuous", () => {
-    expect(parseWorkflowJobs(workflow).map((job) => job.name)).toEqual(["validate", "publish"]);
-    const [validate, publish] = parseWorkflowJobs(workflow);
-    expect(validate?.body).toContain("scripts/check-whats-new-document.ts");
-    expect(publish?.body).toContain("publish_whats_new.py");
+    expect(workflowJobNames(workflow)).toEqual(["validate", "publish"]);
+    const parsed = parseWorkflowJobs(workflow);
+    expect(parsed).not.toBeNull();
+    expect(JSON.stringify(parsed?.jobs.get("validate"))).toContain("scripts/check-whats-new-document.ts");
+    expect(JSON.stringify(parsed?.jobs.get("publish"))).toContain("publish_whats_new.py");
   });
 
   // The regression the reviewer named: the environment expression drifts off
@@ -245,7 +247,7 @@ describe("what's new publish workflow trust boundary", () => {
       "    if: always() && needs.validate.outputs.publish == 'true'",
     );
     const reported = findWhatsNewWorkflowViolations(mutated).join("\n");
-    expect(reported).toContain("references `always()`");
+    expect(reported).toContain("uses `always()`");
   });
 
   test("a dry run that can still publish is rejected", () => {
@@ -263,11 +265,89 @@ describe("what's new publish workflow trust boundary", () => {
         "      - name: Setup Node.js",
         `      - name: Leak\n        env:\n          STOLEN: \${{ secrets.${secret} }}\n        run: env\n\n      - name: Setup Node.js`,
       );
-      expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain(
-        `job \`validate\` reads \`secrets.${secret}\``,
-      );
+      const reported = findWhatsNewWorkflowViolations(mutated).join("\n");
+      expect(reported).toContain("job `validate` reads the `secrets` context");
+      expect(reported).toContain(secret);
     },
   );
+
+  /** A step that exfiltrates whatever `expression` resolves to. */
+  function leakStep(expression: string): string {
+    return ["      - name: Leak", "        env:", `          STOLEN: ${expression}`, "        run: env", ""].join(
+      "\n",
+    );
+  }
+
+  /** Splice a step into `validate`, the job any ref can dispatch. */
+  function intoValidate(source: string, step: string): string {
+    return mutate(source, "      - name: Setup Node.js", `${step}\n      - name: Setup Node.js`);
+  }
+
+  // GitHub's expression language reaches a secret in more shapes than
+  // `secrets.NAME`, and a detector that enumerates shapes is only ever as good
+  // as the list someone thought of. Each of these was verified to slip past
+  // dot-notation matching, returning an empty violation list — in the guard
+  // that exists specifically to stop a secret reaching the arbitrary-ref job.
+  test.each([
+    ["single-quoted bracket", "${{ secrets['UNRELATED_SECRET'] }}"],
+    ["double-quoted bracket", '${{ secrets["UNRELATED_SECRET"] }}'],
+    ["bracket with inner whitespace", "${{ secrets [ 'UNRELATED_SECRET' ] }}"],
+    ["dot with surrounding whitespace", "${{ secrets . UNRELATED_SECRET }}"],
+    ["the whole context serialized", "${{ toJSON(secrets) }}"],
+    ["the whole context bare", "${{ secrets }}"],
+    ["the whole context round-tripped", "${{ fromJSON(toJSON(secrets)).UNRELATED_SECRET }}"],
+    ["an expression folded across lines", "${{\n            secrets.UNRELATED_SECRET\n            }}"],
+  ] as const)("a secret reaching the arbitrary-ref job as %s is rejected", (_shape, expression) => {
+    const mutated = intoValidate(workflow, leakStep(expression));
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` reads");
+  });
+
+  // The one shape no raw-text scanner can see: a double-quoted YAML scalar
+  // with a backslash line continuation. The source never contains the string
+  // `secrets`; the parsed value does. Only reading the document as YAML — not
+  // as text — closes this.
+  test("a secret hidden by a YAML line continuation is rejected", () => {
+    const hidden = ['          STOLEN: "${{ sec\\', "            rets.UNRELATED_SECRET }}\""].join("\n");
+    const step = ["      - name: Leak", "        env:", hidden, "        run: env", ""].join("\n");
+    const mutated = intoValidate(workflow, step);
+    // Precondition: the giveaway substring is genuinely absent from the source,
+    // so a passing assertion below cannot be text matching by accident.
+    expect(mutated).not.toContain("secrets.UNRELATED_SECRET");
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` reads");
+  });
+
+  test.each([
+    ["a run: block", "      - name: Leak\n        run: echo ${{ secrets['UNRELATED_SECRET'] }}\n"],
+    [
+      "a with: input",
+      "      - name: Leak\n        uses: actions/github-script@v8\n        with:\n          github-token: ${{ secrets['UNRELATED_SECRET'] }}\n",
+    ],
+  ] as const)("a secret reaching the arbitrary-ref job through %s is rejected", (_where, step) => {
+    const mutated = intoValidate(workflow, step);
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` reads");
+  });
+
+  // `secrets:` as a job key passes credentials into a called workflow without
+  // any `${{ }}` expression at all, so expression scanning alone cannot see it.
+  test("passing secrets into a called workflow is rejected", () => {
+    // No `${{ }}` anywhere, so expression scanning alone cannot see this one.
+    const mutated = mutate(
+      workflow,
+      "  validate:\n    name: validate document\n",
+      "  validate:\n    name: validate document\n    secrets:\n      PASSED: literal\n",
+    );
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` declares a `secrets:` key");
+  });
+
+  // A document this guard cannot understand must fail, never pass quietly:
+  // "no violations found" and "nothing was examined" have to be distinct.
+  test.each([
+    ["unparseable YAML", (source: string) => `${source}\n  : : :\n`],
+    ["a jobs mapping written in flow style", () => "name: x\njobs: {validate: {runs-on: a}, publish: {runs-on: b}}\n"],
+    ["a renamed publish job", (source: string) => source.replace("  publish:\n", "  upload:\n")],
+  ] as const)("%s fails closed", (_shape, transform) => {
+    expect(findWhatsNewWorkflowViolations(transform(workflow)).length).toBeGreaterThan(0);
+  });
 
   test("any secret at all on the arbitrary-ref job is rejected, not just the R2 four", () => {
     const mutated = mutate(
@@ -275,7 +355,9 @@ describe("what's new publish workflow trust boundary", () => {
       "      - name: Setup Node.js",
       "      - name: Leak\n        env:\n          STOLEN: ${{ secrets.GITHUB_TOKEN }}\n        run: env\n\n      - name: Setup Node.js",
     );
-    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` reads `secrets.GITHUB_TOKEN`");
+    const reported = findWhatsNewWorkflowViolations(mutated).join("\n");
+    expect(reported).toContain("job `validate` reads the `secrets` context");
+    expect(reported).toContain("GITHUB_TOKEN");
   });
 
   test("dropping one of the four credential bindings is rejected", () => {
@@ -290,8 +372,12 @@ describe("what's new publish workflow trust boundary", () => {
   });
 
   test("handing the whole secret store to a called workflow is rejected", () => {
-    const mutated = mutate(workflow, "    environment: whats-new-publish", "    secrets: inherit\n    environment: whats-new-publish");
-    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("`secrets: inherit`");
+    const mutated = mutate(
+      workflow,
+      "  validate:\n    name: validate document\n",
+      "  validate:\n    name: validate document\n    secrets: inherit\n",
+    );
+    expect(findWhatsNewWorkflowViolations(mutated).join("\n")).toContain("job `validate` declares a `secrets:` key");
   });
 
   // The boundary has to be checked by something that actually runs. An edit to

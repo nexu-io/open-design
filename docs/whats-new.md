@@ -143,5 +143,12 @@ check runs from CI's unconditional preflight job rather than a path-routed
 test lane, because an edit to the workflow alone selects no test workload —
 a lane-routed assertion would be skipped for exactly the edit it guards.
 
+It reads the workflow through a YAML parser rather than matching text, and
+looks for the `secrets` **context identifier** inside any `${{ … }}`
+expression rather than for particular access shapes. Both choices are
+load-bearing: `secrets['NAME']`, `toJSON(secrets)` and a bare `secrets` are all
+secret reads, and a double-quoted YAML scalar can hide `secrets` from raw text
+entirely by splitting it across a backslash line continuation.
+
 The repository-wide `CLOUDFLARE_API_TOKEN` is a Pages-scoped token and cannot
 reach R2 at all; do not route this publish through it.
