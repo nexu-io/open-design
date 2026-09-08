@@ -183,7 +183,7 @@ async function flushMounts() {
 function stagedPluginChip(): Element | null {
   return screen
     .queryByTestId('staged-contexts')
-    ?.querySelector('.staged-chip.staged-context--plugin') ?? null;
+    ?.querySelector('[data-staged-kind="plugin"]') ?? null;
 }
 
 function projectPatchBodies(): Array<{ metadata?: { linkedDirs?: string[] } }> {
@@ -459,7 +459,7 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('designs/landing.html')).toBeTruthy());
     const labels = Array.from(
-      screen.getByTestId('mention-popover').querySelectorAll('.mention-section-label'),
+      screen.getByTestId('mention-popover').querySelectorAll('[data-testid="mention-section-label"]'),
       (node) => node.textContent,
     );
     expect(labels[0]).toBe('Design files');
@@ -468,7 +468,9 @@ describe('ChatComposer context pickers', () => {
     pressEnter();
 
     await waitFor(() => expect(composerText()).toBe('@designs/landing.html '));
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
+    // 待发送附件已经搬进自己的托盘(设计稿组件 21):`.composer > .tray` 只装附件,
+    // 不再和 plugin / skill / MCP 芯片挤在同一行。
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/apply'))).toBe(false);
   });
 
@@ -492,7 +494,7 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('Dribbble')).toBeTruthy());
     const labels = Array.from(
-      screen.getByTestId('mention-popover').querySelectorAll('.mention-section-label'),
+      screen.getByTestId('mention-popover').querySelectorAll('[data-testid="mention-section-label"]'),
       (node) => node.textContent,
     );
     expect(labels[0]).toBe('Tabs');
@@ -501,7 +503,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@Dribbble '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.getAttribute('data-mention-kind')).toBe('workspace');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('BrowserDribbble');
 
@@ -551,8 +553,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -585,8 +585,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -644,8 +642,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Reference-project sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
     await screen.findByText('Reference A');
     fireEvent.click(screen.getByText('Reference B'));
@@ -701,8 +697,6 @@ describe('ChatComposer context pickers', () => {
     await typeAndSettle('Review this');
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Reference-project sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByTestId('composer-plus-reference-project'));
     await screen.findByText('Reference A');
     fireEvent.click(screen.getByRole('button', { name: 'Reference project' }));
@@ -740,8 +734,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -793,8 +785,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -816,8 +806,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -873,8 +861,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -988,8 +974,6 @@ describe('ChatComposer context pickers', () => {
     await flushMounts();
 
     fireEvent.click(screen.getByTestId('chat-plus-trigger'));
-    // Link-local-code sits inside the + menu's working-dir group.
-    fireEvent.click(await screen.findByTestId('composer-plus-working-dir'));
     fireEvent.click(await screen.findByText('Link local code'));
 
     await waitFor(() => {
@@ -1023,7 +1007,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@Slack MCP '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.textContent).toBe('@Slack MCP');
     expect(pill?.getAttribute('data-mention-kind')).toBe('mcp');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('@Slack MCP');
@@ -1047,7 +1031,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@Deck Builder '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.textContent).toBe('@Deck Builder');
     expect(pill?.getAttribute('data-mention-kind')).toBe('skill');
     expect(screen.getByTestId('staged-contexts').textContent).toContain('@Deck Builder');
@@ -1115,7 +1099,7 @@ describe('ChatComposer context pickers', () => {
 
     await waitFor(() => expect(screen.getByText('Audit Helper 9')).toBeTruthy());
     const skillNames = Array.from(
-      screen.getByTestId('mention-popover').querySelectorAll('.mention-item strong'),
+      screen.getByTestId('mention-popover').querySelectorAll('[data-testid="mention-item-name"]'),
       (node) => node.textContent,
     );
 
@@ -1136,7 +1120,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() => expect(composerText()).toBe('@My Export '));
     const pill = screen
       .getByTestId('chat-composer-input')
-      .querySelector('.composer-inline-mention');
+      .querySelector('[data-mention-kind]');
     expect(pill?.textContent).toBe('@My Export');
     expect(pill?.getAttribute('data-mention-kind')).toBe('plugin');
   });
@@ -1299,7 +1283,7 @@ describe('ChatComposer context pickers', () => {
     fireEvent.click(screen.getByText('designs/landing.html'));
 
     await waitFor(() => expect(composerText()).toBe('Use @designs/landing.html '));
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
 
     await act(async () => {
       fireEvent.click(screen.getByLabelText('Remove landing.html'));
@@ -1307,7 +1291,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Use '));
-    expect(screen.queryByTestId('staged-contexts')).toBeNull();
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
   it('preserves surrounding draft formatting when removing a design file token', async () => {
@@ -1336,7 +1320,7 @@ describe('ChatComposer context pickers', () => {
     await waitFor(() =>
       expect(composerText()).toBe('Plan:\n\n@designs/landing.html '),
     );
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('landing.html');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('landing.html');
 
     // The user keeps typing after the trailing space; re-seed the full draft to
     // capture that, then remove the staged chip.
@@ -1351,7 +1335,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => expect(composerText()).toBe('Plan:\n\n\n\nKeep spacing'));
-    expect(screen.queryByTestId('staged-contexts')).toBeNull();
+    expect(screen.queryByTestId('staged-attachments')).toBeNull();
   });
 
   it('removes a design file token when punctuation follows it', async () => {
@@ -1468,7 +1452,7 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeTruthy();
+      expect(screen.getByText('File upload failed for 1 file(s). (storage offline)')).toBeTruthy();
     });
     expect(screen.queryByTestId('staged-contexts')).toBeNull();
 
@@ -1479,9 +1463,9 @@ describe('ChatComposer context pickers', () => {
     });
 
     await waitFor(() => {
-      expect(screen.queryByText('Attachment upload failed for 1 file(s) (storage offline).')).toBeNull();
+      expect(screen.queryByText('File upload failed for 1 file(s). (storage offline)')).toBeNull();
     });
-    expect(screen.getByTestId('staged-contexts').textContent).toContain('recovered.txt');
+    expect(screen.getByTestId('staged-attachments').textContent).toContain('recovered.txt');
   });
 
   // The sliders "tools" popover (Official / My plugins switch, plugin search)

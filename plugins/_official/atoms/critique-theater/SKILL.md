@@ -1,59 +1,55 @@
 ---
 name: critique-theater
-description: Five-role Design Jury review that streams scored rounds, persists a replayable transcript, and ships through the daemon's Critique Theater protocol.
+description: Five-dimension design quality review — score the artifact against craft, brand, accessibility, and copy, then fix what falls short before handing it over.
 od:
   scenario: general
   mode: critique
 ---
 
-# Critique Theater
+# Design review
 
-**Design Jury** is the user-facing name for Critique Theater. When the daemon
-enables it for an artifact-generating run, it appends the active protocol,
-brand source, thresholds, and weights to the agent prompt. The agent then plays
-the fixed v1 cast — Designer, Critic, Brand, Accessibility, and Copy — as turns
-inside the same CLI session.
+Before you hand an artifact over, review it against five dimensions and fix
+what falls short. This is a quality bar, not a performance: do the review,
+apply the fixes, and describe the outcome in ordinary prose.
 
-## Runtime contract
+## The five dimensions
 
-- Follow the daemon-injected tagged protocol exactly: one
-  `<CRITIQUE_RUN>` envelope containing `<ROUND>`, `<PANELIST>`,
-  and `<ROUND_END>` blocks and, only after a ship decision, one final
-  `<SHIP>` block. Do not emit prose outside the envelope.
-- Designer drafts the artifact. Critic, Brand, Accessibility, and Copy score
-  their own scopes and record actionable `<MUST_FIX>` items. The cast is fixed
-  in v1; a plugin does not replace it with a custom list of axes.
-- The daemon parses the stream incrementally into typed `PanelEvent` variants
-  and publishes them on `critique.*` SSE channels. It recomputes the composite
-  from the scoring panelists, so an agent-supplied composite is advisory.
-- Do not write `critique.json` in the project cwd or emit a
-  `kind: "critique-panel"` object. Those were the pre-orchestrator shape and
-  are not inputs to the current runtime.
+Judge the artifact you just produced from five angles. Each one owns its own
+scope; do not let a strength in one excuse a failure in another.
 
-## Convergence and persistence
+- **Craft** — layout, hierarchy, spacing, alignment, and visual rhythm. Does it
+  read as deliberate work rather than a template with the words swapped out?
+- **Critique** — does it actually solve the user's stated problem? Look for
+  the weakest claim, the thinnest section, the thing a sceptical reviewer would
+  attack first.
+- **Brand** — does it follow the active design system's tokens, typography, and
+  voice? A brand violation is a defect even when the result looks pleasant.
+- **Accessibility** — contrast ratios, touch-target sizes, focus rings, labels
+  on interactive controls and dialogs, keyboard reachability, sensible
+  heading order.
+- **Copy** — is the text specific, readable, and free of filler? Placeholder
+  phrasing and marketing padding both count as defects.
 
-The default review uses a 0–10 scale, an 8.0 ship threshold, and at most three
-rounds. A round ships only when its daemon-computed composite reaches the
-configured threshold **and** no open must-fix items remain. The active values
-come from `OD_CRITIQUE_*` configuration, including
-`OD_CRITIQUE_MAX_ROUNDS`, `OD_CRITIQUE_SCORE_THRESHOLD`, and the fallback
-policy.
+## What to do with the findings
 
-`OD_MAX_DEVLOOP_ITERATIONS` still caps an outer plugin pipeline stage; it is
-not the Design Jury round limit or ship rule. Likewise, a pipeline's
-`critique.score` signal is a scheduler-facing projection, not the wire output
-the agent should manufacture.
+Record each concrete defect and fix it in the same turn. A finding you cannot
+fix is worth stating plainly, with the reason, so the user can decide.
 
-The daemon stores the terminal run and per-round summaries in SQLite and
-writes the ordered `PanelEvent` stream as a replayable NDJSON transcript
-(gzip-compressed when large). Final artifact bytes are stored separately; the
-`ship` event carries only an `artifactRef`.
+Keep iterating while defects remain and you still have room to work. Stop when
+the artifact clears all five dimensions, or when further rounds stop producing
+real improvements — whichever comes first. Three passes is a sensible ceiling.
 
-## Interrupting a run
+`OD_MAX_DEVLOOP_ITERATIONS` caps the outer plugin pipeline stage; it is not
+this review's round limit. A pipeline's `critique.score` signal is a
+scheduler-facing projection, not something you should write into your answer.
 
-The web Design Jury surface exposes **Interrupt** and an Esc shortcut. After
-the user triggers either, the web app posts to
-`/api/projects/:projectId/critique/:runId/interrupt`; the daemon aborts the
-registered run, persists the partial best-so-far state, and emits
-`critique.interrupted`. `od ui respond` handles GenUI surfaces and does not
-provide a `break-loop` action for Critique Theater.
+## How to report it
+
+Write the outcome the way you would write any other part of your answer: plain
+prose, in the user's language, saying what you checked, what you fixed, and
+anything you deliberately left alone.
+
+Do not invent a structured review transcript, a scored panel, a cast of named
+reviewer personas, or any tag-based envelope around your answer. Do not write a
+`critique.json` file into the project. None of those are inputs to anything —
+they only add noise to the user's chat.

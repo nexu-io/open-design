@@ -15,7 +15,6 @@ export type IconName =
   | 'brain'
   | 'check'
   | 'chevron-down'
-  | 'chevron-up'
   | 'chevron-left'
   | 'chevron-right'
   | 'close'
@@ -33,16 +32,15 @@ export type IconName =
   | 'file'
   | 'file-code'
   | 'file-text'
-  | 'inbox-archive'
-  | 'inbox-unarchive'
   | 'folder'
-  | 'folder-2'
-  | 'folder-transfer'
   | 'folder-filled'
   | 'fork'
   | 'github'
   | 'github-filled'
   | 'grip-vertical'
+  | 'magic'
+  | 'headset'
+  | 'grid-4'
   | 'grid'
   | 'globe'
   | 'hammer'
@@ -58,7 +56,6 @@ export type IconName =
   | 'layers-filled'
   | 'languages'
   | 'layout'
-  | 'layout-grid-2'
   | 'lightbulb'
   | 'arrow-right'
   | 'link'
@@ -73,13 +70,8 @@ export type IconName =
   | 'minus'
   | 'more-horizontal'
   | 'orbit'
-  | 'remix-loop'
-  | 'make-same'
   | 'paint-bucket'
-  | 'layout-left'
-  | 'layout-right'
   | 'panel-left'
-  | 'nodes'
   | 'palette'
   | 'palette-filled'
   | 'pencil'
@@ -88,8 +80,8 @@ export type IconName =
   | 'puzzle'
   | 'slides'
   | 'star'
-  | 'swap'
   | 'swatchbook'
+  | 'pause'
   | 'play'
   | 'present'
   | 'refresh'
@@ -103,7 +95,6 @@ export type IconName =
   | 'smartphone'
   | 'spinner'
   | 'sparkles'
-  | 'sparkles-filled'
   | 'stop'
   | 'sun'
   | 'moon'
@@ -146,7 +137,6 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   brain: 'brain-line',
   check: 'check-line',
   'chevron-down': 'arrow-down-s-line',
-  'chevron-up': 'arrow-up-s-line',
   'chevron-left': 'arrow-left-s-line',
   'chevron-right': 'arrow-right-s-line',
   close: 'close-line',
@@ -163,18 +153,18 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   file: 'file-line',
   'file-code': 'file-code-line',
   'file-text': 'file-text-line',
-  'inbox-archive': 'inbox-archive-line',
-  'inbox-unarchive': 'inbox-unarchive-line',
   folder: 'folder-line',
-  'folder-2': 'folder-2-line',
-  'folder-transfer': 'folder-transfer-line',
   'folder-filled': 'folder-fill',
-  fork: 'git-branch-line',
+  // 支线朝**下**的那一版 —— 交付稿 729fa43ce7 的「新开会话」按钮与分界脚注用的
+  // 就是它(理由与来历见 `remix-icon-paths.ts` 里 `git-branch-line-down` 的注释)。
+  fork: 'git-branch-line-down',
   github: 'github-line',
   'github-filled': 'github-fill',
   globe: 'global-line',
   grid: 'grid-line',
-  'grip-vertical': 'drag-move-line',
+  // 'grip-vertical' 【不映射】到 remix 的 drag-move-line ——
+  // 那是「四向箭头菱形」,交付稿的拖动手柄是 2×3 六个圆点(见下方本地 case)。
+  // 映射存在时 remix 优先,本地那段 case 一直是死代码,手柄画错的根因就在这一行。
   hammer: 'hammer-line',
   'help-circle': 'question-line',
   history: 'history-line',
@@ -189,7 +179,6 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   languages: 'translate-2',
   'layers-filled': 'stack-fill',
   layout: 'layout-line',
-  'layout-grid-2': 'layout-grid-2-line',
   lightbulb: 'lightbulb-line',
   link: 'link',
   lock: 'lock-line',
@@ -211,11 +200,7 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   play: 'play-line',
   plus: 'add-line',
   'plus-filled': 'add-fill',
-  // 幻灯片 reads as the keynote lectern, not the screen-with-bullets glyph
-  // (product pick). Every `present` site means "slide deck" — the Home deck
-  // chip, the card's kind tile, Community's Slides facet, the workspace's
-  // slides tab — so the swap is made once here rather than per surface.
-  present: 'keynote-line',
+  present: 'slideshow-line',
   puzzle: 'puzzle-line',
   refresh: 'refresh-line',
   reload: 'reset-left-line',
@@ -227,13 +212,11 @@ const REMIX_ICON: Partial<Record<IconName, string>> = {
   sliders: 'equalizer-line',
   smartphone: 'smartphone-line',
   sparkles: 'sparkling-line',
-  'sparkles-filled': 'sparkling-2-fill',
   spinner: 'loader-4-line',
   star: 'star-line',
   stop: 'stop-line',
   sun: 'sun-line',
   'sun-moon': 'sun-foggy-line',
-  swap: 'swap-2-fill',
   swatchbook: 'artboard-line',
   terminal: 'terminal-box-line',
   'thumbs-down': 'thumb-down-line',
@@ -325,6 +308,11 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
         </svg>
       );
+    // ⚠️ 2026-09-07 合并 main:#7843 把 #7635 的首页改版整体 revert 掉,连带
+    // 撤走了这枚字形和它在 `IconName` 里的名字。但聊天面板的发送键仍然点名
+    // 要它(`ChatComposer.tsx` 的 `<Icon name="arrow-up-fill" size={32} />`,
+    // 判据 `w134-composer-send-geometry.test.tsx`),所以这一枚按原样留下 ——
+    // 撤走它会让那颗按钮渲染成空白方框,而 TS 只在名字上报错、渲染不会。
     // Up-arrow lifted from the supplied send mark (Group 2147224569.svg, the
     // successor to 发送按钮.svg): two barbs and a shaft, drawn as bars with
     // fully rounded caps (`rx` = half the bar width) rather than one solid
@@ -392,14 +380,6 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M19.7134 8.12811L19.4668 8.69379C19.2864 9.10792 18.7136 9.10792 18.5331 8.69379L18.2866 8.12811C17.8471 7.11947 17.0555 6.31641 16.0677 5.87708L15.308 5.53922C14.8973 5.35653 14.8973 4.75881 15.308 4.57612L16.0252 4.25714C17.0384 3.80651 17.8442 2.97373 18.2761 1.93083L18.5293 1.31953C18.7058 0.893489 19.2942 0.893489 19.4706 1.31953L19.7238 1.93083C20.1558 2.97373 20.9616 3.80651 21.9748 4.25714L22.6919 4.57612C23.1027 4.75881 23.1027 5.35653 22.6919 5.53922L21.9323 5.87708C20.9445 6.31641 20.1529 7.11947 19.7134 8.12811ZM3.9934 3H13V5H5V19H19V11H21V20.0066C21 20.5552 20.5551 21 20.0066 21H3.9934C3.44476 21 3 20.5551 3 20.0066V3.9934C3 3.44476 3.44495 3 3.9934 3ZM10.6219 8.41459L15.5008 11.6672C15.6846 11.7897 15.7343 12.0381 15.6117 12.2219C15.5824 12.2658 15.5447 12.3035 15.5008 12.3328L10.6219 15.5854C10.4381 15.708 10.1897 15.6583 10.0672 15.4745C10.0234 15.4088 10 15.3316 10 15.2526V8.74741C10 8.52649 10.1791 8.34741 10.4 8.34741C10.479 8.34741 10.5562 8.37078 10.6219 8.41459Z" />
-        </svg>
-      );
-    // Four linked nodes (product-supplied glyph, filled like the *-line set):
-    // marks the template a chip stands for.
-    case 'nodes':
-      return (
-        <svg {...common} fill="currentColor" stroke="none">
-          <path d="M9 17C9 16.4474 8.77709 15.949 8.41406 15.5859C8.05104 15.2229 7.55256 15 7 15C5.89543 15 5 15.8954 5 17C5 18.1046 5.89543 19 7 19C8.10457 19 9 18.1046 9 17ZM19 17C19 15.8954 18.1046 15 17 15C15.8954 15 15 15.8954 15 17C15 18.1046 15.8954 19 17 19C18.1046 19 19 18.1046 19 17ZM9 7C9 5.89543 8.10457 5 7 5C5.89543 5 5 5.89543 5 7C5 8.10457 5.89543 9 7 9C8.10457 9 9 8.10457 9 7ZM19 7C19 5.89543 18.1046 5 17 5C15.8954 5 15 5.89543 15 7C15 7.55256 15.2229 8.05104 15.5859 8.41406C15.949 8.77709 16.4474 9 17 9C18.1046 9 19 8.10457 19 7ZM21 17C21 19.2091 19.2091 21 17 21C14.7909 21 13 19.2091 13 17C13 14.7909 14.7909 13 17 13C19.2091 13 21 14.7909 21 17ZM11 7C11 9.20914 9.20914 11 7 11C4.79086 11 3 9.20914 3 7C3 4.79086 4.79086 3 7 3C9.20914 3 11 4.79086 11 7ZM21 7C21 9.20914 19.2091 11 17 11C16.2584 11 15.5634 10.7972 14.9678 10.4453L10.4453 14.9678C10.7972 15.5634 11 16.2584 11 17C11 19.2091 9.20914 21 7 21C4.79086 21 3 19.2091 3 17C3 14.7909 4.79086 13 7 13C7.74116 13 8.43593 13.2022 9.03125 13.5537L13.5537 9.03125C13.2022 8.43593 13 7.74116 13 7C13 4.79086 14.7909 3 17 3C19.2091 3 21 4.79086 21 7Z" />
         </svg>
       );
     case 'bell':
@@ -609,12 +589,41 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
     case 'grip-vertical':
       return (
         <svg {...common} fill="currentColor" stroke="none">
-          <circle cx="9" cy="5" r="1.45" />
-          <circle cx="15" cy="5" r="1.45" />
-          <circle cx="9" cy="12" r="1.45" />
-          <circle cx="15" cy="12" r="1.45" />
-          <circle cx="9" cy="19" r="1.45" />
-          <circle cx="15" cy="19" r="1.45" />
+          {/* 坐标逐个照抄交付稿的 `.grip`:两列 cx 9/15,三行 cy 6/12/18,r 1.5 */}
+          <circle cx="9" cy="6" r="1.5" />
+          <circle cx="15" cy="6" r="1.5" />
+          <circle cx="9" cy="12" r="1.5" />
+          <circle cx="15" cy="12" r="1.5" />
+          <circle cx="9" cy="18" r="1.5" />
+          <circle cx="15" cy="18" r="1.5" />
+        </svg>
+      );
+    case 'grid-4':
+      /*
+       * 交付稿视觉方向卡右上那颗「摊开看全部」——**四个圆角方块**,坐标照抄稿子。
+       * 不复用 `grid`:那个名字映射到 remix 的 `grid-line`(带分隔线的九宫格),
+       * 画出来是「⊞」,和稿子的四块差得远。
+       */
+      return (
+        <svg {...common} fill="none" stroke="currentColor">
+          <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+          <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+          <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+        </svg>
+      );
+    case 'headset':
+      /* 报错卡「联系支持」那一枚(交付稿第 78 格)—— 路径逐字节取自稿子 */
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M19.9381 8H21C22.1046 8 23 8.89543 23 10V14C23 15.1046 22.1046 16 21 16H19.9381C19.446 19.9463 16.0796 23 12 23V21C15.3137 21 18 18.3137 18 15V9C18 5.68629 15.3137 3 12 3C8.68629 3 6 5.68629 6 9V16H3C1.89543 16 1 15.1046 1 14V10C1 8.89543 1.89543 8 3 8H4.06189C4.55399 4.05369 7.92038 1 12 1C16.0796 1 19.446 4.05369 19.9381 8ZM3 10V14H4V10H3ZM20 10V14H21V10H20ZM7.75944 15.7849L8.81958 14.0887C9.74161 14.6662 10.8318 15 12 15C13.1682 15 14.2584 14.6662 15.1804 14.0887L16.2406 15.7849C15.0112 16.5549 13.5576 17 12 17C10.4424 17 8.98882 16.5549 7.75944 15.7849Z" />
+        </svg>
+      );
+    case 'magic':
+      /* 交付稿队列行「编辑」用的那枚魔杖 —— 路径逐字节取自稿子,不另找近似图形 */
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <path d="M4.7134 7.12811L4.46682 7.69379C4.28637 8.10792 3.71357 8.10792 3.53312 7.69379L3.28656 7.12811C2.84706 6.11947 2.05545 5.31641 1.06767 4.87708L0.308047 4.53922C-0.102682 4.35653 -0.102682 3.75881 0.308047 3.57612L1.0252 3.25714C2.03838 2.80651 2.84417 1.97373 3.27612 0.930828L3.52932 0.319534C3.70578 -0.106511 4.29417 -0.106511 4.47063 0.319534L4.72382 0.930828C5.15577 1.97373 5.96158 2.80651 6.9748 3.25714L7.69188 3.57612C8.10271 3.75881 8.10271 4.35653 7.69188 4.53922L6.93228 4.87708C5.94451 5.31641 5.15288 6.11947 4.7134 7.12811ZM6.33421 15.8154C6.51032 15.233 6.7072 14.6562 6.93912 14.0327C8.99484 8.50636 12.4197 5.08172 18.0129 4.21479C17.5 5.35838 17.0151 6.15301 16.5858 6.58237C16.2521 6.91603 15.9185 7.24993 15.5848 7.58407L14.1721 8.99878L15.6279 10.4535C14.4976 12.5384 12.2652 14.1979 9.75193 14.512C8.43544 14.6766 7.29345 15.1188 6.33421 15.8154ZM18 9.99658L17 8.99728C17.3331 8.66372 17.6662 8.33039 18.0027 7.99391C19.0018 6.99303 20.0009 4.99392 21 1.99658C6.31105 1.99658 4.08854 15.422 3.06361 21.6132C3.0419 21.7443 3.02074 21.8722 3 21.9966H4.99824C5.66421 18.6635 7.33146 16.8301 10 16.4966C14 15.9966 17 12.9966 18 9.99658Z" />
         </svg>
       );
     case 'grid':
@@ -686,21 +695,6 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <circle cx="9" cy="9" r="2" />
           <path d="m21 15-4.5-4.5L7 20" />
-        </svg>
-      );
-    // The rail toggle's pair (supplied): the same framed panel with its bar on
-    // one side or the other, so collapsing/expanding reads as the sidebar
-    // moving out of and back into the frame.
-    case 'layout-left':
-      return (
-        <svg {...common} fill="currentColor" stroke="none">
-          <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM20 5H4V19H20V5ZM8 7V17H6V7H8Z" />
-        </svg>
-      );
-    case 'layout-right':
-      return (
-        <svg {...common} fill="currentColor" stroke="none">
-          <path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM20 5H4V19H20V5ZM18 7V17H16V7H18Z" />
         </svg>
       );
     case 'panel-left':
@@ -893,6 +887,13 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
       return (
         <svg {...common} fill="currentColor" stroke="none">
           <path d="M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z" />
+        </svg>
+      );
+    case 'pause':
+      // 音频产物那颗播放键的暂停态(设计稿组件 24)
+      return (
+        <svg {...common}>
+          <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
         </svg>
       );
     case 'play':
@@ -1142,30 +1143,6 @@ export function Icon({ name, size = 14, strokeWidth = 1.6, ...rest }: Props) {
           <path d="M3 6h18" />
           <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
           <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
-        </svg>
-      );
-    case 'remix-loop':
-      // Supplied artwork (per product), kept verbatim: a filled 24-box glyph,
-      // so it opts out of `common`'s stroke contract the same way the send
-      // mark above does. Two nested hooks inside a ring — it reads as "run it
-      // again from this" at 14px, which the generic refresh loop does not.
-      return (
-        <svg {...common} fill="currentColor" stroke="none">
-          <path d="M12 2C17.5121 2 21.9816 6.45975 21.999 11.9678C21.9992 11.9746 21.9989 11.9814 21.999 11.9883C21.999 11.9922 22 11.9961 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2ZM12 4C10.0751 4 8.30904 4.67985 6.92871 5.8125C7.58426 5.61027 8.27973 5.5 9 5.5C12.866 5.50002 16 8.63402 16 12.5C16 13.0523 15.5523 13.5 15 13.5C14.4477 13.5 14 13.0523 14 12.5C14 9.73859 11.7614 7.50002 9 7.5C6.38853 7.5 4.23108 9.50052 4.00098 12.043C4.02411 16.4415 7.59606 20 12 20C13.9248 20 15.69 19.3191 17.0703 18.1865C16.4149 18.3886 15.72 18.5 15 18.5C11.134 18.5 8 15.366 8 11.5C8 10.9477 8.44772 10.5 9 10.5C9.55228 10.5 10 10.9477 10 11.5C10 14.2614 12.2386 16.5 15 16.5C17.6118 16.5 19.7684 14.4989 19.998 11.9561C19.9744 7.558 16.4036 4 12 4Z" />
-        </svg>
-      );
-    case 'make-same':
-      // Supplied artwork (per product). Unlike the rest of the set it keeps
-      // the source's 48 viewBox and its stroke-4 weight — rescaling to 24
-      // would have to re-round every coordinate, and the glyph's thin lid
-      // ellipse is exactly what would go first. The source hard-codes
-      // `stroke="#ffffff"`; taken to `currentColor` here so the glyph follows
-      // whatever paints it (the card pills are white-on-dark today).
-      return (
-        <svg {...common} viewBox="0 0 48 48" strokeWidth={4}>
-          <path d="M10 10c.5 3 1 4.5 1.5 8c.4 2.8.5 7.167.5 9c-2.167 1-7 3-7 7s5 9 19 9s19-5 19-9s-7-7-7-7s0-5.5.5-9s1-5 1.5-8" />
-          <path d="M36 27c0 4-1 8-12.5 8" />
-          <ellipse cx="24" cy="10" rx="14" ry="5" />
         </svg>
       );
     default:

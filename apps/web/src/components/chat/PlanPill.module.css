@@ -1,0 +1,156 @@
+/*
+ * Plan 卡的收起态 —— 一枚「第 N / M 步」的药丸(设计稿第 71 格 / `.pmini`)。
+ *
+ * 选择器**连祖先一起照抄**:稿子写 `.pmini .pill`,这里就是 `.wrap .pill`,
+ * 不因为「反正也匹配得到」把 `.wrap` 省掉 —— 祖先在那儿承担的是层叠职责。
+ * 色值一律走 `--chat-*` 接缝(chat/AGENTS.md §2),不直连全局 token。
+ *
+ * 稿子里的 `.pdemo { padding-top: 136px }` **没有搬**:那一层是稿子自己的脚手架
+ * (它那张卡有 overflow:hidden,不给头顶留高度浮层会被切掉)。稿子注释原话:
+ * 「真实场景里药丸钉在流水底部,上方本来就是空的,不需要这一层。」
+ */
+
+/* 稿子 `.pmini { position: relative; display: inline-flex }`。
+   定位包含块由 ChatPane 那个满宽的底部浮层位承担,不在这儿。
+   这一层仍旧是**悬停 / 聚焦的触发面**:它裹住药丸本身,不铺满整行 ——
+   铺满的话整条空白扫过去都会把浮层勾出来。 */
+.wrap {
+  display: inline-flex;
+  pointer-events: auto;
+}
+
+.wrap .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--chat-radius-pill);
+  border: var(--chat-stroke) solid var(--chat-border);
+  background: var(--chat-bg);
+  font-size: var(--chat-t-mini);
+  font-weight: 600;
+  /* 稿子 `.pmini .pill { color: var(--plan-current-text) }`(729fa43ce7:2016)——
+     和展开态「当前这一步」同一枚,收起 / 展开是同一件事的两个形态。
+     不是 `--chat-text-strong`:那一档(#202020)是正文最深的一格,深了一格。 */
+  color: var(--chat-plan-current-text);
+  cursor: default;
+  transition: border-color var(--chat-dur-quick) var(--chat-ease-out);
+}
+.wrap:hover .pill,
+.wrap:focus-within .pill {
+  border-color: var(--chat-border-strong);
+}
+
+/* 浮层落在药丸【上方】:药丸自己钉在流水底部,往下开会顶到输入框。
+   ------------------------------------------------------------
+   水平方向**回到稿子原文** `left: 50%; transform: translateX(-50%)`。
+   这两条曾经被改成 `left: 0`,理由是「药丸钉在输入框的左内缩线上,而 `.pane` 是
+   `overflow: hidden`,居中会让浮层左边被面板切掉约 50px」—— 药丸自己居中之后
+   那个理由不成立了:包含块是上面那一行(= 输入框那一列),50% 正是那条中线。
+
+   `max-width` 是产品这一侧补的一道夹子,稿子只写了 `320px`。
+   `100%` 量的是那一行,也就是输入框那一列的宽度:窄面板下(实测 `.pane` 320px 那一档
+   这一行只有 292px)光靠 320px 的上限,浮层会被 `.pane` 的 `overflow: hidden`
+   两头切掉。夹上之后浮层永远不宽于输入框,切不着。
+   (`min-width: 232px` 照抄稿子,它比 `max-width` 优先 —— 面板窄到这一行不足 232px
+   时浮层仍会探出去,那已经在 `MIN_CHAT_PANEL_WIDTH = 345` 之下。)
+   `pointer-events: none` 照抄:这份清单只看不点,鼠标穿过去不抢事件。 */
+.wrap .pop {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(100% + 8px);
+  z-index: 7;
+  width: max-content;
+  min-width: 232px;
+  max-width: min(320px, 100%);
+  padding: 6px 4px;
+  border-radius: var(--chat-radius-lg);
+  background: var(--chat-bg);
+  box-shadow: var(--chat-shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--chat-dur-quick) var(--chat-ease-out);
+}
+/* `:focus-within` 是产品这一侧补的:药丸是个真按钮,键盘走得到它,
+   走到了却什么都不浮出等于这份清单对键盘用户不存在。 */
+.wrap:hover .pop,
+.wrap:focus-within .pop {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 常见的 4 / 5 步仍按内容自然高度完整展示。长清单由组件按「药丸顶部到
+   chat viewport 顶部」的实时距离写入 inline max-height;148px 只是在镜像陈列页
+   等没有宿主 viewport 的环境里的安全回退。 */
+.wrap .pop .steps {
+  max-height: 148px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0;
+  margin: 0;
+}
+
+/*
+ * 「不是当前这一步」的那几档 —— 未开始 / 做完了 / 取消了 —— 共用**同一枚**灰
+ * (PR #7170 的 `plan-todo.css`:`--plan-other-text`,那一版改的正是
+ * `.steps li.is-skip { color: var(--text-soft) → var(--plan-other-text) }`)。
+ *
+ * 换句话说:取消掉的那一步**不额外挑一档灰**。它和别的非当前步同色,「被划掉」
+ * 这件事交给那条线自己说 —— 一行里既换色又画线,是同一句话说了两遍,而且两遍
+ * 的轻重还可能反着。当前那一步是这张卡里唯一深的一行,对比才立得住。
+ */
+/*
+ * `font-weight: 400` 是**显式**的,不能靠「不写」拿到。
+ *
+ * 稿子 `.steps li { … font-weight: 400 … }` 里的 400 是相对它自己的基线
+ * (`body { font-weight: 500 }`)说的:非当前的几步要**比基线轻一档**往后退,
+ * 当前那一步的 600 才立得住,一张卡里只有一行是深的。
+ *
+ * 排版基线落到 chat 接缝(`ChatRoot.module.css`,400 → 500)之前,这里「不写」
+ * 恰好等于 400,两边碰巧一致;基线一到 500,「不写」就变成了 500 ——
+ * 非当前的几步凭空重一档,和 `.now` 的 600 只差一档,层次被压平。
+ * 所以这一条必须写出来。守卫见 `tests/components/chat/plan-step-weight.test.tsx`
+ * (夹具挂 `chatSeam()`,不挂接缝就量不到那一档继承,坏实现也会假绿)。
+ */
+.steps li {
+  display: flex;
+  gap: 8px;
+  padding: 5px 11px;
+  font-size: var(--chat-t-mini);
+  font-weight: 400;
+  line-height: var(--chat-lh-row);
+  color: var(--chat-text-soft);
+  list-style: none;
+}
+/* 「做完了」那一档的划线不在这儿 —— 它复用执行记录的 `.struck`
+   (record.module.css),同一件事不在两个文件里各画一遍。 */
+.steps li.done { color: var(--chat-text-soft); }
+/* 「当前这一步」走稿子给 Plan 单独立的那一枚(`--plan-current-text` = #353535,
+   729fa43ce7:2008 / 2070),不是正文最深那一档 `--chat-text-strong`(#202020)。
+   这张卡里唯一深的一行只需要比周围的 `--chat-text-soft` 立得住,不需要重到像标题。 */
+.steps li.now {
+  color: var(--chat-plan-current-text);
+  font-weight: 600;
+}
+/*
+ * ⚠️ **颜色只能有一个所有者。**
+ *
+ * `.struck` 自带 `--chat-text-muted`(执行记录里作废的 todo 就该是那一档),
+ * 而这一行现在是 `--chat-text-soft`。两个文件各写一次颜色的后果:
+ * 行里的记号跟着 `li` 走、文字跟着 `.struck` 走,同一行两档灰;
+ * 暗色主题下两枚 token 翻转方向还不一样(soft 不动、muted 变浅),
+ * 于是被划掉的那一步反而比周围**更亮**,读成「被强调了」。
+ *
+ * 收口在这里而不是去改 `.struck`:那枚划线在执行记录里的墨色是对的,
+ * 不能为了计划卡把别人一起改了。`(0,3,0)` 严格压过 `.struck` 的 `(0,1,0)`,
+ * 不靠源码顺序 —— 两个 CSS Module 谁先进 bundle 不由这一层决定。
+ */
+.steps li.done .tx > * { color: inherit; }
+
+/* 稿子 `.steps li .tx { flex: 1; min-width: 0 }` —— 文字那一栏吃掉剩下的宽,
+   长标题在这里折行而不是把记号挤走。 */
+.steps li .tx {
+  flex: 1;
+  min-width: 0;
+}

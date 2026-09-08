@@ -757,14 +757,13 @@ test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) =
   });
   await routeMockAgents(page);
 
-  const projectId = await createProjectViaApi(page, 'Plan and sketch analytics');
+  const projectId = await createProjectViaApi(page, 'Sketch analytics');
   await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   // The session-mode picker left the composer (#7635), so `session_mode_toggle`
   // can no longer be produced from here; the sketch action is the analytics
   // under test.
-  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);
-  await openAllProjectFiles(page);
+  await expect(page.getByTestId('chat-composer').getByTestId('composer-mode-trigger')).toHaveCount(0);  await openAllProjectFiles(page);
   await page.getByTestId('design-files-empty-new-sketch').click();
 
   const sketchName = await waitForSingleSketchFile(page, projectId);
@@ -773,8 +772,7 @@ test('[P1] new Excalidraw sketch emits analytics dimensions', async ({ page }) =
 
   await expect.poll(() => analyticsBodies.join('\n'), { timeout: T.medium }).toContain('new_sketch');
   const raw = analyticsBodies.join('\n');
-  expect(raw).not.toContain('session_mode_toggle');
-  expect(raw).toContain(projectId);
+  expect(raw).not.toContain('session_mode_toggle');  expect(raw).toContain(projectId);
 });
 
 test('[P1] markdown plan documents support code, split, preview, and autosaved edits', async ({ page }) => {

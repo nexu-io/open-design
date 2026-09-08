@@ -68,6 +68,38 @@ function amrAnalyticsIdentityEnv(
   return { OD_INSTALLATION_ID: installationId };
 }
 
+/**
+ * Claude Code must expose a plan tool, or a Claude run can never draw the Todos
+ * card the rest of the product is built around.
+ *
+ * Claude Code >= 2.1.x retired `TodoWrite` in favour of `TaskCreate` /
+ * `TaskUpdate` / `TaskList` / `TaskGet`, and gates that family behind this
+ * variable for the current model generation. Measured on 2.1.247, reading the
+ * `tools` array of the init frame from `claude -p --output-format stream-json
+ * --verbose`:
+ *
+ *   --model opus   (claude-opus-5)     → Task, TaskOutput, TaskStop
+ *   --model sonnet (claude-sonnet-5)   → Task, TaskOutput, TaskStop
+ *   … either of those, with the flag   → + TaskCreate, TaskGet, TaskList, TaskUpdate
+ *   --model haiku  (claude-haiku-4-5)  → the Task family, flag or not
+ *
+ * `TodoWrite` appears on no model in that build, so the `default` / `opus` /
+ * `sonnet` aliases the model picker offers ship with no plan tool at all unless
+ * this is set. `claude-stream.ts` reduces the Task family back into the
+ * canonical `TodoWrite` snapshot, so nothing downstream has to know which
+ * dialect the installed build speaks.
+ *
+ * Setting it is monotone — inside Claude Code the check is an early
+ * `return true`, so it can only ever ADD the family, never remove `TodoWrite`
+ * from a build that still has it — and builds that predate the variable ignore
+ * an unknown env key. A value the user set (inherited env, or Settings → Local
+ * CLI → Advanced) wins, per the precedence rules above.
+ */
+function applyClaudeTaskToolEnv(env: NodeJS.ProcessEnv): void {
+  if (typeof env.CLAUDE_CODE_ENABLE_TODO_TOOLS === 'string') return;
+  env.CLAUDE_CODE_ENABLE_TODO_TOOLS = '1';
+}
+
 export function spawnEnvForAgent(
   agentId: string,
   baseEnv: RuntimeEnvMap,
@@ -132,6 +164,7 @@ export function spawnEnvForAgent(
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
+    applyClaudeTaskToolEnv(env);
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {

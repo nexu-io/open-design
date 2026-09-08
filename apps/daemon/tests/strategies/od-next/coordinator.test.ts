@@ -83,6 +83,16 @@ function beginAutomaticSimpleProduction(
   });
 }
 
+function requireHostProtocolMeta(meta: Record<string, unknown> | null): {
+  instruction: string;
+  doneKey: string;
+} {
+  if (!meta || typeof meta.instruction !== 'string' || typeof meta.doneKey !== 'string') {
+    throw new Error('expected captured host protocol metadata');
+  }
+  return { instruction: meta.instruction, doneKey: meta.doneKey };
+}
+
 function strategyBinding() {
   const assetDigests = [
     { path: './SKILL.md', sha256: 'a'.repeat(64) },
@@ -970,7 +980,11 @@ describe('OD Next planning coordinator', () => {
     expect(capturedMeta).toMatchObject({
       taskRunIndex: 1,
       instruction: expect.stringContaining(`planContractHash=${planned.task.planContractHash}`),
+      doneKey: expect.stringMatching(/^[a-f0-9]{16}$/),
     });
+    const hostProtocolMeta = requireHostProtocolMeta(capturedMeta);
+    expect(hostProtocolMeta.instruction)
+      .toContain(`<od-done key="${hostProtocolMeta.doneKey}"/>`);
     expect(result.task.latestRunId).toBe('run-production');
     expect(result.projection.nextRunId).toBe('run-production');
   });
@@ -1010,7 +1024,11 @@ describe('OD Next planning coordinator', () => {
       stage: 'production',
       taskRunIndex: 1,
       instruction: expect.stringContaining('planContractHash='),
+      doneKey: expect.stringMatching(/^[a-f0-9]{16}$/),
     });
+    const hostProtocolMeta = requireHostProtocolMeta(capturedMeta);
+    expect(hostProtocolMeta.instruction)
+      .toContain(`<od-next key="${hostProtocolMeta.doneKey}" value="Add an orders list page"/>`);
     expect(transition).toMatchObject({
       start: true,
       stage: 'production',
@@ -1308,6 +1326,141 @@ ${question}`),
     expect(persisted?.blockedContext).toBeUndefined();
   });
 
+  /**
+   * PARKED — pending the product design this behaviour needs, NOT pending a fix.
+   *
+   * The ruling that governs it is
+   * `specs/current/chat-panel-issue-log-2026-08-28.md:58`, which closed the
+   * attribution of this exact field failure: the run and transport really did
+   * succeed and the card comes from the strategy protocol's fail-closed gate,
+   * and the remedy is explicitly deferred — "不隐藏失败卡、不做关键词猜测。未来若要
+   * 支持 Design 模式纯问答,需显式 structured intent,作为独立产品设计而非本次尾项".
+   * The 2026-09-07 re-check (`07bd6d9149`) measured that boundary and recorded
+   * the same verdict in the log: this asserts product behaviour nobody has
+   * designed yet, and the spec offers exactly this parking as the alternative
+   * to deleting it.
+   *
+   * Why it cannot simply be made to pass. Its fixture and the fixture of
+   * `refuses to infer a Direct Edit completion without verified physical
+   * delivery` below reach the coordinator IDENTICAL — same stage, same route,
+   * same `completionEvidence: { physicalStatus: 'succeeded', deliverableValid:
+   * false }` — and differ only in the agent's prose. Measured, not argued:
+   * dropping the `deliverableValid !== true` guard in
+   * `inferDirectEditCompletionRuntimeState` moves that neighbour's verdict from
+   * `od_next_protocol_runtime_state_missing` to
+   * `od_next_canonical_deliverable_invalid` — the silent-no-op guard is already
+   * broken — while THIS turn still blocks, refused by that second fail-closed
+   * gate. So no gate can separate "the user only wanted words" from "the agent
+   * said it was done and wrote nothing"; only reading the prose could, and that
+   * is the keyword guessing the ruling names and forbids.
+   *
+   * Unskip when the structured intent lands: the product owes what the intent
+   * looks like, which outcome it settles on, and how `strategyTaskDelivered`
+   * counts it. The field record it reproduces is kept below verbatim.
+   *
+   * Reproduces the field failure recorded on Open Design Beta
+   * 0.21.1-beta.7, task `odnext_c4ee010be6b748dc9b92984946bc10a8`,
+   * run `e5d6181b-1705-4a44-964b-cdcb3fbcb6ac`.
+   *
+   * The user asked, in an OD Next prototype project:
+   *   「详细讲讲这个页面的实现思路,分十节展开,每节写满一段。
+   *     只输出文字,不要创建或修改文件。」
+   * The agent obeyed: 2940 characters of prose, no question form, no machine
+   * block, no file touched. The child process exited 0 and the daemon persisted
+   * the Run as `succeeded` with `errorCode: null` and `artifactCount: 0`.
+   *
+   * The task nevertheless landed terminal-`blocked` on
+   * `od_next_protocol_runtime_state_missing`, and the web client remapped the
+   * succeeded Run to `failed`, so a fully answered question was presented to
+   * the user as a task failure.
+   *
+   * Fixture shape is taken from that record, not invented: the route is still
+   * unlocked (production calls `prepareStrategyIntake`, never
+   * `prepareStrategyRequest`, on the request turn — routes.ts:2808), the
+   * clarification budget is untouched, and the completion evidence is what
+   * `validateRunDeliverable` resolves for a Run that wrote nothing.
+   */
+  it.skip('does not fail a request turn whose only output was the answer the user asked for', () => {
+    prepareStrategyIntake(db, {
+      taskExecutionId: 'task-1',
+      intake: intakePassed,
+      execution: executionPassed,
+    });
+    const proseOnlyAnswer = [
+      '这份页面的实现思路,分十节讲。',
+      '',
+      '**一、单文件架构与可编辑性**',
+      '整页收敛在一个 HTML 文件里,样式与脚本内联,便于整体替换。',
+      '',
+      '**二、版式栅格**',
+      '主栏与侧注共用一套基线网格,行高按字号的整数倍对齐。',
+    ].join('\n');
+    const result = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1',
+      runId: 'run-request',
+      protocol: protocol(proseOnlyAnswer),
+      // The process succeeded; nothing was written, because nothing was asked
+      // to be written.
+      completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+      updatedAt: 120,
+    });
+
+    expect(result.action).not.toBe('blocked');
+    const persisted = getStrategyTaskExecution(db, 'task-1');
+    expect(persisted?.outcome).not.toBe('blocked');
+    expect(persisted?.blockedContext).toBeUndefined();
+  });
+
+  /**
+   * Companion evidence for the spec above — expected to PASS today.
+   *
+   * It establishes that the block is not the agent misbehaving. Enumerate every
+   * Runtime State the schema admits for an unrouted request turn and feed each
+   * one to the same prose-only turn: all of them are refused too. There is no
+   * declaration the agent could have emitted that would have let a
+   * deliverable-free answer through, so "the reply did not carry the
+   * machine-readable state" describes a contract with no legal move, not a
+   * protocol violation.
+   */
+  it('admits no request-stage runtime state for a turn that delivers nothing', () => {
+    const declarable = [
+      runtimeState({ route: 'full_plan', outcome: 'clarification_required' }),
+      runtimeState({ route: 'full_plan', outcome: 'plan_ready', executionMode: 'simple' }),
+      runtimeState({ route: 'direct_edit', outcome: 'completed', executionMode: 'simple' }),
+    ];
+    const refusals = declarable.map((state, index) => {
+      const taskExecutionId = `task-declared-${index}`;
+      createStrategyTaskExecution(db, {
+        taskExecutionId,
+        projectId: 'project-1',
+        conversationId: 'conversation-1',
+        snapshotId: snapshot.snapshotId,
+        selectedAgentId: AGENT_ID,
+        initialRunId: `run-declared-${index}`,
+        ...strategyTaskCreateIdentityFixture(),
+        createdAt: 100,
+      });
+      prepareStrategyIntake(db, {
+        taskExecutionId,
+        intake: intakePassed,
+        execution: executionPassed,
+      });
+      const outcome = finalizeStrategyPlanningTurn(db, {
+        taskExecutionId,
+        runId: `run-declared-${index}`,
+        protocol: protocol(`答案正文。\n${block('open-design-runtime-state', state)}`),
+        completionEvidence: { physicalStatus: 'succeeded', deliverableValid: false },
+        updatedAt: 120,
+      });
+      return { declared: state.outcome, action: outcome.action };
+    });
+    expect(refusals).toEqual([
+      { declared: 'clarification_required', action: 'blocked' },
+      { declared: 'plan_ready', action: 'blocked' },
+      { declared: 'completed', action: 'blocked' },
+    ]);
+  });
+
   it('accepts a clarification turn whose state predicted a premature execution mode', () => {
     prepareStrategyRequest(db, {
       taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
@@ -1371,6 +1524,94 @@ ${block('open-design-plan-contract', planContract(snapshot))}`),
     });
     expect(withPlan.action).toBe('blocked');
     expect(withPlan.reasonCodes).toContain('od_next_protocol_runtime_state_missing');
+  });
+
+  it('names a repeated clarification even when the turn carried no machine block', () => {
+    // The observed field failure: the user answers the one allowed question
+    // form, and the agent replies with ANOTHER form and no Runtime State block.
+    // The verdict is right — the clarification stage admits only plan_ready
+    // (which needs a Plan Contract this turn never had), blocked or canceled —
+    // but the attribution was the generic `runtime_state_missing`, because the
+    // missing-block gate fires before `validateAcceptedTurn` ever sees the
+    // repeat. The declared variant of the SAME failure (the sibling test
+    // 'persists the one clarification round and refuses a second question
+    // after restart') reports `od_next_clarification_repeated`; both shapes
+    // must name the same gate.
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+      intake: intakePassed, updatedAt: 110,
+    });
+    const question = '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>';
+    finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-request',
+      protocol: protocol(`${question}\n${block('open-design-runtime-state', runtimeState({
+        outcome: 'clarification_required',
+      }))}`),
+      updatedAt: 120,
+    });
+    beginStrategyClarification(db, {
+      taskExecutionId: 'task-1',
+      sourceRunId: 'run-request',
+      nextRunId: 'run-clarification',
+      answer: 'Use the operator console.',
+      updatedAt: 130,
+    });
+
+    const repeated = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-clarification',
+      protocol: protocol(`还需要再确认一点。\n${question}`),
+      updatedAt: 140,
+    });
+
+    // Attribution: the precise gate, and ONLY it. `reasonCodes[0]` is what the
+    // web client turns into the user-visible error code, so a list that merely
+    // contains the precise name still shows the generic one.
+    expect(repeated.reasonCodes).toEqual(['od_next_clarification_repeated']);
+    // Guardrail: the verdict must NOT move. Fail-closed is correct here.
+    expect(repeated.action).toBe('blocked');
+    expect(repeated.task.outcome).toBe('blocked');
+    expect(repeated.task.inputStage).toBe('clarification');
+    expect(repeated.task.clarificationCount).toBe(1);
+    const persisted = getStrategyTaskExecution(db, 'task-1');
+    expect(persisted?.outcome).toBe('blocked');
+    expect(persisted?.blockedContext?.reasonCodes).toEqual([
+      'od_next_clarification_repeated',
+    ]);
+  });
+
+  it('keeps a block-less clarification turn that asked nothing on the generic gate', () => {
+    // Reverse control for the test above. Same stage, same missing block, but
+    // the agent did not ask again — it merely forgot the Runtime State. That is
+    // genuinely `runtime_state_missing`, and re-attributing it to a repeated
+    // clarification would fold two different failures back into one bucket.
+    prepareStrategyRequest(db, {
+      taskExecutionId: 'task-1', preference: 'full_plan', directEdit: directEligible,
+      intake: intakePassed, updatedAt: 110,
+    });
+    const question = '<question-form id="scope">{"questions":[{"id":"surface","label":"Surface?"}]}</question-form>';
+    finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-request',
+      protocol: protocol(`${question}\n${block('open-design-runtime-state', runtimeState({
+        outcome: 'clarification_required',
+      }))}`),
+      updatedAt: 120,
+    });
+    beginStrategyClarification(db, {
+      taskExecutionId: 'task-1',
+      sourceRunId: 'run-request',
+      nextRunId: 'run-clarification',
+      answer: 'Use the operator console.',
+      updatedAt: 130,
+    });
+
+    const proseOnly = finalizeStrategyPlanningTurn(db, {
+      taskExecutionId: 'task-1', runId: 'run-clarification',
+      protocol: protocol('明白了，我按操作台这个方向来做，下面是完整方案……'),
+      updatedAt: 140,
+    });
+
+    expect(proseOnly.action).toBe('blocked');
+    expect(proseOnly.reasonCodes).toEqual(['od_next_protocol_runtime_state_missing']);
   });
 
   it('lets the main Agent choose Direct Edit on an unrouted first turn', () => {

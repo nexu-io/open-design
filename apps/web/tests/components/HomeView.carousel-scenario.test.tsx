@@ -9,7 +9,7 @@
 // create must carry the scene's platform targets / lo-fi fidelity AND stay on
 // the Prototype OD Next route — the same result as typing a prompt by hand.
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const carouselMock = vi.hoisted(() => ({
@@ -49,7 +49,6 @@ vi.mock('../../src/collab/useWorkspaceContext', async (importOriginal) => {
 });
 
 import { HomeView } from '../../src/components/HomeView';
-import { requestHomeChip } from '../../src/runtime/home-intent';
 
 const WEB_PROTOTYPE_PLUGIN = {
   id: 'example-web-prototype',
@@ -173,14 +172,11 @@ describe('HomeView one-click create from a scene-specific carousel line', () => 
     );
 
     await screen.findByTestId('home-hero-input');
-    // Home starts typeless and the hero no longer renders a scene row, so the
-    // scene arrives the way other surfaces hand one off: a queued chip intent
-    // naming the retired top-level id, which HomeView folds onto 原型 + scene.
-    await act(async () => {
-      requestHomeChip(scene);
-    });
+    // The composer seeds 原型 by default; pick the scene under it.
+    fireEvent.click(await screen.findByTestId(`home-hero-subtype-${scene}`));
     await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+      expect(screen.getByTestId(`home-hero-subtype-${scene}`).getAttribute('aria-selected'))
+        .toBe('true');
     });
 
     // The scene's own line is now what the carousel offers, so Send lights up
