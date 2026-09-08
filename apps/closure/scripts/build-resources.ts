@@ -9,6 +9,7 @@ import { build } from "esbuild";
 import JSZip from "jszip";
 import { buildClosureDataResources } from "@open-design/closure/build-resources";
 import { closureNodeExternals } from "../src/build/node-externals.ts";
+import { closureRuntimeDependencies as runtimeDependencies } from "../src/build/runtime-dependencies.ts";
 
 type TreeEntry = Readonly<{ path: string; sha256: string; size: number }>;
 
@@ -102,13 +103,6 @@ export async function buildClosureProductResources(input: Readonly<{ outputDirec
   const daemonRoot = join(stage, "daemon");
   const webRoot = join(stage, "web");
   await Promise.all([mkdir(daemonRoot, { recursive: true }), mkdir(webRoot, { recursive: true })]);
-  const runtimeDependencies = {
-    "@ffmpeg-installer/ffmpeg": "1.1.0",
-    "better-sqlite3": "12.10.0",
-    "blake3-wasm": "2.1.5",
-    "hyperframes": "0.8.1",
-    "node-pty": "1.1.0",
-  } as const;
   await writeFile(join(daemonRoot, "package.json"), `${JSON.stringify({ private: true, type: "module", dependencies: runtimeDependencies }, null, 2)}\n`, "utf8");
   await runNpm(daemonRoot, ["install", "--omit=dev", "--no-package-lock"]);
   await rm(join(daemonRoot, "node_modules", ".bin"), { force: true, recursive: true });

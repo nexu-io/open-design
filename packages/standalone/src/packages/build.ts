@@ -30,28 +30,30 @@ export async function buildNodePlatform(input: BuildNodePlatformInput) {
     throw new Error("platform dependencies require a matching private package and npm lock v3");
   }
   return withStagedNodeRuntime(input, async (node, archiveRoot) => {
-  await writeFile(join(input.outputRoot, "package.json"), packageBytes, { flag: "wx" });
-  await writeFile(join(input.outputRoot, "package-lock.json"), lockBytes, { flag: "wx" });
-  const env = { ...process.env, PATH: `${dirname(node.executablePath)}${delimiter}${process.env.PATH ?? ""}`,
-    NODE_OPTIONS: "", ELECTRON_RUN_AS_NODE: "", NODE_PATH: join(input.outputRoot, "node_modules") };
-  const npmCliPath = join(archiveRoot, input.target === "win32-x64" ? "node_modules/npm/bin/npm-cli.js" : "lib/node_modules/npm/bin/npm-cli.js");
-  await execute(node.executablePath, [npmCliPath, "ci", "--omit=dev", "--no-audit", "--no-fund"],
-    { cwd: input.outputRoot, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
-  const verificationPath = join(input.outputRoot, "platform-check.cjs");
-  await build({ entryPoints: [input.verificationEntryPath], outfile: verificationPath, bundle: true, packages: "external", format: "cjs", platform: "node", target: "node24" });
-  const scratch = await mkdtemp(join(input.outputRoot, ".prepare-"));
-  try {
-    const preparationPath = join(scratch, "prepare.cjs");
-    await build({ entryPoints: [input.preparationEntryPath], outfile: preparationPath, bundle: true, packages: "external", format: "cjs", platform: "node", target: "node24" });
-    await execute(node.executablePath, [preparationPath, input.outputRoot], { cwd: input.outputRoot, env, timeout: 15_000 });
-  } finally {
-    await rm(scratch, { recursive: true, force: true });
-  }
-  const { stdout } = await execute(node.executablePath, [verificationPath], { cwd: input.outputRoot, env, timeout: 15_000 });
-  const manifest = Object.freeze({ schemaVersion: 1 as const, node: node.receipt,
-    dependencies: declaration.dependencies, packageSha256: sha256(packageBytes), lockSha256: sha256(lockBytes),
-    verification: { path: "platform-check.cjs", sha256: sha256(await readFile(verificationPath)) } });
-  await writeFile(join(input.outputRoot, "platform.json"), `${JSON.stringify(manifest, null, 2)}\n`, { flag: "wx" });
-  return Object.freeze({ root: input.outputRoot, manifest, verification: JSON.parse(stdout) as unknown });
+    await writeFile(join(input.outputRoot, "package.json"), packageBytes, { flag: "wx" });
+    await writeFile(join(input.outputRoot, "package-lock.json"), lockBytes, { flag: "wx" });
+    const env = { ...process.env, PATH: `${dirname(node.executablePath)}${delimiter}${process.env.PATH ?? ""}`,
+      NODE_OPTIONS: "", ELECTRON_RUN_AS_NODE: "", NODE_PATH: join(input.outputRoot, "node_modules") };
+    const npmCliPath = join(archiveRoot, input.target === "win32-x64" ? "node_modules/npm/bin/npm-cli.js" : "lib/node_modules/npm/bin/npm-cli.js");
+    await execute(node.executablePath, [npmCliPath, "ci", "--omit=dev", "--no-audit", "--no-fund"],
+      { cwd: input.outputRoot, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 });
+    const verificationPath = join(input.outputRoot, "platform-check.cjs");
+    await build({ entryPoints: [input.verificationEntryPath], outfile: verificationPath, bundle: true, packages: "external", format: "cjs", platform: "node", target: "node24" });
+    const scratch = await mkdtemp(join(input.outputRoot, ".prepare-"));
+    let preparationSha256: string;
+    try {
+      const preparationPath = join(scratch, "prepare.cjs");
+      await build({ entryPoints: [input.preparationEntryPath], outfile: preparationPath, bundle: true, packages: "external", format: "cjs", platform: "node", target: "node24" });
+      preparationSha256 = sha256(await readFile(preparationPath));
+      await execute(node.executablePath, [preparationPath, input.outputRoot], { cwd: input.outputRoot, env, timeout: 15_000 });
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+    const { stdout } = await execute(node.executablePath, [verificationPath], { cwd: input.outputRoot, env, timeout: 15_000 });
+    const manifest = Object.freeze({ schemaVersion: 1 as const, node: node.receipt,
+      dependencies: declaration.dependencies, packageSha256: sha256(packageBytes), lockSha256: sha256(lockBytes), preparationSha256,
+      verification: { path: "platform-check.cjs", sha256: sha256(await readFile(verificationPath)) } });
+    await writeFile(join(input.outputRoot, "platform.json"), `${JSON.stringify(manifest, null, 2)}\n`, { flag: "wx" });
+    return Object.freeze({ root: input.outputRoot, manifest, verification: JSON.parse(stdout) as unknown });
   });
 }

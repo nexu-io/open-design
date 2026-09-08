@@ -8,6 +8,10 @@ dependencies and Vitest/TypeScript tests; it is not the distributed runtime.
   not depend on a preinstalled Node runtime. TypeScript is allowed under tests.
 - Pin official Node archives exactly. Verify archive bytes, the installed executable,
   and `node --version` before invoking the fossil adapter by absolute path.
+- Product dependency locks and build-only preparation/probes live in
+  `resources/platform`. Standalone public package methods assemble the physical
+  Node/native tree; native scene builders consume that explicit artifact.
+  TypeScript build inputs are not distributed as the Terminal runtime.
 - Keep the native layer mechanical: resolve fixed paths, install/probe the carrier,
   emit contract JSON, and execute `runtime/fossil.mjs`. It must not parse release
   metadata or mutate Standalone generation/reference state.

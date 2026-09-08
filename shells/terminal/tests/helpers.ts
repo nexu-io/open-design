@@ -7,6 +7,8 @@ import { expect } from "vitest";
 
 import { stopSidecars, type SidecarStamp } from "@open-design/sidecar";
 import { canonicalJson, sha256Hex, signStandaloneChannelHead, signStandaloneMetadata, type StandaloneMetadata } from "@open-design/standalone";
+import { buildNodePlatform } from "@open-design/standalone/packages/build";
+import type { OfficialNodeTarget } from "@open-design/standalone/packages";
 
 export const repoRoot = resolve(import.meta.dirname, "../../..");
 export const terminalRoot = resolve(import.meta.dirname, "..");
@@ -16,7 +18,7 @@ const terminalSidecars = new Map<string, SidecarStamp>();
 
 export type TerminalOptions = { attachmentId?: string; attachmentCapability?: string; channelHeadUrl?: string; activationPolicy?: string; feedbackFile?: string };
 export type TerminalRunner = (root: string, storeRoot: string, channel: string, namespace: string, operation: string, options?: TerminalOptions) => Record<string, any>;
-type SceneRequestInput = { target: string; shellVersion: string; nodeVersion: string; nodeArchive: string; nodeArchiveSha256: string; closureFile: string; launcherFile: string; standaloneDirectory: string; sidecarDirectory: string; platformDirectory: string; sceneDirectory: string };
+type SceneRequestInput = { target: string; shellVersion: string; nodeVersion: string; nodePlatform: string; nodeArchiveSha256: string; closureFile: string; launcherFile: string; standaloneDirectory: string; sidecarDirectory: string; platformDirectory: string; sceneDirectory: string };
 type DistributionRequestInput = { target: string; sceneDirectory: string; sceneManifestSha256: string; releaseDocumentsDirectory: string; trustFile: string; release: { channel: string; releaseVersion: string; sourceCommit: string; publishedAt: string; artifactBaseUrl: string }; outputDirectory: string };
 
 export async function cleanupFixtures(): Promise<void> {
@@ -39,11 +41,11 @@ export function powershell(script: string, args: string[], options: { allowFailu
 
 export function writeSceneRequest(path: string, input: SceneRequestInput): void {
   writeFileSync(path, canonicalJson({
-    schemaVersion: 1,
+    schemaVersion: 2,
     operation: "terminal.scene.build",
     target: input.target,
     shellVersion: input.shellVersion,
-    node: { version: input.nodeVersion, archiveFile: input.nodeArchive, archiveSha256: input.nodeArchiveSha256 },
+    node: { version: input.nodeVersion, platformDirectory: input.nodePlatform, archiveSha256: input.nodeArchiveSha256 },
     closureArtifactFile: input.closureFile,
     standaloneLauncherFile: input.launcherFile,
     standaloneDirectory: input.standaloneDirectory,
@@ -125,6 +127,7 @@ fetch(process.argv[1], { method: "PUT", body: fs.readFileSync(process.argv[2]) }
 }
 
 function releaseDocuments(root: string, closure: Uint8Array, launcher: Uint8Array, baseUrl: string) {
+  const shellVersion = readFileSync(join(terminalRoot, "version"), "utf8").trim();
   const keys = generateKeyPairSync("ed25519");
   const signer = { keyId: "terminal-e2e", privateKey: keys.privateKey };
   writeFileSync(join(root, "trust.json"), canonicalJson({ schemaVersion: 1, keys: [{ keyId: signer.keyId, publicKey: keys.publicKey.export({ type: "spki", format: "pem" }) }] }));
@@ -175,11 +178,11 @@ function releaseDocuments(root: string, closure: Uint8Array, launcher: Uint8Arra
   const preview1 = Buffer.concat([closure, Buffer.from("\n// terminal exact preview 1\n")]);
   const releases = {
     trustFile: join(root, "trust.json"),
-    beta1: create("somechan", "0.1.0-somechan.1", "0.1.0", closure),
-    beta2: create("somechan", "0.1.0-somechan.2", "0.1.0", beta2),
-    beta3: create("somechan", "0.1.0-somechan.3", "0.2.0", beta3),
-    preview1: create("somepreview", "0.1.0-somepreview.1", "0.1.0", preview1),
-    previewFailed: create("somepreview", "0.1.0-somepreview.2", "0.1.0", preview1,
+    beta1: create("somechan", "0.1.0-somechan.1", shellVersion, closure),
+    beta2: create("somechan", "0.1.0-somechan.2", shellVersion, beta2),
+    beta3: create("somechan", "0.1.0-somechan.3", "0.3.0", beta3),
+    preview1: create("somepreview", "0.1.0-somepreview.1", shellVersion, preview1),
+    previewFailed: create("somepreview", "0.1.0-somepreview.2", shellVersion, preview1,
       Buffer.from('export async function standaloneGenerationHandoff() { throw new Error("injected Terminal candidate startup failure"); }\n')),
     latestUrls: {
       somechan: `${baseUrl}/somechan/latest/channel-head.json`,
@@ -198,7 +201,7 @@ function releaseDocuments(root: string, closure: Uint8Array, launcher: Uint8Arra
   return { ...releases, promote };
 }
 
-export function prepareExactFixture(target: string) {
+export async function prepareExactFixture(target: OfficialNodeTarget) {
   const lock = JSON.parse(readFileSync(join(terminalRoot, "node-lock.json"), "utf8")) as { version: string; targets: Record<string, { archive: string; sha256: string }> };
   const locked = lock.targets[target];
   if (locked == null) throw new Error(`Terminal Node lock lacks ${target}`);
@@ -211,6 +214,11 @@ export function prepareExactFixture(target: string) {
   const platformDirectory = join(repoRoot, "packages/platform/dist");
   if (!existsSync(closureFile) || !existsSync(launcherFile) || !existsSync(join(standaloneDirectory, "index.mjs")) || !existsSync(join(sidecarDirectory, "index.mjs")) || !existsSync(join(platformDirectory, "index.mjs"))) throw new Error("build Closure, Standalone, Sidecar, and Platform before the Terminal native test");
   const work = mkdtempSync(join(tmpdir(), `terminal-${target}-e2e-`)); temporaryRoots.push(work);
+  const nodePlatform = join(work, "physical-platform");
+  await buildNodePlatform({ lockPath: join(terminalRoot, "node-lock.json"), archivePath: archive,
+    target, outputRoot: nodePlatform, dependenciesRoot: join(terminalRoot, "resources/platform"),
+    preparationEntryPath: join(terminalRoot, "resources/platform/prepare.ts"),
+    verificationEntryPath: join(terminalRoot, "resources/platform/verify.ts") });
   const directories = { documents: join(work, "documents"), output: join(work, "output"), unpacked: join(work, "unpacked"), store: join(work, "store") };
   mkdirSync(directories.documents); mkdirSync(directories.output); mkdirSync(directories.unpacked);
   const releases = releaseDocuments(
@@ -220,7 +228,7 @@ export function prepareExactFixture(target: string) {
     startToolsServeReleaseStorage(work),
   );
   writeFileSync(join(directories.documents, "content-metadata.json"), readFileSync(releases.beta1.metadataFile));
-  return { archive, closureFile, launcherFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work };
+  return { nodePlatform, closureFile, launcherFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work };
 }
 
 export function verifyExactLifecycle(root: string, store: string, terminal: TerminalRunner, releases: ReturnType<typeof releaseDocuments>): void {
@@ -278,7 +286,7 @@ export function verifyExactLifecycle(root: string, store: string, terminal: Term
   releases.promote(releases.beta3);
   expect(terminal(root, store, "somechan", "shared", "prepare-update", { channelHeadUrl: releases.latestUrls.somechan, activationPolicy: "observe" }).result).toMatchObject({
     state: "update-required",
-    minimumVersion: "0.2.0",
+    minimumVersion: "0.3.0",
     snapshot: null,
   });
   releases.promote(releases.preview1);

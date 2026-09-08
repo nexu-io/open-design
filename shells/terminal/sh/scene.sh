@@ -23,12 +23,12 @@ done
 [ -n "$request_file" ] && [ -f "$request_file" ] && [ -n "$receipt_file" ] || fail "--request and --receipt are required"
 command -v plutil >/dev/null 2>&1 || fail "macOS plutil is required to read Terminal contracts"
 extract_request() { plutil -extract "$1" raw "$request_file" 2>/dev/null || fail "invalid scene request field: $1"; }
-[ "$(extract_request schemaVersion)" = "1" ] || fail "unsupported scene request schema"
+[ "$(extract_request schemaVersion)" = "2" ] || fail "unsupported scene request schema"
 [ "$(extract_request operation)" = "terminal.scene.build" ] || fail "invalid scene request operation"
 target=$(extract_request target)
 shell_version=$(extract_request shellVersion)
 node_version=$(extract_request node.version)
-node_archive=$(extract_request node.archiveFile)
+node_platform=$(extract_request node.platformDirectory)
 node_archive_sha256=$(extract_request node.archiveSha256)
 closure_file=$(extract_request closureArtifactFile)
 standalone_launcher_file=$(extract_request standaloneLauncherFile)
@@ -39,41 +39,34 @@ scene_directory=$(extract_request sceneDirectory)
 case "$target" in darwin-arm64|darwin-x64) :;; *) fail "sh scene only supports Darwin targets";; esac
 printf '%s\n' "$shell_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || fail "invalid Shell version"
 printf '%s\n' "$node_archive_sha256" | grep -Eq '^[a-f0-9]{64}$' || fail "invalid Node archive digest"
-for path in "$node_archive" "$closure_file" "$standalone_launcher_file" "$standalone_directory" "$sidecar_directory" "$platform_directory" "$scene_directory" "$receipt_file"; do json_escape "$path" >/dev/null; done
-[ -f "$node_archive" ] && [ -f "$closure_file" ] && [ -f "$standalone_launcher_file" ] && [ -f "$standalone_directory/index.mjs" ] \
+for path in "$node_platform" "$closure_file" "$standalone_launcher_file" "$standalone_directory" "$sidecar_directory" "$platform_directory" "$scene_directory" "$receipt_file"; do json_escape "$path" >/dev/null; done
+[ -f "$node_platform/platform.json" ] && [ -f "$closure_file" ] && [ -f "$standalone_launcher_file" ] && [ -f "$standalone_directory/index.mjs" ] && [ -f "$standalone_directory/packages/index.mjs" ] \
   && [ -f "$sidecar_directory/index.mjs" ] && [ -f "$sidecar_directory/supervisor.mjs" ] \
   && [ -f "$platform_directory/index.mjs" ] || fail "scene input missing"
 terminal_source=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 locked_version=$(plutil -extract version raw "$terminal_source/node-lock.json")
-locked_archive=$(plutil -extract "targets.$target.archive" raw "$terminal_source/node-lock.json" 2>/dev/null) || fail "Node lock does not support $target"
 locked_sha256=$(plutil -extract "targets.$target.sha256" raw "$terminal_source/node-lock.json")
 [ "$node_version" = "$locked_version" ] || fail "official Node version differs from lock"
-[ "$(basename -- "$node_archive")" = "$locked_archive" ] || fail "official Node archive name differs from lock"
 [ "$node_archive_sha256" = "$locked_sha256" ] || fail "official Node archive digest differs from lock"
-[ "$(sha256_file "$node_archive")" = "$node_archive_sha256" ] || fail "official Node archive digest mismatch"
+[ "$(plutil -extract node.archiveSha256 raw "$node_platform/platform.json")" = "$locked_sha256" ] || fail "physical Node archive binding mismatch"
+[ "$(plutil -extract node.target raw "$node_platform/platform.json")" = "$target" ] || fail "physical Node target mismatch"
+[ "$(plutil -extract node.version raw "$node_platform/platform.json")" = "$node_version" ] || fail "physical Node version mismatch"
+[ "$(sha256_file "$node_platform/bin/node")" = "$(plutil -extract node.executable.sha256 raw "$node_platform/platform.json")" ] || fail "physical Node executable mismatch"
+[ "$("$node_platform/bin/node" --version)" = "v$node_version" ] || fail "official Node version mismatch"
 
 parent=$(dirname -- "$scene_directory")
 mkdir -p "$parent" "$(dirname -- "$receipt_file")"
 stage="$parent/.terminal-scene-$$"
-extract="$parent/.terminal-node-$$"
-trap 'rm -rf "$stage" "$extract"' EXIT HUP INT TERM
-mkdir "$stage" "$extract"
-tar -xzf "$node_archive" -C "$extract"
-node_root=
-for candidate in "$extract"/*; do
-  [ -d "$candidate" ] || continue
-  [ -z "$node_root" ] || fail "official Node archive has multiple roots"
-  node_root=$candidate
-done
-[ -n "$node_root" ] && [ -x "$node_root/bin/node" ] || fail "official Node executable missing"
-[ "$("$node_root/bin/node" --version)" = "v$node_version" ] || fail "official Node version mismatch"
+trap 'rm -rf "$stage"' EXIT HUP INT TERM
+mkdir "$stage"
 
 mkdir -p "$stage/carrier" "$stage/runtime/standalone" \
   "$stage/runtime/node_modules/@open-design/sidecar/dist" \
   "$stage/runtime/node_modules/@open-design/platform/dist" \
   "$stage/seed" "$stage/sh" "$stage/ps1" "$stage/contract"
-mv "$node_root" "$stage/carrier/node"
+cp -R "$node_platform" "$stage/carrier/node"
 cp "$standalone_directory/index.mjs" "$stage/runtime/standalone/index.mjs"
+cp "$standalone_directory/packages/index.mjs" "$stage/runtime/standalone/packages.mjs"
 cp "$sidecar_directory/index.mjs" "$sidecar_directory/supervisor.mjs" "$stage/runtime/node_modules/@open-design/sidecar/dist/"
 cp "$platform_directory/index.mjs" "$stage/runtime/node_modules/@open-design/platform/dist/index.mjs"
 printf '%s\n' '{"name":"@open-design/sidecar","type":"module","exports":{".":"./dist/index.mjs"}}' > "$stage/runtime/node_modules/@open-design/sidecar/package.json"
@@ -94,6 +87,8 @@ closure_sha=$(sha256_file "$stage/seed/closure.mjs")
 printf '{"files":[' > "$stage/runtime/modules.json"
 first=true
 for module_file in \
+  carrier/node/platform.json \
+  runtime/standalone/packages.mjs \
   runtime/node_modules/@open-design/platform/dist/index.mjs \
   runtime/node_modules/@open-design/platform/package.json \
   runtime/node_modules/@open-design/sidecar/dist/index.mjs \
@@ -129,6 +124,6 @@ printf '{"closure":{"file":"seed/closure.mjs","sha256":"%s","size":%s},"fossil":
 scene_sha=$(sha256_file "$stage/scene.json")
 if [ -e "$scene_directory" ]; then fail "scene destination already exists"; fi
 mv "$stage" "$scene_directory"
-trap 'rm -rf "$extract"' EXIT HUP INT TERM
+trap - EXIT HUP INT TERM
 printf '{"operation":"terminal.scene.build","products":[{"name":"scene.json","sha256":"%s","size":%s}],"sceneDirectory":"%s","sceneManifestSha256":"%s","schemaVersion":1,"target":"%s"}\n' \
   "$scene_sha" "$(file_size "$scene_directory/scene.json")" "$(json_escape "$scene_directory")" "$scene_sha" "$target" > "$receipt_file"

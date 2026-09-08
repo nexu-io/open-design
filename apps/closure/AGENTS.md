@@ -13,3 +13,6 @@ distribution contribution.
 - Do not own channel pointers, signature verification, Store layout, generation
   state, platform packaging, or Terminal behavior.
 - Do not import `shells/**`.
+- Keep Node, better-sqlite3 and node-pty outside Closure resources. Bundled native
+  imports use the Shell-supplied Node module environment; physical compatibility
+  is expressed by the release's Shell requirement, not runtime acquisition.

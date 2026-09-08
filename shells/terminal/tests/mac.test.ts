@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -9,17 +9,17 @@ afterEach(cleanupFixtures);
 describe("Terminal macOS carrier", () => {
   it.skipIf(process.platform !== "darwin" || !new Set(["arm64", "x64"]).has(process.arch))(
     "runs sh scene, tar distribution, lifecycle, update, install, and tamper rejection",
-    () => {
-      const target = `darwin-${process.arch}`;
-      const fixture = prepareExactFixture(target);
+    async () => {
+      const target = process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
+      const fixture = await prepareExactFixture(target);
       if (fixture == null) {
         throw new Error(`locked Node archive for ${target} is required to run the native macOS E2E test`);
       }
-      const { archive, closureFile, launcherFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work } = fixture;
+      const { nodePlatform, closureFile, launcherFile, directories, lock, locked, releases, standaloneDirectory, sidecarDirectory, platformDirectory, work } = fixture;
       const scene = join(work, "scene");
       const sceneRequest = join(work, "scene-request.json");
       const sceneReceipt = join(work, "scene-receipt.json");
-      writeSceneRequest(sceneRequest, { target, shellVersion: readFileSync(join(terminalRoot, "version"), "utf8").trim(), nodeVersion: lock.version, nodeArchive: archive, nodeArchiveSha256: locked.sha256, closureFile, launcherFile, standaloneDirectory, sidecarDirectory, platformDirectory, sceneDirectory: scene });
+      writeSceneRequest(sceneRequest, { target, shellVersion: readFileSync(join(terminalRoot, "version"), "utf8").trim(), nodeVersion: lock.version, nodePlatform, nodeArchiveSha256: locked.sha256, closureFile, launcherFile, standaloneDirectory, sidecarDirectory, platformDirectory, sceneDirectory: scene });
       run("sh", [join(terminalRoot, "sh/scene.sh"), "--request", sceneRequest, "--receipt", sceneReceipt]);
       const sceneSha = JSON.parse(readFileSync(sceneReceipt, "utf8")).sceneManifestSha256 as string;
       expect(JSON.parse(readFileSync(join(scene, "scene.json"), "utf8"))).toMatchObject({ shellBuildHash: expectedShellBuildHash(scene, target, locked.sha256) });
@@ -37,6 +37,28 @@ describe("Terminal macOS carrier", () => {
       expect(contribution).not.toHaveProperty("updater");
       run("tar", ["-xzf", distribution, "-C", directories.unpacked]);
       const root = join(directories.unpacked, "nexu-terminal");
+      const physicalRoot = join(root, "carrier/node");
+      expect(existsSync(join(physicalRoot, "lib/node_modules/npm"))).toBe(false);
+      expect(existsSync(join(physicalRoot, "node_modules/npm"))).toBe(false);
+      const native = JSON.parse(run(join(physicalRoot, "bin/node"), [join(physicalRoot, "platform-check.cjs")]).stdout);
+      expect(native).toMatchObject({ node: lock.version, sqlite: 42, pty: "shell-native-ready" });
+      expect(native.nativePaths.length).toBeGreaterThanOrEqual(2);
+      for (const path of native.nativePaths) expect(path.startsWith(realpathSync(physicalRoot) + "/")).toBe(true);
+      // Corruption must fail before any shared Store state is created. Restore the
+      // actual addon before exercising the ordinary lifecycle on this installation.
+      const addon = native.nativePaths[0] as string;
+      const addonBytes = readFileSync(addon);
+      const untouchedStore = join(work, "damaged-platform-store");
+      try {
+        writeFileSync(addon, "corrupt native addon");
+        const rejected = run("sh", [join(root, "sh/terminal.sh"), "--root", root,
+          "--store-root", untouchedStore, "--channel", "somechan", "--namespace", "physical-damage",
+          "--operation", "start", "--attachment-id", "physical-damage"], { allowFailure: true });
+        expect(rejected.status).not.toBe(0);
+        expect(JSON.parse(rejected.stdout)).toMatchObject({ outcome: "rejected",
+          error: { message: expect.stringContaining("physical Node platform is unavailable") } });
+        expect(existsSync(untouchedStore)).toBe(false);
+      } finally { writeFileSync(addon, addonBytes); }
       expect(existsSync(join(root, "runtime/fixture-lifecycle.mjs"))).toBe(false);
       expect(existsSync(join(root, "runtime/fixture-shell-updater.mjs"))).toBe(false);
       expect(JSON.parse(readFileSync(join(root, "install-manifest.json"), "utf8"))).not.toHaveProperty("fixtureLifecycle");

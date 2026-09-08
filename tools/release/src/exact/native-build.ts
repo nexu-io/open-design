@@ -19,6 +19,10 @@ async function electronBuilder(root: string): Promise<typeof import("@open-desig
   const resolver = createRequire(join(resolve(root), "tools/release/package.json"));
   return import(pathToFileURL(resolver.resolve("@open-design/shell-electron/build")).href);
 }
+async function packageBuilder(root: string): Promise<typeof import("@open-design/standalone/packages/build")> {
+  const resolver = createRequire(join(resolve(root), "tools/release/package.json"));
+  return import(pathToFileURL(resolver.resolve("@open-design/standalone/packages/build")).href);
+}
 function target(input: BuildInput): Target {
   if (input.shell !== "electron" && input.shell !== "terminal") throw new Error("build shell must be electron or terminal");
   if (input.target !== "darwin-arm64" && input.target !== "darwin-x64" && input.target !== "win32-x64") throw new Error("unsupported build target");
@@ -59,15 +63,24 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
   }
   const lock = await readOfficialNodeLock(join(root, "shells/terminal/node-lock.json")), node = lock.targets[buildTarget];
   if (node == null) throw new Error("Terminal platform target is not declared");
-    const archive = input.nodeArchive ? resolve(input.nodeArchive) : (await acquireBuildArchive({
-      cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: node.archive, url: node.url, sha256: node.sha256 })).path;
-    if ((await describeFile(archive)).sha256 !== node.sha256) throw new Error("official Node archive digest mismatch");
-    return await terminalBuild(input, "scene", { schemaVersion: 1, operation: "terminal.scene.build", target: buildTarget,
-      shellVersion: (await readFile(join(root, "shells/terminal/version"), "utf8")).trim(),
-      node: { version: lock.version, archiveFile: archive, archiveSha256: node.sha256 },
-      closureArtifactFile: closure, standaloneLauncherFile: launcher,
-      standaloneDirectory: join(root, "packages/standalone/dist"), sidecarDirectory: join(root, "packages/sidecar/dist"),
-      platformDirectory: join(root, "packages/platform/dist"), sceneDirectory: resolve(input.output) });
+  const archive = input.nodeArchive ? resolve(input.nodeArchive) : (await acquireBuildArchive({
+    cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: node.archive, url: node.url, sha256: node.sha256 })).path;
+  const { buildNodePlatform } = await packageBuilder(root);
+  const scratch = await mkdtemp(join(tmpdir(), "release-terminal-platform-"));
+  try {
+    const platform = await buildNodePlatform({
+      lockPath: join(root, "shells/terminal/node-lock.json"), archivePath: archive, target: buildTarget,
+      outputRoot: join(scratch, "platform"), dependenciesRoot: join(root, "shells/terminal/resources/platform"),
+      preparationEntryPath: join(root, "shells/terminal/resources/platform/prepare.ts"),
+      verificationEntryPath: join(root, "shells/terminal/resources/platform/verify.ts"),
+    });
+    return await terminalBuild(input, "scene", { schemaVersion: 2, operation: "terminal.scene.build", target: buildTarget,
+    shellVersion: (await readFile(join(root, "shells/terminal/version"), "utf8")).trim(),
+    node: { version: lock.version, platformDirectory: platform.root, archiveSha256: node.sha256 },
+    closureArtifactFile: closure, standaloneLauncherFile: launcher,
+    standaloneDirectory: join(root, "packages/standalone/dist"), sidecarDirectory: join(root, "packages/sidecar/dist"),
+    platformDirectory: join(root, "packages/platform/dist"), sceneDirectory: resolve(input.output) });
+  } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
 export async function buildReleaseDistribution(input: BuildInput & Readonly<{ scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {

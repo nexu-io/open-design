@@ -6,9 +6,14 @@ import { promisify } from "node:util";
 import { build } from "esbuild";
 import { afterEach, expect, it } from "vitest";
 import { closureNodeExternals } from "../src/build/node-externals.js";
+import { closureRuntimeDependencies } from "../src/build/runtime-dependencies.js";
 
 const execute = promisify(execFile);
 const roots: string[] = [];
+it("does not install Shell-owned ABI packages into Closure", () => {
+  expect(closureRuntimeDependencies).not.toHaveProperty("better-sqlite3");
+  expect(closureRuntimeDependencies).not.toHaveProperty("node-pty");
+});
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 
 it("resolves static and dynamic native imports from the supplied Node environment outside Closure", async () => {
@@ -26,7 +31,7 @@ it("resolves static and dynamic native imports from the supplied Node environmen
   // The native ESM resolver really fails with this environment before bundling.
   await expect(execute(process.execPath, [entry], { env, timeout: 5000 })).rejects.toThrow(/Cannot find package 'better-sqlite3'/u);
   await build({ entryPoints: [entry], outfile: output, bundle: true, platform: "node", target: "node24", format: "esm",
-    external: ["better-sqlite3", "node-pty"], plugins: [closureNodeExternals()],
+    external: Object.keys(closureRuntimeDependencies), plugins: [closureNodeExternals()],
     banner: { js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);' } });
   const result = await execute(process.execPath, [output], { env, timeout: 5000 });
   expect(JSON.parse(result.stdout)).toEqual({ sqlite: "better-sqlite3", pty: "pty-ready" });

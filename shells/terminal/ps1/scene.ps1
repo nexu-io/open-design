@@ -9,13 +9,13 @@ function Fail([string]$Message) { throw "terminal scene: $Message" }
 function Digest([string]$Path) { return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant() }
 function Size([string]$Path) { return (Get-Item -LiteralPath $Path).Length }
 $requestValue = Get-Content -LiteralPath $Request -Raw | ConvertFrom-Json
-if ($requestValue.schemaVersion -ne 1) { Fail "unsupported scene request schema" }
+if ($requestValue.schemaVersion -ne 2) { Fail "unsupported scene request schema" }
 if ($requestValue.operation -ne "terminal.scene.build") { Fail "invalid scene request operation" }
 $Target = [string]$requestValue.target
 if ($Target -ne "win32-x64") { Fail "PowerShell scene only supports win32-x64" }
 $ShellVersion = [string]$requestValue.shellVersion
 $NodeVersion = [string]$requestValue.node.version
-$NodeArchive = [string]$requestValue.node.archiveFile
+$NodePlatform = [string]$requestValue.node.platformDirectory
 $NodeArchiveSha256 = [string]$requestValue.node.archiveSha256
 $Closure = [string]$requestValue.closureArtifactFile
 $StandaloneLauncher = [string]$requestValue.standaloneLauncherFile
@@ -31,29 +31,28 @@ $lockedProperty = $nodeLock.targets.PSObject.Properties[$Target]
 $locked = if ($null -eq $lockedProperty) { $null } else { $lockedProperty.Value }
 if (-not $locked) { Fail "Node lock does not support $Target" }
 if ($NodeVersion -ne $nodeLock.version) { Fail "official Node version differs from lock" }
-if ([IO.Path]::GetFileName($NodeArchive) -ne $locked.archive) { Fail "official Node archive name differs from lock" }
 if ($NodeArchiveSha256 -ne $locked.sha256) { Fail "official Node archive digest differs from lock" }
-if ((Digest $NodeArchive) -ne $NodeArchiveSha256) { Fail "official Node archive digest mismatch" }
+$physical = Get-Content -LiteralPath (Join-Path $NodePlatform "platform.json") -Raw | ConvertFrom-Json
+if ($physical.node.archiveSha256 -ne $locked.sha256 -or $physical.node.target -ne $Target -or $physical.node.version -ne $NodeVersion) { Fail "physical Node identity mismatch" }
+if ((Digest (Join-Path $NodePlatform "node.exe")) -ne $physical.node.executable.sha256) { Fail "physical Node executable mismatch" }
+$observedVersion = (& (Join-Path $NodePlatform "node.exe") --version).Trim()
+if ($observedVersion -ne "v$NodeVersion") { Fail "official Node version mismatch" }
 if (-not (Test-Path -LiteralPath $StandaloneLauncher -PathType Leaf)) { Fail "Standalone launcher artifact missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $Standalone "index.mjs") -PathType Leaf)) { Fail "Standalone build artifact missing" }
+if (-not (Test-Path -LiteralPath (Join-Path $Standalone "packages/index.mjs") -PathType Leaf)) { Fail "Standalone package runtime artifact missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $Sidecar "index.mjs") -PathType Leaf) -or -not (Test-Path -LiteralPath (Join-Path $Sidecar "supervisor.mjs") -PathType Leaf)) { Fail "Sidecar build artifact missing" }
 if (-not (Test-Path -LiteralPath (Join-Path $Platform "index.mjs") -PathType Leaf)) { Fail "Platform build artifact missing" }
 $sceneParent = Split-Path -Parent ([IO.Path]::GetFullPath($Scene))
 [IO.Directory]::CreateDirectory($sceneParent) | Out-Null
 [IO.Directory]::CreateDirectory((Split-Path -Parent ([IO.Path]::GetFullPath($Receipt)))) | Out-Null
 $stage = Join-Path $sceneParent (".terminal-scene-" + [Guid]::NewGuid().ToString("N"))
-$extract = Join-Path $sceneParent (".terminal-node-" + [Guid]::NewGuid().ToString("N"))
 try {
   [IO.Directory]::CreateDirectory($stage) | Out-Null
-  Expand-Archive -LiteralPath $NodeArchive -DestinationPath $extract
-  $roots = @(Get-ChildItem -LiteralPath $extract -Directory)
-  if ($roots.Count -ne 1 -or -not (Test-Path -LiteralPath (Join-Path $roots[0].FullName "node.exe") -PathType Leaf)) { Fail "official Node archive layout is invalid" }
-  $observedVersion = (& (Join-Path $roots[0].FullName "node.exe") --version).Trim()
-  if ($observedVersion -ne "v$NodeVersion") { Fail "official Node version mismatch" }
   [IO.Directory]::CreateDirectory((Join-Path $stage "carrier")) | Out-Null
-  Move-Item -LiteralPath $roots[0].FullName -Destination (Join-Path $stage "carrier/node")
+  Copy-Item -LiteralPath $NodePlatform -Destination (Join-Path $stage "carrier/node") -Recurse
   foreach ($directory in @("runtime/standalone", "runtime/node_modules/@open-design/sidecar/dist", "runtime/node_modules/@open-design/platform/dist", "seed", "sh", "ps1", "contract")) { [IO.Directory]::CreateDirectory((Join-Path $stage $directory)) | Out-Null }
   Copy-Item -LiteralPath (Join-Path $Standalone "index.mjs") -Destination (Join-Path $stage "runtime/standalone/index.mjs")
+  Copy-Item -LiteralPath (Join-Path $Standalone "packages/index.mjs") -Destination (Join-Path $stage "runtime/standalone/packages.mjs")
   Copy-Item -LiteralPath (Join-Path $Sidecar "index.mjs") -Destination (Join-Path $stage "runtime/node_modules/@open-design/sidecar/dist/index.mjs")
   Copy-Item -LiteralPath (Join-Path $Sidecar "supervisor.mjs") -Destination (Join-Path $stage "runtime/node_modules/@open-design/sidecar/dist/supervisor.mjs")
   Copy-Item -LiteralPath (Join-Path $Platform "index.mjs") -Destination (Join-Path $stage "runtime/node_modules/@open-design/platform/dist/index.mjs")
@@ -75,6 +74,8 @@ try {
   $standaloneLauncherSha = Digest (Join-Path $stage "seed/standalone-launcher.mjs")
   $closureSha = Digest (Join-Path $stage "seed/closure.mjs")
   $moduleFiles = @(
+    "carrier/node/platform.json",
+    "runtime/standalone/packages.mjs",
     "runtime/node_modules/@open-design/platform/dist/index.mjs",
     "runtime/node_modules/@open-design/platform/package.json",
     "runtime/node_modules/@open-design/sidecar/dist/index.mjs",
@@ -128,5 +129,4 @@ try {
   [IO.File]::WriteAllText($Receipt, (($receiptValue | ConvertTo-Json -Compress -Depth 5) + "`n"), [Text.UTF8Encoding]::new($false))
 } finally {
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
 }

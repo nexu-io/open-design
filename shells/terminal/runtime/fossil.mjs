@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { appendFile, readFile, realpath, writeFile } from "node:fs/promises";
 import { isAbsolute, normalize, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -74,9 +74,15 @@ async function validateInstallation(value) {
   const standalonePath = resolve(root, manifest.standalone.entrypoint);
   const standalone = await import(pathToFileURL(standalonePath).href);
   if (typeof standalone.canonicalJson !== "function" || typeof standalone.StandaloneStore !== "function" || typeof standalone.StandaloneUpdater !== "function") throw new Error("installed Standalone public API is incomplete");
+  const packagesPath = "runtime/standalone/packages.mjs";
+  if (!moduleIndex.files.some(descriptor => descriptor.file === packagesPath)
+    || !moduleIndex.files.some(descriptor => descriptor.file === "carrier/node/platform.json")) throw new Error("physical package binding is missing from installation");
+  const packages = await import(pathToFileURL(resolve(root, packagesPath)).href);
+  const nodeRuntime = await packages.bindNodePlatform(resolve(root, "carrier/node"));
+  if (nodeRuntime.command !== await realpath(executablePath)) throw new Error("physical package runtime differs from carrier resolution");
   const closure = await import(pathToFileURL(resolve(root, manifest.seed.closure.file)).href);
   if (typeof closure.prepareClosureShellUpdate !== "function") throw new Error("installed Closure public API is incomplete");
-  return { root, manifest, manifestBytes, standalone, closure };
+  return { root, manifest, manifestBytes, standalone, closure, nodeRuntime };
 }
 
 async function readUrl(url) {
@@ -153,9 +159,9 @@ async function convergeTerminalSidecar(request, installation, guarded = false) {
   if (!guarded) return await withSidecarLifecycleLock(physicalResourceStamps(request), () => convergeTerminalSidecar(request, installation, true));
   const converged = await convergeSidecarLaunch({
     args: [sidecarBootstrap],
-    command: process.execPath,
+    command: installation.nodeRuntime.command,
     cwd: installation.root,
-    env: { ...process.env, OD_TERMINAL_SIDECAR_CONFIG_V1: JSON.stringify(config) },
+    env: { ...process.env, ...installation.nodeRuntime.env, OD_TERMINAL_SIDECAR_CONFIG_V1: JSON.stringify(config) },
     resources: { dataRoot: config.storeRoot, ownerPid: null, port: 0, runtimeRoot },
     stamp,
   });

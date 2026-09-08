@@ -94,7 +94,7 @@ describe("Electron pack adapter contract", () => {
     });
     const staged = createElectronPackManifest(manifest as ElectronShellManifest, request);
     expect(staged.version).toBe("0.21.1-betahyx.7");
-    expect(staged.shell.version).toBe("0.1.0");
+    expect(staged.shell.version).toBe(manifest.shell.version);
     expect(staged.productName).toBe("Open Design Betahyx");
     expect(staged.appId).toBe("io.open-design.betahyx");
     expect(staged.executableName).toBe("open-design-betahyx");

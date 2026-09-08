@@ -12,9 +12,9 @@ const execFileAsync = promisify(execFile);
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))));
 
-async function runExactControl(tool: "pack" | "release", request: string, receipt: string, env: NodeJS.ProcessEnv = {}) {
+async function runCommand(tool: "pack" | "release", args: string[], env: NodeJS.ProcessEnv = {}) {
   try {
-    const result = await execFileAsync(process.execPath, ["--import", "tsx", `tools/${tool}/src/index.ts`, "exact-control", "--request", request, "--receipt", receipt], {
+    const result = await execFileAsync(process.execPath, ["--import", "tsx", `tools/${tool}/src/index.ts`, ...args], {
       cwd: resolve(import.meta.dirname, "../../.."),
       encoding: "utf8",
       env: { ...process.env, ...env },
@@ -26,15 +26,19 @@ async function runExactControl(tool: "pack" | "release", request: string, receip
   }
 }
 
-const runPack = (request: string, receipt: string, env: NodeJS.ProcessEnv = {}) => runExactControl("pack", request, receipt, env);
-const runRelease = (request: string, receipt: string) => runExactControl("release", request, receipt);
+const runPack = (request: string, receipt: string, env: NodeJS.ProcessEnv = {}) => runCommand("pack", ["exact-control", "--request", request, "--receipt", receipt], env);
+const runRelease = (args: string[], receipt: string) => runCommand("release", [...args, "--receipt", receipt]);
 
 async function writeExactValidationPolicy(request: string, receipt: string): Promise<void> {
-  await execFileAsync(process.execPath, ["--import", "tsx", "tools/release/src/index.ts", "release-policy", "--request", request, "--receipt", receipt], {
-    cwd: resolve(import.meta.dirname, "../../.."),
-    encoding: "utf8",
-    env: process.env,
-  });
+  const policy = JSON.parse(await readFile(request, "utf8"));
+  const result = await runRelease(["policy", "resolve",
+    "--profile", policy.profile, "--channel", policy.channel, "--release-version", policy.releaseVersion,
+    "--source-commit", policy.sourceCommit, "--source-ref", policy.sourceRef,
+    "--endpoint-url", policy.target.endpointUrl, "--bucket", policy.target.bucket,
+    "--public-base-url", policy.target.publicBaseUrl,
+    "--end-user-distribution", String(policy.switches.endUserDistribution),
+    "--stable-authorized", String(policy.switches.stableAuthorized)], receipt);
+  if (result.status !== 0) throw new Error(result.stderr);
 }
 
 async function describeFile(file: string) {
@@ -78,13 +82,10 @@ describe("exact phased release control", () => {
     await writeFile(join(root, "runtime-status.json"), JSON.stringify({ outcome: "ready", result: generation }));
     await writeFile(join(root, "runtime-stop.json"), JSON.stringify({ outcome: "ready", result: { state: "stopped", sidecar: { remainingPids: [] } } }));
 
-    const request = join(root, "acceptance-request.json");
     const receipt = join(root, "acceptance/terminal-darwin-arm64.json");
-    await writeFile(request, JSON.stringify({
-      schemaVersion: 1, operation: "exact.acceptance", policyReceipt, publishReceipt,
-      installedRoot, shellType: "terminal", target: "darwin-arm64", runtimeProofRoot: root,
-    }));
-    const result = await runRelease(request, receipt);
+    const args = ["acceptance", "collect", "--policy", policyReceipt, "--publication", publishReceipt,
+      "--installed-root", installedRoot, "--shell", "terminal", "--target", "darwin-arm64", "--runtime-proof-root", root];
+    const result = await runRelease(args, receipt);
     expect(result.status).toBe(0);
     expect(result.stderr).toBe("");
     expect(JSON.parse(await readFile(join(root, "acceptance/terminal-darwin-arm64.json"), "utf8"))).toMatchObject({
@@ -92,7 +93,7 @@ describe("exact phased release control", () => {
     });
 
     await writeFile(join(installedRoot, "install-manifest.sha256"), `${"0".repeat(64)}  install-manifest.json\n`);
-    const rejected = await runRelease(request, join(root, "rejected.json"));
+    const rejected = await runRelease(args, join(root, "rejected.json"));
     expect(rejected.status).not.toBe(0);
     expect(rejected.stderr).toContain("manifest digest mismatch");
   });
@@ -277,20 +278,12 @@ describe("exact phased release control", () => {
         target: releaseTarget,
       }));
       await writeExactValidationPolicy(policyRequest, policyReceipt);
-      const publishRequest = join(root, "publish-request.json");
-      await writeFile(publishRequest, JSON.stringify({
-        schemaVersion: 1,
-        operation: "exact.publish",
-        packReceipt: pack,
-        policyReceipt,
-        endpointUrl,
-        bucket: "fixture",
-        publicBaseUrl: endpointUrl,
-      }));
+      const publishArgs = ["publish", "--pack-receipt", pack, "--policy", policyReceipt,
+        "--endpoint-url", endpointUrl, "--bucket", "fixture", "--public-base-url", endpointUrl];
       const firstPublish = join(root, "publish-first.json");
       const replayPublish = join(root, "publish-replay.json");
-      await expect(runRelease(publishRequest, firstPublish)).resolves.toMatchObject({ status: 0, stderr: "" });
-      await expect(runRelease(publishRequest, replayPublish)).resolves.toMatchObject({ status: 0, stderr: "" });
+      await expect(runRelease(publishArgs, firstPublish)).resolves.toMatchObject({ status: 0, stderr: "" });
+      await expect(runRelease(publishArgs, replayPublish)).resolves.toMatchObject({ status: 0, stderr: "" });
       expect(JSON.parse(await readFile(replayPublish, "utf8"))).toMatchObject({ operation: "exact.publish", replayed: true });
 
       const published = JSON.parse(await readFile(firstPublish, "utf8"));
@@ -309,17 +302,19 @@ describe("exact phased release control", () => {
         shellMetadata: required.shellMetadata,
         installed: { shell: required.shell, target: required.target },
       }));
-      const activateRequest = join(root, "activate-request.json");
-      await writeFile(activateRequest, JSON.stringify({ schemaVersion: 1, operation: "exact.activate", publishReceipt: firstPublish, policyReceipt, acceptanceCredentials: [] }));
-      const rejected = await runRelease(activateRequest, join(root, "rejected.json"));
+      const acceptances = join(root, "acceptances");
+      await mkdir(acceptances);
+      const activateArgs = ["activate", "--publish-receipt", firstPublish, "--policy", policyReceipt,
+        "--channel-head", head, "--acceptances", acceptances];
+      const rejected = await runRelease(activateArgs, join(root, "rejected.json"));
       expect(rejected.status).not.toBe(0);
       expect(rejected.stderr).toContain("acceptance topology mismatch");
 
-      await writeFile(activateRequest, JSON.stringify({ schemaVersion: 1, operation: "exact.activate", publishReceipt: firstPublish, policyReceipt, acceptanceCredentials: [acceptance] }));
+      await writeFile(join(acceptances, "terminal.json"), await readFile(acceptance));
       const firstActivation = join(root, "activation-first.json");
       const replayActivation = join(root, "activation-replay.json");
-      await expect(runRelease(activateRequest, firstActivation)).resolves.toMatchObject({ status: 0, stderr: "" });
-      await expect(runRelease(activateRequest, replayActivation)).resolves.toMatchObject({ status: 0, stderr: "" });
+      await expect(runRelease(activateArgs, firstActivation)).resolves.toMatchObject({ status: 0, stderr: "" });
+      await expect(runRelease(activateArgs, replayActivation)).resolves.toMatchObject({ status: 0, stderr: "" });
       expect(JSON.parse(await readFile(replayActivation, "utf8"))).toMatchObject({ operation: "exact.activate", replayed: true });
     } finally {
       await new Promise<void>((done, reject) => server.close((error) => error == null ? done() : reject(error)));
