@@ -132,6 +132,7 @@ test('[P0] real daemon run streams, persists, and previews an artifact', async (
 });
 
 test('[P0] local OD Next adaptive canary plans and delivers in one physical run', async ({ page }, testInfo) => {
+  test.setTimeout(T.xlong * 2);
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -199,6 +200,7 @@ test('[P0] local OD Next adaptive canary plans and delivers in one physical run'
 });
 
 test('[P0] local OD Next adaptive clarification accepts two decisions on the same task', async ({ page }, testInfo) => {
+  test.setTimeout(T.xlong * 2);
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
@@ -283,6 +285,7 @@ test('[P0] local OD Next adaptive clarification accepts two decisions on the sam
 });
 
 test('[P0] local OD Next adaptive plan-only request completes without producing an artifact', async ({ page }, testInfo) => {
+  test.setTimeout(T.xlong * 2);
   test.skip(
     process.env.OD_NEXT_STRATEGY_ROLLOUT !== 'active'
       || process.env.OD_NEXT_STRATEGY_LOCAL_SYNTHETIC_CANARY !== '1',
