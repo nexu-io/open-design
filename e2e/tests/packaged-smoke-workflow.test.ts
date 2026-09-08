@@ -2501,7 +2501,9 @@ process.stdin.on("end", () => {
     }
 
     const stableWorkflow = workflows[2] ?? "";
-    expect(stableWorkflow).toContain("Validate stable release note policy");
+    // Stable still runs the release-note preflight in `metadata`, but it
+    // reports coverage instead of gating on it (docs/CHANGELOG/README.md).
+    expect(stableWorkflow).toContain("Check stable release note coverage");
     expect(stableWorkflow).toContain(
       "RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}",
     );
