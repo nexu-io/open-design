@@ -130,4 +130,3 @@ export async function resolveAutomaticContinuationEvidence(input: {
     ...(complexRuntimeEvidence ? { complexRuntimeEvidence } : {}),
   };
 }
-
