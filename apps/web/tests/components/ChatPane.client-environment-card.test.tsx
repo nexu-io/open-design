@@ -6,7 +6,7 @@
  * 五个 detail 都解析成 `open-settings` + `secondaryRetry`。这一层钉的是卡面 ——
  * 主按钮真的画了〔去设置〕、点下去落到设置 → 本地 CLI(`execution` 那一节,
  * 「高级:代理与自定义路径」就折叠在里面),重试还在但不是主按钮,
- * 而且正文把 `{供应商}` 和那对括号里的成因都填上了。
+ * 而且正文就是产品文档那一格的「润色正文」。
  *
  * 用真的 zh-CN 词典而不是「返回 key」的假 `t`:S30 要验的正是那句话本身,
  * 返回 key 的话插值有没有发生根本看不出来。
@@ -128,15 +128,13 @@ describe('S30 · 环境类报错卡的按钮', () => {
 });
 
 describe('S30 · 环境类报错卡的文案', () => {
-  it('卡面就是 S30 那一句,{供应商} 和成因都填好了', () => {
+  it('卡面就是产品文档 S30 的润色标题 + 润色正文', () => {
     renderPane({ onOpenSettings: vi.fn(), onRetry: vi.fn() });
 
-    expect(screen.getByText('网络环境不对')).toBeTruthy();
-    // 括号里是这一格自己的成因,不是五格一个说法。
-    expect(
-      screen.getByText(/看起来走了代理或公司网络，.+拒绝了请求（证书校验失败）。/),
-    ).toBeTruthy();
-    expect(screen.getByText(/换一个网络出口，或在设置里调整代理。/)).toBeTruthy();
+    expect(screen.getByText('当前地区暂不支持此服务')).toBeTruthy();
+    expect(screen.getByTestId('chat-run-error-description').textContent).toBe(
+      '暂不支持当前网络所在地区，请尝试切换网络后再试。',
+    );
   });
 
   it('卡上不再出现「任务执行失败」这句什么都没说的兜底', () => {

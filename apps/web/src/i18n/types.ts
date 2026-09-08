@@ -2857,6 +2857,11 @@ export interface Dict {
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;
   'chat.runError.title.modelUnavailable': string;
+  /**
+   * S13 ·「模型能力不支持」。和 `title.modelUnavailable`(S07「当前模型不可用」)
+   * 是产品文档里的两行,不是一句话的两种说法 —— 一个说「用不了」,一个说「做不了」。
+   */
+  'chat.runError.title.modelCapabilityUnsupported': string;
   'chat.runError.title.upstreamUnavailable': string;
   'chat.runError.title.toolLoop': string;
   'chat.runError.title.outputInvalid': string;
@@ -2881,6 +2886,9 @@ export interface Dict {
   'chat.runError.cliMissingMessage': string;
   'chat.runError.promptTooLargeMessage': string;
   'chat.runError.modelUnavailableMessage': string;
+  'chat.runError.modelCapabilityUnsupportedMessage': string;
+  /** S23 · 以前这一格没有正文,报错卡因此落到兜底句上。 */
+  'chat.runError.artifactMissingMessage': string;
   'chat.runError.rateLimitedMessage': string;
   'chat.runError.modelWindowLimitMessage': string;
   'chat.runError.modelWindowLimitMessageNoTime': string;

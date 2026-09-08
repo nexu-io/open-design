@@ -293,6 +293,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.cliMissingMessage'
   | 'chat.runError.promptTooLargeMessage'
   | 'chat.runError.modelUnavailableMessage'
+  | 'chat.runError.modelCapabilityUnsupportedMessage'
+  | 'chat.runError.artifactMissingMessage'
   | 'chat.runError.rateLimitedMessage'
   | 'chat.runError.modelWindowLimitMessage'
   | 'chat.runError.modelWindowLimitMessageNoTime'
@@ -444,6 +446,10 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.cliMissing'
   | 'chat.runError.title.promptTooLarge'
   | 'chat.runError.title.modelUnavailable'
+  // S13 · 「模型能力不支持」—— 和上面那格**不是**同一句话。文档 S13 表里
+  // 「模型不存在」与「模型能力不支持」分列两行,S07 的「模型不可用」又是第三行;
+  // 三句话不能共用一个键,否则谁改都盖到别人头上。
+  | 'chat.runError.title.modelCapabilityUnsupported'
   | 'chat.runError.title.upstreamUnavailable'
   | 'chat.runError.title.toolLoop'
   | 'chat.runError.title.outputInvalid'
@@ -865,11 +871,15 @@ function switchModelWithGuidance(
  * and a retry here is a whole new run against the same rewritten TLS chain or
  * the same blocked route, i.e. the same answer.
  *
- * Copy is the design's, verbatim (`error-ux-design.md` S30): 「网络环境不对 ——
- * 看起来走了代理或公司网络,{供应商} 拒绝了请求({地区不支持 / 证书校验失败})。
- * 换一个网络出口,或在设置里调整代理。〔去设置 | 重试〕」 — note what it does NOT
- * say: nothing here promises that installing a certificate makes it work, because
- * upstream has measured builds where it does not.
+ * 文案取产品文档 S30 的**润色列**终稿:「当前地区暂不支持此服务」/
+ * 「暂不支持当前网络所在地区,请尝试切换网络后再试。」
+ *
+ * ⚠️ 这里此前抄的是同一格的**「原文提示」**栏 —— 那一栏是草稿(带按钮、带
+ * `{供应商}` 和括号成因),不是终稿。终稿把成因收进了标题,正文里不再点名成因,
+ * 所以 `messageCauseKey` 这条通路仍在(五个成因各自的译文也都还在词典里),
+ * 只是当前这句话不引用它:哪天产品把成因写回句子里,接线是现成的。
+ *
+ * 终稿同样没有承诺「装个证书就好了」—— 上游实测过装了也不行的构建。
  *
  * 〔重试〕 stays as the SECONDARY on purpose. The upstream sentence these
  * classify on ("unknown certificate verification error") covers two different
@@ -964,11 +974,13 @@ function contactSupportOnly(
 // of that taxonomy — a human-readable type name plus a one-line instruction,
 // with the raw upstream string preserved in the card's collapsible source area.
 const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
-  // The run completed but did not leave a deliverable file. Name the actual
-  // missing outcome in the compact card and keep the raw reason in details.
+  // S23 · 跑完了但没生成文件。正文以前是 `null`,于是卡面落到兜底那一句
+  // (「这次没能顺利完成。反复出现的话,把日志发给我们。」)—— 用户面对的是一次
+  // **正常结束**的任务,兜底句却在说它失败了,而且什么都没解释。文档 S23 有终稿,
+  // 补上。
   ARTIFACT_NOT_FOUND: retryWithGuidance(
     'chat.runError.title.artifactMissing',
-    null,
+    'chat.runError.artifactMissingMessage',
   ),
   // CLI binary not found on PATH (user_action: install_cli).
   AGENT_UNAVAILABLE: retryWithGuidance(
@@ -1383,6 +1395,12 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   // serve the run), but its literal fix is "load a model in LM Studio", not
   // "pick another model here". Routing is right; the sentence may want its own
   // cell. Change the wording, not the row, when product writes one.
+  //
+  // ⚠️ 「模型不存在」这一半(`cli_version_incompatible` / `model_not_found`)
+  // **还留在 S07 那张卡上**,不是疏忽:文档 S13 给它的终稿标题是
+  // 「未找到 {模型名}」,而失败事件上没有模型名 —— `code` / `failureDetail` /
+  // 上游原文三样里都没有结构化的模型标识,报错卡也拿不到「这一轮跑的是哪个模型」。
+  // 硬把 `{模型名}` 摆到用户脸上比现在更糟,所以这一格等数据通路,不改文案。
   cli_version_incompatible: switchModelWithGuidance(
     'chat.runError.title.modelUnavailable',
     'chat.runError.modelUnavailableMessage',
@@ -1391,17 +1409,21 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
     'chat.runError.title.modelUnavailable',
     'chat.runError.modelUnavailableMessage',
   ),
+  // S13 的另一半:「模型能力不支持」。文档给了它自己的标题和正文,和
+  // S07「当前模型不可用」不是同一句话 —— 那句说的是「这个模型现在用不了」,
+  // 这句说的是「这个模型做不了这件事」。而且这一句**没有插值槽**,所以它是三格
+  // 里唯一能立刻按终稿落下去的。
   model_not_supported: switchModelWithGuidance(
-    'chat.runError.title.modelUnavailable',
-    'chat.runError.modelUnavailableMessage',
+    'chat.runError.title.modelCapabilityUnsupported',
+    'chat.runError.modelCapabilityUnsupportedMessage',
   ),
   model_disabled: switchModelWithGuidance(
-    'chat.runError.title.modelUnavailable',
-    'chat.runError.modelUnavailableMessage',
+    'chat.runError.title.modelCapabilityUnsupported',
+    'chat.runError.modelCapabilityUnsupportedMessage',
   ),
   local_model_not_loaded: switchModelWithGuidance(
-    'chat.runError.title.modelUnavailable',
-    'chat.runError.modelUnavailableMessage',
+    'chat.runError.title.modelCapabilityUnsupported',
+    'chat.runError.modelCapabilityUnsupportedMessage',
   ),
   // S30 · the five client-environment causes. Agent-agnostic on purpose and
   // resolved here, ahead of every agent branch: the proxy, the certificate
@@ -1421,9 +1443,9 @@ const AGENT_AGNOSTIC_DETAIL_FAILURE_UI: Record<string, RunFailureUi> = {
   ),
   // ⚠️ 待拍板 — this one is a local SQLite/WAL I/O failure, not a network path.
   // The design gives the environment family exactly one card (S30) and W28's
-  // brief lists all five under it, so it renders here with its own cause noun;
-  // but S30's opening clause (「看起来走了代理或公司网络」) does not describe this
-  // failure. Either it needs its own sentence or it needs its own scenario.
+  // brief lists all five under it, so it renders here; but S30's 润色 copy
+  // (「暂不支持当前网络所在地区」) does not describe this failure any better than
+  // the draft did. Either it needs its own sentence or it needs its own scenario.
   local_storage_failure: clientEnvironmentCard(
     'chat.runError.clientEnvironmentCause.localStorage',
   ),
