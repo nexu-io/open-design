@@ -22,6 +22,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/closure` owns the independently distributable OpenDesign Closure content. It does not own acquisition, generation state, or shell policy.
 - `packages/electron-contract` owns the browser-safe renderer/main declaration contract without exposing its physical bridge.
 - `packages/electron-kit` owns reusable Electron runtime, platform, distribution, and packaging implementation.
+- `packages/electron-capsule` owns independently updatable loading/startup presentation; product declarations remain in `shells/electron`.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
 - `packages/sidecar-proto` owns business DTOs and action names; `packages/sidecar` owns the complete business-agnostic sidecar client boundary and protocol implementation; `packages/platform` owns generic OS process primitives.
 - `packages/standalone` owns the shell-neutral exact metadata, verification, materialization, generation, and launcher contract.

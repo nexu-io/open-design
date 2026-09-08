@@ -96,6 +96,7 @@ describe("exact Electron release topology", () => {
         electron_scene_win32_x64: { runnerClass: "electron_win32_x64", reusable: false },
       },
     });
+    expect(convergence.suites["electron-scene"]).toContain("packages/electron-capsule/");
   });
 
   it("transports scenes opaquely and restores the plan before reading a cache hit", async () => {

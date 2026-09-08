@@ -27,6 +27,8 @@ Shell and the typed adapter boundary consumed by repository tools.
 - `config/appearance.json` owns Capsule window/loading declarations and channel
   title overrides. Physical manifest schema 2 excludes these presentation fields;
   keep OS product identity, icons and installer endpoints physical.
+- Compose the public electron-capsule startup presentation with product media;
+  do not put loading HTML or DOM mechanics back into Shell adapters or kit.
 
 `electron-kit` owns reusable Electron mechanics. `electron-contract` is the
 browser-safe declaration leaf in that build closure. App producers and web

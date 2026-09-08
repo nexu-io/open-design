@@ -12,6 +12,7 @@ import type {
   ElectronShellManifest,
 } from "@open-design/electron-kit/runtime";
 import type { ElectronMacRuntimePolicy } from "@open-design/electron-kit/macos";
+import { createElectronStartupPresentation } from "@open-design/electron-capsule";
 import type { ElectronWindowsLifecyclePolicy } from "@open-design/electron-kit/windows";
 
 import { createElectronRendererAdapter } from "../adapters/renderer/renderer.js";
@@ -36,7 +37,10 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
   return Object.freeze({
     manifest: shellManifest,
     appearance: shellAppearance,
-    splashMedia: splashMedia as ElectronShellDefinition["splashMedia"],
+    createStartupPresentation: () => createElectronStartupPresentation({
+      productName: shellManifest.productName, appearance: shellAppearance,
+      media: splashMedia as Readonly<{ mimeType: "video/webm"; base64: string }>,
+    }),
     mac: macRuntime as ElectronMacRuntimePolicy,
     preflight: runtimeConfig.preflight,
     warmup: runtimeConfig.warmup,

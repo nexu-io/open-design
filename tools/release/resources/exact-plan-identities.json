@@ -34,6 +34,9 @@
           "excludePaths": ["cdp", "cdp-api.ts"]
         },
         "packages/electron-kit/resources",
+        "packages/electron-capsule/package.json",
+        "packages/electron-capsule/tsconfig.json",
+        "packages/electron-capsule/src",
         "packages/contracts/package.json",
         "packages/contracts/src",
         "packages/download/package.json",
@@ -73,6 +76,9 @@
         "packages/electron-kit/tests",
         "packages/electron-kit/tsconfig.tests.json",
         "packages/electron-kit/vitest.config.ts",
+        "packages/electron-capsule/tests",
+        "packages/electron-capsule/tsconfig.tests.json",
+        "packages/electron-capsule/vitest.config.ts",
         "shells/electron/tests",
         "shells/electron/tsconfig.tests.json",
         "shells/electron/vitest.config.ts"

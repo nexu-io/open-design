@@ -1,0 +1,35 @@
+{
+  "name": "@open-design/electron-capsule",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/electron-kit": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "electron": "41.3.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "peerDependencies": {
+    "electron": "41.3.0"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

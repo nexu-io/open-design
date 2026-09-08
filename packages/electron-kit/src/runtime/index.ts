@@ -20,6 +20,7 @@ import {
   type ElectronRendererLease,
   type ElectronShellDefinition,
   type ElectronShellManifest,
+  type ElectronStartupPresentation,
   type ElectronStandaloneAuthority,
   type ElectronStandalonePreparedRuntime,
   type ElectronStandaloneContentUpdaterPort,
@@ -68,7 +69,6 @@ import { mountElectronRendererLease, replaceElectronRendererLease } from "./wind
 import { observeElectronRuntimeTerminal } from "./session/terminal-observer.js";
 import { awaitElectronRendererRecoveryDecision, ElectronRendererCrashBreaker } from "./window/crash-recovery.js";
 
-import { electronSplashHtml } from "./window/splash.js";
 
 export * from "./session/logging.js";
 export * from "./session/cdp.js";
@@ -81,11 +81,6 @@ export * from "./startup/attempt.js";
 export * from "./startup/cancellation.js";
 export * from "./window/presentation.js";
 export * from "./window/mount-acknowledgement.js";
-
-function setSplashStage(window: BrowserWindow | null, stage: string): void {
-  if (window == null || window.isDestroyed()) return;
-  void window.webContents.executeJavaScript(`document.getElementById("stage").textContent=${JSON.stringify(stage)}`).catch(() => undefined);
-}
 
 function requireWarmupState<T>(value: T | null, label: string): T {
   if (value == null) throw new Error(`Electron warmup completed without ${label}`);
@@ -112,6 +107,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
   const sessionNamespace = resolveElectronSessionNamespace(manifest.namespace, presentation);
   let rendererLease: ElectronRendererLease | null = null;
   let splash: BrowserWindow | null = null;
+  let startupPresentation: ElectronStartupPresentation | null = null;
   const handoffs = new ElectronLaunchHandoffQueue(manifest.protocol);
   const dispatch = (url: string) => {
     if (context.startupQuit?.cancelled) return;
@@ -358,10 +354,10 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
   await context.startupQuit.guard(applyElectronMacRuntimePolicy({ app, platform: process.platform, policy: definition.mac, presentation }));
   const splashStartedAt = Date.now();
   if (presentation === "interactive") {
-    splash = new BrowserWindow({ width: appearance.splash.width, height: appearance.splash.height, frame: false, resizable: false, show: true, backgroundColor: appearance.splash.backgroundColor, webPreferences: { sandbox: true } });
-    await context.startupQuit.guard(splash.loadURL(electronSplashHtml({ productName: manifest.productName, splash: appearance.splash }, definition.splashMedia)));
+    startupPresentation = await context.startupQuit.guard(definition.createStartupPresentation());
+    splash = startupPresentation.window;
   }
-  setSplashStage(splash, appearance.splash.initialLabel);
+  startupPresentation?.setStage(appearance.splash.initialLabel);
 
   warmup = runElectronWarmupTopology({
     topology: warmupTopology,
@@ -376,7 +372,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
           runtimeRoot,
           observeFeedback(event) {
             if (!context.startupQuit?.cancelled) {
-              setSplashStage(splash, event.phase === "generation-prepared" ? "Preparing generation…" : event.phase);
+              startupPresentation?.setStage(event.phase === "generation-prepared" ? "Preparing generation…" : event.phase);
             }
             context.log?.write("standalone.feedback", { event });
           },
@@ -468,7 +464,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
       },
     },
     onEvent(event) {
-      if (!context.startupQuit?.cancelled && event.state === "running") setSplashStage(splash, event.node.label ?? event.node.id);
+      if (!context.startupQuit?.cancelled && event.state === "running") startupPresentation?.setStage(event.node.label ?? event.node.id);
       context.log?.write("warmup.node", {
         blocking: event.node.blocking,
         error: event.error,
@@ -491,7 +487,7 @@ async function runElectronShellSession(input: ElectronCarrierDefinition, context
   requireWarmupState(status as StandaloneRuntimeStatus | null, "Standalone readiness");
   const runtimeUpdaterRevisionAtStart = requireWarmupState(updaterRevisionAtStart as number | null, "the updater revision");
   const runtimeRendererLease = requireWarmupState(rendererLease as ElectronRendererLease | null, "a renderer lease");
-  setSplashStage(splash, appearance.splash.readyLabel);
+  startupPresentation?.setStage(appearance.splash.readyLabel);
   const remaining = presentation === "headless" ? 0 : appearance.splash.minimumVisibleMs - (Date.now() - splashStartedAt);
   if (remaining > 0) await context.startupQuit.guard(new Promise((resolve) => setTimeout(resolve, remaining)));
   const pendingHandoffs = handoffs.drain();

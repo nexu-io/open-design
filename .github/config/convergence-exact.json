@@ -42,6 +42,7 @@
       "apps/closure/",
       "packages/download/",
       "packages/electron-kit/",
+      "packages/electron-capsule/",
       "packages/platform/",
       "packages/sidecar/",
       "packages/standalone/",

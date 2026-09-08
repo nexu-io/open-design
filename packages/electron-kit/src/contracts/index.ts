@@ -170,10 +170,15 @@ export type ElectronStandaloneAuthorityFactory = (input: Readonly<{
   observeFeedback?(event: StandaloneFeedbackEvent): void | Promise<void>;
 }>) => ElectronStandaloneAuthority;
 
+export type ElectronStartupPresentation = Readonly<{
+  window: BrowserWindow;
+  setStage(stage: string): void;
+}>;
+
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
   appearance: ElectronShellAppearance;
-  splashMedia?: Readonly<{ mimeType: "video/webm"; base64: string }>;
+  createStartupPresentation(): Promise<ElectronStartupPresentation>;
   mac: ElectronMacRuntimePolicy;
   preflight: ElectronPreflightTopology;
   warmup: ElectronWarmupTopology;

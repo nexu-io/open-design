@@ -13,6 +13,8 @@ it("keeps installed release identity out of the independent Capsule content", as
   expect(Object.keys(result.metafile.inputs).some(path => /(?:^|\/)config\/appearance\.json$/u.test(path))).toBe(true);
   expect(Object.keys(result.metafile.inputs).some(path => /release-identities\.json$/u.test(path))).toBe(false);
   expect(result.outputFiles[0]!.contents.byteLength).toBeGreaterThan(0);
+  expect(result.outputFiles[0]!.text).toContain("@keyframes slide");
+  expect(result.outputFiles[0]!.text).toContain("createElectronStartupPresentation");
 });
 
 it("builds loading changes from Capsule-owned appearance without editing carrier identity", async () => {

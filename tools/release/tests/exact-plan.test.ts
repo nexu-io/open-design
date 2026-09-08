@@ -75,6 +75,11 @@ describe("exact release plan", () => {
     expect(resolveContentIdentityDeclaration(registry, "electron.shell.test").sources.map(({ path }) => path))
       .toContain("packages/standalone/tests/packages");
     expect(shellPaths).toContain("packages/electron-kit/src");
+    // Until the physical entry selects an external Capsule, its actual bundle
+    // still includes Capsule code. Moving source must not authorize reuse.
+    expect(shellPaths).toContain("packages/electron-capsule/src");
+    expect(resolveContentIdentityDeclaration(registry, "electron.shell.test").sources.map(({ path }) => path))
+      .toContain("packages/electron-capsule/tests");
     expect(shellSources.find(({ path }) => path === "packages/electron-kit/src")?.excludePaths).toEqual([
       "cdp", "cdp-api.ts",
     ]);

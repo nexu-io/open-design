@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { electronSplashHtml } from "@/runtime/window/splash.js";
+import { electronSplashHtml } from "@/splash.js";
 
 const manifest = {
   productName: "Example <Product>",

@@ -29,6 +29,7 @@
   "dependencies": {
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
+    "@open-design/electron-capsule": "workspace:*",
     "@open-design/electron-contract": "workspace:*",
     "@open-design/electron-kit": "workspace:*",
     "@open-design/sidecar": "workspace:*",

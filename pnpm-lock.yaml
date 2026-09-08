@@ -530,6 +530,25 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
+  packages/electron-capsule:
+    dependencies:
+      '@open-design/electron-kit':
+        specifier: workspace:*
+        version: link:../electron-kit
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      electron:
+        specifier: 41.3.0
+        version: 41.3.0
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+
   packages/electron-contract:
     devDependencies:
       '@types/node':
@@ -743,6 +762,9 @@ importers:
       '@open-design/diagnostics':
         specifier: workspace:*
         version: link:../../packages/diagnostics
+      '@open-design/electron-capsule':
+        specifier: workspace:*
+        version: link:../../packages/electron-capsule
       '@open-design/electron-contract':
         specifier: workspace:*
         version: link:../../packages/electron-contract
