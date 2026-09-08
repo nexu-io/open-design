@@ -1,11 +1,14 @@
 import { generateKeyPairSync } from "node:crypto";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { build } from "esbuild";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { canonicalJson, sha256Hex, signDocument, standaloneTreeSha256 } from "@open-design/standalone";
 import { validateElectronCapsuleManifest } from "@/contracts/capsule.js";
-import { ElectronActivationAttempt } from "@/runtime/session/activation.js";
+import { ElectronActivationAttempt, inspectElectronStartup } from "@/runtime/session/activation.js";
 import { armElectronCapsuleSelection, commitElectronCapsuleSelection, readElectronCapsuleSelection } from "@/runtime/session/capsule-selection.js";
 import { recoverElectronStartup } from "@/runtime/session/recovery.js";
 
@@ -43,6 +46,67 @@ it("refuses stale or overlapping arms without replacing the selected target", as
   await expect(armElectronCapsuleSelection({ ...input, expectedRevision: 1 })).rejects.toThrow("already pending");
   await expect(commitElectronCapsuleSelection(input.runtimeRoot, { ...input.capsule, revision: 0 }, input.closureGenerationId)).rejects.toThrow("changed during startup");
   expect((await readElectronCapsuleSelection(input.runtimeRoot)).revision).toBe(1);
+});
+
+it("preserves the committed Capsule but blocks startup after SIGKILL between carrier commits", async () => {
+  const input = await fixture();
+  const armed = await armElectronCapsuleSelection(input);
+  // Compile the owning implementation for a real child process. The private
+  // commit stays private; this adds neither a runtime hook nor a public export.
+  const program = await build({
+    stdin: { contents: `
+      import { acquireElectronSessionLease } from "@/runtime/session/lease.js";
+      import { ElectronActivationAttempt } from "@/runtime/session/activation.js";
+      import { commitElectronCapsuleSelection } from "@/runtime/session/capsule-selection.js";
+      const root = ${JSON.stringify(input.runtimeRoot)};
+      await acquireElectronSessionLease(root);
+      await ElectronActivationAttempt.begin(root);
+      await commitElectronCapsuleSelection(root, ${JSON.stringify({ ...armed.pending, revision: armed.revision })}, ${JSON.stringify(input.closureGenerationId)});
+      process.send("capsule-committed");
+      await new Promise(() => {});
+    `, resolveDir: process.cwd() },
+    alias: { "@": fileURLToPath(new URL("../../../src", import.meta.url)) },
+    bundle: true, packages: "external", platform: "node", format: "esm", write: false,
+  });
+  const child = spawn(process.execPath, ["--input-type=module", "-e", program.outputFiles[0]!.text], {
+    stdio: ["ignore", "ignore", "pipe", "ipc"],
+  });
+  let stderr = "";
+  child.stderr!.on("data", chunk => { stderr += String(chunk); });
+  const exited = new Promise<void>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", () => resolve());
+  });
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const ready = new Promise<void>((resolve, reject) => {
+    child.once("message", message => message === "capsule-committed" ? resolve() : reject(new Error("unexpected commit checkpoint")));
+    timeout = setTimeout(() => reject(new Error(`commit fixture timed out: ${stderr}`)), 5_000);
+  });
+  try {
+    await Promise.race([ready, exited.then(() => { throw new Error(`commit fixture exited early: ${stderr}`); })]);
+    clearTimeout(timeout);
+    const selectionBytes = await readFile(join(input.runtimeRoot, "capsule-selection.json"), "utf8");
+    const activationBytes = await readFile(join(input.runtimeRoot, "activation.json"), "utf8");
+    child.kill("SIGKILL");
+    await exited;
+    expect(child.signalCode).toBe("SIGKILL");
+    expect(await readFile(join(input.runtimeRoot, "capsule-selection.json"), "utf8")).toBe(selectionBytes);
+    expect(await readFile(join(input.runtimeRoot, "activation.json"), "utf8")).toBe(activationBytes);
+    expect(await readElectronCapsuleSelection(input.runtimeRoot)).toMatchObject({ revision: 2, current: armed.pending, pending: null });
+    expect(await inspectElectronStartup(input.runtimeRoot)).toMatchObject({ required: true, activation: { state: "starting" } });
+    await expect(ElectronActivationAttempt.begin(input.runtimeRoot)).rejects.toThrow("explicit exact recovery required");
+    const target = { capsuleManifestSha256: sha256Hex(canonicalJson(input.capsule.envelope)), closureGenerationId: input.closureGenerationId };
+    await recoverElectronStartup({ runtimeRoot: input.runtimeRoot, target, selectTarget: async () => target,
+      repair: async () => { await armElectronCapsuleSelection({ ...input, expectedRevision: 2, recovery: true }); } });
+    const recovered = await ElectronActivationAttempt.begin(input.runtimeRoot);
+    await commitElectronCapsuleSelection(input.runtimeRoot, { ...input.capsule, revision: 3 }, input.closureGenerationId);
+    await recovered.commit();
+    expect(await inspectElectronStartup(input.runtimeRoot)).toMatchObject({ required: false, activation: { state: "running" } });
+  } finally {
+    clearTimeout(timeout);
+    if (child.exitCode == null && child.signalCode == null) child.kill("SIGKILL");
+    await exited;
+  }
 });
 
 it("keeps failed startup blocked and permits only intent-bound recovery rearm", async () => {

@@ -151,6 +151,7 @@ describe("Electron production Standalone authority", () => {
     const runtimeRoot = join(root, "runtime");
     const built = await buildElectronStandaloneAuthority(root);
     const readinessFaultMarker = join(root, "readiness-fault-consumed");
+    const hostIdentityFaultMarker = join(root, "host-identity-fault");
     const [rawHost, supervisor, launcher] = await Promise.all([
       readFile(built.host.path),
       readFile(built.supervisor.path),
@@ -160,7 +161,10 @@ describe("Electron production Standalone authority", () => {
     const faultedReadinessHandler = `if (request.operation === "lifecycle.ready") { const acknowledged = await this.lifecycle.awaitReady(request.readiness); const fs = process.getBuiltinModule("node:fs"); const marker = ${JSON.stringify(readinessFaultMarker)}; if (!fs.existsSync(marker)) { fs.writeFileSync(marker, JSON.stringify([process.pid, process.ppid])); return { ...acknowledged, attachmentId: "faulted-readiness" }; } return acknowledged; }`;
     const hostSource = rawHost.toString("utf8");
     expect(hostSource).toContain(readinessHandler);
-    const host = Buffer.from(hostSource.replace(readinessHandler, faultedReadinessHandler));
+    const hostIdentity = "hostSha256: config.hostSha256,";
+    expect(hostSource).toContain(hostIdentity);
+    const host = Buffer.from(hostSource.replace(readinessHandler, faultedReadinessHandler).replace(hostIdentity,
+      `hostSha256: process.getBuiltinModule("node:fs").existsSync(${JSON.stringify(hostIdentityFaultMarker)}) ? "0".repeat(64) : config.hostSha256,`));
     await Promise.all([writeFile(built.host.path, host), writeFile(readinessFaultMarker, "initial-start-must-remain-healthy")]);
     const closure = Buffer.from("export const closure = true;\n");
     const launcherDigest = createHash("sha256").update(launcher).digest("hex");
@@ -255,6 +259,12 @@ describe("Electron production Standalone authority", () => {
       expect(await findSidecarProcesses(stamp)).toEqual([]);
       await expect(unused.start({ attachment: { id: "disposed", shell: manifest.shell }, capabilities: { async invoke() { throw new Error("must not attach"); } } }))
         .rejects.toThrow("preparation is disposed");
+      await writeFile(hostIdentityFaultMarker, "reject the newly acquired host");
+      await expect(authority.prepare({ correlationId: "partial-launch-failure", scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell }))
+        .rejects.toThrow("escaped its installed launch contract");
+      expect(await findSidecarProcesses(providerStamp)).toEqual([]);
+      expect(await findSidecarProcesses(stamp)).toEqual([]);
+      await rm(hostIdentityFaultMarker);
       prepared = await authority.prepare({ correlationId: "after-unused-preparation", scope: { channel: manifest.channel, namespace: manifest.namespace }, shell: manifest.shell });
       let handle = await prepared.start({
         attachment: { id: "electron-test", shell: manifest.shell },
