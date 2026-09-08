@@ -89,7 +89,9 @@ parser rather than trusting review:
 
 ## Updating the card
 
-1. Edit `docs/whats-new.json` and open a pull request.
+1. Edit `docs/whats-new.json` on the corresponding `release/vX.Y.Z` branch
+   and have the release maintainer review and land the copy there. A `main`
+   pull request remains supported for the main copy.
 2. `pnpm guard` validates the document on every PR
    (`scripts/check-whats-new-document.ts`). It runs the document through the
    daemon's own parser and fails if the card would not show, if an optional
@@ -102,12 +104,32 @@ parser rather than trusting review:
    cache bypassed. The job fails unless the bytes served match the bytes
    uploaded — an exit code from the upload alone is not treated as proof.
 
-Republishing the current `main` content without a code change: run the
-**whats-new-publish** workflow manually (`workflow_dispatch`) against `main`.
-Its `dry_run` input validates the document and reports the live-vs-proposed
-`id` without uploading; a dry run needs no credentials and works from any
-branch, so it is a safe way to preview a copy change before it merges. A real
-publish only runs on `main` — see the trust boundary below.
+To publish release copy, run **whats-new-publish** manually
+(`workflow_dispatch`) against the corresponding `release/vX.Y.Z` branch:
+
+```bash
+gh workflow run whats-new-publish.yml --repo nexu-io/open-design \
+  --ref release/v0.22.0 -f dry_run=true
+# After reviewing the proposed document and id:
+gh workflow run whats-new-publish.yml --repo nexu-io/open-design \
+  --ref release/v0.22.0 -f dry_run=false
+```
+
+The selected branch must contain this workflow, its publisher and validation
+scripts, and `docs/whats-new.json`. Both jobs check out the run's fixed
+`github.sha`, so validation and upload use the same commit even if the branch
+moves. A new dispatch takes the branch's current commit; check the commit and
+copy again if it changed after the dry run. Only `main` and exact
+`release/vX.Y.Z` branches can publish; tags and arbitrary feature branches
+cannot. A dry run needs no credentials and still works from any branch that
+contains the workflow. Manual publication against `main` remains supported.
+
+Release-branch pushes do not trigger this publisher automatically. This
+workflow only uploads the hosted JSON and does not build the application.
+Landing a commit on `release/**` may independently trigger the repository's
+prerelease workflow. The object is shared by all release channels: review the
+live-vs-proposed `id` before publishing, because publishing an older branch
+replaces the same card for every client rather than creating a versioned copy.
 
 Propagation takes up to ~15 minutes: the object's own `max-age=300` plus the
 daemon's ~10 minute in-process cache.
@@ -118,15 +140,18 @@ The card is visible to every installed client as soon as it lands, so
 "published" has to imply "reviewed". The control that guarantees it is the
 **`whats-new-publish` GitHub environment**:
 
-- its deployment-branch policy allows **`main` only**, so a job that declares
-  the environment cannot start on any other ref;
+- its deployment-branch policy allows **`main` and `release/v*` branches**,
+  so a job that declares the environment cannot start outside those branches;
+  keep workflow and source changes on these trusted branches reviewed. The
+  workflow also requires an exact `release/vX.Y.Z` name (no suffix or leading
+  zero in a version component), since the environment uses a broader glob;
 - the R2 credentials are **environment secrets on that environment** —
   `CLOUDFLARE_R2_WHATS_NEW_AK`, `CLOUDFLARE_R2_WHATS_NEW_SK`,
   `CLOUDFLARE_R2_WHATS_NEW_URL`, `CLOUDFLARE_R2_WHATS_NEW_BUCKET`.
 
 Both halves are load-bearing. `workflow_dispatch` runs the workflow file from
 the ref it is dispatched against, so every check written inside the workflow is
-editable by whoever triggers it — including the `main`-only assertion. What is
+editable by whoever triggers it — including the branch-name assertion. What is
 not editable is where the secrets live: dropping the `environment:` declaration
 to escape the branch policy also drops access to the secrets, and the publisher
 then fails naming the variables it is missing.

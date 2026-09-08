@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -165,13 +165,77 @@ describe("what's new publisher", () => {
   });
 });
 
+describe("what's new publish branch policy", () => {
+  async function runGate(jobName: string, stepName: string, ref: string, dryRun = false) {
+    const workflow = await readFile(path.join(repoRoot, WHATS_NEW_WORKFLOW_PATH), "utf8");
+    const job = parseWorkflowJobs(workflow)?.jobs.get(jobName) as {
+      steps: Array<{ name: string; run?: string }>;
+    };
+    const script = job.steps.find((step) => step.name === stepName)?.run;
+    expect(script).toBeTypeOf("string");
+    const scratch = await mkdtemp(path.join(tmpdir(), "whats-new-ref-"));
+    try {
+      const output = path.join(scratch, "output");
+      const result = spawnSync("bash", ["-c", script!.replaceAll("${{ github.sha }}", "a".repeat(40))], {
+        encoding: "utf8",
+        env: {
+          PATH: process.env.PATH,
+          REPOSITORY: "nexu-io/open-design",
+          EVENT_NAME: "workflow_dispatch",
+          REF: ref,
+          DRY_RUN: String(dryRun),
+          GITHUB_OUTPUT: output,
+        },
+      });
+      return {
+        ...result,
+        mode: jobName === "validate" && result.status === 0 ? await readFile(output, "utf8") : "",
+      };
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  }
+
+  test.each(["refs/heads/main", "refs/heads/release/v0.22.0", "refs/heads/release/v12.3.45"])(
+    "%s passes both real-publish gates",
+    async (ref) => {
+      const mode = await runGate("validate", "Resolve run mode", ref);
+      expect(mode.status, mode.stderr).toBe(0);
+      expect(mode.mode).toBe("publish=true\n");
+      const publish = await runGate("publish", "Assert reviewed ref", ref);
+      expect(publish.status, publish.stderr).toBe(0);
+    },
+  );
+
+  test.each([
+    "refs/heads/feature/whats-new",
+    "refs/tags/release/v0.22.0",
+    "refs/heads/release/v0.22.0-copy",
+    "refs/heads/release/v0.22",
+    "refs/heads/release/v01.22.0",
+    "refs/heads/release/v0.22.0/extra",
+  ])("%s is rejected before a real publish", async (ref) => {
+    for (const [job, step] of [["validate", "Resolve run mode"], ["publish", "Assert reviewed ref"]]) {
+      const result = await runGate(job!, step!, ref);
+      expect(result.status, result.stdout).toBe(1);
+      expect(result.stderr).toContain(ref);
+    }
+  });
+
+  test("an arbitrary branch can still preview without enabling publish", async () => {
+    const result = await runGate("validate", "Resolve run mode", "refs/heads/feature/whats-new", true);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.mode).toBe("publish=false\n");
+  });
+});
+
 // The card reaches every installed client the moment it is published, so
 // "published" must imply "reviewed". Nothing written inside the workflow file
 // can enforce that on its own: `workflow_dispatch` runs the workflow from the
 // ref it is dispatched against, so every check in it is editable by whoever
-// triggers it. The control is the `whats-new-publish` environment — main-only
-// branch policy, R2 credentials as secrets on it — and that control only holds
-// while the workflow keeps a specific shape: the job that can reach the
+// triggers it. The control is the `whats-new-publish` environment — main and
+// trusted release branches, R2 credentials as secrets on it — and that control
+// only holds while the workflow keeps a specific shape: the job that can reach the
 // credentials is the job that declares the environment, and it cannot start
 // unless validation succeeded.
 //

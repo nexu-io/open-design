@@ -71,7 +71,7 @@ REQUIRED_STORAGE_VARS = (
 # Repository secrets are readable from any job on any branch, so storing them
 # there would let a modified workflow dispatched from an unreviewed ref publish
 # to every installed client. The environment's deployment-branch policy allows
-# `main` only; see docs/whats-new.md.
+# `main` and trusted `release/v*` branches; see docs/whats-new.md.
 PUBLISH_ENVIRONMENT = "whats-new-publish"
 
 
@@ -209,7 +209,7 @@ def main() -> int:
             "missing R2 credentials: "
             + ", ".join(missing)
             + f". These must be environment secrets on the `{PUBLISH_ENVIRONMENT}` GitHub"
-            " environment, which is restricted to `main`. Do NOT add them as repository"
+            " environment, restricted to `main` and trusted `release/v*` branches. Do NOT add them as repository"
             " secrets: those are readable from any job on any branch and would let an"
             " unreviewed ref publish to every installed client. See docs/whats-new.md."
         )

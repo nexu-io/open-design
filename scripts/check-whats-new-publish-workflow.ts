@@ -8,9 +8,9 @@
  * against*, so every check in that file is editable by whoever triggers it.
  *
  * The control is the `whats-new-publish` GitHub environment — its
- * deployment-branch policy allows `main` only, and the R2 credentials are
- * secrets on it. That control only holds while the workflow keeps a specific
- * shape:
+ * deployment-branch policy allows `main` and trusted `release/v*` branches,
+ * and the R2 credentials are secrets on it. That control only holds while
+ * the workflow keeps a specific shape:
  *
  *   the job that can reach the credentials is the job that declares the
  *   environment, and it cannot start unless validation succeeded first.
@@ -295,7 +295,7 @@ export function findWhatsNewWorkflowViolations(workflow: string): string[] {
   const environment = declaredEnvironment(publish);
   if (environment !== WHATS_NEW_PUBLISH_ENVIRONMENT) {
     violations.push(
-      `job \`${WHATS_NEW_PUBLISH_JOB}\` declares environment ${environment == null ? "(none)" : `\`${environment}\``}; it must be exactly \`${WHATS_NEW_PUBLISH_ENVIRONMENT}\`, whose deployment-branch policy is what restricts publication to main`,
+      `job \`${WHATS_NEW_PUBLISH_JOB}\` declares environment ${environment == null ? "(none)" : `\`${environment}\``}; it must be exactly \`${WHATS_NEW_PUBLISH_ENVIRONMENT}\`, whose deployment-branch policy restricts publication to main and trusted release branches`,
     );
   }
 
@@ -391,7 +391,7 @@ export async function checkWhatsNewPublishWorkflow(root: string = repoRoot): Pro
     console.error(`What's New publish workflow check failed for ${WHATS_NEW_WORKFLOW_PATH}:`);
     for (const violation of violations) console.error(`- ${violation}`);
     console.error(
-      "The card reaches every installed client on publish, so publication must stay bound to the `whats-new-publish` environment (main-only) and unreachable without a green validate. See docs/whats-new.md.",
+      "The card reaches every installed client on publish, so publication must stay bound to the `whats-new-publish` environment (main and trusted release branches) and unreachable without a green validate. See docs/whats-new.md.",
     );
     return false;
   }

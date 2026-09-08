@@ -2,8 +2,8 @@ name: whats-new-publish
 
 # Publish the post-update "What's New" card from the repository copy of the
 # document (docs/whats-new.json) to the R2 object the daemon reads. Editing
-# the card is a copy change, so it goes through the normal PR review path and
-# publishes on merge; nobody needs local Cloudflare credentials.
+# the card is a copy change: main publishes on merge, and release maintainers
+# can publish reviewed release-branch copy manually without rebuilding the app.
 #
 # Standalone (not part of ci.yml): this workflow performs a trusted write and
 # must stay outside the low-privilege PR gate.
@@ -15,12 +15,13 @@ name: whats-new-publish
 # here can be the control.
 #
 # The control is the `whats-new-publish` environment: its deployment-branch
-# policy allows `main` only, and the R2 credentials are environment secrets
-# scoped to it. A job that declares the environment cannot start on another
-# ref; a job that drops the declaration to get around that no longer receives
+# policy allows `main` and `release/v*`, and the R2 credentials are environment
+# secrets scoped to it. These are trusted branches whose workflow and source
+# must be reviewed. A job cannot start on a ref outside that policy; a job
+# that drops the declaration to get around that no longer receives
 # the secrets. The publish job is the only job that declares it, and it is the
-# only job that touches credentials. The `main`-only assertion below is
-# defense in depth and a clear error message — not the boundary.
+# only job that touches credentials. The assertions below additionally require
+# an exact release/vX.Y.Z branch name — not an arbitrary release/v* suffix.
 #
 # Reachability — `validate` has no `needs` and no `if`, so it always runs.
 # `publish` is skipped when `validate` fails or is cancelled, which is the
@@ -98,9 +99,9 @@ jobs:
           # Fail rather than silently downgrading to a dry run, so a mistaken
           # branch dispatch is a red run with an explanation instead of a
           # green one that published nothing.
-          if [ "$publish" = "true" ] && [ "$REF" != "refs/heads/main" ]; then
-            echo "Publishing requires refs/heads/main; got $REF." >&2
-            echo "Re-run with dry_run to preview a branch, or dispatch against main." >&2
+          if [ "$publish" = "true" ] && [[ "$REF" != "refs/heads/main" && ! "$REF" =~ ^refs/heads/release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Publishing requires main or release/vX.Y.Z; got $REF." >&2
+            echo "Re-run with dry_run to preview another branch." >&2
             exit 1
           fi
           echo "publish=$publish" >> "$GITHUB_OUTPUT"
@@ -115,7 +116,7 @@ jobs:
       # that `pnpm guard` runs on every PR, which drives the document through
       # the daemon's shipping parser. Re-running it here covers the cases the
       # PR gate cannot: a manual dispatch on an arbitrary ref, and any direct
-      # write to main.
+      # write to main or a release branch.
       - name: Validate document against the shipping parser
         run: npx --yes tsx@4.22.3 scripts/check-whats-new-document.ts
 
@@ -130,7 +131,7 @@ jobs:
     if: needs.validate.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    # The trust boundary. Deployment-branch policy: `main` only. The R2
+    # The trust boundary. Deployment-branch policy: `main` and `release/v*`. The R2
     # credentials are secrets ON THIS ENVIRONMENT, not repository secrets —
     # repository secrets would be readable from any job on any branch and
     # would defeat the whole control.
@@ -147,10 +148,10 @@ jobs:
         run: |
           set -euo pipefail
           # Defense in depth. The environment's branch policy is what actually
-          # stops a non-main run; this step makes the intent legible and gives
-          # a readable failure if the policy is ever loosened.
-          if [ "$REF" != "refs/heads/main" ]; then
-            echo "Refusing to publish from $REF; only reviewed content on main may reach users." >&2
+          # stops runs outside the trusted branches; this step also enforces
+          # the exact release version format within the environment's glob.
+          if [[ "$REF" != "refs/heads/main" && ! "$REF" =~ ^refs/heads/release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Refusing to publish from $REF; use reviewed content on main or release/vX.Y.Z." >&2
             exit 1
           fi
 
