@@ -3649,7 +3649,7 @@ export const zhTW: Dict = {
   "assistant.copyMarkdown": "複製",
   "assistant.forkConversation": "新會話",
   "assistant.forkingConversation": "正在開始新會話…",
-  "assistant.forkNote": "上文已帶過來,接著說就行",
+  "assistant.forkNote": "從上一個會話繼續",
   "assistant.shareToOpenDesign": "分享到 OpenDesign",
   "assistant.shareToOpenDesignBusy": "正在準備投稿…",
   "assistant.feedbackPrompt": "意見回饋",

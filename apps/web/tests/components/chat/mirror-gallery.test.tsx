@@ -1050,13 +1050,13 @@ const OUTRO: Cell[] = [
     ],
   },
   {
-    gid: 38, sub: '15-5', cmp: '回合状态行', state: '点过「新开会话」· 原地落一条分界,线中间一行「上文已带过来」', family: '产出收尾',
+    gid: 38, sub: '15-5', cmp: '回合状态行', state: '点过「新开会话」· 原地落一条分界,线中间一行「从上一个会话继续」', family: '产出收尾',
     node: () => (
       <div className="fork-sep">
         <i aria-hidden />
         <span className="fork-note">
           <Icon name="fork" size={12} />
-          上文已带过来,接着说就行
+          从上一个会话继续
         </span>
         <i aria-hidden />
       </div>

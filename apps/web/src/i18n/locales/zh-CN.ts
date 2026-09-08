@@ -3639,7 +3639,7 @@ export const zhCN: Dict = {
   "assistant.copyMarkdown": "复制",
   "assistant.forkConversation": "新会话",
   "assistant.forkingConversation": "正在开始新会话…",
-  "assistant.forkNote": "上文已带过来,接着说就行",
+  "assistant.forkNote": "从上一个会话继续",
   "assistant.shareToOpenDesign": "分享到 OpenDesign",
   "assistant.shareToOpenDesignBusy": "正在准备投稿…",
   "assistant.feedbackPrompt": "反馈",
