@@ -21,6 +21,7 @@
   "dependencies": {
     "@open-design/download": "workspace:*",
     "@open-design/release": "workspace:*",
+    "@open-design/shell-electron": "workspace:*",
     "@open-design/standalone": "workspace:*",
     "cac": "6.7.14"
   },

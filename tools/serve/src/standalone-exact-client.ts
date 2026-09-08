@@ -9,7 +9,8 @@ type Bootstrap = Readonly<{
   channelHeadUrl: string;
   content: RemoteFile;
   releaseVersion: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
+  capsule: Readonly<{ manifest: RemoteFile; archive: RemoteFile }> | null;
   seeds: readonly RemoteSeed[];
   trust: RemoteFile;
 }>;
@@ -50,8 +51,8 @@ function remoteFile(value: unknown, origin: string, expectedFile: string | null,
 
 function parseBootstrap(value: unknown, bootstrapUrl: string): Bootstrap {
   const input = record(value, "Standalone fixture bootstrap");
-  exactKeys(input, ["channel", "channelHeadUrl", "content", "releaseVersion", "schemaVersion", "seeds", "trust"], "Standalone fixture bootstrap");
-  if (input.schemaVersion !== 1 || typeof input.channel !== "string" || typeof input.releaseVersion !== "string") throw new Error("Standalone fixture bootstrap identity is invalid");
+  exactKeys(input, ["capsule", "channel", "channelHeadUrl", "content", "releaseVersion", "schemaVersion", "seeds", "trust"], "Standalone fixture bootstrap");
+  if (input.schemaVersion !== 2 || typeof input.channel !== "string" || typeof input.releaseVersion !== "string") throw new Error("Standalone fixture bootstrap identity is invalid");
   const origin = new URL(bootstrapUrl).origin;
   if (!Array.isArray(input.seeds) || input.seeds.length === 0) throw new Error("Standalone fixture bootstrap seeds are invalid");
   const files = new Set<string>();
@@ -71,8 +72,15 @@ function parseBootstrap(value: unknown, bootstrapUrl: string): Bootstrap {
     return Object.freeze({ ...file, blobSha256: file.sha256, component: seed.component });
   });
   if (launchers !== 1) throw new Error("Standalone fixture bootstrap must bind exactly one launcher seed");
+  const capsule = input.capsule == null ? null : (() => {
+    const value = record(input.capsule, "Electron fixture Capsule");
+    exactKeys(value, ["archive", "manifest"], "Electron fixture Capsule");
+    return Object.freeze({ manifest: remoteFile(value.manifest, origin, "capsule-manifest.json", "Electron Capsule manifest"),
+      archive: remoteFile(value.archive, origin, "capsule.zip", "Electron Capsule archive") });
+  })();
   return Object.freeze({
-    schemaVersion: 1,
+    schemaVersion: 2,
+    capsule,
     channel: input.channel,
     releaseVersion: input.releaseVersion,
     channelHeadUrl: localHttpUrl(input.channelHeadUrl, origin, "Standalone fixture channel head"),
@@ -90,6 +98,7 @@ export type StandaloneFixtureFiles = Readonly<{
   channelHeadUrl: string;
   contentFile: string;
   trustFile: string;
+  capsule?: Readonly<{ manifestFile: string; archiveFile: string }>;
   seedFiles: readonly string[];
 }>;
 
@@ -106,7 +115,7 @@ export async function withStandaloneExactFixture<T>(
   await mkdir(input.scratchRoot, { recursive: true });
   const stage = await mkdtemp(join(input.scratchRoot, "fixture-"));
   try {
-    const files = [bootstrap.content, bootstrap.trust, ...bootstrap.seeds];
+    const files = [bootstrap.content, bootstrap.trust, ...bootstrap.seeds, ...(bootstrap.capsule == null ? [] : [bootstrap.capsule.manifest, bootstrap.capsule.archive])];
     if (new Set(files.map(file => file.file)).size !== files.length) throw new Error("Standalone fixture file names collide");
     const outcomes = await Promise.allSettled(files.map(async file => {
       const result = await downloadCopyAndClear({
@@ -122,6 +131,7 @@ export async function withStandaloneExactFixture<T>(
     return await consume(Object.freeze({
       channel: bootstrap.channel, releaseVersion: bootstrap.releaseVersion, channelHeadUrl: bootstrap.channelHeadUrl,
       contentFile: join(stage, bootstrap.content.file), trustFile: join(stage, bootstrap.trust.file),
+      ...(bootstrap.capsule == null ? {} : { capsule: Object.freeze({ manifestFile: join(stage, bootstrap.capsule.manifest.file), archiveFile: join(stage, bootstrap.capsule.archive.file) }) }),
       seedFiles: Object.freeze(bootstrap.seeds.map(seed => join(stage, seed.file))),
     }));
   } finally {

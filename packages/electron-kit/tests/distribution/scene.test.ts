@@ -1,4 +1,5 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -78,23 +79,35 @@ describe("Electron scene", () => {
     ]);
 
     const platformRoot = join(root, "platform");
+    const capsuleBytes = Buffer.from("prebuilt independent capsule archive");
+    const capsulePath = join(root, "capsule.zip");
+    await writeFile(capsulePath, capsuleBytes);
+    const capsuleContent = {
+      schemaVersion: 1 as const, protocol: "electron-capsule-v2" as const,
+      target: "darwin-arm64" as const, entrypoint: "capsule.cjs" as const,
+      archive: { sha256: createHash("sha256").update(capsuleBytes).digest("hex"),
+        size: capsuleBytes.length, treeSha256: "c".repeat(64) },
+    };
     if (withTree) {
       await mkdir(join(platformRoot, "bin"), { recursive: true });
       await writeFile(join(platformRoot, "bin/node"), "native executable bytes");
       await chmod(join(platformRoot, "bin/node"), 0o755);
       await writeFile(join(platformRoot, "empty"), "");
     }
-    const receipt = await assembleElectronScene({
+    const sceneInput = {
       ...paths,
       manifest: JSON.parse(await readFile(paths.manifestPath, "utf8")) as ElectronShellManifest,
       authorityResources: [
+        { name: "capsule.zip", path: capsulePath },
         ...(withTree ? [{ name: "platform", path: platformRoot }] : []),
         { name: "standalone-host.cjs", path: paths.authorityResourcePath },
         { name: "closure.mjs", path: paths.closureResourcePath },
         { name: "standalone-launcher.mjs", path: paths.launcherResourcePath },
       ],
       standaloneBinding: { target: "darwin-arm64", closureResourceName: "closure.mjs", launcherResourceName: "standalone-launcher.mjs" },
-    });
+      capsule: { content: capsuleContent, resourceName: "capsule.zip" },
+    };
+    const receipt = await assembleElectronScene(sceneInput);
     const scene = await readFile(receipt.sceneManifestPath, "utf8");
     const packageManifest = JSON.parse(await readFile(join(paths.outputRoot, "package.json"), "utf8")) as Record<string, unknown>;
     expect(receipt.receiptPath).toBe(join(root, "build", "scene-receipt.json"));
@@ -103,7 +116,8 @@ describe("Electron scene", () => {
     expect(JSON.parse(scene)).toMatchObject({
       schemaVersion: 1,
       operation: "electron.scene.build",
-      authorityResources: ["closure.mjs", ...(withTree ? ["platform"] : []), "standalone-host.cjs", "standalone-launcher.mjs"],
+      authorityResources: ["capsule.zip", "closure.mjs", ...(withTree ? ["platform"] : []), "standalone-host.cjs", "standalone-launcher.mjs"],
+      capsule: { content: capsuleContent, archiveFile: "capsule.zip" },
       target: "darwin-arm64",
       shellVersion: "1.2.3",
       shellBuildHash: "a".repeat(64),
@@ -117,7 +131,7 @@ describe("Electron scene", () => {
     });
     await expect(readFile(join(paths.outputRoot, "scene-receipt.json"), "utf8")).rejects.toThrow();
     expect(packageManifest.author).toBe("Example Company");
-    expect(receipt.authorityResources).toHaveLength(withTree ? 4 : 3);
+    expect(receipt.authorityResources).toHaveLength(withTree ? 5 : 4);
     expect(receipt.authorityResources).toEqual(expect.arrayContaining([expect.objectContaining({
       name: "standalone-host.cjs",
       path: join(paths.outputRoot, "standalone-host.cjs"),
@@ -144,6 +158,16 @@ describe("Electron scene", () => {
       await expect(loadElectronScene(paths.outputRoot, receipt.sceneManifestSha256)).resolves.toEqual(receipt);
       await rm(executable);
       await expect(loadElectronScene(paths.outputRoot, receipt.sceneManifestSha256)).rejects.toThrow("binding verification: platform");
+    }
+    if (!withTree) {
+      for (const capsule of [
+        { ...sceneInput.capsule, resourceName: "missing.zip" },
+        { ...sceneInput.capsule, content: { ...capsuleContent, target: "darwin-x64" as const } },
+        { ...sceneInput.capsule, content: { ...capsuleContent, archive: { ...capsuleContent.archive, size: capsuleBytes.length + 1 } } },
+        { ...sceneInput.capsule, content: { ...capsuleContent, archive: { ...capsuleContent.archive, sha256: "d".repeat(64) } } },
+      ]) {
+        await expect(assembleElectronScene({ ...sceneInput, capsule })).rejects.toThrow("Capsule binding differs");
+      }
     }
   });
 

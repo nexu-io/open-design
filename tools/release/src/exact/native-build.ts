@@ -50,16 +50,21 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{ plan?: st
     const plan = await readObject(input.plan), identity = plan.plan?.nodes?.["electron.shell.build"]?.identity;
     if (plan.plan?.target !== buildTarget || typeof identity !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(identity)) throw new Error("Electron Shell plan identity is invalid");
     // Build dependencies load only when the native build command is executed.
-    const { buildElectronScene, resolveElectronNodeArchive } = await electronBuilder(root);
+    const { buildElectronScene, buildElectronCapsuleContent, resolveElectronNodeArchive } = await electronBuilder(root);
     const platformArchivePath = input.nodeArchive ? resolve(input.nodeArchive) : await (async () => {
       const source = await resolveElectronNodeArchive(buildTarget);
       return (await acquireBuildArchive({ cacheRoot: join(dirname(resolve(input.output)), ".build-cache"), fileName: source.archive, url: source.url, sha256: source.sha256 })).path;
     })();
-    const result = await buildElectronScene({ schemaVersion: 1, operation: "electron.scene.build", target: buildTarget,
-      buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher, platformArchivePath,
-      resourceReceiptFile: resolve(input.resources), sceneDirectory: resolve(input.output) });
-    await writeObject(input.receipt, result);
-    return result;
+    const capsuleStage = await mkdtemp(join(tmpdir(), "release-capsule-baseline-"));
+    try {
+      const capsule = await buildElectronCapsuleContent({ target: buildTarget, outputRoot: join(capsuleStage, "content") });
+      const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: buildTarget,
+        capsuleContentFile: capsule.contentPath, capsuleArchiveFile: capsule.archivePath,
+        buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher, platformArchivePath,
+        resourceReceiptFile: resolve(input.resources), sceneDirectory: resolve(input.output) });
+      await writeObject(input.receipt, result);
+      return result;
+    } finally { await rm(capsuleStage, { recursive: true, force: true }); }
   }
   const lock = await readOfficialNodeLock(join(root, "shells/terminal/node-lock.json")), node = lock.targets[buildTarget];
   if (node == null) throw new Error("Terminal platform target is not declared");
@@ -111,7 +116,9 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ sc
     releaseDocumentsDirectory: join(preparedRoot, "documents"), release: { channel: input.channel, releaseVersion: input.releaseVersion,
       sourceCommit: input.sourceCommit, publishedAt: prepared.publishedAt, artifactBaseUrl: prepared.artifactBaseUrl } });
   const { buildElectronInstaller } = await electronBuilder(input.root);
-  const result = await buildElectronInstaller({ ...common, operation: "electron.distribution.build", acceptedContentMetadataFile: content, acceptedTrustFile: trust,
+  const capsule = await checkedFile(expected.capsule.manifest, "prepared Capsule manifest", join(preparedRoot, "documents", `capsule-${buildTarget}.json`));
+  const result = await buildElectronInstaller({ ...common, schemaVersion: 2, operation: "electron.distribution.build", acceptedContentMetadataFile: content, acceptedTrustFile: trust,
+    acceptedCapsuleManifestFile: capsule,
     channel: policy.channel, releaseVersion: policy.releaseVersion, channelHeadUrl: `${policy.target.publicBaseUrl}/${input.channel}/latest/channel-head.json` });
   await writeObject(join(input.output, "shell-contribution.json"), result);
   await writeObject(input.receipt, result);

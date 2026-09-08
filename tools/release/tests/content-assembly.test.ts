@@ -23,6 +23,8 @@ describe("exact release control", () => {
     await writeFile(closure, "export const closure = true;\n");
     await writeFile(launcher, "export const launcher = true;\n");
     await writeFile(resource, "fixture zip bytes");
+    const capsuleBytes = Buffer.from("fixture Capsule archive");
+    if (shellType === "electron") await writeFile(join(scene, "capsule.zip"), capsuleBytes);
     const manifest = {
       schemaVersion: 1,
       target: "darwin-arm64",
@@ -30,6 +32,10 @@ describe("exact release control", () => {
       shellBuildHash: "a".repeat(64),
       closure: { sha256: digest(await readFile(closure)) },
       standalone: { sha256: digest(await readFile(launcher)) },
+      ...(shellType !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
+        schemaVersion: 1, protocol: "electron-capsule-v2", target: "darwin-arm64", entrypoint: "capsule.cjs",
+        archive: { sha256: digest(capsuleBytes), size: capsuleBytes.byteLength, treeSha256: "d".repeat(64) },
+      } } }),
     };
     const manifestPath = join(scene, "scene.json");
     await writeFile(manifestPath, JSON.stringify(manifest));
@@ -97,12 +103,14 @@ describe("exact release control", () => {
       const finalized = JSON.parse(await readFile(join(finalDirectory, "pack-receipt.json"), "utf8"));
       expect(metadata.document.distributions[0].updater == null).toBe(shellType === "terminal");
       expect(finalized.requiredAcceptances[0].updater == null).toBe(shellType === "terminal");
+      expect(finalized.documents.some((file: { file: string }) => file.file.endsWith("capsule-darwin-arm64.json"))).toBe(shellType === "electron");
     } finally {
       if (previous.key == null) delete process.env.OD_EXACT_ED25519_PRIVATE_KEY; else process.env.OD_EXACT_ED25519_PRIVATE_KEY = previous.key;
       if (previous.keyId == null) delete process.env.OD_EXACT_SIGNING_KEY_ID; else process.env.OD_EXACT_SIGNING_KEY_ID = previous.keyId;
     }
     const envelope = JSON.parse(await readFile(join(output, "documents/content-metadata.json"), "utf8"));
     expect(envelope.metadata).toMatchObject({ channel, releaseVersion });
+    expect(envelope.metadata.resources.some((resource: { id: string }) => resource.id.includes("capsule"))).toBe(false);
     expect(envelope.metadata.resources).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "standalone-launcher" }),
       expect.objectContaining({ id: "closure" }),

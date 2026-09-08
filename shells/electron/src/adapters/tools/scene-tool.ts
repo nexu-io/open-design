@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { assembleElectronScene } from "@open-design/electron-kit/distribution";
+import { validateElectronCapsuleContent } from "@open-design/electron-kit/contracts";
 
 import { buildElectronStandaloneAuthority } from "../standalone/build.ts";
 import { parseElectronExactSceneRequest } from "./exact-contract.ts";
@@ -13,6 +14,7 @@ import { withElectronPhysicalPlatform } from "../../platform/build.ts";
 
 export async function executeElectronExactScene(input: ReturnType<typeof parseElectronExactSceneRequest>) {
 const manifest = await resolveElectronSceneManifest(input.buildHash);
+const capsuleContent = validateElectronCapsuleContent(JSON.parse(await readFile(input.capsuleContentFile, "utf8")));
 const rawResources = JSON.parse(await readFile(input.resourceReceiptFile, "utf8")) as { schemaVersion?: unknown; operation?: unknown; resources?: unknown };
 if (rawResources.schemaVersion !== 1 || rawResources.operation !== "closure.resources.build" || !Array.isArray(rawResources.resources)) {
   throw new Error("Electron exact scene requires a Closure resource receipt");
@@ -30,6 +32,7 @@ await writeFile(normalizedReceiptPath, `${JSON.stringify({ schemaVersion: 1, ope
 const authority = await buildElectronStandaloneAuthority(resolve(dirname(input.sceneDirectory), "electron-authority-build"));
 const receipt = await withElectronPhysicalPlatform({ archivePath: input.platformArchivePath, target: input.target }, async platformRoot => assembleElectronScene({
   authorityResources: [
+    { name: "capsule.zip", path: input.capsuleArchiveFile },
     { name: "platform", path: platformRoot },
     authority.host,
     authority.updaterProvider,
@@ -40,6 +43,7 @@ const receipt = await withElectronPhysicalPlatform({ archivePath: input.platform
     ...resources.map((resource) => ({ name: resource.file, path: resource.path })),
   ],
   entryPath: electronShellSource("main.ts"),
+  capsule: { content: capsuleContent, resourceName: "capsule.zip" },
   manifest,
   outputRoot: input.sceneDirectory,
   rendererPreloadEntryPath: electronShellSource("adapters/renderer/preload.ts"),

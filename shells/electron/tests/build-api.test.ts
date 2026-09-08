@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { buildElectronCapsuleContent, buildElectronScene, buildElectronInstaller } from "@/build-api.js";
 import { resolveElectronSceneManifest } from "@/adapters/tools/manifests.js";
+import { ELECTRON_CAPSULE_PROTOCOL } from "@open-design/electron-kit/contracts";
 
 const mock = vi.hoisted(() => ({ capsule: vi.fn(), assemble: vi.fn(), load: vi.fn(), distribute: vi.fn(), install: vi.fn(), trust: vi.fn() }));
 vi.mock("@open-design/electron-kit/distribution", () => ({ buildElectronCapsuleContent: mock.capsule, assembleElectronScene: mock.assemble, loadElectronScene: mock.load, buildElectronDistribution: mock.distribute }));
@@ -35,8 +36,11 @@ it("composes scene identity in memory and resolves source entries through the pa
   const resourceReceiptFile = join(root, "resources.json"), sceneManifestPath = join(root, "scene.json");
   await writeFile(resourceReceiptFile, JSON.stringify({ schemaVersion: 1, operation: "closure.resources.build", resources: [] }));
   await writeFile(sceneManifestPath, "scene-bytes");
+  const capsuleContentFile = join(root, "capsule-content.json");
+  await writeFile(capsuleContentFile, JSON.stringify({ schemaVersion: 1, protocol: ELECTRON_CAPSULE_PROTOCOL, target: "darwin-arm64", entrypoint: "capsule.cjs", archive: { sha256: "a".repeat(64), size: 1, treeSha256: "b".repeat(64) } }));
   mock.assemble.mockResolvedValue({ sceneManifestPath, sceneRoot: join(root, "scene") });
-  const result = await buildElectronScene({ schemaVersion: 1, operation: "electron.scene.build", target: "darwin-arm64",
+  const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: "darwin-arm64",
+    capsuleContentFile, capsuleArchiveFile: join(root, "capsule.zip"),
     platformArchivePath: join(root, "node.tar.gz"),
     buildHash: "a".repeat(64), acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") });
   expect(result.sceneManifestSha256).toBe(createHash("sha256").update("scene-bytes").digest("hex"));
@@ -54,13 +58,14 @@ it.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platf
   const root = await fixture(), target = `${process.platform}-${process.arch}` as "darwin-arm64" | "darwin-x64" | "win32-x64";
   const manifest = await resolveElectronSceneManifest("b".repeat(64));
   const sceneManifestPath = join(root, "scene.json"), shellManifestPath = join(root, "shell.json"), contentPath = join(root, "content.json");
-  await writeFile(sceneManifestPath, JSON.stringify({ target, closure: { file: "closure.mjs" }, standalone: { entrypoint: "launcher.mjs" } }));
+  await writeFile(sceneManifestPath, JSON.stringify({ target, closure: { file: "closure.mjs" }, standalone: { entrypoint: "launcher.mjs" }, capsule: { archiveFile: "capsule.zip" } }));
   await writeFile(shellManifestPath, JSON.stringify(manifest));
   await writeFile(contentPath, JSON.stringify({ metadata: { channel: "betahyx", releaseVersion: "1.2.3-betahyx.2", resources: [] } }));
   await writeFile(join(root, "closure-resources.json"), JSON.stringify({ resources: [] }));
   mock.load.mockResolvedValue({ sceneManifestPath, shellManifestPath,
-    authorityResources: ["standalone-host.mjs", "electron-updater.mjs", "supervisor.mjs", "closure.mjs", "launcher.mjs", "closure-resources.json"].map(name => ({ name, path: join(root, name) })) });
-  const request = { schemaVersion: 1, operation: "electron.distribution.build", target, sceneDirectory: root, sceneManifestSha256: "c".repeat(64),
+    authorityResources: ["standalone-host.mjs", "electron-updater.mjs", "supervisor.mjs", "closure.mjs", "launcher.mjs", "closure-resources.json", "capsule.zip"].map(name => ({ name, path: join(root, name) })) });
+  const request = { schemaVersion: 2, operation: "electron.distribution.build", target, sceneDirectory: root, sceneManifestSha256: "c".repeat(64),
+    acceptedCapsuleManifestFile: join(root, "capsule-manifest.json"),
     outputDirectory: join(root, "output"), acceptedContentMetadataFile: contentPath, acceptedTrustFile: join(root, "trust.json"),
     channel: "betahyx", releaseVersion: "1.2.3-betahyx.1", channelHeadUrl: "https://example.com/betahyx/latest/channel-head.json" } as const;
   await expect(buildElectronInstaller(request)).rejects.toThrow(/content differs/u);

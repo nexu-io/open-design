@@ -15,7 +15,7 @@ async function fixture() {
   const pkg = join(root, "tools/release/node_modules/@open-design/shell-electron");
   await mkdir(pkg, { recursive: true });
   await json(join(pkg, "package.json"), { name: "@open-design/shell-electron", type: "module", exports: { "./build": "./build.mjs" } });
-  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\nexport async function buildElectronCapsuleContent(request) { return { request }; }\n");
+  await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\nexport async function buildElectronCapsuleContent(request) { return { request, contentPath: request.outputRoot + '/capsule-content.json', archivePath: request.outputRoot + '/capsule.zip' }; }\n");
   const plan = join(root, "plan.json"), receipt = join(root, "receipt.json");
   await json(plan, { plan: { target: "darwin-arm64", nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` } } } });
   return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
@@ -24,7 +24,9 @@ async function fixture() {
 it("resolves only the public build export in the selected workspace and passes typed scene inputs", async () => {
   const f = await fixture(); await buildReleaseScene(f);
   const result = JSON.parse(await readFile(f.receipt, "utf8"));
-  expect(result.request).toEqual({ schemaVersion: 1, operation: "electron.scene.build", target: f.target, buildHash: "a".repeat(64),
+  expect(result.request).toEqual({ schemaVersion: 2, operation: "electron.scene.build", target: f.target, buildHash: "a".repeat(64),
+    capsuleContentFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule-content\.json$/u),
+    capsuleArchiveFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule\.zip$/u),
     acceptedClosureBaselineFile: join(f.root, "apps/closure/dist/index.mjs"), standaloneLauncherFile: join(f.root, "apps/closure/dist/launcher.mjs"),
     resourceReceiptFile: f.resources, sceneDirectory: f.output, platformArchivePath: f.nodeArchive });
   await expect(buildReleaseScene({ ...f, target: "win32-x64" })).rejects.toThrow("plan identity is invalid");
@@ -34,6 +36,7 @@ it("resolves only the public build export in the selected workspace and passes t
 it("builds neutral Capsule content without Node archives, Closure inputs or version policy", async () => {
   const f = await fixture(); await buildReleaseCapsule(f);
   expect(JSON.parse(await readFile(f.receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "electron.capsule.build",
+    contentPath: join(f.output, "capsule-content.json"), archivePath: join(f.output, "capsule.zip"),
     request: { target: f.target, outputRoot: f.output } });
   await expect(buildReleaseCapsule({ ...f, shell: "terminal" })).rejects.toThrow("requires electron");
   await expect(buildReleaseCapsule({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
@@ -44,18 +47,20 @@ it("binds native distribution to authorized prepared content, trust and scene", 
   await mkdir(join(prepared, "documents"), { recursive: true }); await mkdir(join(prepared, "trust")); await mkdir(scene);
   const content = join(prepared, "documents/content-metadata.json"), trust = join(prepared, "trust/keys.json");
   await writeFile(content, "content"); await writeFile(trust, "trust");
+  const capsule = join(prepared, "documents/capsule-darwin-arm64.json");
+  await writeFile(capsule, "capsule");
   const manifest = JSON.stringify({ target: f.target }); await writeFile(join(scene, "scene.json"), manifest);
   const identity = { channel: "betahyx", releaseVersion: "0.1.0-betahyx.1", sourceCommit: "a".repeat(40) };
   await json(policy, resolveReleasePolicy({ schemaVersion: 1, operation: "release.policy.resolve", ...identity, profile: "exact-validation", sourceRef: "refs/heads/feat/test",
     switches: { endUserDistribution: false, stableAuthorized: false }, target: { endpointUrl: "https://storage.example", bucket: "releases", publicBaseUrl: "https://public.example",
       latestChannelHeadUrl: "https://storage.example/releases/betahyx/latest/channel-head.json" } }));
   await json(join(prepared, "prepare-receipt.json"), { ...identity, contentMetadata: { sha256: digest("content"), size: 7 }, trustFile: { sha256: digest("trust"), size: 5 },
-    shells: [{ type: f.shell, scenes: [{ target: f.target, sceneManifestSha256: digest(manifest) }] }] });
+    shells: [{ type: f.shell, scenes: [{ target: f.target, sceneManifestSha256: digest(manifest), capsule: { manifest: { sha256: digest("capsule"), size: 7 } } }] }] });
   const input = { ...f, ...identity, prepared, scene, policy };
   await buildReleaseDistribution(input);
   expect(await readFile(join(f.output, "shell-contribution.json"), "utf8")).toBe(await readFile(f.receipt, "utf8"));
   expect(JSON.parse(await readFile(f.receipt, "utf8")).request).toMatchObject({ operation: "electron.distribution.build",
-    acceptedContentMetadataFile: content, acceptedTrustFile: trust, channelHeadUrl: "https://public.example/betahyx/latest/channel-head.json", sceneManifestSha256: digest(manifest) });
+    schemaVersion: 2, acceptedCapsuleManifestFile: capsule, acceptedContentMetadataFile: content, acceptedTrustFile: trust, channelHeadUrl: "https://public.example/betahyx/latest/channel-head.json", sceneManifestSha256: digest(manifest) });
   await expect(buildReleaseDistribution({ ...input, channel: "stable" })).rejects.toThrow("binding mismatch");
   await writeFile(trust, "tampered");
   await expect(buildReleaseDistribution(input)).rejects.toThrow("prepared trust binding verification failed");

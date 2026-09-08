@@ -1,8 +1,10 @@
 import { createServer } from "node:http";
+import { createHash, createPublicKey } from "node:crypto";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+import { verifyDocument } from "@open-design/standalone";
 
 import { withStandaloneExactFixture } from "../src/standalone-exact-client.js";
 import { startStandaloneExactFixtureServer } from "../src/standalone-exact-fixture.js";
@@ -12,7 +14,13 @@ it("acquires fixture bytes through the download primitive and disposes only its 
   const launcherPath = join(root, "launcher.mjs"), closurePath = join(root, "closure.mjs");
   await writeFile(launcherPath, "launcher");
   await writeFile(closurePath, "closure");
+  const capsule = { contentFile: join(root, "capsule-content.json"), archiveFile: join(root, "capsule.zip") };
+  const capsuleBytes = Buffer.from("Capsule fixture bytes");
+  await writeFile(capsule.archiveFile, capsuleBytes);
+  await writeFile(capsule.contentFile, JSON.stringify({ schemaVersion: 1, protocol: "electron-capsule-v2", target: "darwin-arm64", entrypoint: "capsule.cjs",
+    archive: { sha256: createHash("sha256").update(capsuleBytes).digest("hex"), size: capsuleBytes.byteLength, treeSha256: "b".repeat(64) } }));
   const server = await startStandaloneExactFixtureServer({ channel: "dev", releaseVersion: "0.1.0-dev.1", launcherPath, closurePath,
+    capsule,
     shell: { type: "electron", version: "0.1.0", buildHash: "a".repeat(64) },
   });
   try {
@@ -23,6 +31,13 @@ it("acquires fixture bytes through the download primitive and disposes only its 
       expect(files).toMatchObject({ channel: "dev", releaseVersion: "0.1.0-dev.1" });
       expect(JSON.parse(await readFile(files.contentFile, "utf8")).metadata.channel).toBe("dev");
       expect(await Promise.all(files.seedFiles.map(path => readFile(path, "utf8")))).toEqual(["launcher", "closure"]);
+      expect(files.capsule).toBeDefined();
+      expect(await readFile(files.capsule!.archiveFile)).toEqual(capsuleBytes);
+      const trust = JSON.parse(await readFile(files.trustFile, "utf8"));
+      const ring = new Map<string, ReturnType<typeof createPublicKey>>(trust.keys.map((key: { keyId: string; publicKey: string }) => [key.keyId, createPublicKey(key.publicKey)]));
+      const manifest = JSON.parse(await readFile(files.capsule!.manifestFile, "utf8"));
+      expect(verifyDocument(manifest, ring)).toBe("local-exact");
+      expect(manifest.document).toMatchObject({ protocol: "electron-capsule-v2", provides: { shellVersion: "0.1.0" } });
       await withStandaloneExactFixture(input, async second => {
         expect(second.contentFile).not.toBe(first);
         expect(await readFile(first, "utf8")).not.toBe("");

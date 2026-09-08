@@ -86,7 +86,8 @@ describe("Electron product shell", () => {
     const composition = sources.filter(({ name }) => name.startsWith("composition/"));
     const definition = sources.find(({ name }) => name === "composition/definition.ts")!.source;
     expect(main).not.toContain('from "./composition/definition.js"');
-    expect(main).toContain('await import("./capsule.js")');
+    expect(main).not.toContain('import("./capsule.js")');
+    expect(main).toContain('loadCapsule: loadInstalledElectronCapsule');
     expect(main).toContain('runElectronCarrier');
     expect(sources.find(({ name }) => name === "capsule.ts")!.source).toContain('from "./composition/definition.js"');
     expect(main).toContain('from "./adapters/standalone/electron-control.js"');

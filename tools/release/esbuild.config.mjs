@@ -19,7 +19,6 @@ await build({
   entryPoints: ["./src/exact/control-cli.ts"],
   format: "esm",
   outfile: "./dist/exact-control.mjs",
-  external: ["@open-design/shell-electron/build"],
   platform: "node",
   target: "node24",
 });

@@ -18,7 +18,7 @@ async function command(args: string[]) {
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 async function json(path: string, value: unknown) { await writeFile(path, JSON.stringify(value)); }
 
-it("prepares and finalizes signed content through public pack functions, with no request bridge", async () => {
+it("prepares and finalizes signed content within release ownership, with no request bridge", async () => {
   const root = await mkdtemp(join(tmpdir(), "release-composition-")); roots.push(root);
   const sourceRoot = resolve("../.."), sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: sourceRoot, encoding: "utf8" }).trim();
   const channel = "betahyx", releaseVersion = "0.1.0-betahyx.1";
@@ -37,8 +37,13 @@ it("prepares and finalizes signed content through public pack functions, with no
     const source = join(root, `source-${item.shell}`); await mkdir(source);
     await writeFile(join(source, "closure.mjs"), "closure"); await writeFile(join(source, "launcher.mjs"), "launcher");
     await json(join(source, "closure-resources.json"), { schemaVersion: 1, operation: "closure.resources.build", resources: [] });
+    if (item.shell === "electron") await writeFile(join(source, "capsule.zip"), "capsule");
     await json(join(source, "scene.json"), { schemaVersion: 1, target: item.target, shellVersion: "0.1.0", shellBuildHash: sha(item.shell),
-      closure: { file: "closure.mjs", sha256: sha("closure"), size: 7 }, standalone: { entrypoint: "launcher.mjs", sha256: sha("launcher") } });
+      closure: { file: "closure.mjs", sha256: sha("closure"), size: 7 }, standalone: { entrypoint: "launcher.mjs", sha256: sha("launcher") },
+      ...(item.shell !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
+        schemaVersion: 1, protocol: "electron-capsule-v2", target: item.target, entrypoint: "capsule.cjs",
+        archive: { sha256: sha("capsule"), size: 7, treeSha256: "a".repeat(64) },
+      } } }) });
     await packSceneArtifact(source, join(scenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
     const directory = join(distributions, item.shell); await mkdir(directory);
     await writeFile(join(directory, "installer.bin"), "installer");

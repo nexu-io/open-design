@@ -5,11 +5,13 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { build as bundle } from "esbuild";
 
 import { validateElectronShellManifest, type ElectronShellManifest } from "../contracts/index.js";
+import { validateElectronCapsuleContent, type ElectronCapsuleContent } from "../contracts/capsule.js";
 import { validateElectronRuntimeConfig, type ElectronRuntimeConfig } from "../runtime/startup/config.js";
 import type { ElectronSceneReceipt } from "./contracts.js";
 
 export type AssembleElectronSceneInput = Readonly<{
   authorityResources: readonly Readonly<{ name: string; path: string }>[];
+  capsule?: Readonly<{ content: ElectronCapsuleContent; resourceName: string }>;
   entryPath: string;
   manifest: ElectronShellManifest;
   outputRoot: string;
@@ -143,6 +145,14 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     ...authorityResourceNames,
   ].sort();
   const products = await Promise.all(productNames.map((name) => describeSceneProduct(input.outputRoot, name)));
+  const capsule = input.capsule == null ? null : (() => {
+    const content = validateElectronCapsuleContent(input.capsule.content);
+    const archive = products.find(product => product.name === input.capsule!.resourceName);
+    if (archive == null || archive.tree != null || !authorityResourceNames.has(archive.name)
+      || archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size
+      || (input.standaloneBinding != null && content.target !== input.standaloneBinding.target)) throw new Error("Electron scene Capsule binding differs from its prebuilt content");
+    return Object.freeze({ content, archiveFile: archive.name });
+  })();
   const authorityResources = products.filter(({ name }) => authorityResourceNames.has(name)).map((resource) => Object.freeze({
     ...resource,
     path: join(input.outputRoot, resource.name),
@@ -167,6 +177,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     schemaVersion: 1,
     operation: "electron.scene.build",
     ...standaloneBinding,
+    ...(capsule == null ? {} : { capsule }),
     authorityResources: [...authorityResourceNames].sort(),
     products,
   }, null, 2)}\n`, "utf8");

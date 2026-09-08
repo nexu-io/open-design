@@ -28,6 +28,7 @@ import { ElectronStandaloneInstallerClaimLedger } from "@/adapters/standalone/in
 import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { StandaloneHostLifecycleLedger } from "@open-design/standalone";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
+import { writeCapsuleSeed } from "./fixtures/capsule.js";
 
 const roots: string[] = [];
 const servers: ReturnType<typeof createServer>[] = [];
@@ -183,11 +184,12 @@ describe("Electron production Standalone authority", () => {
       ],
     };
     const keys = generateKeyPairSync("ed25519");
+    const capsule = await writeCapsuleSeed({ root, privateKey: keys.privateKey, keyId: "release" });
     const content = Buffer.from(canonicalJson(signStandaloneMetadata(metadata, "release", keys.privateKey)));
     const trust = Buffer.from(canonicalJson({ schemaVersion: 1, keys: [{ keyId: "release", publicKey: keys.publicKey.export({ format: "pem", type: "spki" }).toString() }] }));
     const target = process.platform === "win32" ? `win32-${process.arch}` : `${process.platform}-${process.arch}`;
     const installation = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       channel: metadata.channel,
       releaseVersion: metadata.releaseVersion,
       target,
@@ -196,6 +198,7 @@ describe("Electron production Standalone authority", () => {
       supervisor: descriptor("supervisor.mjs", supervisor),
       content: descriptor("standalone-content.json", content),
       trust: descriptor("standalone-trust.json", trust),
+      capsule: { manifest: descriptor("capsule-manifest.json", await readFile(capsule.manifestFile)), archive: descriptor("capsule.zip", await readFile(capsule.archiveFile)) },
       update: { channelHeadUrl: `${releaseOrigin}/betahyx/latest/channel-head.json` },
       seeds: [
         { ...descriptor("standalone-launcher-seed.mjs", launcher), blobSha256: launcherDigest },
@@ -205,6 +208,7 @@ describe("Electron production Standalone authority", () => {
     await Promise.all([
       writeFile(join(root, "standalone-content.json"), content),
       writeFile(join(root, "standalone-trust.json"), trust),
+      writeFile(join(root, "capsule.zip"), await readFile(capsule.archiveFile)),
       writeFile(join(root, "standalone-launcher-seed.mjs"), launcher),
       writeFile(join(root, "closure-seed.mjs"), closure),
       writeFile(join(root, "standalone-installation.json"), canonicalJson(installation)),

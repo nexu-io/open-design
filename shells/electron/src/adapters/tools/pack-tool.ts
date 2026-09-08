@@ -72,7 +72,7 @@ export async function executeElectronPack(request: ElectronPackRequest) {
   const baseManifestPath = fileURLToPath(new URL("../../../config/shell.json", import.meta.url));
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(baseManifestPath, "utf8")) as ElectronShellManifest);
   const manifest = createElectronPackManifest(baseManifest, request);
-  const distribution = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget() }, async (installation) => {
+  const distribution = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget(), carrierVersion: manifest.shell.version }, async (installation) => {
   if (installation.channel !== request.channel || installation.releaseVersion !== request.releaseVersion) {
     throw new Error("Electron pack authority differs from its explicit channel release identity");
   }

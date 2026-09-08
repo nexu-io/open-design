@@ -9,6 +9,8 @@ Shell and the typed adapter boundary consumed by repository tools.
   platform policy, and distribution policy.
 - `src/` composes product handlers and adapters over `electron-kit`.
 - Public `/build` and `/lifecycle` exports own the tool-facing composition boundary.
+  `/build/contracts` is the pure artifact metadata leaf; release controllers and
+  fixtures must not visit native compiler/installer modules to compose metadata.
   `/lifecycle/inspection` is the lightweight diagnostic/CDP leaf for relocatable
   controllers: it must not load build dependencies or launch a runtime. Location
   inspection is read-only; explicit CDP updater calls use the running product contract.
@@ -20,7 +22,11 @@ Shell and the typed adapter boundary consumed by repository tools.
   Carrier bytes. Exact planning binds it and `/lifecycle` to Shell tests and
   installed acceptance, not Carrier builds. Build recipes and installation
   composition stay outside this directory and retain their build identity.
-- Tool dev/pack schema 2 consumes local installation files. Loopback fixture acquisition belongs to tools-dev/tools-pack via the tools-serve fixture client, not to Shell or electron-kit. Product installation assembly is shared with exact distribution and must preserve prebuilt scene authority bytes.
+- Tool dev/pack schema 2 consumes local installation schema 3, including a signed
+  Capsule manifest and exact archive separate from Closure seeds. Loopback fixture
+  acquisition belongs to tools-dev/tools-pack via the tools-serve fixture client,
+  not to Shell or electron-kit. Product installation assembly is shared with exact
+  distribution and must preserve prebuilt scene authority bytes.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
 - Capsule composition consumes the explicit installed manifest; never bundle a
   default release manifest into its independently built product content.

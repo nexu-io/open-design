@@ -34,6 +34,34 @@ it("keeps Capsule session orchestration out of the reusable carrier entry", asyn
   expect(code).not.toContain("@keyframes slide");
 });
 
+it("loads product Capsule bytes independently of the physical main bundle", async () => {
+  const result = await build({
+    entryPoints: [fileURLToPath(new URL("../src/main.ts", import.meta.url))],
+    bundle: true, external: ["electron"], format: "cjs", platform: "node", target: "node24",
+    write: false, metafile: true,
+  });
+  const inputs = Object.keys(result.metafile.inputs);
+  expect(inputs.some(path => /(?:^|\/)src\/capsule\.ts$/u.test(path))).toBe(false);
+  const code = result.outputFiles[0]!.text;
+  expect(code.includes("platform.verified")).toBe(true);
+  expect(code.includes("renderer.recovery.committed")).toBe(false);
+  expect(code.includes("@keyframes slide")).toBe(false);
+});
+
+it("bundles artifact contracts without visiting native build implementation", async () => {
+  const result = await build({
+    stdin: { contents: 'export { composeElectronCapsuleManifest } from "@open-design/shell-electron/build/contracts";',
+      resolveDir: fileURLToPath(new URL("..", import.meta.url)), loader: "ts" },
+    bundle: true, format: "esm", platform: "node", target: "node24", write: false, metafile: true,
+    plugins: [{ name: "no-native-builder-in-contracts", setup(builder) {
+      builder.onLoad({ filter: /(?:electron-builder|app-builder-lib|\/esbuild\/|electron-kit\/.*distribution)/ }, () => {
+        throw new Error("Pure artifact contracts must not load native build code");
+      });
+    } }],
+  });
+  expect(result.outputFiles[0]!.text.includes("composeElectronCapsuleManifest")).toBe(true);
+});
+
 it("builds loading changes from Capsule-owned appearance without editing carrier identity", async () => {
   const options = { entryPoints: [fileURLToPath(new URL("../src/capsule.ts", import.meta.url))],
     bundle: true, external: ["electron"], format: "cjs" as const, platform: "node" as const, target: "node24", write: false as const };

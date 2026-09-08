@@ -25,6 +25,7 @@ const sceneManifest = JSON.parse(await readFile(scene.sceneManifestPath, "utf8")
   target?: unknown;
   closure?: { file?: unknown; sha256?: unknown };
   standalone?: { entrypoint?: unknown; sha256?: unknown };
+  capsule?: { archiveFile?: unknown };
 };
 if (sceneManifest.target !== input.target || typeof sceneManifest.closure?.file !== "string" || typeof sceneManifest.standalone?.entrypoint !== "string") {
   throw new Error("Electron exact distribution differs from its scene target or seeds");
@@ -53,6 +54,8 @@ const updaterProvider = required("electron-updater.mjs");
 const supervisor = required("supervisor.mjs");
 const closure = required(sceneManifest.closure.file);
 const launcher = required(sceneManifest.standalone.entrypoint);
+if (sceneManifest.capsule?.archiveFile !== "capsule.zip") throw new Error("Electron exact scene lacks its Capsule baseline");
+const capsuleArchive = required("capsule.zip");
 const closureResources = JSON.parse(await readFile(required("closure-resources.json").path, "utf8")) as { resources?: unknown };
 if (!Array.isArray(closureResources.resources) || !Array.isArray(contentEnvelope.metadata.resources)) {
   throw new Error("Electron exact content lacks its Closure resource binding");
@@ -74,8 +77,9 @@ const resourceSeeds = await Promise.all(closureResources.resources.map(async (ca
 }));
 return await withElectronInstallation({
   input: { channel: manifest.channel, releaseVersion: contentEnvelope.metadata.releaseVersion, channelHeadUrl: input.channelHeadUrl,
-    contentFile: input.acceptedContentMetadataFile, trustFile: input.acceptedTrustFile, seedFiles: [launcher.path, closure.path, ...resourceSeeds] },
-  outputDirectory: dirname(input.outputDirectory), target: input.target, authority: { host, updaterProvider, supervisor },
+    contentFile: input.acceptedContentMetadataFile, trustFile: input.acceptedTrustFile, seedFiles: [launcher.path, closure.path, ...resourceSeeds],
+    capsule: { manifestFile: input.acceptedCapsuleManifestFile, archiveFile: capsuleArchive.path } },
+  outputDirectory: dirname(input.outputDirectory), target: input.target, carrierVersion: manifest.shell.version, authority: { host, updaterProvider, supervisor },
 }, async ({ resourceDirectory }) => {
 const contentPath = join(resourceDirectory, "standalone-content.json");
 const trustPath = join(resourceDirectory, "standalone-trust.json");
@@ -92,6 +96,7 @@ const built = await buildElectronDistribution({
     { name: "standalone-content.json", path: contentPath },
     { name: "standalone-trust.json", path: trustPath },
     { name: "standalone-installation.json", path: installationPath },
+    { name: "capsule-manifest.json", path: join(resourceDirectory, "capsule-manifest.json") },
   ],
 });
 const extension = input.target.startsWith("darwin-") ? ".dmg" : ".exe";

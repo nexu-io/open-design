@@ -53,7 +53,10 @@ export type ElectronCarrierDefinition = Readonly<{
   manifest: ElectronShellManifest;
   preflight: ElectronShellDefinition["preflight"];
   headless?: boolean;
-  loadCapsule(manifest: ElectronShellManifest): Promise<ElectronCapsuleModule>;
+  loadCapsule(manifest: ElectronShellManifest, installation: Readonly<{
+    resourceRoot: string;
+    runtimeRoot: string;
+  }>): Promise<ElectronCapsuleModule>;
 }>;
 
 async function runElectronCarrierSession(input: ElectronCarrierDefinition, context: ElectronRuntimeContext): Promise<void> {
@@ -119,7 +122,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
   context.startup = startup;
 
   // The physical quit/activation barrier already exists when Capsule code runs.
-  const capsule = await startupQuit.guard(input.loadCapsule(manifest));
+  const capsule = await startupQuit.guard(input.loadCapsule(manifest, Object.freeze({ resourceRoot, runtimeRoot: paths.runtimeRoot })));
   const definition = capsule.createElectronCapsuleDefinition(manifest);
   if (canonicalJson(definition.manifest) !== canonicalJson(manifest)
     || canonicalJson(definition.preflight) !== canonicalJson(input.preflight)) {

@@ -19,6 +19,7 @@ export async function packMac(config: ToolPackConfig) {
     throw new Error("tools-pack mac build requires --standalone-bootstrap-url (or OD_ELECTRON_STANDALONE_BOOTSTRAP_URL)");
   }
   return await withStandaloneExactFixture({ bootstrapUrl: config.standaloneBootstrapUrl, scratchRoot: join(config.roots.cacheRoot, "fixture-acquisition") }, async (installationInput) => {
+  if (installationInput.capsule == null) throw new Error("Electron package fixture requires an independently built Capsule seed");
   const version = config.appVersion ?? "0.1.0";
   const channel = releaseChannelFromVersion(version)
     ?? releaseChannelFromNamespace(config.namespace)
@@ -32,7 +33,7 @@ export async function packMac(config: ToolPackConfig) {
   const receipt = await buildElectronPackage({
     schemaVersion: 2,
     operation: "electron.pack.build",
-    installationInput,
+    installationInput: { ...installationInput, capsule: installationInput.capsule },
     platformArchivePath: archive.path,
     channel,
     installationRoot: join(config.roots.cacheRoot, "standalone", channel),

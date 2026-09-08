@@ -6,13 +6,16 @@ import {
   canonicalJson,
   signStandaloneChannelHead,
   signStandaloneMetadata,
+  signDocument,
   type ArtifactReference,
   type StandaloneChannelHead,
   type StandaloneMetadata,
 } from "@open-design/standalone";
+import { composeElectronCapsuleManifest, validateElectronCapsuleContent } from "@open-design/shell-electron/build/contracts";
 
 export type StandaloneExactFixtureOptions = Readonly<{
   channel: string;
+  capsule?: Readonly<{ contentFile: string; archiveFile: string }>;
   closurePath: string;
   host?: string;
   launcherPath: string;
@@ -177,6 +180,15 @@ export async function startStandaloneExactFixtureServer(
     };
     const keys = generateKeyPairSync("ed25519");
     const signer = [{ keyId: "local-exact", privateKey: keys.privateKey }] as const;
+    const capsule = options.capsule == null ? null : await (async () => {
+      if (options.shell.type !== "electron") throw new Error("Capsule fixture input requires an Electron Shell");
+      const content = validateElectronCapsuleContent(JSON.parse(await readFile(options.capsule!.contentFile, "utf8")));
+      const archive = await sourceFile(options.capsule!.archiveFile, "capsule.zip", "application/zip", `${origin}${releaseRoot}/capsule.zip`);
+      if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Capsule fixture archive differs from its build content");
+      const manifest = composeElectronCapsuleManifest({ content, version: options.shell.version,
+        minimumCarrierVersion: options.shell.version, providedShellVersion: options.shell.version });
+      return { archive, manifest: jsonFile("capsule-manifest.json", signDocument(manifest, signer), `${origin}${releaseRoot}/capsule-manifest.json`) };
+    })();
     const contentUrl = `${origin}${releaseRoot}/content-metadata.json`;
     const content = jsonFile("content-metadata.json", signStandaloneMetadata(metadata, signer), contentUrl);
     const trustUrl = `${origin}/${encodeURIComponent(options.channel)}/trust/keys.json`;
@@ -197,10 +209,14 @@ export async function startStandaloneExactFixtureServer(
     const channelHead = jsonFile("channel-head.json", signStandaloneChannelHead(head, signer), channelHeadUrl);
     const bootstrapUrl = `${origin}/${encodeURIComponent(options.channel)}/bootstrap.json`;
     const bootstrap = jsonFile("bootstrap.json", {
-      schemaVersion: 1,
+      schemaVersion: 2,
       channel: options.channel,
       releaseVersion: options.releaseVersion,
       channelHeadUrl,
+      capsule: capsule == null ? null : {
+        manifest: { ...artifact(capsule.manifest), file: capsule.manifest.file },
+        archive: { ...artifact(capsule.archive), file: capsule.archive.file },
+      },
       content: { ...artifact(content), file: "standalone-content.json" },
       trust: { ...artifact(trust), file: "standalone-trust.json" },
       seeds: [
@@ -210,7 +226,7 @@ export async function startStandaloneExactFixtureServer(
       ],
     }, bootstrapUrl);
 
-    for (const file of [launcher, closure, ...resources.map((resource) => resource.file), content, trust, channelHead, bootstrap]) {
+    for (const file of [launcher, closure, ...resources.map((resource) => resource.file), content, trust, channelHead, bootstrap, ...(capsule == null ? [] : [capsule.manifest, capsule.archive])]) {
       routes.set(new URL(file.url).pathname, file);
     }
     return Object.freeze({

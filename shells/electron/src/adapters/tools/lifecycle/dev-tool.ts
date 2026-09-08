@@ -87,7 +87,7 @@ async function start(request: Extract<ElectronDevLifecycleRequest, { operation: 
   const baseManifest = validateElectronShellManifest(JSON.parse(await readFile(manifestPath, "utf8")) as ElectronShellManifest);
   if (baseManifest.channel !== request.channel) throw new Error("Electron dev request escaped the Shell channel");
   if (request.installationInput.channel !== request.channel) throw new Error("Electron dev installation input escaped the Shell channel");
-  const prepared = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget() }, async (installation) => {
+  const prepared = await withElectronInstallation({ input: request.installationInput, outputDirectory: request.installationRoot, target: resolveElectronStandaloneTarget(), carrierVersion: baseManifest.shell.version }, async (installation) => {
     return await withElectronPhysicalPlatform({ archivePath: request.platformArchivePath, target: resolveElectronStandaloneTarget() }, async platformRoot => prepareElectronDevShell({
     authorityResources: [...await loadElectronStandaloneAuthorityResources(installation.resourceDirectory), { name: "platform", path: platformRoot }],
     entryPath: electronShellSource("main.ts"),

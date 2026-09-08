@@ -30,9 +30,9 @@ electron-kit stores, infers, pins, or unpins that state.
 clip from gold `715c0cb9d8ffdedd47d8c27a78a1d5dfdb2dc201`, originally
 `shells/electron/src/main/splash-video.ts` (SHA-256
 `bb1c0530000a5bfe58becb53d2b8264486c1180efa9ba02fa2f41c4f6db5ce9b`).
-It is embedded in the Shell build closure, independent of Web and offline before
+It is embedded in the independent Capsule build closure, independent of Web and offline before
 Closure startup. The Shell retains the 1280×900 light startup window and 2000 ms
-minimum overlapping startup. electron-kit owns sandboxed, non-looping media
+minimum overlapping startup. electron-capsule owns sandboxed, non-looping media
 presentation and stage feedback; the old progress bridge and boot authority are
 not retained. `tools-dev` waits for explicit business readiness; inspect exposes
 native CDP while starting, and logs retain diagnostic locations after exit
@@ -56,7 +56,11 @@ fallback path and no temporary desktop handler protocol is published.
 
 ```sh
 pnpm tools-dev prepare closure --output .tmp/dev-resources
-# Serve that development receipt with tools-serve start standalone-exact.
+pnpm tools-release exact-control build capsule --root "$PWD" --shell electron --target darwin-arm64 --output .tmp/dev-capsule --receipt .tmp/dev-capsule-receipt.json
+# Serve both outputs with tools-serve start standalone-exact:
+# --resource-receipt .tmp/dev-resources/resource-receipt.json
+# --capsule-content .tmp/dev-capsule/capsule-content.json
+# --capsule-archive .tmp/dev-capsule/capsule.zip
 pnpm tools-dev start desktop --standalone-bootstrap-url <fixture-bootstrap-url>
 pnpm tools-dev inspect desktop status --json
 pnpm tools-pack mac build --standalone-bootstrap-url <fixture-bootstrap-url>
@@ -76,6 +80,12 @@ contracts, and Sidecar guarded resource sets; the Shell does not import Closure
 implementation.
 There are no package-local `dev`, `pack`, or `prepack` lifecycle shortcuts.
 Tools call `@open-design/shell-electron/build` or `/lifecycle` directly.
+Metadata-only consumers use `/build/contracts`, which does not load native build
+dependencies. Installation schema 3 binds the signed Capsule manifest and archive
+separately from Closure seeds. The physical main verifies that installed baseline
+against installation trust, target, and carrier compatibility before materializing
+and executing it; no statically bundled Capsule fallback remains. Online Capsule
+selection is a separate integration step, not implied by baseline startup.
 `tools-release electron-scene` and `electron-distribution` consume CI requests
 and emit artifact receipts; Shell manifest resolution is part of each build,
 not a separate command. The Shell has no script-envelope entrypoints.

@@ -2,6 +2,7 @@ import { createHash, createPrivateKey, createPublicKey, sign, verify } from "nod
 import { copyFile, mkdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { parseReleaseVersion } from "@open-design/release";
+import { composeElectronCapsuleManifest, validateElectronCapsuleContent } from "@open-design/shell-electron/build/contracts";
 
 import {
   canonicalBytes,
@@ -160,6 +161,25 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   }
   shellRecords.sort((a, b) => String(a.type).localeCompare(String(b.type)));
   const keys = await signingKeys();
+  for (const shell of shellRecords) {
+    if (shell.type !== "electron") continue;
+    for (const scene of shell.scenes as JsonObject[]) {
+      const neutral = await readObject(join(scene.directory, "scene.json"));
+      if (neutral.capsule?.archiveFile !== "capsule.zip") throw new Error("Electron scene lacks its independently built Capsule baseline");
+      const content = validateElectronCapsuleContent(neutral.capsule.content);
+      if (content.target !== scene.target) throw new Error("Electron Capsule baseline target mismatch");
+      const archiveFile = join(scene.directory, "capsule.zip"), archive = await describeFile(archiveFile, "application/zip");
+      if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Electron Capsule baseline archive mismatch");
+      const manifest = composeElectronCapsuleManifest({ content, version: String(shell.version),
+        minimumCarrierVersion: String(shell.version), providedShellVersion: String(shell.version) });
+      const manifestFile = join(resolve(request.outputDirectory), "documents", `capsule-${scene.target}.json`);
+      const archived = join(resolve(request.outputDirectory), "artifacts", `capsule-${scene.target}-${archive.sha256}.zip`);
+      await mkdir(join(resolve(request.outputDirectory), "artifacts"), { recursive: true });
+      await copyFile(archiveFile, archived);
+      await writeObject(manifestFile, signed("document", manifest, keys));
+      scene.capsule = { manifest: await describeFile(manifestFile), archive: await describeFile(archived, "application/zip") };
+    }
+  }
   const old = await previousRequirements(request.previousContentMetadataFile, String(request.channel), keys);
   for (const shell of shellRecords) {
     shell.minimumVersion = shell.version;
@@ -277,6 +297,19 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
   if (seen.size !== expected.size || [...expected].some((key) => !seen.has(key))) throw new Error("Shell contributions do not cover prepared topology");
   const keys = await signingKeys(), output = resolve(String(request.outputDirectory ?? "")), documents = join(output, "documents");
   await mkdir(documents, { recursive: true });
+  const capsuleFiles: string[] = [];
+  for (const shell of prepared.shells as JsonObject[]) {
+    if (shell.type !== "electron") continue;
+    for (const scene of shell.scenes as JsonObject[]) {
+      const preparedRoot = resolve(request.prepareReceipt, "..");
+      const manifest = await checkedFile(scene.capsule.manifest, "Capsule manifest", join(preparedRoot, "documents", `capsule-${scene.target}.json`));
+      const archive = await checkedFile(scene.capsule.archive, "Capsule archive", join(preparedRoot, "artifacts", basename(scene.capsule.archive.file)));
+      const destination = join(documents, basename(manifest));
+      await copyFile(manifest, destination);
+      capsuleFiles.push(destination);
+      artifacts.push(await describeFile(archive, "application/zip"));
+    }
+  }
   const contentSource = await checkedFile(prepared.contentMetadata, "content metadata", request.contentMetadataFile), contentFile = join(documents, "content-metadata.json");
   await copyFile(contentSource, contentFile);
   const content = await describeFile(contentFile), base = String(prepared.artifactBaseUrl);
@@ -302,7 +335,7 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
   }
   const headFile = join(documents, "channel-head.json");
   await writeObject(headFile, signed("head", { schemaVersion: 1, channel: prepared.channel, publishedAt: prepared.publishedAt, lanes }, keys));
-  const receipt: JsonObject = { schemaVersion: 2, operation: "exact.pack", channel: prepared.channel, releaseVersion: prepared.releaseVersion, sourceCommit: prepared.sourceCommit, shells: (prepared.shells as JsonObject[]).map(({ type, version, buildHash, minimumVersion }) => ({ type, version, buildHash, minimumVersion })), artifacts, documents: await Promise.all([contentFile, ...shellFiles, headFile].map((path) => describeFile(path))), contentMetadataFile: contentFile, shellMetadataFiles: Object.fromEntries(Object.entries(shellMetadata).map(([key, value]) => [key, value.file])), channelHeadFile: headFile, requiredAcceptances };
+  const receipt: JsonObject = { schemaVersion: 2, operation: "exact.pack", channel: prepared.channel, releaseVersion: prepared.releaseVersion, sourceCommit: prepared.sourceCommit, shells: (prepared.shells as JsonObject[]).map(({ type, version, buildHash, minimumVersion }) => ({ type, version, buildHash, minimumVersion })), artifacts, documents: await Promise.all([contentFile, ...capsuleFiles, ...shellFiles, headFile].map((path) => describeFile(path))), contentMetadataFile: contentFile, shellMetadataFiles: Object.fromEntries(Object.entries(shellMetadata).map(([key, value]) => [key, value.file])), channelHeadFile: headFile, requiredAcceptances };
   if (shellMetadata.terminal != null) Object.assign(receipt, { terminalMetadataFile: shellMetadata.terminal.file, shellBuildHash: preparedShells.get("terminal")!.buildHash, minimumShellVersion: preparedShells.get("terminal")!.minimumVersion });
   await writeObject(receiptPath, receipt);
 }

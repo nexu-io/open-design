@@ -13,9 +13,11 @@ import {
 import {
   ELECTRON_STANDALONE_INSTALLATION_FILE,
   loadElectronStandaloneInstallation,
+  loadElectronInstalledCapsuleSeed,
 } from "@/adapters/standalone/installation.js";
 import { loadElectronStandaloneAuthorityResources } from "@/adapters/standalone/installation.js";
 import { withElectronInstallation } from "@/adapters/standalone/assemble-installation.js";
+import { writeCapsuleSeed } from "./fixtures/capsule.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))); });
@@ -55,13 +57,14 @@ async function installedFixture() {
     shellRequirements: [{ type: "electron", minVersion: "0.1.0", buildHash: "a".repeat(64) }],
   };
   const keys = generateKeyPairSync("ed25519");
+  const capsule = await writeCapsuleSeed({ root, privateKey: keys.privateKey, keyId: "release" });
   const content = Buffer.from(canonicalJson(signStandaloneMetadata(metadata, "release", keys.privateKey)));
   const trust = Buffer.from(canonicalJson({
     schemaVersion: 1,
     keys: [{ keyId: "release", publicKey: keys.publicKey.export({ format: "pem", type: "spki" }).toString() }],
   }));
   const declaration = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     channel: metadata.channel,
     releaseVersion: metadata.releaseVersion,
     target: "darwin-arm64",
@@ -70,6 +73,7 @@ async function installedFixture() {
     supervisor: descriptor("supervisor.mjs", supervisor),
     content: descriptor("standalone-content.json", content),
     trust: descriptor("standalone-trust.json", trust),
+    capsule: { manifest: descriptor("capsule-manifest.json", await readFile(capsule.manifestFile)), archive: descriptor("capsule.zip", await readFile(capsule.archiveFile)) },
     update: { channelHeadUrl: "https://releases.invalid/betahyx/latest/channel-head.json" },
     seeds: [
       { ...descriptor("standalone-launcher.mjs", launcher), blobSha256: launcherDigest },
@@ -82,14 +86,42 @@ async function installedFixture() {
     writeFile(join(root, declaration.supervisor.file), supervisor),
     writeFile(join(root, declaration.content.file), content),
     writeFile(join(root, declaration.trust.file), trust),
+    writeFile(join(root, "capsule.zip"), await readFile(capsule.archiveFile)),
     writeFile(join(root, declaration.seeds[0].file), launcher),
     writeFile(join(root, declaration.seeds[1].file), closure),
     writeFile(join(root, ELECTRON_STANDALONE_INSTALLATION_FILE), canonicalJson(declaration)),
   ]);
-  return { declaration, root };
+  return { declaration, root, keys, capsule };
 }
 
 describe("Electron Standalone installed authority input", () => {
+  it("verifies the signed Capsule baseline without loading Closure content first", async () => {
+    const fixture = await installedFixture();
+    await writeFile(join(fixture.root, fixture.declaration.content.file), "broken Closure metadata");
+    const seed = await loadElectronInstalledCapsuleSeed({ resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64", carrierVersion: "0.1.0" });
+    expect(seed.envelope).toEqual(fixture.capsule.envelope);
+    expect(seed.archivePath).toBe(join(fixture.root, "capsule.zip"));
+    expect(seed.trustedKeys.has("release")).toBe(true);
+    await expect(loadElectronInstalledCapsuleSeed({ resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64", carrierVersion: "0.0.9" })).rejects.toThrow("compatible carrier");
+  });
+
+  it("rejects Capsule signatures even if the installation descriptor matches the substituted bytes", async () => {
+    const fixture = await installedFixture();
+    const changed = Buffer.from(canonicalJson({ ...fixture.capsule.envelope, document: { ...fixture.capsule.envelope.document, version: "9.0.0" } }));
+    await writeFile(fixture.capsule.manifestFile, changed);
+    await writeFile(join(fixture.root, ELECTRON_STANDALONE_INSTALLATION_FILE), canonicalJson({ ...fixture.declaration,
+      capsule: { ...fixture.declaration.capsule, manifest: descriptor("capsule-manifest.json", changed) } }));
+    await expect(loadElectronInstalledCapsuleSeed({ resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64", carrierVersion: "0.1.0" })).rejects.toThrow();
+  });
+
+  it("refuses changed Capsule bytes and retired installation schemas", async () => {
+    const fixture = await installedFixture();
+    await writeFile(join(fixture.root, "capsule.zip"), "tampered archive");
+    await expect(loadElectronInstalledCapsuleSeed({ resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64", carrierVersion: "0.1.0" })).rejects.toThrow("Capsule archive size");
+    await writeFile(join(fixture.root, ELECTRON_STANDALONE_INSTALLATION_FILE), canonicalJson({ ...fixture.declaration, schemaVersion: 2 }));
+    await expect(loadElectronInstalledCapsuleSeed({ resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64", carrierVersion: "0.1.0" })).rejects.toThrow("unsupported Electron Standalone installation schema");
+  });
+
   it("assembles local input files and discards only its temporary product installation", async () => {
     const fixture = await installedFixture();
     let staged = "";
@@ -98,7 +130,8 @@ describe("Electron Standalone installed authority input", () => {
         channelHeadUrl: fixture.declaration.update.channelHeadUrl,
         contentFile: join(fixture.root, fixture.declaration.content.file), trustFile: join(fixture.root, fixture.declaration.trust.file),
         seedFiles: fixture.declaration.seeds.map(seed => join(fixture.root, seed.file)),
-      }, outputDirectory: fixture.root, target: "darwin-arm64",
+        capsule: { manifestFile: fixture.capsule.manifestFile, archiveFile: fixture.capsule.archiveFile },
+      }, outputDirectory: fixture.root, target: "darwin-arm64", carrierVersion: "0.1.0",
     }, async installation => {
       staged = installation.resourceDirectory;
       expect(staged).not.toBe(fixture.root);
@@ -116,7 +149,8 @@ describe("Electron Standalone installed authority input", () => {
         channelHeadUrl: fixture.declaration.update.channelHeadUrl,
         contentFile: join(fixture.root, fixture.declaration.content.file), trustFile: join(fixture.root, fixture.declaration.trust.file),
         seedFiles: fixture.declaration.seeds.map(seed => join(fixture.root, seed.file)),
-      }, outputDirectory: fixture.root, target: "darwin-arm64",
+        capsule: { manifestFile: fixture.capsule.manifestFile, archiveFile: fixture.capsule.archiveFile },
+      }, outputDirectory: fixture.root, target: "darwin-arm64", carrierVersion: "0.1.0",
       authority: {
         host: { name: "standalone-host.mjs", path: join(fixture.root, fixture.declaration.host.file) },
         updaterProvider: { name: "electron-updater.mjs", path: join(fixture.root, fixture.declaration.updaterProvider.file) },
@@ -156,6 +190,8 @@ describe("Electron Standalone installed authority input", () => {
       { name: "supervisor.mjs", path: join(fixture.root, "supervisor.mjs") },
       { name: "standalone-content.json", path: join(fixture.root, "standalone-content.json") },
       { name: "standalone-trust.json", path: join(fixture.root, "standalone-trust.json") },
+      { name: "capsule-manifest.json", path: join(fixture.root, "capsule-manifest.json") },
+      { name: "capsule.zip", path: join(fixture.root, "capsule.zip") },
       { name: "standalone-launcher.mjs", path: join(fixture.root, "standalone-launcher.mjs") },
       { name: "closure.mjs", path: join(fixture.root, "closure.mjs") },
     ]);

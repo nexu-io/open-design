@@ -569,11 +569,12 @@ async function invokeElectronLifecycle(config: ToolDevConfig, operation: Electro
     await logHandle.write(`\n[tools-dev] ${operation} via shells/electron at ${new Date().toISOString()}\n`);
     if (operation === "electron.dev.start") {
       if (installationInput == null) throw new Error("Electron development start requires installation input");
+      if (installationInput.capsule == null) throw new Error("Electron development fixture requires an independently built Capsule seed");
       const { resolveElectronNodeArchive } = await import("@open-design/shell-electron/build");
       const { acquireBuildArchive } = await import("@open-design/tools-pack/build");
       const source = await resolveElectronNodeArchive();
       const archive = await acquireBuildArchive({ cacheRoot: path.join(config.apps.desktop.controlRuntimeRoot, "build-cache"), fileName: source.archive, url: source.url, sha256: source.sha256 });
-      return controlElectronDevelopment({ ...scope, operation, installationInput,
+      return controlElectronDevelopment({ ...scope, operation, installationInput: { ...installationInput, capsule: installationInput.capsule },
         platformArchivePath: archive.path,
         installationRoot: config.apps.desktop.installationRoot, ownerPid: options.parentPid ?? null }, { logFd: logHandle.fd });
     }
