@@ -78,9 +78,18 @@ export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
  */
 export const AMR_CONSOLE_AUTO_RECHARGE_INTENT = 'auto-recharge';
 
+// The test entry moved off `vela.powerformer.net` onto
+// `open-design.powerformer.net/cloud` when vela cut the test Cloud domain over
+// (vela #1922 prepare, #1929 finalize). That host serves the test Landing page
+// at `/` and routes `/cloud*` to the AMR web origin; the legacy hostname is no
+// longer a mapped test route and must not be relied on for a redirect.
+//
+// feature-test has no row on purpose — see the note at the bottom of this file:
+// an internal hostname must not be a literal in a publicly shipped bundle, so
+// it arrives through the daemon's runtime console origin instead.
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
   prod: DEFAULT_AMR_RECHARGE_URL,
-  test: 'https://vela.powerformer.net/dashboard?source=open_design',
+  test: 'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
   local: 'http://localhost:5173/dashboard?source=open_design',
 };
 

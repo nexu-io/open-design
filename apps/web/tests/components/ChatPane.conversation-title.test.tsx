@@ -220,17 +220,22 @@ describe('ChatPane session switcher', () => {
     expect(trackRunFailedToastSurfaceView).not.toHaveBeenCalled();
   });
 
-  // 同上:这颗〔去充值〕原来钉在 `AMR_INSUFFICIENT_BALANCE` 上,现在那一档整张卡
-  // 都不画了。深链本身(profile 作用域的控制台地址)仍然是产品行为,由另一条同样
-  // 走「充值」主动作的失败来守 —— 工作区额度用尽。
   /*
    * ⚠️ 这里原来有两条:报错卡上的〔充值〕和〔升级套餐〕各自开出带归因的
    * profile-scoped console URL。**OPEND-2807 把这两颗按钮从报错卡上撤掉了**
    * (「错误卡片…应该只有三个按钮」+ 用户「别分那么多情况了」),
    * 于是 `chat_error_recharge` / `chat_error_upgrade` 两个入口来源不再产生。
    *
-   * URL 构造本身没删,升级卡那条路(`chat_upgrade_card`)还在用同一套
-   * `attributedAmrUrl` + profile 解析,归因判据由升级卡自己的用例守。
+   * **深链本身仍然是产品行为,没有失去守卫** —— 它由单元层直接钉:
+   *   · `tests/runtime/amr-guidance.test.ts`(`amrRechargeUrlForProfile`)
+   *   · `tests/runtime/amr-plans-console-deeplink.test.ts`(`amrPlansUrlForProfile`)
+   * 两处都断言 `/cloud/dashboard` 这个新落点(#7753 那一批的迁移),
+   * 所以撤掉这两条卡片级用例不会把那次迁移的覆盖一起带走。
+   * ⚠️ 合并前这里写的是「由工作区额度用尽那一条来守」—— 那一条正是下面这条,
+   * 按钮已经不在,指针作废,换成上面两个真实落点。
+   *
+   * 归因链路(`attributedAmrUrl` + profile 解析)还活在升级卡那条路
+   * (`chat_upgrade_card`),由升级卡自己的用例守。
    * 这里留一条钉「按钮确实不上卡了」,免得它悄悄回来变成第四颗。
    */
   it('OPEND-2807:余额 / 套餐类失败也只给三颗按钮,充值与升级不再上卡', () => {

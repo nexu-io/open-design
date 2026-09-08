@@ -588,7 +588,11 @@ import {
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { validateRunDeliverable } from './run-deliverable-validation.js';
+import {
+  deliverableSyntaxFinalizerEnabled,
+  finalizeSuccessfulRunDeliverable,
+} from './artifacts/successful-run-deliverable-finalization.js';
+import { recordDeliverableSyntaxDelivery } from './artifacts/deliverable-syntax-metrics.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -885,6 +889,7 @@ import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginR
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
+import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax-tool.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
@@ -7787,7 +7792,16 @@ export async function startServer({
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
       onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
-      beforeFinish: (run, status) => {
+      beforeFinish: (run, status, _code, _signal, terminalAt) => {
+        if (run.deliverableSyntaxValidation?.metrics) {
+          run.deliverableSyntaxValidation = {
+            ...run.deliverableSyntaxValidation,
+            metrics: recordDeliverableSyntaxDelivery({
+              previous: run.deliverableSyntaxValidation.metrics,
+              terminalAtMs: terminalAt,
+            }),
+          };
+        }
         if (status !== 'failed' && status !== 'canceled') return;
         try {
           reconcileStrategyTaskRunTerminal(db, { runId: run.id, status });
@@ -8960,6 +8974,29 @@ export async function startServer({
     projectStore: projectStoreDeps,
     authorizeProjectRequest,
     authorizeProjectToolRequest,
+  });
+  registerDeliverableSyntaxToolRoutes(app, {
+    projectsRoot: PROJECTS_DIR,
+    authorizeToolRequest,
+    authorizeProjectToolRequest,
+    getProject: (id: string) => getProject(db, id),
+    getRun: (id: string) => design.runs.get(id),
+    persistRunState: (run) => design.runs.persistState(run),
+    relatedPathsForRun: async ({ runId, projectRoot }) => {
+      const baseline = runArtifactBaselines.peek(runId);
+      if (
+        !baseline
+        || baseline.contended
+        || path.resolve(baseline.cwd) !== path.resolve(projectRoot)
+      ) {
+        return [];
+      }
+      const current = await snapshotProjectArtifactsAsync(projectRoot);
+      return diffRunArtifacts(
+        baseline.before,
+        current,
+      ).renderDependencyTouchedPaths;
+    },
   });
   registerDesignSystemToolRoutes(app, {
     auth: authDeps,
@@ -16492,30 +16529,6 @@ export async function startServer({
             run.authenticatedDoneConclusion = doneCapture.authenticatedConclusion;
           }
         }
-        await captureChatArtifactsBeforeSuccess();
-        try {
-          await snapshotAiHtmlVersionsBeforeSuccess();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const details = err instanceof AiHtmlVersionSnapshotError
-            ? { failures: err.failures }
-            : undefined;
-          send('error', createSseErrorPayload(
-            'HTML_VERSION_SNAPSHOT_FAILED',
-            message,
-            {
-              retryable: false,
-              ...(details ? { details } : {}),
-            },
-          ));
-          finishStrategyAwarePhysicalRun('failed', 1, signal);
-          return;
-        }
-        try {
-          persistDeliveredAgentSessionState();
-        } catch (err) {
-          console.warn('[sessions] delivered session persistence failed', err);
-        }
         let deliverableValid = false;
         // A turn that emitted no Runtime State can still have delivered. The
         // coordinator may only infer that Direct Edit completion from verified
@@ -16534,23 +16547,93 @@ export async function startServer({
             )
           ),
         );
-        if (
+        const strategyCompletionCandidate = Boolean(
           strategyTaskAtStart
           && (
             strategyProtocolResult?.runtimeState?.outcome === 'completed'
             || mayInferDirectEditCompletion
-          )
-        ) {
-          const deliverable = await validateRunDeliverable({
-            projectsRoot: PROJECTS_DIR,
-            projectId: run.projectId ?? null,
-            projectMetadata: projectRecord?.metadata,
-            runStatus: 'succeeded',
-            artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
-            ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
-          });
+          ),
+        );
+        let processTreeQuiescentForFinalization = true;
+        // Every successful physical Run can produce a final Web deliverable,
+        // even when OD Next Runtime State is absent. Resolve the settled
+        // filesystem before deciding whether the host syntax gate applies.
+        if (acpAttemptTermination) {
+          const termination = await acpAttemptTermination;
+          processTreeQuiescentForFinalization = termination?.quiescent === true;
+        }
+        await resolveRunArtifactOutcomeBeforeFinishAsync();
+        const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          projectsRoot: PROJECTS_DIR,
+          projectId: run.projectId ?? null,
+          projectMetadata: projectRecord?.metadata,
+          artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+          ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
+          relatedPaths:
+            run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
+          processTreeQuiescent: processTreeQuiescentForFinalization,
+          syntaxFinalizerEnabled: deliverableSyntaxFinalizerEnabled(),
+          ...(run.deliverableSyntaxRepair
+            ? { repairState: run.deliverableSyntaxRepair }
+            : {}),
+          ...(run.deliverableSyntaxValidation?.metrics
+            ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
+            : {}),
+        });
+        const { deliverable } = deliverableFinalization;
+        if (strategyCompletionCandidate) {
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
+        }
+        // Host-owned syntax finalization is based on physical delivery, not on
+        // OD Next strategy identity. It never resumes or prompts the Agent.
+        if (deliverableFinalization.syntax.action !== 'skip') {
+          const syntaxFinalization = deliverableFinalization.syntax;
+          run.deliverableSyntaxValidation = syntaxFinalization.validation;
+          if (syntaxFinalization.validation.repairState) {
+            run.deliverableSyntaxRepair = syntaxFinalization.validation.repairState;
+          }
+          design.runs.persistState(run);
+          if (syntaxFinalization.validation.checker) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'deliverable_syntax_validation',
+              source: 'run_finalizer',
+              status: syntaxFinalization.validation.status,
+              checker: syntaxFinalization.validation.checker,
+              candidateHash:
+                syntaxFinalization.validation.candidateHash ?? null,
+              checkedFileCount:
+                syntaxFinalization.validation.checkedFiles?.length ?? 0,
+              checkCount:
+                syntaxFinalization.validation.metrics?.checkCount ?? null,
+              checkerDurationMs:
+                syntaxFinalization.validation.metrics?.checkerDurationMs ?? null,
+              repairableCheckCount:
+                syntaxFinalization.validation.metrics?.repairableCheckCount ?? null,
+              repairExecutor:
+                syntaxFinalization.validation.metrics?.repairExecutor ?? null,
+              repairDurationMs:
+                syntaxFinalization.validation.metrics?.repairDurationMs ?? null,
+              appliedRepairRules:
+                syntaxFinalization.validation.metrics?.appliedRepairRules ?? [],
+              finalization: syntaxFinalization.validation.finalization,
+              safeFixProposalCount: syntaxFinalization.validation.metrics?.safeFixProposalCount ?? null,
+              safeFixProposalDurationMs: syntaxFinalization.validation.metrics?.safeFixProposalDurationMs ?? null,
+            });
+          }
+          if (syntaxFinalization.action === 'fail') {
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              syntaxFinalization.reason === 'check_incomplete'
+                ? `Final Web deliverable syntax check is incomplete at ${syntaxFinalization.location}; delivery blocked.`
+                : `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. Deterministic host repair stopped: ${syntaxFinalization.reason}.`,
+              { retryable: false },
+            ));
+            finishStrategyAwarePhysicalRun('failed', 1, signal);
+            return;
+          }
+        }
+        if (strategyCompletionCandidate) {
           // Observation only (this branch has no repair loop): did a phone-app
           // prototype actually ship inside the staged handset shell? Feeds
           // run_finished analytics so the rollout can measure shell adoption.
@@ -16604,6 +16687,35 @@ export async function startServer({
               );
             }
           }
+        }
+        // Snapshot only after the completion gate accepts the settled Web
+        // candidate. A parse-broken deliverable must not create a version that
+        // looks successfully delivered.
+        // Freeze the committed bytes before linking the HTML version below;
+        // cover rendering remains asynchronous and does not delay the Run.
+        await captureChatArtifactsBeforeSuccess();
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          finishStrategyAwarePhysicalRun('failed', 1, signal);
+          return;
+        }
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] delivered session persistence failed', err);
         }
         if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;

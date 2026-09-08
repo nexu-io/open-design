@@ -1916,6 +1916,80 @@ export function pngBufferHasPaint(data: Buffer): boolean {
   return bgraBitmapHasPaint(nativeImage.createFromBuffer(data).toBitmap());
 }
 
+export type BgraBitmapComparison = {
+  maxChannelDelta: number;
+  meanChannelDelta: number;
+};
+
+/** Worst channel difference between one pixel of `a` and one pixel of `b`. */
+function bgraPixelDelta(a: Uint8Array, aOffset: number, b: Uint8Array, bOffset: number): number {
+  let worst = 0;
+  for (let channel = 0; channel < 4; channel += 1) {
+    const delta = Math.abs(a[aOffset + channel] - b[bOffset + channel]);
+    if (delta > worst) worst = delta;
+  }
+  return worst;
+}
+
+/**
+ * Compares a Chromium reference capture against the isolated capture the PPTX
+ * export produced from the same element, both BGRA of identical geometry.
+ *
+ * `meanChannelDelta` is a strict per-pixel, per-channel mean over the whole
+ * bitmap: a broad fidelity loss shows up there and has nowhere to hide.
+ *
+ * `maxChannelDelta` is deliberately not the strict global maximum. Isolating an
+ * element re-renders it, so a clip, mask, filter or text-clip boundary can land
+ * on a neighbouring pixel from the one the in-slide reference painted, and the
+ * capture rectangle's own rounding lands on the outermost frame. Neither is a
+ * fidelity loss, and both move with the host graphics stack — the same commit
+ * puts them in different places on Ubuntu and on Debian, which made a strict
+ * maximum a platform-calibrated assertion rather than a portable one. So each
+ * pixel is matched against the best candidate in the 3x3 neighbourhood of the
+ * exported bitmap, and the one-pixel frame is skipped. A genuine content or
+ * colour change has no matching neighbour and is still reported at its full
+ * magnitude.
+ *
+ * Bitmaps too small to have an interior are compared strictly, since there is
+ * no boundary allowance to make.
+ */
+export function compareBgraBitmaps(
+  reference: Uint8Array,
+  exported: Uint8Array,
+  width: number,
+  height: number,
+): BgraBitmapComparison {
+  let totalChannelDelta = 0;
+  for (let offset = 0; offset < reference.length; offset += 1) {
+    totalChannelDelta += Math.abs(reference[offset] - exported[offset]);
+  }
+  const meanChannelDelta = totalChannelDelta / (width * height * 4);
+
+  let maxChannelDelta = 0;
+  if (width < 3 || height < 3) {
+    for (let offset = 0; offset < reference.length; offset += 4) {
+      const strict = bgraPixelDelta(reference, offset, exported, offset);
+      if (strict > maxChannelDelta) maxChannelDelta = strict;
+    }
+    return { maxChannelDelta, meanChannelDelta };
+  }
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const offset = (y * width + x) * 4;
+      let best = bgraPixelDelta(reference, offset, exported, offset);
+      for (let dy = -1; dy <= 1 && best > maxChannelDelta; dy += 1) {
+        for (let dx = -1; dx <= 1 && best > maxChannelDelta; dx += 1) {
+          const candidate = bgraPixelDelta(reference, offset, exported, ((y + dy) * width + (x + dx)) * 4);
+          if (candidate < best) best = candidate;
+        }
+      }
+      if (best > maxChannelDelta) maxChannelDelta = best;
+    }
+  }
+  return { maxChannelDelta, meanChannelDelta };
+}
+
 function injectBaseHref(doc: string, baseHref: string | undefined): string {
   if (!baseHref) return doc;
   const tag = `<base href="${escapeHtmlAttribute(baseHref)}">`;

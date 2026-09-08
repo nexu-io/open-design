@@ -41,6 +41,7 @@ import type {
   StrategyTaskProjectionV2,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
+import { OD_NEXT_AGENT_DECLARED_BLOCK_REASON } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
 
 /**
@@ -2206,7 +2207,32 @@ async function consumeDaemonPhysicalRun({
         // an unreachable daemon fails closed to the previous behaviour.
         const deliveredDespiteBlock = endStatus === 'succeeded'
           && (await fetchChatRunStatus(runId, workspaceContext))?.deliverableValid === true;
-        if (!deliveredDespiteBlock) {
+        // A block the agent declared on itself is not a failure to report.
+        // Asked for a prototype with nothing to build on, the agent answers in
+        // the chat — "the requirement was skipped, so there is no runnable plan
+        // this round" — and that reply is the turn's outcome. Raising a run
+        // error on top of it restated the same sentence inside a red "task
+        // execution failed" card, so a turn that had simply asked for more
+        // detail read as a crash (OPEND-2565).
+        //
+        // Keyed on the reason code, NOT on the presence of visible text. Every
+        // other block is a gate the agent did not ask for — a missing Runtime
+        // State, an unresolvable deliverable, an unproven session — and the
+        // prose sitting next to it is the agent's ordinary reply ("sure, three
+        // pages, here is the plan"), not an account of the stop. Treating that
+        // as an explanation would hide a real protocol failure behind a
+        // cheerful sentence.
+        //
+        // Also requires a Run that reached the end on its own: a Run that
+        // failed keeps its error even when the agent narrated the failure,
+        // because narration is not a substitute for the failure the user has
+        // to act on.
+        const agentDeclaredBlock = endStrategyTask.blockedContext?.reasonCodes
+          .includes(OD_NEXT_AGENT_DECLARED_BLOCK_REASON) === true;
+        const explainedToUser = endStatus === 'succeeded'
+          && agentDeclaredBlock
+          && (endStrategyTask.blockedContext?.visibleText?.trim().length ?? 0) > 0;
+        if (!deliveredDespiteBlock && !explainedToUser) {
           endStatus = 'failed';
           pendingStructuredError ??= createStrategyTaskBlockedError(endStrategyTask);
         }

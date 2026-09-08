@@ -279,7 +279,7 @@ describe('AmrLoginPill', () => {
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://vela.powerformer.net/dashboard?source=open_design',
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
     );
   });
 
