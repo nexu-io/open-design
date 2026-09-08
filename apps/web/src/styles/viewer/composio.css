@@ -907,10 +907,35 @@
 .qf-picked-label {
   color: var(--text-soft);
 }
+/* OPEND-2641:分步进度跟着**当前问句**走,住在 `.qf-label` 的末尾,不再是卡头的 flex 子项。
+   ------------------------------------------------------------------
+   原来它写的是 `flex: 0 0 auto` + `margin-inline-start: auto` —— 两句都是「我是卡头的
+   flex 子项」才成立的写法,而卡头里 `.qf-picked`(「已选 N」)也写了同一句 auto。
+   一行两个 auto 会把剩余空间**对半分**,于是进度既不贴左也不贴右,停在卡头中间
+   和计数抢位置(工单原话 "near the middle/right" / "competes with the selected-count label")。
+   搬进问句行之后这两句都不再有意义,一并撤掉;卡头只剩一个 auto,「已选 N」才真的贴到右边界。
+
+   剩下三条是搬进来之后**新需要**的:
+   · `--text-soft` + 400 —— 问句是 `--text-strong`(见 `.qf-label`),同色同重会让 `1/4`
+     读成句子的一部分。这一档是这张卡里「次要计量文字」现成的档位(`.qf-auto-continue`
+     / `.qf-picked-label` 都是它),不新造。
+   · `inline-block` —— 让 `1/4` 成为一个**原子行内盒**,窄面板下永远不会被拆到两行。
+     ⚠️ 这里**故意不写** `white-space: nowrap`:量过,它在这一格什么都不做。
+     无头 Chrome 实测(8px 宽的容器里),`1/4` / `10/24` 在 `display:inline` +
+     `white-space:normal` 下都只有 1 个行盒 —— 斜杠两侧没有断点,加不加 nowrap 一样。
+     (真会拆的是带空格的写法 `1 / 4`,那是 `aria-label` 的念法,不是显示文本。)
+     写了它只会让人以为不断行是靠它;真正的保证是上面那个 `inline-block`。
+   · `margin-inline-start: 6px` —— 和前面的「必填」角标之间的那口气,**这条是硬的**:
+     JSX 里角标和进度之间没有空白文本节点(`req.nextSibling === prog`),置 0 之后
+     实测间距就是 0.0px,`1/4` 紧贴角标的圆边框 —— 正是工单说的
+     "do not collide with required badges"。角标自己是 `margin-inline-start: 4px`
+     的 inline-block,两者各自独立跟排,不会叠上。 */
 .qf-step-progress {
-  flex: 0 0 auto;
-  margin-inline-start: auto;
+  display: inline-block;
+  margin-inline-start: 6px;
+  color: var(--text-soft);
   font-size: 12px;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -927,6 +952,11 @@
   font-size: var(--font-size-13);
   line-height: 1.7;
   color: var(--text-strong);
+  /* OPEND-2641:问句这一行现在还带着行尾的进度(`1/4`)。译文长度差得很远
+     (德语 / 俄语的复合词比中文长出一大截),窄面板下一个不可断的长词会把整行撑出去,
+     连带把行尾的进度推到卡外。允许长词自己折行,进度就永远留在可视区里。
+     `.qf-help` 早就是这么写的,这里补上同一条。 */
+  overflow-wrap: break-word;
 }
 /* `.qf-label` 跟着稿子改回块级之后,角标要自己跟排(原来靠 label 的 flex gap)
    ------------------------------------------------------------------
@@ -946,14 +976,6 @@
   font-size: 11px;
   font-weight: 600;
   line-height: 1.2;
-}
-.qf-help {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: -2px;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  line-height: 1.4;
 }
 /* 选项按设计稿竖排一列:每行一个选择框 + 文字。
    横排胶囊读起来像标签云,竖排才是「在几个答案里挑一个」。 */
@@ -1277,7 +1299,6 @@
  * `.qf-custom .qf-input` 和选项里的 `.qf-own-input` 各有自己的容器内距,不该被
  * 刷成 11),也是**特异性**(少了它就和 `.qf-custom .qf-input` 打平)。
  */
-.question-form-body > .qf-help,
 .question-form-body > .qf-input,
 .question-form-body > .qf-textarea {
   /* 两侧同值,没有要在 RTL 下镜像的东西,所以写物理属性 —— 和旁边的

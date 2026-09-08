@@ -914,7 +914,10 @@ describe('QuestionFormView', () => {
       />,
     );
 
-    expect(screen.getByText('1/3').closest('.question-form-head')).toBeTruthy();
+    // OPEND-2641:进度跟着**当前问句**走,不在卡头里。卡头留给卡的名字和整卡状态。
+    // 位置本身的完整判据在 `chat/opend-2641-step-progress-follows-question.test.tsx`。
+    expect(screen.getByText('1/3').closest('.question-form-head')).toBeNull();
+    expect(screen.getByText('1/3').closest('.qf-label')).toBeTruthy();
     expect(screen.getByLabelText(/Auto-continues when the timer ends 10:00/)).toBeTruthy();
     expect(screen.getByText('Who will see this deck?')).toBeTruthy();
     expect(screen.queryByText('How detailed should it be?')).toBeNull();

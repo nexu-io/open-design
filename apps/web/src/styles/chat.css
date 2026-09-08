@@ -681,7 +681,12 @@
    它们住在 `viewer/theater.css` / `viewer/composio.css`;这枚 token 一旦漫过去,
    「我选过了」这件事就被抹掉了。 */
 /* 定义处对齐稿子的 `.msg-act, .fb, .fork-note` —— 谁用它谁自己声明一次,
-   而不是挂到 chat 根上让整棵树都继承得到:那样迟早会有人「顺手」拿它染别的东西。 */
+   而不是挂到 chat 根上让整棵树都继承得到:那样迟早会有人「顺手」拿它染别的东西。
+   ⚠️ 分叉那一枚就声明在 `.fork-note` 上,别顺手挪到祖先的 `.fork-sep` 去:
+   OPEND-2714 把脚注搬进了线里,`.fork-note` 仍然是**那个元素本身**的类名,
+   而「谁用它谁自己声明」的意思正是它得**独立成立** —— 陈列页、镜像页、
+   `message-muted-ink` 的裸夹具都会把它单独拿出来渲染。挪到祖先上,
+   这些地方就只剩黑字。 */
 .msg,
 .fork-note {
   --chat-message-muted-ink: #a3a3a3;
@@ -4072,7 +4077,8 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 /* ── 分叉分界(设计稿第 38 格)──────────────────────────────────────
    稿子 `.fork-sep`:两侧各一条线,都从外沿的透明化到贴着字的实色 ——
    渐变是为了让它读起来像「一段的开头」,而不是把这一列切成两半的硬横线。
-   中间那行字是**承接过来的会话标题**,过长时截断不换行(换行两侧的线会错位)。
+   中间那一格是分支图标配一行文案(OPEND-2714;原来写的是承接过来的会话标题),
+   过长时截断不换行 —— 换行两侧的线会错位。
    线用 `--border-strong`:要盖过卡片自己的 `--border` 才立得住。 */
 .fork-sep {
   display: flex;
@@ -4088,27 +4094,39 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 .fork-sep i:last-child {
   background: linear-gradient(to left, transparent, var(--border-strong));
 }
+/* 线中间那一格 —— 这条规则只管**这一格在线里怎么占位**:不参与两侧线的伸缩,
+   最多占 62%,过长截断不换行(换行两侧的线会错位;这行字要过 19 个语言,
+   有些语种比英文长得多)。
+   ⚠️ 只写这些。字号、颜色、图标和字怎么并排,都是**脚注自己**的事,写在
+   `.fork-note` 上 —— 那个类名今天仍然挂在这个元素上。写到这里来会赢过
+   `.fork-note`(`.fork-sep span` 是 0-1-1,`.fork-note` 是 0-1-0),
+   于是脚注自己的声明永远生效不了,而裸渲染的 `.fork-note` 又什么都拿不到。 */
 .fork-sep span {
   flex: none;
   max-width: 62%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-size-12);
-  font-weight: 500;
-  color: var(--brand-text);
 }
-/* 分界脚注(同一格):跟着上面那条线【居中】—— 它是这条线的注解,
-   不是新会话里的第一条消息;左对齐会读成「新会话已经开口说了一句」。 */
+/* 分界脚注(同一格):OPEND-2714 之后它住在线中间,而不是线下面自己占一行。
+   `flex` + `gap` 是为了分支图标和字在同一条基线上并排 —— 值照稿子写的 `flex`,
+   不改成 `inline-flex`:它是 `.fork-sep` 这个 flex 容器的项目,外层 display 会被
+   **块化**,两个写法在产线上算出来一模一样,那就没有理由和稿子分岔。
+   这条规则**不依赖祖先**:陈列页和裸夹具都会单独渲染 `.fork-note`。
+
+   ⚠️ 稿子还有一条 `padding-bottom: 2px`,**跟着两块式一起去掉了**(OPEND-2714)——
+   它是「脚注自己占线下面一行」时给那一行留的下边距。现在脚注是线里的一格,
+   而 `.fork-sep` 是 `align-items: center`:居中对齐算的是**边框盒**,底下多 2px
+   会把字整体顶高 1px,两侧发丝线还在正中,字却不在了。 */
 .fork-note {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  padding-bottom: 2px;
   font-size: var(--font-size-12);
   /* 稿子(PR #7170)把它收进消息静音层 —— 分界脚注和消息旁的时间 / 复制
-     是同一类附属信息,音量该一样。 */
+     是同一类附属信息,音量该一样。OPEND-2714 把源会话标题从线上撤掉之后
+     这一点更成立了:这一格写的是这条线自己的注解,不是一个该被认出来的标题,
+     所以是静音层而不是 `--brand-text`。 */
   color: var(--chat-message-muted-ink);
 }
 .fork-note svg {
@@ -4118,9 +4136,10 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
 }
 /* 点出来的那两块要「落」一下(同一格)。静态地摆在那儿,分不出它是刚才那一下
    带来的;落这一下(上方 4px + 淡入)说的就是「这是你刚点的那一下」。
-   线先落、脚注晚 60ms —— 脚注是线的注解,顺序照读的顺序来。
-   开关是 `.is-new`:只有 `AssistantMessage` 渲染的那两块挂,陈列页那一格
-   (手写的裸 `.fork-sep` / `.fork-note`)不挂,一加载就是已经落好的样子 ——
+   OPEND-2714 之后线和文案是同一块,一起落 —— 原来「线先落、脚注晚 60ms」
+   是两块时的读序,一块了就没有先后可言。
+   开关是 `.is-new`:只有 `AssistantMessage` 渲染的那一块挂,陈列页那一格
+   (手写的裸 `.fork-sep`)不挂,一加载就是已经落好的样子 ——
    这正是稿子交代的「钉住展示的那一格不挂 .is-new」。
    ⚠️ 缓动取的是稿子写的 `var(--ease-out)`(在我们 tokens.css 里解出来是
    `cubic-bezier(0, 0, 0, 1)`)。仓库 `AGENTS.md` 的「UI 动效」一节写的默认
@@ -4134,10 +4153,6 @@ body.od-quick-switcher-open .chat-composer-fixed-layer .composer-att .msg-att-de
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
 }
-.fork-sep.is-new,
-.fork-note.is-new {
+.fork-sep.is-new {
   animation: fork-in var(--duration-normal) var(--ease-out) both;
-}
-.fork-note.is-new {
-  animation-delay: 60ms;
 }

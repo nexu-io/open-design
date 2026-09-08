@@ -3,7 +3,9 @@
  *
  * 稿子 `.refs`:输入框上方的一枚小芯片,写着「N 条注释」——
  * **不占写字的地方**,而且一条和五条一样高(第 69 格的意义就是证明这件事)。
- * hover 时右侧露出移除、上方浮出全文。
+ * hover 时上方浮出全文,**前面那枚气泡换成移除键**(OPEND-2713 的裁决 ——
+ * 稿子原本把移除键摆在文字右边,那枚藏着的按钮一直占着 22px,芯片两侧因此
+ * 一边 9px 一边 31px)。
  */
 .refs {
   position: relative;
@@ -28,17 +30,46 @@
   cursor: default;
 }
 
+/* 芯片最前面那一格 —— 气泡和移除键叠在同一个格子里(OPEND-2713)。
+   两个孩子都落在 `1 / 1`,所以这一格**只占一枚记号的宽**(按较大的那枚,16px),
+   而不是两枚并排。用 grid 不用绝对定位:这一格得真的参与芯片的横向排布,
+   脱流的话芯片会缩到只剩文字宽。
+
+   ⚠️ 名字带前缀不是啰嗦:产品里模块类名会被打散成 `_lead_xxxxxx`,但仓库自己的
+   镜像陈列页(`docs/design/chat-mirror`)把它还原成裸类名再和别的表拼在一起 ——
+   叫 `.lead` 会撞上陈列页正文那条 `.lead { margin: 0 0 12px }`,芯片在那一页上
+   凭空高 10px。真机量出来才看得见,只读模块文件是照不出的。 */
+.quoteLead {
+  position: relative;
+  flex: none;
+  display: grid;
+  width: 16px;
+  height: 16px;
+}
+.quoteLead > * {
+  grid-area: 1 / 1;
+  place-self: center;
+}
+
 /* 稿子 `.refs .ic { flex:none; width:13px; height:13px; color: var(--text-soft) }` */
 .icon {
   flex: none;
   width: 13px;
   height: 13px;
   color: var(--chat-text-soft);
+  opacity: 1;
+  /* 气泡排在按钮**后面**,所以它盖在按钮上面。它是纯装饰(`aria-hidden`),
+     真要吃掉那一格中间 13×13 的点击 —— 这条不是保险,是承重。 */
+  pointer-events: none;
+  transition: opacity var(--chat-dur-quick) var(--chat-ease-out);
 }
 
 /* 稿子 `.refs .del { position: static; flex:none; width:16px; height:16px;
    margin-inline-start:1px; opacity:0 }` + `.refs:hover .del { opacity: 1 }`
    —— 静止时不摆「×」,和待发送附件那一枚同一条规矩。
+   ⚠️ OPEND-2713 之后它不再排在文字**右边**,而是和气泡叠在最前面那一格里,
+   所以稿子那条 `margin-inline-start: 1px`(并排时和文字拉开的那一点)没有了
+   落点,跟着去掉 —— 留着会把它在格子里推偏 1px。
 
    ⚠️ `.refs .del` **只写差异**,本体样式在稿子共用的 `.del` 基类里:
    `display:grid; place-items:center; border-radius:50%; background: var(--bg);
@@ -56,7 +87,6 @@
   place-items: center;
   width: 16px;
   height: 16px;
-  margin-inline-start: 1px;
   padding: 0;
   border: var(--chat-stroke) solid var(--chat-border);
   border-radius: 50%;
@@ -77,14 +107,24 @@
   border-color: var(--chat-border-strong);
   background: var(--chat-bg);
 }
+/* 指到芯片上、或者键盘走到移除键上,两枚**对调** —— 气泡让位,移除键顶上来。
+   `.remove:focus-visible ~ .icon` 靠的是「按钮在前、气泡在后」那个 DOM 次序。 */
 .refs:hover .remove,
 .remove:focus-visible {
   opacity: 1;
 }
-/* 触屏没有 hover,一律常驻 —— 不然「×」永远等不出来 */
+.refs:hover .icon,
+.remove:focus-visible ~ .icon {
+  opacity: 0;
+}
+/* 触屏没有 hover,一律常驻 —— 不然「×」永远等不出来。
+   同一格里常驻就意味着气泡在触屏上一直让位,不然两枚会叠着。 */
 @media (hover: none) {
   .remove {
     opacity: 1;
+  }
+  .icon {
+    opacity: 0;
   }
 }
 

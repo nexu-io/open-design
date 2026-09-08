@@ -402,6 +402,11 @@ interface Props {
   showRole?: boolean;
   // True only for the most recent assistant message.
   isLast?: boolean;
+  // True only for the most recent assistant message that actually ran a turn —
+  // i.e. `isLast` with host-authored cards (the memory card, the brand assist
+  // card) skipped over. Only the next-step affordance reads it; see
+  // `ownsTrailingNextStep` below for why it is additive and not a replacement.
+  isLastTurn?: boolean;
   // Assistant message id whose run-failure error is rendered as ChatPane's
   // top-level error card; that message's per-message error pill is suppressed
   // to avoid duplication. Other messages keep their error pill.
@@ -501,6 +506,7 @@ const ASSISTANT_MESSAGE_COMPARED_PROPS: Array<keyof Props> = [
   'hiddenPluginActionPaths',
   'showRole',
   'isLast',
+  'isLastTurn',
   'errorCardOwnerId',
   'nextUserContent',
   'questionFormSubmitDisabled',
@@ -612,6 +618,7 @@ function AssistantMessageImpl({
   shareToOpenDesignBusy = false,
   showRole = true,
   isLast,
+  isLastTurn,
   errorCardOwnerId = null,
   nextUserContent,
   onSubmitQuestionForm,
@@ -1319,6 +1326,32 @@ function AssistantMessageImpl({
     );
   }, [message.content, nextUserContent, suppressDirectionForms]);
   /**
+   * 整轮失败的那一轮,**「这一轮到此为止」由壳头那句「运行失败」宣布**,页脚不再重说。
+   *
+   * 出处(逐条,不是「看起来重复」):
+   *  · `specs/current/chat-panel-next.md` B18 逐字:「整轮失败:执行记录头「运行失败」
+   *    默认收起,下面出组件 19 报错卡…**不出回合状态行**」;
+   *  · `specs/current/chat-panel-dev-design.md` 状态机「运行失败(默认收起,报错卡接手)」
+   *    与场景表「失败 | … | 壳头「运行失败」收起 + 报错卡,**无回合状态行**」;
+   *    同文件写死分工 —— 壳只有三态,「运行失败」是**壳的词**;
+   *  · `specs/current/chat-panel-next-review.md` B18 同条;
+   *  · 交付稿(`729fa43ce7:docs/design/chat-panel-next.html`):「任务挂了是 19 · 报错。
+   *    两边不重复:这一行只负责宣布『这轮到此为止』」。
+   *
+   * ⚠️ 上面第 ① 条(报错卡在场)只覆盖**转录末尾**那一帧:报错卡的归属
+   * (`ChatPane` 的 `errorCardOwnerId`)要求这条失败助手消息正好是最后一条,用户再发
+   * 任何一条消息就变 null。而页脚那条文案阶梯里只认识 `canceled` 一个终态,`failed`
+   * 一个字都没有,于是这一轮直落 `doneLabel` —— 壳头写着「运行失败」、页脚挂着
+   * 「✓ 已完成」,同屏自相矛盾。所以这条例外必须按**终态本身**判,不能靠报错卡在不在。
+   *
+   * ⚠️ **必须绕开空流那一档**:API 空回复把这一轮也写成 `runStatus: 'failed'`
+   * (`ProjectView.tsx` 的 `emptyApiResponse` 分支同时补一条 `status(empty_response)`),
+   * 但它的状态词是「没有输出」,由 `e2e/ui/api-empty-response.test.ts` 那条 P0 钉死
+   * (那格必须显示 "No output",且 "Done" 计数为 0)。它也没有壳头替它说话。
+   */
+  const failedTurnIsAnnouncedByTheShell =
+    message.runStatus === "failed" && !hasEmptyResponse;
+  /**
    * 这一行要不要报「这一轮怎么样了」。
    *
    * ⚠️ 先说反面:**跑完之后这一行是要报终态的**(稿子:绿勾 + 已完成)。原来只要壳里
@@ -1326,20 +1359,22 @@ function AssistantMessageImpl({
    * 也丢了」。运行中的去重已经由 `showCompletionRow` 整行不出来解决,不归这里管。
    * 所以这里只列**具名的例外**,一条都不能凭「看起来重复」加进来。
    *
-   * 三条例外:
+   * 四条例外:
    *  ① 报错卡那一轮 —— 原因和下一步由报错卡说,这一行让位;
    *  ② 问卷还悬着的那一轮 —— run 进程上确实终止了,但握手没完成;挂绿勾会把它变成
    *     假成功,回放老式子标签表单时尤其明显;
    *  ③ **宿主自己补发的卡从来没有过一轮**(记忆卡、品牌协助卡)。它是上一轮的附属
    *     组件,给它挂「已完成」是在陈述一件没发生过的事,读起来就是又一轮 ——
    *     工单 OPEND-2745 里那「两个进行中」正是同一条判据缺口的另一面。
+   *  ④ **整轮失败的那一轮**(判据见下面 `failedTurnIsAnnouncedByTheShell`)。
    *
    * 复制、时间这些**照旧**:它们说的是这段内容本身,不是某一轮的结果。
    */
   const hideRunStatus =
     message.id === errorCardOwnerId
     || hasPendingQuestionForm
-    || assistantMessageNeverHadARun(message);
+    || assistantMessageNeverHadARun(message)
+    || failedTurnIsAnnouncedByTheShell;
   // "Next step" is a delivery affordance, not a generic terminal-state card.
   // Keep it out of pure Q&A, failures/cancellations and incomplete Todo turns;
   // only a successful turn that actually produced something may surface it.
@@ -1377,11 +1412,39 @@ function AssistantMessageImpl({
     (effectiveNextStepVariant === 'brand-extraction-incomplete' ||
       effectiveNextStepVariant === 'brand-programmatic-incomplete' ||
       effectiveNextStepVariant === 'brand-ai-incomplete');
+  /**
+   * 「下一步引导」归**这条**消息管吗。
+   *
+   * 引导是会话**队尾**的东西:它说的是「接下来还能做什么」,所以只有队尾那条消息
+   * 有资格出。原来这句写的就是 `isLast` —— 而 `isLast` 是「流水里最后一条 assistant
+   * 消息」,**把宿主自己补发的卡也算了进去**。
+   *
+   * 记忆卡(`useMemoryWrittenCard`)恰恰是**轮次结束之后**才回报的:提取由守护进程
+   * 在子进程关闭时排队,卡因此几乎总是落在刚交付的那一轮后面。于是产物那条消息被
+   * 顶掉一格,`isLast` 变成 false,三条建议连同 `suggestions` / `onSuggestion` 两个
+   * prop 一起被摘光 —— PPT 明明交付成功、`next_steps` 事件也已下发,面板上一条引导
+   * 都没有(OPEND-2764)。宿主卡是**上一轮的附属组件,不是新的一轮**(OPEND-2745
+   * 的裁决原话),它不该改变谁是队尾。
+   *
+   * ⚠️ 判据写成**两者取或**,而不是拿 `isLastTurn` 直接换掉 `isLast`,因为队尾有
+   * 两种长法,少哪一半都会当场红(都有红测钉着):
+   *  · `isLastTurn` —— 真跑过的那一轮,后面只跟着宿主卡。这是本单要修的那一半;
+   *  · `isLast` —— 宿主卡**自己就是队尾**的那一档。品牌协助卡不是被动的通知,它带着
+   *    〔继续抽取〕/〔继续 AI 抽取〕两颗恢复入口,而且整条会话可能只有它一条消息
+   *    (`ChatPane.connect-repo` 那条用例就是)。只认 `isLastTurn` 会把品牌抽取的
+   *    恢复路径整个关掉。
+   *
+   * 「最后一条」这个说法在这个组件里被**三个互不相同的问题**共用,别再并:问卷可否
+   * 作答问的是「后面还有没有东西」(OPEND-2644,用户走过去就得锁),运行态归属问的
+   * 是「这条消息有没有过一次运行」(OPEND-2745)。三者各有各的红测,合并任意两个都
+   * 会红。
+   */
+  const ownsTrailingNextStep = !!isLast || !!isLastTurn;
   const showNextStepActions =
     !streaming &&
     unfinishedTodos.length === 0 &&
     !hasPendingQuestionForm &&
-    ((!!isLast && hasNextStepPrimary &&
+    ((ownsTrailingNextStep && hasNextStepPrimary &&
       ((runSucceeded && nextStepDeliveryEvidence) || isBrandExtractionRecovery)) ||
       showOpenDesignSubmission);
   // Pre-output vs working: before any real content (text / thinking / tools /
@@ -1449,11 +1512,6 @@ function AssistantMessageImpl({
       );
     }
     if (b.kind === "status") {
-      // Suppress this message's gray error pill ONLY when ChatPane is
-      // rendering the top-level error card for it (the last failed run).
-      // Other failed turns — older history, or once a follow-up makes
-      // this no longer the last assistant message — keep their pill so
-      // the error detail still survives reload / history review.
       /*
        * `error` 这一档**一律不出**。稿子里没有这种状态行,用户 2026-08-27
        * 指认过两次:「为什么还会有这种错误样式?? 你的错误卡片呢??」
@@ -1679,27 +1737,44 @@ function AssistantMessageImpl({
         ) : null}
         {showNextStepActions ? (
           <NextStepActions
-            fileName={isLast ? nextStepFileName : null}
-            planFileName={isLast ? planNextStepName : null}
-            artifactFileName={isLast ? nextStepArtifactName : null}
-            onShare={isLast && nextStepArtifactName && !isPlanNextStep ? onArtifactShare : undefined}
-            onToolboxAction={isLast ? onToolboxAction : undefined}
-            onPromptAction={isLast ? onNextStepPromptAction : undefined}
-            onAiOptimize={isLast ? onNextStepAiOptimize : undefined}
-            aiOptimizeBusy={Boolean(isLast && nextStepAiOptimizeBusy)}
-            onContinueExtraction={isLast ? onNextStepContinueExtraction : undefined}
-            continueExtractionBusy={Boolean(isLast && nextStepContinueExtractionBusy)}
-            onContinueAiExtraction={isLast ? onNextStepContinueAiExtraction : undefined}
-            continueAiExtractionBusy={Boolean(isLast && nextStepContinueAiExtractionBusy)}
-            onCreateDesign={isLast ? onNextStepCreateDesign : undefined}
-            createDesignBusy={Boolean(isLast && nextStepCreateDesignBusy)}
-            onCreateDesignSystem={isLast ? onNextStepCreateDesignSystem : undefined}
-            createDesignSystemBusy={Boolean(isLast && nextStepCreateDesignSystemBusy)}
-            onPickSkill={isLast ? onPickSkill : undefined}
-            suggestions={isLast ? nextStepSuggestions : undefined}
-            onSuggestion={isLast ? onNextStepSuggestion : undefined}
-            onDownload={isLast && nextStepFileName ? onArtifactDownload : undefined}
-            skills={isLast ? nextStepSkills : undefined}
+            /*
+             * ⚠️ 这一排的门必须和 `showNextStepActions` 用**同一个**判据。
+             * 它们原来各写各的 `isLast`,于是「整块出不出」和「出了之后有没有内容」
+             * 是两把锁 —— 只开其中一把,得到的是一块空壳(或者一块永远为空、
+             * 因而 `hasNextStepPrimary` 判 false 的死块)。OPEND-2764 的
+             * `suggestions` / `onSuggestion` 正是被这一排摘掉的。
+             */
+            fileName={ownsTrailingNextStep ? nextStepFileName : null}
+            planFileName={ownsTrailingNextStep ? planNextStepName : null}
+            artifactFileName={ownsTrailingNextStep ? nextStepArtifactName : null}
+            onShare={
+              ownsTrailingNextStep && nextStepArtifactName && !isPlanNextStep
+                ? onArtifactShare
+                : undefined
+            }
+            onToolboxAction={ownsTrailingNextStep ? onToolboxAction : undefined}
+            onPromptAction={ownsTrailingNextStep ? onNextStepPromptAction : undefined}
+            onAiOptimize={ownsTrailingNextStep ? onNextStepAiOptimize : undefined}
+            aiOptimizeBusy={Boolean(ownsTrailingNextStep && nextStepAiOptimizeBusy)}
+            onContinueExtraction={ownsTrailingNextStep ? onNextStepContinueExtraction : undefined}
+            continueExtractionBusy={Boolean(ownsTrailingNextStep && nextStepContinueExtractionBusy)}
+            onContinueAiExtraction={
+              ownsTrailingNextStep ? onNextStepContinueAiExtraction : undefined
+            }
+            continueAiExtractionBusy={
+              Boolean(ownsTrailingNextStep && nextStepContinueAiExtractionBusy)
+            }
+            onCreateDesign={ownsTrailingNextStep ? onNextStepCreateDesign : undefined}
+            createDesignBusy={Boolean(ownsTrailingNextStep && nextStepCreateDesignBusy)}
+            onCreateDesignSystem={ownsTrailingNextStep ? onNextStepCreateDesignSystem : undefined}
+            createDesignSystemBusy={Boolean(ownsTrailingNextStep && nextStepCreateDesignSystemBusy)}
+            onPickSkill={ownsTrailingNextStep ? onPickSkill : undefined}
+            suggestions={ownsTrailingNextStep ? nextStepSuggestions : undefined}
+            onSuggestion={ownsTrailingNextStep ? onNextStepSuggestion : undefined}
+            onDownload={
+              ownsTrailingNextStep && nextStepFileName ? onArtifactDownload : undefined
+            }
+            skills={ownsTrailingNextStep ? nextStepSkills : undefined}
             onShareToOpenDesign={showOpenDesignSubmission ? onShareToOpenDesign : undefined}
             shareToOpenDesignBusy={shareToOpenDesignBusy}
             variant={effectiveNextStepVariant}
@@ -1713,26 +1788,28 @@ function AssistantMessageImpl({
             「新会话开口就给了三条建议」;用户真机指认过。
 
             落在**新会话**里,不是源会话:点完分叉页面就跳到新会话,人此刻站在这里,
-            而那行脚注「上文已带过来,接着说就行」也只有对着这一截复制过来的上下文
-            才说得通。标题用**源会话**的标题 —— 这条线回答的是「上面这些是从哪来的」。
-            盖标记的地方在 daemon 的 fork 分支(`routes/project/conversations.ts`)。 */}
+            而这行字「从上一个会话继续」也只有站在新会话里回看才说得通。
+            盖标记的地方在 daemon 的 fork 分支(`routes/project/conversations.ts`)。
+
+            **一行,不是两行**(OPEND-2714):原来是「线上写源会话标题 + 线下一行脚注」
+            两块。改成对齐 Codex 的那一种 —— 分支图标配一行文案,一起摆进线中间那一格。
+            源会话标题因此不再出现在界面上:一条只说「上面这些是带过来的」的线,
+            比一条报出旧标题的线更接近它真正的作用,而标题本身在会话列表里随时找得到。
+            `forkedInto.title` 仍留在契约和库里,不为这次改动动数据。 */}
         {message.forkedInto ? (
-          <>
-            {/* `.is-new` 是入场动画的开关(稿子第 38 格「落一下」)。
-                这两块只在这里渲染,陈列页那一格是手写的裸类名 —— 稿子交代的
-                「钉住展示的那一格不挂 .is-new」因此天然成立。 */}
-            <div className="fork-sep is-new" data-testid="assistant-fork-divider">
-              <i aria-hidden />
-              <span title={message.forkedInto.title}>{message.forkedInto.title}</span>
-              <i aria-hidden />
-            </div>
-            {/* 脚注跟着分界线【居中】:它是这条线的注解,不是新会话里的第一句话。
-                左对齐会让人读成「新会话已经开口说了一句」。 */}
-            <div className="fork-note is-new" data-testid="assistant-fork-note">
+          /* `.is-new` 是入场动画的开关(稿子第 38 格「落一下」)。
+             只在这里挂,陈列页那一格是手写的裸类名 —— 稿子交代的
+             「钉住展示的那一格不挂 .is-new」因此天然成立。 */
+          <div className="fork-sep is-new" data-testid="assistant-fork-divider">
+            <i aria-hidden />
+            {/* 文案住在线**中间**那一格:它是这条线的注解,不是新会话里的第一句话。
+                摆到线下面、左对齐,都会读成「新会话已经开口说了一句」。 */}
+            <span className="fork-note" data-testid="assistant-fork-note">
               <Icon name="fork" size={12} />
               {t('assistant.forkNote')}
-            </div>
-          </>
+            </span>
+            <i aria-hidden />
+          </div>
         ) : null}
       </div>
     </div>

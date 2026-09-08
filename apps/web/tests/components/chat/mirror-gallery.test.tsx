@@ -1050,25 +1050,21 @@ const OUTRO: Cell[] = [
     ],
   },
   {
-    gid: 38, sub: '15-5', cmp: '回合状态行', state: '点过「新开会话」· 原地落一条分界,标题承接原会话', family: '产出收尾',
+    gid: 38, sub: '15-5', cmp: '回合状态行', state: '点过「新开会话」· 原地落一条分界,线中间一行「从上一个会话继续」', family: '产出收尾',
     node: () => (
-      <>
-        <div className="fork-sep">
-          <i aria-hidden />
-          <span>把商品列表页复刻成能跑的原型</span>
-          <i aria-hidden />
-        </div>
-        <div className="fork-note">
+      <div className="fork-sep">
+        <i aria-hidden />
+        <span className="fork-note">
           <Icon name="fork" size={12} />
-          上文已带过来,接着说就行
-        </div>
-      </>
+          从上一个会话继续
+        </span>
+        <i aria-hidden />
+      </div>
     ),
     notes: [
-      '**已接线**:`handleForkFromMessage` 在分叉成功之后给源会话那条助手消息盖上 `forkedInto`(承接过来的标题 + 新会话 id)并 PUT 回去;daemon 侧新增 `messages.forked_into_json` 落库,所以**刷新之后分界还在**',
+      '**已接线**:分叉时 daemon 给新会话末尾那条 seeded 助手消息盖上 `forkedInto` 并落库(`messages.forked_into_json`),所以**刷新之后分界还在**',
       '两侧的线都从外沿透明化到贴着字的实色 —— 稿子的理由是让它读起来像「一段的开头」,而不是把这一列切成两半的硬横线',
-      '脚注跟着线【居中】:它是这条线的注解,不是新会话里的第一句话(左对齐会读成「新会话已经开口说了一句」)。文案 `assistant.forkNote`,19 语已补齐',
-      '⚠️ **还差半步**:分界今天只落在**源会话**那条消息上,新会话消息流末尾还没有。点完之后页面是跳到新会话的,所以「原地」这一半要等新会话末尾也盖上标记才完整',
+      '⚠️ **和稿子分岔了(OPEND-2714)**:稿子这一格是两块 —— 线上写源会话标题、线下再一行脚注。产品裁决改成 Codex 那一种:**分支图标配一行文案,一起摆进线中间**,源会话标题不再上屏。文案 `assistant.forkNote`,19 语已补齐',
     ],
   },
   {
