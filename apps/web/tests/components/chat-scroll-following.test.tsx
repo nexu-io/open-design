@@ -14,6 +14,7 @@ if (typeof HTMLElement.prototype.scrollTo !== 'function') {
 }
 
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPane } from '../../src/components/ChatPane';
 import { flushMounts, pressEnter, typeInComposer } from '../helpers/lexical-composer';
@@ -1299,5 +1300,159 @@ describe('尾部预留空白不能把「用户滑走了」这件事吃掉(用户
     await userScrollTo(900);
     expect(geom.contentHeight - geom.scrollTop - geom.clientHeight).toBe(360);
     expect(jumpBtnShown()).toBe(true);
+  });
+});
+
+/*
+ * ── 合成器把位置甩回陈旧上限,不算用户上滑 ────────────────────────────
+ *
+ * 真机诊断包(Electron 41 / Chromium 146,用户客户端):布局层和合成器层各持一份
+ * 「这个框能滚多远」,合成器那份卡在旧值上 ——
+ *
+ *   scrollTop 245.5   layoutMax 718   scrollHeight 1307   unreachablePx 472.5
+ *
+ * 点【滚动到最新】→ `scrollTo({top:1307})` → 位置落在 718.5;用户碰一下滚轮,
+ * 合成器把越界位置甩回自己那份陈旧上限 245.5。写入拦截(`scrollTop`/`scrollTo`/
+ * `scrollBy`/`scrollIntoView` 四个 API)全程武装、零丢弃,这 3.8 秒里**零条 JS
+ * 写入记录** —— 没有任何 JS 移过它。
+ *
+ * 那一段位移「位置变小 + `scrollHeight` 没变」,正好命中判据里「用户上滑」的
+ * 定义,于是每一次夹取都把自动跟随静默关掉。
+ *
+ * 判据只由「这段窗口里的滚轮**只**朝下」授权 —— 用户此刻要的是往底部去,位置却
+ * 反着跑,那就不是他的手。下面两条反向用例比正向那条更重要:多判一次就是把跟随
+ * 焊死,比这个 bug 更糟。
+ */
+describe('合成器夹取不许关掉自动跟随', () => {
+  /** 不经过 `scrollTop` setter 的位移 —— 合成器干的,不是 JS 写的。 */
+  async function compositorClampTo(top: number) {
+    await act(async () => {
+      geom.scrollTop = top;
+      fireEvent.scroll(chatLog());
+      await Promise.resolve();
+    });
+  }
+
+  async function wheel(deltaY: number) {
+    await act(async () => {
+      fireEvent.wheel(chatLog(), { deltaY });
+      await Promise.resolve();
+    });
+  }
+
+  async function streamOneChunk(
+    rerender: (ui: ReactElement) => void,
+    text: string,
+    px = 120,
+  ): Promise<void> {
+    geom.contentHeight += px;
+    await act(async () => {
+      rerender(chatPaneEl(longConversation(text), { streaming: true }));
+    });
+    await triggerResize();
+    await flushFrames();
+  }
+
+  it('朝下的滚轮把位置甩到上面去之后,流式输出仍然自动吸底', async () => {
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+    expect(geom.scrollTop).toBe(4600);
+
+    // 用户想往底部去。合成器把他甩回自己那份陈旧上限。
+    await wheel(40);
+    await compositorClampTo(1200);
+
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(maxScrollTop());
+  });
+
+  it('【反向】滚轮朝上带来的同一段位移,跟随必须照旧松开', async () => {
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+
+    await wheel(-40);
+    await compositorClampTo(1200);
+
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(1200);
+  });
+
+  it('【反向】滚轮打不动这个框时改用滚动条上滑,那一次上滑不许被吞掉', async () => {
+    /*
+     * 合成器卡住的那一档里,朝下的滚轮一个 scroll 事件都不发(真机实测「12 格朝下
+     * 的滚轮要 1440px,停在 91 一动不动」)。见证于是留在那儿没人用掉 —— 这时用户
+     * 改用滚动条往上走,那一次**真正的**用户上滑会撞上一个陈旧的「滚轮在朝下要」。
+     *
+     * 所以滚轮之外的每条输入通道一动就把见证作废。这一条钉的就是那个作废。
+     */
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+
+    // 朝下拨了几格,框一动不动 —— 没有任何 scroll 事件来用掉这个见证。
+    await wheel(40);
+    await wheel(40);
+
+    // 改用滚动条:按下去,然后真的滑上去。
+    await act(async () => {
+      fireEvent.pointerDown(chatLog());
+      await Promise.resolve();
+    });
+    await userScrollTo(1200);
+
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(1200);
+  });
+  it('【反向】见证只为这一段位移作数 —— 下一段没有新滚轮就不许再拿它当挡箭牌', async () => {
+    /*
+     * 夹取那一段用掉见证之后,紧接着的下一段位移是**另一件事**。这时如果见证还留着,
+     * 一次没有滚轮的用户上滑(拖滚动条、find-in-page、焦点跳转)就会被那张旧条子
+     * 挡掉 —— 跟随焊死。这一条钉的是「见证是一次性的」。
+     */
+    geom = { contentHeight: 5000, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+
+    // 第一段:朝下的滚轮 + 夹取 —— 跟随保住(正向那条已经钉过)。
+    await wheel(40);
+    await compositorClampTo(1200);
+    await streamOneChunk(rerender, 'chunk more');
+    expect(geom.scrollTop).toBe(maxScrollTop());
+
+    // 第二段:没有任何新滚轮,用户自己往上走。必须松手。
+    await userScrollTo(900);
+    await streamOneChunk(rerender, 'chunk more more');
+    expect(geom.scrollTop).toBe(900);
+  });
+
+  it('【反向】这段窗口里出现过朝上的滚轮 —— 哪怕后面又朝下拨,也归用户', async () => {
+    /*
+     * 用户 2026-09-07 那一档的形状:会话短到滚不动,往上拨几格屏幕纹丝不动
+     * (`upwardGestureCanEscapeBottom` 在那儿挡住了松手,是对的);内容长起来之后
+     * 他又往下拨了一格。见证必须**如实**记下那几格朝上的 —— 记漏了,随后的位移
+     * 就会被当成夹取,一次真正的上滑被吞掉。
+     *
+     * 这条同时说明了见证的偏置:拿不准就松手,不拿不准就焊死。
+     */
+    geom = { contentHeight: 200, clientHeight: 400, scrollTop: 0 };
+    const { rerender } = render(chatPaneEl(longConversation('chunk'), { streaming: true }));
+    await flushFrames();
+    expect(maxScrollTop()).toBe(0);
+
+    // 一屏装得下,往上拨一格 —— 位置一个像素都没动,也没有 scroll 事件。
+    await wheel(-40);
+    expect(geom.scrollTop).toBe(0);
+
+    // 内容长过视口,跟随把他带到底部。
+    await streamOneChunk(rerender, 'chunk 2', 4800);
+    expect(geom.scrollTop).toBe(maxScrollTop());
+
+    // 再往下拨一格,然后位置反而往上跑。见证里有朝上的那一格,不算夹取。
+    await wheel(40);
+    await compositorClampTo(1200);
+    await streamOneChunk(rerender, 'chunk 3');
+    expect(geom.scrollTop).toBe(1200);
   });
 });

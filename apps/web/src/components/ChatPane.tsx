@@ -8,6 +8,7 @@ import {
   upwardGestureCanEscapeBottom,
   type FollowIntent,
   type ScrollSample,
+  type WheelWitness,
 } from '../runtime/chat/stick-to-bottom';
 import {
   ANCHOR_TOP_PADDING,
@@ -1558,6 +1559,16 @@ export function ChatPane({
     scrollHeight: 0,
     clientHeight: 0,
   });
+  /**
+   * 上一次 scroll 事件之后收到的滚轮格数,按方向分开数。
+   *
+   * 唯一的用途是给 `nextFollowIntent` 一个否决权:朝下的滚轮配上朝上的位移不是
+   * 用户上滑(见 `stick-to-bottom.ts` 的 `isCompositorSnapBack`)。
+   *
+   * ⚠️ 它是**一次性**的,而且只由输入清空 —— 见 `resetWheelWitness` 的调用点。
+   * 这个见证留得越久,越可能替一次真正的用户上滑背书。
+   */
+  const wheelWitnessRef = useRef<WheelWitness>({ downwardEvents: 0, upwardEvents: 0 });
   const scrolledToFormRef = useRef<Set<string>>(new Set());
   const refreshInlineAmrLoginStatus = useCallback(async (options: { refresh?: boolean } = {}) => {
     const next = await fetchVelaLoginStatus(options).catch(() => null);
@@ -2975,8 +2986,12 @@ export function ChatPane({
         followIntentRef.current,
         lastScrollSampleRef.current,
         sample,
+        wheelWitnessRef.current,
       );
       lastScrollSampleRef.current = sample;
+      // 见证是一次性的:它只为**这一段**位移作数。留到下一段就可能替一次真正的
+      // 用户上滑背书 —— 那是把跟随焊死,比它要修的 bug 更糟。
+      resetWheelWitness();
       snapshot(target);
       // `syncFollowState` 里的函数式更新在值没变时原地返回,所以流式期间那一串
       // scroll 事件不会每一跳都排一次重渲,也就不会撞上 React 的
@@ -3014,6 +3029,14 @@ export function ChatPane({
     function onWheel(event: WheelEvent) {
       const target = logRef.current;
       if (!target) return;
+      /*
+       * 先记方向,再走下面的早退 —— 朝下的滚轮在这一条里什么都不做,可它正是
+       * 合成器夹取的**触发者**:真机实测「`scrollTop = 800`,一格朝下的滚轮,
+       * 位置被甩到 91」(`observability/chat-scroll-freeze-detector.ts` 的抬头)。
+       * 记漏了,随之而来的那次「位置变小」就还是会被读成用户上滑。
+       */
+      if (event.deltaY > 0) wheelWitnessRef.current.downwardEvents += 1;
+      else if (event.deltaY < 0) wheelWitnessRef.current.upwardEvents += 1;
       if (event.deltaY >= 0) return;
       /*
        * 判据是**这一格有没有可能真的离开底部**,不是「有没有发生一次滚轮手势」。
@@ -3051,11 +3074,26 @@ export function ChatPane({
       }
     }
 
+    /*
+     * 滚轮之外的每条输入通道,一动就把滚轮见证作废。
+     *
+     * 见证平时由 scroll 事件用掉。但滚轮**打不动**这个框的时候(合成器卡住的
+     * 那一档,真机实测「12 格朝下的滚轮要 1440px,停在 91 一动不动」)一个
+     * scroll 事件都不会发,见证就留在那儿。这时用户改用滚动条或键盘往上走,
+     * 那次位移会撞上一个陈旧的「滚轮在朝下要」见证 —— 一次真正的用户上滑被吞掉。
+     * 这两条监听把那个窗口关掉。
+     */
+    function onOtherInput() {
+      resetWheelWitness();
+    }
+
     rememberScrollSample(el);
     el.addEventListener('scroll', onScroll);
     el.addEventListener('wheel', onWheel, { passive: true });
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: true });
+    el.addEventListener('pointerdown', onOtherInput, { passive: true });
+    el.addEventListener('keydown', onOtherInput, { passive: true });
     return () => {
       // Capture final scroll state before unmount; the ref normally
       // tracks via onScroll, but programmatic scrolls or layout shifts
@@ -3065,6 +3103,8 @@ export function ChatPane({
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('pointerdown', onOtherInput);
+      el.removeEventListener('keydown', onOtherInput);
     };
   }, [tab]);
 
@@ -3325,6 +3365,20 @@ export function ChatPane({
    */
   function rememberScrollSample(el: HTMLDivElement) {
     lastScrollSampleRef.current = readViewportSample(el);
+  }
+
+  /**
+   * 把滚轮见证清空。
+   *
+   * 清空点只有两个,而且都是**输入**:scroll 事件把它用掉,别的输入通道
+   * (拖滚动条 / 键盘)一动就把它作废。见证越短命越安全。
+   *
+   * 特意**不**挂在 `rememberScrollSample` 上:我们自己写 `scrollTop` 在流式期间
+   * 随时可能插进「用户滚轮」和「随之而来的 scroll 事件」中间,把见证擦掉,
+   * 那一格夹取就又变回一次「用户上滑」。基线归位和见证归位是两件事。
+   */
+  function resetWheelWitness() {
+    wheelWitnessRef.current = { downwardEvents: 0, upwardEvents: 0 };
   }
 
   /** 唯一的 `scrollTop` 写入口:写完就记基线。 */
