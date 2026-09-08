@@ -20,7 +20,7 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { delimiter, join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import type {
@@ -31,6 +31,7 @@ import type {
 import { startServer } from '../src/server.js';
 import { projectChatArtifactRefs } from '../src/chat-artifacts/refs.js';
 import type { ChatArtifactRef } from '../src/chat-artifacts/types.js';
+import { listProjectFileVersions, readProjectFileVersion } from '../src/project-file-versions.js';
 
 /** A real 1x1 PNG: the daemon hashes and stores whatever the renderer returns. */
 const PNG_1X1 = Buffer.from(
@@ -191,11 +192,15 @@ function refsFor(projectId: string, messageId: string): ChatArtifactRef[] {
  * and return everything the assertions need. The fake agent prints its own cwd
  * so the test never has to assume a projects-directory layout.
  */
-async function runTurnThatWritesHtml(): Promise<{
+async function runTurnThatWritesHtml(options: {
+  html?: string;
+  metadata?: { kind: 'prototype'; entryFile: string };
+} = {}): Promise<{
   projectId: string;
   conversationId: string;
   messageId: string;
   cwd: string;
+  runId: string;
 }> {
   const projectId = `proj-${randomUUID()}`;
   // The web client mints the assistant message id up front and hands it to the
@@ -205,7 +210,11 @@ async function runTurnThatWritesHtml(): Promise<{
   const created = await fetch(`${baseUrl}/api/projects`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: projectId, name: 'chat artifact cover fixture' }),
+    body: JSON.stringify({
+      id: projectId,
+      name: 'chat artifact cover fixture',
+      ...(options.metadata ? { metadata: options.metadata } : {}),
+    }),
   });
   expect(created.ok).toBe(true);
 
@@ -215,13 +224,15 @@ async function runTurnThatWritesHtml(): Promise<{
     .conversations[0]?.id;
   expect(conversationId).toBeTruthy();
 
+  const html = options.html
+    ?? `<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><h1>${V1_BODY_MARKER}</h1></body></html>`;
   const script = `
 const fs = require('node:fs');
 const path = require('node:path');
 fs.writeFileSync(path.join(process.cwd(), 'style.css'), 'body{background:#0af}/* ${V1_CSS_MARKER} */');
 fs.writeFileSync(
   path.join(process.cwd(), 'index.html'),
-  '<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><h1>${V1_BODY_MARKER}</h1></body></html>',
+  ${JSON.stringify(html)},
 );
 console.log(JSON.stringify({ type: 'step_start' }));
 console.log(JSON.stringify({ type: 'text', part: { text: 'cwd=' + process.cwd() + '=cwd' } }));
@@ -247,6 +258,10 @@ process.exit(0);
 
   const cwd = /cwd=(.+?)=cwd/.exec(body)?.[1];
   expect(cwd, 'the fake agent should report the run cwd').toBeTruthy();
+  const startFrame = body.split('\n\n').find((frame) => /^event:\s*start$/m.test(frame));
+  const startData = startFrame && /^data:\s*(.*)$/m.exec(startFrame)?.[1];
+  const runId = startData ? (JSON.parse(startData) as { runId?: string }).runId : undefined;
+  expect(runId, 'the chat start frame should identify the physical Run').toBeTruthy();
 
   const messageId = await waitFor(
     () => latestAssistantMessageId(conversationId!),
@@ -255,7 +270,7 @@ process.exit(0);
   );
   expect(messageId, 'the turn should have persisted its assistant message').toBe(assistantMessageId);
 
-  return { projectId, conversationId: conversationId!, messageId: assistantMessageId, cwd: cwd! };
+  return { projectId, conversationId: conversationId!, messageId: assistantMessageId, cwd: cwd!, runId: runId! };
 }
 
 describe('run terminal HTML cover wiring', () => {
@@ -401,6 +416,86 @@ describe('run terminal HTML cover wiring', () => {
     expect(htmlRef?.snapshotUrl).toBeUndefined();
     expect(htmlRef?.workspaceArtifactId).toBeTruthy();
     expect(htmlRef?.snapshotState).toBe('failed');
+  });
+
+  it('freezes and versions only the committed Host-repaired HTML before finishing', async () => {
+    exporterCalls = [];
+    let release!: () => void;
+    renderGate = new Promise<void>((resolve) => { release = resolve; });
+    exporterResult = async () => ({ ok: false, code: 'capture_blank', error: 'rendering is not under test' });
+    const original = '<!doctype html><html><body><script>const items = [1, 2;</script></body></html>';
+    const repaired = original.replace('[1, 2;', '[1, 2];');
+
+    try {
+      // The HTTP stream must finish while rendering is parked. Capture freezes
+      // after the Host commits, but never waits for the background renderer.
+      const turn = await runTurnThatWritesHtml({
+        html: original,
+        metadata: { kind: 'prototype', entryFile: 'index.html' },
+      });
+      const runResponse = await fetch(`${baseUrl}/api/runs/${turn.runId}`);
+      expect(runResponse.ok).toBe(true);
+      expect(await runResponse.json()).toMatchObject({
+        status: 'succeeded',
+        deliverableSyntaxValidation: {
+          status: 'pass',
+          finalization: { initialStatus: 'repairable', committedPatchCount: 1, action: 'allow' },
+        },
+      });
+      expect(await fsp.readFile(join(turn.cwd, 'index.html'), 'utf8')).toBe(repaired);
+      expect(exporterCalls, 'capture must run exactly once after the syntax gate').toHaveLength(1);
+      const frozen = exporterCalls[0]?.html ?? '';
+      expect(frozen).toContain('<script>const items = [1, 2];</script>');
+      expect(frozen).not.toContain('<script>const items = [1, 2;</script>');
+
+      const versions = await listProjectFileVersions(dirname(turn.cwd), turn.projectId, 'index.html');
+      expect(versions).toHaveLength(1);
+      expect(versions[0]?.source).toBe('ai');
+      const saved = await readProjectFileVersion(dirname(turn.cwd), turn.projectId, 'index.html', versions[0]!.id);
+      expect(saved.content).toBe(repaired);
+      const lineage = withDb((db) => db.prepare(
+        'SELECT html_version_id AS versionId FROM message_artifacts WHERE message_id = ? AND label_at_capture = ?',
+      ).all(turn.messageId, 'index.html') as Array<{ versionId: string | null }>);
+      expect(lineage).toEqual([{ versionId: versions[0]!.id }]);
+
+      // A following turn may overwrite the workspace before drawing completes;
+      // both immutable renderer input and persisted history remain the repair.
+      await fsp.writeFile(join(turn.cwd, 'index.html'), '<html><body>later turn</body></html>');
+      expect(exporterCalls[0]?.html).toBe(frozen);
+      expect((await readProjectFileVersion(dirname(turn.cwd), turn.projectId, 'index.html', versions[0]!.id)).content)
+        .toBe(repaired);
+    } finally {
+      release();
+      renderGate = Promise.resolve();
+    }
+  });
+
+  it('does not capture a cover or successful HTML version when Host syntax repair is refused', async () => {
+    exporterCalls = [];
+    renderGate = Promise.resolve();
+    exporterResult = async () => ({ ok: false, code: 'capture_blank', error: 'must not render a refused delivery' });
+    const original = '<!doctype html><html><body><script>const value = ;</script></body></html>';
+    const turn = await runTurnThatWritesHtml({
+      html: original,
+      metadata: { kind: 'prototype', entryFile: 'index.html' },
+    });
+    const runResponse = await fetch(`${baseUrl}/api/runs/${turn.runId}`);
+    expect(runResponse.ok).toBe(true);
+    expect(await runResponse.json()).toMatchObject({
+      status: 'failed',
+      deliverableSyntaxValidation: {
+        status: 'repairable',
+        finalization: { initialStatus: 'repairable', committedPatchCount: 0, action: 'fail' },
+      },
+    });
+    expect(await fsp.readFile(join(turn.cwd, 'index.html'), 'utf8')).toBe(original);
+    expect(exporterCalls).toHaveLength(0);
+    expect(withDb((db) => db.prepare(
+      'SELECT id FROM message_artifacts WHERE message_id = ?',
+    ).all(turn.messageId))).toEqual([]);
+    // Unlike the HTTP list route, this read-only helper cannot create an
+    // initial manual version and accidentally change what this test observes.
+    expect(await listProjectFileVersions(dirname(turn.cwd), turn.projectId, 'index.html')).toEqual([]);
   });
 
   it('records the HTML version this turn wrote as the ref\'s lineage', async () => {

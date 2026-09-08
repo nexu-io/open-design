@@ -266,7 +266,7 @@ describe('ChatPane session switcher', () => {
     const parsedConsoleUrl = new URL(String(consoleUrl));
     // Top-up reports on the console dashboard now, not a wallet page.
     expect(`${parsedConsoleUrl.origin}${parsedConsoleUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/dashboard',
+      'https://open-design.powerformer.net/cloud/dashboard',
     );
     // The plain top-up entry must NOT carry the upgrade intent — it opens the
     // console to add credit, not the plan catalog.
@@ -312,7 +312,7 @@ describe('ChatPane session switcher', () => {
     // non-prod build sent people to production checkout.
     const parsedPlansUrl = new URL(String(plansUrl));
     expect(`${parsedPlansUrl.origin}${parsedPlansUrl.pathname}`).toBe(
-      'https://vela.powerformer.net/dashboard',
+      'https://open-design.powerformer.net/cloud/dashboard',
     );
     expect(parsedPlansUrl.searchParams.get('billing')).toBe('plan');
     expect(parsedPlansUrl.searchParams.get('od_entry_source')).toBe('chat_error_upgrade');

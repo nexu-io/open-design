@@ -33,7 +33,7 @@ describe('amrRechargeUrlForProfile', () => {
     );
     expect(amrRechargeUrlForProfile('prod')).toBe(DEFAULT_AMR_RECHARGE_URL);
     expect(amrRechargeUrlForProfile('test')).toBe(
-      'https://vela.powerformer.net/dashboard?source=open_design',
+      'https://open-design.powerformer.net/cloud/dashboard?source=open_design',
     );
     expect(amrRechargeUrlForProfile('local')).toBe(
       'http://localhost:5173/dashboard?source=open_design',

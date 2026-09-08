@@ -1163,8 +1163,9 @@ describe('chat run service shutdown', () => {
       createSseErrorPayload: (code: string, message: string) => ({ error: { code, message } }),
       shutdownGraceMs: 10,
       ttlMs: 60_000,
-      beforeFinish: ((run: any, status: string) => {
+      beforeFinish: ((run: any, status: string, _code: unknown, _signal: unknown, terminalAt: number) => {
         observed.push(`before:${status}:${run.status}`);
+        observed.push(`terminal:${terminalAt}`);
         run.strategyTask = { outcome: 'canceled', terminal: true };
       }) as unknown as null,
     });
@@ -1173,7 +1174,10 @@ describe('chat run service shutdown', () => {
 
     await runs.shutdownActive({ graceMs: 10 });
 
-    expect(observed).toEqual(['before:canceled:running']);
+    expect(observed).toEqual([
+      'before:canceled:running',
+      `terminal:${run.terminalAt}`,
+    ]);
     expect(run.events.at(-1)).toMatchObject({
       event: 'end',
       data: {
@@ -1442,6 +1446,47 @@ describe('run event log persistence', () => {
     expect(parsed[0]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: 'hello' } });
     expect(parsed[1]).toMatchObject({ event: 'agent', data: { type: 'text_delta', delta: ' world' } });
     expect(parsed[2]).toMatchObject({ event: 'end', data: { status: 'succeeded' } });
+  });
+
+  it('persists syntax evidence and emits it alongside the terminal failure verdict', () => {
+    const runs = createRunsWithLog(tmpDir);
+    const run = runs.create({ projectId: 'p1', conversationId: 'c1' }) as any;
+    run.deliverableSyntaxRepair = {
+      schema: 'open-design.deliverable-syntax-repair/v1',
+      attempt: 1,
+      maxAttempts: 3,
+      checker: 'web-syntax@1',
+      candidateHash: 'sha256:failed',
+    };
+    run.deliverableSyntaxValidation = {
+      schema: 'open-design.deliverable-syntax-tool/v1',
+      status: 'repairable',
+      checkedAt: 1_725_000_000_000,
+    };
+    runs.persistState(run);
+
+    const statePath = path.join(tmpDir, run.id, 'state.json');
+    expect(JSON.parse(fs.readFileSync(statePath, 'utf8'))).toMatchObject({
+      deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+      deliverableSyntaxValidation: { status: 'repairable' },
+    });
+    expect(runs.statusBody(run)).toMatchObject({
+      deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+      deliverableSyntaxValidation: { status: 'repairable' },
+    });
+    run.failureAction = 'none';
+    run.retryable = false;
+    runs.finish(run, 'failed', 1, null);
+    expect(run.events.at(-1)).toMatchObject({
+      event: 'end',
+      data: {
+        status: 'failed',
+        failureAction: 'none',
+        retryable: false,
+        deliverableSyntaxRepair: { attempt: 1, maxAttempts: 3 },
+        deliverableSyntaxValidation: { status: 'repairable' },
+      },
+    });
   });
 
   it('persists a restart-safe terminal state and telemetry checkpoints', () => {
