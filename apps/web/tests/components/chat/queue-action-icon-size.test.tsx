@@ -74,8 +74,16 @@ describe('队列行的动作键尺寸(层叠走完之后)', () => {
   it('动作键的命中框是 22×22,手柄是 16×22 —— 两者不共用一条宽度', () => {
     renderStrip();
     const handle = document.querySelector('.chat-queued-send-drag-handle')!;
-    const action = document.querySelector('.chat-queued-send-action')!;
-    expect(box(action)).toEqual({ w: '22px', h: '22px' });
+    // 领头那颗「引导对话」带可见文字,稿子 `.qops button.mod-steer` 专门把它的
+    // 宽度放开(`width: auto`);那一条由 `queue-steer-affordance.test.tsx` 量。
+    // 这里问的是**其余**动作键有没有守住方形命中框。
+    const actions = [...document.querySelectorAll('.chat-queued-send-action')].filter(
+      (el) => !el.classList.contains('chat-queued-send-action-steer'),
+    );
+    expect(actions.length).toBe(2);
+    for (const action of actions) {
+      expect(box(action)).toEqual({ w: '22px', h: '22px' });
+    }
     expect(box(handle)).toEqual({ w: '16px', h: '22px' });
   });
 
@@ -88,16 +96,17 @@ describe('队列行的动作键尺寸(层叠走完之后)', () => {
 
   /*
    * 只对齐视觉,不动能力:队列今天比稿子那一行**更全**(可编辑、可重排、
-   * 可引导当前回合、可立即发送)。图标改大一号绝不能顺手把哪一颗按钮拿掉。
+   * 可引导对话)。图标改大一号绝不能顺手把哪一颗按钮拿掉。
    */
-  it('三颗动作一颗不少:编辑 / 移除 / 引导(或退回立即发送)', () => {
-    renderStrip({ onSteer: () => {} });
+  it('三颗动作一颗不少:引导 / 编辑 / 移除', () => {
+    renderStrip();
     expect(document.querySelectorAll('.chat-queued-send-action').length).toBe(3);
     expect(screen.getByTestId('chat-queued-send-steer')).toBeTruthy();
 
+    // 宿主不给回调时那一颗仍旧在位(变成 disabled),不是少画一颗。
     cleanup();
-    renderStrip();
+    renderStrip({ onSendNow: undefined });
     expect(document.querySelectorAll('.chat-queued-send-action').length).toBe(3);
-    expect(screen.getByTestId('chat-queued-send-now')).toBeTruthy();
+    expect(screen.getByTestId('chat-queued-send-steer')).toBeTruthy();
   });
 });
