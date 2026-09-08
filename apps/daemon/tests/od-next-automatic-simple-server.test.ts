@@ -1154,15 +1154,20 @@ describe('OD Next automatic production through the real server', () => {
     const resetCli = await runOdCli([
       'strategy', 'rollout', 'reset', '--daemon-url', started.url, '--json',
     ]).then(
-      (ok) => ({ code: 0, stdout: ok.stdout }),
-      (error: { code?: number; stdout?: string }) => ({
+      (ok) => ({ code: 0, stdout: ok.stdout, stderr: ok.stderr }),
+      (error: { code?: number; stdout?: string; stderr?: string }) => ({
         code: error.code ?? -1,
         stdout: error.stdout ?? '',
+        stderr: error.stderr ?? '',
       }),
     );
     expect(resetCli.code).toBe(2);
-    expect(resetCli.stdout).toContain('od strategy rollout status');
-    expect(resetCli.stdout).not.toContain('rollout reset');
+    // Named, not silently absent from a usage dump. `reset` shipped in 0.21.0
+    // and 0.21.1, so an operator who scripted it gets told what happened and
+    // what replaced it — and gets a non-zero exit, because the recovery it
+    // asked for neither happened nor can.
+    expect(resetCli.stderr).toContain('od strategy rollout reset was removed');
+    expect(resetCli.stderr).toContain('od config set odNextStrategyMode off');
   });
 
   it('keeps active retry/task recipe-only while rollback lazily resolves the ordinary default', async () => {

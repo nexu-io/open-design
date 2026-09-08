@@ -469,6 +469,27 @@ async function runStrategy(args) {
     process.exit(args.length === 0 ? 2 : 0);
   }
   const [area, action = 'status', ...rest] = args;
+  // `reset` cleared the stop latch, and the latch is gone: nothing can disable
+  // OD Next for an installation any more except that installation saving `off`.
+  // Named here rather than left to the usage dump, because it shipped in
+  // 0.21.0 and 0.21.1 and an operator who scripted it deserves to be told what
+  // happened rather than shown a list it is missing from.
+  //
+  // It fails instead of succeeding as a no-op. The command meant "recover this
+  // machine's rollout"; reporting success for a recovery that neither happened
+  // nor can happen is the same lie the latch itself told, and this release is
+  // removing that lie rather than relocating it.
+  if (area === 'rollout' && action === 'reset') {
+    console.error(
+      'od strategy rollout reset was removed: the daemon-instance stop latch it '
+      + 'cleared no longer exists, so there is nothing to reset.\n'
+      + 'OD Next now runs unless this installation opts out. To opt out:\n'
+      + '  od config set odNextStrategyMode off\n'
+      + 'To check which authority decides the mode:\n'
+      + '  od strategy rollout status',
+    );
+    process.exit(2);
+  }
   if (area !== 'rollout' || action !== 'status') {
     printStrategyHelp();
     process.exit(2);
