@@ -2250,15 +2250,26 @@ export function ChatPane({
   // 面板级的那条错误(还没落到消息上)也要过这一道,否则重连行在场时它照样冒出来。
   //
   // `suppressCard` 是**交接**,不是删除:它说的是「别人已经在说这件事了」。
-  // 断线那一档的接手方(重连行)一定在场;余额那一档的接手方是升级卡,而升级卡
-  // 只有在钱包补查读出确定数字时才画得出来 —— 接不住的时候没有任何人在说话,
-  // 这时还按下白卡,用户在一轮「钱不够」的失败之后屏幕上什么都不剩,没有充值
-  // 入口也没有重试。所以交接只在接手方真的在场时成立。
+  // 余额那一档的接手方是升级卡,而升级卡只有在钱包补查读出确定数字时才画得出来;
+  // 断线那一档的接手方是流水末尾那一行重连行,而它的数据(`ProjectView` 的
+  // `reconnectView`)在换项目 / 离开这一屏时被专门清空 —— 退出项目再进来,那一行
+  // 就不在了。两处都一样:接不住的时候没有任何人在说话,这时还按下白卡,用户在一轮
+  // 失败之后屏幕上什么都不剩,既没有说明也没有恢复入口。
+  //
+  // **所以交接只在接手方真的在场时成立。**这是一条不变量,两档共用同一个形状:
+  // 先各自认出「这一档交给谁」,再统一问一句「那个人在不在」。
+  const reconnectRowOwnsFailure = isReconnectOwnedFailure(
+    failedRunErrorEvent?.code,
+    rawError,
+  );
   const balanceCardCannotTakeTheHandoff =
     failureCardHandedToAmrBalanceCard(runFailureUi) && amrBalanceCardUnavailable;
+  const reconnectRowCannotTakeTheHandoff = reconnectRowOwnsFailure && !reconnect;
+  const handoffTargetIsAbsent =
+    balanceCardCannotTakeTheHandoff || reconnectRowCannotTakeTheHandoff;
   const anotherSurfaceOwnsFailure =
-    (runFailureUi?.suppressCard === true && !balanceCardCannotTakeTheHandoff)
-    || isReconnectOwnedFailure(failedRunErrorEvent?.code, rawError);
+    (runFailureUi?.suppressCard === true || reconnectRowOwnsFailure)
+    && !handoffTargetIsAbsent;
   // 面板槽里那段字是不是某一轮跑出来的原文 —— 只看**有没有来源助手**,不看是不是
   // 「这一轮」的。别的助手留下的原文也一样是原文,不该因为「跟这一轮无关」就原样放行。
   const paneErrorCameFromARun = !!currentGlobalError && errorSourceAssistantId != null;
