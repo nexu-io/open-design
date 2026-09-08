@@ -9,6 +9,9 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Keep concrete macOS/Windows distribution and installer policy in Shell JSON. electron-kit may validate a finite supported matrix and translate it to builder configuration; distribution policy must not leak into the release-neutral scene.
 - Keep persistent cache roots, cache files, convergence graphs, hit/miss policy, retention, and immutable artifact registration outside electron-kit. `tools-pack` owns build-work reuse, `tools-release` owns verified final-artifact reuse, and convergence may cache only opaque scene products.
 - A verified signed artifact is byte-immutable. `distribution/projection/` may model copy/wrap/sidecar metadata after reuse, but build information that must enter signed bytes is a pre-sign identity input and requires a rebuild.
+- Capsule content builds emit release-neutral bytes and a content descriptor;
+  public contracts compose version and compatibility metadata without loading a
+  compiler. Keep build-cache policy and final signature authority in tools.
 - Sidecar owns private IPC, transport, process/generation identity, physical resource-set guards, retirement, and terminal stop. electron-kit must not wrap or republish that transport. The product Shell may compose only the frozen public Standalone handoff and Sidecar runtime-handle contracts when they are available.
 - Global shortcuts use the same finite ownership rule: electron-kit owns registration, rollback, observation and teardown; Shell owns every accelerator declaration and action binding. Do not add inert placeholder shortcuts or product menu actions here.
 - Import only public `@open-design/standalone` contracts. Never import `apps/closure`, another Shell, or product Web/daemon implementation.

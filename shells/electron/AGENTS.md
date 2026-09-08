@@ -22,6 +22,8 @@ Shell and the typed adapter boundary consumed by repository tools.
   composition stay outside this directory and retain their build identity.
 - Tool dev/pack schema 2 consumes local installation files. Loopback fixture acquisition belongs to tools-dev/tools-pack via the tools-serve fixture client, not to Shell or electron-kit. Product installation assembly is shared with exact distribution and must preserve prebuilt scene authority bytes.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
+- Capsule composition consumes the explicit installed manifest; never bundle a
+  default release manifest into its independently built product content.
 
 `electron-kit` owns reusable Electron mechanics. `electron-contract` is the
 browser-safe declaration leaf in that build closure. App producers and web

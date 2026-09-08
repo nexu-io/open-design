@@ -1,6 +1,5 @@
 import runtime from "../../config/runtime.json" with { type: "json" };
 import splashMedia from "../../config/splash-media.json" with { type: "json" };
-import manifest from "../../config/shell.json" with { type: "json" };
 import standalone from "../../config/standalone.json" with { type: "json" };
 import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
 import windowsLifecycle from "../../config/platforms/windows.json" with { type: "json" };
@@ -22,7 +21,7 @@ import { createInstallerRecoveryIntentAdapter } from "../adapters/updater/instal
 import { createWindowsCommittedObserver } from "../adapters/windows/lifecycle.js";
 import { assertShellWarmupBindings } from "./warmup-bindings.js";
 
-export function createElectronShellDefinition(installedManifest: ElectronShellManifest = manifest as ElectronShellManifest): ElectronShellDefinition {
+export function createElectronShellDefinition(installedManifest: ElectronShellManifest): ElectronShellDefinition {
   const shellManifest = installedManifest;
   const runtimeConfig = runtime as ElectronRuntimeConfig;
   const renderer = createElectronRendererAdapter(shellManifest.window.title);

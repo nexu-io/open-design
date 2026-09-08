@@ -12,6 +12,8 @@ export type ElectronCapsuleManifest = Readonly<{
   provides: Readonly<{ shellVersion: string }>;
   archive: Readonly<{ sha256: string; size: number; treeSha256: string }>;
 }>;
+export type ElectronCapsuleContent = Readonly<Pick<ElectronCapsuleManifest,
+  "schemaVersion" | "protocol" | "target" | "entrypoint" | "archive">>;
 
 function record(input: unknown, keys: readonly string[]): Record<string, unknown> {
   if (input == null || typeof input !== "object" || Array.isArray(input)
@@ -28,20 +30,43 @@ function digest(input: unknown): string {
   return input;
 }
 
+function contentFields(value: Record<string, unknown>): ElectronCapsuleContent {
+  const archive = record(value.archive, ["sha256", "size", "treeSha256"]);
+  if (value.schemaVersion !== 1 || value.protocol !== ELECTRON_CAPSULE_PROTOCOL || value.entrypoint !== "capsule.cjs"
+    || typeof value.target !== "string" || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(value.target)
+    || typeof archive.size !== "number" || !Number.isSafeInteger(archive.size) || archive.size <= 0) throw new Error("unsupported Capsule manifest");
+  return Object.freeze({ schemaVersion: 1, protocol: ELECTRON_CAPSULE_PROTOCOL,
+    target: value.target as ElectronCapsuleTarget, entrypoint: "capsule.cjs",
+    archive: Object.freeze({ sha256: digest(archive.sha256), size: archive.size, treeSha256: digest(archive.treeSha256) }),
+  });
+}
+
 /** Unsigned payload. Existing release signing and exact references authenticate
  * it; neither a separate trust root nor a Capsule latest pointer belongs here. */
 export function validateElectronCapsuleManifest(input: unknown): ElectronCapsuleManifest {
   const value = record(input, ["schemaVersion", "protocol", "version", "target", "entrypoint", "requires", "provides", "archive"]);
   const requires = record(value.requires, ["carrierVersion"]), provides = record(value.provides, ["shellVersion"]);
-  const archive = record(value.archive, ["sha256", "size", "treeSha256"]);
-  if (value.schemaVersion !== 1 || value.protocol !== ELECTRON_CAPSULE_PROTOCOL || value.entrypoint !== "capsule.cjs"
-    || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(String(value.target))
-    || typeof archive.size !== "number" || !Number.isSafeInteger(archive.size) || archive.size <= 0) throw new Error("unsupported Capsule manifest");
-  return Object.freeze({ schemaVersion: 1, protocol: ELECTRON_CAPSULE_PROTOCOL, version: version(value.version),
-    target: value.target as ElectronCapsuleTarget, entrypoint: "capsule.cjs",
+  return Object.freeze({ ...contentFields(value), version: version(value.version),
     requires: Object.freeze({ carrierVersion: version(requires.carrierVersion) }),
     provides: Object.freeze({ shellVersion: version(provides.shellVersion) }),
-    archive: Object.freeze({ sha256: digest(archive.sha256), size: archive.size, treeSha256: digest(archive.treeSha256) }),
+  });
+}
+
+/** Build output has no release version or compatibility policy. */
+export function validateElectronCapsuleContent(input: unknown): ElectronCapsuleContent {
+  return contentFields(record(input, ["schemaVersion", "protocol", "target", "entrypoint", "archive"]));
+}
+
+/** Pure release composition: no compiler, filesystem, signing key or selection. */
+export function composeElectronCapsuleManifest(input: Readonly<{
+  content: ElectronCapsuleContent;
+  version: string;
+  minimumCarrierVersion: string;
+  providedShellVersion: string;
+}>): ElectronCapsuleManifest {
+  return validateElectronCapsuleManifest({
+    ...validateElectronCapsuleContent(input.content), version: input.version,
+    requires: { carrierVersion: input.minimumCarrierVersion }, provides: { shellVersion: input.providedShellVersion },
   });
 }
 

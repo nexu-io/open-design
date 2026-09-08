@@ -2,6 +2,16 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { expect, it } from "vitest";
 
+it("keeps installed release identity out of the independent Capsule content", async () => {
+  const result = await build({
+    entryPoints: [fileURLToPath(new URL("../src/capsule.ts", import.meta.url))],
+    bundle: true, external: ["electron"], format: "cjs", platform: "node", target: "node24",
+    write: false, metafile: true,
+  });
+  expect(Object.keys(result.metafile.inputs).filter(path => /(?:^|\/)config\/shell\.json$/u.test(path))).toEqual([]);
+  expect(result.outputFiles[0]!.contents.byteLength).toBeGreaterThan(0);
+});
+
 it("keeps tool lifecycle code out of every physical Shell bundle", async () => {
   const entries = [
     ["main.ts", "cjs"],
