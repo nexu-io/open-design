@@ -1,6 +1,9 @@
+import { execFile, fork } from "node:child_process";
+import { once } from "node:events";
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
@@ -41,6 +44,43 @@ async function waitResult(preparation: Awaited<ReturnType<typeof prepareMacElect
 }
 
 describe("macOS Electron LKG detached restore", () => {
+  it("publishes only a complete durable result while a reader observes the write", async () => {
+    const value = await fixture();
+    try {
+      const preparation = await prepareMacElectronLastKnownGoodRestore({ capture: value.capture, claim, trust, recoveryId: "restore-publication", nodeExecutablePath: process.execPath, parentPid: 2_147_483_647, runtimeRoot: value.runtimeRoot, relaunchArguments: [], relaunch: false, mode: "verify-only" });
+      const hookPath = join(value.root, "pause-result-write.cjs");
+      // Pause the actual detached helper after creating its output, before writing
+      // bytes. This exposes the reader/writer interleaving without timing retries.
+      await writeFile(hookPath, `const fs = require("node:fs/promises");
+const original = fs.writeFile;
+fs.writeFile = async (path, data, options) => {
+  const resultPath = ${JSON.stringify(preparation.resultPath)};
+  if (path !== resultPath && !String(path).startsWith(resultPath + ".")) return original(path, data, options);
+  const handle = await fs.open(path, options.flag, options.mode);
+  try {
+    const released = new Promise(resolve => process.once("message", resolve));
+    process.send({ event: "result-opened" });
+    await released;
+    await handle.writeFile(data, options);
+  } finally { await handle.close(); process.disconnect(); }
+};
+`);
+      const child = fork(preparation.helperPath, [preparation.inputPath], { execArgv: ["--require", hookPath], silent: true });
+      const exited = once(child, "exit");
+      try {
+        const [message] = await once(child, "message", { signal: AbortSignal.timeout(5_000) });
+        expect(message).toEqual({ event: "result-opened" });
+        await expect(readMacElectronLastKnownGoodRestoreResult(preparation)).resolves.toBeNull();
+        child.send("release");
+        expect(await exited).toEqual([0, null]);
+        expect(await readMacElectronLastKnownGoodRestoreResult(preparation)).toMatchObject({ state: "restored", restoredAppPath: value.appPath });
+      } finally {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+        await exited;
+      }
+    } finally { await rm(value.root, { recursive: true, force: true }); }
+  });
+
   it("retains the candidate, atomically restores the captured tree, and makes duplicate scheduling harmless", async () => {
     const value = await fixture();
     try {
@@ -68,6 +108,17 @@ describe("macOS Electron LKG detached restore", () => {
       await scheduleMacElectronLastKnownGoodRestore(preparation);
       await new Promise((done) => setTimeout(done, 50));
       expect(await readMacElectronLastKnownGoodRestoreResult(preparation)).toEqual(result);
+    } finally { await rm(value.root, { recursive: true, force: true }); }
+  });
+
+  it("never overwrites a previously published result", async () => {
+    const value = await fixture();
+    try {
+      const preparation = await prepareMacElectronLastKnownGoodRestore({ capture: value.capture, claim, trust, recoveryId: "restore-existing-result", nodeExecutablePath: process.execPath, parentPid: 2_147_483_647, runtimeRoot: value.runtimeRoot, relaunchArguments: [], relaunch: false, mode: "verify-only" });
+      const existing = { schemaVersion: 1, operation: "electron.macos-lkg.restore.result", recoveryId: preparation.recoveryId, claim, state: "failed", error: { code: "prior-failure", message: "Preserve first published result" } };
+      await writeFile(preparation.resultPath, JSON.stringify(existing), { flag: "wx" });
+      await expect(promisify(execFile)(process.execPath, [preparation.helperPath, preparation.inputPath])).rejects.toMatchObject({ code: 1 });
+      expect(await readMacElectronLastKnownGoodRestoreResult(preparation)).toEqual(existing);
     } finally { await rm(value.root, { recursive: true, force: true }); }
   });
 

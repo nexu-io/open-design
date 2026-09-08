@@ -19,9 +19,9 @@ const SHA256 = /^[a-f0-9]{64}$/u;
 const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 
 const helperSource = String.raw`const { constants } = require("node:fs");
-const { createHash } = require("node:crypto");
+const { createHash, randomUUID } = require("node:crypto");
 const { spawn, execFile } = require("node:child_process");
-const { cp, lstat, mkdir, open, readFile, readdir, readlink, rename, writeFile } = require("node:fs/promises");
+const { cp, link, lstat, mkdir, open, readFile, readdir, readlink, rename, unlink, writeFile } = require("node:fs/promises");
 const { basename, dirname, isAbsolute, join, relative, resolve, sep } = require("node:path");
 const { promisify } = require("node:util");
 const run = promisify(execFile);
@@ -34,7 +34,16 @@ const tree = async (root) => { const top = await lstat(root); if (!top.isDirecto
 const same = (a,b) => a.sha256 === b.sha256 && a.entries === b.entries && a.size === b.size;
 const nativeTrust = async (app) => { await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", "--verbose=2", app]); const displayed = await run("/usr/bin/codesign", ["--display", "--requirements", "-", "--verbose=4", app]); const output = String(displayed.stdout || "") + "\n" + String(displayed.stderr || ""); const field = (name) => { const match = output.match(new RegExp("(?:^|\\n)" + name + "=(.*)(?:\\n|$)")); if (!match) throw new Error("restored app lacks codesign " + name); return match[1].trim(); }; const requirementMatch = output.match(/(?:^|\n)(?:# )?designated => (.*)(?:\n|$)/); if (!requirementMatch) throw new Error("restored app lacks designated requirement"); const plist = async (key) => String((await run("/usr/bin/plutil", ["-extract", key, "raw", "-o", "-", join(app, "Contents", "Info.plist")])).stdout).trim(); return { bundleId:await plist("CFBundleIdentifier"), executableName:await plist("CFBundleExecutable"), productName:await plist("CFBundleName"), designatedRequirement:requirementMatch[1].trim(), identifier:field("Identifier"), teamIdentifier:field("TeamIdentifier") }; };
 const verifyTrust = async (app) => { if (input.mode !== "formal") return; const observed = await nativeTrust(app), expected = input.trust.release; if (observed.bundleId !== expected.installIdentity.appId || observed.identifier !== expected.installIdentity.appId || observed.executableName !== expected.installIdentity.executableName || observed.productName !== expected.installIdentity.productName || observed.designatedRequirement !== expected.designatedRequirement || observed.teamIdentifier !== expected.teamIdentifier) throw Object.assign(new Error("restored app native trust identity mismatch"), { code:"native-trust-mismatch" }); };
-const result = async (value) => await writeFile(input.resultPath, stable({ schemaVersion:1, operation:"electron.macos-lkg.restore.result", recoveryId:input.recoveryId, claim:input.claim, ...value }) + "\n", { encoding:"utf8", flag:"wx" });
+const result = async (value) => {
+  const temporary = input.resultPath + "." + process.pid + "." + randomUUID() + ".tmp";
+  try {
+    await writeFile(temporary, stable({ schemaVersion:1, operation:"electron.macos-lkg.restore.result", recoveryId:input.recoveryId, claim:input.claim, ...value }) + "\n", { encoding:"utf8", flag:"wx", mode:384 });
+    const handle = await open(temporary, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try { await handle.sync(); } finally { await handle.close(); }
+    // Link publishes complete bytes atomically and refuses to replace a prior result.
+    await link(temporary, input.resultPath);
+  } finally { await unlink(temporary).catch(() => undefined); }
+};
 (async () => {
   await mkdir(dirname(input.lockPath), { recursive:true, mode:448 });
   try { const lock = await open(input.lockPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 384); await lock.writeFile(String(process.pid)); await lock.close(); }

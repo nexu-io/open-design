@@ -65,9 +65,9 @@ runner configuration; it does not enable deferred targets or create cache hits.
 file. Its bytes must match the original publication receipt: relocation never
 rewrites that receipt or changes its authority.
 
-`prepare` and `finalize` authorize the bound policy and call the public
-`@open-design/tools-pack/exact` content atoms in-process. They own cross-job
-input collection and relocation, not a second signing or assembly implementation.
+`prepare` and `finalize` authorize the bound policy and execute release-owned
+content assembly and signing in-process. Cross-job collection and relocation
+share that implementation; tools-pack has no exact signing API or request CLI.
 Previous content is acquired from the policy's channel origin when no explicit
 envelope is supplied. A missing channel head is cold start; other acquisition
 failures and content digest mismatches fail closed instead of silently resetting

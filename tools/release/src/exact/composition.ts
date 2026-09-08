@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
-import { finalizeContent, prepareContent, type PrepareExactContentInput } from "@open-design/tools-pack/exact";
+import { finalizeContent, prepareContent, type PrepareExactContentInput } from "./content.ts";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { readObject, type JsonObject } from "./control-common.ts";
 import { unpackSceneArtifact } from "./scene-artifact.ts";

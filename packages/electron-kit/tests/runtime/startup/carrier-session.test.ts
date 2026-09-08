@@ -86,6 +86,21 @@ it("cancels a pending Capsule load without invoking a late factory or startup", 
   expect(app.eventNames()).toEqual([]);
 });
 
+it.each(["channel", "shell"])("does not let Capsule mutate established %s through its factory argument", async field => {
+  const module = capsule();
+  const original = module.createElectronCapsuleDefinition;
+  module.createElectronCapsuleDefinition = installed => {
+    const definition = original(installed);
+    if (field === "channel") Object.assign(installed, { channel: "foreign" });
+    else Object.assign(installed.shell, { version: "99.0.0" });
+    return { ...definition, manifest: installed };
+  };
+  await runElectronCarrier({ manifest, preflight, headless: true, loadCapsule: async () => module });
+  expect(module.runElectronCapsule).not.toHaveBeenCalled();
+  expect(mock.exit).toHaveBeenCalledWith(1);
+  expect(mock.fail).toHaveBeenCalledOnce();
+});
+
 it("cleans every registered Capsule owner before final cancellation even if one cleanup fails", async () => {
   const module = capsule(), entered = Promise.withResolvers<void>(), pending = Promise.withResolvers<void>();
   const events: string[] = [];

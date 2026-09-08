@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { executeExactPackControl } from "../src/exact/control-pack.js";
+import { prepareContent, finalizeContent } from "../src/exact/content.ts";
 
 const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
@@ -51,8 +51,6 @@ describe("exact release control", () => {
     process.env.OD_EXACT_ED25519_PRIVATE_KEY = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     try {
       const prepareRequest = {
-        schemaVersion: 1,
-        operation: "exact.prepare",
         channel,
         releaseVersion,
         sourceCommit: "c".repeat(40),
@@ -66,12 +64,12 @@ describe("exact release control", () => {
         outputDirectory: output,
       };
       const resourceReceiptPath = join(scene, "closure-resources.json");
-      await expect(executeExactPackControl({ ...prepareRequest, releaseVersion: channel === "stable" ? "0.1.0-stable.1" : "0.1.0" }, join(output, "prepare-receipt.json"))).rejects.toThrow("release version must be");
+      await expect(prepareContent({ ...prepareRequest, releaseVersion: channel === "stable" ? "0.1.0-stable.1" : "0.1.0" }, join(output, "prepare-receipt.json"))).rejects.toThrow("release version must be");
       const resourceReceipt = JSON.parse(await readFile(resourceReceiptPath, "utf8"));
       await writeFile(resourceReceiptPath, JSON.stringify({ ...resourceReceipt, operation: "closure.resources.development" }));
-      await expect(executeExactPackControl(prepareRequest, join(output, "prepare-receipt.json"))).rejects.toThrow("resource receipt is invalid");
+      await expect(prepareContent(prepareRequest, join(output, "prepare-receipt.json"))).rejects.toThrow("resource receipt is invalid");
       await writeFile(resourceReceiptPath, JSON.stringify(resourceReceipt));
-      await executeExactPackControl(prepareRequest, join(output, "prepare-receipt.json"));
+      await prepareContent(prepareRequest, join(output, "prepare-receipt.json"));
       const prepared = JSON.parse(await readFile(join(output, "prepare-receipt.json"), "utf8"));
       const contributionFile = join(root, "contribution.json"), finalDirectory = join(root, "final");
       const contribution = {
@@ -83,7 +81,7 @@ describe("exact release control", () => {
           platformTrust: { platform: "macos", mode: "verify-only", designatedRequirement: "test", teamIdentifier: "adhoc" },
         }),
       };
-      const finalize = () => executeExactPackControl({ schemaVersion: 1, operation: "exact.finalize", prepareReceipt: join(output, "prepare-receipt.json"),
+      const finalize = () => finalizeContent({ prepareReceipt: join(output, "prepare-receipt.json"),
         contentMetadataFile: prepared.contentMetadata.file, closureArtifactFile: prepared.closureArtifact.file, standaloneArtifactFile: prepared.standaloneArtifact.file,
         contributions: [{ receipt: contributionFile, archiveFile: resource }], outputDirectory: finalDirectory,
       }, join(finalDirectory, "pack-receipt.json"));

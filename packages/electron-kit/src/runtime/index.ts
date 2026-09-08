@@ -58,6 +58,10 @@ export type ElectronCarrierDefinition = Readonly<{
 
 async function runElectronCarrierSession(input: ElectronCarrierDefinition, context: ElectronRuntimeContext): Promise<void> {
   const manifest = validateElectronShellManifest(input.manifest);
+  // A same-process Capsule receives values, not permission to rewrite the OS
+  // identity already used for paths, singleton ownership and platform binding.
+  Object.freeze(manifest.shell);
+  Object.freeze(manifest);
   const presentation = resolveElectronPresentationMode({ explicitHeadless: input.headless });
   const namespace = resolveElectronSessionNamespace(manifest.namespace, presentation);
   const ingress = installElectronLaunchIngress({ app, protocol: manifest.protocol, argv: process.argv });

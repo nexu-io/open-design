@@ -10,7 +10,33 @@ import {
   readObject,
   writeObject,
   type JsonObject,
-} from "./control-common.js";
+} from "./control-common.ts";
+
+export type PrepareExactContentInput = Readonly<{
+  channel: string;
+  releaseVersion: string;
+  sourceCommit: string;
+  publishedAt: string;
+  standaloneVersion: string;
+  artifactBaseUrl: string;
+  closureArtifactFile: string;
+  standaloneArtifactFile: string;
+  resourceReceiptFile?: string;
+  previousContentMetadataFile?: string;
+  shells: readonly Readonly<{ type: string; version: string; scenes: readonly Readonly<{
+    target: string; sceneDirectory: string; sceneManifestSha256: string;
+  }>[] }>[];
+  outputDirectory: string;
+}>;
+
+export type FinalizeExactContentInput = Readonly<{
+  prepareReceipt: string;
+  contentMetadataFile: string;
+  closureArtifactFile: string;
+  standaloneArtifactFile: string;
+  contributions: readonly Readonly<{ receipt: string; archiveFile: string }>[];
+  outputDirectory: string;
+}>;
 
 const DIGEST = /^[a-f0-9]{64}$/u;
 const IDENTIFIER = /^[a-z][a-z0-9-]{0,31}$/u;
@@ -91,10 +117,9 @@ async function previousRequirements(path: unknown, channel: string, keys: readon
   } catch { return new Map(); }
 }
 
-export async function prepareExactContent(request: JsonObject, receiptPath: string): Promise<void> {
+export async function prepareContent(request: PrepareExactContentInput, receiptPath: string): Promise<void> {
   requireRelease(request);
-  const legacyTerminal = request.shells == null && request.shellVersion != null;
-  const shells: unknown = legacyTerminal ? [{ type: "terminal", version: request.shellVersion, scenes: request.scenes }] : request.shells;
+  const shells: unknown = request.shells;
   if (!Array.isArray(shells) || shells.length === 0) throw new Error("exact.prepare requires at least one Shell");
   const shellRecords: JsonObject[] = [];
   const shellTypes = new Set<string>();
@@ -192,11 +217,10 @@ export async function prepareExactContent(request: JsonObject, receiptPath: stri
   await writeObject(contentFile, signed("metadata", metadata, keys));
   await writeObject(trustFile, { schemaVersion: 1, keys: keys.map(({ keyId, publicKey }) => ({ keyId, publicKey })) });
   const receipt: JsonObject = { schemaVersion: 2, operation: "exact.prepare", channel: request.channel, releaseVersion: request.releaseVersion, sourceCommit: request.sourceCommit, publishedAt: request.publishedAt, artifactBaseUrl: base, standaloneVersion: request.standaloneVersion, shells: shellRecords, closureArtifact: closure, standaloneArtifact: standalone, resourceArtifacts: closureResources.map(({ blob }) => blob), contentMetadata: await describeFile(contentFile), trustFile: await describeFile(trustFile) };
-  if (legacyTerminal) Object.assign(receipt, { shellVersion: shellRecords[0]!.version, shellBuildHash: shellRecords[0]!.buildHash, minimumShellVersion: shellRecords[0]!.minimumVersion, scenes: shellRecords[0]!.scenes });
   await writeObject(receiptPath, receipt);
 }
 
-export async function finalizeExactContent(request: JsonObject, receiptPath: string): Promise<void> {
+export async function finalizeContent(request: FinalizeExactContentInput, receiptPath: string): Promise<void> {
   const prepared = await readObject(String(request.prepareReceipt ?? ""));
   if (prepared.schemaVersion !== 2 || prepared.operation !== "exact.prepare") throw new Error("invalid exact.prepare receipt");
   const contributions = request.contributions;
@@ -281,11 +305,4 @@ export async function finalizeExactContent(request: JsonObject, receiptPath: str
   const receipt: JsonObject = { schemaVersion: 2, operation: "exact.pack", channel: prepared.channel, releaseVersion: prepared.releaseVersion, sourceCommit: prepared.sourceCommit, shells: (prepared.shells as JsonObject[]).map(({ type, version, buildHash, minimumVersion }) => ({ type, version, buildHash, minimumVersion })), artifacts, documents: await Promise.all([contentFile, ...shellFiles, headFile].map((path) => describeFile(path))), contentMetadataFile: contentFile, shellMetadataFiles: Object.fromEntries(Object.entries(shellMetadata).map(([key, value]) => [key, value.file])), channelHeadFile: headFile, requiredAcceptances };
   if (shellMetadata.terminal != null) Object.assign(receipt, { terminalMetadataFile: shellMetadata.terminal.file, shellBuildHash: preparedShells.get("terminal")!.buildHash, minimumShellVersion: preparedShells.get("terminal")!.minimumVersion });
   await writeObject(receiptPath, receipt);
-}
-
-export async function executeExactPackControl(request: JsonObject, receiptPath: string): Promise<void> {
-  if (request.schemaVersion !== 1) throw new Error("unsupported exact pack request schema");
-  if (request.operation === "exact.prepare") return await prepareExactContent(request, receiptPath);
-  if (request.operation === "exact.finalize") return await finalizeExactContent(request, receiptPath);
-  throw new Error("unsupported exact pack operation");
 }
