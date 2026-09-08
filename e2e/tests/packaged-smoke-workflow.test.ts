@@ -83,6 +83,14 @@ const releasePrereleaseTestsWorkflowPath = join(workspaceRoot, ".github", "workf
 const releasePrereleaseSmokeWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease-smoke.yml");
 const releasePrereleaseCardWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease-card.yml");
 const prereleaseCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "prerelease-progress-card.ts");
+const prereleaseFallbackScriptPath = join(
+  workspaceRoot,
+  "tools",
+  "release",
+  "src",
+  "notifications",
+  "prerelease-fallback-notice.ts",
+);
 const mainPrereleaseWinSmokeWorkflowPath = join(
   workspaceRoot,
   ".github",
@@ -2937,6 +2945,74 @@ process.stdin.on("end", () => {
     expect(feishuCard).toContain("const smokeFailures = packagePublished");
     expect(feishuCard).toContain("return packagePublished ? \"blue\" : \"red\";");
     expect(notifyDaily).toContain("tools/release/src/notifications/feishu.ts");
+  });
+
+  it("[P1] alerts through the other Feishu bot when the prerelease card lane goes silent", async () => {
+    // The progressive card is now the ONLY prerelease notification, and every
+    // way it breaks is silent: the pipeline stays green, the packages ship, and
+    // the channel hears nothing. Two fallback jobs close that, and both have to
+    // hold three properties or they are worse than useless.
+    const [prerelease, card, watcher, fallback, notice] = await Promise.all([
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releasePrereleaseCardWorkflowPath, "utf8"),
+      readFile(prereleaseCardScriptPath, "utf8"),
+      readFile(prereleaseFallbackScriptPath, "utf8"),
+      readFile(feishuNoticeScriptPath, "utf8"),
+    ]);
+
+    // 1. A different bot. The card posts through the Feishu APPLICATION bot; the
+    //    fallback must post through the custom-bot WEBHOOK, or "the application
+    //    credential expired" — one of the ways the card goes silent — takes the
+    //    alert down with it.
+    const fallbackStart = card.indexOf("  fallback_notice:");
+    expect(fallbackStart).toBeGreaterThanOrEqual(0);
+    const fallbackJob = card.slice(fallbackStart);
+    expect(card).toContain("FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}");
+    expect(card).toContain("FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}");
+    expect(fallbackJob).not.toContain("${{ secrets.FEISHU_APP_SECRET }}");
+    expect(fallbackJob).not.toContain("${{ secrets.FEISHU_APP_ID }}");
+    expect(fallbackJob).toContain("tools/release/src/notifications/feishu-notice.ts");
+    expect(notice).toContain('required("FEISHU_WEBHOOK")');
+
+    // 2. Reachable. A job with `needs` carries an implicit success(), which
+    //    would skip the fallback in exactly the case it exists for — the trap
+    //    that skipped `dispatch_smoke` for N runs. It must break that itself.
+    expect(fallbackJob).toContain("always() && !cancelled()");
+    // The dispatch-side ping is steps of `dispatch_validation`, NOT a job:
+    // nothing may appear in a `needs:` on the dispatchers (asserted in
+    // tools/pack/tests/release-workflows.test.ts), and a step needs no such
+    // edge to read the dispatch outcome.
+    const dispatchJob = sectionBetween(prerelease, "  dispatch_validation:", "  build_mac:");
+    expect(dispatchJob).toContain("tools/release/src/notifications/prerelease-fallback-notice.ts");
+    expect(dispatchJob).toContain("tools/release/src/notifications/feishu-notice.ts");
+    expect(dispatchJob).toContain("STAGE: dispatch");
+    // `always()` so a dispatch that failed above still reaches the notifier.
+    expect(dispatchJob).toContain("always() && github.repository == 'nexu-io/open-design' &&");
+    expect(dispatchJob).toContain("steps.checkout.outcome == 'success'");
+
+    // 3. Silent on a healthy release. A green watcher job is NOT proof of a
+    //    delivered card — the watcher catches every Feishu error on purpose and
+    //    exits 0 — so the gate reads the watcher's own delivery report, and the
+    //    watcher writes it only for a card whose final state reached the chat.
+    expect(fallbackJob).toContain(
+      "!(needs.card.result == 'success' && needs.card.outputs.delivered == 'true')",
+    );
+    expect(card).toContain("delivered: ${{ steps.track.outputs.card_delivered }}");
+    expect(watcher).toContain('appendFileSync(file, "card_delivered=true\\n")');
+    expect(watcher).toContain("if (chatHoldsLatest) reportDelivered();");
+    expect(dispatchJob).toContain("CARD_DISPATCHED: ${{ steps.card_dispatch.outputs.dispatched }}");
+    // The dispatch helper exits non-zero on failure and `run:` blocks stop at
+    // the first failure, so the marker is only written when a card workflow was
+    // really requested — and stays empty when the step is skipped for missing
+    // application-bot credentials.
+    expect(dispatchJob).toContain('echo "dispatched=true" >> "$GITHUB_OUTPUT"');
+    expect(dispatchJob).toContain("if: ${{ env.FEISHU_APP_ID != '' && env.FEISHU_RELEASE_CHAT_ID != '' }}");
+
+    // The notice itself has to stand alone: version, whether a package shipped,
+    // and where to look.
+    expect(fallback).toContain("VERSION_METADATA_URL");
+    expect(fallback).toContain("probeMetadata");
+    expect(fallback).toContain('setOutput("alert", "false")');
   });
 
   it("[P1] keeps download actions on a beta card with a failed Windows smoke", async () => {
