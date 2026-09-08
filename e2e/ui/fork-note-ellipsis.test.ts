@@ -135,23 +135,53 @@ async function seedForkedConversation(page: Page): Promise<Locator> {
   await dismissPrivacyDialog(page);
   await expectWorkspaceReady(page);
 
-  // Let the divider paint at the default width FIRST. The squeeze below is a
-  // raw custom-property write that React's own width effect would overwrite if
-  // a late fetch re-rendered the split afterwards, so nothing may await
-  // between the squeeze and the measurement.
+  // Let the divider paint at the default width first, so the squeeze below has
+  // something to measure.
   const label = page.getByTestId('assistant-fork-note-label');
   await expect(label).toBeVisible({ timeout: T.long });
   await expect(label).toHaveText(/\S/);
 
-  // Squeeze the chat panel so the divider's 62% cap lands under the German
-  // label. React clamps its own state to MIN_CHAT_PANEL_WIDTH, so write the
-  // custom property straight onto the split the way the resize handle does.
-  const split = page.locator('.split');
-  await split.evaluate((element, width) => {
-    (element as HTMLElement).style.setProperty('--project-chat-panel-width', `${width}px`);
-  }, CHAT_PANEL_WIDTH_PX);
-
   return label;
+}
+
+interface LabelBox {
+  scrollWidth: number;
+  clientWidth: number;
+  text: string;
+}
+
+/**
+ * Squeeze the chat panel (optional) and measure the label in ONE round trip.
+ *
+ * Two things make a naive "write, then measure" wrong here:
+ *   - React clamps its own panel state to `MIN_CHAT_PANEL_WIDTH` (345px), so
+ *     the width has to be written straight onto the split the way the resize
+ *     handle does rather than through the product's own state.
+ *   - `--project-chat-panel-width` is a registered `@property` with a 200ms
+ *     transition, so a bare write TWEENS from the default 460px and anything
+ *     measured right after reads the panel mid-flight. The product suspends
+ *     that transition with `.is-resizing-chat` while the handle writes the
+ *     width every frame; borrow the same switch instead of inventing one.
+ *
+ * Writing and reading inside a single `evaluate` also means no re-render can
+ * land between them, and the `scrollWidth` read forces the layout that applies
+ * the new width.
+ */
+async function measureLabel(page: Page, squeezeTo?: number): Promise<LabelBox | null> {
+  return page.locator('.split').evaluate((element, panelWidth) => {
+    const split = element as HTMLElement;
+    if (panelWidth != null) {
+      split.classList.add('is-resizing-chat');
+      split.style.setProperty('--project-chat-panel-width', `${panelWidth}px`);
+    }
+    const label = split.querySelector<HTMLElement>('[data-testid="assistant-fork-note-label"]');
+    if (!label) return null;
+    return {
+      scrollWidth: label.scrollWidth,
+      clientWidth: label.clientWidth,
+      text: label.textContent ?? '',
+    };
+  }, squeezeTo);
 }
 
 test('[P0] a long locale ellipsizes the fork divider note in a narrow chat panel', async ({
@@ -159,20 +189,29 @@ test('[P0] a long locale ellipsizes the fork divider note in a narrow chat panel
 }) => {
   const label = await seedForkedConversation(page);
 
-  // 1. The scenario is live: at this width the label really does overflow its
-  //    own box. Without this the ellipsis check below could pass on a label
-  //    that simply fits, and the guard would be measuring nothing.
-  const box = await label.evaluate((element) => ({
-    scrollWidth: element.scrollWidth,
-    clientWidth: element.clientWidth,
-    text: element.textContent ?? '',
-  }));
+  // 1a. The squeeze landed. Measured before and after so a future failure says
+  //     which half broke: a panel that never narrowed is a fixture problem,
+  //     while a narrowed panel that still fits the text is a copy problem.
+  const relaxed = await measureLabel(page);
+  expect(relaxed, 'the divider never rendered').not.toBeNull();
+  const box = await measureLabel(page, CHAT_PANEL_WIDTH_PX);
+  expect(box, 'the divider vanished while the chat panel was being squeezed').not.toBeNull();
   expect(
-    box.scrollWidth,
-    `the divider note fits at ${CHAT_PANEL_WIDTH_PX}px `
-      + `(content ${box.scrollWidth}px vs box ${box.clientWidth}px, text ${JSON.stringify(box.text)}) `
-      + '— narrow the panel or pick a longer shipped locale, otherwise this guard measures nothing',
-  ).toBeGreaterThan(box.clientWidth);
+    box!.clientWidth,
+    `squeezing the chat panel to ${CHAT_PANEL_WIDTH_PX}px did not narrow the note `
+      + `(${relaxed!.clientWidth}px before, ${box!.clientWidth}px after) `
+      + '— the width write is not reaching the split, so nothing below is being measured',
+  ).toBeLessThan(relaxed!.clientWidth);
+
+  // 1b. The scenario is live: at this width the label really does overflow its
+  //     own box. Without this the ellipsis check below could pass on a label
+  //     that simply fits, and the guard would be measuring nothing.
+  expect(
+    box!.scrollWidth,
+    `the divider note still fits at ${CHAT_PANEL_WIDTH_PX}px `
+      + `(content ${box!.scrollWidth}px vs box ${box!.clientWidth}px, text ${JSON.stringify(box!.text)}) `
+      + '— narrow the panel further or pick a longer shipped locale, otherwise this guard measures nothing',
+  ).toBeGreaterThan(box!.clientWidth);
 
   // 2. The overflow is rendered as an ellipsis, not a hard cut. The control is
   //    the same element forced to `clip`: if the product were still clipping,
