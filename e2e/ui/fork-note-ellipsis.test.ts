@@ -1,5 +1,5 @@
 import { expect, test } from '@/playwright/suite';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 import {
   AMR_PERSONAL_WORKSPACE_HEADERS,
@@ -44,21 +44,19 @@ const AGENT = {
 
 /**
  * German is the longest of the 19 shipped `assistant.forkNote` translations
- * (28 characters against English's 19), so it is the one the divider's 62% cap
- * reaches first. Kept verbatim rather than derived: `apps/web` is another app's
- * private source, and e2e must not import it as a shared helper.
- * If this string ever changes, `assertOverflowing` below fails loudly with the
- * measured widths rather than passing vacuously.
+ * (`Fortsetzung der Konversation`, 28 characters against English's 19), so it
+ * is the one the divider's 62% cap reaches first. The expected string is not
+ * duplicated here — `apps/web` is another app's private source and e2e must
+ * not borrow it — so if the translation is ever shortened, the overflow check
+ * below fails with the measured widths and the string it actually rendered,
+ * rather than passing vacuously.
  */
 const LOCALE = 'de';
 
 /** Narrow enough that 62% of the divider cannot fit the German label. */
 const CHAT_PANEL_WIDTH_PX = 280;
 
-async function seedForkedConversation(page: Page): Promise<{
-  projectId: string;
-  forkedConversationId: string;
-}> {
+async function seedForkedConversation(page: Page): Promise<Locator> {
   await page.addInitScript((locale) => {
     window.localStorage.setItem('open-design:locale', locale);
     window.localStorage.setItem('open-design:locale-source', 'manual');
@@ -137,25 +135,29 @@ async function seedForkedConversation(page: Page): Promise<{
   await dismissPrivacyDialog(page);
   await expectWorkspaceReady(page);
 
+  // Let the divider paint at the default width FIRST. The squeeze below is a
+  // raw custom-property write that React's own width effect would overwrite if
+  // a late fetch re-rendered the split afterwards, so nothing may await
+  // between the squeeze and the measurement.
+  const label = page.getByTestId('assistant-fork-note-label');
+  await expect(label).toBeVisible({ timeout: T.long });
+  await expect(label).toHaveText(/\S/);
+
   // Squeeze the chat panel so the divider's 62% cap lands under the German
   // label. React clamps its own state to MIN_CHAT_PANEL_WIDTH, so write the
   // custom property straight onto the split the way the resize handle does.
   const split = page.locator('.split');
-  await expect(split).toBeVisible({ timeout: T.long });
   await split.evaluate((element, width) => {
     (element as HTMLElement).style.setProperty('--project-chat-panel-width', `${width}px`);
   }, CHAT_PANEL_WIDTH_PX);
 
-  return { projectId, forkedConversationId: conversation!.id! };
+  return label;
 }
 
 test('[P0] a long locale ellipsizes the fork divider note in a narrow chat panel', async ({
   page,
 }) => {
-  await seedForkedConversation(page);
-
-  const label = page.getByTestId('assistant-fork-note-label');
-  await expect(label).toBeVisible({ timeout: T.long });
+  const label = await seedForkedConversation(page);
 
   // 1. The scenario is live: at this width the label really does overflow its
   //    own box. Without this the ellipsis check below could pass on a label
