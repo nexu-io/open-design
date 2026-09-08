@@ -561,7 +561,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 ## ロードマップ
 
 - [x] デーモン + 25 種類の CLI 実行ファイル上の 26 runtime 定義 + スキル/テンプレートレジストリ + デザインシステムカタログ
-- [x] ウェブアプリ + チャット + 質問フォーム + 5 方向ピッカー + todo 進捗 + サンドボックス化プレビュー
+- [x] ウェブアプリ + チャット + 質問フォーム + todo 進捗 + サンドボックス化プレビュー
 - [x] 100 種類以上の機能スキル · 独立テンプレートカタログ · 151 のデザインシステムパッケージ · 5 つのビジュアル方向性 · 5 つのデバイスフレーム
 - [x] SQLite を裏に持つプロジェクト · 会話 · メッセージ · タブ · テンプレート
 - [x] マルチプロバイダー BYOK プロキシ（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF ガード

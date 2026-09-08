@@ -186,6 +186,37 @@ describe('设计风格选择整条路已删除', () => {
     ).not.toMatch(/visualStyleContext/);
   });
 
+  it('十份 README 的「已交付」清单不再把选择器算作已交付的能力', () => {
+    /*
+     * README 的 Roadmap 是 `- [x]` 已交付清单,不是有日期的历史记录 —— 上面躺着
+     * 一个已经不存在的能力,就是对外说了假话。
+     *
+     * ⚠️ 这里**不能**复用 `PICKER_PROMISE`:那条正则只认得英文和中文,而这句话在
+     * 十个 locale 里各有各的译法(`sélecteur à 5 directions` / `5 方向ピッカー` /
+     * `выбор из 5 направлений` …),七个 locale 它一个都看不见。拿它守这里会绿得
+     * 很好看却什么都没守住。所以改成**逐 locale 的显式短语清单**,并且下面先
+     * 自检每个文件都还在 —— 名单里躺着一个早就改名的文件,这条守卫就成了空洞。
+     */
+    const PICKER_PHRASES: { rel: string; phrase: string }[] = [
+      { rel: 'README.md', phrase: '5-direction picker' },
+      { rel: 'docs/i18n/README.th.md', phrase: '5-direction picker' },
+      { rel: 'docs/i18n/README.ar.md', phrase: 'مُنتقي 5 اتجاهات' },
+      { rel: 'docs/i18n/README.es.md', phrase: 'selector de 5 direcciones' },
+      { rel: 'docs/i18n/README.fr.md', phrase: 'sélecteur à 5 directions' },
+      { rel: 'docs/i18n/README.ja-JP.md', phrase: '5 方向ピッカー' },
+      { rel: 'docs/i18n/README.ru.md', phrase: 'выбор из 5 направлений' },
+      { rel: 'docs/i18n/README.uk.md', phrase: 'селектор 5 напрямів' },
+      { rel: 'docs/i18n/README.zh-CN.md', phrase: '5 方向选择器' },
+      { rel: 'docs/i18n/README.zh-TW.md', phrase: '5 方向選擇器' },
+    ];
+    for (const { rel, phrase } of PICKER_PHRASES) {
+      expect(existsSync(abs(rel)), `${rel} 不见了 —— 挪动位置要同时更新本清单`).toBe(true);
+      expect(read(rel), `${rel} 的已交付清单还写着选择器`).not.toContain(phrase);
+    }
+    /* 反向:方向**库**本身仍然是已交付的能力,别顺手把它也划掉 */
+    expect(read('README.md')).toContain('5 visual directions');
+  });
+
   it('提示词侧发问那半边(renderDirectionFormBody)不存在', () => {
     for (const rel of [
       'apps/daemon/src/prompts/directions.ts',

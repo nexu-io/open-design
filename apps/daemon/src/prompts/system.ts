@@ -1112,7 +1112,7 @@ export function composeSystemPrompt({
 
   // Skip the HTML-artifact discovery layer for media surfaces (image / video /
   // audio). DISCOVERY_AND_PHILOSOPHY is ~3 000 tokens of rules about question
-  // forms, brand extraction, direction pickers, and HTML artifact checklist —
+  // forms, brand extraction, and the HTML artifact checklist —
   // none of which apply to media generation. Including it forces the agent to
   // parse and override all of those rules before it can start, adding tokens
   // and LLM inference time. The MEDIA_GENERATION_CONTRACT (pushed below) is

@@ -567,7 +567,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 ## 路线图
 
 - [x] 守护进程 + 26 个不同 CLI 可执行程序上的 27 个 runtime 定义 + 技能/设计模板注册中心 + 设计系统目录
-- [x] Web 应用 + 聊天 + 问题表单 + 5 方向选择器 + 待办进度 + 沙箱预览
+- [x] Web 应用 + 聊天 + 问题表单 + 待办进度 + 沙箱预览
 - [x] 100+ 功能技能 · 独立渲染模板目录 · 151 个设计系统包 · 5 视觉方向 · 5 设备外框
 - [x] SQLite 支撑的项目 · 会话 · 消息 · 标签页 · 模板
 - [x] 多供应商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防护

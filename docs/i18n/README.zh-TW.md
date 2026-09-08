@@ -573,7 +573,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 ## 藍圖
 
 - [x] Daemon + 25 個不同 CLI 可執行檔上的 26 個 runtime 定義 + skill／設計範本 registry + 設計系統型錄
-- [x] Web 應用程式 + chat + 提問表單 + 5 方向選擇器 + todo 進度 + 沙箱化預覽
+- [x] Web 應用程式 + chat + 提問表單 + todo 進度 + 沙箱化預覽
 - [x] 100+ 個功能 skills · 獨立渲染範本型錄 · 151 套設計系統套件 · 5 種視覺方向 · 5 種裝置外框
 - [x] 以 SQLite 為後援的專案 · 對話 · 訊息 · 分頁 · 範本
 - [x] 多供應商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防護

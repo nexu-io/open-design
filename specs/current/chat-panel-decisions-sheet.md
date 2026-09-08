@@ -527,6 +527,8 @@ Do not ask + 渲染层原地留着当安全网**」。产品推翻的正是这�
 | 提示词 | `renderDirectionFormBody()`(两份镜像)、`findDirectionByLabel()`、三处「读 Host 表单答案」的散文 |
 | 脚手架 | `apps/daemon/src/plugins/scaffold.ts` 生成的 `SKILL.md` 正文里那句 `2. Plan + direction picker.` → 改成 `2. Plan the work (TodoWrite-backed).` |
 | 文档 | `docs/atoms.md`、`docs/plugins-spec{,.zh-CN}.md` 的 §10 atom 表 / `choice` 产出方表 / 示例流水线 / taskKind atom 序列 / **公开面承诺**(UI 能展示 direction picker、长程任务标准阶段里的「方向选择」、GenUI 人机介入场景、UI↔CLI 双面表里那一行)、`plugins/spec/SPEC{,.zh-CN}.md`、`create-image-campaign` 示例、`docs/screenshots/03-direction-picker.{png,svg}` |
+| 对外声明 | 十份 README(`README.md` + 9 个 locale)的 Roadmap **已交付**清单里那条「5-direction picker / 5 方向选择器 / `sélecteur à 5 directions` …」。⚠️ 同一条 bullet 下一行的「5 visual directions」是**方向库**,仍然属实,**保留** |
+| 代码注释 | `apps/daemon/src/prompts/system.ts` 里描述 `DISCOVERY_AND_PHILOSOPHY` 内容的那句「forms, brand extraction, direction pickers, and HTML artifact checklist」 |
 | 场景文案 | `od-tune-collab` 的 `useCase.query`(en + zh-CN)不再写「Pick a direction, …」——它描述的就是被删掉的那个阶段。⚠️ 同名的**自由文本输入字段** `direction`(「Preferred direction: shorter / sharper / more playful」)是另一回事,**保留** |
 
 **删掉之后失去的正向职责(产品已知情并仍要求删)**
@@ -597,6 +599,14 @@ alone`。也就是说 1–3 在**默认设计会话**这条路上还在;失去�
 和四份契约文档。加宽后**先证明它在修复前会红**(scaffold 当场红),并配一条
 静态样本的防真空用例把「选择器」和「方向**库**」分开 —— 库用的 direction /
 directions / `od tools directions` 一律放行,那是活的。
+
+⚠️ **一条正则守不住十个 locale**。加宽之后又查出 README 的「已交付」清单里也写着
+这个能力,而它在十份 README 里各有各的译法(`sélecteur à 5 directions` /
+`5 方向ピッカー` / `выбор из 5 направлений` …)—— 上面那条正则只认英文和中文,
+七个 locale 一个都看不见。**拿它守 README 会绿得很好看却什么都没守住**,所以
+README 单独一条用例,判据是**逐 locale 的显式短语清单**,并先自检每个文件都还在
+(名单里躺着一个改名的文件 = 空洞)。已实测证伪:把 `sélecteur à 5 directions`
+临时写回 `README.fr.md`,那条用例**当场红**。
 
 **这仍然是对交付稿的有意偏离 —— 而且更彻底**
 

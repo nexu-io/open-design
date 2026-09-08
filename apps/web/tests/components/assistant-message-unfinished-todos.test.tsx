@@ -31,7 +31,7 @@ function workspaceFile(name: string): ProjectFile {
 describe('AssistantMessage unfinished todo state', () => {
   afterEach(() => cleanup());
 
-  it('suppresses direction picker forms when a design system is active', () => {
+  it('suppresses direction forms when a design system is active', () => {
     const directionForm = [
       'Pick one:',
       '<question-form id="direction" title="Pick a visual direction">',

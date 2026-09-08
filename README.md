@@ -593,7 +593,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 ## Roadmap
 
 - [x] Daemon + 27 runtime definitions across 26 distinct coding-agent CLI executables + skill/design-template registries + design-system catalog
-- [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
+- [x] Web app + chat + question form + todo progress + sandboxed preview
 - [x] 100+ functional skills · separate rendering-template catalog · 151 design-system packages · 5 visual directions · 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) with OpenAI-compatible presets including Atlas Cloud + SSRF guard

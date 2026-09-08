@@ -561,7 +561,7 @@ Architecture complète → [`docs/architecture.md`](../../docs/architecture.md).
 ## Feuille de route
 
 - [x] Daemon + 26 définitions runtime sur 25 exécutables CLI distincts + registres skills/modèles + catalogue de systèmes
-- [x] Application web + chat + formulaire de questions + sélecteur à 5 directions + progression todo + aperçu sandboxé
+- [x] Application web + chat + formulaire de questions + progression todo + aperçu sandboxé
 - [x] Plus de 100 skills fonctionnels · catalogue séparé de modèles · 151 packages de systèmes · 5 directions visuelles · 5 cadres d'appareils
 - [x] Projets · conversations · messages · onglets · modèles adossés à SQLite
 - [x] Proxy BYOK multi-fournisseurs (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + protection SSRF
