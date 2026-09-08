@@ -71,7 +71,7 @@ import {
   validateElectronPhysicalResourceSet,
   type ElectronPhysicalResourceSetDeclaration,
 } from "./physical-resources.js";
-import { withElectronPhysicalResourceSetGuard } from "./guarded-lifecycle.js";
+import { withElectronPhysicalResourceSetGuard, type ElectronPhysicalResourceSetGuard } from "./guarded-lifecycle.js";
 import { projectElectronRuntimeStatus as projectRuntimeStatus } from "./runtime-status.js";
 import { retireElectronOrphanedRuntime } from "./orphan-recovery.js";
 import { StandaloneHostLifecycle } from "@open-design/standalone";
@@ -275,7 +275,8 @@ export function createElectronStandaloneAuthorityFactory(
         validateStandaloneHostConnection(status.connection, { scope: request.scope, layout });
         return status.generationPid!;
       };
-      const launchHost = async (nextBinding: StandaloneGenerationBinding, reuse?: number) => {
+      const launchHost = async (nextBinding: StandaloneGenerationBinding, reuse?: number,
+        guard?: ElectronPhysicalResourceSetGuard) => {
         const resourceSet = bindElectronPhysicalResourceSet(resources, nextBinding);
         const stamp = resourceSet.resources.find(({ id }) => id === runtimeResource.id)!.stamp;
         const providerStamp = resourceSet.resources.find(({ id }) => id === "electron-updater")?.stamp;
@@ -284,17 +285,34 @@ export function createElectronStandaloneAuthorityFactory(
           schemaVersion: 3, scope: request.scope, shell: request.shell, carrier: manifest.shell, resourceRoot: resolve(resourceRoot), storeRoot,
           runtimeRoot: join(runtimeRoot, "electron-updater"), carrierRuntimeRoot: runtimeRoot, channelHeadUrl,
         });
+        const providerExpected = {
+          control: "ready", providerSha256: installation.declaration.updaterProvider.sha256,
+          supervisorSha256: installation.declaration.supervisor.sha256, resourceRoot: resolve(resourceRoot),
+          dataRoot: storeRoot, runtimeRoot: providerConfig.runtimeRoot, carrierRuntimeRoot: runtimeRoot, shell: request.shell, carrier: manifest.shell,
+        };
+        if (reuse != null) {
+          const observed = await getSidecarStatus<Record<string, unknown>>(providerStamp).catch(() => null);
+          if (observed != null && canonicalJson(observed) !== canonicalJson(providerExpected)) {
+            // Only a Capsule capability change may refresh this provider. A
+            // different installation/physical authority remains a hard error.
+            if (guard == null || canonicalJson({ ...observed, shell: request.shell }) !== canonicalJson(providerExpected)) {
+              throw new Error("Electron updater provider escaped its installed launch contract");
+            }
+            compatibleHost(await getSidecarStatus(stamp, { generationPid: reuse }));
+            const retained = await new StandaloneHostControlClient(request.scope, createStandaloneHostControlTransport(stamp)).status(request.scope);
+            if (retained.occupants.some(({ shell }) => shell.type === request.shell.type)) {
+              throw new Error("occupied Electron attachment blocks Capsule provider replacement");
+            }
+            await guard.retireResource("electron-updater");
+          }
+        }
         const provider = await convergeSidecarLaunch({
           args: [installation.updaterProviderPath], command: nodeRuntime.command, cwd: resourceRoot,
           env: { ...process.env, ...nodeRuntime.env, [ELECTRON_UPDATER_PROVIDER_CONFIG_ENV]: JSON.stringify(providerConfig) },
           resources: { dataRoot: storeRoot, ownerPid: null, port: 0, runtimeRoot: providerConfig.runtimeRoot }, stamp: providerStamp,
         });
         const providerStatus = await getSidecarStatus(providerStamp, { generationPid: provider.description.resources.pid });
-        if (canonicalJson(providerStatus) !== canonicalJson({
-          control: "ready", providerSha256: installation.declaration.updaterProvider.sha256,
-          supervisorSha256: installation.declaration.supervisor.sha256, resourceRoot: resolve(resourceRoot),
-          dataRoot: storeRoot, runtimeRoot: providerConfig.runtimeRoot, carrierRuntimeRoot: runtimeRoot, shell: request.shell, carrier: manifest.shell,
-        })) throw new Error("Electron updater provider escaped its installed launch contract");
+        if (canonicalJson(providerStatus) !== canonicalJson(providerExpected)) throw new Error("Electron updater provider escaped its installed launch contract");
         if (reuse == null) {
           const converged = await convergeSidecarLaunch({
             args: [installation.hostPath],
@@ -348,7 +366,7 @@ export function createElectronStandaloneAuthorityFactory(
         if (needsActivation) {
           await store.activatePrepared(activationTarget, request.shell, state.revision, { failurePolicy: "explicit-recovery" });
         }
-        activeHost = await launchHost(binding, reuse);
+        activeHost = await launchHost(binding, reuse, guard);
       });
       feedback.emit({ phase: "generation-prepared", state: "complete", generationId: generation.id });
       let activeGeneration = generation;

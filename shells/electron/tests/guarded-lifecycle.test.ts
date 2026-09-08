@@ -178,6 +178,24 @@ describe("Electron guarded physical lifecycle", () => {
     expect(sidecar.stopSidecars).not.toHaveBeenCalled();
   });
 
+  it("retires only the declared provider while keeping the complete resource set locked", async () => {
+    const provider = { id: "electron-updater", stamp: { ...stamp, app: "electron-updater" } };
+    const complete = { ...resourceSet, resources: [...resourceSet.resources, provider] };
+    sidecar.stopSidecars.mockResolvedValue({ ...stopped, results: [{ result: stopped, stamp: provider.stamp }] });
+    let retained!: ElectronPhysicalResourceSetGuard;
+    const receipt = await withElectronPhysicalResourceSetGuard(complete, async guard => {
+      retained = guard;
+      expect(() => guard.retireResource("unknown")).toThrow("escaped");
+      const first = guard.retireResource(provider.id);
+      expect(guard.retireResource(provider.id)).toBe(first);
+      return await first;
+    });
+    expect(sidecar.withSidecarLifecycleLock).toHaveBeenCalledWith([stamp, provider.stamp], expect.any(Function), {});
+    expect(sidecar.stopSidecars).toHaveBeenCalledExactlyOnceWith([{ stamp: provider.stamp, options: {} }]);
+    expect(receipt.resources).toEqual([{ ...provider, result: stopped }]);
+    expect(() => retained.retireResource(provider.id)).toThrow("no longer active");
+  });
+
   it("keeps the physical guard held until an unawaited retirement settles", async () => {
     let finishRetirement!: () => void;
     const retiring = new Promise<void>((resolve) => { finishRetirement = resolve; });

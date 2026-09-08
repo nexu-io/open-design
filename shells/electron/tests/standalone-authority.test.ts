@@ -254,6 +254,34 @@ describe("Electron production Standalone authority", () => {
       });
       expect(await handle.readStatus()).toMatchObject({ state: "running", generationId: prepared.generation.id, bindingDigest: prepared.binding.digest });
 
+      // A Capsule-only next start must refresh its provider without retiring
+      // the compatible Closure host retained by a Terminal attachment.
+      const sharedScope = { channel: manifest.channel, namespace: manifest.namespace };
+      const shared = new StandaloneHostControlClient(sharedScope, createStandaloneHostControlTransport(stamp));
+      const retained = { id: "terminal-capsule-owner", shell: { type: "terminal", version: "0.1.0", buildHash: "f".repeat(64), digest: "e".repeat(64) } };
+      await shared.start(sharedScope, prepared.generation, retained, prepared.binding);
+      const beforeCapsule = await getSidecarStatus<{ hostPid: number; generationPid: number }>(stamp);
+      const nextCapability = { ...manifest.shell, digest: "c".repeat(64) };
+      const capsuleAuthority = createElectronStandaloneAuthorityFactory(manifest, physicalResources, nextCapability, authorityOptions)({
+        installedShellPath: join(root, "Current.app"), namespaceRoot: join(runtimeRoot, "namespace"),
+        nodeRuntime: { command: process.execPath, env: {} }, observeFeedback() {}, resourceRoot: root, runtimeRoot,
+      });
+      await expect(capsuleAuthority.prepare({ correlationId: "occupied-electron", scope: sharedScope, shell: nextCapability }))
+        .rejects.toThrow("occupied Electron attachment blocks Capsule provider replacement");
+      expect(await getSidecarStatus(providerStamp)).toMatchObject({ shell: manifest.shell });
+      await handle.close();
+      const capsulePrepared = await capsuleAuthority.prepare({ correlationId: "capsule-only-join", scope: sharedScope, shell: nextCapability });
+      const capsuleHandle = await capsulePrepared.start({ attachment: { id: "electron-capsule-next", shell: nextCapability },
+        capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } } });
+      expect(await capsuleHandle.readStatus()).toMatchObject({ state: "running", references: 2 });
+      expect(await getSidecarStatus(stamp)).toMatchObject({ hostPid: beforeCapsule.hostPid, generationPid: beforeCapsule.generationPid });
+      expect(await getSidecarStatus(providerStamp)).toMatchObject({ shell: nextCapability });
+      await capsuleHandle.close();
+      await shared.release(sharedScope, retained.id);
+      prepared = await authority.prepare({ correlationId: "after-capsule-only-join", scope: sharedScope, shell: manifest.shell });
+      handle = await prepared.start({ attachment: { id: "electron-test", shell: manifest.shell },
+        capabilities: { async invoke(request) { return { requestId: request.requestId, attachmentId: request.attachmentId, bindingDigest: request.bindingDigest, outcome: "unsupported" }; } } });
+
       const failedHost = await getSidecarStatus<{ hostPid: number }>(stamp);
       process.kill(failedHost.hostPid, "SIGKILL");
       await vi.waitFor(async () => { expect(await findSidecarProcesses(stamp!)).toEqual([]); });

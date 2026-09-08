@@ -1,4 +1,5 @@
 let body = null;
+let references = 0;
 
 export async function standaloneGenerationHandoff(request) {
   body ??= (async () => {
@@ -58,5 +59,24 @@ export async function standaloneGenerationHandoff(request) {
       waitForTerminal: async () => terminal,
     };
   })();
-  return await body;
+  const runtime = await body;
+  references += 1;
+  let closed = false;
+  let release;
+  const released = new Promise(resolve => { release = resolve; });
+  const readStatus = async () => ({ ...await runtime.readStatus(), references, ...(closed ? { state: "stopped" } : {}) });
+  return {
+    ...runtime,
+    readStatus,
+    async close() {
+      if (!closed) {
+        closed = true;
+        references -= 1;
+        if (references === 0) await runtime.close();
+        release(await readStatus());
+      }
+      return readStatus();
+    },
+    waitForTerminal: () => Promise.race([released, runtime.waitForTerminal()]),
+  };
 }

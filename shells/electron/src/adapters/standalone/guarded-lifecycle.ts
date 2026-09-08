@@ -42,6 +42,7 @@ export type ElectronPhysicalResourceSetGuard = Readonly<{
   bindingDigest: string;
   generationId: string;
   retire(options?: SidecarStopOptions): Promise<ElectronPhysicalRetirementCertificate>;
+  retireResource(id: string, options?: SidecarStopOptions): Promise<ElectronPhysicalRetirementCertificate>;
   retireReplacement(resourceSet: ElectronBoundPhysicalResourceSet, options?: SidecarStopOptions): Promise<ElectronPhysicalRetirementCertificate>;
 }>;
 
@@ -66,6 +67,7 @@ export async function withElectronPhysicalResourceSetGuard<T>(
   return await withSidecarLifecycleLock(stamps, async () => {
     let active = true;
     let retirement: Promise<ElectronPhysicalRetirementCertificate> | null = null;
+    const resourceRetirements = new Map<string, Promise<ElectronPhysicalRetirementCertificate>>();
     const guard: ElectronPhysicalResourceSetGuard = Object.freeze({
       bindingDigest: resourceSet.binding.digest,
       generationId: resourceSet.binding.generationId,
@@ -73,6 +75,17 @@ export async function withElectronPhysicalResourceSetGuard<T>(
         if (!active) throw new Error("Electron physical resource-set guard is no longer active");
         retirement ??= retirePhysicalResourceSet(resourceSet, stopOptions);
         return retirement;
+      },
+      retireResource(id: string, stopOptions: SidecarStopOptions = {}) {
+        if (!active) throw new Error("Electron physical resource-set guard is no longer active");
+        const resource = resourceSet.resources.find(resource => resource.id === id);
+        if (resource == null) throw new Error("Electron resource retirement escaped the guarded physical resource set");
+        let pending = resourceRetirements.get(id);
+        if (pending == null) {
+          pending = retirePhysicalResourceSet({ ...resourceSet, resources: [resource] }, stopOptions);
+          resourceRetirements.set(id, pending);
+        }
+        return pending;
       },
       async retireReplacement(replacement: ElectronBoundPhysicalResourceSet, stopOptions: SidecarStopOptions = {}) {
         if (!active) throw new Error("Electron physical resource-set guard is no longer active");
@@ -90,8 +103,9 @@ export async function withElectronPhysicalResourceSetGuard<T>(
     try { outcome = Object.freeze({ ok: true, value: await operation(guard) }); }
     catch (error) { outcome = Object.freeze({ error, ok: false }); }
     let retirementError: unknown = null;
-    try { if (retirement != null) await retirement; }
-    catch (error) { retirementError = error; }
+    const retirements = await Promise.allSettled([...resourceRetirements.values(), ...(retirement == null ? [] : [retirement])]);
+    const errors = retirements.flatMap(result => result.status === "rejected" ? [result.reason] : []);
+    if (errors.length > 0) retirementError = errors.length === 1 ? errors[0] : new AggregateError(errors, "Electron resource retirement failed");
     active = false;
     if (!outcome.ok) {
       if (retirementError != null && retirementError !== outcome.error) {
