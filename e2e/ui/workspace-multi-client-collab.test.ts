@@ -739,7 +739,9 @@ test('[P0] two isolated clients converge live content, presence, and owner unsha
       expect(witness?.minCurrentCount).toBeGreaterThanOrEqual(1);
       expect(witness?.versions).toHaveLength(2);
 
-      await manualEditToggle.click({ timeout: T.medium });
+      // Leaving edit mode goes through the same overflow-aware accessor as
+      // entering it: the toolbar can collapse this action either way round.
+      await clickPreviewToolbarAction(ownerPage, 'manual-edit-mode-toggle', /^Edit$/);
       await expect(manualEditToggle).toHaveAttribute('aria-pressed', 'false', {
         timeout: T.medium,
       });
