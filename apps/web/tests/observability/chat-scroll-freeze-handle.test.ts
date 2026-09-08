@@ -7,9 +7,12 @@ import {
   setExceptionTrackingContext,
 } from '../../src/analytics/error-tracking';
 import {
+  ACTIVITY_CAPACITY,
   FREEZE_REQUESTED_PX,
   FREEZE_WHEEL_COUNT,
+  LEDGER_CAPACITY,
   MIN_UNREACHABLE_PX,
+  SNAP_BACK_MIN_PX,
   createScrollFreezeState,
   observeScroll,
   observeWheelBatch,
@@ -668,6 +671,184 @@ describe('observability/chat-scroll-freeze — runtime handle', () => {
     expect(snapshot.reportedThisSession).toBe(1);
     expect(snapshot.blockers.find((b) => b.id === 'surface_unreported')?.ok).toBe(false);
     expect(snapshot.verdict).toContain('surface_unreported');
+  });
+
+  /**
+   * What a report is allowed to switch off, and what it is not.
+   *
+   * These three specs exist because of a live capture. The operator clicked
+   * jump-to-bottom on a frozen chat, the scroller landed at 718.5 — the real
+   * layout bottom — and 3.8 seconds later it was back at 245.5, the ceiling
+   * the compositor still believed in, with zero JS writes in the interval and
+   * the write trace armed over all four scroll APIs the whole time. That is
+   * the cleanest evidence this probe has ever had, and it produced nothing,
+   * because the surface had already reported and the same flag that gated the
+   * event had also switched off the sampler:
+   *
+   *   verdict:  "blocked_by=surface_unreported"
+   *   snapBack: { armed: false, lastScrollTop: 245.5, layoutStable: false,
+   *               reportsAtOrBelowPx: null,
+   *               note: "already reported on this surface" }
+   *
+   * Three bundles pulled 5.4 minutes apart off that machine carried the same
+   * `stallWheelCount` of 83 and a byte-identical `steps` string.
+   */
+  it('keeps recording after the report, so a repro driven afterwards is captured', () => {
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, {
+      scrollTop: 91,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    const atReport = handle().snapshot().surface;
+    expect(atReport?.detector.reported).toBe(true);
+
+    // The reproduction a tester actually runs: the turn keeps streaming, the
+    // user keeps wheeling, and the ceiling keeps refusing.
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      geometry.setContent(2347 + (i + 1) * 40);
+      wheel(log, 120);
+    }
+
+    const after = handle().snapshot().surface;
+    // The streak the real machine had stuck at 83.
+    expect(after?.detector.stallWheelCount).toBeGreaterThan(
+      atReport?.detector.stallWheelCount ?? 0,
+    );
+    // The ledger the real machine exported byte-identical three times.
+    expect(after?.ledger.stepCount).toBeGreaterThan(atReport?.ledger.stepCount ?? 0);
+    expect(after?.ledger.probeCount).toBeGreaterThan(atReport?.ledger.probeCount ?? 0);
+    expect(after?.ledger.steps).not.toBe(atReport?.ledger.steps);
+    // Bounded, not merely alive: the rings are the ones this surface was
+    // always sized for, so "keep sampling" cannot become "keep growing".
+    expect((after?.ledger.steps ?? '').split(',').length).toBeLessThanOrEqual(
+      LEDGER_CAPACITY,
+    );
+    expect(after?.activity.size).toBeLessThanOrEqual(ACTIVITY_CAPACITY);
+    // And still exactly one event.
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+  });
+
+  it('leaves the one-notch snap-back route armed on a surface that has reported', () => {
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, {
+      scrollTop: 91,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+
+    // Jump-to-bottom. The write lands where layout says the bottom is, which
+    // is the setup for the snap-back the operator then watched happen.
+    geometry.setTop(1700);
+    advanceClock(400);
+    scrolled(log);
+
+    const route = handle().snapshot().snapBack;
+    // Not the stale ceiling the sampler used to be frozen at.
+    expect(route?.lastScrollTop).toBe(1700);
+    expect(route?.layoutStable).toBe(true);
+    expect(route?.armed).toBe(true);
+    expect(route?.reportsAtOrBelowPx).toBe(1700 - SNAP_BACK_MIN_PX);
+    expect(route?.note).not.toContain('already reported');
+  });
+
+  it('stops at the sink, before the gate that would rewrite what it found', () => {
+    // The de-duplication gate sits ABOVE the inner-scroller gate, and that
+    // order is load-bearing twice over.
+    //
+    // `innerScrollerSuppressions` means "the probe saw a freeze and chose
+    // silence" — it is the only trace that decision leaves. Letting it run on
+    // a surface whose event has already gone would fill it with verdicts that
+    // were never going to be sent, and each pass also CLEARS the stall streak,
+    // so the forensic counter this fix exists to keep alive would be reset by
+    // any wheel that happened to land on a code block. The walk itself reads
+    // layout up an ancestor chain, on every batch, for as long as the user
+    // keeps scrolling a surface that is already known to be broken.
+    const log = buildChatLog();
+    stubGeometry(log, { scrollTop: 91, scrollHeight: 2347, clientHeight: 583 });
+    // `.markdown-rendered pre { overflow: auto }` — stated as the longhand
+    // because jsdom does not expand the shorthand for `getComputedStyle`.
+    const inner = document.createElement('pre');
+    inner.style.overflowY = 'auto';
+    log.appendChild(inner);
+    stubGeometry(inner, { scrollTop: 0, scrollHeight: 900, clientHeight: 200 });
+
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    // Wheels on the log itself, so nothing absorbs them and the surface
+    // reports.
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    const atReport = handle().snapshot().surface;
+    expect(atReport?.innerScrollerSuppressions).toBe(0);
+
+    // Now the user scrolls a code block inside the transcript.
+    for (let i = 0; i < 6; i += 1) {
+      advanceClock(16);
+      wheel(inner, 120);
+    }
+
+    const after = handle().snapshot().surface;
+    expect(after?.innerScrollerSuppressions).toBe(0);
+    expect(after?.detector.stallWheelCount).toBe(
+      (atReport?.detector.stallWheelCount ?? 0) + 6,
+    );
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+  });
+
+  it('sends exactly one event per surface however long the freeze goes on', () => {
+    // The reverse anchor. Keeping the instrument sampling after a report must
+    // not turn one finding into a stream of duplicates: the detector now calls
+    // `frozen` on every batch that still qualifies, and every one of those
+    // after the first has to die at the sink.
+    const log = buildChatLog();
+    const geometry = stubGeometry(log, {
+      scrollTop: 91,
+      scrollHeight: 2347,
+      clientHeight: 583,
+    });
+    installChatScrollFreezeObserver();
+    scrolled(log);
+    for (let i = 0; i < 12; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+
+    // Sixty more notches of the four-notch route…
+    for (let i = 0; i < 60; i += 1) {
+      advanceClock(16);
+      wheel(log, 120);
+    }
+    // …and then a fresh snap-back, which needs only one notch and is the
+    // easiest way there is to a second event.
+    geometry.setTop(1700);
+    advanceClock(400);
+    scrolled(log);
+    geometry.setTop(91);
+    advanceClock(16);
+    wheel(log, 120);
+
+    expect(eventsNamed('client_chat_scroll_frozen')).toHaveLength(1);
+    expect(handle().snapshot().reportedThisSession).toBe(1);
   });
 
   it('is still attached and still ready after more reports than the old cap allowed', () => {

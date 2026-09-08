@@ -109,7 +109,19 @@ export interface ScrollFreezeState {
   readonly stallAt: number | null;
   readonly stallWheelCount: number;
   readonly stallRequestedPx: number;
-  /** Once true the detector is silent for the rest of this surface. */
+  /**
+   * A freeze has been called on this surface.
+   *
+   * A RECORD, not a latch. Nothing in this module short-circuits on it, and
+   * nothing that does may be added back — see `observeWheelBatch`, where such
+   * a short-circuit used to sit.
+   *
+   * It reads as "the detector has already had its say", which is the honest
+   * thing for an audit to print beside a surface. It is NOT the thing that
+   * stops a second `client_chat_scroll_frozen`; de-duplicating the telemetry
+   * event is the emit site's job, and the emit site alone
+   * (`freezeTelemetryAlreadySent` in `chat-scroll-freeze.ts`).
+   */
   readonly reported: boolean;
 }
 
@@ -339,8 +351,21 @@ export function observeWheelBatch(
   state: ScrollFreezeState,
   input: { geometry: ScrollGeometry; requestedPx: number; wheelCount: number },
 ): { state: ScrollFreezeState; verdict: ScrollFreezeVerdict } {
-  if (state.reported) return { state, verdict: { kind: 'ignored' } };
-
+  // There is deliberately NO `if (state.reported) return` here.
+  //
+  // One used to be the first line of this function, and it did not throttle
+  // an event — it stopped the detector. The baseline stopped advancing, the
+  // stall streak stopped counting, and `describeSnapBackRoute` had nothing
+  // current to describe, so the one-notch route that exists FOR the stale
+  // compositor ceiling went permanently dark on exactly the surface that had
+  // just proved it was stale. A real machine shows the price: three
+  // diagnostic bundles exported 5.4 minutes apart carried a byte-identical
+  // ledger and the same `stallWheelCount` of 83, and a deterministic
+  // reproduction run in between was structurally incapable of being seen.
+  //
+  // A report is one thing switching off — the emit. Everything upstream of it
+  // keeps running for the life of the surface, because the moments worth
+  // capturing are the ones after the symptom, not before it.
   const { geometry, requestedPx, wheelCount } = input;
   const top = geometry.scrollTop;
   const maxScrollTopSeen = Math.max(state.maxScrollTopSeen, top);

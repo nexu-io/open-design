@@ -208,10 +208,26 @@ const SCROLL_SAMPLE_MIN_INTERVAL_MS = 250;
 // froze and a session that never froze again look exactly alike. Silence
 // reading as "no defect" is the one failure mode this module exists to avoid.
 //
-// What remains is `Surface.reported`: one report per chat log element. That is
+// What remains is `Surface.reported`: one EVENT per chat log element. That is
 // de-duplication, not rate limiting — a frozen surface has one story, and
 // repeating it says nothing new — and it is per element, so it can never take
 // the probe off a surface it has not yet described.
+//
+// It took a second pass to make that true. The same flag was also being read
+// by every listener and observer callback in this file, which meant sending
+// the event ALSO stopped the scroll sampler, the wheel path, the activity
+// trail and the shortfall ledger — the session cap's failure mode again, one
+// surface at a time and with the collectors that would have explained the
+// freeze. The flag is now read at exactly one place,
+// `freezeTelemetryAlreadySent`, whose docblock carries the rule.
+//
+// Keeping everything running costs nothing unbounded: every collector on this
+// surface is a fixed-size ring that was already sized for a whole session —
+// `activity` at ACTIVITY_CAPACITY, `ledger.steps`/`ledger.probes` at
+// LEDGER_CAPACITY each, `transitions` at MAX_TRANSITIONS, the write trace at
+// its own capacity — with running totals kept as counters so a trimmed ring
+// cannot read as complete. Nothing here grows with time or with transcript
+// length, and `childHeights` is a WeakMap so it cannot outlive its nodes.
 
 /** Element budget for the compositing-layer census. */
 const MAX_LAYER_SCAN = 600;
@@ -525,7 +541,6 @@ function onScrollCapture(event: Event): void {
       discover(target);
       return;
     }
-    if (active.reported) return;
     active.scrollSamplePending = true;
     const at = now();
     if (at - active.lastScrollSampleAt < SCROLL_SAMPLE_MIN_INTERVAL_MS) return;
@@ -568,7 +583,7 @@ function onWheelDiscover(event: WheelEvent): void {
  */
 function onSurfaceWheel(event: WheelEvent): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   // `detach()` removes this listener, so a superseded element should never
   // reach here — but if it ever did, its wheels would be attributed to the
   // wrong surface, which is worse than missing them.
@@ -663,7 +678,7 @@ function attach(element: HTMLElement): Surface {
   if (typeof ResizeObserver !== 'undefined') {
     try {
       const observer = new ResizeObserver(() => {
-        if (surface !== active || active.reported) return;
+        if (surface !== active) return;
         // The entry's own `contentRect` would be free, but the ring buffer
         // wants a moment, not a measurement — and the frame below reads the
         // real geometry a beat later anyway.
@@ -976,7 +991,7 @@ function isJumpActive(el: Element): boolean {
  */
 function onStructureMutations(records: MutationRecord[]): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   const at = now();
   let partsDirty = false;
 
@@ -1053,7 +1068,7 @@ function onStructureMutations(records: MutationRecord[]): void {
  */
 function onStreamMutations(records: MutationRecord[]): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   const at = now();
   for (const record of records) {
     const target = record.target;
@@ -1081,7 +1096,7 @@ function onStreamMutations(records: MutationRecord[]): void {
  */
 function onSurfaceMotion(event: Event): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   if (event.currentTarget !== active.shell) return;
   const kind = MOTION_KIND[event.type];
   if (kind === undefined) return;
@@ -1090,7 +1105,7 @@ function onSurfaceMotion(event: Event): void {
 
 function onVisibilityChange(): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
   pushActivity(active.activity, hidden ? 'doc_hidden' : 'doc_visible', 'other', now());
 }
@@ -1115,7 +1130,7 @@ function observeHostBox(active: Surface): void {
   const target = host;
   try {
     const observer = new ResizeObserver(() => {
-      if (surface !== active || active.reported) return;
+      if (surface !== active) return;
       // Record only. Unlike the chat log's own observer this does NOT
       // schedule a geometry frame: the host's height is not one of the three
       // numbers the verdict is made from.
@@ -1257,6 +1272,20 @@ function runFrame(active: Surface): void {
   });
   active.state = result.state;
   if (result.verdict.kind !== 'frozen') return;
+
+  // The de-duplication gate, and the ONLY thing a previous report switches
+  // off. Above this line the surface is fully instrumented for as long as it
+  // lives; below it, nothing happens twice.
+  //
+  // It sits BEFORE the inner-scroller walk on purpose. That walk reads layout
+  // up an ancestor chain, and a frozen surface produces a frozen verdict on
+  // every subsequent batch — paying for the walk each time would make a
+  // reported surface more expensive to keep watching than an unreported one,
+  // which is how the sampling got switched off in the first place. Keeping it
+  // below also preserves what `innerScrollerSuppressions` means: verdicts
+  // discarded INSTEAD of being reported, not verdicts that were never going
+  // to be sent anyway.
+  if (freezeTelemetryAlreadySent(active)) return;
 
   // Last gate before reporting, and the expensive one — so it runs only
   // here. If a scrollable box between the wheel target and the chat log
@@ -1586,6 +1615,31 @@ function scanAncestorLayerTriggers(root: HTMLElement): Set<ScrollLayerTrigger> {
 // Report
 // ---------------------------------------------------------------------------
 
+/**
+ * Has this surface already sent its one `client_chat_scroll_frozen`?
+ *
+ * The invariant this name exists to hold: **a report suppresses the EVENT and
+ * nothing else.** `Surface.reported` may be read here, and by the audit in
+ * `evaluateReportBlockers` which prints it, and nowhere else in this module —
+ * not by a listener, not by an observer callback, not by the detector.
+ *
+ * It used to be read by nine other places, and the nine turned "we have told
+ * PostHog about this surface" into "stop watching this surface". A real
+ * machine measured the cost: the operator clicked to the bottom, the scroller
+ * landed at 718.5, and 3.8 seconds later the compositor clamped it back to
+ * its own stale ceiling of 245.5 with no JS write in between — the exact
+ * symptom this probe is for, on a surface whose `snapBack` route read
+ * `armed: false, note: "already reported on this surface"` and whose ledger
+ * had not moved in five and a half minutes. A deterministic reproduction was
+ * driven through an instrument that had been structurally switched off by its
+ * own success.
+ *
+ * De-duplication is a property of the sink, so it lives at the sink.
+ */
+function freezeTelemetryAlreadySent(active: Surface): boolean {
+  return active.reported;
+}
+
 function report(
   active: Surface,
   geometry: ScrollGeometry,
@@ -1593,7 +1647,7 @@ function report(
   innerScrollerCount: number,
   at: number,
 ): void {
-  if (active.reported) return;
+  if (freezeTelemetryAlreadySent(active)) return;
   active.reported = true;
   reportedThisSession += 1;
 
