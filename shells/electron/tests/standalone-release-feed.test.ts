@@ -224,7 +224,7 @@ describe("Electron release-exact feed", () => {
     const scope = { channel: "betahyx", namespace: "release-feed" };
     const ledger = new ElectronStandaloneShellUpdaterLedger(cacheRoot, scope, "electron");
     const candidates = new ElectronStandaloneShellCandidateLedger(cacheRoot, scope, feed);
-    const lifecycle = { async beginTransition(): Promise<never> { throw new Error("check/download must not reserve a host transition"); } };
+    const lifecycle = { async occupants() { return []; }, async beginTransition(): Promise<never> { throw new Error("check/download must not reserve a host transition"); } };
     const firstHost = new ElectronStandaloneHostUpdater("electron", lifecycle, ledger, { authorityRoot: cacheRoot, feed, candidates });
     expect(await firstHost.invoke("check")).toMatchObject({ outcome: "accepted", snapshot: { state: "available", candidateId: "0.2.0-betahyx.2" } });
 

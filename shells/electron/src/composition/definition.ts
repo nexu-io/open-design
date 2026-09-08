@@ -18,6 +18,7 @@ import type { ElectronWindowsLifecyclePolicy } from "@open-design/electron-kit/w
 
 import { createElectronRendererAdapter } from "../adapters/renderer/renderer.js";
 import { createElectronStandaloneAuthorityFactory } from "../adapters/standalone/authority.js";
+import { scheduleElectronShellRestart } from "../adapters/standalone/electron-control.js";
 import { resolveElectronChannelHeadOverride } from "../adapters/standalone/release-feed.js";
 import type { ElectronPhysicalResourceSetDeclaration } from "../adapters/standalone/physical-resources.js";
 import { createInstallerHandoffAdapter } from "../adapters/updater/installer.js";
@@ -48,6 +49,7 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
     renderer: renderer.renderer,
     rendererRecovery: runtime.rendererRecovery,
     actions: Object.freeze({
+      scheduleRestart: scheduleElectronShellRestart,
       observeCommitted: createWindowsCommittedObserver(
         shellManifest,
         windowsLifecycle as ElectronWindowsLifecyclePolicy,

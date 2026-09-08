@@ -12,6 +12,7 @@ import {
   signStandaloneChannelHead,
   signStandaloneMetadata,
   signStandaloneShellMetadata,
+  signDocument,
   type StandaloneMetadata,
   type StandaloneShellMetadata,
 } from "@open-design/standalone";
@@ -412,7 +413,9 @@ describe("Electron production Standalone authority", () => {
       const shellArtifact = Buffer.from("signed shell-only electron distribution");
       const shellArtifactUrl = `${releaseOrigin}/electron-v020.dmg`;
       const shellMetadataUrl = `${releaseOrigin}/electron-v020.json`;
-      const capsuleManifest = await readFile(capsule.manifestFile), capsuleArchive = await readFile(capsule.archiveFile);
+      const capsuleManifest = Buffer.from(canonicalJson(signDocument({ ...capsule.envelope.document,
+        requires: { carrierVersion: "0.2.0" } }, [{ keyId: "release", privateKey: keys.privateKey }])));
+      const capsuleArchive = await readFile(capsule.archiveFile);
       const capsuleManifestUrl = `${releaseOrigin}/capsule-manifest.json`, capsuleArchiveUrl = `${releaseOrigin}/capsule.zip`;
       const shellDocument: StandaloneShellMetadata = {
         schemaVersion: 1,

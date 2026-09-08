@@ -6,15 +6,19 @@ const control = vi.hoisted(() => ({
   lifecycle: null as SidecarLifecycle<{ startedAt: string }> | null,
   runtime: null as { startedAt: string } | null,
   register: vi.fn(),
+  handoff: vi.fn(),
+  stamp: vi.fn((): { app: string } | null => ({ app: "electron" })),
 }));
-const app = new EventEmitter() as EventEmitter & { getPath: () => string; quit: ReturnType<typeof vi.fn> };
+const app = new EventEmitter() as EventEmitter & { getPath: () => string; quit: ReturnType<typeof vi.fn>; relaunch: ReturnType<typeof vi.fn> };
 app.getPath = () => "/namespace/electron";
 app.quit = vi.fn(() => { app.emit("will-quit"); });
+app.relaunch = vi.fn();
 
 vi.mock("electron", () => ({ app, BrowserWindow: { getAllWindows: () => [] } }));
 vi.mock("@open-design/electron-kit/runtime", () => ({ inspectElectronCdp: () => ({ discovery: { state: "ready" } }) }));
 vi.mock("@open-design/sidecar/authority", () => ({
-  readOptionalCurrentSidecarStamp: () => ({ app: "electron" }),
+  readOptionalCurrentSidecarStamp: control.stamp,
+  handoffCurrentSidecarGeneration: control.handoff,
   isCurrentSidecarLauncher: () => false,
   registerSidecarProcess: control.register,
   SidecarFactory: {
@@ -34,8 +38,41 @@ describe("Electron control during product startup", () => {
     control.lifecycle = null;
     control.runtime = null;
     vi.clearAllMocks();
+    control.stamp.mockReturnValue({ app: "electron" });
+    control.handoff.mockResolvedValue(undefined);
   });
   afterEach(() => { vi.unstubAllEnvs(); app.removeAllListeners(); });
+
+  it("retains the supervisor across a controlled restart and waits for its acknowledgement", async () => {
+    const { scheduleElectronShellRestart } = await import("@/adapters/standalone/electron-control.js");
+    const accepted = Promise.withResolvers<void>();
+    control.handoff.mockReturnValue(accepted.promise);
+    let settled = false;
+    const pending = scheduleElectronShellRestart().then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(control.handoff).toHaveBeenCalledWith({ command: process.execPath, args: process.argv.slice(1), cwd: process.cwd(), env: process.env });
+    expect(app.relaunch).not.toHaveBeenCalled();
+    expect(app.quit).not.toHaveBeenCalled();
+    accepted.resolve();
+    await pending;
+  });
+
+  it("never falls back to an orphaned native relaunch if supervised handoff fails", async () => {
+    const { scheduleElectronShellRestart } = await import("@/adapters/standalone/electron-control.js");
+    control.handoff.mockRejectedValue(new Error("supervisor unavailable"));
+    await expect(scheduleElectronShellRestart()).rejects.toThrow("supervisor unavailable");
+    expect(app.relaunch).not.toHaveBeenCalled();
+  });
+
+  it("uses native relaunch only for an uncontrolled application", async () => {
+    const { scheduleElectronShellRestart } = await import("@/adapters/standalone/electron-control.js");
+    control.stamp.mockReturnValue(null);
+    await scheduleElectronShellRestart();
+    expect(app.relaunch).toHaveBeenCalledOnce();
+    expect(control.handoff).not.toHaveBeenCalled();
+    expect(app.quit).not.toHaveBeenCalled();
+  });
 
   it("publishes starting with CDP/logs before product readiness", async () => {
     const { runControlledElectronShell } = await import("@/adapters/standalone/electron-control.js");

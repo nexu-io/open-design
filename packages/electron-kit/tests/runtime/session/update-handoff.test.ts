@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { observeElectronInstallerHandoff, resolveElectronInstallerRecovery } from "@/runtime/session/update-handoff.js";
+import { observeElectronUpdateHandoff, resolveElectronInstallerRecovery } from "@/runtime/session/update-handoff.js";
 
 const handedOff = {
   schemaVersion: 4 as const,
@@ -37,10 +37,10 @@ describe("Electron installer handoff observation", () => {
       .resolves.toMatchObject({ state: "continue", snapshot });
     let closing = false;
     const onHandoff = vi.fn();
-    await observeElectronInstallerHandoff({ afterRevision: 0, isClosing: () => closing, onHandoff,
+    await observeElectronUpdateHandoff({ afterRevision: 0, isClosing: () => closing, onHandoff,
       updater: { readSnapshot: async () => snapshot, waitForChange: async () => { closing = true; return snapshot; } },
     });
-    expect(onHandoff).not.toHaveBeenCalled();
+    expect(onHandoff).toHaveBeenCalledWith({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId });
   });
   it("fails sealed instead of replaying installer arming when the current Shell is still the old identity", async () => {
     await expect(resolveElectronInstallerRecovery({
@@ -60,7 +60,7 @@ describe("Electron installer handoff observation", () => {
 
   it("hands an applying transition to the Shell-owned guarded continuation", async () => {
     const onHandoff = vi.fn(async () => undefined);
-    await observeElectronInstallerHandoff({
+    await observeElectronUpdateHandoff({
       afterRevision: 0,
       isClosing: () => false,
       onHandoff,
@@ -75,7 +75,7 @@ describe("Electron installer handoff observation", () => {
   it("arms a handoff that completed before observation started", async () => {
     const onHandoff = vi.fn(async () => undefined);
     const waitForChange = vi.fn();
-    await observeElectronInstallerHandoff({
+    await observeElectronUpdateHandoff({
       afterRevision: 0,
       isClosing: () => false,
       onHandoff,
@@ -94,7 +94,7 @@ describe("Electron installer handoff observation", () => {
 
   it("does not consume a handoff while the runtime is closing", async () => {
     const onHandoff = vi.fn();
-    await observeElectronInstallerHandoff({
+    await observeElectronUpdateHandoff({
       afterRevision: 0,
       isClosing: () => true,
       onHandoff,
@@ -112,7 +112,7 @@ describe("Electron installer handoff observation", () => {
       .mockResolvedValueOnce({ ...handedOff, revision: 0, state: "idle", handoff: null, installAttemptId: null })
       .mockResolvedValueOnce(handedOff);
     const unavailable = Object.assign(new Error("connect ENOENT host.sock"), { code: "ENOENT" });
-    await observeElectronInstallerHandoff({
+    await observeElectronUpdateHandoff({
       afterRevision: 0,
       isClosing: () => false,
       onHandoff,
@@ -123,7 +123,7 @@ describe("Electron installer handoff observation", () => {
   });
 
   it("surfaces non-transport observation failures", async () => {
-    await expect(observeElectronInstallerHandoff({
+    await expect(observeElectronUpdateHandoff({
       afterRevision: 0,
       isClosing: () => false,
       onHandoff: vi.fn(),

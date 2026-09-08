@@ -13,7 +13,7 @@ import {
   type ElectronStandaloneContentUpdaterPort,
 } from "@open-design/electron-kit/contracts";
 import {
-  completeElectronShutdown, observeElectronInstallerHandoff, resolveElectronInstallerRecovery,
+  completeElectronShutdown, observeElectronUpdateHandoff, resolveElectronInstallerRecovery,
   ELECTRON_WARMUP_ATOMS, runElectronWarmupTopology, validateElectronRuntimeWarmupTopology,
   type ElectronWarmupRun, type ElectronStartupSignal, type ElectronCapsuleSession, type ElectronCapsuleReady,
   focusElectronWindow,
@@ -388,16 +388,30 @@ export async function runElectronCapsule(
     async waitForRendererReplacement() { if (!rendererRecoveryParked) await rendererReplacement?.catch(() => undefined); },
     onTerminal(observation) { context.log?.write("standalone.terminal", observation); app.quit(); },
   }).catch((error: unknown) => { context.log?.write("standalone.observation.failed", { error }); app.quit(); });
-  void observeElectronInstallerHandoff({
+  void observeElectronUpdateHandoff({
     afterRevision: runtimeUpdaterRevisionAtStart,
     isClosing: () => closing,
     updater: runtimePrepared.updater,
     async onHandoff(request) {
+      if (request.handoff.interaction === "restart-and-activate") {
+        const handoff = request.handoff;
+        const scheduleRestart = definition.actions?.scheduleRestart;
+        if (scheduleRestart == null) throw new Error("Electron Shell restart action is unavailable");
+        installerArming = (async () => {
+          await runtimePrepared.armShellRestart({ handoff, installAttemptId: request.installAttemptId });
+          await scheduleRestart();
+          context.log?.write("shell.restart.armed", { installAttemptId: request.installAttemptId });
+        })();
+        await installerArming;
+        app.quit();
+        return;
+      }
       if (definition.actions?.installUpdate == null) throw new Error("Electron Shell installer action is unavailable");
       const install = definition.actions.installUpdate;
       installerArming = runtimePrepared.armShellInstallation({
         request: {
           ...request,
+          handoff: request.handoff,
           nodeExecutablePath: nodeRuntime.command,
           parentPid: process.pid,
           runtimeRoot,

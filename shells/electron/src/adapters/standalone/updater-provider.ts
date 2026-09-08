@@ -4,7 +4,7 @@ import {
 } from "@open-design/sidecar/authority";
 import {
   canonicalJson, createStandaloneHostUpdaterHandler, STANDALONE_HOST_CONTROL_ACTION,
-  StandaloneHostControlClient, validateShellIdentity, validateStandaloneScope,
+  StandaloneHostControlClient, StandaloneStore, validateShellIdentity, validateStandaloneScope,
   validateStandaloneHostControlRequest,
   type LifecycleScope, type StandaloneShellIdentity,
 } from "@open-design/standalone";
@@ -14,24 +14,26 @@ import { loadElectronStandaloneInstallation, resolveElectronStandaloneTarget } f
 import { ElectronReleaseExactFeed } from "./release-feed.js";
 import { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
+import { ElectronCapsuleUpdate } from "./capsule-update.js";
 
-export const ELECTRON_UPDATER_PROVIDER_CONFIG_ENV = "OD_ELECTRON_UPDATER_PROVIDER_V2";
+export const ELECTRON_UPDATER_PROVIDER_CONFIG_ENV = "OD_ELECTRON_UPDATER_PROVIDER_V3";
 export type ElectronUpdaterProviderConfig = Readonly<{
-  schemaVersion: 2;
+  schemaVersion: 3;
   scope: LifecycleScope;
   shell: StandaloneShellIdentity;
   carrier: StandaloneShellIdentity;
   resourceRoot: string;
   storeRoot: string;
   runtimeRoot: string;
+  carrierRuntimeRoot: string;
   channelHeadUrl: string;
 }>;
 
 export function parseElectronUpdaterProviderConfig(input: unknown): ElectronUpdaterProviderConfig {
   if (input == null || typeof input !== "object" || Array.isArray(input)) throw new Error("Electron updater provider configuration is invalid");
   const value = input as ElectronUpdaterProviderConfig;
-  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["carrier", "channelHeadUrl", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot"])) throw new Error("Electron updater provider configuration fields are invalid");
-  if (value.schemaVersion !== 2) throw new Error("Electron updater provider schema is unsupported");
+  if (JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["carrier", "carrierRuntimeRoot", "channelHeadUrl", "resourceRoot", "runtimeRoot", "schemaVersion", "scope", "shell", "storeRoot"])) throw new Error("Electron updater provider configuration fields are invalid");
+  if (value.schemaVersion !== 3) throw new Error("Electron updater provider schema is unsupported");
   if (value.scope == null || JSON.stringify(Object.keys(value.scope).sort()) !== JSON.stringify(["channel", "namespace"])) throw new Error("Electron updater provider scope is invalid");
   const scope = Object.freeze({ ...validateStandaloneScope(value.scope) });
   for (const identity of [value.shell, value.carrier]) {
@@ -39,7 +41,7 @@ export function parseElectronUpdaterProviderConfig(input: unknown): ElectronUpda
     validateShellIdentity(identity);
     if (identity.type !== "electron") throw new Error("Electron updater provider cannot serve another Shell");
   }
-  for (const path of [value.resourceRoot, value.runtimeRoot, value.storeRoot]) {
+  for (const path of [value.resourceRoot, value.runtimeRoot, value.carrierRuntimeRoot, value.storeRoot]) {
     if (typeof path !== "string" || resolve(path) !== path) throw new Error("Electron updater provider paths must be absolute and normalized");
   }
   const url = new URL(value.channelHeadUrl);
@@ -78,13 +80,17 @@ export async function runElectronUpdaterProvider(): Promise<void> {
         });
         const updater = new ElectronStandaloneHostUpdater("electron", lifecycle, new ElectronStandaloneShellUpdaterLedger(config.storeRoot, config.scope, "electron"), {
           authorityRoot: config.storeRoot, feed, candidates: new ElectronStandaloneShellCandidateLedger(config.storeRoot, config.scope, feed),
+          capsule: new ElectronCapsuleUpdate({ feed, store: new StandaloneStore(config.storeRoot, config.scope),
+            runtimeRoot: config.carrierRuntimeRoot, channel: config.scope.channel, shell: config.shell,
+            carrier: { target: installation.declaration.target, shell: config.carrier }, trustedKeys: installation.trustedKeys }),
         });
         handler = createStandaloneHostUpdaterHandler(config.scope, updater);
         return { ready: true };
       },
       status() {
         return { control: "ready", providerSha256: installation.declaration.updaterProvider.sha256, supervisorSha256: installation.declaration.supervisor.sha256,
-          resourceRoot: config.resourceRoot, dataRoot: config.storeRoot, runtimeRoot: config.runtimeRoot, shell: config.shell, carrier: config.carrier };
+          resourceRoot: config.resourceRoot, dataRoot: config.storeRoot, runtimeRoot: config.runtimeRoot,
+          carrierRuntimeRoot: config.carrierRuntimeRoot, shell: config.shell, carrier: config.carrier };
       },
       async stop() { handler = null; },
     },

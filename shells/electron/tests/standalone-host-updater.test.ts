@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { SHELL_UPDATE_ALGEBRA, StandaloneHostControlClient, StandaloneHostRuntime } from "@open-design/standalone";
+import { initialSharedLifecycleState, reduceSharedLifecycleState, SHELL_UPDATE_ALGEBRA, StandaloneHostControlClient, StandaloneHostRuntime,
+  type StandaloneShellUpdateHandoff } from "@open-design/standalone";
 
 import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { ElectronStandaloneHostUpdater } from "@/adapters/standalone/host-updater.js";
@@ -29,20 +30,47 @@ const handoff = Object.freeze({
   shell: Object.freeze({ type: "electron", version: "0.2.0", buildHash: "b".repeat(64) }),
 });
 
-async function readyLedger(root: string): Promise<ElectronStandaloneShellUpdaterLedger> {
+async function readyLedger(root: string, selectedHandoff: StandaloneShellUpdateHandoff = handoff): Promise<ElectronStandaloneShellUpdaterLedger> {
   const ledger = new ElectronStandaloneShellUpdaterLedger(root, scope, "electron");
   let snapshot = SHELL_UPDATE_ALGEBRA.initial("electron");
   for (const command of [
     { state: "checking" as const },
     { state: "available" as const, candidateId: "candidate-020" },
     { state: "downloading" as const },
-    { state: "ready" as const, handoff },
+    { state: "ready" as const, handoff: selectedHandoff },
   ]) snapshot = SHELL_UPDATE_ALGEBRA.reduce(snapshot, { expectedRevision: snapshot.revision, ...command });
   await ledger.write(snapshot);
   return ledger;
 }
 
 describe("Electron Standalone host updater", () => {
+  it.each([false, true])("reserves restart without installer authority and respects other Shell occupants (terminal=%s)", async terminal => {
+    const root = await mkdtemp(join(tmpdir(), "electron-host-restart-")); roots.push(root);
+    const shell = { ...handoff.shell, digest: "c".repeat(64) };
+    const selectedHandoff = { interaction: "restart-and-activate" as const, releaseVersion: handoff.releaseVersion,
+      target: handoff.target, shell, activation: { targetDigest: "d".repeat(64), generationId: "e".repeat(64) } };
+    const ledger = await readyLedger(root, selectedHandoff);
+    const now = "2026-09-08T00:00:00.000Z";
+    let shared = initialSharedLifecycleState(scope);
+    for (const type of terminal ? ["electron", "terminal"] : ["electron"]) shared = reduceSharedLifecycleState(shared, {
+      type: "start", generationId: "f".repeat(64), bindingDigest: "a".repeat(64), instanceId: "runtime",
+      attachment: { id: type, shell: { ...shell, type } }, heartbeatAt: now, leaseExpiresAt: "2026-09-08T00:10:00.000Z",
+      capability: { candidateHash: "b".repeat(64), presentedHash: null },
+    });
+    const lifecycle = new StandaloneHostLifecycle(scope, { clock: () => new Date(now), statePort: {
+      async read() { return shared; }, async write(value) { shared = value; },
+    } });
+    const updater = new ElectronStandaloneHostUpdater("electron", publicLifecycle(lifecycle), ledger);
+    expect((await updater.invoke("install")).outcome).toBe("unsupported");
+    const initial = await updater.invoke("restart");
+    if (terminal) {
+      expect(initial).toMatchObject({ outcome: "blocked", snapshot: { blockedBy: [{ attachmentId: "terminal" }] } });
+      expect(shared.transition).toBeNull();
+      expect((await updater.invoke("force-stop-and-restart")).outcome).toBe("accepted");
+    } else expect(initial.outcome).toBe("accepted");
+    expect(shared.transition).toMatchObject({ kind: "content-restart", phase: "reserved" });
+    expect((await ledger.read()).handoff).toEqual(selectedHandoff);
+  });
   it("durably reserves a Shell install and leaves physical retirement to the Shell continuation", async () => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-updater-"));
     roots.push(root);

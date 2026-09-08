@@ -9,6 +9,7 @@ import type {
   StandaloneShellCapabilityPort,
   StandaloneShellIdentity,
   StandaloneShellUpdaterPort,
+  StandaloneShellRestartHandoff,
   UpdateActivationPolicy,
   UpdatePreparation,
   SignedStandaloneChannelHead,
@@ -58,6 +59,7 @@ export type ElectronShellAppearance = Readonly<{
 
 export type ElectronShellActions = Readonly<{
   openDeepLink?(url: string): void | Promise<void>;
+  scheduleRestart?(): Promise<void>;
   installUpdate?(request: ElectronInstallerHandoffRequest): ElectronInstallerHandoffReceipt | Promise<ElectronInstallerHandoffReceipt>;
   observeCommitted?(): void | Promise<void>;
   resolveInstallerRecovery?(input: Readonly<{
@@ -139,6 +141,7 @@ export type ElectronStandalonePreparedRuntime = Readonly<{
   generation: GenerationRecord;
   updater: StandaloneShellUpdaterPort;
   contentUpdater: ElectronStandaloneContentUpdaterPort;
+  armShellRestart(request: Readonly<{ handoff: StandaloneShellRestartHandoff; installAttemptId: string }>): Promise<void>;
   readShellInstallationClaim(): Promise<ElectronInstallerClaimSnapshot | null>;
   confirmShellInstallation(request: ElectronInstallerConfirmationRequest): Promise<ElectronInstallerConfirmationReceipt>;
   armShellInstallation(input: Readonly<{

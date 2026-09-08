@@ -8,10 +8,12 @@ import type {
   StandaloneLifecycleTransitionPort,
 } from "@open-design/standalone";
 import { stageElectronInstallerArtifact } from "@open-design/electron-kit/installation";
+import { compareChannelReleaseVersions } from "@open-design/standalone";
 
 import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 import type { ElectronReleaseExactFeed } from "./release-feed.js";
 import type { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
+import type { ElectronCapsuleUpdate } from "./capsule-update.js";
 
 const result = (outcome: StandaloneShellUpdaterActionResult["outcome"], snapshot: StandaloneShellUpdaterSnapshot): StandaloneShellUpdaterActionResult => Object.freeze({ outcome, snapshot });
 
@@ -20,12 +22,13 @@ export class ElectronStandaloneHostUpdater {
 
   constructor(
     readonly shellType: string,
-    private readonly lifecycle: Pick<StandaloneLifecycleTransitionPort, "beginTransition">,
+    private readonly lifecycle: StandaloneLifecycleTransitionPort,
     private readonly ledger: ElectronStandaloneShellUpdaterLedger,
     private readonly release?: Readonly<{
       authorityRoot: string;
       feed: ElectronReleaseExactFeed;
       candidates: ElectronStandaloneShellCandidateLedger;
+      capsule?: ElectronCapsuleUpdate;
     }>,
   ) {}
 
@@ -38,12 +41,22 @@ export class ElectronStandaloneHostUpdater {
     finally { release(); }
   }
 
-  readSnapshot(): Promise<StandaloneShellUpdaterSnapshot> { return this.ledger.read(); }
+  readSnapshot(): Promise<StandaloneShellUpdaterSnapshot> { return this.#serialize(() => this.#reconcile()); }
+
+  async #reconcile(): Promise<StandaloneShellUpdaterSnapshot> {
+    let snapshot = await this.ledger.read();
+    if (snapshot.handoff?.interaction !== "restart-and-activate" || this.release?.capsule == null
+      || !["ready", "applying", "handed-off"].includes(snapshot.state)) return snapshot;
+    const attemptId = await this.release.capsule.completed(snapshot.handoff);
+    if (attemptId == null) return snapshot;
+    if (snapshot.state === "ready") snapshot = await this.ledger.update({ expectedRevision: snapshot.revision, state: "applying", installAttemptId: attemptId });
+    return this.ledger.update({ expectedRevision: snapshot.revision, state: "installed" });
+  }
 
   async waitForChange(afterRevision: number, timeoutMs: number): Promise<StandaloneShellUpdaterSnapshot> {
     const deadline = Date.now() + timeoutMs;
     for (;;) {
-      const snapshot = await this.ledger.read();
+      const snapshot = await this.readSnapshot();
       if (snapshot.revision > afterRevision || Date.now() >= deadline) return snapshot;
       await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(25, Math.max(1, deadline - Date.now()))));
     }
@@ -51,21 +64,26 @@ export class ElectronStandaloneHostUpdater {
 
   invoke(action: StandaloneShellUpdaterAction["id"]): Promise<StandaloneShellUpdaterActionResult> {
     return this.#serialize(async () => {
-      const snapshot = await this.ledger.read();
+      const snapshot = await this.#reconcile();
       if (action === "check" && this.release != null && (snapshot.state === "idle" || snapshot.state === "failed" || snapshot.state === "installed")) {
         return await this.#check(snapshot);
       }
       if (action === "download" && this.release != null && snapshot.state === "available") {
         return await this.#download(snapshot);
       }
-      if ((action !== "install" && action !== "force-stop-and-install") || snapshot.state !== "ready" || snapshot.handoff?.interaction !== "restart-and-install") {
+      const restart = snapshot.handoff?.interaction === "restart-and-activate";
+      const supported = restart ? action === "restart" || action === "force-stop-and-restart"
+        : action === "install" || action === "force-stop-and-install";
+      if (!supported || snapshot.state !== "ready" || snapshot.handoff == null) {
         return result("unsupported", snapshot);
       }
       const installAttemptId = randomUUID();
-      const transition = await this.lifecycle.beginTransition(this.ledger.scope, "shell-install", {
+      const ownAttachments = restart ? (await this.lifecycle.occupants(this.ledger.scope)).filter(occupant => occupant.shell.type === this.shellType) : [];
+      const transition = await this.lifecycle.beginTransition(this.ledger.scope, restart ? "content-restart" : "shell-install", {
         attemptId: installAttemptId,
         ownerShellType: this.shellType,
-        force: action === "force-stop-and-install",
+        ...(ownAttachments.length === 1 ? { ownerAttachmentId: ownAttachments[0]!.attachmentId } : {}),
+        force: action === "force-stop-and-install" || action === "force-stop-and-restart",
       });
       if (transition.state === "blocked") {
         const blocked = await this.ledger.update({
@@ -99,6 +117,13 @@ export class ElectronStandaloneHostUpdater {
     try {
       const candidate = await this.release!.feed.check();
       if (candidate == null) return result("accepted", await this.ledger.update({ expectedRevision: current.revision, state: "idle" }));
+      const previous = await this.release!.candidates.read();
+      if (previous != null && compareChannelReleaseVersions(candidate.candidateId, previous.candidateId, this.ledger.scope.channel) < 0) {
+        throw new Error("Electron release head would downgrade the retained selected release");
+      }
+      if (await this.release!.capsule?.classify(candidate) === "current") {
+        return result("accepted", await this.ledger.update({ expectedRevision: current.revision, state: "idle" }));
+      }
       await this.release!.candidates.write(candidate);
       current = await this.ledger.update({ expectedRevision: current.revision, state: "available", candidateId: candidate.candidateId });
       return result("accepted", current);
@@ -113,6 +138,16 @@ export class ElectronStandaloneHostUpdater {
     try {
       const candidate = await this.release!.candidates.read();
       if (candidate == null || candidate.candidateId !== snapshot.candidateId) throw new Error("Electron release candidate is unavailable or stale");
+      const route = await this.release!.capsule?.classify(candidate);
+      if (route === "current") {
+        current = await this.ledger.update({ expectedRevision: snapshot.revision, state: "checking" });
+        return result("accepted", await this.ledger.update({ expectedRevision: current.revision, state: "idle" }));
+      }
+      if (route === "activate") {
+        current = await this.ledger.update({ expectedRevision: snapshot.revision, state: "downloading" });
+        const handoff = await this.release!.capsule!.prepare(candidate);
+        return result("accepted", await this.ledger.update({ expectedRevision: current.revision, state: "ready", handoff }));
+      }
       const total = candidate.distribution.artifact.size;
       current = await this.ledger.update({ expectedRevision: snapshot.revision, state: "downloading", progress: { completed: 0, total } });
       const downloaded = await this.release!.feed.download(candidate);

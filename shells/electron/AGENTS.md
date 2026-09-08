@@ -50,7 +50,8 @@ Shell and the typed adapter boundary consumed by repository tools.
 - The verified loader supplies composite Shell capability separately from the
   installed manifest. Closure attachment/compatibility uses that capability;
   installer confirmation, LKG capture and carrier compatibility use the physical
-  manifest identity. Provider schema 2 carries both explicitly. Never turn
+  manifest identity. Provider schema 3 carries both explicitly, together with
+  the fixed carrier runtime root used to observe restart activation. Never turn
   Capsule-provided capability into proof of a replaced installation.
 
 `electron-kit` owns reusable Electron mechanics. `electron-contract` is the

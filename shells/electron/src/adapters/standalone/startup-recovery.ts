@@ -7,7 +7,7 @@ import { inspectElectronCapsule } from "@open-design/electron-kit/capsule-loader
 import { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
 import { validateElectronShellManifest, resolveElectronCompositeShellIdentity, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
 import { bindNodePlatform } from "@open-design/standalone/packages";
-import { canonicalJson, ensureStandaloneBlob, materializeStandaloneBlob, sha256Hex, StandaloneStore, verifyDocument } from "@open-design/standalone";
+import { canonicalJson, ensureStandaloneBlob, materializeStandaloneBlob, sha256Hex, StandaloneHostLifecycle, StandaloneHostLifecycleLedger, StandaloneStore, verifyDocument } from "@open-design/standalone";
 import declaration from "../../../config/standalone.json" with { type: "json" };
 import { loadElectronInstalledCapsuleSeed, loadElectronStandaloneInstallation, resolveElectronStandaloneTarget } from "./installation.js";
 import { validateElectronPhysicalResourceSet } from "./physical-resources.js";
@@ -15,6 +15,7 @@ import { withElectronStoppedResourceSet } from "./guarded-lifecycle.js";
 import { resolveElectronStandaloneStoreRoot } from "./store-root.js";
 import { ElectronReleaseExactFeed } from "./release-feed.js";
 import { ElectronStandaloneShellCandidateLedger } from "./shell-updater-candidate.js";
+import { ElectronStandaloneShellUpdaterLedger } from "./shell-updater-ledger.js";
 
 export type ElectronStartupRecoveryRequest = Readonly<{
   schemaVersion: 1;
@@ -68,6 +69,16 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
         return { capsuleManifestSha256: selected == null ? capsuleManifestSha256 : sha256Hex(canonicalJson(selected.envelope)), closureGenerationId };
       },
       async repair(target) {
+        const updaterLedger = new ElectronStandaloneShellUpdaterLedger(store.root, scope, "electron");
+        const updater = await updaterLedger.read();
+        const lifecycleLedger = new StandaloneHostLifecycleLedger(store.root, scope);
+        const lifecycle = await lifecycleLedger.read();
+        const transition = lifecycle?.transition;
+        const restart = updater.handoff?.interaction === "restart-and-activate"
+          && (updater.state === "applying" || updater.state === "handed-off");
+        if (transition != null && (!restart || transition.kind !== "content-restart" || transition.token !== updater.installAttemptId)) {
+          throw new Error("startup recovery cannot clear another lifecycle transition");
+        }
         const capsuleState = await readElectronCapsuleSelection(paths.runtimeRoot);
         const selected = [capsuleState.pending, capsuleState.current].find(value => value != null
           && sha256Hex(canonicalJson(value.envelope)) === target.capsuleManifestSha256);
@@ -126,6 +137,19 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
           closureGenerationId: target.closureGenerationId, recovery: true,
           capsule: { envelope: capsuleEnvelope, trustedKeys: seed.trustedKeys, root: capsuleRoot,
             carrier: { target: platformTarget, shell: manifest.shell } } });
+        if (restart) {
+          // Physical absence is already proved by the enclosing resource-set
+          // guard. Explicit recovery may abandon only this updater's transition,
+          // never an installer claim or an unrelated successor operation.
+          if (transition != null) {
+            const continuation = new StandaloneHostLifecycle(scope, { statePort: lifecycleLedger });
+            const sealed = transition.phase === "stopped-sealed" ? transition
+              : await continuation.forceStopTransition(transition.token, transition.fence);
+            await continuation.abandonStoppedTransition(transition.token, sealed.fence);
+          }
+          await updaterLedger.update({ expectedRevision: updater.revision, state: "failed",
+            error: { code: "electron-restart-recovered", message: "Explicit exact recovery replaced the interrupted restart attempt" } });
+        }
       },
     });
   });

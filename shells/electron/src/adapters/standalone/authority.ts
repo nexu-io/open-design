@@ -281,8 +281,8 @@ export function createElectronStandaloneAuthorityFactory(
         const providerStamp = resourceSet.resources.find(({ id }) => id === "electron-updater")?.stamp;
         if (providerStamp == null) throw new Error("Electron resource set lacks its updater provider");
         const providerConfig = parseElectronUpdaterProviderConfig({
-          schemaVersion: 2, scope: request.scope, shell: request.shell, carrier: manifest.shell, resourceRoot: resolve(resourceRoot), storeRoot,
-          runtimeRoot: join(runtimeRoot, "electron-updater"), channelHeadUrl,
+          schemaVersion: 3, scope: request.scope, shell: request.shell, carrier: manifest.shell, resourceRoot: resolve(resourceRoot), storeRoot,
+          runtimeRoot: join(runtimeRoot, "electron-updater"), carrierRuntimeRoot: runtimeRoot, channelHeadUrl,
         });
         const provider = await convergeSidecarLaunch({
           args: [installation.updaterProviderPath], command: nodeRuntime.command, cwd: resourceRoot,
@@ -293,7 +293,7 @@ export function createElectronStandaloneAuthorityFactory(
         if (canonicalJson(providerStatus) !== canonicalJson({
           control: "ready", providerSha256: installation.declaration.updaterProvider.sha256,
           supervisorSha256: installation.declaration.supervisor.sha256, resourceRoot: resolve(resourceRoot),
-          dataRoot: storeRoot, runtimeRoot: providerConfig.runtimeRoot, shell: request.shell, carrier: manifest.shell,
+          dataRoot: storeRoot, runtimeRoot: providerConfig.runtimeRoot, carrierRuntimeRoot: runtimeRoot, shell: request.shell, carrier: manifest.shell,
         })) throw new Error("Electron updater provider escaped its installed launch contract");
         if (reuse == null) {
           const converged = await convergeSidecarLaunch({
@@ -471,6 +471,36 @@ export function createElectronStandaloneAuthorityFactory(
             }
             activeHost = await launchHost(activeHost.binding);
             return confirmationReceipt!;
+          });
+        },
+        async armShellRestart(input) {
+          const restart = structuredClone(input);
+          if (activeAttachment == null) throw new Error("Shell restart requires an active runtime attachment");
+          await withElectronPhysicalResourceSetGuard(activeHost.resourceSet, async guard => {
+            const snapshot = await updaterLedger.read();
+            if (snapshot.state !== "applying" || snapshot.handoff?.interaction !== "restart-and-activate"
+              || snapshot.installAttemptId !== restart.installAttemptId || canonicalJson(snapshot.handoff) !== canonicalJson(restart.handoff)) {
+              throw new Error("Shell restart differs from the durable updater transition");
+            }
+            const selection = await readElectronCapsuleSelection(runtimeRoot);
+            const pending = selection.pending;
+            if (pending == null || sha256Hex(canonicalJson(pending.envelope)) !== restart.handoff.activation.targetDigest
+              || pending.closureGenerationId !== restart.handoff.activation.generationId) throw new Error("Shell restart lost its exact pending selection");
+            assertElectronPendingCapsule({ pending, state: await store.readState(), shell: restart.handoff.shell,
+              carrier: { target: resolveElectronStandaloneTarget(), shell: manifest.shell }, trustedKeys: installation.trustedKeys });
+            const reserved = await activeHost.lifecycle.beginTransition(request.scope, "content-restart",
+              { attemptId: restart.installAttemptId, ownerShellType: request.shell.type });
+            if (reserved.state !== "acquired" || reserved.transition.phase !== "reserved") throw new Error("Shell restart reservation is unavailable");
+            await reserved.transition.renew();
+            const previous = await activeHost.lifecycle.status(request.scope);
+            if (previous.instanceId == null || previous.bindingDigest !== activeHost.binding.digest
+              || previous.generationId !== activeGeneration.id) throw new Error("Shell restart lost its active runtime binding");
+            await guard.retire();
+            const continuation = new StandaloneHostLifecycle(request.scope, { statePort: lifecycleLedger });
+            await continuation.forceStopTransition(reserved.transition.attemptId, reserved.transition.fence);
+            await updaterLedger.update({ expectedRevision: snapshot.revision, state: "handed-off" });
+            sealedRuntimeStatus = Object.freeze({ state: "stopped", bindingDigest: activeHost.binding.digest,
+              generationId: activeGeneration.id, instanceId: previous.instanceId, references: 0 });
           });
         },
         async armShellInstallation({ install, request: installationRequest }) {
@@ -917,7 +947,17 @@ export function createElectronStandaloneAuthorityFactory(
           const launcher = new VersionedLauncher(store, activeHost.lifecycle, request.shell, attachment.id, observeFeedback);
           let started: Awaited<ReturnType<VersionedLauncher["start"]>>;
           try {
-            started = await launcher.start();
+            const update = await updaterLedger.read();
+            if ((update.state === "applying" || update.state === "handed-off") && update.handoff?.interaction === "restart-and-activate") {
+              if (pendingCapsule == null || update.installAttemptId == null
+                || update.handoff.activation.generationId !== generation.id
+                || update.handoff.activation.targetDigest !== sha256Hex(canonicalJson(pendingCapsule.envelope))
+                || canonicalJson(update.handoff.shell) !== canonicalJson(request.shell)) throw new Error("Shell restart startup differs from the exact handoff");
+              const acquired = await activeHost.lifecycle.beginTransition(request.scope, "content-restart",
+                { attemptId: update.installAttemptId, ownerShellType: request.shell.type });
+              if (acquired.state !== "acquired" || acquired.transition.phase !== "stopped-sealed") throw new Error("Shell restart requires its exact sealed transition; explicit recovery required");
+              started = await launcher.startDuringTransition(acquired.transition);
+            } else started = await launcher.start();
           } catch (error) {
             // A client can lose the start response after the host has already
             // retained its attachment. Retire both a zero-reference host and a

@@ -5,6 +5,7 @@ import { inspectElectronCdp } from "@open-design/electron-kit/runtime";
 import { APP_KEYS } from "@open-design/sidecar-proto";
 import {
   bootstrapSidecarProcessWithSupervisor,
+  handoffCurrentSidecarGeneration,
   isCurrentSidecarLauncher,
   readOptionalCurrentSidecarStamp,
   registerSidecarProcess,
@@ -13,6 +14,18 @@ import {
 } from "@open-design/sidecar/authority";
 
 const CONTROL_RESOURCES_ENV = "OD_ELECTRON_CONTROL_RESOURCES";
+
+/** Queue only; the Capsule quit barrier owns teardown after acknowledgement.
+ * A native relaunch would inherit a dying supervisor's context and be stopped
+ * as an orphan, so controlled sessions retain the existing generation root. */
+export async function scheduleElectronShellRestart(): Promise<void> {
+  if (readOptionalCurrentSidecarStamp() == null) {
+    app.relaunch();
+    return;
+  }
+  await handoffCurrentSidecarGeneration({ command: process.execPath,
+    args: process.argv.slice(1), cwd: process.cwd(), env: process.env });
+}
 
 /** The outer launcher can fail before carrier handlers exist. Its process
  * boundary must close on failure, not leave an unhandled rejection alive. */

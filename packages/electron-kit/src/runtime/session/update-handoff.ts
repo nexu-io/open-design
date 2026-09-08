@@ -1,4 +1,4 @@
-import type { StandaloneShellIdentity, StandaloneShellUpdaterPort, StandaloneShellUpdaterSnapshot } from "@open-design/standalone";
+import type { StandaloneShellIdentity, StandaloneShellUpdateHandoff, StandaloneShellUpdaterPort, StandaloneShellUpdaterSnapshot } from "@open-design/standalone";
 
 import type { ElectronInstallerHandoff } from "../../update/installation/contracts.js";
 
@@ -37,10 +37,10 @@ export async function resolveElectronInstallerRecovery(input: Readonly<{
   return Object.freeze({ state: "continue" as const, snapshot });
 }
 
-export async function observeElectronInstallerHandoff(input: Readonly<{
+export async function observeElectronUpdateHandoff(input: Readonly<{
   afterRevision: number;
   isClosing(): boolean;
-  onHandoff(request: ElectronObservedInstallerHandoff): Promise<void>;
+  onHandoff(request: Readonly<{ handoff: StandaloneShellUpdateHandoff; installAttemptId: string }>): Promise<void>;
   updater: Pick<StandaloneShellUpdaterPort, "readSnapshot" | "waitForChange">;
 }>): Promise<void> {
   let snapshot: StandaloneShellUpdaterSnapshot | null = null;
@@ -50,7 +50,7 @@ export async function observeElectronInstallerHandoff(input: Readonly<{
       snapshot ??= await input.updater.readSnapshot();
       if (snapshot.revision > input.afterRevision
         && (snapshot.state === "applying" || snapshot.state === "handed-off")
-        && snapshot.handoff?.interaction === "restart-and-install"
+        && snapshot.handoff != null
         && snapshot.installAttemptId != null) {
         await input.onHandoff({ handoff: snapshot.handoff, installAttemptId: snapshot.installAttemptId });
         return;

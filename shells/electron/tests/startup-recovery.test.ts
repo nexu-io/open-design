@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   platform: vi.fn(), recover: vi.fn(), metadata: vi.fn(), inspect: vi.fn(), seed: vi.fn(),
   readState: vi.fn(), armCapsule: vi.fn(), readCapsules: vi.fn(), verifyCapsule: vi.fn(),
   blob: vi.fn(), candidate: vi.fn(), fetchCapsule: vi.fn(), prepareCapsule: vi.fn(),
+  lifecycle: vi.fn(), seal: vi.fn(), abandon: vi.fn(), updater: vi.fn(), updateLedger: vi.fn(),
   manifest: { channel: "betahyx", namespace: "test-shell", shell: { version: "0.2.0", type: "electron" } },
 }));
 vi.mock("@open-design/electron-kit/installation/inspection", () => ({ readElectronInstalledManifest: async () => ({ manifest: state.manifest }) }));
@@ -20,6 +21,7 @@ vi.mock("@/adapters/standalone/release-feed.js", () => ({ ElectronReleaseExactFe
   prepareCapsule = state.prepareCapsule;
 } }));
 vi.mock("@/adapters/standalone/shell-updater-candidate.js", () => ({ ElectronStandaloneShellCandidateLedger: class { read = state.candidate; } }));
+vi.mock("@/adapters/standalone/shell-updater-ledger.js", () => ({ ElectronStandaloneShellUpdaterLedger: class { read = state.updater; update = state.updateLedger; } }));
 vi.mock("@/adapters/standalone/installation.js", () => ({ loadElectronInstalledCapsuleSeed: state.seed,
   loadElectronStandaloneInstallation: async () => ({ envelope: { metadata: { installed: true } }, candidates: {},
     declaration: { releaseVersion: "0.2.0-betahyx.1", update: { channelHeadUrl: "https://invalid.test/betahyx/head.json" } } }),
@@ -28,6 +30,8 @@ vi.mock("@open-design/standalone", async original => ({
   ...await original<typeof import("@open-design/standalone")>(),
   verifyDocument: state.verifyCapsule,
   ensureStandaloneBlob: state.blob,
+  StandaloneHostLifecycleLedger: class { read = state.lifecycle; },
+  StandaloneHostLifecycle: class { forceStopTransition = state.seal; abandonStoppedTransition = state.abandon; },
   StandaloneStore: class {
     root = "/store";
     readState = state.readState;
@@ -69,6 +73,11 @@ describe("stopped Electron exact recovery composition", () => {
     vi.clearAllMocks(); state.events = []; state.survivors = []; state.guard = false;
     state.platform.mockResolvedValue({});
     state.blob.mockResolvedValue({ path: "/cached-capsule.zip" });
+    state.lifecycle.mockResolvedValue(null);
+    state.updater.mockResolvedValue({ state: "idle", revision: 0 });
+    state.seal.mockResolvedValue({ fence: 8 });
+    state.abandon.mockImplementation(async () => { state.events.push("restart-abandoned"); });
+    state.updateLedger.mockImplementation(async () => { state.events.push("updater-failed"); });
     state.readCapsules.mockResolvedValue({ revision: 2, current: null, pending: null });
     state.seed.mockResolvedValue({ envelope, trustedKeys: {}, archivePath: "/installed/Resources/capsule.zip" });
     state.readState.mockResolvedValue({ revision: 7, active: "d".repeat(64), activationIntent: { generationId: selected.closureGenerationId } });
@@ -157,5 +166,25 @@ describe("stopped Electron exact recovery composition", () => {
       expect(state.events).not.toContain("unblock");
     }
     if (mode === "offline") expect(state.candidate).not.toHaveBeenCalled();
+  });
+
+  it.each(["reserved", "stopped-sealed"] as const)("abandons only its own interrupted restart after exact rearm (%s)", async phase => {
+    state.updater.mockResolvedValue({ state: "handed-off", revision: 12, installAttemptId: "restart-1", handoff: { interaction: "restart-and-activate" } });
+    state.lifecycle.mockResolvedValue({ transition: { token: "restart-1", kind: "content-restart", fence: 7, phase } });
+    await recoverElectronProductStartup(request);
+    expect(state.abandon).toHaveBeenCalledWith("restart-1", phase === "reserved" ? 8 : 7);
+    expect(state.events).toEqual(["blockade", "materialize", "rearm", "capsule-rearm", "restart-abandoned", "updater-failed", "unblock"]);
+    expect(state.updateLedger).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 12, state: "failed" }));
+  });
+
+  it("never abandons an unrelated or physical installer transition", async () => {
+    state.updater.mockResolvedValue({ state: "handed-off", revision: 12, installAttemptId: "restart-1", handoff: { interaction: "restart-and-activate" } });
+    for (const transition of [{ token: "other", kind: "content-restart" }, { token: "restart-1", kind: "shell-install" }]) {
+      state.lifecycle.mockResolvedValue({ transition });
+      await expect(recoverElectronProductStartup(request)).rejects.toThrow("another lifecycle transition");
+    }
+    expect(state.recover).not.toHaveBeenCalled();
+    expect(state.abandon).not.toHaveBeenCalled();
+    expect(state.events).not.toContain("unblock");
   });
 });
