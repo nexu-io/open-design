@@ -25,8 +25,12 @@ ASSET = 'open-design-0.22.0-mac-arm64.dmg'
 
 def run(*args, timeout=600, check=True):
     # Do not log argv, which may contain credentials.
-    result = subprocess.run([str(arg) for arg in args], capture_output=True,
-                            text=True, timeout=timeout)
+    try:
+        result = subprocess.run([str(arg) for arg in args], capture_output=True,
+                                text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # TimeoutExpired includes argv; never expose that credential-bearing repr.
+        raise RuntimeError(f'{args[0]} exceeded {timeout}s; do not retry a submission blindly') from None
     if check and result.returncode:
         detail = result.stdout + result.stderr
         for key, value in os.environ.items():
@@ -118,6 +122,9 @@ def measure(variant):
         run('security', 'create-keychain', '-p', password, keychain)
         run('security', 'set-keychain-settings', '-lut', '21600', keychain)
         run('security', 'unlock-keychain', '-p', password, keychain)
+        # codesign's identity/private-key lookup also consults the user search list.
+        run('security', 'list-keychains', '-d', 'user', '-s', keychain,
+            Path.home() / 'Library/Keychains/login.keychain-db')
         run('security', 'import', cert, '-k', keychain, '-P', os.environ[required[1]],
             '-T', '/usr/bin/codesign', '-T', '/usr/bin/security')
         run('security', 'set-key-partition-list', '-S', 'apple-tool:,apple:,codesign:',
