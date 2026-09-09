@@ -30,7 +30,9 @@
       "tools/release/src/exact/topology.ts",
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/control-cli.ts",
-      "tools/release/esbuild.config.mjs"
+      "tools/release/esbuild.config.mjs",
+      "tools/release/src/exact/capsule-cache.ts",
+      "tools/release/src/exact/capsule-budget.ts"
     ],
     "electron-platform": [
       ".node-version",
@@ -138,6 +140,24 @@
     "closure-data-plugin-previews": [
       "suite://closure-data-control",
       "data/plugin-previews/"
+    ],
+    "electron-capsule": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "packages/contracts/",
+      "packages/download/",
+      "packages/electron-contract/",
+      "packages/electron-kit/",
+      "packages/electron-capsule/",
+      "packages/platform/",
+      "packages/release/",
+      "packages/sidecar/",
+      "packages/standalone/",
+      "shells/electron/",
+      "tools/release/src/exact/control-common.ts"
     ]
   },
   "workflows": {
@@ -255,6 +275,22 @@
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
           "reusable": true
+        },
+        "electron_capsule_darwin_arm64": {
+          "inputs": [
+            "suite://electron-capsule"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true
+        },
+        "electron_capsule_win32_x64": {
+          "inputs": [
+            "suite://electron-capsule"
+          ],
+          "runnerClass": "electron_win32_x64",
+          "products": "manifest",
+          "reusable": false
         }
       }
     }

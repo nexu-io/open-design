@@ -148,7 +148,7 @@ export function registerExactCommands(cli: CAC): void {
     .action(async (options: Options) => {
       const result = await projectReleaseTopology({ declaration: required(options, "declaration"), plans: required(options, "plans"), output: required(options, "output") });
       if (options.githubOutput != null) await appendFile(required(options, "githubOutput"),
-        `shell_matrix=${JSON.stringify(result.matrix)}\nvalidation_matrix=${JSON.stringify(result.validationMatrix)}\nplatform_matrix=${JSON.stringify(result.platformMatrix)}\ndata_matrix=${JSON.stringify(result.dataMatrix)}\n`);
+        `shell_matrix=${JSON.stringify(result.matrix)}\nvalidation_matrix=${JSON.stringify(result.validationMatrix)}\nplatform_matrix=${JSON.stringify(result.platformMatrix)}\ncapsule_matrix=${JSON.stringify(result.capsuleMatrix)}\ndata_matrix=${JSON.stringify(result.dataMatrix)}\n`);
       await emit(options, result);
     });
 
@@ -165,7 +165,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--closure-artifact <file>", "Current Closure artifact; defaults to the scene seed")
     .option("--standalone-artifact <file>", "Current Standalone launcher; defaults to the scene seed")
     .option("--resource-receipt <file>", "Current complete Closure resource collection; defaults to the scene seed")
-    .option("--capsules <directory>", "Current Capsule products under <target>/; defaults to scene seeds")
+    .option("--capsules <directory>", "Current Capsule products under <target>/; defaults to the scene Capsule")
     .option("--platforms <directory>", "Independent platform products under <target>/ (required for Electron)")
     .option("--data-resource <file>", "Independent data receipt beside its archive; repeat for the complete data set")
     .option("--data-resources <directory>", "Complete independent data products under <resource-id>/")

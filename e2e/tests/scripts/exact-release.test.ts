@@ -143,6 +143,17 @@ describe("exact Electron release topology", () => {
         "--artifact", `fixture-data-${id}`, "--output", output]);
       await cp(join(output, "products", workload), join(products, workload), { recursive: true });
     }
+    const capsuleWorkload = "electron_capsule_darwin_arm64";
+    expect(planned.workloads[capsuleWorkload].run).toBe(true);
+    expect(planned.workloads.electron_capsule_win32_x64.run).toBe(false);
+    await mkdir(join(products, capsuleWorkload));
+    await writeFile(join(products, capsuleWorkload, "product-manifest.json"), JSON.stringify({
+      workload: capsuleWorkload, digest: planned.workloads[capsuleWorkload].digest,
+      executionClass: planned.workloads[capsuleWorkload].executionClass,
+      products: { capsule: { type: "job", source: "fixture-capsule", data: {
+        id: "electron.capsule.build", identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64",
+      } } },
+    }));
     const event = join(root, "event.json");
     await writeFile(event, JSON.stringify({ repository: { id: 1 } }));
     const handoff = await run("python3", [...common, "handoff", "--pending", pending, "--products-root", products,
@@ -151,7 +162,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(12);
+    expect(candidate.results).toHaveLength(13);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -171,6 +182,15 @@ describe("exact Electron release topology", () => {
     expect(prepare).toContain(' --platforms "$RUNNER_TEMP/platforms"');
     expect(prepare).toContain("pattern: exact-platform-product-*-${{ inputs.source_sha }}");
     expect(prepare).toContain("merge-multiple: true");
+    const capsule = workflow.split("\n  capsule:")[1]!.split("\n  data:")[0]!;
+    expect(capsule).toContain("matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}");
+    expect(capsule.indexOf("Restore converged capsule")).toBeLessThan(capsule.indexOf("actions/checkout"));
+    for (const command of ["capsule restore", "build capsule", "capsule contribute"]) expect(capsule).toContain(`exact-release-control.mjs" ${command}`);
+    expect(prepare).toContain('--capsules "$RUNNER_TEMP/capsules"');
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  platform:")[0]!;
+    expect(scene).toContain("needs: [plan, capsule]");
+    expect(scene).toContain('--capsule-content "$RUNNER_TEMP/capsules/$TARGET/capsule-content.json"');
+    expect(scene).toContain('--capsule-archive "$RUNNER_TEMP/capsules/$TARGET/capsule.zip"');
   });
 
   it("builds or restores each data group without bundling app runtimes and passes the complete directory to prepare", async () => {
@@ -200,7 +220,7 @@ describe("exact Electron release topology", () => {
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('exact-release-control.mjs" validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");
-    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, platform, data, validation]");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, platform, capsule, data, validation]");
     for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
       expect(validation).toContain(`exact-release-control.mjs" validate ${node}`);
     }

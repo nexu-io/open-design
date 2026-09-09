@@ -26,6 +26,8 @@ it.each([false, true])("projects full/hot=%s without activating deferred Windows
   expect(result.dataMatrix.include).toHaveLength(9);
   expect(result.dataMatrix.include.every(entry => entry.target === "darwin-arm64" && result.scope.enabled[entry.workload])).toBe(true);
   expect(result.platformMatrix.include).toEqual([{ target: "darwin-arm64", workload: "platform_mac", runner_class: "electron_mac", runs_on: "macos-15" }]);
+  expect(result.capsuleMatrix.include).toEqual([{ target: "darwin-arm64", workload: "electron_capsule_darwin_arm64", runner_class: "electron_mac", runs_on: "macos-15" }]);
+  expect(result.scope.enabled).toMatchObject({ electron_capsule_darwin_arm64: true, electron_capsule_win32_x64: false });
   expect(result.runners).toEqual({ terminal_mac: ["macos-15"], electron_mac: ["macos-15"], electron_win: ["windows-2025"] });
   expect(result.topology.deferred).toHaveLength(1);
   expect(result.validationMatrix.include.map(value => value.target)).toEqual(["darwin-arm64"]);

@@ -70,7 +70,6 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
   ]) };
   const runnerPlan = Object.fromEntries([...runners].map(([runnerClass, label]) => [runnerClass, [label]]));
   await writeObject(join(input.output, "topology.json"), topology);
-  await writeObject(join(input.output, "scope.json"), scope);
   await writeObject(join(input.output, "runners.json"), runnerPlan);
   const validationMatrix = { include: resolved.filter(entry => entry.shell === "electron") };
   // Platform bytes are needed for metadata composition in full and hot releases.
@@ -78,5 +77,12 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
   const platformMatrix = { include: resolved.filter(entry => entry.shell === "electron").map(entry => ({
     target: entry.target, workload: entry.platform_workload!, runner_class: entry.runner_class, runs_on: entry.runs_on,
   })) };
-  return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, validationMatrix, platformMatrix, dataMatrix, topology, scope, runners: runnerPlan };
+  const capsuleMatrix = { include: platformMatrix.include.map(entry => ({ ...entry, workload: `electron_capsule_${entry.target.replaceAll("-", "_")}` })) };
+  for (const entry of [...active, ...deferred].filter(entry => entry.shell === "electron")) {
+    const workload = `electron_capsule_${entry.target.replaceAll("-", "_")}`;
+    if (workloads.has(workload)) throw new Error("duplicate release topology target or workload");
+    scope.enabled[workload] = active.includes(entry);
+  }
+  await writeObject(join(input.output, "scope.json"), scope);
+  return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, validationMatrix, platformMatrix, capsuleMatrix, dataMatrix, topology, scope, runners: runnerPlan };
 }
