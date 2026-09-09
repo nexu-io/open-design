@@ -10,7 +10,7 @@ import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts"
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
-import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
+import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { contributePlatform, restorePlatform } from "./platform-cache.ts";
@@ -91,6 +91,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
+    .option("--base-receipt <file>", "Verified neutral base receipt (Electron distribution)")
     .option("--scene <directory>", "Verified scene (distribution)")
     .option("--prepared <directory>", "Prepared signed content (distribution)")
     .option("--policy <file>", "Release policy (distribution)")
@@ -115,6 +116,7 @@ export function registerExactCommands(cli: CAC): void {
         return;
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
+      if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");
       if (operation === "platform") {
         const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "plan", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
@@ -131,12 +133,13 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule({ ...common,
         ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
+      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene") });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
-      else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
+      else if (operation === "distribution") await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be resource, runtime-resources, platform, capsule, scene or distribution");
+      else throw new Error("build operation must be resource, runtime-resources, platform, capsule, base, scene or distribution");
     });
 
   cli.command("topology", "Project release actions over declared runner and target data")

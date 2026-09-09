@@ -3,6 +3,12 @@ import type { ElectronExactSceneRequest, ElectronExactDistributionRequest } from
 
 export type { ElectronPackRequest, ElectronExactSceneRequest, ElectronExactDistributionRequest };
 
+/** Neutral native/carrier input; cache ownership stays with the calling tool. */
+export async function buildElectronBase(input: Readonly<{ sceneDirectory: string; sceneManifestSha256: string; outputRoot: string }>) {
+  const { buildElectronDistributionBase } = await import("@open-design/electron-kit/distribution");
+  return buildElectronDistributionBase(input);
+}
+
 /** Product-owned Capsule entry, independent of release versions and physical Node assembly. */
 export async function buildElectronCapsuleContent(input: Readonly<{
   target: ElectronExactSceneRequest["target"];

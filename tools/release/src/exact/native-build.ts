@@ -161,8 +161,24 @@ export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeAr
   return receipt;
 }
 
-export async function buildReleaseDistribution(input: BuildInput & Readonly<{ scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
+export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: string }>) {
+  if (input.shell !== "electron") throw new Error("base build requires electron");
+  const buildTarget = target(input), scene = resolve(input.scene);
+  if ((await readObject(join(scene, "scene.json"))).target !== buildTarget || buildTarget !== `${process.platform}-${process.arch}`) throw new Error("base build target mismatch");
+  const { buildElectronBase } = await electronBuilder(input.root);
+  await mkdir(dirname(resolve(input.output)), { recursive: true });
+  const base = await buildElectronBase({ sceneDirectory: scene,
+    sceneManifestSha256: (await describeFile(join(scene, "scene.json"))).sha256, outputRoot: resolve(input.output) });
+  const receipt = { schemaVersion: 1, operation: "electron.base.build", target: buildTarget, base };
+  await writeObject(input.receipt, receipt);
+  return receipt;
+}
+
+export async function buildReleaseDistribution(input: BuildInput & Readonly<{ baseReceipt?: string; scene: string; prepared: string; policy: string; channel: string; releaseVersion: string; sourceCommit: string }>) {
   const buildTarget = target(input), preparedRoot = resolve(input.prepared);
+  const baseReceipt = input.baseReceipt == null ? undefined : await readObject(input.baseReceipt);
+  if (baseReceipt != null && (input.shell !== "electron" || baseReceipt.schemaVersion !== 1
+    || baseReceipt.operation !== "electron.base.build" || baseReceipt.target !== buildTarget)) throw new Error("distribution base receipt binding mismatch");
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare",
     channel: input.channel, releaseVersion: input.releaseVersion, sourceCommit: input.sourceCommit });
   const prepared = await readObject(join(preparedRoot, "prepare-receipt.json"));
@@ -181,6 +197,7 @@ export async function buildReleaseDistribution(input: BuildInput & Readonly<{ sc
   const capsule = await checkedFile(expected.capsule.manifest, "prepared Capsule manifest", join(preparedRoot, "documents", `capsule-${buildTarget}.json`));
   const capsuleArchive = await checkedFile(expected.capsule.archive, "prepared Capsule archive", join(preparedRoot, "artifacts", basename(expected.capsule.archive.file)));
   const result = await buildElectronInstaller({ ...common, schemaVersion: 2, operation: "electron.distribution.build", acceptedContentMetadataFile: content, acceptedTrustFile: trust,
+    ...(baseReceipt == null ? {} : { base: baseReceipt.base }),
     acceptedCapsuleManifestFile: capsule, acceptedCapsuleArchiveFile: capsuleArchive,
     channel: policy.channel, releaseVersion: policy.releaseVersion, channelHeadUrl: `${policy.target.publicBaseUrl}/${input.channel}/latest/channel-head.json` });
   await writeObject(join(input.output, "shell-contribution.json"), result);

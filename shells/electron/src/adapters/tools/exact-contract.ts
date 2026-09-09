@@ -19,6 +19,7 @@ export type ElectronExactSceneRequest = Readonly<{
 }>;
 
 export type ElectronExactDistributionRequest = Readonly<{
+  base?: Readonly<{ root: string; manifestSha256: string }>;
   acceptedContentMetadataFile: string;
   acceptedCapsuleArchiveFile: string;
   acceptedCapsuleManifestFile: string;
@@ -77,7 +78,14 @@ export function parseElectronExactSceneRequest(value: unknown): ElectronExactSce
 
 export function parseElectronExactDistributionRequest(value: unknown): ElectronExactDistributionRequest {
   const input = record(value, "Electron exact distribution request");
-  exactKeys(input, ["acceptedCapsuleArchiveFile", "acceptedCapsuleManifestFile", "acceptedContentMetadataFile", "acceptedTrustFile", "channel", "channelHeadUrl", "operation", "outputDirectory", "releaseVersion", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target"], "Electron exact distribution request");
+  exactKeys(input, [...("base" in input ? ["base"] : []), "acceptedCapsuleArchiveFile", "acceptedCapsuleManifestFile", "acceptedContentMetadataFile", "acceptedTrustFile", "channel", "channelHeadUrl", "operation", "outputDirectory", "releaseVersion", "sceneDirectory", "sceneManifestSha256", "schemaVersion", "target"], "Electron exact distribution request");
+  let base: ElectronExactDistributionRequest["base"];
+  if ("base" in input) {
+    const value = record(input.base, "Electron distribution base");
+    exactKeys(value, ["root", "manifestSha256"], "Electron distribution base");
+    if (typeof value.manifestSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(value.manifestSha256)) throw new Error("Electron base digest is invalid");
+    base = { root: absolutePath(value, "root", "Electron distribution base"), manifestSha256: value.manifestSha256 };
+  }
   if (input.schemaVersion !== ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION || input.operation !== "electron.distribution.build") {
     throw new Error("Electron exact distribution request identity is invalid");
   }
@@ -86,6 +94,7 @@ export function parseElectronExactDistributionRequest(value: unknown): ElectronE
   if (typeof input.channel !== "string" || !input.channel || typeof input.releaseVersion !== "string" || !input.releaseVersion) throw new Error("Electron exact release identity is invalid");
   return Object.freeze({
     acceptedContentMetadataFile: absolutePath(input, "acceptedContentMetadataFile", "Electron exact distribution"),
+    ...(base == null ? {} : { base }),
     acceptedCapsuleArchiveFile: absolutePath(input, "acceptedCapsuleArchiveFile", "Electron exact distribution"),
     acceptedCapsuleManifestFile: absolutePath(input, "acceptedCapsuleManifestFile", "Electron exact distribution"),
     acceptedTrustFile: absolutePath(input, "acceptedTrustFile", "Electron exact distribution"),

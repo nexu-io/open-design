@@ -59,6 +59,7 @@ return await withElectronInstallation({
 const policy = JSON.parse(await readFile(fileURLToPath(new URL("../../../config/distribution.json", import.meta.url)), "utf8"));
 const windowsLifecycle = JSON.parse(await readFile(fileURLToPath(new URL("../../../config/platforms/windows.json", import.meta.url)), "utf8"));
 const built = await buildElectronDistribution({
+  ...(input.base == null ? {} : { base: input.base }),
   scene,
   manifest,
   policy,

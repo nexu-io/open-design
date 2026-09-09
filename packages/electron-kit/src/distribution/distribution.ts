@@ -1,7 +1,7 @@
 import { access, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
 import { Arch, build as electronBuild, Platform, type Configuration } from "electron-builder";
 
@@ -14,6 +14,7 @@ import {
 import { writeElectronWindowsNsisInclude } from "../platform/windows/installer/nsis-include.js";
 import type { ElectronDistributionReceipt, ElectronSceneReceipt } from "./contracts.js";
 import { loadElectronScene } from "./scene.js";
+import { verifyElectronDistributionBase, type ElectronDistributionBase } from "./base.js";
 import {
   resolveElectronDistributionConfiguration,
   resolveElectronDistributionPlatform,
@@ -27,6 +28,7 @@ export type BuildElectronDistributionInput = Readonly<{
   policy: ElectronDistributionPolicy;
   windowsLifecycle: ElectronWindowsLifecyclePolicy;
   outputRoot: string;
+  base?: ElectronDistributionBase;
   /** Complete installation projection; scene build inputs are never implicit payloads. */
   resources: readonly Readonly<{ name: string; path: string }>[];
 }>;
@@ -67,6 +69,10 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
   const windowsLifecycle = validateElectronWindowsLifecyclePolicy(input.windowsLifecycle);
   const resourceFiles = await resolveElectronDistributionResourceFiles(input.resources);
   const platform: ElectronDistributionReceipt["platform"] = resolveElectronDistributionPlatform(process.platform);
+  if (input.base != null) {
+    const distance = relative(resolve(input.outputRoot), resolve(input.base.root));
+    if (distance === "" || (!isAbsolute(distance) && distance !== ".." && !distance.startsWith("../"))) throw new Error("Electron base overlaps distribution output");
+  }
   await rm(input.outputRoot, { force: true, recursive: true });
   await mkdir(input.outputRoot, { recursive: true });
   const arch = platform === "win" ? Arch.x64 : process.arch === "arm64" ? Arch.arm64 : Arch.x64;
@@ -75,6 +81,9 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     : join(input.outputRoot, "win-unpacked", `${input.manifest.executableName}.exe`);
   const require = createRequire(import.meta.url);
   const electronPackage = JSON.parse(await readFile(require.resolve("electron/package.json"), "utf8")) as { version: string };
+  const base = input.base == null ? undefined : await verifyElectronDistributionBase(input.base, {
+    scene, electronVersion: electronPackage.version, target: `${process.platform}-${process.arch}`,
+  });
   const scratchRoot = await mkdtemp(join(tmpdir(), "electron-kit-distribution-"));
   const projectRoot = join(scratchRoot, "project");
   const windowsNsisIncludePath = platform === "win" ? join(scratchRoot, "installer.nsh") : undefined;
@@ -84,9 +93,9 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
     const iconPath = manifest.iconDataUrl == null ? undefined : join(scratchRoot, "icon.png");
     if (iconPath != null) await writeFile(iconPath, Buffer.from(manifest.iconDataUrl!.slice("data:image/png;base64,".length), "base64"));
     await Promise.all([
-      copyFile(scene.mainPath, join(projectRoot, "main.cjs")),
-      copyFile(scene.rendererPreloadPath, join(projectRoot, "renderer-mount-preload.cjs")),
-      copyFile(scene.carrierConfigPath, join(projectRoot, "carrier.json")),
+      copyFile(base == null ? scene.mainPath : join(base.carrierDirectory, "main.cjs"), join(projectRoot, "main.cjs")),
+      copyFile(base == null ? scene.rendererPreloadPath : join(base.carrierDirectory, "renderer-mount-preload.cjs"), join(projectRoot, "renderer-mount-preload.cjs")),
+      copyFile(base == null ? scene.carrierConfigPath : join(base.carrierDirectory, "carrier.json"), join(projectRoot, "carrier.json")),
       writeFile(join(projectRoot, "shell.json"), `${JSON.stringify(input.manifest, null, 2)}\n`, "utf8"),
       writeFile(join(projectRoot, "package.json"), `${JSON.stringify({
         name: input.manifest.executableName,
@@ -118,6 +127,7 @@ export async function buildElectronDistribution(input: BuildElectronDistribution
         }),
         ...(iconPath == null ? {} : { icon: iconPath }),
         extraResources: resourceFiles,
+        ...(base == null ? {} : { electronDist: base.runtimeDirectory }),
       },
     });
   } finally {
