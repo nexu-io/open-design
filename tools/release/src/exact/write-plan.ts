@@ -37,7 +37,7 @@ export async function writeExactPlan(options: ExactPlanCliOptions): Promise<void
   const available = options.available == null
     ? new Set<string>()
     : new Set(JSON.parse(await readFile(resolve(root, options.available), "utf8")) as string[]);
-  const receipt = { actions: selectExactPlanActions(plan, available), plan };
+  const receipt = { schemaVersion: 1, actions: selectExactPlanActions(plan, available), plan };
   const output = resolve(root, options.output);
   await mkdir(dirname(output), { recursive: true });
   await writeFile(output, `${JSON.stringify(receipt, null, 2)}\n`, "utf8");

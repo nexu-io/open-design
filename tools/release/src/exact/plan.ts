@@ -24,6 +24,7 @@ export type ExactPlanNodeId =
   | "electron.contract.build"
   | "electron.contract.test"
   | "electron.platform.build"
+  | "electron.capsule.build"
   | "electron.acceptance.full"
   | "electron.distribution"
   | "electron.shell.build"
@@ -49,12 +50,13 @@ export type ExactPlanAction = Readonly<{
 }>;
 
 const NODE_DEPENDENCIES: Readonly<Record<Exclude<ExactPlanNodeId, DataNodeId>, readonly ExactPlanNodeId[]>> = {
-  "closure.acceptance.hot": ["electron.distribution", "closure.build", ...EXACT_DATA_PLAN_NODE_IDS],
+  "closure.acceptance.hot": ["electron.distribution", "electron.capsule.build", "closure.build", ...EXACT_DATA_PLAN_NODE_IDS],
   "closure.build": ["electron.contract.build"],
   "closure.test": ["closure.build", "electron.contract.test"],
   "electron.contract.build": [],
   "electron.contract.test": ["electron.contract.build"],
   "electron.platform.build": [],
+  "electron.capsule.build": [],
   "electron.acceptance.full": ["electron.distribution"],
   "electron.distribution": ["electron.shell.build", "electron.platform.build"],
   "electron.shell.build": ["electron.contract.build"],
@@ -65,6 +67,7 @@ const NODE_ORDER = Object.freeze([
   "electron.contract.build",
   "electron.contract.test",
   "electron.platform.build",
+  "electron.capsule.build",
   "electron.shell.build",
   "electron.shell.test",
   ...EXACT_DATA_PLAN_NODE_IDS,
@@ -167,6 +170,14 @@ export async function resolveExactPlatformPlanNode(input: Readonly<{
 }>): Promise<ExactPlanNode> {
   const registry = await readContentIdentityRegistry(input.registryPath);
   return resolveNode(`sha256:${"0".repeat(64)}`, "electron.platform.build", input.root, input.target, registry, {});
+}
+
+/** Capsule content has no release version, signing or platform archive input. */
+export async function resolveExactCapsulePlanNode(input: Readonly<{
+  root: string; registryPath: string; target: ExactTarget;
+}>): Promise<ExactPlanNode> {
+  const registry = await readContentIdentityRegistry(input.registryPath);
+  return resolveNode(`sha256:${"0".repeat(64)}`, "electron.capsule.build", input.root, input.target, registry, {});
 }
 
 export async function resolveExactPlanSourceIdentity(input: Readonly<{

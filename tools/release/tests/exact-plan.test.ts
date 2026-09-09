@@ -9,6 +9,7 @@ import { parseContentIdentityRegistry, resolveContentIdentityDeclaration } from 
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 
 import { createExactPlan, selectExactPlanActions, EXACT_DATA_PLAN_NODE_IDS, type ExactPlan } from "@/exact/plan.js";
+import { writeExactPlan } from "@/exact/write-plan.ts";
 
 const roots: string[] = [];
 const ACCEPTED_BASELINE = `sha256:${"a".repeat(64)}` as const;
@@ -23,7 +24,7 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
     "electron.contract.build",
-    "electron.contract.test", "electron.platform.build",
+    "electron.contract.test", "electron.platform.build", "electron.capsule.build",
     "electron.shell.build",
     "electron.shell.test",
     "closure.build",
@@ -57,6 +58,26 @@ function identities(plan: ExactPlan): Set<string> {
 }
 
 describe("exact release plan", () => {
+  it("writes the versioned plan envelope required by independent build and cache commands", async () => {
+    const f = await fixture();
+    await writeFile(join(f.root, "registry.json"), JSON.stringify(f.registry));
+    await writeExactPlan({ root: f.root, registry: "registry.json", output: "plan.json",
+      target: "darwin-arm64", acceptedShellBaseline: ACCEPTED_BASELINE });
+    const receipt = JSON.parse(await readFile(join(f.root, "plan.json"), "utf8"));
+    expect(receipt).toMatchObject({ schemaVersion: 1, plan: { target: "darwin-arm64",
+      nodes: { "electron.capsule.build": { target: "darwin-arm64" } } } });
+    expect(receipt.actions).toContainEqual({ id: "electron.capsule.build", reason: "identity-miss" });
+  });
+  it("selects Capsule and hot acceptance for an independent Capsule identity change", async () => {
+    const input = { ...await fixture(), acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
+    const before = await createExactPlan(input);
+    await writeFile(join(input.root, "electron.capsule.build/input.txt"), "changed capsule");
+    const after = await createExactPlan(input);
+    expect(after.nodes["electron.capsule.build"].dependencies).toEqual([]);
+    expect(selectExactPlanActions(after, identities(before)).map(action => action.id)).toEqual([
+      "electron.capsule.build", "closure.acceptance.hot", "exact.compose", "exact.publish", "exact.activate",
+    ]);
+  });
   it("rebuilds only the independent platform and downstream distribution when native inputs change", async () => {
     const input = { ...await fixture(), acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
     const before = await createExactPlan(input);

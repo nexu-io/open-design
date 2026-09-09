@@ -14,6 +14,7 @@ import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, bu
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { contributePlatform, restorePlatform } from "./platform-cache.ts";
+import { contributeCapsule, restoreCapsule } from "./capsule-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { validateExactPlanNode } from "./validation.ts";
@@ -85,7 +86,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform)")
+    .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform/capsule)")
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
@@ -128,7 +129,8 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
-      else if (operation === "capsule") await buildReleaseCapsule(common);
+      else if (operation === "capsule") await buildReleaseCapsule({ ...common,
+        ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
@@ -251,22 +253,26 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("baseline operation must be stage or promote");
     });
 
-  cli.command("platform <operation>", "Restore or contribute an independently planned native platform")
-    .option("--plan <file>", "Exact release plan")
-    .option("--pending <file>", "Convergence planner receipt")
-    .option("--workload <name>", "Planner workload")
-    .option("--output <directory>", "New restored platform or contribution directory")
-    .option("--build-receipt <file>", "Plan-bound platform build receipt (contribute)")
-    .option("--artifact <name>", "Job artifact name (contribute)")
-    .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
-    .action(async (operation: string, options: Options) => {
-      const common = { plan: required(options, "plan"), pending: required(options, "pending"),
-        workload: required(options, "workload"), output: required(options, "output") };
-      const result = operation === "restore" ? await restorePlatform(common)
-        : operation === "contribute" ? await contributePlatform({ ...common, buildReceipt: required(options, "buildReceipt"), artifact: required(options, "artifact") })
-        : (() => { throw new Error("platform operation must be restore or contribute"); })();
-      await emit(options, { schemaVersion: 1, operation: `exact.platform.${operation}`, ...result });
-    });
+  for (const product of ["platform", "capsule"] as const) {
+    cli.command(`${product} <operation>`, `Restore or contribute an independently planned ${product}`)
+      .option("--plan <file>", "Exact release plan")
+      .option("--pending <file>", "Convergence planner receipt")
+      .option("--workload <name>", "Planner workload")
+      .option("--output <directory>", "New restored product or contribution directory")
+      .option("--build-receipt <file>", "Plan-bound build receipt (contribute)")
+      .option("--artifact <name>", "Job artifact name (contribute)")
+      .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
+      .action(async (operation: string, options: Options) => {
+        const common = { plan: required(options, "plan"), pending: required(options, "pending"),
+          workload: required(options, "workload"), output: required(options, "output") };
+        const restore = product === "platform" ? restorePlatform : restoreCapsule;
+        const contribute = product === "platform" ? contributePlatform : contributeCapsule;
+        const result = operation === "restore" ? await restore(common)
+          : operation === "contribute" ? await contribute({ ...common, buildReceipt: required(options, "buildReceipt"), artifact: required(options, "artifact") })
+          : (() => { throw new Error(`${product} operation must be restore or contribute`); })();
+        await emit(options, { schemaVersion: 1, operation: `exact.${product}.${operation}`, ...result });
+      });
+  }
 
   cli.command("resource <operation>", "Restore or contribute an independently planned data resource")
     .option("--plan <file>", "Exact release plan")

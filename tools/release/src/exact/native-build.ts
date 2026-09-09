@@ -10,7 +10,7 @@ import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { canonicalBytes, checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
-import { resolveExactPlatformPlanNode } from "./plan.ts";
+import { resolveExactCapsulePlanNode, resolveExactPlatformPlanNode } from "./plan.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
@@ -102,12 +102,20 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{
 }
 
 /** Release-neutral Capsule production uses the same workspace-owned public boundary. */
-export async function buildReleaseCapsule(input: BuildInput) {
+export async function buildReleaseCapsule(input: BuildInput & Readonly<{ plan?: string }>) {
   if (input.shell !== "electron") throw new Error("Capsule build requires electron");
   const buildTarget = target(input);
+  const plan = input.plan == null ? undefined : await readObject(input.plan), id = "electron.capsule.build";
+  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget)) throw new Error("Capsule build requires a valid target-bound release plan");
+  const matches = async () => plan == null || (plan.plan.nodes?.[id] != null && canonicalBytes(await resolveExactCapsulePlanNode({
+    root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"), target: buildTarget,
+  })).equals(canonicalBytes(plan.plan.nodes[id])));
+  if (!await matches()) throw new Error("Capsule build plan binding mismatch");
   const { buildElectronCapsuleContent } = await electronBuilder(input.root);
   const result = await buildElectronCapsuleContent({ target: buildTarget, outputRoot: resolve(input.output) });
-  const receipt = { schemaVersion: 1, operation: "electron.capsule.build", ...result };
+  if (!await matches()) throw new Error("Capsule build source changed during execution");
+  const receipt = { schemaVersion: 1, operation: "electron.capsule.build", ...result,
+    ...(plan == null ? {} : { planNode: { id, identity: plan.plan.nodes[id].identity, target: buildTarget } }) };
   await writeObject(input.receipt, receipt);
   return receipt;
 }
