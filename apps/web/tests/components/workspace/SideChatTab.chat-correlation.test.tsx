@@ -96,6 +96,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'side-chat-correlation-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   __resetChatHealthForTest();
   __resetChatContextForTest();

@@ -23,6 +23,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'device-1',
+    clientType: 'web',
+    osName: 'Mac OS X',
     sessionId: 'session-1',
   });
   window.history.replaceState(

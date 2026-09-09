@@ -145,6 +145,8 @@ beforeEach(() => {
     apiKey: 'phc_test',
     host: 'https://us.i.posthog.com',
     distinctId: 'chat-health-wiring-test',
+    clientType: 'web',
+    osName: 'Mac OS X',
   });
   (globalThis as unknown as { PerformanceObserver: unknown }).PerformanceObserver =
     FakePerformanceObserver;

@@ -13,6 +13,7 @@ import {
 import { scrubBeforeSend } from './scrub';
 import {
   clearExceptionTrackingContext,
+  detectBrowserOsName,
   setExceptionTrackingContext,
 } from './error-tracking';
 import { pinFirstSessionForCapture } from './identity';
@@ -225,6 +226,8 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
         apiKey: cfg.key,
         host: cfg.host,
         distinctId,
+        clientType: context.clientType,
+        osName: detectBrowserOsName(),
         appVersion: context.appVersion,
         sessionId: context.sessionId,
         telemetryEnv,
@@ -394,6 +397,8 @@ export async function getAnalyticsClient(
             apiKey: cfgKey,
             host: cfgHost,
             distinctId,
+            clientType: context.clientType,
+            osName: detectBrowserOsName(),
             appVersion: context.appVersion,
             sessionId: context.sessionId,
             telemetryEnv,
