@@ -25,7 +25,7 @@
         "dependsOn": [],
         "blocking": true,
         "label": "Resolving the Standalone generation…",
-        "timeoutMs": 30000
+        "timeoutMs": 300000
       },
       {
         "id": "standalone-ready",

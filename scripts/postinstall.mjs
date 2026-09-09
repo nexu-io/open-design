@@ -44,6 +44,7 @@ const postinstallLevels = {
   "release-smoke": { roots: ["apps/closure", "tools/pack", "tools/release", "tools/serve"], verifyNativeAddon: true },
   "resource-build": { roots: ["apps/closure"], verifyNativeAddon: false },
   "electron-build": { roots: ["shells/electron"], verifyNativeAddon: false },
+  "terminal-build": { roots: ["apps/closure"], verifyNativeAddon: false },
 };
 
 const jsExtensions = new Set([".js", ".cjs", ".mjs"]);

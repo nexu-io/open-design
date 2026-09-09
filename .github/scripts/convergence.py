@@ -133,7 +133,7 @@ class WorkflowContract:
         self.execution = None
         if "execution" in value:
             execution = object_value(value["execution"], f"workflow {name}.execution")
-            if not {"enabled", "runners", "matrices"} <= set(execution) or set(execution) - {"enabled", "runners", "matrices", "inputs"}:
+            if not {"enabled", "runners", "matrices"} <= set(execution) or set(execution) - {"enabled", "runners", "matrices", "inputs", "batches"}:
                 raise ConfigError("execution requires enabled, runners and matrices; optional inputs")
             for input_name in object_value(execution.get("inputs", {}), "execution inputs"):
                 require_identity(input_name, "execution input name")
@@ -159,6 +159,21 @@ class WorkflowContract:
                     entry = object_value(entry, "execution matrix entry")
                     if not entry or any(not isinstance(key, str) or not key or not isinstance(item, (str, bool, int)) for key, item in entry.items()):
                         raise ConfigError("execution matrix entries must contain scalar values")
+            for batch_name, batch in object_value(execution.get("batches", {}), "execution batches").items():
+                require_identity(batch_name, "batch name")
+                batch = object_value(batch, "execution batch")
+                if set(batch) != {"matrix", "fields", "product"} or batch["matrix"] not in matrices:
+                    raise ConfigError("batch requires a declared matrix, fields and product")
+                require_identity(batch["product"], "batch product")
+                fields = object_value(batch["fields"], "batch fields")
+                if not fields or "artifact" in fields:
+                    raise ConfigError("batch fields must be nonempty and exclude artifact")
+                for field, source in fields.items():
+                    require_identity(field, "batch field")
+                    require_identity(source, "batch source field")
+                for entry in matrices[batch["matrix"]]["include"]:
+                    if entry.get("workload") not in self.workloads or any(source not in entry for source in fields.values()):
+                        raise ConfigError("batch entries require declared workloads and projection fields")
             self.execution = execution
 
 
@@ -750,6 +765,31 @@ def product_inputs(pending: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return inputs
 
 
+def batch_inputs(workflow: WorkflowContract, pending: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    """Group execution without coarsening identities; emit only business fields
+    and verified artifact inputs, never planner state to the executor."""
+    if workflow.execution is None:
+        return {}
+    products = product_inputs(pending)
+    batches = {}
+    for name, batch in workflow.execution.get("batches", {}).items():
+        entries = []
+        for entry in workflow.execution["matrices"][batch["matrix"]]["include"]:
+            identity = entry["workload"]
+            selected = pending["workloads"][identity]
+            if not selected["scopeEnabled"]:
+                continue
+            request = {field: entry[source] for field, source in batch["fields"].items()}
+            if not selected["run"]:
+                binding = products.get(f"{identity}/{batch['product']}")
+                if binding is None:
+                    raise ConfigError(f"batch input lacks a verified artifact: {identity}")
+                request["artifact"] = binding
+            entries.append(request)
+        batches[name] = entries
+    return batches
+
+
 def contribute_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
     """Bind a successful job's opaque output in the control plane, not its tool."""
     pending = object_value(load_json(args.pending), "pending convergence")
@@ -863,6 +903,8 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
     if args.products_output is not None:
         for name, binding in product_inputs(pending).items():
             write_json_atomic(args.products_output / f"{name}.json", binding)
+        for name, entries in batch_inputs(workflow, pending).items():
+            write_json_atomic(args.products_output / "batches" / f"{name}.json", {"sources": entries})
     append_outputs(
         {
             "run": compact_json(run),

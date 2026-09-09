@@ -28,7 +28,9 @@
       "tools/release/src/exact/capsule-artifact.ts",
       "tools/release/src/exact/artifact-product.ts",
       "tools/release/src/exact/base-artifact.ts",
-      "tools/release/src/exact/capsule-budget.ts"
+      "tools/release/src/exact/capsule-budget.ts",
+      ".github/actions/release-data/action.yml",
+      ".github/actions/configure-ci-parallelism/action.yml"
     ],
     "electron-platform": [
       ".node-version",
@@ -263,7 +265,7 @@
           "inputs": [
             "suite://closure-data-skills"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -275,7 +277,7 @@
           "inputs": [
             "suite://closure-data-design-templates"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -287,7 +289,7 @@
           "inputs": [
             "suite://closure-data-design-systems"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -299,7 +301,7 @@
           "inputs": [
             "suite://closure-data-craft"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -311,7 +313,7 @@
           "inputs": [
             "suite://closure-data-plugins"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -323,7 +325,7 @@
           "inputs": [
             "suite://closure-data-frames"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -335,7 +337,7 @@
           "inputs": [
             "suite://closure-data-community-pets"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -347,7 +349,7 @@
           "inputs": [
             "suite://closure-data-prompt-templates"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -359,7 +361,7 @@
           "inputs": [
             "suite://closure-data-plugin-previews"
           ],
-          "runnerClass": "electron_darwin_arm64",
+          "runnerClass": "resource_data",
           "products": "manifest",
           "reusable": true,
           "artifact": {
@@ -434,6 +436,9 @@
           ],
           "release_control": [
             "ubuntu-24.04"
+          ],
+          "resource_data": [
+            "ubuntu-24.04"
           ]
         },
         "matrices": {
@@ -494,66 +499,90 @@
             "include": [
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "skills",
                 "workload": "closure_data_skills_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "design-templates",
                 "workload": "closure_data_design_templates_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "design-systems",
                 "workload": "closure_data_design_systems_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "craft",
                 "workload": "closure_data_craft_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "plugins",
                 "workload": "closure_data_plugins_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "frames",
                 "workload": "closure_data_frames_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "community-pets",
                 "workload": "closure_data_community_pets_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "prompt-templates",
                 "workload": "closure_data_prompt_templates_darwin_arm64"
               },
               {
                 "target": "darwin-arm64",
-                "runner_class": "electron_darwin_arm64",
-                "runs_on": "macos-15",
+                "runner_class": "resource_data",
+                "runs_on": "ubuntu-24.04",
                 "resource_id": "plugin-previews",
                 "workload": "closure_data_plugin_previews_darwin_arm64"
+              }
+            ]
+          },
+          "electron_matrix": {
+            "include": [
+              {
+                "shell": "electron",
+                "target": "darwin-arm64",
+                "workload": "electron_scene_darwin_arm64",
+                "platform_workload": "electron_platform_darwin_arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "base_workload": "electron_base_darwin_arm64"
+              }
+            ]
+          },
+          "terminal_matrix": {
+            "include": [
+              {
+                "shell": "terminal",
+                "target": "darwin-arm64",
+                "workload": "terminal_scene_darwin_arm64",
+                "runner_class": "terminal_darwin_arm64",
+                "runs_on": "macos-15"
               }
             ]
           }
@@ -570,6 +599,15 @@
                 "target": "darwin-arm64"
               }
             ]
+          }
+        },
+        "batches": {
+          "data": {
+            "matrix": "data_matrix",
+            "fields": {
+              "id": "resource_id"
+            },
+            "product": "resource"
           }
         }
       }

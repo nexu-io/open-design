@@ -1,17 +1,38 @@
 import { execFile } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { installMacElectronApp, withMacElectronProcess } from "@open-design/shell-electron/lifecycle/installed";
+import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp } from "@open-design/shell-electron/lifecycle/inspection";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 
 type Input = Readonly<{ publication: string; policy: string; shell: string; target: string; workRoot: string }>;
 const execute = promisify(execFile);
+type ExerciseInput = Input & Readonly<{ artifact: string; mode: string; baselineReceipt?: string }>;
+
+export async function exerciseReleaseInstallation(input: ExerciseInput) {
+  try { return await executeReleaseInstallation(input); }
+  finally {
+    if (input.shell === "electron" && ["first", "hot"].includes(input.mode)) {
+      try {
+        const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication,
+          policyReceipt: input.policy, shellType: input.shell, target: input.target });
+        const diagnostics = describeElectronRuntimeDiagnostics({ baseUserDataRoot: join(resolve(input.workRoot), input.mode, "user-data"),
+          channel: policy.channel, namespace: required.installIdentity.namespace, presentation: "headless" });
+        const output = join(resolve(input.workRoot), "diagnostics");
+        await mkdir(output, { recursive: true });
+        await copyFile(diagnostics.runtimeLog, join(output, input.mode + "-runtime.jsonl"));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") console.error("Could not retain installation diagnostics:", error);
+      }
+    }
+  }
+}
 
 /** Execution products belong to this invocation, never to the workflow's directory layout. */
-export async function exerciseReleaseInstallation(input: Input & Readonly<{ artifact: string; mode: string; baselineReceipt?: string }>) {
+async function executeReleaseInstallation(input: ExerciseInput) {
   if (!["first", "hot"].includes(input.mode)) throw new Error("Installation mode must be first or hot");
   if (!input.target.startsWith("darwin-") || process.platform !== "darwin") throw new Error("Installed execution currently requires macOS");
   if (input.mode === "hot" && input.shell !== "electron") throw new Error("Hot execution requires Electron");
@@ -39,18 +60,24 @@ export async function exerciseReleaseInstallation(input: Input & Readonly<{ arti
     installedRoot = (await installMacElectronApp({ artifact: resolve(input.artifact), appPath })).resources;
     const executableName = required.installIdentity?.executableName;
     if (typeof executableName !== "string") throw new Error("Published executable identity is absent");
-    const common = { appPath, executableName, timeoutMs: 180_000 };
+    // Enclose platform acquisition plus the product's bounded cold warmup;
+    // readiness still requires committed startup and renderer evidence.
+    const common = { appPath, executableName, timeoutMs: 600_000 };
+    const args = ["--headless", `--user-data-dir=${baseUserDataRoot}`, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0"];
     if (input.mode === "hot") {
       const head = new URL(published.channelHead.url), base = new URL(policy.target.publicBaseUrl + "/");
       if (head.protocol !== "https:" || head.origin !== base.origin || head.username || head.password
         || !head.pathname.startsWith(base.pathname + policy.channel + "/" + policy.releaseVersion + "/")) throw new Error("Candidate head escapes publication");
       hotAcceptanceReceipt = join(root, "hot.json");
-      await withMacElectronProcess({ ...common, env: { OD_PACKAGED_E2E_HEADLESS: "1" },
-        args: [`--user-data-dir=${baseUserDataRoot}`, "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0", `--od-channel-head-url=${head.href}`] },
+      await withMacElectronProcess({ ...common, args: [...args, `--od-channel-head-url=${head.href}`] },
       async () => updateAcceptanceClosure({ ...input, baseUserDataRoot, receipt: hotAcceptanceReceipt! }));
     }
-    await withMacElectronProcess({ ...common, env: { OD_PACKAGED_E2E_HEADLESS: "1", ELECTRON_KIT_SMOKE_EXIT_MS: "3000" },
-      args: [`--user-data-dir=${baseUserDataRoot}`] });
+    const startedAfter = Date.now();
+    await withMacElectronProcess({ ...common, args }, async () => {
+      const result = await inspectElectronStartupThroughCdp({ baseUserDataRoot, channel: policy.channel,
+        namespace: required.installIdentity.namespace, presentation: "headless" }, startedAfter);
+      await writeObject(join(root, "startup-cdp.json"), result);
+    });
   } else if (input.shell === "terminal") {
     const extracted = join(root, "extracted");
     installedRoot = join(root, "installed");

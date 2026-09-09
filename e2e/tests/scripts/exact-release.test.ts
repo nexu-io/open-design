@@ -186,9 +186,13 @@ describe("exact Electron release topology", () => {
   it("builds or restores each data group without bundling app runtimes and passes the complete directory to prepare", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const data = workflow.split("\n  data:")[1]!.split("\n  prepare:")[0]!;
-    expect(data).toContain("matrix: ${{ fromJSON(needs.plan.outputs.data_matrix) }}");
-    expect(data.indexOf("Restore converged data resource")).toBeLessThan(data.indexOf("actions/checkout"));
-    for (const command of ["resource import", "build resource", "resource export"]) expect(data).toContain(`tools-release ${command}`);
+    expect(data).toContain("runs-on: ubuntu-24.04");
+    expect(data).toContain("uses: ./.github/actions/release-data");
+    expect(data).not.toMatch(/matrix:|pnpm|install --frozen-lockfile/u);
+    const action = await readFile(resolve(workspaceRoot, ".github/actions/release-data/action.yml"), "utf8");
+    expect(action).toContain("resource materialize");
+    expect(action).toContain("artifacts/batches/data.json");
+    for (const id of dataIds) expect(action).toContain(`name: exact-data-cache-${id}-`);
     expect(data).not.toContain("build:resources");
     expect(data).not.toContain("@open-design/daemon");
     expect(data).not.toContain("@open-design/web");
@@ -210,7 +214,11 @@ describe("exact Electron release topology", () => {
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('tools-release validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");
-    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [tools, plan, scene, platform, capsule, data, validation]");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]");
+    const terminal = workflow.split("\n  terminal_scene:")[1]!.split("\n  platform:")[0]!;
+    expect(terminal).toContain("needs: [tools, plan]");
+    expect(terminal).not.toContain("capsule");
+    expect(terminal).toContain("needs.plan.outputs.terminal_matrix");
     for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
       expect(validation).toContain(`tools-release validate ${node}`);
     }
@@ -375,7 +383,7 @@ describe("exact Electron release topology", () => {
       const profile = lane === "exact" ? "exact-validation" : `${lane}-distribution`;
       for (const job of ["platform", "capsule", "data"]) {
         const producer = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
-        expect(producer).toContain("needs: [tools, plan, validation]");
+        expect(producer).toContain("needs: [tools, plan]");
       }
       expect(workflow).toContain(`PROFILE: ${profile}`);
       expect(workflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
@@ -410,7 +418,9 @@ describe("exact Electron release topology", () => {
         const download = job.indexOf('uses: actions/download-artifact@v8\n        with:\n          name: release-tools-${{ inputs.source_sha }}');
         if (download < 0) continue;
         expect(job.indexOf("- name: Expose release tool"), `${lane}: tool must exist before chmod/PATH`).toBeGreaterThan(download);
-        expect(job.indexOf("tools-release "), `${lane}: expose before invocation`).toBeGreaterThan(job.indexOf("- name: Expose release tool"));
+        const invocation = job.includes("uses: ./.github/actions/release-data")
+          ? job.indexOf("uses: ./.github/actions/release-data") : job.indexOf("tools-release ");
+        expect(invocation, `${lane}: expose before invocation`).toBeGreaterThan(job.indexOf("- name: Expose release tool"));
       }
     }
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");

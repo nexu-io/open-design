@@ -6,8 +6,10 @@ import { describeFile } from "@/exact/control-common.ts";
 import { collectExecutedAcceptance, exerciseReleaseInstallation } from "@/exact/acceptance-execution.ts";
 
 const mocks = vi.hoisted(() => ({
-  published: vi.fn(), install: vi.fn(), process: vi.fn(), update: vi.fn(), collect: vi.fn(),
+  published: vi.fn(), install: vi.fn(), process: vi.fn(), update: vi.fn(), collect: vi.fn(), startup: vi.fn(),
 }));
+vi.mock("@open-design/shell-electron/lifecycle/inspection", () => ({ inspectElectronStartupThroughCdp: mocks.startup,
+  describeElectronRuntimeDiagnostics: ({ baseUserDataRoot }: { baseUserDataRoot: string }) => ({ runtimeLog: join(baseUserDataRoot, "runtime.jsonl") }) }));
 vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process }));
 vi.mock("@/exact/installed-acceptance.ts", () => ({ readPublishedAcceptance: mocks.published }));
 vi.mock("@/exact/acceptance.ts", () => ({ updateAcceptanceClosure: mocks.update, collectReleaseAcceptance: mocks.collect }));
@@ -24,6 +26,7 @@ async function fixture() {
   mocks.published.mockResolvedValue({ required, policy, published: { channelHead: { url: "https://release.example/betahyx/1.0.0-betahyx.2/channel-head.json" } } });
   mocks.install.mockImplementation(async ({ appPath }) => ({ resources: join(appPath, "Contents/Resources") }));
   mocks.process.mockImplementation(async (_input, exercise) => exercise?.());
+  mocks.startup.mockResolvedValue({ results: [{}] });
   const input = { publication, policy: join(root, "policy.json"), shell: "electron", target: "darwin-arm64",
     workRoot: join(root, "execution"), artifact };
   const inspection = join(root, "inspection.json"), baselineReceipt = join(root, "baseline.json");
@@ -41,7 +44,8 @@ it.skipIf(process.platform !== "darwin")("keeps first install, hot update and su
   await exerciseReleaseInstallation({ ...f.input, mode: "hot", baselineReceipt: f.baselineReceipt });
   expect(mocks.process).toHaveBeenCalledTimes(3);
   expect(mocks.process.mock.calls[1]![0].args).toContain("--remote-debugging-port=0");
-  expect(mocks.process.mock.calls[2]![0].env.ELECTRON_KIT_SMOKE_EXIT_MS).toBe("3000");
+  expect(mocks.process.mock.calls[2]![0].args).toContain("--headless");
+  expect(mocks.startup).toHaveBeenCalledTimes(2);
   await collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") });
   const collected = mocks.collect.mock.calls[0]![0];
   expect(collected.installedRoot).not.toBe(collected.firstInstallRoot);

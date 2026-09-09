@@ -37,6 +37,8 @@ jobs:
     outputs:
       run: ${{ steps.convergence.outputs.run }}
       shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
+      electron_matrix: ${{ steps.topology.outputs.electron_matrix }}
+      terminal_matrix: ${{ steps.topology.outputs.terminal_matrix }}
       validation_matrix: ${{ steps.topology.outputs.validation_matrix }}
       platform_matrix: ${{ steps.topology.outputs.platform_matrix }}
       capsule_matrix: ${{ steps.topology.outputs.capsule_matrix }}
@@ -128,17 +130,16 @@ jobs:
         with:
           version: 10.33.2
 
+      - uses: ./.github/actions/configure-ci-parallelism
+        if: ${{ fromJSON(needs.plan.outputs.run).release_tools }}
+
       - name: Build portable release tool
         if: ${{ fromJSON(needs.plan.outputs.run).release_tools }}
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: release-prepare
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          pnpm --filter @open-design/metatool build
-          pnpm --filter @open-design/electron-contract build
-          pnpm --filter @open-design/electron-kit build
-          pnpm --filter @open-design/shell-electron build
-          pnpm --filter @open-design/tools-pack build
-          pnpm --filter @open-design/tools-release build
           mkdir -p "$RUNNER_TEMP/release-tools"
           cp tools/release/dist/tools-release "$RUNNER_TEMP/release-tools/tools-release"
 
@@ -234,7 +235,11 @@ jobs:
           node-version: 24.18.0
           cache: pnpm
 
+      - uses: ./.github/actions/configure-ci-parallelism
+
       - name: Prepare validation workspace
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
         run: pnpm install --frozen-lockfile
 
       - name: Validate exact Electron nodes
@@ -268,7 +273,7 @@ jobs:
     needs: [tools, plan, capsule]
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.shell_matrix) }}
+      matrix: ${{ fromJSON(needs.plan.outputs.electron_matrix) }}
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 35
     steps:
@@ -323,8 +328,13 @@ jobs:
           node-version: 24.18.0
           cache: pnpm
 
+      - uses: ./.github/actions/configure-ci-parallelism
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+
       - name: Prepare scene workspace
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] || (matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload]) }}
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
         shell: bash
         run: pnpm install --frozen-lockfile
 
@@ -385,8 +395,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm --filter @open-design/electron-kit build
-          pnpm --filter @open-design/shell-electron build
           tools-release build base \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
             --scene "$RUNNER_TEMP/exact-scene" \
@@ -428,9 +436,127 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  terminal_scene:
+    name: ${{ matrix.shell }} scene (${{ matrix.target }})
+    needs: [tools, plan]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.terminal_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-tools-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/release-tools
+
+      - name: Expose release tool
+        shell: bash
+        run: |
+          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
+          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-policy
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore converged scene
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          WORKLOAD: ${{ matrix.workload }}
+        shell: bash
+        run: |
+          tools-release scene import \
+            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/scene.json" \
+            --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          version: 10.33.2
+
+      - uses: actions/setup-node@v6
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          node-version: 24.18.0
+          cache: pnpm
+
+      - uses: ./.github/actions/configure-ci-parallelism
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+
+      - name: Prepare scene workspace
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: terminal-build
+        shell: bash
+        run: pnpm install --frozen-lockfile
+
+      - name: Build release-neutral scene inputs
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          tools-release build scene-inputs \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --output "$RUNNER_TEMP/exact-closure-resources" \
+            --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
+
+      - name: Build native scene
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        env:
+          SHELL_TYPE: ${{ matrix.shell }}
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          tools-release build scene \
+            --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
+            --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" \
+            --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
+
+      - name: Verify release-neutral scene
+        env:
+          TARGET: ${{ matrix.target }}
+          WORKLOAD: ${{ matrix.workload }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools-release scene verify \
+            --scene "$RUNNER_TEMP/exact-scene" --target "$TARGET"
+
+      - name: Pack scene transport
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          tools-release scene pack \
+            --scene "$RUNNER_TEMP/exact-scene" --output "$RUNNER_TEMP/exact-scene-artifact/scene.tar"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-scene-artifact/scene.tar
+          if-no-files-found: error
+          retention-days: 1
+
   platform:
     name: Native platform (${{ matrix.target }})
-    needs: [tools, plan, validation]
+    needs: [tools, plan]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}
@@ -485,18 +611,18 @@ jobs:
         with:
           version: 10.33.2
 
+      - uses: ./.github/actions/configure-ci-parallelism
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+
       - name: Build independent platform
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          pnpm --filter @open-design/standalone build
-          pnpm --filter @open-design/electron-contract build
-          pnpm --filter @open-design/electron-kit build
-          pnpm --filter @open-design/shell-electron build
           tools-release build platform \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
             --output "$RUNNER_TEMP/exact-platform/$TARGET" \
@@ -531,7 +657,7 @@ jobs:
 
   capsule:
     name: Capsule (${{ matrix.target }})
-    needs: [tools, plan, validation]
+    needs: [tools, plan]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}
@@ -585,18 +711,18 @@ jobs:
         with:
           version: 10.33.2
 
+      - uses: ./.github/actions/configure-ci-parallelism
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+
       - name: Build independent capsule
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
           TARGET: ${{ matrix.target }}
         shell: bash
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          pnpm --filter @open-design/standalone build
-          pnpm --filter @open-design/electron-contract build
-          pnpm --filter @open-design/electron-kit build
-          pnpm --filter @open-design/shell-electron build
           tools-release build capsule \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
             --output "$RUNNER_TEMP/exact-capsule/$TARGET" \
@@ -630,99 +756,38 @@ jobs:
           retention-days: 1
 
   data:
-    name: Data resource (${{ matrix.resource_id }})
-    needs: [tools, plan, validation]
-    strategy:
-      fail-fast: false
-      max-parallel: 3
-      matrix: ${{ fromJSON(needs.plan.outputs.data_matrix) }}
-    runs-on: ${{ matrix.runs_on }}
+    name: Data resources (batch)
+    needs: [tools, plan]
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
-    env:
-      TARGET: ${{ matrix.target }}
-      RESOURCE_ID: ${{ matrix.resource_id }}
-      WORKLOAD: ${{ matrix.workload }}
     steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
       - uses: actions/download-artifact@v8
         with:
           name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/exact-plan
-
       - uses: actions/download-artifact@v8
         with:
           name: release-tools-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/release-tools
-
-      - name: Expose release tool
-        shell: bash
-        run: |
-          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
-          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: release-policy-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-policy
-
       - uses: actions/setup-node@v6
         with:
           node-version: 24.18.0
-
-      - name: Restore converged data resource
-        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        shell: bash
+      - name: Expose release tool
         run: |
-          tools-release resource import \
-            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/resource.json" \
-            --resource-id "$RESOURCE_ID" \
-            --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID"
-
-      - uses: actions/checkout@v6.0.2
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+          chmod +x "$RUNNER_TEMP/release-tools/tools-release"
+          echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"
+      - uses: ./.github/actions/release-data
         with:
-          ref: ${{ inputs.source_sha }}
-          persist-credentials: false
-
-      - uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          version: 10.33.2
-
-      - name: Build independent data resource
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm install --frozen-lockfile
-          pnpm --filter @open-design/standalone build
-          pnpm --filter @open-design/closure build
-          tools-release build resource \
-            --root "$GITHUB_WORKSPACE" --resource-id "$RESOURCE_ID" \
-            --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID" \
-            --receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json"
-          tools-release resource export \
-            --resource-id "$RESOURCE_ID" \
-            --resource-receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json" \
-            --output "$RUNNER_TEMP/data-contribution"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: exact-data-product-${{ matrix.resource_id }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/exact-data
-          if-no-files-found: error
-          retention-days: 1
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-data-cache-${{ matrix.resource_id }}-${{ inputs.source_sha }}
-          path: ${{ runner.temp }}/data-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
+          source-sha: ${{ inputs.source_sha }}
+          run: ${{ needs.plan.outputs.run }}
 
   prepare:
     name: Prepare signed exact content
-    needs: [tools, plan, scene, platform, capsule, data, validation]
+    needs: [tools, plan, scene, terminal_scene, platform, capsule, data, validation]
     runs-on: ubuntu-24.04
     environment: standalone-exact-release
     timeout-minutes: 10
@@ -879,14 +944,17 @@ jobs:
           tools-release scene unpack \
             --archive "$RUNNER_TEMP/scene-artifact/scene.tar" --output "$RUNNER_TEMP/scene"
 
+      - uses: ./.github/actions/configure-ci-parallelism
+        if: ${{ matrix.shell == 'electron' }}
+
       - name: Prepare Electron distribution toolchain
         if: ${{ matrix.shell == 'electron' }}
+        env:
+          OPEN_DESIGN_POSTINSTALL_LEVEL: electron-build
         shell: bash
         run: |
           set -euo pipefail
           pnpm install --frozen-lockfile
-          pnpm --filter @open-design/standalone build
-          pnpm --filter @open-design/electron-kit build
 
       - uses: actions/download-artifact@v8
         if: ${{ matrix.shell == 'electron' }}
@@ -1208,6 +1276,14 @@ jobs:
           --publication "$env:RUNNER_TEMP/published/publish-receipt.json" --policy "$env:RUNNER_TEMP/published/release-policy.json"
           --shell electron --target "${{ matrix.target }}" --mode first
           --artifact "$env:RUNNER_TEMP/public-shell-artifact.exe" --work-root "$env:RUNNER_TEMP/installed-acceptance"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && matrix.shell == 'electron' }}
+        with:
+          name: exact-installation-diagnostics-${{ matrix.target }}-${{ inputs.release_version }}
+          path: ${{ runner.temp }}/installed-acceptance/diagnostics
+          if-no-files-found: ignore
+          retention-days: 1
 
       - name: Bind installed acceptance credential
         shell: bash

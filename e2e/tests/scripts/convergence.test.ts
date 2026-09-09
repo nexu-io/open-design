@@ -95,6 +95,33 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("projects a mixed batch without leaking identities or changing independent decisions", () => {
+    const fixture = createRepository();
+    const code = `
+import json, sys
+from types import SimpleNamespace
+sys.path.insert(0, sys.argv[1])
+from convergence import batch_inputs, ConfigError
+workflow = SimpleNamespace(execution={
+  'matrices': {'items': {'include': [{'workload': 'a', 'name': 'first'}, {'workload': 'b', 'name': 'second'}]}},
+  'batches': {'data': {'matrix': 'items', 'fields': {'id': 'name'}, 'product': 'resource'}}})
+pending = {'workloads': {
+  'a': {'scopeEnabled': True, 'run': True, 'resultHit': False},
+  'b': {'scopeEnabled': True, 'run': False, 'resultHit': True, 'result': {'products': {
+    'resource': {'type': 'url', 'source': 'https://cache.example/blob.zip', 'data': {'sha256': 'a' * 64}}}}}}}
+print(json.dumps(batch_inputs(workflow, pending)))
+pending['workloads']['b']['resultHit'] = False
+try:
+  batch_inputs(workflow, pending)
+except ConfigError:
+  pass
+else:
+  raise AssertionError('missing artifact must not fall back to undeclared execution')
+`;
+    const result = execFileSync("python3", ["-c", code, path.dirname(convergenceScript)], { encoding: "utf8" });
+    expect(JSON.parse(result)).toEqual({ data: [{ id: "first" }, { id: "second", artifact: { url: "https://cache.example/blob.zip", sha256: "a".repeat(64) } }] });
+  });
+
   test("bootstraps a tool from a verified blob without Node or workspace dependencies", () => {
     const fixture = createRepository();
     const script = `

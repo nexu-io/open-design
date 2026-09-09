@@ -30,8 +30,8 @@ export async function exportDataResource(input: Input & Readonly<{ resourceRecei
 }
 
 /** Invalid downloads never become visible products or success receipts. */
-export async function importDataResource(input: Input & Readonly<{ descriptor: string }>) {
-  const descriptor = await readObject(input.descriptor);
+export async function importDataResource(input: Input & Readonly<{ descriptor: string | Readonly<{ url: string; sha256: string }> }>) {
+  const descriptor = typeof input.descriptor === "string" ? await readObject(input.descriptor) : input.descriptor;
   await assertArtifactDestinationAbsent(resolve(input.output));
   await using product = await openArtifactProduct({ url: descriptor.url, sha256: descriptor.sha256 });
   const { archive, acquisition } = product;

@@ -3,8 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildClosureDataResource, CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
-import { exportDataResource } from "./resource-artifact.ts";
-import { canonicalBytes, checkedFile } from "./control-common.ts";
+import { exportDataResource, importDataResource } from "./resource-artifact.ts";
+import { canonicalBytes, checkedFile, readObject } from "./control-common.ts";
 
 /** Runtime production is separate from the nine independent data products. */
 export async function buildReleaseRuntimeResources(input: Readonly<{ root: string; output: string; receipt: string }>) {
@@ -67,4 +67,37 @@ export async function buildReleaseDataResources(input: Readonly<{
   await mkdir(dirname(resolve(input.receipt)), { recursive: true });
   await writeFile(input.receipt, canonicalBytes(receipt), { flag: "wx" });
   return receipt;
+}
+
+export async function materializeReleaseDataResources(input: Readonly<{
+  root: string; sources: string; output: string; receipt: string;
+}>) {
+  const request = await readObject(input.sources);
+  if (Object.keys(request).join(",") !== "sources" || !Array.isArray(request.sources)) throw new Error("resource request requires sources");
+  const seen = new Set<string>();
+  for (const source of request.sources) {
+    if (source == null || typeof source !== "object" || Array.isArray(source)
+      || Object.keys(source).some(key => key !== "id" && key !== "artifact")
+      || !CLOSURE_DATA_RESOURCES.some(resource => resource.id === source.id) || seen.has(source.id)) throw new Error("invalid or duplicate resource source");
+    seen.add(source.id);
+    if (source.artifact != null && (typeof source.artifact !== "object" || Array.isArray(source.artifact)
+      || Object.keys(source.artifact).sort().join(",") !== "sha256,url"
+      || typeof source.artifact.url !== "string" || !/^[a-f0-9]{64}$/u.test(source.artifact.sha256))) throw new Error("invalid resource artifact");
+    if (Object.hasOwn(source, "artifact") && source.artifact == null) throw new Error("invalid resource artifact");
+  }
+  const resources = [];
+  for (const source of request.sources) {
+    const started = Date.now();
+    if (source.artifact != null) {
+      const result = await importDataResource({ resourceId: source.id, descriptor: source.artifact,
+        output: join(resolve(input.output), "products", source.id) });
+      resources.push({ resourceId: source.id, ...result, durationMs: Date.now() - started });
+    } else {
+      const result = await buildReleaseDataResources({ ...input, resourceIds: [source.id],
+        receipt: join(resolve(input.output), "results", `${source.id}.json`) });
+      resources.push(...result.resources);
+    }
+  }
+  await mkdir(dirname(resolve(input.receipt)), { recursive: true });
+  await writeFile(input.receipt, canonicalBytes({ schemaVersion: 1, operation: "closure.data-resources.materialize", resources }), { flag: "wx" });
 }

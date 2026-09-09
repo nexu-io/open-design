@@ -7,6 +7,7 @@ import { buildClosureDataResources, CLOSURE_DATA_RESOURCES } from "@open-design/
 import { afterEach, expect, it, vi } from "vitest";
 import { exportDataResource, importDataResource } from "@/exact/resource-artifact.ts";
 import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
+import { materializeReleaseDataResources } from "@/exact/resource-build.ts";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -55,6 +56,18 @@ it("restores a portable content-bound resource and feeds the existing complete c
   expect(composed.resources.find((resource: { id: string }) => resource.id === "craft")).toMatchObject({
     sha256: f.resources.find(resource => resource.id === "craft")!.sha256,
   });
+});
+
+it("materializes mixed sources without rebuilding the artifact-backed resource", async () => {
+  const f = await fixture(), hit = await cache(f);
+  await rm(join(f.root, "craft"), { recursive: true });
+  const sources = join(f.root, "sources.json"), output = join(f.root, "mixed"), receipt = join(f.root, "mixed.json");
+  await writeFile(sources, JSON.stringify({ sources: [{ id: "craft", artifact: hit.value }, { id: "skills" }] }));
+  await materializeReleaseDataResources({ root: f.root, sources, output, receipt });
+  expect(await readdir(join(output, "products"))).toEqual(["craft", "skills"]);
+  expect(await readdir(join(output, "contributions"))).toEqual(["skills"]);
+  expect(JSON.parse(await readFile(receipt, "utf8")).resources).toHaveLength(2);
+  expect(hit.fetch).toHaveBeenCalledTimes(1);
 });
 
 it("rejects an invalid descriptor before download and leaves no restored directory", async () => {

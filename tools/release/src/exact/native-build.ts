@@ -17,10 +17,8 @@ type BuildInput = Readonly<{ root: string; shell: string; target: string; output
 /** Workspace preparation for a scene is a build recipe, not workflow policy. */
 export async function buildReleaseSceneInputs(input: BuildInput) {
   target(input);
-  for (const name of ["platform", "sidecar", "standalone", "closure", "electron-contract", "electron-kit"]) {
-    await promisify(execFile)("pnpm", ["--filter", `@open-design/${name}`, "build"],
-      { cwd: resolve(input.root), timeout: 10 * 60_000, maxBuffer: 8 * 1024 * 1024 });
-  }
+  // The caller bootstraps the declared workspace closure once. This operation
+  // produces scene inputs; it must not silently rebuild that closure again.
   if (input.shell === "electron") return buildReleaseRuntimeResources(input);
   await writeObject(input.receipt, { schemaVersion: 1, operation: "terminal.scene.inputs", target: input.target });
 }

@@ -9,7 +9,11 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        cpu_count="$(nproc)"
+        if command -v nproc >/dev/null 2>&1; then
+          cpu_count="$(nproc)"
+        else
+          cpu_count="$(sysctl -n hw.logicalcpu)"
+        fi
         workers="$((cpu_count / 2))"
         if [ "$workers" -lt 1 ]; then
           workers=1
