@@ -16,10 +16,6 @@ concurrency:
 jobs:
   baseline:
     name: Capture visual baselines
-    # Baselines run on the Blacksmith pool and publish to canonical R2. A mirror
-    # inherits neither, so its push-to-main run queues on a runner label that
-    # does not exist until GitHub cancels the job at 24h.
-    if: github.repository == 'nexu-io/open-design'
     runs-on: blacksmith-8vcpu-ubuntu-2404
     timeout-minutes: 30
 

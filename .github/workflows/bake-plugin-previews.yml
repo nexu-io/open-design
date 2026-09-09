@@ -36,10 +36,6 @@ concurrency:
 jobs:
   bake:
     name: Bake plugin previews
-    # R2 uploads and rolling manifest PRs are trusted canonical-repository
-    # writes. Mirrors do not inherit those credentials and should not attempt
-    # this publisher on push or on the copied nightly schedule.
-    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:

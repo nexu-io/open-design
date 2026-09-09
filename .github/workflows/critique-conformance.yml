@@ -25,10 +25,6 @@ on:
 jobs:
   run:
     name: nightly conformance + ratchet snapshot
-    # The ratchet snapshot only means something against the canonical
-    # repository's rolling 14-day conformance history. Mirrors copy the cron but
-    # own no history for it to feed, so their nightly run is pure failure noise.
-    if: github.repository == 'nexu-io/open-design'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
