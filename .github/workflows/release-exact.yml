@@ -222,15 +222,20 @@ jobs:
             --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
 
       - uses: pnpm/action-setup@v5
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        if: ${{ matrix.shell == 'electron' || fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        if: ${{ matrix.shell == 'electron' || fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         with:
           node-version: 24.18.0
           cache: pnpm
+
+      - name: Prepare scene and validation workspace
+        if: ${{ matrix.shell == 'electron' || fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: pnpm install --frozen-lockfile
 
       - name: Build release-neutral scene inputs
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -240,7 +245,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          pnpm install --frozen-lockfile
           pnpm --filter @open-design/platform build
           pnpm --filter @open-design/sidecar build
           pnpm --filter @open-design/standalone build
@@ -263,6 +267,32 @@ jobs:
             --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" \
             --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
+
+      - name: Validate exact Electron nodes
+        if: ${{ matrix.shell == 'electron' }}
+        env:
+          TARGET: ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/exact-validation"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.contract.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/contract.log" --receipt "$RUNNER_TEMP/exact-validation/contract.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate electron.shell.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" validate closure.test \
+            --root "$GITHUB_WORKSPACE" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() && matrix.shell == 'electron' }}
+        with:
+          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation
+          if-no-files-found: warn
+          retention-days: 30
 
       - name: Verify scene and prepare convergence product
         env:
@@ -433,6 +463,12 @@ jobs:
             --scene "$RUNNER_TEMP/scene" --prepared "$RUNNER_TEMP/prepared" \
             --output "$RUNNER_TEMP/distribution" --receipt "$RUNNER_TEMP/distribution/distribution-receipt.json"
 
+      - uses: actions/download-artifact@v8
+        if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}
+        with:
+          name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation
+
       - name: Stage accepted Electron distribution
         if: ${{ matrix.shell == 'electron' && matrix.mode == 'hot' }}
         env:
@@ -445,6 +481,7 @@ jobs:
           set -euo pipefail
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" baseline stage \
             --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --validation "$RUNNER_TEMP/exact-validation/shell.json" \
             --root "$GITHUB_WORKSPACE" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
             --source-commit "$SOURCE_SHA" --target "$TARGET" --output "$RUNNER_TEMP/distribution" \
             --receipt "$RUNNER_TEMP/distribution/shell-contribution.json"

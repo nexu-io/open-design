@@ -118,8 +118,9 @@ not evidence that the current checkout's test suite ran.
 `validate <node> --root <workspace> --plan <release-plan> --log <fresh-file>
 --receipt <fresh-file>` executes the selected `electron.contract.test`,
 `electron.shell.test` or `closure.test` recipe. Build prerequisites first.
-The command recomputes the declared plan before and after execution, retains
-test output, and writes a successful identity-bound receipt only after every
+The command recomputes the selected node and its recursive dependency identity
+before and after execution; unrelated node changes do not invalidate its result.
+It retains test output and writes a successful identity-bound receipt only after every
 command succeeds. It refuses unsupported/unselected nodes, stale source plans,
 existing result files and mismatched native execution platforms. The pure
 contract tests may run on another platform; the receipt records that platform.

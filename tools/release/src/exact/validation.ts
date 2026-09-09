@@ -28,7 +28,10 @@ export async function validateExactPlanNode(input: Readonly<{
   if (node !== "electron.contract.test" && releasePlan.plan?.target !== `${process.platform}-${process.arch}`) throw new Error("validation target differs from the executing platform");
   const current = () => createExactPlanFromRegistryFile({ root, registryPath: resolve(root, input.registry),
     target: releasePlan.plan.target, acceptedShellBaseline: releasePlan.plan.acceptedShellBaseline });
-  if (!canonicalBytes(await current()).equals(canonicalBytes(releasePlan.plan))) throw new Error("validation plan binding mismatch");
+  // The composite node identity already binds its recursive dependencies.
+  // Unrelated nodes do not participate in this validation result.
+  const matches = async () => canonicalBytes((await current()).nodes[node]).equals(canonicalBytes(releasePlan.plan.nodes[node]));
+  if (!await matches()) throw new Error("validation plan binding mismatch");
   try { await lstat(input.receipt); throw new Error("validation receipt already exists"); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   const log = await open(resolve(input.log), "wx"), startedAt = new Date().toISOString();
@@ -44,7 +47,7 @@ export async function validateExactPlanNode(input: Readonly<{
           : reject(new Error(`validation failed in ${command.directory}: ${signal ?? code}`)));
       });
     }
-    if (!canonicalBytes(await current()).equals(canonicalBytes(releasePlan.plan))) throw new Error("validation source changed during execution");
+    if (!await matches()) throw new Error("validation source changed during execution");
     const receipt = { schemaVersion: 1, operation: "exact.validation", status: "passed", node,
       identity: releasePlan.plan.nodes[node].identity, target: releasePlan.plan.target,
       executionPlatform: `${process.platform}-${process.arch}`, startedAt,

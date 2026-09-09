@@ -45,9 +45,19 @@ it("rejects unknown, unselected or stale plans before running commands", async (
   await expect(readFile(input.log)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it.each(["before", "during"])("does not invalidate a node receipt for unrelated source changes %s validation", async when => {
+  const input = await fixture(when === "during"
+    ? 'node -e "require(\'node:fs\').appendFileSync(\'../../closure.build/input.txt\',\'changed\')"'
+    : undefined);
+  if (when === "before") await writeFile(join(input.root, "closure.build/input.txt"), "unrelated Closure change");
+  const result = await validateExactPlanNode(input);
+  expect(result.identity).toBe(JSON.parse(await readFile(input.plan, "utf8")).plan.nodes[input.node].identity);
+});
+
 it.each([
   ['node -e "console.error(\'intentional failure\');process.exit(2)"', "validation failed"],
   ['node -e "require(\'node:fs\').appendFileSync(\'../../electron.contract.test/input.txt\',\'changed\')"', "source changed"],
+  ['node -e "require(\'node:fs\').appendFileSync(\'../../electron.contract.build/input.txt\',\'changed\')"', "source changed"],
 ])("retains logs but no successful receipt for %s", async (script, message) => {
   const input = await fixture(script);
   await expect(validateExactPlanNode(input)).rejects.toThrow(message);

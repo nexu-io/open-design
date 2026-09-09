@@ -15,6 +15,66 @@ const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("passes projected workloads and scene identities through the real convergence planner and handoff", async () => {
+    const root = await mkdtemp(join(tmpdir(), "exact-convergence-contract-")); roots.push(root);
+    const cli = resolve(workspaceRoot, "tools/release/dist/exact-control.mjs");
+    const plans = join(root, "plans"), products = join(root, "products"), pending = join(root, "pending.json");
+    await mkdir(plans);
+    await writeFile(join(plans, "electron-darwin-arm64.json"), JSON.stringify({
+      schemaVersion: 1, plan: { target: "darwin-arm64" }, actions: [{ id: "electron.distribution" }],
+    }));
+    await run(process.execPath, [cli, "topology", "--declaration", resolve(workspaceRoot, ".github/config/exact-topology.json"),
+      "--plans", plans, "--output", root]);
+    const runners = await readFile(join(root, "runners.json"), "utf8");
+    const common = [resolve(workspaceRoot, ".github/scripts/convergence.py"), "--root", workspaceRoot,
+      "--config", resolve(workspaceRoot, ".github/config/convergence-exact.json")];
+    const env = { ...process.env, GITHUB_OUTPUT: join(root, "outputs"), GITHUB_STEP_SUMMARY: join(root, "summary") };
+    await run("python3", [...common, "github-output", "--workflow", "release-exact", "--scope-plan", join(root, "scope.json"),
+      "--runner-plan-json", runners, "--repository-id", "1", "--repository", "local/fixture", "--base-url", "http://invalid.local",
+      "--mode", "enforce", "--pending", pending], { env });
+    const planned = JSON.parse(await readFile(pending, "utf8"));
+    expect(planned.workloads.electron_scene_win32_x64.run).toBe(false);
+    for (const shell of ["terminal", "electron"]) {
+      const workload = `${shell}_scene_darwin_arm64`, scene = join(root, shell);
+      expect(planned.workloads[workload].run).toBe(true);
+      await mkdir(scene);
+      await writeFile(join(scene, "scene.json"), JSON.stringify({ target: "darwin-arm64", shellBuildHash: "a".repeat(64) }));
+      await run(process.execPath, [cli, "scene", "contribute", "--scene", scene, "--target", "darwin-arm64", "--pending", pending,
+        "--workload", workload, "--artifact", `fixture-${shell}`, "--output", products]);
+    }
+    const event = join(root, "event.json");
+    await writeFile(event, JSON.stringify({ repository: { id: 1 } }));
+    const handoff = await run("python3", [...common, "handoff", "--pending", pending, "--products-root", products,
+      "--handoff-root", join(root, "handoff")], { cwd: workspaceRoot, env: { ...env,
+      GITHUB_EVENT_NAME: "workflow_dispatch", GITHUB_EVENT_PATH: event, GITHUB_REPOSITORY_ID: "1",
+      GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
+    } });
+    const candidate = JSON.parse(handoff.stdout);
+    expect(candidate.results).toHaveLength(2);
+    for (const { receipt } of candidate.results) {
+      expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
+      expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
+    }
+  });
+
+  it("requires native validation independently of scene cache reuse and transports its receipt to baseline staging", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
+    const validation = scene.split("- name: Validate exact Electron nodes")[1]?.split("- name: Verify scene")[0];
+    expect(validation).toBeDefined();
+    expect(validation).toContain("if: ${{ matrix.shell == 'electron' }}");
+    expect(validation).not.toContain("needs.plan.outputs.run");
+    for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
+      expect(validation).toContain(`exact-release-control.mjs" validate ${node}`);
+    }
+    expect(scene).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
+    expect(scene).toContain("if: ${{ always() && matrix.shell == 'electron' }}");
+    const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
+    expect(distribution).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
+    const stage = distribution.split("- name: Stage accepted Electron distribution")[1]!;
+    expect(stage).toContain('--validation "$RUNNER_TEMP/exact-validation/shell.json"');
+  });
+
   it("preserves native scene inputs through the actual convergence ZIP normalizer", async () => {
     const root = await mkdtemp(join(tmpdir(), "exact-scene-transport-")); roots.push(root);
     const scene = join(root, "source"); await mkdir(join(scene, "platform"), { recursive: true });
