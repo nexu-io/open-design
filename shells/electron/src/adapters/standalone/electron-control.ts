@@ -15,6 +15,10 @@ import {
 
 const CONTROL_RESOURCES_ENV = "OD_ELECTRON_CONTROL_RESOURCES";
 
+export function isElectronShellPackaged(): boolean {
+  return app.isPackaged;
+}
+
 /** Queue only; the Capsule quit barrier owns teardown after acknowledgement.
  * A native relaunch would inherit a dying supervisor's context and be stopped
  * as an orphan, so controlled sessions retain the existing generation root. */

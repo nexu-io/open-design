@@ -632,6 +632,14 @@ jobs:
       - uses: ./.github/actions/configure-ci-parallelism
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
 
+      - name: Restore platform dependency cache
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.plan.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
       - name: Build independent platform
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         env:
@@ -731,6 +739,14 @@ jobs:
 
       - uses: ./.github/actions/configure-ci-parallelism
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+
+      - name: Restore capsule dependency cache
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.plan.outputs.node_version }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Build independent capsule
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}

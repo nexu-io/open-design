@@ -440,6 +440,11 @@ describe("exact Electron release topology", () => {
         expect(section).toContain("node-version: ${{ needs.plan.outputs.node_version }}");
         expect(section).not.toContain("node-version-file:");
         expect(section.indexOf("actions/setup-node@")).toBeLessThan(section.indexOf("actions/checkout@"));
+        const cache = section.split(`- name: Restore ${job} dependency cache`)[1]!.split("- name: Build independent")[0]!;
+        expect(cache).toContain("if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}");
+        expect(cache).toContain("cache: pnpm");
+        expect(cache).toContain("cache-dependency-path: pnpm-lock.yaml");
+        expect(section.indexOf(`Restore ${job} dependency cache`)).toBeGreaterThan(section.indexOf("pnpm/action-setup@"));
       }
       expect(Object.keys(config.workflows)).toEqual([name]);
       expect(config.suites["convergence-control"]).toContain(configPath);
