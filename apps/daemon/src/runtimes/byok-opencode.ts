@@ -1,8 +1,19 @@
 import type { ByokChatProviderConfig } from '@open-design/contracts';
+import { resolveBedrockRegion } from '@open-design/contracts';
 
 export const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 export const BYOK_OPENCODE_PROVIDER_ID = 'open-design-byok';
 export const BYOK_OPENCODE_API_KEY_ENV = 'OPEN_DESIGN_BYOK_API_KEY';
+// Bedrock runs under OpenCode's own `amazon-bedrock` provider id rather than
+// the generic `open-design-byok` entry: OpenCode keys its Bedrock loader
+// (AWS credential chain, named profile, bearer token, region-aware
+// cross-region model prefixing) on that exact id, and a custom id would only
+// get the bare `@ai-sdk/amazon-bedrock` factory, which reads static access
+// keys from the environment and knows nothing about SSO profiles.
+export const BYOK_OPENCODE_BEDROCK_PROVIDER_ID = 'amazon-bedrock';
+// Read by OpenCode's Bedrock loader; takes precedence over the credential
+// chain, so it must only be set in API-key mode.
+export const BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV = 'AWS_BEARER_TOKEN_BEDROCK';
 export const BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE =
   'BYOK OpenCode requires a complete provider configuration for this run.';
 const DEFAULT_CONTEXT_TOKEN_LIMIT = 128_000;
@@ -16,6 +27,7 @@ const DEFAULT_BASE_URL_BY_PROTOCOL: Record<ByokChatProviderConfig['protocol'], s
   ollama: 'https://ollama.com',
   senseaudio: 'https://api.senseaudio.cn',
   aihubmix: 'https://aihubmix.com/v1',
+  bedrock: 'https://bedrock-runtime.us-east-1.amazonaws.com',
 };
 
 type ProviderPackage =
@@ -23,7 +35,8 @@ type ProviderPackage =
   | '@ai-sdk/openai'
   | '@ai-sdk/openai-compatible'
   | '@ai-sdk/azure'
-  | '@ai-sdk/google';
+  | '@ai-sdk/google'
+  | '@ai-sdk/amazon-bedrock';
 
 export interface OpenCodeByokProviderConfig {
   providerId: string;
@@ -32,11 +45,27 @@ export interface OpenCodeByokProviderConfig {
   config: Record<string, unknown>;
 }
 
-export function opencodeByokModelId(model: string | null | undefined): string | null {
+const OPENCODE_BYOK_PROVIDER_IDS = [
+  BYOK_OPENCODE_PROVIDER_ID,
+  BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
+];
+
+export function opencodeByokProviderId(
+  protocol: ByokChatProviderConfig['protocol'] | null | undefined,
+): string {
+  return protocol === 'bedrock'
+    ? BYOK_OPENCODE_BEDROCK_PROVIDER_ID
+    : BYOK_OPENCODE_PROVIDER_ID;
+}
+
+export function opencodeByokModelId(
+  model: string | null | undefined,
+  protocol: ByokChatProviderConfig['protocol'] | null | undefined = null,
+): string | null {
   const trimmed = typeof model === 'string' ? model.trim() : '';
   if (!trimmed || trimmed.toLowerCase() === 'default') return null;
-  if (trimmed.startsWith(`${BYOK_OPENCODE_PROVIDER_ID}/`)) return trimmed;
-  return `${BYOK_OPENCODE_PROVIDER_ID}/${trimmed}`;
+  if (OPENCODE_BYOK_PROVIDER_IDS.some((id) => trimmed.startsWith(`${id}/`))) return trimmed;
+  return `${opencodeByokProviderId(protocol)}/${trimmed}`;
 }
 
 export function buildOpenCodeByokProviderConfig(
@@ -62,7 +91,11 @@ export function buildOpenCodeByokProviderConfig(
   if (!rawModel || rawModel.toLowerCase() === 'default') return null;
   if (!baseUrl) return null;
 
-  const modelId = opencodeByokModelId(rawModel);
+  if (protocol === 'bedrock') {
+    return buildBedrockProviderConfig(provider, rawModel, baseUrl, apiKey);
+  }
+
+  const modelId = opencodeByokModelId(rawModel, protocol);
   if (!modelId) return null;
 
   const providerEntry = buildProviderEntry(
@@ -120,12 +153,69 @@ function normalizeProviderBaseUrl(
   return trimmed;
 }
 
+function bedrockProfile(provider: ByokChatProviderConfig): string {
+  return typeof provider.awsProfile === 'string' ? provider.awsProfile.trim() : '';
+}
+
+// OpenCode's `amazon-bedrock` loader reads `options.region`, `options.profile`
+// and `options.endpoint`, resolves credentials through the AWS credential
+// chain for the named profile, and reads `AWS_BEARER_TOKEN_BEDROCK` from the
+// process environment for the API-key mode (the bearer token wins over the
+// chain, so it is only exported in that mode). The regional endpoint is only
+// forwarded as `endpoint` when it differs from the default for the region,
+// which keeps the run on OpenCode's own endpoint selection unless the user
+// pointed at a VPC endpoint or another custom host.
+function buildBedrockProviderConfig(
+  provider: ByokChatProviderConfig,
+  rawModel: string,
+  baseUrl: string,
+  apiKey: string,
+): OpenCodeByokProviderConfig | null {
+  const profile = bedrockProfile(provider);
+  if (!profile && !apiKey) return null;
+  const region = resolveBedrockRegion(baseUrl);
+  const defaultEndpoint = `https://bedrock-runtime.${region}.amazonaws.com`;
+  const modelId = opencodeByokModelId(rawModel, 'bedrock');
+  if (!modelId) return null;
+  return {
+    providerId: BYOK_OPENCODE_BEDROCK_PROVIDER_ID,
+    modelId,
+    env: {
+      AWS_REGION: region,
+      ...(profile ? {} : { [BYOK_OPENCODE_BEDROCK_BEARER_TOKEN_ENV]: apiKey }),
+    },
+    config: {
+      provider: {
+        [BYOK_OPENCODE_BEDROCK_PROVIDER_ID]: {
+          name: 'Amazon Bedrock',
+          npm: '@ai-sdk/amazon-bedrock' satisfies ProviderPackage,
+          options: {
+            region,
+            ...(profile ? { profile } : {}),
+            ...(baseUrl !== defaultEndpoint ? { endpoint: baseUrl } : {}),
+          },
+          models: {
+            [rawModel]: {
+              name: rawModel,
+              limit: {
+                context: DEFAULT_CONTEXT_TOKEN_LIMIT,
+                output: DEFAULT_OUTPUT_TOKEN_LIMIT,
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+}
+
 function requiresApiKey(
   provider: ByokChatProviderConfig,
   baseUrl: string,
 ): boolean {
   const protocol = provider.protocol;
   if (provider.requiresApiKey === false) return false;
+  if (protocol === 'bedrock') return !bedrockProfile(provider);
   return protocol !== 'ollama' || !isLocalOllamaBaseUrl(baseUrl);
 }
 
@@ -246,6 +336,10 @@ function buildProviderEntry(
           ...apiKeyOption,
         },
       };
+    case 'bedrock':
+      // Bedrock never reaches the generic entry: it is built by
+      // `buildBedrockProviderConfig` under OpenCode's own provider id.
+      throw new Error('bedrock provider entries are built by buildBedrockProviderConfig');
   }
 }
 

@@ -1,5 +1,5 @@
 import type { KnownProvider } from '../state/config';
-import type { ApiProtocol } from '../types';
+import type { ApiProtocol, BedrockAuthMode } from '../types';
 
 export function isLocalOllamaBaseUrl(baseUrl: string): boolean {
   try {
@@ -11,13 +11,26 @@ export function isLocalOllamaBaseUrl(baseUrl: string): boolean {
   }
 }
 
+/** Bedrock defaults to the API-key (bearer) mode; the profile mode is opt-in. */
+export function resolveBedrockAuthMode(
+  awsAuthMode: BedrockAuthMode | undefined,
+): BedrockAuthMode {
+  return awsAuthMode === 'profile' ? 'profile' : 'api_key';
+}
+
 export function byokProviderRequiresApiKey(
   protocol: ApiProtocol,
   provider: KnownProvider | undefined,
   baseUrl: string,
+  options: { awsAuthMode?: BedrockAuthMode } = {},
 ): boolean {
   if (provider?.requiresApiKey === false) return false;
   if (protocol === 'ollama' && isLocalOllamaBaseUrl(baseUrl)) return false;
+  // Bedrock in AWS-profile mode signs with the credential chain; there is no
+  // bearer to collect. The profile itself is validated by the caller.
+  if (protocol === 'bedrock' && resolveBedrockAuthMode(options.awsAuthMode) === 'profile') {
+    return false;
+  }
   return true;
 }
 
@@ -55,14 +68,13 @@ const BYOK_MANAGED_AGENT_IDS: ReadonlySet<string> = new Set<string>([
  *
  * 这不是一个新的分类维度,而是发送前那道 BYOK 闸门用的同一条线换个读法:
  * `ProjectView` 的 `requiresByokPreflight` 是
- * `(mode === 'api' && protocol !== 'bedrock') || (mode === 'daemon' && agentId === 'byok-opencode')`,
+ * `mode === 'api' || (mode === 'daemon' && agentId === 'byok-opencode')`,
  * 而 `mode === 'api'` 的一轮落到消息上就是 `API_PROTOCOL_AGENT_IDS` 里的那个 id。
  * 报错卡这一侧手上只有 agentId(`resolveRunFailureUi` 的第三个参数),所以判据也
  * 按 agentId 写 —— 同一档,两处读法一致。
  *
- * `bedrock-api` 在这里算数、在发送前那道闸门里不算:闸门问的是「能不能起跑」
- * (bedrock 走 AWS 凭据,没有单一 key 可校验),这里问的是「凭据填在哪一屏」——
- * bedrock 的凭据同样填在 API 提供商那一屏,所以 key 报错把人送过去是对的。
+ * `bedrock-api` 同样算数:API key 模式下凭据就是 Bedrock API key,AWS profile
+ * 模式下凭据是 profile 名,两者都填在 API 提供商那一屏,所以 key 报错把人送过去是对的。
  *
  * 反过来,`claude` / `codex` / `opencode` / `grok` / `deepseek` 这些本机 CLI **不**
  * 在这一档:它们的登录态在用户自己的终端里(`claude` 报 key 错时自己给的指引就是

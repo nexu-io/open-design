@@ -98,6 +98,12 @@ import {
   BYOK_OPENCODE_PROVIDER_ID,
   buildOpenCodeByokProviderConfig,
 } from './runtimes/byok-opencode.js';
+import {
+  bedrockInferenceModelId,
+  bedrockRuntimeEndpoint,
+  resolveBedrockRegion,
+} from '@open-design/contracts';
+import { testBedrockProfileConnection } from './integrations/bedrock-aws-cli.js';
 
 export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
@@ -396,6 +402,11 @@ export async function assertAndFetchExternalAsset(
 // Override with OD_CONNECTION_TEST_PROVIDER_TIMEOUT_MS for slow networks
 // or distant providers; invalid values fall back to the default.
 const DEFAULT_PROVIDER_TIMEOUT_MS = 12_000;
+// Bedrock AWS-profile tests may have to wait for a human to finish a browser
+// SSO sign-in, which does not fit the HTTP provider budget. The extra budget
+// is added on top of the provider timeout for that mode only; the CLI steps
+// inside it each carry their own shorter bound.
+const SSO_LOGIN_BUDGET_MS = 120_000;
 const LOOPBACK_NO_PROXY_TOKENS = ['localhost', '127.0.0.1', '[::1]'] as const;
 // CLI boot time is dominated by adapter auth/session restore; the heavy
 // adapters (Codex, Cursor Agent) regularly take 5–10 s on a cold first
@@ -907,7 +918,7 @@ function isLikelyModelErrorText(text: string): boolean {
 }
 
 function isLikelyAuthErrorText(text: string): boolean {
-  return /(?:api[_ -]?key|x-goog-api-key|unauthorized|unauthenticated|permission denied|invalid credentials|authentication credentials|access denied|invalid key)/i.test(
+  return /(?:api[_ -]?key|x-goog-api-key|unauthorized|unauthenticated|permission denied|invalid credentials|authentication credentials|access denied|invalid key|security token|unrecognizedclientexception|bearer token)/i.test(
     text,
   );
 }
@@ -920,6 +931,9 @@ function normalizeProviderTestInput(
   const baseUrl = String(input.baseUrl ?? '').trim();
   if (input.protocol === 'google' && !baseUrl) {
     return { ...input, baseUrl: GOOGLE_GEMINI_DEFAULT_BASE_URL };
+  }
+  if (input.protocol === 'bedrock' && !baseUrl) {
+    return { ...input, baseUrl: bedrockRuntimeEndpoint(resolveBedrockRegion('')) };
   }
   return input;
 }
@@ -1002,10 +1016,10 @@ function inspectProviderCompletion(
   }
 
   if (protocol === 'bedrock') {
+    const output = (obj as { output?: { message?: unknown } }).output;
     return {
-      valid: false,
-      kind: 'unknown',
-      detail: 'AWS Bedrock BYOK connection tests need AWS credential signing, which is not supported by the current API-key smoke test.',
+      valid: Boolean(output && typeof output === 'object' && output.message),
+      sample: 'valid completion',
     };
   }
 
@@ -1553,10 +1567,38 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
       };
     }
-    case 'bedrock':
-      throw new Error(
-        'AWS Bedrock BYOK requires AWS credential signing; the current provider smoke test only supports API-key based providers.',
-      );
+    case 'bedrock': {
+      // API-key mode: a long-term Bedrock API key is a bearer token the
+      // runtime endpoint accepts directly, so the smoke test is a plain
+      // Converse call. The profile mode never reaches here (it goes through
+      // `testBedrockProfileConnection`). The model id is mapped to the same
+      // cross-region inference id OpenCode will use on the run.
+      const region = resolveBedrockRegion(baseUrl);
+      const inferenceModelId = bedrockInferenceModelId(model, region);
+      return {
+        url: `${baseUrl.replace(/\/+$/, '')}/model/${encodeURIComponent(inferenceModelId)}/converse`,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: {
+          messages: [{ role: 'user', content: [{ text: SMOKE_PROMPT }] }],
+          inferenceConfig: { maxTokens: PROVIDER_MAX_TOKENS },
+        },
+        extractText: (data) => {
+          const output = (data as { output?: { message?: { content?: unknown } } }).output;
+          const content = output?.message?.content;
+          if (!Array.isArray(content)) return '';
+          return content
+            .map((block) =>
+              block && typeof (block as { text?: unknown }).text === 'string'
+                ? (block as { text: string }).text
+                : '',
+            )
+            .join('');
+        },
+      };
+    }
     default:
       throw new Error(`Unknown protocol: ${(input as { protocol?: string }).protocol}`);
   }
@@ -1608,6 +1650,23 @@ export async function testProviderConnection(
       model,
       detail: validated.error ?? '',
     };
+  }
+
+  const awsProfile = typeof normalizedInput.awsProfile === 'string'
+    ? normalizedInput.awsProfile.trim()
+    : '';
+  if (normalizedInput.protocol === 'bedrock' && awsProfile) {
+    // Credential-chain mode has no bearer to send: the AWS CLI resolves the
+    // profile (and drives the browser SSO login when the token expired) and
+    // runs the smoke prompt with SigV4 on our behalf.
+    return testBedrockProfileConnection({
+      profile: awsProfile,
+      region: resolveBedrockRegion(normalizedInput.baseUrl),
+      model,
+      baseUrl: normalizedInput.baseUrl,
+      signal: input.signal,
+      timeoutMs: providerTimeoutMs() + SSO_LOGIN_BUDGET_MS,
+    });
   }
 
   if (normalizedInput.protocol === 'google') {

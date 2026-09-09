@@ -536,6 +536,13 @@ export interface Dict {
   'settings.azureDeploymentModelHint': string;
   'settings.azureModelFetchHint': string;
   'settings.apiVersion': string;
+  'settings.bedrockAuthMode': string;
+  'settings.bedrockAuthApiKey': string;
+  'settings.bedrockAuthProfile': string;
+  'settings.bedrockProfile': string;
+  'settings.bedrockProfileHint': string;
+  'settings.bedrockRegionHint': string;
+  'settings.bedrockRegionUnknownHint': string;
   'settings.byokImageModel': string;
   'settings.byokVideoModel': string;
   'settings.byokVideoI2vHint': string;

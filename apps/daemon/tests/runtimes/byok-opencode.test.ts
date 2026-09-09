@@ -428,3 +428,97 @@ describe('byok-opencode runtime config', () => {
     expect(provider?.options).not.toHaveProperty('apiKey');
   });
 });
+
+describe('byok-opencode Bedrock provider config', () => {
+  it('runs Bedrock under OpenCode\'s own amazon-bedrock provider id in API-key mode', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSKbedrock-key',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.amazonaws.com',
+      },
+      'global.anthropic.claude-sonnet-5',
+    );
+    expect(config).not.toBeNull();
+    expect(config?.providerId).toBe('amazon-bedrock');
+    expect(config?.modelId).toBe('amazon-bedrock/global.anthropic.claude-sonnet-5');
+    // The bearer token travels through the environment OpenCode's loader reads,
+    // never through the JSON config; the region comes from the endpoint host.
+    expect(config?.env).toEqual({
+      AWS_REGION: 'eu-west-1',
+      AWS_BEARER_TOKEN_BEDROCK: 'ABSKbedrock-key',
+    });
+    expect(JSON.stringify(config?.config)).not.toContain('ABSKbedrock-key');
+    expect(config?.config).toMatchObject({
+      provider: {
+        'amazon-bedrock': {
+          npm: '@ai-sdk/amazon-bedrock',
+          options: { region: 'eu-west-1' },
+          models: { 'global.anthropic.claude-sonnet-5': expect.any(Object) },
+        },
+      },
+    });
+    const options = (config?.config as { provider: Record<string, { options: Record<string, unknown> }> })
+      .provider['amazon-bedrock']?.options ?? {};
+    expect(options.endpoint).toBeUndefined();
+    expect(options.profile).toBeUndefined();
+  });
+
+  it('passes the AWS profile to OpenCode and exports no bearer token in profile mode', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: '',
+        awsProfile: 'sandbox',
+        baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com',
+        requiresApiKey: false,
+      },
+      'amazon.nova-lite-v1:0',
+    );
+    expect(config?.env).toEqual({ AWS_REGION: 'us-east-1' });
+    expect(config?.config).toMatchObject({
+      provider: {
+        'amazon-bedrock': { options: { region: 'us-east-1', profile: 'sandbox' } },
+      },
+    });
+  });
+
+  it('forwards a custom Bedrock endpoint (VPC endpoint) and keeps its region', () => {
+    const config = buildOpenCodeByokProviderConfig(
+      {
+        protocol: 'bedrock',
+        apiKey: 'ABSK',
+        baseUrl: 'https://bedrock-runtime.eu-west-1.vpce-0abc123.amazonaws.com/',
+      },
+      'amazon.nova-lite-v1:0',
+    );
+    expect(config?.config).toMatchObject({
+      provider: {
+        'amazon-bedrock': {
+          options: {
+            region: 'eu-west-1',
+            endpoint: 'https://bedrock-runtime.eu-west-1.vpce-0abc123.amazonaws.com',
+          },
+        },
+      },
+    });
+  });
+
+  it('rejects a Bedrock config with neither a key nor a profile', () => {
+    expect(
+      buildOpenCodeByokProviderConfig(
+        { protocol: 'bedrock', apiKey: '', baseUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com' },
+        'amazon.nova-lite-v1:0',
+      ),
+    ).toBeNull();
+  });
+
+  it('does not double-prefix an already qualified amazon-bedrock model id', () => {
+    expect(opencodeByokModelId('amazon-bedrock/amazon.nova-lite-v1:0')).toBe(
+      'amazon-bedrock/amazon.nova-lite-v1:0',
+    );
+    expect(opencodeByokModelId('amazon.nova-lite-v1:0', 'bedrock')).toBe(
+      'amazon-bedrock/amazon.nova-lite-v1:0',
+    );
+  });
+});

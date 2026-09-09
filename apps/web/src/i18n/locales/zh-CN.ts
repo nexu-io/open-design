@@ -596,6 +596,13 @@ export const zhCN: Dict = {
   "settings.azureModelFetchHint":
     "填写 Azure resource 里的部署名称。Azure deployment 目前无法自动拉取。",
   "settings.apiVersion": "API 版本",
+  "settings.bedrockAuthMode": "身份验证",
+  "settings.bedrockAuthApiKey": "Bedrock API 密钥",
+  "settings.bedrockAuthProfile": "AWS 配置文件",
+  "settings.bedrockProfile": "AWS 配置文件名称",
+  "settings.bedrockProfileHint": "来自 ~/.aws/config 的命名配置文件。对于 IAM Identity Center (SSO) 配置文件，会话过期时“测试连接”会在浏览器中打开登录。需要 AWS CLI v2。",
+  "settings.bedrockRegionHint": "区域 {region} 从端点 URL 中读取。",
+  "settings.bedrockRegionUnknownHint": "端点 URL 不包含区域，默认使用 {region}。",
   "settings.byokImageModel": "图片生成模型",
   "settings.byokVideoModel": "视频生成模型",
   "settings.byokVideoI2vHint":
