@@ -58,7 +58,7 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
         mode = "hot";
       }
     }
-    resolved.push({ ...entry, mode });
+    resolved.push({ ...entry, mode, ...(entry.shell === "electron" ? { base_workload: `electron_base_${entry.target.replaceAll("-", "_")}` } : {}) });
   }
   const topology = { active: resolved, deferred, data };
   // Convergence requires a complete workload/runner declaration, even for
@@ -79,9 +79,12 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
   })) };
   const capsuleMatrix = { include: platformMatrix.include.map(entry => ({ ...entry, workload: `electron_capsule_${entry.target.replaceAll("-", "_")}` })) };
   for (const entry of [...active, ...deferred].filter(entry => entry.shell === "electron")) {
-    const workload = `electron_capsule_${entry.target.replaceAll("-", "_")}`;
-    if (workloads.has(workload)) throw new Error("duplicate release topology target or workload");
-    scope.enabled[workload] = active.includes(entry);
+    for (const product of ["capsule", "base"]) {
+      const workload = `electron_${product}_${entry.target.replaceAll("-", "_")}`;
+      if (workloads.has(workload)) throw new Error("duplicate release topology target or workload");
+      workloads.add(workload);
+      scope.enabled[workload] = active.includes(entry);
+    }
   }
   await writeObject(join(input.output, "scope.json"), scope);
   return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, validationMatrix, platformMatrix, capsuleMatrix, dataMatrix, topology, scope, runners: runnerPlan };

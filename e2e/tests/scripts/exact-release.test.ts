@@ -155,6 +155,17 @@ describe("exact Electron release topology", () => {
       } } },
     }));
     const event = join(root, "event.json");
+    const baseWorkload = "electron_base_darwin_arm64";
+    expect(planned.workloads[baseWorkload].run).toBe(true);
+    expect(planned.workloads.electron_base_win32_x64.run).toBe(false);
+    await mkdir(join(products, baseWorkload));
+    await writeFile(join(products, baseWorkload, "product-manifest.json"), JSON.stringify({
+      workload: baseWorkload, digest: planned.workloads[baseWorkload].digest,
+      executionClass: planned.workloads[baseWorkload].executionClass,
+      products: { base: { type: "job", source: "fixture-base", data: {
+        id: "electron.base.build", identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64",
+      } } },
+    }));
     await writeFile(event, JSON.stringify({ repository: { id: 1 } }));
     const handoff = await run("python3", [...common, "handoff", "--pending", pending, "--products-root", products,
       "--handoff-root", join(root, "handoff")], { cwd: workspaceRoot, env: { ...env,
@@ -162,7 +173,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(13);
+    expect(candidate.results).toHaveLength(14);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -191,6 +202,14 @@ describe("exact Electron release topology", () => {
     expect(scene).toContain("needs: [plan, capsule]");
     expect(scene).toContain('--capsule-content "$RUNNER_TEMP/capsules/$TARGET/capsule-content.json"');
     expect(scene).toContain('--capsule-archive "$RUNNER_TEMP/capsules/$TARGET/capsule.zip"');
+    for (const command of ["base restore", "base pack", "build base", "base contribute"]) expect(scene).toContain(`exact-release-control.mjs" ${command}`);
+    expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
+    expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
+    expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/products");
+    const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
+    expect(distribution).toContain('exact-release-control.mjs" base unpack');
+    expect(distribution).toContain('--base-receipt "$RUNNER_TEMP/base/base-build-receipt.json"');
+    expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
   });
 
   it("builds or restores each data group without bundling app runtimes and passes the complete directory to prepare", async () => {
