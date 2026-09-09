@@ -124,19 +124,39 @@ it("dispatches independent platform builds and rejects unrelated policy or Capsu
 
 it("builds one Closure data resource without requiring Shell, platform or release identity", async () => {
   const f = await fixture();
-  const pkg = join(f.root, "tools/release/node_modules/@open-design/closure");
-  await mkdir(pkg, { recursive: true });
-  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "@open-design/closure", type: "module", exports: { "./build-resources": "./build.mjs" } }));
-  await writeFile(join(pkg, "build.mjs"), "export async function buildClosureDataResource(request) { return { request }; }\n");
+  await mkdir(join(f.root, "design-systems"));
+  await writeFile(join(f.root, "design-systems/input.txt"), "data");
   const output = join(f.root, "resource"), receipt = join(f.root, "resource.json");
   const args = ["build", "resource", "--root", f.root, "--resource-id", "design-systems", "--output", output, "--receipt", receipt];
   await f.invoke(args);
-  expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "closure.data-resource.build",
-    resource: { request: { id: "design-systems", workspaceRoot: f.root, outputDirectory: output } } });
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toMatchObject({ schemaVersion: 1, operation: "closure.data-resource.build",
+    resource: { id: "design-systems", entrypoint: "resource.json" } });
   await expect(f.invoke([...args, "--shell", "electron"])).rejects.toThrow("resource build does not accept --shell");
   await expect(f.invoke([...args, "--target", "darwin-arm64"])).rejects.toThrow("resource build does not accept --target");
 });
 
+
+it("builds a selected resource batch without workspace packages and keeps independent contributions", async () => {
+  const f = await fixture();
+  for (const id of ["craft", "skills"]) {
+    await mkdir(join(f.root, id)); await writeFile(join(f.root, id, "input.txt"), id);
+  }
+  const output = join(f.root, "batch"), receipt = join(f.root, "batch.json");
+  const args = ["resource", "build", "--root", f.root, "--resource-ids", '["craft","skills"]', "--output", output, "--receipt", receipt];
+  await f.invoke(args);
+  const result = JSON.parse(await readFile(receipt, "utf8"));
+  expect(result.resources.map((item: { resourceId: string }) => item.resourceId)).toEqual(["craft", "skills"]);
+  for (const id of ["craft", "skills"]) {
+    const contribution = JSON.parse(await readFile(join(output, "contributions", id, "artifact/resource-receipt.json"), "utf8"));
+    expect(contribution.resource.id).toBe(id);
+    expect(contribution.resource.path).toBeUndefined();
+  }
+  await expect(f.invoke(args.map(value => value === '["craft","skills"]' ? '["craft","craft"]' : value))).rejects.toThrow("unique array");
+  const failedReceipt = join(f.root, "failed.json");
+  await expect(f.invoke(args.map(value => value === '["craft","skills"]' ? '["frames"]' : value === receipt ? failedReceipt : value)))
+    .rejects.toThrow("resource.build.failed");
+  await expect(readFile(failedReceipt)).rejects.toMatchObject({ code: "ENOENT" });
+});
 
 it("stages a real data product through the public artifact export command", async () => {
   const f = await fixture();

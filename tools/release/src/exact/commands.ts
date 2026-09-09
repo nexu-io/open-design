@@ -8,7 +8,7 @@ import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifyScen
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene, buildReleaseSceneInputs } from "./native-build.ts";
-import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
+import { buildReleaseDataResource, buildReleaseDataResources, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { exportDataResource, importDataResource } from "./resource-artifact.ts";
 import { exportPlatform, importPlatform } from "./platform-artifact.ts";
 import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
@@ -301,12 +301,22 @@ export function registerExactCommands(cli: CAC): void {
   }
 
   cli.command("resource <operation>", "Export or import an independently verified data resource")
+    .option("--root <directory>", "Source data checkout (build)")
+    .option("--resource-ids <json>", "Selected resource IDs as a JSON array (build)")
     .option("--resource-id <id>", "Public Closure data resource group")
     .option("--output <directory>", "New resource directory")
     .option("--resource-receipt <file>", "Business build receipt (export)")
     .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
     .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
     .action(async (operation: string, options: Options) => {
+      if (operation === "build") {
+        const allowed = new Set(["root", "resourceIds", "output", "receipt", "--"]);
+        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`resource batch build does not accept --${key}`);
+        await buildReleaseDataResources({ root: required(options, "root"), resourceIds: JSON.parse(required(options, "resourceIds")),
+          output: required(options, "output"), receipt: required(options, "receipt") });
+        return;
+      }
+      if (options.resourceIds != null || options.root != null) throw new Error("--root and --resource-ids require resource build");
       const common = { resourceId: required(options, "resourceId"), output: required(options, "output") };
       const result = operation === "import" ? await importDataResource({ ...common, descriptor: required(options, "descriptor") })
         : operation === "export" ? await exportDataResource({ ...common, resourceReceipt: required(options, "resourceReceipt") })
