@@ -27,22 +27,31 @@ beforeEach(() => {
 function fixture() {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const envelope = signDocument(manifest, [{ keyId: "release", privateKey }]);
-  const candidate = { candidateId: "1.0.0-betahyx.2", head: { exact: "selected-head" } };
+  const metadata = { metadata: { releaseVersion: "1.0.0-betahyx.2" } };
+  const metadataBytes = Buffer.from(canonicalJson(metadata));
+  const candidate = { candidateId: "1.0.0-betahyx.2", head: { head: { lanes: { content: {
+    sha256: sha256Hex(metadataBytes), size: metadataBytes.length,
+  } } } } };
   const feed = { validateCandidate: vi.fn(value => value), readCapsule: vi.fn(async () => envelope),
     prepareCapsule: vi.fn(async () => { calls.events.push("prepare-capsule-bytes"); return { envelope, root: "/exact-capsule" }; }) };
   const state = { revision: 8, prepared: generationId, active: "f".repeat(64), activationAttempt: null };
-  const store = { readState: vi.fn(async () => state), authorizePrepared: vi.fn(async () => { calls.events.push("arm-closure"); }) };
+  const store = { readState: vi.fn(async () => state), readGenerationMetadata: vi.fn(async () => metadata),
+    authorizePrepared: vi.fn(async () => { calls.events.push("arm-closure"); }) };
   const input = { feed, store, runtimeRoot: "/runtime", channel: "betahyx", carrier,
     shell: carrier.shell, trustedKeys: { release: publicKey } } as unknown as ConstructorParameters<typeof ElectronCapsuleUpdate>[0];
   return { subject: new ElectronCapsuleUpdate(input), input, feed, store, state, envelope,
     candidate: candidate as unknown as Parameters<ElectronCapsuleUpdate["prepare"]>[0] };
 }
 
-it("prepares both lanes from the retained head before arming either authority", async () => {
+it("prepares both lanes without authorizing either, then arms the exact candidate on restart", async () => {
   const { subject, candidate, envelope, store } = fixture();
   const handoff = await subject.prepare(candidate);
   expect(calls.prepare).toHaveBeenCalledWith(candidate.head, "observe");
-  expect(calls.events).toEqual(["prepare-capsule-bytes", "prepare-all-closure-resources", "arm-capsule", "arm-closure"]);
+  expect(calls.events).toEqual(["prepare-capsule-bytes", "prepare-all-closure-resources"]);
+  expect(calls.arm).not.toHaveBeenCalled();
+  expect(store.authorizePrepared).not.toHaveBeenCalled();
+  await subject.arm(candidate, handoff);
+  expect(calls.events).toEqual(["prepare-capsule-bytes", "prepare-all-closure-resources", "prepare-capsule-bytes", "arm-capsule", "arm-closure"]);
   expect(store.authorizePrepared).toHaveBeenCalledWith(generationId, "silent", "update-policy", 8);
   expect(handoff).toMatchObject({ interaction: "restart-and-activate", activation: { generationId, targetDigest: sha256Hex(canonicalJson(envelope)) } });
   expect(handoff).not.toHaveProperty("artifact");
@@ -69,9 +78,10 @@ it("never arms partial or incompatible Closure preparation", async () => {
 
 it("keeps the first arm as recovery evidence when the second arm conflicts", async () => {
   const { subject, candidate, store } = fixture();
+  const handoff = await subject.prepare(candidate);
   store.authorizePrepared.mockRejectedValueOnce(new Error("stale Closure revision"));
-  await expect(subject.prepare(candidate)).rejects.toThrow("stale Closure revision");
-  expect(calls.events).toEqual(["prepare-capsule-bytes", "prepare-all-closure-resources", "arm-capsule"]);
+  await expect(subject.arm(candidate, handoff)).rejects.toThrow("stale Closure revision");
+  expect(calls.events).toEqual(["prepare-capsule-bytes", "prepare-all-closure-resources", "prepare-capsule-bytes", "arm-capsule"]);
   expect(calls.arm).toHaveBeenCalledOnce();
 });
 
@@ -79,8 +89,20 @@ it("does not rearm a healthy Closure during a Capsule-only update", async () => 
   const { subject, candidate, state, store } = fixture();
   state.active = generationId;
   calls.prepare.mockResolvedValue({ status: "current", generationId });
-  await subject.prepare(candidate);
+  const handoff = await subject.prepare(candidate);
+  await subject.arm(candidate, handoff);
   expect(calls.arm).toHaveBeenCalledOnce();
+  expect(store.authorizePrepared).not.toHaveBeenCalled();
+});
+
+it("rejects a changed handoff or retained Closure before any activation write", async () => {
+  const { subject, candidate, store } = fixture();
+  const handoff = await subject.prepare(candidate);
+  await expect(subject.arm(candidate, { ...handoff, activation: { ...handoff.activation, targetDigest: "0".repeat(64) } }))
+    .rejects.toThrow("prepared candidate");
+  store.readGenerationMetadata.mockResolvedValue({ metadata: { releaseVersion: "1.0.0-betahyx.3" } });
+  await expect(subject.arm(candidate, handoff)).rejects.toThrow("selected head");
+  expect(calls.arm).not.toHaveBeenCalled();
   expect(store.authorizePrepared).not.toHaveBeenCalled();
 });
 

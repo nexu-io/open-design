@@ -96,6 +96,11 @@ export class ElectronStandaloneHostUpdater {
         return result("blocked", blocked);
       }
       try {
+        if (restart && this.release?.capsule != null && snapshot.handoff.interaction === "restart-and-activate") {
+          const candidate = await this.release.candidates.read();
+          if (candidate == null || candidate.candidateId !== snapshot.candidateId) throw new Error("Capsule restart candidate is unavailable or stale");
+          await this.release.capsule.arm(candidate, snapshot.handoff);
+        }
         const applying = await this.ledger.update({
           expectedRevision: snapshot.revision,
           state: "applying",

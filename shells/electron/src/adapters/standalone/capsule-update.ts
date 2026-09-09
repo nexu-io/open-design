@@ -51,6 +51,31 @@ export class ElectronCapsuleUpdate {
     const prepared = await updater.prepareFromHead(candidate.head, "observe");
     if (prepared.status === "shell-reinstall-required") throw new Error("selected Capsule cannot satisfy the exact Closure requirement");
     const generationId = prepared.status === "current" ? prepared.generationId : prepared.generation.id;
+    return { interaction: "restart-and-activate", releaseVersion: candidate.candidateId,
+      target: this.input.carrier.target, shell,
+      activation: { targetDigest: sha256Hex(canonicalJson(capsule.envelope)), generationId } };
+  }
+
+  /** Called only after an authorized restart acquires the shared transition.
+   * Downloading a candidate must not authorize its activation on next launch. */
+  async arm(candidateInput: ElectronReleaseExactCandidate, handoff: StandaloneShellRestartHandoff): Promise<void> {
+    const candidate = this.input.feed.validateCandidate(candidateInput);
+    const selection = await readElectronCapsuleSelection(this.input.runtimeRoot);
+    if (selection.pending != null) throw new Error("Capsule selection is already armed; complete startup or explicit recovery first");
+    const capsule = await this.input.feed.prepareCapsule(candidate);
+    const shell = resolveElectronCompositeShellIdentity(capsule.envelope.document, this.input.carrier);
+    if (handoff.releaseVersion !== candidate.candidateId || handoff.target !== this.input.carrier.target
+      || canonicalJson(handoff.shell) !== canonicalJson(shell)
+      || handoff.activation.targetDigest !== sha256Hex(canonicalJson(capsule.envelope))) {
+      throw new Error("Capsule restart differs from its prepared candidate");
+    }
+    const generationId = handoff.activation.generationId;
+    const metadata = await this.input.store.readGenerationMetadata(generationId, this.input.trustedKeys);
+    const bytes = Buffer.from(canonicalJson(metadata));
+    const lane = candidate.head.head.lanes.content;
+    if (lane == null || lane.sha256 !== sha256Hex(bytes) || lane.size !== bytes.length) {
+      throw new Error("Capsule restart Closure differs from its selected head");
+    }
     const state = await this.input.store.readState();
     if (state.activationAttempt != null) throw new Error("Closure startup is incomplete; explicit recovery required");
     if (state.active !== generationId && state.prepared !== generationId) throw new Error("prepared Closure changed before Capsule arm");
@@ -63,8 +88,5 @@ export class ElectronCapsuleUpdate {
       // closed until explicit exact recovery repairs the pair.
       await this.input.store.authorizePrepared(generationId, "silent", "update-policy", state.revision);
     }
-    return { interaction: "restart-and-activate", releaseVersion: candidate.candidateId,
-      target: this.input.carrier.target, shell,
-      activation: { targetDigest: sha256Hex(canonicalJson(capsule.envelope)), generationId } };
   }
 }

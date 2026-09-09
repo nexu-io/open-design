@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { initialSharedLifecycleState, reduceSharedLifecycleState, SHELL_UPDATE_ALGEBRA, StandaloneHostControlClient, StandaloneHostRuntime,
   type StandaloneShellUpdateHandoff } from "@open-design/standalone";
@@ -60,16 +60,43 @@ describe("Electron Standalone host updater", () => {
     const lifecycle = new StandaloneHostLifecycle(scope, { clock: () => new Date(now), statePort: {
       async read() { return shared; }, async write(value) { shared = value; },
     } });
-    const updater = new ElectronStandaloneHostUpdater("electron", publicLifecycle(lifecycle), ledger);
+    const candidate = { candidateId: "candidate-020" };
+    const arm = vi.fn(async () => {
+      expect(shared.transition).toMatchObject({ kind: "content-restart", phase: "reserved" });
+      expect((await ledger.read()).state).toBe("ready");
+    });
+    const release = { candidates: { read: async () => candidate }, capsule: { completed: async () => null, arm } } as unknown as
+      NonNullable<ConstructorParameters<typeof ElectronStandaloneHostUpdater>[3]>;
+    const updater = new ElectronStandaloneHostUpdater("electron", publicLifecycle(lifecycle), ledger, release);
     expect((await updater.invoke("install")).outcome).toBe("unsupported");
     const initial = await updater.invoke("restart");
     if (terminal) {
       expect(initial).toMatchObject({ outcome: "blocked", snapshot: { blockedBy: [{ attachmentId: "terminal" }] } });
       expect(shared.transition).toBeNull();
+      expect(arm).not.toHaveBeenCalled();
       expect((await updater.invoke("force-stop-and-restart")).outcome).toBe("accepted");
     } else expect(initial.outcome).toBe("accepted");
     expect(shared.transition).toMatchObject({ kind: "content-restart", phase: "reserved" });
     expect((await ledger.read()).handoff).toEqual(selectedHandoff);
+    expect(arm).toHaveBeenCalledExactlyOnceWith(candidate, selectedHandoff);
+  });
+
+  it("releases the reservation when candidate validation fails before arming", async () => {
+    const root = await mkdtemp(join(tmpdir(), "electron-host-stale-restart-")); roots.push(root);
+    const selectedHandoff = { interaction: "restart-and-activate" as const, releaseVersion: handoff.releaseVersion,
+      target: handoff.target, shell: { ...handoff.shell, digest: "c".repeat(64) },
+      activation: { targetDigest: "d".repeat(64), generationId: "e".repeat(64) } };
+    const ledger = await readyLedger(root, selectedHandoff);
+    const lifecycle = new StandaloneHostLifecycle(scope);
+    const arm = vi.fn();
+    const release = { candidates: { read: async () => null }, capsule: { completed: async () => null, arm } } as unknown as
+      NonNullable<ConstructorParameters<typeof ElectronStandaloneHostUpdater>[3]>;
+    const updater = new ElectronStandaloneHostUpdater("electron", publicLifecycle(lifecycle), ledger, release);
+    await expect(updater.invoke("restart")).rejects.toThrow("candidate is unavailable or stale");
+    expect(arm).not.toHaveBeenCalled();
+    expect((await ledger.read()).state).toBe("ready");
+    const next = await lifecycle.beginTransition("content-restart", { attemptId: "next-restart" });
+    expect(next.state).toBe("acquired");
   });
   it("durably reserves a Shell install and leaves physical retirement to the Shell continuation", async () => {
     const root = await mkdtemp(join(tmpdir(), "electron-host-updater-"));
