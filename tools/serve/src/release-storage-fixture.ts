@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { createServer as createSecureServer } from "node:https";
 
 export type ReleaseStorageFixtureOptions = {
   host?: string;
   port?: number;
+  tls?: { cert: string; key: string };
 };
 
 export type ReleaseStorageFixtureInfo = {
@@ -44,10 +46,10 @@ function close(server: Server): Promise<void> {
   });
 }
 
-function serverOrigin(server: Server): string {
+function serverOrigin(server: Server, secure: boolean): string {
   const address = server.address();
   if (address == null || typeof address === "string") throw new Error("release storage fixture did not listen on TCP");
-  return `http://127.0.0.1:${address.port}`;
+  return `${secure ? "https" : "http"}://127.0.0.1:${address.port}`;
 }
 
 function readBody(request: IncomingMessage): Promise<Buffer> {
@@ -86,7 +88,7 @@ export async function startReleaseStorageFixtureServer(
   const port = options.port ?? 0;
   const objects = new Map<string, StoredObject>();
 
-  const server = createServer((request, response) => {
+  const handler = (request: IncomingMessage, response: ServerResponse) => {
     void (async () => {
       const key = objectKeyFromRequest(request, response);
       if (key == null) return;
@@ -140,10 +142,11 @@ export async function startReleaseStorageFixtureServer(
       response.statusCode = 500;
       response.end(error instanceof Error ? error.message : String(error));
     });
-  });
+  };
+  const server = options.tls == null ? createServer(handler) : createSecureServer(options.tls, handler);
 
   await listen(server, port, host);
-  const origin = serverOrigin(server);
+  const origin = serverOrigin(server, options.tls != null);
 
   return {
     close: () => close(server),

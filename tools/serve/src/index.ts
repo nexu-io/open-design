@@ -33,6 +33,8 @@ type CliOptions = {
   standaloneVersion?: string;
   version?: string;
   token?: string;
+  tlsCert?: string;
+  tlsKey?: string;
 };
 
 function parseStandaloneResources(value: string | string[] | undefined) {
@@ -93,6 +95,11 @@ function parsePlatform(value: string | undefined): "mac" | "win" {
 }
 
 async function start(service: string, options: CliOptions): Promise<void> {
+  if (options.tlsCert != null || options.tlsKey != null) {
+    if (service !== "release-storage" || !options.tlsCert || !options.tlsKey) {
+      throw new Error("--tls-cert and --tls-key require release-storage and must be supplied together");
+    }
+  }
   if (service === "standalone-exact") {
     if (options.closurePath == null) throw new Error("--closure-path is required for standalone-exact");
     if (options.launcherPath == null) throw new Error("--launcher-path is required for standalone-exact");
@@ -126,6 +133,9 @@ async function start(service: string, options: CliOptions): Promise<void> {
     const server = await startReleaseStorageFixtureServer({
       host: options.host,
       port: parsePort(options.port),
+      ...(options.tlsCert == null ? {} : { tls: {
+        cert: await readFile(resolve(options.tlsCert), "utf8"), key: await readFile(resolve(options.tlsKey!), "utf8"),
+      } }),
     });
     if (options.json === true) {
       printJson(server.info);
@@ -214,6 +224,8 @@ cli
   .option("--launcher-path <path>", "standalone-exact: generation launcher artifact")
   .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
   .option("--token <token>", "collab-cloud: shared bearer token clients must present")
+  .option("--tls-cert <file>", "release-storage: PEM server certificate; pair with --tls-key")
+  .option("--tls-key <file>", "release-storage: PEM server private key; pair with --tls-cert")
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--release-version <version>", "standalone-exact: channel release version")
   .option("--resource <json>", "standalone-exact: repeatable signed zip resource descriptor")

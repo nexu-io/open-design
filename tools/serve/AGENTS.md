@@ -5,6 +5,11 @@ Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns small lo
 ## Owns
 
 - `tools-serve` CLI.
+- `release-storage` supports explicit `--tls-cert <pem> --tls-key <pem>` for
+  local HTTPS release acceptance. Both flags are required together. Callers
+  trust their temporary CA through standard client configuration such as
+  `NODE_EXTRA_CA_CERTS`; never disable certificate verification or weaken
+  production HTTPS checks for a fixture.
 - Local static updater fixtures for desktop update IPC and packaged-runtime debugging.
 - The `standalone-exact-client` export is the scoped client for this tool's loopback fixture protocol. It uses `packages/download` for verified file transfers and gives tools-dev/tools-pack local file inputs; it must not know Electron identity or implement production updates, installation, or generation state.
 - `collab-cloud` fixture — a self-contained, in-memory stand-in for the C-lane
