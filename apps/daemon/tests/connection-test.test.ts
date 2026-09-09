@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Socks5ProxyAgent } from 'undici';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
 
 const { resolveSystemProxyEnvMock } = vi.hoisted(() => ({
@@ -219,7 +219,22 @@ afterEach(() => {
 
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
+// HTTP-mocked provider tests must also own DNS. Real resolvers can return
+// proxy/private addresses, correctly triggering production SSRF protection.
+// Individual rebinding/timeout cases override this public-address fixture.
+function isolateProviderDns() {
+  let restore: () => void;
+  beforeEach(() => {
+    const spy = vi.spyOn(dnsPromises, 'lookup').mockImplementation((async () => [
+      { address: '93.184.216.34', family: 4 },
+    ]) as unknown as typeof dnsPromises.lookup);
+    restore = () => spy.mockRestore();
+  });
+  afterEach(() => restore());
+}
+
 describe('POST /api/provider/models', () => {
+  isolateProviderDns();
   it('lists OpenAI-compatible models from /models', async () => {
     const fetchMock = passThroughOrUpstream((url, init) => {
       expect(url).toBe('https://api.openai.com/v1/models');
@@ -687,6 +702,7 @@ describe('POST /api/provider/models', () => {
 });
 
 describe('POST /api/test/connection provider mode', () => {
+  isolateProviderDns();
   it('reports success and returns the model sample for an Anthropic 200', async () => {
     vi.stubGlobal(
       'fetch',
