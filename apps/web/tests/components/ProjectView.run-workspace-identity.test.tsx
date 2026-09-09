@@ -602,7 +602,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     comments.resolve([]);
   });
 
-  it('clears the established transcript when request authority changes and reload fails', async () => {
+  it('retains the same readable principal transcript during refresh and clears it if reload fails', async () => {
     window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
     const persistedMessage: ChatMessage = {
       id: 'persisted-assistant',
@@ -643,15 +643,24 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     }));
 
     await waitFor(() => expect(mockedListMessages).toHaveBeenCalledTimes(2));
-    expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([]);
-
-    await act(async () => {
-      reload.reject(new Error('workspace directory unavailable'));
-      await reload.promise.catch(() => undefined);
-    });
+    try {
+      // Scope confirms the same active workspace member with a different role.
+      // Keep their history visible, but wait for the fresh read before sending.
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([persistedMessage]);
+      expect(view.getByTestId('normal-send')).toBeDisabled();
+      fireEvent.click(view.getByTestId('normal-send'));
+      expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => {
+        reload.reject(new Error('workspace directory unavailable'));
+        await reload.promise.catch(() => undefined);
+      });
+    }
 
     expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([]);
     expect(chatPaneSpy.mock.calls.at(-1)?.[0].messagesConversationId).toBeNull();
+    expect(view.getByTestId('normal-send')).toBeDisabled();
+    fireEvent.click(view.getByTestId('normal-send'));
     expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
   });
 

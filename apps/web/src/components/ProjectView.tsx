@@ -77,7 +77,9 @@ import {
 } from '../runtime/strategy-question-continuation';
 import {
   isTodoWriteToolName,
+  isWorkspaceLifecycleReadable,
   workspaceBillingAuthorityContext,
+  workspacePrincipalKey,
   type AmrWalletSnapshot,
   type ByokChatProviderConfig,
   type ByokMediaDefaults,
@@ -2308,6 +2310,14 @@ export function ProjectView({
   const projectRunBillingContext = projectWorkspaceContext(
     projectWorkspaceScopeState.scope,
   );
+  const readableTranscriptPrincipalRef = useRef<string | null>(null);
+  readableTranscriptPrincipalRef.current =
+    !projectWorkspaceScopeState.loading
+    && !projectWorkspaceScopeState.failure
+    && projectRunBillingContext?.memberStatus === 'active'
+    && isWorkspaceLifecycleReadable(projectRunBillingContext.lifecycleState)
+      ? workspacePrincipalKey(projectRunBillingContext)
+      : null;
   // A pending first scope read may use the exact ambient caller only when
   // runWorkspaceIdentity has already proven it matches project.workspaceId.
   // That same safe witness is valid for the balance preflight. Settled
@@ -3456,6 +3466,11 @@ export function ProjectView({
   // correctly gate new-conversation creation even during async loads.
   const messagesConversationIdRef = useRef<string | null>(null);
   const messagesAuthorityKeyRef = useRef<string | null>(null);
+  const loadedTranscriptRef = useRef<{
+    projectId: string;
+    conversationId: string;
+    principalKey: string | null;
+  } | null>(null);
   const creatingConversationRef = useRef(false);
   // Last conversation id this view pushed into the URL. Lets the
   // route -> active-conversation sync tell a genuine external navigation
@@ -3525,10 +3540,14 @@ export function ProjectView({
       && messagesConversationId !== activeConversationId
       && failedMessagesConversationId !== activeConversationId,
   );
+  // A readable transcript can stay visible during an authority refresh, but
+  // sending and recovery still wait for the new authoritative read to settle.
+  const currentConversationReadPending = currentConversationLoading
+    || Boolean(activeConversationId && !messagesInitialized);
   const currentConversationStreaming = streaming && streamingConversationId === activeConversationId;
   const currentConversationControlStreaming =
     currentConversationStreaming || currentConversationHasProgrammaticBrandExtractionRun;
-  const currentConversationBusy = currentConversationLoading
+  const currentConversationBusy = currentConversationReadPending
     || currentConversationStreaming
     || currentConversationHasActiveRun;
   const currentConversationAwaitingActiveRunAttach =
@@ -3537,7 +3556,7 @@ export function ProjectView({
     && !currentConversationHasProgrammaticBrandExtractionRun;
   const currentConversationSendDisabled = projectMutationReadOnly
     || !projectRunHasBillableAmrPrincipal
-    || currentConversationLoading
+    || currentConversationReadPending
     || failedMessagesConversationId === activeConversationId
     || currentConversationAwaitingActiveRunAttach;
   /**
@@ -3558,7 +3577,7 @@ export function ProjectView({
   });
   const currentConversationActionDisabled = currentConversationActionBlockReason !== null;
   const currentConversationQueueDisabled = projectMutationReadOnly
-    || currentConversationLoading
+    || currentConversationReadPending
     || failedMessagesConversationId === activeConversationId;
 
   const currentConversationQueuedItems = activeConversationId
@@ -3891,6 +3910,7 @@ export function ProjectView({
       setFailedMessagesConversationId(null);
       messagesConversationIdRef.current = null;
       messagesAuthorityKeyRef.current = null;
+      loadedTranscriptRef.current = null;
       setStreaming(false);
       streamingConversationIdRef.current = null;
       setStreamingConversationId(null);
@@ -3899,6 +3919,13 @@ export function ProjectView({
     const reloadingCurrentConversation =
       messagesConversationIdRef.current === activeConversationId
       && messagesAuthorityKeyRef.current === projectRunAuthorityKey;
+    const loadedTranscript = loadedTranscriptRef.current;
+    const preservingLoadedTranscript =
+      messagesConversationIdRef.current === activeConversationId
+      && loadedTranscript?.projectId === project.id
+      && loadedTranscript.conversationId === activeConversationId
+      && loadedTranscript.principalKey !== null
+      && loadedTranscript.principalKey === readableTranscriptPrincipalRef.current;
     const liveReloadMessageIds = new Set<string>();
     if (
       messagesConversationIdRef.current === activeConversationId
@@ -3926,21 +3953,21 @@ export function ProjectView({
     }
     const preservingLiveConversation = liveReloadMessageIds.size > 0;
     // Reset the initialized flag so auto-send waits for this authoritative DB
-    // read to settle before checking messages.length. A same-conversation
-    // authority refresh keeps the prior transcript visible. An authority-key
-    // handoff keeps only the live turn, so its pending read cannot detach the
-    // stream or later replace those rows with an empty snapshot.
+    // read to settle before checking messages.length. A confirmed readable
+    // scope for the same principal may keep already-loaded history visible;
+    // this does not replace the full authority key used for the fresh request.
+    // Other authority handoffs retain only the existing live-turn exception.
     setMessagesInitialized(false);
     let cancelled = false;
     const requestWorkspaceContext = projectRunWorkspaceContextRef.current;
     setFailedMessagesConversationId(null);
     if (!preservingLiveConversation) {
-      setMessagesConversationId(null);
+      if (!preservingLoadedTranscript) setMessagesConversationId(null);
       setStreaming(false);
       streamingConversationIdRef.current = null;
       setStreamingConversationId(null);
     }
-    if (!reloadingCurrentConversation) {
+    if (!reloadingCurrentConversation && !preservingLoadedTranscript) {
       setMessages((current) =>
         preservingLiveConversation
           ? current.filter((message) => liveReloadMessageIds.has(message.id))
@@ -3952,9 +3979,10 @@ export function ProjectView({
       savedArtifactRef.current = null;
     }
     const commentsGeneration = previewCommentsGenerationRef.current;
-    if (!reloadingCurrentConversation && !preservingLiveConversation) {
+    if (!reloadingCurrentConversation && !preservingLiveConversation && !preservingLoadedTranscript) {
       messagesConversationIdRef.current = null;
       messagesAuthorityKeyRef.current = null;
+      loadedTranscriptRef.current = null;
     }
     (async () => {
       try {
@@ -3995,10 +4023,16 @@ export function ProjectView({
         savedArtifactRef.current = null;
         messagesConversationIdRef.current = activeConversationId;
         messagesAuthorityKeyRef.current = projectRunAuthorityKey;
+        loadedTranscriptRef.current = {
+          projectId: project.id,
+          conversationId: activeConversationId,
+          principalKey: workspacePrincipalKey(requestWorkspaceContext),
+        };
         setMessagesConversationId(activeConversationId);
         setFailedMessagesConversationId(null);
       } catch (err) {
         if (cancelled) return;
+        loadedTranscriptRef.current = null;
         const message = err instanceof Error ? err.message : 'Could not load messages for this conversation.';
         if (!reloadingCurrentConversation) {
           setMessages((current) =>
