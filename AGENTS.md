@@ -31,7 +31,7 @@ This file is the single source of truth for agents entering this repository. Rea
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the thin local macOS package build/install/start/stop/logs control plane. It delegates Electron behavior to the public `@open-design/shell-electron/build` and `/lifecycle` APIs.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
-- `tools/release` owns release planning, channel-version lifecycle, metadata, immutable publication, release reports, and notification-facing data contracts.
+- `tools/release` owns release policy, channel-version lifecycle, metadata, immutable publication, release reports, and notification-facing data contracts. Workflow planning, workload identities, cache decisions and result binding belong exclusively to the Python control plane under `.github/scripts/`, not tools-release.
 - `e2e` owns user-level end-to-end smoke tests and Playwright UI automation; read `e2e/AGENTS.md` before editing its tests or commands.
 
 ## Inactive or placeholder directories

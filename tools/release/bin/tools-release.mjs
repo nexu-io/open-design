@@ -7,7 +7,7 @@ import { assertFreshToolBuildFromMeta } from "../../../packages/metatool/src/ind
 
 const entryDir = dirname(fileURLToPath(import.meta.url));
 const toolRoot = resolve(entryDir, "..");
-const distEntry = resolve(toolRoot, "dist/index.mjs");
+const distEntry = resolve(toolRoot, "dist/tools-release");
 
 await assertFreshToolBuildFromMeta(toolRoot);
 await import(pathToFileURL(distEntry).href);

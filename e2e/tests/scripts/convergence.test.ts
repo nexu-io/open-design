@@ -95,12 +95,57 @@ afterEach(() => {
 });
 
 describe("workload convergence", () => {
+  test("bootstraps a tool from a verified blob without Node or workspace dependencies", () => {
+    const fixture = createRepository();
+    const script = `
+import argparse, hashlib, io, json, sys, zipfile
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0, sys.argv[1])
+from convergence import acquire_command, ConfigError
+root = Path(sys.argv[2])
+for scenario in ('valid', 'digest', 'traversal', 'symlink', 'duplicate', 'existing', 'http'):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, 'w') as archive:
+        name = '../escape' if scenario == 'traversal' else 'tools-release'
+        info = zipfile.ZipInfo(name)
+        info.external_attr = (0o120777 if scenario == 'symlink' else 0o100755) << 16
+        archive.writestr(info, b'portable tool')
+        if scenario == 'duplicate': archive.writestr('TOOLS-RELEASE', b'duplicate')
+    body = buffer.getvalue()
+    descriptor = root / (scenario + '.json')
+    descriptor.write_text(json.dumps({'url': ('http' if scenario == 'http' else 'https') + '://cache.example/tool.zip',
+        'sha256': '0' * 64 if scenario == 'digest' else hashlib.sha256(body).hexdigest()}))
+    output = root / scenario
+    if scenario == 'existing':
+        output.mkdir()
+        (output / 'keep').write_text('preserved')
+    response = io.BytesIO(body)
+    response.status = 200
+    with patch('convergence.urllib.request.build_opener') as opener:
+        opener.return_value.open.return_value = response
+        if scenario == 'valid':
+            assert acquire_command(argparse.Namespace(descriptor=descriptor, output=output)) == 0
+            assert (output / 'tools-release').read_bytes() == b'portable tool'
+        else:
+            try: acquire_command(argparse.Namespace(descriptor=descriptor, output=output))
+            except ConfigError: pass
+            else: raise AssertionError('accepted ' + scenario)
+            if scenario == 'existing': assert (output / 'keep').read_text() == 'preserved'
+            else: assert not output.exists()
+    assert not list(root.glob('.tool-artifact-*'))
+assert not (root / 'escape').exists()
+`;
+    execFileSync("python3", ["-c", script, path.dirname(convergenceScript), fixture.root]);
+  });
+
   test("projects execution declarations using only Python and the workflow JSON", () => {
     const fixture = createRepository();
     const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
     const execution = {
       enabled: ["a"], runners: { worker: ["ubuntu-24.04"] },
       matrices: { tool_matrix: { include: [{ workload: "a", target: "neutral", runs_on: "ubuntu-24.04" }] } },
+      inputs: { shells: { shells: [{ shell: "electron", target: "darwin-arm64" }] } },
     };
     config.workflows.ci.execution = execution;
     writeFileSync(fixture.configPath, JSON.stringify(config));
@@ -111,6 +156,7 @@ describe("workload convergence", () => {
     expect(JSON.parse(readFileSync(path.join(output, "scope.json"), "utf8"))).toEqual({ enabled: { a: true, b: false } });
     expect(JSON.parse(readFileSync(path.join(output, "runners.json"), "utf8"))).toEqual(execution.runners);
     expect(JSON.parse(readFileSync(path.join(output, "matrices.json"), "utf8"))).toEqual(execution.matrices);
+    expect(JSON.parse(readFileSync(path.join(output, "inputs/shells.json"), "utf8"))).toEqual(execution.inputs.shells);
     expect(readFileSync(githubOutput, "utf8")).toBe(`tool_matrix=${JSON.stringify(execution.matrices.tool_matrix)}\n`);
     for (const mutate of [
       (value: any) => { value.enabled.push("unknown"); },

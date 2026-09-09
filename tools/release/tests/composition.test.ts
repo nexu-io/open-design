@@ -34,7 +34,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
   vi.stubEnv("OD_EXACT_SIGNING_KEY_ID_NEXT", ""); vi.stubEnv("OD_EXACT_ED25519_PRIVATE_KEY_NEXT", "");
   const scenes = join(root, "scenes"), distributions = join(root, "distributions"); await mkdir(distributions);
   const active = ["terminal", "electron"].map(shell => ({ shell, target: "darwin-arm64" }));
-  const topology = join(root, "topology.json"); await json(topology, { active, deferred: [] });
+  const inventory = join(root, "shells.json"); await json(inventory, { shells: active });
   const baselineCapsule = await capsuleFixture("capsule");
   for (const item of active) {
     const source = join(root, `source-${item.shell}`); await mkdir(source);
@@ -61,7 +61,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
   const platforms = join(root, "platforms");
   await writePlatformFixture(join(platforms, "darwin-arm64"));
   const prepare = ["prepare", "--platforms", platforms, "--policy", policy, "--channel", channel, "--release-version", releaseVersion, "--source-commit", sourceCommit,
-    "--root", sourceRoot, "--topology", topology, "--scenes", scenes, "--standalone-version", "0.1.0", "--output", prepared, "--receipt", prepareReceipt];
+    "--root", sourceRoot, "--shells", inventory, "--scenes", scenes, "--standalone-version", "0.1.0", "--output", prepared, "--receipt", prepareReceipt];
   await expect(command(prepare.map(value => value === channel ? "stable" : value))).rejects.toThrow("binding mismatch");
   expect(fetch).not.toHaveBeenCalled();
   fetch.mockResolvedValueOnce(new Response(null, { status: 503 }));

@@ -5,15 +5,17 @@ not an Electron builder.
 
 The active exact flow is:
 
-1. resolve content identities and accepted baselines;
+1. acquire build products selected by the Python control plane;
 2. prepare signed content and Shell requirements;
 3. finalize release-neutral Shell distribution contributions;
 4. publish immutable objects with readback verification;
 5. collect target-bound acceptance credentials;
 6. compare-and-swap the channel head.
 
-`release-exact` is the only Electron release workflow in this slice, and
-`betahyx` is its isolated Electron delivery channel. The explicit channel and
+`release-exact`, `release-prerelease` and `release-stable` have independent
+workflows and independent JSON plan declarations, with no indirect invocation.
+Only `release-exact` / `betahyx` is authorized for live delivery in this task.
+The explicit channel and
 release version travel together through storage, acceptance, and activation.
 A version such as `0.1.0-betahyx.1` repeats the channel as a defensive naming
 convention; it does not replace the explicit channel field.
@@ -35,11 +37,10 @@ previous compatibility floor requires a verified schema-5 envelope for the same
 channel and unchanged build identity. This does not change generation/state
 schema versions or give Closure a Capsule update protocol.
 
-`exact-control` accepts an `exact.acceptance` request with `schemaVersion: 1`,
-`policyReceipt`, `publishReceipt`, `shellType`, `target`, and `installedRoot`.
-Electron also requires `runtimeLog`; hot acceptance adds `hotAcceptanceReceipt`,
-`standaloneState`, and `standaloneGenerationsRoot`. Terminal uses
-`runtimeProofRoot` for its install/start/status/stop receipts. The collector
+`tools-release acceptance collect` accepts explicit policy, publication, Shell, target and
+installed-root flags. Electron also requires runtime-log evidence; hot acceptance
+adds hot-update, Standalone state and generation evidence. Terminal uses
+runtime proof receipts for its install/start/status/stop lifecycle. The collector
 selects the required target from the published topology and rejects policy
 mismatches, altered installed bytes, and an incomplete latest runtime attempt.
 The resulting credential is evidence binding, not a substitute for executing
@@ -50,11 +51,15 @@ use `resources/channel-versions.json` as the channel-owned base-version
 registry. They do not build or validate Electron artifacts and cannot serve as
 an acceptance path.
 
-The workspace CLI and the relocatable `dist/exact-control.mjs` share the
-`topology`, `scene pack|unpack|import|verify`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
-`baseline fetch|promote` commands. Use explicit flags and consume their receipts;
+The workspace CLI and relocatable executable `dist/tools-release` use the same
+`src/index.ts` entry and public commands: `scene pack|unpack|import|verify`,
+`policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
+`baseline inspect|fetch|promote`. Use explicit flags and consume their receipts;
 workflows must not construct transient JSON requests for these operations.
-The relocatable build runs with Node 24 without a workspace install. Credentials
+Workflows put this executable on PATH and call `tools-release` directly. The
+relocatable release commands run with Node 24 without a workspace install;
+catalog rendering loads its optional browser/native image dependencies only
+when those catalog commands execute. Credentials
 remain environment inputs, never command-line arguments or receipt fields.
 
 `build capsule` produces release-neutral content separately. `build scene` may
@@ -104,7 +109,7 @@ artifact, never a complete resource set or a reusable-result authorization.
 The planner owns build/restore selection; release composition must still verify
 all required resources before producing complete signed content.
 
-The exact plan declares `closure.data.<id>.build` for all nine public data
+Each workflow plan declares independent builds for all nine public data
 groups. Production accepts business inputs only: no plan, pending workload or
 source-identity recomputation. Python owns workload identities and decides which
 producers execute. Production receipts describe actual resources, not plan nodes.
@@ -133,14 +138,19 @@ to miss older, lossy directory artifacts without deleting them.
 `scene import --descriptor <file>` verifies the downloaded ZIP digest and accepts
 only its opaque `scene.tar`. `scene verify` checks the actual target, carrier
 identity and absence of release-owned fields without reading planner state.
-`topology` projects full/hot actions over the workflow's declarative target and
-runner configuration; it does not enable deferred targets or create cache hits.
+Python `execution` projects each workflow's own runner/matrix declarations and
+literal business inputs. `prepare --shells <file>` receives only a Shell/target
+inventory. Python alone computes workload identities, cache decisions and result
+bindings. The release tool is itself a reusable product; Linux Python `acquire`
+bootstraps its verified archive without requiring the tool to restore itself.
+The plan job does not install Node packages or execute tools-release.
 
 `activate` and `baseline promote` accept `--channel-head` for a relocated local
 file. Its bytes must match the original publication receipt: relocation never
 rewrites that receipt or changes its authority.
-Baseline promotion records only the carrier build, distribution and installed
-acceptance identities (plus hot acceptance when explicitly proved). It does not
+Schema-3 baseline promotion records the physical carrier, distribution and
+installed acceptance evidence (plus hot acceptance when explicitly proved).
+It contains no workload identities or cache authorization. It does not
 mark contract/Closure builds or any unit-test node as executed. Those results
 must come from their own verified convergence records; an installed artifact is
 not evidence that the current checkout's test suite ran.
@@ -171,10 +181,14 @@ is not an architecture-node cache result. Python binds recipe changes to results
 Do not rerun business aggregates merely because orchestration moved to another
 stage, or reinterpret a historical full-suite receipt as proof of new sources.
 
-`baseline fetch --validation <receipt>` requires current successful native Shell
-test evidence even when a supplied plan claims that testing was already cached.
-A pending test action can be satisfied without rebuilding the physical carrier;
-build/distribution/full-installed actions still prohibit that hot baseline path.
+`baseline inspect --publish-receipt <file>` compares the verified accepted
+baseline with the actual published carrier and release version. A missing or
+incompatible baseline selects full installed acceptance; it never invalidates
+build caches. Invalid metadata fails closed. A compatible older baseline selects
+hot acceptance and emits the business snapshot consumed by `baseline fetch`.
+`baseline fetch --baseline <file> --publish-receipt <file> --validation <receipt>`
+requires matching physical carrier bytes and current successful native Shell
+test evidence. It neither consumes nor recomputes a plan.
 The fetched installer is only an upgrade-test fixture, never a distribution
 contribution. Every release assembles a new installer with its current Capsule.
 Hot acceptance collects the upgraded baseline with `--hot-receipt` and requires
@@ -195,7 +209,7 @@ the compatibility floor.
 pnpm --filter @open-design/tools-release typecheck
 pnpm --filter @open-design/tools-release build
 pnpm --filter @open-design/tools-release test
-pnpm exec tools-release exact-plan --help
-pnpm exec tools-release exact-release-plan --help
-pnpm exec tools-release exact-control --help
+pnpm exec tools-release --help
+pnpm exec tools-release policy --help
+pnpm exec tools-release baseline --help
 ```

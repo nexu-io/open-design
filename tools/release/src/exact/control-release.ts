@@ -1,15 +1,15 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { exactStorageObject, isReleaseChannel } from "@open-design/release";
 import { storageConfigFromEnv } from "../storage/common.ts";
 import { requestStorageObject } from "../storage/s3-upload.ts";
 
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
-import { createAcceptedShellBaselineReceipt } from "./accepted-baseline.ts";
-import { collectInstalledAcceptance } from "./installed-acceptance.ts";
-import { createExactPlanFromRegistryFile } from "./plan.ts";
+import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline, type AcceptedShellTarget } from "./accepted-baseline.ts";
+import { fetchAcceptedShellBaseline } from "./baseline-acquisition.ts";
+import { collectInstalledAcceptance, readPublishedAcceptance } from "./installed-acceptance.ts";
 import { authorizeReleaseCapability, readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt, type ReleaseTarget } from "../policy/release-profile.ts";
 
 function releaseComponent(value: string): number {
@@ -194,28 +194,43 @@ async function validatedElectronAcceptance(published: JsonObject, path: unknown)
   return credential;
 }
 
+export async function inspectAcceptedElectronBaseline(input: Readonly<{
+  publication: string; policy: string; target: string; receipt: string; githubEnv?: string;
+}>) {
+  if (!["darwin-arm64", "darwin-x64", "win32-x64"].includes(input.target)) throw new Error("unsupported baseline target");
+  const { required, policy } = await readPublishedAcceptance({ publishReceipt: input.publication, policyReceipt: input.policy, shellType: "electron", target: input.target });
+  const acquired = await fetchAcceptedShellBaseline({ channel: policy.channel, target: input.target as AcceptedShellTarget,
+    pointerUrl: `${policy.target.publicBaseUrl}/${policy.channel}/accepted/electron/${input.target}/latest.json` });
+  const resolved = resolveAcceptedShellBaseline({ channel: policy.channel, target: input.target as AcceptedShellTarget, acceptedReceipt: acquired });
+  const compatible = resolved.mode === "accepted" && resolved.baseline.shell.buildHash === required.shell.buildHash
+    && resolved.baseline.shell.version === required.shell.version
+    && compareVersion(policy.releaseVersion, resolved.acceptance.releaseVersion, policy.channel) > 0;
+  const baselineReceipt = compatible ? join(dirname(resolve(input.receipt)), "accepted-baseline.json") : undefined;
+  if (baselineReceipt != null) await writeObject(baselineReceipt, JSON.parse(Buffer.from(acquired!.bytes).toString("utf8")));
+  const receipt = { schemaVersion: 1, operation: "electron.baseline.inspect", compatible,
+    channel: policy.channel, releaseVersion: policy.releaseVersion, target: input.target,
+    ...(baselineReceipt == null ? {} : { baselineReceipt }) };
+  await writeObject(input.receipt, receipt);
+  if (input.githubEnv != null) await appendFile(input.githubEnv, `ELECTRON_ACCEPTANCE_MODE=${compatible ? "hot" : "full"}\n`);
+  return receipt;
+}
+
 export async function fetchAcceptedElectronBaseline(input: JsonObject, receiptPath: string): Promise<void> {
   const channel = String(input.channel ?? ""), releaseVersion = String(input.releaseVersion ?? ""), sourceCommit = String(input.sourceCommit ?? "");
   const policy = await readReleasePolicyReceipt(input.policyReceipt, { capability: "reuse", channel, releaseVersion, sourceCommit });
-  const releasePlan = await readObject(String(input.releasePlan ?? ""));
-  if (releasePlan.schemaVersion !== 1 || releasePlan.baseline?.mode !== "accepted" || releasePlan.baseline?.requiredAcceptance !== "hot"
-    || releasePlan.plan?.target !== input.target || !Array.isArray(releasePlan.actions)) throw new Error("exact accepted contribution plan is invalid");
-  const forbidden = new Set(["electron.shell.build", "electron.distribution", "electron.acceptance.full"]);
-  if (releasePlan.actions.some((action: JsonObject) => forbidden.has(String(action.id)))) throw new Error("exact accepted contribution plan requires a fresh Electron distribution");
-  const credential = releasePlan.baseline?.acceptance;
-  if (credential == null || credential.schemaVersion !== 1 || credential.operation !== "exact.acceptance" || credential.status !== "accepted"
-    || credential.channel !== channel || credential.shell?.type !== "electron" || credential.target !== input.target) {
-    throw new Error("exact accepted Electron contribution credential is invalid");
+  const snapshot = await readObject(String(input.baselineReceipt ?? ""));
+  const reconstructed = createAcceptedShellBaselineReceipt(snapshot.acceptance);
+  if (!canonicalBytes(reconstructed).equals(canonicalBytes(snapshot)) || reconstructed.channel !== channel || reconstructed.target !== input.target) {
+    throw new Error("exact accepted Electron baseline binding mismatch");
   }
-  const reconstructed = createAcceptedShellBaselineReceipt(credential, releasePlan.baseline.acceptedIdentities);
-  if (reconstructed.baselineIdentity !== releasePlan.baseline.baselineIdentity) throw new Error("exact accepted Electron baseline identity is invalid");
-  const expectedPlan = await createExactPlanFromRegistryFile({
-    acceptedShellBaseline: reconstructed.baselineIdentity,
-    registryPath: resolve(String(input.registry ?? "")),
-    root: resolve(String(input.root ?? "")),
-    target: input.target,
-  });
-  if (!canonicalBytes(expectedPlan).equals(canonicalBytes(releasePlan.plan))) throw new Error("exact accepted Electron contribution plan binding mismatch");
+  const published = await readObject(String(input.publishReceipt ?? ""));
+  if (published.schemaVersion !== 1 || published.operation !== "exact.publish" || published.channel !== channel
+    || published.releaseVersion !== releaseVersion || published.sourceCommit !== sourceCommit) throw new Error("baseline publication binding mismatch");
+  const { required: current } = await readPublishedAcceptance({ publishReceipt: String(input.publishReceipt),
+    policyReceipt: String(input.policyReceipt), shellType: "electron", target: String(input.target) });
+  const credential = reconstructed.acceptance as JsonObject;
+  if (current == null || current.shell.version !== credential.shell.version || current.shell.buildHash !== credential.shell.buildHash
+    || compareVersion(releaseVersion, credential.releaseVersion, channel) <= 0) throw new Error("accepted baseline carrier differs from the published carrier");
   if (typeof input.validationReceipt !== "string") throw new Error("accepted carrier reuse requires current Shell test validation");
   const validation = await readObject(input.validationReceipt);
   if (validation.schemaVersion !== 1 || validation.operation !== "exact.validation" || validation.status !== "passed"
@@ -312,23 +327,9 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
   if (!activeHead.ok || !Buffer.from(await activeHead.arrayBuffer()).equals(channelHeadBody)) throw new Error("accepted baseline requires the exact active channel head");
 
   const credential = await validatedElectronAcceptance(published, input.acceptanceCredential);
-  const provisional = createAcceptedShellBaselineReceipt(credential, [`sha256:${"0".repeat(64)}`]);
   const target = credential.target;
   if (target !== "darwin-arm64" && target !== "darwin-x64" && target !== "win32-x64") throw new Error("accepted baseline target is unsupported");
-  const plan = await createExactPlanFromRegistryFile({
-    acceptedShellBaseline: provisional.baselineIdentity,
-    registryPath: resolve(String(input.registry ?? "")),
-    root: resolve(String(input.root ?? "")),
-    target,
-  });
-  const hotAccepted = credential.installed?.proof?.hotUpdate?.releaseVersion === releaseVersion;
-  // Installed acceptance proves this carrier artifact and its installed recipe,
-  // not that every source/test node in the current checkout was executed.
-  // Independent build/test cache results retain their own convergence authority.
-  const acceptedIdentities = [plan.nodes["electron.shell.build"].identity,
-    plan.nodes["electron.distribution"].identity, plan.nodes["electron.acceptance.full"].identity];
-  if (hotAccepted) acceptedIdentities.push(plan.nodes["closure.acceptance.hot"].identity);
-  const snapshot = createAcceptedShellBaselineReceipt(credential, acceptedIdentities);
+  const snapshot = createAcceptedShellBaselineReceipt(credential);
   const snapshotBody = canonicalBytes(snapshot), snapshotDigest = createHash("sha256").update(snapshotBody).digest("hex");
   const storageBase = `${policy.target.endpointUrl}/${policy.target.bucket}`;
   const publicBase = policy.target.publicBaseUrl;
@@ -382,7 +383,6 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
     sourceCommit,
     target,
     baselineIdentity: snapshot.baselineIdentity,
-    acceptedIdentities: snapshot.acceptedIdentities,
     snapshot: { url: snapshotUrl, sha256: `sha256:${snapshotDigest}`, size: snapshotBody.byteLength, etag: immutable.etag, replayed: immutable.replayed },
     pointer: { url: pointerUrl, etag: pointerEtag, replayed },
   });

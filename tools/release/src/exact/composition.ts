@@ -18,7 +18,7 @@ async function localFile(root: string, name: unknown): Promise<string> {
 
 export async function prepareReleaseContent(input: Readonly<{
   policy: string; channel: string; releaseVersion: string; sourceCommit: string;
-  sourceRoot: string; topology: string; scenesRoot: string; standaloneVersion: string;
+  sourceRoot: string; shellInputs: string; scenesRoot: string; standaloneVersion: string;
   closureArtifactFile?: string; standaloneArtifactFile?: string; resourceReceiptFile?: string;
   capsulesRoot?: string;
   platformsRoot?: string;
@@ -51,15 +51,15 @@ export async function prepareReleaseContent(input: Readonly<{
       }
     }
   }
-  const topology = await readObject(input.topology);
-  if (!Array.isArray(topology.active) || topology.active.length === 0) throw new Error("prepare requires active Shell topology");
+  const inventory = await readObject(input.shellInputs);
+  if (!Array.isArray(inventory.shells) || inventory.shells.length === 0) throw new Error("prepare requires Shell input inventory");
   type Shell = { type: string; version: string; scenes: { target: string; sceneDirectory: string; sceneManifestSha256: string }[] };
   const shells = new Map<string, Shell>();
   const capsuleProducts: Array<{ target: string; contentFile: string; archiveFile: string }> = [];
   const platformProducts: Array<{ target: string; resourceFile: string; archiveFile: string }> = [];
   let { closureArtifactFile, standaloneArtifactFile, resourceReceiptFile } = input;
-  for (const item of topology.active) {
-    if (!["electron", "terminal"].includes(item.shell) || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(item.target)) throw new Error("unsupported prepare Shell topology");
+  for (const item of inventory.shells) {
+    if (!["electron", "terminal"].includes(item.shell) || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(item.target)) throw new Error("unsupported prepare Shell input");
     const artifact = join(input.scenesRoot, `exact-${item.shell}-scene-${item.target}-${input.sourceCommit}`);
     const directory = join(artifact, "scene");
     await unpackSceneArtifact(join(artifact, "scene.tar"), directory);
@@ -84,7 +84,7 @@ export async function prepareReleaseContent(input: Readonly<{
         archiveFile: await localFile(input.platformsRoot, `${item.target}/platform.zip`) });
     }
   }
-  if (closureArtifactFile == null || standaloneArtifactFile == null) throw new Error("prepare topology has no seeds");
+  if (closureArtifactFile == null || standaloneArtifactFile == null) throw new Error("prepare Shell inputs have no seeds");
   const { stdout } = await promisify(execFile)("git", ["show", "--no-patch", "--format=%cI", input.sourceCommit], { cwd: input.sourceRoot });
   const request: PrepareExactContentInput = {
     channel: input.channel, releaseVersion: input.releaseVersion, sourceCommit: input.sourceCommit, publishedAt: stdout.trim(),

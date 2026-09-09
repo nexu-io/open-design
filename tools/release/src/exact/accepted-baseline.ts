@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 
 import { canonicalMetadataJson, metadataDigest } from "@open-design/metatool";
 
-import type { ExactTarget } from "./plan.js";
+export type AcceptedShellTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
 
 const SHA256_IDENTITY = /^sha256:[a-f0-9]{64}$/u;
 const SHA256_DIGEST = /^[a-f0-9]{64}$/u;
 
-export const ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION = 2 as const;
+export const ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION = 3 as const;
 
 type FileBinding = Readonly<{
   sha256: string;
@@ -28,12 +28,11 @@ export type AcceptedShellBaselinePayload = Readonly<{
     capsule: Readonly<{ manifest: FileBinding; archive: FileBinding }>;
   }>;
   shell: AcceptedShell;
-  target: ExactTarget;
+  target: AcceptedShellTarget;
 }>;
 
 export type AcceptedShellBaselineReceipt = Readonly<{
   acceptance: Readonly<Record<string, unknown>>;
-  acceptedIdentities: readonly `sha256:${string}`[];
   baseline: AcceptedShellBaselinePayload;
   baselineIdentity: `sha256:${string}`;
   channel: string;
@@ -41,25 +40,18 @@ export type AcceptedShellBaselineReceipt = Readonly<{
   releaseVersion: string;
   schemaVersion: typeof ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION;
   sourceCommit: string;
-  target: ExactTarget;
+  target: AcceptedShellTarget;
 }>;
 
 export type AcceptedShellBaselineResolution = Readonly<{
-  acceptance?: Readonly<Record<string, unknown>>;
-  acceptedIdentities: readonly `sha256:${string}`[];
-  acceptedReceiptSha256?: `sha256:${string}`;
-  baseline: AcceptedShellBaselinePayload | Readonly<{
-    channel: string;
-    closureIdentity: `sha256:${string}`;
-    target: ExactTarget;
-  }>;
-  baselineIdentity: `sha256:${string}`;
-  mode: "accepted" | "bootstrap";
-  requiredAcceptance: "full" | "hot";
+  mode: "bootstrap"; channel: string; target: AcceptedShellTarget; schemaVersion: typeof ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION;
+}> | Readonly<{
+  mode: "accepted"; acceptance: Readonly<Record<string, unknown>>; acceptedReceiptSha256: `sha256:${string}`;
+  baseline: AcceptedShellBaselinePayload; baselineIdentity: `sha256:${string}`;
   schemaVersion: typeof ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION;
 }>;
 
-export function createAcceptedShellBaselineReceipt(value: unknown, acceptedIdentities: readonly `sha256:${string}`[]): AcceptedShellBaselineReceipt {
+export function createAcceptedShellBaselineReceipt(value: unknown): AcceptedShellBaselineReceipt {
   const credential = record(value, "Electron installed acceptance credential");
   const shell = record(credential.shell, "Electron installed acceptance Shell");
   const artifact = record(credential.artifact, "Electron installed acceptance artifact");
@@ -91,13 +83,8 @@ export function createAcceptedShellBaselineReceipt(value: unknown, acceptedIdent
     shell,
     target: credential.target,
   });
-  if (acceptedIdentities.length === 0 || new Set(acceptedIdentities).size !== acceptedIdentities.length
-      || acceptedIdentities.some((identity) => !SHA256_IDENTITY.test(identity))) {
-    throw new Error("Electron installed acceptance exact identities are invalid");
-  }
   return Object.freeze({
     acceptance: Object.freeze(structuredClone(credential)),
-    acceptedIdentities: Object.freeze([...acceptedIdentities].sort()),
     baseline,
     baselineIdentity: acceptedShellBaselineIdentity(baseline),
     channel: baseline.channel,
@@ -126,7 +113,7 @@ function fileBinding(value: unknown, label: string): FileBinding {
   return Object.freeze({ sha256: binding.sha256, size: binding.size as number });
 }
 
-function target(value: unknown): ExactTarget {
+function target(value: unknown): AcceptedShellTarget {
   if (value !== "darwin-arm64" && value !== "darwin-x64" && value !== "win32-x64") throw new Error("accepted Shell baseline target is invalid");
   return value;
 }
@@ -170,25 +157,11 @@ export function acceptedShellBaselineIdentity(value: AcceptedShellBaselinePayloa
 export function resolveAcceptedShellBaseline(input: Readonly<{
   acceptedReceipt?: Readonly<{ bytes: Uint8Array; sha256: `sha256:${string}` }>;
   channel: string;
-  currentClosureIdentity: `sha256:${string}`;
-  target: ExactTarget;
+  target: AcceptedShellTarget;
 }>): AcceptedShellBaselineResolution {
   if (!/^[a-z][a-z0-9-]{0,31}$/u.test(input.channel)) throw new Error("accepted Shell baseline channel is invalid");
-  if (!SHA256_IDENTITY.test(input.currentClosureIdentity)) throw new Error("current Closure identity is invalid");
   if (input.acceptedReceipt == null) {
-    const baseline = Object.freeze({
-      channel: input.channel,
-      closureIdentity: input.currentClosureIdentity,
-      target: input.target,
-    });
-    return Object.freeze({
-      acceptedIdentities: Object.freeze([]),
-      baseline,
-      baselineIdentity: metadataDigest(canonicalMetadataJson({ bootstrap: baseline, schemaVersion: ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION })),
-      mode: "bootstrap",
-      requiredAcceptance: "full",
-      schemaVersion: ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION,
-    });
+    return Object.freeze({ mode: "bootstrap", channel: input.channel, target: target(input.target), schemaVersion: ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION });
   }
 
   if (!SHA256_IDENTITY.test(input.acceptedReceipt.sha256)) throw new Error("accepted Shell baseline receipt binding is invalid");
@@ -201,30 +174,23 @@ export function resolveAcceptedShellBaseline(input: Readonly<{
     throw new Error("accepted Shell baseline receipt JSON is invalid");
   }
   const receipt = record(decoded, "accepted Shell baseline receipt");
-  exactKeys(receipt, ["acceptance", "acceptedIdentities", "baseline", "baselineIdentity", "channel", "operation", "releaseVersion", "schemaVersion", "sourceCommit", "target"], "accepted Shell baseline receipt");
+  exactKeys(receipt, ["acceptance", "baseline", "baselineIdentity", "channel", "operation", "releaseVersion", "schemaVersion", "sourceCommit", "target"], "accepted Shell baseline receipt");
   if (receipt.schemaVersion !== ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION || receipt.operation !== "electron.shell-baseline.accepted"
       || typeof receipt.baselineIdentity !== "string" || !SHA256_IDENTITY.test(receipt.baselineIdentity)
       || typeof receipt.releaseVersion !== "string" || typeof receipt.sourceCommit !== "string") {
     throw new Error("accepted Shell baseline receipt identity is invalid");
   }
   const baseline = payload(receipt.baseline);
-  if (!Array.isArray(receipt.acceptedIdentities) || receipt.acceptedIdentities.length === 0
-      || new Set(receipt.acceptedIdentities).size !== receipt.acceptedIdentities.length
-      || receipt.acceptedIdentities.some((identity) => typeof identity !== "string" || !SHA256_IDENTITY.test(identity))) {
-    throw new Error("accepted Shell baseline exact identities are invalid");
-  }
   if (baseline.channel !== input.channel || baseline.target !== input.target) throw new Error("accepted Shell baseline scope mismatch");
   if (acceptedShellBaselineIdentity(baseline) !== receipt.baselineIdentity) throw new Error("accepted Shell baseline payload digest mismatch");
-  const reconstructed = createAcceptedShellBaselineReceipt(receipt.acceptance, receipt.acceptedIdentities as `sha256:${string}`[]);
+  const reconstructed = createAcceptedShellBaselineReceipt(receipt.acceptance);
   if (canonicalMetadataJson(reconstructed) !== canonicalMetadataJson(receipt)) throw new Error("accepted Shell baseline snapshot binding mismatch");
   return Object.freeze({
     acceptance: reconstructed.acceptance,
-    acceptedIdentities: Object.freeze([...(receipt.acceptedIdentities as `sha256:${string}`[])].sort()),
     acceptedReceiptSha256: actualReceiptSha256,
     baseline,
     baselineIdentity: receipt.baselineIdentity as `sha256:${string}`,
     mode: "accepted",
-    requiredAcceptance: "hot",
     schemaVersion: ACCEPTED_SHELL_BASELINE_SCHEMA_VERSION,
   });
 }

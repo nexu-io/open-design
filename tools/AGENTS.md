@@ -12,7 +12,7 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `pnpm tools-dev inspect desktop status` projects the Electron Shell status through its typed adapter.
 - `tools/pack` provides `@open-design/tools-pack` and the `tools-pack` bin. This PR delivers only the macOS build/install/start/stop/logs/uninstall/cleanup/inspect surface through public Shell build/lifecycle APIs.
 - `tools/serve` provides `@open-design/tools-serve` and the `tools-serve` bin. It owns local fixture services such as `tools-serve start updater`.
-- `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns exact planning/control, channel-version lifecycle, metadata, immutable publication, reports, and notification-facing contracts.
+- `tools/release` provides `@open-design/tools-release` and the `tools-release` bin. It owns release policy, channel-version lifecycle, metadata, immutable publication, reports, and notification-facing contracts. Python under `.github/scripts/` exclusively owns workflow planning, workload identities, cache decisions and result binding; tools-release must not consume or recompute that state.
 - Exact content preparation, metadata signing and final composition live in
   tools-release behind its policy-bound commands. Do not restore tools-pack
   exact-control or a separate pack signing API/binary.

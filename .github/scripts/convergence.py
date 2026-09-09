@@ -133,8 +133,10 @@ class WorkflowContract:
         self.execution = None
         if "execution" in value:
             execution = object_value(value["execution"], f"workflow {name}.execution")
-            if set(execution) != {"enabled", "runners", "matrices"}:
-                raise ConfigError("execution requires enabled, runners and matrices")
+            if not {"enabled", "runners", "matrices"} <= set(execution) or set(execution) - {"enabled", "runners", "matrices", "inputs"}:
+                raise ConfigError("execution requires enabled, runners and matrices; optional inputs")
+            for input_name in object_value(execution.get("inputs", {}), "execution inputs"):
+                require_identity(input_name, "execution input name")
             enabled = execution["enabled"]
             if (not isinstance(enabled, list) or any(not isinstance(item, str) for item in enabled)
                     or len(set(enabled)) != len(enabled) or set(enabled) - set(self.workloads)):
@@ -657,6 +659,63 @@ def required_workloads(
     return required
 
 
+def acquire_command(args: argparse.Namespace) -> int:
+    """Bootstrap a portable tool without requiring that tool to restore itself."""
+    descriptor = object_value(load_json(args.descriptor), "artifact descriptor")
+    if set(descriptor) != {"url", "sha256"} or not isinstance(descriptor["sha256"], str) or not DIGEST_RE.fullmatch(descriptor["sha256"]):
+        raise ConfigError("artifact descriptor requires URL and SHA-256")
+    url = require_string(descriptor["url"], "artifact URL")
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+        raise ConfigError("artifact requires credential-free HTTPS")
+    if args.output.exists() or args.output.is_symlink():
+        raise ConfigError("artifact output already exists")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, request, response, code, message, headers, new_url):
+            raise ConfigError("artifact redirects are forbidden")
+    with tempfile.TemporaryDirectory(prefix=".tool-artifact-", dir=args.output.parent) as temporary:
+        scratch = Path(temporary)
+        archive = scratch / "product.zip"
+        with urllib.request.build_opener(NoRedirect).open(public_read_request(url, accept="application/zip"), timeout=120) as response, archive.open("xb") as output:
+            if response.status != 200:
+                raise ConfigError("artifact acquisition failed")
+            size = 0
+            while chunk := response.read(1024 * 1024):
+                size += len(chunk)
+                if size > 2 * 1024 ** 3:
+                    raise ConfigError("artifact exceeds 2 GiB")
+                output.write(chunk)
+        if sha256_file(archive) != descriptor["sha256"]:
+            raise ConfigError("artifact digest mismatch")
+        staged = scratch / "files"
+        staged.mkdir()
+        with zipfile.ZipFile(archive) as product:
+            entries = product.infolist()
+            if len(entries) > 10000 or sum(entry.file_size for entry in entries) > 2 * 1024 ** 3:
+                raise ConfigError("artifact inventory exceeds bounds")
+            seen: set[str] = set()
+            for entry in entries:
+                name = entry.filename.rstrip("/")
+                parts = name.split("/")
+                mode = entry.external_attr >> 16
+                if (not name or any(part in {"", ".", ".."} for part in parts) or re.search(r"[\\:\x00-\x1f]", name)
+                        or name.lower() in seen or (mode & 0o170000) not in {0, 0o100000, 0o040000}):
+                    raise ConfigError("artifact contains unsafe paths or entries")
+                seen.add(name.lower())
+                destination = staged.joinpath(*parts)
+                if entry.is_dir():
+                    destination.mkdir(parents=True, exist_ok=True)
+                else:
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    with product.open(entry) as source, destination.open("xb") as output:
+                        shutil.copyfileobj(source, output, length=1024 * 1024)
+        if args.output.exists() or args.output.is_symlink():
+            raise ConfigError("artifact output already exists")
+        staged.rename(args.output)
+    return 0
+
+
 def execution_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
     """Project a workflow's own declarations; never load a business CLI or package."""
     workflow = contract.workflow(args.workflow)
@@ -667,6 +726,8 @@ def execution_command(args: argparse.Namespace, contract: ConvergenceContract) -
     write_json_atomic(args.output / "scope.json", scope)
     write_json_atomic(args.output / "runners.json", execution["runners"])
     write_json_atomic(args.output / "matrices.json", execution["matrices"])
+    for name, value in execution.get("inputs", {}).items():
+        write_json_atomic(args.output / "inputs" / f"{name}.json", value)
     if args.github_output is not None:
         with args.github_output.open("a", encoding="utf-8") as output:
             for name, matrix in execution["matrices"].items():
@@ -1402,6 +1463,9 @@ def parse_args() -> argparse.Namespace:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("validate")
     sub.add_parser("control-paths")
+    acquire = sub.add_parser("acquire")
+    acquire.add_argument("--descriptor", type=Path, required=True)
+    acquire.add_argument("--output", type=Path, required=True)
     execution = sub.add_parser("execution")
     execution.add_argument("--workflow", required=True)
     execution.add_argument("--output", type=Path, required=True)
@@ -1478,6 +1542,8 @@ def main() -> int:
             calculate(contract, root, workflow, runner_plan)
         print("convergence configuration is valid")
         return 0
+    if args.command == "acquire":
+        return acquire_command(args)
     if args.command == "execution":
         return execution_command(args, contract)
     if args.command == "github-output":

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ExactTarget } from "./plan.js";
+import type { AcceptedShellTarget } from "./accepted-baseline.ts";
 
 type AcquisitionResponse = Readonly<{
   bytes: Uint8Array;
@@ -23,7 +23,7 @@ export async function fetchAcceptedShellBaseline(input: Readonly<{
   channel: string;
   fetcher?: AcceptedBaselineFetcher;
   pointerUrl: string;
-  target: ExactTarget;
+  target: AcceptedShellTarget;
 }>): Promise<Readonly<{ bytes: Uint8Array; sha256: `sha256:${string}` }> | undefined> {
   const pointerUrl = new URL(input.pointerUrl);
   if (pointerUrl.protocol !== "https:" && pointerUrl.hostname !== "localhost" && pointerUrl.hostname !== "127.0.0.1") {
@@ -49,7 +49,7 @@ export async function fetchAcceptedShellBaseline(input: Readonly<{
   if (pointer.schemaVersion !== 1 || pointer.operation !== "electron.shell-baseline.latest"
       || pointer.channel !== input.channel || pointer.target !== input.target
       || typeof pointer.releaseVersion !== "string"
-      || !new RegExp(`^\\d+\\.\\d+\\.\\d+-${input.channel.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\.\\d+$`, "u").test(pointer.releaseVersion)
+      || !(input.channel === "stable" ? /^\d+\.\d+\.\d+$/u.test(pointer.releaseVersion) : new RegExp(`^\\d+\\.\\d+\\.\\d+-${input.channel.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}\\.\\d+$`, "u").test(pointer.releaseVersion))
       || typeof pointer.sourceCommit !== "string" || !/^[a-f0-9]{40}$/u.test(pointer.sourceCommit)) {
     throw new Error("accepted Shell baseline pointer scope is invalid");
   }

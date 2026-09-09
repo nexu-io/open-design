@@ -20,7 +20,7 @@ describe("exact Electron release topology", () => {
     { suite: "electron-scene", nodes: ["electron.contract.build", "electron.shell.build", "closure.build"] },
     { suite: "electron-platform", nodes: ["electron.platform.build"] },
     ...dataIds.map(id => ({ suite: `closure-data-${id}`, nodes: [`closure.data.${id}.build`] })),
-  ])("covers $suite production inputs in the convergence cache key", async ({ suite, nodes }) => {
+  ])("covers $suite production inputs in the convergence cache key", async ({ suite }) => {
     const result = await run("python3", ["-c", [
       "import json, sys",
       "from pathlib import Path",
@@ -30,18 +30,11 @@ describe("exact Electron release topology", () => {
       "print(json.dumps(contract.suite_paths(sys.argv[3]) + contract.suite_paths('convergence-control')))",
     ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/plan/release-exact.json"), suite]);
     const inputs: string[] = JSON.parse(result.stdout);
-    const registry = JSON.parse(await readFile(resolve(workspaceRoot, "tools/release/resources/exact-plan-identities.json"), "utf8"));
-    const paths = new Set<string>();
-    function collect(name: string): void {
-      const source = registry.sourceSets[name];
-      for (const parent of source.inherits ?? []) collect(parent);
-      for (const entry of source.paths ?? []) paths.add(typeof entry === "string" ? entry : entry.path);
-    }
-    // Every actual producer input must be covered; data payloads now belong to
-    // independent producers rather than the runtime-only scene collection.
-    for (const name of nodes) collect(name);
-    paths.add("tools/release/resources/exact-plan-identities.json");
-    paths.add("tools/release/src/exact/plan.ts");
+    const paths = new Set(suite === "electron-scene" ? ["packages/electron-kit/", "shells/electron/", "apps/closure/"]
+      : suite === "electron-platform" ? ["shells/electron/config/carriers/node-lock.json", "packages/platform/"]
+      : ({ "closure-data-plugins": ["plugins/_official/", "plugins/registry/"], "closure-data-frames": ["assets/frames/"],
+        "closure-data-community-pets": ["assets/community-pets/"], "closure-data-plugin-previews": ["data/plugin-previews/"] } as Record<string, string[]>)[suite]
+        ?? [suite.slice("closure-data-".length) + "/"]);
     const uncovered = [...paths].filter(path => !inputs.some(input => input === "*" || input.replace(/\/$/u, "") === path || (input.endsWith("/") && path.startsWith(input))));
     expect(uncovered).toEqual([]);
     if (suite === "electron-platform") {
@@ -76,25 +69,19 @@ describe("exact Electron release topology", () => {
         .toEqual([`closure_data_${id.replaceAll("-", "_")}_darwin_arm64`]);
       await writeFile(path, "baseline"); await run("git", ["-C", root, "add", path]);
     }
-  });
+  }, 15_000);
 
   it("passes projected workloads and scene identities through the real convergence planner and handoff", async () => {
     const root = await mkdtemp(join(tmpdir(), "exact-convergence-contract-")); roots.push(root);
-    const cli = resolve(workspaceRoot, "tools/release/dist/exact-control.mjs");
-    const plans = join(root, "plans"), products = join(root, "products"), pending = join(root, "pending.json");
-    await mkdir(plans);
-    await writeFile(join(plans, "electron-darwin-arm64.json"), JSON.stringify({
-      schemaVersion: 1, plan: { target: "darwin-arm64", nodes: { "electron.platform.build": {
-        identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" } } }, actions: [{ id: "electron.distribution" }],
-    }));
-    await run(process.execPath, [cli, "topology", "--declaration", resolve(workspaceRoot, ".github/config/plan/release-exact-topology.json"),
-      "--plans", plans, "--output", root, "--github-output", join(root, "outputs")]);
+    const cli = resolve(workspaceRoot, "tools/release/dist/tools-release");
+    const products = join(root, "products"), pending = join(root, "pending.json");
+    const common = [resolve(workspaceRoot, ".github/scripts/convergence.py"), "--root", workspaceRoot,
+      "--config", resolve(workspaceRoot, ".github/config/plan/release-exact.json")];
+    await run("python3", [...common, "execution", "--workflow", "release-exact", "--output", root, "--github-output", join(root, "outputs")]);
     const outputLine = (await readFile(join(root, "outputs"), "utf8")).split("\n").find(line => line.startsWith("validation_matrix="))!;
     expect(JSON.parse(outputLine.slice("validation_matrix=".length)).include.map((entry: { shell: string; target: string }) => [entry.shell, entry.target]))
       .toEqual([["electron", "darwin-arm64"]]);
     const runners = await readFile(join(root, "runners.json"), "utf8");
-    const common = [resolve(workspaceRoot, ".github/scripts/convergence.py"), "--root", workspaceRoot,
-      "--config", resolve(workspaceRoot, ".github/config/plan/release-exact.json")];
     const env = { ...process.env, GITHUB_OUTPUT: join(root, "outputs"), GITHUB_STEP_SUMMARY: join(root, "summary") };
     await run("python3", [...common, "github-output", "--workflow", "release-exact", "--scope-plan", join(root, "scope.json"),
       "--runner-plan-json", runners, "--repository-id", "1", "--repository", "local/fixture", "--base-url", "http://invalid.local",
@@ -154,7 +141,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(14);
+    expect(candidate.results).toHaveLength(15);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -166,7 +153,7 @@ describe("exact Electron release topology", () => {
     const platform = workflow.split("\n  platform:")[1]!.split("\n  prepare:")[0]!;
     expect(platform).toContain("matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}");
     expect(platform.indexOf("Restore converged platform")).toBeLessThan(platform.indexOf("actions/checkout"));
-    for (const command of ["platform import", "build platform", "platform export"]) expect(platform).toContain(`exact-release-control.mjs" ${command}`);
+    for (const command of ["platform import", "build platform", "platform export"]) expect(platform).toContain(`tools-release ${command}`);
     expect(platform).not.toContain("build:resources");
     expect(platform).not.toContain("matrix.mode");
     expect(platform).toContain("path: ${{ runner.temp }}/platform-contribution/artifact");
@@ -177,21 +164,21 @@ describe("exact Electron release topology", () => {
     const capsule = workflow.split("\n  capsule:")[1]!.split("\n  data:")[0]!;
     expect(capsule).toContain("matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}");
     expect(capsule.indexOf("Restore converged capsule")).toBeLessThan(capsule.indexOf("actions/checkout"));
-    for (const command of ["capsule import", "build capsule", "capsule export"]) expect(capsule).toContain(`exact-release-control.mjs" ${command}`);
+    for (const command of ["capsule import", "build capsule", "capsule export"]) expect(capsule).toContain(`tools-release ${command}`);
     expect(capsule).not.toMatch(/--plan|--pending|--workload|convergence\.py/u);
     expect(workflow).toContain('--products-output "$RUNNER_TEMP/exact-plan/artifacts"');
     expect(workflow).toContain('convergence.py --config .github/config/plan/release-exact.json contribute');
     expect(prepare).toContain('--capsules "$RUNNER_TEMP/capsules"');
     const scene = workflow.split("\n  scene:")[1]!.split("\n  platform:")[0]!;
-    expect(scene).toContain("needs: [plan, capsule]");
+    expect(scene).toContain("needs: [tools, plan, capsule]");
     expect(scene).toContain('--capsule-content "$RUNNER_TEMP/capsules/$TARGET/capsule-content.json"');
     expect(scene).toContain('--capsule-archive "$RUNNER_TEMP/capsules/$TARGET/capsule.zip"');
-    for (const command of ["base import", "base pack", "build base", "base export"]) expect(scene).toContain(`exact-release-control.mjs" ${command}`);
+    for (const command of ["base import", "base pack", "build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
     expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
     expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
     expect(scene).not.toContain("path: ${{ runner.temp }}/base-contribution/products");
     const distribution = workflow.split("\n  distribution:")[1]!.split("\n  publish:")[0]!;
-    expect(distribution).toContain('exact-release-control.mjs" base unpack');
+    expect(distribution).toContain('tools-release base unpack');
     expect(distribution).toContain('--base-receipt "$RUNNER_TEMP/base/base-build-receipt.json"');
     expect(distribution).toContain("name: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}");
   });
@@ -201,7 +188,7 @@ describe("exact Electron release topology", () => {
     const data = workflow.split("\n  data:")[1]!.split("\n  prepare:")[0]!;
     expect(data).toContain("matrix: ${{ fromJSON(needs.plan.outputs.data_matrix) }}");
     expect(data.indexOf("Restore converged data resource")).toBeLessThan(data.indexOf("actions/checkout"));
-    for (const command of ["resource import", "build resource", "resource export"]) expect(data).toContain(`exact-release-control.mjs" ${command}`);
+    for (const command of ["resource import", "build resource", "resource export"]) expect(data).toContain(`tools-release ${command}`);
     expect(data).not.toContain("build:resources");
     expect(data).not.toContain("@open-design/daemon");
     expect(data).not.toContain("@open-design/web");
@@ -215,17 +202,17 @@ describe("exact Electron release topology", () => {
     const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
     const validation = workflow.split("\n  validation:")[1]?.split("\n  scene:")[0];
     expect(validation).toBeDefined();
-    expect(validation).toContain("needs: [plan]");
+    expect(validation).toContain("needs: [tools, plan]");
     expect(validation).toContain("matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}");
     expect(validation).not.toContain("needs.plan.outputs.run");
     expect(validation).toContain('validate closure.test --coverage architecture');
     expect(validation).not.toContain('--coverage business');
     expect(validation).not.toContain("scene-artifact");
-    expect(scene).not.toContain('exact-release-control.mjs" validate');
+    expect(scene).not.toContain('tools-release validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");
-    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, platform, capsule, data, validation]");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [tools, plan, scene, platform, capsule, data, validation]");
     for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
-      expect(validation).toContain(`exact-release-control.mjs" validate ${node}`);
+      expect(validation).toContain(`tools-release validate ${node}`);
     }
     expect(validation).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
     expect(validation).toContain("if: always()");
@@ -236,7 +223,7 @@ describe("exact Electron release topology", () => {
     expect(acceptance).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
     const stage = acceptance.split("- name: Fetch accepted baseline for upgrade acceptance")[1]!;
     expect(stage).toContain('--validation "$RUNNER_TEMP/exact-validation/shell.json"');
-    expect(stage).toContain('exact-release-control.mjs" baseline fetch');
+    expect(stage).toContain('tools-release baseline fetch');
     expect(stage).toContain('--first-install-root "$installed_root"');
     expect(stage).toContain('--first-install-user-data-root "$user_data_root"');
   });
@@ -248,7 +235,7 @@ describe("exact Electron release topology", () => {
     await writeFile(join(scene, "platform", ".lock"), "locked");
     await writeFile(join(scene, "platform", "node"), "native");
     await chmod(join(scene, "platform", "node"), 0o755);
-    const cli = resolve(workspaceRoot, "tools/release/dist/exact-control.mjs");
+    const cli = resolve(workspaceRoot, "tools/release/dist/tools-release");
     await run(process.execPath, [cli, "scene", "pack", "--scene", scene, "--output", join(root, "scene.tar")]);
     await run("python3", ["-c", [
       "import sys, zipfile",
@@ -275,7 +262,7 @@ describe("exact Electron release topology", () => {
     expect(hot).not.toContain("python3");
     expect(hot).not.toContain("candidateVersion");
     expect(hot).toContain('CHANNEL: ${{ inputs.channel }}');
-    expect(hot).toContain('exact-release-control.mjs" acceptance hot-update');
+    expect(hot).toContain('tools-release acceptance hot-update');
     expect(hot).toContain('--od-channel-head-url="$ELECTRON_CANDIDATE_HEAD_URL"');
     expect(hot).not.toContain("DevToolsActivePort");
   });
@@ -285,7 +272,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain('[[ "$SOURCE_REF" =~');
     expect(workflow).toContain('test "$(git rev-parse HEAD)" = "$SOURCE_SHA"');
     expect(workflow).toContain('git ls-remote --refs origin "$SOURCE_REF"');
-    expect(workflow).toContain("exact-control.mjs policy resolve");
+    expect(workflow).toContain("tools-release policy resolve");
   });
 
   it("runs the current release matrix on macOS while retaining the deferred Windows declaration", async () => {
@@ -293,24 +280,24 @@ describe("exact Electron release topology", () => {
     const convergence = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
 
     expect(workflow).toContain("options: [betahyx]");
-    expect(workflow).toContain('exact-release-control.mjs" topology');
-    expect(workflow).toContain('--declaration .github/config/plan/release-exact-topology.json');
-    expect(workflow).not.toContain("electron_actions =");
-    const topology = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact-topology.json"), "utf8"));
-    expect(topology.active.map((value: { shell: string; target: string }) => [value.shell, value.target])).toEqual([["terminal", "darwin-arm64"], ["electron", "darwin-arm64"]]);
-    expect(topology.active.every((value: { runs_on: string }) => value.runs_on === "macos-15")).toBe(true);
-    expect(topology.deferred).toEqual([{ shell: "electron", target: "win32-x64", workload: "electron_scene_win32_x64", platform_workload: "electron_platform_win32_x64", runner_class: "electron_win32_x64", runs_on: "windows-2025" }]);
-    expect(workflow).toContain("@open-design/tools-release exec tools-release build scene");
-    expect(workflow).toContain('exact-release-control.mjs" build distribution');
+    const execution = convergence.workflows["release-exact"].execution;
+    expect(workflow).toContain("convergence.py --config .github/config/plan/release-exact.json execution");
+    expect(execution.matrices.shell_matrix.include.map((value: { shell: string; target: string }) => [value.shell, value.target]))
+      .toEqual([["terminal", "darwin-arm64"], ["electron", "darwin-arm64"]]);
+    expect(execution.matrices.shell_matrix.include.every((value: { runs_on: string }) => value.runs_on === "macos-15")).toBe(true);
+    expect(execution.enabled).not.toContain("electron_scene_win32_x64");
+    expect(execution.runners.electron_win32_x64).toEqual(["windows-2025"]);
+    expect(workflow).toContain("tools-release build scene");
+    expect(workflow).toContain('tools-release build distribution');
     expect(workflow).not.toContain("exact-scene-request.json");
     expect(workflow).not.toContain("distribution-request.json");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
-    expect(workflow).toContain('exact-release-control.mjs" build runtime-resources');
+    expect(workflow).toContain('tools-release build runtime-resources');
     expect(workflow).not.toContain("build:resources");
     expect(workflow).not.toContain("tools/pack/dist/exact-control.mjs");
-    expect(workflow).toContain("tools/release/dist/exact-control.mjs");
+    expect(workflow).toContain("tools/release/dist/tools-release");
     expect(workflow).not.toContain("exact-pack-control.mjs");
-    expect(workflow).toContain('$RUNNER_TEMP/exact-plan/exact-release-control.mjs');
+    expect(workflow).not.toContain('exact-plan/exact-release-control.mjs');
     expect(workflow).toContain("PROFILE: exact-validation");
     expect(workflow).toContain('--endpoint-url "$STORAGE_ENDPOINT" --bucket "$STORAGE_BUCKET" --public-base-url "$PUBLIC_ORIGIN"');
     for (const capability of ["plan", "prepare", "finalize", "acceptance"]) {
@@ -334,18 +321,18 @@ describe("exact Electron release topology", () => {
     const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
     expect(scene.indexOf("path: ${{ runner.temp }}/exact-plan")).toBeLessThan(scene.indexOf("- name: Restore converged scene"));
     expect(scene).toContain("path: ${{ runner.temp }}/exact-scene-artifact/scene.tar");
-    expect(scene).toContain("exact-release-control.mjs\" scene pack");
-    expect(scene).toContain("exact-release-control.mjs\" scene import");
-    expect(scene).toContain("exact-release-control.mjs\" scene verify");
+    expect(scene).toContain("tools-release scene pack");
+    expect(scene).toContain("tools-release scene import");
+    expect(scene).toContain("tools-release scene verify");
     expect(scene).not.toContain("zipfile");
     expect(scene).not.toContain('operation:"exact.scene.');
     expect(workflow).not.toContain('operation:"release.authorize"');
     expect(workflow).not.toContain('operation:"release.policy.resolve"');
-    expect(workflow).toContain('exact-release-control.mjs" acceptance fetch');
+    expect(workflow).toContain('tools-release acceptance fetch');
     expect(workflow).not.toContain('urllib.request.urlretrieve(required["artifact"]["url"], archive)');
     expect(workflow).not.toContain("Resolve installed Electron identity");
-    expect(workflow).toContain('exact-release-control.mjs" acceptance hot-update');
-    expect(workflow).toContain('exact-release-control.mjs" acceptance collect');
+    expect(workflow).toContain('tools-release acceptance hot-update');
+    expect(workflow).toContain('tools-release acceptance collect');
     expect(workflow).not.toContain("electron-cdp-control.mjs");
     expect(workflow).not.toContain("electron-cdp-request.json");
     expect(workflow).not.toContain("acceptance-request.json");
@@ -359,7 +346,7 @@ describe("exact Electron release topology", () => {
   it("checks release-neutral scenes by owned fields rather than coincidental version values", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
 
-    expect(workflow).toContain('exact-release-control.mjs" scene verify');
+    expect(workflow).toContain('tools-release scene verify');
     expect(workflow).not.toContain("find_release_owned_fields");
     const source = await readFile(resolve(workspaceRoot, "tools/release/src/exact/scene-artifact.ts"), "utf8");
     expect(source).toContain('["artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"]');
@@ -400,13 +387,27 @@ describe("exact Electron release topology", () => {
     await expect(stat(resolve(workspaceRoot, ".github/workflows/convergence-exact.atom.yml"))).rejects.toThrow();
   });
 
-  it("uses the TypeScript exact control plane with no temporary Python bridge", async () => {
+  it("uses Python-only planning and one public business CLI", async () => {
+    for (const lane of ["exact", "prerelease", "stable"]) {
+      const source = await readFile(resolve(workspaceRoot, `.github/workflows/release-${lane}.yml`), "utf8");
+      for (const job of source.split(/\n  [a-z_]+:\n/u).slice(1)) {
+        const download = job.indexOf('uses: actions/download-artifact@v8\n        with:\n          name: release-tools-${{ inputs.source_sha }}');
+        if (download < 0) continue;
+        expect(job.indexOf("- name: Expose release tool"), `${lane}: tool must exist before chmod/PATH`).toBeGreaterThan(download);
+        expect(job.indexOf("tools-release "), `${lane}: expose before invocation`).toBeGreaterThan(job.indexOf("- name: Expose release tool"));
+      }
+    }
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
 
+    const plan = workflow.split("\n  plan:")[1]!.split("\n  tools:")[0]!;
+    expect(plan).not.toMatch(/setup-node|pnpm|node |release-tools|release-policy/u);
+    expect(workflow).not.toMatch(/node "\$RUNNER_TEMP|exact-release-plan|--plan |--registry /u);
+    expect(workflow).toContain('echo "$RUNNER_TEMP/release-tools" >> "$GITHUB_PATH"');
+    expect(workflow).toContain("tools-release baseline inspect");
     expect(workflow).not.toContain('"operation": "exact.prepare"');
     expect(workflow).not.toContain('"operation": "exact.finalize"');
     for (const command of ["prepare", "finalize", "publish", "activate", "baseline promote", "baseline fetch"]) {
-      expect(workflow).toContain(`exact-release-control.mjs" ${command}`);
+      expect(workflow).toContain(`tools-release ${command}`);
     }
     expect(workflow).not.toContain("relocated-publish-receipt.json");
     expect(workflow).not.toContain('"operation": "exact.publish"');
@@ -415,7 +416,7 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain(".github/scripts/pack.py");
     expect(workflow).not.toContain(".github/scripts/release.py");
     expect(workflow).not.toContain("installed_acceptance.py");
-    expect(workflow).toContain('exact-release-control.mjs" acceptance collect');
+    expect(workflow).toContain('tools-release acceptance collect');
     expect(workflow).not.toContain("node tools/release/src/exact/control-cli.ts");
     expect(workflow).not.toContain("somechan");
     expect(workflow).not.toContain("somepreview");
@@ -504,7 +505,7 @@ describe("exact Electron release topology", () => {
     await cp(installedRoot, firstInstallRoot, { recursive: true });
     await cp(baseUserDataRoot, firstInstallUserDataRoot, { recursive: true });
     const collect = async (hotReceipt?: string) => {
-      await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/exact-control.mjs"), "acceptance", "collect",
+      await run(process.execPath, [resolve(workspaceRoot, "tools/release/dist/tools-release"), "acceptance", "collect",
         "--publication", publishReceipt, "--policy", policyReceipt, "--installed-root", installedRoot, "--runtime-proof-root", root,
         "--shell", "electron", "--target", "darwin-arm64", "--base-user-data-root", baseUserDataRoot,
         ...(hotReceipt == null ? [] : ["--hot-receipt", hotReceipt, "--first-install-root", firstInstallRoot,

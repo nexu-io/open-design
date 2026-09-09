@@ -5,7 +5,6 @@
   "suites": {
     "convergence-control": [
       ".github/config/plan/release-stable.json",
-      ".github/config/plan/release-stable-topology.json",
       ".github/workflows/release-stable.yml",
       ".github/workflows/convergence.atom.yml",
       ".github/scripts/convergence.py",
@@ -13,8 +12,6 @@
       ".github/scripts/lib/config.py",
       ".github/scripts/lib/github.py",
       ".github/scripts/lib/r2.py",
-      "tools/release/resources/exact-plan-identities.json",
-      "tools/release/src/exact/plan.ts",
       "packages/metatool/",
       "packages/archive/package.json",
       "packages/archive/tsconfig.json",
@@ -25,9 +22,8 @@
       "tools/release/src/exact/platform-artifact.ts",
       "tools/release/src/exact/resource-composition.ts",
       "tools/release/src/exact/native-build.ts",
-      "tools/release/src/exact/topology.ts",
       "tools/release/src/exact/commands.ts",
-      "tools/release/src/exact/control-cli.ts",
+      "tools/release/src/index.ts",
       "tools/release/esbuild.config.mjs",
       "tools/release/src/exact/capsule-artifact.ts",
       "tools/release/src/exact/artifact-product.ts",
@@ -161,6 +157,18 @@
       "packages/standalone/",
       "shells/electron/",
       "tools/release/src/exact/control-common.ts"
+    ],
+    "release-tools": [
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "packages/",
+      "apps/closure/",
+      "shells/electron/",
+      "tools/pack/",
+      "tools/release/"
     ]
   },
   "workflows": {
@@ -381,6 +389,187 @@
           "artifact": {
             "product": "capsule",
             "prefix": "exact-capsule-cache-win32-x64"
+          }
+        },
+        "release_tools": {
+          "inputs": [
+            "suite://release-tools"
+          ],
+          "runnerClass": "release_control",
+          "products": "manifest",
+          "reusable": true,
+          "artifact": {
+            "product": "tool",
+            "prefix": "release-tools"
+          }
+        }
+      },
+      "execution": {
+        "enabled": [
+          "release_tools",
+          "terminal_scene_darwin_arm64",
+          "electron_scene_darwin_arm64",
+          "electron_base_darwin_arm64",
+          "electron_platform_darwin_arm64",
+          "electron_capsule_darwin_arm64",
+          "closure_data_skills_darwin_arm64",
+          "closure_data_design_templates_darwin_arm64",
+          "closure_data_design_systems_darwin_arm64",
+          "closure_data_craft_darwin_arm64",
+          "closure_data_plugins_darwin_arm64",
+          "closure_data_frames_darwin_arm64",
+          "closure_data_community_pets_darwin_arm64",
+          "closure_data_prompt_templates_darwin_arm64",
+          "closure_data_plugin_previews_darwin_arm64"
+        ],
+        "runners": {
+          "terminal_darwin_arm64": [
+            "macos-15"
+          ],
+          "electron_darwin_arm64": [
+            "macos-15"
+          ],
+          "electron_win32_x64": [
+            "windows-2025"
+          ],
+          "release_control": [
+            "ubuntu-24.04"
+          ]
+        },
+        "matrices": {
+          "shell_matrix": {
+            "include": [
+              {
+                "shell": "terminal",
+                "target": "darwin-arm64",
+                "workload": "terminal_scene_darwin_arm64",
+                "runner_class": "terminal_darwin_arm64",
+                "runs_on": "macos-15"
+              },
+              {
+                "shell": "electron",
+                "target": "darwin-arm64",
+                "workload": "electron_scene_darwin_arm64",
+                "platform_workload": "electron_platform_darwin_arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "base_workload": "electron_base_darwin_arm64"
+              }
+            ]
+          },
+          "validation_matrix": {
+            "include": [
+              {
+                "shell": "electron",
+                "target": "darwin-arm64",
+                "workload": "electron_scene_darwin_arm64",
+                "platform_workload": "electron_platform_darwin_arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "base_workload": "electron_base_darwin_arm64"
+              }
+            ]
+          },
+          "platform_matrix": {
+            "include": [
+              {
+                "target": "darwin-arm64",
+                "workload": "electron_platform_darwin_arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15"
+              }
+            ]
+          },
+          "capsule_matrix": {
+            "include": [
+              {
+                "target": "darwin-arm64",
+                "workload": "electron_capsule_darwin_arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15"
+              }
+            ]
+          },
+          "data_matrix": {
+            "include": [
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "skills",
+                "workload": "closure_data_skills_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "design-templates",
+                "workload": "closure_data_design_templates_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "design-systems",
+                "workload": "closure_data_design_systems_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "craft",
+                "workload": "closure_data_craft_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "plugins",
+                "workload": "closure_data_plugins_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "frames",
+                "workload": "closure_data_frames_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "community-pets",
+                "workload": "closure_data_community_pets_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "prompt-templates",
+                "workload": "closure_data_prompt_templates_darwin_arm64"
+              },
+              {
+                "target": "darwin-arm64",
+                "runner_class": "electron_darwin_arm64",
+                "runs_on": "macos-15",
+                "resource_id": "plugin-previews",
+                "workload": "closure_data_plugin_previews_darwin_arm64"
+              }
+            ]
+          }
+        },
+        "inputs": {
+          "shells": {
+            "shells": [
+              {
+                "shell": "terminal",
+                "target": "darwin-arm64"
+              },
+              {
+                "shell": "electron",
+                "target": "darwin-arm64"
+              }
+            ]
           }
         }
       }

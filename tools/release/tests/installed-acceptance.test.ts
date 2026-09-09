@@ -73,14 +73,13 @@ it("promotes the actual minimal installation proof into a reusable baseline with
   await executeExactReleaseControl(f.input, f.output);
   const acceptance = JSON.parse(await readFile(f.output, "utf8"));
   expect(acceptance.installed.proof.files).not.toHaveProperty("seeds");
-  const receipt = createAcceptedShellBaselineReceipt(acceptance, [`sha256:${"1".repeat(64)}`]);
+  const receipt = createAcceptedShellBaselineReceipt(acceptance);
   const bytes = Buffer.from(JSON.stringify(receipt));
   const resolved = resolveAcceptedShellBaseline({ channel: "betahyx", target: "darwin-arm64",
-    currentClosureIdentity: `sha256:${"2".repeat(64)}`,
     acceptedReceipt: { bytes, sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}` },
   });
   expect(resolved.mode).toBe("accepted");
-  expect(receipt.schemaVersion).toBe(2);
+  expect(receipt.schemaVersion).toBe(3);
   expect(receipt.baseline.installation.capsule.archive.sha256).toBe(f.installation.capsule.archive.sha256);
 });
 

@@ -7,9 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cac } from "cac";
 import { registerExactCommands } from "@/exact/commands.ts";
 
-import { executeExactReleaseControl } from "@/exact/control-release.js";
-import { EXACT_DATA_PLAN_NODE_IDS } from "@/exact/plan.js";
-import { createExactReleasePlanFromRegistryFile } from "@/exact/release-plan.js";
+import { executeExactReleaseControl, inspectAcceptedElectronBaseline } from "@/exact/control-release.js";
+import { createAcceptedShellBaselineReceipt } from "@/exact/accepted-baseline.ts";
 import { writeReleasePolicy } from "@/policy/release-profile.js";
 
 const roots: string[] = [];
@@ -26,27 +25,6 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "accepted-baseline-promotion-"));
   roots.push(root);
-  const repository = join(root, "repository");
-  const ids = [
-    ...EXACT_DATA_PLAN_NODE_IDS,
-    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.base.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
-    "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
-  ];
-  for (const id of ids) {
-    await mkdir(join(repository, id), { recursive: true });
-    await writeFile(join(repository, id, "input.txt"), `${id}\n`);
-  }
-  const registry = join(root, "registry.json");
-  await writeFile(registry, JSON.stringify({
-    schemaVersion: 1,
-    identities: Object.fromEntries(ids.map((id) => [id, {
-      parameters: id === "closure.acceptance.hot" ? ["target", "acceptedShellBaseline"] : ["target"],
-      schemaVersion: 1,
-      sourceSets: [id],
-    }])),
-    sourceSets: Object.fromEntries(ids.map((id) => [id, { paths: [id] }])),
-  }));
-
   const policyRequest = join(root, "policy-request.json"), policyReceipt = join(root, "policy.json");
   const target = {
     endpointUrl: "https://storage.invalid", bucket: "release", publicBaseUrl: publicBase,
@@ -93,10 +71,37 @@ async function fixture() {
         archive: { file: "capsule.zip", sha256: "9".repeat(64), size: 100 } },
     } } },
   }));
-  return { acceptanceCredential, activationReceipt, artifactBody, channelHeadBody, policyReceipt, publishReceipt, registry, repository, root };
+  return { acceptanceCredential, activationReceipt, artifactBody, channelHeadBody, policyReceipt, publishReceipt, root };
 }
 
 describe("accepted Electron baseline promotion", () => {
+  it.each(["missing", "matching", "different", "tampered"])("inspects %s baseline using actual carrier metadata, without a source planner", async kind => {
+    const input = await fixture();
+    const acceptance = JSON.parse(await readFile(input.acceptanceCredential, "utf8"));
+    acceptance.releaseVersion = "1.2.3-betahyx.3";
+    if (kind === "different") acceptance.shell = acceptance.installed.shell = { ...acceptance.shell, buildHash: "8".repeat(64) };
+    const snapshot = createAcceptedShellBaselineReceipt(acceptance), body = Buffer.from(JSON.stringify(snapshot));
+    const snapshotUrl = `${publicBase}/betahyx/accepted/electron/darwin-arm64/snapshot.json`;
+    const pointer = { schemaVersion: 1, operation: "electron.shell-baseline.latest", channel: "betahyx", target: "darwin-arm64",
+      releaseVersion: acceptance.releaseVersion, sourceCommit, receipt: { url: snapshotUrl, size: body.length,
+        sha256: `sha256:${kind === "tampered" ? "0".repeat(64) : createHash("sha256").update(body).digest("hex")}` } };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async request => {
+      const url = String(request), response = new Response(kind === "missing" ? null : url === snapshotUrl ? new Uint8Array(body) : JSON.stringify(pointer), { status: kind === "missing" ? 404 : 200 });
+      Object.defineProperty(response, "url", { value: url }); return response;
+    });
+    const args = { publication: input.publishReceipt, policy: input.policyReceipt, target: "darwin-arm64",
+      receipt: join(input.root, "inspect/result.json"), githubEnv: join(input.root, "environment") };
+    if (kind === "tampered") {
+      await expect(inspectAcceptedElectronBaseline(args)).rejects.toThrow("binding mismatch");
+      await expect(readFile(args.githubEnv)).rejects.toThrow("ENOENT"); return;
+    }
+    const result = await inspectAcceptedElectronBaseline(args);
+    expect(result.compatible).toBe(kind === "matching");
+    expect(await readFile(args.githubEnv, "utf8")).toBe(`ELECTRON_ACCEPTANCE_MODE=${kind === "matching" ? "hot" : "full"}\n`);
+    expect(result).not.toHaveProperty("acceptedIdentities");
+    if (kind === "matching") expect(JSON.parse(await readFile(result.baselineReceipt!, "utf8"))).toEqual(snapshot);
+  });
+
   it("publishes an immutable self-contained snapshot and advances its target pointer with CAS", async () => {
     const input = await fixture();
     const objects = new Map<string, { body: Buffer; etag: string }>([[
@@ -122,7 +127,6 @@ describe("accepted Electron baseline promotion", () => {
     const request = {
       schemaVersion: 1, operation: "exact.baseline.promote", publishReceipt: input.publishReceipt,
       activationReceipt: input.activationReceipt, policyReceipt: input.policyReceipt, acceptanceCredential: input.acceptanceCredential,
-      registry: input.registry, root: input.repository,
     };
     const receiptPath = join(input.root, "promotion.json");
     const originalPublication = await readFile(input.publishReceipt);
@@ -133,12 +137,12 @@ describe("accepted Electron baseline promotion", () => {
     const cli = cac("tools-release"); registerExactCommands(cli);
     cli.parse(["node", "tools-release", "baseline", "promote", "--publish-receipt", input.publishReceipt,
       "--activation-receipt", input.activationReceipt, "--policy", input.policyReceipt, "--acceptance", input.acceptanceCredential,
-      "--channel-head", relocatedHead, "--root", input.repository, "--registry", input.registry, "--receipt", receiptPath], { run: false });
+      "--channel-head", relocatedHead, "--receipt", receiptPath], { run: false });
     await cli.runMatchedCommand();
     expect(await readFile(input.publishReceipt)).toEqual(originalPublication);
     const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
     expect(receipt).toMatchObject({ operation: "exact.baseline.promote", target: "darwin-arm64", snapshot: { replayed: false }, pointer: { replayed: false } });
-    expect(receipt.acceptedIdentities).toHaveLength(3);
+    expect(receipt).not.toHaveProperty("acceptedIdentities");
     const pointerStorageUrl = `${storageBase}/betahyx/accepted/electron/darwin-arm64/latest.json`;
     const pointer = JSON.parse(objects.get(pointerStorageUrl)!.body.toString("utf8"));
     expect(pointer).toMatchObject({ releaseVersion, sourceCommit, receipt: { url: expect.stringContaining(`${publicBase}/betahyx/accepted/electron/darwin-arm64/`) } });
@@ -150,35 +154,16 @@ describe("accepted Electron baseline promotion", () => {
     await executeExactReleaseControl(request, replayPath);
     expect(JSON.parse(await readFile(replayPath, "utf8"))).toMatchObject({ snapshot: { replayed: true }, pointer: { replayed: true } });
 
-    await writeFile(join(input.repository, "closure.build", "input.txt"), "changed Closure\n");
-    const releasePlan = await createExactReleasePlanFromRegistryFile({
-      acceptedReceipt: { bytes: objects.get(snapshotStorageUrl)!.body, sha256: pointer.receipt.sha256 },
-      availableIdentities: new Set(), channel: "betahyx", registryPath: input.registry, root: input.repository, target: "darwin-arm64",
-    });
-    expect(releasePlan.actions.map(({ id }) => id)).toContain("closure.acceptance.hot");
-    expect(releasePlan.actions.map(({ id }) => id)).toEqual(expect.arrayContaining([
-      "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.shell.test", "closure.build", "closure.test",
-    ]));
-    for (const id of ["electron.contract.test", "electron.platform.build", "electron.shell.test", "closure.test"] as const) {
-      expect(receipt.acceptedIdentities).not.toContain(releasePlan.plan.nodes[id].identity);
-    }
-    const releasePlanPath = join(input.root, "release-plan.json");
-    await writeFile(releasePlanPath, JSON.stringify(releasePlan));
+    const snapshotFile = join(input.root, "baseline.json");
+    const oldSnapshot = structuredClone(snapshot);
+    oldSnapshot.releaseVersion = "1.2.3-betahyx.3";
+    oldSnapshot.acceptance.releaseVersion = oldSnapshot.releaseVersion;
+    await writeFile(snapshotFile, JSON.stringify(oldSnapshot));
     const stagedDirectory = join(input.root, "staged"), stagedReceipt = join(stagedDirectory, "shell-contribution.json");
     const stageRequest = {
-      schemaVersion: 1, operation: "exact.baseline.fetch", policyReceipt: input.policyReceipt, releasePlan: releasePlanPath,
-      registry: input.registry, root: input.repository, channel: "betahyx", releaseVersion, sourceCommit, target: "darwin-arm64",
-      outputDirectory: stagedDirectory,
+      schemaVersion: 1, operation: "exact.baseline.fetch", policyReceipt: input.policyReceipt, baselineReceipt: snapshotFile,
+      publishReceipt: input.publishReceipt, channel: "betahyx", releaseVersion, sourceCommit, target: "darwin-arm64", outputDirectory: stagedDirectory,
     };
-    await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires current Shell test validation");
-    // A separately supplied test result can satisfy the existing test gate;
-    // installed acceptance alone must not manufacture that result.
-    const testedPlan = await createExactReleasePlanFromRegistryFile({
-      acceptedReceipt: { bytes: objects.get(snapshotStorageUrl)!.body, sha256: pointer.receipt.sha256 },
-      availableIdentities: new Set([releasePlan.plan.nodes["electron.shell.test"].identity]),
-      channel: "betahyx", registryPath: input.registry, root: input.repository, target: "darwin-arm64",
-    });
-    await writeFile(releasePlanPath, JSON.stringify(testedPlan));
     await expect(executeExactReleaseControl(stageRequest, stagedReceipt)).rejects.toThrow("requires current Shell test validation");
     const validationReceipt = join(input.root, "shell-test-result.json");
     const validation = { schemaVersion: 1, operation: "exact.validation", status: "passed", node: "electron.shell.test",
@@ -188,9 +173,6 @@ describe("accepted Electron baseline promotion", () => {
       await expect(executeExactReleaseControl({ ...stageRequest, validationReceipt }, stagedReceipt)).rejects.toThrow("validation binding mismatch");
     }
     await writeFile(validationReceipt, JSON.stringify(validation));
-    // Pending test actions do not require rebuilding physical bytes when their
-    // independently executed current result has now been supplied.
-    await writeFile(releasePlanPath, JSON.stringify(releasePlan));
     await executeExactReleaseControl({ ...stageRequest, validationReceipt }, stagedReceipt);
     const staged = JSON.parse(await readFile(stagedReceipt, "utf8"));
     expect(staged).toMatchObject({ operation: "electron.baseline.fetch", artifact: { sha256: snapshot.acceptance.artifact.sha256 } });

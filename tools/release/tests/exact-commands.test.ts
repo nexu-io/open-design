@@ -13,11 +13,17 @@ const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "release-cli-test-")); roots.push(root);
-  const cli = join(root, "tools-release.mjs");
-  await build({ entryPoints: [resolve("src/exact/control-cli.ts")], outfile: cli, bundle: true, format: "esm", platform: "node", target: "node24", external: ["original-fs"],
-    banner: { js: "import { createRequire as exactCreateRequire } from 'node:module'; const require = exactCreateRequire(import.meta.url);" } });
-  return { root, invoke: (args: string[]) => run(process.execPath, [cli, ...args], { cwd: root, env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } }) };
+  const cli = join(root, "tools-release");
+  await build({ entryPoints: [resolve("src/index.ts")], outfile: cli, bundle: true, format: "esm", platform: "node", target: "node24", external: ["original-fs", "sharp", "playwright"],
+    banner: { js: "#!/usr/bin/env node\nimport { createRequire as exactCreateRequire } from 'node:module'; const require = exactCreateRequire(import.meta.url);" } });
+  await chmod(cli, 0o755);
+  return { root, cli, invoke: (args: string[]) => run(process.execPath, [cli, ...args], { cwd: root, env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } }) };
 }
+it.skipIf(process.platform === "win32")("starts the extensionless public executable outside the workspace", async () => {
+  const f = await fixture();
+  const result = await run(f.cli, ["self-check"], { cwd: f.root, env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" } });
+  expect(result.stderr).toBe("");
+});
 const identity = ["--channel", "betahyx", "--release-version", "0.1.0-betahyx.1", "--source-commit", "a".repeat(40)];
 const policyArgs = ["policy", "resolve", ...identity, "--profile", "exact-validation", "--source-ref", "refs/heads/feat/test",
   "--endpoint-url", "https://storage.example", "--bucket", "release", "--public-base-url", "https://public.example",
@@ -173,10 +179,10 @@ it("dispatches runtime-only production through the Closure public API", async ()
   await expect(f.invoke([...args, "--resource-id", "craft"])).rejects.toThrow("does not accept");
 });
 
-it("keeps workspace command names distinct from the relocatable exact grammar", async () => {
+it("exposes existing workspace commands and release commands from one public entry", async () => {
   const root = await mkdtemp(join(tmpdir(), "release-workspace-cli-")); roots.push(root);
   const cli = join(root, "workspace.mjs");
-  await build({ entryPoints: [resolve("src/index.ts")], outfile: cli, bundle: true, format: "esm", platform: "node", target: "node24", external: ["original-fs"],
+  await build({ entryPoints: [resolve("src/index.ts")], outfile: cli, bundle: true, format: "esm", platform: "node", target: "node24", external: ["original-fs", "sharp", "playwright"],
     banner: { js: "import { createRequire as exactCreateRequire } from 'node:module'; const require = exactCreateRequire(import.meta.url);" } });
   const invoke = (args: string[]) => run(process.execPath, [cli, ...args], { cwd: root });
   const help = (await invoke(["--help"])).stdout;

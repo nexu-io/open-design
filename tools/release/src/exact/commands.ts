@@ -1,13 +1,12 @@
 import type { CAC } from "cac";
-import { appendFile, readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import { exactStorageObject } from "@open-design/release";
 import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/release-profile.ts";
 import { writeObject } from "./control-common.ts";
 import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifySceneArtifact } from "./scene-artifact.ts";
-import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
+import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, inspectAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
-import { projectReleaseTopology } from "./topology.ts";
 import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { exportDataResource, importDataResource } from "./resource-artifact.ts";
@@ -144,26 +143,13 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("build operation must be resource, runtime-resources, platform, capsule, base, scene or distribution");
     });
 
-  cli.command("topology", "Project release actions over declared runner and target data")
-    .option("--declaration <file>", "Active and deferred target declaration")
-    .option("--plans <directory>", "Release plan receipts")
-    .option("--output <directory>", "Resolved topology, scope and runner receipts")
-    .option("--github-output <file>", "Optional GitHub matrix output destination")
-    .option("--receipt <file>", "Optional receipt; defaults to stdout")
-    .action(async (options: Options) => {
-      const result = await projectReleaseTopology({ declaration: required(options, "declaration"), plans: required(options, "plans"), output: required(options, "output") });
-      if (options.githubOutput != null) await appendFile(required(options, "githubOutput"),
-        `shell_matrix=${JSON.stringify(result.matrix)}\nvalidation_matrix=${JSON.stringify(result.validationMatrix)}\nplatform_matrix=${JSON.stringify(result.platformMatrix)}\ncapsule_matrix=${JSON.stringify(result.capsuleMatrix)}\ndata_matrix=${JSON.stringify(result.dataMatrix)}\n`);
-      await emit(options, result);
-    });
-
   cli.command("prepare", "Compose and sign content from the declared Shell scenes")
     .option("--policy <file>", "Release policy receipt")
     .option("--channel <name>", "Release channel")
     .option("--release-version <version>", "Release version")
     .option("--source-commit <sha>", "Exact source commit")
     .option("--root <directory>", "Checked-out source root")
-    .option("--topology <file>", "Resolved active Shell topology")
+    .option("--shells <file>", "Business Shell/target input inventory")
     .option("--scenes <directory>", "Downloaded scene artifacts")
     .option("--standalone-version <version>", "Standalone runtime version")
     .option("--previous-content <file>", "Optional verified previous content envelope")
@@ -179,7 +165,7 @@ export function registerExactCommands(cli: CAC): void {
     .action(async (options: Options) => {
       await prepareReleaseContent({ policy: required(options, "policy"), channel: required(options, "channel"),
         releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit"), sourceRoot: required(options, "root"),
-        topology: required(options, "topology"), scenesRoot: required(options, "scenes"), standaloneVersion: required(options, "standaloneVersion"),
+        shellInputs: required(options, "shells"), scenesRoot: required(options, "scenes"), standaloneVersion: required(options, "standaloneVersion"),
         ...(options.previousContent == null ? {} : { previousContentMetadataFile: required(options, "previousContent") }),
         ...(options.closureArtifact == null ? {} : { closureArtifactFile: required(options, "closureArtifact") }),
         ...(options.standaloneArtifact == null ? {} : { standaloneArtifactFile: required(options, "standaloneArtifact") }),
@@ -229,14 +215,13 @@ export function registerExactCommands(cli: CAC): void {
     });
 
   cli.command("baseline <operation>", "Fetch an upgrade-test baseline or promote a newly accepted baseline")
+    .option("--github-env <file>", "Optional acceptance eligibility projection (inspect)")
     .option("--publish-receipt <file>", "Publication receipt (promote)")
     .option("--activation-receipt <file>", "Activation receipt (promote)")
     .option("--acceptance <file>", "Installed Electron acceptance (promote)")
     .option("--channel-head <file>", "Relocated channel head (promote)")
     .option("--policy <file>", "Release policy receipt")
-    .option("--root <directory>", "Checked-out source root")
-    .option("--registry <file>", "Identity registry relative to root", { default: "tools/release/resources/exact-plan-identities.json" })
-    .option("--plan <file>", "Accepted release plan (fetch)")
+    .option("--baseline <file>", "Verified accepted baseline snapshot (fetch)")
     .option("--validation <file>", "Current successful Shell test result (fetch)")
     .option("--channel <name>", "Release channel (fetch)")
     .option("--release-version <version>", "Release version (fetch)")
@@ -245,17 +230,19 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Baseline installer for upgrade acceptance (fetch)")
     .option("--receipt <file>", "Result receipt")
     .action(async (operation: string, options: Options) => {
-      const root = resolve(required(options, "root"));
-      const shared = { root, registry: resolve(root, required(options, "registry")), policyReceipt: required(options, "policy") };
+      const shared = { policyReceipt: required(options, "policy") };
       const receipt = required(options, "receipt");
-      if (operation === "fetch") await fetchAcceptedElectronBaseline({ ...shared,
-        releasePlan: required(options, "plan"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"),
+      if (operation === "inspect") await inspectAcceptedElectronBaseline({ publication: required(options, "publishReceipt"),
+        policy: required(options, "policy"), target: required(options, "target"), receipt,
+        ...(options.githubEnv == null ? {} : { githubEnv: required(options, "githubEnv") }) });
+      else if (operation === "fetch") await fetchAcceptedElectronBaseline({ ...shared,
+        baselineReceipt: required(options, "baseline"), publishReceipt: required(options, "publishReceipt"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"),
         sourceCommit: required(options, "sourceCommit"), target: required(options, "target"), outputDirectory: required(options, "output"),
         validationReceipt: required(options, "validation") }, receipt);
       else if (operation === "promote") await promoteAcceptedElectronBaseline({ ...shared,
         publishReceipt: required(options, "publishReceipt"), activationReceipt: required(options, "activationReceipt"),
         acceptanceCredential: required(options, "acceptance"), channelHeadFile: required(options, "channelHead") }, receipt);
-      else throw new Error("baseline operation must be fetch or promote");
+      else throw new Error("baseline operation must be inspect, fetch or promote");
     });
 
   for (const product of ["capsule", "platform", "base"] as const) {
