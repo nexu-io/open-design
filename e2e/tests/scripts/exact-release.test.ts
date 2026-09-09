@@ -372,6 +372,10 @@ describe("exact Electron release topology", () => {
         expect(config.suites["convergence-control"]).not.toContain(`.github/config/plan/release-${other}.json`);
       }
       const profile = lane === "exact" ? "exact-validation" : `${lane}-distribution`;
+      for (const job of ["platform", "capsule", "data"]) {
+        const producer = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:/u)[0]!;
+        expect(producer).toContain("needs: [tools, plan, validation]");
+      }
       expect(workflow).toContain(`PROFILE: ${profile}`);
       expect(workflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
       expect(workflow).toContain("RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}");

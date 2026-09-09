@@ -442,7 +442,7 @@ jobs:
 
   platform:
     name: Native platform (${{ matrix.target }})
-    needs: [tools, plan]
+    needs: [tools, plan, validation]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}
@@ -543,7 +543,7 @@ jobs:
 
   capsule:
     name: Capsule (${{ matrix.target }})
-    needs: [tools, plan]
+    needs: [tools, plan, validation]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.capsule_matrix) }}
@@ -643,7 +643,7 @@ jobs:
 
   data:
     name: Data resource (${{ matrix.resource_id }})
-    needs: [tools, plan]
+    needs: [tools, plan, validation]
     strategy:
       fail-fast: false
       max-parallel: 3

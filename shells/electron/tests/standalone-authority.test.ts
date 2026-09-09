@@ -31,6 +31,7 @@ import { StandaloneHostLifecycle } from "@open-design/standalone";
 import { StandaloneHostLifecycleLedger } from "@open-design/standalone";
 import { ElectronStandaloneShellUpdaterLedger } from "@/adapters/standalone/shell-updater-ledger.js";
 import { writeCapsuleSeed } from "./fixtures/capsule.js";
+import { resolveElectronStandaloneTarget, type ElectronStandaloneInstallation } from "@/adapters/standalone/installation.js";
 
 const roots: string[] = [];
 const servers: ReturnType<typeof createServer>[] = [];
@@ -169,6 +170,8 @@ describe("Electron production Standalone authority", () => {
     const closure = Buffer.from("export const closure = true;\n");
     const launcherDigest = createHash("sha256").update(launcher).digest("hex");
     const closureDigest = createHash("sha256").update(closure).digest("hex");
+    releases.set(`${releaseOrigin}/launcher.mjs`, launcher);
+    releases.set(`${releaseOrigin}/closure.mjs`, closure);
     const metadata: StandaloneMetadata = {
       schemaVersion: 5,
       channel: "betahyx",
@@ -177,8 +180,8 @@ describe("Electron production Standalone authority", () => {
       sourceCommit: "7a4175c86fe305b6432081c3dc269cd4bd4ec04d",
       publishedAt: "2026-09-04T00:00:00.000Z",
       blobs: {
-        [launcherDigest]: { sha256: launcherDigest, size: launcher.byteLength, mediaType: "text/javascript", sources: [{ kind: "remote", url: "https://releases.invalid/launcher.mjs" }] },
-        [closureDigest]: { sha256: closureDigest, size: closure.byteLength, mediaType: "text/javascript", sources: [{ kind: "remote", url: "https://releases.invalid/closure.mjs" }] },
+        [launcherDigest]: { sha256: launcherDigest, size: launcher.byteLength, mediaType: "text/javascript", sources: [{ kind: "remote", url: `${releaseOrigin}/launcher.mjs` }] },
+        [closureDigest]: { sha256: closureDigest, size: closure.byteLength, mediaType: "text/javascript", sources: [{ kind: "remote", url: `${releaseOrigin}/closure.mjs` }] },
       },
       resources: [
         { id: "standalone-launcher", component: "standalone.launcher", blob: launcherDigest, sync: true, materialization: { type: "file", entrypoint: "standalone-launcher.mjs" } },
@@ -193,9 +196,9 @@ describe("Electron production Standalone authority", () => {
     const capsule = await writeCapsuleSeed({ root, privateKey: keys.privateKey, keyId: "release" });
     const content = Buffer.from(canonicalJson(signStandaloneMetadata(metadata, "release", keys.privateKey)));
     const trust = Buffer.from(canonicalJson({ schemaVersion: 1, keys: [{ keyId: "release", publicKey: keys.publicKey.export({ format: "pem", type: "spki" }).toString() }] }));
-    const target = process.platform === "win32" ? `win32-${process.arch}` : `${process.platform}-${process.arch}`;
-    const installation = {
-      schemaVersion: 3,
+    const target = resolveElectronStandaloneTarget();
+    const installation: ElectronStandaloneInstallation = {
+      schemaVersion: 4,
       channel: metadata.channel,
       releaseVersion: metadata.releaseVersion,
       target,
@@ -206,17 +209,11 @@ describe("Electron production Standalone authority", () => {
       trust: descriptor("standalone-trust.json", trust),
       capsule: { manifest: descriptor("capsule-manifest.json", await readFile(capsule.manifestFile)), archive: descriptor("capsule.zip", await readFile(capsule.archiveFile)) },
       update: { channelHeadUrl: `${releaseOrigin}/betahyx/latest/channel-head.json` },
-      seeds: [
-        { ...descriptor("standalone-launcher-seed.mjs", launcher), blobSha256: launcherDigest },
-        { ...descriptor("closure-seed.mjs", closure), blobSha256: closureDigest },
-      ],
     };
     await Promise.all([
       writeFile(join(root, "standalone-content.json"), content),
       writeFile(join(root, "standalone-trust.json"), trust),
       writeFile(join(root, "capsule.zip"), await readFile(capsule.archiveFile)),
-      writeFile(join(root, "standalone-launcher-seed.mjs"), launcher),
-      writeFile(join(root, "closure-seed.mjs"), closure),
       writeFile(join(root, "standalone-installation.json"), canonicalJson(installation)),
     ]);
     const manifest: ElectronShellManifest = {
