@@ -320,6 +320,7 @@ export type RunFailureMessageKey =
   | 'chat.runError.cliSessionRefusedMessage'
   | 'chat.runError.strategyTaskStateMismatchMessage'
   | 'chat.runError.agentReplyIncompleteMessage'
+  | 'chat.runError.noDeliverableMessage'
   | 'chat.runError.clarificationRepeatedMessage'
   | 'chat.runError.clientEnvironmentMessage'
   | null;
@@ -488,6 +489,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.cliSessionRefused'
   | 'chat.runError.title.strategyTaskHalted'
   | 'chat.runError.title.agentReplyIncomplete'
+  | 'chat.runError.title.noDeliverable'
   | 'chat.runError.title.clarificationRepeated'
   | 'chat.runError.title.clientEnvironment'
   | 'chat.runError.title.generic';
@@ -1112,6 +1114,29 @@ const AGENT_AGNOSTIC_FAILURE_UI: Record<string, RunFailureUi> = {
   // share the row: to the user they are one story — the reply came back without
   // the marker — and splitting them would only ask product for four wordings of
   // the same sentence.
+  // The turn ran to the end and produced no openable file.
+  //
+  // Ladder rung 2. Distinct from the four Runtime State codes on purpose: to
+  // the user those say "your reply went missing", and this one says "nothing
+  // came out this round" — a different sentence, a different expectation, and
+  // the only one of the two that is true when the project is empty. Since the
+  // undeclared shape of this failure is now attributed here too
+  // (`reattributeUndeclaredTurn`), it is the code a real empty-handed turn
+  // lands on whether or not the agent wrote its machine block.
+  //
+  // Retry earns its place: the deliverable is missing because THIS turn wrote
+  // nothing, and a re-run is exactly the thing that can write it. A turn whose
+  // deliverable does exist never reaches a card at all — `providers/daemon.ts`
+  // keeps it `succeeded` on `projectDeliverableValid`.
+  //
+  // ⚠️ Copy is engineering's, like the rows below it:
+  // `docs/design/run-errors/error-ux-design.md` has no cell for it. S23 ("跑完
+  // 没生成文件") is the nearest and is listed there as invisible in telemetry;
+  // product should rewrite the wording, not the routing.
+  od_next_canonical_deliverable_invalid: retryWithGuidance(
+    'chat.runError.title.noDeliverable',
+    'chat.runError.noDeliverableMessage',
+  ),
   od_next_protocol_runtime_state_missing: agentReplyIncomplete(),
   od_next_protocol_runtime_state_duplicate: agentReplyIncomplete(),
   od_next_protocol_runtime_state_invalid_json: agentReplyIncomplete(),

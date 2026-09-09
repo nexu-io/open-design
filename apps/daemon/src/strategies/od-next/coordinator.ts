@@ -435,7 +435,12 @@ export function finalizeStrategyPlanningResult(db: SqliteDb, input: {
       const repair = tryBeginSerializationRepair(db, current, input, parsed, protocolCodes);
       if (repair) return repair;
       const blockedCodes = [
-        ...reattributeUndeclaredTurn(current, parsed, protocolCodes),
+        ...reattributeUndeclaredTurn(
+          current,
+          parsed,
+          protocolCodes,
+          input.completionEvidence,
+        ),
         ...bindingCodes,
       ];
       logOdNextMachineContractGap(current, input.runId, parsed, blockedCodes);
@@ -630,13 +635,46 @@ function reattributeUndeclaredTurn(
   task: StrategyTaskExecutionRecord,
   parsed: ReturnType<OdNextMachineProtocolStream['finish']>,
   protocolCodes: string[],
+  completionEvidence?: {
+    physicalStatus: 'succeeded' | 'failed' | 'canceled';
+    deliverableValid: boolean;
+  },
 ): string[] {
   if (!turnEmittedNoMachineBlock(parsed)) return protocolCodes;
-  if (countRenderableQuestionForms(parsed.visibleText) === 0) return protocolCodes;
-  if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+  if (countRenderableQuestionForms(parsed.visibleText) > 0) {
+    if (task.clarificationCount === 0 && task.inputStage !== 'clarification') {
+      return protocolCodes;
+    }
+    return ['od_next_clarification_repeated'];
+  }
+  // The turn was SHAPED like a completion the host may infer, and the
+  // inference above still declined it. Both inference helpers gate on exactly
+  // two things — the shape, which just held, and the evidence — so the
+  // evidence is what refused, and it is a host fact the user can act on
+  // ("nothing was produced this round") while the parser's own code is not
+  // ("a marker is missing"). Naming it first puts the acting cause in
+  // `reasonCodes[0]`, the slot the failure card and the analytics bucket read.
+  //
+  // The parser's code is kept behind it: `blocked_reason_codes_json` is the
+  // durable record of what the turn actually wrote, and a later triage that
+  // cannot tell "declared badly" from "declared nothing" has lost the one
+  // distinction that decides whether a serialization repair was ever possible.
+  if (
+    !odNextTurnMayInferDirectEditCompletion(task, parsed)
+    && !odNextTurnMayInferProductionCompletion(task, parsed)
+  ) {
     return protocolCodes;
   }
-  return ['od_next_clarification_repeated'];
+  const evidenceCodes = [
+    ...(completionEvidence?.physicalStatus !== 'succeeded'
+      ? ['od_next_physical_run_not_succeeded']
+      : []),
+    ...(completionEvidence?.deliverableValid !== true
+      ? ['od_next_canonical_deliverable_invalid']
+      : []),
+  ];
+  if (evidenceCodes.length === 0) return protocolCodes;
+  return [...evidenceCodes, ...protocolCodes];
 }
 
 export function odNextTurnMayInferDirectEditCompletion(

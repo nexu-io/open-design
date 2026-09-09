@@ -2887,7 +2887,9 @@ export interface Dict {
   'chat.runError.title.cliSessionRefused': string;
   'chat.runError.title.strategyTaskHalted': string;
   'chat.runError.title.agentReplyIncomplete': string;
+  'chat.runError.title.noDeliverable': string;
   'chat.runError.agentReplyIncompleteMessage': string;
+  'chat.runError.noDeliverableMessage': string;
   'chat.runError.title.clarificationRepeated': string;
   'chat.runError.clarificationRepeatedMessage': string;
   'chat.runError.title.clientEnvironment': string;
