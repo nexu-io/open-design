@@ -19,9 +19,10 @@ available to the user, with durable, content-free evidence of the warning.
 | N3 | User: continue programmatic repair | Existing safe-edit, staging, verification, commit and time budgets remain; no model repair turn |
 | N4 | Existing execution failures remain failures | Agent/protocol, missing artifact, cancellation and snapshot failures are not converted to success; a syntax warning is never counted as repaired or blocked delivery |
 
-Current implementation baseline: `259ee527d`. Its remote evaluation is the old
-blocking policy and cannot validate N1–N4. This update is local until separately
-authorized for push/release. No critical decision remains unresolved in this scope.
+The earlier implementation baseline `259ee527d` used the blocking policy; its
+remote evaluation cannot validate N1–N4. The non-blocking increment is now based
+directly on main (`d07102a3b`). PR submission does not imply merge or release.
+No critical decision remains unresolved in this scope.
 
 | ID | Contract | Acceptance |
 | --- | --- | --- |
@@ -180,9 +181,33 @@ and durable-message contract tests passed 17/17; daemon telemetry/bridge/termina
 tests passed 237/237 and both daemon source/test typechecks passed. These test
 counts are code tests, distinct from the three deployed-daemon canary executions.
 
-No source was committed, pushed, merged or deployed by this canary. The changes
-remain local. An additional default-off-lane identity-isolation assertion was
+No source was committed, pushed, merged or remotely deployed by that canary. Its
+receipt predates PR submission. An additional default-off-lane identity-isolation assertion was
 added after this receipt; it leaves the canary's effective environment unchanged.
+
+### Main-based PR validation: 2026-09-09
+
+Commit `5164836e47c8530254459e392051732b38a4c602`, based directly on main
+`d07102a3b`, passed a fresh build and isolated deployed-daemon replay:
+
+```bash
+pnpm exec tsx e2e/scripts/syntax-acceptance.ts --mode replay --repeat 1
+```
+
+Private receipt `od-syntax-acceptance-mK8tps/report.json` records 10/10 PASS:
+six verified repairs, one clean delivery and three warning deliveries. All Runs
+succeeded; refused patches retained the original bytes. `sourceStable=true` and
+`cleanup.stopped=true` were verified. Upload was disabled and the CLI emitted
+fixed fixtures, so this is local deployment acceptance, not real-model or online
+coverage evidence. Repaired-delivery windows were 21–38 ms for these tiny fixtures;
+the two observed-error warning windows were 11/14 ms. The oversized incomplete
+check has no first-error window, not a zero-duration repair.
+
+The same source passed 380 daemon tests across eight focused files, 16 contract
+tests and 17 harness tests (413 total), repository guard and full workspace
+typecheck. Initial restricted-sandbox attempts could not create IPC/listening
+sockets; the affected commands passed with the required local process permission.
+The subsequent documentation-only commit does not change the validated runtime.
 
 ### Local receipts: 2026-09-08 non-blocking policy
 
