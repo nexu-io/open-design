@@ -54,7 +54,11 @@ export async function pack(source: string, destination: string, options: Archive
       await snapshot(root, input);
     }
     const file = join(scratch, "content.zip");
-    const args = backend.kind === "7z" ? ["a", "-tzip", "-mx=5", "-y", file, "."] : ["-q", "-r", "-y", "-X", file, "."];
+    // Suppress older p7zip's timestamp extensions: normalizing mtime alone does
+    // not remove snapshot-local metadata from its directory entries.
+    const args = backend.kind === "7z"
+      ? ["a", "-tzip", "-mx=5", "-y", ...(options.reproducible ? ["-mtc=off"] : []), file, "."]
+      : ["-q", "-r", "-y", "-X", file, "."];
     await execute(backend.executable, args, { cwd: input, env: { ...(options.env ?? process.env), ...(options.reproducible ? { TZ: "UTC" } : {}) }, timeout: options.timeoutMs ?? 120_000, signal: options.signal, maxBuffer: 1024 * 1024 });
     await inspect(file, options);
     const hash = createHash("sha256"); let size = 0;

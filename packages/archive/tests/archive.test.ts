@@ -6,6 +6,19 @@ import { pack, extract, inspect, resolveArchiveBackend } from "../src/build.js";
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture() { const root = await mkdtemp(join(tmpdir(), "native-archive-")); roots.push(root); const source = join(root, "source"); await mkdir(source); await writeFile(join(source, "valid"), "native", { mode: 0o755 }); return { root, source }; }
+it("keeps reproducible ZIP bytes independent of snapshot creation and access times", async () => {
+  const { root, source } = await fixture();
+  for (const name of ["_official", "registry"]) {
+    await mkdir(join(source, name));
+    await writeFile(join(source, name, "content.txt"), name);
+  }
+  const first = await pack(source, join(root, "first.zip"), { reproducible: true, permissions: "portable" });
+  await new Promise(done => setTimeout(done, 1100));
+  const second = await pack(source, join(root, "second.zip"), { reproducible: true, permissions: "portable" });
+  expect(second.backend).toEqual(first.backend);
+  expect(second.sha256).toBe(first.sha256);
+  expect(await inspect(second.file)).toEqual(await inspect(first.file));
+});
 it("fails explicit configuration without falling back to PATH", async () => {
   await expect(resolveArchiveBackend("pack", { tool: { kind: "zip", executable: "/missing/archive-tool" } })).rejects.toThrow("not found");
 });
