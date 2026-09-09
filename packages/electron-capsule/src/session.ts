@@ -214,7 +214,7 @@ export async function runElectronCapsule(
 
   // The local Capsule owns the first screen. Node/native preparation may need
   // I/O and must not precede that screen or escape the carrier's quit barrier.
-  platformAcquisition = definition.prepareNodeRuntime({ resourceRoot, runtimeRoot, signal: rendererShutdown.signal });
+  platformAcquisition = definition.prepareNodeRuntime({ runtimeRoot, platform: context.platform, signal: rendererShutdown.signal });
   const nodeRuntime = await context.startupQuit.guard(platformAcquisition);
   context.log.write("platform.ready", { command: nodeRuntime.command });
 

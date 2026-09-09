@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { standaloneTreeSha256 } from "@open-design/standalone";
+import { platformFixture } from "../platform-fixture.js";
 import { buildElectronCapsuleContent } from "@/distribution/capsule.js";
 import { assertElectronCapsuleCompatibility, assertElectronCapsuleReleaseManifest, composeElectronCapsuleManifest, resolveElectronCompositeShellIdentity, validateElectronCapsuleContent, validateElectronCapsuleManifest, validateElectronCapsuleRelease } from "@/contracts/capsule.js";
 
@@ -19,7 +20,7 @@ async function fixture() {
 describe("independent Capsule build", () => {
   it("derives composite capability from authenticated Capsule and physical carrier without rewriting either", () => {
     const carrier = { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "a".repeat(64), digest: "b".repeat(64) } };
-    const manifest = composeElectronCapsuleManifest({ content: {
+    const manifest = composeElectronCapsuleManifest({ platform: platformFixture(), content: {
       schemaVersion: 1, protocol: "electron-capsule-v6", target: carrier.target, entrypoint: "capsule.cjs",
       archive: { sha256: "c".repeat(64), size: 100, treeSha256: "d".repeat(64) },
     }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
@@ -33,6 +34,18 @@ describe("independent Capsule build", () => {
     const renamed = resolveElectronCompositeShellIdentity({ ...manifest, version: "2.0.1", provides: { shellVersion: "3.0.1" } }, carrier);
     expect(renamed.buildHash).toBe(shell.buildHash);
     expect(renamed.digest).not.toBe(shell.digest);
+    const relocated = resolveElectronCompositeShellIdentity({ ...manifest, platform: { ...manifest.platform,
+      blob: { ...manifest.platform.blob, sources: [{ kind: "remote", url: "https://other.invalid/platform.zip" }] } } }, carrier);
+    expect(relocated.buildHash).toBe(shell.buildHash);
+    expect(relocated.digest).not.toBe(shell.digest);
+    for (const platform of [
+      { ...manifest.platform, treeSha256: "a".repeat(64) },
+      { ...manifest.platform, executables: ["bin/node", "spawn-helper"] },
+      { ...manifest.platform, blob: { ...manifest.platform.blob, sha256: "a".repeat(64) } },
+    ]) expect(resolveElectronCompositeShellIdentity({ ...manifest, platform }, carrier).buildHash).not.toBe(shell.buildHash);
+    expect(() => validateElectronCapsuleManifest({ ...manifest, platform: platformFixture("win32-x64") })).toThrow("platform");
+    expect(() => validateElectronCapsuleManifest({ ...manifest, platform: { ...manifest.platform, blob: { ...manifest.platform.blob, sources: [] } } })).toThrow("platform");
+    expect(() => validateElectronCapsuleManifest({ ...manifest, platform: undefined })).toThrow();
     expect(resolveElectronCompositeShellIdentity({ ...manifest, archive: { ...manifest.archive, sha256: "e".repeat(64) } }, carrier).buildHash).not.toBe(shell.buildHash);
     expect(resolveElectronCompositeShellIdentity(manifest, { ...carrier, shell: { ...carrier.shell, buildHash: "e".repeat(64) } }).buildHash).not.toBe(shell.buildHash);
     expect(() => resolveElectronCompositeShellIdentity(manifest, { ...carrier, shell: { ...carrier.shell, version: "0.9.0" } })).toThrow("carrier");
@@ -44,7 +57,7 @@ describe("independent Capsule build", () => {
       manifest: { url: "https://release.invalid/capsule.json", sha256: "a".repeat(64), size: 500 },
       archive: { url: "https://release.invalid/capsule.zip", sha256: "b".repeat(64), size: 100 },
     });
-    const manifest = composeElectronCapsuleManifest({ content: {
+    const manifest = composeElectronCapsuleManifest({ platform: platformFixture(), content: {
       schemaVersion: 1, protocol: "electron-capsule-v6", target: "darwin-arm64", entrypoint: "capsule.cjs",
       archive: { sha256: release.archive.sha256, size: release.archive.size, treeSha256: "c".repeat(64) },
     }, version: "2.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "3.0.0" });
@@ -80,8 +93,8 @@ describe("independent Capsule build", () => {
     const bytes = await readFile(built.archivePath);
     const content = validateElectronCapsuleContent(JSON.parse(await readFile(built.contentPath, "utf8")));
     await rm(input.entryPath);
-    const first = composeElectronCapsuleManifest({ content, version: "1.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "2.0.0" });
-    const second = composeElectronCapsuleManifest({ content, version: "1.0.1", minimumCarrierVersion: "1.1.0", providedShellVersion: "2.1.0" });
+    const first = composeElectronCapsuleManifest({ platform: platformFixture(), content, version: "1.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "2.0.0" });
+    const second = composeElectronCapsuleManifest({ platform: platformFixture(), content, version: "1.0.1", minimumCarrierVersion: "1.1.0", providedShellVersion: "2.1.0" });
     expect(second.archive).toEqual(first.archive);
     expect(second).toMatchObject({ version: "1.0.1", requires: { carrierVersion: "1.1.0" }, provides: { shellVersion: "2.1.0" } });
     expect(content).not.toHaveProperty("version");
@@ -93,11 +106,11 @@ describe("independent Capsule build", () => {
       { ...content, requires: { carrierVersion: "1.0.0" } }]) {
       expect(() => validateElectronCapsuleContent(invalid)).toThrow();
     }
-    expect(() => composeElectronCapsuleManifest({ content, version: "bad", minimumCarrierVersion: "1.0.0", providedShellVersion: "2.0.0" })).toThrow();
+    expect(() => composeElectronCapsuleManifest({ platform: platformFixture(), content, version: "bad", minimumCarrierVersion: "1.0.0", providedShellVersion: "2.0.0" })).toThrow();
   });
   it("rejects unsupported protocols, platform targets, fields and carrier floors", async () => {
     const input = await fixture(), { content } = await buildElectronCapsuleContent(input);
-    const manifest = composeElectronCapsuleManifest({ content, version: "1.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "2.0.0" });
+    const manifest = composeElectronCapsuleManifest({ platform: platformFixture(), content, version: "1.0.0", minimumCarrierVersion: "1.0.0", providedShellVersion: "2.0.0" });
     for (const invalid of [{ ...manifest, target: "linux-x64" }, { ...manifest, entrypoint: "../main.cjs" },
       { ...manifest, schemaVersion: 2 }, { ...manifest, latest: "anything" }, { ...manifest, archive: { ...manifest.archive, size: -1 } }]) {
       expect(() => validateElectronCapsuleManifest(invalid)).toThrow();

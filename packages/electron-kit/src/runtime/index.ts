@@ -161,7 +161,7 @@ async function runElectronCarrierSession(input: ElectronCarrierDefinition, conte
     },
   });
   const ready = await startupQuit.guard(capsule.runElectronCapsule(definition, Object.freeze({
-    manifest, shell, presentation, namespace, paths, preflight, resourceRoot,
+    manifest, shell, platform: capsule.platform, presentation, namespace, paths, preflight, resourceRoot,
     log, processErrors, ingress,
     activation: Object.freeze({ stop: () => activation.stop() }),
     startup: capsuleStartup,

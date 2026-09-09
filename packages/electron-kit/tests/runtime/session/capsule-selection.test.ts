@@ -11,6 +11,7 @@ import { validateElectronCapsuleManifest } from "@/contracts/capsule.js";
 import { ElectronActivationAttempt, inspectElectronStartup } from "@/runtime/session/activation.js";
 import { armElectronCapsuleSelection, commitElectronCapsuleSelection, readElectronCapsuleSelection } from "@/runtime/session/capsule-selection.js";
 import { recoverElectronStartup } from "@/runtime/session/recovery.js";
+import { platformFixture } from "../../platform-fixture.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -20,7 +21,7 @@ async function fixture() {
   const code = Buffer.from('throw new Error("selection must never execute Capsule");');
   await writeFile(join(root, "capsule.cjs"), code);
   const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v6", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
-    requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
+    platform: platformFixture(), requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 100, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: sha256Hex(code), size: code.length }]) } });
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const capsule = { root, envelope: signDocument(manifest, [{ keyId: "test", privateKey }]), trustedKeys: { test: publicKey },

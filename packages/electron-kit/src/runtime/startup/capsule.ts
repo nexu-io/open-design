@@ -13,6 +13,7 @@ export type ElectronCapsuleModule = Readonly<{
   runElectronCapsule(definition: ElectronShellDefinition, session: ElectronCapsuleSession): Promise<ElectronCapsuleReady>;
 }>;
 export type LoadedElectronCapsule = ElectronCapsuleModule & Readonly<{
+  platform: ElectronCapsuleManifest["platform"];
   shell: Readonly<StandaloneShellIdentity>;
   selection: Readonly<{ envelope: SignedDocument<ElectronCapsuleManifest>; root: string; revision: number }>;
 }>;
@@ -79,7 +80,7 @@ export function createElectronCapsuleLoader(): (input: LoadElectronCapsuleInput)
       evaluate(module.exports, createRequire(entrypoint), module, entrypoint, root);
       if (typeof module.exports.createElectronCapsuleDefinition !== "function") throw new Error("Capsule module lacks its definition factory");
       if (typeof module.exports.runElectronCapsule !== "function") throw new Error("Capsule module lacks its startup entry");
-      return Object.freeze({ shell, selection: Object.freeze({ envelope: snapshot.envelope, root: snapshot.root, revision: snapshot.selectionRevision ?? 0 }),
+      return Object.freeze({ shell, platform: candidate.manifest.platform, selection: Object.freeze({ envelope: snapshot.envelope, root: snapshot.root, revision: snapshot.selectionRevision ?? 0 }),
         createElectronCapsuleDefinition: module.exports.createElectronCapsuleDefinition,
         runElectronCapsule: module.exports.runElectronCapsule });
     })();

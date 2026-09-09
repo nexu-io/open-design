@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { signStandaloneMetadata, verifyDocument, verifyStandaloneMetadata, verifyStandaloneShellMetadata } from "@open-design/standalone";
 
 import { prepareContent, finalizeContent } from "@/exact/content.ts";
-import { capsuleFixture } from "./capsule-fixture.ts";
+import { capsuleFixture, writePlatformFixture } from "./capsule-fixture.ts";
 
 const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
@@ -60,6 +60,7 @@ describe("exact release control", () => {
     process.env.OD_EXACT_ED25519_PRIVATE_KEY = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
     try {
       const prepareRequest = {
+        platformProducts: shellType === "electron" ? [await writePlatformFixture(join(root, "platform"))] : [],
         channel,
         releaseVersion,
         sourceCommit: "c".repeat(40),
@@ -154,6 +155,11 @@ describe("exact release control", () => {
       if (shellType === "electron") {
         await expect(finalize()).rejects.toThrow("lacks updater contract");
         await writeFile(contributionFile, JSON.stringify({ ...contribution, updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" } }));
+        const platformPath = prepared.shells[0].scenes[0].platform.file;
+        const platformBytes = await readFile(platformPath);
+        await writeFile(platformPath, "tampered platform");
+        await expect(finalize()).rejects.toThrow("platform archive binding verification failed");
+        await writeFile(platformPath, platformBytes);
       }
       await finalize();
       const metadata = JSON.parse(await readFile(join(finalDirectory, `documents/${shellType}-metadata.json`), "utf8"));

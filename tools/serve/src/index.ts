@@ -17,6 +17,8 @@ type CliOptions = {
   closurePath?: string;
   capsuleContent?: string;
   capsuleArchive?: string;
+  platformResource?: string;
+  platformArchive?: string;
   host?: string;
   json?: boolean;
   platform?: "mac" | "win";
@@ -95,12 +97,14 @@ async function start(service: string, options: CliOptions): Promise<void> {
     if (options.closurePath == null) throw new Error("--closure-path is required for standalone-exact");
     if (options.launcherPath == null) throw new Error("--launcher-path is required for standalone-exact");
     if (options.shellBuildHash == null) throw new Error("--shell-build-hash is required for standalone-exact");
-    if ((options.capsuleContent == null) !== (options.capsuleArchive == null)) throw new Error("--capsule-content and --capsule-archive must be supplied together");
+    const capsuleInputs = [options.capsuleContent, options.capsuleArchive, options.platformResource, options.platformArchive];
+    if (capsuleInputs.some(value => value != null) && capsuleInputs.some(value => value == null)) throw new Error("--capsule-content, --capsule-archive, --platform-resource and --platform-archive must be supplied together");
     const channel = options.channel ?? "dev";
     const server = await startStandaloneExactFixtureServer({
       channel,
       closurePath: options.closurePath,
-      ...(options.capsuleContent == null ? {} : { capsule: { contentFile: resolve(options.capsuleContent), archiveFile: resolve(options.capsuleArchive!) } }),
+      ...(options.capsuleContent == null ? {} : { capsule: { contentFile: resolve(options.capsuleContent), archiveFile: resolve(options.capsuleArchive!),
+        platformResourceFile: resolve(options.platformResource!), platformArchiveFile: resolve(options.platformArchive!) } }),
       host: options.host,
       launcherPath: options.launcherPath,
       port: parsePort(options.port),
@@ -203,6 +207,8 @@ cli
   .option("--closure-path <path>", "standalone-exact: Closure content artifact")
   .option("--capsule-content <path>", "standalone-exact: prebuilt Electron Capsule content descriptor")
   .option("--capsule-archive <path>", "standalone-exact: matching Electron Capsule archive")
+  .option("--platform-resource <path>", "standalone-exact: independent platform resource descriptor")
+  .option("--platform-archive <path>", "standalone-exact: matching platform archive")
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
   .option("--launcher-path <path>", "standalone-exact: generation launcher artifact")

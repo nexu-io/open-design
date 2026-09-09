@@ -14,7 +14,13 @@ it("acquires fixture bytes through the download primitive and disposes only its 
   const launcherPath = join(root, "launcher.mjs"), closurePath = join(root, "closure.mjs");
   await writeFile(launcherPath, "launcher");
   await writeFile(closurePath, "closure");
-  const capsule = { contentFile: join(root, "capsule-content.json"), archiveFile: join(root, "capsule.zip") };
+  const capsule = { contentFile: join(root, "capsule-content.json"), archiveFile: join(root, "capsule.zip"),
+    platformResourceFile: join(root, "platform-resource.json"), platformArchiveFile: join(root, "platform.zip") };
+  const platformBytes = Buffer.from("platform fixture bytes");
+  await writeFile(capsule.platformArchiveFile, platformBytes);
+  await writeFile(capsule.platformResourceFile, JSON.stringify({ schemaVersion: 1, target: "darwin-arm64",
+    blob: { sha256: createHash("sha256").update(platformBytes).digest("hex"), size: platformBytes.length, mediaType: "application/zip", sources: [] },
+    treeSha256: "f".repeat(64), executables: ["bin/node"] }));
   const capsuleBytes = Buffer.from("Capsule fixture bytes");
   await writeFile(capsule.archiveFile, capsuleBytes);
   await writeFile(capsule.contentFile, JSON.stringify({ schemaVersion: 1, protocol: "electron-capsule-v6", target: "darwin-arm64", entrypoint: "capsule.cjs",
@@ -38,6 +44,8 @@ it("acquires fixture bytes through the download primitive and disposes only its 
       const manifest = JSON.parse(await readFile(files.capsule!.manifestFile, "utf8"));
       expect(verifyDocument(manifest, ring)).toBe("local-exact");
       expect(manifest.document).toMatchObject({ protocol: "electron-capsule-v6", provides: { shellVersion: "0.1.0" } });
+      expect(Buffer.from(await (await fetch(manifest.document.platform.blob.sources[0].url)).arrayBuffer())).toEqual(platformBytes);
+      expect(manifest.document.platform.blob.sha256).toBe(createHash("sha256").update(platformBytes).digest("hex"));
       await withStandaloneExactFixture(input, async second => {
         expect(second.contentFile).not.toBe(first);
         expect(await readFile(first, "utf8")).not.toBe("");

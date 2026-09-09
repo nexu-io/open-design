@@ -15,6 +15,7 @@ import {
 } from "./control-common.ts";
 import { composeReleaseDataResources } from "./resource-composition.ts";
 import { verifyCapsuleReleaseBudget } from "./capsule-budget.ts";
+import { preparePlatformProduct } from "./platform-product.ts";
 
 export type PrepareExactContentInput = Readonly<{
   channel: string;
@@ -28,6 +29,7 @@ export type PrepareExactContentInput = Readonly<{
   resourceReceiptFile?: string;
   dataResourceReceiptFiles?: readonly string[];
   capsuleProducts?: readonly Readonly<{ target: string; contentFile: string; archiveFile: string }>[];
+  platformProducts?: readonly Readonly<{ target: string; resourceFile: string; archiveFile: string }>[];
   previousContentMetadataFile?: string;
   shells: readonly Readonly<{ type: string; version: string; scenes: readonly Readonly<{
     target: string; sceneDirectory: string; sceneManifestSha256: string;
@@ -159,6 +161,12 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
     capsuleProducts.set(product.target, product);
   }
   if (request.capsuleProducts != null && capsuleProducts.size !== electronTargets.size) throw new Error("Capsule products do not cover Electron topology");
+  const platformProducts = new Map<string, NonNullable<PrepareExactContentInput["platformProducts"]>[number]>();
+  for (const product of request.platformProducts ?? []) {
+    if (!electronTargets.has(product.target) || platformProducts.has(product.target)) throw new Error("invalid or duplicate platform product target");
+    platformProducts.set(product.target, product);
+  }
+  if (platformProducts.size !== electronTargets.size) throw new Error("platform products do not cover Electron topology");
   const keys = await signingKeys();
   for (const shell of shellRecords) {
     if (shell.type !== "electron") continue;
@@ -171,8 +179,11 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       const archiveFile = product?.archiveFile ?? join(scene.directory, "capsule.zip"), archive = await describeFile(archiveFile, "application/zip");
       if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Electron Capsule baseline archive mismatch");
       const budget = await verifyCapsuleReleaseBudget(archiveFile, content.archive);
-      scene.capabilityBuildHash = electronCompositeShellBuildHash(content, scene.shellBuildHash);
-      const manifest = composeElectronCapsuleManifest({ content, version: String(shell.version),
+      const platform = await preparePlatformProduct({ ...platformProducts.get(String(scene.target))!,
+        outputDirectory: request.outputDirectory, artifactBaseUrl: request.artifactBaseUrl });
+      scene.platform = platform.archive;
+      scene.capabilityBuildHash = electronCompositeShellBuildHash(content, scene.shellBuildHash, platform.resource);
+      const manifest = composeElectronCapsuleManifest({ content, platform: platform.resource, version: String(shell.version),
         minimumCarrierVersion: String(shell.version), providedShellVersion: String(shell.version) });
       const manifestFile = join(resolve(request.outputDirectory), "documents", `capsule-${scene.target}.json`);
       const archived = join(resolve(request.outputDirectory), "artifacts", `capsule-${scene.target}-${archive.sha256}.zip`);
@@ -324,6 +335,13 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
         archive: { url: publicObjectUrl(String(prepared.artifactBaseUrl), archive), sha256: archiveDescription.sha256, size: archiveDescription.size },
       });
       const capsuleManifest = assertElectronCapsuleReleaseManifest(distribution.capsule, (await readObject(destination)).document, scene.target);
+      const platform = await checkedFile(scene.platform, "platform archive", join(preparedRoot, "artifacts", basename(scene.platform.file)));
+      const platformDescription = await describeFile(platform, "application/zip");
+      if (platformDescription.sha256 !== capsuleManifest.platform.blob.sha256 || platformDescription.size !== capsuleManifest.platform.blob.size
+        || capsuleManifest.platform.blob.sources.length !== 1 || capsuleManifest.platform.blob.sources[0]!.url !== publicObjectUrl(String(prepared.artifactBaseUrl), platform)) {
+        throw new Error("Capsule platform publication binding mismatch");
+      }
+      artifacts.push(platformDescription);
       // Re-evaluate current policy; a cached preparation receipt cannot waive it.
       await verifyCapsuleReleaseBudget(archive, capsuleManifest.archive);
     }

@@ -1,9 +1,12 @@
 import { join } from "node:path";
-import { bindNodePlatform } from "@open-design/standalone/packages";
+import type { NodePlatformResource } from "@open-design/standalone/packages";
+import { prepareNodePlatformResource } from "@open-design/standalone/packages/resource";
+import { resolveElectronStandaloneStoreRoot } from "./store-root.js";
 
 /** Product platform preparation is invoked by Capsule after its first screen. */
-export function prepareElectronNodeRuntime(input: Readonly<{
-  resourceRoot: string; runtimeRoot: string; signal: AbortSignal;
+export async function prepareElectronNodeRuntime(input: Readonly<{
+  runtimeRoot: string; platform: NodePlatformResource; signal: AbortSignal;
 }>) {
-  return bindNodePlatform(join(input.resourceRoot, "platform"), { signal: input.signal });
+  return (await prepareNodePlatformResource({ root: join(resolveElectronStandaloneStoreRoot(input.runtimeRoot), "platform"),
+    resource: input.platform }, { signal: input.signal })).binding;
 }

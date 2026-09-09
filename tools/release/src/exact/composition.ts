@@ -20,6 +20,7 @@ export async function prepareReleaseContent(input: Readonly<{
   sourceRoot: string; topology: string; scenesRoot: string; standaloneVersion: string;
   closureArtifactFile?: string; standaloneArtifactFile?: string; resourceReceiptFile?: string;
   capsulesRoot?: string;
+  platformsRoot?: string;
   dataResourceReceiptFiles?: readonly string[];
   previousContentMetadataFile?: string; output: string; receipt: string;
 }>): Promise<void> {
@@ -50,6 +51,7 @@ export async function prepareReleaseContent(input: Readonly<{
   type Shell = { type: string; version: string; scenes: { target: string; sceneDirectory: string; sceneManifestSha256: string }[] };
   const shells = new Map<string, Shell>();
   const capsuleProducts: Array<{ target: string; contentFile: string; archiveFile: string }> = [];
+  const platformProducts: Array<{ target: string; resourceFile: string; archiveFile: string }> = [];
   let { closureArtifactFile, standaloneArtifactFile, resourceReceiptFile } = input;
   for (const item of topology.active) {
     if (!["electron", "terminal"].includes(item.shell) || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(item.target)) throw new Error("unsupported prepare Shell topology");
@@ -70,6 +72,12 @@ export async function prepareReleaseContent(input: Readonly<{
         contentFile: await localFile(input.capsulesRoot, `${item.target}/capsule-content.json`),
         archiveFile: await localFile(input.capsulesRoot, `${item.target}/capsule.zip`) });
     }
+    if (item.shell === "electron") {
+      if (input.platformsRoot == null) throw new Error("Electron prepare requires --platforms independent products");
+      platformProducts.push({ target: item.target,
+        resourceFile: await localFile(input.platformsRoot, `${item.target}/platform-resource.json`),
+        archiveFile: await localFile(input.platformsRoot, `${item.target}/platform.zip`) });
+    }
   }
   if (closureArtifactFile == null || standaloneArtifactFile == null) throw new Error("prepare topology has no seeds");
   const { stdout } = await promisify(execFile)("git", ["show", "--no-patch", "--format=%cI", input.sourceCommit], { cwd: input.sourceRoot });
@@ -79,6 +87,7 @@ export async function prepareReleaseContent(input: Readonly<{
     closureArtifactFile, standaloneArtifactFile, resourceReceiptFile, previousContentMetadataFile,
     ...(input.dataResourceReceiptFiles == null ? {} : { dataResourceReceiptFiles: input.dataResourceReceiptFiles }),
     ...(input.capsulesRoot == null ? {} : { capsuleProducts }),
+    platformProducts,
     shells: [...shells.values()].sort((a, b) => a.type.localeCompare(b.type)), outputDirectory: input.output,
   };
   await prepareContent(request, input.receipt);

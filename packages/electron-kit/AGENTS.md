@@ -26,7 +26,8 @@ Follow the root and `packages/AGENTS.md` guidance first.
   compiler. Keep build-cache policy and final signature authority in tools.
 - Capsule protocol v6 supplies a verified composite Shell identity alongside the
   immutable physical manifest. Its build hash binds carrier build inputs and
-  exact Capsule content, excluding release versions; its runtime digest binds
+  exact Capsule content and authenticated platform bytes/executable grants,
+  excluding release versions and source URLs; its runtime digest binds
   the full authenticated combination. Do not accept module-exported identity
   or use composite capability as physical installer proof.
 - Capsule returns exact renderer-ready evidence only after installing its runtime
@@ -40,6 +41,9 @@ Follow the root and `packages/AGENTS.md` guidance first.
 - Carrier session v6 does not contain a prepared Node runtime. Capsule calls the
   product definition's preparation after first-screen mount, under startup
   cancellation. Native probes must not block the local Capsule loading screen.
+  The loader supplies the signed manifest's mandatory external platform descriptor
+  separately from module exports. Reject missing/cross-target/source-less bindings;
+  the platform does not have its own update or latest authority.
 - `/capsule-loader` is the Node-safe verification/loading leaf. Recovery inspection must
   authenticate the same signed manifest, compatibility edges and exact materialized
   bytes as execution without evaluating candidate code. An inspection receipt

@@ -36,6 +36,11 @@ Shell and the typed adapter boundary consumed by repository tools.
   first-install seed. A current/pending Capsule uses the sealed installation
   trust root independently; missing or invalid selected state never falls back
   to the seed. Empty lineage materializes the exact local seed without network.
+  Explicit recovery follows the same selection authority and uses a historical
+  seed only for the identical pinned target when its local caches are unavailable.
+  Signed Capsule platform resources prepare through Standalone after the first
+  screen; recovery verifies that same descriptor under the stopped-session guard.
+  Normal startup never substitutes the installation's former platform tree.
 - `config/appearance.json` owns Capsule window/loading declarations and channel
   title overrides. Physical manifest schema 2 excludes these presentation fields;
   keep OS product identity, icons and installer endpoints physical.

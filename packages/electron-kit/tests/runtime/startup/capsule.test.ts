@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { signDocument, standaloneTreeSha256 } from "@open-design/standalone";
 import { createElectronCapsuleLoader, inspectElectronCapsule } from "@/runtime/startup/capsule.js";
 import { validateElectronCapsuleManifest } from "@/contracts/capsule.js";
+import { platformFixture } from "../../platform-fixture.js";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -15,7 +16,7 @@ async function fixture(source = 'module.exports.createElectronCapsuleDefinition 
   const body = Buffer.from(`${source}\n${startup ? 'module.exports.runElectronCapsule = async () => {};' : ''}`), entrypoint = join(root, "capsule.cjs");
   await writeFile(entrypoint, body);
   const manifest = validateElectronCapsuleManifest({ schemaVersion: 1, protocol: "electron-capsule-v6", version: "1.0.0", target: "darwin-arm64", entrypoint: "capsule.cjs",
-    requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
+    platform: platformFixture(), requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
     archive: { sha256: "a".repeat(64), size: 100, treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: createHash("sha256").update(body).digest("hex"), size: body.byteLength }]) } });
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   return { root, entrypoint, envelope: signDocument(manifest, [{ keyId: "test", privateKey }]), trustedKeys: { test: publicKey },
@@ -26,10 +27,13 @@ describe("verified Capsule loading", () => {
     const fixtureInput = await fixture();
     const input = { ...fixtureInput, envelope: structuredClone(fixtureInput.envelope), selectionRevision: 7 };
     const loading = createElectronCapsuleLoader()(input);
+    input.envelope.document = { ...input.envelope.document, platform: { ...input.envelope.document.platform,
+      blob: { ...input.envelope.document.platform.blob, sources: [{ kind: "remote", url: "https://changed.invalid/platform.zip" }] } } };
     input.envelope.document = { ...input.envelope.document, version: "99.0.0" };
     input.selectionRevision = 8;
     const loaded = await loading;
     expect(loaded.selection).toEqual({ envelope: fixtureInput.envelope, root: fixtureInput.root, revision: 7 });
+    expect(loaded.platform).toEqual(fixtureInput.envelope.document.platform);
   });
   it("loads the public verification leaf under plain Node without an Electron host", () => {
     expect(() => execFileSync(process.execPath, ["--input-type=module", "-e", `
@@ -63,11 +67,13 @@ describe("verified Capsule loading", () => {
     await expect(inspectElectronCapsule(input)).rejects.toThrow("inventory mismatch");
   });
   it("does not take composite identity from executable module exports", async () => {
-    const input = await fixture('module.exports.shell = {type:"electron", version:"99.0.0"}; module.exports.createElectronCapsuleDefinition = () => ({});');
+    const input = await fixture('module.exports.platform = { untrusted: true }; module.exports.shell = {type:"electron", version:"99.0.0"}; module.exports.createElectronCapsuleDefinition = () => ({});');
     const loaded = await createElectronCapsuleLoader()(input);
     expect(loaded.shell.version).toBe(input.envelope.document.provides.shellVersion);
     expect(loaded.shell.version).not.toBe("99.0.0");
     expect(Object.isFrozen(loaded.shell)).toBe(true);
+    expect(loaded.platform).toEqual(input.envelope.document.platform);
+    expect(Object.isFrozen(loaded.platform)).toBe(true);
     expect(input.carrier.shell.version).toBe("1.0.0");
   });
   it("requires the versioned startup entry and rejects the former definition-only protocol", async () => {

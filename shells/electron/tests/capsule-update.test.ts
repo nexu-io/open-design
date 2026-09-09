@@ -3,6 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { canonicalJson, sha256Hex, signDocument } from "@open-design/standalone";
 import { resolveElectronCompositeShellIdentity, type ElectronCapsuleManifest } from "@open-design/electron-kit/contracts";
 import { ElectronCapsuleUpdate } from "@/adapters/standalone/capsule-update.js";
+import { platformFixture } from "./fixtures/capsule.js";
 
 const calls = vi.hoisted(() => ({ events: [] as string[], readSelection: vi.fn(), arm: vi.fn(), prepare: vi.fn(), inspect: vi.fn() }));
 vi.mock("@open-design/electron-kit", () => ({ readElectronCapsuleSelection: calls.readSelection, armElectronCapsuleSelection: calls.arm, inspectElectronStartup: calls.inspect }));
@@ -11,7 +12,7 @@ vi.mock("@open-design/standalone", async original => ({ ...await original<typeof
 }));
 
 const manifest: ElectronCapsuleManifest = { schemaVersion: 1, protocol: "electron-capsule-v6", version: "1.0.0",
-  target: "darwin-arm64", entrypoint: "capsule.cjs", requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
+  platform: platformFixture(), target: "darwin-arm64", entrypoint: "capsule.cjs", requires: { carrierVersion: "1.0.0" }, provides: { shellVersion: "2.0.0" },
   archive: { sha256: "a".repeat(64), size: 1, treeSha256: "b".repeat(64) } };
 const carrier = { target: "darwin-arm64" as const, shell: { type: "electron", version: "1.0.0", buildHash: "c".repeat(64), digest: "d".repeat(64) } };
 const generationId = "e".repeat(64);

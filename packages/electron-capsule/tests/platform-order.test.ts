@@ -3,6 +3,10 @@ import type { ElectronShellDefinition } from "@open-design/electron-kit/contract
 import type { ElectronCapsuleSession } from "@open-design/electron-kit/runtime";
 import { runElectronCapsule } from "@/session.js";
 
+const platform: ElectronCapsuleSession["platform"] = { schemaVersion: 1, target: "darwin-arm64", treeSha256: "f".repeat(64),
+  blob: { sha256: "e".repeat(64), size: 123, mediaType: "application/zip", sources: [{ kind: "remote", url: "https://fixture.invalid/platform.zip" }] },
+  executables: ["bin/node"] };
+
 vi.mock("electron", () => ({ BrowserWindow: class {}, app: {}, dialog: {}, ipcMain: {}, protocol: {}, nativeImage: {} }));
 vi.mock("@open-design/electron-kit/contracts", async original => ({
   ...await original<typeof import("@open-design/electron-kit/contracts")>(),
@@ -27,7 +31,7 @@ it.each(["interactive", "headless"] as const)("prepares Node after presentation 
   const authority = vi.fn();
   const definition = { appearance: { splash: { initialLabel: "Starting" } }, createStartupPresentation,
     prepareNodeRuntime, createStandaloneAuthority: authority } as unknown as ElectronShellDefinition;
-  const session = { manifest: { channel: "test" }, shell: {}, presentation, namespace: "test",
+  const session = { manifest: { channel: "test" }, shell: {}, platform, presentation, namespace: "test",
     paths: { runtimeRoot: "/runtime" }, resourceRoot: "/installed", ingress: { bindReceiver() {} },
     startupQuit: { guard: <T>(promise: Promise<T>) => promise }, registerCleanup() { events.push("cleanup.registered"); },
   } as unknown as ElectronCapsuleSession;
@@ -44,7 +48,7 @@ it.each(["interactive", "headless"] as const)("prepares Node after presentation 
     ? ["cleanup.registered", "presentation.begin", "presentation.mounted", "presentation.stage", "platform.prepare"]
     : ["cleanup.registered", "platform.prepare"]);
   expect(authority).not.toHaveBeenCalled();
-  expect(prepareNodeRuntime).toHaveBeenCalledWith({ resourceRoot: "/installed", runtimeRoot: "/runtime", signal: expect.any(AbortSignal) });
+  expect(prepareNodeRuntime).toHaveBeenCalledWith({ runtimeRoot: "/runtime", platform, signal: expect.any(AbortSignal) });
   if (presentation === "headless") expect(createStartupPresentation).not.toHaveBeenCalled();
 });
 

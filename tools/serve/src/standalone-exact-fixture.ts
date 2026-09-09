@@ -12,10 +12,11 @@ import {
   type StandaloneMetadata,
 } from "@open-design/standalone";
 import { composeElectronCapsuleManifest, validateElectronCapsuleContent } from "@open-design/shell-electron/build/contracts";
+import { validateNodePlatformResource } from "@open-design/standalone/packages";
 
 export type StandaloneExactFixtureOptions = Readonly<{
   channel: string;
-  capsule?: Readonly<{ contentFile: string; archiveFile: string }>;
+  capsule?: Readonly<{ contentFile: string; archiveFile: string; platformResourceFile: string; platformArchiveFile: string }>;
   closurePath: string;
   host?: string;
   launcherPath: string;
@@ -185,9 +186,13 @@ export async function startStandaloneExactFixtureServer(
       const content = validateElectronCapsuleContent(JSON.parse(await readFile(options.capsule!.contentFile, "utf8")));
       const archive = await sourceFile(options.capsule!.archiveFile, "capsule.zip", "application/zip", `${origin}${releaseRoot}/capsule.zip`);
       if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Capsule fixture archive differs from its build content");
-      const manifest = composeElectronCapsuleManifest({ content, version: options.shell.version,
+      const platformResource = validateNodePlatformResource(JSON.parse(await readFile(options.capsule!.platformResourceFile, "utf8")));
+      const platform = await sourceFile(options.capsule!.platformArchiveFile, "platform.zip", "application/zip", `${origin}${releaseRoot}/platform.zip`);
+      if (platform.sha256 !== platformResource.blob.sha256 || platform.size !== platformResource.blob.size) throw new Error("platform fixture archive differs from its descriptor");
+      const manifest = composeElectronCapsuleManifest({ content, platform: { ...platformResource,
+        blob: { ...platformResource.blob, sources: [{ kind: "remote", url: platform.url }] } }, version: options.shell.version,
         minimumCarrierVersion: options.shell.version, providedShellVersion: options.shell.version });
-      return { archive, manifest: jsonFile("capsule-manifest.json", signDocument(manifest, signer), `${origin}${releaseRoot}/capsule-manifest.json`) };
+      return { archive, platform, manifest: jsonFile("capsule-manifest.json", signDocument(manifest, signer), `${origin}${releaseRoot}/capsule-manifest.json`) };
     })();
     const contentUrl = `${origin}${releaseRoot}/content-metadata.json`;
     const content = jsonFile("content-metadata.json", signStandaloneMetadata(metadata, signer), contentUrl);
@@ -226,7 +231,7 @@ export async function startStandaloneExactFixtureServer(
       ],
     }, bootstrapUrl);
 
-    for (const file of [launcher, closure, ...resources.map((resource) => resource.file), content, trust, channelHead, bootstrap, ...(capsule == null ? [] : [capsule.manifest, capsule.archive])]) {
+    for (const file of [launcher, closure, ...resources.map((resource) => resource.file), content, trust, channelHead, bootstrap, ...(capsule == null ? [] : [capsule.manifest, capsule.archive, capsule.platform])]) {
       routes.set(new URL(file.url).pathname, file);
     }
     return Object.freeze({

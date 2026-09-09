@@ -16,6 +16,7 @@ import type {
   StandaloneLifecycleOccupant,
   LifecycleStatus,
 } from "@open-design/standalone";
+import type { NodePlatformResource } from "@open-design/standalone/packages";
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
 import type { ElectronPreflightResult } from "../runtime/startup/preflight/index.js";
 import type { ElectronWarmupExecutor, ElectronWarmupTopology } from "../runtime/startup/warmup/index.js";
@@ -186,7 +187,7 @@ export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
   appearance: ElectronShellAppearance;
   createStartupPresentation(): Promise<ElectronStartupPresentation>;
-  prepareNodeRuntime(input: Readonly<{ resourceRoot: string; runtimeRoot: string; signal: AbortSignal }>): Promise<NodeRuntimeBinding>;
+  prepareNodeRuntime(input: Readonly<{ runtimeRoot: string; platform: NodePlatformResource; signal: AbortSignal }>): Promise<NodeRuntimeBinding>;
   mac: ElectronMacRuntimePolicy;
   warmup: ElectronWarmupTopology;
   headless?: boolean;

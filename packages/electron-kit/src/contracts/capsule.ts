@@ -1,4 +1,5 @@
 import { canonicalJson, compareVersions, sha256Hex, validateShellIdentity, type ArtifactReference, type StandaloneShellIdentity } from "@open-design/standalone";
+import { validateNodePlatformResource, type NodePlatformResource } from "@open-design/standalone/packages";
 
 export const ELECTRON_CAPSULE_PROTOCOL = "electron-capsule-v6" as const;
 export type ElectronCapsuleTarget = "darwin-arm64" | "darwin-x64" | "win32-x64";
@@ -11,6 +12,7 @@ export type ElectronCapsuleManifest = Readonly<{
   requires: Readonly<{ carrierVersion: string }>;
   provides: Readonly<{ shellVersion: string }>;
   archive: Readonly<{ sha256: string; size: number; treeSha256: string }>;
+  platform: NodePlatformResource;
 }>;
 export type ElectronCapsuleContent = Readonly<Pick<ElectronCapsuleManifest,
   "schemaVersion" | "protocol" | "target" | "entrypoint" | "archive">>;
@@ -74,9 +76,11 @@ function contentFields(value: Record<string, unknown>): ElectronCapsuleContent {
 /** Unsigned payload. Existing release signing and exact references authenticate
  * it; neither a separate trust root nor a Capsule latest pointer belongs here. */
 export function validateElectronCapsuleManifest(input: unknown): ElectronCapsuleManifest {
-  const value = record(input, ["schemaVersion", "protocol", "version", "target", "entrypoint", "requires", "provides", "archive"]);
+  const value = record(input, ["schemaVersion", "protocol", "version", "target", "entrypoint", "requires", "provides", "archive", "platform"]);
   const requires = record(value.requires, ["carrierVersion"]), provides = record(value.provides, ["shellVersion"]);
-  return Object.freeze({ ...contentFields(value), version: version(value.version),
+  const platform = validateNodePlatformResource(value.platform);
+  if (platform.target !== value.target || platform.blob.sources.length === 0) throw new Error("Capsule requires an exact external platform source for its target");
+  return Object.freeze({ ...contentFields(value), version: version(value.version), platform,
     requires: Object.freeze({ carrierVersion: version(requires.carrierVersion) }),
     provides: Object.freeze({ shellVersion: version(provides.shellVersion) }),
   });
@@ -90,12 +94,13 @@ export function validateElectronCapsuleContent(input: unknown): ElectronCapsuleC
 /** Pure release composition: no compiler, filesystem, signing key or selection. */
 export function composeElectronCapsuleManifest(input: Readonly<{
   content: ElectronCapsuleContent;
+  platform: NodePlatformResource;
   version: string;
   minimumCarrierVersion: string;
   providedShellVersion: string;
 }>): ElectronCapsuleManifest {
   return validateElectronCapsuleManifest({
-    ...validateElectronCapsuleContent(input.content), version: input.version,
+    ...validateElectronCapsuleContent(input.content), version: input.version, platform: input.platform,
     requires: { carrierVersion: input.minimumCarrierVersion }, provides: { shellVersion: input.providedShellVersion },
   });
 }
@@ -119,15 +124,19 @@ export function resolveElectronCompositeShellIdentity(input: ElectronCapsuleMani
   if (carrier.shell.type !== "electron") throw new Error("Electron Capsule requires an Electron carrier");
   assertElectronCapsuleCompatibility(manifest, { target: carrier.target, version: carrier.shell.version });
   const { schemaVersion, protocol, target, entrypoint, archive } = manifest;
-  const buildHash = electronCompositeShellBuildHash({ schemaVersion, protocol, target, entrypoint, archive }, carrier.shell.buildHash);
+  const buildHash = electronCompositeShellBuildHash({ schemaVersion, protocol, target, entrypoint, archive }, carrier.shell.buildHash, manifest.platform);
   return Object.freeze({ type: "electron", version: manifest.provides.shellVersion, buildHash,
     digest: sha256Hex(canonicalJson({ carrier: carrier.shell, capsule: manifest })) });
 }
 
 /** Release-neutral capability fingerprint shared by runtime and publication.
  * Content descriptors cannot carry release versions or installer identity. */
-export function electronCompositeShellBuildHash(input: ElectronCapsuleContent, carrierBuildHash: string): string {
+export function electronCompositeShellBuildHash(input: ElectronCapsuleContent, carrierBuildHash: string, platformInput: NodePlatformResource): string {
   const content = validateElectronCapsuleContent(input);
+  const platform = validateNodePlatformResource(platformInput);
+  if (platform.target !== content.target) throw new Error("Capsule platform target mismatch");
   return sha256Hex(canonicalJson({ protocol: content.protocol, target: content.target,
-    carrierBuildHash: digest(carrierBuildHash), archive: content.archive }));
+    carrierBuildHash: digest(carrierBuildHash), archive: content.archive,
+    platform: { schemaVersion: platform.schemaVersion, target: platform.target, treeSha256: platform.treeSha256,
+      executables: platform.executables, blob: { sha256: platform.blob.sha256, size: platform.blob.size, mediaType: platform.blob.mediaType } } }));
 }

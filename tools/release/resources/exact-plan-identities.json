@@ -205,6 +205,7 @@
     "electron.distribution": {
       "paths": [
         "tools/release/src/exact/capsule-budget.ts",
+        "tools/release/src/exact/platform-product.ts",
         "shells/electron/config/platforms",
         "shells/electron/src/build-api.ts",
         "shells/electron/src/adapters/tools/distribution-tool.ts",

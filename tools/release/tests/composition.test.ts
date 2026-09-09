@@ -9,7 +9,7 @@ import { registerExactCommands } from "@/exact/commands.ts";
 import { packSceneArtifact } from "@/exact/scene-artifact.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
-import { capsuleFixture } from "./capsule-fixture.ts";
+import { capsuleFixture, writePlatformFixture } from "./capsule-fixture.ts";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -58,7 +58,9 @@ it("prepares and finalizes signed content within release ownership, with no requ
         updater: { protocol: "standalone-shell-updater-v4", handler: "sidecar-v1", interaction: "restart-and-install" } }) });
   }
   const prepared = join(root, "prepared"), final = join(root, "final"), prepareReceipt = join(prepared, "prepare-receipt.json");
-  const prepare = ["prepare", "--policy", policy, "--channel", channel, "--release-version", releaseVersion, "--source-commit", sourceCommit,
+  const platforms = join(root, "platforms");
+  await writePlatformFixture(join(platforms, "darwin-arm64"));
+  const prepare = ["prepare", "--platforms", platforms, "--policy", policy, "--channel", channel, "--release-version", releaseVersion, "--source-commit", sourceCommit,
     "--root", sourceRoot, "--topology", topology, "--scenes", scenes, "--standalone-version", "0.1.0", "--output", prepared, "--receipt", prepareReceipt];
   await expect(command(prepare.map(value => value === channel ? "stable" : value))).rejects.toThrow("binding mismatch");
   expect(fetch).not.toHaveBeenCalled();

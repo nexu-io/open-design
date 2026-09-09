@@ -1,4 +1,5 @@
 import type { StandaloneShellIdentity } from "@open-design/standalone";
+import type { NodePlatformResource } from "@open-design/standalone/packages";
 import type { ElectronShellManifest } from "../../contracts/index.js";
 import type { ElectronActivationAttempt } from "../session/activation.js";
 import type { installElectronLaunchIngress } from "../session/launch-ingress.js";
@@ -31,6 +32,8 @@ export type ElectronCapsuleSession = Readonly<{
   manifest: ElectronShellManifest;
   /** Verified composite capability; manifest.shell remains physical installation proof. */
   shell: Readonly<StandaloneShellIdentity>;
+  /** Authenticated by the loader, never taken from the module exports. */
+  platform: NodePlatformResource;
   presentation: "headless" | "interactive";
   namespace: string;
   paths: ElectronNamespacePaths;

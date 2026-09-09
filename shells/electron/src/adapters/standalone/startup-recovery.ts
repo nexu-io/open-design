@@ -6,7 +6,7 @@ import { recoverElectronStartup, resolveElectronNamespacePaths, resolveElectronS
 import { inspectElectronCapsule } from "@open-design/electron-kit/capsule-loader";
 import { readElectronInstalledManifest } from "@open-design/electron-kit/installation/inspection";
 import { validateElectronShellManifest, resolveElectronCompositeShellIdentity, type ElectronShellManifest } from "@open-design/electron-kit/contracts";
-import { bindNodePlatform } from "@open-design/standalone/packages";
+import { prepareNodePlatformResource } from "@open-design/standalone/packages/resource";
 import { canonicalJson, ensureStandaloneBlob, materializeStandaloneBlob, sha256Hex, StandaloneHostLifecycle, StandaloneHostLifecycleLedger, StandaloneStore, verifyDocument } from "@open-design/standalone";
 import declaration from "../../../config/standalone.json" with { type: "json" };
 import { loadElectronInstalledCapsuleSeed, loadElectronStandaloneInstallation, resolveElectronStandaloneTarget } from "./installation.js";
@@ -44,8 +44,6 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
     manifest = validateElectronShellManifest(JSON.parse(await readFile(path, "utf8")) as ElectronShellManifest);
   }
   if (manifest.channel !== request.session.channel || manifest.namespace !== request.session.namespace) throw new Error("Electron recovery escaped its physical installation scope");
-  // Damaged physical packages require installation repair, never hot recovery.
-  await bindNodePlatform(join(request.resourceRoot, "platform"));
   const scope = { channel: manifest.channel, namespace: resolveElectronSessionNamespace(manifest.namespace, request.session.presentation) };
   const paths = resolveElectronNamespacePaths(request.session.baseUserDataRoot, scope);
   const store = new StandaloneStore(resolveElectronStandaloneStoreRoot(paths.runtimeRoot), scope);
@@ -141,6 +139,10 @@ export async function recoverElectronProductStartup(input: ElectronStartupRecove
         }
         const verified = await inspectElectronCapsule({ envelope: capsuleEnvelope, trustedKeys,
           root: capsuleRoot, carrier: { target: platformTarget, shell: manifest.shell } });
+        await prepareNodePlatformResource({ root: join(store.root, "platform"), resource: verified.manifest.platform, recovery: true },
+          request.allowNetwork === true ? {} : {
+            fetch: async () => { throw new Error("exact platform recovery bytes are missing locally; online reacquisition was not authorized"); },
+          });
         const state = await store.readState();
         await store.recoverGeneration({ envelope, trustedKeys, shell: verified.shell,
           expectedGenerationId: target.closureGenerationId, expectedRevision: state.revision }, {

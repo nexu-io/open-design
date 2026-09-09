@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
 vi.mock("@open-design/electron-kit/installation/inspection", () => ({ readElectronInstalledManifest: async () => ({ manifest: state.manifest }) }));
 vi.mock("@open-design/electron-kit/contracts", async original => ({ ...await original<typeof import("@open-design/electron-kit/contracts")>(),
   resolveElectronCompositeShellIdentity: () => ({}) }));
-vi.mock("@open-design/standalone/packages", () => ({ bindNodePlatform: state.platform }));
+vi.mock("@open-design/standalone/packages/resource", () => ({ prepareNodePlatformResource: state.platform }));
 vi.mock("@open-design/electron-kit/capsule-loader", () => ({ inspectElectronCapsule: state.inspect }));
 vi.mock("@/adapters/standalone/release-feed.js", () => ({ ElectronReleaseExactFeed: class {
   readCapsule = state.fetchCapsule;
@@ -71,7 +71,7 @@ const selected = { capsuleManifestSha256: sha256Hex(canonicalJson(envelope)), cl
 describe("stopped Electron exact recovery composition", () => {
   beforeEach(() => {
     vi.resetAllMocks(); state.events = []; state.survivors = []; state.guard = false;
-    state.platform.mockResolvedValue({});
+    state.platform.mockImplementation(async () => { expect(state.guard).toBe(true); return {}; });
     state.blob.mockResolvedValue({ path: "/cached-capsule.zip" });
     state.lifecycle.mockResolvedValue(null);
     state.updater.mockResolvedValue({ state: "idle", revision: 0 });
@@ -82,7 +82,7 @@ describe("stopped Electron exact recovery composition", () => {
     state.seed.mockResolvedValue({ envelope, trustedKeys: {}, archivePath: "/installed/Resources/capsule.zip" });
     state.readState.mockResolvedValue({ revision: 7, active: "d".repeat(64), activationIntent: { generationId: selected.closureGenerationId } });
     state.metadata.mockResolvedValue({ metadata: {} });
-    state.inspect.mockResolvedValue({ shell: { type: "electron", version: "0.3.0" } });
+    state.inspect.mockResolvedValue({ shell: { type: "electron", version: "0.3.0" }, manifest: { platform: { exact: true } } });
     state.recover.mockImplementation(async () => { expect(state.guard).toBe(true); state.events.push("rearm"); });
     state.armCapsule.mockImplementation(async () => { expect(state.guard).toBe(true); state.events.push("capsule-rearm"); });
   });
@@ -93,6 +93,8 @@ describe("stopped Electron exact recovery composition", () => {
       shell: { type: "electron", version: "0.3.0" } }), expect.objectContaining({ fetch: expect.any(Function) }));
     expect(state.armCapsule).toHaveBeenCalledWith(expect.objectContaining({ recovery: true, expectedRevision: 2,
       closureGenerationId: selected.closureGenerationId }));
+    expect(state.platform).toHaveBeenCalledWith({ root: "/store/platform", resource: { exact: true }, recovery: true }, { fetch: expect.any(Function) });
+    await expect(state.platform.mock.calls[0]![1].fetch()).rejects.toThrow("not authorized");
     expect(state.events).toEqual(["blockade", "materialize", "rearm", "capsule-rearm", "unblock"]);
   });
   it("does not start or retire another consumer to make repair succeed", async () => {
@@ -100,10 +102,11 @@ describe("stopped Electron exact recovery composition", () => {
     await expect(recoverElectronProductStartup(request)).rejects.toThrow("shared resource set to be stopped");
     expect(state.events).toEqual([]); expect(state.recover).not.toHaveBeenCalled();
   });
-  it("refuses physical damage before changing startup state", async () => {
-    state.platform.mockRejectedValueOnce(new Error("physical package damaged"));
-    await expect(recoverElectronProductStartup(request)).rejects.toThrow("physical package damaged");
-    expect(state.seed).not.toHaveBeenCalled(); expect(state.events).toEqual([]);
+  it("keeps recovery blocked when exact external platform preparation fails", async () => {
+    state.platform.mockRejectedValueOnce(new Error("platform unavailable"));
+    await expect(recoverElectronProductStartup(request)).rejects.toThrow("platform unavailable");
+    expect(state.events).toEqual(["blockade", "materialize"]);
+    expect(state.recover).not.toHaveBeenCalled();
   });
   it("never substitutes installed Capsule bytes for a different exact target", async () => {
     await expect(recoverElectronProductStartup({ ...request, target: { ...selected, capsuleManifestSha256: "e".repeat(64) } })).rejects.toThrow("selected Capsule is not available");
@@ -119,6 +122,7 @@ describe("stopped Electron exact recovery composition", () => {
   it("enables only exact signed resource reacquisition when online recovery is explicit", async () => {
     await recoverElectronProductStartup({ ...request, allowNetwork: true });
     expect(state.recover.mock.calls[0]![1]).not.toHaveProperty("fetch");
+    expect(state.platform.mock.calls[0]![1]).not.toHaveProperty("fetch");
   });
 
   it("keeps a pending independent Capsule paired with its exact prepared Closure", async () => {

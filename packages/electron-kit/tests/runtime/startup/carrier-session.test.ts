@@ -38,6 +38,7 @@ const preflight = { schemaVersion: 1 as const, atoms: [] };
 const shell = { type: "electron", version: "0.2.0", buildHash: "c".repeat(64), digest: "d".repeat(64) };
 function capsule() {
   return {
+    platform: { schemaVersion: 1, target: "darwin-arm64", blob: { sha256: "e".repeat(64), size: 1, mediaType: "application/zip", sources: [] }, treeSha256: "f".repeat(64), executables: ["bin/node"] } as LoadedElectronCapsule["platform"],
     shell,
     selection: {} as LoadedElectronCapsule["selection"],
     createElectronCapsuleDefinition: vi.fn(() => ({ manifest,
