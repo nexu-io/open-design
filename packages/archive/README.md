@@ -11,6 +11,12 @@ and `timeoutMs` are injectable. Commands use argv, never a shell. Invalid
 explicit configuration fails without substitution or installation. Hosts own
 bundled executable discovery, including Windows 7z.
 
+`permissions: "portable"` extracts files as 0644, leaving execute grants to
+the authenticated caller. Build callers can select `reproducible: true` to
+pack a sorted snapshot with normalized timestamps; combined with portable
+permissions this removes incidental source file metadata from release inputs.
+This does not promise identical compressed bytes across tools or versions.
+
 The initial interchange format is ZIP (stored/deflate, ZIP32, UTF-8 names).
 Inspection parses metadata only; native tools perform compression and
 decompression. Encrypted, multi-volume, ZIP64, ambiguous paths and special

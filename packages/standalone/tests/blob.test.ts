@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import JSZip from "jszip";
+import { pack } from "@open-design/archive/build";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -45,12 +45,13 @@ describe("Standalone blob repository", () => {
 
   it("materializes a verified zip tree and reuses it", async () => {
     const root = await mkdtemp(join(tmpdir(), "standalone-tree-")); roots.push(root);
-    const zip = new JSZip();
-    zip.file("skills/SKILL.md", "# Skill\n");
-    zip.file("runtime.json", "{}\n");
-    const bytes = await zip.generateAsync({ type: "nodebuffer" });
+    const source = join(root, "source");
+    await mkdir(join(source, "skills"), { recursive: true });
+    await writeFile(join(source, "skills/SKILL.md"), "# Skill\n");
+    await writeFile(join(source, "runtime.json"), "{}\n");
     const blobPath = join(root, "resource.zip");
-    await writeFile(blobPath, bytes);
+    await pack(source, blobPath);
+    const bytes = await readFile(blobPath);
     const entries = [
       { path: "runtime.json", sha256: sha256Hex(Buffer.from("{}\n")), size: 3 },
       { path: "skills/SKILL.md", sha256: sha256Hex(Buffer.from("# Skill\n")), size: 8 },

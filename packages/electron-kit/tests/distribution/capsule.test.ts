@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import JSZip from "jszip";
+import { extract, inspect } from "@open-design/archive";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { platformFixture } from "../platform-fixture.js";
 import { buildElectronCapsuleContent } from "@/distribution/capsule.js";
@@ -77,9 +77,11 @@ describe("independent Capsule build", () => {
     const second = await buildElectronCapsuleContent({ ...input, outputRoot: join(input.root, "second") });
     expect(second.content).toEqual(first.content);
     expect(await readFile(second.contentPath)).toEqual(await readFile(first.contentPath));
-    const bytes = await readFile(first.archivePath), zip = await JSZip.loadAsync(bytes);
-    expect(Object.keys(zip.files)).toEqual(["capsule.cjs"]);
-    const module = await zip.file("capsule.cjs")!.async("nodebuffer");
+    const bytes = await readFile(first.archivePath);
+    expect((await inspect(first.archivePath)).map(entry => entry.path)).toEqual(["capsule.cjs"]);
+    const unpacked = join(input.root, "unpacked");
+    await extract(first.archivePath, unpacked);
+    const module = await readFile(join(unpacked, "capsule.cjs"));
     expect(first.content.archive).toEqual({ sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength,
       treeSha256: standaloneTreeSha256([{ path: "capsule.cjs", sha256: createHash("sha256").update(module).digest("hex"), size: module.byteLength }]) });
     await writeFile(input.entryPath, 'export const createElectronCapsuleDefinition = () => ({ title: "changed" });');

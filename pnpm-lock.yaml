@@ -587,6 +587,9 @@ importers:
       '@electron/asar':
         specifier: 3.4.1
         version: 3.4.1
+      '@open-design/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@open-design/electron-contract':
         specifier: workspace:*
         version: link:../electron-contract
@@ -602,9 +605,6 @@ importers:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
-      jszip:
-        specifier: 3.10.1
-        version: 3.10.1
       mustache:
         specifier: 4.2.0
         version: 4.2.0
@@ -755,6 +755,9 @@ importers:
 
   packages/standalone:
     dependencies:
+      '@open-design/archive':
+        specifier: workspace:*
+        version: link:../archive
       '@open-design/download':
         specifier: workspace:*
         version: link:../download
@@ -764,9 +767,6 @@ importers:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
-      jszip:
-        specifier: 3.10.1
-        version: 3.10.1
     devDependencies:
       '@types/node':
         specifier: 24.12.2

@@ -4,6 +4,10 @@
     "excludeDirectoryNames": [".next", ".tmp", "coverage", "dist", "node_modules", "out"]
   },
   "sourceSets": {
+    "archive.build": {
+      "normalizePackageVersion": true,
+      "paths": ["packages/archive/package.json", "packages/archive/tsconfig.json", "packages/archive/src"]
+    },
     "electron.base.build": {
       "inherits": ["electron.shell.build"],
       "paths": ["tools/release/src/exact/native-build.ts", "tools/release/src/exact/control-common.ts"]
@@ -13,6 +17,7 @@
       "paths": ["tools/release/src/exact/native-build.ts", "tools/release/src/exact/control-common.ts"]
     },
     "electron.platform.build": {
+      "inherits": ["archive.build"],
       "normalizePackageVersion": true,
       "paths": [
         ".node-version",
@@ -40,6 +45,7 @@
       ]
     },
     "closure.data.build-control": {
+      "inherits": ["archive.build"],
       "paths": [
         ".node-version", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
         "apps/closure/package.json", "apps/closure/esbuild.config.ts",
@@ -102,6 +108,7 @@
       ]
     },
     "electron.shell.build": {
+      "inherits": ["archive.build"],
       "normalizePackageVersion": true,
       "paths": [
         ".node-version",
@@ -166,6 +173,7 @@
       ]
     },
     "closure.build": {
+      "inherits": ["archive.build"],
       "normalizePackageVersion": true,
       "paths": [
         ".node-version",

@@ -5,6 +5,10 @@ export type ArchiveOptions = Readonly<{
   signal?: AbortSignal;
   timeoutMs?: number;
   allowInternalLinks?: boolean;
+  /** Portable extraction grants no execute bits; authenticated callers may grant them later. */
+  permissions?: "preserve" | "portable";
+  /** Build-only: stage a sorted, timestamp-normalized snapshot before packing. */
+  reproducible?: boolean;
   maxEntries?: number;
   maxExpandedBytes?: number;
 }>;

@@ -143,6 +143,12 @@ describe("exact release plan", () => {
     const contractPaths = resolveContentIdentityDeclaration(registry, "electron.contract.build").sources.map(({ path }) => path);
     expect(contractPaths).toContain("packages/electron-contract/src");
     expect(contractPaths).not.toContain("packages/electron-kit/src");
+    expect(contractPaths).not.toContain("packages/archive/src");
+    for (const id of ["electron.shell.build", "electron.capsule.build", "electron.platform.build", "closure.build", "closure.data.skills.build"]) {
+      const paths = resolveContentIdentityDeclaration(registry, id).sources.map(({ path }) => path);
+      expect(paths, id).toContain("packages/archive/src");
+      expect(paths, id).not.toContain("packages/archive/tests");
+    }
 
     const shellSources = resolveContentIdentityDeclaration(registry, "electron.shell.build").sources;
     const shellPaths = shellSources.map(({ path }) => path);

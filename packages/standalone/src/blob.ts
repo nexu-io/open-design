@@ -1,10 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { managedDownload } from "@open-design/download";
-import JSZip from "jszip";
+import { extract } from "@open-design/archive";
 
 import { canonicalJson, type StandaloneBlob, type StandaloneMaterialization } from "./protocol.js";
 import type { StandaloneFeedbackEmitter } from "./feedback.js";
@@ -195,21 +195,10 @@ export async function materializeStandaloneBlob(
     await discardStandaloneStoreEntry(root, destination);
   }
   const stage = join(root, "staging", `${key}.${randomUUID()}.tree`);
-  await mkdir(stage, { recursive: true });
   try {
-    const archive = await JSZip.loadAsync(await readFile(blobPath));
-    for (const [name, entry] of Object.entries(archive.files).sort(([left], [right]) => left.localeCompare(right))) {
-      if (name.startsWith("/") || name.startsWith("\\") || name.split(/[\\/]/).includes("..")) throw new Error(`unsafe zip entry: ${name}`);
-      const permissions = typeof entry.unixPermissions === "string" ? Number.parseInt(entry.unixPermissions, 8) : entry.unixPermissions;
-      if (permissions != null && (permissions & 0o170000) === 0o120000) throw new Error(`zip symbolic link is unsupported: ${name}`);
-      const target = join(stage, name);
-      if (!under(stage, target)) throw new Error(`zip entry escaped materialization root: ${name}`);
-      if (entry.dir) await mkdir(target, { recursive: true });
-      else {
-        await mkdir(dirname(target), { recursive: true });
-        await writeFile(target, await entry.async("uint8array"), { flag: "wx" });
-      }
-    }
+    // Archive owns safe conversion; Standalone retains tree authentication and
+    // never accepts archive-supplied execute permissions as authorization.
+    await extract(blobPath, stage, { permissions: "portable" });
     if (standaloneTreeSha256(await inventory(stage)) !== materialization.treeSha256) throw new Error(`materialized tree failed verification: ${options.resourceId ?? blob.sha256}`);
     await mkdir(dirname(destination), { recursive: true });
     await rename(stage, destination);

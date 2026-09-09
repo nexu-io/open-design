@@ -52,11 +52,11 @@ export async function extract(file: string, destination: string, options: Archiv
         const target = Buffer.concat(chunks).toString("utf8"); safeLink(entry.path, target); links.push({ path: entry.path, target });
       } else {
         await entryBytes(snapshot, entry, backend, createWriteStream(join(stage, entry.path), { flags: "wx" }), options);
-        await chmod(join(stage, entry.path), entry.mode);
+        await chmod(join(stage, entry.path), options.permissions === "portable" ? 0o644 : entry.mode);
       }
     }
     for (const link of links) await symlink(link.target, join(stage, link.path));
-    for (const entry of entries.filter(entry => entry.kind === "directory").sort((a, b) => b.path.length - a.path.length)) await chmod(join(stage, entry.path), entry.mode);
+    for (const entry of entries.filter(entry => entry.kind === "directory").sort((a, b) => b.path.length - a.path.length)) await chmod(join(stage, entry.path), options.permissions === "portable" ? 0o755 : entry.mode);
     await absent(output); await rename(stage, output);
     return { directory: output, backend };
   } finally { await rm(scratch, { recursive: true, force: true }); }

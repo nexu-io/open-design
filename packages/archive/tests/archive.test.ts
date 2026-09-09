@@ -18,6 +18,8 @@ it.skipIf(process.platform === "win32")("round-trips native ZIP bytes, modes and
   expect(await readFile(join(root, "restored/link"), "utf8")).toBe("native");
   expect(await readlink(join(root, "restored/link"))).toBe("valid");
   expect((await stat(join(root, "restored/valid"))).mode & 0o777).toBe(0o755);
+  await extract(archive.file, join(root, "portable"), { ...options, permissions: "portable" });
+  expect((await stat(join(root, "portable/valid"))).mode & 0o777).toBe(0o644);
   await expect(extract(archive.file, join(root, "restored"), options)).rejects.toThrow("already exists");
 });
 it.skipIf(process.platform === "win32")("rejects traversal metadata before native extraction", async () => {

@@ -63,7 +63,7 @@ it("refuses wrong target, unsafe executable paths, and wrong tree digest before 
 
 it("does not overwrite archives or package symbolic links", async () => {
   const f = await fixture();
-  await expect(archiveNodePlatformResource({ root: f.platform, target: "darwin-arm64", archivePath: f.archivePath, executables })).rejects.toThrow("EEXIST");
+  await expect(archiveNodePlatformResource({ root: f.platform, target: "darwin-arm64", archivePath: f.archivePath, executables })).rejects.toThrow("already exists");
   if (process.platform !== "win32") {
     await symlink("bin/node", join(f.platform, "node-link"));
     await expect(archiveNodePlatformResource({ root: f.platform, target: "darwin-arm64", archivePath: join(f.root, "bad.zip"), executables })).rejects.toThrow("symbolic links");

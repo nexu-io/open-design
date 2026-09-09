@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat, mkdir, mkdtemp, readdir, readlink, rename, rm } from "node:fs/promises";
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readdir, readlink, rename, rm, symlink, utimes } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { execute, resolveArchiveBackend } from "./backend.js";
 import { absent } from "./runtime.js";
@@ -32,9 +32,30 @@ export async function pack(source: string, destination: string, options: Archive
   await absent(output); await mkdir(dirname(output), { recursive: true });
   const scratch = await mkdtemp(join(dirname(output), ".archive-build-"));
   try {
+    let input = root;
+    if (options.reproducible) {
+      input = join(scratch, "source");
+      const epoch = new Date("1980-01-01T00:00:00Z");
+      async function snapshot(source: string, target: string) {
+        await mkdir(target, { mode: 0o755 });
+        for (const name of (await readdir(source)).sort()) {
+          const from = join(source, name), to = join(target, name), info = await lstat(from);
+          if (info.isDirectory()) await snapshot(from, to);
+          else if (info.isFile()) {
+            await copyFile(from, to);
+            await chmod(to, options.permissions === "portable" ? 0o644 : info.mode & 0o777);
+            await utimes(to, epoch, epoch);
+          } else if (info.isSymbolicLink() && options.allowInternalLinks) {
+            await symlink(await readlink(from), to);
+          } else throw new Error("archive source changed during snapshot");
+        }
+        await utimes(target, epoch, epoch);
+      }
+      await snapshot(root, input);
+    }
     const file = join(scratch, "content.zip");
     const args = backend.kind === "7z" ? ["a", "-tzip", "-mx=5", "-y", file, "."] : ["-q", "-r", "-y", "-X", file, "."];
-    await execute(backend.executable, args, { cwd: root, env: options.env ?? process.env, timeout: options.timeoutMs ?? 120_000, signal: options.signal, maxBuffer: 1024 * 1024 });
+    await execute(backend.executable, args, { cwd: input, env: { ...(options.env ?? process.env), ...(options.reproducible ? { TZ: "UTC" } : {}) }, timeout: options.timeoutMs ?? 120_000, signal: options.signal, maxBuffer: 1024 * 1024 });
     await inspect(file, options);
     const hash = createHash("sha256"); let size = 0;
     for await (const chunk of createReadStream(file)) { hash.update(chunk); size += chunk.length; }
