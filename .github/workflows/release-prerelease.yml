@@ -155,12 +155,12 @@ jobs:
           CHANNEL: prerelease
           END_USER_DISTRIBUTION: "false"
           PROFILE: prerelease-distribution
-          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           SOURCE_REF: ${{ inputs.source_ref }}
-          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
-          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
+          STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
           STABLE_AUTHORIZED: "false"
         run: |
           set -euo pipefail
@@ -808,7 +808,7 @@ jobs:
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           STANDALONE_VERSION: ${{ inputs.standalone_version }}
-          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           OD_EXACT_SIGNING_KEY_ID: ${{ secrets.EXACT_SIGNING_KEY_ID }}
           OD_EXACT_ED25519_PRIVATE_KEY: ${{ secrets.EXACT_ED25519_PRIVATE_KEY }}
           OD_EXACT_SIGNING_KEY_ID_NEXT: ${{ secrets.EXACT_SIGNING_KEY_ID_NEXT }}
@@ -917,6 +917,11 @@ jobs:
 
       - name: Build native distribution
         env:
+          CSC_LINK: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_BASE64 || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.shell == 'electron' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.shell == 'electron' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.shell == 'electron' && secrets.APPLE_TEAM_ID || '' }}
           CHANNEL: prerelease
           RELEASE_VERSION: ${{ inputs.release_version }}
           SOURCE_SHA: ${{ inputs.source_sha }}
@@ -1018,10 +1023,14 @@ jobs:
 
       - name: Publish immutable release objects
         env:
-          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
-          PUBLIC_ORIGIN: ${{ secrets.EXACT_RELEASE_PUBLIC_ORIGIN }}
-          STORAGE_ENDPOINT: ${{ secrets.EXACT_RELEASE_ENDPOINT }}
-          STORAGE_BUCKET: ${{ secrets.EXACT_RELEASE_BUCKET }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
         run: |
           set -euo pipefail
           tools-release publish \
@@ -1354,7 +1363,11 @@ jobs:
 
       - name: Activate latest channel head after acceptance
         env:
-          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
         run: |
           set -euo pipefail
           tools-release activate \
@@ -1364,7 +1377,11 @@ jobs:
 
       - name: Promote accepted Electron baseline snapshot
         env:
-          OD_EXACT_RELEASE_TOKEN: ${{ secrets.EXACT_RELEASE_TOKEN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
         run: |
           set -euo pipefail
           tools-release baseline promote \

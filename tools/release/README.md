@@ -30,6 +30,17 @@ gates remain in force. Fossil channel-name readers retain their decoding grammar
 reading an old channel name does not authorize a new publication.
 Stable versions are `X.Y.Z`; counted channels use `X.Y.Z-<channel>.N`.
 
+Release workflows use the existing `CLOUDFLARE_R2_RELEASES_*` configuration:
+AK/SK map to `RELEASE_STORAGE_ACCESS_KEY_ID` / `RELEASE_STORAGE_SECRET_ACCESS_KEY`,
+URL/BUCKET select the SigV4 target (region `auto`), and PUBLIC_ORIGIN prefers the
+repository variable with a secret fallback. Workload-result AK/SK remain confined
+to trusted convergence; producer plans use only `OD_WORKLOAD_RESULTS_BASE_URL`.
+`EXACT_SIGNING_KEY_ID` / `EXACT_ED25519_PRIVATE_KEY` hold the persistent metadata
+signing pair; optional `_NEXT` secrets support explicit rotation. Never replace
+that pair with ephemeral local fixture keys. Apple certificate base64 and password
+are passed directly as `CSC_LINK` / `CSC_KEY_PASSWORD`, alongside the existing
+Apple notarization credentials, only for Electron distribution execution.
+
 Content metadata schema 5 declares `shell.<type>.version.min` and the associated
 build identity. Producers and consumers switch together; regenerate experimental
 schema-4 metadata instead of accepting both requirement shapes. Retaining a

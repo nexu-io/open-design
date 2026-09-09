@@ -373,6 +373,17 @@ describe("exact Electron release topology", () => {
       }
       const profile = lane === "exact" ? "exact-validation" : `${lane}-distribution`;
       expect(workflow).toContain(`PROFILE: ${profile}`);
+      expect(workflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
+      expect(workflow).toContain("RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}");
+      expect(workflow).toContain("secrets.CLOUDFLARE_R2_RELEASES_URL");
+      expect(workflow).toContain("vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN || secrets.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN");
+      expect(workflow).not.toContain("secrets.EXACT_RELEASE_");
+      expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_AK");
+      expect(workflow).not.toContain("CLOUDFLARE_R2_WORKLOAD_RESULTS_SK");
+      const distributionBuild = workflow.split("- name: Build native distribution")[1]!.split("- uses:")[0]!;
+      expect(distributionBuild).toContain("CSC_LINK: ${{ matrix.shell == 'electron' && secrets.APPLE_SIGNING_CERTIFICATE_BASE64 || '' }}");
+      expect(distributionBuild).toContain("secrets.APPLE_APP_SPECIFIC_PASSWORD");
+      expect(distributionBuild).toContain("secrets.APPLE_TEAM_ID");
       if (lane !== "exact") expect(workflow).toContain(`CHANNEL: ${lane}`);
       expect(workflow).toContain(`END_USER_DISTRIBUTION: "${lane === "stable"}"`);
       expect(workflow).toContain(lane === "stable"
