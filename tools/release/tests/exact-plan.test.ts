@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parseContentIdentityRegistry, resolveContentIdentityDeclaration } from "@open-design/metatool";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 
-import { createExactPlan, selectExactPlanActions, EXACT_DATA_PLAN_NODE_IDS, type ExactPlan } from "@/exact/plan.js";
+import { createExactPlan, resolveExactBasePlanNode, selectExactPlanActions, EXACT_DATA_PLAN_NODE_IDS, type ExactPlan } from "@/exact/plan.js";
 import { writeExactPlan } from "@/exact/write-plan.ts";
 
 const roots: string[] = [];
@@ -24,7 +24,7 @@ async function fixture(): Promise<{ registry: ReturnType<typeof parseContentIden
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
     "electron.contract.build",
-    "electron.contract.test", "electron.platform.build", "electron.capsule.build",
+    "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.base.build",
     "electron.shell.build",
     "electron.shell.test",
     "closure.build",
@@ -58,6 +58,20 @@ function identities(plan: ExactPlan): Set<string> {
 }
 
 describe("exact release plan", () => {
+  it("binds base production to carrier inputs and selects only downstream work for base changes", async () => {
+    const input = { ...await fixture(), acceptedShellBaseline: ACCEPTED_BASELINE, target: "darwin-arm64" as const };
+    const registryPath = join(input.root, "registry.json");
+    await writeFile(registryPath, JSON.stringify(input.registry));
+    const before = await createExactPlan(input);
+    expect(await resolveExactBasePlanNode({ ...input, registryPath })).toEqual(before.nodes["electron.base.build"]);
+    expect(before.nodes["electron.base.build"].dependencies).toEqual(["electron.shell.build"]);
+    await writeFile(join(input.root, "electron.base.build/input.txt"), "new assembly inputs");
+    const after = await createExactPlan(input);
+    expect(selectExactPlanActions(after, identities(before)).map(action => action.id)).toEqual([
+      "electron.base.build", "electron.distribution", "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
+    ]);
+    expect(after.nodes["electron.shell.build"].identity).toBe(before.nodes["electron.shell.build"].identity);
+  });
   it("writes the versioned plan envelope required by independent build and cache commands", async () => {
     const f = await fixture();
     await writeFile(join(f.root, "registry.json"), JSON.stringify(f.registry));
@@ -273,6 +287,7 @@ describe("exact release plan", () => {
     expect(actions).toEqual([
       "electron.shell.build",
       "electron.shell.test",
+      "electron.base.build",
       "electron.distribution",
       "electron.acceptance.full",
       "exact.compose",

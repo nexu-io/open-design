@@ -25,6 +25,7 @@ export type ExactPlanNodeId =
   | "electron.contract.test"
   | "electron.platform.build"
   | "electron.capsule.build"
+  | "electron.base.build"
   | "electron.acceptance.full"
   | "electron.distribution"
   | "electron.shell.build"
@@ -58,7 +59,8 @@ const NODE_DEPENDENCIES: Readonly<Record<Exclude<ExactPlanNodeId, DataNodeId>, r
   "electron.platform.build": [],
   "electron.capsule.build": [],
   "electron.acceptance.full": ["electron.distribution"],
-  "electron.distribution": ["electron.shell.build", "electron.platform.build"],
+  "electron.distribution": ["electron.base.build", "electron.platform.build"],
+  "electron.base.build": ["electron.shell.build"],
   "electron.shell.build": ["electron.contract.build"],
   "electron.shell.test": ["electron.shell.build", "electron.contract.test"],
 };
@@ -70,6 +72,7 @@ const NODE_ORDER = Object.freeze([
   "electron.capsule.build",
   "electron.shell.build",
   "electron.shell.test",
+  "electron.base.build",
   ...EXACT_DATA_PLAN_NODE_IDS,
   "closure.build",
   "closure.test",
@@ -178,6 +181,18 @@ export async function resolveExactCapsulePlanNode(input: Readonly<{
 }>): Promise<ExactPlanNode> {
   const registry = await readContentIdentityRegistry(input.registryPath);
   return resolveNode(`sha256:${"0".repeat(64)}`, "electron.capsule.build", input.root, input.target, registry, {});
+}
+
+/** Resolve only carrier and base inputs, without loading Closure/data trees. */
+export async function resolveExactBasePlanNode(input: Readonly<{
+  root: string; registryPath: string; target: ExactTarget; acceptedShellBaseline: `sha256:${string}`;
+}>): Promise<ExactPlanNode> {
+  const registry = await readContentIdentityRegistry(input.registryPath);
+  const nodes: Partial<Record<ExactPlanNodeId, ExactPlanNode>> = {};
+  for (const id of ["electron.contract.build", "electron.shell.build", "electron.base.build"] as const) {
+    nodes[id] = await resolveNode(input.acceptedShellBaseline, id, input.root, input.target, registry, nodes);
+  }
+  return nodes["electron.base.build"]!;
 }
 
 export async function resolveExactPlanSourceIdentity(input: Readonly<{

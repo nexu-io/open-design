@@ -4,6 +4,10 @@
     "excludeDirectoryNames": [".next", ".tmp", "coverage", "dist", "node_modules", "out"]
   },
   "sourceSets": {
+    "electron.base.build": {
+      "inherits": ["electron.shell.build"],
+      "paths": ["tools/release/src/exact/native-build.ts", "tools/release/src/exact/control-common.ts"]
+    },
     "electron.capsule.build": {
       "inherits": ["electron.shell.build"],
       "paths": ["tools/release/src/exact/native-build.ts", "tools/release/src/exact/control-common.ts"]
@@ -284,6 +288,7 @@
     }
   },
   "identities": {
+    "electron.base.build": {"schemaVersion": 1, "sourceSets": ["electron.base.build"], "parameters": ["target"]},
     "electron.capsule.build": {"schemaVersion": 1, "sourceSets": ["electron.capsule.build"], "parameters": ["target"]},
     "electron.platform.build": {
       "schemaVersion": 1,

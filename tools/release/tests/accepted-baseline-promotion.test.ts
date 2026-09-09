@@ -29,7 +29,7 @@ async function fixture() {
   const repository = join(root, "repository");
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
-    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
+    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.base.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ];
   for (const id of ids) {

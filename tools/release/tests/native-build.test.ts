@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
-import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
+import { afterEach, expect, it, vi } from "vitest";
+import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
+import * as planModule from "@/exact/plan.ts";
 import { resolveExactCapsulePlanNode, resolveExactPlatformPlanNode } from "@/exact/plan.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.restoreAllMocks(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 async function json(file: string, value: unknown) { await writeFile(file, JSON.stringify(value)); }
 async function fixture() {
@@ -21,6 +22,28 @@ async function fixture() {
   await json(plan, { plan: { target: "darwin-arm64", nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` } } } });
   return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
 }
+
+it.skipIf(process.platform !== "darwin" || process.arch !== "arm64").each(["bound", "drift", "wrong-carrier"])("binds base production before and after the public builder (%s)", async mode => {
+  const f = await fixture(), scene = join(f.root, "scene");
+  await mkdir(scene);
+  await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: (mode === "wrong-carrier" ? "b" : "a").repeat(64) });
+  const node = { target: "darwin-arm64" as const, identity: `sha256:${"c".repeat(64)}` as const,
+    sourceIdentity: `sha256:${"d".repeat(64)}` as const, dependencies: ["electron.shell.build" as const] };
+  await json(f.plan, { schemaVersion: 1, actions: [], plan: { target: f.target, acceptedShellBaseline: `sha256:${"0".repeat(64)}`,
+    nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` }, "electron.base.build": node } } });
+  const resolver = vi.spyOn(planModule, "resolveExactBasePlanNode").mockResolvedValue(node);
+  if (mode === "drift") resolver.mockResolvedValueOnce(node).mockResolvedValueOnce({ ...node, identity: `sha256:${"e".repeat(64)}` });
+  await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
+    'export async function buildElectronBase(input) { return { root: input.outputRoot, manifestSha256: "' + "f".repeat(64) + '" }; }');
+  if (mode !== "bound") {
+    await expect(buildReleaseBase({ ...f, scene })).rejects.toThrow(mode === "drift" ? "source changed" : "carrier binding");
+    await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
+    return;
+  }
+  expect(await buildReleaseBase({ ...f, scene })).toMatchObject({ operation: "electron.base.build",
+    planNode: { id: "electron.base.build", identity: node.identity, target: f.target } });
+  expect(resolver).toHaveBeenCalledTimes(2);
+});
 
 it("resolves only the public build export in the selected workspace and passes typed scene inputs", async () => {
   const f = await fixture(); await buildReleaseScene({ ...f, nodeArchive: undefined });

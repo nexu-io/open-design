@@ -22,7 +22,7 @@ async function fixture() {
   roots.push(root);
   const ids = [
     ...EXACT_DATA_PLAN_NODE_IDS,
-    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
+    "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.base.build", "electron.shell.build", "electron.shell.test", "closure.build", "closure.test",
     "electron.distribution", "electron.acceptance.full", "closure.acceptance.hot",
   ] as const;
   await Promise.all(ids.map(async (id) => {
@@ -50,7 +50,7 @@ describe("exact release plan", () => {
     });
     expect(first.baseline.mode).toBe("bootstrap");
     expect(first.actions.map(({ id }) => id)).toEqual([
-      "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.shell.build", "electron.shell.test", ...EXACT_DATA_PLAN_NODE_IDS, "closure.build", "closure.test", "electron.distribution",
+      "electron.contract.build", "electron.contract.test", "electron.platform.build", "electron.capsule.build", "electron.shell.build", "electron.shell.test", "electron.base.build", ...EXACT_DATA_PLAN_NODE_IDS, "closure.build", "closure.test", "electron.distribution",
       "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
     ]);
 

@@ -86,7 +86,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform/capsule)")
+    .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform/capsule/base)")
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
@@ -133,7 +133,8 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule({ ...common,
         ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
-      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene") });
+      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene"),
+        ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });

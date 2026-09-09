@@ -10,7 +10,7 @@ import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { canonicalBytes, checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
-import { resolveExactCapsulePlanNode, resolveExactPlatformPlanNode } from "./plan.ts";
+import { resolveExactBasePlanNode, resolveExactCapsulePlanNode, resolveExactPlatformPlanNode } from "./plan.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
@@ -161,15 +161,27 @@ export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeAr
   return receipt;
 }
 
-export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: string }>) {
+export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: string; plan?: string }>) {
   if (input.shell !== "electron") throw new Error("base build requires electron");
   const buildTarget = target(input), scene = resolve(input.scene);
-  if ((await readObject(join(scene, "scene.json"))).target !== buildTarget || buildTarget !== `${process.platform}-${process.arch}`) throw new Error("base build target mismatch");
+  const sceneManifest = await readObject(join(scene, "scene.json"));
+  if (sceneManifest.target !== buildTarget || buildTarget !== `${process.platform}-${process.arch}`) throw new Error("base build target mismatch");
+  const plan = input.plan == null ? undefined : await readObject(input.plan), id = "electron.base.build";
+  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget
+    || !/^sha256:[a-f0-9]{64}$/u.test(plan.plan?.acceptedShellBaseline ?? "")
+    || sceneManifest.shellBuildHash !== plan.plan?.nodes?.["electron.shell.build"]?.identity?.slice(7))) throw new Error("base build plan or carrier binding mismatch");
+  const matches = async () => plan == null || (plan.plan.nodes?.[id] != null && canonicalBytes(await resolveExactBasePlanNode({
+    root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"),
+    target: buildTarget, acceptedShellBaseline: plan.plan.acceptedShellBaseline,
+  })).equals(canonicalBytes(plan.plan.nodes[id])));
+  if (!await matches()) throw new Error("base build plan binding mismatch");
   const { buildElectronBase } = await electronBuilder(input.root);
   await mkdir(dirname(resolve(input.output)), { recursive: true });
   const base = await buildElectronBase({ sceneDirectory: scene,
     sceneManifestSha256: (await describeFile(join(scene, "scene.json"))).sha256, outputRoot: resolve(input.output) });
-  const receipt = { schemaVersion: 1, operation: "electron.base.build", target: buildTarget, base };
+  if (!await matches()) throw new Error("base build source changed during execution");
+  const receipt = { schemaVersion: 1, operation: "electron.base.build", target: buildTarget, base,
+    ...(plan == null ? {} : { planNode: { id, identity: plan.plan.nodes[id].identity, target: buildTarget } }) };
   await writeObject(input.receipt, receipt);
   return receipt;
 }
