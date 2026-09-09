@@ -7,6 +7,7 @@ import { finalizeContent, prepareContent, type PrepareExactContentInput } from "
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { readObject, type JsonObject } from "./control-common.ts";
 import { unpackSceneArtifact } from "./scene-artifact.ts";
+import { resolveDataResourceReceipts } from "./resource-composition.ts";
 
 async function localFile(root: string, name: unknown): Promise<string> {
   if (typeof name !== "string" || isAbsolute(name)) throw new Error("scene input must be a relative file");
@@ -22,9 +23,13 @@ export async function prepareReleaseContent(input: Readonly<{
   capsulesRoot?: string;
   platformsRoot?: string;
   dataResourceReceiptFiles?: readonly string[];
+  dataResourcesRoot?: string;
   previousContentMetadataFile?: string; output: string; receipt: string;
 }>): Promise<void> {
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare", ...input });
+  if (input.dataResourcesRoot != null && input.dataResourceReceiptFiles != null) throw new Error("choose --data-resources or --data-resource, not both");
+  const dataResourceReceiptFiles = input.dataResourcesRoot == null ? input.dataResourceReceiptFiles
+    : await resolveDataResourceReceipts(input.dataResourcesRoot);
   let previousContentMetadataFile = input.previousContentMetadataFile;
   if (previousContentMetadataFile == null) {
     const base = `${policy.target.publicBaseUrl.replace(/\/$/u, "")}/${input.channel}/`;
@@ -85,7 +90,7 @@ export async function prepareReleaseContent(input: Readonly<{
     channel: input.channel, releaseVersion: input.releaseVersion, sourceCommit: input.sourceCommit, publishedAt: stdout.trim(),
     standaloneVersion: input.standaloneVersion, artifactBaseUrl: `${policy.target.publicBaseUrl.replace(/\/$/u, "")}/${input.channel}/${input.releaseVersion}`,
     closureArtifactFile, standaloneArtifactFile, resourceReceiptFile, previousContentMetadataFile,
-    ...(input.dataResourceReceiptFiles == null ? {} : { dataResourceReceiptFiles: input.dataResourceReceiptFiles }),
+    ...(dataResourceReceiptFiles == null ? {} : { dataResourceReceiptFiles }),
     ...(input.capsulesRoot == null ? {} : { capsuleProducts }),
     platformProducts,
     shells: [...shells.values()].sort((a, b) => a.type.localeCompare(b.type)), outputDirectory: input.output,

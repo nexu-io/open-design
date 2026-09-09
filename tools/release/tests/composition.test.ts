@@ -89,15 +89,15 @@ it("prepares and finalizes signed content within release ownership, with no requ
       size: id.length, treeSha256: "c".repeat(64), entrypoint: "sidecar.mjs" });
   }
   await json(currentResources, { schemaVersion: 1, operation: "closure.resources.build", resources: runtimeResources });
-  const dataOptions: string[] = [];
+  const dataRoot = join(root, "data-products");
   for (const { id } of CLOSURE_DATA_RESOURCES) {
-    const file = `${id}-${sha(id)}.zip`, receipt = join(root, `${id}.json`);
-    await writeFile(join(root, file), id);
+    const directory = join(dataRoot, id); await mkdir(directory, { recursive: true });
+    const file = `${id}-${sha(id)}.zip`, receipt = join(directory, "resource-receipt.json");
+    await writeFile(join(directory, file), id);
     await json(receipt, { schemaVersion: 1, operation: "closure.data-resource.build", resource: {
       id, file, path: `/old-run/${file}`, sha256: sha(id), size: id.length,
       treeSha256: "d".repeat(64), entrypoint: "resource.json", sync: true,
     } });
-    dataOptions.push("--data-resource", receipt);
   }
   const independent = join(root, "independent"), independentReceipt = join(independent, "prepare-receipt.json");
   const independentScenes = join(root, "independent-scenes");
@@ -109,8 +109,11 @@ it("prepares and finalizes signed content within release ownership, with no requ
     target: "darwin-arm64", entrypoint: "capsule.cjs", archive: currentCapsule.archive });
   for (const item of active) await packSceneArtifact(join(root, `source-${item.shell}`),
     join(independentScenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
-  await command([...prepare.map(value => value === prepared ? independent : value === prepareReceipt ? independentReceipt : value === scenes ? independentScenes : value),
-    "--closure-artifact", currentClosure, "--standalone-artifact", currentLauncher, "--resource-receipt", currentResources, "--capsules", capsules, ...dataOptions]);
+  const independentArgs = [...prepare.map(value => value === prepared ? independent : value === prepareReceipt ? independentReceipt : value === scenes ? independentScenes : value),
+    "--closure-artifact", currentClosure, "--standalone-artifact", currentLauncher, "--resource-receipt", currentResources, "--capsules", capsules,
+    "--data-resources", dataRoot];
+  await expect(command([...independentArgs, "--data-resource", "ambiguous.json"])).rejects.toThrow("not both");
+  await command(independentArgs);
   const selected = JSON.parse(await readFile(independentReceipt, "utf8"));
   expect(selected.closureArtifact.sha256).toBe(sha("current closure"));
   expect(selected.standaloneArtifact.sha256).toBe(sha("current launcher"));

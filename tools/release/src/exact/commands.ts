@@ -160,6 +160,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--capsules <directory>", "Current Capsule products under <target>/; defaults to scene seeds")
     .option("--platforms <directory>", "Independent platform products under <target>/ (required for Electron)")
     .option("--data-resource <file>", "Independent data receipt beside its archive; repeat for the complete data set")
+    .option("--data-resources <directory>", "Complete independent data products under <resource-id>/")
     .option("--output <directory>", "Prepared content directory")
     .option("--receipt <file>", "Preparation receipt")
     .action(async (options: Options) => {
@@ -172,6 +173,7 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.resourceReceipt == null ? {} : { resourceReceiptFile: required(options, "resourceReceipt") }),
         ...(options.capsules == null ? {} : { capsulesRoot: required(options, "capsules") }),
         ...(options.platforms == null ? {} : { platformsRoot: required(options, "platforms") }),
+        ...(options.dataResources == null ? {} : { dataResourcesRoot: required(options, "dataResources") }),
         ...(options.dataResource == null ? {} : { dataResourceReceiptFiles: Array.isArray(options.dataResource)
           ? options.dataResource as string[] : [required(options, "dataResource")] }),
         output: required(options, "output"), receipt: required(options, "receipt") });

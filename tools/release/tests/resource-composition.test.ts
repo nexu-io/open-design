@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, rmdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { afterEach, expect, it } from "vitest";
-import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
+import { composeReleaseDataResources, resolveDataResourceReceipts } from "@/exact/resource-composition.ts";
 
 const roots: string[] = [];
 afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -17,7 +17,7 @@ it("composes all independent data products without reading superseded seeds or r
     const directory = join(root, id); await mkdir(directory);
     const file = `${id}-${digest(id)}.zip`;
     await writeFile(join(directory, file), id);
-    const receipt = join(directory, "receipt.json"); files.push(receipt);
+    const receipt = join(directory, "resource-receipt.json"); files.push(receipt);
     await writeFile(receipt, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build", resource: {
       id, file, path: `/previous-job/${file}`, sha256: digest(id), size: id.length,
       treeSha256: "a".repeat(64), entrypoint: "resource.json", sync: true,
@@ -28,7 +28,9 @@ it("composes all independent data products without reading superseded seeds or r
     ...runtime, ...CLOSURE_DATA_RESOURCES.map(({ id }) => ({ id, path: `/absent-old-seeds/${id}.zip` })),
   ] };
   const snapshot = structuredClone(previous);
-  const result = await composeReleaseDataResources(previous, files);
+  const discovered = await resolveDataResourceReceipts(root);
+  expect(discovered).toEqual(files);
+  const result = await composeReleaseDataResources(previous, discovered);
   expect(result.resources.slice(0, 2)).toEqual(runtime);
   expect(result.resources).toHaveLength(11);
   expect(previous).toEqual(snapshot);
@@ -44,4 +46,16 @@ it("composes all independent data products without reading superseded seeds or r
   await expect(composeReleaseDataResources(previous, files)).rejects.toThrow("binding verification failed");
   await writeFile(files[0]!, JSON.stringify({ ...first, operation: "closure.resources.development" }));
   await expect(composeReleaseDataResources(previous, files)).rejects.toThrow("single data resource receipt");
+});
+
+it("rejects incomplete, extra and linked product directories", async () => {
+  const root = await mkdtemp(join(tmpdir(), "release-data-inventory-")); roots.push(root);
+  await expect(resolveDataResourceReceipts(root)).rejects.toThrow("exactly the declared resource set");
+  for (const { id } of CLOSURE_DATA_RESOURCES) await mkdir(join(root, id));
+  await mkdir(join(root, "unexpected"));
+  await expect(resolveDataResourceReceipts(root)).rejects.toThrow("exactly the declared resource set");
+  await rmdir(join(root, "unexpected"));
+  const first = CLOSURE_DATA_RESOURCES[0]!.id;
+  await rmdir(join(root, first)); await symlink(root, join(root, first), "dir");
+  await expect(resolveDataResourceReceipts(root)).rejects.toThrow("exactly the declared resource set");
 });
