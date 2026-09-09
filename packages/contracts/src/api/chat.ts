@@ -1022,9 +1022,11 @@ export type PersistedAgentEvent =
        * travels with the boundary it describes and needs no parallel channel.
        *
        * Optional because turns recorded before this existed carry none, and
-       * because a Run that is still in flight has no end yet. Absent means
-       * "unknown" — clients MUST fall back to the turn-level span rather than
-       * inventing a boundary.
+       * because a Run that is still in flight has no end yet. An absent boundary
+       * is unknown. Clients may still use timestamps belonging to the same Run,
+       * but MUST NOT substitute a preceding Run's timestamps or the aggregate
+       * folded turn's span for a missing successor-Run boundary. If no own timing
+       * data is available, leave the duration unknown rather than inventing one.
        */
       runStartedAt?: number;
       runEndedAt?: number;
