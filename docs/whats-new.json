@@ -1,16 +1,16 @@
 {
-  "id": "0.22.0",
-  "title": "Introducing OpenDesign Arena",
-  "body": "Over a dozen models tested: Compare design quality and cost across models evaluated with the OpenDesign Harness.\nDeepSeek V4.1 Flash Leads in Scores: DeepSeek V4.1 Flash achieved 98% of top-ranked GPT-6 Astra’s average score at just 1% of its average cost.\nFind the right model for you: Explore the benchmarks to choose a model for your design needs and budget.",
+  "id": "0.22.1",
+  "title": "The OpenDesign Product Design Hackathon is here!",
+  "body": "Win up to $1,000 in tokens: Share your website, app, or product design built with OpenDesign on X. The 10 entries with the most likes win prizes!\nRewards for the first 50 submissions: Join the OpenDesign Discord or Feishu community and share your work. The first 50 participants each get $5 in tokens!\n40% better prototype designs: Upgrade to version 0.22.0 or later to experience OpenDesign’s latest design improvements!",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
-  "linkUrl": "https://open-design.ai/llm-arena-for-design/",
-  "ctaLabel": "View Arena",
+  "linkUrl": "https://open-design.ai/opendesign-hackathon/",
+  "ctaLabel": "Explore the Hackathon",
   "locales": {
     "zh-CN": {
-      "title": "OpenDesign Arena 正式上线",
-      "body": "十多款模型实测：使用 OpenDesign Harness，对比模型的设计表现与成本。\nDeepSeek V4.1 Flash 评分领先：DeepSeek V4.1 Flash 的均分达到榜首 GPT-6 Astra 的 98%，平均成本仅为其 1%。\n找到适合你的模型：前往 Arena，根据创作需求与预算选择模型。",
-      "linkUrl": "https://open-design.ai/zh/llm-arena-for-design/",
-      "ctaLabel": "查看评测站"
+      "title": "OpenDesign 产品设计黑客松来了！",
+      "body": "最高获价值 1000 美金 Token：分享用 OpenDesign 做的网页/App/产品设计到 X，点赞 Top 10 均可获奖；\n前50位投稿都有奖：加入OpenDesign Discord/飞书社群分享作品，前 50 名人人可得 $5 Token；\n原型设计效果提升 40%：升级 0.22.0 及以上版本，体验最新OpenDesign设计效果！",
+      "linkUrl": "https://open-design.ai/zh/opendesign-hackathon/",
+      "ctaLabel": "查看活动"
     }
   }
 }
