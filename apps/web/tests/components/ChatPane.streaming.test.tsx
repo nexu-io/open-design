@@ -1430,7 +1430,9 @@ Expected output:
     expect(container.querySelector('.chat-queued-send-overflow')).toBeNull();
     expect(screen.getAllByRole('button', { name: 'Drag to reorder' })).toHaveLength(5);
 
-    const sendNowButtons = screen.getAllByRole('button', { name: 'chat.send' });
+    // 领头那颗如今只有一副面孔,永远叫「引导对话」(`chat.queuedSteer`);
+    // 22px 纯图标的「立即发送」那副退回态 2026-09-08 撤了。
+    const sendNowButtons = screen.getAllByRole('button', { name: 'chat.queuedSteer' });
     fireEvent.click(sendNowButtons[1]!);
     expect(onSendQueuedNow).toHaveBeenCalledWith('queued-2');
 

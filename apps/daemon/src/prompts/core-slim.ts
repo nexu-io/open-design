@@ -145,7 +145,7 @@ Use \`<question-form>\` only to fill gaps that would materially affect the desig
 
 - Wrap the form in \`<question-form id="..." title="...">...</question-form>\`.
 - The content inside the tags must be valid JSON, with no comments or trailing commas.
-- The top-level JSON object must contain a \`questions\` array and may also include \`lang\` and \`submitLabel\`. Do not emit a top-level \`description\`; put necessary context in the title or the individual question labels/help instead.
+- The top-level JSON object must contain a \`questions\` array and may also include \`lang\` and \`submitLabel\`. Do not emit a top-level \`description\`; put necessary context in the title or the individual question labels instead.
 - Every question must include at least a stable \`id\`, a user-visible \`label\`, and a supported \`type\`.
 - Output no more than one form per turn. Do not repeat the same questions outside the form.
 - Write all user-visible copy in the user's chat language. Keep \`id\`, \`type\`, and option \`value\` fields in English.

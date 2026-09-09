@@ -13,6 +13,7 @@ import { DESIGN_SYSTEMS_USAGE, isDesignSystemsHelpArg } from './cli-help/index.j
 import { BRAND_USAGE, isBrandHelpArg } from './cli-help/index.js';
 import { parseDesignSystemRenameArgs } from './design-systems/rename-args.js';
 import { runLiveArtifactsToolCli } from './tools-live-artifacts-cli.js';
+import { runDeliverableSyntaxToolCli } from './tools-deliverable-syntax-cli.js';
 import { splitResearchSubcommand } from './research/cli-args.js';
 import { resolveDaemonUrl } from './daemon-url.js';
 import { SidecarFactory } from '@open-design/sidecar';
@@ -349,7 +350,7 @@ const BRAND_BOOLEAN_FLAGS = new Set([
 ]);
 const AGENT_STRING_FLAGS = new Set(['daemon-url']);
 const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
-const STRATEGY_STRING_FLAGS = new Set(['daemon-url', 'expected-revision']);
+const STRATEGY_STRING_FLAGS = new Set(['daemon-url']);
 const STRATEGY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
@@ -433,22 +434,18 @@ const SUBCOMMAND_MAP = {
 function printStrategyHelp() {
   console.log(`Usage:
   od strategy rollout status [--json] [--daemon-url <url>]
-  od strategy rollout reset [--expected-revision <n>] [--json] [--daemon-url <url>]
 
-Inspect or reset the OD Next safety latch for this daemon instance. Reset is
-compare-and-swap protected; when --expected-revision is omitted the CLI first
-reads status and submits that exact revision.
+Report which OD Next mode this daemon is running and which authority chose it.
 
-OD Next is opt-in and off until this installation asks for it:
+OD Next runs by default; this installation opts out of it here:
 
-  od config set odNextStrategyMode active    Opt in; takes effect next run.
-  od config set odNextStrategyMode off       Opt back out.
+  od config set odNextStrategyMode off       Opt out; takes effect next run.
+  od config set odNextStrategyMode active    Opt back in.
 
-The status subcommand reports which authority set the mode in effect (env /
-app_config / default), so you can confirm the configuration landed.
+Status names the authority in effect (env / app_config / default), which the
+mode alone does not: leaving it unset and saving 'off' produce opposite routes.
 
 Options:
-  --expected-revision <n>  Reset only the status revision you inspected.
   --json                   Emit the daemon response as JSON.
   --daemon-url <url>       Override the Open Design daemon HTTP base.`);
 }
@@ -459,12 +456,6 @@ function printStrategyRolloutStatus(status) {
   console.log(`Requested mode\t${status.requestedMode}`);
   if (status.requestedModeSource) console.log(`Requested by\t${status.requestedModeSource}`);
   console.log(`Effective mode\t${status.effectiveMode}`);
-  console.log(`Latch\t${status.latch?.mode ?? 'none'}`);
-  if (status.latch?.reasonCode) console.log(`Reason\t${status.latch.reasonCode}`);
-  console.log(`Revision\t${status.revision}`);
-  if (status.lastEvent) {
-    console.log(`Last event\t${status.lastEvent.action}:${status.lastEvent.reasonCode}`);
-  }
 }
 
 async function runStrategy(args) {
@@ -478,7 +469,28 @@ async function runStrategy(args) {
     process.exit(args.length === 0 ? 2 : 0);
   }
   const [area, action = 'status', ...rest] = args;
-  if (area !== 'rollout' || (action !== 'status' && action !== 'reset')) {
+  // `reset` cleared the stop latch, and the latch is gone: nothing can disable
+  // OD Next for an installation any more except that installation saving `off`.
+  // Named here rather than left to the usage dump, because it has shipped in
+  // every release since 0.21.0 and an operator who scripted it deserves to be
+  // told what happened rather than shown a list it is missing from.
+  //
+  // It fails instead of succeeding as a no-op. The command meant "recover this
+  // machine's rollout"; reporting success for a recovery that neither happened
+  // nor can happen is the same lie the latch itself told, and this release is
+  // removing that lie rather than relocating it.
+  if (area === 'rollout' && action === 'reset') {
+    console.error(
+      'od strategy rollout reset was removed: the daemon-instance stop latch it '
+      + 'cleared no longer exists, so there is nothing to reset.\n'
+      + 'OD Next now runs unless this installation opts out. To opt out:\n'
+      + '  od config set odNextStrategyMode off\n'
+      + 'To check which authority decides the mode:\n'
+      + '  od strategy rollout status',
+    );
+    process.exit(2);
+  }
+  if (area !== 'rollout' || action !== 'status') {
     printStrategyHelp();
     process.exit(2);
   }
@@ -498,34 +510,7 @@ async function runStrategy(args) {
     if (!response.ok) return structuredHttpFailure(response);
     return response.json();
   };
-  if (action === 'status') {
-    const payload = await readStatus();
-    if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-    printStrategyRolloutStatus(payload.status);
-    return;
-  }
-
-  const inspected = await readStatus();
-  const expectedRevision = flags['expected-revision'] == null
-    ? inspected.status.revision
-    : Number(flags['expected-revision']);
-  if (!Number.isInteger(expectedRevision) || expectedRevision < 0) {
-    console.error('--expected-revision must be a non-negative integer');
-    process.exit(2);
-  }
-  let response;
-  try {
-    response = await fetch(`${base}/api/strategies/od-next/rollout/reset`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ expectedRevision }),
-    });
-  } catch (error) {
-    surfaceFetchError(error, base);
-    process.exit(3);
-  }
-  if (!response.ok) return structuredHttpFailure(response);
-  const payload = await response.json();
+  const payload = await readStatus();
   if (flags.json) return process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
   printStrategyRolloutStatus(payload.status);
 }
@@ -867,6 +852,16 @@ if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
       process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
       process.exitCode = 1;
     });
+} else if (argv[0] === 'tools' && argv[1] === 'deliverable-syntax') {
+  runDeliverableSyntaxToolCli(argv.slice(2))
+    .then(({ exitCode }) => {
+      process.exitCode = exitCode;
+    })
+    .catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      process.stderr.write(`${JSON.stringify({ ok: false, error: { message } })}\n`);
+      process.exitCode = 1;
+    });
 } else if (argv[0] === 'tools' && argv[1] === 'connectors') {
   runConnectorsToolCli(argv.slice(2))
     .then(({ exitCode }) => {
@@ -967,6 +962,9 @@ function printRootHelp() {
 
   od tools live-artifacts <create|list|update|refresh> [options]
       Manage live artifacts through daemon wrapper commands.
+
+  od tools deliverable-syntax check [--json]
+      Check the current deliverable syntax through the daemon wrapper.
 
   od tools directions [--id <id> | --label <label>] [--json]
       List the built-in design directions, or print one direction's full
@@ -9627,14 +9625,14 @@ async function runLibraryList(name, args) {
   const flags = parseFlags(rest, { string: LIBRARY_STRING_FLAGS, boolean: LIBRARY_BOOLEAN_FLAGS });
   const base = (await libraryDaemonUrl(flags)).replace(/\/$/, '');
   const apiPath = name === 'design-systems' ? '/api/design-systems' : `/api/${name}`;
-  const designSystemWorkspaceHeaders = name === 'design-systems'
+  const workspaceHeaders = name === 'design-systems' || name === 'skills'
     ? workspaceHeadersFromExplicitFlags(flags) ?? {}
     : undefined;
   switch (sub) {
     case 'list': {
       const resp = await fetch(`${base}${apiPath}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9654,8 +9652,8 @@ async function runLibraryList(name, args) {
         process.exit(2);
       }
       const resp = await fetch(`${base}${apiPath}/${encodeURIComponent(id)}`, {
-        ...(designSystemWorkspaceHeaders
-          ? { headers: designSystemWorkspaceHeaders }
+        ...(workspaceHeaders
+          ? { headers: workspaceHeaders }
           : {}),
       });
       if (!resp.ok) return structuredHttpFailure(resp);
@@ -9678,8 +9676,8 @@ async function runSkills(args) {
   if (!args[0] || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
     console.log(`Usage:
   od skill install <https://github.com/owner/repo|github:owner/repo|https://…tar.gz|https://…tgz> [--json]
-  od skill list
-  od skill show <id>
+  od skill list [--workspace <id> --workspace-member <id>]
+  od skill show <id> [--workspace <id> --workspace-member <id>]
   od skill uninstall <id>
 
 \`od skills …\` remains an alias for compatibility.`);

@@ -105,10 +105,73 @@ function transitiveNeeds(jobs: Map<string, WorkflowJob>, name: string): string[]
   return [...seen];
 }
 
+type WorkflowStep = { job: string; name: string; if: string };
+
+/**
+ * Minimal `steps:` reader: every step in the file as job id + step name +
+ * step-level `if` (block scalars folded onto one line).
+ *
+ * Same rationale as parseJobGraph — hand-written workflows with stable
+ * indentation, and this is a topology assertion rather than a YAML feature
+ * test. Keys of a step sit at exactly eight spaces (or on the `- ` line), so
+ * `run:`/`env:` bodies, which must be indented deeper than their key, never
+ * look like one.
+ */
+function parseWorkflowSteps(content: string): WorkflowStep[] {
+  const steps: WorkflowStep[] = [];
+  let job: string | null = null;
+  let inSteps = false;
+  let collectingIf = false;
+  for (const line of content.split("\n")) {
+    const header = /^ {2}([A-Za-z0-9_-]+):\s*$/.exec(line);
+    if (header?.[1] != null) {
+      job = header[1];
+      inSteps = false;
+      collectingIf = false;
+      continue;
+    }
+    if (/^ {4}steps:\s*$/.test(line)) {
+      inSteps = true;
+      continue;
+    }
+    if (!inSteps || job == null) continue;
+
+    const isStepKey = /^ {6}- |^ {8}[A-Za-z_-]+:/.test(line);
+    if (collectingIf && !isStepKey) {
+      const last = steps[steps.length - 1];
+      const text = line.trim();
+      if (last != null && text.length > 0 && !text.startsWith("#")) last.if += ` ${text}`;
+      continue;
+    }
+    collectingIf = false;
+
+    if (/^ {6}- /.test(line)) steps.push({ job, name: "", if: "" });
+    const current = steps[steps.length - 1];
+    if (current == null) continue;
+
+    const name = /^(?: {6}- | {8})name:\s*(.*)$/.exec(line);
+    if (name?.[1] != null) {
+      current.name = name[1].trim();
+      continue;
+    }
+    const condition = /^(?: {6}- | {8})if:\s*(.*)$/.exec(line);
+    if (condition != null) {
+      current.if = (condition[1] ?? "").trim();
+      collectingIf = true;
+    }
+  }
+  return steps;
+}
+
 /**
  * Status-check functions that make a job evaluate its own `if` instead of
  * inheriting a skip from somewhere up the chain. `success()` does not count:
  * it is what GitHub already applies implicitly.
+ *
+ * The same list applies one level down. A step-level `if` without a status
+ * function also gets an implicit `success()`, evaluated against the job's
+ * status SO FAR — so a step placed after one that failed is skipped before its
+ * own condition is read, exactly as a job is.
  */
 const SKIP_CHAIN_BREAKERS = ["always(", "cancelled(", "failure("];
 
@@ -452,6 +515,13 @@ describe("release workflows", () => {
       "release-beta.yml",
       "release-stable.yml",
       "notify-release-feishu.yml",
+      // The dispatched prerelease lanes were outside this sweep, which left
+      // release-prerelease-card.yml's `fallback_notice` — a job whose `if`
+      // hand-checks `needs.card.result` — uncovered by the very rule it has to
+      // obey.
+      "release-prerelease-card.yml",
+      "release-prerelease-tests.yml",
+      "release-prerelease-smoke.yml",
     ];
     const contents = await Promise.all(
       files.map((file) => readFile(new URL(`../../../.github/workflows/${file}`, import.meta.url), "utf8")),
@@ -480,6 +550,66 @@ describe("release workflows", () => {
     expect(transitiveNeeds(prerelease, "dispatch_smoke")).toContain("build_linux");
     expect(prerelease.get("build_linux")?.if).toContain("vars.ENABLE_STABLE_LINUX");
     expect(SKIP_CHAIN_BREAKERS.some((breaker) => (dispatchSmoke?.if ?? "").includes(breaker))).toBe(true);
+  });
+
+  it("keeps the prerelease card fallback reachable after the step it alerts on has failed", async () => {
+    // The job-level trap above has a step-level twin, and it is easier to walk
+    // into because there is no `needs:` to remind you. GitHub applies an
+    // implicit `success()` to any step-level `if` that carries no status
+    // function, and that success() is evaluated against the JOB'S STATUS SO
+    // FAR. So a step placed after a step that failed is skipped before its own
+    // condition is ever read.
+    //
+    // That is fatal for exactly one kind of step: one whose job is to speak up
+    // BECAUSE something earlier failed. The prerelease card fallback is that
+    // kind. `dispatch-validation.sh` exits non-zero when it could not dispatch
+    // the card on any ref, which marks the job failed — and a card that was
+    // never dispatched is the headline reason the fallback exists. A notifier
+    // that inherits success() there is silent in precisely its own emergency.
+    //
+    // Not a rule that generalizes to every step: most steps SHOULD stop when
+    // something before them broke. It binds the fallback notifier group, whose
+    // whole contract is the opposite.
+    const [prerelease, card] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease-card.yml", import.meta.url), "utf8"),
+    ]);
+
+    // The notifier group inside `dispatch_validation` sits after two dispatch
+    // steps that can fail, so every step of it needs a status function.
+    const dispatchSteps = parseWorkflowSteps(prerelease).filter((step) => step.job === "dispatch_validation");
+    const notifierStart = dispatchSteps.findIndex((step) => step.name === "Setup Node.js for the fallback notifier");
+    expect(notifierStart, "release-prerelease.yml must still carry the fallback notifier").toBeGreaterThan(0);
+    const stranded = dispatchSteps
+      .slice(notifierStart)
+      .filter((step) => !SKIP_CHAIN_BREAKERS.some((breaker) => step.if.includes(breaker)));
+    expect(
+      stranded.map((step) => step.name),
+      "these fallback steps inherit success() and are skipped by the very dispatch failure they exist to report",
+    ).toEqual([]);
+
+    // Wherever the composed notice is consumed, same rule — and one more: a
+    // consumer must require the composer to have SUCCEEDED. `alert` is written
+    // last precisely so a half-written notice cannot claim to be one, and the
+    // outcome check says the same thing at the workflow layer, so neither a
+    // crashed nor a skipped composer can hand feishu-notice.ts an empty body.
+    for (const [file, content] of [
+      ["release-prerelease.yml", prerelease],
+      ["release-prerelease-card.yml", card],
+    ] as const) {
+      const consumers = parseWorkflowSteps(content).filter((step) => step.if.includes("steps.notice.outputs"));
+      expect(consumers.length, `${file} must consume the composed notice`).toBeGreaterThan(0);
+      for (const consumer of consumers) {
+        expect(
+          SKIP_CHAIN_BREAKERS.some((breaker) => consumer.if.includes(breaker)),
+          `${file}:${consumer.job}:${consumer.name} inherits success() and cannot report an upstream failure`,
+        ).toBe(true);
+        expect(
+          consumer.if,
+          `${file}:${consumer.job}:${consumer.name} must not post a notice its composer failed to finish`,
+        ).toContain("steps.notice.outcome == 'success'");
+      }
+    }
   });
 
   it("keeps every prerelease validation lane out of the release concurrency group", async () => {

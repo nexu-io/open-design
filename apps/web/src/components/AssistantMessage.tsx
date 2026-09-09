@@ -1806,7 +1806,16 @@ function AssistantMessageImpl({
                 摆到线下面、左对齐,都会读成「新会话已经开口说了一句」。 */}
             <span className="fork-note" data-testid="assistant-fork-note">
               <Icon name="fork" size={12} />
-              {t('assistant.forkNote')}
+              {/* 文案必须住在**自己的具名元素**里,不能是 `.fork-note` 的裸文本。
+                  `.fork-note` 是 flex 容器(图标和字要并排),裸文本会被包进一个
+                  **匿名 flex item** —— 而 `text-overflow` 是非继承属性,匿名盒
+                  拿不到 `ellipsis`,长译文于是被齐口切断而不是省略。
+                  截断那几条因此挂在这一层上(`chat.css` 的 `.fork-note-label`)。
+                  `data-testid` 是给守卫用的稳定抓手:`e2e/ui/fork-note-ellipsis.test.ts`
+                  在受限宽度下量这一格真的省略了没有,不去碰类名和样式声明。 */}
+              <span className="fork-note-label" data-testid="assistant-fork-note-label">
+                {t('assistant.forkNote')}
+              </span>
             </span>
             <i aria-hidden />
           </div>

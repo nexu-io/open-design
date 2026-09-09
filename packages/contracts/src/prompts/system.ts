@@ -85,7 +85,7 @@ function renderUiLocalePrompt(locale: string | undefined): string {
   const lines = [
     '# UI locale override',
     '',
-    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, question labels, placeholders, helper text, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
+    `The OpenDesign UI locale for this run is \`${normalized}\` (${languageName}). All user-visible chat prose and generated UI controls must follow this locale, especially \`<question-form>\` titles, question labels, placeholders, and option labels. Keep machine-readable ids and object option \`value\` fields exact and unlocalized.`,
   ];
   if (normalized === 'zh-CN') {
     lines.push(
@@ -1097,6 +1097,18 @@ function shouldRenderElevenLabsVoiceOptions(
     && audioVoiceOptions.length > 0;
 }
 
+/**
+ * OPEND-2707. 与 `apps/daemon/src/prompts/system.ts` 的同名函数是手抄件,必须同步。
+ *
+ * 「交上去的是 voice_id,不是你看到的那行描述」原本写在每题副标题(help 字段)里。
+ * 澄清卡不再渲染副标题之后那句话写了就丢,所以它并进了 `label` ——
+ * `FormQuestion` 没有题级 `description`,`placeholder` 归 "Choose a voice" 占着,
+ * `label` 是唯一还会渲染、又属于这道题本身的位置。
+ *
+ * 这份 JSON 会被整段 `JSON.stringify` 进系统提示词,所以它同时是模型看到的
+ * 「一道题可以长这样」的范例 —— 留一个 help 键在这里,撤发问就撤了个寂寞。
+ * 钉在 `packages/contracts/tests/system-prompt-audio-voices.test.ts`。
+ */
 function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
   questions: Array<{
     id: string;
@@ -1105,7 +1117,6 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     required: boolean;
     allowCustom: false;
     placeholder: string;
-    help: string;
     options: Array<{ label: string; value: string }>;
   }>;
   submitLabel: string;
@@ -1118,12 +1129,11 @@ function renderElevenLabsVoiceQuestionForm(voiceOptions: AudioVoiceOption[]): {
     questions: [
       {
         id: 'voice',
-        label: 'Voice',
+        label: 'Voice — the answer submits the matching Voice ID',
         type: 'select',
         required: true,
         allowCustom: false,
         placeholder: 'Choose a voice',
-        help: 'Select a voice description; the answer submits the matching Voice ID.',
         options,
       },
     ],

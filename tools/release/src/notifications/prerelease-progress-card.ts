@@ -19,7 +19,7 @@
 // build dies. The one exception is total failure, where silence would hide an
 // incident — see shouldPostFirstCard.
 
-import { existsSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
 import { FeishuAppClient } from "./feishu-app.ts";
 import {
@@ -254,6 +254,28 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * The watcher's report to the fallback job: `card_delivered=true` means the
+ * card's FINAL state is in the chat.
+ *
+ * The job's own result cannot carry this. Every Feishu failure below is caught
+ * on purpose — one hiccup must not end a two-hour watch — so an application bot
+ * whose credentials expired, or which was removed from the chat, produces a
+ * green job and an empty channel. Writing the signal only on the delivered path
+ * is what lets the fallback tell that apart from a healthy release, and writing
+ * it for the FINAL render (not the first) also catches a card that was posted
+ * and then froze because the closing update could not be written.
+ */
+function reportDelivered(): void {
+  const file = process.env.GITHUB_OUTPUT;
+  if (file == null || file.length === 0) return;
+  try {
+    appendFileSync(file, "card_delivered=true\n");
+  } catch (error) {
+    console.warn(`[card] could not record delivery: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 type Watch = {
   originJobs: GithubJob[];
   publish: LaneStatus;
@@ -414,6 +436,8 @@ async function main(): Promise<void> {
   };
   let messageId: string | null = null;
   let lastRendered = "";
+  // Whether the chat currently holds the render this loop last produced.
+  let chatHoldsLatest = false;
 
   for (;;) {
     const timedOut = Date.now() - startedAt > timeoutMs;
@@ -440,15 +464,19 @@ async function main(): Promise<void> {
             console.log("[card] updated");
           }
           lastRendered = rendered;
+          chatHoldsLatest = true;
         } catch (error) {
           // Keep watching. The next cycle re-renders from the same state and
           // tries again, so one Feishu hiccup does not lose the card.
           console.warn(`[card] delivery failed: ${error instanceof Error ? error.message : String(error)}`);
+          chatHoldsLatest = false;
         }
       }
     }
 
     if (done) {
+      if (chatHoldsLatest) reportDelivered();
+      else console.warn("::warning::the prerelease card never reached the chat; the fallback notice takes over");
       if (timedOut && !state.finished) {
         console.warn(`::warning::prerelease card watcher timed out after ${Math.round(timeoutMs / 60000)} minutes`);
       }

@@ -1,5 +1,9 @@
 import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
 import type { RunFailureAction, RunFailureCategory, RunFailureDetail } from '../api/chat.js';
+import type {
+  DeliverableSyntaxRepairState,
+  DeliverableSyntaxValidationEvidence,
+} from '../api/deliverable-syntax.js';
 import type { StrategyTaskProjectionV2 } from '../plugins/strategy-v2.js';
 import type { SseErrorPayload } from '../errors.js';
 import type { SseTransportEvent } from './common.js';
@@ -135,6 +139,10 @@ export interface ChatSseEndPayload {
    *  Mirror ChatRunStatusResponse.failureCategory / failureDetail. */
   failureCategory?: RunFailureCategory | null;
   failureDetail?: RunFailureDetail | null;
+  /** Bounded repair-loop state persisted before this terminal frame. */
+  deliverableSyntaxRepair?: DeliverableSyntaxRepairState;
+  /** Latest parse-only syntax evidence for the canonical Web deliverable. */
+  deliverableSyntaxValidation?: DeliverableSyntaxValidationEvidence;
   /** The daemon's verdict on the same failure: what the user should do, and
    *  whether re-running can help at all. Carried on the terminal frame for the
    *  same reason as the classification above — the chat decides which button

@@ -208,10 +208,26 @@ const SCROLL_SAMPLE_MIN_INTERVAL_MS = 250;
 // froze and a session that never froze again look exactly alike. Silence
 // reading as "no defect" is the one failure mode this module exists to avoid.
 //
-// What remains is `Surface.reported`: one report per chat log element. That is
+// What remains is `Surface.reported`: one EVENT per chat log element. That is
 // de-duplication, not rate limiting — a frozen surface has one story, and
 // repeating it says nothing new — and it is per element, so it can never take
 // the probe off a surface it has not yet described.
+//
+// It took a second pass to make that true. The same flag was also being read
+// by every listener and observer callback in this file, which meant sending
+// the event ALSO stopped the scroll sampler, the wheel path, the activity
+// trail and the shortfall ledger — the session cap's failure mode again, one
+// surface at a time and with the collectors that would have explained the
+// freeze. The flag is now read at exactly one place,
+// `freezeTelemetryAlreadySent`, whose docblock carries the rule.
+//
+// Keeping everything running costs nothing unbounded: every collector on this
+// surface is a fixed-size ring that was already sized for a whole session —
+// `activity` at ACTIVITY_CAPACITY, `ledger.steps`/`ledger.probes` at
+// LEDGER_CAPACITY each, `transitions` at MAX_TRANSITIONS, the write trace at
+// its own capacity — with running totals kept as counters so a trimmed ring
+// cannot read as complete. Nothing here grows with time or with transcript
+// length, and `childHeights` is a WeakMap so it cannot outlive its nodes.
 
 /** Element budget for the compositing-layer census. */
 const MAX_LAYER_SCAN = 600;
@@ -301,12 +317,22 @@ interface Surface {
   idleHandle: number | null;
   reported: boolean;
   /**
-   * Frozen verdicts the inner-scroller gate threw away.
+   * Frozen verdicts the inner-scroller gate threw away INSTEAD of reporting.
    *
    * Incremented only inside that gate's own branch, which has just walked an
    * ancestor chain reading layout — so this costs nothing measurable and it
    * is the ONLY record that the probe saw a freeze and chose silence. Without
    * it, suppression and "no defect ever happened" are the same observation.
+   *
+   * "Instead of reporting" is the whole meaning, so the counter stops once
+   * this surface has reported — a verdict discarded after the event was
+   * already sent was never going to be sent again anyway, and counting it
+   * would make the audit's `inner_scroller_free` line ("the probe SAW the
+   * freeze and chose not to report it") read as an explanation for a silence
+   * that did not happen. The gate's RETRACTION is unconditional; only this
+   * bookkeeping about it is not. Do not restore the symmetry by moving the
+   * gate instead: the retraction is what keeps an absorbed wheel out of the
+   * stall streak.
    */
   innerScrollerSuppressions: number;
   resizeObserver: ResizeObserver | null;
@@ -525,7 +551,6 @@ function onScrollCapture(event: Event): void {
       discover(target);
       return;
     }
-    if (active.reported) return;
     active.scrollSamplePending = true;
     const at = now();
     if (at - active.lastScrollSampleAt < SCROLL_SAMPLE_MIN_INTERVAL_MS) return;
@@ -568,7 +593,7 @@ function onWheelDiscover(event: WheelEvent): void {
  */
 function onSurfaceWheel(event: WheelEvent): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   // `detach()` removes this listener, so a superseded element should never
   // reach here — but if it ever did, its wheels would be attributed to the
   // wrong surface, which is worse than missing them.
@@ -663,7 +688,7 @@ function attach(element: HTMLElement): Surface {
   if (typeof ResizeObserver !== 'undefined') {
     try {
       const observer = new ResizeObserver(() => {
-        if (surface !== active || active.reported) return;
+        if (surface !== active) return;
         // The entry's own `contentRect` would be free, but the ring buffer
         // wants a moment, not a measurement — and the frame below reads the
         // real geometry a beat later anyway.
@@ -976,7 +1001,7 @@ function isJumpActive(el: Element): boolean {
  */
 function onStructureMutations(records: MutationRecord[]): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   const at = now();
   let partsDirty = false;
 
@@ -1053,7 +1078,7 @@ function onStructureMutations(records: MutationRecord[]): void {
  */
 function onStreamMutations(records: MutationRecord[]): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   const at = now();
   for (const record of records) {
     const target = record.target;
@@ -1081,7 +1106,7 @@ function onStreamMutations(records: MutationRecord[]): void {
  */
 function onSurfaceMotion(event: Event): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   if (event.currentTarget !== active.shell) return;
   const kind = MOTION_KIND[event.type];
   if (kind === undefined) return;
@@ -1090,7 +1115,7 @@ function onSurfaceMotion(event: Event): void {
 
 function onVisibilityChange(): void {
   const active = surface;
-  if (active === null || active.reported) return;
+  if (active === null) return;
   const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
   pushActivity(active.activity, hidden ? 'doc_hidden' : 'doc_visible', 'other', now());
 }
@@ -1115,7 +1140,7 @@ function observeHostBox(active: Surface): void {
   const target = host;
   try {
     const observer = new ResizeObserver(() => {
-      if (surface !== active || active.reported) return;
+      if (surface !== active) return;
       // Record only. Unlike the chat log's own observer this does NOT
       // schedule a geometry frame: the host's height is not one of the three
       // numbers the verdict is made from.
@@ -1231,6 +1256,25 @@ function runFrame(active: Surface): void {
     return;
   }
 
+  // Whose scroller was this batch aimed at?
+  //
+  // Asked ONCE per wheel-bearing frame, here, and the single answer is used by
+  // both the shortfall ledger below and the freeze verdict further down. It
+  // used to be asked only at report time, on the grounds that it is the
+  // expensive check — but "expensive" does not survive reading it: the walk is
+  // the ancestor chain from the wheel target up to the chat log, which is
+  // nesting depth and never transcript length, it returns immediately when the
+  // wheel was aimed at the log itself, and `absorbsWheelInDirection` rejects on
+  // geometry before it will pay for a `getComputedStyle`. Layout is already
+  // clean here, because the frame callback above has just read `scrollHeight`.
+  //
+  // Asking early is what makes the answer usable. A wheel a code block or a
+  // tool-output box absorbed is a wheel the chat log was never asked to move,
+  // so it is not evidence about the chat log — and everything below this line
+  // records evidence about the chat log.
+  const innerScrollerCount = countAbsorbingScrollers(active.element, wheelTarget);
+  const absorbedByInnerScroller = innerScrollerCount > 0;
+
   // One round of "the wheel asked to go further; this is where it stopped".
   // Read BEFORE `observeWheelBatch`, which replaces the baseline this is
   // judged against.
@@ -1241,7 +1285,15 @@ function runFrame(active: Surface): void {
   // below a baseline it never actually failed to pass, and banking that as a
   // shortfall permanently claims `ledger.first` — the field the report exists
   // for — with a number the wheel had nothing to do with.
-  if (wheelPx > 0 && ceilingProbeAttributable(active.state, geometry)) {
+  //
+  // An absorbed wheel is the same mistake by a different route, and a worse
+  // one, because it is indistinguishable from a real round by arithmetic
+  // alone: the chat log genuinely did not move, and it genuinely has travel
+  // left, because the user was scrolling something else entirely. `first` is
+  // never evicted, so one such round owns "where the drift began" for the life
+  // of the surface. It is excluded here rather than retracted later for that
+  // exact reason — there is no taking `first` back.
+  if (!absorbedByInnerScroller && wheelPx > 0 && ceilingProbeAttributable(active.state, geometry)) {
     recordCeilingProbe(active.ledger, {
       at,
       reachedPx: geometry.scrollTop,
@@ -1258,23 +1310,53 @@ function runFrame(active: Surface): void {
   active.state = result.state;
   if (result.verdict.kind !== 'frozen') return;
 
-  // Last gate before reporting, and the expensive one — so it runs only
-  // here. If a scrollable box between the wheel target and the chat log
-  // still had travel in the requested direction, the chat log was never
-  // asked to move and this is not our defect. Every code block and
-  // tool-output box in a transcript is such a box.
-  const innerScrollerCount = countAbsorbingScrollers(active.element, wheelTarget);
-  if (innerScrollerCount > 0) {
+  // The attribution answered at the top of this frame, applied to the verdict.
+  // If a scrollable box between the wheel target and the chat log still had
+  // travel in the requested direction, the chat log was never asked to move
+  // and this is not our defect. Every code block and tool-output box in a
+  // transcript is such a box.
+  //
+  // Nothing may put a de-duplication check above this branch. That is not a
+  // style preference: `observeWheelBatch` has ALREADY folded the notch into
+  // the stall streak by the time we get here, and the retraction below is the
+  // only thing that takes it back out. Gating the branch on `reported` — which
+  // this PR briefly did, to save the walk — left ordinary code-block scrolling
+  // climbing `stallWheelCount` for a chat scroller nobody was scrolling, and a
+  // later snapshot then presents that as exactly the signal this probe exists
+  // to produce. An instrument that costs a little more is survivable; one that
+  // manufactures its own findings is not.
+  if (absorbedByInnerScroller) {
     // The only trace this decision leaves. A suppressed freeze and a chat
     // that never froze are otherwise indistinguishable from outside, which is
     // how a real 1493px failure produced no event and no explanation.
-    active.innerScrollerSuppressions += 1;
-    // Clear the streak as well as the verdict. Leaving it at the threshold
-    // would re-run this ancestor walk — which does read layout — on every
-    // single frame for as long as the user keeps scrolling that inner box.
+    //
+    // Counted only while the surface can still report, because that is what
+    // the field means — see its docblock on `Surface`. The retraction below
+    // is what must be unconditional; the bookkeeping about why a report did
+    // not happen is meaningless once one has.
+    const alreadySent = freezeTelemetryAlreadySent(active);
+    if (!alreadySent) active.innerScrollerSuppressions += 1;
+    // Clear the streak as well as the verdict. This is the retraction: the
+    // notch has already been folded in by `observeWheelBatch` above, and this
+    // is where it is taken back out, so an absorbed wheel can never leave a
+    // stall standing in a snapshot. Leaving the streak parked at the threshold
+    // would also mean re-deciding a freeze on every single frame for as long
+    // as the user keeps scrolling that inner box.
     active.state = {
       ...active.state,
-      reported: false,
+      // Retract the VERDICT, not the history.
+      //
+      // Before this surface has reported there is no history: the verdict was
+      // discarded, no event went out, and the surface must still be able to
+      // report a real freeze later — so this goes back to false.
+      //
+      // After it has reported, an event DID go out, and `ScrollFreezeState`'s
+      // `reported` is documented as the permanent record of that. Writing
+      // false here unconditionally — which this branch did until review caught
+      // it, back when it was unreachable post-report — would leave a snapshot
+      // saying `surface.reported: true` beside `detector.reported: false` and
+      // contradict that contract to the one person who reads both.
+      reported: alreadySent,
       stallAt: null,
       stallWheelCount: 0,
       stallRequestedPx: 0,
@@ -1586,6 +1668,39 @@ function scanAncestorLayerTriggers(root: HTMLElement): Set<ScrollLayerTrigger> {
 // Report
 // ---------------------------------------------------------------------------
 
+/**
+ * Has this surface already sent its one `client_chat_scroll_frozen`?
+ *
+ * The invariant this name exists to hold: **a report suppresses the EVENT and
+ * nothing else.** Not a listener, not an observer callback, not the detector,
+ * and — the case that had to be learned twice — not an attribution gate. Every
+ * remaining reader is inside the reporting path itself: `report()` below, and
+ * the suppression counter, which is bookkeeping ABOUT reporting. The audit in
+ * `evaluateReportBlockers` prints the flag without acting on it.
+ *
+ * "Suppresses the event" is deliberately narrow. Deciding whether a wheel was
+ * even aimed at this scroller is not suppression, it is measurement, and it
+ * has to keep happening — a gate that skips it lets an absorbed wheel's notch
+ * stay in the stall streak, which turns scrolling a code block into evidence
+ * of a frozen chat log.
+ *
+ * It used to be read by nine other places, and the nine turned "we have told
+ * PostHog about this surface" into "stop watching this surface". A real
+ * machine measured the cost: the operator clicked to the bottom, the scroller
+ * landed at 718.5, and 3.8 seconds later the compositor clamped it back to
+ * its own stale ceiling of 245.5 with no JS write in between — the exact
+ * symptom this probe is for, on a surface whose `snapBack` route read
+ * `armed: false, note: "already reported on this surface"` and whose ledger
+ * had not moved in five and a half minutes. A deterministic reproduction was
+ * driven through an instrument that had been structurally switched off by its
+ * own success.
+ *
+ * De-duplication is a property of the sink, so it lives at the sink.
+ */
+function freezeTelemetryAlreadySent(active: Surface): boolean {
+  return active.reported;
+}
+
 function report(
   active: Surface,
   geometry: ScrollGeometry,
@@ -1593,7 +1708,7 @@ function report(
   innerScrollerCount: number,
   at: number,
 ): void {
-  if (active.reported) return;
+  if (freezeTelemetryAlreadySent(active)) return;
   active.reported = true;
   reportedThisSession += 1;
 

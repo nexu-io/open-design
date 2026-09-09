@@ -350,12 +350,28 @@ describe('chat scroll takeover — once the probe has called it frozen', () => {
     wheelEvent(log, 40);
     wheelEvent(log, 40);
     expect(geometry.writes).toEqual([]);
+    const framesForThreeNotches = callbacks.length;
 
-    // Exactly one frame was asked for, and it carries all three notches.
-    const takeoverFrames = callbacks.length;
-    expect(takeoverFrames).toBe(1);
+    // One frame carries all three notches.
     callbacks.forEach((cb) => cb(clock));
     expect(geometry.writes).toEqual([FROZEN.scrollTop + 120]);
+
+    // Twice the notches, the same number of frames, and still one write.
+    //
+    // The count is compared against itself rather than pinned at the literal
+    // 1, because the takeover is not the only thing on this element asking
+    // for frames: the freeze probe keeps sampling a surface it has already
+    // reported, which is deliberate — it is what makes a second symptom on an
+    // already-reported surface catchable at all. Both coalesce per frame, so
+    // what this spec is about, and all it should be able to see, is that
+    // neither of them scales with the number of EVENTS.
+    callbacks.length = 0;
+    geometry.writes.length = 0;
+    geometry.setTop(FROZEN.scrollTop);
+    for (let i = 0; i < 6; i += 1) wheelEvent(log, 40);
+    expect(callbacks.length).toBe(framesForThreeNotches);
+    callbacks.forEach((cb) => cb(clock));
+    expect(geometry.writes).toEqual([FROZEN.scrollTop + 240]);
   });
 
   it('normalises line and page wheels the way the detector does', () => {

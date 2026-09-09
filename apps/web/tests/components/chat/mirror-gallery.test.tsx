@@ -1056,7 +1056,10 @@ const OUTRO: Cell[] = [
         <i aria-hidden />
         <span className="fork-note">
           <Icon name="fork" size={12} />
-          从上一个会话继续
+          {/* 内层 `.fork-note-label` 照产线的结构写:`.fork-note` 是 flex 容器,
+              文案落成裸文本会进匿名 flex item,`text-overflow` 永远不生效。
+              陈列页这一格要照得出真形态,所以这一层不能省。 */}
+          <span className="fork-note-label">从上一个会话继续</span>
         </span>
         <i aria-hidden />
       </div>
@@ -1065,6 +1068,7 @@ const OUTRO: Cell[] = [
       '**已接线**:分叉时 daemon 给新会话末尾那条 seeded 助手消息盖上 `forkedInto` 并落库(`messages.forked_into_json`),所以**刷新之后分界还在**',
       '两侧的线都从外沿透明化到贴着字的实色 —— 稿子的理由是让它读起来像「一段的开头」,而不是把这一列切成两半的硬横线',
       '⚠️ **和稿子分岔了(OPEND-2714)**:稿子这一格是两块 —— 线上写源会话标题、线下再一行脚注。产品裁决改成 Codex 那一种:**分支图标配一行文案,一起摆进线中间**,源会话标题不再上屏。文案 `assistant.forkNote`,19 语已补齐',
+      '**文案外面还套着一层 `.fork-note-label`**:并成一行之后 `.fork-note` 是 flex 容器,裸文本会落进匿名 flex item,`text-overflow` 是非继承属性因此永远不生效 —— 德语 / 俄语那样的长译文在 62% 上限处是被**齐口切断**的,没有省略号。截断四条(`min-width: 0` / `overflow` / `text-overflow` / `white-space`)现在挂在内层,`.fork-sep > span` 也换成了子组合符,免得把内层一起按成 `flex: none`',
     ],
   },
   {
@@ -1513,12 +1517,11 @@ const queued = (prompts: string[]): QueueItems =>
   prompts.map((prompt, i) => ({ id: `q${i + 1}`, prompt }));
 
 /*
- * `onSteer` 必须给。第三颗动作键是**二选一**的:`onSteer` 有值才画稿子那颗
- * 74px 带字的「引导对话」(`.chat-queued-send-action-steer`),没有就退回 22px
- * 的纯图标「立即发送」。不给它,这一族三格摆出来的永远是**退回态** ——
- * 稿子画的那颗键在陈列页上一次都没出现过,也就永远量不到。
- * 判据在 `ChatPane.tsx` 的 `steerableRow`:`onSteer` 有值且这一条不带附件 / 标记。
- * 稿子第 17 组三条全是纯文本,所以三行都该是引导态,和这里的夹具一致。
+ * 领头那颗动作键如今只有一副面孔:稿子那颗带字的「引导对话」
+ * (`.chat-queued-send-action-steer`)。产品 2026-09-08 把「有一轮可中断才画
+ * 引导键、否则退回 22px 纯图标的立即发送」那个分叉裁掉了 —— 两边喂的本来就是
+ * 同一个回调。所以这里给 `onSendNow` 就够,不再需要额外那个 prop 才摆得出
+ * 稿子的形态。
  */
 const queue = (prompts: string[]) => (
   <QueuedSendStrip
@@ -1527,7 +1530,6 @@ const queue = (prompts: string[]) => (
     onRemove={() => {}}
     onReorder={() => {}}
     onSendNow={() => {}}
-    onSteer={() => {}}
   />
 );
 
@@ -1585,8 +1587,8 @@ const EDGE: Cell[] = [
       '**已按稿子改**:删掉了卡头(原来是「N Queued ↩ to Send」那一行)、补了行首 mono 序号、文字从「58 字单行截断」改成 CSS 两行 `line-clamp`、去掉外框与底色只留条间发丝线、顶对齐',
       '**那条「三条轨道装四个孩子」的错位已经修好了**:`.chat-queued-send-row` 现在是 `display: flex`(把手 / 序号 / 动作 `flex: none`,正文 `flex: 1; min-width: 0`),和稿子 `.queue .q` 同一套排版模型。**这条注记原来写着「这一格现在是坏的」,那是旧话**',
       '第三条特意用稿子那句长的 —— **两行切在哪儿是这一格唯一能比的事**;原来 `summarizeQueuedPrompt` 会先把它压成一行截断,那样人认不出自己要取消的是哪一条',
-      '**第三枚动作已经是稿子那颗「引导对话」**:它是二选一的 —— 真能引导(有在跑的一轮、agent 中途还读 stdin、且这一条不带附件 / 标记)时画 74px 带字的引导键,不能引导时才退回 22px 纯图标的「立即发送」并把原因挂进 tooltip。这一格的夹具给了 `onSteer`,所以摆的是引导态,和稿子对得上',
-      '⚠️ **两副面孔里「立即发送」那一副稿子没画**:它是已上线能力(会 `handleStop()` 打断当前 run),照稿删掉等于砍功能。什么时候允许退回、退回时那颗键长什么样,**待产品裁**',
+      '**领头那枚动作就是稿子那颗「引导对话」**,而且只有这一副面孔:74px 带字的引导键,三处名字(`title` / `data-tooltip` / `aria-label`)按稿子 `data-tip` 逐字写「引导对话」。它按下去做的事没变 —— 有一轮在跑就 `handleStop()` 打断再把这条发出去,没在跑就直接发',
+      '**原来那条「两副面孔待产品裁」的注记已经结案**:产品 2026-09-08 当面裁的是「引导对话就是原本的立即发送,只不过换了个名字跟 codex 客户端对齐」。所以 22px 纯图标那副退回态整个撤掉,和稿子对齐;稿子里本来也只有这一颗',
       '⚠️ **产品多一样稿子没有的东西**:`QueuedSendMetaChips`(附件 / 标记 / 插件 / 技能 / MCP / 连接器计数)。这一格的夹具照稿子给的是纯文本,所以芯片没出现;真实队列里带附件时它会多一行。它是「所见即所发」的信任面,删掉是能力回退',
       '拖动手柄的 tooltip 走 `od-tooltip` + `TooltipLayer` portal(稿子是 `data-tip` + `::after`)—— 静态页里两者都看不见',
     ],

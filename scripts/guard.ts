@@ -21,6 +21,8 @@ import {
   checkDesignSystemUnknownTokens,
 } from "./check-tokens-fixture-sync.ts";
 import { checkCraftReferences } from "./lint-craft-references.ts";
+import { checkWhatsNewDocument } from "./check-whats-new-document.ts";
+import { checkWhatsNewPublishWorkflow } from "./check-whats-new-publish-workflow.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
 import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
@@ -30,6 +32,8 @@ const allowedE2eScripts = new Set([
   "e2e/scripts/artifact-render-parity.ts",
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
+  // Explicit opt-in local daemon acceptance; not part of hermetic CI test discovery.
+  "e2e/scripts/syntax-acceptance.ts",
   "e2e/scripts/visual-report.ts",
 ]);
 
@@ -1525,6 +1529,8 @@ const checks: GuardCheck[] = [
   { name: "tools layout", run: checkToolsLayout },
   { name: "style policy", run: checkStylePolicy },
   { name: "craft references", run: checkCraftReferences },
+  { name: "what's new document", run: ({ repoRoot: root }) => checkWhatsNewDocument(root) },
+  { name: "what's new publish workflow", run: ({ repoRoot: root }) => checkWhatsNewPublishWorkflow(root) },
   { name: "HTML plugin preview contracts", run: ({ repoRoot: root }) => checkHtmlPluginPreviewContracts(root) },
   { name: "plugin preview manifest", run: checkPluginPreviewManifest },
   { name: "design system manifests", run: checkDesignSystemManifests },

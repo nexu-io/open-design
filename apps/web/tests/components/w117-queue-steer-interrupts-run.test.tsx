@@ -12,6 +12,11 @@
 //      `claude` / `codebuddy` 过得了那道关,其余 25 个连按钮都没有。中断对所有
 //      agent 都成立,所以那道关整个作废。这一页用 `codex`(`text`)当样本。
 //
+//      2026-09-08 产品又把最后一道 `canSteerCurrentTurn`(此刻有没有一轮可中断)
+//      也裁掉了 —— 「引导对话就是原本的立即发送,只不过换了个名字跟 codex 对齐」。
+//      两边喂的本来就是同一个 `sendQueuedChatSendNow`,所以现在 ProjectView 只
+//      交出一个 `onSendQueuedNow`,按钮永远在。
+//
 //   2. **点下去是 `handleStop()` + 重排队列,不是往 stdin 写字。**
 //      证据钉在真实副作用上,不是「某个函数被调了」:在跑那一轮的 `cancelSignal`
 //      真的被 abort,而且队列里那条真的作为**第二次** `streamViaDaemon` 发了出去;
@@ -171,7 +176,6 @@ type MockChatPaneProps = {
   sendDisabled?: boolean;
   queuedItems?: Array<{ id: string; prompt: string }>;
   onSend?: (prompt: string, attachments: [], commentAttachments: []) => unknown;
-  onSteerQueuedSend?: (id: string) => void;
   onSendQueuedNow?: (id: string) => void;
 };
 
@@ -183,9 +187,9 @@ vi.mock('../../src/components/ChatPane', () => ({
       <div>
         <div data-testid="active-conversation">{props.activeConversationId ?? ''}</div>
         <div data-testid="queued-count">{String(props.queuedItems?.length ?? 0)}</div>
-        {/* 「引导对话」那一颗的存在与否,完全由这个 prop 有没有值决定
-            (`QueuedSendStrip` 里就是 `onSteer ? 引导态 : 退回态`)。 */}
-        <div data-testid="steer-offered">{props.onSteerQueuedSend ? 'yes' : 'no'}</div>
+        {/* 「引导对话」那一颗按不按得动,完全由这个 prop 有没有值决定
+            (`QueuedSendStrip` 里就是 `disabled={!onSendNow}`)。 */}
+        <div data-testid="steer-offered">{props.onSendQueuedNow ? 'yes' : 'no'}</div>
         <button
           type="button"
           data-testid="normal-send"
@@ -204,8 +208,8 @@ vi.mock('../../src/components/ChatPane', () => ({
         <button
           type="button"
           data-testid="steer-click"
-          disabled={!first || !props.onSteerQueuedSend}
-          onClick={() => first && props.onSteerQueuedSend?.(first.id)}
+          disabled={!first || !props.onSendQueuedNow}
+          onClick={() => first && props.onSendQueuedNow?.(first.id)}
         >
           steer
         </button>
@@ -380,7 +384,7 @@ describe('OPEND-2602:队列里的「引导对话」按下去中断当前运行',
   ])('%s 都给出这颗按钮', async (_name, agent) => {
     await startRunAndQueueOne(agent as AgentInfo);
     expect(screen.getByTestId('steer-offered').textContent).toBe('yes');
-    expect(typeof lastChatPaneProps().onSteerQueuedSend).toBe('function');
+    expect(typeof lastChatPaneProps().onSendQueuedNow).toBe('function');
   });
 
   it('点下去:在跑的那一轮被中断,队列里这条立刻作为新一轮发出去', async () => {
@@ -407,21 +411,21 @@ describe('OPEND-2602:队列里的「引导对话」按下去中断当前运行',
     expect(mockedSteerChatRun).not.toHaveBeenCalled();
   });
 
-  // ——— 反向对照:没有在跑的一轮 ———
+  // ——— 对照:一轮都没在跑的时候 ———
 
-  it('一轮都没在跑时不给这颗按钮 —— 没有任何东西可中断', async () => {
+  it('一轮都没在跑时这颗也照给 —— 那道可见性的门 2026-09-08 撤了', async () => {
     renderProjectView();
     await screen.findByTestId('normal-send');
     await waitFor(() =>
       expect((screen.getByTestId('normal-send') as HTMLButtonElement).disabled).toBe(false),
     );
-    // 等一拍,让任何异步落定 —— 「没给按钮」不能只赢在时序上。
+    // 等一拍,让任何异步落定 —— 这一格量的是稳态,不能只赢在时序上。
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    // 前提先钉住:确实一轮都没在跑。旧实现在这一格是 `no`,门就挂在这里。
     expect(startedRuns).toHaveLength(0);
-    expect(screen.getByTestId('steer-offered').textContent).toBe('no');
-    expect(lastChatPaneProps().onSteerQueuedSend).toBeUndefined();
-    // 「立即发送」那条路一直都在,不许被这次改动带走。
+    expect(screen.getByTestId('steer-offered').textContent).toBe('yes');
+    // 交出去的仍是同一个函数,它自己按 busy 分支;没在跑就是直接发。
     expect(typeof lastChatPaneProps().onSendQueuedNow).toBe('function');
   });
 });

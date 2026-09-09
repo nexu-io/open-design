@@ -292,11 +292,24 @@ jobs:
     #
     # A dispatch failure is loud (this job goes red) and harmless: nothing
     # depends on this job, so `publish` cannot see it.
+    #
+    # Red is not, however, a channel anyone watches. The progressive card is the
+    # ONLY prerelease notification left, so a card that was never dispatched is
+    # a release the team never hears about. The last steps below are the ping
+    # for that, and they live in this job rather than a job of their own
+    # precisely because nothing may depend on the dispatchers.
     needs: metadata
     if: ${{ needs.metadata.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      # Read only by the last step, which alerts when the card was not
+      # dispatched. Deliberately the OTHER bot: the card posts through the
+      # Feishu application bot below, so an application credential that expired
+      # (or was emptied, which silently skips the dispatch step) must not take
+      # the alert down with it.
+      FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
+      FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
       GH_REPO: ${{ github.repository }}
       PRIMARY_REF: ${{ needs.metadata.outputs.branch }}
       FALLBACK_REF: ${{ github.event.repository.default_branch || 'main' }}
@@ -307,6 +320,7 @@ jobs:
       FEISHU_RELEASE_CHAT_ID: ${{ secrets.FEISHU_RELEASE_CHAT_ID }}
     steps:
       - name: Checkout dispatch helper
+        id: checkout
         uses: actions/checkout@v6.0.2
         with:
           # Deliberately the ref this workflow was loaded from, NOT the built
@@ -315,6 +329,7 @@ jobs:
           # break the moment a release branch carried an older .github tree.
           fetch-depth: 1
       - name: Dispatch prerelease code tests
+        id: tests_dispatch
         if: ${{ inputs.enable_tests }}
         env:
           COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -325,6 +340,7 @@ jobs:
             -f "version=$VERSION" \
             -f "origin_run_id=$GITHUB_RUN_ID"
       - name: Dispatch progressive Feishu card
+        id: card_dispatch
         if: ${{ env.FEISHU_APP_ID != '' && env.FEISHU_RELEASE_CHAT_ID != '' }}
         env:
           BRANCH: ${{ needs.metadata.outputs.branch }}
@@ -342,6 +358,89 @@ jobs:
             -f "origin_run_id=$GITHUB_RUN_ID" \
             -f "expect_tests=$EXPECT_TESTS" \
             -f "expect_smoke=$EXPECT_SMOKE"
+          # Only reached when the dispatch above actually succeeded — the helper
+          # exits non-zero on every ref it could not dispatch on, and `run:`
+          # blocks stop at the first failure. Empty therefore covers every way
+          # the card fails to start: the helper could not dispatch on any ref,
+          # an earlier step in this job died, or this step was skipped because
+          # the application bot's credentials are missing.
+          echo "dispatched=true" >> "$GITHUB_OUTPUT"
+
+      # ---- Fallback when the card never started --------------------------
+      # `always()` so a failed dispatch above still reaches these; gated on the
+      # checkout because both scripts come from the working tree. They run on
+      # every prerelease and stay silent on the healthy ones — the composer
+      # refuses to emit `alert=true` when the card was dispatched, which is the
+      # same rule this repository cannot afford to get wrong: a fallback that
+      # also posts on good days is just a second card.
+      #
+      # This ping is necessarily early. It fires beside the build, before any
+      # package exists, so it reports where the version metadata WILL appear
+      # instead of claiming a publication verdict it cannot have yet. Once the
+      # card workflow IS running, release-prerelease-card.yml's own
+      # `fallback_notice` job owns the rest of the lane — the two are mutually
+      # exclusive, so a release can never draw both.
+      - name: Setup Node.js for the fallback notifier
+        if: >-
+          ${{
+            always() && github.repository == 'nexu-io/open-design' &&
+            steps.checkout.outcome == 'success'
+          }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Compose the fallback notice
+        id: notice
+        if: >-
+          ${{
+            always() && github.repository == 'nexu-io/open-design' &&
+            steps.checkout.outcome == 'success'
+          }}
+        env:
+          BRANCH: ${{ needs.metadata.outputs.branch }}
+          CARD_DISPATCHED: ${{ steps.card_dispatch.outputs.dispatched }}
+          CHANNEL_LABEL: Prerelease
+          COMMIT: ${{ needs.metadata.outputs.commit }}
+          LANE_SUMMARY: "card dispatch=${{ steps.card_dispatch.outcome }} · tests dispatch=${{ steps.tests_dispatch.outcome }}"
+          ORIGIN_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # This job runs beside the build, so the packages are still coming.
+          # A probe would be worse than useless here: a job cannot ask the API
+          # whether its own run has finished.
+          PIPELINE_PROGRESS: running
+          RELEASE_CHANNEL: prerelease
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          STAGE: dispatch
+          VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: node --experimental-strip-types tools/release/src/notifications/prerelease-fallback-notice.ts
+      - name: Fail loudly when the fallback bot is itself unconfigured
+        # Both notification paths down at once is an incident of its own, and a
+        # red job is the only channel left to say so. Only reachable on this
+        # repository: the composer above is scoped to it, so a fork — which has
+        # neither bot — leaves `alert` empty and never goes red for this.
+        # `always()` because the whole point is to speak after something
+        # broke — without it GitHub's implicit success() skips this step in
+        # every run where an earlier step already failed. The outcome check
+        # is the other half: never act on a composer that did not finish.
+        if: >-
+          ${{
+            always() && steps.notice.outcome == 'success' &&
+            steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK == ''
+          }}
+        run: |
+          echo "::error::the prerelease card was never dispatched and FEISHU_RELEASE_WEBHOOK is unset, so no fallback notice could be delivered"
+          exit 1
+      - name: Post the fallback notice
+        if: >-
+          ${{
+            always() && steps.notice.outcome == 'success' &&
+            steps.notice.outputs.alert == 'true' && env.FEISHU_WEBHOOK != ''
+          }}
+        env:
+          NOTICE_BODY: ${{ steps.notice.outputs.body }}
+          NOTICE_TEMPLATE: ${{ steps.notice.outputs.template }}
+          NOTICE_TITLE: ${{ steps.notice.outputs.title }}
+          RUN_URL: ${{ steps.notice.outputs.run_url }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu-notice.ts
   build_mac:
     name: Build prerelease mac arm64
     # Deliberately NOT gated on any test suite, and neither is `publish`. A

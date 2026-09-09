@@ -175,6 +175,110 @@ export function upwardGestureCanEscapeBottom(sample: ScrollSample): boolean {
 }
 
 /**
+ * 这一段位移发生时,**滚轮**在朝哪个方向要。
+ *
+ * 计数而不是存最后一格的方向:一次触控板轻扫在两个 scroll 事件之间能吐十几格,
+ * 中途还可能掉头。只记最后一格会把「净上滚的一串里最后碰巧朝下的那一格」
+ * 读成朝下。
+ *
+ * ## 一张条子只解释一次位移
+ *
+ * 见证是**证词**,不是状态:它说的是「就在这个位置上,用户的滚轮在朝下要」。
+ * 一张能解释任意后续位移的条子会把跟随焊死,而那比它要修的 bug 更糟。
+ * 所以它带着 `atScrollTop` —— 位移的起点必须就是记录它时的那个位置。
+ *
+ * 这一条是**结构性**的,不是时间窗:会话切换、我们自己写 `scrollTop`、日志节点
+ * 被换掉,都会把基线挪走,于是旧条子对不上号,自动作废。调用方还要另外管两件
+ * 时间上的事(用掉就清、过一帧就过期),见 `ChatPane` 的 `resetWheelWitness`。
+ */
+export interface WheelWitness {
+  /** 朝底部(`deltaY > 0`)的格数。 */
+  downwardEvents: number;
+  /** 朝上(`deltaY < 0`)的格数。 */
+  upwardEvents: number;
+  /**
+   * 记录这张条子时滚动条所在的位置。
+   *
+   * 位移的起点(`previous.scrollTop`)必须**正好**是它。差一点都作废 —— 对不上
+   * 就说明中间还有别的东西动过这个滚动条,那这张条子解释的已经不是眼前这一段。
+   */
+  atScrollTop: number;
+}
+
+/**
+ * 这一次「位置变小」是**合成器把越界位置夹回它自己的陈旧上限**,不是用户上滑。
+ *
+ * ## 为什么 `nextFollowIntent` 原来那条判据分不出来
+ *
+ * 原来的注释写着「内容变化引起的位移必然伴随 `scrollHeight` 变化」。这句话对
+ * **内容驱动**的位移成立(scroll anchoring、回流),但对下面这种位移不成立:
+ * Chromium 为了让滚轮不等主线程,自己另存一份「这个框能滚多远」,而这份拷贝
+ * 会卡在旧值上不再跟着布局走。真机(Electron 41 / Chromium 146)诊断包:
+ *
+ *   scrollTop 245.5   layoutMax 718   scrollHeight 1307   unreachablePx 472.5
+ *
+ * 点【滚动到最新】→ `scrollTo({top:1307})` → 位置落在 718.5(布局的真底部);
+ * 用户碰一下滚轮,合成器把它甩回自己那份陈旧上限 245.5。这中间 `scrollHeight`
+ * 一个像素没变(内容是静态的)—— 于是「位置变小 + `scrollHeight` 没变」两条
+ * 同时成立,每一次夹取都被读成一次用户上滑,跟随被静默关掉。
+ *
+ * 同一现象在 `observability/chat-scroll-freeze-detector.ts` 里被独立量到过,
+ * 那份实测记的是:`scrollTop = 800`,**一格朝下**的滚轮,位置被甩到 91。
+ *
+ * ## 判据:朝下的滚轮 + 位置反而往上跑
+ *
+ * 用户上滑要么带**朝上**的滚轮,要么根本没有滚轮(拖滚动条 / 键盘 / 触摸)。
+ * 所以「这段窗口里的滚轮**只**朝下」这一条,用户上滑永远不成立 —— 它是在说
+ * 「用户此刻要的是往底部去」。位置却反着跑,那就不是他的手。
+ *
+ * 另外三条候选都不够:
+ *
+ *  · **落点等于已知的陈旧上限** —— 那个上限只能靠 freeze detector 的连续
+ *    stall / snap-back 状态机推出来,而 `runtime/chat-scroll-takeover.ts` 写明
+ *    那个检测器的误报率**至今未知**(`client_chat_scroll_frozen` 线上零事件,
+ *    而那个零后来查出是上报缺陷)。何况用户完全可以正好停在那个数上。
+ *  · **和 `layoutMax` 的差** —— 用户上滑可以停在 `[0, layoutMax]` 里任何位置,
+ *    这一条不携带任何区分信息。
+ *  · **紧邻一次 JS 写入** —— 被诊断包本身证伪:夹取发生在写入之后 **3.8 秒**,
+ *    期间零条 JS 写入记录。能盖住 3.8 秒的时间窗会连正常上滑一起吞掉。
+ *
+ * ## 见证必须**紧贴**它解释的那一段位移
+ *
+ * 一格朝下的滚轮如果落在**已经到底**的日志上,位置一个像素都不动,于是连 scroll
+ * 事件都不发 —— 那张条子就没人来用掉。它要是还留着,后面任何一次**非滚轮**的
+ * 位置变化(页内查找、焦点驱动的滚动、换会话之后的重新定位)都会撞上它,被判成
+ * 夹取,跟随不释放。那正是「把跟随焊死」,方向和这个 bug 反过来,但更糟
+ * (nettee 在 #7898 上点名的就是这条)。
+ *
+ * `atScrollTop` 挡住其中**结构性**的那一半:基线因为别的原因挪过,条子就对不上。
+ * 剩下「基线没挪、但那一格滚轮已经是很久以前的事」由调用方的过期负责。
+ *
+ * ⚠️ 这里只回答「**不是**用户上滑」,不回答「合成器一定坏了」。判据宁可漏
+ * (没有滚轮见证的夹取照旧被当成上滑)也不许多:多判一次就是把跟随焊死,
+ * 那比现在这个 bug 更糟。
+ *
+ * 位移门槛复用 `AT_BOTTOM_TOLERANCE_PX`(8px)—— 高 DPI / 分数缩放下贴底位置
+ * 本来就有亚像素抖动,和这套状态机其余部分同一把尺子。freeze detector 的
+ * `SNAP_BACK_MIN_PX` 从同一批实测里独立得到的也是 8。
+ */
+export function isCompositorSnapBack(
+  previous: ScrollSample,
+  next: ScrollSample,
+  wheel: WheelWitness | null | undefined,
+): boolean {
+  if (wheel == null) return false;
+  // 一格朝上就作废:那一格本身就是用户在要求上滑。
+  if (wheel.upwardEvents > 0) return false;
+  if (wheel.downwardEvents <= 0) return false;
+  // 这张条子记的不是眼前这一段位移的起点 —— 中间有别的东西动过滚动条,作废。
+  if (wheel.atScrollTop !== previous.scrollTop) return false;
+  // 内容动过就不是这个现象 —— 那种位移由 `layoutStable` 那条负责。
+  if (next.scrollHeight !== previous.scrollHeight) return false;
+  if (next.clientHeight !== previous.clientHeight) return false;
+  return previous.scrollTop - next.scrollTop > AT_BOTTOM_TOLERANCE_PX;
+}
+
+/**
  * 一次滚动之后,跟随意图该变成什么。
  *
  * **只有这里(以及几处显式动作:点「回到最新」、发消息、切会话)能改意图。**
@@ -193,11 +297,18 @@ export function upwardGestureCanEscapeBottom(sample: ScrollSample): boolean {
  * 更麻烦的是流式:浏览器的落点在调用那一刻算死,内容还在长,于是动画落在一个
  * 早就不是底部的位置上,连「最后一帧贴底顺手救回来」都没有。
  * (`ChatPane` 的 question-form 定位在这上面栽过一次,两份拷贝只修了一份。)
+ *
+ * ## `wheel`:这段位移发生时滚轮朝哪儿要
+ *
+ * 可选。给了就多一条否决:朝下的滚轮配上朝上的位移不是用户上滑,是合成器夹取
+ * (见 `isCompositorSnapBack`)。不给等于没有见证,判据退回「方向 + 几何」——
+ * 也就是这个参数出现之前的行为,一格不差。
  */
 export function nextFollowIntent(
   current: FollowIntent,
   previous: ScrollSample,
   next: ScrollSample,
+  wheel?: WheelWitness | null,
 ): FollowIntent {
   // 位置变小**且内容总高没变** = 用户的手。内容变化引起的位移(浏览器夹取、
   // scroll anchoring 修正)必然伴随 `scrollHeight` 变化,在这里就被排掉了。
@@ -226,7 +337,9 @@ export function nextFollowIntent(
 
   let { following, escaped } = current;
   // 还贴在底上的一两个像素抖动不算挣脱 —— 高 DPI 屏上这种抖动是常态。
-  if (scrolledUp && !isAtBottom(next)) {
+  // 合成器把越界位置夹回陈旧上限也长这个样子(位置变小 + `scrollHeight` 没变),
+  // 但那一刻用户的滚轮要的是**往底部去** —— 那不是挣脱,见 `isCompositorSnapBack`。
+  if (scrolledUp && !isAtBottom(next) && !isCompositorSnapBack(previous, next, wheel)) {
     escaped = true;
     following = false;
   }

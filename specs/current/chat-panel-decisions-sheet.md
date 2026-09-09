@@ -489,7 +489,46 @@ T4 / T6 是小的默认值问题,现状能跑,不急。
 
 **未决 / 未做**
 
-- **其余 17 个 locale 仍是旧句子的各自译文**,没有跟着改 —— 翻译属于产品文案,不自拟。要补的话需要产品逐条给。
-- `.fork-sep span` 带着 `overflow: hidden; text-overflow: ellipsis`,但标签本身是 flex 容器,`text-overflow` 永远不生效;长译文会被切掉而不是省略号。自 #2714 落地起如此,修法要给标签加一层纯文本内层。
 - `docs/design/chat-mirror/mirror-exec.html` 是**生成产物**,仍停在两块式旧形态且写着旧文案。重建会产生约 776KB 的巨型 diff,单独一件事。
 - daemon 在源会话没有标题时整个压掉 `forkedInto` 戳(`routes/project/conversations.ts`「拿不到源标题就不盖」)。标题现在已经不渲染了,无标题的源会话理应仍然值得那条分界线。
+
+**已收尾**
+
+- ~~**其余 17 个 locale 仍是旧句子的各自译文**,没有跟着改。~~ **已补齐(2026-09-08 用户拍板「都改」)**:除已定稿的 `en` / `zh-CN` / `zh-TW` 外的 **16 支**语言包(目录下共 19 支)全部改成对齐新英文 `Continued from chat` 的说法 —— 说的是「来处」(这段是从上一个会话接着来的),不再是旧句的「上下文已带过来 + 接着说」。用词跟各 locale 自己的 `assistant.forkConversation` 走(`es-ES` 例外:`conversación` 那条会到 1.63×,改用 `chat`)。长度全部控制在英文 19 字符的 1.5× 以内,最长 `de` 28 字符。
+- ~~`.fork-sep span` 带着 `overflow: hidden; text-overflow: ellipsis`,但标签本身是 flex 容器,`text-overflow` 永远不生效;长译文会被切掉而不是省略号。~~ **已修**(#7868 评审线程 → 修复 PR):文案搬进内层 `.fork-note-label`,截断四条(`min-width: 0` / `overflow: hidden` / `text-overflow: ellipsis` / `white-space: nowrap`)落在那一层;`.fork-sep span` 同时换成子组合符 `.fork-sep > span`,否则内层会被一起按成 `flex: none`,不可收缩的 flex item 宽度恒等于内容宽度,省略号照样轮不到。守卫 `e2e/ui/fork-note-ellipsis.test.ts`:真浏览器里用**最长的那支译文**(德语)在受限宽度下渲染,先证明它真的溢出了(`scrollWidth > clientWidth`),再拿同一个元素强制 `text-overflow: clip` 的渲染做对照 —— 两张画得一样就说明还是硬切。判据只读几何和像素,不碰类名和声明:`apps/web/src/components/chat/AGENTS.md` §5 禁止断言 CSS 类名/声明,而且缺陷现场那句 `text-overflow: ellipsis` **本来就写着**,断言声明必然假绿。结构那一条(文案由自己的元素承载)在 `AssistantMessage.fork-continued-line.test.tsx` 里,走 `data-testid`。
+
+---
+
+## 2026-09-08 用户当面裁决三条
+
+### 1. 队列行第三颗按钮:并成一颗「引导对话」
+
+原话:「**引导对话就是原本的立即发送啊,只不过我们换了个名字跟 codex 客户端对齐了下**」。
+
+依据核实:`onSendQueuedNow` 和 `onSteerQueuedSend` 两个 prop 的实参**是同一个函数** `sendQueuedChatSendNow`,差别只有标签文字、`canSteerCurrentTurn` 这道门、以及埋点的 `element` 值。交付稿(`729fa43ce7` 组件 17「Queue」)三行样例的第三颗**一律**是 `aria-label="引导对话" data-tip="引导对话"`,**没有**只有图标的「立即发送」那一面。
+
+落地:并成一颗,门去掉,tooltip 收敛回稿子的四个字。**顺序仍按 OPEND-2715 的 引导会话 → 编辑 → 删除**(工单晚于稿子;稿子自己的 `qops` 源码顺序是 编辑 → 移除 → 引导对话,这条分歧**故意保留**,下一个拿稿子做 diff 的人会遇到)。
+
+埋点:`element: 'send_now'` **从此不再产生**,只剩 `'steer'`。类型联合里保留 `send_now`(PostHog 历史事件还在,看板要能编译),注释已改成「已退役,不是改名」。**队列漏斗看板的所有者需要知道这件事。**
+
+### 2. 问卷澄清卡副标题:改彻底,提示词一起收
+
+原话:「**改彻底是的, 提示词也改**」。
+
+9-07 分诊给的两条路里选②(渲染 + 提示词链路)。模型面 3 处(`core-slim.ts` 的 `labels/help`、`system.ts` 本地化清单里的 `helper text`、以及 `packages/contracts` 那份 API/BYOK 镜像)全部去掉;宿主自己那条 ElevenLabs 音色说明按「不丢信息」原则**并进 `label`**。`FormQuestion.help` 字段**保留**并标休眠(参照六个 `qf.visual*` 键的先例)。
+
+### 3. Cloud 切换按钮:只对齐按钮,报错文案不对齐
+
+原话:「切换到 cloud 就行了,你怎么写那么长的文案『切换到 Cloud 并重试』」、「**具体的报错文案不一定跟设计稿对齐, 按钮文案对齐先**」。
+
+`chat.amrCard.switchCta` 19 个 locale 全部缩短(zh-CN 为「切换到 Cloud」,en 为 `Switch to Cloud`),对齐交付稿第 5772 行。
+
+⚠️ **标题与正文按裁决明确不对齐**:稿子那一格写的是「本地环境跑不动这一步」+「当前运行在 CLI / BYOK 环境…」,而产品是**每类失败各说各的**(例:Claude 登录过期 → 「Claude 尚未登录」)。这不是遗漏,是产品选择。`chat-panel-edge-audit.md:329`、`run-error-catalog.md:405-406` 等处 2026-09-07 的记载写着「改文案不在授权范围内」—— 那些是**当时的**存档,不改;本条是新的裁决。
+
+⚠️ 按钮**数量**也和稿子不一致(稿子 2 颗,产品 4 颗),`run-error-catalog.md:421-430` 里 A/B 两案仍挂着等产品挑,本次未动。
+
+### 本轮顺带确认、**未做**的
+
+- `docs/design/chat-mirror/mirror-exec.html:8948` 的说明在文案改后变成了反话(它和 `mirror-gallery.test.tsx:1687` 逐字配对)。生成产物,与 fork 那条同属「重建是 776KB 巨型 diff」的待办。
+- `chat.amrCard.switchTitle` / `switchBody` / 三枚 chip 共 **5 个死键**(OPEND-2772 删掉 AmrGuidance 卡之后没有消费者),19 locale × 5 + `types.ts`。纯机械清理,单独一个 PR 更干净。
+- hu 的 `Cloud-re`、tr 的 `Cloud'ye` 是前元音后缀,而 "Cloud" 读作 /klaud/ 属后元音,按元音和谐应为 `-ra` / `'a`。**旧串里就带着的**,本次只做了「删掉多余部分」的最小变换,没顺手改翻译质量。

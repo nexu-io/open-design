@@ -518,6 +518,43 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     );
   });
 
+  /**
+   * OPEND-2707(2026-09-08 裁决:「改彻底,提示词也改」)。
+   *
+   * 这道题是**全仓唯一**由仓库自己写出 `help` 的地方,而澄清卡已经不画每题副标题了
+   * —— 那句「the answer submits the matching Voice ID」写了直接丢掉。它偏偏是**有用
+   * 信息**:选项的可见文字是音色描述,交上去的却是 `voice_id`,不说一声用户是看不出来的。
+   *
+   * 所以这里不是删掉,是**换承载位**:并进 `label`。`FormQuestion` 没有题级
+   * `description`(只有选项有),`placeholder` 归 "Choose a voice" 占着 ——
+   * `label` 是唯一还会渲染、又属于这道题本身的位置。
+   *
+   * 顺带守住第二件事:这份 JSON 会被 `JSON.stringify` 整段拼进系统提示词,
+   * 模型每次读到都等于看了一份「一道题可以长这样」的范例。留着 `"help"` 这个键,
+   * 撤发问就撤了个寂寞 —— 模型会照抄。
+   */
+  it('把 Voice ID 那句话并进题面,提示词里不再出现 help 这个键', () => {
+    const out = composeSystemPrompt({
+      metadata: {
+        kind: 'audio',
+        audioKind: 'speech',
+        audioModel: 'elevenlabs-v3',
+        audioDuration: 10,
+      },
+      audioVoiceOptions: [
+        { name: 'Rachel', voiceId: '21m00Tcm4TlvDq8ikWAM', category: 'premade', labels: { accent: 'american' } },
+      ],
+    });
+
+    expect(out).toContain('"label": "Voice — the answer submits the matching Voice ID"');
+    expect(out).not.toContain('"help"');
+    expect(out).not.toContain('Select a voice description');
+    // 换承载位,不是丢信息:那句话的实质仍然在提示词里。
+    expect(out).toContain('the answer submits the matching Voice ID');
+    // placeholder 归 placeholder,不该被顺手改掉。
+    expect(out).toContain('"placeholder": "Choose a voice"');
+  });
+
   it('surfaces ElevenLabs voice lookup failures for project discovery', () => {
     const out = composeSystemPrompt({
       metadata: {

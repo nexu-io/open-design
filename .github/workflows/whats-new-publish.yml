@@ -1,0 +1,168 @@
+name: whats-new-publish
+
+# Publish the post-update "What's New" card from the repository copy of the
+# document (docs/whats-new.json) to the R2 object the daemon reads. Editing
+# the card is a copy change: main publishes on merge, and release maintainers
+# can publish reviewed release-branch copy manually without rebuilding the app.
+#
+# Standalone (not part of ci.yml): this workflow performs a trusted write and
+# must stay outside the low-privilege PR gate.
+#
+# TRUST BOUNDARY — the card is visible to every installed client the moment it
+# lands, so "published" must imply "reviewed". `workflow_dispatch` can be run
+# from any ref, and a dispatch runs the workflow file *from that ref*, so any
+# check written in this file is editable by the person triggering it. Nothing
+# here can be the control.
+#
+# The control is the `whats-new-publish` environment: its deployment-branch
+# policy allows `main` and `release/v*`, and the R2 credentials are environment
+# secrets scoped to it. These are trusted branches whose workflow and source
+# must be reviewed. A job cannot start on a ref outside that policy; a job
+# that drops the declaration to get around that no longer receives
+# the secrets. The publish job is the only job that declares it, and it is the
+# only job that touches credentials. The assertions below additionally require
+# an exact release/vX.Y.Z branch name — not an arbitrary release/v* suffix.
+#
+# Reachability — `validate` has no `needs` and no `if`, so it always runs.
+# `publish` is skipped when `validate` fails or is cancelled, which is the
+# intended fail-closed behavior: `always() && !cancelled()` is deliberately
+# NOT used here, because "publish anyway" is exactly what must not happen.
+# Within `validate`, a condition that would otherwise skip silently is a step
+# that exits 1 instead — a publish that quietly does nothing looks green and
+# leaves the old card up.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/whats-new.json"
+      - ".github/scripts/publish_whats_new.py"
+      - ".github/scripts/lib/r2.py"
+      - ".github/workflows/whats-new-publish.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Validate and diff against the live document without uploading
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never publish two documents at once; the object is last-write-wins.
+  group: whats-new-publish
+  cancel-in-progress: false
+
+env:
+  WHATS_NEW_DOCUMENT: docs/whats-new.json
+  WHATS_NEW_OBJECT_KEY: whats-new.json
+  # The exact URL the daemon fetches (DEFAULT_WHATS_NEW_URL in
+  # apps/daemon/src/services/whats-new.ts). Read-back verification hits this,
+  # not a configurable mirror, so a green run means the card users will see.
+  WHATS_NEW_PUBLIC_URL: https://whatsnew.open-design.ai/whats-new.json
+
+jobs:
+  # No environment, no secrets. Safe to run from any ref, which is what makes
+  # `dry_run` useful for previewing a copy change before it merges.
+  validate:
+    name: validate document
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      publish: ${{ steps.mode.outputs.publish }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          # Pin both jobs to one commit so the document that was validated is
+          # the document that gets published, even if the ref moves in between.
+          ref: ${{ github.sha }}
+
+      - name: Resolve run mode
+        id: mode
+        env:
+          REPOSITORY: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "$REPOSITORY" != "nexu-io/open-design" ]; then
+            echo "This workflow publishes the nexu-io/open-design card only; got $REPOSITORY" >&2
+            exit 1
+          fi
+          publish=true
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$DRY_RUN" = "true" ]; then
+            publish=false
+          fi
+          # Fail rather than silently downgrading to a dry run, so a mistaken
+          # branch dispatch is a red run with an explanation instead of a
+          # green one that published nothing.
+          if [ "$publish" = "true" ] && [[ "$REF" != "refs/heads/main" && ! "$REF" =~ ^refs/heads/release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Publishing requires main or release/vX.Y.Z; got $REF." >&2
+            echo "Re-run with dry_run to preview another branch." >&2
+            exit 1
+          fi
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "Mode: $([ "$publish" = "true" ] && echo 'publish' || echo 'dry run') from $REF @ ${{ github.sha }}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # The content contract has exactly one implementation: the guard check
+      # that `pnpm guard` runs on every PR, which drives the document through
+      # the daemon's shipping parser. Re-running it here covers the cases the
+      # PR gate cannot: a manual dispatch on an arbitrary ref, and any direct
+      # write to main or a release branch.
+      - name: Validate document against the shipping parser
+        run: npx --yes tsx@4.22.3 scripts/check-whats-new-document.ts
+
+      - name: Report live vs proposed
+        env:
+          WHATS_NEW_DRY_RUN: "true"
+        run: python3 .github/scripts/publish_whats_new.py
+
+  publish:
+    name: publish to R2
+    needs: validate
+    if: needs.validate.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # The trust boundary. Deployment-branch policy: `main` and `release/v*`. The R2
+    # credentials are secrets ON THIS ENVIRONMENT, not repository secrets —
+    # repository secrets would be readable from any job on any branch and
+    # would defeat the whole control.
+    environment: whats-new-publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Assert reviewed ref
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          # Defense in depth. The environment's branch policy is what actually
+          # stops runs outside the trusted branches; this step also enforces
+          # the exact release version format within the environment's glob.
+          if [[ "$REF" != "refs/heads/main" && ! "$REF" =~ ^refs/heads/release/v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "Refusing to publish from $REF; use reviewed content on main or release/vX.Y.Z." >&2
+            exit 1
+          fi
+
+      - name: Publish
+        env:
+          # Environment secrets on `whats-new-publish`, following the naming
+          # used by the releases / repository-assets / workload-results
+          # buckets. Absent or repo-level-only => the publisher fails loudly
+          # with the exact names.
+          WHATS_NEW_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_AK }}
+          WHATS_NEW_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_SK }}
+          WHATS_NEW_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_URL }}
+          WHATS_NEW_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_WHATS_NEW_BUCKET }}
+        run: python3 .github/scripts/publish_whats_new.py

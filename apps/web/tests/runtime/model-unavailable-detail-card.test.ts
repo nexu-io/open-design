@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { zhCN } from '../../src/i18n/locales/zh-CN';
 import {
   daemonFailureVerdictFrom,
   resolveRunFailureUi,
@@ -95,27 +96,75 @@ describe('模型不可用:daemon 已经命名的病因,不该在界面上退回�
   /*
    * 同一族的其余 detail 走的是同一条路(`modelUnavailableDetail()` 的四个返回值
    * 加上 AMR 那条),一起钉住,免得只补了用户撞到的那一行、剩下的继续掉兜底。
+   *
+   * ⚠️ 这一族**不再共用一张卡**。产品文档 S13 把它拆成两行 ——「模型不存在」和
+   * 「模型能力不支持」——「用不了」和「做不了」不是一句话。所以这里改成逐 detail
+   * 声明它该落到哪一对键上,而不是断言五个 detail 命中同一个 titleKey。
+   *
+   * 「模型不存在」那半仍留在 `title.modelUnavailable` 上:文档给它的终稿标题是
+   * 「未找到 {模型名}」,而报错卡拿不到模型名(见 amr-guidance 里那条注释),
+   * 所以那一格等数据通路,先不换文案。
    */
-  it.each([
-    'cli_version_incompatible',
-    'model_not_found',
-    'model_not_supported',
-    'model_disabled',
-    'local_model_not_loaded',
-  ])('model_unavailable 一族的 detail「%s」都要命中同一张卡', (detail) => {
-    for (const agent of ['codex', 'claude', 'byok-opencode', 'antigravity', null]) {
-      const ui = resolveRunFailureUi(
-        'AGENT_EXECUTION_FAILED',
-        detail,
-        agent,
-        null,
-        CODEX_CLI_TOO_OLD_VERDICT,
-      );
-      expect(ui.titleKey, `agent=${agent} detail=${detail}`).toBe(
-        'chat.runError.title.modelUnavailable',
-      );
-      expect(ui.primaryAction, `agent=${agent} detail=${detail}`).toBe('switch-model');
-    }
+  const CARD_BY_DETAIL: ReadonlyArray<readonly [string, string, string]> = [
+    [
+      'cli_version_incompatible',
+      'chat.runError.title.modelUnavailable',
+      'chat.runError.modelUnavailableMessage',
+    ],
+    [
+      'model_not_found',
+      'chat.runError.title.modelUnavailable',
+      'chat.runError.modelUnavailableMessage',
+    ],
+    [
+      'model_not_supported',
+      'chat.runError.title.modelCapabilityUnsupported',
+      'chat.runError.modelCapabilityUnsupportedMessage',
+    ],
+    [
+      'model_disabled',
+      'chat.runError.title.modelCapabilityUnsupported',
+      'chat.runError.modelCapabilityUnsupportedMessage',
+    ],
+    [
+      'local_model_not_loaded',
+      'chat.runError.title.modelCapabilityUnsupported',
+      'chat.runError.modelCapabilityUnsupportedMessage',
+    ],
+  ];
+
+  it.each(CARD_BY_DETAIL)(
+    'model_unavailable 一族的 detail「%s」命中它自己那张卡,且不掉兜底',
+    (detail, titleKey, messageKey) => {
+      for (const agent of ['codex', 'claude', 'byok-opencode', 'antigravity', null]) {
+        const ui = resolveRunFailureUi(
+          'AGENT_EXECUTION_FAILED',
+          detail,
+          agent,
+          null,
+          CODEX_CLI_TOO_OLD_VERDICT,
+        );
+        expect(ui.titleKey, `agent=${agent} detail=${detail}`).not.toBe(
+          'chat.runError.title.generic',
+        );
+        expect(ui.titleKey, `agent=${agent} detail=${detail}`).toBe(titleKey);
+        expect(ui.messageKey, `agent=${agent} detail=${detail}`).toBe(messageKey);
+        expect(ui.primaryAction, `agent=${agent} detail=${detail}`).toBe('switch-model');
+      }
+    },
+  );
+
+  /*
+   * 拆完之后两张卡说的**必须是两句不同的话** —— 否则拆键就只是多了一个别名,
+   * 下一个人会顺手把它们合回去。
+   */
+  it('「模型不存在」和「模型能力不支持」在词典里是两句话,不是一句话的两个键', () => {
+    expect(zhCN['chat.runError.title.modelCapabilityUnsupported']).not.toBe(
+      zhCN['chat.runError.title.modelUnavailable'],
+    );
+    expect(zhCN['chat.runError.modelCapabilityUnsupportedMessage']).not.toBe(
+      zhCN['chat.runError.modelUnavailableMessage'],
+    );
   });
 
   /*
@@ -141,20 +190,15 @@ describe('模型不可用:daemon 已经命名的病因,不该在界面上退回�
    * 这条同时钉住反向的风险:把行写成 `retryWithGuidance()` 而不是
    * `switchModelWithGuidance()` 也会当场变红 —— 标题一样,但按钮变成 retry。
    */
-  it.each([
-    'cli_version_incompatible',
-    'model_not_found',
-    'model_not_supported',
-    'model_disabled',
-    'local_model_not_loaded',
-  ])('「%s」即使 daemon 没带裁决字段,也不许出现重试按钮', (detail) => {
+  it.each(CARD_BY_DETAIL)('「%s」即使 daemon 没带裁决字段,也不许出现重试按钮', (
+    detail,
+    titleKey,
+  ) => {
     for (const agent of ['codex', 'claude', 'byok-opencode', 'antigravity', null]) {
       // 注意:第五个参数(verdict)故意不传,模拟今天真实的线上形状。
       const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', detail, agent);
 
-      expect(ui.titleKey, `agent=${agent} detail=${detail}`).toBe(
-        'chat.runError.title.modelUnavailable',
-      );
+      expect(ui.titleKey, `agent=${agent} detail=${detail}`).toBe(titleKey);
       // 主按钮是〔更换模型〕,不是〔重试〕。
       expect(ui.primaryAction, `agent=${agent} detail=${detail}`).toBe('switch-model');
       expect(ui.primaryAction, `agent=${agent} detail=${detail}`).not.toBe('retry');

@@ -722,6 +722,52 @@ function readRuntimeCloseReason(
   return null;
 }
 
+/**
+ * True when the DAEMON itself declared this run timed out.
+ *
+ * Invariant: a verdict the daemon reached on its own survives without its own
+ * prose. The ACP stage watchdog decides a stage is over and kills the child —
+ * nothing upstream reported anything — and it stamps that decision as
+ * `error.details.kind === 'acp_stage_timeout'` (see `agent-protocol/acp/session.ts`).
+ * Reading the marker rather than regex-matching the sentence it happened to
+ * write is what stops a reworded, wrapped, localized or dropped message from
+ * silently re-filing a watchdog kill as an opaque `process_exit / exit_code` —
+ * which is `retryable: false` / `user_action: 'none'`, the one verdict this
+ * failure must never get, since a retry is its entire remedy.
+ *
+ * The value is matched exactly, and it is namespaced to the mechanism that
+ * writes it. `error.details` is NOT a daemon-private slot — `fail()` copies an
+ * agent's JSON-RPC `error.data` straight into it — so the marker's protection
+ * comes from being a name no upstream payload emits, not from the slot being
+ * unreachable. A generic `kind: 'timeout'`, which any vendor SDK might send for
+ * its own timeout, would have been read here as a watchdog kill that never
+ * happened, and would additionally have outranked the forced-signal guard below.
+ *
+ * This is collision resistance, not authentication: an adapter that deliberately
+ * sent `kind: 'acp_stage_timeout'` would still be believed. Making the verdict
+ * unforgeable requires carrying it in a field agent payload can never reach —
+ * see the note on `fail()` in `agent-protocol/acp/session.ts`.
+ */
+function hasDaemonTimeoutVerdict(
+  events: RunEventForFailureClassification[] = [],
+): boolean {
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const rec = events[i];
+    if (!rec || rec.event !== 'error') continue;
+    const payload = rec.data && typeof rec.data === 'object'
+      ? rec.data as Record<string, unknown>
+      : null;
+    const nested = payload?.error && typeof payload.error === 'object'
+      ? payload.error as Record<string, unknown>
+      : null;
+    const details = nested?.details && typeof nested.details === 'object'
+      ? nested.details as Record<string, unknown>
+      : null;
+    if (details?.kind === 'acp_stage_timeout') return true;
+  }
+  return false;
+}
+
 // Promote the opaque `execution_failed` detail to the specific close reason when
 // one of the three currently-unclassified shapes is present. Every other reason
 // (and a missing diagnostic) keeps the opaque label so the bucket never silently
@@ -933,6 +979,11 @@ function classifyRunFailureBase(
   // Compute once; used both for the early empty_output guard below and for the
   // fatal_rpc_error promotion later in this function.
   const runtimeCloseReason = readRuntimeCloseReason(events);
+  // The daemon's own watchdog verdict, read structurally. Computed here beside
+  // the other once-only signals because two branches consult it: the forced
+  // signal guard below (a watchdog kill IS a signal, and the reason it was
+  // killed outranks the bare signal) and the timeout branch itself.
+  const daemonTimeoutVerdict = hasDaemonTimeoutVerdict(events);
   const amrFailure = classifyAmrAccountFailure(text);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
@@ -1061,7 +1112,12 @@ function classifyRunFailureBase(
    *    before escalating to a kill, and WHY it was killed beats the bare signal.
    */
   const forcedSignal = forcedSignalName(errorCode, input.status.signal);
-  if (forcedSignal && !isTimeoutText(text) && errorCode !== 'TIMEOUT') {
+  if (
+    forcedSignal &&
+    !isTimeoutText(text) &&
+    errorCode !== 'TIMEOUT' &&
+    !daemonTimeoutVerdict
+  ) {
     const forced = signalInterruptClassification(errorCode, text, retryableHint, forcedSignal);
     if (forced) return forced;
   }
@@ -1364,7 +1420,7 @@ function classifyRunFailureBase(
     );
   }
 
-  if (isTimeoutText(text) || errorCode === 'TIMEOUT') {
+  if (isTimeoutText(text) || errorCode === 'TIMEOUT' || daemonTimeoutVerdict) {
     const retryable = retryableHint ?? true;
     const inactivityTimeout = /inactivity|stalled|hung|no new output|without emitting any new output/i.test(text);
     // `attachAcpSession`'s stage watchdog fails the turn with
@@ -1373,7 +1429,12 @@ function classifyRunFailureBase(
     // trigger the terminal reads as a bare AGENT_EXIT_130 — indistinguishable
     // from a user interrupt, which is how the 2026-07-28 AMR stall got
     // attributed to the wrong watchdog and the wrong 15-minute window.
-    const acpStageTimeout = /\bACP\b[^\n]*timed out after \d+\s*ms/i.test(text);
+    //
+    // The structured verdict counts too: it is emitted by that same watchdog
+    // and by nothing else, so the trigger keeps naming the watchdog even when
+    // the sentence it wrote is gone.
+    const acpStageTimeout =
+      daemonTimeoutVerdict || /\bACP\b[^\n]*timed out after \d+\s*ms/i.test(text);
     const terminalTrigger: TrackingRunTerminalTrigger | undefined =
       /without emitting a first output/i.test(text)
         ? 'first_output_deadline'

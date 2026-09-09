@@ -257,7 +257,7 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
   OpenDesign è un'alternativa open-source (codice aperto) a Claude Design.
   ```
 - For regional variants (zh-CN vs zh-TW, pt-BR vs pt-PT), choose the most widely understood variant for your target audience
-- See [Regional terminology](#regional-terminology) section for specific glossaries
+- See [Regional terminology](#-regional-terminology) section for specific glossaries
 
 ### Badge Translation
 

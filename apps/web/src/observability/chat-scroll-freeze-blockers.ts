@@ -165,7 +165,12 @@ export function evaluateReportBlockers(input: ReportBlockerInput): ReportBlocker
     ok: !surface.reported && !state.reported,
     actual: surface.reported || state.reported ? 'already reported' : 'not yet',
     needed: 'not yet',
-    note: 'One report per chat log element. This is a success, not a failure.',
+    note:
+      'One TELEMETRY event per chat log element. This is a success, not a '
+      + 'failure — and it gates the event only. The detector, the shortfall '
+      + 'ledger, the activity ring, the write trace and the snap-back route '
+      + 'all keep running on a surface that has already reported, so a '
+      + 'reproduction driven after the first event is still captured.',
   });
 
   out.push({
@@ -260,7 +265,13 @@ export interface SnapBackRoute {
    * just watched a chat refuse to scroll.
    */
   layoutStable: boolean;
-  /** A downward notch landing at or below this reports on the spot. */
+  /**
+   * A downward notch landing at or below this is called frozen on the spot.
+   *
+   * "Called frozen", not "reported": on a surface that has already sent its
+   * one event the verdict still happens — it is what keeps the ledger and the
+   * streak honest — and only the emit is skipped.
+   */
   reportsAtOrBelowPx: number | null;
   note: string;
 }
@@ -270,15 +281,20 @@ export function describeSnapBackRoute(
   geometry: ScrollGeometry,
 ): SnapBackRoute {
   const previousTop = state.lastScrollTop;
-  if (previousTop == null || state.reported) {
+  // `state.reported` is deliberately NOT consulted. It was, and it made this
+  // route describe itself as disarmed on every surface that had already sent
+  // an event — which is the one population where the route matters most,
+  // because those are the surfaces a stale compositor ceiling has already
+  // been proven on. The route is armed or not by the geometry in front of it;
+  // whether the resulting verdict would also be TELEMETERED is the
+  // `surface_unreported` blocker's question, and it is answered there.
+  if (previousTop == null) {
     return {
       armed: false,
       lastScrollTop: previousTop,
       layoutStable: false,
       reportsAtOrBelowPx: null,
-      note: state.reported
-        ? 'already reported on this surface'
-        : 'no frame sampled yet, so there is nothing to snap back FROM',
+      note: 'no frame sampled yet, so there is nothing to snap back FROM',
     };
   }
   const landing = previousTop - SNAP_BACK_MIN_PX;
@@ -294,8 +310,9 @@ export function describeSnapBackRoute(
     layoutStable: stable,
     reportsAtOrBelowPx: landing,
     note: stable
-      ? `A downward notch landing at or below ${px(landing)} reports at once, `
-        + `provided at least ${MIN_UNREACHABLE_PX}px is still unreachable there.`
+      ? `A downward notch landing at or below ${px(landing)} is called frozen `
+        + `at once, provided at least ${MIN_UNREACHABLE_PX}px is still `
+        + 'unreachable there.'
       : 'The content or viewport height has moved since the last reading, so a '
         + 'backwards step here could be the browser\'s own scroll anchoring. '
         + 'This route stays shut until one frame is sampled against a settled '

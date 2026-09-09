@@ -524,7 +524,6 @@ import {
 } from './strategies/od-next/native-build-package.js';
 import {
   resolveAutomaticContinuationEvidence,
-  rolloutStopSignalForBlockedContinuation,
   type OdNextComplexProductionResolver,
   type OdNextExecutionPreflightResolver,
 } from './strategies/od-next/automatic-continuation-service.js';
@@ -572,12 +571,7 @@ import {
   odNextTurnMayInferDirectEditCompletion,
   odNextTurnMayInferProductionCompletion,
 } from './strategies/od-next/automatic-simple-production.js';
-import {
-  odNextRolloutSignalForRun,
-  readOdNextRolloutPolicy,
-  stopModeForOdNextSignal,
-} from './strategies/od-next/rollout.js';
-import { latchOdNextRolloutStopOperationally } from './strategies/od-next/rollout-control-telemetry.js';
+import { readOdNextRolloutPolicy } from './strategies/od-next/rollout.js';
 import {
   getStrategyTaskExecutionByRunId,
   reconcileStrategyTaskRunTerminal,
@@ -597,7 +591,11 @@ import {
 import { deriveRunErrorCode, runResultFromStatus } from './run-result.js';
 import { promptBudgetAnalyticsFromDiagnostic } from './run-diagnostics.js';
 import { classifyRunFailure, isResumableFailure } from './run-failure-classification.js';
-import { validateRunDeliverable } from './run-deliverable-validation.js';
+import {
+  deliverableSyntaxFinalizerEnabled,
+  finalizeSuccessfulRunDeliverable,
+} from './artifacts/successful-run-deliverable-finalization.js';
+import { recordDeliverableSyntaxDelivery } from './artifacts/deliverable-syntax-metrics.js';
 import {
   POST_TOOL_RESUME_CONTINUATION_PROMPT,
   decidePostToolResumeRecovery,
@@ -894,6 +892,7 @@ import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginR
 import { registerMcpRoutes } from './mcp-routes.js';
 import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
+import { registerDeliverableSyntaxToolRoutes } from './routes/deliverable-syntax-tool.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
 import { registerDeployRoutes, registerDeploymentCheckRoutes } from './routes/deploy.js';
 import { registerMediaRoutes } from './routes/media.js';
@@ -969,6 +968,7 @@ import {
   AmrWorkspaceScopeRequiredError,
   openDesignAmrTraceEnvForRun,
   pinRunWorkspaceScopeForProject,
+  type RunWorkspaceScope,
 } from './runtimes/project-amr-trace-env.js';
 import {
   createWorkspaceDirectoryAuthorityBroker,
@@ -1872,6 +1872,7 @@ export function createAgentRuntimeToolPrompt(
     '- On PowerShell use `& $env:OD_NODE_BIN $env:OD_BIN tools ...`; on cmd.exe use `"%OD_NODE_BIN%" "%OD_BIN%" tools ...`.',
     tokenLine,
     '- Prefer project wrapper commands through `OD_NODE_BIN` + `OD_BIN` over raw HTTP. The wrappers read these environment values automatically.',
+    '- For dynamic Skill reads pass --workspace "$OD_WORKSPACE_ID" --workspace-member "$OD_WORKSPACE_MEMBER_ID" (use the corresponding environment-variable syntax on other shells). This pair is pinned to this run, not the UI\'s current Workspace. Both values are empty for unbound local runs; never substitute a different Workspace or member when either is missing.',
   ].join('\n');
 }
 
@@ -1880,18 +1881,26 @@ export function createOpenDesignToolEnv({
   hyperFramesBin = resolveHyperFramesCliPath(),
   projectDir,
   projectId,
+  workspaceScope,
 }: {
   daemonUrl: string;
   hyperFramesBin?: string;
   projectDir?: string | null;
   projectId?: string | null;
+  workspaceScope?: RunWorkspaceScope | null;
 }): NodeJS.ProcessEnv {
+  const scope = workspaceScope?.projectId === projectId ? workspaceScope : null;
   return {
     OD_BIN,
     OD_DATA_DIR: RUNTIME_DATA_DIR,
     OD_HYPERFRAMES_BIN: hyperFramesBin,
     OD_NODE_BIN,
     OD_DAEMON_URL: daemonUrl,
+    // Always overwrite ambient/configured identities, including unbound runs.
+    // An older bound Run without a member keeps its Workspace id so the CLI
+    // rejects the incomplete pair rather than silently reading another library.
+    OD_WORKSPACE_ID: scope?.workspaceId ?? '',
+    OD_WORKSPACE_MEMBER_ID: scope?.workspaceId ? scope.workspaceMemberId ?? '' : '',
     ...(typeof projectId === 'string' && projectId && projectDir
       ? {
           OD_PROJECT_ID: projectId,
@@ -7771,29 +7780,11 @@ export async function startServer({
     currentAppVersionInfo()?.version ?? UNKNOWN_APP_VERSION;
   const { analyticsService } = telemetry;
   registerStrategyRolloutRoutes(app, {
-    db,
-    analytics: analyticsService,
-    getAppVersion: currentAppVersion,
     requireLocalDaemonRequest,
     // Uncaught on purpose: an operator asking which mode is in effect must get
     // an error when the config cannot be read, never `off` / `default`.
     readOdNextPreference: () => readAppConfig(RUNTIME_DATA_DIR),
   });
-  const latchOdNextRolloutForRun = (run, mode, reasonCode) => {
-    latchOdNextRolloutStopOperationally({
-      db,
-      analytics: analyticsService,
-      analyticsContext: run.analyticsContext,
-      appVersion: currentAppVersion(),
-      mode,
-      reasonCode,
-      // A thunk, not a value: the latch is the safety action and must land
-      // even if this read fails. Sync because run-terminal bookkeeping cannot
-      // await, and read at all so the reported effective mode matches the mode
-      // the run was admitted under.
-      readAppConfig: () => readAppConfigSync(RUNTIME_DATA_DIR),
-    });
-  };
   workspaceAnalyticsService = analyticsService;
   console.info(
     '[telemetry] effective run sink',
@@ -7823,7 +7814,16 @@ export async function startServer({
         if (promptBudget) run.promptBudgetDiagnostics = promptBudget;
       },
       onTerminal: createAmrTerminalReportFinalizer(amrTerminalReportOutbox),
-      beforeFinish: (run, status) => {
+      beforeFinish: (run, status, _code, _signal, terminalAt) => {
+        if (run.deliverableSyntaxValidation?.metrics) {
+          run.deliverableSyntaxValidation = {
+            ...run.deliverableSyntaxValidation,
+            metrics: recordDeliverableSyntaxDelivery({
+              previous: run.deliverableSyntaxValidation.metrics,
+              terminalAtMs: terminalAt,
+            }),
+          };
+        }
         if (status !== 'failed' && status !== 'canceled') return;
         try {
           reconcileStrategyTaskRunTerminal(db, { runId: run.id, status });
@@ -9003,6 +9003,29 @@ export async function startServer({
     projectStore: projectStoreDeps,
     authorizeProjectRequest,
     authorizeProjectToolRequest,
+  });
+  registerDeliverableSyntaxToolRoutes(app, {
+    projectsRoot: PROJECTS_DIR,
+    authorizeToolRequest,
+    authorizeProjectToolRequest,
+    getProject: (id: string) => getProject(db, id),
+    getRun: (id: string) => design.runs.get(id),
+    persistRunState: (run) => design.runs.persistState(run),
+    relatedPathsForRun: async ({ runId, projectRoot }) => {
+      const baseline = runArtifactBaselines.peek(runId);
+      if (
+        !baseline
+        || baseline.contended
+        || path.resolve(baseline.cwd) !== path.resolve(projectRoot)
+      ) {
+        return [];
+      }
+      const current = await snapshotProjectArtifactsAsync(projectRoot);
+      return diffRunArtifacts(
+        baseline.before,
+        current,
+      ).renderDependencyTouchedPaths;
+    },
   });
   registerDesignSystemToolRoutes(app, {
     auth: authDeps,
@@ -12746,21 +12769,6 @@ export async function startServer({
       return 'unknown';
     };
     const finishStrategyAwarePhysicalRun = (status, code = null, signal = null) => {
-      const maxDurationRaw = Number(process.env.OD_NEXT_STRATEGY_MAX_RUN_DURATION_MS);
-      const thresholdSignal = strategyTaskAtStart
-        ? odNextRolloutSignalForRun({
-            durationMs: Math.max(0, Date.now() - run.createdAt),
-            maxDurationMs: Number.isFinite(maxDurationRaw) ? maxDurationRaw : null,
-          })
-        : null;
-      if (thresholdSignal) {
-        latchOdNextRolloutForRun(run, 'observe', thresholdSignal);
-        design.runs.emit(run, 'diagnostic', {
-          type: 'od_next_rollout_stop',
-          mode: 'observe',
-          reason_code: thresholdSignal,
-        });
-      }
       const finished = finishRun(status, code, signal);
       return finished;
     };
@@ -14118,6 +14126,7 @@ export async function startServer({
       daemonUrl,
       projectDir: cwd,
       projectId: typeof projectId === 'string' ? projectId : null,
+      workspaceScope: run.workspaceScope,
     });
     if (run.cancelRequested || design.runs.isTerminal(run.status)) {
       cleanupPromptFile();
@@ -16148,7 +16157,6 @@ export async function startServer({
         if (strategyTaskAtStart && strategyTaskAtStart.inputStage !== 'request') {
           const blocked = blockAutomaticContinuation(db, { runId: run.id });
           if (blocked) run.strategyTask = projectStrategyTask(blocked, run.id);
-          latchOdNextRolloutForRun(run, 'observe', 'native_resume_failed');
           send('error', createSseErrorPayload(
             'AGENT_SESSION_RESUME_FAILED',
             'The locked OD Next native session is unavailable; the task was blocked without cold re-seeding.',
@@ -16708,30 +16716,6 @@ export async function startServer({
             run.authenticatedDoneConclusion = doneCapture.authenticatedConclusion;
           }
         }
-        await captureChatArtifactsBeforeSuccess();
-        try {
-          await snapshotAiHtmlVersionsBeforeSuccess();
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          const details = err instanceof AiHtmlVersionSnapshotError
-            ? { failures: err.failures }
-            : undefined;
-          send('error', createSseErrorPayload(
-            'HTML_VERSION_SNAPSHOT_FAILED',
-            message,
-            {
-              retryable: false,
-              ...(details ? { details } : {}),
-            },
-          ));
-          finishStrategyAwarePhysicalRun('failed', 1, signal);
-          return;
-        }
-        try {
-          persistDeliveredAgentSessionState();
-        } catch (err) {
-          console.warn('[sessions] delivered session persistence failed', err);
-        }
         let deliverableValid = false;
         // A turn that emitted no Runtime State can still have delivered. The
         // coordinator may only infer that Direct Edit completion from verified
@@ -16750,23 +16734,93 @@ export async function startServer({
             )
           ),
         );
-        if (
+        const strategyCompletionCandidate = Boolean(
           strategyTaskAtStart
           && (
             strategyProtocolResult?.runtimeState?.outcome === 'completed'
             || mayInferDirectEditCompletion
-          )
-        ) {
-          const deliverable = await validateRunDeliverable({
-            projectsRoot: PROJECTS_DIR,
-            projectId: run.projectId ?? null,
-            projectMetadata: projectRecord?.metadata,
-            runStatus: 'succeeded',
-            artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
-            ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
-          });
+          ),
+        );
+        let processTreeQuiescentForFinalization = true;
+        // Every successful physical Run can produce a final Web deliverable,
+        // even when OD Next Runtime State is absent. Resolve the settled
+        // filesystem before deciding whether the host syntax gate applies.
+        if (acpAttemptTermination) {
+          const termination = await acpAttemptTermination;
+          processTreeQuiescentForFinalization = termination?.quiescent === true;
+        }
+        await resolveRunArtifactOutcomeBeforeFinishAsync();
+        const deliverableFinalization = await finalizeSuccessfulRunDeliverable({
+          projectsRoot: PROJECTS_DIR,
+          projectId: run.projectId ?? null,
+          projectMetadata: projectRecord?.metadata,
+          artifactCount: Number.isFinite(run.artifactCount) ? run.artifactCount : 0,
+          ...(Array.isArray(run.artifactPaths) ? { touchedPaths: run.artifactPaths } : {}),
+          relatedPaths:
+            run.artifactOutcome?.diff?.renderDependencyTouchedPaths ?? [],
+          processTreeQuiescent: processTreeQuiescentForFinalization,
+          syntaxFinalizerEnabled: deliverableSyntaxFinalizerEnabled(),
+          ...(run.deliverableSyntaxRepair
+            ? { repairState: run.deliverableSyntaxRepair }
+            : {}),
+          ...(run.deliverableSyntaxValidation?.metrics
+            ? { previousMetrics: run.deliverableSyntaxValidation.metrics }
+            : {}),
+        });
+        const { deliverable } = deliverableFinalization;
+        if (strategyCompletionCandidate) {
           design.runs.setDeliverableValidation?.(run, deliverable);
           deliverableValid = deliverable.valid;
+        }
+        // Host-owned syntax finalization is based on physical delivery, not on
+        // OD Next strategy identity. It never resumes or prompts the Agent.
+        if (deliverableFinalization.syntax.action !== 'skip') {
+          const syntaxFinalization = deliverableFinalization.syntax;
+          run.deliverableSyntaxValidation = syntaxFinalization.validation;
+          if (syntaxFinalization.validation.repairState) {
+            run.deliverableSyntaxRepair = syntaxFinalization.validation.repairState;
+          }
+          design.runs.persistState(run);
+          if (syntaxFinalization.validation.checker) {
+            design.runs.emit(run, 'diagnostic', {
+              type: 'deliverable_syntax_validation',
+              source: 'run_finalizer',
+              status: syntaxFinalization.validation.status,
+              checker: syntaxFinalization.validation.checker,
+              candidateHash:
+                syntaxFinalization.validation.candidateHash ?? null,
+              checkedFileCount:
+                syntaxFinalization.validation.checkedFiles?.length ?? 0,
+              checkCount:
+                syntaxFinalization.validation.metrics?.checkCount ?? null,
+              checkerDurationMs:
+                syntaxFinalization.validation.metrics?.checkerDurationMs ?? null,
+              repairableCheckCount:
+                syntaxFinalization.validation.metrics?.repairableCheckCount ?? null,
+              repairExecutor:
+                syntaxFinalization.validation.metrics?.repairExecutor ?? null,
+              repairDurationMs:
+                syntaxFinalization.validation.metrics?.repairDurationMs ?? null,
+              appliedRepairRules:
+                syntaxFinalization.validation.metrics?.appliedRepairRules ?? [],
+              finalization: syntaxFinalization.validation.finalization,
+              safeFixProposalCount: syntaxFinalization.validation.metrics?.safeFixProposalCount ?? null,
+              safeFixProposalDurationMs: syntaxFinalization.validation.metrics?.safeFixProposalDurationMs ?? null,
+            });
+          }
+          if (syntaxFinalization.action === 'fail') {
+            send('error', createSseErrorPayload(
+              'AGENT_EXECUTION_FAILED',
+              syntaxFinalization.reason === 'check_incomplete'
+                ? `Final Web deliverable syntax check is incomplete at ${syntaxFinalization.location}; delivery blocked.`
+                : `Final Web deliverable still has a syntax error at ${syntaxFinalization.location}. Deterministic host repair stopped: ${syntaxFinalization.reason}.`,
+              { retryable: false },
+            ));
+            finishStrategyAwarePhysicalRun('failed', 1, signal);
+            return;
+          }
+        }
+        if (strategyCompletionCandidate) {
           // Observation only (this branch has no repair loop): did a phone-app
           // prototype actually ship inside the staged handset shell? Feeds
           // run_finished analytics so the rollout can measure shell adoption.
@@ -16820,6 +16874,35 @@ export async function startServer({
               );
             }
           }
+        }
+        // Snapshot only after the completion gate accepts the settled Web
+        // candidate. A parse-broken deliverable must not create a version that
+        // looks successfully delivered.
+        // Freeze the committed bytes before linking the HTML version below;
+        // cover rendering remains asynchronous and does not delay the Run.
+        await captureChatArtifactsBeforeSuccess();
+        try {
+          await snapshotAiHtmlVersionsBeforeSuccess();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const details = err instanceof AiHtmlVersionSnapshotError
+            ? { failures: err.failures }
+            : undefined;
+          send('error', createSseErrorPayload(
+            'HTML_VERSION_SNAPSHOT_FAILED',
+            message,
+            {
+              retryable: false,
+              ...(details ? { details } : {}),
+            },
+          ));
+          finishStrategyAwarePhysicalRun('failed', 1, signal);
+          return;
+        }
+        try {
+          persistDeliveredAgentSessionState();
+        } catch (err) {
+          console.warn('[sessions] delivered session persistence failed', err);
         }
         if (strategyTaskAtStart && strategyProtocolResult) {
           let automaticContinuationChatBody = null;
@@ -16935,15 +17018,6 @@ export async function startServer({
             return;
           }
           run.strategyTask = projectStrategyTask(transition.result.task, run.id);
-          if (transition.result.action === 'blocked') {
-            const signal = rolloutStopSignalForBlockedContinuation(
-              transition.result.reasonCodes,
-            );
-            const stopMode = signal ? stopModeForOdNextSignal(signal) : null;
-            if (signal && stopMode) {
-              latchOdNextRolloutForRun(run, stopMode, signal);
-            }
-          }
           if (transition.start && transition.prepared?.kind === 'ready') {
             const nextRun = transition.prepared.run;
             nextRun.strategyTask = projectStrategyTask(transition.result.task, nextRun.id);

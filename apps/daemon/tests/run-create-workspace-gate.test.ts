@@ -1153,6 +1153,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
           schemaVersion: 1,
           projectId: PERSONAL_PROJECT,
           workspaceId: WORKSPACE_ID,
+          workspaceMemberId: OWNER_MEMBER_ID,
           source: 'persisted_project_binding',
         },
       });

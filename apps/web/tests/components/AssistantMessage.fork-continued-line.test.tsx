@@ -106,6 +106,29 @@ describe('分叉后的来源提示', () => {
     expect(note.textContent).toBe('Continued from chat');
   });
 
+  /*
+   * 文案由**自己的那个元素**承载,不是图标旁边的一段裸文本。
+   *
+   * 这是「过长要出省略号」的前提:并成一行之后图标和字是并排的,裸文本会落进
+   * 一个匿名盒里,而匿名盒没有任何抓手 —— 样式够不着,测试也够不着。
+   * 这里只问结构,**不问样式**;省略号到底画没画出来要真浏览器才看得见,
+   * 那条守卫在 `e2e/ui/fork-note-ellipsis.test.ts`(受限宽度 + 最长的那支译文)。
+   */
+  it('文案由自己那个元素承载,不是图标旁边的裸文本', () => {
+    const { container } = renderForked();
+
+    const note = container.querySelector('[data-testid="assistant-fork-note"]')!;
+    const label = container.querySelector('[data-testid="assistant-fork-note-label"]');
+    expect(label).toBeTruthy();
+    expect(note.contains(label!)).toBe(true);
+    expect(label!.textContent).toBe('Continued from chat');
+    // 图标旁边不该再剩一段没人管的文本节点 —— 剩了就说明文案有两个出处。
+    const looseText = Array.from(note.childNodes).filter(
+      (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim(),
+    );
+    expect(looseText).toHaveLength(0);
+  });
+
   it('源会话标题不再出现在界面上', () => {
     const { container } = renderForked();
 

@@ -2388,6 +2388,108 @@ describe('streamViaDaemon', () => {
     }
   });
 
+  // OPEND-2565. A block the agent already explained is not a failure to report:
+  // asked for a prototype with nothing to build on, the agent answers in the
+  // chat and that reply is the turn's outcome. Raising a run error on top of it
+  // restated the same sentence inside a red "task execution failed" card, so a
+  // turn that had simply asked for more detail read as a crash. A machine gate
+  // that left no text still errors — pinned by the `it.each` above, whose
+  // projection carries no blockedContext.
+  it('leaves a blocked task to its own explanation instead of raising a run error', async () => {
+    const handlers = createDaemonHandlers();
+    const onRunStatus = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-blocked' });
+      if (url === '/api/runs/run-blocked/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-blocked',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'clarification',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: 'simple',
+            activeRunId: 'run-blocked',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: ['od_next_agent_declared_block'],
+              visibleText: '由于原型需求被跳过，本轮无法形成可执行方案。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '你好' }],
+      signal: new AbortController().signal,
+      handlers,
+      onRunStatus,
+    });
+
+    expect(handlers.onError).not.toHaveBeenCalled();
+    expect(onRunStatus).toHaveBeenLastCalledWith('succeeded');
+  });
+
+  // The other half of the same rule. A gate the agent did not ask for leaves
+  // the agent's ordinary reply sitting next to the verdict — "sure, three
+  // pages, here is the plan" — and that prose is not an account of the stop.
+  // Suppressing on text alone would hide a real protocol failure behind a
+  // cheerful sentence, so the reason code is what decides.
+  it('still raises a run error when a gate blocked the task the agent did not', async () => {
+    const handlers = createDaemonHandlers();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/runs') return jsonResponse({ runId: 'run-gated' });
+      if (url === '/api/runs/run-gated') return jsonResponse({ deliverableValid: false });
+      if (url === '/api/runs/run-gated/events') {
+        return sseResponse(`event: end\ndata: ${JSON.stringify({
+          code: 0,
+          status: 'succeeded',
+          strategyTask: {
+            taskExecutionId: 'task-gated',
+            strategy: {
+              id: 'od-next-strategy',
+              version: '2.0.0',
+              packageHash: 'a'.repeat(64),
+              snapshotId: 'snapshot-1',
+            },
+            inputStage: 'clarification',
+            outcome: 'blocked',
+            route: 'full_plan',
+            executionMode: null,
+            activeRunId: 'run-gated',
+            terminal: true,
+            blockedContext: {
+              reasonCodes: ['od_next_protocol_runtime_state_missing'],
+              visibleText: '好的，按你说的三页来做。计划如下：1) 首页 2) 列表 3) 详情。',
+            },
+          },
+        })}\n\n`);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    await streamViaDaemon({
+      agentId: 'mock',
+      history: [{ id: '1', role: 'user', content: '深色，三页' }],
+      signal: new AbortController().signal,
+      handlers,
+    });
+
+    expect(handlers.onError).toHaveBeenCalledTimes(1);
+  });
+
   it('reattaches to an existing daemon run after the last stored event id', async () => {
     const handlers = createDaemonHandlers();
     const fetchMock = vi.fn()
