@@ -4,7 +4,10 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { validateRunDeliverable } from '../src/run-deliverable-validation.js';
+import {
+  validateProjectDeliverable,
+  validateRunDeliverable,
+} from '../src/run-deliverable-validation.js';
 
 const temporaryRoots: string[] = [];
 
@@ -229,5 +232,80 @@ describe('run deliverable validation', () => {
       valid: false,
       validation: 'no_artifact',
     });
+  });
+});
+
+// One predicate used to answer two questions, and the strict answer is the
+// wrong answer to the loose one. `validateRunDeliverable` asks "did THIS run
+// write the entry" — the right gate for accepting an Agent's completion claim,
+// and `false` for a "继续" turn that verifies finished work and correctly
+// rewrites nothing. That `false` then decided whether the user was shown a red
+// failure card over a deck sitting in their project.
+describe('project deliverable validation', () => {
+  it('resolves the entry a run did not touch this round', async () => {
+    const fixture = await projectFixture({
+      'qingdao-travel-guide.html': '<!doctype html><title>Done</title>',
+    });
+    const metadata = { kind: 'deck' as const };
+
+    // The run-scoped question, on the exact shape of the incident: the file is
+    // finished, this run wrote nothing.
+    await expect(
+      validateRunDeliverable({
+        ...fixture,
+        runStatus: 'succeeded',
+        artifactCount: 0,
+        touchedPaths: [],
+        projectMetadata: metadata,
+      }),
+    ).resolves.toMatchObject({ valid: false, validation: 'no_artifact' });
+
+    // The presentation question, same project, same moment.
+    await expect(
+      validateProjectDeliverable({ ...fixture, projectMetadata: metadata }),
+    ).resolves.toMatchObject({
+      valid: true,
+      validation: 'valid',
+      entryFile: 'qingdao-travel-guide.html',
+      artifactKind: 'html',
+    });
+  });
+
+  it('still refuses a project with no resolvable entry', async () => {
+    // Loosening the run-scoped gates must not loosen the filesystem ones: this
+    // is what keeps a genuinely empty-handed turn a failure.
+    const fixture = await projectFixture({ 'notes.md': '# nothing runnable' });
+
+    await expect(
+      validateProjectDeliverable({
+        ...fixture,
+        projectMetadata: { kind: 'deck' },
+      }),
+    ).resolves.toMatchObject({ valid: false, validation: 'type_mismatch' });
+  });
+
+  it('still refuses a declared entry that is gone', async () => {
+    const fixture = await projectFixture({
+      'other.html': '<!doctype html><title>Not the entry</title>',
+    });
+
+    await expect(
+      validateProjectDeliverable({
+        ...fixture,
+        projectMetadata: { kind: 'deck', entryFile: 'index.html' },
+      }),
+    ).resolves.toMatchObject({ valid: false, validation: 'entry_missing' });
+  });
+
+  it('refuses a project it cannot identify', async () => {
+    const fixture = await projectFixture({ 'index.html': '<!doctype html>' });
+
+    await expect(
+      validateProjectDeliverable({
+        projectsRoot: fixture.projectsRoot,
+        projectId: null,
+        projectMetadata: { kind: 'deck' },
+      }),
+    ).resolves.toMatchObject({ valid: false, validation: 'project_missing' });
   });
 });

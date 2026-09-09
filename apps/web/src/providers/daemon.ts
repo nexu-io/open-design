@@ -2202,11 +2202,26 @@ async function consumeDaemonPhysicalRun({
         // The strategy contract is explicit that a post-claim failure keeps the
         // current Run's own result rather than inventing a new one, so only a
         // Run that did NOT succeed-and-deliver falls through to the failure
-        // branch. `deliverableValid` is filesystem-backed (entry resolved, this
-        // Run touched it, kind matches) — never the agent's own assertion — and
-        // an unreachable daemon fails closed to the previous behaviour.
-        const deliveredDespiteBlock = endStatus === 'succeeded'
-          && (await fetchChatRunStatus(runId, workspaceContext))?.deliverableValid === true;
+        // branch. Both fields are filesystem-backed — never the agent's own
+        // assertion — and an unreachable daemon fails closed to the previous
+        // behaviour.
+        //
+        // `projectDeliverableValid` is the one that answers the question this
+        // branch is actually asking. `deliverableValid` asks "did THIS run
+        // write the entry", which the strategy contract needs for accepting a
+        // completion claim but which is `false` for the most ordinary shape of
+        // this failure: the user says "继续", the agent re-checks work an
+        // earlier turn already finished, correctly rewrites nothing, and the
+        // turn is refused over a machine-block defect. That put a red card over
+        // a finished 16-page deck the user could see rendered beside it. The
+        // OR keeps the stricter field meaningful on its own — a run that did
+        // deliver has obviously delivered.
+        const blockedRunStatus = endStatus === 'succeeded'
+          ? await fetchChatRunStatus(runId, workspaceContext)
+          : null;
+        const deliveredDespiteBlock = blockedRunStatus !== null
+          && (blockedRunStatus.projectDeliverableValid === true
+            || blockedRunStatus.deliverableValid === true);
         // A block the agent declared on itself is not a failure to report.
         // Asked for a prototype with nothing to build on, the agent answers in
         // the chat — "the requirement was skipped, so there is no runnable plan

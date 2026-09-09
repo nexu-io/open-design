@@ -163,6 +163,7 @@ import {
   type RunArtifactBaseline,
 } from '../run-artifact-fs.js';
 import {
+  projectDeliverableValidation,
   validateRunDeliverable,
   type RunDeliverableValidationResult,
 } from '../run-deliverable-validation.js';
@@ -211,6 +212,7 @@ import {
 import { createRunAnalyticsLifecycle } from '../services/run-analytics-lifecycle.js';
 import {
   runTouchedArtifactPaths,
+  validateChatProjectDeliverable,
   toJsonRecord,
   toProjectRecord,
   validateChatRunDeliverable,
@@ -1013,6 +1015,59 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
     }
     return design.runs.statusBody(run);
+  };
+
+  /**
+   * The presentation-side deliverable answer, resolved only when a strategy
+   * task settled `blocked`.
+   *
+   * A blocked verdict says the protocol could not record the step. It does NOT
+   * say the user lost anything, and those two got conflated because one
+   * predicate answered both: `deliverableValid` asks "did THIS run write it",
+   * which is `false` for the most ordinary shape of the failure — a turn that
+   * checks already-finished work and correctly changes nothing. The client
+   * needs the other answer to decide whether a refusal is worth a red card.
+   *
+   * Fails open to `{}` rather than throwing: a project scan that cannot run
+   * must not take the whole status read down with it, and an absent field
+   * leaves the client on its previous behaviour.
+   */
+  const projectDeliverableForBlockedStrategyTask = async (
+    run: ChatRun,
+    status: ChatRunStatusResponse,
+  ): Promise<Partial<ChatRunStatusResponse>> => {
+    if (status.strategyTask?.terminal !== true) return {};
+    if (status.strategyTask.outcome !== 'blocked') return {};
+    try {
+      const resolved = await validateChatProjectDeliverable({
+        db,
+        projectsRoot: PROJECTS_DIR,
+        run,
+      });
+      const validation = projectDeliverableValidation(resolved.validation);
+      // The moment a red card is about to be withheld over a finished
+      // deliverable. Logged server-side so it lands in the daemon log and the
+      // diagnostics export: suppressing a failure the user cannot act on is
+      // right, suppressing it invisibly is not.
+      console.info('[od-next-task] blocked task deliverable probe', {
+        runId: run.id,
+        projectId: run.projectId ?? null,
+        reasonCodes: status.strategyTask?.blockedContext?.reasonCodes ?? [],
+        projectDeliverableValid: resolved.valid,
+        projectDeliverableValidation: resolved.validation,
+        ...(resolved.entryFile ? { entryFile: resolved.entryFile } : {}),
+      });
+      return {
+        projectDeliverableValid: resolved.valid,
+        ...(validation ? { projectDeliverableValidation: validation } : {}),
+      };
+    } catch (error) {
+      console.warn('[od-next-task] project deliverable probe failed', {
+        runId: run.id,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      return {};
+    }
   };
 
   type ClarificationContinuation = {
@@ -3313,11 +3368,23 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       res.json(status);
       return;
     }
+    // A blocked strategy verdict is the one place the client has to know
+    // whether the USER still has the deliverable, which is a different question
+    // from whether THIS run produced it (`deliverableValid`). A "继续" turn that
+    // verifies finished work and correctly rewrites nothing answers `false` to
+    // the second and `true` to the first, and the second answer is the one that
+    // used to decide whether a red failure card appeared over a finished deck.
+    // Computed only for that case so an ordinary status read costs no extra
+    // project scan.
+    const projectDeliverable = await projectDeliverableForBlockedStrategyTask(
+      run,
+      status,
+    );
     if (
       typeof status.deliverableValid === 'boolean'
       && typeof status.deliverableValidation === 'string'
     ) {
-      res.json(status);
+      res.json({ ...status, ...projectDeliverable });
       return;
     }
     const touchedArtifactPaths = runTouchedArtifactPaths(run);
@@ -3335,6 +3402,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     design.runs.setDeliverableValidation?.(run, deliverable);
     res.json({
       ...status,
+      ...projectDeliverable,
       deliverableValid: deliverable.valid,
       deliverableValidation: deliverable.validation,
       ...(deliverable.entryFile

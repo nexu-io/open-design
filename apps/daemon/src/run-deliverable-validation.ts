@@ -149,6 +149,63 @@ function matchesAcceptedKinds(
 }
 
 /**
+ * The two questions a caller can ask about a project's canonical deliverable.
+ *
+ * `'run'` — did THIS run produce it? Strict on purpose: the answer decides
+ * whether the host may accept an Agent's completion claim, so a turn must not
+ * be able to pass by pointing at a file an earlier turn wrote.
+ *
+ * `'project'` — does the user have it, right now? The same filesystem checks
+ * without the run-scoped gates. It answers a presentation question ("is there
+ * anything to tell the user they lost?"), where the earlier turn's file counts
+ * precisely because the user can open it.
+ *
+ * Splitting them is the whole point: one predicate used to answer both, and
+ * the strict answer is the WRONG answer to the loose question. A "继续" turn
+ * that verifies finished work and correctly changes nothing scores
+ * `no_artifact` under `'run'` — true, and irrelevant to whether the user got
+ * their deck.
+ */
+export type DeliverableValidationScope = 'run' | 'project';
+
+/** Values `validateProjectDeliverable` can actually produce, narrowed to the
+ *  wire union. Run-scoped outcomes are unreachable there; returning null for
+ *  one keeps a future enum addition from being reported as a wire value the
+ *  client's type does not admit. */
+export function projectDeliverableValidation(
+  validation: RunDeliverableValidation,
+): 'valid' | 'project_missing' | 'entry_missing' | 'entry_unreadable' | 'type_mismatch' | null {
+  switch (validation) {
+    case 'valid':
+    case 'project_missing':
+    case 'entry_missing':
+    case 'entry_unreadable':
+    case 'type_mismatch':
+      return validation;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Does this project hold a usable canonical deliverable right now?
+ *
+ * Same entry resolution, kind contract and readability check as
+ * `validateRunDeliverable`, minus every gate that asks about a particular run.
+ * Never use it to accept a completion claim — see `DeliverableValidationScope`.
+ */
+export async function validateProjectDeliverable(
+  input: Omit<ValidateRunDeliverableInput, 'runStatus' | 'artifactCount' | 'touchedPaths'>,
+): Promise<RunDeliverableValidationResult> {
+  return resolveDeliverable({
+    ...input,
+    runStatus: 'succeeded',
+    artifactCount: 1,
+    scope: 'project',
+  });
+}
+
+/**
  * Resolve and verify the one canonical file a successful run can deliver.
  *
  * `artifactCount` proves this run touched output; it does not prove the
@@ -158,10 +215,20 @@ function matchesAcceptedKinds(
 export async function validateRunDeliverable(
   input: ValidateRunDeliverableInput,
 ): Promise<RunDeliverableValidationResult> {
-  if (input.runStatus !== 'succeeded') {
+  return resolveDeliverable({ ...input, scope: 'run' });
+}
+
+async function resolveDeliverable(
+  input: ValidateRunDeliverableInput & { scope: DeliverableValidationScope },
+): Promise<RunDeliverableValidationResult> {
+  const runScoped = input.scope === 'run';
+  if (runScoped && input.runStatus !== 'succeeded') {
     return { valid: false, validation: 'not_succeeded' };
   }
-  if (!Number.isFinite(input.artifactCount) || input.artifactCount <= 0) {
+  if (
+    runScoped
+    && (!Number.isFinite(input.artifactCount) || input.artifactCount <= 0)
+  ) {
     return { valid: false, validation: 'no_artifact' };
   }
   if (!input.projectId) {
@@ -197,7 +264,7 @@ export async function validateRunDeliverable(
     entryFile,
     artifactKind: selected.kind,
   };
-  if (input.touchedPaths) {
+  if (runScoped && input.touchedPaths) {
     const touched = new Set(
       input.touchedPaths.flatMap((candidate) => {
         if (typeof candidate !== 'string' || !candidate) return [];
