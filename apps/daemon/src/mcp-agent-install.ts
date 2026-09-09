@@ -47,6 +47,7 @@ export const AGENT_SLUGS = [
   'kiro',
   'trae',
   'opencode',
+  'opencode2',
   'claude-desktop',
 ] as const;
 
@@ -264,6 +265,26 @@ export function planAgentInstall(
           return e;
         })(),
       };
+    case 'opencode2':
+      // OpenCode V2 (invoked as `opencode2`) moved to its own config root
+      // and nests servers one level deeper than V1: `mcp.servers`, not the
+      // flat `mcp` map above. Same per-entry shape as V1 otherwise.
+      return {
+        kind: 'json',
+        slug,
+        configPath: path.join(opencode2ConfigDir(home), 'opencode.json'),
+        keyPath: ['mcp', 'servers'],
+        serverKey: serverName,
+        entry: (() => {
+          const e: Record<string, unknown> = {
+            type: 'local',
+            command: [spec.command, ...spec.args],
+            enabled: true,
+          };
+          if (Object.keys(spec.env).length > 0) e.environment = spec.env;
+          return e;
+        })(),
+      };
     case 'openclaw':
       return {
         kind: 'json',
@@ -363,6 +384,10 @@ export function planAgentInstall(
       throw new Error(`unknown agent slug: ${String(exhaustive)}`);
     }
   }
+}
+
+function opencode2ConfigDir(home: string): string {
+  return process.env.OPENCODE2_CONFIG_DIR ?? path.join(home, '.config', 'opencode2');
 }
 
 function clineConfigPath(home: string, platform: NodeJS.Platform): string {

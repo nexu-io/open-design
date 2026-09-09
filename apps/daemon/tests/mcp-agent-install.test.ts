@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import path from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   AGENT_SLUGS,
@@ -24,11 +25,15 @@ const ctx = (platform: NodeJS.Platform = 'linux') => ({
   serverName: 'open-design',
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(17);
+    expect(AGENT_SLUGS).toHaveLength(18);
     expect(isAgentSlug('kiro')).toBe(true);
     expect(isAgentSlug('reasonix')).toBe(true);
     expect(isAgentSlug('raven')).toBe(true);
@@ -78,7 +83,7 @@ describe('JSON-config agents', () => {
   it('cursor merges a stdio entry under mcpServers', () => {
     const plan = planAgentInstall('cursor', SPEC, ctx());
     if (plan.kind !== 'json') throw new Error('expected json');
-    expect(plan.configPath).toBe('/home/u/.cursor/mcp.json');
+    expect(plan.configPath).toBe(path.join('/home/u', '.cursor', 'mcp.json'));
     expect(plan.keyPath).toEqual(['mcpServers']);
     expect(plan.entry).toEqual({
       command: SPEC.command,
@@ -100,6 +105,30 @@ describe('JSON-config agents', () => {
     });
   });
 
+  it('opencode2 nests under mcp.servers at its own config root, same entry shape as V1', () => {
+    const plan = planAgentInstall('opencode2', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe(
+      path.join('/home/u', '.config', 'opencode2', 'opencode.json')
+    );
+    expect(plan.keyPath).toEqual(['mcp', 'servers']);
+    expect(plan.entry).toEqual({
+      type: 'local',
+      command: [SPEC.command, ...SPEC.args],
+      enabled: true,
+      environment: SPEC.env,
+    });
+  });
+
+  it('opencode2 honors OPENCODE2_CONFIG_DIR to relocate its config root', () => {
+    const customDir = path.join('/custom', 'opencode2-dir');
+    vi.stubEnv('OPENCODE2_CONFIG_DIR', customDir);
+    const plan = planAgentInstall('opencode2', SPEC, ctx());
+    if (plan.kind !== 'json') throw new Error('expected json');
+    expect(plan.configPath).toBe(path.join(customDir, 'opencode.json'));
+    expect(plan.keyPath).toEqual(['mcp', 'servers']);
+  });
+
   it('openclaw nests under mcp.servers', () => {
     const plan = planAgentInstall('openclaw', SPEC_NO_ENV, ctx());
     if (plan.kind !== 'json') throw new Error('expected json');
@@ -110,7 +139,7 @@ describe('JSON-config agents', () => {
   it('kiro merges a stdio entry into the user MCP settings file', () => {
     const plan = planAgentInstall('kiro', SPEC, ctx());
     if (plan.kind !== 'json') throw new Error('expected json');
-    expect(plan.configPath).toBe('/home/u/.kiro/settings/mcp.json');
+    expect(plan.configPath).toBe(path.join('/home/u', '.kiro', 'settings', 'mcp.json'));
     expect(plan.keyPath).toEqual(['mcpServers']);
     expect(plan.serverKey).toBe('open-design');
     expect(plan.entry).toEqual({
@@ -123,7 +152,7 @@ describe('JSON-config agents', () => {
   it('raven plans a stdio entry under tools.mcpServers', () => {
     const plan = planAgentInstall('raven', SPEC, ctx());
     if (plan.kind !== 'json') throw new Error('expected json');
-    expect(plan.configPath).toBe('/home/u/.raven/config.json');
+    expect(plan.configPath).toBe(path.join('/home/u', '.raven', 'config.json'));
     expect(plan.keyPath).toEqual(['tools', 'mcpServers']);
     expect(plan.serverKey).toBe('open-design');
     expect(plan.entry).toEqual({
@@ -173,15 +202,25 @@ describe('JSON-config agents', () => {
     const mac = planAgentInstall('cline', SPEC, ctx('darwin'));
     const linux = planAgentInstall('cline', SPEC, ctx('linux'));
     if (mac.kind !== 'json' || linux.kind !== 'json') throw new Error('expected json');
-    expect(mac.configPath).toContain('Library/Application Support/Code/User');
-    expect(linux.configPath).toContain('.config/Code/User');
+    expect(mac.configPath).toContain(
+      path.join('Library', 'Application Support', 'Code', 'User')
+    );
+    expect(linux.configPath).toContain(path.join('.config', 'Code', 'User'));
     expect(mac.configPath).toContain('saoudrizwan.claude-dev');
   });
 
   it('claude-desktop on macOS writes to Library/Application Support/Claude', () => {
     const plan = planAgentInstall('claude-desktop', SPEC, ctx('darwin'));
     if (plan.kind !== 'json') throw new Error('expected json');
-    expect(plan.configPath).toBe('/home/u/Library/Application Support/Claude/claude_desktop_config.json');
+    expect(plan.configPath).toBe(
+      path.join(
+        '/home/u',
+        'Library',
+        'Application Support',
+        'Claude',
+        'claude_desktop_config.json'
+      )
+    );
     expect(plan.keyPath).toEqual(['mcpServers']);
     expect(plan.serverKey).toBe('open-design');
     expect(plan.entry).toEqual({
