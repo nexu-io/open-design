@@ -847,6 +847,9 @@ importers:
 
   tools/dev:
     dependencies:
+      '@open-design/archive':
+        specifier: workspace:*
+        version: link:../../packages/archive
       '@open-design/closure':
         specifier: workspace:*
         version: link:../../apps/closure
@@ -871,9 +874,6 @@ importers:
       cac:
         specifier: 6.7.14
         version: 6.7.14
-      jszip:
-        specifier: 3.10.1
-        version: 3.10.1
     devDependencies:
       '@types/node':
         specifier: 24.12.2

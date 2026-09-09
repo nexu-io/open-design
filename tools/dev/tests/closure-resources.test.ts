@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import JSZip from "jszip";
+import { extract, inspect } from "@open-design/archive";
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import { createHash } from "node:crypto";
@@ -44,13 +44,14 @@ describe("tools-dev Closure fixture resources", () => {
       const bytes = await readFile(resource.path);
       assert.equal(bytes.byteLength, resource.size);
       assert.equal(createHash("sha256").update(bytes).digest("hex"), resource.sha256);
-      const zip = await JSZip.loadAsync(await readFile(resource.path));
+      const unpacked = join(workspaceRoot, "unpacked", resource.id);
+      await extract(resource.path, unpacked, { permissions: "portable" });
       if (resource.entrypoint === "resource.json") {
-        assert.equal(JSON.parse(await zip.file("resource.json")!.async("string")).id, resource.id);
+        assert.equal(JSON.parse(await readFile(join(unpacked, "resource.json"), "utf8")).id, resource.id);
         continue;
       }
-      assert.deepEqual(Object.keys(zip.files), ["sidecar.mjs"]);
-      const source = await zip.file("sidecar.mjs")!.async("string");
+      assert.deepEqual((await inspect(resource.path)).map(entry => entry.path), ["sidecar.mjs"]);
+      const source = await readFile(join(unpacked, "sidecar.mjs"), "utf8");
       assert.ok(source.includes("await import(\"file://"));
       assert.ok(!source.includes("daemon\\n"));
       assert.ok(!source.includes("web\\n"));

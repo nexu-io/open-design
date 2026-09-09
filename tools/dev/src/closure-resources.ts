@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { cp, lstat, mkdir, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import JSZip from "jszip";
+import { pack } from "@open-design/archive/build";
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { buildClosureDataResources, type ClosureDataResourceArtifact } from "@open-design/closure/build-resources";
 
@@ -56,18 +56,23 @@ async function archive(input: Readonly<{
   id: Resource["id"];
   outputRoot: string;
 }>): Promise<Resource> {
-  const zip = new JSZip();
-  zip.file("sidecar.mjs", input.body, { date: new Date(0), unixPermissions: 0o100644 });
-  const bytes = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 9 }, platform: "UNIX" });
   const path = join(input.outputRoot, input.file);
-  await writeFile(path, bytes);
+  const stage = await mkdtemp(join(input.outputRoot, ".resource-"));
+  let packed;
+  try {
+    const source = join(stage, "source"); await mkdir(source);
+    await writeFile(join(source, "sidecar.mjs"), input.body);
+    packed = await pack(source, join(stage, "resource.zip"), { reproducible: true, permissions: "portable" });
+    // Development receipts may refresh their own local fixture artifacts.
+    await rename(packed.file, path);
+  } finally { await rm(stage, { recursive: true, force: true }); }
   return Object.freeze({
     entrypoint: "sidecar.mjs",
     file: input.file,
     id: input.id,
     path,
-    sha256: createHash("sha256").update(bytes).digest("hex"),
-    size: bytes.byteLength,
+    sha256: packed.sha256,
+    size: packed.size,
     treeSha256: standaloneTreeSha256([{ path: "sidecar.mjs", sha256: createHash("sha256").update(input.body).digest("hex"), size: input.body.byteLength }]),
   });
 }

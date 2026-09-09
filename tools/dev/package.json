@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@open-design/archive": "workspace:*",
     "@open-design/shell-electron": "workspace:*",
     "@open-design/closure": "workspace:*",
     "@open-design/tools-serve": "workspace:*",
@@ -20,8 +21,7 @@
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/sidecar-proto": "workspace:*",
-    "cac": "6.7.14",
-    "jszip": "3.10.1"
+    "cac": "6.7.14"
   },
   "devDependencies": {
     "@types/node": "24.12.2",
