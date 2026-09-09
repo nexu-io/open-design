@@ -18,6 +18,7 @@ available to the user, with durable, content-free evidence of the warning.
 | N2 | User: preserve evidence for unsuccessful repairs | Run/SSE and Langfuse retain the real checker status and finalization reason; `deliveredWithSyntaxWarningCount=1` only for a succeeded physical Run with complete warning evidence |
 | N3 | User: continue programmatic repair | Existing safe-edit, staging, verification, commit and time budgets remain; no model repair turn |
 | N4 | Existing execution failures remain failures | Agent/protocol, missing artifact, cancellation and snapshot failures are not converted to success; a syntax warning is never counted as repaired or blocked delivery |
+| N5 | User-approved review follow-up: internal engine defects must remain visible without blocking delivery | The finalizer throws a dedicated internal error; only the delivery boundary recovers it, retaining `internal_error` evidence and ERROR-level observation; expected filesystem errors remain ordinary incomplete warnings |
 
 The earlier implementation baseline `259ee527d` used the blocking policy; its
 remote evaluation cannot validate N1–N4. The non-blocking increment is now based
@@ -272,6 +273,25 @@ warning cannot override a latest clean result, and missing latest warning eviden
 stays unknown rather than becoming an observed zero.
 
 ## Terminal summary and timing
+
+Review follow-up (2026-09-09): internal finalizer defects now reject from the engine
+as `DeliverableSyntaxInternalError`. Only the delivery owner handles this dedicated
+error, retaining `internal_error` evidence and a sanitized local ERROR log. The
+native Run trace exports an ERROR-level `deliverable-syntax-internal-error` event;
+ordinary incomplete checks do not emit it. The original cause stays in memory and
+is not logged or exported. Existing Agent/protocol/snapshot failures are unchanged.
+Consumers must accept the additive `internal_error` finalization reason to retain
+its classification; this PR does not deploy ODEval or prove online ingestion.
+
+The illegal-decision and programming-error tests first failed against `ce880a19b`
+(two incorrect warning resolutions), then passed. Updated engine, delivery, HTTP,
+Langfuse, Task and contract checks passed 373 tests; full typecheck and guard passed.
+The HTTP fault-injection test proves durable internal-error evidence, successful
+Run completion and byte-identical original artifact readback. Fresh rebuilt-daemon
+replay `od-syntax-acceptance-R85H3J` passed 10/10 with stable source and confirmed
+cleanup (six repaired, one clean, three warnings; fixed CLI, no model/upload).
+The preceding replay was invalidated by a concurrent test-source edit and is not
+an acceptance receipt. These local witnesses are not production monitoring results.
 
 `deliverableSyntaxValidation.finalization` records summaryVersion 1,
 repairEngine `host-safe-fixer@2`, initialStatus, action/reason/refusal,

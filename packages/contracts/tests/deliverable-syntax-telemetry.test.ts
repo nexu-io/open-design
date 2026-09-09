@@ -19,6 +19,11 @@ const finalization = {
 };
 
 describe('content-free syntax terminal summary', () => {
+  it('preserves the distinct internal engine error reason', () => {
+    expect(SafeDeliverableSyntaxTelemetryV1Schema.parse({
+      ...legacy, status: 'incomplete', finalization: { ...finalization, action: 'warn', reason: 'internal_error' },
+    })).toMatchObject({ finalization: { reason: 'internal_error' } });
+  });
   it('accepts legacy evidence without inventing missing summary fields', () => {
     const parsed = SafeDeliverableSyntaxTelemetryV1Schema.parse(legacy);
     expect(parsed).not.toHaveProperty('finalization');

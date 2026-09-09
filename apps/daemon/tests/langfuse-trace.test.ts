@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { projectDeliverableSyntaxTelemetry } from '../src/langfuse-bridge.js';
 
 import {
   buildFeedbackPayload,
@@ -459,6 +460,29 @@ describe('shouldFullyRedactToolPayload (fail-closed)', () => {
 });
 
 describe('buildTracePayload', () => {
+  it.each(['internal_error', 'check_incomplete'] as const)('emits a distinct ERROR observation only for engine defects: %s', (reason) => {
+    const syntax = projectDeliverableSyntaxTelemetry({
+      status: 'succeeded', deliverableSyntaxValidation: {
+        schema: 'open-design.deliverable-syntax-tool/v1', source: 'run_finalizer',
+        status: 'incomplete', reason: reason === 'internal_error' ? reason : 'checker_error', checkedAt: 1,
+        finalization: { action: 'warn', reason, summaryVersion: 1, initialStatus: 'incomplete',
+          repairEngine: 'host-safe-fixer@2', stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [] },
+      },
+    });
+    if (!syntax) throw new Error('Missing syntax projection');
+    const batch = buildTracePayload(makeCtx({ deliverableSyntax: syntax }));
+    const errors = (batch as Array<{ type: string; body: Record<string, any> }>).filter(
+      item => item.body.name === 'deliverable-syntax-internal-error',
+    );
+    expect(errors).toHaveLength(reason === 'internal_error' ? 1 : 0);
+    if (reason === 'internal_error') expect(errors[0]).toMatchObject({ type: 'event-create', body: {
+      level: 'ERROR', statusMessage: 'Syntax finalizer internal error',
+      metadata: { reason: 'internal_error', deliveryStatus: 'succeeded' },
+    } });
+    expect(bodyOf(batch, 'trace-create').metadata).toMatchObject({ success: true,
+      deliverable_syntax_finalization_reason: reason, deliverable_syntax_recovered_delivery_count: 0 });
+  });
+
   it.each(['synthetic-test-syntax-replay', 'production'])(
     'sets the native trace environment to the resolved telemetry environment %s',
     (environment) => {

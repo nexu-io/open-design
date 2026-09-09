@@ -245,6 +245,21 @@ async function finalizeCandidate(input: {
   }
 }
 
+/** Only the delivery owner may recover from an internal finalizer failure. */
+export class DeliverableSyntaxInternalError extends Error {
+  constructor(readonly outcome: Extract<DeliverableSyntaxFinalizationOutcome, { action: 'warn' }>, cause: unknown) {
+    super('Syntax finalizer internal error', { cause });
+    this.name = 'DeliverableSyntaxInternalError';
+  }
+}
+
+function isExpectedOperationalError(error: unknown): boolean {
+  return error instanceof Error && !(error instanceof TypeError)
+    && !(error instanceof RangeError) && !(error instanceof ReferenceError)
+    && 'code' in error && ['EIO', 'ENOENT', 'EACCES', 'EPERM', 'ENOSPC', 'EROFS', 'EBUSY', 'EMFILE', 'ENFILE']
+      .includes(String(error.code));
+}
+
 export async function finalizeDeliverableSyntax(
   input: Parameters<typeof finalizeCandidate>[0],
 ): Promise<DeliverableSyntaxFinalizationOutcome> {
@@ -256,19 +271,24 @@ export async function finalizeDeliverableSyntax(
   let result: DeliverableSyntaxFinalizationOutcome;
   try {
     result = await finalizeCandidate(input, summary, progress);
-  } catch {
-    // Syntax tooling is best effort: preserve observed evidence, not the raw
-    // exception, and leave the artifact delivery lifecycle to its owner.
+  } catch (error) {
+    const operational = isExpectedOperationalError(error);
     result = {
-      action: 'warn', reason: 'check_incomplete', location: input.entryFile ?? '',
+      action: 'warn', reason: operational ? 'check_incomplete' : 'internal_error', location: input.entryFile ?? '',
       validation: {
         schema: DELIVERABLE_SYNTAX_TOOL_SCHEMA,
-        source: 'run_finalizer', status: 'incomplete', reason: 'checker_error',
+        source: 'run_finalizer', status: 'incomplete', reason: operational ? 'checker_error' : 'internal_error',
         checkedAt: input.checkedAt ?? input.wallNow?.() ?? Date.now(),
         ...(progress.validation?.metrics || input.previousMetrics
           ? { metrics: progress.validation?.metrics ?? input.previousMetrics } : {}),
       },
     };
+    if (!operational) {
+      throw new DeliverableSyntaxInternalError({
+        ...result,
+        validation: { ...result.validation, finalization: { ...summary, action: 'warn', reason: 'internal_error' } },
+      }, error);
+    }
   }
   if (result.action === 'skip') return result;
   return {

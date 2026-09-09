@@ -8,6 +8,7 @@ import { finalizeDeliverableSyntax } from '../../src/artifacts/deliverable-synta
 import { checkDeliverableSyntax } from '../../src/artifacts/deliverable-syntax.js';
 import * as safeFix from '../../src/artifacts/deliverable-syntax-safe-fix.js';
 import * as syntaxChecker from '../../src/artifacts/deliverable-syntax.js';
+import * as repairDecision from '../../src/artifacts/deliverable-syntax-repair.js';
 
 const roots: string[] = [];
 
@@ -26,10 +27,26 @@ async function htmlFixture(source: string): Promise<string> {
 }
 
 describe('deliverable syntax finalization', () => {
+  it('rejects an invalid repair decision instead of disguising an invariant failure as checker_error', async () => {
+    const projectRoot = await htmlFixture('<script>const items = [1;</script>');
+    vi.spyOn(repairDecision, 'decideDeliverableSyntaxRepair').mockReturnValue({ action: 'accept', next: undefined });
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
+    })).rejects.toMatchObject({ name: 'DeliverableSyntaxInternalError' });
+  });
+
+  it('rejects unexpected programming errors without exporting their message', async () => {
+    const projectRoot = await htmlFixture('<script>const items = [1;</script>');
+    vi.spyOn(syntaxChecker, 'checkDeliverableSyntax').mockRejectedValueOnce(new TypeError('private source'));
+    await expect(finalizeDeliverableSyntax({
+      artifactKind: 'html', projectRoot, entryFile: 'index.html', processTreeQuiescent: true,
+    })).rejects.toMatchObject({ name: 'DeliverableSyntaxInternalError', message: 'Syntax finalizer internal error' });
+  });
+
   it.each(['checker', 'proposal'] as const)('warns without leaking an unexpected %s exception', async (stage) => {
     const source = '<script>const items = [1;</script>';
     const projectRoot = await htmlFixture(source);
-    const error = new Error('private path and source must not be exported');
+    const error = Object.assign(new Error('private path and source must not be exported'), { code: 'EIO' });
     if (stage === 'checker') vi.spyOn(syntaxChecker, 'checkDeliverableSyntax').mockRejectedValueOnce(error);
     else vi.spyOn(safeFix, 'proposeDeliverableSyntaxSafeFix').mockRejectedValueOnce(error);
     const result = await finalizeDeliverableSyntax({

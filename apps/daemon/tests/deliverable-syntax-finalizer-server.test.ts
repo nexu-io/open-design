@@ -140,6 +140,29 @@ describe('successful run deliverable syntax finalizer (HTTP)', () => {
     expect(await artifact.text()).toBe(original);
   }, 60_000);
 
+  it('persists an injected invariant failure as internal_error while delivering the unchanged artifact', async () => {
+    if (!started || !binDir) throw new Error('server fixture not started');
+    const decision = await import('../src/artifacts/deliverable-syntax-repair.js');
+    const spy = vi.spyOn(decision, 'decideDeliverableSyntaxRepair').mockReturnValue({ action: 'accept', next: undefined });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const original = '<!doctype html><script>const items = [1, 2;</script>';
+      await putConfig(started.url, await writeHtmlClaude(binDir, original, 'claude-internal-error'));
+      const { projectId, conversationId } = await createProject(started.url);
+      const run = await createAndWaitForRun(started.url, projectId, conversationId);
+      expect(run.status).toBe('succeeded');
+      expect(run.deliverableSyntaxValidation).toMatchObject({ status: 'incomplete', reason: 'internal_error',
+        finalization: { action: 'warn', reason: 'internal_error', committedPatchCount: 0 } });
+      expect(log).toHaveBeenCalledWith('[deliverable-syntax] internal_error');
+      const artifact = await fetch(`${started.url}/api/projects/${encodeURIComponent(projectId)}/raw/index.html`);
+      expect(artifact.status).toBe(200);
+      expect(await artifact.text()).toBe(original);
+    } finally {
+      spy.mockRestore();
+      log.mockRestore();
+    }
+  }, 60_000);
+
   it('delivers oversized output with incomplete-check evidence, not a fabricated pass', async () => {
     if (!started || !binDir) throw new Error('server fixture not started');
     const original = `<!doctype html><script>${' '.repeat(2 * 1024 * 1024)}</script>`;

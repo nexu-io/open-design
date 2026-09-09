@@ -27,7 +27,7 @@ export type DeliverableSyntaxSafeFixRule =
 export const DELIVERABLE_SYNTAX_FINALIZATION_REASONS = [
   'attempt_limit_reached', 'commit_conflict', 'commit_failed',
   'check_incomplete', 'no_progress', 'no_safe_fix', 'verification_failed',
-  'repair_budget_exceeded',
+  'repair_budget_exceeded', 'internal_error',
 ] as const;
 export type DeliverableSyntaxFinalizationReason = typeof DELIVERABLE_SYNTAX_FINALIZATION_REASONS[number];
 export const DELIVERABLE_SYNTAX_SAFE_FIX_REFUSALS = [
@@ -216,7 +216,7 @@ export type DeliverableSyntaxValidationEvidence =
     })
   | (DeliverableSyntaxToolEnvelope & {
       status: 'incomplete';
-      reason: 'process_tree_not_quiescent' | 'checker_error';
+      reason: 'process_tree_not_quiescent' | 'checker_error' | 'internal_error';
       source: 'run_finalizer';
       checkedAt: number;
       repairState?: DeliverableSyntaxRepairState;

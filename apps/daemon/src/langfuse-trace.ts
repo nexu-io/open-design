@@ -2216,6 +2216,18 @@ export function buildTracePayload(
     },
   ];
 
+  if (ctx.deliverableSyntax?.finalization?.reason === 'internal_error') {
+    batch.push({
+      id: randomUUID(), type: 'event-create', timestamp: nowIso,
+      body: {
+        id: `${traceId}-syntax-internal-error`, traceId, parentObservationId: agentSpanId,
+        name: 'deliverable-syntax-internal-error', startTime: endTimeIso,
+        level: 'ERROR', statusMessage: 'Syntax finalizer internal error',
+        metadata: { reason: 'internal_error', deliveryStatus: ctx.run.status },
+      },
+    });
+  }
+
   if (createGeneration) {
     batch.push({
       id: randomUUID(),
