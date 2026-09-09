@@ -1417,15 +1417,21 @@ async function readProjectMessageListError(resp: Response): Promise<{
 }> {
   let message = `Could not load messages for this conversation (${resp.status}).`;
   let code: string | null = null;
-  let retryable = false;
+  // Legacy errors and proxy failures may omit a retryability hint. This is a
+  // read, so transient HTTP statuses can use the caller's bounded retry policy.
+  let retryable = resp.status === 408
+    || resp.status === 429
+    || (resp.status >= 500 && resp.status <= 599);
   try {
     const payload = await resp.json() as {
+      retryable?: unknown;
       error?: string | {
         code?: unknown;
         message?: unknown;
         retryable?: unknown;
       };
     };
+    if (typeof payload.retryable === 'boolean') retryable = payload.retryable;
     if (payload.error && typeof payload.error === 'object') {
       const rawCode = payload.error.code;
       code = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(rawCode)
@@ -1434,7 +1440,9 @@ async function readProjectMessageListError(resp: Response): Promise<{
       if (typeof payload.error.message === 'string' && payload.error.message.trim()) {
         message = payload.error.message;
       }
-      retryable = payload.error.retryable === true;
+      if (typeof payload.error.retryable === 'boolean') {
+        retryable = payload.error.retryable;
+      }
     } else if (typeof payload.error === 'string' && payload.error.trim()) {
       message = payload.error;
     }
