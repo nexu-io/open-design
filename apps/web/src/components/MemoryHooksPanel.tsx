@@ -4,7 +4,7 @@
 // memory stays on:
 //   - chatExtractionEnabled — sediment new facts from chat turns.
 //   - profileEnabled        — inject the structured profile into the prompt.
-//   - rewriteEnabled        — PRE: expand a short query into a task-brief card.
+//   - rewriteEnabled        — PRE: apply memory guidance when expanding a short query.
 //   - verifyEnabled         — POST: self-verify against rules + emit scorecard.
 //
 // State lives in the parent (MemorySection) so optimistic-set + rollback can

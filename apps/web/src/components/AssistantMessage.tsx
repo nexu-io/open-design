@@ -59,7 +59,6 @@ import {
   hasOdCard,
   narrowProducedFilesToFocus,
   pickPrimaryArtifacts,
-  splitOnOdCards,
   stripArtifactFocusMarkers,
   stripCritiqueGrammar,
   stripTrailingOpenOdCard,
@@ -71,6 +70,7 @@ import {
   type WorkspaceContextItem,
 } from "@open-design/contracts";
 import { OdCardView, type BrandBrowserAssistConfirm } from "./OdCard";
+import { splitShellCards } from "../runtime/chat/split-shell-cards";
 import {
   AnsweredValue,
   isShortValueAnswer,
@@ -1577,8 +1577,7 @@ function AssistantMessageImpl({
               /* done 一到就收起,不等 run 结束(产品 2026-09-04,见 `concludedAt`) */
               concluded={entry.concluded}
               /* D43 把 done 之前的正文收进壳,里面可能夹着 `<od-card>`。壳内那条
-                 通道用的是**同一支** `splitOnOdCards`,这两样是卡片自己要的身份与
-                 回调(见 `chat/SayBlock.tsx`)。 */
+                 通道共享代码上下文解析;保留原实例标识传递和品牌浏览器辅助回调。 */
               odCardScope={[
                 projectId ?? "no-project",
                 conversationId ?? "no-conversation",
@@ -3409,8 +3408,10 @@ function ProseBlock({
     [onRequestOpenFile, projectFileNames, projectId, projectResolvedDir],
   );
   // Each text segment is further split on `<od-card>` blocks (so memory cards
-  // render inline, composing with the surrounding question-form handling) and
-  // then on `<system-reminder>` blocks (so those render as their own
+  // render inline, composing with the surrounding question-form handling).
+  // Use the shell's code-aware boundary so quoted card examples stay Markdown,
+  // including retired card types whose real payloads no longer render. Then split
+  // on `<system-reminder>` blocks (so those render as their own
   // collapsible chip instead of raw markup). Splitting od-cards BEFORE
   // system-reminders keeps a card's JSON body out of the reminder scanner.
   type Renderable =
@@ -3427,7 +3428,7 @@ function ProseBlock({
       return [{ key: `f-${idx}`, kind: "form", form: seg.form }];
     }
     if (seg.text.trim().length === 0) return [];
-    return splitOnOdCards(seg.text).flatMap((cardSeg, c): Renderable[] => {
+    return splitShellCards(seg.text, false).flatMap((cardSeg, c): Renderable[] => {
       if (cardSeg.kind === "card") {
         return [{ key: `c-${idx}-${c}`, kind: "od-card", card: cardSeg.card }];
       }

@@ -9,10 +9,7 @@ export interface SayBlockProps {
   text: string;
   /** 这一段是**这一刻还在往里写的那一段**吗 —— 语义与 `SayText.live` 相同。 */
   live?: boolean;
-  /**
-   * 卡片实例的身份前缀。`rule-proposal` 那一档拿它记「用户已经处理过这张卡」,
-   * 没有它两张同名的卡会共用一份状态。
-   */
+  /** Compatibility scope forwarded from existing shell callers; retired rules no longer use it. */
   instanceScope?: string;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
 }

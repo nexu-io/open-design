@@ -4570,24 +4570,10 @@ export interface Dict {
   'questions.submitting': string;
 
   // Inline <od-card> memory cards (display-only siblings of question-form)
-  'artifact.odCardTaskBriefChip': string;
   'artifact.odCardScorecardTitle': string;
   'artifact.odCardScorecardStatusPass': string;
   'artifact.odCardScorecardStatusPartial': string;
   'artifact.odCardScorecardStatusFail': string;
-  'artifact.odCardRuleKicker': string;
-  'artifact.odCardRuleNameLabel': string;
-  'artifact.odCardRuleDescriptionLabel': string;
-  'artifact.odCardRuleAssertionLabel': string;
-  'artifact.odCardRuleCheckLabel': string;
-  'artifact.odCardRuleRationaleLabel': string;
-  'artifact.odCardRuleKeep': string;
-  'artifact.odCardRuleEdit': string;
-  'artifact.odCardRuleDone': string;
-  'artifact.odCardRuleDiscard': string;
-  'artifact.odCardRuleSaving': string;
-  'artifact.odCardRuleSaved': string;
-  'artifact.odCardRuleError': string;
   'artifact.odCardBrandAssistDone': string;
   'artifact.odCardBrandAssistKicker': string;
   'artifact.odCardBrandAssistBody': string;

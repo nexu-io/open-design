@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { OdCard } from '@open-design/contracts';
 import { ExecutionShell } from '../../../src/components/chat/ExecutionShell';
@@ -11,9 +11,8 @@ import type { ChatMessage } from '../../../src/types';
 const TASK_BRIEF = { kind: 'task-brief', summary: 'Keep <od-demo>brand wording</od-demo>', fields: [] } satisfies OdCard;
 const MEMORY_APPLIED = { kind: 'memory-applied', summary: 'Applied palette', used: [{ type: 'rule', name: 'Palette' }] } satisfies OdCard;
 const VERIFY_SCORECARD = { kind: 'verify-scorecard', status: 'pass', summary: 'Checks passed', rows: [{ rule: 'Palette', status: 'pass' }] } satisfies OdCard;
-const RULE_PROPOSAL = { kind: 'rule-proposal', name: 'Palette', assertion: 'Use palette', check: 'Check colors' } satisfies OdCard;
 const BROWSER_ASSIST = { kind: 'brand-browser-assist', brandId: 'brand-1', url: 'https://brand.test/', reason: 'Verification' } satisfies OdCard;
-const CARDS = [TASK_BRIEF, MEMORY_APPLIED, VERIFY_SCORECARD, RULE_PROPOSAL, BROWSER_ASSIST];
+const CARDS = [MEMORY_APPLIED, VERIFY_SCORECARD, BROWSER_ASSIST];
 
 function markup(card: OdCard): string {
   return `<od-card type="${card.kind}">${JSON.stringify(card)}</od-card>`;
@@ -55,7 +54,6 @@ describe('execution shell card boundaries', () => {
     expect(container.querySelector(`[data-od-card="${card.kind}"]`)).not.toBeNull();
     expect(container.querySelector('strong')?.textContent).toBe('Before');
     expect(container.textContent).toContain('After');
-    if (card.kind === 'task-brief') expect(container.textContent).toContain(card.summary);
   });
 
   it.each(['fenced', 'inline', 'unclosed fence'])('preserves a card quoted as %s code', (style) => {
@@ -79,12 +77,12 @@ describe('execution shell card boundaries', () => {
   });
 
   it('reveals a streamed card only after it closes and preserves terminal malformed text', () => {
-    const raw = markup(TASK_BRIEF);
+    const raw = markup(MEMORY_APPLIED);
     const { container, rerender } = render(show([{ kind: 'text', text: `Before\n${raw.slice(0, -10)}` }]));
     expect(container.textContent).toContain('Before');
     expect(container.textContent).not.toContain('<od-card');
     rerender(show([{ kind: 'text', text: `Before\n${raw}\nAfter` }]));
-    expect(container.querySelector('[data-od-card="task-brief"]')).not.toBeNull();
+    expect(container.querySelector('[data-od-card="memory-applied"]')).not.toBeNull();
     expect(container.textContent).toContain('After');
     const malformed = '<od-card type="task-brief">not JSON';
     rerender(<I18nProvider initial="en"><ExecutionShell shell={{ ...shell([{ kind: 'text', text: malformed }]), status: 'done' }} deferCollapsedBodies={false} /></I18nProvider>);
@@ -94,7 +92,7 @@ describe('execution shell card boundaries', () => {
   it('holds live opener prefixes without hiding earlier prose or losing the completed card', () => {
     // Real ACP/SSE QA on 201ba003 exposed "<od-ca" in an expanded shell
     // after event 18, before the remainder of the same legitimate card arrived.
-    const raw = markup(TASK_BRIEF);
+    const raw = markup(MEMORY_APPLIED);
     const openerEnd = raw.indexOf('>');
     const { container, rerender } = render(show([{ kind: 'text', text: 'D2 SSE before.' }]));
     for (let length = '<od-ca'.length; length <= openerEnd; length += 1) {
@@ -105,8 +103,8 @@ describe('execution shell card boundaries', () => {
       expect(container.querySelector('[data-od-card]')).toBeNull();
     }
     rerender(show([{ kind: 'text', text: `D2 SSE before.\n${raw}\nD2 SSE after.` }]));
-    expect(container.querySelectorAll('[data-od-card="task-brief"]')).toHaveLength(1);
-    expect(container.textContent).toContain(TASK_BRIEF.summary);
+    expect(container.querySelectorAll('[data-od-card="memory-applied"]')).toHaveLength(1);
+    expect(container.textContent).toContain(MEMORY_APPLIED.summary);
     expect(container.textContent).toContain('D2 SSE before.');
     expect(container.textContent).toContain('D2 SSE after.');
   });
@@ -144,21 +142,26 @@ describe('execution shell card boundaries', () => {
     }
   });
 
-  it('keeps a discarded rule local to its todo across remounts', () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ entries: [] }))));
-    const raw = markup(RULE_PROPOSAL);
+  it('keeps memory disclosure local to each todo and preserves both cards on remount', () => {
+    const raw = markup(MEMORY_APPLIED);
     const items = [todo('First step', raw), todo('Second step', raw)];
     const first = render(show(items));
-    const cards = first.container.querySelectorAll<HTMLElement>('[data-od-card="rule-proposal"]');
+    const cards = first.container.querySelectorAll<HTMLDetailsElement>('[data-od-card="memory-applied"]');
     expect(cards).toHaveLength(2);
-    fireEvent.click(within(cards[0]!).getByRole('button', { name: 'View details' }));
-    fireEvent.click(within(cards[0]!).getByRole('button', { name: 'Discard' }));
+    const [firstCard, secondCard] = cards;
+    if (!firstCard || !secondCard) throw new Error('Missing independent todo cards');
+    const summary = firstCard.querySelector('summary');
+    if (!summary) throw new Error('Missing memory disclosure control');
+    fireEvent.click(summary);
+    expect(firstCard.open).toBe(true);
+    expect(secondCard.open).toBe(false);
     first.unmount();
-    render(show(items));
-    expect(screen.getAllByRole('button', { name: 'Keep' })).toHaveLength(1);
+    const remount = render(show(items));
+    expect(remount.container.querySelectorAll('[data-od-card="memory-applied"]')).toHaveLength(2);
+    expect(remount.container.querySelectorAll('[data-od-card="memory-applied"][open]')).toHaveLength(0);
     cleanup();
-    render(show(items, 'another-conversation'));
-    expect(screen.getAllByRole('button', { name: 'Keep' })).toHaveLength(2);
+    const other = render(show(items, 'another-conversation'));
+    expect(other.container.querySelectorAll('[data-od-card="memory-applied"]')).toHaveLength(2);
   });
 
   it('wires browser assistance from AssistantMessage through a todo', async () => {

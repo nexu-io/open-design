@@ -101,14 +101,10 @@ export interface ExecutionShellProps {
    */
   concluded?: boolean;
   /**
-   * 壳内那些散文里可能夹着 `<od-card>` —— D43 把 `<od-done>` 之前的正文全收进壳,
-   * 而 task-brief 这一档卡按设计就是开工前发的(判据与理由在
-   * `SayBlock.tsx`)。这两样是卡片自己要的:
-   *
-   *  · `odCardScope` —— 卡片实例的身份前缀,`rule-proposal` 拿它记「已处理」;
-   *  · `onBrandBrowserAssistConfirm` —— `brand-browser-assist` 那一档的确认回调。
-   *
-   * 都是可选的:静态陈列页与老测试不传,卡片照画,只是少了这两样各自的能力。
+   * D43 routes pre-done prose, including cards, through the execution shell.
+   * Keep the existing optional instance scope for caller compatibility;
+   * retired rule proposals no longer consume it. Browser assistance still
+   * needs its confirmation callback in both shell and conclusion lanes.
    */
   odCardScope?: string;
   onBrandBrowserAssistConfirm?: BrandBrowserAssistConfirm;
