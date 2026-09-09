@@ -3589,6 +3589,33 @@ test.each(['pi', 'codex', 'claude', 'dsh', 'none'] as const)('AMR %s preserves d
   expect(evidence.at(-1)).toMatchObject({ modelId: 'gpt-6-astra-high', modelResponses });
 });
 
+test.each([false, true])('AMR Pi cancelled partial evidence preserves usage and validates catalog identity (mismatch=%s)', (mismatch) => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; data: unknown }> = [];
+  const evidence: unknown[] = [];
+  const session = attachAcpSession({ child: child as never, prompt: 'Build a page', model: 'gpt-6-astra-high', expectedAmrRuntime: 'pi',
+    send: (event, data) => events.push({ event, data }), onAmrRuntimeEvidence: (value) => evidence.push(value) });
+  const sessionId = `pi-${'a'.repeat(32)}`;
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId, durableSessionId: sessionId, runtime: 'pi', runtimeVersion: '0.85.1' });
+  writeAcpResult(child, 3, { modelId: 'amr/gpt-6-astra-high' });
+  // One completed HTTP response followed by an interrupted request. The selected
+  // catalog model is unchanged; the unfinished request has no response evidence.
+  const modelResponses = [{ requestedModelId: mismatch ? 'wrong-model' : 'gpt-6-astra-high', responseId: 'completed-response', responseModelId: 'provider/astra' }];
+  writeAcpResult(child, 4, { runtime: 'pi', runtimeVersion: '0.85.1', modelId: 'amr/gpt-6-astra-high',
+    requestedModelId: 'amr/gpt-6-astra-high', stopReason: 'cancelled', usageComplete: false,
+    usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 }, modelResponses });
+  expect(session.completedSuccessfully()).toBe(!mismatch); // ACP consumption, not a successful artifact claim.
+  expect(scanRunEventsForUsageAnalytics(events, 'gpt-6-astra-high', 0)).toMatchObject({
+    input_tokens_provider: 20, output_tokens: 5, total_tokens: 25,
+  });
+  if (mismatch) expect(JSON.stringify(events)).toContain('amr_runtime_model_mismatch');
+  else {
+    expect(JSON.stringify(events)).not.toContain('amr_runtime_model_mismatch');
+    expect(evidence.at(-1)).toMatchObject({ modelResponses });
+  }
+});
+
 test.each(['codex', 'none'] as const)('AMR %s preserves provider cache and reasoning subsets through ACP analytics', (runtime) => {
   const child = new FakeAcpChild();
   const events: Array<{ event: string; data: unknown }> = [];
