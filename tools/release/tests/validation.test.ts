@@ -1,6 +1,8 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
 import { zipFixture } from "./archive-fixture.ts";
@@ -63,10 +65,13 @@ it("binds a current subject without rewriting original execution provenance", as
   }
 });
 
-it("materializes declared test batches and emits independently retainable evidence", async () => {
+it("materializes declared test batches through the real CLI and emits independently retainable evidence", async () => {
   const input = await fixture(), sources = join(input.root, "sources.json"), output = join(input.root, "output");
   await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target }] }));
-  const result = await materializeReleaseValidations({ sources, output, root: input.root, sourceCommit: input.sourceCommit });
+  const report = join(input.root, "materialized.json");
+  await promisify(execFile)(process.execPath, [resolve("bin/tools-release.mjs"), "validation", "materialize",
+    "--sources", sources, "--output", output, "--root", input.root, "--source-commit", input.sourceCommit, "--receipt", report]);
+  const result = JSON.parse(await readFile(report, "utf8"));
   expect(result.bindings).toHaveLength(1);
   expect(JSON.parse(await readFile(join(output, "contract.json"), "utf8"))).toMatchObject({ operation: "exact.validation.binding" });
   expect(JSON.parse(await readFile(join(output, "products/contract/result.json"), "utf8")))

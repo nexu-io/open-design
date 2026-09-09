@@ -29,10 +29,11 @@ function boolean(options: Options, key: string): boolean {
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
   registerValidationCommands(cli);
-  cli.command("artifact acquire", "Acquire a checksum-bound opaque transport without repacking it")
+  cli.command("artifact <operation>", "Acquire a checksum-bound opaque transport without repacking it")
     .option("--descriptor <file>", "Immutable URL and SHA-256 descriptor")
     .option("--output <directory>", "Fresh transport directory")
-    .action(async (options: Options) => {
+    .action(async (operation: string, options: Options) => {
+      if (operation !== "acquire") throw new Error("unsupported artifact operation");
       await emit(options, await acquireArtifactProduct({ descriptor: required(options, "descriptor"), output: required(options, "output") }));
     });
   cli.command("installation <operation>", "Exercise a published installation and collect its bound evidence")

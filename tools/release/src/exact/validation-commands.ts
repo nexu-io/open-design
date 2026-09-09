@@ -3,13 +3,14 @@ import { required, emit, type Options } from "./command-input.ts";
 import { materializeReleaseValidations, validateReleaseRecipe } from "./validation.ts";
 
 export function registerValidationCommands(cli: CAC): void {
-  cli.command("validation materialize", "Execute or acquire selected validation evidence and bind the current subject")
+  cli.command("validation <operation>", "Materialize selected validation evidence and bind the current subject")
     .option("--sources <file>", "Selected validation inputs")
     .option("--root <directory>", "Workspace root")
     .option("--source-commit <sha>", "Current validation subject")
     .option("--output <directory>", "Evidence and binding output")
     .option("--receipt <file>", "Materialization receipt")
-    .action(async (options: Options) => {
+    .action(async (operation: string, options: Options) => {
+      if (operation !== "materialize") throw new Error("unsupported validation operation");
       await emit(options, await materializeReleaseValidations({ sources: required(options, "sources"),
         root: required(options, "root"), sourceCommit: required(options, "sourceCommit"), output: required(options, "output") }));
     });

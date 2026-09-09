@@ -404,6 +404,13 @@ describe("exact Electron release topology", () => {
       expect(workflow).toContain(`--config ${configPath}`);
       expect(workflow).toContain(`--workflow ${name}`);
       expect(workflow).toContain(`--id ${name}-results`);
+      expect(workflow).toContain("node_version: ${{ steps.toolchain.outputs.node_version }}");
+      for (const job of ["platform", "capsule"]) {
+        const section = workflow.split(`\n  ${job}:`)[1]!.split(/\n  [a-z_]+:\n/u)[0]!;
+        expect(section).toContain("node-version: ${{ needs.plan.outputs.node_version }}");
+        expect(section).not.toContain("node-version-file:");
+        expect(section.indexOf("actions/setup-node@")).toBeLessThan(section.indexOf("actions/checkout@"));
+      }
       expect(Object.keys(config.workflows)).toEqual([name]);
       expect(config.suites["convergence-control"]).toContain(configPath);
       for (const other of ["exact", "prerelease", "stable"].filter(value => value !== lane)) {

@@ -36,6 +36,7 @@ jobs:
     outputs:
       run: ${{ steps.convergence.outputs.run }}
       batch_run: ${{ steps.convergence.outputs.batch_run }}
+      node_version: ${{ steps.toolchain.outputs.node_version }}
       shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
       electron_matrix: ${{ steps.topology.outputs.electron_matrix }}
       terminal_matrix: ${{ steps.topology.outputs.terminal_matrix }}
@@ -68,6 +69,10 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           test "$(git ls-remote --refs origin "$SOURCE_REF" | cut -f1)" = "$SOURCE_SHA"
+
+      - name: Project pinned toolchain
+        id: toolchain
+        run: echo "node_version=$(cat .node-version)" >> "$GITHUB_OUTPUT"
 
       - name: Project workflow execution declarations
         id: topology
@@ -599,7 +604,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: ${{ needs.plan.outputs.node_version }}
 
       - name: Restore converged platform
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -700,7 +705,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version-file: .node-version
+          node-version: ${{ needs.plan.outputs.node_version }}
 
       - name: Restore converged capsule
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
