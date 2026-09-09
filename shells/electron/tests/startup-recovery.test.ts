@@ -23,7 +23,7 @@ vi.mock("@/adapters/standalone/release-feed.js", () => ({ ElectronReleaseExactFe
 vi.mock("@/adapters/standalone/shell-updater-candidate.js", () => ({ ElectronStandaloneShellCandidateLedger: class { read = state.candidate; } }));
 vi.mock("@/adapters/standalone/shell-updater-ledger.js", () => ({ ElectronStandaloneShellUpdaterLedger: class { read = state.updater; update = state.updateLedger; } }));
 vi.mock("@/adapters/standalone/installation.js", () => ({ loadElectronInstalledCapsuleSeed: state.seed,
-  loadElectronStandaloneInstallation: async () => ({ envelope: { metadata: { installed: true } }, candidates: {},
+  loadElectronStandaloneInstallation: async () => ({ envelope: { metadata: { installed: true } }, candidates: {}, trustedKeys: {},
     declaration: { releaseVersion: "0.2.0-betahyx.1", update: { channelHeadUrl: "https://invalid.test/betahyx/head.json" } } }),
   resolveElectronStandaloneTarget: () => "darwin-arm64" }));
 vi.mock("@open-design/standalone", async original => ({
@@ -70,7 +70,7 @@ const selected = { capsuleManifestSha256: sha256Hex(canonicalJson(envelope)), cl
 
 describe("stopped Electron exact recovery composition", () => {
   beforeEach(() => {
-    vi.clearAllMocks(); state.events = []; state.survivors = []; state.guard = false;
+    vi.resetAllMocks(); state.events = []; state.survivors = []; state.guard = false;
     state.platform.mockResolvedValue({});
     state.blob.mockResolvedValue({ path: "/cached-capsule.zip" });
     state.lifecycle.mockResolvedValue(null);
@@ -139,6 +139,44 @@ describe("stopped Electron exact recovery composition", () => {
     expect(state.events).toEqual([]);
   });
 
+  it.each(["current", "pending"] as const)("recovers retained %s without reading the historical installation archive", async selection => {
+    state.readCapsules.mockResolvedValue({ revision: 3, current: null, pending: null,
+      [selection]: { envelope, root: "/retained-exact", closureGenerationId: selected.closureGenerationId } });
+    state.seed.mockRejectedValueOnce(new Error("historical seed missing"));
+    await expect(recoverElectronProductStartup(request)).resolves.toMatchObject({ target: selected });
+    expect(state.seed).not.toHaveBeenCalled();
+    expect(state.armCapsule).toHaveBeenCalledWith(expect.objectContaining({ capsule: expect.objectContaining({ root: "/retained-exact" }) }));
+  });
+
+  it("repairs a retained initial Capsule from its bound seed only after both exact caches are unavailable", async () => {
+    state.readCapsules.mockResolvedValue({ revision: 3, current: { envelope, root: "/missing-initial" }, pending: null });
+    state.inspect.mockRejectedValueOnce(new Error("initial tree missing"));
+    state.blob.mockRejectedValueOnce(new Error("promoted cache missing")).mockRejectedValueOnce(new Error("initial cache missing"));
+    await expect(recoverElectronProductStartup(request)).resolves.toMatchObject({ target: selected });
+    expect(state.blob).toHaveBeenCalledTimes(2);
+    expect(state.seed).toHaveBeenCalledTimes(1);
+    expect(state.candidate).not.toHaveBeenCalled();
+    expect(state.events).toEqual(["blockade", "materialize", "rearm", "capsule-rearm", "unblock"]);
+  });
+
+  it("reuses the original local Capsule cache without requiring its old installed archive", async () => {
+    state.readCapsules.mockResolvedValue({ revision: 3, current: { envelope, root: "/missing-initial" }, pending: null });
+    state.inspect.mockRejectedValueOnce(new Error("initial tree missing"));
+    state.blob.mockRejectedValueOnce(new Error("promoted cache missing"));
+    state.seed.mockRejectedValueOnce(new Error("historical seed missing"));
+    await expect(recoverElectronProductStartup(request)).resolves.toMatchObject({ target: selected });
+    expect(state.blob).toHaveBeenCalledTimes(2);
+    expect(state.seed).not.toHaveBeenCalled();
+    expect(state.candidate).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back to the seed when retained selection state cannot be read", async () => {
+    state.readCapsules.mockRejectedValueOnce(new Error("selection corrupt"));
+    await expect(recoverElectronProductStartup(request)).rejects.toThrow("selection corrupt");
+    expect(state.seed).not.toHaveBeenCalled();
+    expect(state.events).toEqual([]);
+  });
+
   it("authenticates the retained Capsule before repairing any archive or Closure state", async () => {
     state.verifyCapsule.mockImplementationOnce(() => { throw new Error("untrusted selected Capsule"); });
     await expect(recoverElectronProductStartup(request)).rejects.toThrow("untrusted selected Capsule");
@@ -151,7 +189,7 @@ describe("stopped Electron exact recovery composition", () => {
     state.readCapsules.mockResolvedValue({ revision: 3, current: null,
       pending: { envelope: pendingEnvelope, root: "/missing-pending", closureGenerationId: selected.closureGenerationId } });
     state.inspect.mockRejectedValueOnce(new Error("selected tree missing"));
-    state.blob.mockRejectedValueOnce(new Error("local archive missing"));
+    state.blob.mockRejectedValueOnce(new Error("local archive missing")).mockRejectedValueOnce(new Error("initial archive missing"));
     state.candidate.mockResolvedValue(mode === "missing" ? null : { candidateId: "exact-release" });
     state.fetchCapsule.mockResolvedValue(mode === "different" ? envelope : pendingEnvelope);
     state.prepareCapsule.mockResolvedValue({ root: "/reacquired-exact" });
