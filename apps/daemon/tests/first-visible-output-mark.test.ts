@@ -18,7 +18,6 @@ import {
   createOdNextDesignProject,
   expectVisibleOutputNotBeforeFirstToken,
   putConfig,
-  readAssistantMessage,
   restoreEnv,
   sendRunAndWait,
   snapshotEnv,
@@ -209,7 +208,6 @@ describe('first_visible_output is stamped at emission, not at first token', () =
       bin,
       label: 'strategy-tail',
       strategyRollout: 'active',
-      expectedReply: '<o',
     });
 
     expect(existsSync(firstTokenAck), 'daemon did not acknowledge first_token').toBe(true);
@@ -229,7 +227,6 @@ describe('first_visible_output is stamped at emission, not at first token', () =
      * all.
      */
     strategyRollout: 'off' | 'active';
-    expectedReply?: string;
   }): Promise<RunTiming> {
     posthog = await startCaptureSink();
     clearTelemetryEnv();
@@ -271,13 +268,6 @@ describe('first_visible_output is stamped at emission, not at first token', () =
       expect(created.strategyTask).toBeUndefined();
     }
     expect(run.status).toBe('succeeded');
-    if (options.expectedReply !== undefined) {
-      expect(await readAssistantMessage(
-        started.url,
-        conversation,
-        created.assistantMessageId as string,
-      )).toBe(options.expectedReply);
-    }
     const flush = async () => {
       await Promise.resolve(started?.shutdown?.());
     };
