@@ -17,7 +17,10 @@ import type {
 } from '@open-design/contracts';
 import {
   markVelaAuthorizationExpired,
+  markVelaAuthorizationRecovered,
   readVelaControlApiContext,
+  readVelaControlApiContextForAuthorityProbe,
+  velaStatusRevokesCredential,
   type VelaControlApiContext,
   type VelaUser,
 } from '../integrations/vela.js';
@@ -859,7 +862,11 @@ export async function fetchVelaWorkspaceDirectory(
   options: VelaWorkspaceContextOptions = {},
 ): Promise<WorkspaceDirectoryFetchResult> {
   const fetchImpl = options.fetch ?? fetch;
-  const readSession = options.readSession ?? readVelaControlApiContext;
+  // This probe is the daemon's credential-authority oracle: it is what marks a
+  // credential expired, and therefore the only thing that can ever unmark it.
+  // It reads the unfiltered session so a previously rejected key gets re-tested
+  // instead of being pinned forever behind its own rejection.
+  const readSession = options.readSession ?? readVelaControlApiContextForAuthorityProbe;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const configuredEnv = typeof options.configuredEnv === 'function'
     ? options.configuredEnv()
@@ -878,7 +885,7 @@ export async function fetchVelaWorkspaceDirectory(
       signal: controller.signal,
     });
     if (!response.ok) {
-      if (response.status === 401 || response.status === 403) {
+      if (velaStatusRevokesCredential(response.status)) {
         if (!options.readSession) {
           markVelaAuthorizationExpired(process.env, configuredEnv);
         }
@@ -896,7 +903,13 @@ export async function fetchVelaWorkspaceDirectory(
         status: response.status,
       };
     }
-    return { ok: true, items: mapVelaWorkspaceDirectory(await response.json()) };
+    const items = mapVelaWorkspaceDirectory(await response.json());
+    // Upstream accepted this credential, which retires any earlier expiry mark
+    // for it. Without this the reauth flag has no exit other than a logout.
+    if (!options.readSession) {
+      markVelaAuthorizationRecovered(process.env, configuredEnv);
+    }
+    return { ok: true, items };
   } catch {
     return { ok: false, items: [], reason: 'network' };
   } finally {

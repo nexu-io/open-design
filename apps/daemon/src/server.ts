@@ -1034,7 +1034,10 @@ import {
   createRememberedTeamResourceScopes,
   type RememberedTeamResourceScopeLease,
 } from './collab/remembered-team-resource-scopes.js';
-import { readVelaControlApiContext } from './integrations/vela.js';
+import {
+  readVelaControlApiContext,
+  readVelaControlApiContextForAuthorityProbe,
+} from './integrations/vela.js';
 import {
   fetchBillingCheckoutUrl,
   fetchVelaBillingCatalog,
@@ -3741,8 +3744,12 @@ export async function startServer({
       if (result.ok) workspaceTypes.learn(result.items);
       return result;
     },
+    // Partition on the session `fetchVelaWorkspaceDirectory` actually uses. It
+    // re-tests a credential the daemon previously marked expired, so reading a
+    // filtered session here would file that credential's result under the
+    // signed-out partition and let a genuinely signed-out read hit it.
     identityKey: () => velaWorkspaceDirectoryIdentity(
-      readVelaControlApiContext,
+      readVelaControlApiContextForAuthorityProbe,
       configuredAmrEnv(),
     ),
     onDecision: (input) => recordWorkspaceAuthorityDecision({

@@ -6,6 +6,7 @@ import {
   markVelaAuthorizationExpired,
   readVelaControlApiContext,
   readVelaLoginStatus,
+  velaStatusRevokesCredential,
   type VelaUser,
 } from './vela.js';
 
@@ -141,7 +142,11 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
         },
         signal: controller.signal,
       });
-      if (response.status === 401 || response.status === 403) {
+      // Only a credential-revoking status may expire the session here. The
+      // wallet poll runs on its own timer, so letting a transient upstream
+      // rejection through would re-pin the daemon into `reauth_required`
+      // even after the workspace-directory probe stopped doing so.
+      if (velaStatusRevokesCredential(response.status)) {
         cache.delete(key);
         markVelaAuthorizationExpired(input.env, input.configuredEnv);
         return unavailableSnapshot({

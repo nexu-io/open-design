@@ -507,6 +507,32 @@ function writeWorkspaceSelection(selection: WorkspaceSelection | null): void {
   }
 }
 
+/**
+ * Drop the workspace identity the daemon just refused, so the next read has to
+ * resolve one from the account directory instead of asserting it again.
+ *
+ * `403 WORKSPACE_ACCESS_DENIED` is an answer about the WORKSPACE, not about the
+ * credential: the daemon looked the claimed workspace/member pair up in the
+ * signed-in account's own membership directory and did not find it. The way a
+ * tab gets there is by still holding ids from a DIFFERENT identity — the
+ * credential and the claimed workspace are not switched atomically, so an
+ * account switch or an `OPEN_DESIGN_AMR_PROFILE` change between environments
+ * leaves the two describing different accounts (upstream, vela answers the
+ * same mismatch with `403 missing_principal`).
+ *
+ * Nothing about that requires a new sign-in, and the ambient revalidation that
+ * hits it is exactly the one that skips the directory (`exactScopeOnly`), so
+ * without this the same rejected claim is re-asserted on every poll forever.
+ * The directory read is healthy throughout and already knows the right answer;
+ * forgetting the claim is what lets the next read reach it.
+ */
+function forgetRejectedWorkspaceClaim(): void {
+  writeWorkspaceSelection(null);
+  // The refused context must not keep authorizing workspace-scoped resource
+  // reads while recovery runs.
+  cachedWorkspaceContext = null;
+}
+
 function selectableWorkspaceItems(items: WorkspaceDirectoryItem[]): WorkspaceDirectoryItem[] {
   return items.filter(
     (item) => item.memberStatus === 'active' && item.lifecycleState !== 'deleted',
@@ -855,7 +881,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // state for them.
       const status = (error as { status?: unknown })?.status;
       const unsupported = status === 404;
-      const reauthRequired = status === 401 || status === 403;
+      const reauthRequired = status === 401;
+      const workspaceClaimRejected = status === 403;
+      if (workspaceClaimRejected) forgetRejectedWorkspaceClaim();
       setState({
         context: cachedWorkspaceContext,
         resourceReadIdentity:
@@ -876,7 +904,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // An `unsupported` daemon has no workspace endpoint — retrying is
       // pointless. A transient `unavailable` outage arms the shared jittered
       // backoff so the shell recovers on its own without waiting for the 30s
-      // poll or a focus event.
+      // poll or a focus event. A rejected workspace claim retries too: the
+      // claim it was rejected for has just been forgotten, so the next read
+      // asks the directory instead of repeating it.
       if (!unsupported && !reauthRequired) scheduleWorkspaceContextRetry(requestGeneration);
     }
   }, []);

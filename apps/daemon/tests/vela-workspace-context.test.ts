@@ -198,20 +198,34 @@ describe('createCachedWorkspaceDirectoryFetcher', () => {
     ).resolves.toEqual({ ok: true, items: [] });
   });
 
-  it.each([401, 403])(
-    'preserves an authoritative %s as an expired authorization result',
-    async (status) => {
-      await expect(fetchVelaWorkspaceDirectory({
-        readSession: () => SESSION,
-        fetch: async () => jsonResponse(status, { error: 'unauthenticated' }),
-      })).resolves.toEqual({
-        ok: false,
-        items: [],
-        reason: 'unauthorized',
-        status,
-      });
-    },
-  );
+  it('preserves an authoritative 401 as an expired authorization result', async () => {
+    await expect(fetchVelaWorkspaceDirectory({
+      readSession: () => SESSION,
+      fetch: async () => jsonResponse(401, { error: 'untrusted_caller' }),
+    })).resolves.toEqual({
+      ok: false,
+      items: [],
+      reason: 'unauthorized',
+      status: 401,
+    });
+  });
+
+  // A 403 used to be folded in with the 401 above. B answers `403
+  // missing_principal` from a bare catch around principal resolution, so a
+  // database blip or a slow entitlement lookup arrives with the caller's
+  // credential still perfectly valid — see
+  // `tests/collab/vela-authorization-expiry-classification.test.ts`.
+  it('treats an authoritative 403 as a retryable upstream failure', async () => {
+    await expect(fetchVelaWorkspaceDirectory({
+      readSession: () => SESSION,
+      fetch: async () => jsonResponse(403, { error: 'missing_principal' }),
+    })).resolves.toEqual({
+      ok: false,
+      items: [],
+      reason: 'upstream',
+      status: 403,
+    });
+  });
 
   it('marks the Settings-backed credential revision when the directory rejects its file control key', async () => {
     const amrHome = mkdtempSync(join(tmpdir(), 'od-vela-directory-auth-'));
