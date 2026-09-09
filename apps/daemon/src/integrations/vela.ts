@@ -718,6 +718,33 @@ function velaCredentialRevisionDigest(revision: VelaCredentialRevision): string 
     .slice(0, 20);
 }
 
+/**
+ * Whether an upstream HTTP status is PROOF that the local credential itself is
+ * no longer valid — the only condition under which the daemon may expire it.
+ *
+ * Marking a credential expired is close to irreversible: it pins
+ * `readVelaLoginStatus` at `reauth_required` for as long as that credential is
+ * on disk, and the web shell answers that by replacing the current route with
+ * onboarding. Only an answer that is about the CREDENTIAL earns that.
+ *
+ *  • 401 qualifies. Vela replies `untrusted_caller` when the control key fails
+ *    verification or the profile behind it no longer exists. Nothing but a
+ *    fresh sign-in recovers from it.
+ *  • 403 does NOT qualify. Vela's `getCurrentWorkspaceContext` wraps principal
+ *    resolution in a bare catch, so anything that stops a principal resolving
+ *    surfaces as `403 missing_principal` with the caller's key untouched. The
+ *    case observed in the field is a workspace id and a control key that
+ *    describe DIFFERENT environments: `findWorkspaceAndMember` finds no row,
+ *    raises `workspace_member_required`, and the catch reports 403. Probing
+ *    production confirms the symmetry — prod key + test workspace and test key
+ *    + prod workspace both answer 403, while a nonsense key answers 401 — so
+ *    403 says nothing about the key. Callers must treat it as a retryable
+ *    authority outage and fix the workspace id, not the credential.
+ */
+export function velaStatusRevokesCredential(status: number): boolean {
+  return status === 401;
+}
+
 /** Mark only the currently-active credential revision as rejected upstream. */
 export function markVelaAuthorizationExpired(
   env: NodeJS.ProcessEnv = process.env,
@@ -727,6 +754,27 @@ export function markVelaAuthorizationExpired(
   expiredVelaCredentialRevisions.add(revision);
   const control = readRawVelaControlApiContext(env, configuredEnv);
   if (control) expiredVelaControlKeys.add(velaControlKeyDigest(control.controlKey));
+  return revision;
+}
+
+/**
+ * Record that this credential was ACCEPTED upstream, undoing an earlier
+ * expiry mark for the same revision.
+ *
+ * Without this the expired sets are write-only for the daemon's whole life —
+ * `clearVelaAuthorizationState` runs on logout and nowhere else — so one
+ * rejection outlives the condition that produced it and the user is asked to
+ * sign in again even though their credential works. A 2xx answer to an
+ * authenticated call is the direct evidence that ends that state.
+ */
+export function markVelaAuthorizationRecovered(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): string {
+  const revision = velaCredentialRevisionDigest(readVelaCredentialRevision(env, configuredEnv));
+  expiredVelaCredentialRevisions.delete(revision);
+  const control = readRawVelaControlApiContext(env, configuredEnv);
+  if (control) expiredVelaControlKeys.delete(velaControlKeyDigest(control.controlKey));
   return revision;
 }
 
@@ -750,6 +798,26 @@ export function readVelaControlApiContext(
     && expiredVelaControlKeys.has(velaControlKeyDigest(context.controlKey))
   ) return null;
   return context;
+}
+
+/**
+ * Session for the one caller whose job is to RE-TEST a rejected credential.
+ *
+ * `readVelaControlApiContext` hides an expired control key so ordinary
+ * consumers stop using it. Applied to the workspace-directory probe that same
+ * filter is self-sealing: the probe is the only thing that can observe the
+ * credential being accepted again, so hiding the key from it guarantees the
+ * expiry mark is never revisited. This reader hands the probe the raw session
+ * back; every other consumer keeps the filtered view, so a genuinely revoked
+ * credential still reads as unusable everywhere else and simply gets marked
+ * expired again on the probe's next answer.
+ */
+export function readVelaControlApiContextForAuthorityProbe(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaControlApiContext | null {
+  return readVelaControlApiContext(env, configuredEnv)
+    ?? readRawVelaControlApiContext(env, configuredEnv);
 }
 
 function readRawVelaControlApiContext(
