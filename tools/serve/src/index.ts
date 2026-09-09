@@ -62,7 +62,7 @@ async function standaloneResources(options: CliOptions) {
     operation?: unknown;
     resources?: unknown;
   };
-  if (receipt.schemaVersion !== 1 || !["closure.resources.build", "closure.resources.development"].includes(String(receipt.operation)) || !Array.isArray(receipt.resources)) {
+  if (receipt.schemaVersion !== 1 || !["closure.resources.build", "closure.runtime-resources.build", "closure.resources.development"].includes(String(receipt.operation)) || !Array.isArray(receipt.resources)) {
     throw new Error("--resource-receipt is not a Closure resource receipt");
   }
   const serialized = receipt.resources.map((resource) => {

@@ -53,13 +53,16 @@ export async function buildElectronDistributionStages(input: Readonly<{
   targets: readonly string[]; config: Configuration;
 }>) {
   const platform = input.platform === "mac" ? Platform.MAC : Platform.WINDOWS;
+  // electron-builder mutates declarative file sets while normalizing them.
+  // Each stage must start from the original recipe, not the previous mutation.
+  const assemblyConfig = structuredClone(input.config), wrapperConfig = structuredClone(input.config);
   await electronBuild({ projectDir: input.projectDir,
-    targets: platform.createTarget(["dir"], input.arch), config: input.config });
+    targets: platform.createTarget(["dir"], input.arch), config: assemblyConfig });
   await access(input.appPath);
   return electronBuild({ projectDir: input.projectDir,
     prepackaged: input.platform === "mac" ? input.appPath : dirname(input.appPath),
     targets: platform.createTarget(input.targets.filter(target => target !== "dir"), input.arch),
-    config: input.config });
+    config: wrapperConfig });
 }
 
 export async function buildElectronDistribution(input: BuildElectronDistributionInput): Promise<ElectronDistributionReceipt> {

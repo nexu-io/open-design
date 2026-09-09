@@ -17,16 +17,20 @@ it.each(["mac", "win"] as const)("assembles before wrapping the untouched %s app
   vi.mocked(build).mockImplementationOnce(async options => {
     expect(options?.prepackaged).toBeUndefined();
     expect([...options!.targets!.values()].flatMap(value => [...value.values()].flat())).toEqual(["dir"]);
+    // electron-builder normalizes file sets in place during the first build.
+    (options!.config as { files: unknown[] }).files.push(null);
     await mkdir(dirname(appPath), { recursive: true });
     await writeFile(appPath, "signed application");
     return [];
   }).mockResolvedValueOnce([join(root, "installer")]);
-  const config = { appId: "test.app" };
+  const config = { appId: "test.app", files: ["main.cjs"] };
   expect(await buildElectronDistributionStages({ projectDir: root, appPath, platform, arch: Arch.arm64,
     config, targets: ["dir", platform === "mac" ? "dmg" : "nsis"] })).toEqual([join(root, "installer")]);
   expect(vi.mocked(build).mock.calls[1]![0]).toMatchObject({
     prepackaged: platform === "mac" ? appPath : dirname(appPath), config,
   });
+  expect(config.files).toEqual(["main.cjs"]);
+  expect(vi.mocked(build).mock.calls[1]![0]!.config).toMatchObject({ files: ["main.cjs"] });
 });
 
 it("does not wrap an application when native assembly fails", async () => {
