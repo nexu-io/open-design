@@ -53,5 +53,6 @@ export async function inspectElectronStartupThroughCdp(session: ElectronDiagnost
     await new Promise(done => setTimeout(done, 100));
   }
   return executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session,
-    timeoutMs: Math.max(1, deadline - Date.now()), close: true, invocations: [{ path: ["updater", "status"], args: [] }] });
+    timeoutMs: Math.max(1_000, Math.min(120_000, deadline - Date.now())), close: true,
+    invocations: [{ path: ["updater", "status"], args: [] }] });
 }

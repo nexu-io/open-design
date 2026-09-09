@@ -19,11 +19,11 @@ const events = (timestamp: string, attemptId: string) => ["capsule.startup.ready
 it("does not reuse old startup evidence when closing a restarted process", async () => {
   const f = await fixture(), now = Date.now();
   await writeFile(f.log, events(new Date(now - 1_000).toISOString(), "old"));
-  const pending = inspectElectronStartupThroughCdp(f.session, now, 2_000);
+  const pending = inspectElectronStartupThroughCdp(f.session, now);
   expect(cdp).not.toHaveBeenCalled();
   await appendFile(f.log, events(new Date(now).toISOString(), "new"));
   await pending;
-  expect(cdp).toHaveBeenCalledWith(expect.objectContaining({ close: true, session: f.session,
+  expect(cdp).toHaveBeenCalledWith(expect.objectContaining({ close: true, session: f.session, timeoutMs: 120_000,
     invocations: [{ path: ["updater", "status"], args: [] }] }));
 });
 it("reports failed startup without treating an open CDP port as readiness", async () => {
