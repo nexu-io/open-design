@@ -5350,7 +5350,6 @@ export const hu: Dict = {
   'labs.harnessTooltip': "Átvált arra az agent harness re, amelyet az Open Design tervezői munkához épített. Az elrendezés, a szerkezet és a kidolgozottság érezhetően jobb lesz.",
   'labs.harnessScope': "Jelenleg prototípusokat, diákat, marketinganyagokat és Hyperframes elemeket fed le. Néhány agent még nem támogatott.",
   'labs.envOverrideNotice': "Ezt a beállítást egy környezeti változó vezérli, ezért itt nem módosítható.",
-  'labs.latchedNotice': "Egy észlelt hiba után automatikusan szüneteltetve. A generálás a korábbi módszert használja.",
   'labs.loadFailedNotice': "Nem sikerült beolvasni ezt a beállítást. Ellenőrizd, hogy fut e a helyi daemon.",
   'labs.optOutPrompt': "Visszaálltunk a korábbi módszerre. Mi nem volt megfelelő?",
   'labs.optOutWorseOutput': "Rosszabb eredmény",

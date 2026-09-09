@@ -5350,7 +5350,6 @@ export const ja: Dict = {
   'labs.harnessTooltip': "Open Design がデザイン用途に構築した agent harness に切り替えます。レイアウト・構成・完成度が目に見えて良くなります。",
   'labs.harnessScope': "現在はプロトタイプ、スライド、マーケティング素材、Hyperframes に対応しています。一部の agent は未対応です。",
   'labs.envOverrideNotice': "環境変数が優先されているため、ここでは変更できません。",
-  'labs.latchedNotice': "問題を検知したため自動的に停止しました。生成は従来の方式を使用しています。",
   'labs.loadFailedNotice': "この設定を読み込めませんでした。ローカルの daemon が起動しているか確認してください。",
   'labs.optOutPrompt': "元の生成方式に戻しました。どこが合いませんでしたか？",
   'labs.optOutWorseOutput': "成果物の質が下がった",

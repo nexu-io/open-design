@@ -5350,7 +5350,6 @@ export const fr: Dict = {
   'labs.harnessTooltip': "Bascule vers le harness d agent conçu par Open Design pour le design. La mise en page, la structure et le niveau de finition des productions sont nettement meilleurs.",
   'labs.harnessScope': "Couvre aujourd hui les prototypes, les présentations, les supports marketing et les Hyperframes. Certains agents ne sont pas encore pris en charge.",
   'labs.envOverrideNotice': "Une variable d environnement contrôle ce réglage, il ne peut pas être modifié ici.",
-  'labs.latchedNotice': "Mis en pause automatiquement après la détection d un problème. La génération utilise la méthode habituelle.",
   'labs.loadFailedNotice': "Impossible de lire ce réglage. Vérifiez que le daemon local est en cours d exécution.",
   'labs.optOutPrompt': "Retour à la méthode précédente. Qu'est-ce qui n'allait pas ?",
   'labs.optOutWorseOutput': "Résultats moins bons",
