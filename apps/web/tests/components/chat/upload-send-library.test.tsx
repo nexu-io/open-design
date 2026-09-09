@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { ChatComposer } from '../../../src/components/ChatComposer';
-import { applyLibraryAsset, fetchLibraryAssets } from '../../../src/providers/registry';
+import { ANNOTATION_EVENT } from '../../../src/components/PreviewDrawOverlay';
+import {
+  applyLibraryAsset,
+  fetchLibraryAssets,
+  uploadProjectFiles,
+} from '../../../src/providers/registry';
 import { flushMounts, pressEnter } from '../../helpers/lexical-composer';
 
 vi.mock('../../../src/features/libraryUi', () => ({ LIBRARY_UI_VISIBLE: true }));
@@ -16,11 +21,13 @@ vi.mock('../../../src/providers/registry', async () => {
     ...actual,
     applyLibraryAsset: vi.fn(),
     fetchLibraryAssets: vi.fn(),
+    uploadProjectFiles: vi.fn(),
   };
 });
 
 const applyAsset = vi.mocked(applyLibraryAsset);
 const fetchAssets = vi.mocked(fetchLibraryAssets);
+const upload = vi.mocked(uploadProjectFiles);
 
 const asset = {
   id: 'asset-1',
@@ -96,5 +103,66 @@ describe('library attachment preparation ownership', () => {
     expect(onSend.mock.calls[0]?.[1]).toEqual([
       expect.objectContaining({ path: 'library/library-image.png', name: 'Library image' }),
     ]);
+  });
+
+  it('keeps a selected library asset available while a terminal annotation prepares', async () => {
+    const annotationPending = gate();
+    upload.mockImplementation(async (_id, files) => {
+      await annotationPending.promise;
+      const name = files[0]?.name ?? 'annotation.png';
+      return {
+        uploaded: [{ path: `uploads/${name}`, name, kind: 'image' as const, size: 1 }],
+        failed: [],
+      };
+    });
+    applyAsset.mockResolvedValue({ relPath: 'library/library-image.png' });
+    const annotationAck = vi.fn();
+    render(
+      <ChatComposer
+        projectId="p1"
+        projectFiles={[]}
+        streaming={false}
+        initialDraft="Keep the library selection"
+        onEnsureProject={async () => 'p1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    await flushMounts();
+
+    fireEvent.click(screen.getByTestId('chat-plus-trigger'));
+    fireEvent.click(await screen.findByTestId('composer-plus-library'));
+    fireEvent.click(await screen.findByTitle('Library image'));
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(ANNOTATION_EVENT, {
+        detail: {
+          file: new File(['x'], 'annotation.png', { type: 'image/png' }),
+          action: 'queue',
+          note: 'Queued annotation',
+          filePath: 'index.html',
+          ack: annotationAck,
+        },
+      }));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+
+    const confirm = screen.getByTestId('library-picker-confirm') as HTMLButtonElement;
+    expect(confirm.disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(applyAsset).not.toHaveBeenCalled();
+    expect(screen.getByTestId('library-picker')).toBeTruthy();
+
+    await act(async () => {
+      annotationPending.open();
+      await annotationPending.promise;
+    });
+    await waitFor(() => expect(annotationAck).toHaveBeenCalledWith({ ok: true }));
+    await waitFor(() => expect(confirm.disabled).toBe(false));
+    fireEvent.click(confirm);
+
+    await waitFor(() => expect(applyAsset).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTestId('library-picker')).toBeNull());
   });
 });
