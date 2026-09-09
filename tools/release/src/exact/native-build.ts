@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import type { ElectronExactSceneRequest } from "@open-design/shell-electron/build";
 import { acquireBuildArchive } from "@open-design/tools-pack/build";
-import { readOfficialNodeLock } from "@open-design/standalone/packages";
+import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 
@@ -110,6 +110,34 @@ export async function buildReleaseCapsule(input: BuildInput) {
   const { buildElectronCapsuleContent } = await electronBuilder(input.root);
   const result = await buildElectronCapsuleContent({ target: buildTarget, outputRoot: resolve(input.output) });
   const receipt = { schemaVersion: 1, operation: "electron.capsule.build", ...result };
+  await writeObject(input.receipt, receipt);
+  return receipt;
+}
+
+/** Independent Node/native production. No Capsule compilation, Closure inputs,
+ * channel policy or signing; release preparation authenticates this descriptor. */
+export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeArchive?: string }>) {
+  if (input.shell !== "electron") throw new Error("external platform build requires electron");
+  const buildTarget = target(input), output = resolve(input.output);
+  const { buildElectronPlatformResource, resolveElectronNodeArchive } = await electronBuilder(input.root);
+  await mkdir(dirname(output), { recursive: true });
+  // A cache hit is restored by the plan owner, never inferred from output presence.
+  await mkdir(output);
+  const archivePath = input.nodeArchive ? resolve(input.nodeArchive) : await (async () => {
+    const source = await resolveElectronNodeArchive(buildTarget);
+    return (await acquireBuildArchive({ cacheRoot: join(dirname(output), ".build-cache"),
+      fileName: source.archive, url: source.url, sha256: source.sha256 })).path;
+  })();
+  const outputArchivePath = join(output, "platform.zip");
+  const built = await buildElectronPlatformResource({ archivePath, target: buildTarget, outputArchivePath });
+  const resource = validateNodePlatformResource(built.resource);
+  const archive = await describeFile(outputArchivePath, "application/zip");
+  if (resource.target !== buildTarget || resource.blob.sources.length !== 0 || built.archivePath !== outputArchivePath
+    || archive.sha256 !== resource.blob.sha256 || archive.size !== resource.blob.size) throw new Error("platform build product binding mismatch");
+  const resourcePath = join(output, "platform-resource.json");
+  await writeObject(resourcePath, resource);
+  const receipt = { schemaVersion: 1, operation: "electron.platform.build", target: buildTarget,
+    archivePath: outputArchivePath, resourcePath, resource };
   await writeObject(input.receipt, receipt);
   return receipt;
 }

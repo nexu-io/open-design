@@ -71,6 +71,30 @@ it("rejects unknown commands, missing arguments and non-boolean switches", async
   await expect(f.invoke([...policyArgs, "--bypass"])).rejects.toThrow("Unknown option");
 });
 
+it("dispatches independent platform builds and rejects unrelated policy or Capsule arguments", async () => {
+  const f = await fixture(), pkg = join(f.root, "tools/release/node_modules/@open-design/shell-electron");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "@open-design/shell-electron", type: "module", exports: { "./build": "./build.mjs" } }));
+  await writeFile(join(pkg, "build.mjs"), `
+    import { writeFile } from 'node:fs/promises'; import { createHash } from 'node:crypto';
+    export async function buildElectronPlatformResource(request) {
+      await writeFile(request.outputArchivePath, 'platform');
+      return { archivePath: request.outputArchivePath, resource: { schemaVersion: 1, target: request.target,
+        blob: { sha256: createHash('sha256').update('platform').digest('hex'), size: 8, mediaType: 'application/zip', sources: [] },
+        treeSha256: 'b'.repeat(64), executables: ['bin/node'] } };
+    }
+  `);
+  const output = join(f.root, "platform"), receipt = join(f.root, "platform-receipt.json");
+  const args = ["build", "platform", "--root", f.root, "--shell", "electron", "--target", "darwin-arm64", "--output", output,
+    "--receipt", receipt, "--node-archive", join(f.root, "node.tar.gz")];
+  await f.invoke(args);
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toMatchObject({ operation: "electron.platform.build", target: "darwin-arm64",
+    resourcePath: join(output, "platform-resource.json"), archivePath: join(output, "platform.zip") });
+  for (const option of ["--channel", "--capsule-content", "--resources", "--plan"]) {
+    await expect(f.invoke([...args, option, "unrelated"])).rejects.toThrow(`platform build does not accept ${option}`);
+  }
+});
+
 it("builds one Closure data resource without requiring Shell, platform or release identity", async () => {
   const f = await fixture();
   const pkg = join(f.root, "tools/release/node_modules/@open-design/closure");

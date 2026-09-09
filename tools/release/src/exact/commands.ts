@@ -10,7 +10,7 @@ import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts"
 import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
-import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from "./native-build.ts";
+import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
 import { buildReleaseDataResource } from "./resource-build.ts";
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
@@ -77,7 +77,7 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("acceptance operation must be fetch or hot-update or collect");
     });
 
-  cli.command("build <operation>", "Build independent resources, Capsule content, native scenes or distributions")
+  cli.command("build <operation>", "Build independent resources, platform, Capsule content, native scenes or distributions")
     .option("--root <directory>", "Checked-out workspace with built inputs")
     .option("--shell <name>", "electron or terminal")
     .option("--target <target>", "Native platform architecture")
@@ -86,7 +86,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--resource-id <id>", "Closure data resource group (resource)")
     .option("--plan <file>", "Release plan (scene; optional identity binding for resource)")
     .option("--resources <file>", "Closure resource receipt (Electron scene)")
-    .option("--node-archive <file>", "Optional local locked official Node archive (scene)")
+    .option("--node-archive <file>", "Optional local locked official Node archive (scene/platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
     .option("--scene <directory>", "Verified scene (distribution)")
@@ -107,6 +107,12 @@ export function registerExactCommands(cli: CAC): void {
         return;
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
+      if (operation === "platform") {
+        const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "--"]);
+        for (const key of Object.keys(options)) if (!allowed.has(key)) {
+          throw new Error(`platform build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
+        }
+      }
       const common = { root: required(options, "root"), shell: required(options, "shell"), target: required(options, "target"), output: required(options, "output"), receipt: required(options, "receipt") };
       if (operation !== "scene" && (options.capsuleContent != null || options.capsuleArchive != null)) throw new Error("prebuilt Capsule inputs are only supported by build scene");
       if (operation === "scene") await buildReleaseScene({ ...common,
@@ -116,9 +122,11 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule(common);
+      else if (operation === "platform") await buildReleasePlatform({ ...common,
+        ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be resource or capsule or scene or distribution");
+      else throw new Error("build operation must be resource or platform or capsule or scene or distribution");
     });
 
   cli.command("topology", "Project release actions over declared runner and target data")

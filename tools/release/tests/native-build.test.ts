@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { buildReleaseCapsule, buildReleaseDistribution, buildReleaseScene } from "../src/exact/native-build.ts";
+import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "../src/exact/native-build.ts";
 import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
 
 const roots: string[] = [];
@@ -40,6 +40,48 @@ it("builds neutral Capsule content without Node archives, Closure inputs or vers
     request: { target: f.target, outputRoot: f.output } });
   await expect(buildReleaseCapsule({ ...f, shell: "terminal" })).rejects.toThrow("requires electron");
   await expect(buildReleaseCapsule({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
+});
+
+it("builds an independent platform through Shell with release-neutral verified metadata", async () => {
+  const f = await fixture();
+  const resource = { schemaVersion: 1, target: f.target,
+    blob: { sha256: digest("platform"), size: 8, mediaType: "application/zip", sources: [] },
+    treeSha256: "b".repeat(64), executables: ["bin/node"] };
+  await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"), `
+    import { writeFile } from 'node:fs/promises';
+    export async function buildElectronPlatformResource(request) {
+      if (request.archivePath !== ${JSON.stringify(f.nodeArchive)}) throw Error('archive escaped');
+      await writeFile(request.outputArchivePath, 'platform', { flag: 'wx' });
+      return { archivePath: request.outputArchivePath, resource: ${JSON.stringify(resource)} };
+    }
+  `);
+  const result = await buildReleasePlatform(f);
+  expect(result).toEqual({ schemaVersion: 1, operation: "electron.platform.build", target: f.target,
+    resource, resourcePath: join(f.output, "platform-resource.json"), archivePath: join(f.output, "platform.zip") });
+  expect(JSON.parse(await readFile(result.resourcePath, "utf8"))).toEqual(resource);
+  expect(JSON.parse(await readFile(f.receipt, "utf8"))).toEqual(result);
+  await expect(buildReleasePlatform(f)).rejects.toThrow("EEXIST");
+  expect(await readFile(result.archivePath, "utf8")).toBe("platform");
+  await expect(buildReleasePlatform({ ...f, shell: "terminal" })).rejects.toThrow("requires electron");
+  await expect(buildReleasePlatform({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
+});
+
+it.each(["digest", "target", "source"])("rejects unbound platform output before writing release-neutral metadata (%s)", async kind => {
+  const f = await fixture();
+  const resource = { schemaVersion: 1, target: kind === "target" ? "darwin-x64" : f.target,
+    blob: { sha256: kind === "digest" ? "a".repeat(64) : digest("platform"), size: 8, mediaType: "application/zip",
+      sources: kind === "source" ? [{ kind: "remote", url: "https://invalid.test/platform.zip" }] : [] },
+    treeSha256: "b".repeat(64), executables: ["bin/node"] };
+  await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"), `
+    import { writeFile } from 'node:fs/promises';
+    export async function buildElectronPlatformResource(request) {
+      await writeFile(request.outputArchivePath, 'platform');
+      return { archivePath: request.outputArchivePath, resource: ${JSON.stringify(resource)} };
+    }
+  `);
+  await expect(buildReleasePlatform(f)).rejects.toThrow("product binding mismatch");
+  await expect(readFile(join(f.output, "platform-resource.json"))).rejects.toThrow("ENOENT");
+  await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
 });
 
 it("consumes a prebuilt Capsule without invoking its compiler or deleting caller inputs", async () => {
