@@ -116,6 +116,25 @@ describe('annotation upload/send readiness', () => {
       .toEqual(['fast.png', 'slow.png']);
   });
 
+  it('rejects a streaming Mark send while an ordinary attachment is already preparing', async () => {
+    const slow = gate();
+    upload.mockImplementation(async (_id, files) => {
+      await slow.promise;
+      return result(files[0]?.name ?? '');
+    });
+    const { onSend } = mount({ streaming: true });
+    await flushMounts();
+    pick(['slow.png']);
+    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+
+    const rejected = await dispatchAnnotation('send', 'Do not stage this yet');
+    expect(rejected).toHaveBeenCalledWith({ ok: false, message: 'Uploading files…' });
+    expect(onSend).not.toHaveBeenCalled();
+
+    await settle(slow);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('rejects queue without consuming its note, then preserves queue metadata on retry', async () => {
     const slow = gate();
     upload.mockImplementation(async (_id, files) => {

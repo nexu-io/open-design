@@ -813,14 +813,18 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // so the user can type-to-filter.
     const [slash, setSlash] = useState<{ q: string } | null>(null);
     const [slashIndex, setSlashIndex] = useState(0);
-    const activeAttachmentPreparationsRef = useRef<Set<string>>(new Set());
+    type AttachmentPreparationKind = 'attachment' | 'annotation';
+    const activeAttachmentPreparationsRef = useRef<Map<string, AttachmentPreparationKind>>(new Map());
     const attachmentPreparationSeqRef = useRef(0);
     const [activeAttachmentPreparationCount, setActiveAttachmentPreparationCount] = useState(0);
-    function beginAttachmentPreparation(id?: string): string {
+    function beginAttachmentPreparation(
+      id?: string,
+      kind: AttachmentPreparationKind = 'attachment',
+    ): string {
       const preparationId = id ?? `attachment-preparation-${++attachmentPreparationSeqRef.current}`;
       const active = activeAttachmentPreparationsRef.current;
       if (!active.has(preparationId)) {
-        active.add(preparationId);
+        active.set(preparationId, kind);
         setActiveAttachmentPreparationCount(active.size);
       }
       return preparationId;
@@ -835,6 +839,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
     function hasPendingAttachmentPreparation(): boolean {
       return activeAttachmentPreparationsRef.current.size > 0
+        || Boolean(externalPendingUploads?.some((item) => item.state === 'uploading'));
+    }
+    function hasPendingOrdinaryAttachmentPreparation(): boolean {
+      return Array.from(activeAttachmentPreparationsRef.current.values())
+        .some((kind) => kind === 'attachment')
         || Boolean(externalPendingUploads?.some((item) => item.state === 'uploading'));
     }
     const [uploadError, setUploadError] = useState<string | null>(null);
@@ -2511,7 +2520,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             acked = true;
             detail.ack?.(result);
           };
-          if (detail.action !== 'draft' && hasPendingAttachmentPreparation()) {
+          // Concurrent Mark annotations may prepare together. Ordinary uploads
+          // still reject send/queue truthfully; accepted streaming sends are
+          // flushed only after every preparation (including annotations) ends.
+          if (detail.action !== 'draft' && hasPendingOrdinaryAttachmentPreparation()) {
             ack({ ok: false, message: t('questions.uploadingFiles') });
             return;
           }
@@ -2528,7 +2540,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
               (f): f is File => Boolean(f),
             );
             if (annotationFiles.length > 0) {
-              annotationPreparationId = beginAttachmentPreparation();
+              annotationPreparationId = beginAttachmentPreparation(undefined, 'annotation');
               const orderStart = reserveAttachmentOrders(annotationFiles.length);
               const id = await ensureProject();
               if (!id) {
