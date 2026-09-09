@@ -1448,12 +1448,16 @@ export async function listMessages(
   projectId: string,
   conversationId: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  signal?: AbortSignal,
 ): Promise<ChatMessage[]> {
   try {
     const resp = await fetch(
       `/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages`,
-      workspaceContext
-        ? { headers: workspaceProjectHeaders(workspaceContext) }
+      workspaceContext || signal
+        ? {
+            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+            ...(signal ? { signal } : {}),
+          }
         : undefined,
     );
     if (!resp.ok) {
