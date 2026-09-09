@@ -35,14 +35,17 @@ it("selects the Capsule product entry without assembly or release identity", asy
 it("composes scene identity in memory and resolves source entries through the package root", async () => {
   const root = await fixture();
   const resourceReceiptFile = join(root, "resources.json"), sceneManifestPath = join(root, "scene.json");
-  await writeFile(resourceReceiptFile, JSON.stringify({ schemaVersion: 1, operation: "closure.resources.build", resources: [] }));
+  await writeFile(resourceReceiptFile, JSON.stringify({ schemaVersion: 1, operation: "closure.runtime-resources.build",
+    resources: ["open-design-daemon", "open-design-web"].map(id => ({ id, file: `${id}.zip`, path: join(root, `${id}.zip`),
+      entrypoint: "sidecar.mjs", sha256: "a".repeat(64), treeSha256: "b".repeat(64), size: 1 })) }));
   await writeFile(sceneManifestPath, "scene-bytes");
   const capsuleContentFile = join(root, "capsule-content.json");
   await writeFile(capsuleContentFile, JSON.stringify({ schemaVersion: 1, protocol: ELECTRON_CAPSULE_PROTOCOL, target: "darwin-arm64", entrypoint: "capsule.cjs", archive: { sha256: "a".repeat(64), size: 1, treeSha256: "b".repeat(64) } }));
   mock.assemble.mockResolvedValue({ sceneManifestPath, sceneRoot: join(root, "scene") });
-  const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: "darwin-arm64",
+  const request = { schemaVersion: 2, operation: "electron.scene.build", target: "darwin-arm64",
     capsuleContentFile, capsuleArchiveFile: join(root, "capsule.zip"),
-    buildHash: "a".repeat(64), acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") });
+    buildHash: "a".repeat(64), acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") } as const;
+  const result = await buildElectronScene(request);
   expect(result.sceneManifestSha256).toBe(createHash("sha256").update("scene-bytes").digest("hex"));
   expect(mock.assemble).toHaveBeenCalledWith(expect.objectContaining({
     manifest: await resolveElectronSceneManifest("a".repeat(64)),
@@ -52,6 +55,11 @@ it("composes scene identity in memory and resolves source entries through the pa
   }));
   expect(mock.assemble.mock.calls[0]![0]).not.toHaveProperty("manifestPath");
   expect(await readdir(root)).not.toContain("shell.json");
+  const resources = JSON.parse(await readFile(resourceReceiptFile, "utf8"));
+  resources.resources.push({ ...resources.resources[0], id: "craft", file: "craft.zip" });
+  await writeFile(resourceReceiptFile, JSON.stringify(resources));
+  await expect(buildElectronScene(request)).rejects.toThrow("exactly the runtime resource set");
+  expect(mock.assemble).toHaveBeenCalledTimes(1);
 });
 
 it.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platform}-${process.arch}`))("derives native installer identity from the verified scene and rejects mismatched accepted content before assembly", async () => {

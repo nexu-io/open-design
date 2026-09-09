@@ -2,14 +2,12 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { standaloneTreeSha256 } from "@open-design/standalone";
 import { build } from "esbuild";
 import JSZip from "jszip";
-import { buildClosureDataResources } from "@open-design/closure/build-resources";
-import { closureNodeExternals } from "../src/build/node-externals.ts";
-import { closureRuntimeDependencies as runtimeDependencies } from "../src/build/runtime-dependencies.ts";
+import { closureNodeExternals } from "./node-externals.js";
+import { closureRuntimeDependencies as runtimeDependencies } from "./runtime-dependencies.js";
 
 type TreeEntry = Readonly<{ path: string; sha256: string; size: number }>;
 
@@ -90,11 +88,12 @@ async function archive(root: string, outputPath: string): Promise<{ sha256: stri
   });
 }
 
-export async function buildClosureProductResources(input: Readonly<{ outputDirectory: string; workspaceRoot: string }>) {
+export async function buildClosureRuntimeResources(input: Readonly<{ outputDirectory: string; workspaceRoot: string }>) {
   const outputDirectory = resolve(input.outputDirectory);
   const workspaceRoot = resolve(input.workspaceRoot);
   const stage = join(outputDirectory, "stage");
-  await rm(outputDirectory, { force: true, recursive: true });
+  await mkdir(dirname(outputDirectory), { recursive: true });
+  await mkdir(outputDirectory);
   await mkdir(stage, { recursive: true });
   await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon", "build"]);
   await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
@@ -148,21 +147,8 @@ export async function buildClosureProductResources(input: Readonly<{ outputDirec
   const resources = Object.freeze([
     Object.freeze({ id: "open-design-daemon", file: "open-design-daemon.zip", path: daemonPath, entrypoint: "sidecar.mjs", ...daemon }),
     Object.freeze({ id: "open-design-web", file: "open-design-web.zip", path: webPath, entrypoint: "sidecar.mjs", ...web }),
-    ...await buildClosureDataResources({ workspaceRoot, outputDirectory: artifactsRoot }),
   ]);
-  const receipt = Object.freeze({ schemaVersion: 1 as const, operation: "closure.resources.build" as const, resources });
-  await writeFile(join(outputDirectory, "resource-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`, "utf8");
+  const receipt = Object.freeze({ schemaVersion: 1 as const, operation: "closure.runtime-resources.build" as const, resources });
   await rm(stage, { force: true, recursive: true });
   return receipt;
-}
-
-function argument(name: string): string {
-  const index = process.argv.indexOf(name);
-  const value = index < 0 ? undefined : process.argv[index + 1];
-  if (value == null || value.startsWith("--")) throw new Error(`${name} is required`);
-  return resolve(value);
-}
-
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await buildClosureProductResources({ outputDirectory: argument("--output"), workspaceRoot: argument("--workspace") });
 }

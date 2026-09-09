@@ -88,7 +88,7 @@ it("prepares and finalizes signed content within release ownership, with no requ
     runtimeResources.push({ id, file: `${id}.zip`, path: join(root, `${id}.zip`), sha256: sha(id),
       size: id.length, treeSha256: "c".repeat(64), entrypoint: "sidecar.mjs" });
   }
-  await json(currentResources, { schemaVersion: 1, operation: "closure.resources.build", resources: runtimeResources });
+  await json(currentResources, { schemaVersion: 1, operation: "closure.runtime-resources.build", resources: runtimeResources });
   const dataRoot = join(root, "data-products");
   for (const { id } of CLOSURE_DATA_RESOURCES) {
     const directory = join(dataRoot, id); await mkdir(directory, { recursive: true });

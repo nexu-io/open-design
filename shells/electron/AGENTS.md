@@ -32,6 +32,9 @@ Shell and the typed adapter boundary consumed by repository tools.
   explicitly projects only installation resources and the current prepared Capsule;
   scene build inputs must not become implicit installer payloads.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
+- Scene assembly accepts only the two-entry `closure.runtime-resources.build`
+  collection. Independent data archives belong to tools-release preparation,
+  not scene inputs or installer resources.
 - Capsule composition consumes the explicit installed manifest; never bundle a
   default release manifest into its independently built product content.
 - Startup reads the durable Capsule selection before accessing the bundled

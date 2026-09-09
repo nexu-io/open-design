@@ -11,7 +11,7 @@ import { projectReleaseTopology } from "./topology.ts";
 import { restoreSceneCache } from "./scene-cache.ts";
 import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
-import { buildReleaseDataResource } from "./resource-build.ts";
+import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
 import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
 import { contributePlatform, restorePlatform } from "./platform-cache.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
@@ -86,7 +86,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
     .option("--plan <file>", "Release plan (scene; optional identity binding for resource/platform)")
-    .option("--resources <file>", "Closure resource receipt (Electron scene)")
+    .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
@@ -97,6 +97,12 @@ export function registerExactCommands(cli: CAC): void {
     .option("--release-version <version>", "Release version (distribution)")
     .option("--source-commit <sha>", "Exact source commit (distribution)")
     .action(async (operation: string, options: Options) => {
+      if (operation === "runtime-resources") {
+        const allowed = new Set(["root", "output", "receipt", "--"]);
+        for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`runtime resource build does not accept --${key}`);
+        await buildReleaseRuntimeResources({ root: required(options, "root"), output: required(options, "output"), receipt: required(options, "receipt") });
+        return;
+      }
       if (operation === "resource") {
         const allowed = new Set(["root", "resourceId", "output", "receipt", "plan", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
@@ -128,7 +134,7 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
-      else throw new Error("build operation must be resource or platform or capsule or scene or distribution");
+      else throw new Error("build operation must be resource, runtime-resources, platform, capsule, scene or distribution");
     });
 
   cli.command("topology", "Project release actions over declared runner and target data")

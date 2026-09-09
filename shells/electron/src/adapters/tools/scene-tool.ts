@@ -15,7 +15,7 @@ export async function executeElectronExactScene(input: ReturnType<typeof parseEl
 const manifest = await resolveElectronSceneManifest(input.buildHash);
 const capsuleContent = validateElectronCapsuleContent(JSON.parse(await readFile(input.capsuleContentFile, "utf8")));
 const rawResources = JSON.parse(await readFile(input.resourceReceiptFile, "utf8")) as { schemaVersion?: unknown; operation?: unknown; resources?: unknown };
-if (rawResources.schemaVersion !== 1 || rawResources.operation !== "closure.resources.build" || !Array.isArray(rawResources.resources)) {
+if (rawResources.schemaVersion !== 1 || rawResources.operation !== "closure.runtime-resources.build" || !Array.isArray(rawResources.resources)) {
   throw new Error("Electron exact scene requires a Closure resource receipt");
 }
 const resources = rawResources.resources.map((candidate) => {
@@ -25,9 +25,10 @@ const resources = rawResources.resources.map((candidate) => {
     || typeof value.sha256 !== "string" || typeof value.size !== "number" || typeof value.treeSha256 !== "string") throw new Error("Closure resource receipt entry is incomplete");
   return { id: value.id, file: value.file, path: resolve(value.path), entrypoint: value.entrypoint, sha256: value.sha256, size: value.size, treeSha256: value.treeSha256 };
 });
+if (resources.map(resource => resource.id).sort().join(",") !== "open-design-daemon,open-design-web") throw new Error("Electron scene requires exactly the runtime resource set");
 const normalizedReceiptPath = resolve(dirname(input.sceneDirectory), "closure-resources.json");
 await mkdir(dirname(normalizedReceiptPath), { recursive: true });
-await writeFile(normalizedReceiptPath, `${JSON.stringify({ schemaVersion: 1, operation: "closure.resources.build", resources: resources.map(({ path: _path, ...resource }) => resource) }, null, 2)}\n`, "utf8");
+await writeFile(normalizedReceiptPath, `${JSON.stringify({ schemaVersion: 1, operation: "closure.runtime-resources.build", resources: resources.map(({ path: _path, ...resource }) => resource) }, null, 2)}\n`, "utf8");
 const authority = await buildElectronStandaloneAuthority(resolve(dirname(input.sceneDirectory), "electron-authority-build"));
 const receipt = await assembleElectronScene({
   authorityResources: [

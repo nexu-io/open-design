@@ -311,7 +311,9 @@ jobs:
           pnpm --filter @open-design/electron-contract build
           pnpm --filter @open-design/electron-kit build
           if [[ "$SHELL_TYPE" == "electron" ]]; then
-            pnpm --filter @open-design/closure build:resources -- --output "$RUNNER_TEMP/exact-closure-resources" --workspace "$GITHUB_WORKSPACE"
+            node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build runtime-resources \
+              --root "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/exact-closure-resources" \
+              --receipt "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json"
           fi
 
       - name: Build native scene

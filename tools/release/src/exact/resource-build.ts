@@ -2,8 +2,22 @@ import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { canonicalBytes, readObject } from "./control-common.ts";
+import { canonicalBytes, checkedFile, readObject } from "./control-common.ts";
 import { resolveExactDataPlanNode, type ExactTarget } from "./plan.ts";
+
+/** Runtime production is separate from the nine independent data products. */
+export async function buildReleaseRuntimeResources(input: Readonly<{ root: string; output: string; receipt: string }>) {
+  const root = resolve(input.root), resolver = createRequire(join(root, "tools/release/package.json"));
+  const builder: typeof import("@open-design/closure/build-runtime-resources") = await import(
+    pathToFileURL(resolver.resolve("@open-design/closure/build-runtime-resources")).href);
+  const result = await builder.buildClosureRuntimeResources({ workspaceRoot: root, outputDirectory: resolve(input.output) });
+  if (result.schemaVersion !== 1 || result.operation !== "closure.runtime-resources.build"
+    || result.resources.map(resource => resource.id).sort().join(",") !== "open-design-daemon,open-design-web") throw new Error("invalid runtime resource set");
+  for (const resource of result.resources) await checkedFile(resource, "runtime resource", resource.path);
+  await mkdir(dirname(resolve(input.receipt)), { recursive: true });
+  await writeFile(input.receipt, canonicalBytes(result), { flag: "wx" });
+  return result;
+}
 
 /** One release-neutral product, not a complete resource receipt or cache hit.
  * The Closure producer owns declarations and validates the selected group. */

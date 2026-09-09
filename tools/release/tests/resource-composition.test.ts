@@ -28,6 +28,7 @@ it("composes all independent data products without reading superseded seeds or r
     ...runtime, ...CLOSURE_DATA_RESOURCES.map(({ id }) => ({ id, path: `/absent-old-seeds/${id}.zip` })),
   ] };
   const snapshot = structuredClone(previous);
+  await expect(composeReleaseDataResources({ ...previous, operation: "closure.runtime-resources.build" }, files)).rejects.toThrow("must not contain data");
   const discovered = await resolveDataResourceReceipts(root);
   expect(discovered).toEqual(files);
   const result = await composeReleaseDataResources(previous, discovered);

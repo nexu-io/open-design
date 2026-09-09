@@ -35,7 +35,7 @@ export function validateDataResourceReceipt(receipt: JsonObject): JsonObject {
  * A relocated single-product receipt travels beside its archive; its original
  * machine's absolute path is informational, not a fallback source. */
 export async function composeReleaseDataResources(collection: JsonObject, receiptFiles: readonly string[]): Promise<JsonObject> {
-  if (collection.schemaVersion !== 1 || collection.operation !== "closure.resources.build" || !Array.isArray(collection.resources)) {
+  if (collection.schemaVersion !== 1 || !["closure.resources.build", "closure.runtime-resources.build"].includes(collection.operation) || !Array.isArray(collection.resources)) {
     throw new Error("invalid Closure resource collection");
   }
   const expected = new Set<string>(CLOSURE_DATA_RESOURCES.map(({ id }) => id));
@@ -46,6 +46,7 @@ export async function composeReleaseDataResources(collection: JsonObject, receip
     if (resource == null || typeof resource.id !== "string" || seen.has(resource.id)
       || (!expected.has(resource.id) && !runtimeIds.has(resource.id))) throw new Error("invalid or duplicate collection resource");
     seen.add(resource.id);
+    if (collection.operation === "closure.runtime-resources.build" && !runtimeIds.has(resource.id)) throw new Error("runtime collection must not contain data resources");
     if (runtimeIds.has(resource.id)) runtime.push(resource);
   }
   if (runtime.length !== runtimeIds.size) throw new Error("incomplete runtime resource set");

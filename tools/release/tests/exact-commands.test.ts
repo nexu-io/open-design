@@ -163,6 +163,30 @@ it("stages a real data product through the public convergence command", async ()
   await expect(f.invoke(restore.map(arg => arg === join(f.root, "contribution") ? join(f.root, "restored") : arg))).rejects.toThrow("planner cache hit");
 });
 
+it("dispatches runtime-only production through the Closure public API", async () => {
+  const f = await fixture(), pkg = join(f.root, "tools/release/node_modules/@open-design/closure");
+  await mkdir(pkg, { recursive: true });
+  await writeFile(join(pkg, "package.json"), JSON.stringify({ name: "@open-design/closure", type: "module",
+    exports: { "./build-runtime-resources": "./build.mjs" } }));
+  await writeFile(join(pkg, "build.mjs"), `
+    import {mkdir,writeFile} from 'node:fs/promises'; import {join} from 'node:path'; import {createHash} from 'node:crypto';
+    export async function buildClosureRuntimeResources({outputDirectory}) {
+      await mkdir(outputDirectory); const resources=[];
+      for(const id of ['open-design-daemon','open-design-web']) {
+        const path=join(outputDirectory,id+'.zip'); await writeFile(path,id);
+        resources.push({id,path,file:id+'.zip',sha256:createHash('sha256').update(id).digest('hex'),size:id.length});
+      }
+      return {schemaVersion:1,operation:'closure.runtime-resources.build',resources};
+    }
+  `);
+  const output = join(f.root, "runtime"), receipt = join(f.root, "receipt.json");
+  const args = ["build", "runtime-resources", "--root", f.root, "--output", output, "--receipt", receipt];
+  await f.invoke(args);
+  expect(JSON.parse(await readFile(receipt, "utf8"))).toMatchObject({ operation: "closure.runtime-resources.build",
+    resources: [{ id: "open-design-daemon" }, { id: "open-design-web" }] });
+  await expect(f.invoke([...args, "--resource-id", "craft"])).rejects.toThrow("does not accept");
+});
+
 it("keeps workspace command names distinct from the relocatable exact grammar", async () => {
   const root = await mkdtemp(join(tmpdir(), "release-workspace-cli-")); roots.push(root);
   const cli = join(root, "workspace.mjs");

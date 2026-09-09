@@ -245,7 +245,8 @@ describe("exact Electron release topology", () => {
     expect(workflow).not.toContain("exact-scene-request.json");
     expect(workflow).not.toContain("distribution-request.json");
     expect(workflow).not.toMatch(/@open-design\/shell-electron exact:|manifest-request|shellManifestFile|releaseManifestFile/u);
-    expect(workflow).toContain("@open-design/closure build:resources");
+    expect(workflow).toContain('exact-release-control.mjs" build runtime-resources');
+    expect(workflow).not.toContain("build:resources");
     expect(workflow).not.toContain("tools/pack/dist/exact-control.mjs");
     expect(workflow).toContain("tools/release/dist/exact-control.mjs");
     expect(workflow).not.toContain("exact-pack-control.mjs");
