@@ -36,6 +36,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       run: ${{ steps.convergence.outputs.run }}
+      batch_run: ${{ steps.convergence.outputs.batch_run }}
       shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
       electron_matrix: ${{ steps.topology.outputs.electron_matrix }}
       terminal_matrix: ${{ steps.topology.outputs.terminal_matrix }}
@@ -227,38 +228,32 @@ jobs:
           path: ${{ runner.temp }}/release-policy
 
       - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.batch_run).validation }}
         with:
           version: 10.33.2
 
       - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
-          cache: pnpm
+          cache: ${{ fromJSON(needs.plan.outputs.batch_run).validation && 'pnpm' || '' }}
 
       - uses: ./.github/actions/configure-ci-parallelism
 
       - name: Prepare validation workspace
+        if: ${{ fromJSON(needs.plan.outputs.batch_run).validation }}
         env:
           OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
         run: pnpm install --frozen-lockfile
 
-      - name: Validate exact Electron nodes
+      - name: Materialize selected validation evidence
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
-          TARGET: ${{ matrix.target }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/exact-validation"
-          tools-release validate electron.contract.test \
-            --root "$GITHUB_WORKSPACE" --target "$TARGET" --source-commit "$SOURCE_SHA" \
-            --log "$RUNNER_TEMP/exact-validation/contract.log" --receipt "$RUNNER_TEMP/exact-validation/contract.json"
-          tools-release validate electron.shell.test \
-            --root "$GITHUB_WORKSPACE" --target "$TARGET" --source-commit "$SOURCE_SHA" \
-            --log "$RUNNER_TEMP/exact-validation/shell.log" --receipt "$RUNNER_TEMP/exact-validation/shell.json"
-          tools-release validate closure.test --coverage architecture \
-            --root "$GITHUB_WORKSPACE" --target "$TARGET" --source-commit "$SOURCE_SHA" \
-            --log "$RUNNER_TEMP/exact-validation/closure.log" --receipt "$RUNNER_TEMP/exact-validation/closure.json"
+        run: >-
+          tools-release validation materialize
+          --root "$GITHUB_WORKSPACE" --source-commit "$SOURCE_SHA"
+          --sources "$RUNNER_TEMP/exact-plan/artifacts/batches/validation.json"
+          --output "$RUNNER_TEMP/exact-validation"
+          --receipt "$RUNNER_TEMP/validation-materialization.json"
 
       - uses: actions/upload-artifact@v7.0.1
         if: always()
@@ -267,6 +262,30 @@ jobs:
           path: ${{ runner.temp }}/exact-validation
           if-no-files-found: warn
           retention-days: 30
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ success() && fromJSON(needs.plan.outputs.run).validation_contract_darwin_arm64 }}
+        with:
+          name: exact-validation-contract-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation/products/contract
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ success() && fromJSON(needs.plan.outputs.run).validation_shell_darwin_arm64 }}
+        with:
+          name: exact-validation-shell-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation/products/shell
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ success() && fromJSON(needs.plan.outputs.run).validation_closure_darwin_arm64 }}
+        with:
+          name: exact-validation-closure-darwin-arm64-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-validation/products/closure
+          if-no-files-found: error
+          retention-days: 1
 
   scene:
     name: ${{ matrix.shell }} scene (${{ matrix.target }})

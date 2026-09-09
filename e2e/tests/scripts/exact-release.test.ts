@@ -166,7 +166,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(15);
+    expect(candidate.results).toHaveLength(18);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -234,8 +234,9 @@ describe("exact Electron release topology", () => {
     expect(validation).toBeDefined();
     expect(validation).toContain("needs: [tools, plan]");
     expect(validation).toContain("matrix: ${{ fromJSON(needs.plan.outputs.validation_matrix) }}");
-    expect(validation).not.toContain("needs.plan.outputs.run");
-    expect(validation).toContain('validate closure.test --coverage architecture');
+    expect(validation).not.toContain("outputs.run).electron_scene");
+    expect(validation).toContain('tools-release validation materialize');
+    expect(validation).toContain('batches/validation.json');
     expect(validation).not.toContain('--coverage business');
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('tools-release validate');
@@ -245,8 +246,11 @@ describe("exact Electron release topology", () => {
     expect(terminal).toContain("needs: [tools, plan]");
     expect(terminal).not.toContain("capsule");
     expect(terminal).toContain("needs.plan.outputs.terminal_matrix");
-    for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
-      expect(validation).toContain(`tools-release validate ${node}`);
+    const plan = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/plan/release-exact.json"), "utf8"));
+    for (const [id, node] of Object.entries({ contract: "electron.contract.test", shell: "electron.shell.test", closure: "closure.test" })) {
+      expect(validation).toContain(`outputs.run).validation_${id}_darwin_arm64`);
+      expect(plan.workflows["release-exact"].workloads[`validation_${id}_darwin_arm64`])
+        .toMatchObject({ reusable: true, parameters: { node, coverage: "architecture" }, products: "manifest" });
     }
     expect(validation).toContain("name: exact-validation-${{ matrix.target }}-${{ inputs.source_sha }}");
     expect(validation).toContain("if: always()");

@@ -1,8 +1,10 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
-import { resolveExactValidationRecipe, validateReleaseRecipe } from "@/exact/validation.ts";
+import { createHash } from "node:crypto";
+import { afterEach, expect, it, vi } from "vitest";
+import { zipFixture } from "./archive-fixture.ts";
+import { bindReleaseValidation, materializeReleaseValidations, resolveExactValidationRecipe, validateReleaseRecipe } from "@/exact/validation.ts";
 
 const roots: string[] = [];
 it("defaults Closure validation to architecture boundaries, not business aggregates", () => {
@@ -26,7 +28,7 @@ it("requires an explicit reason for business coverage and rejects unsupported co
   expect(recipe.commands.map(command => command.directory)).toEqual(["apps/closure", "apps/daemon", "apps/web"]);
   expect(recipe.commands.every(command => JSON.stringify(command.args) === '["test"]')).toBe(true);
 });
-afterEach(async () => { await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
+afterEach(async () => { vi.unstubAllGlobals(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
 async function fixture(script = 'node -e "console.log(\'executed contract test\')"') {
   const root = await mkdtemp(join(tmpdir(), "release-validation-")); roots.push(root);
   await mkdir(join(root, "packages/electron-contract"), { recursive: true });
@@ -45,6 +47,48 @@ it("executes the selected recipe and emits execution provenance, not a plan iden
   const original = await readFile(input.receipt);
   await expect(validateReleaseRecipe(input)).rejects.toThrow("receipt already exists");
   expect(await readFile(input.receipt)).toEqual(original);
+});
+
+it("binds a current subject without rewriting original execution provenance", async () => {
+  const input = await fixture(), execution = await validateReleaseRecipe(input);
+  const original = structuredClone(execution), sourceCommit = "b".repeat(40);
+  const binding = bindReleaseValidation(execution, { node: input.node, target: input.target, sourceCommit });
+  expect(binding.sourceCommit).toBe(sourceCommit);
+  expect(binding.execution).toEqual(original);
+  expect(binding.execution.sourceCommit).toBe(input.sourceCommit);
+  expect(execution).toEqual(original);
+  for (const change of [{ status: "failed" }, { coverage: "business" }, { commands: [] }, { node: "closure.test" }]) {
+    expect(() => bindReleaseValidation({ ...execution, ...change }, { node: input.node, target: input.target, sourceCommit }))
+      .toThrow("binding mismatch");
+  }
+});
+
+it("materializes declared test batches and emits independently retainable evidence", async () => {
+  const input = await fixture(), sources = join(input.root, "sources.json"), output = join(input.root, "output");
+  await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target }] }));
+  const result = await materializeReleaseValidations({ sources, output, root: input.root, sourceCommit: input.sourceCommit });
+  expect(result.bindings).toHaveLength(1);
+  expect(JSON.parse(await readFile(join(output, "contract.json"), "utf8"))).toMatchObject({ operation: "exact.validation.binding" });
+  expect(JSON.parse(await readFile(join(output, "products/contract/result.json"), "utf8")))
+    .toMatchObject({ operation: "exact.validation", sourceCommit: input.sourceCommit });
+  await expect(materializeReleaseValidations({ sources, output, root: input.root, sourceCommit: input.sourceCommit }))
+    .rejects.toThrow("receipt already exists");
+});
+
+it("restores verified execution evidence without requiring a workspace or rerunning tests", async () => {
+  const input = await fixture(), execution = await validateReleaseRecipe(input);
+  const body = await zipFixture({ "result.json": JSON.stringify(execution), "test.log": "original log" });
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array(body))));
+  const sources = join(input.root, "cached.json"), output = join(input.root, "restored");
+  const artifact = { url: "https://cache.example/validation.zip", sha256: createHash("sha256").update(body).digest("hex") };
+  await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target, artifact }] }));
+  const result = await materializeReleaseValidations({ sources, output, root: join(input.root, "absent-workspace"), sourceCommit: "b".repeat(40) });
+  expect(result.bindings[0]).toMatchObject({ sourceCommit: "b".repeat(40), execution });
+  expect(await readFile(join(output, "products/contract/test.log"), "utf8")).toBe("original log");
+  await writeFile(sources, JSON.stringify({ sources: [{ id: "contract", node: input.node, target: input.target,
+    artifact: { ...artifact, sha256: "0".repeat(64) } }] }));
+  await expect(materializeReleaseValidations({ sources, output: join(input.root, "corrupt"), root: input.root, sourceCommit: input.sourceCommit }))
+    .rejects.toThrow("digest mismatch");
 });
 
 it.runIf(process.platform === "darwin" && process.arch === "arm64")("keeps business receipts distinct using tiny fixture packages, never real business suites", async () => {

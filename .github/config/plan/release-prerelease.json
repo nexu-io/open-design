@@ -204,6 +204,7 @@
       "tools/release/"
     ],
     "release-executor": [
+      "tools/release/src/exact/command-input.ts",
       ".node-version",
       "packages/metatool/",
       "packages/archive/package.json",
@@ -215,6 +216,31 @@
       "tools/release/src/exact/commands.ts",
       "tools/release/src/exact/control-common.ts",
       "tools/release/src/exact/artifact-product.ts"
+    ],
+    "validation-control": [
+      "tools/release/src/exact/validation-commands.ts",
+      "tools/release/src/exact/command-input.ts",
+      ".node-version",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "scripts/postinstall.mjs",
+      "tools/release/src/exact/validation.ts"
+    ],
+    "validation-contract": [
+      "suite://validation-control",
+      "packages/electron-contract/"
+    ],
+    "validation-shell": [
+      "suite://validation-control",
+      "suite://electron-capsule",
+      "suite://electron-platform"
+    ],
+    "validation-closure": [
+      "suite://validation-control",
+      "suite://closure-resources",
+      "apps/closure/",
+      "packages/standalone/"
     ]
   },
   "workflows": {
@@ -512,6 +538,57 @@
             "prefix": "release-tools"
           },
           "parameters": {}
+        },
+        "validation_contract_darwin_arm64": {
+          "inputs": [
+            "suite://validation-contract"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "parameters": {
+            "node": "electron.contract.test",
+            "target": "darwin-arm64",
+            "coverage": "architecture"
+          },
+          "artifact": {
+            "product": "validation",
+            "prefix": "exact-validation-contract-darwin-arm64"
+          }
+        },
+        "validation_shell_darwin_arm64": {
+          "inputs": [
+            "suite://validation-shell"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "parameters": {
+            "node": "electron.shell.test",
+            "target": "darwin-arm64",
+            "coverage": "architecture"
+          },
+          "artifact": {
+            "product": "validation",
+            "prefix": "exact-validation-shell-darwin-arm64"
+          }
+        },
+        "validation_closure_darwin_arm64": {
+          "inputs": [
+            "suite://validation-closure"
+          ],
+          "runnerClass": "electron_darwin_arm64",
+          "products": "manifest",
+          "reusable": true,
+          "parameters": {
+            "node": "closure.test",
+            "target": "darwin-arm64",
+            "coverage": "architecture"
+          },
+          "artifact": {
+            "product": "validation",
+            "prefix": "exact-validation-closure-darwin-arm64"
+          }
         }
       },
       "execution": {
@@ -530,7 +607,10 @@
           "closure_data_frames_darwin_arm64",
           "closure_data_community_pets_darwin_arm64",
           "closure_data_prompt_templates_darwin_arm64",
-          "closure_data_plugin_previews_darwin_arm64"
+          "closure_data_plugin_previews_darwin_arm64",
+          "validation_contract_darwin_arm64",
+          "validation_shell_darwin_arm64",
+          "validation_closure_darwin_arm64"
         ],
         "runners": {
           "terminal_darwin_arm64": [
@@ -693,6 +773,28 @@
                 "runs_on": "macos-15"
               }
             ]
+          },
+          "validation_sources": {
+            "include": [
+              {
+                "id": "contract",
+                "node": "electron.contract.test",
+                "target": "darwin-arm64",
+                "workload": "validation_contract_darwin_arm64"
+              },
+              {
+                "id": "shell",
+                "node": "electron.shell.test",
+                "target": "darwin-arm64",
+                "workload": "validation_shell_darwin_arm64"
+              },
+              {
+                "id": "closure",
+                "node": "closure.test",
+                "target": "darwin-arm64",
+                "workload": "validation_closure_darwin_arm64"
+              }
+            ]
           }
         },
         "inputs": {
@@ -716,6 +818,15 @@
               "id": "resource_id"
             },
             "product": "resource"
+          },
+          "validation": {
+            "matrix": "validation_sources",
+            "fields": {
+              "id": "id",
+              "node": "node",
+              "target": "target"
+            },
+            "product": "validation"
           }
         }
       }

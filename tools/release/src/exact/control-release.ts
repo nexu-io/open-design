@@ -9,6 +9,7 @@ import { requestStorageObject } from "../storage/s3-upload.ts";
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { createAcceptedShellBaselineReceipt, resolveAcceptedShellBaseline, type AcceptedShellTarget } from "./accepted-baseline.ts";
 import { fetchAcceptedShellBaseline } from "./baseline-acquisition.ts";
+import { bindReleaseValidation } from "./validation.ts";
 import { collectInstalledAcceptance, readPublishedAcceptance } from "./installed-acceptance.ts";
 import { authorizeReleaseCapability, readReleasePolicyReceipt, releaseTargetsEqual, type ReleasePolicyReceipt, type ReleaseTarget } from "../policy/release-profile.ts";
 
@@ -233,7 +234,13 @@ export async function fetchAcceptedElectronBaseline(input: JsonObject, receiptPa
     || compareVersion(releaseVersion, credential.releaseVersion, channel) <= 0) throw new Error("accepted baseline carrier differs from the published carrier");
   if (typeof input.validationReceipt !== "string") throw new Error("accepted carrier reuse requires current Shell test validation");
   const validation = await readObject(input.validationReceipt);
-  if (validation.schemaVersion !== 1 || validation.operation !== "exact.validation" || validation.status !== "passed"
+  if (validation.operation === "exact.validation.binding") {
+    if (validation.schemaVersion !== 1 || validation.sourceCommit !== sourceCommit
+      || validation.node !== "electron.shell.test" || validation.target !== input.target) {
+      throw new Error("accepted carrier Shell test validation binding mismatch");
+    }
+    bindReleaseValidation(validation.execution, { node: "electron.shell.test", target: input.target, sourceCommit });
+  } else if (validation.schemaVersion !== 1 || validation.operation !== "exact.validation" || validation.status !== "passed"
     || validation.node !== "electron.shell.test" || validation.sourceCommit !== sourceCommit
     || validation.target !== input.target || validation.executionPlatform !== input.target) {
     throw new Error("accepted carrier Shell test validation binding mismatch");

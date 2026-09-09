@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { lstat, mkdir, open, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { canonicalBytes } from "./control-common.ts";
+import { canonicalBytes, readObject, writeObject } from "./control-common.ts";
+import { acquireArtifactProduct } from "./artifact-product.ts";
 
 const recipes = {
   "electron.contract.test": [{ directory: "packages/electron-contract", args: ["test"] }],
@@ -49,6 +50,7 @@ export async function validateReleaseRecipe(input: Readonly<{
   if (node !== "electron.contract.test" && input.target !== process.platform + "-" + process.arch) throw new Error("validation target differs from the executing platform");
   try { await lstat(input.receipt); throw new Error("validation receipt already exists"); }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  await mkdir(dirname(resolve(input.log)), { recursive: true });
   const log = await open(resolve(input.log), "wx"), startedAt = new Date().toISOString();
   const commands: Array<{ directory: string; args: readonly string[] }> = [];
   try {
@@ -73,4 +75,59 @@ export async function validateReleaseRecipe(input: Readonly<{
     await writeFile(input.receipt, canonicalBytes(receipt), { flag: "wx" });
     return receipt;
   } finally { await log.close(); }
+}
+
+/** Business evidence binding, not an identity/equivalence calculator. The
+ * caller selects evidence through its trusted orchestration; original execution
+ * provenance remains intact even when the subject commit differs. */
+export function bindReleaseValidation(execution: Record<string, any>, subject: Readonly<{
+  node: string; target: string; sourceCommit: string;
+}>) {
+  const recipe = resolveExactValidationRecipe(subject.node);
+  if (!["darwin-arm64", "darwin-x64", "win32-x64"].includes(subject.target)
+    || !/^[a-f0-9]{40}$/u.test(subject.sourceCommit) || execution == null || execution.schemaVersion !== 1
+    || execution.operation !== "exact.validation" || execution.status !== "passed"
+    || execution.coverage !== "architecture" || execution.node !== recipe.node
+    || execution.target !== subject.target || !/^[a-f0-9]{40}$/u.test(execution.sourceCommit ?? "")
+    || canonicalBytes(execution.commands).compare(canonicalBytes(recipe.commands)) !== 0
+    || (recipe.node !== "electron.contract.test" && execution.executionPlatform !== subject.target)
+    || !Number.isFinite(Date.parse(execution.startedAt)) || !Number.isFinite(Date.parse(execution.finishedAt))
+    || Date.parse(execution.finishedAt) < Date.parse(execution.startedAt)) {
+    throw new Error("validation execution binding mismatch");
+  }
+  return { schemaVersion: 1, operation: "exact.validation.binding", ...subject, execution };
+}
+
+/** Materialize a caller-selected batch. Artifact inputs are ordinary verified
+ * transports; no planner state, identity or cache decisions enter this tool. */
+export async function materializeReleaseValidations(input: Readonly<{
+  sources: string; root: string; sourceCommit: string; output: string;
+}>) {
+  const declaration = await readObject(input.sources);
+  if (!Array.isArray(declaration.sources) || declaration.sources.length === 0) throw new Error("validation sources are required");
+  const ids = new Set<string>();
+  for (const source of declaration.sources) {
+    if (typeof source.id !== "string" || !/^[a-z]+$/u.test(source.id) || ids.has(source.id)) throw new Error("invalid or duplicate validation id");
+    ids.add(source.id);
+    resolveExactValidationRecipe(source.node);
+  }
+  const bindings = [];
+  for (const source of declaration.sources) {
+    const output = resolve(input.output), product = join(output, "products", source.id);
+    const receipt = join(product, "result.json");
+    if (source.artifact != null) {
+      const descriptor = join(output, "descriptors", `${source.id}.json`);
+      await writeObject(descriptor, source.artifact);
+      await acquireArtifactProduct({ descriptor, output: product });
+    } else {
+      await validateReleaseRecipe({ root: input.root, sourceCommit: input.sourceCommit,
+        node: source.node, target: source.target, log: join(product, "test.log"), receipt });
+    }
+    const binding = bindReleaseValidation(await readObject(receipt), {
+      node: source.node, target: source.target, sourceCommit: input.sourceCommit,
+    });
+    await writeObject(join(output, `${source.id}.json`), binding);
+    bindings.push(binding);
+  }
+  return { schemaVersion: 1, operation: "exact.validation.materialize", bindings };
 }

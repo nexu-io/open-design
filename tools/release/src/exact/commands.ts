@@ -16,28 +16,19 @@ import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { collectExecutedAcceptance, exerciseReleaseInstallation } from "./acceptance-execution.ts";
-import { validateReleaseRecipe } from "./validation.ts";
+import { registerValidationCommands } from "./validation-commands.ts";
+import { required, emit, type Options } from "./command-input.ts";
 import { acquireArtifactProduct } from "./artifact-product.ts";
 
-type Options = Record<string, unknown>;
-function required(options: Options, key: string): string {
-  const value = options[key];
-  if (typeof value !== "string" || !value.trim()) throw new Error(`--${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)} is required`);
-  return value;
-}
 function boolean(options: Options, key: string): boolean {
   const value = options[key];
   if (value === "true") return true;
   if (value === "false") return false;
   throw new Error(`${key} must be true or false`);
 }
-async function emit(options: Options, receipt: unknown): Promise<void> {
-  if (options.receipt != null) await writeObject(required(options, "receipt"), receipt);
-  else process.stdout.write(`${JSON.stringify(receipt)}\n`);
-}
-
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  registerValidationCommands(cli);
   cli.command("artifact acquire", "Acquire a checksum-bound opaque transport without repacking it")
     .option("--descriptor <file>", "Immutable URL and SHA-256 descriptor")
     .option("--output <directory>", "Fresh transport directory")
@@ -69,19 +60,6 @@ export function registerExactCommands(cli: CAC): void {
     cli.outputHelp();
   });
   cli.command("self-check", "Verify exact channel transition algebra").action(() => selfCheckExactReleaseControl());
-  cli.command("validate <node>", "Execute a named validation recipe and retain its execution receipt")
-    .option("--coverage <name>", "architecture (default), or explicit Closure business aggregate", { default: "architecture" })
-    .option("--reason <text>", "Required risk reason for business coverage")
-    .option("--root <directory>", "Checked-out workspace with built prerequisites")
-    .option("--target <target>", "Expected native execution target")
-    .option("--source-commit <sha>", "Source checkout commit")
-    .option("--log <file>", "Fresh test output file")
-    .option("--receipt <file>", "Successful validation receipt")
-    .action(async (node: string, options: Options) => {
-      await validateReleaseRecipe({ node, root: required(options, "root"), target: required(options, "target"),
-        sourceCommit: required(options, "sourceCommit"), log: required(options, "log"), receipt: required(options, "receipt"),
-        coverage: required(options, "coverage"), ...(options.reason == null ? {} : { reason: required(options, "reason") }) });
-    });
   cli.command("acceptance <operation>", "Acquire the exact published installer selected for acceptance")
     .option("--publication <file>", "Publication receipt")
     .option("--policy <file>", "Release policy")

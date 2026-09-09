@@ -925,6 +925,10 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
             "run": compact_json(run),
             "hit": compact_json(hits),
             "would_run": compact_json(would_run),
+            "batch_run": compact_json({
+                name: any(run[entry["workload"]] for entry in workflow.execution["matrices"][batch["matrix"]]["include"])
+                for name, batch in (workflow.execution or {}).get("batches", {}).items()
+            }),
         }
     )
     lines = [
