@@ -53,6 +53,22 @@ export function splitShellCards(text: string, live: boolean): OdCardSegment[] {
       codeRanges = markdownCodeRanges(text.slice(markdownStart));
     }
   }
+  if (live) {
+    const candidateStart = text.lastIndexOf('<');
+    if (candidateStart >= cursor && !rangeContains(codeRanges, candidateStart - markdownStart)) {
+      const candidate = text.slice(candidateStart).toLowerCase();
+      const opener = '<od-card';
+      const partialName = candidate.startsWith('<od-') && opener.startsWith(candidate);
+      const partialAttributes = candidate.startsWith(opener)
+        && /^\s[^<>]*$/.test(candidate.slice(opener.length));
+      if (partialName || partialAttributes) {
+        // A future delta can complete this card opener. Keep earlier prose
+        // visible now; terminal rendering restores candidates that never close.
+        appendText(text.slice(cursor, candidateStart));
+        return result;
+      }
+    }
+  }
   appendText(text.slice(cursor));
   return result;
 }

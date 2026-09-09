@@ -91,6 +91,59 @@ describe('execution shell card boundaries', () => {
     expect(container.textContent).toContain(malformed);
   });
 
+  it('holds live opener prefixes without hiding earlier prose or losing the completed card', () => {
+    // Real ACP/SSE QA on 201ba003 exposed "<od-ca" in an expanded shell
+    // after event 18, before the remainder of the same legitimate card arrived.
+    const raw = markup(TASK_BRIEF);
+    const openerEnd = raw.indexOf('>');
+    const { container, rerender } = render(show([{ kind: 'text', text: 'D2 SSE before.' }]));
+    for (let length = '<od-ca'.length; length <= openerEnd; length += 1) {
+      const prefix = raw.slice(0, length);
+      rerender(show([{ kind: 'text', text: `D2 SSE before.\n${prefix}` }]));
+      expect(container.textContent).toContain('D2 SSE before.');
+      expect(container.textContent).not.toContain('<od-ca');
+      expect(container.querySelector('[data-od-card]')).toBeNull();
+    }
+    rerender(show([{ kind: 'text', text: `D2 SSE before.\n${raw}\nD2 SSE after.` }]));
+    expect(container.querySelectorAll('[data-od-card="task-brief"]')).toHaveLength(1);
+    expect(container.textContent).toContain(TASK_BRIEF.summary);
+    expect(container.textContent).toContain('D2 SSE before.');
+    expect(container.textContent).toContain('D2 SSE after.');
+  });
+
+  it.each(['inline', 'fenced', 'unclosed fence'])('keeps a partial card opener quoted as %s code', (style) => {
+    const prefix = '<od-ca';
+    const example = style === 'inline' ? `Example: \`${prefix}\``
+      : style === 'fenced' ? `\`\`\`xml\n${prefix}\n\`\`\`` : `\`\`\`xml\n${prefix}`;
+    const { container } = render(show([{ kind: 'text', text: `Before.\n\n${example}` }]));
+    expect(container.textContent).toContain('Before.');
+    expect(container.querySelector('code')?.textContent).toContain(prefix);
+    expect(container.querySelector('[data-od-card]')).toBeNull();
+  });
+
+  it('keeps ordinary live prose when a candidate continues as a different tag name', () => {
+    const text = 'Before. Compare 5 < 7. <od-card-example is a literal example. After.';
+    const { container } = render(show([{ kind: 'text', text }]));
+    expect(container.textContent).toContain(text);
+    expect(container.querySelector('[data-od-card]')).toBeNull();
+  });
+
+  it('restores terminal literal opener prefixes that never became a card', () => {
+    const raw = markup(TASK_BRIEF);
+    const openerEnd = raw.indexOf('>');
+    const { container, rerender } = render(show([]));
+    for (let length = '<od-ca'.length; length <= openerEnd; length += 1) {
+      const prefix = raw.slice(0, length);
+      const text = `Before.\n${prefix}`;
+      rerender(<I18nProvider initial="en"><ExecutionShell shell={{ ...shell([{ kind: 'text', text }]), status: 'done' }} deferCollapsedBodies={false} /></I18nProvider>);
+      expect(container.textContent).toContain('Before.');
+      // SayText trims its Markdown input; preserve visible prefix characters,
+      // including unfinished attributes, without requiring trailing whitespace.
+      expect(container.textContent).toContain(prefix.trimEnd());
+      expect(container.querySelector('[data-od-card]')).toBeNull();
+    }
+  });
+
   it('keeps a discarded rule local to its todo across remounts', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ entries: [] }))));
     const raw = markup(RULE_PROPOSAL);
