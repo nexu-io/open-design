@@ -4,7 +4,11 @@ import type { ElectronExactSceneRequest, ElectronExactDistributionRequest } from
 export type { ElectronPackRequest, ElectronExactSceneRequest, ElectronExactDistributionRequest };
 
 /** Neutral native/carrier input; cache ownership stays with the calling tool. */
-export async function buildElectronBase(input: Readonly<{ sceneDirectory: string; sceneManifestSha256: string; outputRoot: string }>) {
+export async function resolveElectronBaseArchive(target: string) {
+  const { resolveElectronDistributionArchive } = await import("@open-design/electron-kit/distribution");
+  return resolveElectronDistributionArchive(target);
+}
+export async function buildElectronBase(input: Readonly<{ sceneDirectory: string; sceneManifestSha256: string; archivePath: string; outputRoot: string }>) {
   const { buildElectronDistributionBase } = await import("@open-design/electron-kit/distribution");
   return buildElectronDistributionBase(input);
 }

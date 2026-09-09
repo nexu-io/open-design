@@ -25,9 +25,12 @@ it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("builds a p
   await mkdir(scene);
   await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: "b".repeat(64) });
   await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
-    'export async function buildElectronBase(input) { return { root: input.outputRoot, manifestSha256: "' + "f".repeat(64) + '" }; }');
-  const result = await buildReleaseBase({ ...f, scene });
+    'export async function resolveElectronBaseArchive() { return { version: "41.3.0" }; }\n' +
+    'export async function buildElectronBase(input) { return { root: input.outputRoot, archivePath: input.archivePath, manifestSha256: "' + "f".repeat(64) + '" }; }');
+  const runtimeArchive = join(f.root, "official-electron.zip");
+  const result = await buildReleaseBase({ ...f, scene, runtimeArchive });
   expect(result).toMatchObject({ operation: "electron.base.build", target: f.target });
+  expect(result.base).toHaveProperty("archivePath", runtimeArchive);
   expect(result).not.toHaveProperty("planNode");
 });
 

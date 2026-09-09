@@ -111,6 +111,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--resource-id <id>", "Closure data resource group (resource)")
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
+    .option("--runtime-archive <file>", "Optional local official Electron archive; pinned checksum required (base)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
     .option("--capsule-directory <directory>", "Portable Capsule products, indexed by target (scene; Electron consumes)")
     .option("--capsule-archive <file>", "Prebuilt Capsule archive (Electron scene; paired with content)")
@@ -139,6 +140,7 @@ export function registerExactCommands(cli: CAC): void {
         return;
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
+      if (options.runtimeArchive != null && operation !== "base") throw new Error("--runtime-archive is only supported by build base");
       if (options.baseReceipt != null && operation !== "distribution") throw new Error("--base-receipt is only supported by build distribution");
       if (options.baseDirectory != null && operation !== "distribution") throw new Error("--base-directory is only supported by build distribution");
       if (options.capsuleDirectory != null && operation !== "scene") throw new Error("--capsule-directory is only supported by build scene");
@@ -162,7 +164,8 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule(common);
-      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene") });
+      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene"),
+        ...(options.runtimeArchive == null ? {} : { runtimeArchive: required(options, "runtimeArchive") }) });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
