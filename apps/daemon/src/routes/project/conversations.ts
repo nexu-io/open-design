@@ -433,6 +433,10 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
           strategyTaskExecutionId: turn.taskExecutionId,
           strategyTaskRunIndex: turn.taskRunIndex,
           ...(turn.delivered ? { strategyTaskDelivered: true } : {}),
+          ...(turn.blocked ? {
+            strategyTaskBlocked: true,
+            strategyTaskBlockedText: turn.blockedText,
+          } : {}),
         };
       }),
     });

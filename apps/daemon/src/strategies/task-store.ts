@@ -440,6 +440,9 @@ export interface StrategyTaskTurnProjection {
    *  learn the verdict, and surfaces keyed off the agent's TodoWrite snapshot
    *  (the "continue remaining tasks" offer) would resurrect on every reload. */
   delivered: boolean;
+  /** Persisted task verdict, independent of the physical Run's status. */
+  blocked: boolean;
+  blockedText: string | null;
 }
 
 /**
@@ -470,7 +473,8 @@ export function strategyTaskTurnsForRunIds(
         SELECT r.run_id AS runId,
                r.task_execution_id AS taskExecutionId,
                r.task_run_index AS taskRunIndex,
-               t.outcome AS outcome
+               t.outcome AS outcome,
+               t.blocked_visible_text AS blockedVisibleText
           FROM strategy_task_runs r
           -- LEFT so a mapping whose task row is gone still yields its turn
           -- position: losing that would un-fold an already-rendered Full Plan
@@ -489,6 +493,12 @@ export function strategyTaskTurnsForRunIds(
           taskExecutionId: row['taskExecutionId'],
           taskRunIndex: row['taskRunIndex'],
           delivered: row['outcome'] === 'completed',
+          blocked: row['outcome'] === 'blocked',
+          blockedText: row['outcome'] === 'blocked'
+            && typeof row['blockedVisibleText'] === 'string'
+            && row['blockedVisibleText'].trim().length > 0
+            ? row['blockedVisibleText']
+            : null,
         });
       }
     }
