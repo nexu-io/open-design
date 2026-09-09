@@ -25,7 +25,7 @@
     "resedit": "1.7.2"
   },
   "optionalDependencies": {
-    "@powerformer/vela-cli": "0.0.35"
+    "@powerformer/vela-cli": "file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.matrix-six.g2419a3777c64.portable.1.tgz"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

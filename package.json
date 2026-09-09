@@ -57,7 +57,8 @@
       "tmp": "0.2.7",
       "undici@^6": "6.28.0",
       "undici@^7": "7.29.0",
-      "yaml": "2.9.0"
+      "yaml": "2.9.0",
+      "@powerformer/vela-cli-darwin-arm64": "file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.matrix-six.g2419a3777c64.tgz"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3",

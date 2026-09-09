@@ -1,0 +1,30 @@
+{
+  "distributionVersion": "0.0.1-test.matrix-six.g2419a3777c64.portable.1",
+  "velaBinaryVersion": "0.0.1-test.matrix-six.g2419a3777c64",
+  "velaSourceCommit": "2419a3777c645702a7be1f6290cdcf68edb87fc3",
+  "openDesignBaselineCommit": "46d1f1f830ccbe299f768c32078e45baaeb280af",
+  "platforms": [
+    "darwin-arm64"
+  ],
+  "runtimes": [
+    "opencode",
+    "pi",
+    "codex",
+    "claude",
+    "dsh",
+    "none"
+  ],
+  "npmPublished": false,
+  "artifacts": [
+    {
+      "file": "powerformer-vela-cli-0.0.1-test.matrix-six.g2419a3777c64.portable.1.tgz",
+      "bytes": 9038,
+      "sha256": "187825041c3250edae5d8066bad5f8bf03f0ba713cd65f643d1f3f06c45b2da0"
+    },
+    {
+      "file": "powerformer-vela-cli-darwin-arm64-0.0.1-test.matrix-six.g2419a3777c64.tgz",
+      "bytes": 57024211,
+      "sha256": "391dd771664c1dfa447fd6bd6961e6171301c23932629f84e403db05fe02b0d9"
+    }
+  ]
+}
