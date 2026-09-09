@@ -1,20 +1,24 @@
+import { existsSync, writeFileSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import * as runLifecycleTracer from '../src/run-lifecycle-tracer.js';
 import { startServer } from '../src/server.js';
 import {
   type CaptureSink,
   type Conversation,
   type RunTiming,
   type StartedServer,
+  RUN_TERMINAL_WAIT_MS,
   TEST_BUDGET_MS,
   clearTelemetryEnv,
   createChatProject,
   createOdNextDesignProject,
   expectVisibleOutputNotBeforeFirstToken,
   putConfig,
+  readAssistantMessage,
   restoreEnv,
   sendRunAndWait,
   snapshotEnv,
@@ -54,6 +58,7 @@ describe('first_visible_output is stamped at emission, not at first token', () =
   let posthog: CaptureSink | null = null;
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.resolve(started?.shutdown?.());
     if (started?.server) {
       await new Promise<void>((resolve) => started?.server.close(() => resolve()));
@@ -152,6 +157,20 @@ describe('first_visible_output is stamped at emission, not at first token', () =
   // change exists to end.
   it('reports the close-time wait when the strategy releases the reply at finish', async () => {
     binDir = await mkdtemp(path.join(os.tmpdir(), 'od-fvo-strategy-'));
+    const firstTokenAck = path.join(binDir, 'first-token-recorded');
+    const createTracer = runLifecycleTracer.createRunLifecycleTracer;
+    vi.spyOn(runLifecycleTracer, 'createRunLifecycleTracer').mockImplementation((run) => {
+      const tracer = createTracer(run);
+      return {
+        ...tracer,
+        mark(mark, timestamp) {
+          tracer.mark(mark, timestamp);
+          if (mark === 'first_token' && run.analyticsTelemetry?.firstTokenAt !== undefined) {
+            writeFileSync(firstTokenAck, 'recorded');
+          }
+        },
+      };
+    });
     // Every visible byte of this reply is withheld until close. The machine
     // block is suppressed by design (it is protocol, not prose) and the only
     // remaining text is `<o` — a prefix of a reserved opening tag, which the
@@ -164,14 +183,36 @@ describe('first_visible_output is stamped at emission, not at first token', () =
     '{"schemaVersion":2}',
     '</open-design-runtime-state>',
   ].join('\\n') + '<o' } });
-  setTimeout(finishTurn, ${WITHHOLD_MS});`);
+  // The child can write long before the daemon decodes its stdout. Start the
+  // withheld window only after the REAL tracer has recorded first_token; no
+  // timestamps or output marks are supplied by this acknowledgement.
+  const { existsSync } = require('node:fs');
+  const deadline = Date.now() + ${RUN_TERMINAL_WAIT_MS / 2};
+  function waitForFirstToken() {
+    if (existsSync(${JSON.stringify(firstTokenAck)})) {
+      // This real delay spans a child-process boundary and is the interval the
+      // real run_finished telemetry must measure, rather than a readiness wait.
+      setTimeout(finishTurn, ${WITHHOLD_MS});
+      return;
+    }
+    if (Date.now() >= deadline) {
+      // End the fixture cleanly so a missing acknowledgement cannot trigger
+      // runtime retries. The test below fails explicitly on the missing file.
+      finishTurn();
+      return;
+    }
+    setTimeout(waitForFirstToken, 10);
+  }
+  waitForFirstToken();`);
 
     const timing = await runOnceAndReadTiming({
       bin,
       label: 'strategy-tail',
       strategyRollout: 'active',
+      expectedReply: '<o',
     });
 
+    expect(existsSync(firstTokenAck), 'daemon did not acknowledge first_token').toBe(true);
     expectVisibleOutputNotBeforeFirstToken(timing);
     const gap =
       timing.time_to_first_visible_output_ms! - timing.time_to_first_token_ms!;
@@ -188,6 +229,7 @@ describe('first_visible_output is stamped at emission, not at first token', () =
      * all.
      */
     strategyRollout: 'off' | 'active';
+    expectedReply?: string;
   }): Promise<RunTiming> {
     posthog = await startCaptureSink();
     clearTelemetryEnv();
@@ -229,6 +271,13 @@ describe('first_visible_output is stamped at emission, not at first token', () =
       expect(created.strategyTask).toBeUndefined();
     }
     expect(run.status).toBe('succeeded');
+    if (options.expectedReply !== undefined) {
+      expect(await readAssistantMessage(
+        started.url,
+        conversation,
+        created.assistantMessageId as string,
+      )).toBe(options.expectedReply);
+    }
     const flush = async () => {
       await Promise.resolve(started?.shutdown?.());
     };
