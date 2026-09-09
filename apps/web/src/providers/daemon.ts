@@ -87,6 +87,7 @@ import {
 } from '../artifacts/strip';
 import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observability/stuck-run';
 import { setChatCorrelation } from '../observability/chat-context';
+import { chatSurfaceRunEnded, chatSurfaceRunStarted } from '../observability/chat-health';
 import { markUpstreamActivity } from '../runtime/chat/upstream-activity';
 import { IN_FLIGHT_TOOL_INPUT_MARKER, IN_FLIGHT_TOOL_OUTPUT_KEY } from '../runtime/tool-events';
 
@@ -1165,6 +1166,11 @@ export async function streamViaDaemon({
       client_type: detectClientType(),
     });
     openChatRunCorrelation(runId, agentId);
+    // Opens the chat-health jank window for this run. `client_chat_stream_health`
+    // only counts long tasks that landed inside one, so a run with no opener
+    // contributes nothing at all — idle-time jank belongs to `client_long_task`.
+    // No-ops when no chat surface is mounted.
+    chatSurfaceRunStarted(runId);
     notifyRunsChanged();
     emitRunStatus('queued');
     await consumeDaemonRun({
@@ -1200,6 +1206,7 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
   // either); only the correlation is being closed here, deliberately, so this
   // change adds no new event.
   openChatRunCorrelation(options.runId, options.agentId);
+  chatSurfaceRunStarted(options.runId);
   await consumeDaemonRun({
     ...options,
     onRunStatus: (status) => {
@@ -1715,6 +1722,9 @@ async function consumeDaemonRun(options: DaemonReattachOptions): Promise<void> {
     // the run that just ended, so every stall in the rest of the chain would
     // be filed under the wrong run id.
     openChatRunCorrelation(runId, options.agentId);
+    // Miss this one and every long task in the rest of the chain is billed to
+    // the run that already ended.
+    chatSurfaceRunStarted(runId);
     options.onRunCreated?.(runId, result.strategyTask);
   }
 }
@@ -2373,6 +2383,10 @@ async function consumeDaemonPhysicalRun({
     // is a no-op for unknown runIds.
     trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
     closeChatRunCorrelation();
+    // Closes and reports the jank window. Skipping it does not lose the window
+    // — the next run start flushes it — but it does report `run_completed:
+    // false` for a run that finished cleanly.
+    chatSurfaceRunEnded(runId);
   }
 }
 

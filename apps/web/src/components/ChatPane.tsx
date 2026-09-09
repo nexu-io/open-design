@@ -65,6 +65,11 @@ import {
   runAgentProviderId,
 } from '../analytics/run-task';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
+import {
+  chatSurfaceSample,
+  openChatSurface,
+  type ChatSurfaceHandle,
+} from '../observability/chat-health';
 import { useI18n, useT } from '../i18n';
 import { startersForProduct, type ProductType } from '../onboarding/recommendation';
 import { starterCopyFor } from '../onboarding/starter-copy';
@@ -1407,6 +1412,20 @@ export function ChatPane({
    * 只是此刻长得一样。见 `buildChatRenderItems` 的注释。
    */
   const chatRenderItems = useMemo(() => buildChatRenderItems(displayMessages), [displayMessages]);
+  /** Live handle on the chat-health surface, for the effects that feed it. */
+  const chatSurfaceRef = useRef<ChatSurfaceHandle | null>(null);
+  const chatVirtualized = isChatVirtualized(chatRenderItems);
+  /**
+   * 这场对话背后**agent 事件的总条数**。
+   *
+   * 首屏耗时单独一个数字是没法归因的:3 秒到底是「消息多」还是「每条消息底下
+   * 挂了几百条工具事件」,只有这个数能分开。所以它和 `markFirstPaint` 必须同批
+   * 落地 —— 只有耗时没有它,那个耗时就只是个不能下钻的读数。
+   */
+  const chatStreamEventCount = useMemo(
+    () => displayMessages.reduce((total, message) => total + (message.events?.length ?? 0), 0),
+    [displayMessages],
+  );
   /**
    * 每一轮各自那张升级卡:key = 那一轮助手消息的 id,value = **结束那一刻**的余额。
    *
@@ -2803,10 +2822,64 @@ export function ChatPane({
     });
   };
 
+  /*
+   * 把这块转录交给 chat-health 看着(`client_chat_first_paint` /
+   * `client_chat_dom_growth` / `client_chat_memory_pressure` /
+   * `client_chat_stream_health` 四条的宿主)。
+   *
+   * 依赖只有两项,各自防一个真实的死法:
+   *   - `tab`:不是聊天页时整块是条件渲染的,`logRef.current` 是 null。
+   *     漏了它,从别的页回到聊天页永远接不上观察者。
+   *   - `activeConversationId`:那个 div **不带 conversation key**,换会话
+   *     React 复用同一个 DOM 节点。所以「换会话要重开」这件事没有任何
+   *     节点层面的信号,只能靠这条依赖。
+   *
+   * `openChatSurface` 自己会先 detach 上一块再建新的,cleanup 再 detach 一次
+   * 是幂等的 —— 两套观察者并存这件事在模块那一侧就已经不可能。
+   */
+  useEffect(() => {
+    if (tab !== 'chat') return undefined;
+    const el = logRef.current;
+    if (!el) return undefined;
+    const handle = openChatSurface({
+      element: el,
+      messageCount: displayMessages.length,
+      virtualized: chatVirtualized,
+      streamEventCount: chatStreamEventCount,
+    });
+    chatSurfaceRef.current = handle;
+    // 开局先取一个基线。没有它,DOM/heap 曲线的第一个点要等 60 秒的定时器,
+    // 而「打开就已经很大」和「开着开着长大了」是两个不同的故事。
+    chatSurfaceSample('conversation_open');
+    return () => {
+      chatSurfaceRef.current = null;
+      handle.detach();
+    };
+    // 计数由下面那条 effect 持续推给 handle;这里只认「换会话 / 换标签页」
+    // 这两件真的需要换一块被观察对象的事。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConversationId, tab]);
+
+  useEffect(() => {
+    const handle = chatSurfaceRef.current;
+    if (!handle) return;
+    handle.setMessageCount(displayMessages.length);
+    handle.setVirtualized(chatVirtualized);
+    handle.setStreamEventCount(chatStreamEventCount);
+  }, [chatStreamEventCount, chatVirtualized, displayMessages.length]);
+
   useEffect(() => {
     const el = logRef.current;
     if (!el || didInitialScrollRef.current || displayMessages.length === 0) return;
     didInitialScrollRef.current = true;
+    // 第一条消息在屏幕上了 —— 这才是「用户读得到」的那一刻,也是首屏耗时的
+    // 终点。模块自己保证幂等(只有第一次会上报),所以 StrictMode 的双跑
+    // 造不出一个假的、更快的样本。
+    // 行数按 chat-health 自己数 `dom_growth` 那一套算(日志容器的直接子元素),
+    // 两个事件用同一个定义,才比得起来。
+    chatSurfaceRef.current?.markFirstPaint({
+      renderedRowCount: el.querySelectorAll(':scope > *').length,
+    });
     requestAnimationFrame(() => {
       // If the last assistant message contains a question form, scroll to
       // the form instead of the bottom, so the user sees the form first.
@@ -5621,7 +5694,7 @@ function ChatRows({
     }
     return byMessageId;
   }, [messages]);
-  const virtualized = items.length > CHAT_MESSAGE_VIRTUALIZE_THRESHOLD;
+  const virtualized = isChatVirtualized(items);
   const virtualWindow = useMeasuredVirtualWindow(items, {
     enabled: virtualized,
     containerRef: scrollContainerRef,
@@ -5905,6 +5978,18 @@ function buildChatRenderItems(messages: ChatMessage[]): ChatRenderItem[] {
     });
   }
   return items;
+}
+
+/**
+ * 转录此刻**走不走虚拟窗口**。
+ *
+ * 一个判据,两个消费者:`ChatRows` 按它决定怎么画,chat-health 按它上报
+ * `virtualized`。写成两处 `items.length > 阈值` 今天读起来一模一样,
+ * 等这条规则长出第二个条件的那天就会分家 —— 那时埋点描述的是渲染层
+ * **已经不用了**的那种模式,而看板上没有任何东西会喊。
+ */
+function isChatVirtualized(items: ChatRenderItem[]): boolean {
+  return items.length > CHAT_MESSAGE_VIRTUALIZE_THRESHOLD;
 }
 
 /**
