@@ -2,6 +2,7 @@ import { chmod, copyFile, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { DECK_SKELETON_HTML } from '@open-design/contracts';
 
 const PROTOCOL_DECK_CANARY_HTML = DECK_SKELETON_HTML
@@ -66,11 +67,13 @@ export type FakeAgentRuntime = {
   bin: string;
   envKey: string;
   env: Record<string, string>;
+  invocation?: { path: string; nonce: string };
 };
 
 export type FakeAgentRuntimeOptions = {
   root?: string;
   runtimeIds?: FakeAgentId[];
+  recordInvocations?: boolean;
 };
 
 export type FakeAcpHandshakeRuntime = {
@@ -183,22 +186,31 @@ export async function createFakeAgentRuntimes(
     const bin = process.platform === 'win32'
       ? path.join(parsedScript.dir, `${parsedScript.name}.cmd`)
       : script;
-    await writeFile(script, renderFakeAgentScript(agentId), 'utf8');
+    const invocation = !Array.isArray(input) && input.recordInvocations && agentId === 'codex'
+      ? { path: path.join(root, 'codex-invocations.jsonl'), nonce: randomUUID() }
+      : undefined;
+    if (invocation) await writeFile(invocation.path, '', 'utf8');
+    await writeFile(script, renderFakeAgentScript(agentId, invocation), 'utf8');
     if (process.platform === 'win32') {
       await writeFile(bin, '@echo off\r\nnode "%~dp0%~n0.cjs" %*\r\n', 'utf8');
     } else {
       await chmod(bin, 0o755);
     }
     const envKey = AGENT_BIN_ENV_KEYS[agentId];
-    runtimes[agentId] = { agentId, bin, envKey, env: { [envKey]: bin } };
+    runtimes[agentId] = { agentId, bin, envKey, env: { [envKey]: bin }, ...(invocation ? { invocation } : {}) };
   }
   return runtimes;
 }
 
-function renderFakeAgentScript(agentId: FakeAgentId): string {
+function renderFakeAgentScript(agentId: FakeAgentId, invocation?: FakeAgentRuntime['invocation']): string {
   return `#!/usr/bin/env node
 const agentId = ${JSON.stringify(agentId)};
 const args = process.argv.slice(2);
+const codexAppServer = agentId === 'codex' && args.includes('app-server');
+const invocation = ${JSON.stringify(invocation ?? null)};
+let codexThreadId = 'fake-codex-session';
+let codexTurnId = 'fake-codex-turn';
+let codexCwd = '';
 const { mkdir, writeFile: writeFileFs } = require('node:fs/promises');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -219,6 +231,41 @@ if (args.includes('--version')) {
 let prompt = '';
 let emitted = false;
 let emitTimer = null;
+recordInvocation('started');
+if (codexAppServer) {
+  const lines = require('node:readline').createInterface({ input: process.stdin });
+  let initialized = false;
+  let threadReady = false;
+  lines.on('line', (line) => {
+    try {
+      const request = JSON.parse(line);
+      recordInvocation('request', { method: request.method });
+      const reply = (result) => writeJson({ id: request.id, result });
+      if (request.method === 'initialize') {
+        initialized = true;
+        reply({ userAgent: 'codex-e2e' });
+      } else if (request.method === 'initialized') {
+        return;
+      } else if (initialized && ['thread/start', 'thread/resume'].includes(request.method)) {
+        codexThreadId = request.params?.threadId || 'fake-codex-session';
+        codexCwd = request.params?.cwd || '';
+        threadReady = true;
+        reply({ thread: { id: codexThreadId } });
+      } else if (threadReady && request.method === 'turn/start' && !emitted) {
+        codexTurnId = 'fake-codex-turn';
+        reply({ turn: { id: codexTurnId, status: 'inProgress' } });
+        notifyCodex('turn/started', { turn: { id: codexTurnId, status: 'inProgress' } });
+        const input = (request.params?.input || [])
+          .filter((item) => item.type === 'text').map((item) => item.text).join('\\n');
+        void emitRun(input).catch(failUnhandled);
+      } else if (request.id != null) {
+        writeJson({ id: request.id, error: { code: -32601, message: 'Unsupported or out-of-order fixture method: ' + request.method } });
+      }
+    } catch (error) {
+      failUnhandled(error);
+    }
+  });
+} else {
 process.stdin.setEncoding('utf8');
 process.stdin.resume();
 process.stdin.on('data', (chunk) => {
@@ -235,6 +282,26 @@ process.stdin.on('end', () => {
 if (process.stdin.isTTY || agentId === 'deepseek') {
   prompt = args.join(' ');
   void emitRun(prompt).catch(failUnhandled);
+}
+}
+
+function recordInvocation(event, extra = {}) {
+  if (!invocation) return;
+  require('node:fs').appendFileSync(invocation.path, JSON.stringify({
+    nonce: invocation.nonce, pid: process.pid,
+    mode: codexAppServer ? 'app-server' : 'exec-json', event, ...extra,
+  }) + '\\n');
+}
+
+function notifyCodex(method, params) {
+  writeJson({ method, params: { threadId: codexThreadId, turnId: codexTurnId, ...params } });
+}
+
+function completeCodexTurn(error) {
+  recordInvocation('completed', { threadId: codexThreadId, turnId: codexTurnId, failed: !!error });
+  notifyCodex('turn/completed', {
+    turn: { id: codexTurnId, status: error ? 'failed' : 'completed', error: error ? { message: error } : null },
+  });
 }
 
 async function emitRun(promptText) {
@@ -441,6 +508,10 @@ async function emitRun(promptText) {
   }
   const isSlowReload = promptText.includes('Create a slow reload deterministic smoke artifact');
   const isDelayed = promptText.includes('Create a delayed deterministic smoke artifact');
+  if (isDelayed && promptText.includes('<recipe_identity ')) {
+    emitOdNextPlanningRun(promptText, 'request', undefined, { homeFirstRun: true });
+    return;
+  }
   const isChunked = promptText.includes('Create a chunked deterministic smoke artifact');
   const isFollowUp = promptText.includes('Create a follow-up deterministic smoke artifact');
   const isDefaultSmoke = promptText.includes('Create a deterministic smoke artifact');
@@ -532,7 +603,8 @@ function emitOdNextPlanningRun(promptText, inputStage = 'request', taskTypeOverr
     identity.taskType = taskTypeOverride;
   }
   if (options.legacyDeck) identity.legacyDeck = true;
-  if (taskTypeOverride || options.legacyDeck) {
+  if (options.homeFirstRun) identity.homeFirstRun = true;
+  if (taskTypeOverride || options.legacyDeck || options.homeFirstRun) {
     writeFileSync(odNextIdentityPath, JSON.stringify(identity), 'utf8');
   }
   const deliverableKind = identity.taskType === 'ppt' ? 'deck' : 'prototype';
@@ -629,9 +701,12 @@ function emitOdNextBlockedRun() {
 async function emitOdNextProductionRun(promptText) {
   const identity = odNextPromptIdentity(promptText);
   const legacyDeck = identity.legacyDeck === true;
+  const homeFirstRun = identity.homeFirstRun === true;
+  if (homeFirstRun) await new Promise((resolve) => setTimeout(resolve, 1200));
   await writeFileFs(
     join(projectDir(), 'od-next-active-canary.html'),
-    legacyDeck ? legacyTemplateDeckCanaryHtml : protocolDeckCanaryHtml,
+    homeFirstRun ? '<!doctype html><html><body><h1>Delayed Daemon Smoke</h1></body></html>'
+      : legacyDeck ? legacyTemplateDeckCanaryHtml : protocolDeckCanaryHtml,
     'utf8',
   );
   const state = {
@@ -639,7 +714,9 @@ async function emitOdNextProductionRun(promptText) {
     outcome: 'completed', executionMode: 'simple', reasonCodes: [],
   };
   emitSuccess(
-    (legacyDeck
+    (homeFirstRun
+      ? 'I recovered the delayed reasoning path and will persist the artifact now.\\n'
+      : legacyDeck
       ? 'Created the selected-template legacy deck canary.\\n'
       : 'Created od-next-active-canary.html through the continued native session.\\n')
       + '<open-design-runtime-state>\\n' + JSON.stringify(state)
@@ -884,7 +961,7 @@ function projectDir(promptText = '') {
   const fromArgs = cwdFlagIndex >= 0 && typeof args[cwdFlagIndex + 1] === 'string'
     ? args[cwdFlagIndex + 1]
     : '';
-  return process.env.OD_PROJECT_DIR || fromEnv || fromArgs || fromPrompt || process.cwd();
+  return process.env.OD_PROJECT_DIR || fromEnv || fromArgs || codexCwd || fromPrompt || process.cwd();
 }
 
 function writeJson(value) {
@@ -892,6 +969,9 @@ function writeJson(value) {
 }
 
 function exitSoon(code) {
+  // app-server completes a turn before the host closes stdin. Keep the pipe
+  // alive until that EOF, just like the real server; exit 0 is not the handshake.
+  if (codexAppServer && code === 0) return;
   setTimeout(() => process.exit(code), 10);
 }
 
@@ -926,6 +1006,16 @@ function emitSuccess(artifact, isChunked, includeThinking) {
   const second = artifact.slice(Math.ceil(artifact.length / 2));
   switch (agentId) {
     case 'codex':
+      if (codexAppServer) {
+        const item = { id: 'fake-message', type: 'agentMessage', phase: 'final_answer' };
+        notifyCodex('item/started', { item: { ...item, text: '' } });
+        for (const delta of isChunked ? [first, second] : [artifact]) {
+          notifyCodex('item/agentMessage/delta', { itemId: item.id, delta });
+        }
+        notifyCodex('item/completed', { item: { ...item, text: artifact } });
+        completeCodexTurn();
+        return;
+      }
       writeJson({ type: 'thread.started', thread_id: 'fake-codex-session' });
       writeJson({ type: 'turn.started' });
       if (isChunked) {
@@ -1056,6 +1146,7 @@ function failUnhandled(error) {
 function emitFailure() {
   switch (agentId) {
     case 'codex':
+      if (codexAppServer) return completeCodexTurn('intentional fake codex failure');
       writeJson({ type: 'thread.started' });
       writeJson({ type: 'turn.started' });
       writeJson({ type: 'turn.failed', error: { message: 'intentional fake codex failure' } });
@@ -1086,6 +1177,7 @@ function emitServiceFailure(statusCode) {
       : 'HTTP 503 Service Unavailable: upstream model provider is temporarily unavailable.';
   switch (agentId) {
     case 'codex':
+      if (codexAppServer) return completeCodexTurn(message);
       writeJson({ type: 'thread.started' });
       writeJson({ type: 'turn.started' });
       writeJson({ type: 'turn.failed', error: { message } });
@@ -1242,6 +1334,7 @@ function emitOpenCodeRepeatedToolFailures() {
 function emitEmptySuccess() {
   switch (agentId) {
     case 'codex':
+      if (codexAppServer) return completeCodexTurn();
       writeJson({ type: 'thread.started' });
       writeJson({ type: 'turn.started' });
       writeJson({ type: 'turn.completed', usage: { input_tokens: 1, output_tokens: 0 } });

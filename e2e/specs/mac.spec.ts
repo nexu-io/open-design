@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { createFakeAgentRuntimes } from '@/fake-agents';
+import { createFakeAgentRuntimes, type FakeAgentRuntime } from '@/fake-agents';
 import { T } from '@/timeouts';
 import {
   capturePackagedFailureEvidence,
@@ -440,12 +440,15 @@ macDescribe('packaged mac runtime smoke', () => {
     let firstRunStarted = false;
     let firstRunDesktopLogPath: string | null = null;
     let firstRunFailure: unknown = null;
+    let invocation: FakeAgentRuntime['invocation'];
     try {
       await resetPackagedRuntimeState();
       const fakeAgents = await createFakeAgentRuntimes({
         root: fakeAgentRoot,
         runtimeIds: ['codex'],
+        recordInvocations: true,
       });
+      invocation = fakeAgents.codex.invocation;
       const install = await runToolsPackJson<MacInstallResult>('install');
       firstRunInstalledAppPath = install.installedAppPath;
       await seedPackagedHomeFirstRunConfig(fakeAgents.codex.env);
@@ -479,6 +482,19 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(runFinished.terminalRunStatus).toBe('succeeded');
 
       const firstRun = await waitForPackagedHomeFirstRunStage('assistant-output');
+      const { report } = await createPackagedSmokeReport('mac');
+      await report.json('first-run/result.json', firstRun);
+      // Preserve the actual default/fallback decision; do not force a transport
+      // or bypass OD Next admission just to make the deterministic fake pass.
+      expect(firstRun.runId).not.toBe('');
+      expect(firstRun.strategyRolloutDecision).not.toBeNull();
+      expect(invocation).toBeDefined();
+      const receipts = (await readFile(invocation!.path, 'utf8')).trim().split('\n')
+        .map((line) => JSON.parse(line));
+      expect(receipts.length).toBeGreaterThan(0);
+      expect(receipts.every((entry) => entry.nonce === invocation!.nonce && entry.mode === 'app-server')).toBe(true);
+      expect(receipts.map((entry) => entry.method)).toEqual(expect.arrayContaining(['initialize', 'thread/start', 'turn/start']));
+      expect(receipts.some((entry) => entry.event === 'completed' && entry.failed === false)).toBe(true);
       expect(firstRun.submitClicked).toBe(true);
       expect(firstRun.projectId).toEqual(expect.any(String));
       expect(firstRun.hrefBefore).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/$)/);
@@ -506,6 +522,16 @@ macDescribe('packaged mac runtime smoke', () => {
       firstRunFailure = error;
       throw error;
     } finally {
+      if (invocation) {
+        try {
+          const { report } = await createPackagedSmokeReport('mac');
+          await capturePackagedFailureEvidence(report, 'first-run', [
+            { name: 'fixture-invocations.jsonl', read: () => readFile(invocation!.path) },
+          ]);
+        } catch (error) {
+          console.error('failed to preserve packaged fixture receipt', error);
+        }
+      }
       // Capture before uninstall: cleanup removes the installed app and the next
       // case's reset deletes the runtime namespace, so evidence not copied out
       // here no longer exists by the time anyone reads the report.
