@@ -60,7 +60,7 @@ describe('successful physical Run deliverable finalization', () => {
       .resolves.toBe('<!doctype html><script>const items = [1, 2];</script>');
   });
 
-  it('fails closed on a known unsafe syntax error without changing the file', async () => {
+  it('warns on a known unsafe syntax error without changing the file', async () => {
     const source = '<!doctype html><script>const value = ;</script>';
     const fixture = await projectFixture('index.html', source);
 
@@ -73,7 +73,7 @@ describe('successful physical Run deliverable finalization', () => {
       processTreeQuiescent: true,
     });
 
-    expect(result.syntax).toMatchObject({ action: 'fail', reason: 'no_safe_fix' });
+    expect(result.syntax).toMatchObject({ action: 'warn', reason: 'no_safe_fix' });
     await expect(fs.readFile(fixture.target, 'utf8')).resolves.toBe(source);
   });
 

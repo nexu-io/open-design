@@ -191,7 +191,7 @@ const done = true;`,
     const root = await fixture(source);
     await expect(checkDeliverableSyntax({ projectRoot: root, entryFile: 'index.html' }))
       .resolves.toMatchObject({ status: 'repairable' });
-    await expect(finalize(root)).resolves.toMatchObject({ action: 'fail' });
+    await expect(finalize(root)).resolves.toMatchObject({ action: 'warn' });
     await expect(fs.readFile(path.join(root, 'index.html'), 'utf8')).resolves.toBe(source);
   });
 
@@ -210,7 +210,7 @@ const done = true;`,
     const source = `<script>\n${Array.from({ length: 9 }, (_, index) => `const label${index} = 'ready${index}";`).join('\n')}\n</script>`;
     const root = await fixture(source);
     await expect(finalize(root)).resolves.toMatchObject({
-      action: 'fail', reason: 'attempt_limit_reached',
+      action: 'warn', reason: 'attempt_limit_reached',
       validation: { repairState: { attempt: 8, maxAttempts: 8, mode: 'host_safe_fixer' } },
     });
     await expect(fs.readFile(path.join(root, 'index.html'), 'utf8')).resolves.toBe(source);
@@ -220,7 +220,7 @@ const done = true;`,
     const source = '<script>\nconst one = \'ready";\nconst two = \'done";\nconst unsupported = ;\n</script>';
     const root = await fixture(source);
     await expect(finalize(root)).resolves.toMatchObject({
-      action: 'fail', reason: 'no_safe_fix',
+      action: 'warn', reason: 'no_safe_fix',
       validation: {
         repairState: { attempt: 2, maxAttempts: 8, mode: 'host_safe_fixer' },
         metrics: {

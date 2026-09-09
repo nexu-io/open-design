@@ -459,6 +459,21 @@ describe('shouldFullyRedactToolPayload (fail-closed)', () => {
 });
 
 describe('buildTracePayload', () => {
+  it.each(['synthetic-test-syntax-replay', 'production'])(
+    'sets the native trace environment to the resolved telemetry environment %s',
+    (environment) => {
+      vi.stubEnv('OD_TELEMETRY_ENV', environment);
+      vi.stubEnv('OPEN_DESIGN_ENV', 'ignored-fallback');
+      try {
+        const trace = bodyOf(buildTracePayload(makeCtx()), 'trace-create');
+        expect(trace.environment).toBe(environment);
+        expect(trace.metadata.env).toBe(environment);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it('emits a trace with nested agent + generation observations', () => {
     const batch = buildTracePayload(makeCtx());
     const types = (batch as Array<{ type: string }>).map((e) => e.type);
@@ -580,6 +595,38 @@ describe('buildTracePayload', () => {
       deliverable_syntax_blocked_broken_delivery_count: 0,
     });
     expect(JSON.stringify(trace.metadata)).not.toContain('index.html');
+  });
+
+  it.each([0, 1, undefined] as const)('exports warning count %s without inventing a missing value', (count) => {
+    const trace = (buildTracePayload(makeCtx({
+      deliverableSyntax: {
+        schemaVersion: 'deliverable-syntax-telemetry-v1', applicable: true,
+        status: 'repairable', source: 'run_finalizer', checker: 'web-syntax@1',
+        checkedFileCount: 1, checkCount: 1, checkerDurationMs: 2,
+        repairWindowDurationMs: null, repairToDeliveryDurationMs: 5,
+        terminalRunStatus: 'succeeded',
+        finalization: {
+          action: 'warn', reason: 'no_safe_fix', refusal: 'unsupported_syntax_error',
+          summaryVersion: 1, initialStatus: 'repairable', repairEngine: 'host-safe-fixer@2',
+          stagedPatchCount: 0, committedPatchCount: 0, committedRepairRules: [],
+        },
+        repairableCheckCount: 1, initialDiagnosticCount: 1, latestDiagnosticCount: 1,
+        repairTriggered: true, repairAttempts: 0, maxRepairAttempts: 8,
+        repairOutcome: 'unresolved', recoveredDeliveryCount: 0, blockedBrokenDeliveryCount: 0,
+        ...(count !== undefined ? { deliveredWithSyntaxWarningCount: count } : {}),
+      },
+    }))[0] as any).body;
+    expect(trace.metadata).toMatchObject({
+      deliverable_syntax_finalization_action: 'warn',
+      deliverable_syntax_finalization_reason: 'no_safe_fix',
+      deliverable_syntax_finalization_refusal: 'unsupported_syntax_error',
+    });
+    const serialized = JSON.parse(JSON.stringify(trace.metadata));
+    if (count === undefined) {
+      expect(serialized).not.toHaveProperty('deliverable_syntax_delivered_with_syntax_warning_count');
+    } else {
+      expect(serialized.deliverable_syntax_delivered_with_syntax_warning_count).toBe(count);
+    }
   });
 
   it('omits prompt + output when content gate is off', () => {

@@ -38,7 +38,8 @@ export type DeliverableSyntaxSafeFixRefusal = typeof DELIVERABLE_SYNTAX_SAFE_FIX
 
 /** One Host finalizer invocation, separate from preceding Agent-tool history. */
 export interface DeliverableSyntaxFinalization {
-  action: 'allow' | 'fail';
+  /** Syntax-only failures warn without blocking delivery; fail remains readable for legacy evidence. */
+  action: 'allow' | 'warn' | 'fail';
   reason?: DeliverableSyntaxFinalizationReason;
   refusal?: DeliverableSyntaxSafeFixRefusal;
   /** Missing fields in historical evidence are unknown, not zero or success. */
@@ -215,7 +216,7 @@ export type DeliverableSyntaxValidationEvidence =
     })
   | (DeliverableSyntaxToolEnvelope & {
       status: 'incomplete';
-      reason: 'process_tree_not_quiescent';
+      reason: 'process_tree_not_quiescent' | 'checker_error';
       source: 'run_finalizer';
       checkedAt: number;
       repairState?: DeliverableSyntaxRepairState;
