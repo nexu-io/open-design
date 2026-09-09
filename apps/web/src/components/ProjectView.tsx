@@ -10640,6 +10640,13 @@ export function ProjectView({
           conversationId: activeConversationId,
           assistantId: failedAssistant.id,
           workspaceIdentityKey: projectRunAuthorityKey,
+          workspacePrincipal: projectRunWorkspaceContext
+            ? {
+                workspaceId: projectRunWorkspaceContext.workspaceId,
+                workspaceType: projectRunWorkspaceContext.workspaceType,
+                workspaceMemberId: projectRunWorkspaceContext.workspaceMemberId,
+              }
+            : null,
           originMountId: amrAuthRetryMountIdRef.current,
         });
       }
@@ -10656,6 +10663,7 @@ export function ProjectView({
       onOpenAmrSettings,
       project.id,
       projectRunAuthorityKey,
+      projectRunWorkspaceContext,
     ],
   );
   // PR #3157: Antigravity's `agy -p` cannot complete OAuth on its own,
