@@ -9,7 +9,6 @@ export type ElectronExactSceneRequest = Readonly<{
   acceptedClosureBaselineFile: string;
   capsuleContentFile: string;
   capsuleArchiveFile: string;
-  buildHash: string;
   operation: "electron.scene.build";
   resourceReceiptFile: string;
   sceneDirectory: string;
@@ -57,16 +56,14 @@ function absolutePath(input: Record<string, unknown>, field: string, label: stri
 
 export function parseElectronExactSceneRequest(value: unknown): ElectronExactSceneRequest {
   const input = record(value, "Electron exact scene request");
-  exactKeys(input, ["acceptedClosureBaselineFile", "buildHash", "capsuleArchiveFile", "capsuleContentFile", "operation", "resourceReceiptFile", "sceneDirectory", "schemaVersion", "standaloneLauncherFile", "target"], "Electron exact scene request");
+  exactKeys(input, ["acceptedClosureBaselineFile", "capsuleArchiveFile", "capsuleContentFile", "operation", "resourceReceiptFile", "sceneDirectory", "schemaVersion", "standaloneLauncherFile", "target"], "Electron exact scene request");
   if (input.schemaVersion !== ELECTRON_EXACT_ADAPTER_SCHEMA_VERSION || input.operation !== "electron.scene.build") {
     throw new Error("Electron exact scene request identity is invalid");
   }
-  if (typeof input.buildHash !== "string" || !/^[a-f0-9]{64}$/u.test(input.buildHash)) throw new Error("Electron exact Shell build digest is invalid");
   return Object.freeze({
     acceptedClosureBaselineFile: absolutePath(input, "acceptedClosureBaselineFile", "Electron exact scene"),
     capsuleContentFile: absolutePath(input, "capsuleContentFile", "Electron exact scene"),
     capsuleArchiveFile: absolutePath(input, "capsuleArchiveFile", "Electron exact scene"),
-    buildHash: input.buildHash,
     operation: "electron.scene.build",
     resourceReceiptFile: absolutePath(input, "resourceReceiptFile", "Electron exact scene"),
     sceneDirectory: absolutePath(input, "sceneDirectory", "Electron exact scene"),

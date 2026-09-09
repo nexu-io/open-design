@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { buildElectronCapsuleContent, buildElectronScene, buildElectronInstaller } from "@/build-api.js";
 import { resolveElectronSceneManifest } from "@/adapters/tools/manifests.js";
+import { createElectronSceneManifest } from "@/composition/release-identity.js";
 import { ELECTRON_CAPSULE_PROTOCOL } from "@open-design/electron-kit/contracts";
 
 const mock = vi.hoisted(() => ({ capsule: vi.fn(), assemble: vi.fn(), load: vi.fn(), distribute: vi.fn(), install: vi.fn(), resources: vi.fn(), trust: vi.fn() }));
@@ -44,11 +45,11 @@ it("composes scene identity in memory and resolves source entries through the pa
   mock.assemble.mockResolvedValue({ sceneManifestPath, sceneRoot: join(root, "scene") });
   const request = { schemaVersion: 2, operation: "electron.scene.build", target: "darwin-arm64",
     capsuleContentFile, capsuleArchiveFile: join(root, "capsule.zip"),
-    buildHash: "a".repeat(64), acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") } as const;
+    acceptedClosureBaselineFile: join(root, "closure.mjs"), standaloneLauncherFile: join(root, "launcher.mjs"), resourceReceiptFile, sceneDirectory: join(root, "scene") } as const;
   const result = await buildElectronScene(request);
   expect(result.sceneManifestSha256).toBe(createHash("sha256").update("scene-bytes").digest("hex"));
   expect(mock.assemble).toHaveBeenCalledWith(expect.objectContaining({
-    manifest: await resolveElectronSceneManifest("a".repeat(64)),
+    manifest: await resolveElectronSceneManifest(),
     authorityResources: expect.not.arrayContaining([expect.objectContaining({ name: "platform" })]),
     entryPath: expect.stringMatching(/\/shells\/electron\/src\/main\.ts$/u),
     rendererPreloadEntryPath: expect.stringMatching(/\/shells\/electron\/src\/adapters\/renderer\/preload\.ts$/u),
@@ -64,7 +65,7 @@ it("composes scene identity in memory and resolves source entries through the pa
 
 it.skipIf(!["darwin-arm64", "darwin-x64", "win32-x64"].includes(`${process.platform}-${process.arch}`))("derives native installer identity from the verified scene and rejects mismatched accepted content before assembly", async () => {
   const root = await fixture(), target = `${process.platform}-${process.arch}` as "darwin-arm64" | "darwin-x64" | "win32-x64";
-  const manifest = await resolveElectronSceneManifest("b".repeat(64));
+  const manifest = createElectronSceneManifest(await resolveElectronSceneManifest(), "b".repeat(64));
   const sceneManifestPath = join(root, "scene.json"), shellManifestPath = join(root, "shell.json"), contentPath = join(root, "content.json");
   await writeFile(sceneManifestPath, JSON.stringify({ target }));
   await writeFile(shellManifestPath, JSON.stringify(manifest));

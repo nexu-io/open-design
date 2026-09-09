@@ -7,6 +7,10 @@ Follow the root and `packages/AGENTS.md` guidance first.
   atomic mechanics. Updatable session/warmup/renderer orchestration belongs to
   electron-capsule; concrete graphs, product Sidecar messages, Web readiness,
   routes, handlers, labels and resource identities stay in shells/electron.
+- Scene assembly derives physical Shell buildHash from the built carrier files,
+  normalized carrier config, Electron version and target. Callers cannot inject a
+  plan/cache identity. Release labels and updatable Capsule/Closure bytes remain
+  outside that projection; dev/pack consume the resulting physical manifest.
 - Normal carrier startup and explicit recovery share the canonical runtime-root
   session lease, acquired before platform/activation/Capsule work. The running
   carrier retains it until process death. Use Platform kernel ownership, not a

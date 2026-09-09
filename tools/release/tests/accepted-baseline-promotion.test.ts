@@ -8,7 +8,7 @@ import { cac } from "cac";
 import { registerExactCommands } from "@/exact/commands.ts";
 
 import { executeExactReleaseControl } from "@/exact/control-release.js";
-import { createExactPlanFromRegistryFile, EXACT_DATA_PLAN_NODE_IDS } from "@/exact/plan.js";
+import { EXACT_DATA_PLAN_NODE_IDS } from "@/exact/plan.js";
 import { createExactReleasePlanFromRegistryFile } from "@/exact/release-plan.js";
 import { writeReleasePolicy } from "@/policy/release-profile.js";
 
@@ -62,10 +62,7 @@ async function fixture() {
   const channelHeadBody = Buffer.from('{"head":{"lanes":{"electron":{"releaseVersion":"1.2.3-betahyx.4"}}}}\n');
   const channelHeadFile = join(root, "channel-head.json");
   await writeFile(channelHeadFile, channelHeadBody);
-  const identityPlan = await createExactPlanFromRegistryFile({
-    acceptedShellBaseline: `sha256:${"0".repeat(64)}`, registryPath: registry, root: repository, target: "darwin-arm64",
-  });
-  const shell = { buildHash: identityPlan.nodes["electron.shell.build"].identity.slice("sha256:".length), type: "electron", version: "1.2.3" };
+  const shell = { buildHash: "7".repeat(64), type: "electron", version: "1.2.3" };
   const artifactBody = Buffer.from("accepted signed Electron artifact\n");
   const required = {
     artifact: { mediaType: "application/x-apple-diskimage", sha256: createHash("sha256").update(artifactBody).digest("hex"), size: artifactBody.byteLength, url: `${publicBase}/betahyx/${releaseVersion}/electron.dmg` },

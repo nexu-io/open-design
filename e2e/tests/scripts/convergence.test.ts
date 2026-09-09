@@ -130,6 +130,105 @@ describe("workload convergence", () => {
     expect(arc).not.toBe(hosted);
   });
 
+  test("owns dependency identity and target parameters in Python without executor hashes", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.workloads.b.inputs = ["b.txt"];
+    config.workflows.ci.workloads.b.dependsOn = ["a"];
+    config.workflows.ci.workloads.a.parameters = { target: "darwin-arm64" };
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const first = runPlan(fixture).pending.workloads;
+    writeFileSync(path.join(fixture.root, "a.txt"), "changed producer");
+    execFileSync("git", ["add", "a.txt"], { cwd: fixture.root });
+    const changedSource = runPlan(fixture).pending.workloads;
+    expect(workload(changedSource, "a").digest).not.toBe(workload(first, "a").digest);
+    expect(workload(changedSource, "b").digest).not.toBe(workload(first, "b").digest);
+    config.workflows.ci.workloads.a.parameters.target = "win32-x64";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const changedTarget = runPlan(fixture).pending.workloads;
+    expect(workload(changedTarget, "b").digest).not.toBe(workload(changedSource, "b").digest);
+    config.workflows.ci.workloads = Object.fromEntries(Object.entries(config.workflows.ci.workloads).reverse());
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    expect(runPlan(fixture).pending.workloads).toEqual(changedTarget);
+  });
+
+  test("rejects invalid dependency graphs before scheduling work", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    for (const dependencies of [["missing"], ["a"], ["b", "b"]]) {
+      config.workflows.ci.workloads.a.dependsOn = dependencies;
+      writeFileSync(fixture.configPath, JSON.stringify(config));
+      const result = spawnSync("python3", [convergenceScript, "--config", fixture.configPath, "validate"], { encoding: "utf8" });
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toMatch(/unknown dependency|dependency cycle|duplicates/u);
+    }
+    config.workflows.ci.workloads.a.dependsOn = ["b"];
+    config.workflows.ci.workloads.b.dependsOn = ["a"];
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const result = spawnSync("python3", [convergenceScript, "--config", fixture.configPath, "validate"], { encoding: "utf8" });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("dependency cycle");
+  });
+
+  test("requires missing producer inputs without rebuilding dependencies of a cached consumer", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.workloads.b.dependsOn = ["a"];
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const decisions = JSON.parse(execFileSync("python3", ["-c", [
+      "import json, sys", "from pathlib import Path", "sys.path.insert(0, sys.argv[1])",
+      "from convergence import ConvergenceContract, required_workloads, execution_decisions",
+      "workflow = ConvergenceContract(Path(sys.argv[2])).workflow('ci')",
+      "enabled = {'a': False, 'b': True}",
+      "def resolve(hits, mode):",
+      "    required = required_workloads(workflow, enabled, hits, mode)",
+      "    return {'required': required, 'run': execution_decisions(required, hits, mode)[0]}",
+      "print(json.dumps([resolve({'a': a, 'b': b}, mode) for a, b, mode in [(False, False, 'enforce'), (True, False, 'enforce'), (False, True, 'enforce'), (True, True, 'shadow')]]))",
+    ].join("\n"), path.dirname(convergenceScript), fixture.configPath], { encoding: "utf8" }));
+    expect(decisions).toEqual([
+      { required: { a: true, b: true }, run: { a: true, b: true } },
+      { required: { a: true, b: true }, run: { a: false, b: true } },
+      { required: { a: false, b: true }, run: { a: false, b: false } },
+      { required: { a: true, b: true }, run: { a: true, b: true } },
+    ]);
+  });
+
+  test("binds opaque job artifacts without asking the executor to handle plan metadata", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    config.workflows.ci.workloads.a.products = "manifest";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const plan = runPlan(fixture);
+    const output = path.join(fixture.root, "products");
+    const args = [convergenceScript, "--config", fixture.configPath, "contribute",
+      "--pending", fixture.pendingPath, "--workload", "a", "--product", "capsule",
+      "--artifact", "capsule-output", "--output", output];
+    execFileSync("python3", args, { encoding: "utf8" });
+    expect(JSON.parse(readFileSync(path.join(output, "a/product-manifest.json"), "utf8"))).toEqual({
+      workload: "a", digest: workload(plan.pending.workloads, "a").digest,
+      executionClass: { runnerClass: "worker", labels: ["ubuntu-24.04"] },
+      products: { capsule: { type: "job", source: "capsule-output" } },
+    });
+    const pending = JSON.parse(readFileSync(fixture.pendingPath, "utf8"));
+    pending.workloads.a.run = false;
+    pending.workloads.a.resultHit = true;
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+    const refused = spawnSync("python3", args, { encoding: "utf8" });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain("selected execution");
+  });
+
+  test("projects only exact artifact bindings to consumers, never cache decisions or workload identities", () => {
+    const result = JSON.parse(execFileSync("python3", ["-c", [
+      "import json, sys", "sys.path.insert(0, sys.argv[1])",
+      "from convergence import product_inputs",
+      "entry = {'scopeEnabled': True, 'run': False, 'resultHit': True, 'digest': 'planner-only', 'result': {'products': {'capsule': {'type': 'url', 'source': 'https://cache.invalid/capsule.zip', 'data': {'sha256': 'a' * 64}}}}}",
+      "pending = {'workloads': {'capsule': entry, 'disabled': {**entry, 'scopeEnabled': False}, 'executing': {**entry, 'run': True}}}",
+      "print(json.dumps(product_inputs(pending)))",
+    ].join("\n"), path.dirname(convergenceScript)], { encoding: "utf8" }));
+    expect(result).toEqual({ "capsule/capsule": { url: "https://cache.invalid/capsule.zip", sha256: "a".repeat(64) } });
+  });
+
   test("isolates atomic workflow policy changes through the actual calculator", () => {
     const fixture = createRepository();
     const original = JSON.parse(readFileSync(fixture.configPath, "utf8"));

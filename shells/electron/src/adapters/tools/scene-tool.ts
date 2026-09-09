@@ -12,7 +12,7 @@ import { resolveElectronSceneManifest } from "./manifests.ts";
 import { electronShellSource } from "./resources.ts";
 
 export async function executeElectronExactScene(input: ReturnType<typeof parseElectronExactSceneRequest>) {
-const manifest = await resolveElectronSceneManifest(input.buildHash);
+const manifest = await resolveElectronSceneManifest();
 const capsuleContent = validateElectronCapsuleContent(JSON.parse(await readFile(input.capsuleContentFile, "utf8")));
 const rawResources = JSON.parse(await readFile(input.resourceReceiptFile, "utf8")) as { schemaVersion?: unknown; operation?: unknown; resources?: unknown };
 if (rawResources.schemaVersion !== 1 || rawResources.operation !== "closure.runtime-resources.build" || !Array.isArray(rawResources.resources)) {

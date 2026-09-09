@@ -32,5 +32,6 @@ export async function packElectronShell(input: Readonly<{
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     carrierConfigPath: input.carrierConfigPath,
   });
-  return await buildElectronDistribution({ scene, manifest, policy, windowsLifecycle, resources: scene.authorityResources, outputRoot: input.outputRoot });
+  const builtManifest = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")));
+  return await buildElectronDistribution({ scene, manifest: builtManifest, policy, windowsLifecycle, resources: scene.authorityResources, outputRoot: input.outputRoot });
 }

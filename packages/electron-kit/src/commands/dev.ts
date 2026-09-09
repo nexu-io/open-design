@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import electronPath from "electron";
@@ -40,7 +41,8 @@ export async function prepareElectronDevShell(input: PrepareElectronDevShellInpu
     rendererPreloadEntryPath: input.rendererPreloadEntryPath,
     carrierConfigPath: input.carrierConfigPath,
   });
-  return Object.freeze({ electronPath: electronPath as unknown as string, manifest, scene });
+  const builtManifest = validateElectronShellManifest(JSON.parse(await readFile(scene.shellManifestPath, "utf8")));
+  return Object.freeze({ electronPath: electronPath as unknown as string, manifest: builtManifest, scene });
 }
 
 export async function devElectronShell(input: PrepareElectronDevShellInput): Promise<number> {

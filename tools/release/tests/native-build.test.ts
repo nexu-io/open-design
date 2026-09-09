@@ -23,10 +23,10 @@ async function fixture() {
   return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
 }
 
-it.skipIf(process.platform !== "darwin" || process.arch !== "arm64").each(["bound", "drift", "wrong-carrier"])("binds base production before and after the public builder (%s)", async mode => {
+it.skipIf(process.platform !== "darwin" || process.arch !== "arm64").each(["bound", "drift", "content-identity"])("binds base production without equating carrier content and plan identities (%s)", async mode => {
   const f = await fixture(), scene = join(f.root, "scene");
   await mkdir(scene);
-  await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: (mode === "wrong-carrier" ? "b" : "a").repeat(64) });
+  await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: (mode === "content-identity" ? "b" : "a").repeat(64) });
   const node = { target: "darwin-arm64" as const, identity: `sha256:${"c".repeat(64)}` as const,
     sourceIdentity: `sha256:${"d".repeat(64)}` as const, dependencies: ["electron.shell.build" as const] };
   await json(f.plan, { schemaVersion: 1, actions: [], plan: { target: f.target, acceptedShellBaseline: `sha256:${"0".repeat(64)}`,
@@ -35,8 +35,8 @@ it.skipIf(process.platform !== "darwin" || process.arch !== "arm64").each(["boun
   if (mode === "drift") resolver.mockResolvedValueOnce(node).mockResolvedValueOnce({ ...node, identity: `sha256:${"e".repeat(64)}` });
   await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
     'export async function buildElectronBase(input) { return { root: input.outputRoot, manifestSha256: "' + "f".repeat(64) + '" }; }');
-  if (mode !== "bound") {
-    await expect(buildReleaseBase({ ...f, scene })).rejects.toThrow(mode === "drift" ? "source changed" : "carrier binding");
+  if (mode === "drift") {
+    await expect(buildReleaseBase({ ...f, scene })).rejects.toThrow("source changed");
     await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
     return;
   }
@@ -46,14 +46,14 @@ it.skipIf(process.platform !== "darwin" || process.arch !== "arm64").each(["boun
 });
 
 it("resolves only the public build export in the selected workspace and passes typed scene inputs", async () => {
-  const f = await fixture(); await buildReleaseScene({ ...f, nodeArchive: undefined });
+  const f = await fixture(); await rm(f.plan); await buildReleaseScene({ ...f, nodeArchive: undefined });
   const result = JSON.parse(await readFile(f.receipt, "utf8"));
-  expect(result.request).toEqual({ schemaVersion: 2, operation: "electron.scene.build", target: f.target, buildHash: "a".repeat(64),
+  expect(result.request).toEqual({ schemaVersion: 2, operation: "electron.scene.build", target: f.target,
     capsuleContentFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule-content\.json$/u),
     capsuleArchiveFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule\.zip$/u),
     acceptedClosureBaselineFile: join(f.root, "apps/closure/dist/index.mjs"), standaloneLauncherFile: join(f.root, "apps/closure/dist/launcher.mjs"),
     resourceReceiptFile: f.resources, sceneDirectory: f.output });
-  await expect(buildReleaseScene({ ...f, nodeArchive: undefined, target: "win32-x64" })).rejects.toThrow("plan identity is invalid");
+  await expect(buildReleaseScene({ ...f, nodeArchive: undefined, resources: undefined })).rejects.toThrow("requires --resources");
   await expect(buildReleaseScene({ ...f, nodeArchive: undefined, shell: "linux" })).rejects.toThrow("electron or terminal");
   await expect(buildReleaseScene(f)).rejects.toThrow("use build platform");
 });

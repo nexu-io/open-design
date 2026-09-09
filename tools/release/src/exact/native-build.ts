@@ -54,17 +54,15 @@ export async function buildReleaseScene(input: BuildInput & Readonly<{
   const buildTarget = target(input), root = resolve(input.root);
   const closure = join(root, "apps/closure/dist/index.mjs"), launcher = join(root, "apps/closure/dist/launcher.mjs");
   if (input.shell === "electron") {
-    if (!input.plan || !input.resources) throw new Error("Electron scene requires --plan and --resources");
+    if (!input.resources) throw new Error("Electron scene requires --resources");
     const resourceReceiptFile = resolve(input.resources);
-    const plan = await readObject(input.plan), identity = plan.plan?.nodes?.["electron.shell.build"]?.identity;
-    if (plan.plan?.target !== buildTarget || typeof identity !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(identity)) throw new Error("Electron Shell plan identity is invalid");
     // Build dependencies load only when the native build command is executed.
     if (input.nodeArchive != null) throw new Error("Electron scene does not consume --node-archive; use build platform");
     const { buildElectronScene, buildElectronCapsuleContent } = await electronBuilder(root);
     const assemble = async (capsule: Readonly<{ contentPath: string; archivePath: string }>) => {
       const result = await buildElectronScene({ schemaVersion: 2, operation: "electron.scene.build", target: buildTarget,
         capsuleContentFile: capsule.contentPath, capsuleArchiveFile: capsule.archivePath,
-        buildHash: identity.slice(7), acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher,
+        acceptedClosureBaselineFile: closure, standaloneLauncherFile: launcher,
         resourceReceiptFile, sceneDirectory: resolve(input.output) });
       await writeObject(input.receipt, result);
       return result;
@@ -168,8 +166,7 @@ export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: str
   if (sceneManifest.target !== buildTarget || buildTarget !== `${process.platform}-${process.arch}`) throw new Error("base build target mismatch");
   const plan = input.plan == null ? undefined : await readObject(input.plan), id = "electron.base.build";
   if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget
-    || !/^sha256:[a-f0-9]{64}$/u.test(plan.plan?.acceptedShellBaseline ?? "")
-    || sceneManifest.shellBuildHash !== plan.plan?.nodes?.["electron.shell.build"]?.identity?.slice(7))) throw new Error("base build plan or carrier binding mismatch");
+    || !/^sha256:[a-f0-9]{64}$/u.test(plan.plan?.acceptedShellBaseline ?? ""))) throw new Error("base build plan binding mismatch");
   const matches = async () => plan == null || (plan.plan.nodes?.[id] != null && canonicalBytes(await resolveExactBasePlanNode({
     root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"),
     target: buildTarget, acceptedShellBaseline: plan.plan.acceptedShellBaseline,

@@ -70,9 +70,9 @@ class Workload:
     def __init__(self, workflow: str, identity: str, raw: Any):
         value = object_value(raw, f"convergence.workflows.{workflow}.workloads.{identity}")
         expected = {"inputs", "runnerClass", "products", "reusable"}
-        if set(value) != expected:
+        if not expected.issubset(value) or set(value) - expected - {"dependsOn", "parameters"}:
             raise ConfigError(
-                f"convergence.workflows.{workflow}.workloads.{identity} keys must be {sorted(expected)}"
+                f"convergence.workflows.{workflow}.workloads.{identity} requires {sorted(expected)}; optional dependsOn and parameters"
             )
         self.identity = require_identity(identity, f"convergence workload {workflow}")
         self.inputs = ConvergenceContract.tokens(value["inputs"], f"workload {workflow}/{identity}.inputs")
@@ -83,6 +83,16 @@ class Workload:
         if not isinstance(value["reusable"], bool):
             raise ConfigError(f"workload {workflow}/{identity}.reusable must be boolean")
         self.reusable = value["reusable"]
+        dependencies = value.get("dependsOn", [])
+        if not isinstance(dependencies, list) or any(not isinstance(item, str) for item in dependencies):
+            raise ConfigError(f"workload {workflow}/{identity}.dependsOn must be an array of workload identities")
+        if len(set(dependencies)) != len(dependencies):
+            raise ConfigError(f"workload {workflow}/{identity}.dependsOn contains duplicates")
+        self.dependencies = sorted(require_identity(item, "workload dependency") for item in dependencies)
+        self.parameters = object_value(value.get("parameters", {}), f"workload {workflow}/{identity}.parameters")
+        if any(not isinstance(key, str) or not key or not isinstance(item, str) or not item
+               for key, item in self.parameters.items()):
+            raise ConfigError(f"workload {workflow}/{identity}.parameters must contain non-empty strings")
 
 
 class WorkflowContract:
@@ -96,6 +106,24 @@ class WorkflowContract:
         if not workloads:
             raise ConfigError(f"convergence.workflows.{name}.workloads must not be empty")
         self.workloads = {identity: Workload(name, identity, raw_workload) for identity, raw_workload in workloads.items()}
+        self.order: list[str] = []
+        visiting: list[str] = []
+
+        def visit(identity: str) -> None:
+            if identity not in self.workloads:
+                raise ConfigError(f"workflow {name} references unknown dependency {identity}")
+            if identity in visiting:
+                raise ConfigError(f"workload dependency cycle: {' -> '.join([*visiting, identity])}")
+            if identity in self.order:
+                return
+            visiting.append(identity)
+            for dependency in self.workloads[identity].dependencies:
+                visit(dependency)
+            visiting.pop()
+            self.order.append(identity)
+
+        for identity in sorted(self.workloads):
+            visit(identity)
 
 
 class ConvergenceContract:
@@ -271,7 +299,8 @@ def calculate(
         resolved,
     )
     results: dict[str, dict[str, Any]] = {}
-    for identity, workload in workflow.workloads.items():
+    for identity in workflow.order:
+        workload = workflow.workloads[identity]
         if workload.runner_class not in runner_plan:
             raise ConfigError(f"runner plan lacks class {workload.runner_class} for {workflow_name}/{identity}")
         labels = runner_plan[workload.runner_class]
@@ -289,6 +318,14 @@ def calculate(
         digest.update(f"{PROTOCOL}\0workload-result\0".encode())
         for value in (workflow_name, workflow.policy, identity, input_digest, control_digest, execution_class, workload.products):
             digest.update(value.encode())
+            digest.update(b"\0")
+        # Only this control plane resolves dependency identities. Executors get
+        # artifact inputs and emit business receipts, never planner state.
+        if workload.dependencies or workload.parameters:
+            digest.update(canonical_json({
+                "dependencies": {name: results[name]["digest"] for name in workload.dependencies},
+                "parameters": workload.parameters,
+            }).encode())
             digest.update(b"\0")
         results[identity] = {
             "digest": digest.hexdigest(),
@@ -568,6 +605,66 @@ def execution_decisions(
     return run, would_run
 
 
+def required_workloads(
+    workflow: WorkflowContract, enabled: dict[str, bool], hits: dict[str, bool], mode: str,
+) -> dict[str, bool]:
+    """Close execution inputs, not all transitive sources of a cache hit.
+
+    A reused consumer already contains its declared outputs and does not need
+    its producer jobs. A missing consumer must acquire every direct dependency,
+    recursively executing only dependencies whose own result is unavailable.
+    """
+    required = dict(enabled)
+    for identity in reversed(workflow.order):
+        if required[identity] and (mode == "shadow" or not hits[identity]):
+            for dependency in workflow.workloads[identity].dependencies:
+                required[dependency] = True
+    return required
+
+
+def product_inputs(pending: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Project acquired-result bindings as ordinary executor artifact inputs."""
+    inputs = {}
+    for identity, workload in pending["workloads"].items():
+        if not workload["scopeEnabled"] or workload["run"] or not workload["resultHit"]:
+            continue
+        products = validate_products(workload["result"]["products"], f"{identity}.products", require_urls=True)
+        for name, product in products.items():
+            digest = product.get("data", {}).get("sha256")
+            if not isinstance(digest, str) or not DIGEST_RE.fullmatch(digest):
+                raise ConfigError(f"reusable artifact requires an exact digest: {identity}/{name}")
+            inputs[f"{identity}/{name}"] = {"url": product["source"], "sha256": digest}
+    return inputs
+
+
+def contribute_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    """Bind a successful job's opaque output in the control plane, not its tool."""
+    pending = object_value(load_json(args.pending), "pending convergence")
+    workflow = contract.workflow(require_string(pending.get("workflow"), "pending workflow"))
+    if pending.get("schemaVersion") != 1 or pending.get("protocol") != PROTOCOL or pending.get("policy") != workflow.policy:
+        raise ConfigError("pending convergence contract differs")
+    identity = require_identity(args.workload, "contributed workload")
+    if identity not in workflow.workloads or workflow.workloads[identity].products != "manifest":
+        raise ConfigError("contribution requires a declared product workload")
+    workload = object_value(pending.get("workloads", {}).get(identity), "pending workload")
+    if workload.get("scopeEnabled") is not True or workload.get("run") is not True:
+        raise ConfigError("contribution requires a selected execution, not a cache hit")
+    digest = workload.get("digest")
+    if not isinstance(digest, str) or not DIGEST_RE.fullmatch(digest):
+        raise ConfigError("contribution requires a calculated workload digest")
+    execution_class = object_value(workload.get("executionClass"), "contribution execution class")
+    if set(execution_class) != {"runnerClass", "labels"} or execution_class["runnerClass"] != workflow.workloads[identity].runner_class:
+        raise ConfigError("contribution execution class differs")
+    labels = execution_class["labels"]
+    if not isinstance(labels, list) or not labels or any(not isinstance(label, str) or not label for label in labels):
+        raise ConfigError("contribution execution labels are invalid")
+    products = validate_products({args.product: {"type": "job", "source": args.artifact}}, "contribution products", require_urls=False)
+    write_json_atomic(args.output / identity / "product-manifest.json", {
+        "workload": identity, "digest": digest, "executionClass": execution_class, "products": products,
+    })
+    return 0
+
+
 def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: Path) -> int:
     repository_id = args.repository_id or int(os.environ.get("GITHUB_REPOSITORY_ID", "0"))
     repository = args.repository or os.environ.get("GITHUB_REPOSITORY", "")
@@ -592,7 +689,10 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
         calculated,
         args.timeout,
     )
-    run, would_run = execution_decisions(enabled, hits, args.mode)
+    requested = enabled
+    enabled = required_workloads(workflow, requested, hits, args.mode)
+    run, _ = execution_decisions(enabled, hits, args.mode)
+    _, would_run = execution_decisions(required_workloads(workflow, requested, hits, "enforce"), hits, "enforce")
     reasons = {
         identity: "scope-disabled"
         if not enabled[identity]
@@ -624,6 +724,9 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
         },
     }
     write_json_atomic(args.pending, pending)
+    if args.products_output is not None:
+        for name, binding in product_inputs(pending).items():
+            write_json_atomic(args.products_output / f"{name}.json", binding)
     append_outputs(
         {
             "run": compact_json(run),
@@ -1234,6 +1337,13 @@ def parse_args() -> argparse.Namespace:
     plan.add_argument("--timeout", type=float, default=2.0)
     plan.add_argument("--mode", choices=["shadow", "enforce"], default="shadow")
     plan.add_argument("--pending", type=Path, required=True)
+    plan.add_argument("--products-output", type=Path)
+    contribute = sub.add_parser("contribute")
+    contribute.add_argument("--pending", type=Path, required=True)
+    contribute.add_argument("--workload", required=True)
+    contribute.add_argument("--product", required=True)
+    contribute.add_argument("--artifact", required=True)
+    contribute.add_argument("--output", type=Path, required=True)
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--pending", type=Path, required=True)
     handoff.add_argument("--products-root", type=Path, required=True)
@@ -1287,6 +1397,8 @@ def main() -> int:
         return 0
     if args.command == "github-output":
         return plan_command(args, contract, root)
+    if args.command == "contribute":
+        return contribute_command(args, contract)
     if args.command == "handoff":
         return handoff_command(args, contract)
     return admit_command(args, contract)

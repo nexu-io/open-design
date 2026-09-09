@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { copyFile, cp, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { createRequire } from "node:module";
 
 import { build as bundle } from "esbuild";
 
@@ -87,7 +88,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     if (contains(input.outputRoot, resource.path) || contains(resource.path, input.outputRoot)) throw new Error("Electron scene input and output cannot overlap");
     return describeSceneProduct(dirname(resource.path), basename(resource.path));
   }));
-  const manifest = validateElectronShellManifest(input.manifest);
+  const declaration = validateElectronShellManifest(input.manifest);
   const carrierConfig = validateElectronCarrierConfig(
     JSON.parse(await readFile(input.carrierConfigPath, "utf8")) as ElectronCarrierConfig,
   );
@@ -98,6 +99,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
   const rendererPreloadPath = join(input.outputRoot, "renderer-mount-preload.cjs");
   const carrierConfigPath = join(input.outputRoot, "carrier.json");
   await bundle({
+    absWorkingDir: dirname(resolve(input.entryPath)),
     bundle: true,
     entryPoints: [input.entryPath],
     external: ["electron"],
@@ -114,6 +116,7 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     if (copied.sha256 !== sourceResources[index]!.sha256 || copied.size !== sourceResources[index]!.size) throw new Error(`Electron scene source changed while copying: ${resource.name}`);
   }));
   await bundle({
+    absWorkingDir: dirname(resolve(input.rendererPreloadEntryPath)),
     bundle: true,
     entryPoints: [input.rendererPreloadEntryPath],
     external: ["electron"],
@@ -123,6 +126,22 @@ export async function assembleElectronScene(input: AssembleElectronSceneInput): 
     target: "node24",
   });
   await writeFile(carrierConfigPath, `${JSON.stringify(carrierConfig, null, 2)}\n`, "utf8");
+
+  // Product identity binds the neutral carrier, not a workflow/cache key. The
+  // manifest itself, release labels, Capsule and Closure are deliberately outside
+  // this projection; their own authenticated descriptors bind those bytes.
+  const electronVersion = createRequire(import.meta.url)("electron/package.json").version as string;
+  const carrier = await Promise.all(["main.cjs", "renderer-mount-preload.cjs", "carrier.json"]
+    .map(name => describeSceneProduct(input.outputRoot, name)));
+  const buildHash = createHash("sha256").update(JSON.stringify({
+    schemaVersion: 1, electronVersion,
+    target: input.standaloneBinding?.target ?? `${process.platform}-${process.arch}`,
+    carrier,
+  })).digest("hex");
+  const shell = { buildHash, type: "electron" as const, version: declaration.shell.version };
+  const manifest = validateElectronShellManifest({ ...declaration, shell: {
+    ...shell, digest: createHash("sha256").update(JSON.stringify(shell)).digest("hex"),
+  } });
 
   const packagedManifestPath = join(input.outputRoot, "shell.json");
   await writeFile(packagedManifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");

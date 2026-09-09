@@ -321,9 +321,6 @@ export async function promoteAcceptedElectronBaseline(input: JsonObject, receipt
     root: resolve(String(input.root ?? "")),
     target,
   });
-  if (credential.shell.buildHash !== plan.nodes["electron.shell.build"].identity.slice("sha256:".length)) {
-    throw new Error("accepted Electron Shell build differs from its exact plan identity");
-  }
   const hotAccepted = credential.installed?.proof?.hotUpdate?.releaseVersion === releaseVersion;
   // Installed acceptance proves this carrier artifact and its installed recipe,
   // not that every source/test node in the current checkout was executed.

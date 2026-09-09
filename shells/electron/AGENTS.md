@@ -35,6 +35,9 @@ Shell and the typed adapter boundary consumed by repository tools.
 - Scene assembly accepts only the two-entry `closure.runtime-resources.build`
   collection. Independent data archives belong to tools-release preparation,
   not scene inputs or installer resources.
+- Scene requests do not accept a caller-supplied buildHash. Kit derives physical
+  carrier content identity during assembly; release composition consumes the
+  verified scene manifest rather than substituting a workflow plan identity.
 - Capsule composition consumes the explicit installed manifest; never bundle a
   default release manifest into its independently built product content.
 - Startup reads the durable Capsule selection before accessing the bundled

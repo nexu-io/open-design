@@ -114,7 +114,7 @@ describe("Electron scene", () => {
       capsule: { content: capsuleContent, archiveFile: "capsule.zip" },
       target: "darwin-arm64",
       shellVersion: "1.2.3",
-      shellBuildHash: "a".repeat(64),
+      shellBuildHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
       closure: { file: "closure.mjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) },
       standalone: { entrypoint: "standalone-launcher.mjs", sha256: expect.stringMatching(/^[a-f0-9]{64}$/u) },
       products: expect.arrayContaining([
@@ -133,6 +133,22 @@ describe("Electron scene", () => {
     })]));
     await expect(loadElectronScene(paths.outputRoot, receipt.sceneManifestSha256)).resolves.toEqual(receipt);
     await expect(loadElectronScene(paths.outputRoot, "f".repeat(64))).rejects.toThrow("binding verification");
+    const builtManifest = JSON.parse(await readFile(receipt.shellManifestPath, "utf8")) as ElectronShellManifest;
+    expect(builtManifest.shell.buildHash).toBe(JSON.parse(scene).shellBuildHash);
+    expect(builtManifest.shell.buildHash).not.toBe(sceneInput.manifest.shell.buildHash);
+    if (!withTree) {
+      // Neither caller-supplied identity/release labels nor updatable authority
+      // bytes may change the fixed carrier's content identity.
+      await writeFile(paths.closureResourcePath, "export const closure = 'new';\n");
+      const rebuilt = await assembleElectronScene({ ...sceneInput, outputRoot: join(root, "second", "scene"),
+        manifest: { ...sceneInput.manifest, channel: "betahyx", version: "1.2.4-betahyx.1",
+          shell: { ...sceneInput.manifest.shell, buildHash: "e".repeat(64), digest: "f".repeat(64) } } });
+      const rebuiltManifest = JSON.parse(await readFile(rebuilt.shellManifestPath, "utf8")) as ElectronShellManifest;
+      expect(rebuiltManifest.shell).toEqual(builtManifest.shell);
+      await writeFile(paths.entryPath, "export const foundation = 'changed';\n");
+      const changed = await assembleElectronScene({ ...sceneInput, outputRoot: join(root, "third", "scene") });
+      expect(JSON.parse(await readFile(changed.shellManifestPath, "utf8")).shell.buildHash).not.toBe(builtManifest.shell.buildHash);
+    }
     if (withTree) {
       const platform = receipt.authorityResources.find(resource => resource.name === "platform")!;
       expect(platform.tree?.map(file => file.path)).toEqual(["bin/node", "empty"]);

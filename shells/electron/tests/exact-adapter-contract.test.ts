@@ -11,14 +11,14 @@ describe("Electron exact Shell adapter contract", () => {
     const request = {
       acceptedClosureBaselineFile: absolute("closure.mjs"), operation: "electron.scene.build", sceneDirectory: absolute("scene"), schemaVersion: 2,
       capsuleContentFile: absolute("capsule-content.json"), capsuleArchiveFile: absolute("capsule.zip"),
-      resourceReceiptFile: absolute("closure-resources.json"), buildHash: "a".repeat(64), standaloneLauncherFile: absolute("standalone-launcher.mjs"), target: "darwin-arm64",
+      resourceReceiptFile: absolute("closure-resources.json"), standaloneLauncherFile: absolute("standalone-launcher.mjs"), target: "darwin-arm64",
     } as const;
     expect(parseElectronExactSceneRequest(request)).toEqual(request);
     expect(() => parseElectronExactSceneRequest({ ...request, target: "linux-x64" })).toThrow(/target/u);
     expect(() => parseElectronExactSceneRequest({ ...request, extra: true })).toThrow(/fields/u);
     expect(() => parseElectronExactSceneRequest({ ...request, currentClosureArtifactFile: absolute("current-closure.mjs") })).toThrow(/fields/u);
     expect(() => parseElectronExactSceneRequest({ ...request, sceneDirectory: "relative" })).toThrow(/absolute/u);
-    expect(() => parseElectronExactSceneRequest({ ...request, buildHash: "bad" })).toThrow(/digest/u);
+    expect(() => parseElectronExactSceneRequest({ ...request, buildHash: "a".repeat(64) })).toThrow(/fields/u);
     expect(() => parseElectronExactSceneRequest({ ...request, shellManifestFile: absolute("shell.json") })).toThrow(/fields/u);
   });
 
