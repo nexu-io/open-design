@@ -4,6 +4,26 @@ export const PACKAGED_HOME_FIRST_RUN_PROMPT =
 export const PACKAGED_HOME_FIRST_RUN_OUTPUT =
   'I recovered the delayed reasoning path and will persist the artifact now.';
 
+type CodexInvocationReceipt = {
+  nonce: string; pid: number; mode: string; event: string; method?: string; failed?: boolean;
+};
+
+export function codexAppServerInvocationsCompleted(receipts: CodexInvocationReceipt[], nonce: string): boolean {
+  if (receipts.length === 0 || receipts.some((entry) => entry.nonce !== nonce)) return false;
+  // Capability/login probes also invoke the fixture. Keep their provenance,
+  // but verify the protocol independently for each actual app-server process.
+  const appServer = receipts.filter((entry) => entry.mode === 'app-server');
+  const pids = [...new Set(appServer.map((entry) => entry.pid))];
+  return pids.length > 0 && pids.every((pid) => {
+    const processReceipts = appServer.filter((entry) => entry.pid === pid);
+    const methods = processReceipts.filter((entry) => entry.event === 'request').map((entry) => entry.method);
+    return methods[0] === 'initialize' && methods[1] === 'initialized'
+      && ['thread/start', 'thread/resume'].includes(methods[2] ?? '')
+      && methods[3] === 'turn/start'
+      && processReceipts.some((entry) => entry.event === 'completed' && entry.failed === false);
+  });
+}
+
 type CreatedHomeRun = { runId: string; conversationId: string | null };
 type ObservedHomeRun = {
   id: string;
