@@ -1,21 +1,21 @@
 {
   "fixtureKind": "sanitized_real_best_effort",
   "runtime": "vela-pi",
-  "velaVersion": "0.0.1-test.matrix-six.gd8f3d75d9b47",
+  "velaVersion": "0.0.1-test.matrix-six.g2419a3777c64",
   "companionVersion": "0.85.1",
   "modelEndpoint": "loopback_fixture",
   "executionSemantics": "agent_cli",
-  "recordingDigest": "sha256:539e996a3a18c221013da7e25ab1a247e9fccc28f6a87bf8e18a781789397c7a",
+  "recordingDigest": "sha256:8488f22a50e1150b08ed08625fb4a61f14196e1c0d4ecc453510ae20a17d8d24",
   "observations": [
     {
       "channel": "acp_response",
       "stage": "initial",
-      "digest": "sha256:1673f51f12ed29aafedd2e14bef6e7574b3628598c9b7fe2299038f8990ca90d"
+      "digest": "sha256:cf258292ad3bc6166483c4954280575df274778dc5731e8c1e742e71a6eb25d2"
     },
     {
       "channel": "acp_response",
       "stage": "initial",
-      "digest": "sha256:deca0e2571c6ef93fa4be51cea5c9afec9692b89710da62f3e3e40756fbab174"
+      "digest": "sha256:320bd4f812102f73f363b7c18743081c172d248ea088e7afd4861ae11549bff0"
     },
     {
       "channel": "acp_response",
@@ -25,42 +25,42 @@
     {
       "channel": "http_request",
       "stage": "initial",
-      "digest": "sha256:eb405e740d1e1a4ba8dc71a55133f0f086a5b3ff6f857761c6c247c31e225ead"
+      "digest": "sha256:de20327ffb75cab7a23d2c2802fbb77b6fa200e4fd3c4e19d31459f09d7ac8e6"
     },
     {
       "channel": "acp_update",
       "stage": "initial",
-      "digest": "sha256:3e9ab0cda33cf026484d04778af21d9fcc82337090e311f0bf80a4885b36c8d0"
+      "digest": "sha256:051e863503bc167105c5a88acbb06f8a9a51a8c8aaf6f061d863db75c181b214"
     },
     {
       "channel": "acp_update",
       "stage": "initial",
-      "digest": "sha256:dbc69acc0a21d5e4c27e4930688d6892761b6dffc70815b099ea97f9714ef44a"
+      "digest": "sha256:9b675a949bae80a9e09876fd32d8d00d283de671b9dfc5788de4a9b0dc23a46b"
     },
     {
       "channel": "http_request",
       "stage": "initial",
-      "digest": "sha256:a9740876b4c463b2c1a7b0214cbf0b2b001bd81807ac4854774a2012473eebe6"
+      "digest": "sha256:16f59c874eb47fc06ccc25230f13dc4abff41fa7bc256ae56885cd8d72f12b7a"
     },
     {
       "channel": "acp_update",
       "stage": "initial",
-      "digest": "sha256:5bb07bfd39e6e0d2677830c14eb4d32875af258b2a761f0b437f837f05402f3f"
+      "digest": "sha256:62c739f17778fcc44949ea6c65646466f8bde9eef506706cb4041935bc486b27"
     },
     {
       "channel": "acp_response",
       "stage": "initial",
-      "digest": "sha256:934ae4934cec7398883eb7e910c922f519595df42671c45cb7432fb10b06f831"
+      "digest": "sha256:45cfd35ed9084bcdd60b91176abc1ee342b3d29454132595ad009715cdba533d"
     },
     {
       "channel": "acp_response",
       "stage": "resume",
-      "digest": "sha256:1673f51f12ed29aafedd2e14bef6e7574b3628598c9b7fe2299038f8990ca90d"
+      "digest": "sha256:cf258292ad3bc6166483c4954280575df274778dc5731e8c1e742e71a6eb25d2"
     },
     {
       "channel": "acp_response",
       "stage": "resume",
-      "digest": "sha256:deca0e2571c6ef93fa4be51cea5c9afec9692b89710da62f3e3e40756fbab174"
+      "digest": "sha256:320bd4f812102f73f363b7c18743081c172d248ea088e7afd4861ae11549bff0"
     },
     {
       "channel": "acp_response",
@@ -70,37 +70,37 @@
     {
       "channel": "http_request",
       "stage": "resume",
-      "digest": "sha256:bf8228d5975cb0ee083e29dcbce0bd8a6b6f0cf8a582ace6912494b68cd914ed"
+      "digest": "sha256:38930fbc001f50df9d5593e462471c7b8544c4cd9bad53570f3fcf3facae11a2"
     },
     {
       "channel": "acp_update",
       "stage": "resume",
-      "digest": "sha256:5bb07bfd39e6e0d2677830c14eb4d32875af258b2a761f0b437f837f05402f3f"
+      "digest": "sha256:62c739f17778fcc44949ea6c65646466f8bde9eef506706cb4041935bc486b27"
     },
     {
       "channel": "acp_response",
       "stage": "resume",
-      "digest": "sha256:5dbf2676b8e2e66e7199075c8227ba58dfce95b3818db1fc98ec9cc88022137e"
+      "digest": "sha256:694caaf4f7b598538912107ecaaf0afca959974e2378169e607e3af63c3dc075"
     },
     {
       "channel": "http_request",
       "stage": "cancel",
-      "digest": "sha256:9fdb30b91ec1af06401827f713ff7771bf2502193f935d50089c69bfd5ded22e"
+      "digest": "sha256:c35d1110ce0af3c038778f43edfcf5ccf2155831afb2750341a02e72c00c63ac"
     },
     {
       "channel": "acp_response",
       "stage": "cancel",
-      "digest": "sha256:b5bd6f1945a2d9f6488a31dc117912cad8e9dc835b7c3df84822cc9bba1be9a9"
+      "digest": "sha256:be0a7177490335b39590028bf6414c6821d5f6a066a243f0e9e31b345fab356c"
     },
     {
       "channel": "http_request",
       "stage": "timeout",
-      "digest": "sha256:79d04e4c4c5550b0a71757ee71935f93ddbcc48a2bde377ac30490c1e7fdae97"
+      "digest": "sha256:f003d0aa1c52ad46ea42d713b39a7d0b2c6296619f633800502928e569600234"
     },
     {
       "channel": "acp_response",
       "stage": "timeout",
-      "digest": "sha256:cae15d6869588e99be856d6618685f7728245bd355499819277f2e60c7bc21c2"
+      "digest": "sha256:719b65c4f90b1e37276c405224c28087db68d9c75b8aa68a44d5a6b59ebb10bb"
     }
   ],
   "cases": [

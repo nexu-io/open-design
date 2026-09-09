@@ -160,7 +160,7 @@ describe('OD Next runtime capability gate', () => {
   });
   it.each(['codex', 'claude', 'dsh'] as const)('admits verified AMR %s continuation without borrowing OpenCode child evidence', (runtime) => {
     const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.gd8f3d75d9b47',
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
       runtimeCompanionName: 'opencode', runtimeCompanionVersion: '1.18.18',
     });
     expect(capability.reason).toBe('capability_resolved');
@@ -178,12 +178,12 @@ describe('OD Next runtime capability gate', () => {
     { runtime: 'pi' as const, companionVersion: '0.85.1' },
   ])('uses the installed new $runtime tuple with its own simple-only evidence', ({ runtime, companionVersion }) => {
     const capability = resolveBundledOdNextRuntimeCapability({
-      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.gd8f3d75d9b47',
+      agentId: 'amr', amrRuntime: runtime, agentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
       runtimeCompanionName: runtime, runtimeCompanionVersion: companionVersion,
     });
     expect(capability.reason).toBe('capability_resolved');
     expect(capability.snapshot).toMatchObject({
-      recordedAgentCliVersion: '0.0.1-test.matrix-six.gd8f3d75d9b47',
+      recordedAgentCliVersion: '0.0.1-test.matrix-six.g2419a3777c64',
       recordedRuntimeCompanionName: runtime, recordedRuntimeCompanionVersion: companionVersion,
       nativeSessionContinuation: { support: 'verified' }, nativeSubagents: { support: 'unknown' },
     });
