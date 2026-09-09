@@ -4,7 +4,7 @@ import { canonicalJson, materializeStandaloneBlob, verifyDocument,
 import { createElectronCapsuleLoader } from "@open-design/electron-kit/capsule-loader";
 import { readElectronCapsuleSelection, type ElectronCapsuleSelection } from "@open-design/electron-kit";
 import { resolveElectronCompositeShellIdentity, type ElectronShellManifest, type ElectronCapsuleTarget } from "@open-design/electron-kit/contracts";
-import { loadElectronInstalledCapsuleSeed, resolveElectronStandaloneTarget } from "./installation.js";
+import { loadElectronInstalledCapsuleSeed, loadElectronInstalledTrust, resolveElectronStandaloneTarget } from "./installation.js";
 
 const load = createElectronCapsuleLoader();
 
@@ -33,14 +33,16 @@ export async function loadInstalledElectronCapsule(manifest: ElectronShellManife
   runtimeRoot: string;
 }>) {
   const target = resolveElectronStandaloneTarget();
-  const seed = await loadElectronInstalledCapsuleSeed({ resourceRoot: installation.resourceRoot,
-    channel: manifest.channel, target, carrierVersion: manifest.shell.version });
   const state = await readElectronCapsuleSelection(installation.runtimeRoot);
   const selected = state.pending ?? state.current;
   if (selected != null) {
-    return await load({ envelope: selected.envelope, trustedKeys: seed.trustedKeys, root: selected.root,
+    const { trustedKeys } = await loadElectronInstalledTrust({ resourceRoot: installation.resourceRoot,
+      channel: manifest.channel, target });
+    return await load({ envelope: selected.envelope, trustedKeys, root: selected.root,
       carrier: { target, shell: manifest.shell }, selectionRevision: state.revision });
   }
+  const seed = await loadElectronInstalledCapsuleSeed({ resourceRoot: installation.resourceRoot,
+    channel: manifest.channel, target, carrierVersion: manifest.shell.version });
   const capsule = seed.envelope.document;
   const materialized = await materializeStandaloneBlob(join(installation.runtimeRoot, "capsule"),
     { ...capsule.archive, mediaType: "application/zip", sources: [] }, seed.archivePath,

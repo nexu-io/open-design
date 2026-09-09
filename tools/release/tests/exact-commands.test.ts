@@ -130,7 +130,9 @@ it("stages a real data product through the public convergence command", async ()
   const result = JSON.parse((await f.invoke([...args, "--resource-receipt", receipt, "--artifact", "craft-artifact"])).stdout);
   expect(result).toMatchObject({ operation: "exact.resource.contribute", contributed: true });
   expect(await readFile(join(result.artifactDirectory, resource.file))).toEqual(await readFile(resource.path));
-  await expect(f.invoke(args.map(arg => arg === "contribute" ? "restore" : arg))).rejects.toThrow("planner cache hit");
+  const restore = args.map(arg => arg === "contribute" ? "restore" : arg);
+  await expect(f.invoke(restore)).rejects.toThrow("destination already exists");
+  await expect(f.invoke(restore.map(arg => arg === join(f.root, "contribution") ? join(f.root, "restored") : arg))).rejects.toThrow("planner cache hit");
 });
 
 it("keeps workspace command names distinct from the relocatable exact grammar", async () => {

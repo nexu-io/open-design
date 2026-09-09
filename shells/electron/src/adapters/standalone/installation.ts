@@ -205,6 +205,18 @@ async function installedDeclaration(input: Readonly<{
   return declaration;
 }
 
+/** Warm Capsule selection needs the sealed trust root, not the first-install
+ * seed archive. Never source trust from the selected downloaded payload. */
+export async function loadElectronInstalledTrust(input: Readonly<{
+  resourceRoot: string;
+  channel: string;
+  target: ElectronStandaloneTarget;
+}>) {
+  const declaration = await installedDeclaration(input);
+  const trustedKeys = parseTrust(await verifiedInstalledBytes(input.resourceRoot, declaration.trust, "Electron Standalone trust"));
+  return Object.freeze({ declaration, trustedKeys });
+}
+
 /** The sealed installation supplies trust and an exact baseline, not an online
  * trust file or an independently selected Capsule latest pointer. */
 export async function loadElectronInstalledCapsuleSeed(input: Readonly<{
@@ -213,8 +225,7 @@ export async function loadElectronInstalledCapsuleSeed(input: Readonly<{
   target: ElectronStandaloneTarget;
   carrierVersion: string;
 }>) {
-  const declaration = await installedDeclaration(input);
-  const trustedKeys = parseTrust(await verifiedInstalledBytes(input.resourceRoot, declaration.trust, "Electron Standalone trust"));
+  const { declaration, trustedKeys } = await loadElectronInstalledTrust(input);
   const envelope = parseJson(await verifiedInstalledBytes(input.resourceRoot, declaration.capsule.manifest, "Electron Capsule manifest"), "Electron Capsule manifest") as SignedDocument<ElectronCapsuleManifest>;
   verifyDocument(envelope, trustedKeys);
   const manifest = validateElectronCapsuleManifest(envelope.document);

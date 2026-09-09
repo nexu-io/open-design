@@ -14,6 +14,7 @@ import {
   type JsonObject,
 } from "./control-common.ts";
 import { composeReleaseDataResources } from "./resource-composition.ts";
+import { verifyCapsuleReleaseBudget } from "./capsule-budget.ts";
 
 export type PrepareExactContentInput = Readonly<{
   channel: string;
@@ -169,6 +170,7 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       if (content.target !== scene.target) throw new Error("Electron Capsule baseline target mismatch");
       const archiveFile = product?.archiveFile ?? join(scene.directory, "capsule.zip"), archive = await describeFile(archiveFile, "application/zip");
       if (archive.sha256 !== content.archive.sha256 || archive.size !== content.archive.size) throw new Error("Electron Capsule baseline archive mismatch");
+      const budget = await verifyCapsuleReleaseBudget(archiveFile, content.archive);
       scene.capabilityBuildHash = electronCompositeShellBuildHash(content, scene.shellBuildHash);
       const manifest = composeElectronCapsuleManifest({ content, version: String(shell.version),
         minimumCarrierVersion: String(shell.version), providedShellVersion: String(shell.version) });
@@ -179,7 +181,7 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
       const archivedDescription = await describeFile(archived, "application/zip");
       if (archivedDescription.sha256 !== archive.sha256 || archivedDescription.size !== archive.size) throw new Error("Capsule source changed during copy");
       await writeObject(manifestFile, signed("document", manifest, keys));
-      scene.capsule = { manifest: await describeFile(manifestFile), archive: archivedDescription };
+      scene.capsule = { manifest: await describeFile(manifestFile), archive: archivedDescription, budget };
     }
     shell.buildHash = createHash("sha256").update(canonicalBytes((shell.scenes as JsonObject[])
       .map(({ target, capabilityBuildHash }) => ({ target, shellBuildHash: capabilityBuildHash })))).digest("hex");
@@ -321,7 +323,9 @@ export async function finalizeContent(request: FinalizeExactContentInput, receip
         manifest: { url: publicObjectUrl(String(prepared.artifactBaseUrl), destination), sha256: manifestDescription.sha256, size: manifestDescription.size },
         archive: { url: publicObjectUrl(String(prepared.artifactBaseUrl), archive), sha256: archiveDescription.sha256, size: archiveDescription.size },
       });
-      assertElectronCapsuleReleaseManifest(distribution.capsule, (await readObject(destination)).document, scene.target);
+      const capsuleManifest = assertElectronCapsuleReleaseManifest(distribution.capsule, (await readObject(destination)).document, scene.target);
+      // Re-evaluate current policy; a cached preparation receipt cannot waive it.
+      await verifyCapsuleReleaseBudget(archive, capsuleManifest.archive);
     }
   }
   const contentSource = await checkedFile(prepared.contentMetadata, "content metadata", request.contentMetadataFile), contentFile = join(documents, "content-metadata.json");

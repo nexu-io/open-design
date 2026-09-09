@@ -14,6 +14,7 @@ import {
   ELECTRON_STANDALONE_INSTALLATION_FILE,
   loadElectronStandaloneInstallation,
   loadElectronInstalledCapsuleSeed,
+  loadElectronInstalledTrust,
 } from "@/adapters/standalone/installation.js";
 import { loadElectronStandaloneAuthorityResources } from "@/adapters/standalone/installation.js";
 import { withElectronInstallation } from "@/adapters/standalone/assemble-installation.js";
@@ -95,6 +96,17 @@ async function installedFixture() {
 }
 
 describe("Electron Standalone installed authority input", () => {
+  it("loads sealed trust independently of first-install Capsule bytes", async () => {
+    const fixture = await installedFixture();
+    await rm(join(fixture.root, "capsule.zip"));
+    await rm(fixture.capsule.manifestFile);
+    const input = { resourceRoot: fixture.root, channel: "betahyx", target: "darwin-arm64" as const };
+    expect((await loadElectronInstalledTrust(input)).trustedKeys.has("release")).toBe(true);
+    await expect(loadElectronInstalledCapsuleSeed({ ...input, carrierVersion: "0.1.0" })).rejects.toThrow();
+    await writeFile(join(fixture.root, fixture.declaration.trust.file), "tampered trust");
+    await expect(loadElectronInstalledTrust(input)).rejects.toThrow("trust");
+  });
+
   it("verifies the signed Capsule baseline without loading Closure content first", async () => {
     const fixture = await installedFixture();
     await writeFile(join(fixture.root, fixture.declaration.content.file), "broken Closure metadata");

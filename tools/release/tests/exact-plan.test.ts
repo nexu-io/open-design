@@ -152,6 +152,13 @@ describe("exact release plan", () => {
     expect(selectExactPlanActions(after, identities(before)).map(action => action.id)).toEqual([
       "electron.shell.test", "electron.acceptance.full", "exact.compose", "exact.publish", "exact.activate",
     ]);
+    const budgetPath = join(root, "tools/release/src/exact/capsule-budget.ts");
+    await writeFile(budgetPath, "changed release budget\n");
+    const budgetChange = await createExactPlan(input);
+    expect(budgetChange.nodes["electron.shell.build"].identity).toBe(after.nodes["electron.shell.build"].identity);
+    expect(budgetChange.nodes["closure.build"].identity).toBe(after.nodes["closure.build"].identity);
+    expect(budgetChange.nodes["electron.distribution"].identity).not.toBe(after.nodes["electron.distribution"].identity);
+    await writeFile(budgetPath, "baseline\n");
     const nativeLock = join(root, "shells/electron/resources/platform/package-lock.json");
     await mkdir(dirname(nativeLock), { recursive: true });
     await writeFile(nativeLock, '{"native":"changed"}');

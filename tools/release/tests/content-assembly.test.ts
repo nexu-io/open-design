@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { signStandaloneMetadata, verifyDocument, verifyStandaloneMetadata, verifyStandaloneShellMetadata } from "@open-design/standalone";
 
 import { prepareContent, finalizeContent } from "../src/exact/content.ts";
+import { capsuleFixture } from "./capsule-fixture.ts";
 
 const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
@@ -24,7 +25,8 @@ describe("exact release control", () => {
     await writeFile(closure, "export const closure = true;\n");
     await writeFile(launcher, "export const launcher = true;\n");
     await writeFile(resource, "fixture zip bytes");
-    const capsuleBytes = Buffer.from("fixture Capsule archive");
+    const capsule = await capsuleFixture();
+    const capsuleBytes = capsule.bytes;
     if (shellType === "electron") await writeFile(join(scene, "capsule.zip"), capsuleBytes);
     const manifest = {
       schemaVersion: 1,
@@ -35,7 +37,7 @@ describe("exact release control", () => {
       standalone: { sha256: digest(await readFile(launcher)) },
       ...(shellType !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
         schemaVersion: 1, protocol: "electron-capsule-v5", target: "darwin-arm64", entrypoint: "capsule.cjs",
-        archive: { sha256: digest(capsuleBytes), size: capsuleBytes.byteLength, treeSha256: "d".repeat(64) },
+        archive: capsule.archive,
       } } }),
     };
     const manifestPath = join(scene, "scene.json");
@@ -78,6 +80,9 @@ describe("exact release control", () => {
       await writeFile(resourceReceiptPath, JSON.stringify(resourceReceipt));
       await prepareContent(prepareRequest, join(output, "prepare-receipt.json"));
       const prepared = JSON.parse(await readFile(join(output, "prepare-receipt.json"), "utf8"));
+      if (shellType === "electron") expect(prepared.shells[0].scenes[0].capsule.budget).toMatchObject({
+        files: 1, archiveBytes: capsuleBytes.length, sha256: capsule.archive.sha256, budget: { revision: 1 },
+      });
       const replayOutput = join(root, "replayed");
       await prepareContent({ ...prepareRequest, outputDirectory: replayOutput }, join(replayOutput, "prepare-receipt.json"));
       const replay = JSON.parse(await readFile(join(replayOutput, "prepare-receipt.json"), "utf8"));
@@ -175,10 +180,11 @@ describe("exact release control", () => {
           electron: { ...currentContent.metadata.shell.electron, version: { min: "0.0.9" } },
         } }, "release-test", keys.privateKey);
         await writeFile(historyFile, JSON.stringify(prior));
-        const changedBytes = Buffer.from("changed Capsule on unchanged carrier");
+        const changedCapsule = await capsuleFixture("changed Capsule on unchanged carrier");
+        const changedBytes = changedCapsule.bytes;
         await writeFile(join(scene, "capsule.zip"), changedBytes);
         const changedManifest = { ...manifest, capsule: { ...manifest.capsule!, content: {
-          ...manifest.capsule!.content, archive: { ...manifest.capsule!.content.archive, sha256: digest(changedBytes), size: changedBytes.byteLength },
+          ...manifest.capsule!.content, archive: changedCapsule.archive,
         } } };
         await writeFile(manifestPath, JSON.stringify(changedManifest));
         const changedOutput = join(root, "changed-capsule");

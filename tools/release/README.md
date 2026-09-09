@@ -67,6 +67,16 @@ Final Electron metadata binds the published Capsule manifest and archive by
 URL, SHA-256 and size. Compatibility is declared once in the signed Capsule
 manifest; no separate Capsule latest pointer is published.
 
+`prepare` and `finalize` enforce the same channel-independent Capsule release
+budget, including reused products: at most 8 payload files, 1 MiB ZIP bytes and
+4 MiB expanded bytes. The initial budget is based on a measured product with
+one file, 467,112 ZIP bytes and 1,545,796 expanded bytes. Limits are release
+policy in `src/exact/capsule-budget.ts`, not runtime protocol or CLI overrides.
+Preparation records actual counts, sizes, digests and the budget revision;
+finalization rechecks actual archive/tree bytes under the current policy rather
+than trusting an old measurement. Adjust limits only against measured minimal
+first-screen dependencies, never automatically to admit growing payloads.
+
 `prepare --closure-artifact <file> --standalone-artifact <file>
 --resource-receipt <file> --capsules <directory>` can select current independent
 products without modifying retained carrier scenes. Capsule directories contain

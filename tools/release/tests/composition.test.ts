@@ -9,6 +9,7 @@ import { registerExactCommands } from "../src/exact/commands.ts";
 import { packSceneArtifact } from "../src/exact/scene-artifact.ts";
 import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
 import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
+import { capsuleFixture } from "./capsule-fixture.ts";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -34,16 +35,17 @@ it("prepares and finalizes signed content within release ownership, with no requ
   const scenes = join(root, "scenes"), distributions = join(root, "distributions"); await mkdir(distributions);
   const active = ["terminal", "electron"].map(shell => ({ shell, target: "darwin-arm64" }));
   const topology = join(root, "topology.json"); await json(topology, { active, deferred: [] });
+  const baselineCapsule = await capsuleFixture("capsule");
   for (const item of active) {
     const source = join(root, `source-${item.shell}`); await mkdir(source);
     await writeFile(join(source, "closure.mjs"), "closure"); await writeFile(join(source, "launcher.mjs"), "launcher");
     await json(join(source, "closure-resources.json"), { schemaVersion: 1, operation: "closure.resources.build", resources: [] });
-    if (item.shell === "electron") await writeFile(join(source, "capsule.zip"), "capsule");
+    if (item.shell === "electron") await writeFile(join(source, "capsule.zip"), baselineCapsule.bytes);
     await json(join(source, "scene.json"), { schemaVersion: 1, target: item.target, shellVersion: "0.1.0", shellBuildHash: sha(item.shell),
       closure: { file: "closure.mjs", sha256: sha("closure"), size: 7 }, standalone: { entrypoint: "launcher.mjs", sha256: sha("launcher") },
       ...(item.shell !== "electron" ? {} : { capsule: { archiveFile: "capsule.zip", content: {
         schemaVersion: 1, protocol: "electron-capsule-v5", target: item.target, entrypoint: "capsule.cjs",
-        archive: { sha256: sha("capsule"), size: 7, treeSha256: "a".repeat(64) },
+        archive: baselineCapsule.archive,
       } } }) });
     await packSceneArtifact(source, join(scenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
     const directory = join(distributions, item.shell); await mkdir(directory);
@@ -99,9 +101,10 @@ it("prepares and finalizes signed content within release ownership, with no requ
   const independentScenes = join(root, "independent-scenes");
   const capsules = join(root, "capsules"), capsuleTarget = join(capsules, "darwin-arm64");
   await mkdir(capsuleTarget, { recursive: true });
-  await writeFile(join(capsuleTarget, "capsule.zip"), "current capsule");
+  const currentCapsule = await capsuleFixture("current capsule");
+  await writeFile(join(capsuleTarget, "capsule.zip"), currentCapsule.bytes);
   await json(join(capsuleTarget, "capsule-content.json"), { schemaVersion: 1, protocol: "electron-capsule-v5",
-    target: "darwin-arm64", entrypoint: "capsule.cjs", archive: { sha256: sha("current capsule"), size: 15, treeSha256: "b".repeat(64) } });
+    target: "darwin-arm64", entrypoint: "capsule.cjs", archive: currentCapsule.archive });
   for (const item of active) await packSceneArtifact(join(root, `source-${item.shell}`),
     join(independentScenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
   await command([...prepare.map(value => value === prepared ? independent : value === prepareReceipt ? independentReceipt : value === scenes ? independentScenes : value),
@@ -120,8 +123,8 @@ it("prepares and finalizes signed content within release ownership, with no requ
     expect(scene.closure.sha256).toBe(sha("closure"));
     expect(scene.standalone.sha256).toBe(sha("launcher"));
     if (shell.type === "electron") {
-      expect(scene.capsule.content.archive.sha256).toBe(sha("capsule"));
-      expect(shell.scenes[0].capsule.archive.sha256).toBe(sha("current capsule"));
+      expect(scene.capsule.content.archive.sha256).toBe(baselineCapsule.archive.sha256);
+      expect(shell.scenes[0].capsule.archive.sha256).toBe(currentCapsule.archive.sha256);
     }
   }
   const independentFinal = join(root, "independent-final");
@@ -129,5 +132,5 @@ it("prepares and finalizes signed content within release ownership, with no requ
     : value === join(final, "pack-receipt.json") ? join(independentFinal, "pack-receipt.json") : value));
   const composed = JSON.parse(await readFile(join(independentFinal, "documents/electron-metadata.json"), "utf8"));
   expect(composed.document.distributions[0].artifact.sha256).toBe(sha("installer"));
-  expect(composed.document.distributions[0].capsule.archive.sha256).toBe(sha("current capsule"));
+  expect(composed.document.distributions[0].capsule.archive.sha256).toBe(currentCapsule.archive.sha256);
 });

@@ -32,6 +32,10 @@ Shell and the typed adapter boundary consumed by repository tools.
 - `tests/` validates Shell policy and both Shell/Closure updater handler lines.
 - Capsule composition consumes the explicit installed manifest; never bundle a
   default release manifest into its independently built product content.
+- Startup reads the durable Capsule selection before accessing the bundled
+  first-install seed. A current/pending Capsule uses the sealed installation
+  trust root independently; missing or invalid selected state never falls back
+  to the seed. Empty lineage materializes the exact local seed without network.
 - `config/appearance.json` owns Capsule window/loading declarations and channel
   title overrides. Physical manifest schema 2 excludes these presentation fields;
   keep OS product identity, icons and installer endpoints physical.
