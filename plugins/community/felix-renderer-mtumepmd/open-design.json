@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "felix-renderer-mtumepmd",
+  "title": "Felix renderer 模板提炼结果",
+  "version": "0.1.0",
+  "description": "本轮读取四个项目的入口、布局及渲染代码；保留源项目，未重渲旧视频。第一份可运行种子来自 `world-births-circle`，不是从空画布猜测布局。",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

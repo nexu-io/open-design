@@ -1,0 +1,26 @@
+{
+  "candidateId": "86b4980c-549c-44fb-b147-5732ad87b24c",
+  "projectId": "b3741929-d0bf-4909-a2fe-63cff27dd35c",
+  "runId": "6559d3fd-7e0e-4652-b8cb-a8e974e45af6",
+  "conversationId": "e5acfdae-942f-4fd9-a75c-5bf36bde381d",
+  "provenance": {
+    "summary": "Detected from felix-renderer-extraction.md, felix-design-system.md after a successful run.",
+    "detectedAt": 1788989843192
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "felix-renderer-extraction.md",
+      "label": "felix-renderer-extraction.md",
+      "size": 5662,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "felix-design-system.md",
+      "label": "felix-design-system.md",
+      "size": 13458,
+      "copied": true
+    }
+  ]
+}
