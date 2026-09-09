@@ -26,7 +26,7 @@ import styles from './WhatsNewPopup.module.css';
 // `id` (see ../lib/whats-new).
 //
 // It reports what already happened, so its only actions are "close" and "open
-// the release notes". Applying an update belongs to the real updater indicator
+// the highlight link". Applying an update belongs to the real updater indicator
 // (see ./UpdaterPopup.tsx) — this surface must never claim to install anything.
 
 // Fallback for the CTA when the highlight document omits an explicit link.
@@ -65,6 +65,7 @@ type CardModel = {
   notes: string[];
   imageUrl: string | null;
   linkUrl: string;
+  ctaLabel: string | null;
 };
 
 // `active` reports whether Home is the active entry view. EntryShell keeps
@@ -103,6 +104,7 @@ export function WhatsNewPopup({ active }: { active: boolean }) {
         notes: whatsNewNotesFromBody(localized.body),
         imageUrl: info.content.imageUrl ?? null,
         linkUrl: localized.linkUrl ?? RELEASES_INDEX_URL,
+        ctaLabel: localized.ctaLabel,
       });
     });
     return () => {
@@ -195,7 +197,7 @@ export function WhatsNewPopup({ active }: { active: boolean }) {
           variant="primary"
           onClick={openLink}
         >
-          {t('whatsNew.cta')}
+          {card.ctaLabel ?? t('whatsNew.cta')}
         </Button>
       </div>
     </Dialog>
