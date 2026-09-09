@@ -134,7 +134,12 @@ const allTestManifest = {
 		entry: `${key.split(".").at(-1)}.js`,
 		resources: [],
 		locales: ["zh-CN"],
-		requiredCapabilities: [],
+		requiredCapabilities:
+			key === "opend.home.campaign-modal"
+				? ["close", "static-action"]
+				: key === "opend.home.account-badge"
+					? ["static-action"]
+					: ["hover", "static-action"],
 		staticActions: [],
 	})),
 	resources: allTestPlacements.map((key) => `${key.split(".").at(-1)}.js`),
@@ -534,7 +539,12 @@ describe("Test campaign decision and lifecycle guards", () => {
 					snapshotHash: deployment.snapshotHash,
 					artifactHash: deployment.snapshot.artifactHash,
 					manifestHash: deployment.snapshot.manifestHash,
-					requiredCapabilities: [],
+					requiredCapabilities:
+					placementKey === "opend.home.campaign-modal"
+						? ["close", "static-action"]
+						: placementKey === "opend.home.account-badge"
+							? ["static-action"]
+							: ["hover", "static-action"],
 					activityId: deployment.activityId,
 					testContext: { ...context, scheduleState: "active" as const },
 				},

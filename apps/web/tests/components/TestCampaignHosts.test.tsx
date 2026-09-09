@@ -45,7 +45,12 @@ const manifest = {
 		entry: `${key.split(".").at(-1)}.js`,
 		resources: [],
 		locales: ["zh-CN"],
-		requiredCapabilities: [],
+		requiredCapabilities:
+			key === "opend.home.campaign-modal"
+				? ["close", "static-action"]
+				: key === "opend.home.account-badge"
+					? ["static-action"]
+					: ["hover", "static-action"],
 		staticActions: [],
 	})),
 	resources: placements.map((key) => `${key.split(".").at(-1)}.js`),
@@ -60,7 +65,12 @@ function decision(placementKey: (typeof placements)[number]): TestDecision {
 		artifactHash: "sha256:four-artifact",
 		manifestHash: "sha256:four-manifest",
 		placementKey,
-		requiredCapabilities: [],
+		requiredCapabilities:
+		placementKey === "opend.home.campaign-modal"
+			? ["close", "static-action"]
+			: placementKey === "opend.home.account-badge"
+				? ["static-action"]
+				: ["hover", "static-action"],
 		staticActions: [],
 		testContext: { ...context, scheduleState: "active" },
 		content: {

@@ -23,7 +23,7 @@ export const TEST_CAMPAIGN_PLACEMENTS = [
 ] as const;
 export type TestCampaignPlacement = (typeof TEST_CAMPAIGN_PLACEMENTS)[number];
 const supportedCapabilities = new Set<string>(TEST_CAMPAIGN_MODAL_CAPABILITIES);
-const placementCapabilities = new Set(["static-action"]);
+const placementCapabilities = new Set(["hover", "static-action"]);
 type Scenario = "before" | "active" | "after" | "wake";
 
 /** The list response is the selected deployment snapshot, not a presentation fixture. */

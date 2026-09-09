@@ -33,7 +33,7 @@ const content = (placementKey: string) => ({
 		placements: [
 			{
 				key: placementKey,
-				requiredCapabilities: ["static-action"],
+				requiredCapabilities: ["hover", "static-action"],
 				staticActions: [
 					{
 						id: "learn",
@@ -68,7 +68,7 @@ const decision = (
 	serverTime: "2030-01-01T00:00:00.000Z",
 	placementKey,
 	content: content(placementKey),
-	requiredCapabilities: ["static-action"],
+		requiredCapabilities: ["hover", "static-action"],
 	staticActions: [
 		{ id: "learn", target: { kind: "https", url: "https://example.com" } },
 	],
@@ -120,7 +120,7 @@ const pairedMultiPlacementManifest = {
 			entry: "hover-entry.js",
 			resources: [],
 			locales: ["en-US"],
-			requiredCapabilities: ["static-action"],
+			requiredCapabilities: ["hover", "static-action"],
 			staticActions: [
 				{ id: "learn", target: { kind: "https", url: "https://example.com" } },
 			],
@@ -130,7 +130,7 @@ const pairedMultiPlacementManifest = {
 			entry: "hover-layer.js",
 			resources: [],
 			locales: ["en-US"],
-			requiredCapabilities: ["static-action"],
+			requiredCapabilities: ["hover", "static-action"],
 			staticActions: [
 				{ id: "learn", target: { kind: "https", url: "https://example.com" } },
 			],
