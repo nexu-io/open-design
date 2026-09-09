@@ -20,6 +20,7 @@ export async function prepareReleaseContent(input: Readonly<{
   sourceRoot: string; topology: string; scenesRoot: string; standaloneVersion: string;
   closureArtifactFile?: string; standaloneArtifactFile?: string; resourceReceiptFile?: string;
   capsulesRoot?: string;
+  dataResourceReceiptFiles?: readonly string[];
   previousContentMetadataFile?: string; output: string; receipt: string;
 }>): Promise<void> {
   const policy = await readReleasePolicyReceipt(input.policy, { capability: "prepare", ...input });
@@ -76,6 +77,7 @@ export async function prepareReleaseContent(input: Readonly<{
     channel: input.channel, releaseVersion: input.releaseVersion, sourceCommit: input.sourceCommit, publishedAt: stdout.trim(),
     standaloneVersion: input.standaloneVersion, artifactBaseUrl: `${policy.target.publicBaseUrl.replace(/\/$/u, "")}/${input.channel}/${input.releaseVersion}`,
     closureArtifactFile, standaloneArtifactFile, resourceReceiptFile, previousContentMetadataFile,
+    ...(input.dataResourceReceiptFiles == null ? {} : { dataResourceReceiptFiles: input.dataResourceReceiptFiles }),
     ...(input.capsulesRoot == null ? {} : { capsuleProducts }),
     shells: [...shells.values()].sort((a, b) => a.type.localeCompare(b.type)), outputDirectory: input.output,
   };

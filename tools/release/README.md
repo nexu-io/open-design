@@ -77,6 +77,15 @@ is a complete collection, not the single-resource build receipt. These inputs
 do not authorize a cache hit or skip installed acceptance; carrier installation
 seeds and current signed release content keep separate digest bindings.
 
+Repeat `prepare --data-resource <receipt>` for all nine declared data groups to
+compose independent build/restored products over the selected runtime collection.
+Each `closure.data-resource.build` receipt must sit beside its content-addressed
+archive; stale absolute paths from another machine are ignored. The full data
+selection replaces old data seeds while retaining daemon/Web from
+`--resource-receipt` (or the scene default). Missing groups, duplicates, unknown
+IDs, invalid receipts and changed bytes fail closed. This composition performs
+no builds and claims no cache hit; upstream plan/convergence must justify reuse.
+
 `build resource --resource-id <id> --root <workspace> --output <directory>
 --receipt <file>` invokes the Closure public producer for one declared data
 group. It needs no Shell, platform, channel or version and does not compile

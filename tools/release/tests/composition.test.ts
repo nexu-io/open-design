@@ -8,6 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { registerExactCommands } from "../src/exact/commands.ts";
 import { packSceneArtifact } from "../src/exact/scene-artifact.ts";
 import { resolveReleasePolicy } from "../src/policy/release-profile.ts";
+import { CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 
 const roots: string[] = [];
 afterEach(async () => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true }))); });
@@ -77,7 +78,23 @@ it("prepares and finalizes signed content within release ownership, with no requ
   const currentClosure = join(root, "current-closure.mjs"), currentLauncher = join(root, "current-launcher.mjs");
   await writeFile(currentClosure, "current closure"); await writeFile(currentLauncher, "current launcher");
   const currentResources = join(root, "current-resources.json");
-  await json(currentResources, { schemaVersion: 1, operation: "closure.resources.build", resources: [] });
+  const runtimeResources = [];
+  for (const id of ["open-design-daemon", "open-design-web"]) {
+    await writeFile(join(root, `${id}.zip`), id);
+    runtimeResources.push({ id, file: `${id}.zip`, path: join(root, `${id}.zip`), sha256: sha(id),
+      size: id.length, treeSha256: "c".repeat(64), entrypoint: "sidecar.mjs" });
+  }
+  await json(currentResources, { schemaVersion: 1, operation: "closure.resources.build", resources: runtimeResources });
+  const dataOptions: string[] = [];
+  for (const { id } of CLOSURE_DATA_RESOURCES) {
+    const file = `${id}-${sha(id)}.zip`, receipt = join(root, `${id}.json`);
+    await writeFile(join(root, file), id);
+    await json(receipt, { schemaVersion: 1, operation: "closure.data-resource.build", resource: {
+      id, file, path: `/old-run/${file}`, sha256: sha(id), size: id.length,
+      treeSha256: "d".repeat(64), entrypoint: "resource.json", sync: true,
+    } });
+    dataOptions.push("--data-resource", receipt);
+  }
   const independent = join(root, "independent"), independentReceipt = join(independent, "prepare-receipt.json");
   const independentScenes = join(root, "independent-scenes");
   const capsules = join(root, "capsules"), capsuleTarget = join(capsules, "darwin-arm64");
@@ -88,10 +105,15 @@ it("prepares and finalizes signed content within release ownership, with no requ
   for (const item of active) await packSceneArtifact(join(root, `source-${item.shell}`),
     join(independentScenes, `exact-${item.shell}-scene-${item.target}-${sourceCommit}`, "scene.tar"));
   await command([...prepare.map(value => value === prepared ? independent : value === prepareReceipt ? independentReceipt : value === scenes ? independentScenes : value),
-    "--closure-artifact", currentClosure, "--standalone-artifact", currentLauncher, "--resource-receipt", currentResources, "--capsules", capsules]);
+    "--closure-artifact", currentClosure, "--standalone-artifact", currentLauncher, "--resource-receipt", currentResources, "--capsules", capsules, ...dataOptions]);
   const selected = JSON.parse(await readFile(independentReceipt, "utf8"));
   expect(selected.closureArtifact.sha256).toBe(sha("current closure"));
   expect(selected.standaloneArtifact.sha256).toBe(sha("current launcher"));
+  expect(selected.resourceArtifacts).toHaveLength(11);
+  const selectedContent = JSON.parse(await readFile(selected.contentMetadata.file, "utf8"));
+  for (const { id } of CLOSURE_DATA_RESOURCES) {
+    expect(selectedContent.metadata.resources.find((resource: { id: string }) => resource.id === id).blob).toBe(sha(id));
+  }
   for (const shell of selected.shells) {
     expect(shell.scenes[0].shellBuildHash).toBe(sha(shell.type));
     const scene = JSON.parse(await readFile(join(shell.scenes[0].directory, "scene.json"), "utf8"));

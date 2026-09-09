@@ -13,6 +13,7 @@ import {
   writeObject,
   type JsonObject,
 } from "./control-common.ts";
+import { composeReleaseDataResources } from "./resource-composition.ts";
 
 export type PrepareExactContentInput = Readonly<{
   channel: string;
@@ -24,6 +25,7 @@ export type PrepareExactContentInput = Readonly<{
   closureArtifactFile: string;
   standaloneArtifactFile: string;
   resourceReceiptFile?: string;
+  dataResourceReceiptFiles?: readonly string[];
   capsuleProducts?: readonly Readonly<{ target: string; contentFile: string; archiveFile: string }>[];
   previousContentMetadataFile?: string;
   shells: readonly Readonly<{ type: string; version: string; scenes: readonly Readonly<{
@@ -203,8 +205,11 @@ export async function prepareContent(request: PrepareExactContentInput, receiptP
   const standalone = await describeFile(standaloneFile, "text/javascript");
   if (standalone.sha256 !== standaloneSourceDescription.sha256 || standalone.size !== standaloneSourceDescription.size) throw new Error("Standalone launcher promotion source changed during copy");
   const closureResources: Array<{ blob: JsonObject; entrypoint: string; id: string; treeSha256: string }> = [];
+  if (request.dataResourceReceiptFiles != null && request.resourceReceiptFile == null) throw new Error("independent data resources require a runtime resource collection");
   if (typeof request.resourceReceiptFile === "string") {
-    const resourceReceiptPath = resolve(request.resourceReceiptFile), resourceReceipt = await readObject(resourceReceiptPath);
+    const resourceReceiptPath = resolve(request.resourceReceiptFile), originalReceipt = await readObject(resourceReceiptPath);
+    const resourceReceipt = request.dataResourceReceiptFiles == null ? originalReceipt
+      : await composeReleaseDataResources(originalReceipt, request.dataResourceReceiptFiles);
     if (resourceReceipt.schemaVersion !== 1 || resourceReceipt.operation !== "closure.resources.build" || !Array.isArray(resourceReceipt.resources)) throw new Error("exact.prepare resource receipt is invalid");
     for (const raw of resourceReceipt.resources) {
       if (raw == null || typeof raw !== "object" || Array.isArray(raw)) throw new Error("exact.prepare resource descriptor is invalid");

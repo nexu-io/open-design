@@ -131,6 +131,7 @@ export function registerExactCommands(cli: CAC): void {
     .option("--standalone-artifact <file>", "Current Standalone launcher; defaults to the scene seed")
     .option("--resource-receipt <file>", "Current complete Closure resource collection; defaults to the scene seed")
     .option("--capsules <directory>", "Current Capsule products under <target>/; defaults to scene seeds")
+    .option("--data-resource <file>", "Independent data receipt beside its archive; repeat for the complete data set")
     .option("--output <directory>", "Prepared content directory")
     .option("--receipt <file>", "Preparation receipt")
     .action(async (options: Options) => {
@@ -142,6 +143,8 @@ export function registerExactCommands(cli: CAC): void {
         ...(options.standaloneArtifact == null ? {} : { standaloneArtifactFile: required(options, "standaloneArtifact") }),
         ...(options.resourceReceipt == null ? {} : { resourceReceiptFile: required(options, "resourceReceipt") }),
         ...(options.capsules == null ? {} : { capsulesRoot: required(options, "capsules") }),
+        ...(options.dataResource == null ? {} : { dataResourceReceiptFiles: Array.isArray(options.dataResource)
+          ? options.dataResource as string[] : [required(options, "dataResource")] }),
         output: required(options, "output"), receipt: required(options, "receipt") });
     });
 
