@@ -1,0 +1,25 @@
+{
+  "distributionVersion": "0.0.1-test.pi.98057bb.portable.1",
+  "velaBinaryVersion": "0.0.1-test.pi.98057bb",
+  "velaSourceCommit": "98057bbaea8098599a3f0237ae66063b45ebec13",
+  "openDesignBaselineCommit": "7c7c2db27f8aae20b3105e3222a3d0d8b39a4a72",
+  "platforms": [
+    "darwin-arm64"
+  ],
+  "piVersion": "0.85.1",
+  "npmPublished": false,
+  "changes": "Only meta package version and native dependency locator changed; native archive and runtime code are unchanged.",
+  "originalMetaSha256": "5f582d0567e19a5cfdca807a16efa381596ed7e004655f1571889f93e42ef931",
+  "artifacts": [
+    {
+      "file": "powerformer-vela-cli-0.0.1-test.pi.98057bb.portable.1.tgz",
+      "bytes": 2235,
+      "sha256": "9f185f698bf5c824b79db245b464cffc5ff81e038b240e57291501d79cb67033"
+    },
+    {
+      "file": "powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz",
+      "bytes": 11467735,
+      "sha256": "8e3d718e4e903e92ca7703e86ac4eff4ef705ef84eaaef4d03852c856bfcd1be"
+    }
+  ]
+}

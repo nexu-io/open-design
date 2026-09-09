@@ -18,6 +18,7 @@ overrides:
   undici@^6: 6.28.0
   undici@^7: 7.29.0
   yaml: 2.9.0
+  '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz
 
 importers:
 
@@ -930,8 +931,8 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
     optionalDependencies:
       '@powerformer/vela-cli':
-        specifier: file:/Users/william/Documents/vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-0.0.1-test.pi.98057bb.tgz
-        version: file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-0.0.1-test.pi.98057bb.tgz(@modelcontextprotocol/sdk@1.29.0(zod@4.4.2))(ws@8.21.3)(zod@4.4.2)
+        specifier: file:../../vendor/vela/powerformer-vela-cli-0.0.1-test.pi.98057bb.portable.1.tgz
+        version: file:vendor/vela/powerformer-vela-cli-0.0.1-test.pi.98057bb.portable.1.tgz(@modelcontextprotocol/sdk@1.29.0(zod@4.4.2))(ws@8.21.3)(zod@4.4.2)
 
   tools/release:
     dependencies:
@@ -3000,15 +3001,15 @@ packages:
   '@posthog/types@1.374.2':
     resolution: {integrity: sha512-ZghQSFMi+HFJNPvPjBoyY/jWQ+q6mSQVtWQxOHMSbBidUZjsyYbxYxBFbHy2qWLNe4mEpX+Wqir2Q4I/4AVvJQ==}
 
-  '@powerformer/vela-cli-darwin-arm64@file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz':
-    resolution: {integrity: sha512-6lB/fk2hYVMDp5nDs5JVesU+KR+DLOGp7Az7gqjuv7AF/VZTQfPYHdlZBON88qRr8tsOdpfOw55chSIDJirwfw==, tarball: file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz}
+  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz':
+    resolution: {integrity: sha512-6lB/fk2hYVMDp5nDs5JVesU+KR+DLOGp7Az7gqjuv7AF/VZTQfPYHdlZBON88qRr8tsOdpfOw55chSIDJirwfw==, tarball: file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz}
     version: 0.0.1-test.pi.98057bb
     cpu: [arm64]
     os: [darwin]
 
-  '@powerformer/vela-cli@file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-0.0.1-test.pi.98057bb.tgz':
-    resolution: {integrity: sha512-WhQgTWmHqUUoj0B+neQ55/fWlQnmi99CFaD0D4qFst5+Bq1R1JGAKiSfcyPDUnwl0y0ycmoSxKgKlBX6SYqFDw==, tarball: file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-0.0.1-test.pi.98057bb.tgz}
-    version: 0.0.1-test.pi.98057bb
+  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.pi.98057bb.portable.1.tgz':
+    resolution: {integrity: sha512-DMSxpn3T3aJIlPfmKqHTgpqh9/nw3ez/BRIu7Qz5kOoghmNljMviPM+a51bKbMamPRbqKy9DgJ3Os6cxsmxleA==, tarball: file:vendor/vela/powerformer-vela-cli-0.0.1-test.pi.98057bb.portable.1.tgz}
+    version: 0.0.1-test.pi.98057bb.portable.1
     hasBin: true
 
   '@preact/signals-core@1.14.2':
@@ -9866,14 +9867,14 @@ snapshots:
 
   '@posthog/types@1.374.2': {}
 
-  '@powerformer/vela-cli-darwin-arm64@file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz':
+  '@powerformer/vela-cli-darwin-arm64@file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz':
     optional: true
 
-  '@powerformer/vela-cli@file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-0.0.1-test.pi.98057bb.tgz(@modelcontextprotocol/sdk@1.29.0(zod@4.4.2))(ws@8.21.3)(zod@4.4.2)':
+  '@powerformer/vela-cli@file:vendor/vela/powerformer-vela-cli-0.0.1-test.pi.98057bb.portable.1.tgz(@modelcontextprotocol/sdk@1.29.0(zod@4.4.2))(ws@8.21.3)(zod@4.4.2)':
     dependencies:
       '@earendil-works/pi-coding-agent': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.4.2))(ws@8.21.3)(zod@4.4.2)
     optionalDependencies:
-      '@powerformer/vela-cli-darwin-arm64': file:../vela-amr-cli-evaluation/.task/pi-local-packages/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz
+      '@powerformer/vela-cli-darwin-arm64': file:vendor/vela/powerformer-vela-cli-darwin-arm64-0.0.1-test.pi.98057bb.tgz
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
       - bufferutil
