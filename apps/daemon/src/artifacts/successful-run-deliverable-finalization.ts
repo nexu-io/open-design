@@ -11,6 +11,7 @@ import {
 } from '../run-deliverable-validation.js';
 import {
   finalizeDeliverableSyntax,
+  DeliverableSyntaxInternalError,
   type DeliverableSyntaxFinalizationOutcome,
 } from './deliverable-syntax-finalization.js';
 
@@ -61,7 +62,7 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     return { deliverable, syntax: { action: 'skip' } };
   }
 
-  const syntax = await finalizeDeliverableSyntax({
+  const syntaxInput = {
     artifactKind: deliverable.artifactKind,
     projectRoot: resolveProjectDir(
       input.projectsRoot,
@@ -73,6 +74,16 @@ export async function finalizeSuccessfulRunDeliverable(input: {
     processTreeQuiescent: input.processTreeQuiescent,
     ...(input.repairState ? { repairState: input.repairState } : {}),
     ...(input.previousMetrics ? { previousMetrics: input.previousMetrics } : {}),
-  });
+  };
+  let syntax: DeliverableSyntaxFinalizationOutcome;
+  try {
+    syntax = await finalizeDeliverableSyntax(syntaxInput);
+  } catch (error) {
+    if (!(error instanceof DeliverableSyntaxInternalError)) throw error;
+    // The product's non-blocking delivery policy must not hide an engine defect.
+    // Never log the cause: it may contain generated source or local paths.
+    console.error('[deliverable-syntax] internal_error');
+    syntax = error.outcome;
+  }
   return { deliverable, syntax };
 }
