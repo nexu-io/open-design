@@ -790,6 +790,23 @@ test('[P0] manual edit mode keeps deck navigation available for deck-shaped HTML
   await expect(frame.getByText('Slide One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Slide Two')).toBeVisible();
+
+  // Opening a preview tool must leave the preview viewport the same size it
+  // was. A deck lays its slides out against that viewport — a scroll-snap deck
+  // sizes each slide `flex: 0 0 100vw` — so a viewport that changes width
+  // under a settled document re-anchors it partway between two slides while
+  // the host keeps reporting the slide index it last chose. The user sees the
+  // deck jump to a different page with nothing in the product's own state
+  // saying it moved.
+  await expect(page.locator('.deck-thumbnail-rail')).toBeVisible();
+  const anchoredWidth = (await artifactPreview(page).boundingBox())?.width ?? 0;
+  expect(anchoredWidth).toBeGreaterThan(0);
+
+  await clickPreviewToolbarAction(page, 'manual-edit-mode-toggle', /^Edit$/);
+  await expect(artifactPreviewFrame(page).locator('html[data-od-edit-mode]')).toHaveCount(1);
+  await expect
+    .poll(async () => (await artifactPreview(page).boundingBox())?.width ?? 0)
+    .toBe(anchoredWidth);
 });
 
 test('[P0] deck presentation host exit remains usable after the sandboxed slide takes focus', async ({ page }) => {
