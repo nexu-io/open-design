@@ -65,6 +65,7 @@ import {
   runAgentProviderId,
 } from '../analytics/run-task';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
+import { setChatCorrelation } from '../observability/chat-context';
 import {
   chatSurfaceSample,
   openChatSurface,
@@ -2821,6 +2822,25 @@ export function ChatPane({
       meta: item.meta,
     });
   };
+
+  /*
+   * 这块面板此刻在显示**哪个项目的哪场对话**。
+   *
+   * 设在 ChatPane 自己身上,而不是某一个宿主里 —— 同一个组件挂在三处:
+   * `ProjectView`、`DesignSystemFlow`、`workspace/SideChatTab`。只在其中一处设,
+   * 另外两处发出去的每一条 `client_chat_*` 都是没有项目、没有会话的孤儿事件,
+   * 而三处用的是同一套观测模块、同一块看板。这两个 id 早就作为 props 递进来了,
+   * 组件边界才是它们共同的、唯一的落点。
+   *
+   * 必须排在下面那条 openChatSurface 的 effect **前面**:开面时那一发
+   * `conversation_open` 取样会展开这个块,晚一步它就是空的。
+   */
+  useEffect(() => {
+    setChatCorrelation({
+      conversation_id: activeConversationId ?? undefined,
+      project_id: projectId ?? undefined,
+    });
+  }, [activeConversationId, projectId]);
 
   /*
    * 把这块转录交给 chat-health 看着(`client_chat_first_paint` /

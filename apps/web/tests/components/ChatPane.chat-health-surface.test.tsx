@@ -168,6 +168,12 @@ describe('ChatPane — chat-health surface lifecycle', () => {
     const samples = safetyEvents('client_chat_dom_growth');
     expect(samples).toHaveLength(1);
     expect(samples[0]?.sample_reason).toBe('conversation_open');
+    // Correlation is set by ChatPane itself, so it is already on the very
+    // first beacon the surface sends — whichever of the three hosts mounted
+    // the panel. An event ordering that stamped it later would leave this one
+    // anonymous.
+    expect(samples[0]?.project_id).toBe('project-1');
+    expect(samples[0]?.conversation_id).toBe('conv-1');
   });
 
   it('measures first paint against the transcript it actually rendered', () => {
@@ -218,8 +224,14 @@ describe('ChatPane — chat-health surface lifecycle', () => {
     const second = container.querySelector('[data-testid="chat-log"]');
 
     expect(second).toBe(first);
-    const reasons = safetyEvents('client_chat_dom_growth').map((s) => s.sample_reason);
-    expect(reasons).toEqual(['conversation_open', 'conversation_open']);
+    const samples = safetyEvents('client_chat_dom_growth');
+    expect(samples.map((s) => s.sample_reason)).toEqual([
+      'conversation_open',
+      'conversation_open',
+    ]);
+    // …and the second one names the conversation the user switched TO, not
+    // the one they left.
+    expect(samples[1]?.conversation_id).toBe('conv-2');
   });
 
   it('lets go of the surface when the panel unmounts', () => {

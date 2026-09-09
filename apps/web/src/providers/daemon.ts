@@ -1165,12 +1165,17 @@ export async function streamViaDaemon({
       conversation_id: conversationId ?? undefined,
       client_type: detectClientType(),
     });
-    openChatRunCorrelation(runId, agentId);
-    // Opens the chat-health jank window for this run. `client_chat_stream_health`
-    // only counts long tasks that landed inside one, so a run with no opener
-    // contributes nothing at all — idle-time jank belongs to `client_long_task`.
-    // No-ops when no chat surface is mounted.
+    // Chat-health first, correlation second — the same rule as the terminal
+    // path below. `runStarted` flushes any window a previous run left open
+    // (its terminal event never arrived), and that flush belongs to the OLD
+    // run, so it has to happen before the block is repointed at this one.
+    //
+    // Opening the window is what makes `client_chat_stream_health` possible at
+    // all: it only counts long tasks that landed inside one, and idle-time
+    // jank belongs to `client_long_task`. No-ops when no chat surface is
+    // mounted.
     chatSurfaceRunStarted(runId);
+    openChatRunCorrelation(runId, agentId);
     notifyRunsChanged();
     emitRunStatus('queued');
     await consumeDaemonRun({
@@ -1205,8 +1210,8 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
   // path has never had a run-start signal of its own (no `trackRunStart`
   // either); only the correlation is being closed here, deliberately, so this
   // change adds no new event.
-  openChatRunCorrelation(options.runId, options.agentId);
   chatSurfaceRunStarted(options.runId);
+  openChatRunCorrelation(options.runId, options.agentId);
   await consumeDaemonRun({
     ...options,
     onRunStatus: (status) => {
@@ -1721,10 +1726,10 @@ async function consumeDaemonRun(options: DaemonReattachOptions): Promise<void> {
     // other. Skipping it here would leave the correlation block pointing at
     // the run that just ended, so every stall in the rest of the chain would
     // be filed under the wrong run id.
-    openChatRunCorrelation(runId, options.agentId);
     // Miss this one and every long task in the rest of the chain is billed to
     // the run that already ended.
     chatSurfaceRunStarted(runId);
+    openChatRunCorrelation(runId, options.agentId);
     options.onRunCreated?.(runId, result.strategyTask);
   }
 }
@@ -2382,11 +2387,22 @@ async function consumeDaemonPhysicalRun({
     // hit the daemon for an already-finished run), trackRunTerminal
     // is a no-op for unknown runIds.
     trackRunTerminal(runId, endStatus ?? (canceled ? 'canceled' : 'unknown'));
-    closeChatRunCorrelation();
-    // Closes and reports the jank window. Skipping it does not lose the window
-    // — the next run start flushes it — but it does report `run_completed:
-    // false` for a run that finished cleanly.
+    /*
+     * ORDER IS THE POINT, and it is the same defect this whole change exists
+     * to remove.
+     *
+     * `chatSurfaceRunEnded` does not merely bookkeep — it FLUSHES the jank
+     * window, and `client_chat_stream_health` spreads `chatCorrelation()` on
+     * its way out. Clear the correlation first and that event ships with an
+     * empty `run_id`: a chat event that cannot name the run it measured.
+     *
+     * One rule covers both ends of a run: the chat-health call goes FIRST,
+     * because it is the one that can emit; the correlation mutation goes
+     * second. `trackRunTerminal` is unaffected either way — it carries its own
+     * context object and never reads the chat correlation block.
+     */
     chatSurfaceRunEnded(runId);
+    closeChatRunCorrelation();
   }
 }
 
