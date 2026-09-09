@@ -225,8 +225,8 @@ export interface ComposeInput {
   // memory config (`profileEnabled` / `rewriteEnabled` / `verifyEnabled`).
   // An absent object — or an absent field — is treated as TRUE so callers
   // with no memory config wired (and the contracts/BYOK fallback) keep the
-  // loops on by default. `rewrite` drives the PRE intent-gateway task-brief
-  // card; `verify` drives the POST self-verify scorecard. `profile` is
+  // loops on by default. `rewrite` gates the applied-memory chip;
+  // `verify` drives the POST self-verify scorecard. `profile` is
   // consumed by the memory-body composer; it is accepted here only so the
   // same object threads through unchanged.
   memoryHooks?: { profile?: boolean; rewrite?: boolean; verify?: boolean } | undefined;
@@ -479,7 +479,7 @@ export function composeSystemPrompt({
     // apps/daemon/src/prompts/system.ts.
     if ((memoryHooks?.rewrite ?? true)) {
       parts.push(
-        `\n\n## Intent gateway — turn short asks into a brief\n\nWhen the user's request is short or underspecified AND memory gives you enough to expand it, silently build an internal task brief (task type, audience, files/artifacts in play, delivery preferences, constraints, and what "done" means) before acting. Surface it as ONE collapsed card at the very start of your reply, then continue with the work without waiting for confirmation:\n\n<od-card type="task-brief">\n{ "summary": "<one line restating the expanded intent>", "fields": [ {"label": "Audience", "value": "…"}, {"label": "Deliverable", "value": "…"}, {"label": "Done means", "value": "…"} ] }\n</od-card>\n\nEmit at most one task-brief per turn. Skip it entirely when the request is already explicit or trivial (a greeting, a yes/no, a tiny edit). If you applied memory but skipped the brief, you may instead emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>. Never dump the brief as prose — only as the card.\n\nWhen the task-brief card makes the intent clear, continue without a clarification form. The card does NOT replace the rest of the build flow. On every artifact-producing turn you STILL open with a TodoWrite plan (RULE 3) before writing files and update it live as you work, then run the anti-slop / brand self-check before shipping. The brief only expands intent; it is never the deliverable and never stands in for the TodoWrite plan or the self-check.`,
+        `\n\nIf you applied memory, you may emit one compact chip: <od-card type="memory-applied">{ "summary": "Applied your profile and 2 rules", "used": [ {"type": "profile", "name": "Work profile"} ] }</od-card>.`,
       );
     }
 
@@ -490,7 +490,7 @@ export function composeSystemPrompt({
     }
 
     parts.push(
-      `\n\n## Propose new verified rules from corrections\n\nWhen the user corrects your output in a way that implies a reusable, checkable rule, PROPOSE it — never save it silently. Emit a proposal card the user can Keep, Edit, or Discard:\n\n<od-card type="rule-proposal">\n{ "name": "<short name>", "description": "<one line>", "assertion": "<what must hold>", "check": "<how to verify it>", "rationale": "<why you inferred it>" }\n</od-card>\n\nPropose at most one rule per turn, and only when confident it generalizes beyond the current artifact. Do not claim in prose that a rule was recorded, saved, noted, added to memory, or will be remembered unless this same response includes the rule-proposal card for that rule; the rule becomes saved only after the user clicks Keep.`,
+      `\n\nNever save new verified rules silently.`,
     );
   }
 
