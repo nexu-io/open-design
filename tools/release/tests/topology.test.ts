@@ -21,8 +21,8 @@ async function fixture(hot = false) {
 it.each([false, true])("projects full/hot=%s without activating deferred Windows or dropping Terminal", async hot => {
   const f = await fixture(hot), result = await projectReleaseTopology(f);
   expect(result.matrix.include.map(value => [value.shell, value.mode])).toEqual([["terminal", "full"], ["electron", hot ? "hot" : "full"]]);
-  expect(result.scope.enabled).toEqual({ terminal_scene: true, electron_scene: true });
-  expect(result.runners).toEqual({ terminal_mac: ["macos-15"], electron_mac: ["macos-15"] });
+  expect(result.scope.enabled).toEqual({ terminal_scene: true, electron_scene: true, electron_win: false });
+  expect(result.runners).toEqual({ terminal_mac: ["macos-15"], electron_mac: ["macos-15"], electron_win: ["windows-2025"] });
   expect(result.topology.deferred).toHaveLength(1);
   expect(JSON.parse(await readFile(join(f.output, "topology.json"), "utf8"))).toEqual(result.topology);
 });

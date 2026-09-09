@@ -11,7 +11,8 @@ async function fixture(run = true) {
   const scene = join(root, "scene"), pending = join(root, "pending.json"), output = join(root, "products");
   await mkdir(scene);
   await writeFile(join(scene, "scene.json"), JSON.stringify({ target: "darwin-arm64", shellBuildHash: "a".repeat(64) }));
-  await writeFile(pending, JSON.stringify({ workloads: { electron_scene: { run, resultHit: !run, digest: "b".repeat(64), executionClass: "mac" } } }));
+  await writeFile(pending, JSON.stringify({ workloads: { electron_scene: { run, resultHit: !run, digest: "b".repeat(64),
+    executionClass: { runnerClass: "electron_darwin_arm64", labels: ["macos-15"] } } } }));
   return { scene, pending, output, target: "darwin-arm64", workload: "electron_scene", artifact: "exact-electron-scene" };
 }
 
@@ -19,7 +20,7 @@ it("emits the existing untrusted candidate without recomputing planner identity"
   const f = await fixture(), result = await contributeScene(f);
   expect(result.contributed).toBe(true);
   expect(JSON.parse(await readFile(join(f.output, f.workload, "product-manifest.json"), "utf8"))).toEqual({
-    workload: f.workload, digest: "b".repeat(64), executionClass: "mac",
+    workload: f.workload, digest: "b".repeat(64), executionClass: { runnerClass: "electron_darwin_arm64", labels: ["macos-15"] },
     products: { scene: { type: "job", source: f.artifact, data: { target: f.target } } },
   });
 });
@@ -30,6 +31,14 @@ it("validates cache hits but does not contribute them again", async () => {
   await expect(access(f.output)).rejects.toThrow();
   await expect(contributeScene({ ...f, target: "win32-x64" })).rejects.toThrow("identity mismatch");
 });
+
+it.each(["mac", null, [], { runnerClass: "mac", labels: [] }, { runnerClass: "mac", labels: [false] }])(
+  "rejects malformed execution classes without emitting a result: %j", async executionClass => {
+    const f = await fixture();
+    await writeFile(f.pending, JSON.stringify({ workloads: { electron_scene: { run: true, digest: "b".repeat(64), executionClass } } }));
+    await expect(contributeScene(f)).rejects.toThrow("no convergence identity");
+    await expect(access(f.output)).rejects.toThrow();
+  });
 
 it("rejects nested release fields and missing planner decisions before writing", async () => {
   const f = await fixture();

@@ -42,8 +42,13 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
     resolved.push({ ...entry, mode });
   }
   const topology = { active: resolved, deferred };
-  const scope = { enabled: Object.fromEntries(resolved.map(entry => [entry.workload, true])) };
-  const runnerPlan = Object.fromEntries(resolved.map(entry => [entry.runner_class, [entry.runs_on]]));
+  // Convergence requires a complete workload/runner declaration, even for
+  // disabled targets. Only active entries belong in the execution matrix.
+  const scope = { enabled: Object.fromEntries([
+    ...resolved.map(entry => [entry.workload, true]),
+    ...deferred.map(entry => [entry.workload, false]),
+  ]) };
+  const runnerPlan = Object.fromEntries([...runners].map(([runnerClass, label]) => [runnerClass, [label]]));
   await writeObject(join(input.output, "topology.json"), topology);
   await writeObject(join(input.output, "scope.json"), scope);
   await writeObject(join(input.output, "runners.json"), runnerPlan);

@@ -32,7 +32,13 @@ export async function contributeScene(input: Readonly<{
     if (pending.resultHit !== true) throw new Error("skipped scene workload has no cache hit");
     return { contributed: false };
   }
-  if (typeof pending.digest !== "string" || !pending.digest || typeof pending.executionClass !== "string" || !pending.executionClass) {
+  const executionClass = pending.executionClass;
+  if (typeof pending.digest !== "string" || !/^[a-f0-9]{64}$/u.test(pending.digest)
+    || executionClass == null || typeof executionClass !== "object" || Array.isArray(executionClass)
+    || Object.keys(executionClass).sort().join(",") !== "labels,runnerClass"
+    || typeof executionClass.runnerClass !== "string" || !/^[a-z0-9][a-z0-9_-]{0,79}$/u.test(executionClass.runnerClass)
+    || !Array.isArray(executionClass.labels) || executionClass.labels.length === 0
+    || executionClass.labels.some((label: unknown) => typeof label !== "string" || !label)) {
     throw new Error("scene workload has no convergence identity");
   }
   const manifest = { workload: input.workload, digest: pending.digest, executionClass: pending.executionClass,
