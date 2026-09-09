@@ -69,9 +69,10 @@ describe("Electron renderer content updater binding", () => {
       status: "applied" as const,
       binding: {}, lifecycle: {}, generation: { id: "n".repeat(64), releaseVersion: "betahyx-closure-2" },
     }));
+    const readPrepared = vi.fn<Parameters<typeof installElectronProductHandlers>[0]["contentUpdater"]["readPrepared"]>().mockResolvedValue(null);
     const lease = await installElectronProductHandlers({
       daemonUrl: "http://127.0.0.1:17578",
-      contentUpdater: { prepareLatest, prepareFromHead: vi.fn(), applyNow },
+      contentUpdater: { readPrepared, prepareLatest, prepareFromHead: vi.fn(), applyNow },
       shellUpdater: { readSnapshot: async () => shellSnapshot, invoke: shellInvoke },
       runtime: {
         attachment: { id: "attachment", shell: { version: "betahyx-1" } },
@@ -86,6 +87,15 @@ describe("Electron renderer content updater binding", () => {
     expect(initial.lines.shell).toMatchObject({ target: "shell", state: "ready", candidateVersion: "betahyx-2", actions: ["apply"] });
     expect(initial.lines.closure).toMatchObject({ target: "closure", state: "idle", actions: ["check"] });
 
+    readPrepared.mockResolvedValue(await prepareLatest() as never);
+    await lease.refreshUpdater();
+    expect(webContents.send).toHaveBeenLastCalledWith(ELECTRON_RENDERER_IPC.updaterStatusChanged,
+      expect.objectContaining({ lines: expect.objectContaining({ closure: expect.objectContaining({ state: "ready" }) }) }));
+    await electron.handlers.get(ELECTRON_RENDERER_IPC.updaterLater)!(event, "closure");
+    await lease.refreshUpdater();
+    expect(webContents.send).toHaveBeenLastCalledWith(ELECTRON_RENDERER_IPC.updaterStatusChanged,
+      expect.objectContaining({ lines: expect.objectContaining({ closure: expect.objectContaining({ state: "idle" }) }) }));
+
     const checked = await electron.handlers.get(ELECTRON_RENDERER_IPC.updaterCheck)!(event, "closure") as OpenDesignElectronUpdaterStatusSnapshot;
     expect(checked.lines.closure).toMatchObject({ state: "ready", candidateVersion: "betahyx-closure-2", actions: ["apply", "later"] });
     expect(shellInvoke).not.toHaveBeenCalled();
@@ -96,6 +106,9 @@ describe("Electron renderer content updater binding", () => {
     expect(shellInvoke).toHaveBeenCalledWith(action);
 
     lease.dispose();
+    webContents.send.mockClear();
+    await lease.refreshUpdater();
+    expect(webContents.send).not.toHaveBeenCalled();
   });
 
   it("accepts only the mounted renderer and removes both finite handlers on dispose", async () => {
@@ -113,7 +126,7 @@ describe("Electron renderer content updater binding", () => {
     const adapter = createElectronRendererAdapter("Electron");
     const lease = await adapter.renderer.mount({
       acknowledgement: { attemptId: "attempt", bindingDigest: "b".repeat(64), channel: "od:mounted", nonce: "nonce" },
-      contentUpdater: { prepareLatest, prepareFromHead: vi.fn(), applyNow },
+      contentUpdater: { readPrepared: vi.fn().mockResolvedValue(null), prepareLatest, prepareFromHead: vi.fn(), applyNow },
       manifest: { protocol: "od" },
       preflight: {},
       presentation: "interactive",
@@ -149,7 +162,7 @@ describe("Electron renderer content updater binding", () => {
     const adapter = createElectronRendererAdapter("Electron");
     await expect(adapter.renderer.mount({
       acknowledgement: { attemptId: "attempt", bindingDigest: "b".repeat(64), channel: "od:mounted", nonce: "nonce" },
-      contentUpdater: { prepareLatest: vi.fn(), prepareFromHead: vi.fn(), applyNow: vi.fn() },
+      contentUpdater: { readPrepared: vi.fn().mockResolvedValue(null), prepareLatest: vi.fn(), prepareFromHead: vi.fn(), applyNow: vi.fn() },
       manifest: { protocol: "od" },
       preflight: {},
       presentation: "interactive",

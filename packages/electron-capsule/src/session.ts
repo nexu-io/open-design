@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { BrowserWindow, app, dialog, ipcMain } from "electron";
+import { startElectronUpdateScheduler } from "./update-scheduler.js";
 import type {
   GenerationRecord, StandaloneGenerationBinding, StandaloneHandoffAttachment,
   StandaloneRuntimeHandle, StandaloneRuntimeStatus, StandaloneShellCapabilityRequest,
@@ -68,6 +69,7 @@ export async function runElectronCapsule(
   let status: StandaloneRuntimeStatus | null = null;
   let runtimeHandle: StandaloneRuntimeHandle | null = null;
   let updaterRevisionAtStart: number | null = null;
+  let contentGenerationAtStart: string | null = null;
   let warmup: ElectronWarmupRun | null = null;
   let runtimeAcquisition: Promise<StandaloneRuntimeHandle> | null = null;
   let platformAcquisition: Promise<NodeRuntimeBinding> | null = null;
@@ -154,6 +156,7 @@ export async function runElectronCapsule(
     signal,
   });
   const rendererContentUpdater: ElectronStandaloneContentUpdaterPort = Object.freeze({
+    readPrepared: () => requireWarmupState(preparedRuntime, "a prepared Standalone runtime").contentUpdater.readPrepared(),
     prepareLatest: (policy: Parameters<ElectronStandaloneContentUpdaterPort["prepareLatest"]>[0]) => requireWarmupState(preparedRuntime, "a prepared Standalone runtime").contentUpdater.prepareLatest(policy),
     prepareFromHead: (...args: Parameters<ElectronStandaloneContentUpdaterPort["prepareFromHead"]>) => requireWarmupState(preparedRuntime, "a prepared Standalone runtime").contentUpdater.prepareFromHead(...args),
     async applyNow(options: Parameters<ElectronStandaloneContentUpdaterPort["applyNow"]>[0]) {
@@ -243,6 +246,8 @@ export async function runElectronCapsule(
           shell,
         });
         preparedRuntime = await preparationAcquisition;
+        try { contentGenerationAtStart = (await preparedRuntime.contentUpdater.readPrepared())?.generation.id ?? null; }
+        catch (error) { context.log.write("updater.startup.content-unavailable", { error }); }
         signal.throwIfAborted();
         generation = preparedRuntime.generation;
         generationBinding = preparedRuntime.binding;
@@ -451,6 +456,20 @@ export async function runElectronCapsule(
     async afterCommit() {
       for (const ingress of pendingHandoffs) if (ingress.type === "deep-link") dispatch(ingress.url);
       await definition.actions?.observeCommitted?.();
+      const backgroundUpdates = definition.backgroundUpdates;
+      if (backgroundUpdates != null && !rendererShutdown.signal.aborted) {
+        startElectronUpdateScheduler({
+          schedule: backgroundUpdates.schedule,
+          signal: rendererShutdown.signal,
+          check: signal => backgroundUpdates.check({ signal,
+            contentUpdater: rendererContentUpdater, shellUpdater: runtimePrepared.updater,
+            startupShellRevision: runtimeUpdaterRevisionAtStart,
+            startupContentGenerationId: contentGenerationAtStart,
+            runtime: { attachment, binding: requireWarmupState(generationBinding, "a generation binding"), handle: runtimeStandaloneHandle },
+          }),
+          observe: (event, detail) => context.log.write(`updater.background.${event}`, { detail }),
+        });
+      }
     },
   };
 }

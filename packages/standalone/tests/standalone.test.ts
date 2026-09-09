@@ -583,12 +583,19 @@ describe("standalone exact lifecycle", () => {
       prepare: await blobOptions(root, artifact),
     });
     const invalid = structuredClone(head); invalid.signatures[0]!.value = "AA==";
+    await expect(updater.readPrepared()).resolves.toBeNull();
     await expect(updater.prepareFromHead(invalid, "observe")).rejects.toThrow("signature");
     expect(documentReads).toBe(0);
     await expect(updater.prepareFromHead(head, "observe")).resolves.toMatchObject({ status: "prepared", authorized: false, generation: { releaseVersion: "0.1.0-somechan.1" } });
     expect(documentReads).toBe(1);
     const prepared = await store.readState();
     expect(prepared.activationIntent).toBeNull();
+    await expect(updater.readPrepared()).resolves.toMatchObject({ status: "prepared", authorized: false, generation: { id: prepared.prepared } });
+    expect(documentReads).toBe(1);
+    await expect(updater.applyNow({} as never, { expectedGenerationId: "f".repeat(64) })).rejects.toThrow("prepared generation changed");
+    await expect(updater.applyNow({ beginTransition: async () => ({ state: "blocked", reason: "occupied", occupants: [] }) } as never,
+      { expectedGenerationId: prepared.prepared!, activationPolicy: "authorize-silent" })).resolves.toMatchObject({ status: "blocked" });
+    expect(await store.readState()).toEqual(prepared);
     returnedBytes = Buffer.from("{}");
     await expect(updater.prepareFromHead(original, "authorize-silent")).rejects.toThrow("binding verification");
     expect(await store.readState()).toEqual(prepared);

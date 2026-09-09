@@ -6,6 +6,7 @@ import { createElectronContentUpdateHandler } from "@/adapters/updater/content.j
 
 function updater(input: Partial<ElectronStandaloneContentUpdaterPort>): ElectronStandaloneContentUpdaterPort {
   return {
+    readPrepared: input.readPrepared ?? vi.fn().mockResolvedValue(null),
     prepareLatest: input.prepareLatest ?? vi.fn(),
     prepareFromHead: input.prepareFromHead ?? vi.fn(),
     applyNow: input.applyNow ?? vi.fn(),

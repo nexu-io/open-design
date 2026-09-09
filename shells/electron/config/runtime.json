@@ -1,5 +1,12 @@
 {
   "schemaVersion": 1,
+  "backgroundUpdates": {
+    "initialDelayMs": 5000,
+    "intervalMs": 900000,
+    "stableIntervalMs": 21600000,
+    "backoffInitialMs": 60000,
+    "backoffMaxMs": 1800000
+  },
   "rendererRecovery": {
     "policy": {
       "crashLimit": 5,

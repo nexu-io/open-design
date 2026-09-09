@@ -248,10 +248,12 @@ async function printPdf(html: unknown, nonce: unknown, rawOptions: unknown): Pro
 }
 
 /** Register product handlers only for the current mounted renderer and binding. */
-export async function installElectronProductHandlers(context: HandlerContext): Promise<Readonly<{ dispose(): void }>> {
+export async function installElectronProductHandlers(context: HandlerContext): Promise<Readonly<{ dispose(): void; refreshUpdater(): Promise<void> }>> {
   const secret = randomBytes(32);
   let content: ContentProjection = null;
   let closureRevision = 0;
+  let dismissedGenerationId: string | null = null;
+  let disposed = false;
   let closureError: OpenDesignElectronUpdaterLineSnapshot["error"] | undefined;
   await armDaemonAuth(context, secret);
   const handled = [
@@ -344,10 +346,27 @@ export async function installElectronProductHandlers(context: HandlerContext): P
   });
   const publishUpdater = async () => {
     const status = updaterStatus(context, await context.shellUpdater.readSnapshot(), content, closureRevision, closureError);
-    if (!context.window.isDestroyed()) context.window.webContents.send(ELECTRON_RENDERER_IPC.updaterStatusChanged, status);
+    if (!disposed && !context.window.isDestroyed()) context.window.webContents.send(ELECTRON_RENDERER_IPC.updaterStatusChanged, status);
     return status;
   };
-  ipcMain.handle(ELECTRON_RENDERER_IPC.updaterStatus, async (event) => { ownSender(context, event); return await publishUpdater(); });
+  const refreshUpdater = async () => {
+    if (disposed) return;
+    try {
+      const prepared = await context.contentUpdater.readPrepared();
+      const next = prepared?.generation.id === dismissedGenerationId ? null : prepared;
+      if (next?.generation.id !== (content?.status === "prepared" ? content.generation.id : undefined)) {
+        content = next;
+        closureRevision += 1;
+        closureError = undefined;
+      }
+    } catch {
+      // A Capsule-bound Closure may exceed this running Shell's capability;
+      // keep publishing the independent Shell line without offering it alone.
+      content = null;
+    }
+    await publishUpdater();
+  };
+  ipcMain.handle(ELECTRON_RENDERER_IPC.updaterStatus, async (event) => { ownSender(context, event); await refreshUpdater(); return await publishUpdater(); });
   ipcMain.handle(ELECTRON_RENDERER_IPC.updaterCheck, async (event, target: OpenDesignElectronUpdaterTarget | null) => {
     ownSender(context, event);
     if (target == null || target === "shell") {
@@ -355,6 +374,7 @@ export async function installElectronProductHandlers(context: HandlerContext): P
       if (snapshot.actions.some(({ id }) => id === "check")) await context.shellUpdater.invoke("check");
     }
     if (target == null || target === "closure") {
+      dismissedGenerationId = null;
       content = await context.contentUpdater.prepareLatest("observe");
       closureRevision += 1;
       closureError = undefined;
@@ -400,6 +420,7 @@ export async function installElectronProductHandlers(context: HandlerContext): P
       const snapshot = await context.shellUpdater.readSnapshot();
       if (snapshot.actions.some(({ id }) => id === "later")) await context.shellUpdater.invoke("later");
     } else if (target === "closure") {
+      dismissedGenerationId = content?.status === "prepared" ? content.generation.id : null;
       content = null;
       closureRevision += 1;
       closureError = undefined;
@@ -418,7 +439,9 @@ export async function installElectronProductHandlers(context: HandlerContext): P
   ipcMain.on(ELECTRON_RENDERER_IPC.petSetVisible, pet);
 
   return Object.freeze({
+    refreshUpdater,
     dispose() {
+      disposed = true;
       for (const channel of handled) ipcMain.removeHandler(channel);
       ipcMain.removeListener(ELECTRON_RENDERER_IPC.appearanceSetTheme, appearance);
       ipcMain.removeListener(ELECTRON_RENDERER_IPC.petSetVisible, pet);

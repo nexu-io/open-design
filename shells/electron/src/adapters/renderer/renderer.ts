@@ -16,11 +16,13 @@ import { installElectronProductHandlers } from "./product-handlers.js";
 export const RENDERER_RESOURCE_EXECUTOR = "shell.renderer-resource";
 
 export type ElectronRendererAdapter = Readonly<{
+  notifyUpdates(): Promise<void>;
   renderer: ElectronShellRenderer;
   warmupExecutors: Readonly<Record<typeof RENDERER_RESOURCE_EXECUTOR, ElectronWarmupExecutor>>;
 }>;
 
 export function createElectronRendererAdapter(title: string): ElectronRendererAdapter {
+  let currentProductHandlers: Awaited<ReturnType<typeof installElectronProductHandlers>> | null = null;
   const prewarm = () => { void title; };
   const renderer: ElectronShellRenderer = Object.freeze({
     windowOptions() {
@@ -54,6 +56,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
       });
       const entryUrl = product.web.url;
       const productHandlers = await installElectronProductHandlers({ contentUpdater, daemonUrl: product.daemon.url, runtime, shellUpdater, window });
+      currentProductHandlers = productHandlers;
       const security = installElectronRendererSecurity({
         openExternal: (url) => systemShell.openExternal(url),
         shellProtocol: manifest.protocol,
@@ -63,6 +66,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
       try {
         await window.loadURL(entryUrl);
       } catch (error) {
+        if (currentProductHandlers === productHandlers) currentProductHandlers = null;
         productHandlers.dispose();
         security.dispose();
         ipcMain.removeHandler(ELECTRON_CONTENT_UPDATE_CHANNELS.prepare);
@@ -71,6 +75,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
       }
       return Object.freeze({
         dispose() {
+          if (currentProductHandlers === productHandlers) currentProductHandlers = null;
           productHandlers.dispose();
           security.dispose();
           ipcMain.removeHandler(ELECTRON_CONTENT_UPDATE_CHANNELS.prepare);
@@ -80,6 +85,7 @@ export function createElectronRendererAdapter(title: string): ElectronRendererAd
     },
   });
   return Object.freeze({
+    async notifyUpdates() { await currentProductHandlers?.refreshUpdater(); },
     renderer,
     warmupExecutors: Object.freeze({ [RENDERER_RESOURCE_EXECUTOR]: prewarm }),
   });

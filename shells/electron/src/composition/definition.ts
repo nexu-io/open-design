@@ -4,6 +4,7 @@ import splashMedia from "../../config/splash-media.json" with { type: "json" };
 import standalone from "../../config/standalone.json" with { type: "json" };
 import macRuntime from "../../config/platforms/mac.json" with { type: "json" };
 import windowsLifecycle from "../../config/platforms/windows.json" with { type: "json" };
+import { app } from "electron";
 
 import type {
   ElectronWarmupTopology,
@@ -23,6 +24,7 @@ import { scheduleElectronShellRestart } from "../adapters/standalone/electron-co
 import { resolveElectronChannelHeadOverride } from "../adapters/standalone/release-feed.js";
 import type { ElectronPhysicalResourceSetDeclaration } from "../adapters/standalone/physical-resources.js";
 import { createInstallerHandoffAdapter } from "../adapters/updater/installer.js";
+import { createElectronBackgroundUpdateCheck } from "../adapters/updater/background.js";
 import { createInstallerRecoveryIntentAdapter } from "../adapters/updater/installer-recovery.js";
 import { createWindowsCommittedObserver } from "../adapters/windows/lifecycle.js";
 import { assertShellWarmupBindings } from "./warmup-bindings.js";
@@ -49,6 +51,15 @@ export function createElectronShellDefinition(installedManifest: ElectronShellMa
     warmup,
     warmupExecutors: assertShellWarmupBindings(warmup, renderer.warmupExecutors),
     renderer: renderer.renderer,
+    ...(app.isPackaged ? { backgroundUpdates: {
+      schedule: {
+        initialDelayMs: runtime.backgroundUpdates.initialDelayMs,
+        intervalMs: shellManifest.channel === "stable" ? runtime.backgroundUpdates.stableIntervalMs : runtime.backgroundUpdates.intervalMs,
+        backoffInitialMs: runtime.backgroundUpdates.backoffInitialMs,
+        backoffMaxMs: runtime.backgroundUpdates.backoffMaxMs,
+      },
+      check: createElectronBackgroundUpdateCheck(renderer.notifyUpdates),
+    } } : {}),
     rendererRecovery: runtime.rendererRecovery,
     actions: Object.freeze({
       scheduleRestart: scheduleElectronShellRestart,

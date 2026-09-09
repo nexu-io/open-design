@@ -83,6 +83,16 @@ export class StandaloneUpdater {
     return await this.prepareFromHead(await this.source.readChannelHead(this.channel), activationPolicy);
   }
 
+  /** Observe retained preparation without network access or activation writes. */
+  async readPrepared(): Promise<Extract<UpdatePreparation, { status: "prepared" }> | null> {
+    const state = await this.store.readState();
+    if (state.prepared == null || state.prepared === state.active) return null;
+    const envelope = await this.store.readGenerationMetadata(state.prepared, this.trustedKeys);
+    assertShellCompatibility(envelope.metadata, this.shell);
+    const generation = await this.store.readGeneration(state.prepared);
+    return { status: "prepared", generation, authorized: state.activationIntent?.generationId === state.prepared };
+  }
+
   /** Prepare the caller's already selected release without a second discovery.
    * Snapshot before I/O; this does not grant activation or bypass verification. */
   async prepareFromHead(input: SignedStandaloneChannelHead, activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation> {
@@ -128,18 +138,21 @@ export class StandaloneUpdater {
 
   activateOnColdStart(bootloader: FossilBootloader): Promise<LifecycleStatus> { return bootloader.start(); }
 
-  async applyNow(launcher: VersionedLauncher, options: Readonly<{ force?: boolean }> = {}): Promise<UpdateApplication> {
+  async applyNow(launcher: VersionedLauncher, options: Readonly<{ force?: boolean; expectedGenerationId?: string; activationPolicy?: "authorize-user" | "authorize-silent" }> = {}): Promise<UpdateApplication> {
     const state = await this.store.readState();
     if (state.prepared == null) throw new Error("no prepared generation to apply");
+    if (options.expectedGenerationId != null && state.prepared !== options.expectedGenerationId) throw new Error("prepared generation changed before requested activation");
     const targetGenerationId = state.prepared;
-    await applyActivationPolicy(this.store, targetGenerationId, "authorize-user");
+    const silent = options.activationPolicy === "authorize-silent";
+    if (!silent) await applyActivationPolicy(this.store, targetGenerationId, "authorize-user");
     const transition = await launcher.beginTransition("content-restart", options);
     if (transition.state === "blocked") return { status: "blocked", reason: transition.reason, occupants: transition.occupants };
     await transition.transition.renew();
     await transition.transition.forceStop();
     await this.store.recoverInterruptedAttempt();
-    const prepared = await this.store.readState();
+    let prepared = await this.store.readState();
     if (prepared.prepared !== targetGenerationId) throw new Error("prepared generation changed before activation");
+    if (silent) prepared = await applyActivationPolicy(this.store, targetGenerationId, "authorize-silent");
     await this.store.activatePrepared(targetGenerationId, this.shell, prepared.revision);
     return { status: "applied", lifecycle: await launcher.startDuringTransition(transition.transition) };
   }

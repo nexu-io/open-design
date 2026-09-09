@@ -111,9 +111,10 @@ export type ElectronStandaloneContentUpdateApplication =
     }>;
 
 export interface ElectronStandaloneContentUpdaterPort {
+  readPrepared(): Promise<Extract<UpdatePreparation, { status: "prepared" }> | null>;
   prepareLatest(activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation>;
   prepareFromHead(head: SignedStandaloneChannelHead, activationPolicy: UpdateActivationPolicy): Promise<UpdatePreparation>;
-  applyNow(options?: Readonly<{ force?: boolean }>): Promise<ElectronStandaloneContentUpdateApplication>;
+  applyNow(options?: Readonly<{ force?: boolean; expectedGenerationId?: string; activationPolicy?: "authorize-user" | "authorize-silent" }>): Promise<ElectronStandaloneContentUpdateApplication>;
 }
 
 export type ElectronShellRenderer = Readonly<{
@@ -183,6 +184,18 @@ export type ElectronStartupPresentation = Readonly<{
   setStage(stage: string): void;
 }>;
 
+export type ElectronBackgroundUpdatePolicy = Readonly<{
+  schedule: Readonly<{ initialDelayMs: number; intervalMs: number; backoffInitialMs: number; backoffMaxMs: number }>;
+  check(input: Readonly<{
+    signal: AbortSignal;
+    contentUpdater: ElectronStandaloneContentUpdaterPort;
+    shellUpdater: StandaloneShellUpdaterPort;
+    startupShellRevision: number;
+    startupContentGenerationId: string | null;
+    runtime: ElectronStandaloneRuntimeAccess;
+  }>): Promise<void>;
+}>;
+
 export type ElectronShellDefinition = Readonly<{
   manifest: ElectronShellManifest;
   appearance: ElectronShellAppearance;
@@ -193,6 +206,7 @@ export type ElectronShellDefinition = Readonly<{
   headless?: boolean;
   actions?: ElectronShellActions;
   renderer: ElectronShellRenderer;
+  backgroundUpdates?: ElectronBackgroundUpdatePolicy;
   rendererRecovery?: Readonly<{
     policy: ElectronRendererRecoveryPolicy;
     prompt: Readonly<{ title: string; message: string; detail: string; retryLabel: string; quitLabel: string }>;

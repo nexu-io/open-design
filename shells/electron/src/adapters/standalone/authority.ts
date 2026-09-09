@@ -867,6 +867,7 @@ export function createElectronStandaloneAuthorityFactory(
           });
         },
         contentUpdater: Object.freeze({
+          readPrepared: () => content.readPrepared(),
           prepareLatest: (activationPolicy: UpdateActivationPolicy) => content.prepareLatest(activationPolicy),
           prepareFromHead: (head: SignedStandaloneChannelHead, activationPolicy: UpdateActivationPolicy) => content.prepareFromHead(head, activationPolicy),
           async applyNow(options = {}) {
