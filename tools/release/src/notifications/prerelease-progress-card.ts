@@ -14,10 +14,14 @@
 // pipeline nothing; it lives in a workflow of its own so it cannot hold the
 // pipeline's repository-wide concurrency group.
 //
-// The first card is deliberately withheld until a platform actually publishes.
-// A "构建中…" card posted at dispatch time becomes a permanent lie whenever a
-// build dies. The one exception is total failure, where silence would hide an
-// incident — see shouldPostFirstCard.
+// The card is posted on the first poll, before any package exists, and every
+// later state is an edit of that same message. The fear that used to withhold
+// it — a "构建中…" card left standing forever when a build dies — is answered by
+// the machinery that grew around it since: a failed lane renders its own
+// terminal state, a release where nothing shipped turns the card red, and the
+// watcher's own timeout stamps the card instead of abandoning it. Silence
+// during the entire build window bought nothing and cost the channel the one
+// thing it wanted, which is knowing a release is under way.
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 
@@ -28,19 +32,25 @@ import {
   isTerminal,
   readChangelogLines,
   renderPrereleaseCard,
-  shouldPostFirstCard,
   undiscoveredLaneStatus,
 } from "./prerelease-card.ts";
 import type {
   Changelog,
   LaneStatus,
+  LaneTiming,
   PlatformKey,
   PlatformLane,
   PrereleaseCardState,
   TestLane,
 } from "./prerelease-card.ts";
 
-type GithubJob = { name?: unknown; status?: unknown; conclusion?: unknown };
+type GithubJob = {
+  name?: unknown;
+  status?: unknown;
+  conclusion?: unknown;
+  started_at?: unknown;
+  completed_at?: unknown;
+};
 type GithubRun = { id?: unknown; name?: unknown; html_url?: unknown; status?: unknown };
 type DispatchedRun = { completed: boolean; id: string; url: string };
 
@@ -152,6 +162,26 @@ function statusOf(job: GithubJob): LaneStatus {
   return "failure";
 }
 
+const NO_TIMING: LaneTiming = { startedAt: null, completedAt: null };
+
+function epochMs(value: unknown): number | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * The job's wall clock, taken verbatim.
+ *
+ * No interpretation happens here on purpose: GitHub sets `started_at` on a
+ * QUEUED job too, and deciding which of these numbers is meaningful belongs to
+ * the renderer, which is the only place that also knows the lane's status.
+ */
+function timingOf(job: GithubJob | undefined): LaneTiming {
+  if (job == null) return NO_TIMING;
+  return { startedAt: epochMs(job.started_at), completedAt: epochMs(job.completed_at) };
+}
+
 /** Worst-wins, with "still moving" beating "all done" so a family never reads terminal early. */
 function rollup(statuses: LaneStatus[]): LaneStatus {
   if (statuses.length === 0) return "unknown";
@@ -187,6 +217,26 @@ async function listJobs(runId: string): Promise<GithubJob[]> {
     if (batch.length < 100) break;
   }
   return jobs;
+}
+
+/**
+ * When the origin run was created — the start of the round's own clock.
+ *
+ * Read in its own try/catch rather than inside the poll: the total elapsed time
+ * is a convenience, and losing it must never cost the card a whole cycle of
+ * lane states. Retried every cycle until it lands, so one 5xx does not drop it
+ * for the rest of the watch.
+ */
+async function readRunCreatedAt(): Promise<number | null> {
+  try {
+    const run = await githubJson<{ created_at?: unknown; run_started_at?: unknown }>(
+      `/repos/${repo}/actions/runs/${originRunId}`,
+    );
+    return epochMs(run.created_at) ?? epochMs(run.run_started_at);
+  } catch (error) {
+    console.warn(`[card] could not read run start: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 }
 
 async function findDispatchedRun(workflowFile: string): Promise<DispatchedRun | null> {
@@ -279,17 +329,24 @@ function reportDelivered(): void {
 type Watch = {
   originJobs: GithubJob[];
   publish: LaneStatus;
+  /** When publish stopped, once it has. Feeds the card's whole-round clock. */
+  publishCompletedAt: number | null;
   testsRun: DispatchedRun | null;
   testsJobs: GithubJob[];
   smokeRun: DispatchedRun | null;
   smokeJobs: GithubJob[];
   publishSucceededAt: number | null;
+  runCreatedAt: number | null;
 };
 
 async function collect(previous: Watch): Promise<Watch> {
+  const runCreatedAt = previous.runCreatedAt ?? (await readRunCreatedAt());
   const originJobs = await listJobs(originRunId);
   const publishJob = originJobs.find((job) => jobMatches(String(job.name ?? ""), ORIGIN_PUBLISH_JOB));
   const publish = publishJob == null ? "pending" : statusOf(publishJob);
+  // Only a terminal publish has a completion to report; a job the API has not
+  // finished with can still carry a stale or absent stamp.
+  const publishCompletedAt = isTerminal(publish) ? timingOf(publishJob).completedAt : null;
 
   // Re-listed every cycle rather than cached, because the run's own
   // completion is what tells a MISSING job apart from a job the API has not
@@ -314,11 +371,13 @@ async function collect(previous: Watch): Promise<Watch> {
   return {
     originJobs,
     publish,
+    publishCompletedAt,
     testsRun,
     testsJobs,
     smokeRun,
     smokeJobs,
     publishSucceededAt: previous.publishSucceededAt ?? (publish === "success" ? Date.now() : null),
+    runCreatedAt,
   };
 }
 
@@ -360,7 +419,7 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
         });
       } else smoke = "skipped";
     }
-    platforms.push({ key, label: PLATFORM_LABELS[key], build, downloadUrl, smoke });
+    platforms.push({ key, label: PLATFORM_LABELS[key], build, downloadUrl, smoke, timing: timingOf(job) });
   }
 
   const tests: TestLane[] = TEST_JOBS.map((entry) => {
@@ -414,6 +473,9 @@ async function buildState(watch: Watch, startedAt: number, timedOut: boolean): P
     expectSmoke,
     finished: originDone && testsDone && smokeDone,
     timedOut,
+    now: Date.now(),
+    runCreatedAt: watch.runCreatedAt,
+    publishCompletedAt: watch.publishCompletedAt,
   };
 }
 
@@ -428,11 +490,13 @@ async function main(): Promise<void> {
   let watch: Watch = {
     originJobs: [],
     publish: "pending",
+    publishCompletedAt: null,
     testsRun: null,
     testsJobs: [],
     smokeRun: null,
     smokeJobs: [],
     publishSucceededAt: null,
+    runCreatedAt: null,
   };
   let messageId: string | null = null;
   let lastRendered = "";
@@ -451,26 +515,29 @@ async function main(): Promise<void> {
     const state = await buildState(watch, startedAt, timedOut);
     const done = state.finished || timedOut;
 
-    if (messageId != null || shouldPostFirstCard(state) || done) {
-      const card = renderPrereleaseCard(state);
-      const rendered = JSON.stringify(card);
-      if (rendered !== lastRendered) {
-        try {
-          if (messageId == null) {
-            messageId = await client.sendCard(chatId, card);
-            console.log(`[card] posted ${messageId}`);
-          } else {
-            await client.patchCard(messageId, card);
-            console.log("[card] updated");
-          }
-          lastRendered = rendered;
-          chatHoldsLatest = true;
-        } catch (error) {
-          // Keep watching. The next cycle re-renders from the same state and
-          // tries again, so one Feishu hiccup does not lose the card.
-          console.warn(`[card] delivery failed: ${error instanceof Error ? error.message : String(error)}`);
-          chatHoldsLatest = false;
+    // No gate: the first render goes to the chat whatever it says, and every
+    // one after it edits that same message. The only thing that suppresses a
+    // write is "this render is identical to the one already delivered", which
+    // is why the live durations are quantized to the minute — see
+    // formatElapsed.
+    const card = renderPrereleaseCard(state);
+    const rendered = JSON.stringify(card);
+    if (rendered !== lastRendered) {
+      try {
+        if (messageId == null) {
+          messageId = await client.sendCard(chatId, card);
+          console.log(`[card] posted ${messageId}`);
+        } else {
+          await client.patchCard(messageId, card);
+          console.log("[card] updated");
         }
+        lastRendered = rendered;
+        chatHoldsLatest = true;
+      } catch (error) {
+        // Keep watching. The next cycle re-renders from the same state and
+        // tries again, so one Feishu hiccup does not lose the card.
+        console.warn(`[card] delivery failed: ${error instanceof Error ? error.message : String(error)}`);
+        chatHoldsLatest = false;
       }
     }
 

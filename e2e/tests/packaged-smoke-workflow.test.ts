@@ -2956,10 +2956,15 @@ process.stdin.on("end", () => {
     expect(card).toContain("gh api --paginate");
     expect(card).toContain("compare/${PREV}...${CUR}?per_page=100");
 
-    // The watcher polls; it is never pushed to.
+    // The watcher polls; it is never pushed to. That holds for the durations
+    // the card reports too: they are the job list's own `started_at` /
+    // `completed_at`, so no build job has to report a timing to anyone. (When
+    // the first card is posted is behaviour, not workflow topology — it is
+    // asserted against the real script in
+    // tools/release/tests/prerelease-card-delivery-signal.test.ts.)
     expect(watcher).toContain("/repos/${repo}/actions/runs/${runId}/jobs");
     expect(watcher).toContain("origin-run ${originRunId}");
-    expect(watcher).toContain("shouldPostFirstCard");
+    expect(watcher).toContain("timingOf(job)");
     // A wrong URL would ship a 404 button to the whole channel.
     expect(watcher).toContain("verifyDownloadUrl");
 

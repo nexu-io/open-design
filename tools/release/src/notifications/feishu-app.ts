@@ -4,7 +4,7 @@
 // channel it is frozen, so a build that reports progress has to post one
 // message per state change and the channel fills with stale cards. An
 // application bot can PATCH a message it sent, which is what lets one card
-// track a release from "first platform ready" to "everything green".
+// track a release from "the pipeline started" to "everything green".
 //
 // Three endpoints, in the order a caller uses them:
 //   POST  /open-apis/auth/v3/tenant_access_token/internal  {app_id, app_secret}
