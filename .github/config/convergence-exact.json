@@ -13,6 +13,9 @@
       ".github/workflows/release-exact.yml",
       ".github/workflows/release-prerelease.yml",
       ".github/workflows/release-stable.yml",
+      "tools/release/resources/exact-plan-identities.json",
+      "tools/release/src/exact/plan.ts",
+      "packages/metatool/",
       "tools/release/src/exact/scene-artifact.ts",
       "tools/release/src/exact/scene-cache.ts",
       "tools/release/src/exact/scene-contribution.ts",
@@ -35,6 +38,8 @@
       "shells/terminal/"
     ],
     "electron-scene": [
+      ".node-version",
+      "suite://closure-resources",
       "package.json",
       "pnpm-lock.yaml",
       "pnpm-workspace.yaml",
@@ -47,6 +52,29 @@
       "packages/sidecar/",
       "packages/standalone/",
       "shells/electron/"
+    ],
+    "closure-resources": [
+      "apps/daemon/",
+      "apps/web/",
+      "packages/agui-adapter/",
+      "packages/components/",
+      "packages/contracts/",
+      "packages/diagnostics/",
+      "packages/electron-contract/",
+      "packages/plugin-runtime/",
+      "packages/registry-protocol/",
+      "packages/release/",
+      "packages/sidecar-proto/",
+      "skills/",
+      "design-templates/",
+      "design-systems/",
+      "craft/",
+      "plugins/_official/",
+      "plugins/registry/",
+      "assets/frames/",
+      "assets/community-pets/",
+      "prompt-templates/",
+      "data/plugin-previews/"
     ]
   },
   "workflows": {

@@ -15,6 +15,32 @@ const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
+  it("covers the declared aggregate scene production inputs in the convergence cache key", async () => {
+    const result = await run("python3", ["-c", [
+      "import json, sys",
+      "from pathlib import Path",
+      "sys.path.insert(0, sys.argv[1])",
+      "from convergence import ConvergenceContract",
+      "contract = ConvergenceContract(Path(sys.argv[2]))",
+      "print(json.dumps(contract.suite_paths('electron-scene') + contract.suite_paths('convergence-control')))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/convergence-exact.json")]);
+    const inputs: string[] = JSON.parse(result.stdout);
+    const registry = JSON.parse(await readFile(resolve(workspaceRoot, "tools/release/resources/exact-plan-identities.json"), "utf8"));
+    const paths = new Set<string>();
+    function collect(name: string): void {
+      const source = registry.sourceSets[name];
+      for (const parent of source.inherits ?? []) collect(parent);
+      for (const entry of source.paths ?? []) paths.add(typeof entry === "string" ? entry : entry.path);
+    }
+    // Until independent producers replace the aggregate scene, every bundled
+    // Capsule, Closure and resource input must invalidate that aggregate.
+    for (const name of ["electron.contract.build", "electron.shell.build", "closure.build"]) collect(name);
+    paths.add("tools/release/resources/exact-plan-identities.json");
+    paths.add("tools/release/src/exact/plan.ts");
+    const uncovered = [...paths].filter(path => !inputs.some(input => input === "*" || input.replace(/\/$/u, "") === path || (input.endsWith("/") && path.startsWith(input))));
+    expect(uncovered).toEqual([]);
+  });
+
   it("passes projected workloads and scene identities through the real convergence planner and handoff", async () => {
     const root = await mkdtemp(join(tmpdir(), "exact-convergence-contract-")); roots.push(root);
     const cli = resolve(workspaceRoot, "tools/release/dist/exact-control.mjs");
