@@ -10,12 +10,13 @@
     "tools-pack": "./bin/tools-pack.mjs"
   },
   "scripts": {
-    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
+    "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && metatool write .",
     "dev": "tsx ./src/index.ts",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/metatool": "workspace:*",
     "@open-design/download": "workspace:*",
     "@open-design/shell-electron": "workspace:*",
     "@open-design/tools-serve": "workspace:*",

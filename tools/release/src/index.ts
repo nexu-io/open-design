@@ -110,11 +110,5 @@ cli
     await import("./storage/summary-metadata.ts");
   });
 
-cli
-  .command("notify feishu", "Send a Feishu release notification")
-  .action(async () => {
-    await import("./notifications/feishu.ts");
-  });
-
 cli.help();
 cli.parse();

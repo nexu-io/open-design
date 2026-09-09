@@ -853,6 +853,9 @@ importers:
       '@open-design/closure':
         specifier: workspace:*
         version: link:../../apps/closure
+      '@open-design/metatool':
+        specifier: workspace:*
+        version: link:../../packages/metatool
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -893,6 +896,9 @@ importers:
       '@open-design/download':
         specifier: workspace:*
         version: link:../../packages/download
+      '@open-design/metatool':
+        specifier: workspace:*
+        version: link:../../packages/metatool
       '@open-design/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -995,6 +1001,9 @@ importers:
       '@open-design/download':
         specifier: workspace:*
         version: link:../../packages/download
+      '@open-design/metatool':
+        specifier: workspace:*
+        version: link:../../packages/metatool
       '@open-design/release':
         specifier: workspace:*
         version: link:../../packages/release

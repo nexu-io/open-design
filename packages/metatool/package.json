@@ -6,7 +6,11 @@
   "description": "Internal metadata helpers for checking freshness of built OpenDesign tool dist outputs.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "metatool": "./bin/metatool.mjs"
+  },
   "files": [
+    "bin",
     "dist"
   ],
   "exports": {

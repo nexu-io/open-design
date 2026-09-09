@@ -900,6 +900,11 @@ def plan_command(args: argparse.Namespace, contract: ConvergenceContract, root: 
         },
     }
     write_json_atomic(args.pending, pending)
+    write_json_atomic(args.pending.parent / "summary.json", {
+        "schemaVersion": 1, "operation": "workflow.plan.summary", "workflow": workflow.name,
+        "workloads": [{"name": name, "hit": hits[name], "run": run[name], "reason": reasons[name]}
+                      for name in workflow.order if enabled[name]],
+    })
     if args.products_output is not None:
         for name, binding in product_inputs(pending).items():
             write_json_atomic(args.products_output / f"{name}.json", binding)

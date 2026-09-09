@@ -7,12 +7,13 @@
     "tools-dev": "./bin/tools-dev.mjs"
   },
   "scripts": {
-    "build": "node ./esbuild.config.mjs && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
+    "build": "node ./esbuild.config.mjs && metatool write .",
     "dev": "tsx ./src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@open-design/metatool": "workspace:*",
     "@open-design/archive": "workspace:*",
     "@open-design/shell-electron": "workspace:*",
     "@open-design/closure": "workspace:*",

@@ -61,6 +61,7 @@ const residualSkippedDirectories = new Set([
 ]);
 
 const residualAllowedExactPaths = new Set([
+  "packages/metatool/bin/metatool.mjs", // Stable CLI bootstrap; implementation is prebuilt.
   // esbuild config entrypoints are executed directly by Node before package
   // dist output exists.
   "packages/agui-adapter/esbuild.config.mjs",

@@ -1199,6 +1199,16 @@ jobs:
           --policy "$RUNNER_TEMP/published/release-policy.json" --target "${{ matrix.target }}"
           --receipt "$RUNNER_TEMP/baseline-inspection/receipt.json" --github-env "$GITHUB_ENV"
 
+      - name: Retain notification comparison baseline
+        if: ${{ matrix.shell == 'electron' && matrix.target == 'darwin-arm64' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: exact-notification-baseline-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/baseline-inspection/accepted-baseline.json
+          if-no-files-found: ignore
+          retention-days: 1
+
       - name: Download accepted public artifact
         env:
           SHELL_TYPE: ${{ matrix.shell }}
@@ -1369,10 +1379,49 @@ jobs:
             --receipt "$RUNNER_TEMP/baseline-promote-receipt.json"
 
       - uses: actions/upload-artifact@v7.0.1
+        if: ${{ always() }}
         with:
           name: exact-activation-${{ inputs.channel }}-${{ inputs.release_version }}
           path: |
             ${{ runner.temp }}/activate-receipt.json
             ${{ runner.temp }}/baseline-promote-receipt.json
           if-no-files-found: error
+          retention-days: 30
+
+  notify:
+    name: Report release outcome
+    needs: [plan, tools, validation, scene, terminal_scene, platform, capsule, data, prepare, distribution, publish, acceptance, activate]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Report and notify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_FEISHU_BOT: ${{ inputs.channel == 'betahyx' && secrets.RELEASE_FEISHU_BETA || '' }}
+          RELEASE_JOB_RESULTS: ${{ toJSON(needs) }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: >-
+          python3 .github/scripts/feishu.py
+          --channel "$RELEASE_CHANNEL" --version "$RELEASE_VERSION" --commit "$SOURCE_SHA"
+          --plan-artifact "exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}"
+          --publication-artifact "exact-$RELEASE_CHANNEL-$RELEASE_VERSION-receipts"
+          --activation-artifact "exact-activation-$RELEASE_CHANNEL-$RELEASE_VERSION"
+          --baseline-artifact "exact-notification-baseline-${{ github.run_id }}-${{ github.run_attempt }}"
+          --output "$RUNNER_TEMP/notification/report.json"
+
+      - uses: actions/upload-artifact@v7.0.1
+        if: ${{ always() }}
+        with:
+          name: release-notification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/notification/report.json
+          if-no-files-found: warn
           retention-days: 30
