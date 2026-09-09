@@ -77,6 +77,16 @@ function configuredMode(value: unknown): OdNextRolloutMode | null {
  * mode is switched back on. So the invariant this function has to keep is:
  * an installation that opted out reads `off` through every later release.
  *
+ * With one deliberate exception, and it is a one-time one. The build that
+ * carried the default-on flip also starts every installation on the default
+ * once, whatever the opt-in switch left behind, so an opt-out saved under the
+ * opt-in regime is cleared on that build's first boot. `migrateOdNextDefaultOnSync`
+ * does that and writes a marker in the same breath, which is what keeps the
+ * invariant above true for every opt-out after it: this function never sees a
+ * second clear, and a switch the user turns off stays off across restarts. The
+ * exception belongs to that migration, not to this resolution — nothing here
+ * treats a saved `off` as anything but a decision.
+ *
  * That rests on the config never reading as unconfigured unless it genuinely
  * is. `off` is a value the config carries, and the read path in `app-config.ts`
  * keeps three states apart rather than two: no file at all is the only one that
