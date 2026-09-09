@@ -3,6 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 
 import { exactStorageObject, isReleaseChannel } from "@open-design/release";
+import { storageConfigFromEnv } from "../storage/common.ts";
+import { requestStorageObject } from "../storage/s3-upload.ts";
 
 import { canonicalBytes, checkedFile, readObject, writeObject, type JsonObject } from "./control-common.ts";
 import { createAcceptedShellBaselineReceipt } from "./accepted-baseline.ts";
@@ -48,6 +50,18 @@ export function validateExactLaneTransition(current: JsonObject, incoming: JsonO
 }
 
 async function request(url: string, init: RequestInit = {}): Promise<Response> {
+  if (process.env.RELEASE_STORAGE_ACCESS_KEY_ID || process.env.RELEASE_STORAGE_SECRET_ACCESS_KEY) {
+    const config = storageConfigFromEnv();
+    const prefix = `${config.endpointUrl.replace(/\/$/u, "")}/${encodeURIComponent(config.bucket)}/`;
+    if (!url.startsWith(prefix)) throw new Error("exact storage request differs from configured R2 target");
+    const method = init.method ?? "GET";
+    if ((method !== "GET" && method !== "PUT") || (init.body != null && !(init.body instanceof Uint8Array))) {
+      throw new Error("unsupported exact storage request");
+    }
+    return requestStorageObject(config, decodeURIComponent(url.slice(prefix.length)), {
+      method, headers: init.headers, ...(init.body == null ? {} : { body: init.body as Uint8Array }),
+    });
+  }
   const headers = new Headers(init.headers);
   const token = process.env.OD_EXACT_RELEASE_TOKEN;
   if (token != null && token.length > 0) headers.set("Authorization", `Bearer ${token}`);

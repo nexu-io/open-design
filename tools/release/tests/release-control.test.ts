@@ -6,11 +6,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const execFileAsync = promisify(execFile);
 const roots: string[] = [];
 afterEach(async () => Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true }))));
+afterEach(() => vi.unstubAllEnvs());
 
 async function runCommand(args: string[]) {
   try {
@@ -96,11 +97,13 @@ describe("exact phased release control", () => {
     expect(rejected.stderr).toContain("manifest digest mismatch");
   });
 
-  it("publishes immutable objects idempotently and activates only an exact accepted topology", async () => {
+  it.each(["fixture", "sigv4"])("publishes immutable objects idempotently and activates only an exact accepted topology (%s)", async (transport) => {
     const root = await mkdtemp(join(tmpdir(), "terminal-release-control-"));
     roots.push(root);
     const objects = new Map<string, Buffer>();
+    const authorizationHeaders: Array<string | undefined> = [];
     const server = createServer(async (request: IncomingMessage, response: ServerResponse) => {
+      authorizationHeaders.push(request.headers.authorization);
       const path = request.url ?? "/";
       if (request.method === "GET") {
         const body = objects.get(path);
@@ -171,6 +174,12 @@ describe("exact phased release control", () => {
       const policyRequest = join(root, "policy-request.json");
       const policyReceipt = join(root, "policy-receipt.json");
       const endpointUrl = `http://127.0.0.1:${address.port}`;
+      if (transport === "sigv4") {
+        for (const [name, value] of Object.entries({
+          RELEASE_STORAGE_ACCESS_KEY_ID: "fixture-access", RELEASE_STORAGE_SECRET_ACCESS_KEY: "fixture-secret",
+          RELEASE_STORAGE_ENDPOINT: endpointUrl, RELEASE_STORAGE_BUCKET: "fixture", RELEASE_STORAGE_REGION: "auto",
+        })) vi.stubEnv(name, value);
+      }
       const releaseTarget = {
         endpointUrl,
         bucket: "fixture",
@@ -227,6 +236,10 @@ describe("exact phased release control", () => {
       await expect(runRelease(activateArgs, firstActivation)).resolves.toMatchObject({ status: 0, stderr: "" });
       await expect(runRelease(activateArgs, replayActivation)).resolves.toMatchObject({ status: 0, stderr: "" });
       expect(JSON.parse(await readFile(replayActivation, "utf8"))).toMatchObject({ operation: "exact.activate", replayed: true });
+      expect(authorizationHeaders.length).toBeGreaterThan(0);
+      if (transport === "sigv4") {
+        expect(authorizationHeaders.every(value => value?.startsWith("AWS4-HMAC-SHA256 Credential=fixture-access/"))).toBe(true);
+      }
     } finally {
       await new Promise<void>((done, reject) => server.close((error) => error == null ? done() : reject(error)));
     }

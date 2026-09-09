@@ -89,6 +89,28 @@ function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canon
 }
 
 const MAX_ATTEMPTS = 5;
+
+/** Raw status and ETag are retained for immutable writes and channel-head CAS. */
+export async function requestStorageObject(config: StorageConfig, objectKey: string, init: {
+  method: "GET" | "PUT"; body?: Uint8Array; headers?: RequestInit["headers"];
+}): Promise<Response> {
+  const { canonicalUri, url } = objectUrl(config, objectKey);
+  const body = init.body == null ? undefined : Buffer.from(init.body);
+  const payloadHash = hash(body ?? "");
+  const headers = Object.fromEntries(new Headers(init.headers).entries());
+  delete headers.authorization;
+  if (headers["if-match"]) headers["if-match"] = strongQuotedEtag(headers["if-match"]);
+  headers.host = url.host;
+  headers["x-amz-content-sha256"] = payloadHash;
+  if (config.sessionToken) headers["x-amz-security-token"] = config.sessionToken;
+  return signedFetchWithRetry(`${init.method} ${url}`, () => {
+    const { amzDate, dateStamp } = amzTimestamp(new Date());
+    const signedHeaders = { ...headers, "x-amz-date": amzDate };
+    return { url, init: { method: init.method, body, redirect: "error", headers: {
+      ...signedHeaders, Authorization: authorizationHeader(config, init.method, canonicalUri, signedHeaders, payloadHash, dateStamp),
+    } } };
+  });
+}
 const BASE_DELAY_MS = 500;
 const MAX_DELAY_MS = 8000;
 
