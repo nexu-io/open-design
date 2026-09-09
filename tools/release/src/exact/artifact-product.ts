@@ -1,14 +1,24 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { extract, inspect, type ArchiveEntry } from "@open-design/archive";
+import { readObject } from "./control-common.ts";
 
 const MAX_BYTES = 2 * 1024 ** 3;
 type ProductTree = Readonly<{ root: string; entries: readonly ArchiveEntry[] }>;
+
+/** Restore an opaque transport once; native interpretation belongs to its consumer. */
+export async function acquireArtifactProduct(input: Readonly<{ descriptor: string; output: string }>) {
+  const descriptor = await readObject(input.descriptor);
+  await assertArtifactDestinationAbsent(resolve(input.output));
+  await using product = await openArtifactProduct({ url: descriptor.url, sha256: descriptor.sha256 });
+  await stageArtifactProduct(input.output, stage => cp(product.archive.root, stage, { recursive: true }));
+  return { directory: resolve(input.output), acquisition: product.acquisition };
+}
 
 export async function assertArtifactDestinationAbsent(path: string) {
   try { await lstat(path); }

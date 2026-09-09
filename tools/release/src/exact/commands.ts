@@ -17,6 +17,7 @@ import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { collectExecutedAcceptance, exerciseReleaseInstallation } from "./acceptance-execution.ts";
 import { validateReleaseRecipe } from "./validation.ts";
+import { acquireArtifactProduct } from "./artifact-product.ts";
 
 type Options = Record<string, unknown>;
 function required(options: Options, key: string): string {
@@ -37,6 +38,12 @@ async function emit(options: Options, receipt: unknown): Promise<void> {
 
 /** One command grammar for the workspace tool and its relocatable CI build. */
 export function registerExactCommands(cli: CAC): void {
+  cli.command("artifact acquire", "Acquire a checksum-bound opaque transport without repacking it")
+    .option("--descriptor <file>", "Immutable URL and SHA-256 descriptor")
+    .option("--output <directory>", "Fresh transport directory")
+    .action(async (options: Options) => {
+      await emit(options, await acquireArtifactProduct({ descriptor: required(options, "descriptor"), output: required(options, "output") }));
+    });
   cli.command("installation <operation>", "Exercise a published installation and collect its bound evidence")
     .option("--publication <file>", "Publication receipt")
     .option("--policy <file>", "Release policy")

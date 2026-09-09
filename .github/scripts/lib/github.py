@@ -78,9 +78,13 @@ def run_artifacts(repository: str, run_id: int) -> list[dict[str, Any]]:
 
 
 def unique_run_artifact(repository: str, run_id: int, name: str) -> dict[str, Any] | None:
+    return unique_artifact(run_artifacts(repository, run_id), name)
+
+
+def unique_artifact(artifacts: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
     matches = [
         artifact
-        for artifact in run_artifacts(repository, run_id)
+        for artifact in artifacts
         if artifact.get("name") == name and artifact.get("expired") is False
     ]
     if not matches:

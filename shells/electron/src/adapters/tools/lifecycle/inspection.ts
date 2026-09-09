@@ -30,8 +30,8 @@ export async function updateElectronClosureThroughCdp(session: ElectronDiagnosti
   return Object.freeze({ schemaVersion: 1, operation: "electron.cdp.contract.invoked", ...result });
 }
 
-/** Observe committed product startup before closing through native CDP. */
-export async function inspectElectronStartupThroughCdp(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 540_000) {
+/** Observe the current launch without issuing CDP calls or closing the product. */
+export async function waitForElectronStartup(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 540_000) {
   if (!Number.isFinite(startedAfter)) throw new Error("Startup observation requires the launch timestamp");
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 600_000) throw new Error("Startup observation timeout is invalid");
   const diagnostics = describeElectronRuntimeDiagnostics(session);
@@ -52,6 +52,12 @@ export async function inspectElectronStartupThroughCdp(session: ElectronDiagnost
     if (Date.now() >= deadline) throw new Error("Installed Electron startup did not commit; inspect runtime log: " + diagnostics.runtimeLog);
     await new Promise(done => setTimeout(done, 100));
   }
+}
+
+/** Observe committed product startup before closing through native CDP. */
+export async function inspectElectronStartupThroughCdp(session: ElectronDiagnosticSession, startedAfter: number, timeoutMs = 540_000) {
+  const deadline = Date.now() + timeoutMs;
+  await waitForElectronStartup(session, startedAfter, timeoutMs);
   return executeElectronCdpContractControl({ schemaVersion: 1, operation: "electron.cdp.contract.invoke", session,
     timeoutMs: Math.max(1_000, Math.min(120_000, deadline - Date.now())), close: true,
     invocations: [{ path: ["updater", "status"], args: [] }] });

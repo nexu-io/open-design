@@ -30,7 +30,8 @@ from lib.github import (
     api_json,
     download_artifact,
     event_payload,
-    unique_run_artifact,
+    unique_artifact,
+    run_artifacts,
 )
 from lib.r2 import R2Client, R2Credentials, R2Error, R2PreconditionFailed, self_check as r2_self_check
 
@@ -609,11 +610,9 @@ def resolve_results(
                 expected=expected,
             )
             for product in result["products"].values():
-                declared_digest = product.get("data", {}).get("sha256")
-                if declared_digest is None:
-                    probe_product(product["source"], timeout)
-                elif sha256_url(product["source"], timeout) != declared_digest:
-                    raise ConfigError("workload result product digest mismatch")
+                # Planning checks availability, not payload bytes. Acquisition
+                # verifies the declared digest before exposing any content.
+                probe_product(product["source"], timeout)
             results[identity] = result
             hits[identity] = True
             reasons[identity] = "result-hit"
@@ -1312,8 +1311,9 @@ def stage_products_command(args: argparse.Namespace) -> int:
         raise ConfigError("a positive producing run id is required")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     staged = []
+    artifacts = run_artifacts(repository, run_id)
     for source in candidate_product_sources(args.candidate):
-        artifact = unique_run_artifact(repository, run_id, source)
+        artifact = unique_artifact(artifacts, source)
         if artifact is None:
             raise ConfigError(f"current-run product artifact is missing: {source}")
         destination = args.output_dir / f"{source}.zip"
@@ -1425,6 +1425,16 @@ def self_check() -> None:
     product_receipt["products"] = {
         "bundle": {"type": "url", "source": "https://results.example/bundle.zip"}
     }
+    hashed_receipt = json.loads(canonical_json(product_receipt))
+    hashed_receipt["products"]["bundle"]["data"] = {"sha256": "e" * 64}
+    with (
+        patch.object(module, "fetch_result", return_value=hashed_receipt),
+        patch.object(module, "probe_product") as probe,
+        patch.object(module, "sha256_url", side_effect=AssertionError("plan downloaded payload")),
+    ):
+        hits, _, _ = resolve_results("https://results.example", 42, workflow, {"unit": product_expected}, 0.1)
+        if hits != {"unit": True} or probe.call_count != 1:
+            raise ConfigError("convergence self-check omitted lightweight product probing")
     with (
         patch.object(module, "fetch_result", return_value=product_receipt),
         patch.object(module, "probe_product", side_effect=TimeoutError()),

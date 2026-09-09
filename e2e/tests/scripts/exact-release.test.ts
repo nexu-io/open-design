@@ -173,7 +173,8 @@ describe("exact Electron release topology", () => {
     expect(scene).toContain("needs: [tools, plan, capsule]");
     expect(scene).toContain('--capsule-directory "$RUNNER_TEMP/capsules"');
     expect(scene).not.toContain("capsule_args");
-    for (const command of ["base import", "base pack", "build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
+    for (const command of ["artifact acquire", "build base", "base export"]) expect(scene).toContain(`tools-release ${command}`);
+    expect(scene).not.toContain("tools-release base pack");
     expect(scene).toContain("fromJSON(needs.plan.outputs.run)[matrix.base_workload]");
     expect(scene).toContain("path: ${{ runner.temp }}/base-contribution/artifact");
     expect(scene).not.toContain("path: ${{ runner.temp }}/base-contribution/products");

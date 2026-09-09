@@ -8,6 +8,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { exportDataResource, importDataResource } from "@/exact/resource-artifact.ts";
 import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
 import { materializeReleaseDataResources } from "@/exact/resource-build.ts";
+import { acquireArtifactProduct } from "@/exact/artifact-product.ts";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -56,6 +57,17 @@ it("restores a portable content-bound resource and feeds the existing complete c
   expect(composed.resources.find((resource: { id: string }) => resource.id === "craft")).toMatchObject({
     sha256: f.resources.find(resource => resource.id === "craft")!.sha256,
   });
+});
+
+it("acquires opaque transport bytes once without interpreting or repacking their payload", async () => {
+  const f = await fixture(), hit = await cache(f);
+  const output = join(f.root, "transport");
+  await acquireArtifactProduct({ descriptor: f.input.descriptor, output });
+  for (const file of await readdir(join(f.input.output, "artifact"))) {
+    expect(await readFile(join(output, file))).toEqual(await readFile(join(f.input.output, "artifact", file)));
+  }
+  expect(hit.fetch).toHaveBeenCalledTimes(1);
+  await expect(acquireArtifactProduct({ descriptor: f.input.descriptor, output })).rejects.toThrow("already exists");
 });
 
 it("materializes mixed sources without rebuilding the artifact-backed resource", async () => {

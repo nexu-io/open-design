@@ -3,7 +3,7 @@ import { copyFile, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { installMacElectronApp, withMacElectronProcess } from "@open-design/shell-electron/lifecycle/installed";
-import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp } from "@open-design/shell-electron/lifecycle/inspection";
+import { describeElectronRuntimeDiagnostics, inspectElectronStartupThroughCdp, waitForElectronStartup } from "@open-design/shell-electron/lifecycle/inspection";
 import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 import { readPublishedAcceptance } from "./installed-acceptance.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
@@ -87,8 +87,15 @@ async function executeReleaseInstallation(input: ExerciseInput) {
       if (head.protocol !== "https:" || head.origin !== base.origin || head.username || head.password
         || !head.pathname.startsWith(base.pathname + policy.channel + "/" + policy.releaseVersion + "/")) throw new Error("Candidate head escapes publication");
       hotAcceptanceReceipt = join(root, "hot.json");
+      const baselineStartedAfter = Date.now();
       await withMacElectronProcess({ ...common, args: [...args, `--od-channel-head-url=${head.href}`] },
-      async () => updateAcceptanceClosure({ ...input, baseUserDataRoot, receipt: hotAcceptanceReceipt! }));
+      async () => {
+        // The freshly installed baseline has its own cold materialization;
+        // only the subsequent updater interaction belongs to the CDP budget.
+        await waitForElectronStartup({ baseUserDataRoot, channel: policy.channel,
+          namespace: required.installIdentity.namespace, presentation: "headless" }, baselineStartedAfter, 420_000);
+        await updateAcceptanceClosure({ ...input, baseUserDataRoot, receipt: hotAcceptanceReceipt! });
+      });
     }
     const startedAfter = Date.now();
     await withMacElectronProcess({ ...common, args }, async () => {

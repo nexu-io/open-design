@@ -6,9 +6,10 @@ import { describeFile } from "@/exact/control-common.ts";
 import { collectExecutedAcceptance, exerciseReleaseInstallation } from "@/exact/acceptance-execution.ts";
 
 const mocks = vi.hoisted(() => ({
-  published: vi.fn(), install: vi.fn(), process: vi.fn(), update: vi.fn(), collect: vi.fn(), startup: vi.fn(),
+  published: vi.fn(), install: vi.fn(), process: vi.fn(), update: vi.fn(), collect: vi.fn(), startup: vi.fn(), ready: vi.fn(),
 }));
 vi.mock("@open-design/shell-electron/lifecycle/inspection", () => ({ inspectElectronStartupThroughCdp: mocks.startup,
+  waitForElectronStartup: mocks.ready,
   describeElectronRuntimeDiagnostics: ({ baseUserDataRoot }: { baseUserDataRoot: string }) => ({ runtimeLog: join(baseUserDataRoot, "runtime.jsonl") }) }));
 vi.mock("@open-design/shell-electron/lifecycle/installed", () => ({ installMacElectronApp: mocks.install, withMacElectronProcess: mocks.process }));
 vi.mock("@/exact/installed-acceptance.ts", () => ({ readPublishedAcceptance: mocks.published }));
@@ -46,12 +47,23 @@ it.skipIf(process.platform !== "darwin")("keeps first install, hot update and su
   expect(mocks.process.mock.calls[1]![0].args).toContain("--remote-debugging-port=0");
   expect(mocks.process.mock.calls[2]![0].args).toContain("--headless");
   expect(mocks.startup).toHaveBeenCalledTimes(2);
+  expect(mocks.ready).toHaveBeenCalledTimes(1);
+  expect(mocks.ready.mock.invocationCallOrder[0]).toBeLessThan(mocks.update.mock.invocationCallOrder[0]!);
   await collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") });
   const collected = mocks.collect.mock.calls[0]![0];
   expect(collected.installedRoot).not.toBe(collected.firstInstallRoot);
   expect(collected.hotAcceptanceReceipt).toBe(join(f.input.workRoot, "hot/hot.json"));
   await writeFile(f.input.publication, '{"changed":true}');
   await expect(collectExecutedAcceptance({ ...f.input, inspection: f.inspection, receipt: join(f.root, "accepted.json") })).rejects.toThrow("binding verification");
+});
+
+it.skipIf(process.platform !== "darwin")("does not invoke the hot updater before baseline startup commits", async () => {
+  const f = await fixture();
+  mocks.ready.mockRejectedValueOnce(new Error("baseline startup failed"));
+  await expect(exerciseReleaseInstallation({ ...f.input, mode: "hot", baselineReceipt: f.baselineReceipt }))
+    .rejects.toThrow("baseline startup failed");
+  expect(mocks.update).not.toHaveBeenCalled();
+  expect(mocks.startup).not.toHaveBeenCalled();
 });
 
 it.skipIf(process.platform !== "darwin")("fails before installation for wrong bytes and leaves no successful receipt after runtime failure", async () => {
