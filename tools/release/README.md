@@ -51,7 +51,7 @@ registry. They do not build or validate Electron artifacts and cannot serve as
 an acceptance path.
 
 The workspace CLI and the relocatable `dist/exact-control.mjs` share the
-`topology`, `scene pack|unpack|restore`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
+`topology`, `scene pack|unpack|import|verify`, `policy resolve|authorize`, `prepare`, `finalize`, `publish`, `activate`, and
 `baseline fetch|promote` commands. Use explicit flags and consume their receipts;
 workflows must not construct transient JSON requests for these operations.
 The relocatable build runs with Node 24 without a workspace install. Credentials
@@ -105,34 +105,24 @@ The planner owns build/restore selection; release composition must still verify
 all required resources before producing complete signed content.
 
 The exact plan declares `closure.data.<id>.build` for all nine public data
-groups. Each identity includes its producer and its own unfiltered resource
-bytes; identities remain target-scoped conservatively. Optional `build resource
---plan <release-plan>` verifies that selected node before and after production,
-then adds `planNode` to the receipt. It hashes only that resource's declared
-closure, so unrelated resource directories and daemon/Web sources need not be
-present. A stale plan or mid-build source change emits no success receipt;
-existing receipts are never overwritten. This binding is evidence for the
-existing convergence authority, not permission to publish cache results.
-The old aggregate scene/Closure dependencies remain in place until independent
-build, restore and composition are wired end to end; these nodes alone do not
-enable workflow skips.
+groups. Production accepts business inputs only: no plan, pending workload or
+source-identity recomputation. Python owns workload identities and decides which
+producers execute. Production receipts describe actual resources, not plan nodes.
 
-`resource contribute --plan <file> --resource-id <id> --pending <file>
---workload <name> --resource-receipt <file> --artifact <name> --output <directory>`
-verifies the planned resource and stages `artifact/` (one archive plus portable
-`resource-receipt.json`) and `products/` (the existing convergence handoff
-manifest). It emits no candidate for a planner cache hit and publishes nothing
-to R2. The job artifact uses the existing convergence ZIP normalization.
-`resource restore --plan <file> --resource-id <id> --pending <file>
---workload <name> --output <new-directory>` accepts only a complete planner hit,
-credential-free HTTPS and verified transport bytes. It checks the exact plan
-identity, resource ID, archive size/digest and payload allowlist before exposing
-the directory. Pass its `resource-receipt.json` directly to `prepare
---data-resource`; restoration never executes a compiler or reads the original
-machine's paths. Scene and resource acquisition share one convergence transport
-implementation. These commands do not yet replace the workflow's aggregate
-scene execution.
+`resource export --resource-id <id> --resource-receipt <file> --output <directory>`
+stages `artifact/` with one archive and a portable `resource-receipt.json`.
+`resource import --resource-id <id> --descriptor <file> --output <new-directory>`
+accepts an ordinary `{url, sha256}` blob descriptor. It verifies credential-free
+HTTPS, transport bytes, resource ID, archive size/digest and payload inventory.
+Pass the imported receipt directly to `prepare --data-resource`; imports never
+execute compilers or read producer-machine paths. Capsule, platform and base use
+the same export/import boundary, with an explicit target for native products.
+Their shared artifact transport has no knowledge of cache decisions.
 
+Each independent workflow JSON declares artifact product names and prefixes.
+The Linux Python control plane binds successful executions through
+`contribute-all`; native jobs emit no workload result manifests. Cache hits
+are not contributed again. Trusted convergence remains the R2 cache writer.
 Scene cache transport uses an opaque `scene.tar` inside the existing GitHub
 artifact / convergence ZIP. It preserves native executable permissions,
 read-only files and hidden inputs, while convergence retains ownership of
@@ -140,8 +130,9 @@ immutable R2 cache publication. Unpack only creates a new scene directory and
 rejects links and unsafe paths; it does not repair installed applications or
 replace the consumer's full scene verification. The cache policy is versioned
 to miss older, lossy directory artifacts without deleting them.
-`scene restore` requires a complete cache hit from the convergence planner,
-verifies the downloaded ZIP digest, and accepts only its opaque `scene.tar`.
+`scene import --descriptor <file>` verifies the downloaded ZIP digest and accepts
+only its opaque `scene.tar`. `scene verify` checks the actual target, carrier
+identity and absence of release-owned fields without reading planner state.
 `topology` projects full/hot actions over the workflow's declarative target and
 runner configuration; it does not enable deferred targets or create cache hits.
 

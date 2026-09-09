@@ -20,13 +20,10 @@
       "packages/archive/tsconfig.json",
       "packages/archive/src/",
       "tools/release/src/exact/scene-artifact.ts",
-      "tools/release/src/exact/scene-cache.ts",
-      "tools/release/src/exact/convergence-product.ts",
-      "tools/release/src/exact/resource-cache.ts",
+      "tools/release/src/exact/resource-artifact.ts",
       "tools/release/src/exact/resource-build.ts",
-      "tools/release/src/exact/platform-cache.ts",
+      "tools/release/src/exact/platform-artifact.ts",
       "tools/release/src/exact/resource-composition.ts",
-      "tools/release/src/exact/scene-contribution.ts",
       "tools/release/src/exact/native-build.ts",
       "tools/release/src/exact/topology.ts",
       "tools/release/src/exact/commands.ts",
@@ -34,7 +31,7 @@
       "tools/release/esbuild.config.mjs",
       "tools/release/src/exact/capsule-artifact.ts",
       "tools/release/src/exact/artifact-product.ts",
-      "tools/release/src/exact/base-cache.ts",
+      "tools/release/src/exact/base-artifact.ts",
       "tools/release/src/exact/capsule-budget.ts"
     ],
     "electron-platform": [
@@ -176,7 +173,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "base",
+            "prefix": "exact-base-product-darwin-arm64"
+          }
         },
         "electron_base_win32_x64": {
           "inputs": [
@@ -184,7 +185,11 @@
           ],
           "runnerClass": "electron_win32_x64",
           "products": "manifest",
-          "reusable": false
+          "reusable": false,
+          "artifact": {
+            "product": "base",
+            "prefix": "exact-base-product-win32-x64"
+          }
         },
         "electron_platform_darwin_arm64": {
           "inputs": [
@@ -192,7 +197,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "platform",
+            "prefix": "exact-platform-cache-darwin-arm64"
+          }
         },
         "electron_platform_win32_x64": {
           "inputs": [
@@ -200,7 +209,11 @@
           ],
           "runnerClass": "electron_win32_x64",
           "products": "manifest",
-          "reusable": false
+          "reusable": false,
+          "artifact": {
+            "product": "platform",
+            "prefix": "exact-platform-cache-win32-x64"
+          }
         },
         "terminal_scene_darwin_arm64": {
           "inputs": [
@@ -208,7 +221,11 @@
           ],
           "runnerClass": "terminal_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "scene",
+            "prefix": "exact-terminal-scene-darwin-arm64"
+          }
         },
         "electron_scene_darwin_arm64": {
           "inputs": [
@@ -216,7 +233,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "scene",
+            "prefix": "exact-electron-scene-darwin-arm64"
+          }
         },
         "electron_scene_win32_x64": {
           "inputs": [
@@ -224,7 +245,11 @@
           ],
           "runnerClass": "electron_win32_x64",
           "products": "manifest",
-          "reusable": false
+          "reusable": false,
+          "artifact": {
+            "product": "scene",
+            "prefix": "exact-electron-scene-win32-x64"
+          }
         },
         "closure_data_skills_darwin_arm64": {
           "inputs": [
@@ -232,7 +257,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-skills"
+          }
         },
         "closure_data_design_templates_darwin_arm64": {
           "inputs": [
@@ -240,7 +269,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-design-templates"
+          }
         },
         "closure_data_design_systems_darwin_arm64": {
           "inputs": [
@@ -248,7 +281,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-design-systems"
+          }
         },
         "closure_data_craft_darwin_arm64": {
           "inputs": [
@@ -256,7 +293,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-craft"
+          }
         },
         "closure_data_plugins_darwin_arm64": {
           "inputs": [
@@ -264,7 +305,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-plugins"
+          }
         },
         "closure_data_frames_darwin_arm64": {
           "inputs": [
@@ -272,7 +317,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-frames"
+          }
         },
         "closure_data_community_pets_darwin_arm64": {
           "inputs": [
@@ -280,7 +329,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-community-pets"
+          }
         },
         "closure_data_prompt_templates_darwin_arm64": {
           "inputs": [
@@ -288,7 +341,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-prompt-templates"
+          }
         },
         "closure_data_plugin_previews_darwin_arm64": {
           "inputs": [
@@ -296,7 +353,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "resource",
+            "prefix": "exact-data-cache-plugin-previews"
+          }
         },
         "electron_capsule_darwin_arm64": {
           "inputs": [
@@ -304,7 +365,11 @@
           ],
           "runnerClass": "electron_darwin_arm64",
           "products": "manifest",
-          "reusable": true
+          "reusable": true,
+          "artifact": {
+            "product": "capsule",
+            "prefix": "exact-capsule-cache-darwin-arm64"
+          }
         },
         "electron_capsule_win32_x64": {
           "inputs": [
@@ -312,7 +377,11 @@
           ],
           "runnerClass": "electron_win32_x64",
           "products": "manifest",
-          "reusable": false
+          "reusable": false,
+          "artifact": {
+            "product": "capsule",
+            "prefix": "exact-capsule-cache-win32-x64"
+          }
         }
       }
     }

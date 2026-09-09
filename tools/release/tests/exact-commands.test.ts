@@ -6,7 +6,6 @@ import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { build } from "esbuild";
 import { afterEach, expect, it } from "vitest";
-import { resolveExactDataPlanNode } from "@/exact/plan.ts";
 import { buildClosureDataResource } from "@open-design/closure/build-resources";
 
 const run = promisify(execFile);
@@ -25,24 +24,23 @@ const policyArgs = ["policy", "resolve", ...identity, "--profile", "exact-valida
   "--end-user-distribution", "false", "--stable-authorized", "false"];
 
 it("hands off a portable base without workspace packages or a convergence hit", async () => {
-  const f = await fixture(), base = join(f.root, "base"), plan = join(f.root, "plan.json"), buildReceipt = join(f.root, "build.json");
+  const f = await fixture(), base = join(f.root, "base"), buildReceipt = join(f.root, "build.json");
   await mkdir(base);
   const manifest = JSON.stringify({ schemaVersion: 1, operation: "electron.base.build", target: "darwin-arm64" });
-  const node = { id: "electron.base.build", target: "darwin-arm64", identity: `sha256:${"a".repeat(64)}` };
+  const node = { id: "electron.base.build", target: "darwin-arm64" };
   await writeFile(join(base, "base.json"), manifest); await writeFile(join(base, "native"), "native");
-  await writeFile(plan, JSON.stringify({ schemaVersion: 1, plan: { target: node.target, nodes: { [node.id]: node } } }));
-  await writeFile(buildReceipt, JSON.stringify({ schemaVersion: 1, operation: node.id, target: node.target, planNode: node,
+  await writeFile(buildReceipt, JSON.stringify({ schemaVersion: 1, operation: node.id, target: node.target,
     base: { root: base, manifestSha256: createHash("sha256").update(manifest).digest("hex") } }));
   const transport = join(f.root, "transport"), output = join(f.root, "restored");
-  await f.invoke(["base", "pack", "--plan", plan, "--build-receipt", buildReceipt, "--output", transport]);
+  await f.invoke(["base", "pack", "--target", node.target, "--build-receipt", buildReceipt, "--output", transport]);
   const portable = JSON.parse(await readFile(join(transport, "base-build-receipt.json"), "utf8"));
   expect(portable.base).not.toHaveProperty("root");
   await rm(base, { recursive: true });
-  const result = JSON.parse((await f.invoke(["base", "unpack", "--plan", plan, "--source", transport, "--output", output])).stdout);
+  const result = JSON.parse((await f.invoke(["base", "unpack", "--target", node.target, "--source", transport, "--output", output])).stdout);
   expect(result.operation).toBe("exact.base.unpack");
   expect(await readFile(join(output, "base", "native"), "utf8")).toBe("native");
   expect(JSON.parse(await readFile(result.buildReceipt, "utf8")).base.root).toBe(join(output, "base"));
-  await expect(f.invoke(["base", "unpack", "--plan", plan, "--source", transport, "--output", output])).rejects.toThrow("already exists");
+  await expect(f.invoke(["base", "unpack", "--target", node.target, "--source", transport, "--output", output])).rejects.toThrow("already exists");
 });
 
 it("runs scene commands without workspace packages or request files", async () => {
@@ -77,7 +75,7 @@ it("dispatches Capsule production through the selected workspace public package"
   expect(JSON.parse(await readFile(receipt, "utf8"))).toEqual({ schemaVersion: 1, operation: "electron.capsule.build", request: { target: "darwin-arm64", outputRoot: output } });
   await expect(f.invoke(args.map(value => value === "electron" ? "terminal" : value))).rejects.toThrow("requires electron");
   await expect(f.invoke([...args, "--capsule-content", "content.json"])).rejects.toThrow("Capsule build does not accept --capsule-content");
-  await expect(f.invoke([...args, "--plan", "plan.json"])).rejects.toThrow("Capsule build does not accept --plan");
+  await expect(f.invoke([...args, "--plan", "plan.json"])).rejects.toThrow("Unknown option");
   await expect(f.invoke([...args.map(value => value === "capsule" ? "scene" : value), "--capsule-content", "content.json"])).rejects.toThrow("both --capsule-content and --capsule-archive");
 });
 
@@ -89,7 +87,7 @@ it("rejects unknown commands, missing arguments and non-boolean switches", async
   await expect(f.invoke(["removed-command"])).rejects.toThrow("Unknown command");
   await expect(f.invoke(["publish"])).rejects.toThrow("--pack-receipt is required");
   await expect(f.invoke(["scene", "pack"])).rejects.toThrow("--output is required");
-  await expect(f.invoke(["scene", "erase", "--output", f.root])).rejects.toThrow("must be pack or unpack");
+  await expect(f.invoke(["scene", "erase", "--output", f.root])).rejects.toThrow("must be pack, unpack, import or verify");
   await expect(f.invoke(policyArgs.map(value => value === "false" ? "yes" : value))).rejects.toThrow("must be true or false");
   await expect(f.invoke([...policyArgs, "--bypass"])).rejects.toThrow("Unknown option");
 });
@@ -133,57 +131,22 @@ it("builds one Closure data resource without requiring Shell, platform or releas
   await expect(f.invoke([...args, "--target", "darwin-arm64"])).rejects.toThrow("resource build does not accept --target");
 });
 
-it("binds a selected data build without needing other plan nodes or resource directories", async () => {
-  const f = await fixture(), id = "closure.data.craft.build", target = "darwin-arm64";
-  const pkg = join(f.root, "tools/release/node_modules/@open-design/closure");
-  await mkdir(pkg, { recursive: true });
-  await writeFile(join(pkg, "package.json"), JSON.stringify({ type: "module", exports: { "./build-resources": "./build.mjs" } }));
-  await writeFile(join(pkg, "build.mjs"), "export async function buildClosureDataResource(request) { return { request }; }\n");
-  await mkdir(join(f.root, "craft/dist"), { recursive: true });
-  await writeFile(join(f.root, "craft/dist/input.txt"), "baseline");
-  const registryPath = join(f.root, "tools/release/resources/exact-plan-identities.json");
-  await mkdir(dirname(registryPath), { recursive: true });
-  await writeFile(registryPath, JSON.stringify({ schemaVersion: 1,
-    identities: { [id]: { schemaVersion: 1, sourceSets: [id], parameters: ["target"] } },
-    sourceSets: { [id]: { paths: [{ path: "craft", excludeDirectoryNames: [] }] } },
-  }));
-  const node = await resolveExactDataPlanNode({ root: f.root, registryPath, id, target });
-  const plan = join(f.root, "plan.json"), receipt = join(f.root, "result.json");
-  const value = { schemaVersion: 1, actions: [{ id }], plan: { target, nodes: { [id]: node } } };
-  await writeFile(plan, JSON.stringify(value));
-  const args = ["build", "resource", "--root", f.root, "--resource-id", "craft", "--output", join(f.root, "out"), "--plan", plan, "--receipt", receipt];
-  await f.invoke(args);
-  expect(JSON.parse(await readFile(receipt, "utf8")).planNode).toEqual({ id, identity: node.identity, target });
-  await writeFile(plan, JSON.stringify({ ...value, actions: [] }));
-  const unchangedReceipt = join(f.root, "unchanged.json");
-  await f.invoke(args.map(arg => arg === receipt ? unchangedReceipt : arg));
-  expect(JSON.parse(await readFile(unchangedReceipt, "utf8")).planNode).toEqual({ id, identity: node.identity, target });
-  await writeFile(join(f.root, "craft/dist/input.txt"), "changed bytes inside dist are real resource inputs");
-  const failedArgs = args.map(arg => arg === receipt ? join(f.root, "failed.json") : arg);
-  await expect(f.invoke(failedArgs)).rejects.toThrow("plan binding mismatch");
-  await expect(readFile(join(f.root, "failed.json"))).rejects.toMatchObject({ code: "ENOENT" });
-  await writeFile(join(f.root, "craft/dist/input.txt"), "baseline");
-  await writeFile(join(pkg, "build.mjs"), "import {writeFile} from 'node:fs/promises'; export async function buildClosureDataResource(request) { await writeFile(request.workspaceRoot + '/craft/dist/input.txt', 'changed during build'); return {}; }\n");
-  await expect(f.invoke(failedArgs)).rejects.toThrow("source changed during execution");
-  await expect(readFile(join(f.root, "failed.json"))).rejects.toMatchObject({ code: "ENOENT" });
-});
 
-it("stages a real data product through the public convergence command", async () => {
+it("stages a real data product through the public artifact export command", async () => {
   const f = await fixture();
   await mkdir(join(f.root, "craft")); await writeFile(join(f.root, "craft/input.txt"), "resource bytes");
   const resource = await buildClosureDataResource({ id: "craft", workspaceRoot: f.root, outputDirectory: join(f.root, "built") });
-  const planNode = { id: "closure.data.craft.build", identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" };
-  const plan = join(f.root, "plan.json"), pending = join(f.root, "pending.json"), receipt = join(f.root, "built/receipt.json");
-  await writeFile(plan, JSON.stringify({ schemaVersion: 1, plan: { target: planNode.target, nodes: { [planNode.id]: planNode } } }));
-  await writeFile(pending, JSON.stringify({ workloads: { data_craft: { run: true, digest: "b".repeat(64), executionClass: { runnerClass: "data", labels: ["macos-15"] } } } }));
-  await writeFile(receipt, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build", planNode, resource }));
-  const args = ["resource", "contribute", "--plan", plan, "--pending", pending, "--workload", "data_craft", "--resource-id", "craft", "--output", join(f.root, "contribution")];
-  const result = JSON.parse((await f.invoke([...args, "--resource-receipt", receipt, "--artifact", "craft-artifact"])).stdout);
-  expect(result).toMatchObject({ operation: "exact.resource.contribute", contributed: true });
+  const receipt = join(f.root, "built/receipt.json");
+  await writeFile(receipt, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build", resource }));
+  const args = ["resource", "export", "--resource-id", "craft", "--output", join(f.root, "contribution"), "--resource-receipt", receipt];
+  const result = JSON.parse((await f.invoke(args)).stdout);
+  expect(result).toMatchObject({ operation: "exact.resource.export" });
+  expect(result).not.toHaveProperty("contributed");
   expect(await readFile(join(result.artifactDirectory, resource.file))).toEqual(await readFile(resource.path));
-  const restore = args.map(arg => arg === "contribute" ? "restore" : arg);
-  await expect(f.invoke(restore)).rejects.toThrow("destination already exists");
-  await expect(f.invoke(restore.map(arg => arg === join(f.root, "contribution") ? join(f.root, "restored") : arg))).rejects.toThrow("planner cache hit");
+  await expect(f.invoke(args)).rejects.toThrow("destination already exists");
+  for (const flag of ["--plan", "--pending", "--workload"]) {
+    await expect(f.invoke([...args, flag, "forbidden"])).rejects.toThrow("Unknown option");
+  }
 });
 
 it("dispatches runtime-only production through the Closure public API", async () => {

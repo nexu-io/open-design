@@ -4,8 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "@/exact/native-build.ts";
-import * as planModule from "@/exact/plan.ts";
-import { resolveExactPlatformPlanNode } from "@/exact/plan.ts";
 import { resolveReleasePolicy } from "@/policy/release-profile.ts";
 
 const roots: string[] = [];
@@ -18,35 +16,23 @@ async function fixture() {
   await mkdir(pkg, { recursive: true });
   await json(join(pkg, "package.json"), { name: "@open-design/shell-electron", type: "module", exports: { "./build": "./build.mjs" } });
   await writeFile(join(pkg, "build.mjs"), "export async function buildElectronScene(request) { return { request }; }\nexport async function buildElectronInstaller(request) { return { request }; }\nexport async function buildElectronCapsuleContent(request) { return { request, contentPath: request.outputRoot + '/capsule-content.json', archivePath: request.outputRoot + '/capsule.zip' }; }\n");
-  const plan = join(root, "plan.json"), receipt = join(root, "receipt.json");
-  await json(plan, { plan: { target: "darwin-arm64", nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` } } } });
-  return { root, plan, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
+  const receipt = join(root, "receipt.json");
+  return { root, receipt, shell: "electron", target: "darwin-arm64", output: join(root, "output"), resources: join(root, "resources.json"), nodeArchive: join(root, "node.tar.gz") };
 }
 
-it.skipIf(process.platform !== "darwin" || process.arch !== "arm64").each(["bound", "drift", "content-identity"])("binds base production without equating carrier content and plan identities (%s)", async mode => {
+it.skipIf(process.platform !== "darwin" || process.arch !== "arm64")("builds a physical base without planner state", async () => {
   const f = await fixture(), scene = join(f.root, "scene");
   await mkdir(scene);
-  await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: (mode === "content-identity" ? "b" : "a").repeat(64) });
-  const node = { target: "darwin-arm64" as const, identity: `sha256:${"c".repeat(64)}` as const,
-    sourceIdentity: `sha256:${"d".repeat(64)}` as const, dependencies: ["electron.shell.build" as const] };
-  await json(f.plan, { schemaVersion: 1, actions: [], plan: { target: f.target, acceptedShellBaseline: `sha256:${"0".repeat(64)}`,
-    nodes: { "electron.shell.build": { identity: `sha256:${"a".repeat(64)}` }, "electron.base.build": node } } });
-  const resolver = vi.spyOn(planModule, "resolveExactBasePlanNode").mockResolvedValue(node);
-  if (mode === "drift") resolver.mockResolvedValueOnce(node).mockResolvedValueOnce({ ...node, identity: `sha256:${"e".repeat(64)}` });
+  await json(join(scene, "scene.json"), { target: f.target, shellBuildHash: "b".repeat(64) });
   await writeFile(join(f.root, "tools/release/node_modules/@open-design/shell-electron/build.mjs"),
     'export async function buildElectronBase(input) { return { root: input.outputRoot, manifestSha256: "' + "f".repeat(64) + '" }; }');
-  if (mode === "drift") {
-    await expect(buildReleaseBase({ ...f, scene })).rejects.toThrow("source changed");
-    await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
-    return;
-  }
-  expect(await buildReleaseBase({ ...f, scene })).toMatchObject({ operation: "electron.base.build",
-    planNode: { id: "electron.base.build", identity: node.identity, target: f.target } });
-  expect(resolver).toHaveBeenCalledTimes(2);
+  const result = await buildReleaseBase({ ...f, scene });
+  expect(result).toMatchObject({ operation: "electron.base.build", target: f.target });
+  expect(result).not.toHaveProperty("planNode");
 });
 
 it("resolves only the public build export in the selected workspace and passes typed scene inputs", async () => {
-  const f = await fixture(); await rm(f.plan); await buildReleaseScene({ ...f, nodeArchive: undefined });
+  const f = await fixture(); await buildReleaseScene({ ...f, nodeArchive: undefined });
   const result = JSON.parse(await readFile(f.receipt, "utf8"));
   expect(result.request).toEqual({ schemaVersion: 2, operation: "electron.scene.build", target: f.target,
     capsuleContentFile: expect.stringMatching(/release-capsule-baseline-[^/]+\/content\/capsule-content\.json$/u),
@@ -69,24 +55,12 @@ it("builds neutral Capsule content without Node archives, Closure inputs or vers
 
 it("does not read planner files or source registries during Capsule production", async () => {
   const f = await fixture();
-  await rm(f.plan);
   await buildReleaseCapsule(f);
   expect(JSON.parse(await readFile(f.receipt, "utf8"))).not.toHaveProperty("planNode");
 });
 
-it.each(["unbound", "bound", "unchanged", "drift"])("builds an independent platform with verified metadata (%s)", async mode => {
-  const fixtureInput = await fixture();
-  const f = { ...fixtureInput, plan: mode === "unbound" ? undefined : fixtureInput.plan };
-  const source = join(f.root, "platform-input");
-  await writeFile(source, "source");
-  const registryPath = join(f.root, "tools/release/resources/exact-plan-identities.json");
-  await mkdir(join(f.root, "tools/release/resources"), { recursive: true });
-  await json(registryPath, { schemaVersion: 1,
-    identities: { "electron.platform.build": { schemaVersion: 1, parameters: ["target"], sourceSets: ["platform"] } },
-    sourceSets: { platform: { paths: ["platform-input"] } } });
-  const node = await resolveExactPlatformPlanNode({ root: f.root, registryPath, target: "darwin-arm64" });
-  if (f.plan != null) await json(f.plan, { schemaVersion: 1, actions: mode === "unchanged" ? [] : [{ id: "electron.platform.build" }],
-    plan: { target: f.target, nodes: { "electron.platform.build": node } } });
+it("builds an independent platform with verified metadata and no planner input", async () => {
+  const f = await fixture();
   const resource = { schemaVersion: 1, target: f.target,
     blob: { sha256: digest("platform"), size: 8, mediaType: "application/zip", sources: [] },
     treeSha256: "b".repeat(64), executables: ["bin/node"] };
@@ -94,20 +68,13 @@ it.each(["unbound", "bound", "unchanged", "drift"])("builds an independent platf
     import { writeFile } from 'node:fs/promises';
     export async function buildElectronPlatformResource(request) {
       if (request.archivePath !== ${JSON.stringify(f.nodeArchive)}) throw Error('archive escaped');
-      ${mode === "drift" ? `await writeFile(${JSON.stringify(source)}, 'changed');` : ""}
       await writeFile(request.outputArchivePath, 'platform', { flag: 'wx' });
       return { archivePath: request.outputArchivePath, resource: ${JSON.stringify(resource)} };
     }
   `);
-  if (mode === "drift") {
-    await expect(buildReleasePlatform(f)).rejects.toThrow("source changed during execution");
-    await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
-    return;
-  }
   const result = await buildReleasePlatform(f);
   expect(result).toEqual({ schemaVersion: 1, operation: "electron.platform.build", target: f.target,
-    resource, resourcePath: join(f.output, "platform-resource.json"), archivePath: join(f.output, "platform.zip"),
-    ...(f.plan == null ? {} : { planNode: { id: "electron.platform.build", identity: node.identity, target: f.target } }) });
+    resource, resourcePath: join(f.output, "platform-resource.json"), archivePath: join(f.output, "platform.zip") });
   expect(JSON.parse(await readFile(result.resourcePath, "utf8"))).toEqual(resource);
   expect(JSON.parse(await readFile(f.receipt, "utf8"))).toEqual(result);
   await expect(buildReleasePlatform(f)).rejects.toThrow("EEXIST");
@@ -116,14 +83,6 @@ it.each(["unbound", "bound", "unchanged", "drift"])("builds an independent platf
   await expect(buildReleasePlatform({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
 });
 
-it("rejects incomplete or wrong-target platform plans before creating build output", async () => {
-  const f = await fixture();
-  await json(f.plan, { schemaVersion: 1, actions: [], plan: { target: f.target } });
-  await expect(buildReleasePlatform(f)).rejects.toThrow("plan binding mismatch");
-  await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
-  await json(f.plan, { schemaVersion: 1, actions: [{ id: "electron.platform.build" }], plan: { target: "win32-x64" } });
-  await expect(buildReleasePlatform(f)).rejects.toThrow("valid target-bound release plan");
-});
 
 
 it.each(["digest", "target", "source"])("rejects unbound platform output before writing release-neutral metadata (%s)", async kind => {
@@ -139,7 +98,7 @@ it.each(["digest", "target", "source"])("rejects unbound platform output before 
       return { archivePath: request.outputArchivePath, resource: ${JSON.stringify(resource)} };
     }
   `);
-  await expect(buildReleasePlatform({ ...f, plan: undefined })).rejects.toThrow("product binding mismatch");
+  await expect(buildReleasePlatform(f)).rejects.toThrow("product binding mismatch");
   await expect(readFile(join(f.output, "platform-resource.json"))).rejects.toThrow("ENOENT");
   await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
 });

@@ -4,18 +4,16 @@ import { join, resolve } from "node:path";
 import { exactStorageObject } from "@open-design/release";
 import { authorizeReleaseCapability, resolveReleasePolicy } from "../policy/release-profile.ts";
 import { writeObject } from "./control-common.ts";
-import { packSceneArtifact, unpackSceneArtifact } from "./scene-artifact.ts";
+import { importSceneArtifact, packSceneArtifact, unpackSceneArtifact, verifySceneArtifact } from "./scene-artifact.ts";
 import { activateExactRelease, promoteAcceptedElectronBaseline, publishExactRelease, fetchAcceptedElectronBaseline, selfCheckExactReleaseControl } from "./control-release.ts";
 import { finalizeReleaseContent, prepareReleaseContent } from "./composition.ts";
 import { projectReleaseTopology } from "./topology.ts";
-import { restoreSceneCache } from "./scene-cache.ts";
-import { contributeScene } from "./scene-contribution.ts";
 import { buildReleaseBase, buildReleaseCapsule, buildReleaseDistribution, buildReleasePlatform, buildReleaseScene } from "./native-build.ts";
 import { buildReleaseDataResource, buildReleaseRuntimeResources } from "./resource-build.ts";
-import { contributeDataResource, restoreDataResource } from "./resource-cache.ts";
-import { contributePlatform, restorePlatform } from "./platform-cache.ts";
+import { exportDataResource, importDataResource } from "./resource-artifact.ts";
+import { exportPlatform, importPlatform } from "./platform-artifact.ts";
 import { exportCapsule, importCapsule } from "./capsule-artifact.ts";
-import { contributeBase, packBase, restoreBase, unpackBase } from "./base-cache.ts";
+import { exportBase, packBase, importBase, unpackBase } from "./base-artifact.ts";
 import { fetchAcceptanceArtifact } from "./acceptance-artifact.ts";
 import { collectReleaseAcceptance, updateAcceptanceClosure } from "./acceptance.ts";
 import { validateExactPlanNode } from "./validation.ts";
@@ -91,7 +89,6 @@ export function registerExactCommands(cli: CAC): void {
     .option("--output <directory>", "Build output")
     .option("--receipt <file>", "Build receipt")
     .option("--resource-id <id>", "Closure data resource group (resource)")
-    .option("--plan <file>", "Release plan (resource/platform/base)")
     .option("--resources <file>", "Closure runtime-only resource receipt (Electron scene)")
     .option("--node-archive <file>", "Optional local locked official Node archive (Terminal scene or independent platform)")
     .option("--capsule-content <file>", "Prebuilt Capsule content descriptor (Electron scene; paired with archive)")
@@ -111,13 +108,12 @@ export function registerExactCommands(cli: CAC): void {
         return;
       }
       if (operation === "resource") {
-        const allowed = new Set(["root", "resourceId", "output", "receipt", "plan", "--"]);
+        const allowed = new Set(["root", "resourceId", "output", "receipt", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
           throw new Error(`resource build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
         }
         await buildReleaseDataResource({ root: required(options, "root"), resourceId: required(options, "resourceId"),
-          output: required(options, "output"), receipt: required(options, "receipt"),
-          ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
+          output: required(options, "output"), receipt: required(options, "receipt") });
         return;
       }
       if (options.resourceId != null) throw new Error("--resource-id is only supported by build resource");
@@ -127,7 +123,7 @@ export function registerExactCommands(cli: CAC): void {
         for (const key of Object.keys(options)) if (!allowed.has(key)) throw new Error(`Capsule build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
       }
       if (operation === "platform") {
-        const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "plan", "--"]);
+        const allowed = new Set(["root", "shell", "target", "output", "receipt", "nodeArchive", "--"]);
         for (const key of Object.keys(options)) if (!allowed.has(key)) {
           throw new Error(`platform build does not accept --${key.replace(/[A-Z]/gu, letter => `-${letter.toLowerCase()}`)}`);
         }
@@ -137,14 +133,11 @@ export function registerExactCommands(cli: CAC): void {
       if (operation === "scene") await buildReleaseScene({ ...common,
         ...(options.capsuleContent == null ? {} : { capsuleContent: required(options, "capsuleContent") }),
         ...(options.capsuleArchive == null ? {} : { capsuleArchive: required(options, "capsuleArchive") }),
-        ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.resources == null ? {} : { resources: required(options, "resources") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "capsule") await buildReleaseCapsule(common);
-      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene"),
-        ...(options.plan == null ? {} : { plan: required(options, "plan") }) });
+      else if (operation === "base") await buildReleaseBase({ ...common, scene: required(options, "scene") });
       else if (operation === "platform") await buildReleasePlatform({ ...common,
-        ...(options.plan == null ? {} : { plan: required(options, "plan") }),
         ...(options.nodeArchive == null ? {} : { nodeArchive: required(options, "nodeArchive") }) });
       else if (operation === "distribution") await buildReleaseDistribution({ ...common, ...(options.baseReceipt == null ? {} : { baseReceipt: required(options, "baseReceipt") }), scene: required(options, "scene"), prepared: required(options, "prepared"),
         policy: required(options, "policy"), channel: required(options, "channel"), releaseVersion: required(options, "releaseVersion"), sourceCommit: required(options, "sourceCommit") });
@@ -265,84 +258,63 @@ export function registerExactCommands(cli: CAC): void {
       else throw new Error("baseline operation must be fetch or promote");
     });
 
-  cli.command("capsule <operation>", "Export or import a verified portable Capsule artifact")
-    .option("--target <target>", "Expected native target")
-    .option("--output <directory>", "New product directory")
-    .option("--build-receipt <file>", "Business build receipt (export)")
-    .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
-    .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
-    .action(async (operation: string, options: Options) => {
-      const common = { target: required(options, "target"), output: required(options, "output") };
-      const result = operation === "export" ? await exportCapsule({ ...common, buildReceipt: required(options, "buildReceipt") })
-        : operation === "import" ? await importCapsule({ ...common, descriptor: required(options, "descriptor") })
-        : (() => { throw new Error("capsule operation must be export or import"); })();
-      await emit(options, { schemaVersion: 1, operation: `exact.capsule.${operation}`, ...result });
-    });
-
-  for (const product of ["platform", "base"] as const) {
-    const command = cli.command(`${product} <operation>`, product === "base" ? "Pack, unpack, restore or contribute a planned base" : `Restore or contribute an independently planned ${product}`)
-      .option("--plan <file>", "Exact release plan")
-      .option("--pending <file>", "Convergence planner receipt")
-      .option("--workload <name>", "Planner workload")
-      .option("--output <directory>", "New restored product or contribution directory")
-      .option("--build-receipt <file>", "Plan-bound build receipt (contribute or base pack)")
-      .option("--artifact <name>", "Job artifact name (contribute)")
+  for (const product of ["capsule", "platform", "base"] as const) {
+    const command = cli.command(product + " <operation>", "Export or import a verified portable " + product + " artifact")
+      .option("--target <target>", "Expected native target")
+      .option("--output <directory>", "New product directory")
+      .option("--build-receipt <file>", "Business build receipt (export or pack)")
+      .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
       .option("--receipt <file>", "Optional operation receipt; defaults to stdout");
     if (product === "base") command.option("--source <directory>", "Portable base transport directory (unpack)");
     command.action(async (operation: string, options: Options) => {
-        if (product === "base" && (operation === "pack" || operation === "unpack")) {
-          const input = { plan: required(options, "plan"), output: required(options, "output") };
-          const result = operation === "pack" ? await packBase({ ...input, buildReceipt: required(options, "buildReceipt") })
-            : await unpackBase({ ...input, source: required(options, "source") });
-          await emit(options, { schemaVersion: 1, operation: `exact.base.${operation}`, ...result }); return;
-        }
-        const common = { plan: required(options, "plan"), pending: required(options, "pending"),
-          workload: required(options, "workload"), output: required(options, "output") };
-        const restore = product === "platform" ? restorePlatform : restoreBase;
-        const contribute = product === "platform" ? contributePlatform : contributeBase;
-        const result = operation === "restore" ? await restore(common)
-          : operation === "contribute" ? await contribute({ ...common, buildReceipt: required(options, "buildReceipt"), artifact: required(options, "artifact") })
-          : (() => { throw new Error(`${product} operation must be restore or contribute`); })();
-        await emit(options, { schemaVersion: 1, operation: `exact.${product}.${operation}`, ...result });
-      });
+      const common = { target: required(options, "target"), output: required(options, "output") };
+      if (product === "base" && (operation === "pack" || operation === "unpack")) {
+        const result = operation === "pack" ? await packBase({ ...common, buildReceipt: required(options, "buildReceipt") })
+          : await unpackBase({ ...common, source: required(options, "source") });
+        await emit(options, { schemaVersion: 1, operation: "exact.base." + operation, ...result }); return;
+      }
+      const importer = product === "platform" ? importPlatform : product === "capsule" ? importCapsule : importBase;
+      const exporter = product === "platform" ? exportPlatform : product === "capsule" ? exportCapsule : exportBase;
+      const result = operation === "import" ? await importer({ ...common, descriptor: required(options, "descriptor") })
+        : operation === "export" ? await exporter({ ...common, buildReceipt: required(options, "buildReceipt") })
+        : (() => { throw new Error(product + " operation must be export or import"); })();
+      await emit(options, { schemaVersion: 1, operation: "exact." + product + "." + operation, ...result });
+    });
   }
 
-  cli.command("resource <operation>", "Restore or contribute an independently planned data resource")
-    .option("--plan <file>", "Exact release plan")
+  cli.command("resource <operation>", "Export or import an independently verified data resource")
     .option("--resource-id <id>", "Public Closure data resource group")
-    .option("--pending <file>", "Convergence planner receipt")
-    .option("--workload <name>", "Planner workload")
-    .option("--output <directory>", "New restored resource or contribution directory")
-    .option("--resource-receipt <file>", "Plan-bound build receipt (contribute)")
-    .option("--artifact <name>", "Job artifact name (contribute)")
+    .option("--output <directory>", "New resource directory")
+    .option("--resource-receipt <file>", "Business build receipt (export)")
+    .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
     .option("--receipt <file>", "Optional operation receipt; defaults to stdout")
     .action(async (operation: string, options: Options) => {
-      const common = { plan: required(options, "plan"), resourceId: required(options, "resourceId"),
-        pending: required(options, "pending"), workload: required(options, "workload"), output: required(options, "output") };
-      const result = operation === "restore" ? await restoreDataResource(common)
-        : operation === "contribute" ? await contributeDataResource({ ...common, resourceReceipt: required(options, "resourceReceipt"), artifact: required(options, "artifact") })
-        : (() => { throw new Error("resource operation must be restore or contribute"); })();
-      await emit(options, { schemaVersion: 1, operation: `exact.resource.${operation}`, ...result });
+      const common = { resourceId: required(options, "resourceId"), output: required(options, "output") };
+      const result = operation === "import" ? await importDataResource({ ...common, descriptor: required(options, "descriptor") })
+        : operation === "export" ? await exportDataResource({ ...common, resourceReceipt: required(options, "resourceReceipt") })
+        : (() => { throw new Error("resource operation must be export or import"); })();
+      await emit(options, { schemaVersion: 1, operation: "exact.resource." + operation, ...result });
     });
 
-  cli.command("scene <operation>", "Transport scenes or contribute a release-neutral convergence candidate")
-    .option("--scene <directory>", "Source scene (pack)")
+  cli.command("scene <operation>", "Transport or verify a release-neutral scene")
+    .option("--scene <directory>", "Source scene (pack or verify)")
     .option("--archive <file>", "Source archive (unpack)")
-    .option("--output <path>", "New archive (pack) or new scene directory (unpack)")
-    .option("--pending <file>", "Convergence planner receipt (restore)")
-    .option("--workload <name>", "Planner workload (restore)")
-    .option("--transport <file>", "New local scene.tar for downstream transfer (restore)")
-    .option("--target <target>", "Expected scene target (contribute)")
-    .option("--artifact <name>", "Job artifact name (contribute)")
+    .option("--output <path>", "New archive (pack) or new scene directory (unpack/import)")
+    .option("--descriptor <file>", "Exact artifact URL and SHA-256 (import)")
+    .option("--transport <file>", "New local scene.tar for downstream transfer (import)")
+    .option("--target <target>", "Expected scene target (verify)")
     .option("--receipt <file>", "Optional receipt; defaults to stdout")
     .action(async (operation: string, options: Options) => {
+      if (operation === "verify") {
+        await emit(options, { schemaVersion: 1, operation: "exact.scene.verify",
+          ...await verifySceneArtifact(required(options, "scene"), required(options, "target")) }); return;
+      }
       const output = required(options, "output");
       const result = operation === "pack" ? await packSceneArtifact(required(options, "scene"), output)
         : operation === "unpack" ? await unpackSceneArtifact(required(options, "archive"), output)
-        : operation === "restore" ? await restoreSceneCache({ pending: required(options, "pending"), workload: required(options, "workload"), transport: required(options, "transport"), output })
-        : operation === "contribute" ? await contributeScene({ scene: required(options, "scene"), target: required(options, "target"), pending: required(options, "pending"), workload: required(options, "workload"), artifact: required(options, "artifact"), output })
-        : (() => { throw new Error("scene operation must be pack or unpack or restore or contribute"); })();
-      await emit(options, { schemaVersion: 1, operation: `exact.scene.${operation}`, ...result });
+        : operation === "import" ? await importSceneArtifact({ descriptor: required(options, "descriptor"), transport: required(options, "transport"), output })
+        : (() => { throw new Error("scene operation must be pack, unpack, import or verify"); })();
+      await emit(options, { schemaVersion: 1, operation: "exact.scene." + operation, ...result });
     });
 
   cli.command("policy <operation>", "Resolve release policy or authorize an operation")

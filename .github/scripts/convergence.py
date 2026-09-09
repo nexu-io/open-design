@@ -70,9 +70,9 @@ class Workload:
     def __init__(self, workflow: str, identity: str, raw: Any):
         value = object_value(raw, f"convergence.workflows.{workflow}.workloads.{identity}")
         expected = {"inputs", "runnerClass", "products", "reusable"}
-        if not expected.issubset(value) or set(value) - expected - {"dependsOn", "parameters"}:
+        if not expected.issubset(value) or set(value) - expected - {"dependsOn", "parameters", "artifact"}:
             raise ConfigError(
-                f"convergence.workflows.{workflow}.workloads.{identity} requires {sorted(expected)}; optional dependsOn and parameters"
+                f"convergence.workflows.{workflow}.workloads.{identity} requires {sorted(expected)}; optional dependsOn, parameters and artifact"
             )
         self.identity = require_identity(identity, f"convergence workload {workflow}")
         self.inputs = ConvergenceContract.tokens(value["inputs"], f"workload {workflow}/{identity}.inputs")
@@ -93,6 +93,12 @@ class Workload:
         if any(not isinstance(key, str) or not key or not isinstance(item, str) or not item
                for key, item in self.parameters.items()):
             raise ConfigError(f"workload {workflow}/{identity}.parameters must contain non-empty strings")
+        self.artifact = None
+        if "artifact" in value:
+            artifact = object_value(value["artifact"], f"workload {workflow}/{identity}.artifact")
+            if self.products != "manifest" or set(artifact) != {"product", "prefix"}:
+                raise ConfigError("artifact requires a manifest workload, product and prefix")
+            self.artifact = {key: require_identity(artifact[key], f"artifact.{key}") for key in ("product", "prefix")}
 
 
 class WorkflowContract:
@@ -321,10 +327,11 @@ def calculate(
             digest.update(b"\0")
         # Only this control plane resolves dependency identities. Executors get
         # artifact inputs and emit business receipts, never planner state.
-        if workload.dependencies or workload.parameters:
+        if workload.dependencies or workload.parameters or workload.artifact:
             digest.update(canonical_json({
                 "dependencies": {name: results[name]["digest"] for name in workload.dependencies},
                 "parameters": workload.parameters,
+                "artifact": workload.artifact,
             }).encode())
             digest.update(b"\0")
         results[identity] = {
@@ -662,6 +669,29 @@ def contribute_command(args: argparse.Namespace, contract: ConvergenceContract) 
     write_json_atomic(args.output / identity / "product-manifest.json", {
         "workload": identity, "digest": digest, "executionClass": execution_class, "products": products,
     })
+    return 0
+
+
+def contribute_all_command(args: argparse.Namespace, contract: ConvergenceContract) -> int:
+    if not re.fullmatch(r"[a-f0-9]{40}", args.source_commit):
+        raise ConfigError("artifact source commit must be a full Git SHA")
+    pending = object_value(load_json(args.pending), "pending convergence")
+    workflow = contract.workflow(require_string(pending.get("workflow"), "pending workflow"))
+    if pending.get("schemaVersion") != 1 or pending.get("protocol") != PROTOCOL or pending.get("policy") != workflow.policy:
+        raise ConfigError("pending convergence contract differs")
+    decisions = object_value(pending.get("workloads"), "pending workloads")
+    if set(decisions) != set(workflow.workloads):
+        raise ConfigError("pending workload inventory differs")
+    for identity, workload in workflow.workloads.items():
+        selected = object_value(decisions[identity], "pending workload")
+        if not workload.reusable or selected.get("run") is not True or workload.products != "manifest":
+            continue
+        if workload.artifact is None:
+            raise ConfigError(f"executed workload lacks an artifact declaration: {identity}")
+        contribute_command(argparse.Namespace(
+            pending=args.pending, workload=identity, product=workload.artifact["product"],
+            artifact=f"{workload.artifact['prefix']}-{args.source_commit}", output=args.output,
+        ), contract)
     return 0
 
 
@@ -1344,6 +1374,10 @@ def parse_args() -> argparse.Namespace:
     contribute.add_argument("--product", required=True)
     contribute.add_argument("--artifact", required=True)
     contribute.add_argument("--output", type=Path, required=True)
+    contribute_all = sub.add_parser("contribute-all")
+    contribute_all.add_argument("--pending", type=Path, required=True)
+    contribute_all.add_argument("--source-commit", required=True)
+    contribute_all.add_argument("--output", type=Path, required=True)
     handoff = sub.add_parser("handoff")
     handoff.add_argument("--pending", type=Path, required=True)
     handoff.add_argument("--products-root", type=Path, required=True)
@@ -1399,6 +1433,8 @@ def main() -> int:
         return plan_command(args, contract, root)
     if args.command == "contribute":
         return contribute_command(args, contract)
+    if args.command == "contribute-all":
+        return contribute_all_command(args, contract)
     if args.command == "handoff":
         return handoff_command(args, contract)
     return admit_command(args, contract)

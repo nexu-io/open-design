@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { zipFixture, type ZipFixtureEntries } from "./archive-fixture.ts";
 import { buildClosureDataResources, CLOSURE_DATA_RESOURCES } from "@open-design/closure/build-resources";
 import { afterEach, expect, it, vi } from "vitest";
-import { contributeDataResource, restoreDataResource } from "@/exact/resource-cache.ts";
+import { exportDataResource, importDataResource } from "@/exact/resource-artifact.ts";
 import { composeReleaseDataResources } from "@/exact/resource-composition.ts";
 
 const roots: string[] = [];
@@ -20,44 +20,32 @@ async function fixture() {
     await writeFile(join(root, input.source, "input.txt"), input.source);
   }
   const resources = await buildClosureDataResources({ workspaceRoot: root, outputDirectory: join(root, "built") });
-  const target = "darwin-arm64", identity = `sha256:${"a".repeat(64)}`;
   const receipts = await Promise.all(resources.map(async resource => {
     const file = join(root, "built", `${resource.id}.json`);
-    await writeFile(file, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build", resource,
-      planNode: { id: `closure.data.${resource.id}.build`, identity, target } }));
+    await writeFile(file, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build", resource }));
     return file;
   }));
-  const plan = join(root, "plan.json"), pending = join(root, "pending.json"), workload = "data_craft_darwin_arm64";
-  await writeFile(plan, JSON.stringify({ schemaVersion: 1, plan: { target, nodes: { "closure.data.craft.build": { identity, target } } } }));
-  const value = { workloads: { [workload]: { run: true, resultHit: false, digest: "b".repeat(64),
-    executionClass: { runnerClass: "data", labels: ["macos-15"] } } } };
-  await writeFile(pending, JSON.stringify(value));
-  return { root, resources, receipts, value, input: { plan, pending, workload, resourceId: "craft", output: join(root, "candidate"),
-    resourceReceipt: join(root, "built/craft.json"), artifact: "craft-artifact" } as const };
+  return { root, resources, receipts, input: { descriptor: join(root, "descriptor.json"), resourceId: "craft", output: join(root, "candidate"),
+    resourceReceipt: join(root, "built/craft.json") } as const };
 }
 async function cache(f: Awaited<ReturnType<typeof fixture>>, mutate?: (zip: ZipFixtureEntries) => void) {
-  const result = await contributeDataResource(f.input);
-  expect(result.contributed).toBe(true);
+  await exportDataResource(f.input);
+  expect(await readdir(f.input.output)).toEqual(["artifact"]);
   const zip = {} as ZipFixtureEntries;
   for (const file of await readdir(join(f.input.output, "artifact"))) zip[file] = await readFile(join(f.input.output, "artifact", file));
   mutate?.(zip);
   const body = await zipFixture(zip);
-  const value = { workloads: { [f.input.workload]: { run: false, resultHit: true, result: { products: { resource: {
-    type: "url", source: "https://cache.example/craft.zip", data: { sha256: createHash("sha256").update(body).digest("hex") },
-  } } } } } };
-  await writeFile(f.input.pending, JSON.stringify(value));
+  const value = { url: "https://cache.example/craft.zip", sha256: createHash("sha256").update(body).digest("hex") };
+  await writeFile(f.input.descriptor, JSON.stringify(value));
   const fetch = vi.fn(async () => new Response(new Uint8Array(body))); vi.stubGlobal("fetch", fetch);
   return { fetch, value, restore: { ...f.input, output: join(f.root, "restored") } };
 }
 
-it("restores a portable plan-bound resource and feeds the existing complete composition", async () => {
+it("restores a portable content-bound resource and feeds the existing complete composition", async () => {
   const f = await fixture(), hit = await cache(f);
-  const manifest = JSON.parse(await readFile(join(f.input.output, "products", f.input.workload, "product-manifest.json"), "utf8"));
-  expect(manifest).toMatchObject({ digest: "b".repeat(64), executionClass: f.value.workloads[f.input.workload].executionClass,
-    products: { resource: { type: "job", source: "craft-artifact" } } });
   // The producer's original path is no longer available at restoration time.
   await rm(f.resources.find(resource => resource.id === "craft")!.path);
-  const result = await restoreDataResource(hit.restore);
+  const result = await importDataResource(hit.restore);
   const restored = JSON.parse(await readFile(result.resourceReceipt, "utf8"));
   expect(restored.resource.path).toBeUndefined();
   const composed = await composeReleaseDataResources({ schemaVersion: 1, operation: "closure.resources.build",
@@ -69,14 +57,15 @@ it("restores a portable plan-bound resource and feeds the existing complete comp
   });
 });
 
-it("rejects a non-hit before download and leaves no restored directory", async () => {
+it("rejects an invalid descriptor before download and leaves no restored directory", async () => {
   const f = await fixture(); const fetch = vi.fn(); vi.stubGlobal("fetch", fetch);
-  await expect(restoreDataResource({ ...f.input, output: join(f.root, "restored") })).rejects.toThrow("planner cache hit");
+  await writeFile(f.input.descriptor, JSON.stringify({ url: "https://cache.example/craft.zip", sha256: "invalid" }));
+  await expect(importDataResource({ ...f.input, output: join(f.root, "restored") })).rejects.toThrow("SHA-256");
   expect(fetch).not.toHaveBeenCalled();
   expect(await readdir(f.root)).not.toContain("restored");
 });
 
-it.each(["wrong identity", "wrong target", "extra payload", "changed archive", "oversized receipt"])("rejects %s without publishing a restored product", async fault => {
+it.each(["wrong identity", "wrong resource", "extra payload", "changed archive", "oversized receipt"])("rejects %s without publishing a restored product", async fault => {
   const f = await fixture();
   const hit = await cache(f, zip => {
     if (fault === "extra payload") zip["extra.txt"] = "unexpected";
@@ -84,26 +73,18 @@ it.each(["wrong identity", "wrong target", "extra payload", "changed archive", "
     if (fault === "oversized receipt") zip["resource-receipt.json"] = " ".repeat(65 * 1024);
   });
   if (fault === "wrong identity") {
-    const plan = JSON.parse(await readFile(f.input.plan, "utf8"));
-    plan.plan.nodes["closure.data.craft.build"].identity = `sha256:${"c".repeat(64)}`;
-    await writeFile(f.input.plan, JSON.stringify(plan));
+    hit.value.sha256 = "c".repeat(64);
+    await writeFile(f.input.descriptor, JSON.stringify(hit.value));
   }
-  if (fault === "wrong target") {
-    const plan = JSON.parse(await readFile(f.input.plan, "utf8"));
-    plan.plan.target = "darwin-x64";
-    plan.plan.nodes["closure.data.craft.build"].target = "darwin-x64";
-    await writeFile(f.input.plan, JSON.stringify(plan));
-  }
-  await expect(restoreDataResource(hit.restore)).rejects.toThrow();
+  const input = fault === "wrong resource" ? { ...hit.restore, resourceId: "skills" } : hit.restore;
+  await expect(importDataResource(input)).rejects.toThrow();
   expect(await readdir(f.root)).not.toContain("restored");
 });
 
-it("does not replace existing output or republish a cache hit", async () => {
+it("does not replace existing output", async () => {
   const f = await fixture(), hit = await cache(f);
-  expect(await contributeDataResource({ ...f.input, output: join(f.root, "unused") })).toEqual({ contributed: false });
-  expect(await readdir(f.root)).not.toContain("unused");
   await mkdir(hit.restore.output); await writeFile(join(hit.restore.output, "keep"), "existing");
-  await expect(restoreDataResource(hit.restore)).rejects.toThrow("already exists");
+  await expect(importDataResource(hit.restore)).rejects.toThrow("already exists");
   expect(hit.fetch).not.toHaveBeenCalled();
   expect(await readFile(join(hit.restore.output, "keep"), "utf8")).toBe("existing");
 });

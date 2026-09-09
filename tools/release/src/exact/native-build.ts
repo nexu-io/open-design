@@ -9,8 +9,7 @@ import type { ElectronExactSceneRequest } from "@open-design/shell-electron/buil
 import { acquireBuildArchive } from "@open-design/tools-pack/build";
 import { readOfficialNodeLock, validateNodePlatformResource } from "@open-design/standalone/packages";
 import { readReleasePolicyReceipt } from "../policy/release-profile.ts";
-import { canonicalBytes, checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
-import { resolveExactBasePlanNode, resolveExactPlatformPlanNode } from "./plan.ts";
+import { checkedFile, describeFile, readObject, writeObject } from "./control-common.ts";
 
 type Target = ElectronExactSceneRequest["target"];
 type BuildInput = Readonly<{ root: string; shell: string; target: string; output: string; receipt: string }>;
@@ -44,7 +43,7 @@ async function terminalBuild(input: BuildInput, operation: "scene" | "distributi
 }
 
 export async function buildReleaseScene(input: BuildInput & Readonly<{
-  plan?: string; resources?: string; nodeArchive?: string;
+  resources?: string; nodeArchive?: string;
   capsuleContent?: string; capsuleArchive?: string;
 }>) {
   if ((input.capsuleContent != null || input.capsuleArchive != null)
@@ -112,20 +111,9 @@ export async function buildReleaseCapsule(input: BuildInput) {
 
 /** Independent Node/native production. No Capsule compilation, Closure inputs,
  * channel policy or signing; release preparation authenticates this descriptor. */
-export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeArchive?: string; plan?: string }>) {
+export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeArchive?: string }>) {
   if (input.shell !== "electron") throw new Error("external platform build requires electron");
   const buildTarget = target(input), output = resolve(input.output);
-  const plan = input.plan == null ? undefined : await readObject(input.plan);
-  const id = "electron.platform.build";
-  // Release delta actions describe upgrades, not artifact availability. A cache
-  // miss may require rebuilding unchanged neutral bytes under the same identity.
-  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget)) {
-    throw new Error("platform build requires a valid target-bound release plan");
-  }
-  const matches = async () => plan == null || (plan.plan.nodes?.[id] != null && canonicalBytes(await resolveExactPlatformPlanNode({
-    root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"), target: buildTarget,
-  })).equals(canonicalBytes(plan.plan.nodes[id])));
-  if (!await matches()) throw new Error("platform build plan binding mismatch");
   const { buildElectronPlatformResource, resolveElectronNodeArchive } = await electronBuilder(input.root);
   await mkdir(dirname(output), { recursive: true });
   // A cache hit is restored by the plan owner, never inferred from output presence.
@@ -141,36 +129,24 @@ export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeAr
   const archive = await describeFile(outputArchivePath, "application/zip");
   if (resource.target !== buildTarget || resource.blob.sources.length !== 0 || built.archivePath !== outputArchivePath
     || archive.sha256 !== resource.blob.sha256 || archive.size !== resource.blob.size) throw new Error("platform build product binding mismatch");
-  if (!await matches()) throw new Error("platform build source changed during execution");
   const resourcePath = join(output, "platform-resource.json");
   await writeObject(resourcePath, resource);
   const receipt = { schemaVersion: 1, operation: "electron.platform.build", target: buildTarget,
-    archivePath: outputArchivePath, resourcePath, resource,
-    ...(plan == null ? {} : { planNode: { id, identity: plan.plan.nodes[id].identity, target: buildTarget } }) };
+    archivePath: outputArchivePath, resourcePath, resource };
   await writeObject(input.receipt, receipt);
   return receipt;
 }
 
-export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: string; plan?: string }>) {
+export async function buildReleaseBase(input: BuildInput & Readonly<{ scene: string }>) {
   if (input.shell !== "electron") throw new Error("base build requires electron");
   const buildTarget = target(input), scene = resolve(input.scene);
   const sceneManifest = await readObject(join(scene, "scene.json"));
   if (sceneManifest.target !== buildTarget || buildTarget !== `${process.platform}-${process.arch}`) throw new Error("base build target mismatch");
-  const plan = input.plan == null ? undefined : await readObject(input.plan), id = "electron.base.build";
-  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget
-    || !/^sha256:[a-f0-9]{64}$/u.test(plan.plan?.acceptedShellBaseline ?? ""))) throw new Error("base build plan binding mismatch");
-  const matches = async () => plan == null || (plan.plan.nodes?.[id] != null && canonicalBytes(await resolveExactBasePlanNode({
-    root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"),
-    target: buildTarget, acceptedShellBaseline: plan.plan.acceptedShellBaseline,
-  })).equals(canonicalBytes(plan.plan.nodes[id])));
-  if (!await matches()) throw new Error("base build plan binding mismatch");
   const { buildElectronBase } = await electronBuilder(input.root);
   await mkdir(dirname(resolve(input.output)), { recursive: true });
   const base = await buildElectronBase({ sceneDirectory: scene,
     sceneManifestSha256: (await describeFile(join(scene, "scene.json"))).sha256, outputRoot: resolve(input.output) });
-  if (!await matches()) throw new Error("base build source changed during execution");
-  const receipt = { schemaVersion: 1, operation: "electron.base.build", target: buildTarget, base,
-    ...(plan == null ? {} : { planNode: { id, identity: plan.plan.nodes[id].identity, target: buildTarget } }) };
+  const receipt = { schemaVersion: 1, operation: "electron.base.build", target: buildTarget, base };
   await writeObject(input.receipt, receipt);
   return receipt;
 }

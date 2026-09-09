@@ -249,8 +249,8 @@ jobs:
           WORKLOAD: ${{ matrix.workload }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene restore \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene import \
+            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/scene.json" \
             --transport "$RUNNER_TEMP/exact-scene-artifact/scene.tar" --output "$RUNNER_TEMP/exact-scene"
 
       - uses: pnpm/action-setup@v5
@@ -308,7 +308,6 @@ jobs:
           fi
           pnpm --filter @open-design/tools-release exec tools-release build scene \
             --root "$GITHUB_WORKSPACE" --shell "$SHELL_TYPE" --target "$TARGET" \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --resources "$RUNNER_TEMP/exact-closure-resources/resource-receipt.json" "${capsule_args[@]}" \
             --output "$RUNNER_TEMP/exact-scene" --receipt "$RUNNER_TEMP/exact-scene-receipt.json"
 
@@ -321,12 +320,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base restore \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base import \
+            --target "$TARGET" \
+            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/base.json" \
             --output "$RUNNER_TEMP/exact-base"
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base pack \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --target "$TARGET" \
             --build-receipt "$RUNNER_TEMP/exact-base/base-build-receipt.json" \
             --output "$RUNNER_TEMP/base-contribution/artifact"
 
@@ -335,7 +334,6 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           WORKLOAD: ${{ matrix.base_workload }}
-          ARTIFACT_NAME: exact-base-product-${{ matrix.target }}-${{ inputs.source_sha }}
           ARCHIVE_ZIP_PATH: /usr/bin/zip
         shell: bash
         run: |
@@ -344,13 +342,12 @@ jobs:
           pnpm --filter @open-design/shell-electron build
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build base \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --scene "$RUNNER_TEMP/exact-scene" --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --scene "$RUNNER_TEMP/exact-scene" \
             --output "$RUNNER_TEMP/exact-base" --receipt "$RUNNER_TEMP/base-build-receipt.json"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base contribute \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base export \
+            --target "$TARGET" \
             --build-receipt "$RUNNER_TEMP/base-build-receipt.json" \
-            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/base-contribution"
+            --output "$RUNNER_TEMP/base-contribution"
 
       - uses: actions/upload-artifact@v4
         if: ${{ matrix.shell == 'electron' }}
@@ -360,26 +357,15 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - uses: actions/upload-artifact@v4
-        if: ${{ matrix.shell == 'electron' && fromJSON(needs.plan.outputs.run)[matrix.base_workload] }}
-        with:
-          name: exact-convergence-manifest-${{ matrix.base_workload }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/base-contribution/products
-          if-no-files-found: error
-          retention-days: 1
-
-      - name: Verify scene and prepare convergence product
+      - name: Verify release-neutral scene
         env:
-          ARTIFACT_NAME: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
           TARGET: ${{ matrix.target }}
           WORKLOAD: ${{ matrix.workload }}
         shell: bash
         run: |
           set -euo pipefail
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene contribute \
-            --scene "$RUNNER_TEMP/exact-scene" --target "$TARGET" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
-            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/convergence-products"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" scene verify \
+            --scene "$RUNNER_TEMP/exact-scene" --target "$TARGET"
 
       - name: Pack scene transport
         if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
@@ -392,14 +378,6 @@ jobs:
         with:
           name: exact-${{ matrix.shell }}-scene-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/exact-scene-artifact/scene.tar
-          if-no-files-found: error
-          retention-days: 1
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/convergence-products
           if-no-files-found: error
           retention-days: 1
 
@@ -428,9 +406,9 @@ jobs:
           WORKLOAD: ${{ matrix.workload }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" platform restore \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" platform import \
+            --target "$TARGET" \
+            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/platform.json" \
             --output "$RUNNER_TEMP/exact-platform/$TARGET"
 
       - uses: actions/checkout@v6.0.2
@@ -458,7 +436,6 @@ jobs:
           pnpm --filter @open-design/shell-electron build
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build platform \
             --root "$GITHUB_WORKSPACE" --shell electron --target "$TARGET" \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --output "$RUNNER_TEMP/exact-platform/$TARGET" \
             --receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json"
 
@@ -467,14 +444,12 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           WORKLOAD: ${{ matrix.workload }}
-          ARTIFACT_NAME: exact-platform-cache-${{ matrix.target }}-${{ inputs.source_sha }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" platform contribute \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" platform export \
+            --target "$TARGET" \
             --build-receipt "$RUNNER_TEMP/exact-platform/$TARGET/platform-build-receipt.json" \
-            --artifact "$ARTIFACT_NAME" --output "$RUNNER_TEMP/platform-contribution"
+            --output "$RUNNER_TEMP/platform-contribution"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -488,14 +463,6 @@ jobs:
         with:
           name: exact-platform-cache-${{ matrix.target }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/platform-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/platform-contribution/products
           if-no-files-found: error
           retention-days: 1
 
@@ -610,9 +577,9 @@ jobs:
         if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
         shell: bash
         run: |
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource restore \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" --resource-id "$RESOURCE_ID" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource import \
+            --descriptor "$RUNNER_TEMP/exact-plan/artifacts/$WORKLOAD/resource.json" \
+            --resource-id "$RESOURCE_ID" \
             --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID"
 
       - uses: actions/checkout@v6.0.2
@@ -636,14 +603,11 @@ jobs:
           pnpm --filter @open-design/closure build
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build resource \
             --root "$GITHUB_WORKSPACE" --resource-id "$RESOURCE_ID" \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
             --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID" \
             --receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json"
-          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource contribute \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" --resource-id "$RESOURCE_ID" \
-            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource export \
+            --resource-id "$RESOURCE_ID" \
             --resource-receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json" \
-            --artifact "exact-data-cache-$RESOURCE_ID-${{ inputs.source_sha }}" \
             --output "$RUNNER_TEMP/data-contribution"
 
       - uses: actions/upload-artifact@v4
@@ -658,14 +622,6 @@ jobs:
         with:
           name: exact-data-cache-${{ matrix.resource_id }}-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/data-contribution/artifact
-          if-no-files-found: error
-          retention-days: 1
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
-        with:
-          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
-          path: ${{ runner.temp }}/data-contribution/products
           if-no-files-found: error
           retention-days: 1
 
@@ -818,7 +774,7 @@ jobs:
         shell: bash
         run: |
           node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" base unpack \
-            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --target "$TARGET" \
             --source "$RUNNER_TEMP/base-transport" --output "$RUNNER_TEMP/base"
 
       - name: Build native distribution
@@ -928,29 +884,13 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - uses: actions/download-artifact@v8
-        continue-on-error: true
-        with:
-          pattern: exact-convergence-manifest-*-${{ github.run_id }}
-          path: ${{ runner.temp }}/convergence-products
-          merge-multiple: true
-
-      - name: Bind Capsule workload results in the Linux control plane
+      - name: Bind workload results in the Linux control plane
         env:
-          CAPSULE_MATRIX: ${{ needs.plan.outputs.capsule_matrix }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-        run: |
-          set -euo pipefail
-          jq -c '.include[]' <<< "$CAPSULE_MATRIX" | while IFS= read -r entry; do
-            workload=$(jq -r '.workload' <<< "$entry")
-            target=$(jq -r '.target' <<< "$entry")
-            if jq -e --arg workload "$workload" '.workloads[$workload].run' "$RUNNER_TEMP/exact-plan/pending.json" >/dev/null; then
-              python3 .github/scripts/convergence.py --config .github/config/plan/release-exact.json contribute \
-                --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$workload" \
-                --product capsule --artifact "exact-capsule-cache-$target-$SOURCE_SHA" \
-                --output "$RUNNER_TEMP/convergence-products"
-            fi
-          done
+        run: >-
+          python3 .github/scripts/convergence.py --config .github/config/plan/release-exact.json contribute-all
+          --pending "$RUNNER_TEMP/exact-plan/pending.json" --source-commit "$SOURCE_SHA"
+          --output "$RUNNER_TEMP/convergence-products"
 
       - name: Create reusable scene handoff
         id: convergence_handoff

@@ -218,6 +218,40 @@ describe("workload convergence", () => {
     expect(refused.stderr).toContain("selected execution");
   });
 
+  test("binds declared artifacts in one control-plane batch and excludes cache hits", () => {
+    const fixture = createRepository();
+    const config = JSON.parse(readFileSync(fixture.configPath, "utf8"));
+    for (const id of ["a", "b"]) {
+      config.workflows.ci.workloads[id].products = "manifest";
+      config.workflows.ci.workloads[id].artifact = { product: "tool", prefix: `tool-${id}` };
+    }
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const first = runPlan(fixture);
+    config.workflows.ci.workloads.a.artifact.prefix = "renamed-tool";
+    writeFileSync(fixture.configPath, JSON.stringify(config));
+    const second = runPlan(fixture);
+    expect(second.pending.workloads.a!.digest).not.toBe(first.pending.workloads.a!.digest);
+    expect(second.pending.workloads.b!.digest).toBe(first.pending.workloads.b!.digest);
+    const pending = JSON.parse(readFileSync(fixture.pendingPath, "utf8"));
+    pending.workloads.b.run = false;
+    pending.workloads.b.resultHit = true;
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+    const output = path.join(fixture.root, "products");
+    const args = [convergenceScript, "--config", fixture.configPath, "contribute-all",
+      "--pending", fixture.pendingPath, "--source-commit", "a".repeat(40), "--output", output];
+    execFileSync("python3", args);
+    expect(JSON.parse(readFileSync(path.join(output, "a/product-manifest.json"), "utf8")).products)
+      .toEqual({ tool: { type: "job", source: "renamed-tool-" + "a".repeat(40) } });
+    expect(() => readFileSync(path.join(output, "b/product-manifest.json"))).toThrow();
+    expect(spawnSync("python3", args.map(arg => arg === "a".repeat(40) ? "short" : arg)).status).not.toBe(0);
+    pending.workloads.a.run = false;
+    pending.policy = "stale";
+    writeFileSync(fixture.pendingPath, JSON.stringify(pending));
+    const refused = spawnSync("python3", args, { encoding: "utf8" });
+    expect(refused.status).not.toBe(0);
+    expect(refused.stderr).toContain("contract differs");
+  });
+
   test("projects only exact artifact bindings to consumers, never cache decisions or workload identities", () => {
     const result = JSON.parse(execFileSync("python3", ["-c", [
       "import json, sys", "sys.path.insert(0, sys.argv[1])",

@@ -4,6 +4,43 @@ import { copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm } from "
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { create, extract, list } from "tar";
+import { openArtifactProduct, writeArtifactEntry } from "./artifact-product.ts";
+import { readObject } from "./control-common.ts";
+
+const releaseFields = new Set(["artifactBaseUrl", "channel", "publishedAt", "releaseVersion", "signatures"]);
+function releaseOwnedFields(value: unknown, path = "$", violations: string[] = []): string[] {
+  if (Array.isArray(value)) value.forEach((child, index) => releaseOwnedFields(child, `${path}[${index}]`, violations));
+  else if (value != null && typeof value === "object") {
+    for (const [key, child] of Object.entries(value)) {
+      const field = `${path}.${key}`;
+      if (releaseFields.has(key)) violations.push(field);
+      releaseOwnedFields(child, field, violations);
+    }
+  }
+  return violations;
+}
+
+/** Validate the business artifact without accepting workload/cache authority. */
+export async function verifySceneArtifact(sceneDirectory: string, target: string) {
+  const scene = await readObject(join(sceneDirectory, "scene.json"));
+  if (scene.target !== target || typeof scene.shellBuildHash !== "string" || !/^[a-f0-9]{64}$/u.test(scene.shellBuildHash)) {
+    throw new Error("Shell scene identity mismatch");
+  }
+  const violations = releaseOwnedFields(scene).sort();
+  if (violations.length) throw new Error(`Shell scene contains release-owned fields: ${violations.join(", ")}`);
+  return { sceneDirectory: resolve(sceneDirectory), target, shellBuildHash: scene.shellBuildHash };
+}
+
+export async function importSceneArtifact(input: Readonly<{ descriptor: string; transport: string; output: string }>) {
+  const descriptor = await readObject(input.descriptor);
+  await using product = await openArtifactProduct({ url: descriptor.url, sha256: descriptor.sha256 });
+  const { archive, acquisition } = product;
+  if (archive.entries.length !== 1 || archive.entries[0]?.path !== "scene.tar") throw new Error("scene artifact must contain only scene.tar");
+  const transport = resolve(input.transport);
+  await mkdir(dirname(transport), { recursive: true });
+  await writeArtifactEntry(archive, "scene.tar", transport);
+  return { ...await unpackSceneArtifact(transport, input.output), acquisition };
+}
 
 // A CI transport envelope, not a new product component or release authority.
 // In particular, scene consumers must still verify their own scene manifest.
