@@ -119,13 +119,14 @@ export async function buildReleasePlatform(input: BuildInput & Readonly<{ nodeAr
   const buildTarget = target(input), output = resolve(input.output);
   const plan = input.plan == null ? undefined : await readObject(input.plan);
   const id = "electron.platform.build";
-  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget
-    || !Array.isArray(plan.actions) || !plan.actions.some(action => action?.id === id))) {
-    throw new Error("platform build is not selected by a valid release plan");
+  // Release delta actions describe upgrades, not artifact availability. A cache
+  // miss may require rebuilding unchanged neutral bytes under the same identity.
+  if (plan != null && (plan.schemaVersion !== 1 || plan.plan?.target !== buildTarget)) {
+    throw new Error("platform build requires a valid target-bound release plan");
   }
-  const matches = async () => plan == null || canonicalBytes(await resolveExactPlatformPlanNode({
+  const matches = async () => plan == null || (plan.plan.nodes?.[id] != null && canonicalBytes(await resolveExactPlatformPlanNode({
     root: resolve(input.root), registryPath: join(resolve(input.root), "tools/release/resources/exact-plan-identities.json"), target: buildTarget,
-  })).equals(canonicalBytes(plan.plan.nodes?.[id] ?? null));
+  })).equals(canonicalBytes(plan.plan.nodes[id])));
   if (!await matches()) throw new Error("platform build plan binding mismatch");
   const { buildElectronPlatformResource, resolveElectronNodeArchive } = await electronBuilder(input.root);
   await mkdir(dirname(output), { recursive: true });

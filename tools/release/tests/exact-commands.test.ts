@@ -131,6 +131,10 @@ it("binds a selected data build without needing other plan nodes or resource dir
   const args = ["build", "resource", "--root", f.root, "--resource-id", "craft", "--output", join(f.root, "out"), "--plan", plan, "--receipt", receipt];
   await f.invoke(args);
   expect(JSON.parse(await readFile(receipt, "utf8")).planNode).toEqual({ id, identity: node.identity, target });
+  await writeFile(plan, JSON.stringify({ ...value, actions: [] }));
+  const unchangedReceipt = join(f.root, "unchanged.json");
+  await f.invoke(args.map(arg => arg === receipt ? unchangedReceipt : arg));
+  expect(JSON.parse(await readFile(unchangedReceipt, "utf8")).planNode).toEqual({ id, identity: node.identity, target });
   await writeFile(join(f.root, "craft/dist/input.txt"), "changed bytes inside dist are real resource inputs");
   const failedArgs = args.map(arg => arg === receipt ? join(f.root, "failed.json") : arg);
   await expect(f.invoke(failedArgs)).rejects.toThrow("plan binding mismatch");

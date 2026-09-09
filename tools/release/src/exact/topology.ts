@@ -1,12 +1,14 @@
 import { join } from "node:path";
 import { readObject, writeObject } from "./control-common.ts";
 
-type Entry = Readonly<{ shell: "electron" | "terminal"; target: string; workload: string; runner_class: string; runs_on: string }>;
+type Entry = Readonly<{ shell: "electron" | "terminal"; target: string; workload: string; platform_workload?: string; runner_class: string; runs_on: string }>;
 function entries(value: unknown): Entry[] {
   if (!Array.isArray(value)) throw new Error("topology must declare active and deferred arrays");
   return value.map(entry => {
     if (entry == null || typeof entry !== "object" || Array.isArray(entry)
-      || Object.keys(entry).sort().join(",") !== "runner_class,runs_on,shell,target,workload"
+      || Object.keys(entry).sort().join(",") !== (entry.shell === "electron"
+        ? "platform_workload,runner_class,runs_on,shell,target,workload" : "runner_class,runs_on,shell,target,workload")
+      || (entry.shell === "electron" && (typeof entry.platform_workload !== "string" || !/^[a-z][a-z0-9_]*$/u.test(entry.platform_workload)))
       || !["electron", "terminal"].includes(entry.shell) || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(entry.target)
       || !/^[a-z][a-z0-9_]*$/u.test(entry.workload) || !/^[a-z][a-z0-9_]*$/u.test(entry.runner_class)
       || typeof entry.runs_on !== "string" || !entry.runs_on.trim()) throw new Error("invalid release topology declaration");
@@ -21,8 +23,12 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
   const scopes = new Set<string>(), workloads = new Set<string>(), runners = new Map<string, string>();
   for (const entry of [...active, ...deferred]) {
     const scope = `${entry.shell}/${entry.target}`;
-    if (scopes.has(scope) || workloads.has(entry.workload)) throw new Error("duplicate release topology target or workload");
-    scopes.add(scope); workloads.add(entry.workload);
+    if (scopes.has(scope)) throw new Error("duplicate release topology target or workload");
+    scopes.add(scope);
+    for (const workload of [entry.workload, ...(entry.platform_workload == null ? [] : [entry.platform_workload])]) {
+      if (workloads.has(workload)) throw new Error("duplicate release topology target or workload");
+      workloads.add(workload);
+    }
     const runner = runners.get(entry.runner_class);
     if (runner != null && runner !== entry.runs_on) throw new Error("release topology runner class is inconsistent");
     runners.set(entry.runner_class, entry.runs_on);
@@ -45,13 +51,18 @@ export async function projectReleaseTopology(input: Readonly<{ declaration: stri
   // Convergence requires a complete workload/runner declaration, even for
   // disabled targets. Only active entries belong in the execution matrix.
   const scope = { enabled: Object.fromEntries([
-    ...resolved.map(entry => [entry.workload, true]),
-    ...deferred.map(entry => [entry.workload, false]),
+    ...resolved.flatMap(entry => [[entry.workload, true], ...(entry.platform_workload == null ? [] : [[entry.platform_workload, true]])]),
+    ...deferred.flatMap(entry => [[entry.workload, false], ...(entry.platform_workload == null ? [] : [[entry.platform_workload, false]])]),
   ]) };
   const runnerPlan = Object.fromEntries([...runners].map(([runnerClass, label]) => [runnerClass, [label]]));
   await writeObject(join(input.output, "topology.json"), topology);
   await writeObject(join(input.output, "scope.json"), scope);
   await writeObject(join(input.output, "runners.json"), runnerPlan);
   const validationMatrix = { include: resolved.filter(entry => entry.shell === "electron") };
-  return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, validationMatrix, topology, scope, runners: runnerPlan };
+  // Platform bytes are needed for metadata composition in full and hot releases.
+  // Only convergence decides whether they need building or can be restored.
+  const platformMatrix = { include: resolved.filter(entry => entry.shell === "electron").map(entry => ({
+    target: entry.target, workload: entry.platform_workload!, runner_class: entry.runner_class, runs_on: entry.runs_on,
+  })) };
+  return { schemaVersion: 1, operation: "release.topology", matrix: { include: resolved }, validationMatrix, platformMatrix, topology, scope, runners: runnerPlan };
 }

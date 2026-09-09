@@ -44,7 +44,7 @@ it("builds neutral Capsule content without Node archives, Closure inputs or vers
   await expect(buildReleaseCapsule({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
 });
 
-it.each(["unbound", "bound", "drift"])("builds an independent platform with verified metadata (%s)", async mode => {
+it.each(["unbound", "bound", "unchanged", "drift"])("builds an independent platform with verified metadata (%s)", async mode => {
   const fixtureInput = await fixture();
   const f = { ...fixtureInput, plan: mode === "unbound" ? undefined : fixtureInput.plan };
   const source = join(f.root, "platform-input");
@@ -55,7 +55,7 @@ it.each(["unbound", "bound", "drift"])("builds an independent platform with veri
     identities: { "electron.platform.build": { schemaVersion: 1, parameters: ["target"], sourceSets: ["platform"] } },
     sourceSets: { platform: { paths: ["platform-input"] } } });
   const node = await resolveExactPlatformPlanNode({ root: f.root, registryPath, target: "darwin-arm64" });
-  if (f.plan != null) await json(f.plan, { schemaVersion: 1, actions: [{ id: "electron.platform.build" }],
+  if (f.plan != null) await json(f.plan, { schemaVersion: 1, actions: mode === "unchanged" ? [] : [{ id: "electron.platform.build" }],
     plan: { target: f.target, nodes: { "electron.platform.build": node } } });
   const resource = { schemaVersion: 1, target: f.target,
     blob: { sha256: digest("platform"), size: 8, mediaType: "application/zip", sources: [] },
@@ -86,14 +86,15 @@ it.each(["unbound", "bound", "drift"])("builds an independent platform with veri
   await expect(buildReleasePlatform({ ...f, target: "linux-x64" })).rejects.toThrow("unsupported build target");
 });
 
-it("rejects unselected platform plans before creating build output", async () => {
+it("rejects incomplete or wrong-target platform plans before creating build output", async () => {
   const f = await fixture();
   await json(f.plan, { schemaVersion: 1, actions: [], plan: { target: f.target } });
-  await expect(buildReleasePlatform(f)).rejects.toThrow("not selected by a valid release plan");
+  await expect(buildReleasePlatform(f)).rejects.toThrow("plan binding mismatch");
   await expect(readFile(f.receipt)).rejects.toThrow("ENOENT");
   await json(f.plan, { schemaVersion: 1, actions: [{ id: "electron.platform.build" }], plan: { target: "win32-x64" } });
-  await expect(buildReleasePlatform(f)).rejects.toThrow("not selected by a valid release plan");
+  await expect(buildReleasePlatform(f)).rejects.toThrow("valid target-bound release plan");
 });
+
 
 it.each(["digest", "target", "source"])("rejects unbound platform output before writing release-neutral metadata (%s)", async kind => {
   const f = await fixture();

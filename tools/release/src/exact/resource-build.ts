@@ -13,12 +13,12 @@ export async function buildReleaseDataResource(input: Readonly<{
   const root = resolve(input.root);
   const node = `closure.data.${input.resourceId}.build`;
   const plan = input.plan == null ? undefined : await readObject(input.plan);
-  if (plan != null && (plan.schemaVersion !== 1 || !Array.isArray(plan.actions)
-    || !plan.actions.some(action => action?.id === node)
-    || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(plan.plan?.target))) throw new Error("data build is not selected by a valid release plan");
-  const matches = async () => plan == null || canonicalBytes(await resolveExactDataPlanNode({
+  // An unchanged release node still needs materialization on a cache miss.
+  if (plan != null && (plan.schemaVersion !== 1
+    || !["darwin-arm64", "darwin-x64", "win32-x64"].includes(plan.plan?.target))) throw new Error("data build requires a valid target-bound release plan");
+  const matches = async () => plan == null || (plan.plan.nodes?.[node] != null && canonicalBytes(await resolveExactDataPlanNode({
     id: node, root, registryPath: join(root, "tools/release/resources/exact-plan-identities.json"), target: plan.plan.target as ExactTarget,
-  })).equals(canonicalBytes(plan.plan.nodes?.[node] ?? null));
+  })).equals(canonicalBytes(plan.plan.nodes[node])));
   if (!await matches()) throw new Error("data build plan binding mismatch");
   const resolver = createRequire(join(root, "tools/release/package.json"));
   const builder: typeof import("@open-design/closure/build-resources") = await import(

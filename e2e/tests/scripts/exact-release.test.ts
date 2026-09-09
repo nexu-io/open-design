@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -15,15 +15,18 @@ const roots: string[] = [];
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
 describe("exact Electron release topology", () => {
-  it("covers the declared aggregate scene production inputs in the convergence cache key", async () => {
+  it.each([
+    { suite: "electron-scene", nodes: ["electron.contract.build", "electron.shell.build", "closure.build"] },
+    { suite: "electron-platform", nodes: ["electron.platform.build"] },
+  ])("covers $suite production inputs in the convergence cache key", async ({ suite, nodes }) => {
     const result = await run("python3", ["-c", [
       "import json, sys",
       "from pathlib import Path",
       "sys.path.insert(0, sys.argv[1])",
       "from convergence import ConvergenceContract",
       "contract = ConvergenceContract(Path(sys.argv[2]))",
-      "print(json.dumps(contract.suite_paths('electron-scene') + contract.suite_paths('convergence-control')))",
-    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/convergence-exact.json")]);
+      "print(json.dumps(contract.suite_paths(sys.argv[3]) + contract.suite_paths('convergence-control')))",
+    ].join("\n"), resolve(workspaceRoot, ".github/scripts"), resolve(workspaceRoot, ".github/config/convergence-exact.json"), suite]);
     const inputs: string[] = JSON.parse(result.stdout);
     const registry = JSON.parse(await readFile(resolve(workspaceRoot, "tools/release/resources/exact-plan-identities.json"), "utf8"));
     const paths = new Set<string>();
@@ -34,11 +37,14 @@ describe("exact Electron release topology", () => {
     }
     // Until independent producers replace the aggregate scene, every bundled
     // Capsule, Closure and resource input must invalidate that aggregate.
-    for (const name of ["electron.contract.build", "electron.shell.build", "closure.build"]) collect(name);
+    for (const name of nodes) collect(name);
     paths.add("tools/release/resources/exact-plan-identities.json");
     paths.add("tools/release/src/exact/plan.ts");
     const uncovered = [...paths].filter(path => !inputs.some(input => input === "*" || input.replace(/\/$/u, "") === path || (input.endsWith("/") && path.startsWith(input))));
     expect(uncovered).toEqual([]);
+    if (suite === "electron-platform") {
+      expect(inputs.some(input => input.startsWith("apps/daemon/") || input.startsWith("apps/web/") || input.startsWith("packages/electron-capsule/"))).toBe(false);
+    }
   });
 
   it("passes projected workloads and scene identities through the real convergence planner and handoff", async () => {
@@ -47,7 +53,8 @@ describe("exact Electron release topology", () => {
     const plans = join(root, "plans"), products = join(root, "products"), pending = join(root, "pending.json");
     await mkdir(plans);
     await writeFile(join(plans, "electron-darwin-arm64.json"), JSON.stringify({
-      schemaVersion: 1, plan: { target: "darwin-arm64" }, actions: [{ id: "electron.distribution" }],
+      schemaVersion: 1, plan: { target: "darwin-arm64", nodes: { "electron.platform.build": {
+        identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" } } }, actions: [{ id: "electron.distribution" }],
     }));
     await run(process.execPath, [cli, "topology", "--declaration", resolve(workspaceRoot, ".github/config/exact-topology.json"),
       "--plans", plans, "--output", root, "--github-output", join(root, "outputs")]);
@@ -63,6 +70,8 @@ describe("exact Electron release topology", () => {
       "--mode", "enforce", "--pending", pending], { env });
     const planned = JSON.parse(await readFile(pending, "utf8"));
     expect(planned.workloads.electron_scene_win32_x64.run).toBe(false);
+    expect(planned.workloads.electron_platform_win32_x64.run).toBe(false);
+    expect(planned.workloads.electron_platform_darwin_arm64.run).toBe(true);
     for (const shell of ["terminal", "electron"]) {
       const workload = `${shell}_scene_darwin_arm64`, scene = join(root, shell);
       expect(planned.workloads[workload].run).toBe(true);
@@ -71,6 +80,19 @@ describe("exact Electron release topology", () => {
       await run(process.execPath, [cli, "scene", "contribute", "--scene", scene, "--target", "darwin-arm64", "--pending", pending,
         "--workload", workload, "--artifact", `fixture-${shell}`, "--output", products]);
     }
+    const platformRoot = join(root, "platform"); await mkdir(platformRoot);
+    const archivePath = join(platformRoot, "platform.zip"), resourcePath = join(platformRoot, "platform-resource.json");
+    const resource = { schemaVersion: 1, target: "darwin-arm64", blob: {
+      sha256: createHash("sha256").update("platform").digest("hex"), size: 8, mediaType: "application/zip", sources: [] },
+      treeSha256: "b".repeat(64), executables: ["bin/node"] };
+    await writeFile(archivePath, "platform"); await writeFile(resourcePath, JSON.stringify(resource));
+    const buildReceipt = join(platformRoot, "build.json");
+    await writeFile(buildReceipt, JSON.stringify({ schemaVersion: 1, operation: "electron.platform.build", target: "darwin-arm64",
+      planNode: { id: "electron.platform.build", identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" }, resource, archivePath, resourcePath }));
+    await run(process.execPath, [cli, "platform", "contribute", "--plan", join(plans, "electron-darwin-arm64.json"),
+      "--pending", pending, "--workload", "electron_platform_darwin_arm64", "--build-receipt", buildReceipt,
+      "--artifact", "fixture-platform", "--output", join(root, "platform-contribution")]);
+    await cp(join(root, "platform-contribution/products/electron_platform_darwin_arm64"), join(products, "electron_platform_darwin_arm64"), { recursive: true });
     const event = join(root, "event.json");
     await writeFile(event, JSON.stringify({ repository: { id: 1 } }));
     const handoff = await run("python3", [...common, "handoff", "--pending", pending, "--products-root", products,
@@ -79,11 +101,26 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(2);
+    expect(candidate.results).toHaveLength(3);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
     }
+  });
+
+  it("keeps independent platform cache restore free of workspace setup and passes target directories to prepare", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    const platform = workflow.split("\n  platform:")[1]!.split("\n  prepare:")[0]!;
+    expect(platform).toContain("matrix: ${{ fromJSON(needs.plan.outputs.platform_matrix) }}");
+    expect(platform.indexOf("Restore converged platform")).toBeLessThan(platform.indexOf("actions/checkout"));
+    for (const command of ["platform restore", "build platform", "platform contribute"]) expect(platform).toContain(`exact-release-control.mjs" ${command}`);
+    expect(platform).not.toContain("build:resources");
+    expect(platform).not.toContain("matrix.mode");
+    expect(platform).toContain("path: ${{ runner.temp }}/platform-contribution/artifact");
+    const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
+    expect(prepare).toContain(' --platforms "$RUNNER_TEMP/platforms"');
+    expect(prepare).toContain("pattern: exact-platform-product-*-${{ inputs.source_sha }}");
+    expect(prepare).toContain("merge-multiple: true");
   });
 
   it("requires native validation independently of scene cache reuse and transports its receipt to baseline staging", async () => {
@@ -99,7 +136,7 @@ describe("exact Electron release topology", () => {
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('exact-release-control.mjs" validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");
-    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, validation]");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, platform, validation]");
     for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
       expect(validation).toContain(`exact-release-control.mjs" validate ${node}`);
     }
@@ -167,7 +204,7 @@ describe("exact Electron release topology", () => {
     const topology = JSON.parse(await readFile(resolve(workspaceRoot, ".github/config/exact-topology.json"), "utf8"));
     expect(topology.active.map((value: { shell: string; target: string }) => [value.shell, value.target])).toEqual([["terminal", "darwin-arm64"], ["electron", "darwin-arm64"]]);
     expect(topology.active.every((value: { runs_on: string }) => value.runs_on === "macos-15")).toBe(true);
-    expect(topology.deferred).toEqual([{ shell: "electron", target: "win32-x64", workload: "electron_scene_win32_x64", runner_class: "electron_win32_x64", runs_on: "windows-2025" }]);
+    expect(topology.deferred).toEqual([{ shell: "electron", target: "win32-x64", workload: "electron_scene_win32_x64", platform_workload: "electron_platform_win32_x64", runner_class: "electron_win32_x64", runs_on: "windows-2025" }]);
     expect(workflow).toContain("@open-design/tools-release exec tools-release build scene");
     expect(workflow).toContain('exact-release-control.mjs" build distribution');
     expect(workflow).not.toContain("exact-scene-request.json");
@@ -325,23 +362,22 @@ describe("exact Electron release topology", () => {
       "--end-user-distribution", "false", "--stable-authorized", "false", "--receipt", policyReceipt]);
     await writeFile(publishReceipt, JSON.stringify({ schemaVersion: 1, operation: "exact.publish", profile: "exact-validation", channel: "betahyx", releaseVersion: "1.2.3-betahyx.4", sourceCommit, target, requiredAcceptances: [required] }));
 
-    const installedFiles = await Promise.all(["host.mjs", "supervisor.mjs", "content.json", "trust.json", "seed.bin", "updater-provider.mjs", "capsule-manifest.json", "capsule.zip"].map(async (file) => {
+    const installedFiles = await Promise.all(["host.mjs", "supervisor.mjs", "content.json", "trust.json", "updater-provider.mjs", "capsule-manifest.json", "capsule.zip"].map(async (file) => {
       const body = Buffer.from(`installed:${file}`);
       await writeFile(join(installedRoot, file), body);
       return { file, sha256: createHash("sha256").update(body).digest("hex"), size: body.length };
     }));
     await writeFile(join(installedRoot, "standalone-installation.json"), JSON.stringify({
-      schemaVersion: 3,
+      schemaVersion: 4,
       channel: "betahyx",
       releaseVersion: "1.2.3-betahyx.4",
       target: "darwin-arm64",
       host: installedFiles[0],
-      updaterProvider: installedFiles[5],
+      updaterProvider: installedFiles[4],
       supervisor: installedFiles[1],
       content: installedFiles[2],
       trust: installedFiles[3],
-      capsule: { manifest: installedFiles[6], archive: installedFiles[7] },
-      seeds: [installedFiles[4]],
+      capsule: { manifest: installedFiles[5], archive: installedFiles[6] },
     }));
     const baseUserDataRoot = join(root, "user-data");
     const runtimeRoot = join(baseUserDataRoot, "exact/channels/betahyx/namespaces/acceptance-headless/runtime/electron");
