@@ -74,6 +74,7 @@ describe('error-tracking', () => {
       properties: expect.objectContaining({
         $exception_type: 'Error',
         $exception_message: 'early-boom',
+        event_schema_version: 4,
         app_version: '1.2.3',
         session_id: 'session-abc',
       }),

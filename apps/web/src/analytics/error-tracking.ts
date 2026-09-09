@@ -33,6 +33,7 @@
 // `capture_exceptions: false` on the posthog-js init — this module is the
 // single source of truth for browser exception capture.
 
+import { EVENT_SCHEMA_VERSION } from '@open-design/contracts/analytics';
 import { scrubExceptionList, scrubFilePath } from './scrub';
 
 interface ExceptionTrackingContext {
@@ -245,6 +246,10 @@ function dispatch(item: BufferedSafetyEvent): void {
     distinct_id: context.distinctId,
     properties: {
       ...item.body.properties,
+      // Keep the direct-fetch web safety envelope aligned with daemon and
+      // packaged-runtime telemetry. Stamp this after caller properties so a
+      // stale producer cannot accidentally override the canonical version.
+      event_schema_version: EVENT_SCHEMA_VERSION,
       $lib: 'web/error-tracking',
       ...(context.telemetryEnv ? { env: context.telemetryEnv } : {}),
       ...(context.appVersion ? { app_version: context.appVersion, ui_version: context.appVersion } : {}),
