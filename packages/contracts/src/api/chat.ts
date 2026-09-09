@@ -1004,7 +1004,39 @@ export type PersistedAgentEvent =
    * existed simply have none — clients MUST fall back to the legacy bare-marker
    * heuristic there rather than treating "no key" as "no boundary".
    */
-  | { kind: 'done_key'; key: string }
+  | {
+      kind: 'done_key';
+      key: string;
+      /**
+       * This physical Run's own wall-clock span.
+       *
+       * A logical OD Next task runs as several physical Runs, and the client
+       * folds them into one turn when history is reloaded
+       * (`foldStrategyTaskTurns`). That fold concatenates every Run's events
+       * into a single stream but can only keep ONE message row, so the first
+       * Run's `createdAt` and the last Run's `endedAt` survive and every
+       * boundary in between is lost. The renderer then has one clock for N
+       * Runs: a Run whose events carry no timestamps of their own (a
+       * clarification Run typically has none, and the plain-stream agent
+       * family never emits any) has no boundary left to fall back on and shows
+       * no duration at all, while a thinking gap — inferred from "last stamped
+       * event until the next one" — runs straight across the boundary and
+       * charges earlier Runs' wall-clock time to the current one.
+       *
+       * `done_key` is already emitted once per Run and is already what the
+       * renderer uses to detect a Run boundary, so the span belongs here: it
+       * travels with the boundary it describes and needs no parallel channel.
+       *
+       * Optional because turns recorded before this existed carry none, and
+       * because a Run that is still in flight has no end yet. An absent boundary
+       * is unknown. Clients may still use timestamps belonging to the same Run,
+       * but MUST NOT substitute a preceding Run's timestamps or the aggregate
+       * folded turn's span for a missing successor-Run boundary. If no own timing
+       * data is available, leave the duration unknown rather than inventing one.
+       */
+      runStartedAt?: number;
+      runEndedAt?: number;
+    }
   /**
    * This turn's follow-up suggestions — the three one-line actions the chat
    * offers under a delivered answer. Parsed by the daemon out of the agent's

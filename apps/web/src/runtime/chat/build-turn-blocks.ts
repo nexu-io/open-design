@@ -95,7 +95,20 @@ const ABANDON_NAME_RE = /(^|__)todo_abandon$/i;
 interface RawTodo { content: string; status: string }
 
 /** 还开着的那一段推理:它自己、它落在哪个数组里、它从哪一刻开始填空 */
-interface OpenThink { item: ShellText; arr: ShellItem[]; from: number | null }
+interface OpenThink {
+  item: ShellText;
+  arr: ShellItem[];
+  from: number | null;
+  /**
+   * 这段推理落在**哪张卡 / 哪条 todo** 名下 —— 认领成功时要把这一截空白记进它们的
+   * 跨度,否则卡头会小于卡里那一行(`closeThink` 里的原委)。
+   *
+   * 开表那一刻取,不在结账时再问一次:那时候 `activeShell()` / `current` 可能已经
+   * 换人了(下一份清单一落就换),记到别人头上比不记更糟。
+   */
+  shell: ExecutionShell | null;
+  seg: TodoSegment | null;
+}
 
 function readTodoList(input: unknown): RawTodo[] {
   const rec = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
@@ -489,20 +502,44 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
 
   let shellSeq = 0;
   /**
-   * 这一轮开过的**每一张**壳,按开壳先后 —— 也就是它们在 `blocks` 里的先后。
+   * **当前这个 run** 开过的每一张壳,按开壳先后。每道 run 边界清空一次。
    *
    * 收尾原来是 `for (const shell of [top, todoCard])`,写死了「一轮最多两张壳」。
    * 折叠轮次(`foldStrategyTaskTurns`)把 N 个物理 run 接成一条事件流之后这不再成立:
    * 每个 run 开自己的壳,先跑完的那几张也得各自定住状态与秒数,否则它们会永远
    * 停在「进行中」并跟着当前这一轮一起转圈。
+   *
+   * 这里原来攒的是**整条流**的每一张壳(`allShells`),秒表的「开这一轮的那张壳」
+   * 于是读到了整条流的第一张。而那两条边界规则(见 `shellElapsed`)说的一直是
+   * 「开**这一轮**」「收**这一轮**」,折叠视图里的「一轮」就是一个物理 run ——
+   * 读成整条流之后,中间那几个 run 的壳两头都够不着,而澄清 run 恰恰常常一个带时刻的
+   * 事件都没有:兜底一失效,壳头就只剩光秃秃一句「已完成」(OPEND-2823)。
+   * 收窄到 run 之后整条流的那份名单没有第二个读者,所以不再攒。
    */
-  const allShells: ExecutionShell[] = [];
+  let runShells: ExecutionShell[] = [];
   const nextShell = (): ExecutionShell => {
     shellSeq += 1;
     const shell = makeShell(shellSeq);
-    allShells.push(shell);
+    runShells.push(shell);
     return shell;
   };
+  /**
+   * **当前这个 run 自己的起止** —— 折叠视图里唯一说得出 run 边界的东西。
+   *
+   * 出处是 `done_key` 上的 `runStartedAt` / `runEndedAt`:折叠把 N 条消息并成一条,
+   * 每个 run 自己的 `createdAt` / `endedAt` 就此消失,所以 `foldStrategyTaskTurns`
+   * 在拼接之前把它盖在这个 run 的 `done_key` 上(那正是这里认 run 边界用的同一枚事件)。
+   *
+   * 没折叠的一轮只有一个 run,这两个值就是轮次自己的起止 —— 与从前逐字相同。
+   * 后继 run 拿不到盖章时留 `null`:那是「不知道」,不是「等于轮次开头」——
+   * 拿轮次开头顶上会把前面几个 run 的时间算进它名下,正是这次要修的那种谎报。
+   */
+  let runStartedAt: number | null = input.startedAtMs ?? null;
+  /**
+   * `null` = 这个 run 还没盖过章。收尾那一个 run 由 `finishTurn` 兜到轮次收尾
+   * (折叠时轮次收尾就是最后一个 run 的收尾),中途结束的那几个只能靠盖章。
+   */
+  let runEndedAt: number | null = null;
 
   let top: ExecutionShell | null = null;
   let todoCard: ExecutionShell | null = null;
@@ -661,6 +698,27 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
   }
 
   /**
+   * 一段推理从哪一刻开始「填空」。
+   *
+   * 上一件带时刻的事结束的那一刻(`lastEndedAt`),一件都还没有就是这个 run 的开头。
+   *
+   * ⚠️ **不许早于这个 run 的开头**(OPEND-2824)。`lastEndedAt` 是**全轮共用**的,
+   * 而折叠视图里一条流装着 N 个 run:后继 run 的头一段推理照原样取,起点会落在
+   * **上一个 run** 最后一件事上,于是把 run 之间的墙上时间 —— 包括用户盯着
+   * `<question-form>` 想答案的那几分钟 —— 全部算成「模型在想」。真机语料里
+   * run 2 的第一格思考因此从 2m 57s 涨成 7m 2s,而它所在那张卡的头只写 1m 45s:
+   * 卡里那一行比卡头还大,正是用户截图里那一幕。
+   *
+   * 那几分钟里**没有任何模型在跑**,所以这不是「两个数分属不同范围、标清楚就行」,
+   * 是一段时间被记到了错的账上 —— 夹在两个 run 之间的空白谁也不领。
+   */
+  function thinkGapStart(): number | null {
+    if (lastEndedAt == null) return runStartedAt;
+    if (runStartedAt == null) return lastEndedAt;
+    return Math.max(lastEndedAt, runStartedAt);
+  }
+
+  /**
    * 给还开着的那段推理结账:它填掉的空白到 `at` 为止。
    *
    * 这段空白不是它一个人的(`ownsGap`)就**整段作废**,而不是跳过这一截 ——
@@ -682,8 +740,28 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
     const prev = thinkMs.get(open.item);
     if (prev === null) return; // 已经作废,不再往上加
     if (!ownsGap(open)) { thinkMs.set(open.item, null); return; }
-    const ms = open.from == null ? -1 : at - open.from;
-    thinkMs.set(open.item, ms < 0 ? null : (prev ?? 0) + ms);
+    const from = open.from;
+    if (from == null || at < from) { thinkMs.set(open.item, null); return; }
+    thinkMs.set(open.item, (prev ?? 0) + (at - from));
+    /*
+     * **记在行上的这一截,同时要记进它所在的那张卡**(OPEND-2824)。
+     *
+     * 壳自己的跨度只由带时刻的事件撑开,而推理一个时刻都不带。整轮第一张 / 最后一张
+     * 壳靠 run 的起止兜住了两头(见 `shellElapsed`),但一个 run 中途另起的那张卡
+     * 兜不住:它的表从**它自己第一件带时刻的事**开始走,而落在它头上的那段推理比
+     * 这更早 —— 于是卡头写 10s,卡里那一行写 4m。
+     *
+     * 这里补的不是一个数,是一条归属:这段空白既然已经被判给了卡里的这一行,
+     * 它就在这张卡的名下,卡的跨度本来就该覆盖它。判据与行用的是**同一份证据**
+     * (同一个 `from` / `at`),所以不会出现「卡头比行大一点点」这种为了好看凑出来的数。
+     *
+     * 只在**认领成功**的这一支补。空白不是它一个人的(`ownsGap` 为假)时那一行本来
+     * 就不报数,没有需要被覆盖的东西,补了反而是替一段无主的时间找了个卡。
+     */
+    widen(shellSpan, open.shell, from);
+    widen(shellSpan, open.shell, at);
+    widen(segSpan, open.seg, from);
+    widen(segSpan, open.seg, at);
   }
 
   /**
@@ -789,6 +867,21 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
         // 后面那个 run 的 `<od-done key="…"/>` 会对不上,整段结论留在壳里
         if (started) closeRun();
         runKey = key;
+        /*
+         * 新的 run = 新的钟。先清零再认盖章:拿不到盖章时留 `null`,让秒表
+         * 退回「只认事件时刻」,而不是继承上一个 run 的边界(那会把别人的时间
+         * 记在这个 run 头上)。
+         */
+        runShells = [];
+        runStartedAt = null;
+        runEndedAt = null;
+      }
+      if (key) {
+        // 折叠视图盖上来的那个 run 自己的起止(见 contracts 的 `done_key.runStartedAt`)。
+        // 头一个 run 的这枚 `done_key` 不换密钥,但同样带着章 —— 它把轮次起止收窄成
+        // 这个 run 自己的起止,这正是折叠之后 run 0 需要的那口钟。
+        if (event.runStartedAt != null) runStartedAt = event.runStartedAt;
+        if (event.runEndedAt != null) runEndedAt = event.runEndedAt;
       }
     }
     // `done_key` 是协议元数据,不是这一轮的内容 —— 在 ensureShell 之前跳掉,
@@ -857,7 +950,7 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
       // 在循环体里会把它窄化成 `null`(和上面 `openText` 同一个坑)。显式断开窄化。
       const think = openThink as OpenThink | null;
       if (segment?.thinking && think?.item !== segment) {
-        openThink = { item: segment, arr, from: lastEndedAt ?? input.startedAtMs ?? null };
+        openThink = { item: segment, arr, from: thinkGapStart(), shell: activeShell(), seg: current };
       }
       continue;
     }
@@ -1322,13 +1415,24 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
    */
   function closeRun(): void {
     liftConclusion();
-    // 这个 run 的最后一段推理走到它自己最后一件带时刻的事为止,不跨到下一个 run
-    if (lastEndedAt != null) closeThink(lastEndedAt);
+    /*
+     * 这个 run 的最后一段推理走到**它这个 run 的收尾**为止,不跨到下一个 run。
+     * 盖了章就用章上那一刻(比事件时刻更准:澄清 run 常常一个带时刻的事件都没有);
+     * 没盖章才退回它最后一件带时刻的事。
+     */
+    const thinkEnd = runEndedAt ?? lastEndedAt;
+    if (thinkEnd != null) closeThink(thinkEnd);
     openThink = null;
+    // 这个 run 收尾的那张壳 —— 和 `finishTurn` 里的 `lastShell` 是同一句话
+    const lastRunShell = todoCard ?? top;
     // `todoCard` 常常就是 `top` 本人(D50 之后清单不另起卡),去重再收
     for (const shell of new Set([top, todoCard])) {
       if (!shell) continue;
-      shell.elapsedMs = shellElapsed(false, shell, shell === allShells[0], false);
+      shell.elapsedMs = shellElapsed(
+        shell,
+        shell === runShells[0] ? runStartedAt : null,
+        shell === lastRunShell ? runEndedAt : null,
+      );
       shell.quietMs = null;
       if (shell.status === 'running') shell.status = 'done';
       closeRunningSegments(shell);
@@ -1400,18 +1504,33 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
      * `todoCard` 常常就是 `top` 本人(D50 之后清单不另起卡),所以要去重再数。
      */
     /*
-     * 「开这一轮的那张壳」是**整轮**的第一张,不是当前这个 run 的第一张 ——
-     * 折叠轮次里 `top` 已经换过好几茬了(见 `closeRun`),拿它当第一张的话,
-     * 最后那个 run 的壳会把表拨回轮次开头,把前面几个 run 的时间也算进自己名下。
+     * 「开这一轮的那张壳」是**当前这个 run** 的第一张。
+     *
+     * 这里原来读的是 `allShells[0]`(整轮第一张),配的是「轮次开头」那个起点 ——
+     * 两者本来就是一对:折叠之前一轮只有一个 run,整轮第一张壳就是这个 run 的第一张,
+     * 轮次开头就是这个 run 的开头。折叠之后这一对同时失真:后继 run 的第一张壳
+     * 拿不到任何起点(壳头于是没有秒数,OPEND-2823),而「轮次开头」也早已不是它的开头
+     * (借给它就是把前面几个 run 的时间算进它名下)。现在两边一起收窄到 run 自己那口钟
+     * (`runShells` / `runStartedAt`),没有折叠的一轮逐字等价于从前。
      */
-    const firstShell = allShells[0] ?? null;
+    const firstShell = runShells[0] ?? null;
     const lastShell = todoCard ?? top;
 
     for (const shell of [top, todoCard]) {
       if (!shell) continue;
       // 只有**还在跑的那张**跟着 now 走;先结束的那张定在自己的最后一刻
       const live = running && shell === activeShell();
-      shell.elapsedMs = shellElapsed(live, shell, shell === firstShell, shell === lastShell);
+      /*
+       * 收这个 run 的那张壳走到 run 收尾为止 —— 跑着的时候「收尾」就是现在。
+       * 收尾那一个 run 没有后继来给它盖章,而轮次收尾就是它的收尾(折叠取的正是
+       * 最后一个 run 的 `endedAt`),所以这里兜一手 `input.endedAtMs`。
+       */
+      const closeTo = live ? (input.nowMs ?? null) : (runEndedAt ?? input.endedAtMs ?? null);
+      shell.elapsedMs = shellElapsed(
+        shell,
+        shell === firstShell ? runStartedAt : null,
+        shell === lastShell ? closeTo : null,
+      );
       shell.quietMs = shellQuiet(live, shell);
     }
 
@@ -1486,29 +1605,62 @@ export function buildTurnBlocks(input: BuildTurnInput): TurnBlock[] {
    * 两张壳的那一轮仍然分得开:第一张拿轮次**开头**、最后一张拿轮次**收尾**,
    * 中间那道缝(卡外那段结论)谁也不领。两张写上同一个数的 T34 坏画面
    * (`chat-panel-feedback.md`「被推翻的两条」)因此在结构上就出不来。
+   *
+   * ── 「这一轮」= 一个物理 run,不是折起来的那整条流(OPEND-2823)────────────
+   *
+   * 上面那条不变量一个字没改,改的是**谁来当这一轮**。两个边界现在由调用处按
+   * **run** 算好了递进来(`openFrom` / `closeTo`),这里只负责把它们并进跨度。
+   *
+   * 为什么必须收窄:`foldStrategyTaskTurns` 在重新打开历史时把 N 个物理 run 接成
+   * 一条流,而这两条边界原来读的是**整轮**的第一张壳与整轮收尾。于是中间那几个 run
+   * 的壳两头都够不着 —— 偏偏澄清 run 常常一个带时刻的事件都没有(plain-stream 那一族
+   * 整轮如此),兜底一失效,`from` / `to` 有一头是 null,壳头就只剩光秃秃一句
+   * 「已完成」。真机语料 `odnext-parchment.reload.json` 三个 run:live 时报
+   * 1m 20s / 2m 39s / 4m 42s,重新打开之后变成 (无) / (无) / 1m 45s。
+   *
+   * 反过来也不能把整轮的边界**借**给后继 run 的壳:那等于把前面几个 run 的时间
+   * 算进它名下,是同一个谎报换个方向。拿不到 run 自己的边界时就传 `null`,
+   * 退回「只认事件时刻」—— 不知道就是不知道(§2.2b)。
    */
   function shellElapsed(
-    running: boolean,
     shell: ExecutionShell | undefined,
-    isFirst: boolean,
-    isLast: boolean,
+    /** 这张壳开了它那个 run 时,那个 run 的起点;否则 `null` */
+    openFrom: number | null,
+    /** 这张壳收了它那个 run 时,那个 run 的终点(还在跑就是「现在」);否则 `null` */
+    closeTo: number | null,
   ): number | null {
-    const span = shell ? shellSpan.get(shell) : undefined;
-    let from = span ? span.from : firstStartedAt;
-    let to = span ? span.to : lastEndedAt;
-
-    // 开这一轮的那张壳:表从轮次开头就开始走(第一个工具之前的推理在这一截里)
-    if (isFirst && input.startedAtMs != null) {
-      from = from == null ? input.startedAtMs : Math.min(from, input.startedAtMs);
-    }
     /*
-     * 收这一轮的那张壳:走到轮次收尾为止 —— 跑着的时候「收尾」就是现在,秒表继续走。
-     * `running` 只可能落在最后一张壳上(调用处的 `live` 判据是 `shell === activeShell()`,
-     * 而 `activeShell()` 就是这里的最后一张),所以秒表不需要另开一条分支。
+     * **只认这张壳自己的事件。**
+     *
+     * 这里原来在拿不到 `shellSpan` 时回落到 `firstStartedAt` / `lastEndedAt`,而那两个
+     * 是**全轮所有时刻**的 min / max。既然这张壳没有自己的跨度,那两个值里但凡有数,
+     * 就必然是**别的壳**盖出来的 —— 所以那条兜底在构造上等价于「借另一张卡的表」,
+     * 不存在它恰好等于本张卡的情形。
+     *
+     * 借来的表怎么变成用户看得见的错(评审 #7921):一个只有 status / text、一个带时刻的
+     * 事件都没有的后继 run(澄清 run 的典型形态),它那张壳捡起前一个 run 的工具时刻,
+     * 再和自己的 run 边界取 min / max —— 真机形状的语料里,一张只跑了 20 秒的卡
+     * 因此写成 5m 10s,多出来的五分钟是前一个 run 加上用户读产出、想怎么回话的那一段。
+     *
+     * 为什么不是「在 `closeRun()` 里把那两个时钟清零」:那只堵住跨 run 这一个入口。
+     * 同一段代码在**一个 run 之内**同样会借 —— 一轮里 done 之后另起第二张卡、而那张卡
+     * 没有带时刻的事件时,`closeRun()` 根本不会跑。而且那两个时钟另有两位读者
+     * (`thinkGapStart` / `shellQuiet`),在边界上清零会顺手改掉它们的语义,
+     * 那是副作用不是修复。
+     *
+     * 拿不到就返回 null —— 不知道就是不知道(§2.2b),和本文件其它几处同一条纪律。
      */
-    const turnEnd = running ? input.nowMs : input.endedAtMs;
-    if (isLast && turnEnd != null) {
-      to = to == null ? turnEnd : Math.max(to, turnEnd);
+    const span = shell ? shellSpan.get(shell) : undefined;
+    let from = span ? span.from : null;
+    let to = span ? span.to : null;
+
+    // 开这个 run 的那张壳:表从 run 开头就开始走(第一个工具之前的推理在这一截里)
+    if (openFrom != null) {
+      from = from == null ? openFrom : Math.min(from, openFrom);
+    }
+    // 收这个 run 的那张壳:走到 run 收尾为止 —— 跑着的时候「收尾」就是现在,秒表继续走
+    if (closeTo != null) {
+      to = to == null ? closeTo : Math.max(to, closeTo);
     }
     if (from == null || to == null) return null;
     const ms = to - from;

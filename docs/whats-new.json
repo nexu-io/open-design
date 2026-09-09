@@ -4,11 +4,13 @@
   "body": "Over a dozen models tested: Compare design quality and cost across models evaluated with the OpenDesign Harness.\nDeepSeek V4.1 Flash Leads in Scores: DeepSeek V4.1 Flash achieved 98% of top-ranked GPT-6 Astra’s average score at just 1% of its average cost.\nFind the right model for you: Explore the benchmarks to choose a model for your design needs and budget.",
   "imageUrl": "https://whatsnew.open-design.ai/0.18.0.webp",
   "linkUrl": "https://open-design.ai/llm-arena-for-design/",
+  "ctaLabel": "View Arena",
   "locales": {
     "zh-CN": {
       "title": "OpenDesign Arena 正式上线",
       "body": "十多款模型实测：使用 OpenDesign Harness，对比模型的设计表现与成本。\nDeepSeek V4.1 Flash 评分领先：DeepSeek V4.1 Flash 的均分达到榜首 GPT-6 Astra 的 98%，平均成本仅为其 1%。\n找到适合你的模型：前往 Arena，根据创作需求与预算选择模型。",
-      "linkUrl": "https://open-design.ai/zh/llm-arena-for-design/"
+      "linkUrl": "https://open-design.ai/zh/llm-arena-for-design/",
+      "ctaLabel": "查看评测站"
     }
   }
 }
