@@ -25,13 +25,35 @@ const trust = Object.freeze({ schemaVersion: 1 as const, operation: "electron.ma
 
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "electron-macos-lkg-restore-"));
+  const helpers: number[] = [];
   const appPath = join(root, "Open Design Betahyx.app");
   await mkdir(join(appPath, "Contents", "MacOS"), { recursive: true });
   await writeFile(join(appPath, "Contents", "Info.plist"), "lkg-plist");
   await writeFile(join(appPath, "Contents", "MacOS", "open-design-betahyx"), "lkg-executable");
   const authorityRoot = join(root, "authority"), runtimeRoot = join(root, "runtime");
   const capture = await captureMacElectronLastKnownGood({ appPath, authorityRoot, shell, installIdentity });
-  return { root, appPath, capture, runtimeRoot };
+  return { root, appPath, capture, runtimeRoot,
+    async schedule(preparation: Awaited<ReturnType<typeof prepareMacElectronLastKnownGoodRestore>>) {
+      const armed = await scheduleMacElectronLastKnownGoodRestore(preparation);
+      helpers.push(armed.helperPid);
+      return armed;
+    },
+    async dispose() {
+      // A durable result precedes helper exit. Reap every scheduled helper before
+      // deleting its working directory, including duplicate no-op invocations.
+      await Promise.all(helpers.map(waitHelperExit));
+      await rm(root, { recursive: true, force: true });
+    },
+  };
+}
+
+async function waitHelperExit(pid: number) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    try { process.kill(pid, 0); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return; throw error; }
+    await new Promise(done => setTimeout(done, 25));
+  }
+  throw new Error(`LKG fixture helper ${pid} did not exit`);
 }
 
 async function waitResult(preparation: Awaited<ReturnType<typeof prepareMacElectronLastKnownGoodRestore>>) {
@@ -78,7 +100,7 @@ fs.writeFile = async (path, data, options) => {
         if (child.exitCode === null && child.signalCode === null) child.kill();
         await exited;
       }
-    } finally { await rm(value.root, { recursive: true, force: true }); }
+    } finally { await value.dispose(); }
   });
 
   it("retains the candidate, atomically restores the captured tree, and makes duplicate scheduling harmless", async () => {
@@ -98,17 +120,17 @@ fs.writeFile = async (path, data, options) => {
         relaunch: false,
         mode: "verify-only",
       });
-      const armed = await scheduleMacElectronLastKnownGoodRestore(preparation);
+      const armed = await value.schedule(preparation);
       expect(armed).toMatchObject({ state: "armed", recoveryId: "restore-1", claim });
       const result = await waitResult(preparation);
       if (result.state === "failed") throw new Error(`restore fixture failed: ${JSON.stringify(result.error)}`);
       expect(result).toMatchObject({ state: "restored", restoredAppPath: value.appPath });
       expect((await identifyMacElectronLastKnownGoodTree(value.appPath)).sha256).toBe(value.capture.source.sha256);
       expect((await identifyMacElectronLastKnownGoodTree(result.forensicAppPath!)).sha256).toBe(candidate.sha256);
-      await scheduleMacElectronLastKnownGoodRestore(preparation);
-      await new Promise((done) => setTimeout(done, 50));
+      const duplicate = await value.schedule(preparation);
+      await waitHelperExit(duplicate.helperPid);
       expect(await readMacElectronLastKnownGoodRestoreResult(preparation)).toEqual(result);
-    } finally { await rm(value.root, { recursive: true, force: true }); }
+    } finally { await value.dispose(); }
   });
 
   it("never overwrites a previously published result", async () => {
@@ -119,7 +141,7 @@ fs.writeFile = async (path, data, options) => {
       await writeFile(preparation.resultPath, JSON.stringify(existing), { flag: "wx" });
       await expect(promisify(execFile)(process.execPath, [preparation.helperPath, preparation.inputPath])).rejects.toMatchObject({ code: 1 });
       expect(await readMacElectronLastKnownGoodRestoreResult(preparation)).toEqual(existing);
-    } finally { await rm(value.root, { recursive: true, force: true }); }
+    } finally { await value.dispose(); }
   });
 
   it("refuses to schedule a modified helper", async () => {
@@ -130,7 +152,7 @@ fs.writeFile = async (path, data, options) => {
       await writeFile(preparation.helperPath, "tampered helper");
       await expect(scheduleMacElectronLastKnownGoodRestore(preparation)).rejects.toThrow("helper preparation changed");
       expect(await readFile(preparation.inputPath, "utf8")).toContain("restore-tamper");
-    } finally { await rm(value.root, { recursive: true, force: true }); }
+    } finally { await value.dispose(); }
   });
 
   it("rejects malformed and symlink-substituted durable results", async () => {
@@ -143,7 +165,7 @@ fs.writeFile = async (path, data, options) => {
       const substituted = await prepareMacElectronLastKnownGoodRestore({ capture: value.capture, claim, trust, recoveryId: "restore-result-symlink", nodeExecutablePath: process.execPath, parentPid: 2_147_483_647, runtimeRoot: value.runtimeRoot, relaunchArguments: [], relaunch: false, mode: "verify-only" });
       await symlink(malformed.resultPath, substituted.resultPath);
       await expect(readMacElectronLastKnownGoodRestoreResult(substituted)).rejects.toThrow();
-    } finally { await rm(value.root, { recursive: true, force: true }); }
+    } finally { await value.dispose(); }
   });
 
   it("fails before touching the candidate when the captured backup changes", async () => {
@@ -153,10 +175,10 @@ fs.writeFile = async (path, data, options) => {
       const candidate = await identifyMacElectronLastKnownGoodTree(value.appPath);
       const preparation = await prepareMacElectronLastKnownGoodRestore({ capture: value.capture, claim, trust, recoveryId: "restore-backup-tamper", nodeExecutablePath: process.execPath, parentPid: 2_147_483_647, runtimeRoot: value.runtimeRoot, relaunchArguments: [], relaunch: false, mode: "verify-only" });
       await writeFile(join(value.capture.backup.path, "Contents", "Info.plist"), "tampered-backup");
-      await scheduleMacElectronLastKnownGoodRestore(preparation);
+      await value.schedule(preparation);
       const result = await waitResult(preparation);
       expect(result).toMatchObject({ state: "failed", error: { code: "backup-mismatch" } });
       expect((await identifyMacElectronLastKnownGoodTree(value.appPath)).sha256).toBe(candidate.sha256);
-    } finally { await rm(value.root, { recursive: true, force: true }); }
+    } finally { await value.dispose(); }
   });
 });
