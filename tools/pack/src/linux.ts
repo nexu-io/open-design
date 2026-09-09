@@ -21,7 +21,7 @@ import {
   stopSidecars,
   type SidecarStamp,
 } from "@open-design/sidecar";
-import { createPackageManagerInvocation, readLogTail } from "@open-design/platform";
+import { createPackageManagerInvocation, isProcessAlive, readLogTail } from "@open-design/platform";
 
 import type { ToolPackConfig } from "./config/index.js";
 import {
@@ -918,14 +918,58 @@ async function resolveReachableLinuxSidecar<T>(
   return probes.find((probe): probe is ReachableLinuxSidecar<T> => probe != null) ?? null;
 }
 
-async function waitForLinuxStatus<T>(stamps: readonly SidecarStamp[], timeoutMs: number): Promise<ReachableLinuxSidecar<T> | null> {
+// Cold first launch: AppImage --appimage-extract-and-run unpacks the image to
+// /tmp before exec'ing the inner electron, then the daemon seeds bundled
+// plugins and the web sidecar boots -- measured well past the old fixed 60s
+// window on desktop hardware, so a fixed timeout kills healthy starts. Both the
+// launch convergence wait and the readiness wait share this budget while the
+// launched process stays alive.
+export const PACKAGED_LINUX_COLD_START_TIMEOUT_MS = 300_000;
+
+export type LinuxLaunchReadiness<T> =
+  | { outcome: "ready"; sidecar: ReachableLinuxSidecar<T> }
+  | { outcome: "exited" }
+  | { outcome: "timeout" };
+
+export type LinuxReadinessWaitOptions = {
+  /** Absolute ceiling; a hung-but-alive launch still surfaces an error. */
+  timeoutMs: number;
+  pollIntervalMs?: number;
+};
+
+/**
+ * Waits for a launched Linux sidecar to report status while its launch process
+ * stays alive. A process that exits before reporting status is a failed start
+ * and fails fast; an alive process is just slow (cold AppImage extraction plus
+ * Electron and sidecar boot can exceed a fixed timeout on first launch) and
+ * keeps waiting until `timeoutMs`, so a hung-but-alive launch still surfaces an
+ * error. `readStatus`/`isLaunchAlive` are injectable for tests.
+ */
+export async function waitForLinuxReadiness<T>(
+  readStatus: () => Promise<ReachableLinuxSidecar<T> | null>,
+  isLaunchAlive: () => boolean | Promise<boolean>,
+  options: LinuxReadinessWaitOptions,
+): Promise<LinuxLaunchReadiness<T>> {
+  const { timeoutMs, pollIntervalMs = 200 } = options;
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const active = await resolveReachableLinuxSidecar<T>(stamps, 1_000);
-    if (active != null) return active;
-    await new Promise((r) => setTimeout(r, 200));
+  while (true) {
+    const sidecar = await readStatus();
+    if (sidecar != null) return { outcome: "ready", sidecar };
+    if (!(await isLaunchAlive())) return { outcome: "exited" };
+    if (Date.now() >= deadline) return { outcome: "timeout" };
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
   }
-  return null;
+}
+
+async function waitForLinuxStatus<T>(
+  stamps: readonly SidecarStamp[],
+  options: { rootPid: number; timeoutMs: number },
+): Promise<LinuxLaunchReadiness<T>> {
+  return await waitForLinuxReadiness<T>(
+    async () => await resolveReachableLinuxSidecar<T>(stamps, 1_000),
+    () => isProcessAlive(options.rootPid),
+    { timeoutMs: options.timeoutMs },
+  );
 }
 
 export async function startPackedLinuxApp(config: ToolPackConfig): Promise<LinuxStartResult> {
@@ -965,16 +1009,26 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
       runtimeRoot: join(config.roots.runtime.namespaceRoot, "runtime"),
     },
     stamp,
-  }, { ownerStamps: launchStamps, timeoutMs: 60_000 });
+  }, { ownerStamps: launchStamps, timeoutMs: PACKAGED_LINUX_COLD_START_TIMEOUT_MS });
 
-  // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
-  // first launch before exec'ing the inner electron, which adds substantial
-  // overhead vs mac's direct .app launch.
-  //
-  const active = await waitForLinuxStatus<DesktopStatusSnapshot>(launchStamps, 60_000);
-  if (active == null) {
+  // Cold first launch overhead: AppImage --appimage-extract-and-run unpacks the
+  // image to /tmp before exec'ing the inner electron, then the daemon seeds
+  // bundled plugins and the web sidecar boots -- measured well past the old
+  // fixed 60s window on desktop hardware, so a fixed timeout kills healthy
+  // starts. The wait is liveness-aware instead: fail fast only when the spawned
+  // app process exits before reporting status, keep polling while it is alive,
+  // and cap the wait with a hard ceiling so a hung-but-alive app still surfaces.
+  const active = await waitForLinuxStatus<DesktopStatusSnapshot>(launchStamps, {
+    rootPid: convergence.description.resources.pid,
+    timeoutMs: PACKAGED_LINUX_COLD_START_TIMEOUT_MS,
+  });
+  if (active.outcome !== "ready") {
     await stopSidecars(launchStamps.map((candidate) => ({ stamp: candidate }))).catch(() => undefined);
-    throw new Error(`desktop sidecar did not become ready within 60s for ${config.namespace}`);
+    throw new Error(
+      active.outcome === "exited"
+        ? `desktop sidecar exited before reporting status for ${config.namespace}`
+        : `desktop sidecar did not become ready within ${PACKAGED_LINUX_COLD_START_TIMEOUT_MS / 1000}s for ${config.namespace}`,
+    );
   }
 
   return {
@@ -984,7 +1038,7 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     namespace: config.namespace,
     pid: convergence.description.resources.pid,
     source,
-    status: active.status,
+    status: active.sidecar.status,
   };
 }
 
@@ -1267,10 +1321,17 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
     await logHandle.close().catch(() => undefined);
   }
 
-  const active = await waitForLinuxStatus<DesktopStatusSnapshot>(launchStamps, 95_000);
-  if (active == null) {
+  const active = await waitForLinuxStatus<DesktopStatusSnapshot>(launchStamps, {
+    rootPid: child.pid,
+    timeoutMs: 95_000,
+  });
+  if (active.outcome !== "ready") {
     await stopSidecars(launchStamps.map((candidate) => ({ stamp: candidate }))).catch(() => undefined);
-    throw new Error(`headless sidecar did not become ready within 95s for ${config.namespace}`);
+    throw new Error(
+      active.outcome === "exited"
+        ? `headless sidecar exited before reporting status for ${config.namespace}`
+        : `headless sidecar did not become ready within 95s for ${config.namespace}`,
+    );
   }
 
   return {
@@ -1278,7 +1339,7 @@ export async function startPackedLinuxHeadless(config: ToolPackConfig): Promise<
     logPath,
     namespace: config.namespace,
     pid: child.pid,
-    status: active.status,
+    status: active.sidecar.status,
   };
 }
 

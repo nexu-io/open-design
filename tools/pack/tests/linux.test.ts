@@ -16,6 +16,9 @@ import {
 } from "@open-design/sidecar-proto";
 import { describe, expect, it, vi } from "vitest";
 
+const convergeSidecarLaunchMock = vi.hoisted(() => vi.fn(async () => ({
+  description: { resources: { pid: process.pid } },
+})));
 const stopSidecarMock = vi.hoisted(() => vi.fn(async (_stamp?: unknown, _options?: unknown) => ({
   alreadyStopped: true,
   forcedPids: [],
@@ -45,6 +48,7 @@ vi.mock("@open-design/sidecar", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@open-design/sidecar")>();
   return {
     ...actual,
+    convergeSidecarLaunch: convergeSidecarLaunchMock as unknown as typeof actual.convergeSidecarLaunch,
     findSidecarProcesses: vi.fn(async () => []),
     getSidecarStatus: vi.fn(async () => { throw new Error("status unavailable"); }),
     invokeSidecar: vi.fn(async () => { throw new Error("invoke unavailable"); }),
@@ -65,11 +69,14 @@ import {
   renderLinuxAppImageAppRun,
   renderLinuxPackagedMainEntry,
   resolveLinuxLifecycleMode,
+  PACKAGED_LINUX_COLD_START_TIMEOUT_MS,
   resolveProductionInstallCommand,
   shouldRejectLinuxHeadlessInspectOptions,
+  startPackedLinuxApp,
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
+  waitForLinuxReadiness,
 } from "@/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -946,5 +953,154 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(false);
+  });
+});
+
+describe("waitForLinuxReadiness", () => {
+  const readySidecar = { stamp: { app: APP_KEYS.DESKTOP }, status: { namespace: "default" } } as never;
+
+  it("returns ready as soon as the sidecar reports status", async () => {
+    const result = await waitForLinuxReadiness(
+      async () => readySidecar,
+      () => true,
+      { timeoutMs: PACKAGED_LINUX_COLD_START_TIMEOUT_MS, pollIntervalMs: 5 },
+    );
+    expect(result).toEqual({ outcome: "ready", sidecar: readySidecar });
+  });
+
+  it("fails fast with exited when the launch process is gone before reporting status", async () => {
+    const result = await waitForLinuxReadiness(
+      async () => null,
+      () => false,
+      { timeoutMs: PACKAGED_LINUX_COLD_START_TIMEOUT_MS, pollIntervalMs: 5 },
+    );
+    expect(result).toEqual({ outcome: "exited" });
+  });
+
+  it("returns exited when the launch process dies mid-wait", async () => {
+    let alive = true;
+    const result = await waitForLinuxReadiness(
+      async () => {
+        alive = false;
+        return null;
+      },
+      () => alive,
+      { timeoutMs: PACKAGED_LINUX_COLD_START_TIMEOUT_MS, pollIntervalMs: 5 },
+    );
+    expect(result).toEqual({ outcome: "exited" });
+  });
+
+  it("keeps waiting past the old fixed 60s ceiling while the launch process stays alive", async () => {
+    vi.useFakeTimers();
+    try {
+      const startedAt = Date.now();
+      const promise = waitForLinuxReadiness(
+        async () => (Date.now() - startedAt < 70_000 ? null : readySidecar),
+        () => true,
+        { timeoutMs: PACKAGED_LINUX_COLD_START_TIMEOUT_MS, pollIntervalMs: 250 },
+      );
+      await vi.advanceTimersByTimeAsync(71_000);
+      await expect(promise).resolves.toEqual({ outcome: "ready", sidecar: readySidecar });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns timeout at the ceiling while the launch process stays alive", async () => {
+    vi.useFakeTimers();
+    try {
+      const promise = waitForLinuxReadiness(
+        async () => null,
+        () => true,
+        { timeoutMs: 1_000, pollIntervalMs: 250 },
+      );
+      await vi.advanceTimersByTimeAsync(1_500);
+      await expect(promise).resolves.toEqual({ outcome: "timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("startPackedLinuxApp", () => {
+  const status = { app: APP_KEYS.DESKTOP, namespace: "default" } as never;
+
+  async function makeLaunchConfig(): Promise<ToolPackConfig> {
+    const root = await mkdtemp(join(tmpdir(), "od-linux-start-"));
+    const config = makeConfig();
+    config.roots.output.appBuilderRoot = join(root, "builder");
+    config.roots.output.namespaceRoot = join(root, "out");
+    config.roots.runtime.namespaceRoot = join(root, "runtime");
+    config.roots.runtime.namespaceBaseRoot = join(root, "runtime-base");
+    await mkdir(config.roots.output.appBuilderRoot, { recursive: true });
+    await writeFile(join(config.roots.output.appBuilderRoot, "Open Design-1.0.0.AppImage"), "fake");
+    return config;
+  }
+
+  async function withIsolatedHome<T>(run: () => Promise<T>): Promise<T> {
+    const previousHome = process.env.HOME;
+    const home = await mkdtemp(join(tmpdir(), "od-linux-home-"));
+    process.env.HOME = home;
+    try {
+      return await run();
+    } finally {
+      if (previousHome == null) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+    }
+  }
+
+  it("keeps waiting for a slow first launch past the old fixed 60s ceiling while the app process stays alive", async () => {
+    await withIsolatedHome(async () => {
+      const config = await makeLaunchConfig();
+      convergeSidecarLaunchMock.mockResolvedValueOnce({ description: { resources: { pid: process.pid } } });
+      const readyAfterMs = 70_000;
+      const startedAt = Date.now();
+      vi.mocked(getSidecarStatus).mockImplementation(async () => {
+        if (Date.now() - startedAt < readyAfterMs) throw new Error("status unavailable");
+        return status;
+      });
+
+      vi.useFakeTimers();
+      try {
+        let settled = false;
+        const promise = startPackedLinuxApp(config).finally(() => {
+          settled = true;
+        });
+        for (let i = 0; i < 1_000 && !settled; i += 1) {
+          await vi.advanceTimersByTimeAsync(250);
+        }
+        await expect(promise).resolves.toMatchObject({
+          pid: process.pid,
+          source: "built",
+          status,
+        });
+      } finally {
+        vi.useRealTimers();
+        convergeSidecarLaunchMock.mockReset();
+        vi.mocked(getSidecarStatus).mockImplementation(async () => {
+          throw new Error("status unavailable");
+        });
+      }
+    });
+  });
+
+  it("fails fast when the launched app process exits before reporting status", async () => {
+    await withIsolatedHome(async () => {
+      const config = await makeLaunchConfig();
+      convergeSidecarLaunchMock.mockResolvedValueOnce({
+        description: { resources: { pid: 2_147_483_646 } },
+      });
+      vi.mocked(getSidecarStatus).mockImplementation(async () => {
+        throw new Error("status unavailable");
+      });
+
+      try {
+        await expect(startPackedLinuxApp(config)).rejects.toThrow(
+          "desktop sidecar exited before reporting status for default",
+        );
+      } finally {
+        convergeSidecarLaunchMock.mockReset();
+      }
+    });
   });
 });
