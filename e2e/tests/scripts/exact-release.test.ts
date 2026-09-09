@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const workspaceRoot = resolve("..");
 const run = promisify(execFile);
 const roots: string[] = [];
+const dataIds = ["skills", "design-templates", "design-systems", "craft", "plugins", "frames", "community-pets", "prompt-templates", "plugin-previews"];
 
 afterEach(async () => await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true }))));
 
@@ -18,6 +19,7 @@ describe("exact Electron release topology", () => {
   it.each([
     { suite: "electron-scene", nodes: ["electron.contract.build", "electron.shell.build", "closure.build"] },
     { suite: "electron-platform", nodes: ["electron.platform.build"] },
+    ...dataIds.map(id => ({ suite: `closure-data-${id}`, nodes: [`closure.data.${id}.build`] })),
   ])("covers $suite production inputs in the convergence cache key", async ({ suite, nodes }) => {
     const result = await run("python3", ["-c", [
       "import json, sys",
@@ -93,6 +95,25 @@ describe("exact Electron release topology", () => {
       "--pending", pending, "--workload", "electron_platform_darwin_arm64", "--build-receipt", buildReceipt,
       "--artifact", "fixture-platform", "--output", join(root, "platform-contribution")]);
     await cp(join(root, "platform-contribution/products/electron_platform_darwin_arm64"), join(products, "electron_platform_darwin_arm64"), { recursive: true });
+    const dataPlan = JSON.parse(await readFile(join(plans, "electron-darwin-arm64.json"), "utf8"));
+    for (const id of dataIds) dataPlan.plan.nodes[`closure.data.${id}.build`] = { identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" };
+    await writeFile(join(plans, "electron-darwin-arm64.json"), JSON.stringify(dataPlan));
+    for (const id of dataIds) {
+      const workload = `closure_data_${id.replaceAll("-", "_")}_darwin_arm64`;
+      expect(planned.workloads[workload].run).toBe(true);
+      const directory = join(root, "data", id); await mkdir(directory, { recursive: true });
+      const sha256 = createHash("sha256").update(id).digest("hex"), file = `${id}-${sha256}.zip`;
+      await writeFile(join(directory, file), id);
+      const receipt = join(directory, "resource-receipt.json");
+      await writeFile(receipt, JSON.stringify({ schemaVersion: 1, operation: "closure.data-resource.build",
+        planNode: { id: `closure.data.${id}.build`, identity: `sha256:${"a".repeat(64)}`, target: "darwin-arm64" },
+        resource: { id, file, sha256, size: id.length, treeSha256: "b".repeat(64), entrypoint: "resource.json", sync: true } }));
+      const output = join(root, `data-contribution-${id}`);
+      await run(process.execPath, [cli, "resource", "contribute", "--plan", join(plans, "electron-darwin-arm64.json"),
+        "--pending", pending, "--workload", workload, "--resource-id", id, "--resource-receipt", receipt,
+        "--artifact", `fixture-data-${id}`, "--output", output]);
+      await cp(join(output, "products", workload), join(products, workload), { recursive: true });
+    }
     const event = join(root, "event.json");
     await writeFile(event, JSON.stringify({ repository: { id: 1 } }));
     const handoff = await run("python3", [...common, "handoff", "--pending", pending, "--products-root", products,
@@ -101,7 +122,7 @@ describe("exact Electron release topology", () => {
       GITHUB_REPOSITORY: "local/fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: "1",
     } });
     const candidate = JSON.parse(handoff.stdout);
-    expect(candidate.results).toHaveLength(3);
+    expect(candidate.results).toHaveLength(12);
     for (const { receipt } of candidate.results) {
       expect(receipt.executionClass).toEqual(planned.workloads[receipt.workload].executionClass);
       expect(receipt.digest).toBe(planned.workloads[receipt.workload].digest);
@@ -123,6 +144,20 @@ describe("exact Electron release topology", () => {
     expect(prepare).toContain("merge-multiple: true");
   });
 
+  it("builds or restores each data group without bundling app runtimes and passes the complete directory to prepare", async () => {
+    const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
+    const data = workflow.split("\n  data:")[1]!.split("\n  prepare:")[0]!;
+    expect(data).toContain("matrix: ${{ fromJSON(needs.plan.outputs.data_matrix) }}");
+    expect(data.indexOf("Restore converged data resource")).toBeLessThan(data.indexOf("actions/checkout"));
+    for (const command of ["resource restore", "build resource", "resource contribute"]) expect(data).toContain(`exact-release-control.mjs" ${command}`);
+    expect(data).not.toContain("build:resources");
+    expect(data).not.toContain("@open-design/daemon");
+    expect(data).not.toContain("@open-design/web");
+    const prepare = workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]!;
+    expect(prepare).toContain('--data-resources "$RUNNER_TEMP/data-products"');
+    expect(prepare).toContain("pattern: exact-data-product-*-${{ inputs.source_sha }}");
+  });
+
   it("requires native validation independently of scene cache reuse and transports its receipt to baseline staging", async () => {
     const workflow = await readFile(resolve(workspaceRoot, ".github/workflows/release-exact.yml"), "utf8");
     const scene = workflow.split("\n  scene:")[1]!.split("\n  prepare:")[0]!;
@@ -136,7 +171,7 @@ describe("exact Electron release topology", () => {
     expect(validation).not.toContain("scene-artifact");
     expect(scene).not.toContain('exact-release-control.mjs" validate');
     expect(scene).not.toContain("matrix.shell == 'electron' ||");
-    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, platform, validation]");
+    expect(workflow.split("\n  prepare:")[1]!.split("\n  distribution:")[0]).toContain("needs: [plan, scene, platform, data, validation]");
     for (const node of ["electron.contract.test", "electron.shell.test", "closure.test"]) {
       expect(validation).toContain(`exact-release-control.mjs" validate ${node}`);
     }

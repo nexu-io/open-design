@@ -1,4 +1,5 @@
 {
+  "data": { "target": "darwin-arm64", "runner_class": "electron_darwin_arm64", "runs_on": "macos-15" },
   "active": [
     { "shell": "terminal", "target": "darwin-arm64", "workload": "terminal_scene_darwin_arm64", "runner_class": "terminal_darwin_arm64", "runs_on": "macos-15" },
     { "shell": "electron", "target": "darwin-arm64", "workload": "electron_scene_darwin_arm64", "platform_workload": "electron_platform_darwin_arm64", "runner_class": "electron_darwin_arm64", "runs_on": "macos-15" }

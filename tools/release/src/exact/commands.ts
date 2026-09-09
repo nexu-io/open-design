@@ -140,7 +140,7 @@ export function registerExactCommands(cli: CAC): void {
     .action(async (options: Options) => {
       const result = await projectReleaseTopology({ declaration: required(options, "declaration"), plans: required(options, "plans"), output: required(options, "output") });
       if (options.githubOutput != null) await appendFile(required(options, "githubOutput"),
-        `shell_matrix=${JSON.stringify(result.matrix)}\nvalidation_matrix=${JSON.stringify(result.validationMatrix)}\nplatform_matrix=${JSON.stringify(result.platformMatrix)}\n`);
+        `shell_matrix=${JSON.stringify(result.matrix)}\nvalidation_matrix=${JSON.stringify(result.validationMatrix)}\nplatform_matrix=${JSON.stringify(result.platformMatrix)}\ndata_matrix=${JSON.stringify(result.dataMatrix)}\n`);
       await emit(options, result);
     });
 

@@ -68,6 +68,7 @@ jobs:
       shell_matrix: ${{ steps.topology.outputs.shell_matrix }}
       validation_matrix: ${{ steps.topology.outputs.validation_matrix }}
       platform_matrix: ${{ steps.topology.outputs.platform_matrix }}
+      data_matrix: ${{ steps.topology.outputs.data_matrix }}
     steps:
       - name: Validate immutable inputs
         env:
@@ -457,9 +458,95 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  data:
+    name: Data resource (${{ matrix.resource_id }})
+    needs: [plan]
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.plan.outputs.data_matrix) }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 15
+    env:
+      TARGET: ${{ matrix.target }}
+      RESOURCE_ID: ${{ matrix.resource_id }}
+      WORKLOAD: ${{ matrix.workload }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: exact-convergence-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/exact-plan
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Restore converged data resource
+        if: ${{ !fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource restore \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" --resource-id "$RESOURCE_ID" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID"
+
+      - uses: actions/checkout@v6.0.2
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@v5
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          version: 10.33.2
+
+      - name: Build independent data resource
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm --filter @open-design/standalone build
+          pnpm --filter @open-design/closure build
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" build resource \
+            --root "$GITHUB_WORKSPACE" --resource-id "$RESOURCE_ID" \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" \
+            --output "$RUNNER_TEMP/exact-data/$RESOURCE_ID" \
+            --receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json"
+          node "$RUNNER_TEMP/exact-plan/exact-release-control.mjs" resource contribute \
+            --plan "$RUNNER_TEMP/exact-plan/electron-$TARGET.json" --resource-id "$RESOURCE_ID" \
+            --pending "$RUNNER_TEMP/exact-plan/pending.json" --workload "$WORKLOAD" \
+            --resource-receipt "$RUNNER_TEMP/exact-data/$RESOURCE_ID/resource-receipt.json" \
+            --artifact "exact-data-cache-$RESOURCE_ID-${{ inputs.source_sha }}" \
+            --output "$RUNNER_TEMP/data-contribution"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: exact-data-product-${{ matrix.resource_id }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/exact-data
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-data-cache-${{ matrix.resource_id }}-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/data-contribution/artifact
+          if-no-files-found: error
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ fromJSON(needs.plan.outputs.run)[matrix.workload] }}
+        with:
+          name: exact-convergence-manifest-${{ matrix.workload }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/data-contribution/products
+          if-no-files-found: error
+          retention-days: 1
+
   prepare:
     name: Prepare signed exact content
-    needs: [plan, scene, platform, validation]
+    needs: [plan, scene, platform, data, validation]
     runs-on: ubuntu-24.04
     environment: ${{ inputs.release_environment || 'standalone-exact-release' }}
     timeout-minutes: 10
@@ -500,6 +587,12 @@ jobs:
           path: ${{ runner.temp }}/platforms
           merge-multiple: true
 
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: exact-data-product-*-${{ inputs.source_sha }}
+          path: ${{ runner.temp }}/data-products
+          merge-multiple: true
+
       - name: Compose and sign content metadata
         env:
           CHANNEL: ${{ inputs.channel }}
@@ -518,7 +611,7 @@ jobs:
             --policy "$RUNNER_TEMP/exact-plan/release-policy.json" --channel "$CHANNEL" --release-version "$RELEASE_VERSION" \
             --source-commit "$SOURCE_SHA" --root "$GITHUB_WORKSPACE" --standalone-version "$STANDALONE_VERSION" \
             --topology "$RUNNER_TEMP/exact-plan/topology.json" --scenes "$RUNNER_TEMP/scenes" \
-            --platforms "$RUNNER_TEMP/platforms" \
+            --platforms "$RUNNER_TEMP/platforms" --data-resources "$RUNNER_TEMP/data-products" \
             --output "$RUNNER_TEMP/exact-prepare" --receipt "$RUNNER_TEMP/exact-prepare/prepare-receipt.json"
 
       - uses: actions/upload-artifact@v4

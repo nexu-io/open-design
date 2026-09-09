@@ -12,7 +12,7 @@ async function fixture(hot = false) {
   const active = ["terminal", "electron"].map(shell => ({ shell, target: "darwin-arm64", workload: `${shell}_scene`,
     ...(shell === "electron" ? { platform_workload: "platform_mac" } : {}), runner_class: `${shell}_mac`, runs_on: "macos-15" }));
   const deferred = [{ shell: "electron", target: "win32-x64", workload: "electron_win", platform_workload: "platform_win", runner_class: "electron_win", runs_on: "windows-2025" }];
-  await writeFile(declaration, JSON.stringify({ active, deferred })); await mkdir(plans);
+  await writeFile(declaration, JSON.stringify({ active, deferred, data: { target: "darwin-arm64", runner_class: "electron_mac", runs_on: "macos-15" } })); await mkdir(plans);
   await writeFile(join(plans, "electron-darwin-arm64.json"), JSON.stringify({ schemaVersion: 1, plan: { target: "darwin-arm64" },
     actions: hot ? [{ id: "closure.acceptance.hot" }] : [{ id: "electron.distribution" }],
     baseline: hot ? { mode: "accepted", requiredAcceptance: "hot" } : { mode: "cold", requiredAcceptance: "full" } }));
@@ -22,7 +22,9 @@ async function fixture(hot = false) {
 it.each([false, true])("projects full/hot=%s without activating deferred Windows or dropping Terminal", async hot => {
   const f = await fixture(hot), result = await projectReleaseTopology(f);
   expect(result.matrix.include.map(value => [value.shell, value.mode])).toEqual([["terminal", "full"], ["electron", hot ? "hot" : "full"]]);
-  expect(result.scope.enabled).toEqual({ terminal_scene: true, electron_scene: true, electron_win: false, platform_mac: true, platform_win: false });
+  expect(result.scope.enabled).toMatchObject({ terminal_scene: true, electron_scene: true, electron_win: false, platform_mac: true, platform_win: false });
+  expect(result.dataMatrix.include).toHaveLength(9);
+  expect(result.dataMatrix.include.every(entry => entry.target === "darwin-arm64" && result.scope.enabled[entry.workload])).toBe(true);
   expect(result.platformMatrix.include).toEqual([{ target: "darwin-arm64", workload: "platform_mac", runner_class: "electron_mac", runs_on: "macos-15" }]);
   expect(result.runners).toEqual({ terminal_mac: ["macos-15"], electron_mac: ["macos-15"], electron_win: ["windows-2025"] });
   expect(result.topology.deferred).toHaveLength(1);
@@ -38,4 +40,15 @@ it("rejects omission without accepted baseline and duplicate topology", async ()
   const declaration = JSON.parse(await readFile(f.declaration, "utf8")); declaration.active.push(declaration.active[0]);
   await writeFile(f.declaration, JSON.stringify(declaration));
   await expect(projectReleaseTopology(f)).rejects.toThrow("duplicate");
+});
+
+it("refuses a deferred or mismatched data producer", async () => {
+  const f = await fixture();
+  const declaration = JSON.parse(await readFile(f.declaration, "utf8"));
+  declaration.data = { target: "win32-x64", runner_class: "electron_win", runs_on: "windows-2025" };
+  await writeFile(f.declaration, JSON.stringify(declaration));
+  await expect(projectReleaseTopology(f)).rejects.toThrow("active Electron target");
+  declaration.data = { target: "darwin-arm64", runner_class: "electron_mac", runs_on: "ubuntu-24.04" };
+  await writeFile(f.declaration, JSON.stringify(declaration));
+  await expect(projectReleaseTopology(f)).rejects.toThrow("active Electron target");
 });
